@@ -1,0 +1,20 @@
+[package]
+name        = "valenx-reactdyn"
+description = "Reaction-dynamics core for Valenx — an engine-agnostic molecular-dynamics shell (System / Controls / Frame / Trajectory + a ReactionEngine trait) with an ab-initio MD (AIMD) backend: a velocity-Verlet integrator driven by numerical nuclear forces from central finite differences of valenx-qchem's single-point energy (qchem ships no analytic gradient). Everything runs in atomic units (bohr / hartree), qchem-native, so forces need no conversion. Phase 1 of a multi-engine program — QM/MM and ReaxFF backends plug in behind the same trait."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# AIMD forces come from valenx-qchem single-point energies (RHF/UHF/DFT);
+# Element supplies atomic masses. No other dependencies — the integrator,
+# the finite-difference gradient and the thermostat are hand-rolled.
+valenx-qchem = { path = "../valenx-qchem" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

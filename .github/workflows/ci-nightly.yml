@@ -1,0 +1,81 @@
+name: CI nightly (E2E)
+
+# MANUAL ONLY — nightly cron disabled on 2026-05-24 after a billing
+# surprise. Nightly E2E installs conda-forge tools and runs adapter
+# integration tests; each run consumed ~30 min of ubuntu runner time.
+# To re-enable, restore the `schedule:` block (see `docs/CI.md`).
+#
+# Still runnable on demand: GitHub UI → Actions → CI nightly → Run
+# workflow, or via: `gh workflow run ci-nightly.yml`.
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  e2e:
+    name: E2E (adapters + real tools)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo + build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Miniforge (conda-forge / bioconda)
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          activate-environment: valenx-e2e
+          auto-activate-base: false
+
+      - name: Install upstream bio tools via conda
+        shell: bash -l {0}
+        run: |
+          # One install line, every adapter we test E2E. Both bioconda
+          # and conda-forge channels are active per the setup-miniconda
+          # config above. Conda solves the cross-channel dependency
+          # graph in one shot.
+          conda install -y -n valenx-e2e \
+            bwa samtools mafft viennarna bcftools hmmer \
+            minimap2 muscle bowtie2 mmseqs2 diamond hisat2 \
+            blast clustalo t-coffee iqtree raxml-ng fasttree \
+            mrbayes rnastructure art wgsim badread snakemake \
+            nextflow cwltool smoldyn openbabel xtb cas-offinder \
+            vina=1.2.5
+
+      - name: Run E2E test crate
+        shell: bash -l {0}
+        run: |
+          # Tools land at $CONDA/envs/valenx-e2e/bin — make sure
+          # cargo test inherits a PATH that finds them.
+          export PATH="$CONDA/envs/valenx-e2e/bin:$PATH"
+          which bwa samtools mafft RNAfold bcftools hmmsearch \
+                minimap2 muscle bowtie2 mmseqs diamond hisat2 \
+                blastn clustalo t_coffee iqtree2 raxml-ng FastTree \
+                mb Fold art_illumina wgsim badread snakemake \
+                nextflow cwltool smoldyn obabel xtb cas-offinder
+          cargo test -p valenx-e2e-tests -- --nocapture
+
+      - name: Native Vina parity test
+        shell: bash -l {0}
+        env:
+          VINA_BIN: ${{ env.CONDA }}/envs/valenx-e2e/bin/vina
+        run: |
+          export PATH="$CONDA/envs/valenx-e2e/bin:$PATH"
+          which vina
+          cargo test -p valenx-e2e-tests --test dock_parity --release -- --nocapture
+
+      - name: Print conda env on failure
+        if: failure()
+        shell: bash -l {0}
+        run: |
+          conda list -n valenx-e2e

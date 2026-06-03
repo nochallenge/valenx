@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "seurat.analyze"
+mesh    = "(none)"
+
+# Seurat R-based single-cell analysis. The user-supplied .R script
+# does `library(Seurat)` and the analysis work; it can read
+# `valenx_params.json` via `jsonlite::fromJSON()` to get the
+# configured `output_basename` and the staged `input_data` filename.
+[bio.seurat]
+script           = "analysis.R"
+rscript          = "Rscript"
+# input_data     = "matrix.h5"
+output_basename  = "analysis"

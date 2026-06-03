@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "openbabel.convert"
+mesh    = "(none)"
+
+# Open Babel chemistry-format conversion. Format auto-detected
+# from extensions unless `input_format` / `output_format` set.
+# `gen_3d` = true generates 3D coords for 2D inputs (SMILES → MOL).
+# `add_hydrogens` = true adds explicit Hs to organic molecules.
+[bio.openbabel]
+input          = "molecule.smi"
+output         = "molecule.mol"
+gen_3d         = false
+add_hydrogens  = false
+extra_args     = []

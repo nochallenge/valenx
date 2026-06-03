@@ -1,0 +1,228 @@
+//! Rebar — one reinforcing bar.
+
+use nalgebra::Vector3;
+use serde::{Deserialize, Serialize};
+
+/// Steel grade (yield-stress class, US standard).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RebarGrade {
+    /// Grade 40 (40 ksi yield).
+    G40,
+    /// Grade 60 (60 ksi yield).
+    G60,
+    /// Grade 75 (75 ksi yield).
+    G75,
+}
+
+impl RebarGrade {
+    /// Yield stress in ksi.
+    pub fn yield_ksi(self) -> u32 {
+        match self {
+            Self::G40 => 40,
+            Self::G60 => 60,
+            Self::G75 => 75,
+        }
+    }
+
+    /// UI dropdown label.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::G40 => "Grade 40",
+            Self::G60 => "Grade 60",
+            Self::G75 => "Grade 75",
+        }
+    }
+}
+
+impl Default for RebarGrade {
+    fn default() -> Self {
+        Self::G60
+    }
+}
+
+/// Rebar shape recipe — the centreline geometry of the bar.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum RebarShape {
+    /// Straight bar of `length` along +X starting at origin.
+    Straight {
+        /// Bar length (m).
+        length: f64,
+    },
+    /// L-shape: a `leg_a`-long horizontal leg along +X then bends
+    /// 90° downward into a `leg_b`-long leg along -Z.
+    L {
+        /// First leg length (m).
+        leg_a: f64,
+        /// Second leg length (m).
+        leg_b: f64,
+    },
+    /// U-shape (stirrup): rectangle with `width` × `height`, open at
+    /// the top. The base centreline runs along +X at z = -height.
+    U {
+        /// Base width (m).
+        width: f64,
+        /// Side height (m).
+        height: f64,
+    },
+    /// 180° hook at the end of a straight bar — a small semicircle of
+    /// radius `bend_radius` after a `straight` length along +X.
+    Hook {
+        /// Straight tail length (m).
+        straight: f64,
+        /// Hook bend radius (m).
+        bend_radius: f64,
+    },
+    /// Spiral hoop — helix of `pitch`-per-turn, `radius`, `turns`
+    /// turns, centred on the Z axis.
+    Spiral {
+        /// Helix radius (m).
+        radius: f64,
+        /// Vertical rise per full turn (m).
+        pitch: f64,
+        /// Number of full turns.
+        turns: f64,
+    },
+}
+
+impl Default for RebarShape {
+    fn default() -> Self {
+        Self::Straight { length: 1.0 }
+    }
+}
+
+impl RebarShape {
+    /// Sample the bar's centreline into a 3D polyline. Vertex count
+    /// scales with the visual complexity of each shape variant.
+    pub fn to_polyline(&self) -> Vec<Vector3<f64>> {
+        match self {
+            Self::Straight { length } => vec![
+                Vector3::zeros(),
+                Vector3::new(*length, 0.0, 0.0),
+            ],
+            Self::L { leg_a, leg_b } => vec![
+                Vector3::zeros(),
+                Vector3::new(*leg_a, 0.0, 0.0),
+                Vector3::new(*leg_a, 0.0, -*leg_b),
+            ],
+            Self::U { width, height } => vec![
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(0.0, 0.0, -*height),
+                Vector3::new(*width, 0.0, -*height),
+                Vector3::new(*width, 0.0, 0.0),
+            ],
+            Self::Hook {
+                straight,
+                bend_radius,
+            } => {
+                // Straight tail then a 180° arc.
+                let mut pts = vec![Vector3::zeros(), Vector3::new(*straight, 0.0, 0.0)];
+                let r = *bend_radius;
+                let cx = *straight;
+                let cz = -r;
+                let segs = 12;
+                for i in 1..=segs {
+                    let theta = std::f64::consts::FRAC_PI_2
+                        - (i as f64 / segs as f64) * std::f64::consts::PI;
+                    pts.push(Vector3::new(cx + r * theta.sin(), 0.0, cz + r * theta.cos()));
+                }
+                pts
+            }
+            Self::Spiral { radius, pitch, turns } => {
+                let total = (*turns) * 16.0;
+                let n = total.ceil() as usize + 1;
+                let mut pts = Vec::with_capacity(n);
+                for i in 0..n {
+                    let t = (i as f64) / total;
+                    let theta = t * turns * std::f64::consts::TAU;
+                    pts.push(Vector3::new(
+                        radius * theta.cos(),
+                        radius * theta.sin(),
+                        t * turns * pitch,
+                    ));
+                }
+                pts
+            }
+        }
+    }
+
+    /// UI label.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Straight { .. } => "Straight",
+            Self::L { .. } => "L",
+            Self::U { .. } => "U",
+            Self::Hook { .. } => "Hook",
+            Self::Spiral { .. } => "Spiral",
+        }
+    }
+}
+
+/// One rebar — geometry + steel class.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Rebar {
+    /// Bar nominal diameter in mm.
+    pub diameter_mm: f64,
+    /// Centreline length in metres (set by callers; cage generators
+    /// fill this from the shape).
+    pub length_m: f64,
+    /// Shape recipe.
+    pub shape: RebarShape,
+    /// Steel grade.
+    pub grade: RebarGrade,
+}
+
+impl Default for Rebar {
+    fn default() -> Self {
+        Self {
+            diameter_mm: 16.0,
+            length_m: 1.0,
+            shape: RebarShape::default(),
+            grade: RebarGrade::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grade_yields() {
+        assert_eq!(RebarGrade::G60.yield_ksi(), 60);
+    }
+
+    #[test]
+    fn straight_polyline_has_2_pts() {
+        let s = RebarShape::Straight { length: 3.0 };
+        assert_eq!(s.to_polyline().len(), 2);
+    }
+
+    #[test]
+    fn l_polyline_has_3_pts() {
+        let s = RebarShape::L {
+            leg_a: 1.0,
+            leg_b: 0.5,
+        };
+        assert_eq!(s.to_polyline().len(), 3);
+    }
+
+    #[test]
+    fn hook_polyline_has_2_plus_arc() {
+        let s = RebarShape::Hook {
+            straight: 0.5,
+            bend_radius: 0.1,
+        };
+        let p = s.to_polyline();
+        assert!(p.len() >= 14);
+    }
+
+    #[test]
+    fn spiral_polyline_scales_with_turns() {
+        let s = RebarShape::Spiral {
+            radius: 0.3,
+            pitch: 0.1,
+            turns: 5.0,
+        };
+        assert!(s.to_polyline().len() > 40);
+    }
+}

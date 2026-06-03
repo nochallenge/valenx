@@ -1,0 +1,53 @@
+# Citable metadata for Valenx.
+#
+# CFF (Citation File Format) lets other software (GitHub, Zenodo,
+# academic tools) pick up a canonical citation for this project.
+#
+# When the first tagged release ships, add a `doi:` line pointing at
+# a Zenodo deposit so every release gets a durable academic citation.
+
+cff-version: 1.2.0
+message: "If you use Valenx in academic work, please cite it as below."
+title: "Valenx — native open-source simulation suite"
+abstract: >
+  Valenx is a native desktop simulation + life-science suite that
+  unifies CAD, meshing, CFD, FEA, electromagnetics, chemistry,
+  molecular dynamics, battery modelling, multi-physics coupling, and
+  a large biology surface (123 of 141 adapters covering sequence
+  alignment, CRISPR design, structure prediction, variant calling,
+  single-cell analysis, phylogenetics, RNA folding, pharmacokinetics)
+  into one Rust application (dual-licensed MIT OR Apache-2.0) driving
+  open-source tools (OpenFOAM, Code_Aster, Elmer, Cantera, openEMS,
+  PyBaMM, BWA, BLAST, AlphaFold, RoseTTAFold, GROMACS, OpenMM,
+  Biopython, and many more).
+type: software
+license:
+  - MIT
+  - Apache-2.0
+repository-code: "https://github.com/nochallenge/valenx"
+url: "https://github.com/nochallenge/valenx"
+keywords:
+  - simulation
+  - cfd
+  - fea
+  - electromagnetics
+  - chemistry
+  - molecular-dynamics
+  - battery
+  - multi-physics
+  - bioinformatics
+  - crispr
+  - protein-design
+  - genomics
+  - structure-prediction
+  - open-source
+  - rust
+  - desktop-application
+authors:
+  - family-names: "Valenx contributors"
+    given-names: ""
+    website: "https://github.com/nochallenge/valenx"
+# When a release is tagged, the build pipeline should update these:
+# version: 0.1.0
+# date-released: YYYY-MM-DD
+# doi: 10.xxxx/zenodo.xxxxxxx

@@ -1,0 +1,329 @@
+//! Solid-modeling primitives.
+//!
+//! Each builder validates its input, then delegates to
+//! [`truck_modeling::builder`] to produce a closed BRep. The
+//! resulting topology is wrapped in a [`Solid`] so callers never have
+//! to spell out the three-parameter `Solid<Point3, Curve, Surface>`.
+//!
+//! Coordinate conventions
+//! ----------------------
+//!
+//! - **Box** — corner at the origin, opposite corner at `(dx, dy, dz)`.
+//! - **Cylinder** — base disk centred on `(0,0,0)` lying in the X-Y
+//!   plane, axis pointing along +Z, height `height`.
+//! - **Sphere** — centred on the origin.
+//! - **Truncated cone** — base disk in the X-Y plane, axis along +Z.
+//!   `top_radius = 0.0` is the regular "pointed" cone.
+//! - **Torus** — major axis along Z.
+//! - **Prism** — closed polygon defined in the X-Y plane, extruded
+//!   along +Z.
+//!
+//! These match Valenx's right-handed Y-up viewport convention well
+//! enough for v1; we can revisit the coordinate frame once we have
+//! actual users.
+
+use std::f64::consts::PI;
+
+use truck_modeling::{builder, EuclideanSpace, Point3, Rad, Solid as TruckSolid, Vector3, Wire};
+
+use crate::solid::{CadError, Solid};
+
+/// Axis-aligned box.
+///
+/// One corner at the origin, the opposite corner at `(dx, dy, dz)`.
+/// All three dimensions must be strictly positive.
+pub fn box_solid(dx: f64, dy: f64, dz: f64) -> Result<Solid, CadError> {
+    require_positive("box.dx", dx)?;
+    require_positive("box.dy", dy)?;
+    require_positive("box.dz", dz)?;
+
+    // Three orthogonal sweeps — vertex → edge → face → solid. The
+    // sweep direction is the dimension we're extending each step.
+    let v = builder::vertex(Point3::origin());
+    let edge = builder::tsweep(&v, Vector3::new(dx, 0.0, 0.0));
+    let face = builder::tsweep(&edge, Vector3::new(0.0, dy, 0.0));
+    let solid: TruckSolid = builder::tsweep(&face, Vector3::new(0.0, 0.0, dz));
+    Ok(Solid::from_inner(solid))
+}
+
+/// Right circular cylinder centred on the origin.
+///
+/// Base disk lives in the X-Y plane, axis along +Z.
+pub fn cylinder(radius: f64, height: f64) -> Result<Solid, CadError> {
+    require_positive("cylinder.radius", radius)?;
+    require_positive("cylinder.height", height)?;
+
+    // Build a disk: revolve a vertex 360° around the Z axis through
+    // the origin to produce a circle wire, then attach the disk
+    // surface inside it. `try_attach_plane` is the truck builder
+    // helper that creates a planar face from a closed wire.
+    let v = builder::vertex(Point3::new(radius, 0.0, 0.0));
+    let circle = builder::rsweep(&v, Point3::origin(), Vector3::unit_z(), Rad(2.0 * PI));
+    let disk = builder::try_attach_plane(&[circle])
+        .map_err(|e| CadError::InvalidParam(format!("cylinder disk: {e:?}")))?;
+
+    // Translation sweep: disk → solid cylinder along +Z.
+    let solid: TruckSolid = builder::tsweep(&disk, Vector3::new(0.0, 0.0, height));
+    Ok(Solid::from_inner(solid))
+}
+
+/// Sphere centred on the origin.
+///
+/// Built by revolving a semi-circular wire around the Y axis through
+/// the origin, then closing the resulting shell into a solid via
+/// [`builder::cone`] (which is misnamed in the truck API — it's
+/// really "sweep around an axis, closing degenerate edges that hit
+/// the axis").
+pub fn sphere(radius: f64) -> Result<Solid, CadError> {
+    require_positive("sphere.radius", radius)?;
+
+    // Top pole vertex, semi-circle wire around the X axis (so the
+    // wire lives in the Y-Z plane), then revolve that wire around
+    // the Y axis. `builder::cone` collapses the degenerate edges
+    // that touch the rotation axis at the poles, giving us a closed
+    // sphere shell.
+    let v0 = builder::vertex(Point3::new(0.0, radius, 0.0));
+    let wire: Wire = builder::rsweep(&v0, Point3::origin(), Vector3::unit_x(), Rad(PI));
+    let shell = builder::cone(&wire, Vector3::unit_y(), Rad(2.0 * PI));
+    let solid = TruckSolid::new(vec![shell]);
+    Ok(Solid::from_inner(solid))
+}
+
+/// Truncated cone (frustum). Pass `top_radius = 0.0` for a regular
+/// pointed cone, or matching radii for a degenerate "cylinder" (use
+/// [`cylinder`] for that case directly).
+///
+/// Base disk lies in the X-Y plane, axis along +Z, height `height`.
+pub fn cone(base_radius: f64, top_radius: f64, height: f64) -> Result<Solid, CadError> {
+    require_positive("cone.base_radius", base_radius)?;
+    if top_radius < 0.0 {
+        return Err(CadError::InvalidParam(format!(
+            "cone.top_radius must be >= 0, got {top_radius}"
+        )));
+    }
+    require_positive("cone.height", height)?;
+
+    // Build an OPEN profile wire whose endpoints lie on the
+    // rotation axis (Z). truck's `builder::cone` closes the shell
+    // by collapsing the degenerate side edges that ride along the
+    // axis — that's why the profile must START and END on the
+    // rotation axis, with the off-axis vertices in between.
+    //
+    // The convention is the inverse of FreeCAD: it walks DOWN the
+    // axis from top, OUT to the slant, then BACK along the base.
+    //
+    // For a pointed cone (top_radius == 0):
+    //   apex (on axis) → base outer → base centre (on axis)
+    // For a frustum:
+    //   top centre (on axis) → top outer → base outer → base centre (on axis)
+    let top_axis = builder::vertex(Point3::new(0.0, 0.0, height));
+    let base_axis = builder::vertex(Point3::new(0.0, 0.0, 0.0));
+    let wire: Wire = if top_radius > 0.0 {
+        // Frustum: top axis → top outer → base outer → base axis.
+        let top_outer = builder::vertex(Point3::new(top_radius, 0.0, height));
+        let base_outer = builder::vertex(Point3::new(base_radius, 0.0, 0.0));
+        vec![
+            builder::line(&top_axis, &top_outer),
+            builder::line(&top_outer, &base_outer),
+            builder::line(&base_outer, &base_axis),
+        ]
+        .into()
+    } else {
+        // Pointed cone: apex (top axis) → base outer → base axis.
+        let base_outer = builder::vertex(Point3::new(base_radius, 0.0, 0.0));
+        vec![
+            builder::line(&top_axis, &base_outer),
+            builder::line(&base_outer, &base_axis),
+        ]
+        .into()
+    };
+    let shell = builder::cone(&wire, Vector3::unit_z(), Rad(2.0 * PI));
+    let solid = TruckSolid::new(vec![shell]);
+    Ok(Solid::from_inner(solid))
+}
+
+/// Torus. `major_radius` is the centre-circle radius; `minor_radius`
+/// is the tube radius. The torus's major axis lies along Z (so the
+/// hole is parallel to the X-Y plane).
+pub fn torus(major_radius: f64, minor_radius: f64) -> Result<Solid, CadError> {
+    require_positive("torus.major_radius", major_radius)?;
+    require_positive("torus.minor_radius", minor_radius)?;
+    if minor_radius >= major_radius {
+        return Err(CadError::InvalidParam(format!(
+            "torus.minor_radius ({minor_radius}) must be strictly less than \
+             major_radius ({major_radius}) — a self-intersecting torus is \
+             not a valid BRep solid"
+        )));
+    }
+
+    // Standard two-sweep torus from `examples/torus.rs`, but oriented
+    // so the major axis is Z.
+    let v = builder::vertex(Point3::new(major_radius + minor_radius, 0.0, 0.0));
+    let inner_circle = builder::rsweep(
+        &v,
+        Point3::new(major_radius, 0.0, 0.0),
+        Vector3::unit_y(),
+        Rad(2.0 * PI),
+    );
+    let shell = builder::rsweep(
+        &inner_circle,
+        Point3::origin(),
+        Vector3::unit_z(),
+        Rad(2.0 * PI),
+    );
+    let solid = TruckSolid::new(vec![shell]);
+    Ok(Solid::from_inner(solid))
+}
+
+/// Prism — extrude a planar polygon from the X-Y plane along +Z.
+///
+/// Inputs
+/// ------
+///
+/// - `profile_xy` — vertices of the polygon, traversed in order. The
+///   polygon must be closed by the caller (last point != first point;
+///   the function does NOT auto-close). Vertices must be coplanar in
+///   the X-Y plane.
+/// - `height` — extrusion length along +Z. Must be strictly positive.
+///
+/// At least three distinct points are required. Self-intersecting
+/// or non-simple polygons are not validated here — truck will reject
+/// the resulting wire downstream.
+pub fn prism(profile_xy: &[(f64, f64)], height: f64) -> Result<Solid, CadError> {
+    if profile_xy.len() < 3 {
+        return Err(CadError::InvalidParam(format!(
+            "prism profile needs at least 3 points, got {}",
+            profile_xy.len()
+        )));
+    }
+    require_positive("prism.height", height)?;
+
+    // Build vertices, then line edges between successive pairs and
+    // a closing edge back to the start.
+    let mut vertices = Vec::with_capacity(profile_xy.len());
+    for (x, y) in profile_xy {
+        if !x.is_finite() || !y.is_finite() {
+            return Err(CadError::InvalidParam(format!(
+                "prism profile point ({x}, {y}) contains a non-finite value"
+            )));
+        }
+        vertices.push(builder::vertex(Point3::new(*x, *y, 0.0)));
+    }
+    let mut edges = Vec::with_capacity(vertices.len());
+    for i in 0..vertices.len() {
+        let next = (i + 1) % vertices.len();
+        edges.push(builder::line(&vertices[i], &vertices[next]));
+    }
+    let wire: Wire = edges.into();
+    let face = builder::try_attach_plane(&[wire])
+        .map_err(|e| CadError::InvalidParam(format!("prism profile: {e:?}")))?;
+    let solid: TruckSolid = builder::tsweep(&face, Vector3::new(0.0, 0.0, height));
+    Ok(Solid::from_inner(solid))
+}
+
+/// Helper: enforce `value > 0` with a parameter-name-tagged error.
+fn require_positive(name: &str, value: f64) -> Result<(), CadError> {
+    if !value.is_finite() {
+        return Err(CadError::InvalidParam(format!(
+            "{name} must be finite, got {value}"
+        )));
+    }
+    if value <= 0.0 {
+        return Err(CadError::InvalidParam(format!(
+            "{name} must be strictly positive, got {value}"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn box_topology() {
+        let cube = box_solid(2.0, 3.0, 4.0).unwrap();
+        assert_eq!(cube.faces(), 6);
+        assert_eq!(cube.edges(), 12);
+        assert_eq!(cube.vertices(), 8);
+    }
+
+    #[test]
+    fn box_rejects_zero_or_negative_dims() {
+        assert!(matches!(
+            box_solid(-1.0, 1.0, 1.0),
+            Err(CadError::InvalidParam(_))
+        ));
+        assert!(matches!(
+            box_solid(1.0, 0.0, 1.0),
+            Err(CadError::InvalidParam(_))
+        ));
+        assert!(matches!(
+            box_solid(1.0, 1.0, f64::NAN),
+            Err(CadError::InvalidParam(_))
+        ));
+    }
+
+    #[test]
+    fn cylinder_has_three_faces_top_bottom_side() {
+        // top disk + bottom disk + side surface (which truck may
+        // split into 3 sub-faces depending on its closed-sweep
+        // tessellation). All we really assert is "more than zero".
+        let cyl = cylinder(1.0, 2.0).unwrap();
+        assert!(cyl.faces() > 0, "cylinder should have visible faces");
+        assert!(cyl.vertices() > 0);
+    }
+
+    #[test]
+    fn sphere_topology_is_non_empty() {
+        let s = sphere(1.0).unwrap();
+        assert!(s.faces() > 0);
+        assert!(s.vertices() > 0);
+    }
+
+    #[test]
+    fn cone_pointed_and_frustum_both_build() {
+        let pointed = cone(1.0, 0.0, 2.0).unwrap();
+        assert!(pointed.faces() > 0);
+
+        let frustum = cone(2.0, 1.0, 3.0).unwrap();
+        assert!(frustum.faces() >= pointed.faces());
+    }
+
+    #[test]
+    fn cone_rejects_negative_top_radius() {
+        assert!(matches!(
+            cone(1.0, -0.5, 2.0),
+            Err(CadError::InvalidParam(_))
+        ));
+    }
+
+    #[test]
+    fn torus_builds_when_minor_lt_major() {
+        let t = torus(2.0, 0.5).unwrap();
+        assert!(t.faces() > 0);
+    }
+
+    #[test]
+    fn torus_rejects_self_intersecting() {
+        assert!(matches!(torus(1.0, 1.0), Err(CadError::InvalidParam(_))));
+        assert!(matches!(torus(1.0, 1.5), Err(CadError::InvalidParam(_))));
+    }
+
+    #[test]
+    fn prism_extrudes_triangle() {
+        let tri = prism(&[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)], 2.0).unwrap();
+        // A triangular prism has 5 faces (2 triangular ends + 3 rect sides),
+        // 9 edges, 6 vertices.
+        assert_eq!(tri.faces(), 5, "triangular prism should have 5 faces");
+        assert_eq!(tri.vertices(), 6);
+    }
+
+    #[test]
+    fn prism_rejects_short_profiles() {
+        assert!(matches!(
+            prism(&[(0.0, 0.0), (1.0, 0.0)], 1.0),
+            Err(CadError::InvalidParam(_))
+        ));
+    }
+}

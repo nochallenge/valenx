@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-mesh-to-brep"
+description = "Mesh-to-BRep reverse engineering — RANSAC plane / cylinder / sphere / cone detection over a triangulated mesh, then NURBS-surface fitting per detected region, then sewing back into a closed solid where possible (Phase 23)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+anyhow      = { workspace = true }
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+tracing     = { workspace = true }
+nalgebra    = { workspace = true }
+
+valenx-mesh    = { path = "../valenx-mesh" }
+valenx-cad     = { path = "../valenx-cad" }
+valenx-surface = { path = "../valenx-surface" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

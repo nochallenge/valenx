@@ -1,0 +1,32 @@
+[package]
+name         = "valenx-export"
+description  = "ML training-data + report export. Phase 13 / RFC 0012."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+# Used by the field-remap helper that bridges to
+# valenx_fields::interp; the nalgebra Vector3 is the canonical
+# point representation across the workspace.
+nalgebra   = { workspace = true }
+
+valenx-fields = { path = "../valenx-fields" }
+valenx-core   = { path = "../valenx-core" }
+
+# Headless CSV / HTML exporter. Reads a `results.json` and writes
+# whichever artifacts the caller asks for. Useful when a CI job
+# wants to attach a human-readable report to a pull request without
+# firing up the GUI.
+[[bin]]
+name = "valenx-report"
+path = "src/bin/valenx_report.rs"

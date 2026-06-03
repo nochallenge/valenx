@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "bionetgen.simulate"
+mesh    = "(none)"
+
+# BioNetGen rule-based signaling network modeling. Drop your
+# `.bngl` model alongside this case.toml. `output_basename`
+# names the produced .net (reaction network), .gdat (species
+# trajectories), and .cdat (concentrations) files. Set
+# `generate_only = true` to skip simulation and just produce
+# the .net network.
+[bio.bionetgen]
+model            = "model.bngl"
+output_basename  = "model"
+generate_only    = false
+extra_args       = []

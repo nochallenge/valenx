@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "clustalo.align"
+mesh    = "(none)"
+
+# Clustal Omega multiple-sequence alignment. `outfmt` controls the
+# output format and the file extension is picked to match (clustal
+# → .aln, fasta → .fasta, phylip → .phy, etc.).
+[bio.clustalo]
+input           = "input.fa"
+output_basename = "alignment"
+outfmt          = "clustal"
+threads         = 4
+extra_args      = []

@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "icodon.predict"
+mesh    = "(none)"
+
+# iCodon codon-level mRNA stability prediction (R-based).
+# Requires `Rscript` on PATH and the `iCodon` R package
+# installed (devtools::install_github('santiago1234/iCodon')).
+# The user-supplied .R script does `library(iCodon)` and the
+# stability work; it can read `valenx_params.json` via
+# `jsonlite::fromJSON()` for the configured `output_basename`
+# and the staged `input_fasta` filename.
+[bio.icodon]
+script           = "predict.R"
+rscript          = "Rscript"
+# input_fasta    = "transcripts.fa"
+output_basename  = "stability"

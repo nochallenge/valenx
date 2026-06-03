@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "slim.simulate"
+mesh    = "(none)"
+
+# SLiM forward-time population-genetics simulator. Drop your
+# Eidos `.slim` script alongside this case.toml. Optional
+# `seed` makes the run deterministic. Outputs (typically
+# `.trees` from `treeSeqOutput()`) land in the workdir.
+[bio.slim]
+script           = "model.slim"
+# seed           = 42
+output_basename  = "sim"
+extra_args       = []

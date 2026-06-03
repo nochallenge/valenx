@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-genomics"
+description = "NGS / variant-tooling core for Valenx (Round 6 Block 10). Native Rust replacement for the daily-driver portion of samtools, bcftools, VCFtools, the alignment-based core of GATK and FreeBayes, the read simulators ART / wgsim / DWGSIM, and the CRISPR tools CHOPCHOP / Cas-OFFinder / CRISPResso2: SAM / VCF / BED / GFF3 / GTF parsers and writers and a pileup generator; FASTQ quality statistics (a FastQC-class per-base / per-read summary), adapter and quality trimming, read filtering, coordinate + sequence duplicate marking and reference depth computation; a pileup-based SNV and short-indel caller with a Bayesian diploid genotype-likelihood model, variant filtering / annotation, allele-frequency statistics and VCF normalisation (left-align, decompose, trim); an Illumina-style short-read simulator (ART-class — position-specific substitution error model + quality profiles), a long-read simulator (PacBio / Nanopore-style indel-heavy error model — pbsim / Badread-class) and paired-end generation with a configurable insert-size distribution; CRISPR guide-RNA design (PAM scan + a Doench Rule-Set-2-style on-target score), off-target enumeration (a mismatch-tolerant genome scan with a CFD-style off-target score) and CRISPR edit-outcome analysis (a CRISPResso-class indel-spectrum quantifier); k-mer-based assembly statistics (N50 / L50 / GC), a De Bruijn graph assembler and an overlap-layout-consensus mini-assembler, FASTA / FASTQ subsampling, and a top-level batch pipeline with a bundled `GenomicsReport`. Pure deterministic algorithms, no neural-network weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure parsing + numerical algorithms. `valenx-bioseq` (Block 6.1)
+# supplies the `Seq` type, the FASTQ codec and quality handling;
+# `valenx-align` (Block 6.2) supplies CIGAR conversion and the
+# seed-and-extend read mapper used by the edit-outcome analyser. serde
+# drives the data-model derives. No heavy or platform-specific deps —
+# the SAM / VCF / BED / GFF parsers, the pileup engine, the variant
+# caller, the read simulators and the assemblers are hand-rolled.
+valenx-bioseq = { path = "../valenx-bioseq" }
+valenx-align  = { path = "../valenx-align" }
+serde         = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

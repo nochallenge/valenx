@@ -1,0 +1,18 @@
+physics = "cfd"
+solver  = "openfoam.simpleFoam"
+mesh    = "(none)"
+
+[flow]
+turbulence = "kEpsilon"
+density    = 1.225  # kg/m^3 (sea-level air)
+viscosity  = 1.5e-5
+
+[boundaries.inlet]
+type     = "fixedValue"
+velocity = [10.0, 0.0, 0.0]
+
+[boundaries.outlet]
+type = "zeroGradient"
+
+[boundaries.walls]
+type = "noSlip"

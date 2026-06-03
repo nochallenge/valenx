@@ -1,0 +1,18 @@
+physics = "bio"
+solver  = "rfdiffusion.design"
+mesh    = "(none)"
+
+# RFdiffusion protein backbone generation. The user-supplied
+# Python script imports `rfdiffusion` and reads
+# `valenx_params.json` (auto-written by the adapter) for the
+# config knobs below. Modes: motif (motif scaffolding), binder
+# (target-binder design), unconditional (free generation),
+# partial-diffusion (structural perturbation).
+[bio.rfdiffusion]
+script           = "design.py"
+python           = "python3"
+input_pdb        = "context.pdb"
+mode             = "unconditional"
+num_designs      = 8
+diffusion_steps  = 50
+output_basename  = "design"

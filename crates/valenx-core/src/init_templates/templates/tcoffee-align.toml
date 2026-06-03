@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "tcoffee.align"
+mesh    = "(none)"
+
+# T-Coffee consensus / library-based multiple-sequence alignment.
+# `outfmt` controls the output content; the output file is always
+# `.aln` regardless of format. Optional `mode` picks among
+# `regular` / `expresso` / `psicoffee` / etc. — omit to use
+# T-Coffee's built-in default.
+[bio.tcoffee]
+input           = "input.fa"
+output_basename = "alignment"
+outfmt          = "clustalw"
+# mode          = "regular"
+extra_args      = []

@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "iqtree.tree"
+mesh    = "(none)"
+
+# IQ-TREE maximum-likelihood phylogenetic inference. Drop a
+# multiple sequence alignment (FASTA / PHYLIP / NEXUS) alongside
+# this case.toml. `model = "MFP"` triggers ModelFinder Plus
+# (auto model selection); pin to e.g. "GTR+G" / "WAG+I+G" for
+# specific models. `bootstrap = 0` disables UFBoot.
+[bio.iqtree]
+alignment   = "alignment.fa"
+model       = "MFP"
+bootstrap   = 1000
+threads     = "AUTO"
+prefix      = "tree"
+extra_args  = []

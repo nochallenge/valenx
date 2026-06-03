@@ -1,0 +1,30 @@
+[package]
+name        = "valenx-variant-effect"
+description = "Variant-effect orchestration for Valenx. The integration layer that turns a parsed genetic variant (HGVS-style protein / coding substitutions) into a predicted-effect report by applying the variant to a reference sequence and chaining it over a set of pluggable effect predictors. Pure library: parses variants, applies them to `valenx-bioseq` `Seq` values, derives the protein consequence via translation, runs each predictor and aggregates a consensus call. Writes no files — callers persist the returned report. The concrete predictors (AlphaMissense, etc.) plug in through the `VariantEffectPredictor` trait via their existing adapters."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure orchestration. `valenx-bioseq` supplies the `Seq` type, the
+# IUPAC alphabets and the NCBI translation tables used to derive the
+# protein consequence of a coding substitution; `thiserror` derives the
+# error type; serde drives the report data-model derives so callers can
+# persist the report as JSON (this crate never writes it). No heavy or
+# platform-specific deps.
+valenx-bioseq = { path = "../valenx-bioseq" }
+thiserror     = { workspace = true }
+serde         = { workspace = true }
+
+[dev-dependencies]
+# Only the tests exercise JSON round-tripping of the report (the library
+# itself emits no JSON and writes no files); serde_json stays dev-only.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "planemo.run"
+mesh    = "(none)"
+
+# Planemo Galaxy ecosystem CLI. `action` picks the planemo
+# subcommand (run / test / lint).
+[bio.planemo]
+workflow        = "workflow.ga"
+# inputs        = "inputs.json"
+output_basename = "report"
+action          = "run"
+extra_args      = []

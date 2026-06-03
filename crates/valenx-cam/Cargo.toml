@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-cam"
+description = "CAM workbench (Phase 10): tool library, stock, operations (Profile/Pocket/Drill/Face), G-code postprocessors (GRBL/LinuxCNC/Fanuc), toolpath simulation."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+nalgebra    = { workspace = true }
+serde       = { workspace = true }
+ron         = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+# Round-28 H2: canonical atomic_write_str for persist.rs::write_to.
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

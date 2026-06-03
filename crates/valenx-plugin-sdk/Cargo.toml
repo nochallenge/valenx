@@ -1,0 +1,16 @@
+[package]
+name         = "valenx-plugin-sdk"
+description  = "Helper crate for plugin authors. Re-exports the Adapter trait + provides the FFI-symbol macro that plugins need to register with the host. Phase 14 / RFC 0003."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+# Plugin authors `use valenx_plugin_sdk::Adapter` etc.; the trait
+# itself lives in valenx-core because the host registry uses it too.
+valenx-core = { path = "../valenx-core" }

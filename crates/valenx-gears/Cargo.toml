@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-gears"
+description = "Gears workbench (Phase 39) — involute spur, helical, bevel, and worm gear generators. Parametric tooth-profile math from the canonical involute equations + tessellated solid output for spur/helical/bevel/worm gears via twisted extrusion / conical sweep / helical thread synthesis."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+valenx-cad  = { path = "../valenx-cad" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

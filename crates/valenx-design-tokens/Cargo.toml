@@ -1,0 +1,24 @@
+[package]
+name         = "valenx-design-tokens"
+description  = "Single source of truth for Valenx design tokens. Reads tokens.json at build time, generates Rust consts, theme-resolution API, and palette exports."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+build        = "build.rs"
+
+publish.workspace     = true
+[dependencies]
+# Runtime is intentionally dependency-light: tokens resolve to consts.
+
+[build-dependencies]
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# Used by `tests/contrast_audit.rs` to gate the canonical fg/bg
+# pairs through WCAG 2.1 AA. Drift in tokens.json that breaks
+# contrast for any documented pair fails CI.
+valenx-a11y = { path = "../valenx-a11y" }

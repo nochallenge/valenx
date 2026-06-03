@@ -1,0 +1,18 @@
+physics = "bio"
+solver  = "rfantibody.design"
+mesh    = "(none)"
+
+# RFantibody antibody-specific design (RosettaCommons fork of
+# RFdiffusion). `framework_pdb` is the antibody framework;
+# `target_pdb` is the antigen target. `design_loops` is a
+# subset of ["H1", "H2", "H3", "L1", "L2", "L3"]; H3 is the
+# most variable + most-designed loop.
+[bio.rfantibody]
+script           = "design.py"
+python           = "python3"
+framework_pdb    = "framework.pdb"
+target_pdb       = "antigen.pdb"
+design_loops     = ["H3"]
+num_designs      = 8
+diffusion_steps  = 50
+output_basename  = "antibody"

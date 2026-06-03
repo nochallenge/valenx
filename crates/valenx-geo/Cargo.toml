@@ -1,0 +1,22 @@
+[package]
+name         = "valenx-geo"
+description  = "Canonical geometry types (BRep, Shape, Geometry) exchanged between CAD adapters and meshers."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+nalgebra   = { workspace = true }
+
+# Used by the polyline -> extrusion -> Mesh path. Both crates are
+# already in the workspace dep graph; including them here just
+# makes the dependency explicit.
+valenx-mesh = { path = "../valenx-mesh" }

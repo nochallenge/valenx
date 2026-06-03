@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "psi4.compute"
+mesh    = "(none)"
+
+# Psi4 HF/DFT/post-HF quantum chemistry. Drop your `.in` /
+# `.dat` Psi4 input file alongside this case.toml. `memory`
+# format is "<N> mb" or "<N> gb".
+[bio.psi4]
+input       = "input.in"
+output      = "output.dat"
+threads     = 1
+memory      = "1 gb"
+extra_args  = []

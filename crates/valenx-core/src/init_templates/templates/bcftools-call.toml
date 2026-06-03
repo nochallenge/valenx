@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "bcftools.call"
+mesh    = "(none)"
+
+# bcftools VCF/BCF multitool. Action is `view` / `call` / `filter` /
+# `concat`. For `call` you must provide a `reference` FASTA; for
+# `concat` swap `input` for the multi-element `inputs` array.
+[bio.bcftools]
+action     = "call"
+input      = "aligned.bam"
+output     = "variants.vcf"
+reference  = "ref.fa"
+threads    = 1
+extra_args = []

@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "ngl.view"
+mesh    = "(none)"
+
+# NGL Viewer Rose-lab WebGL framework, wrapped via the
+# `nglview` Python binding (Jupyter-friendly). The user-
+# supplied .py script does `import nglview` and the viewer
+# composition; it can read `valenx_params.json` for the
+# configured `output_basename` and the staged `input_structure`
+# filename.
+[bio.ngl]
+script             = "viewer.py"
+python             = "python3"
+# input_structure  = "structure.pdb"
+output_basename    = "viewer"

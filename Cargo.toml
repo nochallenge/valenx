@@ -1,0 +1,544 @@
+# Workspace manifest for Valenx.
+#
+# Every crate under `crates/` is a workspace member. Shared metadata
+# (version, edition, license) lives in `[workspace.package]` so
+# individual crates just inherit with `.workspace = true`.
+#
+# Dependency versions are pinned here so every crate uses the same
+# version of common libs; update in one place.
+
+[workspace]
+resolver = "2"
+members = [
+    # Native shell + canonical types
+    "crates/valenx-app",
+    "crates/valenx-astro",
+    "crates/valenx-core",
+    "crates/valenx-geo",
+    "crates/valenx-mesh",
+    "crates/valenx-fields",
+    "crates/valenx-feature-tree",
+    "crates/valenx-viz",
+    "crates/valenx-icons",
+    "crates/valenx-fonts",
+    "crates/valenx-design-tokens",
+    "crates/valenx-plugin",
+    "crates/valenx-plugin-sdk",
+    "crates/valenx-optimize",
+    "crates/valenx-audit",
+    "crates/valenx-rbac",
+    "crates/valenx-sketch",
+    "crates/valenx-draft",
+    "crates/valenx-techdraw",
+    "crates/valenx-assembly",
+    "crates/valenx-fillet",
+    "crates/valenx-fillet-brep",
+    "crates/valenx-export",
+    "crates/valenx-executor-slurm",
+    "crates/valenx-crash-reporter",
+    "crates/valenx-first-run",
+    "crates/valenx-i18n",
+    "crates/valenx-a11y",
+    "crates/valenx-bio",
+    "crates/valenx-cad",
+    "crates/valenx-step-iges",
+    "crates/valenx-surface",
+    "crates/valenx-cam",
+    "crates/valenx-arch",
+    "crates/valenx-spreadsheet",
+    "crates/valenx-py",
+    "crates/valenx-dock",
+    "crates/valenx-mcp",
+    "crates/valenx-macro",
+    "crates/valenx-addons",
+    "crates/valenx-mesh-to-brep",
+    "crates/valenx-fem",
+    "crates/valenx-inspect",
+    "crates/valenx-reverse",
+    "crates/valenx-curves",
+    "crates/valenx-lattice",
+    "crates/valenx-animate",
+    "crates/valenx-render-bridge",
+    "crates/valenx-pathtrace",
+    "crates/valenx-cfd-native",
+    "crates/valenx-aero",
+    "crates/valenx-plot",
+    "crates/valenx-meshpart",
+    "crates/valenx-reinforcement",
+    "crates/valenx-sheet-metal",
+    "crates/valenx-geomatics",
+    "crates/valenx-fasteners",
+    "crates/valenx-symbols",
+    "crates/valenx-frames",
+    "crates/valenx-gears",
+    "crates/valenx-springs",
+    "crates/valenx-manipulator",
+    "crates/valenx-kicad",
+    "crates/valenx-defeaturing",
+    "crates/valenx-collision",
+    "crates/valenx-openscad-import",
+    "crates/valenx-partlib",
+    "crates/valenx-decimate-pro",
+    "crates/valenx-threads-pro",
+    "crates/valenx-piping",
+    "crates/valenx-hvac",
+    "crates/valenx-print-bed",
+    "crates/valenx-openscad",
+    "crates/valenx-solvespace-3d",
+    "crates/valenx-camotics-sim",
+    "crates/valenx-opencamlib",
+    "crates/valenx-cgal-port",
+    "crates/valenx-libigl-port",
+    "crates/valenx-librecad-2d",
+    "crates/valenx-subdivision",
+    "crates/valenx-interior",
+    "crates/valenx-salome-bridge",
+    "crates/valenx-brlcad-csg",
+    "crates/valenx-blender-mesh-ops",
+    "crates/valenx-gcad3d",
+    "crates/valenx-paramhist",
+    "crates/valenx-vector-graphics",
+    "crates/valenx-heekscad",
+    "crates/valenx-occt-surface",
+    "crates/valenx-occt-exchange",
+    "crates/valenx-occt-advanced",
+    "crates/valenx-occt-viz",
+
+    # Round 6 — computational biology
+    "crates/valenx-bioseq",
+    "crates/valenx-align",
+    "crates/valenx-phylo",
+    "crates/valenx-popgen",
+    "crates/valenx-rnastruct",
+    "crates/valenx-md",
+    "crates/valenx-cheminf",
+    "crates/valenx-biostruct",
+    "crates/valenx-qchem",
+    "crates/valenx-genomics",
+    "crates/valenx-sysbio",
+    "crates/valenx-dock-screen",
+    "crates/valenx-genediting",
+    "crates/valenx-structpredict",
+    "crates/valenx-rnadesign",
+    "crates/valenx-variant-effect",
+    "crates/valenx-reactdyn",
+
+    "crates/valenx-test-utils",
+    "crates/valenx-e2e-tests",
+
+    # CFD adapters
+    "crates/valenx-adapters/cfd/valenx-adapter-openfoam",
+    "crates/valenx-adapters/cfd/valenx-adapter-su2",
+
+    # CAD adapters
+    "crates/valenx-adapters/cad/valenx-adapter-freecad",
+    "crates/valenx-adapters/cad/valenx-adapter-occt",
+
+    # Meshing adapters
+    "crates/valenx-adapters/mesh/valenx-adapter-gmsh",
+    "crates/valenx-adapters/mesh/valenx-adapter-netgen",
+
+    # FEA adapters
+    "crates/valenx-adapters/fea/valenx-adapter-calculix",
+    "crates/valenx-adapters/fea/valenx-adapter-code-aster",
+    "crates/valenx-adapters/fea/valenx-adapter-elmer",
+    "crates/valenx-adapters/fea/valenx-adapter-openradioss",
+
+    # Chemistry adapters
+    "crates/valenx-adapters/chemistry/valenx-adapter-cantera",
+
+    # Molecular-dynamics adapters
+    "crates/valenx-adapters/md/valenx-adapter-lammps",
+    "crates/valenx-adapters/md/valenx-adapter-gromacs",
+
+    # Electromagnetics adapters
+    "crates/valenx-adapters/em/valenx-adapter-openems",
+    "crates/valenx-adapters/em/valenx-adapter-meep",
+
+    # Battery-modelling adapters
+    "crates/valenx-adapters/battery/valenx-adapter-pybamm",
+
+    # Dynamics / robotics adapters
+    "crates/valenx-adapters/dynamics/valenx-adapter-mujoco",
+
+    # Multi-physics coupling meta-adapter
+    "crates/valenx-adapters/coupling/valenx-adapter-precice",
+
+    # Biology adapters (Phase 17)
+    "crates/valenx-adapters/bio/valenx-adapter-biopython",
+    "crates/valenx-adapters/bio/valenx-adapter-rdkit",
+    "crates/valenx-adapters/bio/valenx-adapter-openmm",
+    "crates/valenx-adapters/bio/valenx-adapter-chimerax",
+    "crates/valenx-adapters/bio/valenx-adapter-oxdna",
+    "crates/valenx-adapters/bio/valenx-adapter-mdanalysis",
+    "crates/valenx-adapters/bio/valenx-adapter-colabfold",
+    "crates/valenx-adapters/bio/valenx-adapter-esmfold",
+    "crates/valenx-adapters/bio/valenx-adapter-openfold",
+    "crates/valenx-adapters/bio/valenx-adapter-alphafold2",
+    "crates/valenx-adapters/bio/valenx-adapter-alphafold3",
+    "crates/valenx-adapters/bio/valenx-adapter-rosettafold",
+    "crates/valenx-adapters/bio/valenx-adapter-omegafold",
+
+    # Biology (Phase 17.7) — structure search
+    "crates/valenx-adapters/bio/valenx-adapter-foldseek",
+
+    # Biology adapters (Phase 18)
+    "crates/valenx-adapters/bio/valenx-adapter-bwa",
+    "crates/valenx-adapters/bio/valenx-adapter-minimap2",
+    "crates/valenx-adapters/bio/valenx-adapter-mafft",
+    "crates/valenx-adapters/bio/valenx-adapter-muscle",
+    "crates/valenx-adapters/bio/valenx-adapter-hmmer",
+    "crates/valenx-adapters/bio/valenx-adapter-samtools",
+
+    # Biology (Phase 18.5) — aligners expansion
+    "crates/valenx-adapters/bio/valenx-adapter-bowtie2",
+    "crates/valenx-adapters/bio/valenx-adapter-mmseqs2",
+    "crates/valenx-adapters/bio/valenx-adapter-diamond",
+
+    # Biology adapters (Phase 19) — variant calling
+    "crates/valenx-adapters/bio/valenx-adapter-bcftools",
+    "crates/valenx-adapters/bio/valenx-adapter-gatk",
+    "crates/valenx-adapters/bio/valenx-adapter-deepvariant",
+
+    # Biology adapters (Phase 23) — molecular viewers
+    "crates/valenx-adapters/bio/valenx-adapter-pymol",
+    "crates/valenx-adapters/bio/valenx-adapter-vmd",
+    "crates/valenx-adapters/bio/valenx-adapter-igv",
+
+    # Biology adapters (Phase 27) — protein design
+    "crates/valenx-adapters/bio/valenx-adapter-rfdiffusion",
+    "crates/valenx-adapters/bio/valenx-adapter-proteinmpnn",
+
+    # Biology (Phase 27.5) — protein design expansion
+    "crates/valenx-adapters/bio/valenx-adapter-chroma",
+    "crates/valenx-adapters/bio/valenx-adapter-esm-if",
+    "crates/valenx-adapters/bio/valenx-adapter-rfantibody",
+
+    # Biology (Phase 34) — molecular docking
+    "crates/valenx-adapters/bio/valenx-adapter-vina",
+    "crates/valenx-adapters/bio/valenx-adapter-autodock4",
+
+    # Biology (Phase 24) — cheminformatics expansion
+    "crates/valenx-adapters/bio/valenx-adapter-deepchem",
+    "crates/valenx-adapters/bio/valenx-adapter-openbabel",
+    "crates/valenx-adapters/bio/valenx-adapter-avogadro",
+
+    # Biology (Phase 22) — workflow managers
+    "crates/valenx-adapters/bio/valenx-adapter-nextflow",
+    "crates/valenx-adapters/bio/valenx-adapter-snakemake",
+
+    # Biology (Phase 22.5) — workflow managers expansion
+    "crates/valenx-adapters/bio/valenx-adapter-planemo",
+    "crates/valenx-adapters/bio/valenx-adapter-cromwell",
+    "crates/valenx-adapters/bio/valenx-adapter-cwltool",
+
+    # Biology (Phase 19.5) — single-cell genomics
+    "crates/valenx-adapters/bio/valenx-adapter-scanpy",
+    "crates/valenx-adapters/bio/valenx-adapter-scvi",
+
+    # Biology (Phase 19.6) — single-cell expansion
+    "crates/valenx-adapters/bio/valenx-adapter-seurat",
+    "crates/valenx-adapters/bio/valenx-adapter-anndata",
+
+    # Biology (Phase 18.6) — RNA-seq alignment
+    "crates/valenx-adapters/bio/valenx-adapter-hisat2",
+    "crates/valenx-adapters/bio/valenx-adapter-star",
+
+    # Biology (Phase 18.7) — sequence search
+    "crates/valenx-adapters/bio/valenx-adapter-blast",
+    "crates/valenx-adapters/bio/valenx-adapter-clustalo",
+    "crates/valenx-adapters/bio/valenx-adapter-tcoffee",
+
+    # Biology (Phase 20) — transcript quantification
+    "crates/valenx-adapters/bio/valenx-adapter-salmon",
+    "crates/valenx-adapters/bio/valenx-adapter-kallisto",
+
+    # Biology (Phase 30) — phylogenetics
+    "crates/valenx-adapters/bio/valenx-adapter-iqtree",
+    "crates/valenx-adapters/bio/valenx-adapter-raxml-ng",
+    "crates/valenx-adapters/bio/valenx-adapter-fasttree",
+
+    # Biology (Phase 28) — RNA structure
+    "crates/valenx-adapters/bio/valenx-adapter-viennarna",
+    "crates/valenx-adapters/bio/valenx-adapter-rnastructure",
+    "crates/valenx-adapters/bio/valenx-adapter-nupack",
+
+    # Biology (Phase 44.5) — RNA folding expansion
+    "crates/valenx-adapters/bio/valenx-adapter-mfold",
+    "crates/valenx-adapters/bio/valenx-adapter-eternafold",
+    "crates/valenx-adapters/bio/valenx-adapter-linearfold",
+
+    # Biology (Phase 25) — quantum chemistry
+    "crates/valenx-adapters/bio/valenx-adapter-psi4",
+    "crates/valenx-adapters/bio/valenx-adapter-nwchem",
+    "crates/valenx-adapters/bio/valenx-adapter-xtb",
+
+    # Biology (Phase 27.6) — EvolutionaryScale models
+    "crates/valenx-adapters/bio/valenx-adapter-esm3",
+    "crates/valenx-adapters/bio/valenx-adapter-esmc",
+
+    # Biology (Phase 32) — systems biology
+    "crates/valenx-adapters/bio/valenx-adapter-copasi",
+    "crates/valenx-adapters/bio/valenx-adapter-bionetgen",
+    "crates/valenx-adapters/bio/valenx-adapter-physicell",
+
+    # Biology (Phase 32.5) — spatial stochastic reaction-diffusion
+    "crates/valenx-adapters/bio/valenx-adapter-smoldyn",
+    "crates/valenx-adapters/bio/valenx-adapter-mcell",
+
+    # Biology (Phase 36) — cryo-EM
+    "crates/valenx-adapters/bio/valenx-adapter-relion",
+    "crates/valenx-adapters/bio/valenx-adapter-eman2",
+    "crates/valenx-adapters/bio/valenx-adapter-ctffind",
+
+    # Biology (Phase 31) — sequencing read simulators
+    "crates/valenx-adapters/bio/valenx-adapter-art",
+    "crates/valenx-adapters/bio/valenx-adapter-wgsim",
+    "crates/valenx-adapters/bio/valenx-adapter-badread",
+
+    # Biology (Phase 35) — CRISPR design
+    "crates/valenx-adapters/bio/valenx-adapter-chopchop",
+    "crates/valenx-adapters/bio/valenx-adapter-crispor",
+    "crates/valenx-adapters/bio/valenx-adapter-cas-offinder",
+
+    # Biology (Phase 35.5) — base + prime editing design
+    "crates/valenx-adapters/bio/valenx-adapter-be-designer",
+    "crates/valenx-adapters/bio/valenx-adapter-be-hive",
+    "crates/valenx-adapters/bio/valenx-adapter-primedesign",
+    "crates/valenx-adapters/bio/valenx-adapter-pegfinder",
+
+    # Biology (Phase 35.6) — edit-outcome prediction
+    "crates/valenx-adapters/bio/valenx-adapter-indelphi",
+    "crates/valenx-adapters/bio/valenx-adapter-forecast",
+    "crates/valenx-adapters/bio/valenx-adapter-alphamissense",
+    "crates/valenx-adapters/bio/valenx-adapter-crispritz",
+
+    # Biology (Phase 38) — Rosetta family (academic-license flagged)
+    "crates/valenx-adapters/bio/valenx-adapter-rosetta",
+    "crates/valenx-adapters/bio/valenx-adapter-pyrosetta",
+
+    # Biology (Phase 29) — population genetics
+    "crates/valenx-adapters/bio/valenx-adapter-slim",
+    "crates/valenx-adapters/bio/valenx-adapter-msprime",
+    "crates/valenx-adapters/bio/valenx-adapter-tskit",
+
+    # Biology (Phase 30.5) — Bayesian phylogenetics
+    "crates/valenx-adapters/bio/valenx-adapter-beast2",
+    "crates/valenx-adapters/bio/valenx-adapter-mrbayes",
+
+    # Biology (Phase 39) — DNA structural geometry (academic-license flagged)
+    "crates/valenx-adapters/bio/valenx-adapter-x3dna",
+    "crates/valenx-adapters/bio/valenx-adapter-curves",
+    "crates/valenx-adapters/bio/valenx-adapter-dssr",
+
+    # Biology (Phase 5.5) — MD analysis expansion
+    "crates/valenx-adapters/bio/valenx-adapter-plumed",
+    "crates/valenx-adapters/bio/valenx-adapter-prody",
+    "crates/valenx-adapters/bio/valenx-adapter-cpptraj",
+
+    # Biology (Phase 5.6) — bio MD engines (academic-license flagged)
+    "crates/valenx-adapters/bio/valenx-adapter-namd",
+    "crates/valenx-adapters/bio/valenx-adapter-amber-sander",
+    "crates/valenx-adapters/bio/valenx-adapter-hoomd",
+
+    # Biology (Phase 5.7) — Python MD trajectory analyzers
+    "crates/valenx-adapters/bio/valenx-adapter-mdtraj",
+
+    # Biology (Phase 33) — synthetic biology
+    "crates/valenx-adapters/bio/valenx-adapter-pysbol",
+    "crates/valenx-adapters/bio/valenx-adapter-j5",
+    "crates/valenx-adapters/bio/valenx-adapter-cello",
+
+    # Biology (Phase 41) — sequence editors / plasmid design
+    "crates/valenx-adapters/bio/valenx-adapter-pydna",
+    "crates/valenx-adapters/bio/valenx-adapter-jalview",
+
+    # Biology (Phase 43) — codon optimization / sequence design
+    "crates/valenx-adapters/bio/valenx-adapter-dnachisel",
+    "crates/valenx-adapters/bio/valenx-adapter-lineardesign",
+    "crates/valenx-adapters/bio/valenx-adapter-icodon",
+
+    # Biology (Phase 40) — microscopy / bioimage analysis
+    "crates/valenx-adapters/bio/valenx-adapter-fiji",
+    "crates/valenx-adapters/bio/valenx-adapter-cellprofiler",
+    "crates/valenx-adapters/bio/valenx-adapter-ilastik",
+
+    # Biology (Phase 42) — molecular viewers
+    "crates/valenx-adapters/bio/valenx-adapter-molstar",
+    "crates/valenx-adapters/bio/valenx-adapter-ngl",
+
+    # Biology (Phase 45) — pharmacokinetics + RNA tertiary structure
+    "crates/valenx-adapters/bio/valenx-adapter-pksim",
+    "crates/valenx-adapters/bio/valenx-adapter-simrna",
+]
+
+# ---------------------------------------------------------------------------
+# Shared crate metadata
+# ---------------------------------------------------------------------------
+
+[workspace.package]
+version      = "0.1.0-alpha.1"
+edition      = "2021"
+rust-version = "1.88"  # MSRV = stable - 3 (see POLICIES.md). Bumped via PR when stable moves. 1.88 required for eframe 0.28's transitive `image@0.25.10`.
+authors      = ["Valenx contributors"]
+license      = "MIT OR Apache-2.0"
+repository   = "https://github.com/nochallenge/valenx"
+homepage     = "https://github.com/nochallenge/valenx"
+readme       = "README.md"
+publish      = false   # workspace-level default; sibling crates inherit via `publish.workspace = true`
+
+# ---------------------------------------------------------------------------
+# Shared dependency versions
+# ---------------------------------------------------------------------------
+
+[workspace.dependencies]
+# Error handling
+anyhow     = "1"
+thiserror  = "2"
+
+# Serialization
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+toml        = "0.8"
+ron              = "0.8"
+nalgebra-sparse  = "0.10"
+
+# OS link/file opener — used by valenx-app for "open project workdir
+# in the file manager" / "open the help URL" affordances. Lives at
+# workspace level so any first-party crate that needs to open an
+# external URL or file path picks up the same pinned version.
+opener      = "0.8"
+
+# Observability
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Numerics
+ndarray   = "0.15"
+nalgebra  = { version = "0.33", features = ["serde-serialize"] }
+byteorder = "1"
+
+# ZLIB / deflate codec — used by the JT reader for ZLIB-compressed
+# segment payloads (the common production-file case) and available to
+# any other format reader that needs raw inflate / deflate. Already in
+# the lockfile as a transitive dep of vtkio; pinning at workspace level
+# so first-party use is explicit.
+flate2    = "1"
+
+# Concurrency
+rayon  = "1"
+tokio  = { version = "1", features = ["rt-multi-thread", "macros", "process", "sync", "time", "io-util", "io-std"] }
+
+# Cross-platform file locking — used by `valenx-audit` to serialise
+# concurrent `AuditWriter::append` calls so the SHA-256 prev_hash
+# chain stays intact even when two threads / processes race against
+# the same log. Pure-Rust shim around `flock(2)` (POSIX) and
+# `LockFileEx` (Windows); no native side-deps.
+fs2 = "0.4"
+
+# Hashing / IDs
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# SemVer
+semver = "1"
+
+# Native UI — eframe wraps winit + egui with a default glow backend.
+# wgpu bindings are activated via the backend feature when the
+# viewport crate graduates to its own renderer.
+eframe    = { version = "0.28", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"] }
+egui      = "0.28"
+egui_plot = "0.28"
+# wgpu + bytemuck for the custom viewport render pipeline. eframe's
+# wgpu feature re-exports `eframe::wgpu` + `eframe::egui_wgpu`.
+bytemuck  = { version = "1", features = ["derive"] }
+
+# Native file dialogs (OS-native picker on every platform). Default
+# features pick Win32 / AppKit / xdg-portal depending on platform.
+rfd    = "0.14"
+
+# Dynamic-library loading for the plugin loader (valenx-plugin).
+# Cross-platform `dlopen` / `LoadLibrary` wrapper.
+libloading = "0.8"
+
+# Rust-native BRep CAD kernel (RICOS Co. Ltd, Apache-2.0). Powers the
+# Part workbench's primitives, booleans, and tessellation in
+# `valenx-cad`. Disable `truck-shapeops` default features to avoid the
+# `truck-stepio` test dependency on STEP I/O, which we don't use.
+truck-modeling = "0.6"
+# truck-meshalgo: keep vtk feature; the lz4_flex 0.7→0.11 RUSTSEC-2026-0041
+# mitigation lives in vendor/vtkio (see vendor/vtkio/CHANGES_VS_UPSTREAM.md).
+# Cargo.lock confirms lz4_flex 0.11.6 is the only version present.
+truck-meshalgo = "0.4"
+truck-shapeops = { version = "0.4", default-features = false }
+
+# ---------------------------------------------------------------------------
+# Release and dev profiles
+# ---------------------------------------------------------------------------
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"
+panic         = "abort"
+
+[profile.dev]
+# A little optimization on our own crates: opt-level 1 captures most of
+# the runtime speedup of higher levels while staying fast to compile.
+# The compute-heavy crates (CFD / FEM / aero / MD solvers) run ~5-20x
+# faster than the opt-level-0 default, so the dev test suite stops being
+# dominated by unoptimized numerics.
+opt-level = 1
+debug     = true
+
+# Dependencies (nalgebra, ndarray, etc.) fully optimized even in dev /
+# test builds. They compile once and are cached, so this doesn't slow
+# day-to-day iteration — it only speeds the numerics that lean on them.
+# Standard recipe for compute-heavy Rust workspaces (the Bevy-book
+# pattern); applies to external deps, not the workspace crates above.
+[profile.dev.package."*"]
+opt-level = 3
+
+# valenx-aero is the one genuinely compute-bound long-pole crate — its
+# immersed-boundary cut-cell CFD tests dominated the suite (57 min at
+# opt-level 0, 9 min at opt-level 1). Fully optimize it in both the dev
+# and test profiles; it's rarely edited, so the slower recompile is a
+# fine trade for the test-run speedup. The other numerical crates
+# (cfd-native, fem, md) already run sub-second, so they deliberately do
+# NOT get this — it would only slow their recompiles for no gain.
+[profile.dev.package.valenx-aero]
+opt-level = 3
+[profile.test.package.valenx-aero]
+opt-level = 3
+
+# Faster release-for-validation builds during development.
+[profile.release-fast]
+inherits     = "release"
+lto          = "off"
+codegen-units = 16
+incremental  = true
+
+# Benchmarks need release-like performance but with debuginfo.
+[profile.bench]
+inherits = "release"
+debug    = true
+strip    = "none"
+
+# Vendored vtkio with lz4_flex bumped from 0.7.5 → 0.11 to resolve
+# RUSTSEC-2026-0041 (lz4_flex decompress can leak uninit memory). The
+# vtk feature path in our deps (truck-shapeops → truck-meshalgo →
+# vtkio → lz4_flex) couldn't be broken via cargo feature unification,
+# so we patch vtkio at the source level. See vendor/vtkio/Cargo.toml
+# for the version suffix `+valenx-patch` and minimal source diffs.
+#
+# WARNING (round-16 L2): the `vtkio` patch entry below MUST be removed
+# in the same commit that removes `vendor/vtkio/`. If the directory
+# is deleted but this line is left, the next `cargo build` errors
+# with `error: failed to resolve patches for ... vendor/vtkio` and
+# every workspace member fails to compile. If the line is removed but
+# the directory is left, the patched lz4_flex bump is silently lost
+# and RUSTSEC-2026-0041 reappears via the transitive truck-shapeops
+# → vtkio → lz4_flex 0.7.5 path. Always update both in lockstep.
+[patch.crates-io]
+vtkio = { path = "vendor/vtkio" }

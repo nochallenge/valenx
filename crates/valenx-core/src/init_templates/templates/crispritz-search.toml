@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "crispritz.search"
+mesh    = "(none)"
+
+# CRISPRitz off-target search. The user-supplied .py script
+# does `import crispritz` and the search work.
+[bio.crispritz]
+script           = "search.py"
+python           = "python3"
+# input_fasta    = "guides.fa"
+output_basename  = "offtargets"

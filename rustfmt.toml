@@ -1,0 +1,40 @@
+# rustfmt configuration for the Valenx workspace.
+#
+# We stay close to defaults — every option here is either a
+# default-that-we-want-to-pin (so it doesn't drift if upstream changes
+# its mind) or a small, widely-agreed-upon deviation.
+#
+# Anything controversial belongs in an RFC, not in this file.
+
+edition = "2021"
+
+# 100 is the community default. We pin it explicitly so formatter
+# behavior is stable across contributors.
+max_width = 100
+
+# Hard-wrap comments to the same width so rustdoc reads well in terminals.
+#
+# These three options are nightly-only. Pinning the toolchain to stable
+# (`rust-toolchain.toml`) means rustfmt silently ignores them, but
+# anyone running `+nightly fmt` would apply them and create churn
+# against stable CI. Kept commented as documentation of intent — if
+# `wrap_comments` ever stabilizes, uncomment.
+# wrap_comments = true
+# comment_width = 100
+# normalize_comments = true
+
+# Keep imports sorted and grouped (std / external / crate) for diffs.
+# These settings are stable in rustfmt; if they're ever gated behind
+# an unstable flag again, drop them.
+reorder_imports = true
+reorder_modules = true
+
+# Use field init shorthand (Foo { x, y } instead of Foo { x: x, y: y }).
+use_field_init_shorthand = true
+
+# Use `?` instead of `try!` in any legacy code we encounter.
+use_try_shorthand = true
+
+# Newline style: Unix everywhere — CI runs on Linux/macOS/Windows and
+# we don't want CRLF files mixed in.
+newline_style = "Unix"

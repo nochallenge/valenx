@@ -1,0 +1,19 @@
+physics = "bio"
+solver  = "salmon.quant"
+mesh    = "(none)"
+
+# Salmon transcript-level quantification (quasi-mapping). Drop
+# the transcriptome FASTA + reads FASTQ alongside this case.toml.
+# `libtype` is Salmon's library-type DSL: "A" auto-detects the
+# orientation, "ISF"/"ISR" pin paired-end stranded forward/reverse,
+# "IU" matches paired-end unstranded. See Salmon docs for the
+# full spec.
+[bio.salmon]
+transcriptome  = "transcripts.fa"
+index_dir      = "salmon-index"
+reads          = ["reads.fq"]
+output_dir     = "salmon-quant"
+threads        = 1
+skip_index     = false
+libtype        = "A"
+extra_args     = []

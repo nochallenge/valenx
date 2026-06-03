@@ -1,0 +1,18 @@
+physics = "bio"
+solver  = "scvi.train"
+mesh    = "(none)"
+
+# scvi-tools probabilistic single-cell models. The user-supplied
+# Python script imports `scvi` and reads `valenx_params.json`
+# (auto-written by the adapter) for the config knobs below.
+# `model` is "scvi" / "scanvi" / "totalvi" / "linear-scvi".
+[bio.scvi]
+script       = "train.py"
+python       = "python3"
+input_h5ad   = "raw.h5ad"
+output_h5ad  = "latent.h5ad"
+model        = "scvi"
+n_latent     = 10
+n_hidden     = 128
+n_layers     = 2
+max_epochs   = 400

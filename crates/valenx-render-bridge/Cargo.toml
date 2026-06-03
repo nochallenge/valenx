@@ -1,0 +1,39 @@
+[package]
+name        = "valenx-render-bridge"
+description = "Render workbench bridge (Phase 30) — RenderJob / Camera / Light / Material types + scene-file emitters for LuxRender / Cycles / POV-Ray plus a Native (in-app screenshot) hook. Pure-data; subprocess launch is the caller's responsibility."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+# bytemuck: the wgsl_pbr GPU-uniform structs derive Pod/Zeroable so a
+# wgpu host can cast them straight into device buffers. The crate
+# itself launches no GPU — it only describes the byte layout.
+bytemuck  = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+valenx-cad  = { path = "../valenx-cad" }
+# valenx-core: round-20 M1+M2 use the shared `io_caps` size-cap
+# helpers so the RON-persist + HDR-environment loaders refuse to
+# slurp a multi-GB file into memory before the parser ever sees it.
+valenx-core = { path = "../valenx-core" }
+
+[dev-dependencies]
+# naga: the WGSL front-end + validator that wgpu itself uses. The
+# wgsl_pbr tests parse + semantically validate `PBR_FORWARD_WGSL`
+# with it so a malformed shader fails the build, not the GPU. Pinned
+# to 0.20 to match the version `wgpu` 0.20 (via eframe) already
+# resolves in the workspace lockfile — no new transitive tree.
+naga = { version = "0.20", features = ["wgsl-in"] }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

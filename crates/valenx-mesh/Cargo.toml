@@ -1,0 +1,38 @@
+[package]
+name         = "valenx-mesh"
+description  = "Canonical mesh types (nodes, elements, regions, boundary groups) exchanged between meshers and solvers."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+ndarray    = { workspace = true }
+nalgebra   = { workspace = true }
+# Round-26 L3 DEFERRED: the intended fix was to delete the local
+# `read_capped_obj_lines` mirror in `format/obj.rs` and use
+# `valenx_core::io_caps::read_capped_lines_bounded` directly. Adding
+# the dep here closes a cycle that already exists in the workspace
+# graph (valenx-core → valenx-fields → valenx-mesh), so Cargo rejects
+# it outright. Breaking the cycle would require moving
+# `vtu::to_canonical` out of `valenx-fields` (which currently uses
+# `valenx_mesh::Mesh` as its target type) or extracting `io_caps` into
+# a third leaf crate that both `valenx-core` and `valenx-mesh` depend
+# on — both are out of scope for round-26. Leaving the inline mirror
+# in place with the strengthened round-26 L2 strict-UTF-8 guarantee.
+
+# Headless mesh-quality inspector. Reads a canonical Mesh JSON
+# from disk and prints the QualityReport + AR / skewness
+# histograms. Useful for CI mesh checks, SSH sessions, and any
+# other place the GUI isn't reachable.
+[[bin]]
+name = "valenx-mesh-info"
+path = "src/bin/valenx_mesh_info.rs"

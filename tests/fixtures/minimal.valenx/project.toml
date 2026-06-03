@@ -1,0 +1,39 @@
+# Minimal .valenx project fixture used by cross-crate integration
+# tests. Conforms to RFC 0001. Keep it small; heavy fixtures live
+# elsewhere and are not checked in.
+
+[project]
+format      = "1.0"
+name        = "minimal"
+valenx_min  = "0.1.0"
+created     = "2026-04-23T00:00:00Z"
+modified    = "2026-04-23T00:00:00Z"
+author      = "fixtures"
+description = "Tiny project used to exercise .valenx load/save round-trips."
+
+[units]
+length      = "m"
+mass        = "kg"
+time        = "s"
+temperature = "K"
+
+[[geometry.entries]]
+id     = "box"
+source = "geometry/box.stl"
+format = "stl"
+
+[cases]
+# Five-case spread covering CFD, FEA, heat, meshing (gmsh + netgen)
+# so cross-crate integration tests can exercise every live adapter
+# against a single project load.
+order = [
+    "box-mesh",
+    "cfd-steady",
+    "cfd-transient",
+    "fea-cantilever",
+    "heat-cube",
+    "netgen-cylinder",
+]
+
+[ui]
+last_camera_pivot = [0.0, 0.0, 0.0]

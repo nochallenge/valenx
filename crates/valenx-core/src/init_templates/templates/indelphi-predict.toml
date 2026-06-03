@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "indelphi.predict"
+mesh    = "(none)"
+
+# inDelphi Cas9-cut indel pattern predictor. The user-supplied
+# .py script does `import inDelphi` and the prediction work.
+[bio.indelphi]
+script           = "predict.py"
+python           = "python3"
+# input_fasta    = "target.fa"
+output_basename  = "indels"

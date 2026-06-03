@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-librecad-2d"
+description = "LibreCAD-style 2D drafting workbench (Phase 60). Drawing2D + Layer + Block + Entity2D; full DXF round-trip reader + writer covering LINE/CIRCLE/ARC/LWPOLYLINE/SPLINE/TEXT/MTEXT/DIMENSION/HATCH/INSERT."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

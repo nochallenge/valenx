@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "alphafold3.predict"
+mesh    = "(none)"
+
+# AlphaFold 3 all-atom complex prediction. NOTE: AF3 model weights
+# are CC-BY-NC-4.0 (non-commercial) — confirm your use case
+# complies before redistributing predictions or derived data.
+# Input is AF3's JSON job-spec format, NOT a FASTA. See
+# https://github.com/google-deepmind/alphafold3 for the schema.
+[bio.alphafold3]
+run_script             = "/path/to/alphafold3/run_alphafold.py"
+python                 = "python3"
+input_json             = "job.json"
+model_dir              = "/path/to/af3/models"
+db_dir                 = "/path/to/af3/databases"
+num_diffusion_samples  = 5

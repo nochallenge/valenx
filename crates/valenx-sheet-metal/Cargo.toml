@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-sheet-metal"
+description = "Sheet Metal workbench (Phase 34) — parametric sheet metal with flanges, bends, k-factor neutral-axis bend allowance, planar unfold flattening, and cutouts. FreeCAD SheetMetal community workbench analogue."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+valenx-cad  = { path = "../valenx-cad" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

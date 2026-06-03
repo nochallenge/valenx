@@ -1,0 +1,20 @@
+[package]
+name        = "valenx-align"
+description = "Sequence alignment and homology search for Valenx (Round 6 Block 2). Native Rust replacement for BLAST+, BWA, Bowtie2, minimap2, ClustalΩ, MUSCLE, MAFFT, T-Coffee, HMMER, DIAMOND and MMseqs2: substitution matrices (BLOSUM / PAM / NUC.4.4), pairwise alignment (Needleman-Wunsch, Gotoh affine, Smith-Waterman, semi-global, banded, Hirschberg), k-mer / FM-index / minimizer search with seed-and-extend and Karlin-Altschul statistics, progressive multiple-sequence alignment with iterative refinement, pair and profile HMMs, alignment file I/O (Clustal / Stockholm / PHYLIP / MSF), edit distance and a short-read mapper. Pure dynamic-programming algorithms, no neural-network weights."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure DP algorithms — the sequence-core crate for inputs, and serde
+# for the data-model derives. No heavy or platform-specific deps.
+valenx-bioseq = { path = "../valenx-bioseq" }
+serde         = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

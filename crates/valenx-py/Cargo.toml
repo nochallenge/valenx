@@ -1,0 +1,63 @@
+[package]
+name = "valenx-py"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+description = "Python scripting bridge for Valenx — exposes the cad / sketch / feature-tree crates as a `valenx` Python module via PyO3. Mirrors FreeCAD's Python scripting surface for the most common authoring operations (primitives, booleans, tessellation, sketch / extrude, feature tree replay)."
+
+# This is the Phase 11 (Python Scripting Bridge) artifact. The
+# `extension-module` feature builds a `.pyd` / `.so` that loads
+# inside a Python interpreter; `abi3-py39` targets the stable ABI
+# so a single wheel works for Python 3.9+ without rebuilds per
+# minor version. `auto-initialize` brings up an embedded
+# interpreter when Rust-side code starts Python (used by the smoke
+# test only — disabled by default to keep `cargo check` from
+# requiring a linkable Python at workspace check time).
+
+publish.workspace     = true
+[lib]
+name        = "valenx_py"
+# Rust integration tests need rlib; the eventual wheel will be
+# built with `maturin develop` which produces the cdylib. Listing
+# both lets `cargo check` work in the workspace AND lets the wheel
+# build produce a loadable extension module.
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+# Domain crates the bridge wraps. Each function below sticks to
+# the canonical public API of these crates — no internals.
+valenx-cad          = { path = "../valenx-cad" }
+valenx-sketch       = { path = "../valenx-sketch" }
+valenx-feature-tree = { path = "../valenx-feature-tree" }
+valenx-mesh         = { path = "../valenx-mesh" }
+
+nalgebra            = { workspace = true }
+thiserror           = { workspace = true }
+
+# PyO3 bindings. `abi3-py39` = build against the Python 3.9+
+# stable ABI so the resulting wheel works across minor versions
+# without recompilation. `extension-module` skips linking to
+# libpython on Linux/macOS (the host interpreter provides the
+# symbols at load time); on Windows the import lib is found via
+# the default search path.
+#
+# We intentionally don't enable `auto-initialize` here — the
+# bridge is meant to be loaded INTO a Python interpreter, not to
+# embed one. The smoke test under `tests/` opts in via the
+# `embed-python` feature when run interactively.
+pyo3 = { version = "0.24", default-features = false, features = ["macros", "extension-module", "abi3-py39"] }
+
+[features]
+# Used by the manual smoke test under tests/. Enables PyO3's
+# `auto-initialize` feature so `Python::with_gil` can boot an
+# embedded interpreter. Default-off because it would force every
+# `cargo check` to find a linkable Python on the build machine,
+# which we can't guarantee in CI.
+embed-python = ["pyo3/auto-initialize"]
+
+[lints.rust]
+unused_imports = "warn"

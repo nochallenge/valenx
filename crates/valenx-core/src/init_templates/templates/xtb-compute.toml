@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "xtb.compute"
+mesh    = "(none)"
+
+# xTB extended tight-binding semiempirical quantum chemistry.
+# `mode` is `single-point` / `opt` / `ohess` (opt + Hessian) /
+# `hess` / `md`. `gfn` is 0/1/2 (GFN parameterisation level).
+# Set `solvent` for implicit solvation (ALPB model).
+[bio.xtb]
+input        = "molecule.xyz"
+mode         = "opt"
+charge       = 0
+uhf          = 0
+gfn          = 2
+# solvent    = "water"
+extra_args   = []

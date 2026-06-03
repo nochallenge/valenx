@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "dssr.analyze"
+mesh    = "(none)"
+
+# DSSR DNA/RNA structural-feature analysis. NOTE: DSSR is
+# licensed for non-commercial / academic use only. Output lands
+# as a single JSON file at `output_json`.
+[bio.dssr]
+input_pdb     = "structure.pdb"
+output_json   = "analysis.json"
+extra_args    = []

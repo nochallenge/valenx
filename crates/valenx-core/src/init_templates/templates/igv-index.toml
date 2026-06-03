@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "igv.index"
+mesh    = "(none)"
+
+# IGV's igvtools — headless BAM/VCF indexing + tile generation.
+# Action is `index` / `count` / `sort` / `tile`. `output` is
+# required for count / sort / tile but ignored for index (igvtools
+# writes `<input>.bai` / `<input>.idx` next to the input). For
+# `count`, `window_size` controls the resolution.
+[bio.igv]
+action      = "index"
+input       = "aligned.bam"
+window_size = 25
+extra_args  = []

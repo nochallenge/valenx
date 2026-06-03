@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "blast.search"
+mesh    = "(none)"
+
+# NCBI BLAST+ sequence search. `program` selects which BLAST+
+# binary to invoke (blastn / blastp / blastx / tblastn / tblastx).
+# `database` is the path-prefix of the BLAST database (the actual
+# files live at `<database>.nhr`, `.nin`, `.nsq` for nucleotide,
+# or `.phr/.pin/.psq` for protein).
+[bio.blast]
+program    = "blastn"
+query      = "query.fa"
+database   = "db/nt"
+evalue     = 1e-5
+outfmt     = 6
+threads    = 4
+extra_args = []

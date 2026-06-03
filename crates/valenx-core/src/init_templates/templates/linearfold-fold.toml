@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "linearfold.fold"
+mesh    = "(none)"
+
+# LinearFold Baidu/OSU fast RNA folder. `model` picks
+# CONTRAfold ("C") or ViennaRNA ("V"). LinearFold reads
+# sequence from stdin; we redirect from `sequence`.
+[bio.linearfold]
+sequence        = "rna.fa"
+output_basename = "fold"
+model           = "C"
+beam_size       = 100
+extra_args      = []

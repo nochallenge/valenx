@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-blender-mesh-ops"
+description = "Blender precision-modeling subset (Phase 65). Mesh-domain CAD ops: extrude region, bevel, inset, loop cut, bridge, boolean modifier, solidify."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+valenx-cgal-port = { path = "../valenx-cgal-port" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

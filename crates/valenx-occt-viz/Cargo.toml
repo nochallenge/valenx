@@ -1,0 +1,36 @@
+[package]
+name        = "valenx-occt-viz"
+description = "OpenCASCADE (OCCT) visualization-pattern parity for Valenx (Phases 161-200, Round 5 Block 4 — FINAL of the 200-phase FreeCAD-parity roadmap). 40 Rust-native APIs adapt OCCT's V3d_View / AIS_InteractiveContext / Prs3d_Drawer concepts onto Valenx's existing egui+wgpu pipeline rather than direct-porting the Aspect/OpenGl windowing layer. v1 implements the operations that map cleanly onto valenx-viz::OrbitCamera + valenx-app's wgpu renderer (orbit/pan/zoom/fit-all, canonical axonometric views, screenshot read-back); selection + AIS subshape pickers + interactive widgets + animation are documented stubs awaiting Phase 200.5+ work."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-viz      = { path = "../valenx-viz" }
+valenx-mesh     = { path = "../valenx-mesh" }
+# R29: atomic_write_bytes for the AVI export (crash-safe sidecar+rename).
+valenx-core     = { path = "../valenx-core" }
+# Real hidden-line removal (Phase 5 HLR) powers prs3d_drawer_hidden_line_display.
+valenx-techdraw = { path = "../valenx-techdraw" }
+# NurbsSurface evaluator powers prs3d_drawer_isolines.
+valenx-surface  = { path = "../valenx-surface" }
+# Solid type consumed by the HLR pass.
+valenx-cad      = { path = "../valenx-cad" }
+# Assembly + constraint solver — drives the constraint-propagating
+# drag in transformation_assembly_gizmo.
+valenx-assembly = { path = "../valenx-assembly" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

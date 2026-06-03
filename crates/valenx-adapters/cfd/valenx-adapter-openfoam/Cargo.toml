@@ -1,0 +1,32 @@
+[package]
+name         = "valenx-adapter-openfoam"
+description  = "Subprocess-isolated adapter for OpenFOAM. Translates canonical Case/Mesh into OpenFOAM dictionaries, invokes solver binaries, collects Results."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+# NOTE: this adapter is declared Subprocess mode per RFC 0002.
+# It MUST NOT add a link-time dependency on any OpenFOAM crate.
+# cargo-deny enforces that invariant in CI.
+
+publish.workspace     = true
+[dependencies]
+anyhow       = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+toml         = { workspace = true }
+serde        = { workspace = true }
+tokio        = { workspace = true }
+semver       = { workspace = true }
+
+valenx-core   = { path = "../../../valenx-core" }
+valenx-geo    = { path = "../../../valenx-geo" }
+valenx-mesh   = { path = "../../../valenx-mesh" }
+valenx-fields = { path = "../../../valenx-fields" }
+
+[dev-dependencies]
+valenx-test-utils = { path = "../../../valenx-test-utils" }

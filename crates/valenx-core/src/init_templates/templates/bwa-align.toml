@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "bwa.mem"
+mesh    = "(none)"
+
+# BWA short-read alignment. Drop your reference FASTA + reads
+# FASTQ alongside this case.toml. The adapter runs `bwa index`
+# on first run unless `skip_index = true`. `reads` accepts 1
+# entry (single-end) or 2 entries (paired-end).
+[bio.bwa]
+reference   = "ref.fa"
+reads       = ["reads.fq"]
+threads     = 1
+skip_index  = false
+extra_args  = []

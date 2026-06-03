@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-salome-bridge"
+description = "Salome-style integrated CAD+meshing+FEM platform bridge (Phase 63). Study DAG with Solid/Mesh/FEM/Result nodes + topological rebuild + opaque module facades."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

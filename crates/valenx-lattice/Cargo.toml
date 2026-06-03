@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-lattice"
+description = "Lattice2 workbench (Phase 28) — advanced parametric arrays beyond Part Design's basic Linear/Circular pattern. Generates Placement lists for Grid / Polar / Bezier / OnCurve / OnSurface / OnMesh distributions which the caller instances solids against."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh    = { path = "../valenx-mesh" }
+valenx-surface = { path = "../valenx-surface" }
+# Round-28 H2: canonical atomic_write_str for persist.rs::write_to.
+valenx-core    = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

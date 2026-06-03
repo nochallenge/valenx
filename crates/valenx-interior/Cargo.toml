@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-interior"
+description = "Sweet Home 3D-style interior workflow (Phase 62). Rooms, furniture catalog (12 kinds), placement, parametric block geometry."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

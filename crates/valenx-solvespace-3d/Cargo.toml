@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-solvespace-3d"
+description = "SolveSpace-style 3D mechanical constraint solver (Phase 53). 3D analogue of Phase 1's 2D sketcher: entities (Point3, Line3, Plane3, Workplane), constraints (Coincident3, OnLine, OnPlane, PointDistance3, LineLength3, LineAngle3, LineParallel3, LinePerpendicular3, PointInPlane), residuals + Jacobians, Newton-Raphson with LM damping."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror       = { workspace = true }
+serde           = { workspace = true }
+nalgebra        = { workspace = true }
+nalgebra-sparse = { workspace = true }
+ron             = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,29 @@
+[package]
+name        = "valenx-sketch"
+description = "2D parametric sketcher: primitives, geometric constraints, Newton-Raphson solver, extrude bridge to valenx-cad."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+anyhow          = { workspace = true }
+thiserror       = { workspace = true }
+tracing         = { workspace = true }
+nalgebra        = { workspace = true }
+nalgebra-sparse = { workspace = true }
+serde           = { workspace = true }
+ron             = { workspace = true }
+
+valenx-cad     = { path = "../valenx-cad" }
+truck-modeling = { workspace = true }
+# Round-28 H2: canonical atomic_write_str for persist.rs::write_to.
+valenx-core    = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

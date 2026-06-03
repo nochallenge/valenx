@@ -1,0 +1,10 @@
+physics = "meshing"
+solver  = "netgen.batch"
+mesh    = "(none)"
+
+# CSG (.geo / .geo2d) or BREP (.step / .iges / .brep) source.
+# The adapter writes the .vol output named by `output`.
+[meshing.netgen]
+geometry_file = "csg-box.geo"
+mesh_size     = 0.5
+output        = "csg-box.vol"

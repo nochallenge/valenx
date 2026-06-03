@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "copasi.simulate"
+mesh    = "(none)"
+
+# COPASI biochemical pathway / ODE simulation. Drop your `.cps`
+# (COPASI native) or `.sbml` model alongside this case.toml.
+# `report` is an optional output filename for the report task.
+# `run_all = true` (default) executes every scheduled task in
+# the model.
+[bio.copasi]
+model       = "model.cps"
+# report    = "report.txt"
+run_all     = true
+extra_args  = []

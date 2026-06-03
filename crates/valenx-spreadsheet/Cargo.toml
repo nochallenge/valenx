@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-spreadsheet"
+description = "Spreadsheet workbench (Phase 16): parametric Cell / Sheet / Spreadsheet, hand-rolled formula parser + evaluator, feature-tree integration via Value enum."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+anyhow      = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+serde       = { workspace = true }
+ron         = { workspace = true }
+
+# Round-28 H2: canonical atomic_write_str for persist.rs::write_to.
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

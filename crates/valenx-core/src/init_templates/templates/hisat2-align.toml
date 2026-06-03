@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "hisat2.align"
+mesh    = "(none)"
+
+# HISAT2 graph-based splice-aware RNA-seq alignment. Drop the
+# reference FASTA + reads FASTQ alongside this case.toml.
+# `strandness` ∈ {unstranded, F, R, FR, RF}; the F/R variants
+# match Illumina TruSeq stranded library prep conventions.
+[bio.hisat2]
+reference   = "ref.fa"
+reads       = ["reads.fq"]
+threads     = 1
+skip_index  = false
+strandness  = "unstranded"
+extra_args  = []

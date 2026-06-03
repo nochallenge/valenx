@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-decimate-pro"
+description = "Mesh Decimation Pro (Phase 47) — curvature-aware, UV-preserving, and feature-aware mesh decimation. Layers cotangent-Laplacian mean curvature + UV stretch quadrics + feature-edge constraints on top of valenx-mesh's Phase 7 Quadric Error Metrics (Garland & Heckbert) decimator."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "crispor.design"
+mesh    = "(none)"
+
+# CRISPOR guide-RNA design + off-target prediction. Same shape
+# as CHOPCHOP but supports many more enzymes / genomes. Optional
+# `batch_id` enables resumable runs (CRISPOR caches partial
+# results by batch).
+[bio.crispor]
+script           = "design.py"
+python           = "python3"
+target           = "target.fa"
+genome           = "hg38"
+pam              = "NGG"
+# batch_id       = "experiment-2026-04-30"
+output_basename  = "guides"

@@ -1,0 +1,10 @@
+physics = "em"
+solver  = "meep.batch"
+mesh    = "(none)"
+
+# A Python script that imports `meep` and runs a simulation.
+# `python = false` switches to legacy `.ctl` Scheme scripts.
+# `np > 1` wraps the invocation in `mpirun -np N`.
+[em.meep]
+script = "ring.py"
+python = true

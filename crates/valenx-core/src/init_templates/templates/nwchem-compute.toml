@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "nwchem.compute"
+mesh    = "(none)"
+
+# NWChem ab initio quantum chemistry. Drop your `.nw` input file
+# alongside this case.toml. `mpi_procs > 1` requires `mpirun`
+# on PATH (the adapter checks at prepare time and surfaces a
+# helpful error otherwise).
+[bio.nwchem]
+input       = "input.nw"
+output      = "output.txt"
+mpi_procs   = 1
+extra_args  = []

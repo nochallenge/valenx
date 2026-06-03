@@ -1,0 +1,19 @@
+physics = "bio"
+solver  = "vina.dock"
+mesh    = "(none)"
+
+# AutoDock Vina small-molecule docking. Drop receptor + ligand
+# PDBQT files alongside this case.toml (prep them with
+# AutoDockTools / Open Babel first). `center` + `size` define
+# the search box in Å. `exhaustiveness` is 1..=32; default 8.
+[bio.vina]
+receptor       = "receptor.pdbqt"
+ligand         = "ligand.pdbqt"
+output         = "docked.pdbqt"
+center         = [0.0, 0.0, 0.0]
+size           = [20.0, 20.0, 20.0]
+exhaustiveness = 8
+num_modes      = 9
+energy_range   = 3.0
+cpu            = 0   # 0 = auto-detect
+extra_args     = []

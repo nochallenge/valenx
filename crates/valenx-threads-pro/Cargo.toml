@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-threads-pro"
+description = "Threaded Profiles (Phase 48) — full ISO metric / UN / BSP / NPT thread tables plus 3D thread profile geometry (helical sweep). Extends Phase 13 fastener thread metadata with Acme / Trapezoidal / Whitworth standards and a mesh-backed Solid sweep of the canonical V/Acme/Trapezoidal/Buttress profile along a helix."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+valenx-mesh         = { path = "../valenx-mesh" }
+valenx-cad          = { path = "../valenx-cad" }
+valenx-feature-tree = { path = "../valenx-feature-tree" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

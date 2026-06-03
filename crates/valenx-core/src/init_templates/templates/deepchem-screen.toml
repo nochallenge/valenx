@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "deepchem.script"
+mesh    = "(none)"
+
+# DeepChem PyTorch-backed cheminformatics. The user-supplied
+# Python script imports `deepchem` and reads `valenx_params.json`
+# (auto-written by the adapter) for the SMILES list / dataset CSV
+# / checkpoint path below.
+[bio.deepchem]
+script       = "screen.py"
+python       = "python3"
+smiles       = ["CCO", "c1ccccc1"]
+# dataset_csv = "molecules.csv"
+# checkpoint  = "model.pt"

@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-curves"
+description = "Curves workbench (Phase 27) — higher-level NURBS curve operations on top of Phase 9 / Phase 19 valenx-surface: offset, blend-corner, point-cloud approximation, reverse, trim, extend, discretize, project, and isoparametric extraction from surfaces."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-surface = { path = "../valenx-surface" }
+valenx-core    = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

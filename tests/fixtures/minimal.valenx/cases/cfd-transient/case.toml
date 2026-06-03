@@ -1,0 +1,35 @@
+[case]
+format  = "1.0"
+name    = "cfd-transient"
+physics = "cfd"
+solver  = "openfoam.pimpleFoam"
+mesh    = "default"
+
+[flow]
+turbulence = "kOmegaSST"
+schemes    = "linear-second-order"
+
+[flow.fluid]
+name = "air"
+rho  = 1.225
+nu   = 1.5e-5
+
+[boundaries.inlet]
+type     = "velocity-inlet"
+velocity = [10.0, 0.0, 0.0]
+turbulence_intensity = 0.05
+
+[boundaries.outlet]
+type     = "pressure-outlet"
+pressure = 0.0
+
+[boundaries.walls]
+type = "no-slip"
+
+[solve]
+residual_target = 1e-5
+
+[solve.transient]
+end_time       = 2.0
+delta_t        = 5e-4
+write_interval = 0.05

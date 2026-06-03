@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-opencamlib"
+description = "OpenCamLib algorithm port (Phase 57). DropCutter / AdaptiveDropCutter / WaterlinePathPlanner / PushCutter / EdgeCutter + Octree + AABB tree spatial indexes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+nalgebra    = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+valenx-cam  = { path = "../valenx-cam" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

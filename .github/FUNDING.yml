@@ -1,0 +1,16 @@
+# GitHub Sponsors / funding links shown on the repo home page.
+#
+# Populate the provider keys below once the corresponding accounts
+# exist. Every field here is optional; commented-out entries will
+# simply not appear.
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+# github:           # username or organization with Sponsors enabled
+# open_collective:  # OpenCollective slug
+# ko_fi:            # Ko-fi username
+# tidelift:         # platform-name/package-name
+# community_bridge: # CommunityBridge project name
+# liberapay:        # Liberapay username
+# issuehunt:        # IssueHunt username
+# custom:           # array of explicit URLs (e.g. your own donation page)

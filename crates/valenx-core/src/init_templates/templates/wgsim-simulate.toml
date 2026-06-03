@@ -1,0 +1,18 @@
+physics = "bio"
+solver  = "wgsim.simulate"
+mesh    = "(none)"
+
+# wgsim classic short-read simulator (paired-end only;
+# bundled with samtools). `error_rate` is per-base 0..=1
+# (0.02 = 2% — typical Illumina baseline). `fragment_size`
+# is the outer fragment length.
+[bio.wgsim]
+reference        = "ref.fa"
+output1          = "reads_1.fq"
+output2          = "reads_2.fq"
+num_pairs        = 100000
+length1          = 70
+length2          = 70
+fragment_size    = 500
+error_rate       = 0.02
+extra_args       = []

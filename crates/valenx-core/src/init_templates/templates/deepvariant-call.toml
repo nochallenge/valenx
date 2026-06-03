@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "deepvariant.call"
+mesh    = "(none)"
+
+# Google DeepVariant ML-driven variant calling. `model_type` is
+# "WGS" / "WES" / "PACBIO" / "ONT_R104" / "HYBRID_PACBIO_ILLUMINA"
+# — pick the one matching your sequencing technology.
+# `num_shards` parallelises the example-generation step.
+[bio.deepvariant]
+reference   = "ref.fa"
+input_bam   = "aligned.sorted.bam"
+output_vcf  = "variants.vcf"
+model_type  = "WGS"
+num_shards  = 1
+extra_args  = []

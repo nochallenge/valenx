@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "pymol.render"
+mesh    = "(none)"
+
+# Open-source PyMOL script-driven rendering. Drop a `.pml` script
+# alongside this case.toml — the adapter runs `pymol -c -q
+# <script>` so the script should `quit` at the end. Outputs land
+# in the workdir (`.png` / `.pse` / `.cif` / `.pdb` are all
+# auto-collected). Set `nogui = false` for an interactive session
+# (rare; mostly for demo recording).
+[bio.pymol]
+script     = "render.pml"
+nogui      = true
+quiet      = true
+extra_args = []

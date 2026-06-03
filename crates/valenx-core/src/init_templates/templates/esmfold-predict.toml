@@ -1,0 +1,21 @@
+physics = "bio"
+solver  = "esmfold.predict"
+mesh    = "(none)"
+
+# ESMFold structure prediction. The user-supplied Python script
+# imports `esm`, calls `esm.pretrained.esmfold_v1()`, runs
+# inference on `query_fasta`, and writes the prediction to
+# `output_pdb`. pLDDT confidence rides the B-factor column —
+# the in-tree PDB reader picks it up automatically.
+#
+# The adapter writes a flat `valenx_params.json` into the workdir
+# during prepare() with these keys; the script can read it with
+# `json.load(open("valenx_params.json"))` to pick up the parsed
+# `output_pdb` / `num_recycles` / `query_fasta` values without
+# reparsing case.toml itself.
+[bio.esmfold]
+script       = "predict.py"
+python       = "python3"
+query_fasta  = "query.fasta"
+output_pdb   = "prediction.pdb"
+num_recycles = 4

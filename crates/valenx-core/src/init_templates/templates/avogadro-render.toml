@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "avogadro.render"
+mesh    = "(none)"
+
+# Avogadro 2 Python-scripted chemistry editing / rendering. The
+# user-supplied script drives Avogadro 2 via its scripting API
+# (`avogadro2 --script <script>`). Optional `structure` pre-loads
+# a CML / MOL / XYZ / PDB file before the script runs. `headless`
+# defaults to true (`--no-gui`).
+[bio.avogadro]
+script     = "render.py"
+# structure = "molecule.cml"
+headless   = true
+extra_args = []

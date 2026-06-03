@@ -1,0 +1,21 @@
+physics = "bio"
+solver  = "esm3.generate"
+mesh    = "(none)"
+
+# ESM3 generative multi-modal protein model (EvolutionaryScale).
+# The user-supplied Python script imports `esm` and reads
+# `valenx_params.json` for the config knobs below.
+# `model_variant` ∈ {"open", "open-multimer", "small"}.
+# `mode` ∈ {"design", "inverse-fold", "scaffold", "predict"}.
+# Inverse-fold and scaffold require `input_pdb`; predict
+# requires `input_fasta`.
+[bio.esm3]
+script           = "generate.py"
+python           = "python3"
+model_variant    = "open"
+mode             = "design"
+num_samples      = 4
+# input_pdb      = "context.pdb"
+# input_fasta    = "query.fasta"
+temperature      = 1.0
+output_basename  = "design"

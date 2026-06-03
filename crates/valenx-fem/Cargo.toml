@@ -1,0 +1,29 @@
+[package]
+name        = "valenx-fem"
+description = "Native FEM workbench (Phase 24) — pre/post over the existing valenx-adapter-{calculix, elmer, code-aster} subprocess adapters. Provides FemAnalysis / FemMaterial / FemConstraint / FemLoad / FemMeshParams / FemSolverChoice + a results parser + visualization tessellator."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+anyhow          = { workspace = true }
+thiserror       = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+tracing         = { workspace = true }
+nalgebra        = { workspace = true }
+nalgebra-sparse = { workspace = true }
+
+valenx-core   = { path = "../valenx-core" }
+valenx-mesh   = { path = "../valenx-mesh" }
+valenx-cad    = { path = "../valenx-cad" }
+valenx-fields = { path = "../valenx-fields" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

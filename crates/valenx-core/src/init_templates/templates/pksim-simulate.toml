@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "pksim.simulate"
+mesh    = "(none)"
+
+# PK-Sim Open Systems Pharmacology PBPK simulation. Point
+# `project` at a .pksim5 project file authored in the GUI;
+# the CLI runs the simulation and writes outputs.
+[bio.pksim]
+project         = "vaccine_pbpk.pksim5"
+output_basename = "results"
+extra_args      = []

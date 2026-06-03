@@ -1,0 +1,23 @@
+[book]
+title       = "Valenx User Manual"
+authors     = ["Valenx contributors"]
+description = "Getting started, reference, and tutorials for the Valenx desktop simulation suite."
+language    = "en"
+src         = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+# Additional CSS / JS can live under `theme/` when we have bespoke styling.
+mathjax-support = true
+git-repository-url = "https://github.com/nochallenge/valenx"
+edit-url-template  = "https://github.com/nochallenge/valenx/edit/main/docs/{path}"
+
+[output.html.fold]
+enable = true
+level  = 1
+
+[output.html.print]
+enable = true

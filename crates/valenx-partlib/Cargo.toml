@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-partlib"
+description = "Parts Library (Phase 46) — offline cache of fetched CAD parts. Browse a local library root, install parts by copying from disk + computing a SHA-256 checksum, and surface them through a PartEntry / PartLibrary index. Network fetching is deferred to v2 (handled via Phase 22 Add-on Manager)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+sha2      = { workspace = true }
+
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

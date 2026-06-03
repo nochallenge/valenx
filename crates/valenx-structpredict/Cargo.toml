@@ -1,0 +1,36 @@
+[package]
+name        = "valenx-structpredict"
+description = "Classical (non-neural-network) protein structure prediction, protein design and cryo-EM reconstruction for Valenx (Round 6 Block 14). The honest, physics-and-statistics-based counterpart of AlphaFold / RoseTTAFold / RFdiffusion / RELION — Valenx ships those neural tools as adapter hooks only (the project's standing \"no llms\" rule); this crate delivers the same *capabilities* via the classical algorithms that predate and parallel the deep-learning era: comparative / homology modelling (Modeller-class — template search by alignment, target-template alignment, backbone transfer, cyclic-coordinate-descent loop closure, rotamer sidechain placement, spatial-restraint model assembly); ab-initio fragment assembly (Rosetta-class — sequence-windowed backbone-fragment libraries, GOR / Chou-Fasman secondary-structure prediction, distance-dependent knowledge-based statistical potentials, simulated-annealing Monte-Carlo fragment-insertion folding, a centroid-to-all-atom coarse-to-fine protocol, decoy clustering and model selection); refinement and quality (dead-end-elimination + simulated-annealing rotamer repacking, gradient energy minimisation via the valenx-md force field, Ramachandran backbone refinement, a clash / Ramachandran / packing quality score, and Kabsch superposition with RMSD / GDT); physics-based protein design (Rosetta fixbb-class fixed-backbone sequence design, a combinatorial rotamer design search, a statistical design-scoring potential, loop / functional-motif grafting, interface design); and the classical signal-processing core of cryo-EM reconstruction (RELION / EMAN-class — MRC file I/O and a particle-stack model, a contrast-transfer-function model and CTF estimation, blob / template particle picking, 2D class averaging, weighted-back-projection 3D reconstruction, projection-matching iterative refinement, and Fourier-shell-correlation gold-standard resolution estimation). A deterministic seedable PCG generator drives every Monte-Carlo method. Real classical algorithms — genuinely useful, but NOT AlphaFold-accuracy: AlphaFold-class accuracy requires a trained neural network, excluded from this crate by design. No neural-network weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Classical physics + statistics algorithms only. `nalgebra` supplies
+# the 3-vector / matrix / FFT-free linear-algebra types behind the
+# loop-closure rotations, the back-projection geometry and the CTF
+# grids; serde drives the data-model derives. The four bio crates are
+# path dependencies: `valenx-bioseq` supplies `Seq` / `SeqKind`,
+# `valenx-biostruct` the `Structure` hierarchy + PDB/mmCIF I/O +
+# Kabsch superposition + geometry, `valenx-align` the pairwise +
+# multiple sequence alignment used by template search and
+# target-template alignment, and `valenx-md` the force-field-class
+# energy minimisers (callback-driven steepest-descent / CG / L-BFGS)
+# plus the seedable PCG `Rng`. No heavy or platform-specific
+# dependencies — the statistical potentials, the fragment libraries,
+# the CCD loop closer, the DEE solver, the CTF model, the
+# back-projector and the FSC estimator are all hand-rolled.
+nalgebra        = { workspace = true }
+serde           = { workspace = true }
+valenx-bioseq   = { path = "../valenx-bioseq" }
+valenx-biostruct = { path = "../valenx-biostruct" }
+valenx-align    = { path = "../valenx-align" }
+valenx-md       = { path = "../valenx-md" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

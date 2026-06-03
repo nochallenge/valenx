@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-biostruct"
+description = "Macromolecular-structure-analysis core for Valenx (Round 6 Block 8). Native Rust replacement for Biopython.PDB and the structure-handling portions of ChimeraX / PyMOL / VMD / 3DNA-X3DNA / Curves+ / DSSR / FoldSeek: a `Structure` / `Model` / `Chain` / `Residue` / `Atom` hierarchy (altloc, insertion codes, hetatm flag, occupancy, B-factor); PDB and mmCIF readers and writers; a structure selection mini-language; geometry (inter-atomic distances with a grid-accelerated neighbour search, bond / dihedral / torsion angles including backbone phi/psi/omega and sidechain chi, Ramachandran classification, residue contact maps, van der Waals clash detection, radius of gyration / centre of mass / principal axes, Shrake-Rupley solvent-accessible surface area); DSSP-class Kabsch-Sander hydrogen-bond detection and secondary-structure assignment with helix / sheet enumeration; Kabsch and quaternion optimal superposition with RMSD, a sequence-anchored iterative structure alignment, TM-score and a FoldSeek-class 3Di-like structural alphabet; nucleic-acid geometry (Watson-Crick / wobble base-pair detection, 3DNA-class base-pair and step parameters, groove widths, Curves+-class helical-axis fitting); biological-assembly generation from BIOMT operators, B-factor analysis, point-mutation modelling and a batch structure-validation report. Pure parsing + geometry, no neural-network weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure parsing + geometry. `nalgebra` supplies the 3-vector / matrix /
+# SVD machinery behind the Kabsch superposition, the principal-axis
+# diagonalisation and the helical-axis fit; `valenx-bioseq` supplies the
+# `Seq` / `SeqKind` types used to expose chain sequences (SEQRES and
+# observed-residue derived); serde drives the data-model derives. The
+# PDB / mmCIF parsers, the grid neighbour search, the Shrake-Rupley
+# sphere sampler, the Kabsch-Sander hydrogen-bond model and the DSSP
+# state machine are all hand-rolled. No heavy or platform-specific
+# dependencies.
+nalgebra      = { workspace = true }
+serde         = { workspace = true }
+valenx-bioseq = { path = "../valenx-bioseq" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

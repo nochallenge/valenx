@@ -1,0 +1,26 @@
+[package]
+name         = "valenx-adapter-mujoco"
+description  = "Subprocess adapter driving MuJoCo via its Python bindings. Phase 8 — live for MJCF / URDF playback + trajectory capture."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow       = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+semver       = { workspace = true }
+toml         = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+
+valenx-core   = { path = "../../../valenx-core" }
+valenx-fields = { path = "../../../valenx-fields" }
+
+[dev-dependencies]
+valenx-test-utils = { path = "../../../valenx-test-utils" }

@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Name=Valenx
+GenericName=Simulation Suite
+# Launches Valenx for use via its own File menu (New Project / Open
+# Project / Import STL). The desktop entry deliberately does NOT
+# advertise MIME types or pass a `%F` / `%U` placeholder — see TODO.
+Comment=Native open-source desktop simulation suite. Use File → New / Open inside the app to choose a project.
+Exec=valenx
+TryExec=valenx
+Icon=valenx
+Terminal=false
+Categories=Science;Education;Engineering;Physics;Chemistry;Biology;
+StartupNotify=true
+StartupWMClass=valenx
+Keywords=CFD;FEA;Simulation;CAD;Molecular;Bioinformatics;
+# TODO: re-enable file-association dispatch.
+# Earlier revisions claimed:
+#   Exec=valenx %F
+#   MimeType=application/x-valenx-project;model/step;model/iges;
+# but crates/valenx-app/src/main.rs hands `args[1]` to load_stl only —
+# double-clicking a `.valenx` directory or a STEP/IGES file in Nautilus
+# silently fails. The MIME types + `%F` will come back once
+# valenx-app dispatches by file extension (STL → load_stl, .valenx →
+# load_project, .step/.iges → STEP/IGES importer). Until then, claiming
+# the associations would be false advertising.

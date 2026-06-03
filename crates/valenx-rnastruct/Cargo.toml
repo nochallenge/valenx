@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-rnastruct"
+description = "RNA secondary-structure prediction and analysis for Valenx (Round 6 Block 5). Native Rust replacement for ViennaRNA, RNAstructure, mfold / UNAFold, NUPACK, ContraFold and IPknot: a base-pair-set / dot-bracket structure model (with pseudoknot brackets) plus ct-file and bpseq I/O, Nussinov maximum-base-pairing folding, a Turner-2004 nearest-neighbor energy model (stacking, hairpin / bulge / internal-loop length tables, terminal mismatches, a linear multiloop model), Zuker minimum-free-energy folding, free-energy evaluation, hard- and SHAPE-soft-constrained folding, the McCaskill partition function with base-pair-probability matrix, centroid and maximum-expected-accuracy structures, Zuker-Stiegler suboptimal structures, Boltzmann stochastic sampling, melting curves, RNA-RNA cofolding / hybridization and IntaRNA-class interaction prediction, accessibility profiles, Eterna-class inverse folding, G-quadruplex prediction, base-pair and tree-edit structure distance, RNAforester-class structure alignment, RNAalifold-class consensus structure, restricted H-type pseudoknot folding, tRNA cloverleaf detection, mountain plots, Forna-class 2D layout coordinates, energy dot plots and folding statistics / reports. Pure algorithms, no neural-network weights."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure dynamic-programming algorithms. valenx-bioseq supplies the RNA
+# alphabet and the validated `Seq` type that every folding entry point
+# accepts as sequence input; serde drives the data-model derives.
+# No heavy or platform dependencies — the partition-function and
+# sampling code is hand-rolled.
+valenx-bioseq = { path = "../valenx-bioseq" }
+serde         = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

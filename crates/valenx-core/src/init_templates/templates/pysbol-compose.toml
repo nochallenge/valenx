@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "pysbol.compose"
+mesh    = "(none)"
+
+# pySBOL SBOL Python composition. The user-supplied Python script
+# imports `sbol3` and reads `valenx_params.json` for an optional
+# `input_sbol` document and the output basename.
+[bio.pysbol]
+script           = "compose.py"
+python           = "python3"
+# input_sbol     = "imported.xml"
+output_basename  = "design"

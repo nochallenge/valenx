@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "chroma.design"
+mesh    = "(none)"
+
+# Chroma diffusion-based protein design (Generate Biomedicines).
+# The user-supplied Python script imports `chroma` and reads
+# `valenx_params.json` for the config knobs below. Outputs
+# `<output_basename>_*.pdb` (structures) and `_*.fa` (sequences).
+[bio.chroma]
+script           = "design.py"
+python           = "python3"
+num_samples      = 4
+length           = 100
+temperature      = 1.0
+output_basename  = "design"

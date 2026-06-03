@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-openscad-import"
+description = "OpenSCAD Importer (Phase 45) — parse a subset of the OpenSCAD .scad language and evaluate the resulting CSG tree into a valenx-cad Solid. Lexer + recursive-descent parser + interpreter covering cube / sphere / cylinder / union / difference / intersection / translate / rotate / scale plus variable bindings and finite for-loops."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-cad  = { path = "../valenx-cad" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

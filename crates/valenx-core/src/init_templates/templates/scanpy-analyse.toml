@@ -1,0 +1,19 @@
+physics = "bio"
+solver  = "scanpy.analyse"
+mesh    = "(none)"
+
+# Scanpy single-cell analysis. The user-supplied Python script
+# imports `scanpy as sc` and reads `valenx_params.json` (auto-
+# written by the adapter) for the config knobs below. `input_h5ad`
+# is the input AnnData; `output_h5ad` is what the script should
+# write back. Defaults match the standard QC → HVG → PCA →
+# neighbors → leiden pipeline.
+[bio.scanpy]
+script        = "analyse.py"
+python        = "python3"
+input_h5ad    = "raw.h5ad"
+output_h5ad   = "processed.h5ad"
+n_top_genes   = 2000
+n_pcs         = 50
+n_neighbors   = 15
+resolution    = 1.0

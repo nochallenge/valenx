@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-libigl-port"
+description = "Pure-Rust port of libigl discrete geometry processing (Phase 59). LSCM/ARAP parameterization, Laplacian smoothing, biharmonic deformation, heat geodesics, random cuts, PCA descriptor."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+nalgebra    = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

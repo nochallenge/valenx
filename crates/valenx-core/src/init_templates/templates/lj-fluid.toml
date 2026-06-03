@@ -1,0 +1,29 @@
+physics = "molecular-dynamics"
+solver  = "lammps.nve"
+mesh    = "(none)"
+
+# Lennard-Jones FCC fluid in NVE — the canonical "does my LAMMPS
+# build work" smoke run. Edit `density`, `size`, `run_steps` to
+# scale to your hardware.
+[md]
+units        = "lj"
+atom_style   = "atomic"
+boundary     = ["p", "p", "p"]
+timestep     = 0.005
+run_steps    = 2000
+initial_temperature = 1.0
+thermo_every = 50
+dump_every   = 100
+ensemble     = "nve"
+
+[md.init]
+kind      = "lj-fcc-box"
+density   = 0.8442
+size      = [10, 10, 10]
+num_types = 1
+
+[md.potential]
+kind    = "lj-cut"
+epsilon = 1.0
+sigma   = 1.0
+cutoff  = 2.5

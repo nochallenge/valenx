@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "ilastik.classify"
+mesh    = "(none)"
+
+# Ilastik interactive ML pixel/object classification. Point
+# `ilastik_app` at the launcher (run_ilastik.sh / ilastik.exe);
+# `project` is the trained .ilp classifier; `input_images` is
+# one or more raw images.
+[bio.ilastik]
+ilastik_app     = "/opt/ilastik-1.4.0/run_ilastik.sh"
+project         = "trained_classifier.ilp"
+input_images    = ["raw_001.tif", "raw_002.tif"]
+output_basename = "predictions"
+workflow        = "Pixel Classification"
+extra_args      = []

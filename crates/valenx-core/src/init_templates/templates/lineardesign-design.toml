@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "lineardesign.design"
+mesh    = "(none)"
+
+# LinearDesign Baidu joint codon + secondary-structure mRNA
+# design. The `lambda_param` knob (CLI flag `--lambda`)
+# controls the CAI-vs-MFE tradeoff; `codon_usage` selects
+# the species codon table.
+[bio.lineardesign]
+protein         = "spike_protein.fa"
+output_basename = "designed_mrna"
+lambda_param    = 1.0
+codon_usage     = "human"
+extra_args      = []

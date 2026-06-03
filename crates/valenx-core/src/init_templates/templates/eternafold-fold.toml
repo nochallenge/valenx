@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "eternafold.fold"
+mesh    = "(none)"
+
+# EternaFold ML-aware RNA folder, accessed via the `arnie`
+# Python wrapper. The user-supplied .py script does
+# `import arnie` and the folding work.
+[bio.eternafold]
+script           = "fold.py"
+python           = "python3"
+# input_fasta    = "rna.fa"
+output_basename  = "fold"

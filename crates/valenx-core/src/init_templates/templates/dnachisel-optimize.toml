@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "dnachisel.optimize"
+mesh    = "(none)"
+
+# DNA Chisel Edinburgh Genome Foundry codon-optimization
+# library. The user-supplied .py script does `import dnachisel`
+# and the optimization work; it can read `valenx_params.json`
+# for the configured `output_basename` and the staged
+# `input_fasta` filename.
+[bio.dnachisel]
+script           = "optimize.py"
+python           = "python3"
+# input_fasta    = "protein.fa"
+output_basename  = "optimized"

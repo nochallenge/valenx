@@ -1,0 +1,17 @@
+[case]
+format  = "1.0"
+name    = "netgen-cylinder"
+physics = "meshing"
+solver  = "netgen.csg"
+mesh    = "primary"
+
+# Tiny CSG cylinder demo for the Netgen adapter — exercises the
+# `[meshing.netgen]` schema end-to-end. The sibling `cylinder.geo`
+# is the actual Netgen input; netgen reads it and writes `mesh.vol`
+# into the run workdir, which the adapter then promotes to a
+# canonical `mesh.canonical.json` for the viewport.
+
+[meshing.netgen]
+geometry_file = "cylinder.geo"
+mesh_size     = 0.1
+output        = "mesh.vol"

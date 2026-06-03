@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-dock"
+description = "Native Rust molecular docking engine. Drop-in replacement for the AutoDock Vina subprocess used by valenx-adapter-vina."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+nalgebra  = { workspace = true }
+rayon     = { workspace = true }
+serde     = { workspace = true }
+serde_json = { workspace = true }
+rand      = "0.8"
+
+valenx-bio  = { path = "../valenx-bio" }
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports  = "warn"
+missing_docs    = "warn"

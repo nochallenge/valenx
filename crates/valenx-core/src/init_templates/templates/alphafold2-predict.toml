@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "alphafold2.predict"
+mesh    = "(none)"
+
+# AlphaFold 2 protein structure prediction. The user provides
+# `run_alphafold.py` from the DeepMind repo plus a reference
+# database tree (`data_dir`); the adapter does NOT manage either.
+# `model_preset` ∈ {"monomer", "monomer_ptm", "multimer"}.
+# (AF2's CLI has no `--num_recycles` flag — recycle count is config-
+# baked, so the schema deliberately omits it.)
+[bio.alphafold2]
+run_script         = "/path/to/alphafold/run_alphafold.py"
+python             = "python3"
+query_fasta        = "query.fasta"
+data_dir           = "/path/to/alphafold/data"
+max_template_date  = "2022-01-01"
+model_preset       = "monomer"

@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "eman2.refine"
+mesh    = "(none)"
+
+# EMAN2 broad-spectrum cryo-EM image processing. `e2refine_easy.py`
+# is the entry point. `symmetry` follows EMAN2's convention
+# (c1 / c2 / d2 / icos / etc.). Outputs land in
+# `<output_basename>_NN/` subdirs.
+[bio.eman2]
+particles            = "particles.hdf"
+model                = "initial.hdf"
+output_basename      = "refine"
+target_resolution    = 8.0
+symmetry             = "c1"
+threads              = 4
+extra_args           = []

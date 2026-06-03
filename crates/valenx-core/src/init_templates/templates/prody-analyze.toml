@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "prody.analyze"
+mesh    = "(none)"
+
+# ProDy protein dynamics + ENM analysis. The user-supplied Python
+# script imports `prody` and reads `valenx_params.json`.
+# `num_modes` is the count of normal modes to compute. `cutoff`
+# is the ENM contact distance in Å.
+[bio.prody]
+script           = "analyze.py"
+python           = "python3"
+input_pdb        = "structure.pdb"
+output_basename  = "modes"
+num_modes        = 20
+cutoff           = 15.0

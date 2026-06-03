@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "omegafold.predict"
+mesh    = "(none)"
+
+# OmegaFold HelixonAI single-sequence structure prediction. No
+# MSA required. Ships with its own CLI (`omegafold <fasta>
+# <output_dir>`); falls back to `<python> -m omegafold ...` when
+# the CLI isn't on PATH.
+[bio.omegafold]
+fasta            = "query.fasta"
+output_basename  = "predicted"
+python           = "python3"
+# model_dir      = "/path/to/omegafold/checkpoints"

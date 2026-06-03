@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "chopchop.design"
+mesh    = "(none)"
+
+# CHOPCHOP CRISPR guide-RNA design. The user-supplied Python
+# script imports `chopchop` and reads `valenx_params.json`.
+# `cas_variant` ∈ {Cas9, Cas12a, Cas13, TALEN}. `genome` is a
+# CHOPCHOP-installed genome name (hg38 / mm10 / etc.).
+[bio.chopchop]
+script           = "design.py"
+python           = "python3"
+target           = "target.fa"
+genome           = "hg38"
+cas_variant      = "Cas9"
+pam              = "NGG"
+output_basename  = "guides"

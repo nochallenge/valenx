@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-print-bed"
+description = "Print Bed Layout (Phase 51) — 3D-printer multi-part placement, auto-pack, optimal orientation, tree-style supports, and slicer-bundle export. Pairs parts to a Printer bed and emits an STL bundle the user feeds to an external slicer (Cura, PrusaSlicer, etc.)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+valenx-core = { path = "../valenx-core" }
+valenx-mesh = { path = "../valenx-mesh" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

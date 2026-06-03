@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-md"
+description = "Molecular-dynamics engine for Valenx (Round 6 Block 6). Native Rust replacement for the classical core of GROMACS, OpenMM, LAMMPS, NAMD, AmberTools, Tinker, HOOMD-blue, MDAnalysis, MDTraj and oxDNA: a System / Atom / Topology data model with bonds, angles, dihedrals and a simulation box; a force-field parameter model (atom types, Lennard-Jones sigma/epsilon, partial charges, bonded constants, Lorentz-Berthelot and geometric combining rules); PDB / XYZ / GRO readers and writers plus a DCD-class binary and a framed-text trajectory writer; nonbonded interactions (cutoff + shifted Lennard-Jones, direct Coulomb with reaction-field correction, an Ewald / particle-mesh-Ewald v1 with real- and reciprocal-space splitting, a cell list + Verlet neighbour list, minimum-image periodic boundaries for orthorhombic and triclinic boxes); bonded interactions (harmonic bonds, harmonic angles, periodic and Ryckaert-Bellemans proper dihedrals, harmonic improper dihedrals); integrators (velocity-Verlet, leapfrog, Langevin / Brownian dynamics); thermostats (Berendsen, Andersen, velocity-rescale / Bussi, Nose-Hoover chain) and barostats (Berendsen, Parrinello-Rahman); SHAKE and RATTLE constraints; energy minimisers (steepest descent, conjugate gradient, L-BFGS); analysis (energy / temperature / virial-pressure reporters, radial distribution function, mean-squared displacement and the Einstein diffusion coefficient, Kabsch-superposed RMSD and RMSF); an oxDNA-class coarse-grained DNA bead model; and a generalized-Born implicit-solvent v1. A deterministic seedable PCG generator drives the stochastic integrators and thermostats. Pure algorithms, no GPU kernels and no neural-network weights."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure classical-mechanics algorithms. `nalgebra` supplies the 3-vector
+# and 3x3-matrix types behind every force / box / superposition routine
+# and the symmetric eigensolver the Kabsch RMSD and Parrinello-Rahman
+# barostat lean on; serde drives the data-model derives. No heavy or
+# platform dependencies — the PCG RNG, the PME reciprocal sum and the
+# DCD trajectory writer are hand-rolled.
+nalgebra = { workspace = true }
+serde    = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

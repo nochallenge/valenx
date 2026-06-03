@@ -1,0 +1,33 @@
+[package]
+name        = "valenx-occt-advanced"
+description = "OpenCASCADE (OCCT) advanced-operations feature parity for Valenx (Phases 131-160). Provides 30 Rust-native APIs covering sweep/loft advanced sketch-driven builders, ShapeAnalysis_*, ShapeUpgrade_*, GeomLib_* geometric queries, and BRepFeat_* local replace/remove/split. v1 implements the operations that map cleanly onto existing valenx-cad / valenx-surface capabilities (geometric queries on NURBS, boundary topology checks against truck-modeling Solid iterators, replaceable face-count assertions); the rest return `OcctAdvancedError::NotYetImplemented` with rustdoc describing what real OCCT does and which follow-up phase will deliver the deep implementation."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-cad     = { path = "../valenx-cad" }
+valenx-mesh    = { path = "../valenx-mesh" }
+valenx-surface = { path = "../valenx-surface" }
+# Phases 133-138 reuse the real Phase-97/98/99 feature substrate
+# (feat_make_prism/revol/pipe + feat_support) and the Phase-89/90
+# sweep/loft machinery rather than re-deriving them.
+valenx-occt-surface = { path = "../valenx-occt-surface" }
+# Phases 133/134 are sketch-driven — they consume a real
+# `valenx_sketch::Sketch` and extract its closed wire as the profile.
+valenx-sketch       = { path = "../valenx-sketch" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

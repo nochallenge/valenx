@@ -1,0 +1,21 @@
+# 1iep / imatinib-Abl kinase — bundled native-Vina docking demo.
+#
+# Receptor and ligand are copies of the same fixtures the CI parity
+# test in `crates/valenx-e2e-tests/tests/dock_parity.rs` uses, so the
+# search box centre + size below match those of the parity case.
+#
+# exhaustiveness reduced to 2 for fast smoke-test; use 8+ for real docking.
+[case]
+physics = "bio"
+solver  = "vina.dock"
+
+[bio.vina]
+receptor       = "receptor.pdbqt"
+ligand         = "ligand.pdbqt"
+output         = "poses.pdbqt"
+center         = [15.190, 53.903, 16.917]
+size           = [22.5, 22.5, 22.5]
+exhaustiveness = 2
+num_modes      = 9
+energy_range   = 3.0
+engine         = "native"

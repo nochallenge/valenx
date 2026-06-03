@@ -1,0 +1,73 @@
+[package]
+name         = "valenx-e2e-tests"
+description  = "End-to-end integration tests that spawn real upstream tools through the Valenx adapter trait. Run only in CI nightly (or locally when the tools are installed)."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+# Empty src/ — this crate is tests-only.
+
+publish.workspace     = true
+[dev-dependencies]
+valenx-core         = { path = "../valenx-core" }
+valenx-fields       = { path = "../valenx-fields" }
+valenx-test-utils   = { path = "../valenx-test-utils" }
+
+# Wired to the adapters whose tools we test. Add more as more
+# E2E tests land.
+valenx-adapter-bwa          = { path = "../valenx-adapters/bio/valenx-adapter-bwa" }
+valenx-adapter-samtools     = { path = "../valenx-adapters/bio/valenx-adapter-samtools" }
+valenx-adapter-mafft        = { path = "../valenx-adapters/bio/valenx-adapter-mafft" }
+valenx-adapter-viennarna    = { path = "../valenx-adapters/bio/valenx-adapter-viennarna" }
+valenx-adapter-bcftools     = { path = "../valenx-adapters/bio/valenx-adapter-bcftools" }
+valenx-adapter-hmmer        = { path = "../valenx-adapters/bio/valenx-adapter-hmmer" }
+
+# Phase 18 / 18.5 / 18.6 / 18.7 aligners
+valenx-adapter-minimap2     = { path = "../valenx-adapters/bio/valenx-adapter-minimap2" }
+valenx-adapter-muscle       = { path = "../valenx-adapters/bio/valenx-adapter-muscle" }
+valenx-adapter-bowtie2      = { path = "../valenx-adapters/bio/valenx-adapter-bowtie2" }
+valenx-adapter-mmseqs2      = { path = "../valenx-adapters/bio/valenx-adapter-mmseqs2" }
+valenx-adapter-diamond      = { path = "../valenx-adapters/bio/valenx-adapter-diamond" }
+valenx-adapter-hisat2       = { path = "../valenx-adapters/bio/valenx-adapter-hisat2" }
+valenx-adapter-blast        = { path = "../valenx-adapters/bio/valenx-adapter-blast" }
+valenx-adapter-clustalo     = { path = "../valenx-adapters/bio/valenx-adapter-clustalo" }
+valenx-adapter-tcoffee      = { path = "../valenx-adapters/bio/valenx-adapter-tcoffee" }
+
+# Phylogenetics
+valenx-adapter-iqtree       = { path = "../valenx-adapters/bio/valenx-adapter-iqtree" }
+valenx-adapter-raxml-ng     = { path = "../valenx-adapters/bio/valenx-adapter-raxml-ng" }
+valenx-adapter-fasttree     = { path = "../valenx-adapters/bio/valenx-adapter-fasttree" }
+valenx-adapter-mrbayes      = { path = "../valenx-adapters/bio/valenx-adapter-mrbayes" }
+
+# RNA structure
+valenx-adapter-rnastructure = { path = "../valenx-adapters/bio/valenx-adapter-rnastructure" }
+
+# Read simulators
+valenx-adapter-art          = { path = "../valenx-adapters/bio/valenx-adapter-art" }
+valenx-adapter-wgsim        = { path = "../valenx-adapters/bio/valenx-adapter-wgsim" }
+valenx-adapter-badread      = { path = "../valenx-adapters/bio/valenx-adapter-badread" }
+
+# Workflow engines
+valenx-adapter-snakemake    = { path = "../valenx-adapters/bio/valenx-adapter-snakemake" }
+valenx-adapter-nextflow     = { path = "../valenx-adapters/bio/valenx-adapter-nextflow" }
+valenx-adapter-cwltool      = { path = "../valenx-adapters/bio/valenx-adapter-cwltool" }
+
+# Spatial / MD analysis
+valenx-adapter-smoldyn      = { path = "../valenx-adapters/bio/valenx-adapter-smoldyn" }
+
+# Cheminformatics / quantum
+valenx-adapter-openbabel    = { path = "../valenx-adapters/bio/valenx-adapter-openbabel" }
+valenx-adapter-xtb          = { path = "../valenx-adapters/bio/valenx-adapter-xtb" }
+
+# CRISPR
+valenx-adapter-cas-offinder = { path = "../valenx-adapters/bio/valenx-adapter-cas-offinder" }
+
+# Native docking parity test (Task 38) — gated on VINA_BIN.
+valenx-dock = { path = "../valenx-dock" }
+valenx-bio  = { path = "../valenx-bio" }
+nalgebra    = { workspace = true }
+toml        = { workspace = true }

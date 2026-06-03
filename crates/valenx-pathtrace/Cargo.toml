@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-pathtrace"
+description = "CPU Monte-Carlo path tracer (real global illumination) — BVH-accelerated ray-triangle, cosine-weighted importance sampling, Cook-Torrance/Lambert BRDF, Russian-roulette termination, HDR environment lighting. A real unbiased v1, not Cycles-fast."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+valenx-mesh          = { path = "../valenx-mesh" }
+valenx-render-bridge = { path = "../valenx-render-bridge" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

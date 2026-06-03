@@ -1,0 +1,21 @@
+physics = "bio"
+solver  = "nextflow.run"
+mesh    = "(none)"
+
+# Nextflow pipeline orchestrator. `pipeline` accepts a local
+# `.nf` filename, a relative/absolute path, or a registry
+# identifier like "nf-core/rnaseq". `params` maps to
+# `--<key> <value>` args (sorted by key for reproducibility).
+# `profile` selects a Nextflow config profile; `resume` enables
+# `-resume`. The adapter does NOT manage the work/ + .nextflow/
+# dirs — Nextflow places them next to the case dir.
+[bio.nextflow]
+pipeline = "main.nf"
+# profile  = "docker"
+# config   = "nextflow.config"
+resume   = false
+extra_args = []
+
+[bio.nextflow.params]
+# input  = "samples.csv"
+# outdir = "results/"

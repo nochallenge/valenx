@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-openscad"
+description = "OpenSCAD CSG scripting paradigm (Phase 52) — full live re-evaluation engine that owns OpenSCAD AST + bindings + cached evaluation result. Builds on valenx-openscad-import's lexer/parser, adds primitives, transforms, modifier flags, hull/minkowski stubs, and an Engine that re-evaluates when source changes (dirty-flag pattern; no native file-watcher in tests)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror              = { workspace = true }
+serde                  = { workspace = true }
+ron                    = { workspace = true }
+nalgebra               = { workspace = true }
+
+valenx-cad             = { path = "../valenx-cad" }
+valenx-mesh            = { path = "../valenx-mesh" }
+valenx-openscad-import = { path = "../valenx-openscad-import" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

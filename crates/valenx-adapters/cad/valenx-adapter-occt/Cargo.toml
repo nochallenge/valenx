@@ -1,0 +1,28 @@
+[package]
+name         = "valenx-adapter-occt"
+description  = "Subprocess-isolated adapter that drives pythonocc-core (OpenCASCADE Technology) via a user-supplied Python script."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+# pythonocc-core wraps OCCT (LGPL-2.1-or-later WITH OCCT-exception-1.0).
+# We spawn the Python interpreter as a subprocess so the LGPL kernel
+# never links into the Valenx binary.
+
+publish.workspace     = true
+[dependencies]
+anyhow       = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+semver       = { workspace = true }
+toml         = { workspace = true }
+
+valenx-core   = { path = "../../../valenx-core" }
+valenx-fields = { path = "../../../valenx-fields" }
+
+[dev-dependencies]
+valenx-test-utils = { path = "../../../valenx-test-utils" }

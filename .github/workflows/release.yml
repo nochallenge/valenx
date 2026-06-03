@@ -1,0 +1,383 @@
+name: Release
+
+# Builds signed installers for macOS / Windows / Linux and uploads
+# them to a GitHub Release. Lane D of NEXT_PHASE.md.
+#
+# Signing degrades gracefully:
+# - macOS: if APPLE_ID + APPLE_TEAM_ID + APPLE_DEVELOPER_ID_CERT
+#   secrets are present, the .app gets codesigned and notarised.
+#   Otherwise an unsigned .app is uploaded with a warning.
+# - Windows: if WINDOWS_CERT + WINDOWS_CERT_PASSWORD secrets are
+#   present, the .exe + .msi get Authenticode-signed via signtool.
+#   Otherwise unsigned binaries are uploaded with a warning.
+# - Linux: .deb and .rpm don't require code signing (distros sign
+#   their repository indices, not individual packages).
+
+# MANUAL ONLY — tag-push auto-trigger disabled on 2026-05-24 after a
+# billing surprise (this matrix runs Windows + macOS runners which
+# cost 2x / 10x the Linux rate respectively; one full matrix run was
+# ~$12 USD). To re-enable on `v*` tag pushes, restore the `push:`
+# block above the `workflow_dispatch:` line (see `docs/CI.md`).
+#
+# Still runnable on demand for a specific tag: GitHub UI → Actions →
+# Release → Run workflow → enter the tag, or via:
+#   gh workflow run release.yml -f tag=v0.1.0-alpha.1
+#
+# For zero-cost installer builds, prefer the local-build scripts
+# documented in `docs/INSTALLER.md`:
+#   - Windows: `scripts/build-installer.ps1` (needs WiX Toolset 3.x)
+#   - macOS:   `scripts/build-installer.sh` on a Mac (needs cargo-
+#              bundle + Homebrew create-dmg)
+#   - Linux:   `scripts/build-installer.sh` on Linux/WSL (needs
+#              cargo-deb + cargo-generate-rpm + system libs)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.1.0-alpha.1)'
+        required: true
+      draft:
+        description: 'Create as draft release?'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+
+# Single concurrency group so re-tagging cancels in-flight builds.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------
+  # Linux .deb (Debian / Ubuntu).
+  # -------------------------------------------------------------------
+  linux-deb:
+    name: linux .deb
+    runs-on: ubuntu-latest
+    steps:
+      # Round-19 H1: pin the checkout to the requested tag (or to
+      # github.ref_name on a tag-push fallback). Pre-fix `actions/checkout@v4`
+      # ran with no `ref:` and silently grabbed master HEAD, so triggering
+      # the workflow for `v0.1.0-alpha.1` actually built whatever was on
+      # master at run time. Sister change to the same pattern on every
+      # other job in this file.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev libwayland-dev libxkbcommon-dev \
+            libasound2-dev pkg-config
+      - name: Install cargo-deb
+        run: cargo install --locked cargo-deb
+      - name: Build release binaries
+        run: cargo build --release -p valenx-app -p valenx-core -p valenx-fields -p valenx-mesh -p valenx-audit -p valenx-export
+      - name: Build .deb
+        run: cargo deb -p valenx-app --no-build
+      - name: Stage artefact
+        run: |
+          mkdir -p dist
+          cp target/debian/*.deb dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------
+  # Linux .rpm (Fedora / RHEL / openSUSE).
+  # -------------------------------------------------------------------
+  linux-rpm:
+    name: linux .rpm
+    runs-on: ubuntu-latest
+    steps:
+      # Round-19 H1: pin checkout to the requested tag — see linux-deb.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev libwayland-dev libxkbcommon-dev \
+            libasound2-dev pkg-config
+      - name: Install cargo-generate-rpm
+        run: cargo install --locked cargo-generate-rpm
+      - name: Build release binaries
+        run: cargo build --release -p valenx-app -p valenx-core -p valenx-fields -p valenx-mesh -p valenx-audit -p valenx-export
+      - name: Build .rpm
+        run: cargo generate-rpm -p crates/valenx-app
+      - name: Stage artefact
+        run: |
+          mkdir -p dist
+          cp target/generate-rpm/*.rpm dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-rpm
+          path: dist/*.rpm
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------
+  # macOS .app wrapped in a signed/notarised .dmg (the .app alone
+  # forces users to unzip + manually drag to Applications; .dmg gives
+  # them the native drag-to-Applications UX). Signing + notarisation
+  # degrade gracefully when Apple-developer secrets are missing.
+  # -------------------------------------------------------------------
+  macos:
+    name: macOS .dmg
+    runs-on: macos-latest
+    steps:
+      # Round-19 H1: pin checkout to the requested tag — see linux-deb.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-bundle + create-dmg + jq
+        # create-dmg wraps the Apple `hdiutil` flow (drag-to-Applications
+        # window layout + custom volume icon). jq pulls the crate version
+        # out of `cargo metadata` so the .dmg filename matches Releases.
+        run: |
+          cargo install --locked cargo-bundle
+          brew install create-dmg jq
+      - name: Build .app bundle
+        run: cargo bundle --release -p valenx-app
+      - name: Resolve version
+        id: ver
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name=="valenx-app") | .version')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved valenx-app version: $VERSION"
+      - name: Codesign .app (gated on secrets)
+        # Sign the .app BEFORE wrapping into .dmg — codesign'ing the
+        # outer .dmg is a separate step (below) and only protects the
+        # disk image, not the executable inside it.
+        #
+        # All four Apple secrets must appear in this step's `env:` block
+        # so the `if:` expression (which evaluates against the step's
+        # own env scope, not the job's) can read APPLE_ID + APPLE_TEAM_ID.
+        # Earlier revisions only declared the cert + password here and
+        # the gate silently evaluated to `false` for every release. The
+        # .dmg sign step below has the same structure for the same reason.
+        if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DEVELOPER_ID_CERT: ${{ secrets.APPLE_DEVELOPER_ID_CERT }}
+          APPLE_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
+          # Temp keychain so we don't pollute the runner's default
+          # keychain across concurrent jobs.
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$APPLE_DEVELOPER_ID_CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" \
+            -P "$APPLE_DEVELOPER_ID_CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          for app in target/release/bundle/osx/*.app; do
+            codesign --force --deep --options runtime --timestamp \
+              --sign "Developer ID Application" "$app"
+          done
+      - name: Build .dmg
+        # create-dmg lays out a window with the .app on the left and a
+        # symlink to /Applications on the right — the canonical macOS
+        # install UX. --hdiutil-quiet silences hdiutil's "verifying"
+        # spam that otherwise floods the GHA log.
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          mkdir -p dist
+          # create-dmg wants a *folder* containing only what we ship.
+          # The cargo-bundle output dir holds the .app and nothing else
+          # (target/release/bundle/osx/Valenx.app), so we can point it
+          # at that directly.
+          BUNDLE_DIR="target/release/bundle/osx"
+          if [ ! -d "$BUNDLE_DIR" ]; then
+            echo "::error::cargo-bundle output missing at $BUNDLE_DIR"; exit 1
+          fi
+          create-dmg \
+            --volname "Valenx" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Valenx.app" 150 200 \
+            --hide-extension "Valenx.app" \
+            --app-drop-link 450 200 \
+            --hdiutil-quiet \
+            "dist/Valenx-${VERSION}.dmg" \
+            "${BUNDLE_DIR}/"
+      - name: Codesign + notarise .dmg (gated on secrets)
+        # codesign'ing the .dmg lets Gatekeeper verify the disk image
+        # itself. notarytool handles .dmg natively — stapling embeds
+        # the ticket so end users get a green "verified developer"
+        # check even when offline.
+        if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          DMG="dist/Valenx-${VERSION}.dmg"
+          codesign --force --sign "Developer ID Application" "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "$DMG"
+      - name: Warn when running unsigned
+        # As with the codesign steps above, the `if:` reads from this
+        # step's env scope, so APPLE_ID and APPLE_TEAM_ID both have to
+        # be exported here too — otherwise the warning never fires
+        # (env.APPLE_ID / env.APPLE_TEAM_ID are always empty against
+        # an undeclared variable). Mirrors the env block on the
+        # "Codesign + notarise" steps above so the gate stays in sync.
+        if: env.APPLE_ID == '' || env.APPLE_TEAM_ID == ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "::warning::APPLE_ID or APPLE_TEAM_ID secret not set — uploading unsigned .dmg. \
+            Users will need to right-click → Open on first launch to bypass Gatekeeper."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------
+  # Windows .msi via cargo-wix + Authenticode signing (when available).
+  # -------------------------------------------------------------------
+  windows:
+    name: Windows .msi
+    runs-on: windows-latest
+    steps:
+      # Round-19 H1: pin checkout to the requested tag — see linux-deb.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-wix
+        run: cargo install --locked cargo-wix
+      - name: Build release binaries
+        # cargo-wix needs the binaries on disk before it can package
+        # them, so build first then call wix with --no-build.
+        run: cargo build --release -p valenx-app
+      - name: Initialise WiX template (only if missing)
+        # The repo ships a hand-authored `crates/valenx-app/wix/main.wxs`
+        # that adds the Start Menu group + optional Desktop shortcut +
+        # ARPPRODUCTICON. Falling back to `cargo wix init` would
+        # clobber it, so only run init when the file is genuinely
+        # missing (defensive — should never happen in CI). See
+        # docs/INSTALLER.md for the full template walk-through.
+        shell: pwsh
+        run: |
+          if (-not (Test-Path crates/valenx-app/wix/main.wxs)) {
+            Write-Host "::warning::No checked-in WiX template found, falling back to cargo wix init"
+            cargo wix init -p valenx-app
+          } else {
+            Write-Host "Using checked-in WiX template at crates/valenx-app/wix/main.wxs"
+          }
+      - name: Build .msi
+        # cargo-wix auto-discovers the template at the conventional
+        # `wix/main.wxs` path inside the crate, so no explicit
+        # --template arg is needed.
+        run: cargo wix -p valenx-app --no-build --nocapture
+      - name: Sign .msi (gated on secrets)
+        if: env.WINDOWS_CERT != ''
+        env:
+          WINDOWS_CERT: ${{ secrets.WINDOWS_CERT }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          # Decode the base64 cert into a temp .pfx.
+          $certPath = "$env:RUNNER_TEMP\cert.pfx"
+          [System.IO.File]::WriteAllBytes(
+            $certPath,
+            [System.Convert]::FromBase64String($env:WINDOWS_CERT)
+          )
+          # signtool ships with the Windows SDK; the runner has it on PATH.
+          Get-ChildItem target/wix/*.msi | ForEach-Object {
+            signtool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD `
+              /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+              /v $_.FullName
+          }
+      - name: Warn when running unsigned
+        # The `if:` expression evaluates against this step's env scope,
+        # not the job's. Without declaring WINDOWS_CERT here the gate
+        # silently evaluates to `true` on every release run (env.WINDOWS_CERT
+        # against an undeclared variable is always empty), so the warning
+        # fired even when the secret was actually configured. Mirrors the
+        # env block on the "Sign .msi" step so the two stay in lock-step.
+        if: env.WINDOWS_CERT == ''
+        env:
+          WINDOWS_CERT: ${{ secrets.WINDOWS_CERT }}
+        shell: pwsh
+        run: |
+          Write-Host "::warning::WINDOWS_CERT secret not set — uploading unsigned .msi. Users will see SmartScreen warnings."
+      - name: Stage artefact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/wix/*.msi dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: dist/*.msi
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------
+  # Publish: collect all artefacts, push to a GitHub Release.
+  # -------------------------------------------------------------------
+  publish:
+    name: GitHub Release
+    needs: [linux-deb, linux-rpm, macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required for action-gh-release
+    steps:
+      # Round-19 H1: pin checkout to the requested tag — see linux-deb.
+      # The publish job uses the checkout only for release notes /
+      # CHANGELOG context, but pinning keeps the publish step's source
+      # tree in lock-step with the build jobs.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - name: Download all artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Stage flat dist/
+        run: ls -lah dist/
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: ${{ github.event.inputs.draft || 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.dmg
+            dist/*.msi

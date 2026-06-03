@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-astro"
+description = "Native launch-vehicle ascent + trajectory simulator. Planar 3-DOF point-mass flight in an Earth-centred inertial frame: US Standard Atmosphere 1976, thrust/Isp with mass flow, Mach-dependent drag, gravity-turn guidance, multi-stage staging, and orbital insertion (apoapsis/periapsis, delta-v budget). A real working v1, not a flight-certified GNC stack."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public config / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

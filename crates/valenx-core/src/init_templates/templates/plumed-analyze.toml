@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "plumed.analyze"
+mesh    = "(none)"
+
+# PLUMED enhanced-sampling + free-energy MD analysis. Drop your
+# `plumed.dat` (PLUMED input) + trajectory (XTC) alongside this
+# case.toml. `kt` is k_B T in kJ/mol (2.494 ≈ 300 K).
+[bio.plumed]
+plumed_dat       = "plumed.dat"
+trajectory       = "traj.xtc"
+output_basename  = "analysis"
+kt               = 2.494
+extra_args       = []

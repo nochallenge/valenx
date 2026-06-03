@@ -1,0 +1,89 @@
+[package]
+name         = "valenx-bio"
+description  = "Canonical Sequence / Structure / Trajectory types + format I/O for the biology + biotech adapters. Phase 17."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+nalgebra    = { workspace = true }
+byteorder   = { workspace = true }
+
+valenx-fields = { path = "../valenx-fields" }
+# valenx-blast wraps the BLAST+ binaries via std::process::Command;
+# `find_on_path` lives on valenx-core::adapter_helpers and respects
+# PATHEXT on Windows so conda / scoop / chocolatey shims for `blastp`
+# and `blastn` resolve cleanly. Library code in valenx-bio doesn't
+# touch valenx-core — it's a binary-only dep used by the CLI.
+valenx-core   = { path = "../valenx-core" }
+
+# Headless FASTA inspector / validator / extractor. Routes through
+# the in-tree `format::fasta` reader; auto-detects DNA / RNA / protein
+# alphabet for inspect + extract, takes an explicit `--alphabet`
+# flag for validate. Useful for CI gates and SSH'd-into-a-cluster
+# debugging where the GUI isn't reachable.
+[[bin]]
+name = "valenx-fasta"
+path = "src/bin/valenx_fasta.rs"
+
+# Headless PDB structure summary. Routes through the in-tree
+# `format::pdb` reader and prints per-chain residue / atom counts +
+# element-frequency tally. Useful for confirming a PDB landed
+# correctly in CI or as a quick `head` on a multi-MB structure dump.
+[[bin]]
+name = "valenx-pdb-info"
+path = "src/bin/valenx_pdb_info.rs"
+
+# Wrapper around the NCBI BLAST+ tools (`blastp` / `blastn`). Auto-
+# detects DNA / RNA / protein from the query and routes to the
+# matching binary. Probes PATH via valenx-core's `find_on_path`. We
+# don't try to detect or stage databases — `--db` is passed through
+# to BLAST+ verbatim.
+[[bin]]
+name = "valenx-blast"
+path = "src/bin/valenx_blast.rs"
+
+# Headless FASTQ inspector. Routes through the in-tree
+# `format::fastq` reader; reports record count, total bases,
+# length range, and Phred range. `-` reads from stdin so a CI
+# pipeline can pipe in `gunzip -c reads.fq.gz | valenx-fastq inspect -`.
+[[bin]]
+name = "valenx-fastq"
+path = "src/bin/valenx_fastq.rs"
+
+# Headless SAM summary. Routes through the in-tree `format::sam`
+# reader and reports header-line count, record count, mapped /
+# unmapped split. BAM is not supported — convert with
+# `samtools view -h <in.bam> | valenx-sam-info -` first.
+[[bin]]
+name = "valenx-sam-info"
+path = "src/bin/valenx_sam_info.rs"
+
+# Headless VCF summary. Routes through the in-tree `format::vcf`
+# reader and reports header-line count, sample count, record count,
+# and PASS/fail + no-ALT splits. BCF (binary) and BGZF-compressed
+# VCF are not supported — convert with `bcftools view`.
+[[bin]]
+name = "valenx-vcf-info"
+path = "src/bin/valenx_vcf_info.rs"
+
+# mRNA designer demo — animal CDS (Aequorea victoria GFP) →
+# human-codon-optimised IVT-ready mRNA construct (5'UTR + Kozak +
+# CDS + 3'UTR + poly-A). Pure-Rust on top of `valenx-bio::Sequence`;
+# no Python / no internet. Output reports CAI / GC / swap counts and
+# the assembled FASTA. See the module-level docs for the framing —
+# the demo intentionally maxes CAI for didactic clarity; production
+# codon optimizers (GenScript / IDT) target CAI ≈ 0.85 with GC and
+# secondary-structure penalties.
+[[bin]]
+name = "valenx-design-mrna"
+path = "src/bin/valenx_design_mrna.rs"

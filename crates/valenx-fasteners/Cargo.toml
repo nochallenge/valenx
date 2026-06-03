@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-fasteners"
+description = "Fasteners workbench (Phase 36) — standard parts library for bolts (ISO 4017 hex / ANSI B18.2.1), nuts (ISO 4032 hex), washers (ISO 7089). Each table entry pairs a nominal-diameter spec with a to_solid() generator that returns a mesh-backed Solid suitable for the viewport and downstream assembly placement."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh         = { path = "../valenx-mesh" }
+valenx-cad          = { path = "../valenx-cad" }
+valenx-feature-tree = { path = "../valenx-feature-tree" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

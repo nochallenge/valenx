@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-techdraw"
+description = "TechDraw workbench: generate 2D engineering drawings (front/top/iso views, sections, dimensions, BOM, title blocks) from 3D solids and export to SVG/PDF/DXF."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-cad          = { path = "../valenx-cad" }
+valenx-mesh         = { path = "../valenx-mesh" }
+valenx-feature-tree = { path = "../valenx-feature-tree" }
+valenx-assembly     = { path = "../valenx-assembly" }
+# Round-28 H2: canonical atomic_write_str for persist.rs::write_to.
+valenx-core         = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

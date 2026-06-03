@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "pyrosetta.script"
+mesh    = "(none)"
+
+# PyRosetta Python wrapper for Rosetta core. NOTE: PyRosetta
+# inherits Rosetta's academic-only license. The user-supplied
+# script imports `pyrosetta` and reads `valenx_params.json` for
+# the optional `input_pdb` and `output_basename`.
+[bio.pyrosetta]
+script           = "design.py"
+python           = "python3"
+# input_pdb      = "starting.pdb"
+output_basename  = "designed"

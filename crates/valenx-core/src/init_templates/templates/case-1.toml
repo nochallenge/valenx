@@ -1,0 +1,6 @@
+physics = "geometry"
+solver  = "(none)"
+mesh    = "(none)"
+
+# Add per-physics sections (e.g. [flow], [structural], [chemistry])
+# once you decide what this case will do.

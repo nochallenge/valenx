@@ -1,0 +1,29 @@
+# cargo-nextest — fast, parallel test runner for the Valenx workspace.
+#
+# `cargo test` runs each crate's test binary largely sequentially;
+# nextest schedules every test from every crate into one global thread
+# pool, which on a many-core machine cuts wall-clock time dramatically on
+# this ~150-crate workspace (it fills idle cores during the slow numerical
+# crates instead of running binaries one after another).
+#
+#   Install: cargo install cargo-nextest --version 0.9.114 --locked
+#   Run:     cargo nextest run --workspace
+#
+# (0.9.114 is pinned to the last release supporting rustc 1.88; newer
+# nextest requires rustc 1.91.)
+
+[profile.default]
+# Default = all cores (the same core-scaling cargo test already uses), so
+# it is fastest on a capable machine but never spawns unbounded work.
+# The numerical solver crates (valenx-aero, valenx-cfd-native, valenx-fem,
+# valenx-md, valenx-reactdyn, ...) have legitimately long convergence
+# tests; warn when a single test runs past two minutes, but never
+# auto-terminate — a slow test here is doing real physics, not hanging.
+slow-timeout = "120s"
+
+# A resource-light profile for modest machines — or for running the suite
+# in the background while you keep working. Caps parallelism so the run
+# never saturates the box (inherits the default profile; only the thread
+# cap differs). Use: `cargo nextest run --profile gentle`.
+[profile.gentle]
+test-threads = 4

@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-vector-graphics"
+description = "Inkscape-style SVG vector primitives (Phase 68). Line/Path/Rect/Ellipse/Polygon/Text with SVG round-trip writer + minimal reader and path bbox + arc-length tools."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

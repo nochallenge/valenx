@@ -1,0 +1,19 @@
+physics = "bio"
+solver  = "kallisto.quant"
+mesh    = "(none)"
+
+# Kallisto pseudoalignment-based transcript quantification.
+# `index` is a single .idx file (kallisto convention). For
+# single-end reads, both `fragment_length` and `fragment_sd`
+# must be supplied (kallisto auto-detects them only for
+# paired-end input).
+[bio.kallisto]
+transcriptome    = "transcripts.fa"
+index            = "transcripts.idx"
+reads            = ["r1.fq", "r2.fq"]
+output_dir       = "kallisto-quant"
+threads          = 1
+skip_index       = false
+# fragment_length = 200.0  # required if reads has 1 entry
+# fragment_sd     = 20.0   # required if reads has 1 entry
+extra_args       = []

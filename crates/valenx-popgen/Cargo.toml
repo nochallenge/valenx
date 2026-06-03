@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-popgen"
+description = "Population genetics and evolution simulators for Valenx (Round 6 Block 4). Native Rust replacement for SLiM, msprime / tskit, fwdpy11, simuPOP, Nemo, discoal, ms and stdpopsim: a Population / Individual / Genome data model, a deterministic seedable PCG random-number generator, Wright-Fisher forward simulation with additive / dominance / epistatic selection, infinite- and finite-sites mutation, crossover and gene-conversion recombination, island and stepping-stone migration, drift and piecewise effective-population-size demography, forward-in-time tree recording, Kingman coalescent and coalescent-with-recombination (ARG) backward simulation reusing valenx-phylo's Tree, a succinct tskit-class tree sequence with node / edge / site / mutation tables, summary statistics (site-frequency spectrum, nucleotide diversity, Watterson's theta, Tajima's D, Fu & Li's D, Fay & Wu's H, Weir-Cockerham and Hudson Fst, linkage disequilibrium D / D' / r-squared, EHH / iHS selection scans), Hardy-Weinberg tests, heterozygosity and inbreeding coefficients, quantitative-genetics breeding values and heritability, the stepwise microsatellite mutation model, an Approximate Bayesian Computation rejection framework, a stdpopsim-class species catalog and VCF / ms / Newick export. Pure algorithms, no neural-network weights."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure algorithms. valenx-bioseq supplies the nucleotide alphabet and
+# sequence types behind mutation overlay; valenx-phylo supplies the
+# `Tree` arena that the coalescent and ARG reuse for genealogies rather
+# than redefining a tree type. serde drives the data-model derives.
+# No heavy or platform dependencies — the PCG RNG is hand-rolled.
+valenx-bioseq = { path = "../valenx-bioseq" }
+valenx-phylo  = { path = "../valenx-phylo" }
+serde         = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

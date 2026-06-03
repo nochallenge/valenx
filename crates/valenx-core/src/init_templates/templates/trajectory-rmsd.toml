@@ -1,0 +1,10 @@
+physics = "bio"
+solver  = "mdanalysis.script"
+mesh    = "(none)"
+
+# Trajectory-analysis Python script. The adapter parses any DCD it
+# finds in the workdir into typed frames on collect(); the script
+# itself is free to compute whatever observable the user needs.
+[bio.mdanalysis]
+script = "analyse_traj.py"
+python = "python3"

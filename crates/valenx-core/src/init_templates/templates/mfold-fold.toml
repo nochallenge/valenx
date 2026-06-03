@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "mfold.fold"
+mesh    = "(none)"
+
+# mfold/UNAFold Zuker RNA folder. Free for academic / non-
+# commercial use only.
+[bio.mfold]
+sequence        = "rna.fa"
+output_basename = "fold"
+temperature     = 37.0
+extra_args      = []

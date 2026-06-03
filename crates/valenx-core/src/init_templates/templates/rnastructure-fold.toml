@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "rnastructure.fold"
+mesh    = "(none)"
+
+# RNAstructure Fold (Mathews lab, BSD-3-Clause). Uses Kelvin
+# temperatures (310.15 K = 37 °C). `max_structures` is the
+# count of suboptimal structures to predict; `max_percent` is
+# the energy-difference cutoff as % of MFE (default 10).
+[bio.rnastructure]
+input          = "sequence.seq"
+output         = "structures.ct"
+max_structures = 20
+max_percent    = 10
+temperature    = 310.15
+extra_args     = []

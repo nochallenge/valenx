@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-kicad"
+description = "KiCad workbench (Phase 42) — KiCad PCB STEP round-trip. Parametric KicadBoard (outline / drill holes / pads / components) parser for .kicad_pcb S-expression files, board-to-solid tessellator that extrudes the outline + subtracts drill holes, and STEP assembly emit hook for KicadStepUp-style 3D model exports."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh     = { path = "../valenx-mesh" }
+valenx-cad      = { path = "../valenx-cad" }
+valenx-assembly = { path = "../valenx-assembly" }
+valenx-core     = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

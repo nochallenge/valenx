@@ -1,0 +1,29 @@
+[package]
+name         = "valenx-audit"
+description  = "Append-only JSONL audit log with prev-hash integrity chain. Phase 15 / RFC 0013."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+sha2       = { workspace = true }
+fs2        = { workspace = true }
+# Round-22 L1: shared `read_capped_to_string` helper for the
+# rotation-genesis sidecar cap (see `read_rotation_genesis`).
+valenx-core = { path = "../valenx-core" }
+
+# A small CLI binary that runs the chain verifier from the command
+# line. Useful for compliance auditors who want to script log checks
+# without launching the GUI.
+[[bin]]
+name = "valenx-audit"
+path = "src/bin/valenx_audit.rs"
