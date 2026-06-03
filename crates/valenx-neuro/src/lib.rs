@@ -28,6 +28,7 @@ pub mod error;
 pub mod field;
 pub mod impedance;
 pub mod membrane;
+pub mod myelinated;
 pub mod units;
 
 pub use activating::activating_along_x;
@@ -38,3 +39,4 @@ pub use error::{NeuroError, Result};
 pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};
 pub use impedance::{Cpe, ElectrodeImpedance};
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
+pub use myelinated::MyelinatedFiber;

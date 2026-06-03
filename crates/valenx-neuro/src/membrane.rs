@@ -14,7 +14,7 @@ use crate::cable::{
 /// Solve a tridiagonal linear system by the Thomas algorithm: `sub` is the
 /// sub-diagonal (`sub[0]` unused), `diag` the diagonal, `sup` the
 /// super-diagonal (`sup[n-1]` unused), `rhs` the right-hand side.
-fn thomas(sub: &[f64], diag: &[f64], sup: &[f64], rhs: &[f64]) -> Vec<f64> {
+pub(crate) fn thomas(sub: &[f64], diag: &[f64], sup: &[f64], rhs: &[f64]) -> Vec<f64> {
     let n = diag.len();
     let mut c = vec![0.0; n];
     let mut d = vec![0.0; n];
