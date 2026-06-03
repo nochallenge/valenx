@@ -33,7 +33,7 @@ pub const V_REST: f64 = -65.0;
 // The two `x / (1 − e^{−x/10})` forms are 0/0 at V = −40 (αm) and V = −55
 // (αn); each is guarded with its analytic limit there.
 
-fn alpha_m(v: f64) -> f64 {
+pub(crate) fn alpha_m(v: f64) -> f64 {
     let x = v + 40.0;
     if x.abs() < 1e-6 {
         1.0 // limit of 0.1·x / (1 − e^{−x/10}) as x → 0
@@ -41,16 +41,16 @@ fn alpha_m(v: f64) -> f64 {
         0.1 * x / (1.0 - (-x / 10.0).exp())
     }
 }
-fn beta_m(v: f64) -> f64 {
+pub(crate) fn beta_m(v: f64) -> f64 {
     4.0 * (-(v + 65.0) / 18.0).exp()
 }
-fn alpha_h(v: f64) -> f64 {
+pub(crate) fn alpha_h(v: f64) -> f64 {
     0.07 * (-(v + 65.0) / 20.0).exp()
 }
-fn beta_h(v: f64) -> f64 {
+pub(crate) fn beta_h(v: f64) -> f64 {
     1.0 / (1.0 + (-(v + 35.0) / 10.0).exp())
 }
-fn alpha_n(v: f64) -> f64 {
+pub(crate) fn alpha_n(v: f64) -> f64 {
     let x = v + 55.0;
     if x.abs() < 1e-6 {
         0.1 // limit of 0.01·x / (1 − e^{−x/10}) as x → 0
@@ -58,7 +58,7 @@ fn alpha_n(v: f64) -> f64 {
         0.01 * x / (1.0 - (-x / 10.0).exp())
     }
 }
-fn beta_n(v: f64) -> f64 {
+pub(crate) fn beta_n(v: f64) -> f64 {
     0.125 * (-(v + 65.0) / 80.0).exp()
 }
 

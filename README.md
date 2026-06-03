@@ -78,9 +78,12 @@ Rust solvers ship inside the app and work out of the box:
   (`valenx-neuro`): an implanted electrode's **extracellular FEM field**
   (reusing the FEA solver), **Hodgkin–Huxley** cable axons, the **Rattay
   activating function** coupling the two (an electrode recruits nearby
-  neurons), **bioheat** tissue heating, and **electrode–tissue impedance** —
-  each validated against a textbook or closed-form result (see
-  [Validation](#validation)).
+  neurons), **bioheat** tissue heating, and **electrode–tissue impedance**,
+  plus an **unconditionally-stable implicit cable solver**, **myelinated
+  saltatory fibers** (conduction velocity matched to the empirical 6·D rule),
+  **strength–duration** curves, an **anisotropic-tensor FEM field**, and
+  **multi-contact current steering** — each validated against a textbook or
+  closed-form result (see [Validation](#validation)).
 
 The external tools below are **optional** — reach for them when you want a
 reference implementation, a GPU/ML model, or a domain not yet native. A few
@@ -112,6 +115,9 @@ running them — lives in [docs/VALIDATION.md](./docs/VALIDATION.md).
 | Neuro — `valenx-neuro` | field + activating function | point source φ = I/(4πσr); cathodic depolarizes, anodic hyperpolarizes (Rattay) |
 | Neuro — `valenx-neuro` | electrode recruitment | threshold **rises with electrode–fiber distance**; recruitment monotone in current |
 | Neuro — `valenx-neuro` | bioheat + impedance | ΔT = Q/(4πk r); electrode access resistance R = 1/(4σa) |
+| Neuro — `valenx-neuro` | implicit cable + myelinated fiber | unconditionally-stable implicit solver (stable at 100 µm, fixes the v1 RK4 limit); myelinated **CV ≈ 6·D** within ~6% (57 / 113 m/s at 10 / 20 µm), ∝ D not √D |
+| Neuro — `valenx-neuro` | strength–duration | rheobase + **chronaxie 1.65 ms** (≈ ½ membrane τ); Lapicque constant-charge law holds to **< 1%** at short widths |
+| Neuro — `valenx-neuro` | anisotropic FEM + steering | tensor-σ point source matches the **closed-form** anisotropic Green's function within ~10%; multi-contact **current steering** shifts the focus |
 
 ## Install
 

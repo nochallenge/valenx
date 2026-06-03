@@ -353,3 +353,32 @@ scoping notes / deviations from the original targets:
   (2-mm) FEM field the measured threshold exponent over 0.5–2 mm is ≈ 0.7–1, not
   the textbook current-distance `r²`; the qualitative law (deeper fibers need
   more current) holds, and a finer field should steepen it.
+
+**2026-06-03 — Phase 2 implemented (research-grade upgrades; `valenx-neuro` now
+33 tests).** Five modules added on the v1 base; the v1 scoping notes above are
+largely **resolved**:
+
+- **Implicit cable solver** (`membrane`) — backward-Euler axial diffusion with a
+  Thomas tridiagonal solve, behind a generic `Membrane` trait. Unconditionally
+  stable: the exact 100 µm sub-threshold case that diverged the v1 explicit RK4
+  to +∞ now stays bounded and still propagates. **Resolves the "1-mm cable
+  compartments" note** above.
+- **Myelinated mammalian fiber** (`myelinated`) — active Hodgkin–Huxley nodes of
+  Ranvier joined by near-transparent myelinated internodes (length ∝ diameter).
+  Conduction velocity reproduces the empirical **CV ≈ 6·D** rule within ~6%
+  (57 / 113 m/s at 10 / 20 µm) and scales ∝ D (saltatory), not ∝ √D.
+- **Strength–duration** (`strength_duration`) — rheobase + chronaxie (1.65 ms,
+  ≈ ½ the membrane time constant) by bisection; the Lapicque/Weiss
+  constant-charge law holds to < 1% at short pulse widths.
+- **Anisotropic / heterogeneous FEM field** (`aniso_field`) — a from-scratch
+  solve of `−∇·(σ∇φ)=I` with a per-element 3×3 conductivity tensor, by conjugate
+  gradient. Validated against the closed-form anisotropic point source
+  `φ = I/(4π√(detσ)·√(rᵀσ⁻¹r))` to within ~10% (under 4% away from the source).
+- **Multi-contact steering** (`steering`) — field superposition (validated to
+  solver tolerance) and electronic current steering that shifts the stimulation
+  focus without moving the lead.
+
+Honest ceiling: this is **real neurostimulation-research-grade** modelling
+(standard membrane models, idealized geometry, quasi-static fields), not
+Neuralink-production or clinical software — that needs their hardware, data, and
+regulatory pipeline, not just code.
