@@ -67,7 +67,7 @@ jobs:
       # the workflow for `v0.1.0-alpha.1` actually built whatever was on
       # master at run time. Sister change to the same pattern on every
       # other job in this file.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Round-19 H1: pin checkout to the requested tag — see linux-deb.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
@@ -140,7 +140,7 @@ jobs:
     runs-on: macos-latest
     steps:
       # Round-19 H1: pin checkout to the requested tag — see linux-deb.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
@@ -271,7 +271,7 @@ jobs:
     runs-on: windows-latest
     steps:
       # Round-19 H1: pin checkout to the requested tag — see linux-deb.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
@@ -359,7 +359,7 @@ jobs:
       # The publish job uses the checkout only for release notes /
       # CHANGELOG context, but pinning keeps the publish step's source
       # tree in lock-step with the build jobs.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
       - name: Download all artefacts
