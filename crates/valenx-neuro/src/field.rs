@@ -169,20 +169,40 @@ impl ExtracellularField {
         i + self.n * j + self.n * self.n * k
     }
 
-    /// Potential (mV) at the node nearest the point `pos` (metres; the grid
-    /// is centred at the origin).
+    /// Potential (mV) at the point `pos` (metres; the grid is centred at the
+    /// origin), trilinearly interpolated from the eight surrounding nodes.
     pub fn potential_mv_at(&self, pos: Vector3<f64>) -> f64 {
         let c = (self.n as f64 - 1.0) / 2.0;
-        let to_idx = |coord: f64| -> usize {
-            (coord / self.spacing_m + c).round().clamp(0.0, self.n as f64 - 1.0) as usize
-        };
-        let idx = self.node_index(to_idx(pos.x), to_idx(pos.y), to_idx(pos.z));
-        self.potential_mv[idx]
+        let nmax = self.n as f64 - 1.0;
+        let g = |coord: f64| (coord / self.spacing_m + c).clamp(0.0, nmax);
+        let (gx, gy, gz) = (g(pos.x), g(pos.y), g(pos.z));
+        let (i0, j0, k0) = (gx.floor() as usize, gy.floor() as usize, gz.floor() as usize);
+        let (i1, j1, k1) = (
+            (i0 + 1).min(self.n - 1),
+            (j0 + 1).min(self.n - 1),
+            (k0 + 1).min(self.n - 1),
+        );
+        let (fx, fy, fz) = (gx - i0 as f64, gy - j0 as f64, gz - k0 as f64);
+        let p = |i: usize, j: usize, k: usize| self.potential_mv[self.node_index(i, j, k)];
+        let lerp = |a: f64, b: f64, t: f64| a + (b - a) * t;
+        let c00 = lerp(p(i0, j0, k0), p(i1, j0, k0), fx);
+        let c10 = lerp(p(i0, j1, k0), p(i1, j1, k0), fx);
+        let c01 = lerp(p(i0, j0, k1), p(i1, j0, k1), fx);
+        let c11 = lerp(p(i0, j1, k1), p(i1, j1, k1), fx);
+        let c0 = lerp(c00, c10, fy);
+        let c1 = lerp(c01, c11, fy);
+        lerp(c0, c1, fz)
     }
 
     /// Potential (mV) at distance `r_mm` along +x from the grid centre.
     pub fn potential_mv_at_radius_x(&self, r_mm: f64) -> f64 {
         self.potential_mv_at(Vector3::new(r_mm * 1.0e-3, 0.0, 0.0))
+    }
+
+    /// Grid node spacing (metres) — the natural scale at which to sample the
+    /// field's curvature.
+    pub fn node_spacing_m(&self) -> f64 {
+        self.spacing_m
     }
 }
 

@@ -236,9 +236,14 @@ impl CableRun {
             None
         }
     }
+
+    /// The highest peak membrane potential (mV) reached by any compartment.
+    pub fn max_peak_mv(&self) -> f64 {
+        self.peak_v.iter().cloned().fold(f64::MIN, f64::max)
+    }
 }
 
-fn cable_derivs(comps: &[HhCompartment], g_c: f64, i_stim: f64, n_stim: usize) -> Vec<Deriv> {
+fn cable_derivs(comps: &[HhCompartment], g_c: f64, ext_drive: &[f64]) -> Vec<Deriv> {
     let n = comps.len();
     (0..n)
         .map(|k| {
@@ -248,11 +253,10 @@ fn cable_derivs(comps: &[HhCompartment], g_c: f64, i_stim: f64, n_stim: usize) -
             // Axial current density (µA/cm²). g_c·ΔV is in mA/cm²
             // (mV / (Ω·cm²)); the 1e3 converts it to µA/cm².
             let i_axial = 1.0e3 * g_c * (vm1 - 2.0 * c.v + vp1);
-            // Inject the stimulus into the first `n_stim` compartments — a
-            // small region, so it depolarizes a patch rather than fighting
-            // the very large axial current at a single-compartment step.
-            let stim = if k < n_stim { i_stim } else { 0.0 };
-            HhCompartment::derivs(c.v, c.m, c.h, c.n, stim + i_axial)
+            // `ext_drive[k]` is the per-compartment external current density
+            // (µA/cm²) — either a block stimulus or the extracellular
+            // activating term from a field.
+            HhCompartment::derivs(c.v, c.m, c.h, c.n, ext_drive[k] + i_axial)
         })
         .collect()
 }
@@ -283,15 +287,15 @@ impl HhCable {
         }
     }
 
-    fn step_rk4(&mut self, i_stim: f64, n_stim: usize, dt: f64) {
+    fn step_rk4(&mut self, ext_drive: &[f64], dt: f64) {
         let g_c = self.g_c;
-        let k1 = cable_derivs(&self.comps, g_c, i_stim, n_stim);
+        let k1 = cable_derivs(&self.comps, g_c, ext_drive);
         let s1 = add_scaled(&self.comps, &k1, 0.5 * dt);
-        let k2 = cable_derivs(&s1, g_c, i_stim, n_stim);
+        let k2 = cable_derivs(&s1, g_c, ext_drive);
         let s2 = add_scaled(&self.comps, &k2, 0.5 * dt);
-        let k3 = cable_derivs(&s2, g_c, i_stim, n_stim);
+        let k3 = cable_derivs(&s2, g_c, ext_drive);
         let s3 = add_scaled(&self.comps, &k3, dt);
-        let k4 = cable_derivs(&s3, g_c, i_stim, n_stim);
+        let k4 = cable_derivs(&s3, g_c, ext_drive);
         for k in 0..self.comps.len() {
             let c = &mut self.comps[k];
             c.v += dt / 6.0 * (k1[k].0 + 2.0 * k2[k].0 + 2.0 * k3[k].0 + k4[k].0);
@@ -310,9 +314,47 @@ impl HhCable {
         let mut peak_v: Vec<f64> = self.comps.iter().map(|c| c.v).collect();
         let mut peak_t_ms = vec![0.0; n];
         let n_steps = (duration_ms / dt_ms).round() as usize;
+        let mut drive = vec![0.0; n];
         let mut t = 0.0;
         for _ in 0..n_steps {
-            self.step_rk4(stim.current_at(t), n_stim, dt_ms);
+            let i = stim.current_at(t);
+            for (k, d) in drive.iter_mut().enumerate() {
+                *d = if k < n_stim { i } else { 0.0 };
+            }
+            self.step_rk4(&drive, dt_ms);
+            t += dt_ms;
+            for k in 0..n {
+                if self.comps[k].v > peak_v[k] {
+                    peak_v[k] = self.comps[k].v;
+                    peak_t_ms[k] = t;
+                }
+            }
+        }
+        CableRun { peak_v, peak_t_ms }
+    }
+
+    /// Integrate with a per-compartment extracellular activating `drive`
+    /// (µA/cm²) gated on during `[start_ms, start_ms + width_ms)`.
+    pub fn stimulate_extracellular(
+        &mut self,
+        drive: &[f64],
+        start_ms: f64,
+        width_ms: f64,
+        duration_ms: f64,
+        dt_ms: f64,
+    ) -> CableRun {
+        let n = self.comps.len();
+        let mut peak_v: Vec<f64> = self.comps.iter().map(|c| c.v).collect();
+        let mut peak_t_ms = vec![0.0; n];
+        let n_steps = (duration_ms / dt_ms).round() as usize;
+        let mut buf = vec![0.0; n];
+        let mut t = 0.0;
+        for _ in 0..n_steps {
+            let on = t >= start_ms && t < start_ms + width_ms;
+            for (k, b) in buf.iter_mut().enumerate() {
+                *b = if on { drive[k] } else { 0.0 };
+            }
+            self.step_rk4(&buf, dt_ms);
             t += dt_ms;
             for k in 0..n {
                 if self.comps[k].v > peak_v[k] {
