@@ -205,6 +205,126 @@ pub fn count_spikes(trace: &[f64], threshold: f64) -> usize {
     count
 }
 
+// --- multi-compartment cable -------------------------------------------
+
+/// Per-compartment state derivative `(dV, dm, dh, dn)`.
+type Deriv = (f64, f64, f64, f64);
+
+/// A uniform unmyelinated Hodgkin–Huxley **cable**: a chain of compartments
+/// coupled by intracellular axial current, with sealed (no-flux) ends. An
+/// action potential initiated at one end propagates along it.
+pub struct HhCable {
+    comps: Vec<HhCompartment>,
+    /// Axial coupling coefficient `a / (2 Rᵢ Δx²)` in 1/(Ω·cm²).
+    g_c: f64,
+}
+
+/// The outcome of a cable run: the peak membrane potential and the time it
+/// occurred, per compartment.
+pub struct CableRun {
+    peak_v: Vec<f64>,
+    peak_t_ms: Vec<f64>,
+}
+
+impl CableRun {
+    /// The time (ms) of peak depolarization at compartment `idx`, or `None`
+    /// if that compartment never fired (its peak stayed below 0 mV).
+    pub fn peak_time_ms(&self, idx: usize) -> Option<f64> {
+        if self.peak_v[idx] > 0.0 {
+            Some(self.peak_t_ms[idx])
+        } else {
+            None
+        }
+    }
+}
+
+fn cable_derivs(comps: &[HhCompartment], g_c: f64, i_stim: f64, n_stim: usize) -> Vec<Deriv> {
+    let n = comps.len();
+    (0..n)
+        .map(|k| {
+            let c = comps[k];
+            let vm1 = if k > 0 { comps[k - 1].v } else { c.v };
+            let vp1 = if k + 1 < n { comps[k + 1].v } else { c.v };
+            // Axial current density (µA/cm²). g_c·ΔV is in mA/cm²
+            // (mV / (Ω·cm²)); the 1e3 converts it to µA/cm².
+            let i_axial = 1.0e3 * g_c * (vm1 - 2.0 * c.v + vp1);
+            // Inject the stimulus into the first `n_stim` compartments — a
+            // small region, so it depolarizes a patch rather than fighting
+            // the very large axial current at a single-compartment step.
+            let stim = if k < n_stim { i_stim } else { 0.0 };
+            HhCompartment::derivs(c.v, c.m, c.h, c.n, stim + i_axial)
+        })
+        .collect()
+}
+
+fn add_scaled(s0: &[HhCompartment], k: &[Deriv], f: f64) -> Vec<HhCompartment> {
+    s0.iter()
+        .zip(k)
+        .map(|(c, d)| HhCompartment {
+            v: c.v + f * d.0,
+            m: c.m + f * d.1,
+            h: c.h + f * d.2,
+            n: c.n + f * d.3,
+        })
+        .collect()
+}
+
+impl HhCable {
+    /// Build a uniform cable of `n` compartments, each `dx_um` long, of fiber
+    /// radius `a_um`, with intracellular resistivity `ri_ohm_cm` (Ω·cm). All
+    /// compartments start at rest.
+    pub fn uniform(n: usize, dx_um: f64, a_um: f64, ri_ohm_cm: f64) -> Self {
+        let dx_cm = dx_um * 1.0e-4;
+        let a_cm = a_um * 1.0e-4;
+        let g_c = a_cm / (2.0 * ri_ohm_cm * dx_cm * dx_cm);
+        Self {
+            comps: vec![HhCompartment::at_rest(); n],
+            g_c,
+        }
+    }
+
+    fn step_rk4(&mut self, i_stim: f64, n_stim: usize, dt: f64) {
+        let g_c = self.g_c;
+        let k1 = cable_derivs(&self.comps, g_c, i_stim, n_stim);
+        let s1 = add_scaled(&self.comps, &k1, 0.5 * dt);
+        let k2 = cable_derivs(&s1, g_c, i_stim, n_stim);
+        let s2 = add_scaled(&self.comps, &k2, 0.5 * dt);
+        let k3 = cable_derivs(&s2, g_c, i_stim, n_stim);
+        let s3 = add_scaled(&self.comps, &k3, dt);
+        let k4 = cable_derivs(&s3, g_c, i_stim, n_stim);
+        for k in 0..self.comps.len() {
+            let c = &mut self.comps[k];
+            c.v += dt / 6.0 * (k1[k].0 + 2.0 * k2[k].0 + 2.0 * k3[k].0 + k4[k].0);
+            c.m += dt / 6.0 * (k1[k].1 + 2.0 * k2[k].1 + 2.0 * k3[k].1 + k4[k].1);
+            c.h += dt / 6.0 * (k1[k].2 + 2.0 * k2[k].2 + 2.0 * k3[k].2 + k4[k].2);
+            c.n += dt / 6.0 * (k1[k].3 + 2.0 * k2[k].3 + 2.0 * k3[k].3 + k4[k].3);
+        }
+    }
+
+    /// Stimulate compartment 0 with `stim` and integrate for `duration_ms` at
+    /// timestep `dt_ms`, recording each compartment's peak depolarization.
+    pub fn stimulate_end(&mut self, stim: StimPulse, duration_ms: f64, dt_ms: f64) -> CableRun {
+        let n = self.comps.len();
+        // Stimulate a small block at the near end (≈10 % of the cable).
+        let n_stim = (n / 10).max(1);
+        let mut peak_v: Vec<f64> = self.comps.iter().map(|c| c.v).collect();
+        let mut peak_t_ms = vec![0.0; n];
+        let n_steps = (duration_ms / dt_ms).round() as usize;
+        let mut t = 0.0;
+        for _ in 0..n_steps {
+            self.step_rk4(stim.current_at(t), n_stim, dt_ms);
+            t += dt_ms;
+            for k in 0..n {
+                if self.comps[k].v > peak_v[k] {
+                    peak_v[k] = self.comps[k].v;
+                    peak_t_ms[k] = t;
+                }
+            }
+        }
+        CableRun { peak_v, peak_t_ms }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,5 +381,25 @@ mod tests {
         let far = c_far.run_two(pulse(1.0), pulse(18.0), 30.0, 0.005);
         assert_eq!(count_spikes(&close, 0.0), 1, "second pulse blocked by refractory period");
         assert_eq!(count_spikes(&far, 0.0), 2, "well-separated pulses both fire");
+    }
+
+    #[test]
+    fn action_potential_propagates_with_finite_velocity() {
+        // squid giant axon: radius 238 µm, Rᵢ = 35.4 Ω·cm, 100-µm compartments
+        let mut cable = HhCable::uniform(200, 100.0, 238.0, 35.4);
+        let r = cable.stimulate_end(
+            StimPulse { amp_ua_cm2: 100.0, start_ms: 1.0, width_ms: 0.5 },
+            15.0,
+            0.01,
+        );
+        let t50 = r.peak_time_ms(50).expect("comp 50 fires");
+        let t150 = r.peak_time_ms(150).expect("comp 150 fires");
+        assert!(t150 > t50, "AP travels 50→150 in +x: t50={t50} t150={t150}");
+        let dist_mm = (150 - 50) as f64 * 0.1; // Δx = 100 µm = 0.1 mm → 10 mm
+        let vel_m_s = dist_mm / (t150 - t50); // mm/ms ≡ m/s
+        assert!(
+            (1.0..100.0).contains(&vel_m_s),
+            "squid-like conduction velocity expected; got {vel_m_s} m/s"
+        );
     }
 }
