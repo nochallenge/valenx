@@ -7242,6 +7242,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-neuro"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "valenx-fem",
+]
+
+[[package]]
 name = "valenx-occt-advanced"
 version = "0.1.0-alpha.1"
 dependencies = [
