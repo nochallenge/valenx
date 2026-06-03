@@ -401,7 +401,7 @@ serde       = { version = "1", features = ["derive"] }
 serde_json  = "1"
 toml        = "0.8"
 ron              = "0.8"
-nalgebra-sparse  = "0.10"
+nalgebra-sparse  = "0.12"
 
 # OS link/file opener — used by valenx-app for "open project workdir
 # in the file manager" / "open the help URL" affordances. Lives at

@@ -1358,6 +1358,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.30.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19fc433e8437a212d1b6f1e68c7824af3aed907da60afa994e7f542d18d12aa9"
+
+[[package]]
+name = "glam"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "556f6b2ea90b8d15a74e0e7bb41671c9bdf38cd9f78c284d750b9ce58a2b5be7"
+
+[[package]]
+name = "glam"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
+
+[[package]]
+name = "glam"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fb167719045debebe9f532320accc7b5c993c5a3b813f5696a11d5ca7bdc57b"
+
+[[package]]
 name = "glow"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2083,12 +2107,32 @@ checksum = "9d43ddcacf343185dfd6de2ee786d9e8b1c2301622afab66b6c73baf9882abfd"
 dependencies = [
  "approx 0.5.1",
  "matrixmultiply",
- "nalgebra-macros",
+ "nalgebra-macros 0.2.2",
  "num-complex",
  "num-rational",
  "num-traits",
  "serde",
- "simba",
+ "simba 0.9.1",
+ "typenum",
+]
+
+[[package]]
+name = "nalgebra"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adc43a60c217b0c6ff46e47f26911015ad8d2e5a8be1af668c67e370d99a4346"
+dependencies = [
+ "approx 0.5.1",
+ "glam 0.30.10",
+ "glam 0.31.1",
+ "glam 0.32.1",
+ "glam 0.33.0",
+ "matrixmultiply",
+ "nalgebra-macros 0.3.0",
+ "num-complex",
+ "num-rational",
+ "num-traits",
+ "simba 0.10.0",
  "typenum",
 ]
 
@@ -2104,12 +2148,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "nalgebra-sparse"
-version = "0.10.0"
+name = "nalgebra-macros"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1107e2587bc373090389bd5b54e05ac3184fd02d7c102decf5d76b8feb84b2d0"
+checksum = "973e7178a678cfd059ccec50887658d482ce16b0aa9da3888ddeab5cd5eb4889"
 dependencies = [
- "nalgebra",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "nalgebra-sparse"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8935b578b6a012f3667131452add895472f37c242d2844497daf7c49f6b8059"
+dependencies = [
+ "nalgebra 0.35.0",
  "num-traits",
 ]
 
@@ -3137,6 +3192,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "safe_arch"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f7caad094bd561859bcd467734a720c3c1f5d1f338995351fefe2190c45efed"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3292,7 +3356,19 @@ dependencies = [
  "num-complex",
  "num-traits",
  "paste",
- "wide",
+ "wide 0.7.33",
+]
+
+[[package]]
+name = "simba"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f45c644a9f3a386f9288625d9f0c1e999e1acf07a37df35d0516c7f199d9cb2"
+dependencies = [
+ "approx 0.5.1",
+ "num-complex",
+ "num-traits",
+ "wide 1.4.0",
 ]
 
 [[package]]
@@ -4306,7 +4382,7 @@ name = "valenx-adapter-calculix"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "semver",
  "serde",
  "serde_json",
@@ -4891,7 +4967,7 @@ name = "valenx-adapter-gmsh"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "semver",
  "serde",
  "serde_json",
@@ -5360,7 +5436,7 @@ name = "valenx-adapter-netgen"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "semver",
  "serde",
  "serde_json",
@@ -6167,7 +6243,7 @@ name = "valenx-adapter-vina"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "semver",
  "serde",
  "thiserror 2.0.18",
@@ -6261,7 +6337,7 @@ dependencies = [
 name = "valenx-aero"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "rayon",
  "thiserror 2.0.18",
  "valenx-cad",
@@ -6281,7 +6357,7 @@ dependencies = [
 name = "valenx-animate"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6300,7 +6376,7 @@ dependencies = [
  "egui_plot",
  "embed-resource",
  "naga",
- "nalgebra",
+ "nalgebra 0.33.3",
  "opener",
  "png",
  "pollster",
@@ -6513,7 +6589,7 @@ name = "valenx-arch"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6528,7 +6604,7 @@ dependencies = [
 name = "valenx-assembly"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6541,7 +6617,7 @@ dependencies = [
 name = "valenx-astro"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -6565,7 +6641,7 @@ name = "valenx-bio"
 version = "0.1.0-alpha.1"
 dependencies = [
  "byteorder",
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -6585,7 +6661,7 @@ dependencies = [
 name = "valenx-biostruct"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "valenx-bioseq",
 ]
@@ -6594,7 +6670,7 @@ dependencies = [
 name = "valenx-blender-mesh-ops"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-cgal-port",
@@ -6604,7 +6680,7 @@ dependencies = [
 name = "valenx-brlcad-csg"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -6614,7 +6690,7 @@ name = "valenx-cad"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "thiserror 2.0.18",
  "truck-meshalgo",
  "truck-modeling",
@@ -6626,7 +6702,7 @@ dependencies = [
 name = "valenx-cam"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6639,7 +6715,7 @@ dependencies = [
 name = "valenx-camotics-sim"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6658,7 +6734,7 @@ dependencies = [
 name = "valenx-cgal-port"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-mesh",
@@ -6668,7 +6744,7 @@ dependencies = [
 name = "valenx-cheminf"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
 ]
 
@@ -6676,7 +6752,7 @@ dependencies = [
 name = "valenx-collision"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6718,7 +6794,7 @@ dependencies = [
 name = "valenx-curves"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6730,7 +6806,7 @@ dependencies = [
 name = "valenx-decimate-pro"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-mesh",
@@ -6740,7 +6816,7 @@ dependencies = [
 name = "valenx-defeaturing"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6761,7 +6837,7 @@ name = "valenx-dock"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "rand",
  "rayon",
  "serde",
@@ -6776,7 +6852,7 @@ dependencies = [
 name = "valenx-dock-screen"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "rand",
  "rayon",
  "serde",
@@ -6790,7 +6866,7 @@ dependencies = [
 name = "valenx-draft"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6801,7 +6877,7 @@ dependencies = [
 name = "valenx-e2e-tests"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "toml 0.8.23",
  "valenx-adapter-art",
  "valenx-adapter-badread",
@@ -6856,7 +6932,7 @@ name = "valenx-export"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -6868,7 +6944,7 @@ dependencies = [
 name = "valenx-fasteners"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6882,7 +6958,7 @@ name = "valenx-feature-tree"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6903,7 +6979,7 @@ name = "valenx-fem"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "nalgebra-sparse",
  "serde",
  "serde_json",
@@ -6920,7 +6996,7 @@ name = "valenx-fields"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ndarray",
  "semver",
  "serde",
@@ -6937,7 +7013,7 @@ name = "valenx-fillet"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "thiserror 2.0.18",
  "tracing",
  "valenx-cad",
@@ -6949,7 +7025,7 @@ name = "valenx-fillet-brep"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "thiserror 2.0.18",
  "tracing",
  "truck-modeling",
@@ -6973,7 +7049,7 @@ version = "0.1.0-alpha.1"
 name = "valenx-frames"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -6986,7 +7062,7 @@ dependencies = [
 name = "valenx-gcad3d"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -6995,7 +7071,7 @@ dependencies = [
 name = "valenx-gears"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7028,7 +7104,7 @@ name = "valenx-geo"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-mesh",
@@ -7038,7 +7114,7 @@ dependencies = [
 name = "valenx-geomatics"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7049,7 +7125,7 @@ dependencies = [
 name = "valenx-heekscad"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7060,7 +7136,7 @@ dependencies = [
 name = "valenx-hvac"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-cad",
@@ -7082,7 +7158,7 @@ version = "0.1.0-alpha.1"
 name = "valenx-inspect"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7095,7 +7171,7 @@ dependencies = [
 name = "valenx-interior"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -7104,7 +7180,7 @@ dependencies = [
 name = "valenx-kicad"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7118,7 +7194,7 @@ dependencies = [
 name = "valenx-lattice"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7131,7 +7207,7 @@ dependencies = [
 name = "valenx-libigl-port"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-mesh",
@@ -7152,7 +7228,7 @@ name = "valenx-macro"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7166,7 +7242,7 @@ dependencies = [
 name = "valenx-manipulator"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7180,7 +7256,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "libc",
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "serde_json",
  "tokio",
@@ -7200,7 +7276,7 @@ dependencies = [
 name = "valenx-md"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
 ]
 
@@ -7209,7 +7285,7 @@ name = "valenx-mesh"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ndarray",
  "serde",
  "serde_json",
@@ -7221,7 +7297,7 @@ name = "valenx-mesh-to-brep"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "tracing",
@@ -7234,7 +7310,7 @@ dependencies = [
 name = "valenx-meshpart"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-cad",
@@ -7246,7 +7322,7 @@ name = "valenx-occt-advanced"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7264,7 +7340,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "flate2",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "serde_json",
@@ -7282,7 +7358,7 @@ name = "valenx-occt-surface"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7299,7 +7375,7 @@ name = "valenx-occt-viz"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7317,7 +7393,7 @@ dependencies = [
 name = "valenx-opencamlib"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-cam",
@@ -7328,7 +7404,7 @@ dependencies = [
 name = "valenx-openscad"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7341,7 +7417,7 @@ dependencies = [
 name = "valenx-openscad-import"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7383,7 +7459,7 @@ dependencies = [
 name = "valenx-pathtrace"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "thiserror 2.0.18",
  "valenx-mesh",
  "valenx-render-bridge",
@@ -7393,7 +7469,7 @@ dependencies = [
 name = "valenx-phylo"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "valenx-align",
  "valenx-bioseq",
@@ -7403,7 +7479,7 @@ dependencies = [
 name = "valenx-piping"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-cad",
@@ -7455,7 +7531,7 @@ dependencies = [
 name = "valenx-print-bed"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-core",
@@ -7466,7 +7542,7 @@ dependencies = [
 name = "valenx-py"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "pyo3",
  "thiserror 2.0.18",
  "valenx-cad",
@@ -7479,7 +7555,7 @@ dependencies = [
 name = "valenx-qchem"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
 ]
 
@@ -7503,7 +7579,7 @@ dependencies = [
 name = "valenx-reinforcement"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7516,7 +7592,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "bytemuck",
  "naga",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7529,7 +7605,7 @@ dependencies = [
 name = "valenx-reverse"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7569,7 +7645,7 @@ dependencies = [
 name = "valenx-sheet-metal"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7582,7 +7658,7 @@ name = "valenx-sketch"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "nalgebra-sparse",
  "ron",
  "serde",
@@ -7597,7 +7673,7 @@ dependencies = [
 name = "valenx-solvespace-3d"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "nalgebra-sparse",
  "ron",
  "serde",
@@ -7620,7 +7696,7 @@ dependencies = [
 name = "valenx-springs"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7633,7 +7709,7 @@ name = "valenx-step-iges"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "ruststep",
  "thiserror 2.0.18",
  "tracing",
@@ -7650,7 +7726,7 @@ dependencies = [
 name = "valenx-structpredict"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "valenx-align",
  "valenx-bioseq",
@@ -7662,7 +7738,7 @@ dependencies = [
 name = "valenx-subdivision"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -7671,7 +7747,7 @@ dependencies = [
 name = "valenx-surface"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7694,7 +7770,7 @@ dependencies = [
 name = "valenx-sysbio"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "valenx-bioseq",
 ]
@@ -7703,7 +7779,7 @@ dependencies = [
 name = "valenx-techdraw"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "ron",
  "serde",
  "thiserror 2.0.18",
@@ -7722,7 +7798,7 @@ version = "0.1.0-alpha.1"
 name = "valenx-threads-pro"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
  "valenx-cad",
@@ -7744,7 +7820,7 @@ dependencies = [
 name = "valenx-vector-graphics"
 version = "0.1.0-alpha.1"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.33.3",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -7754,7 +7830,7 @@ name = "valenx-viz"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "nalgebra",
+ "nalgebra 0.33.3",
  "png",
  "thiserror 2.0.18",
  "tracing",
@@ -8272,7 +8348,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce5da8ecb62bcd8ec8b7ea19f69a51275e91299be594ea5cc6ef7819e16cd03"
 dependencies = [
  "bytemuck",
- "safe_arch",
+ "safe_arch 0.7.4",
+]
+
+[[package]]
+name = "wide"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a7714cd0430a663154667c74da5d09325c2387695bee18b3f7f72825aa3693a"
+dependencies = [
+ "bytemuck",
+ "safe_arch 1.0.0",
 ]
 
 [[package]]
