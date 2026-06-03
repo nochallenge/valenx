@@ -123,7 +123,7 @@ impl<M: Membrane> ImplicitCable<M> {
     /// One implicit step of `dt` (ms) under per-compartment external drive
     /// `ext` (µA/cm²): gates advance explicitly, then a tridiagonal solve
     /// updates the membrane potential (backward-Euler in the axial term).
-    fn step(&mut self, ext: &[f64], dt: f64) {
+    pub fn step(&mut self, ext: &[f64], dt: f64) {
         let n = self.v.len();
         for k in 0..n {
             self.mem[k].advance_gates(self.v[k], dt);
