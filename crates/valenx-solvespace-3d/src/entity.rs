@@ -66,6 +66,23 @@ pub struct Workplane {
     pub nz_var: usize,
 }
 
+/// Circle — a centre point, a free radius variable, and a free normal
+/// vector defining the circle's plane (three free variables, like a plane
+/// normal).
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub struct Circle3 {
+    /// Centre point id (must resolve to `Point3`).
+    pub center: EntityId,
+    /// Variable index for the radius.
+    pub radius_var: usize,
+    /// Normal X variable.
+    pub nx_var: usize,
+    /// Normal Y variable.
+    pub ny_var: usize,
+    /// Normal Z variable.
+    pub nz_var: usize,
+}
+
 /// Sum-type wrapper so a sketch can hold heterogeneous entities in a
 /// single `Vec`.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -78,6 +95,8 @@ pub enum Entity3D {
     Plane3(Plane3),
     /// 3D workplane.
     Workplane(Workplane),
+    /// 3D circle.
+    Circle3(Circle3),
 }
 
 impl Entity3D {
@@ -88,6 +107,7 @@ impl Entity3D {
             Entity3D::Line3(_) => "Line3",
             Entity3D::Plane3(_) => "Plane3",
             Entity3D::Workplane(_) => "Workplane",
+            Entity3D::Circle3(_) => "Circle3",
         }
     }
 }

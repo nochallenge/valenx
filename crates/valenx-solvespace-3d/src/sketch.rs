@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::constraint::Constraint3D;
-use crate::entity::{Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
+use crate::entity::{Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
 use crate::error::Solve3DError;
 
 /// Variable-backed 3D sketch.
@@ -106,6 +106,63 @@ impl Sketch3D {
             nz_var: nzv,
         }));
         Ok(id)
+    }
+
+    /// Add a circle centred on `center` with `radius`, lying in the plane
+    /// with normal `(nx, ny, nz)`. Radius and normal are free variables.
+    pub fn add_circle(
+        &mut self,
+        center: EntityId,
+        radius: f64,
+        nx: f64,
+        ny: f64,
+        nz: f64,
+    ) -> Result<EntityId, Solve3DError> {
+        self.expect_point(center)?;
+        let rv = self.vars.len();
+        self.vars.push(radius);
+        let nxv = self.vars.len();
+        self.vars.push(nx);
+        let nyv = self.vars.len();
+        self.vars.push(ny);
+        let nzv = self.vars.len();
+        self.vars.push(nz);
+        let id = EntityId(self.entities.len());
+        self.entities.push(Entity3D::Circle3(Circle3 {
+            center,
+            radius_var: rv,
+            nx_var: nxv,
+            ny_var: nyv,
+            nz_var: nzv,
+        }));
+        Ok(id)
+    }
+
+    /// (cx, cy, cz, radius, nx, ny, nz) for a circle entity.
+    pub fn circle_data(&self, id: EntityId) -> (f64, f64, f64, f64, f64, f64, f64) {
+        match &self.entities[id.0] {
+            Entity3D::Circle3(c) => {
+                let (cx, cy, cz) = self.point_xyz(c.center);
+                (
+                    cx,
+                    cy,
+                    cz,
+                    self.vars[c.radius_var],
+                    self.vars[c.nx_var],
+                    self.vars[c.ny_var],
+                    self.vars[c.nz_var],
+                )
+            }
+            other => panic!("expected Circle3 at {id:?}, got {}", other.kind()),
+        }
+    }
+
+    /// A circle's current radius.
+    pub fn circle_radius(&self, id: EntityId) -> f64 {
+        match &self.entities[id.0] {
+            Entity3D::Circle3(c) => self.vars[c.radius_var],
+            other => panic!("expected Circle3 at {id:?}, got {}", other.kind()),
+        }
     }
 
     /// Append a constraint.
