@@ -30,6 +30,7 @@ pub mod field;
 pub mod impedance;
 pub mod membrane;
 pub mod myelinated;
+pub mod steering;
 pub mod strength_duration;
 pub mod units;
 
@@ -43,4 +44,5 @@ pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};
 pub use impedance::{Cpe, ElectrodeImpedance};
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
 pub use myelinated::MyelinatedFiber;
+pub use steering::ContactArray;
 pub use strength_duration::{chronaxie, rheobase, threshold_amplitude};

@@ -132,6 +132,25 @@ impl AnisoTissue {
         current_ua: f64,
         boundary_mv: impl Fn(Vector3<f64>) -> f64,
     ) -> SolvedField {
+        let center = self.node_index(self.n / 2, self.n / 2, self.n / 2);
+        self.solve_currents(&[(center, current_ua)], boundary_mv)
+    }
+
+    /// Grid node index at `(di, dj, dk)` steps from the centre — for placing
+    /// electrode contacts.
+    pub fn node_at_steps(&self, di: i32, dj: i32, dk: i32) -> usize {
+        let c = (self.n / 2) as i32;
+        self.node_index((c + di) as usize, (c + dj) as usize, (c + dk) as usize)
+    }
+
+    /// Solve with arbitrary nodal current `loads` (interior node index, µA) and
+    /// a Dirichlet `boundary_mv(pos)` (mV). Several contacts superpose because
+    /// the operator is linear — the basis for current steering.
+    pub fn solve_currents(
+        &self,
+        loads: &[(usize, f64)],
+        boundary_mv: impl Fn(Vector3<f64>) -> f64,
+    ) -> SolvedField {
         let n_nodes = self.nodes.len();
         // Free DOFs = interior nodes; boundary nodes are fixed (Dirichlet), so
         // their columns move to the right-hand side of K_ff φ_f = b_f.
@@ -178,8 +197,11 @@ impl AnisoTissue {
             }
         }
 
-        let center = self.node_index(self.n / 2, self.n / 2, self.n / 2);
-        b[reduced[center]] += current_ua * 1.0e-6; // amperes
+        for &(node, ua) in loads {
+            if reduced[node] != usize::MAX {
+                b[reduced[node]] += ua * 1.0e-6; // amperes
+            }
+        }
 
         let (indptr, indices, data) = to_csr(&rows);
         let phi = conjugate_gradient(&indptr, &indices, &data, &b);
@@ -288,6 +310,27 @@ impl SolvedField {
     /// Per-node potential (mV), indexed `i + n·j + n²·k`.
     pub fn phi_mv(&self) -> &[f64] {
         &self.phi_mv
+    }
+
+    /// The x-coordinate (metres) of the positive-potential-weighted field
+    /// centroid — a simple scalar measure of where stimulation is focused,
+    /// used to quantify current steering.
+    pub fn focus_x_m(&self) -> f64 {
+        let c = (self.n as f64 - 1.0) / 2.0;
+        let mut num = 0.0;
+        let mut den = 0.0;
+        for (idx, &phi) in self.phi_mv.iter().enumerate() {
+            if phi > 0.0 {
+                let i = (idx % self.n) as f64;
+                num += phi * (i - c) * self.spacing_m;
+                den += phi;
+            }
+        }
+        if den > 0.0 {
+            num / den
+        } else {
+            0.0
+        }
     }
 }
 
