@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-neuro"
+description = "Neural-interface / BCI simulation core for Valenx — extracellular FEM field (reusing valenx-fem), Hodgkin–Huxley cable models, the Rattay activating function, Pennes bioheat, and electrode–tissue impedance. Each module is validated against a closed-form or textbook result. Research / education-grade; not clinical or certified."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# The extracellular field and Pennes bioheat reuse valenx-fem's steady
+# conduction solver — the operator −∇·(σ∇φ)=I is identical to −∇·(k∇T)=q.
+valenx-fem = { path = "../valenx-fem" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
