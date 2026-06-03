@@ -54,17 +54,30 @@ Rust solvers ship inside the app and work out of the box:
   quantum chemistry (Hartree–Fock / MP2 / Kohn–Sham DFT), genomics, systems biology, docking,
   and CRISPR / gene-edit design — all native (`valenx-bioseq`, `valenx-align`,
   `valenx-phylo`, `valenx-rnastruct`, `valenx-md`, `valenx-qchem`, …).
-- **Engineering** — native 3D external-aerodynamics (a **wind-tunnel
-  workbench** with k-ω SST turbulence), 2D laminar CFD, finite-element analysis
-  (**8 native solvers**: static, modal, thermal, nonlinear, plasticity, beam),
-  a CAD geometry kernel (primitives, booleans, fillets, NURBS surfaces), and a
-  launch / orbital workbench.
+- **Aerospace / GN&C** — a launch-vehicle + orbital engine: multi-stage
+  gravity-turn ascent to orbit, 3-D orbital mechanics with **J2** oblateness, a
+  **6-DOF rigid-body** attitude core, and impulsive maneuvers (Hohmann,
+  bi-elliptic, plane-change, **Lambert rendezvous**) — validated against
+  textbook/analytic results (`valenx-astro`; see [Validation](#validation)).
+- **Fluids & structures** — a 3-D external-aerodynamics **wind-tunnel
+  workbench** and 2-D CFD with Menter **k-ω SST** turbulence, plus
+  finite-element analysis (**8 native solvers**: static, modal, thermal,
+  nonlinear, plasticity, beam, buckling, transient dynamics).
+- **CAD / CAM / CAE** — a geometry kernel (primitives, booleans, fillets, NURBS
+  surfaces), a **parametric feature-tree history**, CAM toolpaths + G-code
+  post-processing, technical drafting (DXF / SVG / PDF), assemblies with
+  interference detection, architectural / structural modelling (IFC4, Eurocode),
+  surface modelling (NURBS fitting + blends), and JT / STEP-AP242 / IGES interop.
+- **Reaction dynamics & graphics** — a **reaction-dynamics / AIMD** simulator
+  (velocity-Verlet on quantum-chemistry forces) and a physically-based **path
+  tracer** (light-tree importance sampling, bidirectional path tracing,
+  subsurface scattering).
 
 The external tools below are **optional** — reach for them when you want a
 reference implementation, a GPU/ML model, or a domain not yet native. A few
 domains are still external-only and on the roadmap: a native
-**electromagnetics** solver, **parametric CAD** history, native **unstructured
-meshing**, and **large-scale 3-D / industrial CFD**. **Contributors welcome —
+**electromagnetics** solver, native **unstructured meshing**, and
+**large-scale 3-D / industrial CFD**. **Contributors welcome —
 AI-assisted included** (see [CONTRIBUTING.md](./CONTRIBUTING.md) +
 [AGENTS.md](./AGENTS.md)).
 
@@ -78,6 +91,7 @@ running them — lives in [docs/VALIDATION.md](./docs/VALIDATION.md).
 | Solver | Benchmark / reference | Result |
 | --- | --- | --- |
 | Orbital — `valenx-astro` | LEO→GEO Hohmann Δv vs textbook ~3.9 km/s | **3,892 m/s** total (2,425 + 1,467), ToF 5.27 h — [test](./crates/valenx-astro/src/maneuver.rs) |
+| Orbital — `valenx-astro` | J2 secular nodal regression vs closed-form rate | within **5%** of the analytic dΩ/dt; `a`, `i` secularly unchanged — [test](./crates/valenx-astro/src/orbit3d.rs) |
 | CFD — `valenx-cfd-native` | Lid-driven cavity vs Ghia, Ghia & Shin 1982 | centerline MAE **0.035 / 0.016 / 0.024** at Re 100 / 400 / 1000 |
 | CFD — `valenx-cfd-native` | Poiseuille channel vs analytic | u_max **1.4949 vs 1.5000** (0.34% error) |
 | CFD — `valenx-cfd-native` | Backward-facing step vs Armaly / Gartling | reattachment x_r/h ≈ **4.5**, inside the published envelope |
