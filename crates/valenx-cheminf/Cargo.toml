@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-cheminf"
+description = "Cheminformatics core for Valenx. Native Rust replacement for the classical core of RDKit, Open Babel, the non-neural portion of DeepChem and datamol: a `Molecule` graph model (atoms with element / formal charge / isotope / aromatic flag / explicit + implicit hydrogen counts, bonds with order / aromatic flag / stereo); a SMILES parser and a canonical-SMILES writer driven by a Morgan / canonical-ranking algorithm; a SMARTS parser with VF2 substructure matching; MOL V2000 and multi-record SDF readers and writers; an InChI-class layered canonical string; perception (molecular formula, monoisotopic + average molecular weight, smallest-set-of-smallest-rings, Hueckel 4n+2 aromaticity, valence-based implicit-hydrogen handling, CIP tetrahedral R/S and double-bond E/Z assignment); coordinates and charges (2D depiction layout, distance-geometry 3D conformer embedding, an MMFF/UFF-class force-field geometry cleanup, Gasteiger-Marsili PEOE partial charges); fingerprints and similarity (Morgan / ECFP circular fingerprints, MACCS-class structural keys, topological path fingerprints, Tanimoto + Dice coefficients); descriptors and scaffolds (Crippen-style logP, TPSA, hydrogen-bond donor / acceptor counts, rotatable bonds, ring and heavy-atom counts, Lipinski rule-of-five + Veber rules, Bemis-Murcko scaffold extraction, maximum common substructure); reactions (a reaction model with reaction SMILES, a SMIRKS-class transform, combinatorial library enumeration, salt stripping + standardization, tautomer enumeration); and analysis (a pharmacophore feature model with 3D feature points, a QED drug-likeness score, and a batch `MoleculeReport` plus SDF-batch utilities). Pure graph algorithms, no neural-network weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure graph + numerical algorithms. `nalgebra` supplies the 3-vector
+# and matrix types behind the distance-geometry embedding, the
+# force-field geometry cleanup and the pharmacophore feature points;
+# serde drives the data-model derives. No heavy or platform-specific
+# dependencies — the SMILES / SMARTS parsers, the VF2 matcher, the
+# Morgan canonical ranking and the PEOE charge solver are hand-rolled.
+nalgebra = { workspace = true }
+serde    = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

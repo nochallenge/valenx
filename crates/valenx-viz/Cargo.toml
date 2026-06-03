@@ -1,0 +1,22 @@
+[package]
+name         = "valenx-viz"
+description  = "3D viewport: wgpu-based renderer, camera, selection, overlays, contour/vector/streamline rendering."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+nalgebra  = { workspace = true }
+
+[dev-dependencies]
+# Headless grid-preview example writes a PNG so the viewport grid look
+# can be verified/tuned without a GPU/GUI. Version already in the lockfile.
+png = "0.18"

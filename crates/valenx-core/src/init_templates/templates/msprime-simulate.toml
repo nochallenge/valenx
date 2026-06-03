@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "msprime.simulate"
+mesh    = "(none)"
+
+# msprime coalescent backward-time simulator. The user-supplied
+# Python script imports `msprime` and reads `valenx_params.json`
+# for the demographic parameters. Output `.trees` files (and
+# optionally `.vcf`) land in the workdir.
+[bio.msprime]
+script              = "simulate.py"
+python              = "python3"
+population_size     = 10000
+num_samples         = 100
+recombination_rate  = 1e-8
+mutation_rate       = 1e-8
+output_basename     = "sim"

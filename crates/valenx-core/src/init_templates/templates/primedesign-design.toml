@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "primedesign.design"
+mesh    = "(none)"
+
+# PrimeDesign Liu-lab prime editing design. The user-supplied
+# .py script does `import primedesign` and the pegRNA design
+# work.
+[bio.primedesign]
+script           = "design.py"
+python           = "python3"
+# input_fasta    = "target.fa"
+output_basename  = "pegrnas"

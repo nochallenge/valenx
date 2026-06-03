@@ -1,0 +1,10 @@
+physics = "bio"
+solver  = "biopython.script"
+mesh    = "(none)"
+
+# User-supplied Biopython script. The adapter stages it into the
+# workdir and runs `python <script>`. Edit `analyse.py` to wire up
+# whatever sequence-IO / motif / structural-bio analysis you need.
+[bio.biopython]
+script = "analyse.py"
+python = "python3"

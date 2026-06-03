@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-bioseq"
+description = "Biological-sequence core for Valenx. Native Rust replacement for the sequence-handling portion of Biopython / BioJava / SeqKit / ApE / SerialCloner / pLannotate / pydna: IUPAC alphabets, Seq / SeqRecord / SeqFeature data models, FASTA / FASTQ / GenBank / EMBL I/O, reverse complement, transcription, translation across NCBI codon tables, ORF finding, GC / k-mer / Tm / molecular-weight / ProtParam analysis, restriction digest + virtual gel, plasmid annotation, codon optimization, primer design and in-silico PCR. Pure parsing + algorithms, no neural-network weights."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure parsing + algorithms — only the data-model derive helpers, no
+# heavy or platform-specific dependencies.
+serde = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

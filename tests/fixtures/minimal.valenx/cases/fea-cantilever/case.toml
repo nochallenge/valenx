@@ -1,0 +1,32 @@
+[case]
+format  = "1.0"
+name    = "fea-cantilever"
+physics = "fea"
+solver  = "calculix.static"
+mesh    = "default"
+
+[structural]
+analysis    = "linear-static"
+mesh_source = "mesh.canonical.json"
+
+[structural.material]
+name             = "steel"
+youngs_modulus   = 2.1e11
+poissons_ratio   = 0.3
+density          = 7850.0
+
+[[structural.boundaries]]
+nset      = "fixed"
+dof_start = 1
+dof_end   = 3
+value     = 0.0
+
+[[structural.loads]]
+nset  = "tip"
+dof   = 2
+force = -1000.0
+
+[structural.step]
+time_total     = 1.0
+time_increment = 1.0
+output_fields  = ["U", "S", "RF"]

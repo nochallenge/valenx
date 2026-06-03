@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "oxdna.batch"
+mesh    = "(none)"
+
+# oxDNA reads everything from `input.dat` (force-field flags,
+# integration parameters, initial conf, topology pointer). Drop
+# your `input.dat` (and the topology it references) alongside this
+# case.toml. The optional `topology` key stages an explicit `.top`
+# file when oxDNA's working directory differs from the case dir.
+[bio.oxdna]
+input = "input.dat"

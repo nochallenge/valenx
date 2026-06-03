@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-heekscad"
+description = "HeeksCAD primitives + CAM (Phase 69). Drawing tree with Layer grouping; Sketch/Pad/Pocket/Drill primitives; pocket/profile/drill toolpaths with HeeksCNC .nc export; RON persistence."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+nalgebra  = { workspace = true }
+# R29: atomic_write_str for the HeeksCAD NC export (crash-safe write).
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

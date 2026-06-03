@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "viennarna.fold"
+mesh    = "(none)"
+
+# ViennaRNA RNAfold secondary-structure prediction. NOTE:
+# ViennaRNA is licensed for non-commercial / academic use only —
+# confirm your use case complies before redistributing folds.
+# `partition_function = true` enables -p (computes base-pair
+# probabilities + ensemble free energy).
+[bio.viennarna]
+input              = "sequence.fa"
+output             = "structure.txt"
+temperature        = 37.0
+partition_function = false
+allow_gu           = true
+extra_args         = []

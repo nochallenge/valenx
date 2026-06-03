@@ -1,0 +1,18 @@
+physics = "bio"
+solver  = "badread.simulate"
+mesh    = "(none)"
+
+# Badread Nanopore long-read simulator (also supports PacBio).
+# `quantity` accepts integer + optional KMGT suffix
+# (e.g. "100M" = 100 megabases). `error_model` ∈ {nanopore2018,
+# nanopore2020, nanopore2023, pacbio2016}. `identity_mean` is
+# percent (0..=100). `length_mean` / `length_sd` in bases.
+[bio.badread]
+reference       = "ref.fa"
+output          = "reads.fq"
+quantity        = "100M"
+error_model     = "nanopore2023"
+identity_mean   = 87.5
+length_mean     = 15000.0
+length_sd       = 13000.0
+extra_args      = []

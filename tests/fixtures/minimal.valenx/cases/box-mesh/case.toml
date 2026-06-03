@@ -1,0 +1,16 @@
+[case]
+format  = "1.0"
+name    = "box-mesh"
+physics = "meshing"
+solver  = "gmsh.delaunay"
+mesh    = "primary"
+
+[mesh]
+type   = "box"
+origin = [0.0, 0.0, 0.0]
+size   = [1.0, 1.0, 1.0]
+characteristic_length = 0.1
+algorithm_3d = "delaunay"
+dim          = 3
+volume_name  = "fluid"
+surface_name = "walls"

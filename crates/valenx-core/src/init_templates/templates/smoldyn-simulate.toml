@@ -1,0 +1,9 @@
+physics = "bio"
+solver  = "smoldyn.simulate"
+mesh    = "(none)"
+
+# Smoldyn Andrews-lab spatial stochastic reaction-diffusion sim.
+# Single-binary CLI — point `config` at your Smoldyn .txt file.
+[bio.smoldyn]
+config     = "system.txt"
+extra_args = []

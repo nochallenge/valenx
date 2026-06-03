@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "tskit.analyze"
+mesh    = "(none)"
+
+# tskit tree-sequence analysis. Companion to SLiM and msprime —
+# reads a `.trees` file and computes summary statistics, plots,
+# or extracts sub-trees. The user-supplied Python script imports
+# `tskit` and reads `valenx_params.json` for the input + output
+# basename.
+[bio.tskit]
+script           = "analyze.py"
+python           = "python3"
+input_trees      = "sim.trees"
+output_basename  = "stats"

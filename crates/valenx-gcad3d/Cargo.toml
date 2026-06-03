@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-gcad3d"
+description = "gCAD3D parametric primitives (Phase 66). Plane3d / Line3d / Arc3d constructors, ruled surface ref, block-letter extruded text."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

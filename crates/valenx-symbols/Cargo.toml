@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-symbols"
+description = "Symbols workbench (Phase 37) — electrical, hydraulic, and pneumatic schematic symbol library with canonical SVG glyph paths, schematics composed of placed symbols and wires, and a schematic→SVG renderer."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

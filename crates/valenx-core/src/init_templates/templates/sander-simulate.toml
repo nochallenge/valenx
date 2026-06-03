@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "sander.simulate"
+mesh    = "(none)"
+
+# AmberTools sander (the OSS portion of AMBER's MD engine —
+# pmemd.cuda is proprietary and not wrapped here).
+[bio.sander]
+topology        = "system.prmtop"
+coordinates     = "system.inpcrd"
+config          = "production.in"
+output_basename = "production"
+extra_args      = []

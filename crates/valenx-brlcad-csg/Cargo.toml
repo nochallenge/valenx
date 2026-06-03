@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-brlcad-csg"
+description = "BRL-CAD-style combinatorial solid geometry (Phase 64). CsgNode tree of primitives + boolean ops + transforms; MGED-style text round-trip; evaluator returns abstract SolidHandle."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

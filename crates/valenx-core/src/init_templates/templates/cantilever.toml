@@ -1,0 +1,27 @@
+physics = "fea"
+solver  = "calculix.static"
+mesh    = "(none)"
+
+[structural]
+mesh_source = "canonical"
+
+[structural.material]
+name           = "steel"
+youngs_modulus = 2.1e11   # Pa
+poissons_ratio = 0.3
+
+[[structural.boundaries]]
+nset      = "Nfix"
+dof_start = 1
+dof_end   = 6
+value     = 0.0
+
+[[structural.loads]]
+nset  = "Nload"
+dof   = 2
+force = -1000.0  # 1 kN downward
+
+[structural.step]
+time_total     = 1.0
+time_increment = 1.0
+output_fields  = ["U", "S", "RF"]

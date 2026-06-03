@@ -1,0 +1,291 @@
+//! Sequence composition: GC content, GC skew, residue / dinucleotide
+//! frequencies and Shannon entropy.
+
+use crate::error::{BioseqError, Result};
+use crate::seq::{Seq, SeqKind};
+use std::collections::BTreeMap;
+
+/// Overall GC fraction (0.0–1.0) of a nucleotide sequence.
+///
+/// Counts `G`, `C`, and the ambiguity code `S` (G or C). The
+/// denominator is the count of unambiguous A/C/G/T(U) plus S/W — so
+/// `N` runs do not deflate the result. Returns
+/// [`BioseqError::Invalid`] for a protein sequence and `0.0` for an
+/// all-ambiguous / empty sequence.
+pub fn gc_content(seq: &Seq) -> Result<f64> {
+    if seq.kind() == SeqKind::Protein {
+        return Err(BioseqError::invalid("kind", "GC content needs a nucleotide sequence"));
+    }
+    let (gc, at) = gc_at_counts(seq.as_bytes());
+    let total = gc + at;
+    Ok(if total == 0 { 0.0 } else { gc as f64 / total as f64 })
+}
+
+/// AT fraction — the complement of [`gc_content`] over the same
+/// unambiguous denominator.
+pub fn at_content(seq: &Seq) -> Result<f64> {
+    Ok(1.0 - gc_content(seq)?)
+}
+
+/// `(gc_count, at_count)` over A/C/G/T(U) plus the two-base ambiguity
+/// codes `S` (→GC) and `W` (→AT).
+fn gc_at_counts(bytes: &[u8]) -> (usize, usize) {
+    let mut gc = 0;
+    let mut at = 0;
+    for &b in bytes {
+        match b.to_ascii_uppercase() {
+            b'G' | b'C' | b'S' => gc += 1,
+            b'A' | b'T' | b'U' | b'W' => at += 1,
+            _ => {}
+        }
+    }
+    (gc, at)
+}
+
+/// GC content in a sliding window — returns one value per window
+/// position. `window` is the window size; `step` is the stride.
+///
+/// The output `Vec` has `floor((len - window) / step) + 1` entries.
+/// Returns [`BioseqError::Invalid`] for a zero window/step or a
+/// window larger than the sequence.
+pub fn gc_sliding_window(seq: &Seq, window: usize, step: usize) -> Result<Vec<f64>> {
+    if seq.kind() == SeqKind::Protein {
+        return Err(BioseqError::invalid("kind", "GC content needs a nucleotide sequence"));
+    }
+    if window == 0 || step == 0 {
+        return Err(BioseqError::invalid("window", "window and step must be > 0"));
+    }
+    let bytes = seq.as_bytes();
+    if window > bytes.len() {
+        return Err(BioseqError::invalid(
+            "window",
+            format!("window {window} exceeds sequence length {}", bytes.len()),
+        ));
+    }
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start + window <= bytes.len() {
+        let (gc, at) = gc_at_counts(&bytes[start..start + window]);
+        let total = gc + at;
+        out.push(if total == 0 {
+            0.0
+        } else {
+            gc as f64 / total as f64
+        });
+        start += step;
+    }
+    Ok(out)
+}
+
+/// GC skew `(G − C) / (G + C)` over the whole sequence.
+///
+/// GC skew is used to locate replication origins/termini in bacterial
+/// genomes. Returns `0.0` when `G + C == 0`.
+pub fn gc_skew(seq: &Seq) -> Result<f64> {
+    if seq.kind() == SeqKind::Protein {
+        return Err(BioseqError::invalid("kind", "GC skew needs a nucleotide sequence"));
+    }
+    let g = seq.count(b'G') as f64;
+    let c = seq.count(b'C') as f64;
+    Ok(if g + c == 0.0 { 0.0 } else { (g - c) / (g + c) })
+}
+
+/// Cumulative GC skew per window — the running sum of per-window
+/// `(G−C)/(G+C)` values, the classic skew plot. See
+/// [`gc_sliding_window`] for the windowing.
+pub fn cumulative_gc_skew(seq: &Seq, window: usize, step: usize) -> Result<Vec<f64>> {
+    if seq.kind() == SeqKind::Protein {
+        return Err(BioseqError::invalid("kind", "GC skew needs a nucleotide sequence"));
+    }
+    if window == 0 || step == 0 {
+        return Err(BioseqError::invalid("window", "window and step must be > 0"));
+    }
+    let bytes = seq.as_bytes();
+    if window > bytes.len() {
+        return Err(BioseqError::invalid(
+            "window",
+            format!("window {window} exceeds length {}", bytes.len()),
+        ));
+    }
+    let mut out = Vec::new();
+    let mut running = 0.0;
+    let mut start = 0;
+    while start + window <= bytes.len() {
+        let slice = &bytes[start..start + window];
+        let g = slice.iter().filter(|&&b| b.eq_ignore_ascii_case(&b'G')).count() as f64;
+        let c = slice.iter().filter(|&&b| b.eq_ignore_ascii_case(&b'C')).count() as f64;
+        let skew = if g + c == 0.0 { 0.0 } else { (g - c) / (g + c) };
+        running += skew;
+        out.push(running);
+        start += step;
+    }
+    Ok(out)
+}
+
+/// Counts of every residue that appears, keyed by uppercase residue.
+pub fn residue_counts(seq: &Seq) -> BTreeMap<char, usize> {
+    let mut map: BTreeMap<char, usize> = BTreeMap::new();
+    for b in seq.iter() {
+        *map.entry(b as char).or_insert(0) += 1;
+    }
+    map
+}
+
+/// Residue frequencies (each count divided by the sequence length).
+/// Empty for an empty sequence.
+pub fn residue_frequencies(seq: &Seq) -> BTreeMap<char, f64> {
+    let n = seq.len();
+    let mut map: BTreeMap<char, f64> = BTreeMap::new();
+    if n == 0 {
+        return map;
+    }
+    for (k, v) in residue_counts(seq) {
+        map.insert(k, v as f64 / n as f64);
+    }
+    map
+}
+
+/// Counts of every overlapping dinucleotide (length-2 window, step 1).
+/// Keyed by the uppercase two-character string.
+pub fn dinucleotide_counts(seq: &Seq) -> BTreeMap<String, usize> {
+    let mut map: BTreeMap<String, usize> = BTreeMap::new();
+    let bytes = seq.as_bytes();
+    for w in bytes.windows(2) {
+        let k = format!("{}{}", w[0] as char, w[1] as char);
+        *map.entry(k).or_insert(0) += 1;
+    }
+    map
+}
+
+/// Dinucleotide frequencies — [`dinucleotide_counts`] normalized by the
+/// number of dinucleotide windows.
+pub fn dinucleotide_frequencies(seq: &Seq) -> BTreeMap<String, f64> {
+    let counts = dinucleotide_counts(seq);
+    let total: usize = counts.values().sum();
+    let mut map: BTreeMap<String, f64> = BTreeMap::new();
+    if total == 0 {
+        return map;
+    }
+    for (k, v) in counts {
+        map.insert(k, v as f64 / total as f64);
+    }
+    map
+}
+
+/// Shannon entropy of the residue distribution, in bits.
+///
+/// `H = -Σ pᵢ·log₂(pᵢ)`. The maximum is `log₂(alphabet_size)` — about
+/// 2 bits for DNA, ~4.32 for protein. Returns `0.0` for an empty or
+/// single-residue-type sequence.
+pub fn shannon_entropy(seq: &Seq) -> f64 {
+    let n = seq.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let counts = residue_counts(seq);
+    let mut h = 0.0;
+    for &c in counts.values() {
+        if c == 0 {
+            continue;
+        }
+        let p = c as f64 / n as f64;
+        h -= p * p.log2();
+    }
+    h
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gc_content_basic() {
+        let s = Seq::new(SeqKind::Dna, "GGCC").unwrap();
+        assert!((gc_content(&s).unwrap() - 1.0).abs() < 1e-12);
+        let s = Seq::new(SeqKind::Dna, "ATAT").unwrap();
+        assert!((gc_content(&s).unwrap() - 0.0).abs() < 1e-12);
+        let s = Seq::new(SeqKind::Dna, "ATGC").unwrap();
+        assert!((gc_content(&s).unwrap() - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn gc_ignores_n_runs() {
+        let s = Seq::new(SeqKind::Dna, "GCNNNN").unwrap();
+        // 2 of 2 unambiguous bases are G/C.
+        assert!((gc_content(&s).unwrap() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn at_content_complements_gc() {
+        let s = Seq::new(SeqKind::Dna, "ATGC").unwrap();
+        assert!((at_content(&s).unwrap() - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn protein_rejected() {
+        let p = Seq::new(SeqKind::Protein, "MKVL").unwrap();
+        assert!(gc_content(&p).is_err());
+        assert!(gc_skew(&p).is_err());
+    }
+
+    #[test]
+    fn sliding_window_shape() {
+        let s = Seq::new(SeqKind::Dna, "GGGGCCCCAAAATTTT").unwrap(); // 16 nt
+        let w = gc_sliding_window(&s, 4, 4).unwrap();
+        assert_eq!(w.len(), 4);
+        assert!((w[0] - 1.0).abs() < 1e-12); // GGGG
+        assert!((w[2] - 0.0).abs() < 1e-12); // AAAA
+        assert!(gc_sliding_window(&s, 0, 1).is_err());
+        assert!(gc_sliding_window(&s, 99, 1).is_err());
+    }
+
+    #[test]
+    fn gc_skew_sign() {
+        let s = Seq::new(SeqKind::Dna, "GGGC").unwrap();
+        // (3-1)/(3+1) = 0.5.
+        assert!((gc_skew(&s).unwrap() - 0.5).abs() < 1e-12);
+        let s = Seq::new(SeqKind::Dna, "AAAA").unwrap();
+        assert_eq!(gc_skew(&s).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn cumulative_skew_is_running_sum() {
+        let s = Seq::new(SeqKind::Dna, "GGCC").unwrap();
+        let c = cumulative_gc_skew(&s, 2, 2).unwrap();
+        // window GG: skew +1 ; window CC: skew -1 -> cumulative [1, 0].
+        assert_eq!(c.len(), 2);
+        assert!((c[0] - 1.0).abs() < 1e-12);
+        assert!((c[1] - 0.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn residue_counts_and_freqs() {
+        let s = Seq::new(SeqKind::Dna, "AAGC").unwrap();
+        let counts = residue_counts(&s);
+        assert_eq!(counts[&'A'], 2);
+        assert_eq!(counts[&'G'], 1);
+        let freqs = residue_frequencies(&s);
+        assert!((freqs[&'A'] - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn dinucleotide_counts_overlap() {
+        let s = Seq::new(SeqKind::Dna, "ATAT").unwrap();
+        let d = dinucleotide_counts(&s);
+        // windows: AT, TA, AT.
+        assert_eq!(d["AT"], 2);
+        assert_eq!(d["TA"], 1);
+        let f = dinucleotide_frequencies(&s);
+        assert!((f["AT"] - 2.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn entropy_extremes() {
+        // Uniform 4-letter DNA -> 2 bits.
+        let s = Seq::new(SeqKind::Dna, "ACGT").unwrap();
+        assert!((shannon_entropy(&s) - 2.0).abs() < 1e-12);
+        // Single residue type -> 0 bits.
+        let s = Seq::new(SeqKind::Dna, "AAAA").unwrap();
+        assert!(shannon_entropy(&s).abs() < 1e-12);
+    }
+}

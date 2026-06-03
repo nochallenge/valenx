@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-cfd-native"
+description = "Native 2D laminar CFD solver — steady incompressible Navier-Stokes by the SIMPLE algorithm on a staggered finite-volume grid. A real working laminar-flow solver (lid-driven cavity, channel flow); not an OpenFOAM replacement (no turbulence, no transient, 2D)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

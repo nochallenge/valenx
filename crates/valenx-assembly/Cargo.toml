@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-assembly"
+description = "Assembly workbench: multi-part scene with rigid-body placement, geometric mate constraints, joint types (Fixed/Revolute/Prismatic/Cylindrical/Spherical/Planar), 3D constraint solver, kinematic motion preview."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-cad  = { path = "../valenx-cad" }
+valenx-mesh = { path = "../valenx-mesh" }
+# Round-28 H2: canonical atomic_write_str for persist.rs::write_to.
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

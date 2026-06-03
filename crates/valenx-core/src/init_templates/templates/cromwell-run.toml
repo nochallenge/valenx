@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "cromwell.run"
+mesh    = "(none)"
+
+# Cromwell Broad WDL workflow engine — JAR-distributed.
+# Point `jar` at the cromwell-XX.jar release. `action` picks
+# the Cromwell subcommand (run / submit / validate).
+[bio.cromwell]
+jar             = "/path/to/cromwell-86.jar"
+workflow        = "workflow.wdl"
+# inputs        = "inputs.json"
+output_basename = "metadata"
+action          = "run"
+extra_args      = []

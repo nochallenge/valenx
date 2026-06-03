@@ -1,0 +1,12 @@
+physics = "chemistry"
+solver  = "cantera.equilibrium"
+mesh    = "(none)"
+
+[chemistry]
+mechanism = "gri30.yaml"
+analysis  = "equilibrium-hp"
+
+[chemistry.initial]
+T           = 300.0
+P           = 101325.0
+composition = "CH4:1, O2:2, N2:7.52"

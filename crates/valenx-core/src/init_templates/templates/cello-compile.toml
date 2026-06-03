@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "cello.compile"
+mesh    = "(none)"
+
+# Cello genetic-circuit design + DNA compiler. Cello is JAR-
+# distributed — point `jar` at the Cello-2 JAR. Inputs are a
+# Verilog circuit description + UCF user-constraints + sensor /
+# device library JSONs.
+[bio.cello]
+jar                = "/path/to/cello.jar"
+verilog            = "circuit.v"
+user_constraints   = "Eco1C1G1T1.UCF.json"
+input_sensors      = "Eco1C1G1T1.input.json"
+output_devices     = "Eco1C1G1T1.output.json"
+output_basename    = "compiled"
+extra_args         = []

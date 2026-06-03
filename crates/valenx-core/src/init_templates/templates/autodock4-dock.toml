@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "autodock4.dock"
+mesh    = "(none)"
+
+# AutoDock 4 two-stage docking. autogrid4 generates grid maps
+# from the .gpf, then autodock4 reads them + the .dpf to dock.
+# Skip the grid step (skip_grid = true) only if you've already
+# pre-generated the grid maps. Both autogrid4 + autodock4 must
+# be on PATH.
+[bio.autodock4]
+gpf              = "receptor.gpf"
+dpf              = "ligand.dpf"
+skip_grid        = false
+grid_log         = "autogrid4.glg"
+dock_log         = "autodock4.dlg"
+extra_grid_args  = []
+extra_dock_args  = []

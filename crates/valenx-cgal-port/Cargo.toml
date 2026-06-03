@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-cgal-port"
+description = "Pure-Rust port of CGAL geometry algorithms (Phase 58). Delaunay 2D, convex hull 2D/3D, mesh boolean, AABB tree, alpha shapes, Voronoi."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+nalgebra    = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

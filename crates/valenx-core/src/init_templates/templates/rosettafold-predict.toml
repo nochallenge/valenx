@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "rosettafold.predict"
+mesh    = "(none)"
+
+# RoseTTAFold Baker-lab original 3-track structure prediction.
+# Model weights + dependencies are not bundled — clone
+# https://github.com/RosettaCommons/RoseTTAFold and follow the
+# install README. The user-supplied .py wraps the inference call;
+# it can read `valenx_params.json` for the staged FASTA filename
+# and the configured `output_basename`.
+[bio.rosettafold]
+script           = "predict.py"
+python           = "python3"
+fasta            = "query.fasta"
+output_basename  = "predicted"

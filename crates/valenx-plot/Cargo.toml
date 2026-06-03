@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-plot"
+description = "Plot workbench (Phase 31) — 2D plotting + charting. Series (Line/Scatter/Bar/Area) → Plot (title + axis labels + ranges) → SVG output. PNG deferred to v2 (would pull in the image crate)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

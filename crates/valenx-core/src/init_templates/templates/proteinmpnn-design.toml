@@ -1,0 +1,18 @@
+physics = "bio"
+solver  = "proteinmpnn.design"
+mesh    = "(none)"
+
+# ProteinMPNN sequence design from a backbone PDB. The user-
+# supplied Python script imports `ProteinMPNN` and reads
+# `valenx_params.json` (auto-written by the adapter) for the
+# config knobs below. Variants: vanilla (default), soluble
+# (solubility-biased), ca-only (CA-trace-only inputs). Lower
+# `temperature` = higher confidence / lower diversity.
+[bio.proteinmpnn]
+script               = "design.py"
+python               = "python3"
+input_pdb            = "backbone.pdb"
+model_variant        = "vanilla"
+temperature          = 0.1
+num_seq_per_target   = 8
+output_basename      = "designed"

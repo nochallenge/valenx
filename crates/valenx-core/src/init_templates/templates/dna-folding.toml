@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "colabfold.predict"
+mesh    = "(none)"
+
+# Protein structure prediction from a FASTA. `query.fasta` ships a
+# 50-residue placeholder; replace the sequence with your target.
+# `num_recycles` is 1..=12, `num_models` is 1..=5.
+[bio.colabfold]
+input_fasta  = "query.fasta"
+num_recycles = 3
+num_models   = 5

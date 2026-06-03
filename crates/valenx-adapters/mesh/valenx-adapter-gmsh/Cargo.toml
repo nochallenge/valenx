@@ -1,0 +1,29 @@
+[package]
+name         = "valenx-adapter-gmsh"
+description  = "Subprocess-isolated adapter for the gmsh unstructured mesher. Phase 2 scaffold."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+# gmsh is GPL-2.0-or-later with a linking exception for its SDK, but
+# driving it via the CLI keeps Valenx's link surface out of that
+# perimeter entirely.
+
+publish.workspace     = true
+[dependencies]
+anyhow       = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+semver       = { workspace = true }
+toml         = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+nalgebra     = { workspace = true }
+
+valenx-core   = { path = "../../../valenx-core" }
+valenx-fields = { path = "../../../valenx-fields" }
+valenx-mesh   = { path = "../../../valenx-mesh" }

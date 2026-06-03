@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "forecast.predict"
+mesh    = "(none)"
+
+# FORECasT Sanger indel predictor. The user-supplied .py
+# script does `import selftarget` (FORECasT ships under the
+# SelfTarget package name).
+[bio.forecast]
+script           = "predict.py"
+python           = "python3"
+# input_fasta    = "target.fa"
+output_basename  = "predictions"

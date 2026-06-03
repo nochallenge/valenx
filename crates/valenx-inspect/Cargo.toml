@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-inspect"
+description = "Inspection workbench (Phase 25) — geometric measurement (distance, angle, radius, polyline length, polygon area, mesh volume, bounding box) plus GD&T tolerance verification on top of Phase 18's TechDraw feature-control frames. Pure-data; no UI, no subprocess, no network."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh     = { path = "../valenx-mesh" }
+valenx-techdraw = { path = "../valenx-techdraw" }
+valenx-core     = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

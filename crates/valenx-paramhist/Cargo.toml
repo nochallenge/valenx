@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-paramhist"
+description = "NaroCAD-style parametric history alternatives (Phase 67). DAG history with topological sort, dirty-set computation, partial rebuild, DAG-preserving insert/move."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

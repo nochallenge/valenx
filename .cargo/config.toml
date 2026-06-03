@@ -1,0 +1,21 @@
+# Workspace cargo config.
+#
+# Currently only used to make `cargo build --workspace --all-targets`
+# succeed on macOS for the `valenx-py` cdylib target. PyO3's
+# `extension-module` feature deliberately does NOT link to libpython
+# — the host interpreter provides the symbols when the wheel is
+# loaded — but on macOS `cdylib` builds still fail at link time with
+# "symbol(s) not found" unless the linker is told that undefined
+# symbols will be resolved at load time.
+#
+# These flags are identical to what `maturin develop` injects under
+# the hood. Linux uses the same convention (`-Wl,-undefined,dynamic_lookup`
+# is a no-op there; the symbols are resolved at load time via lazy
+# binding without any flag), so we only need the override on Apple
+# targets.
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

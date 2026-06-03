@@ -1,0 +1,62 @@
+[package]
+name         = "valenx-core"
+description  = "Project model, workflow DAG engine, adapter registry, unit system, validation, settings, logging."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow      = { workspace = true }
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+toml        = { workspace = true }
+tracing     = { workspace = true }
+sha2        = { workspace = true }
+uuid        = { workspace = true }
+semver      = { workspace = true }
+
+valenx-fields = { path = "../valenx-fields" }
+
+# Round-27 STRUCTURAL: libc for the `O_NOFOLLOW` Unix flag on the
+# canonical `atomic_write_bytes` sidecar open. Mirrors the dep
+# pattern already used by `valenx-dock` (R25 H2). Windows uses
+# `FILE_FLAG_OPEN_REPARSE_POINT` (hardcoded as `0x00200000` — no
+# windows-sys dep needed for a single one-shot constant).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# R30 STRUCTURAL: the `no_raw_fs_write_guard` integration test parses
+# every `crates/**/src/**/*.rs` file with `syn` and walks the AST to
+# flag un-allowlisted raw durable writes (`fs::write`, `File::create*`,
+# writing `OpenOptions` chains). syn 2 is already in the lock graph
+# (proc-macro derives pull it transitively); `visit` gives the
+# read-only AST visitor, `full` lets it parse expressions/items,
+# `extra-traits` provides Debug for offender snippets.
+[dev-dependencies]
+syn = { version = "2", features = ["full", "visit", "extra-traits"] }
+# `span-locations` makes proc-macro2 (used by syn in non-proc-macro
+# parse mode) record 1-based line/column for every token's span, so the
+# guard can point a human at the exact offending line.
+proc-macro2 = { version = "1", features = ["span-locations"] }
+
+# Tiny scaffold CLI that emits a valid `.valenx` project skeleton
+# (project.toml + cases/<name>/case.toml). Useful for users who
+# don't want to copy-paste the boilerplate from QUICKSTART.md.
+[[bin]]
+name = "valenx-init"
+path = "src/bin/valenx_init.rs"
+
+# Project-level validator. Walks a `.valenx` directory, loads the
+# project + each case, and reports a punch list of structural
+# problems (missing sections, malformed TOML, dangling case
+# references) without running an actual solver. Useful in CI
+# pre-flight gates that run before any adapter is invoked.
+[[bin]]
+name = "valenx-validate"
+path = "src/bin/valenx_validate.rs"

@@ -1,0 +1,187 @@
+name: CI
+
+# MANUAL ONLY — auto-triggers (push / pull_request) disabled on
+# 2026-05-24 after a billing surprise. To re-enable, restore the
+# `push:` and `pull_request:` blocks below the `workflow_dispatch:`
+# line (see `docs/CI.md` for the full block).
+#
+# Still runnable on demand from GitHub UI → Actions → CI → Run
+# workflow, or via: `gh workflow run ci.yml`.
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # -------------------------------------------------------------------
+  # Fast checks — run first, fail the pipeline quickly if basics break
+  # -------------------------------------------------------------------
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # -------------------------------------------------------------------
+  # Cross-platform test matrix — the real signal
+  # -------------------------------------------------------------------
+  test:
+    name: test / ${{ matrix.os }}
+    needs: [fmt, clippy]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libgl1-mesa-dev libwayland-dev libxkbcommon-dev \
+            libasound2-dev
+      - name: PyO3 link flags (macOS)
+        # `valenx-py` is a pyo3 extension-module cdylib. PyO3 deliberately
+        # does NOT link to libpython (the host interpreter provides the
+        # symbols at module-load time), but Apple's ld still rejects the
+        # undefined symbols at build time unless told otherwise. Linux
+        # resolves the same symbols via lazy binding (no flag needed),
+        # and Windows finds the python import lib on PATH. This is
+        # exactly the recipe `maturin develop` injects under the hood —
+        # we just have to do it ourselves because we go through
+        # `cargo build --workspace`.
+        #
+        # `.cargo/config.toml` would normally hold this, but the
+        # workflow's top-level `RUSTFLAGS: "-D warnings"` env var
+        # overrides `config.toml`'s rustflags table (Cargo docs are
+        # explicit about this). So we append to RUSTFLAGS here.
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "RUSTFLAGS=$RUSTFLAGS -C link-arg=-undefined -C link-arg=dynamic_lookup" >> "$GITHUB_ENV"
+      - run: cargo build --workspace --all-targets
+      # Run the scoped QA harness instead of `cargo test --workspace`
+      # — see docs/QA.md for why a workspace-wide cargo test is forbidden
+      # (file-dialog crates hang headless CI).
+      - name: Scoped QA harness (Unix)
+        if: matrix.os != 'windows-latest'
+        run: bash scripts/qa.sh --tests
+      - name: Scoped QA harness (Windows)
+        if: matrix.os == 'windows-latest'
+        run: pwsh scripts/qa.ps1 --tests
+
+  # -------------------------------------------------------------------
+  # Docs build — catches broken rustdoc links
+  # -------------------------------------------------------------------
+  docs:
+    name: rustdoc
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps --all-features
+
+  # -------------------------------------------------------------------
+  # mdBook user manual — catches broken markdown links, bad code examples
+  # -------------------------------------------------------------------
+  mdbook:
+    name: user manual
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check docs/ exists
+        id: check
+        run: |
+          if [ -f docs/book.toml ]; then
+            echo "has_book=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_book=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: peaceiris/actions-mdbook@v2
+        if: steps.check.outputs.has_book == 'true'
+        with:
+          mdbook-version: latest
+      - run: mdbook build docs
+        if: steps.check.outputs.has_book == 'true'
+
+  # -------------------------------------------------------------------
+  # License and dependency gating — prevents surprise GPL/commercial deps
+  # -------------------------------------------------------------------
+  deny:
+    name: cargo-deny
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deny.toml exists
+        id: check
+        run: |
+          if [ -f deny.toml ]; then
+            echo "has_deny=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_deny=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        if: steps.check.outputs.has_deny == 'true'
+        with:
+          command: check all
+
+  # NOTE: A standalone `cargo-audit` job used to live here. Removed
+  # because `cargo-deny`'s `[advisories]` section (deny.toml line 12)
+  # consults the same RustSec advisory DB and already runs in CI. Two
+  # jobs against the same DB is double work and double maintenance —
+  # and the `rustsec/audit-check@v2` action installs cargo-audit from
+  # source, which currently fails on our pinned rustc 1.88.0 because
+  # the latest cargo-audit's transitive `smol_str` requires rustc
+  # 1.89. If you want cargo-audit back, install it via prebuilt binary
+  # (e.g. taiki-e/install-action) or wait for the toolchain bump.
+
+  # -------------------------------------------------------------------
+  # Summary job — single required status check for branch protection
+  # -------------------------------------------------------------------
+  ci-ok:
+    name: CI OK
+    needs: [fmt, clippy, test, docs, mdbook, deny]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job failed, was cancelled, or was skipped
+        if: |
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled') ||
+          contains(needs.*.result, 'skipped')
+        run: exit 1
+      - run: echo "All CI jobs passed."

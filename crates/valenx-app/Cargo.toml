@@ -1,0 +1,707 @@
+[package]
+name         = "valenx-app"
+description  = "The Valenx desktop application binary. Native window, ribbon, browser tree, viewport, timeline, command palette."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+default-run = "valenx"
+# Windows resource embedding (Valenx app icon -> valenx.exe). See
+# `build.rs` for the cfg(target_os = "windows") logic that picks up
+# `wix/valenx.ico` and packs it into the PE's resource section so
+# File Explorer / Alt+Tab / the taskbar all show the right icon for
+# the running process. The script is a no-op on Linux + macOS.
+build = "build.rs"
+
+publish.workspace     = true
+[[bin]]
+name = "valenx"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anyhow             = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Native shell. eframe pulls in winit + a glow rendering backend;
+# replacing with a wgpu backend is a feature swap, not an API
+# rewrite.
+eframe     = { workspace = true }
+egui       = { workspace = true }
+egui_plot  = { workspace = true }
+rfd        = { workspace = true }
+bytemuck   = { workspace = true }
+# `opener` opens a URL or filesystem path in the user's default
+# handler — ShellExecuteW on Windows, `open(1)` on macOS, the xdg-
+# open preference order on Linux. Replaces a hand-rolled
+# `cmd /C start "" <url>` shell-out in landing_page::open_link which
+# was vulnerable to cmd.exe metachar re-parsing of paths containing
+# `&`, `^`, `|`, etc. License: MIT OR Apache-2.0 (already covered by
+# deny.toml's allowlist).
+opener     = { workspace = true }
+nalgebra   = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+toml       = { workspace = true }
+
+valenx-core          = { path = "../valenx-core" }
+valenx-geo           = { path = "../valenx-geo" }
+valenx-mesh          = { path = "../valenx-mesh" }
+valenx-fields        = { path = "../valenx-fields" }
+valenx-viz           = { path = "../valenx-viz" }
+# Render-bridge: the Cook-Torrance PBR library + the WGSL forward
+# shader source the pbr_forward_pass module wires into the live wgpu
+# device.
+valenx-render-bridge = { path = "../valenx-render-bridge" }
+valenx-icons         = { path = "../valenx-icons" }
+valenx-audit         = { path = "../valenx-audit" }
+valenx-rbac          = { path = "../valenx-rbac" }
+valenx-optimize      = { path = "../valenx-optimize" }
+valenx-export        = { path = "../valenx-export" }
+valenx-fonts         = { path = "../valenx-fonts" }
+valenx-design-tokens = { path = "../valenx-design-tokens" }
+valenx-cad           = { path = "../valenx-cad" }
+valenx-dock          = { path = "../valenx-dock" }
+valenx-bio           = { path = "../valenx-bio" }
+valenx-sketch        = { path = "../valenx-sketch" }
+valenx-draft         = { path = "../valenx-draft" }
+valenx-techdraw      = { path = "../valenx-techdraw" }
+valenx-assembly      = { path = "../valenx-assembly" }
+valenx-feature-tree  = { path = "../valenx-feature-tree" }
+valenx-step-iges     = { path = "../valenx-step-iges" }
+valenx-surface       = { path = "../valenx-surface" }
+valenx-cam           = { path = "../valenx-cam" }
+valenx-arch          = { path = "../valenx-arch" }
+valenx-spreadsheet   = { path = "../valenx-spreadsheet" }
+valenx-macro         = { path = "../valenx-macro" }
+valenx-addons        = { path = "../valenx-addons" }
+valenx-mesh-to-brep  = { path = "../valenx-mesh-to-brep" }
+valenx-fem           = { path = "../valenx-fem" }
+
+# The native 3D external-aerodynamics CFD engine,
+# surfaced in the desktop UI by the Aerodynamics / Wind Tunnel
+# workbench (src/aero_workbench.rs + src/aero/). A pure-Rust solver
+# library; the workbench calls its real API directly (no subprocess).
+valenx-aero          = { path = "../valenx-aero" }
+
+# The native 2-D incompressible laminar CFD engine (SIMPLE), surfaced in
+# the desktop UI by the CFD Workbench (src/cfd_workbench.rs). A pure-Rust
+# solver library; the workbench calls its real API directly (no subprocess).
+valenx-cfd-native    = { path = "../valenx-cfd-native" }
+
+# The native reaction-dynamics engine (Born-Oppenheimer ab-initio MD),
+# surfaced by the Reaction Dynamics workbench (src/reactdyn_workbench.rs).
+# Depends on valenx-qchem for the single-point energies its forces use.
+valenx-reactdyn      = { path = "../valenx-reactdyn" }
+
+# The native launch-vehicle ascent + trajectory simulator, surfaced in
+# the desktop UI by the Astro / Launch workbench (src/astro_workbench.rs
+# + src/astro/). Like valenx-aero it's a pure-Rust solver library; the
+# workbench calls its real API directly (ascent sim + closed-form
+# Hohmann / hoverslam / rendezvous / launch-azimuth planners).
+valenx-astro         = { path = "../valenx-astro" }
+
+# Native computational-biology library crates, surfaced in
+# the desktop UI by the Genetics workbench (src/genetics_workbench.rs
+# + src/genetics/). These are pure-Rust algorithm libraries; the
+# workbench panels call their real APIs directly (no subprocesses).
+valenx-bioseq        = { path = "../valenx-bioseq" }
+valenx-align         = { path = "../valenx-align" }
+valenx-phylo         = { path = "../valenx-phylo" }
+valenx-popgen        = { path = "../valenx-popgen" }
+valenx-rnastruct     = { path = "../valenx-rnastruct" }
+valenx-md            = { path = "../valenx-md" }
+valenx-cheminf       = { path = "../valenx-cheminf" }
+valenx-biostruct     = { path = "../valenx-biostruct" }
+valenx-qchem         = { path = "../valenx-qchem" }
+valenx-genomics      = { path = "../valenx-genomics" }
+valenx-sysbio        = { path = "../valenx-sysbio" }
+valenx-dock-screen   = { path = "../valenx-dock-screen" }
+valenx-genediting    = { path = "../valenx-genediting" }
+# Classical protein structure prediction + design,
+# surfaced by the Genetics workbench's "Structure Prediction" panel.
+valenx-structpredict = { path = "../valenx-structpredict" }
+# The unified synthetic-RNA design workflow,
+# surfaced by the Genetics workbench's guided "RNA Designer" panel.
+valenx-rnadesign     = { path = "../valenx-rnadesign" }
+
+# Adapter registry wiring — pull in every live adapter so the
+# browser tree has something real to enumerate and the Run action
+# + Load canonical mesh action have something to call.
+valenx-adapter-openfoam    = { path = "../valenx-adapters/cfd/valenx-adapter-openfoam" }
+valenx-adapter-su2         = { path = "../valenx-adapters/cfd/valenx-adapter-su2" }
+valenx-adapter-gmsh        = { path = "../valenx-adapters/mesh/valenx-adapter-gmsh" }
+valenx-adapter-netgen      = { path = "../valenx-adapters/mesh/valenx-adapter-netgen" }
+valenx-adapter-freecad     = { path = "../valenx-adapters/cad/valenx-adapter-freecad" }
+valenx-adapter-occt        = { path = "../valenx-adapters/cad/valenx-adapter-occt" }
+valenx-adapter-calculix    = { path = "../valenx-adapters/fea/valenx-adapter-calculix" }
+valenx-adapter-elmer       = { path = "../valenx-adapters/fea/valenx-adapter-elmer" }
+valenx-adapter-code-aster  = { path = "../valenx-adapters/fea/valenx-adapter-code-aster" }
+valenx-adapter-openradioss = { path = "../valenx-adapters/fea/valenx-adapter-openradioss" }
+valenx-adapter-cantera     = { path = "../valenx-adapters/chemistry/valenx-adapter-cantera" }
+valenx-adapter-lammps      = { path = "../valenx-adapters/md/valenx-adapter-lammps" }
+valenx-adapter-gromacs     = { path = "../valenx-adapters/md/valenx-adapter-gromacs" }
+valenx-adapter-openems     = { path = "../valenx-adapters/em/valenx-adapter-openems" }
+valenx-adapter-meep        = { path = "../valenx-adapters/em/valenx-adapter-meep" }
+valenx-adapter-pybamm      = { path = "../valenx-adapters/battery/valenx-adapter-pybamm" }
+valenx-adapter-mujoco      = { path = "../valenx-adapters/dynamics/valenx-adapter-mujoco" }
+valenx-adapter-precice     = { path = "../valenx-adapters/coupling/valenx-adapter-precice" }
+
+# Biology (Phase 17) — text-driven subprocess adapters covering the
+# common biomolecular workflows (sequence / cheminformatics / MD /
+# visualisation / coarse-grained DNA / trajectory analysis / protein
+# structure prediction).
+valenx-adapter-biopython   = { path = "../valenx-adapters/bio/valenx-adapter-biopython" }
+valenx-adapter-rdkit       = { path = "../valenx-adapters/bio/valenx-adapter-rdkit" }
+valenx-adapter-openmm      = { path = "../valenx-adapters/bio/valenx-adapter-openmm" }
+valenx-adapter-chimerax    = { path = "../valenx-adapters/bio/valenx-adapter-chimerax" }
+valenx-adapter-oxdna       = { path = "../valenx-adapters/bio/valenx-adapter-oxdna" }
+valenx-adapter-mdanalysis  = { path = "../valenx-adapters/bio/valenx-adapter-mdanalysis" }
+valenx-adapter-colabfold   = { path = "../valenx-adapters/bio/valenx-adapter-colabfold" }
+
+# Biology (Phase 18) — sequence alignment toolkit covering the
+# canonical short / long-read aligners, multi-sequence aligners,
+# profile-HMM search, and the SAM/BAM multitool.
+valenx-adapter-bwa         = { path = "../valenx-adapters/bio/valenx-adapter-bwa" }
+valenx-adapter-minimap2    = { path = "../valenx-adapters/bio/valenx-adapter-minimap2" }
+valenx-adapter-mafft       = { path = "../valenx-adapters/bio/valenx-adapter-mafft" }
+valenx-adapter-muscle      = { path = "../valenx-adapters/bio/valenx-adapter-muscle" }
+valenx-adapter-hmmer       = { path = "../valenx-adapters/bio/valenx-adapter-hmmer" }
+valenx-adapter-samtools    = { path = "../valenx-adapters/bio/valenx-adapter-samtools" }
+
+# Biology (Phase 17.5) — structure prediction expansion. Each adapter
+# wraps a Python-script driver around the four most-used open-source
+# protein-structure prediction pipelines.
+valenx-adapter-esmfold     = { path = "../valenx-adapters/bio/valenx-adapter-esmfold" }
+valenx-adapter-openfold    = { path = "../valenx-adapters/bio/valenx-adapter-openfold" }
+valenx-adapter-alphafold2  = { path = "../valenx-adapters/bio/valenx-adapter-alphafold2" }
+valenx-adapter-alphafold3  = { path = "../valenx-adapters/bio/valenx-adapter-alphafold3" }
+
+# Biology (Phase 19) — variant calling toolkit covering the
+# conventional + ML-driven variant callers (bcftools / GATK
+# HaplotypeCaller / Google DeepVariant).
+valenx-adapter-bcftools    = { path = "../valenx-adapters/bio/valenx-adapter-bcftools" }
+valenx-adapter-gatk        = { path = "../valenx-adapters/bio/valenx-adapter-gatk" }
+valenx-adapter-deepvariant = { path = "../valenx-adapters/bio/valenx-adapter-deepvariant" }
+
+# Biology (Phase 23) — molecular viewers covering the script-driven
+# headless renderers (PyMOL, VMD) and IGV's igvtools indexer.
+valenx-adapter-pymol       = { path = "../valenx-adapters/bio/valenx-adapter-pymol" }
+valenx-adapter-vmd         = { path = "../valenx-adapters/bio/valenx-adapter-vmd" }
+valenx-adapter-igv         = { path = "../valenx-adapters/bio/valenx-adapter-igv" }
+
+# Biology (Phase 27) — protein design covering the de novo generation
+# pair: RFdiffusion (backbone sampling) + ProteinMPNN (sequence
+# design). Pair-counterpart of the structure-prediction adapters
+# already in tree (ColabFold / ESMFold / OpenFold / AlphaFold 2/3).
+valenx-adapter-rfdiffusion = { path = "../valenx-adapters/bio/valenx-adapter-rfdiffusion" }
+valenx-adapter-proteinmpnn = { path = "../valenx-adapters/bio/valenx-adapter-proteinmpnn" }
+
+# Biology (Phase 34) — molecular docking covering AutoDock Vina
+# (single-binary modern docker) and AutoDock 4 (two-stage autogrid4
+# + autodock4 — the same pattern as BWA's index + mem).
+valenx-adapter-vina        = { path = "../valenx-adapters/bio/valenx-adapter-vina" }
+valenx-adapter-autodock4   = { path = "../valenx-adapters/bio/valenx-adapter-autodock4" }
+
+# Biology (Phase 24) — cheminformatics expansion covering DeepChem
+# (PyTorch-backed deep-learning), Open Babel (~120-format chemistry
+# converter), and Avogadro 2 (Python-scriptable chemistry editor).
+valenx-adapter-deepchem    = { path = "../valenx-adapters/bio/valenx-adapter-deepchem" }
+valenx-adapter-openbabel   = { path = "../valenx-adapters/bio/valenx-adapter-openbabel" }
+valenx-adapter-avogadro    = { path = "../valenx-adapters/bio/valenx-adapter-avogadro" }
+
+# Biology (Phase 22) — workflow managers covering the de-facto
+# bioinformatics orchestrators: Nextflow + Snakemake. Meta-tools that
+# invoke pipelines that themselves call other bio adapters' binaries.
+valenx-adapter-nextflow    = { path = "../valenx-adapters/bio/valenx-adapter-nextflow" }
+valenx-adapter-snakemake   = { path = "../valenx-adapters/bio/valenx-adapter-snakemake" }
+
+# Biology (Phase 19.5) — single-cell genomics: Scanpy (de-facto
+# Python single-cell analysis) + scvi-tools (probabilistic deep-
+# learning models). Seurat (R) and AnnData (HDF5 reader) deferred
+# to Phase 19.6.
+valenx-adapter-scanpy      = { path = "../valenx-adapters/bio/valenx-adapter-scanpy" }
+valenx-adapter-scvi        = { path = "../valenx-adapters/bio/valenx-adapter-scvi" }
+
+# Biology (Phase 27.5) — protein design expansion: Chroma (Generate
+# Biomedicines diffusion), ESM-IF (Meta inverse-folding), RFantibody
+# (RosettaCommons antibody-specific RFdiffusion fork).
+valenx-adapter-chroma      = { path = "../valenx-adapters/bio/valenx-adapter-chroma" }
+valenx-adapter-esm-if      = { path = "../valenx-adapters/bio/valenx-adapter-esm-if" }
+valenx-adapter-rfantibody  = { path = "../valenx-adapters/bio/valenx-adapter-rfantibody" }
+
+# Biology (Phase 18.5) — aligners expansion: Bowtie2 (alternative
+# short-read aligner), MMseqs2 (fast protein search + clustering),
+# DIAMOND (ultra-fast BLAST-compatible protein search).
+valenx-adapter-bowtie2     = { path = "../valenx-adapters/bio/valenx-adapter-bowtie2" }
+valenx-adapter-mmseqs2     = { path = "../valenx-adapters/bio/valenx-adapter-mmseqs2" }
+valenx-adapter-diamond     = { path = "../valenx-adapters/bio/valenx-adapter-diamond" }
+
+# Biology (Phase 18.6) — RNA-seq alignment: HISAT2 (graph-based
+# splice-aware) + STAR (most-used spliced aligner).
+valenx-adapter-hisat2      = { path = "../valenx-adapters/bio/valenx-adapter-hisat2" }
+valenx-adapter-star        = { path = "../valenx-adapters/bio/valenx-adapter-star" }
+
+# Biology (Phase 20) — transcript quantification: Salmon (quasi-
+# mapping-based) + Kallisto (pseudoalignment-based). Both produce
+# transcript-level TPM/counts without intermediate SAM/BAM.
+valenx-adapter-salmon      = { path = "../valenx-adapters/bio/valenx-adapter-salmon" }
+valenx-adapter-kallisto    = { path = "../valenx-adapters/bio/valenx-adapter-kallisto" }
+
+# Biology (Phase 30) — phylogenetics: IQ-TREE + RAxML-NG (single-
+# binary maximum-likelihood inference) + FastTree (approximate-ML).
+valenx-adapter-iqtree      = { path = "../valenx-adapters/bio/valenx-adapter-iqtree" }
+valenx-adapter-raxml-ng    = { path = "../valenx-adapters/bio/valenx-adapter-raxml-ng" }
+valenx-adapter-fasttree    = { path = "../valenx-adapters/bio/valenx-adapter-fasttree" }
+
+# Biology (Phase 28) — RNA secondary structure: ViennaRNA, RNA-
+# structure, NUPACK. ViennaRNA + NUPACK are academic-license-
+# flagged via ProbeReport.warnings.
+valenx-adapter-viennarna   = { path = "../valenx-adapters/bio/valenx-adapter-viennarna" }
+valenx-adapter-rnastructure = { path = "../valenx-adapters/bio/valenx-adapter-rnastructure" }
+valenx-adapter-nupack      = { path = "../valenx-adapters/bio/valenx-adapter-nupack" }
+
+# Biology (Phase 25) — quantum chemistry: Psi4 (HF/DFT/post-HF),
+# NWChem (massively-parallel ab initio), xTB (semiempirical
+# extended tight-binding for fast geometry optimisation).
+valenx-adapter-psi4        = { path = "../valenx-adapters/bio/valenx-adapter-psi4" }
+valenx-adapter-nwchem      = { path = "../valenx-adapters/bio/valenx-adapter-nwchem" }
+valenx-adapter-xtb         = { path = "../valenx-adapters/bio/valenx-adapter-xtb" }
+
+# Biology (Phase 27.6) — EvolutionaryScale models: ESM3 (generative
+# multi-modal — sequence + structure + function joint reasoning) +
+# ESM Cambrian (lightweight protein representation embeddings).
+# Closes the EvolutionaryScale lineup at 4 tools alongside ESMFold
+# (Phase 17.5) and ESM-IF (Phase 27.5).
+valenx-adapter-esm3        = { path = "../valenx-adapters/bio/valenx-adapter-esm3" }
+valenx-adapter-esmc        = { path = "../valenx-adapters/bio/valenx-adapter-esmc" }
+
+# Biology (Phase 32) — systems biology / multiscale modeling: COPASI
+# (biochemical pathway / ODE), BioNetGen (rule-based signaling
+# networks), PhysiCell (agent-based multicellular tissue).
+valenx-adapter-copasi      = { path = "../valenx-adapters/bio/valenx-adapter-copasi" }
+valenx-adapter-bionetgen   = { path = "../valenx-adapters/bio/valenx-adapter-bionetgen" }
+valenx-adapter-physicell   = { path = "../valenx-adapters/bio/valenx-adapter-physicell" }
+
+# Biology (Phase 36) — cryo-EM reconstruction: RELION (Bayesian
+# 3D refinement), EMAN2 (broad-spectrum image processing), CTFFIND
+# (CTF estimation, academic-license-flagged).
+valenx-adapter-relion      = { path = "../valenx-adapters/bio/valenx-adapter-relion" }
+valenx-adapter-eman2       = { path = "../valenx-adapters/bio/valenx-adapter-eman2" }
+valenx-adapter-ctffind     = { path = "../valenx-adapters/bio/valenx-adapter-ctffind" }
+
+# Biology (Phase 31) — sequencing read simulators: ART (Illumina),
+# wgsim (classic short-read), Badread (Nanopore long-read).
+valenx-adapter-art         = { path = "../valenx-adapters/bio/valenx-adapter-art" }
+valenx-adapter-wgsim       = { path = "../valenx-adapters/bio/valenx-adapter-wgsim" }
+valenx-adapter-badread     = { path = "../valenx-adapters/bio/valenx-adapter-badread" }
+
+# Biology (Phase 35) — CRISPR design: CHOPCHOP (guide design,
+# Python), CRISPOR (guide design + off-target prediction, Python),
+# Cas-OFFinder (single-binary off-target searcher).
+valenx-adapter-chopchop    = { path = "../valenx-adapters/bio/valenx-adapter-chopchop" }
+valenx-adapter-crispor     = { path = "../valenx-adapters/bio/valenx-adapter-crispor" }
+valenx-adapter-cas-offinder = { path = "../valenx-adapters/bio/valenx-adapter-cas-offinder" }
+
+# Biology (Phase 38) — Rosetta family: rosetta_scripts (XML-driven
+# protocol runner) + PyRosetta (Python wrapper). Both academic-
+# license-flagged via probe warnings.
+valenx-adapter-rosetta     = { path = "../valenx-adapters/bio/valenx-adapter-rosetta" }
+valenx-adapter-pyrosetta   = { path = "../valenx-adapters/bio/valenx-adapter-pyrosetta" }
+
+# Biology (Phase 29) — population genetics / evolutionary simulation:
+# SLiM (forward-time, Eidos), msprime (coalescent backward-time,
+# Python), tskit (tree-sequence analysis, Python).
+valenx-adapter-slim        = { path = "../valenx-adapters/bio/valenx-adapter-slim" }
+valenx-adapter-msprime     = { path = "../valenx-adapters/bio/valenx-adapter-msprime" }
+valenx-adapter-tskit       = { path = "../valenx-adapters/bio/valenx-adapter-tskit" }
+
+# Biology (Phase 30.5) — Bayesian phylogenetics: BEAST 2 (XML-driven
+# MCMC) + MrBayes (NEXUS-driven MCMC). Sister to Phase 30 ML methods.
+valenx-adapter-beast2      = { path = "../valenx-adapters/bio/valenx-adapter-beast2" }
+valenx-adapter-mrbayes     = { path = "../valenx-adapters/bio/valenx-adapter-mrbayes" }
+
+# Biology (Phase 39) — DNA structural geometry: X3DNA + Curves+ +
+# DSSR. All academic-license-flagged via probe warnings.
+valenx-adapter-x3dna       = { path = "../valenx-adapters/bio/valenx-adapter-x3dna" }
+valenx-adapter-curves      = { path = "../valenx-adapters/bio/valenx-adapter-curves" }
+valenx-adapter-dssr        = { path = "../valenx-adapters/bio/valenx-adapter-dssr" }
+
+# Biology (Phase 5.5) — MD analysis expansion: PLUMED (enhanced
+# sampling), ProDy (protein dynamics + ENM), cpptraj (AmberTools
+# trajectory analysis). Sister to Phase 17 MDAnalysis.
+valenx-adapter-plumed      = { path = "../valenx-adapters/bio/valenx-adapter-plumed" }
+valenx-adapter-prody       = { path = "../valenx-adapters/bio/valenx-adapter-prody" }
+valenx-adapter-cpptraj     = { path = "../valenx-adapters/bio/valenx-adapter-cpptraj" }
+
+# Biology (Phase 33) — synthetic biology / genetic-circuit design:
+# pySBOL (SBOL Python toolkit), j5 (DNA assembly automation, JAR),
+# Cello (genetic-circuit DNA compiler, JAR).
+valenx-adapter-pysbol      = { path = "../valenx-adapters/bio/valenx-adapter-pysbol" }
+valenx-adapter-j5          = { path = "../valenx-adapters/bio/valenx-adapter-j5" }
+valenx-adapter-cello       = { path = "../valenx-adapters/bio/valenx-adapter-cello" }
+
+# Biology (Phase 18.7) — alignment toolkit expansion: BLAST+ (NCBI's
+# seminal nucleotide / protein search), Clustal Omega (modern MSA),
+# T-Coffee (consensus / library-based MSA).
+valenx-adapter-blast       = { path = "../valenx-adapters/bio/valenx-adapter-blast" }
+valenx-adapter-clustalo    = { path = "../valenx-adapters/bio/valenx-adapter-clustalo" }
+valenx-adapter-tcoffee     = { path = "../valenx-adapters/bio/valenx-adapter-tcoffee" }
+
+# Biology (Phase 19.6) — single-cell genomics expansion: Seurat
+# (R-based — Rscript subprocess pattern, the R analogue of biopython
+# / scanpy / pysbol's Python-script pattern) + AnnData (Python — the
+# canonical scverse HDF5 .h5ad data container).
+valenx-adapter-seurat      = { path = "../valenx-adapters/bio/valenx-adapter-seurat" }
+valenx-adapter-anndata     = { path = "../valenx-adapters/bio/valenx-adapter-anndata" }
+
+# Biology (Phase 5.6) — bio MD engines: NAMD (UIUC, academic-licensed),
+# AmberTools sander (OSS portion of AMBER), HOOMD-blue (Glotzer lab,
+# GPU-native particle MD).
+valenx-adapter-namd          = { path = "../valenx-adapters/bio/valenx-adapter-namd" }
+valenx-adapter-amber-sander  = { path = "../valenx-adapters/bio/valenx-adapter-amber-sander" }
+valenx-adapter-hoomd         = { path = "../valenx-adapters/bio/valenx-adapter-hoomd" }
+
+# Biology (Phase 5.7) — MD analysis sister: MDTraj (Pande/Beauchamp
+# lab, sister to Phase 17 MDAnalysis with wider format support).
+valenx-adapter-mdtraj        = { path = "../valenx-adapters/bio/valenx-adapter-mdtraj" }
+
+# Biology (Phase 17.7) — structure prediction + search: RoseTTAFold
+# (Baker lab, original 3-track network), OmegaFold (HelixonAI, single-
+# sequence prediction without MSA), FoldSeek (Steinegger lab, structure
+# search via 3Di alphabet — the 3D analogue of MMseqs2).
+valenx-adapter-rosettafold   = { path = "../valenx-adapters/bio/valenx-adapter-rosettafold" }
+valenx-adapter-omegafold     = { path = "../valenx-adapters/bio/valenx-adapter-omegafold" }
+valenx-adapter-foldseek      = { path = "../valenx-adapters/bio/valenx-adapter-foldseek" }
+
+# Biology (Phase 32.5) — spatial stochastic reaction-diffusion:
+# Smoldyn (Andrews lab) + MCell (Salk Institute Stiles/Bartol).
+# Sister to Phase 32 systems biology.
+valenx-adapter-smoldyn       = { path = "../valenx-adapters/bio/valenx-adapter-smoldyn" }
+valenx-adapter-mcell         = { path = "../valenx-adapters/bio/valenx-adapter-mcell" }
+
+# Biology (Phase 41) — sequence editors / plasmid design: pydna
+# (Python plasmid / clone-design library) + Jalview (Java alignment
+# viewer with headless mode).
+valenx-adapter-pydna         = { path = "../valenx-adapters/bio/valenx-adapter-pydna" }
+valenx-adapter-jalview       = { path = "../valenx-adapters/bio/valenx-adapter-jalview" }
+
+# Biology (Phase 40) — microscopy / bioimage analysis: Fiji
+# (ImageJ headless), CellProfiler (Broad Institute pipeline-driven
+# segmentation), Ilastik (interactive ML pixel/object classification).
+valenx-adapter-fiji          = { path = "../valenx-adapters/bio/valenx-adapter-fiji" }
+valenx-adapter-cellprofiler  = { path = "../valenx-adapters/bio/valenx-adapter-cellprofiler" }
+valenx-adapter-ilastik       = { path = "../valenx-adapters/bio/valenx-adapter-ilastik" }
+
+# Biology (Phase 22.5) — workflow expansion: Planemo (Galaxy
+# ecosystem CLI), Cromwell (Broad WDL workflow engine, JAR),
+# cwltool (Common Workflow Language reference runner, Python).
+valenx-adapter-planemo       = { path = "../valenx-adapters/bio/valenx-adapter-planemo" }
+valenx-adapter-cromwell      = { path = "../valenx-adapters/bio/valenx-adapter-cromwell" }
+valenx-adapter-cwltool       = { path = "../valenx-adapters/bio/valenx-adapter-cwltool" }
+
+# Biology (Phase 42) — modern web 3D molecular visualization:
+# Mol* (PDBe / RCSB WebGL viewer) and NGL Viewer (Rose lab WebGL
+# framework). Both wrapped via their Python bindings (molstar /
+# nglview) so they slot into the established Python-script subprocess
+# pattern.
+valenx-adapter-molstar       = { path = "../valenx-adapters/bio/valenx-adapter-molstar" }
+valenx-adapter-ngl           = { path = "../valenx-adapters/bio/valenx-adapter-ngl" }
+
+# Biology (Phase 43) — mRNA design: DNA Chisel (Edinburgh Genome
+# Foundry codon optimization), LinearDesign (Baidu joint codon +
+# secondary-structure mRNA design), iCodon (codon-level mRNA
+# stability prediction, R-based).
+valenx-adapter-dnachisel     = { path = "../valenx-adapters/bio/valenx-adapter-dnachisel" }
+valenx-adapter-lineardesign  = { path = "../valenx-adapters/bio/valenx-adapter-lineardesign" }
+valenx-adapter-icodon        = { path = "../valenx-adapters/bio/valenx-adapter-icodon" }
+
+# Biology (Phase 44.5) — RNA folding expansion: mfold (Zuker
+# classic), EternaFold (ML-aware), LinearFold (Baidu, sister to
+# LinearDesign).
+valenx-adapter-mfold         = { path = "../valenx-adapters/bio/valenx-adapter-mfold" }
+valenx-adapter-eternafold    = { path = "../valenx-adapters/bio/valenx-adapter-eternafold" }
+valenx-adapter-linearfold    = { path = "../valenx-adapters/bio/valenx-adapter-linearfold" }
+
+# Biology (Phase 35.5) — base + prime editing design: BE-Designer
+# (base editor guides), BE-Hive (Liu lab outcome predictor),
+# PrimeDesign (Liu lab prime editing), pegFinder (Komor lab).
+valenx-adapter-be-designer   = { path = "../valenx-adapters/bio/valenx-adapter-be-designer" }
+valenx-adapter-be-hive       = { path = "../valenx-adapters/bio/valenx-adapter-be-hive" }
+valenx-adapter-primedesign   = { path = "../valenx-adapters/bio/valenx-adapter-primedesign" }
+valenx-adapter-pegfinder     = { path = "../valenx-adapters/bio/valenx-adapter-pegfinder" }
+
+# Biology (Phase 35.6) — edit-outcome prediction: inDelphi (indel
+# patterns at Cas9 cuts), FORECasT (alternative indel predictor),
+# AlphaMissense (DeepMind missense effects, academic-licensed),
+# CRISPRitz (off-target search).
+valenx-adapter-indelphi      = { path = "../valenx-adapters/bio/valenx-adapter-indelphi" }
+valenx-adapter-forecast      = { path = "../valenx-adapters/bio/valenx-adapter-forecast" }
+valenx-adapter-alphamissense = { path = "../valenx-adapters/bio/valenx-adapter-alphamissense" }
+valenx-adapter-crispritz     = { path = "../valenx-adapters/bio/valenx-adapter-crispritz" }
+
+# Biology (Phase 45) — pharmacokinetics + RNA tertiary structure:
+# PK-Sim (Open Systems Pharmacology PBPK), SimRNA (3D RNA folding).
+valenx-adapter-pksim         = { path = "../valenx-adapters/bio/valenx-adapter-pksim" }
+valenx-adapter-simrna        = { path = "../valenx-adapters/bio/valenx-adapter-simrna" }
+
+# Crash reporter — panic hook is installed at startup in `run()`.
+# The crate is dep-light (serde + tracing only) and pulls into
+# every workspace member that wants to capture panics.
+valenx-crash-reporter      = { path = "../valenx-crash-reporter" }
+
+# First-run wizard logic — pure state machine + per-OS install
+# hints. The egui dialog that renders an `EnvironmentReport`
+# lives in `src/first_run.rs`.
+valenx-first-run           = { path = "../valenx-first-run" }
+valenx-i18n                = { path = "../valenx-i18n" }
+
+# whoami: OS-canonical username lookup (GetUserNameW on Windows,
+# getpwuid_r on Unix). Used by `audit::current_actor_id` so the
+# user-mutable `$USER` env var can't spoof the audit-log actor / RBAC
+# gate on Windows. Round-11 R11-1 fix — pre-fix the function consulted
+# `$USER` first, which let an unprivileged Windows shell `set
+# USER=admin@example.com` and bypass both. License is
+# Apache-2.0 OR BSL-1.0 OR MIT (all in deny.toml allow-list).
+whoami = "2.1.1"
+
+[dev-dependencies]
+# Used by the run-orchestration unit test's dummy adapter.
+semver   = { workspace = true }
+# Viewport tests build small canonical meshes directly.
+nalgebra = { workspace = true }
+# tempfile lets settings tests create real on-disk directories so
+# `push_recent_project`'s canonicalisation branch (which only fires
+# when the path actually exists) gets exercised. Pinned to 3.x; the
+# crate is already in the lockfile as a transitive dep of rfd ->
+# ashpd -> zbus -> uds_windows, so no new tree.
+tempfile = "3"
+# pollster: a minimal block-on executor for the headless GPU render
+# test (wgpu_renderer's `headless_ui_tests`). `wgpu`'s
+# request_adapter / request_device / buffer-map are `async`; the test
+# is synchronous, so it blocks on them with pollster. Pinned to 0.3
+# to match the version `wgpu` (via eframe) already resolves — no new
+# transitive tree.
+pollster = "0.3"
+# naga: the WGSL front-end + validator wgpu runs inside
+# create_shader_module. The wgpu_renderer headless test validates the
+# private viewport `SHADER_WGSL` with it (GPU-free shader-soundness
+# proof). Pinned to 0.20 to match the version wgpu 0.20 (via eframe)
+# already resolves in the lockfile.
+naga = { version = "0.20", features = ["wgsl-in"] }
+# png: pure-Rust PNG encoder used by the `headless_screenshots`
+# integration test to write workbench panel renders to disk. Pinned to
+# 0.18 to match the version eframe's transitive image stack
+# (eframe -> image 0.25 -> png 0.18) already resolves — no new tree.
+png = "0.18"
+
+# ===========================================================================
+# Build-script dependencies — embed-resource compiles the per-target
+# .rc file produced by `build.rs` so the Valenx app icon ships inside
+# valenx.exe's PE resource section. Gated on cfg(windows) so the
+# Linux + macOS workspace builds never pull this dependency into the
+# graph.
+# ===========================================================================
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3.0"
+
+# ===========================================================================
+# Packaging metadata — feeds the release pipeline in
+# .github/workflows/release.yml. Each [package.metadata.<tool>] block
+# is read by the matching cargo-* helper at package time.
+# ===========================================================================
+
+# cargo-wix (Windows .msi via WiX 3.x).
+# Run: `cargo wix -p valenx-app` (after `cargo build --release`).
+# The custom template at `wix/main.wxs` is picked up automatically
+# because it sits at the standard cargo-wix path; we don't need
+# `template = "..."` here. `upgrade-guid` MUST match the UpgradeCode
+# attribute on the <Product> element in main.wxs so cargo-wix can
+# verify the contract.
+[package.metadata.wix]
+# Stable UpgradeCode - identical to the UpgradeCode attribute on
+# <Product> in wix/main.wxs. Windows uses this to recognise that a
+# new MSI is an upgrade of the same product (rather than a parallel
+# install). Never regenerate.
+upgrade-guid = "7530132B-431C-4F23-B9B3-2744F5BE49E1"
+# Per-build path-component GUID seed cargo-wix uses for any auto-
+# generated component IDs. We hand-author every component in the
+# template, but cargo-wix still requires this key.
+path-guid    = "63D5237D-A0CA-4114-9B6B-B0AC2A6D6CC2"
+# OSS - no end-user licence agreement dialog. Valenx is dual-licensed
+# under MIT OR Apache-2.0; both licence files ship in README + Program
+# Files\Valenx after install (LICENSE-MIT, LICENSE-APACHE).
+license      = false
+eula         = false
+
+# cargo-bundle (macOS .app + Windows .exe wrapper).
+# Run: `cargo bundle --release` — produces target/release/bundle/<os>/.
+[package.metadata.bundle]
+name = "Valenx"
+identifier = "io.valenx.app"
+# Multi-resolution Apple Icon Image. Built by scripts/build_icns.py
+# (Python + Pillow); ships the brand mark in every size from 16 to
+# 1024 px so Finder + Dock + Launchpad + Cmd-Tab all render crisp at
+# 1x and 2x Retina. cargo-bundle copies this into
+# Valenx.app/Contents/Resources/AppIcon.icns and writes the matching
+# CFBundleIconFile entry into Info.plist. Path is relative to this
+# Cargo.toml.
+icon = ["../../packaging/macos/valenx.icns"]
+# Round-5 fix: bundle both LICENSE files into the .app's Resources/
+# directory so end-users opening Valenx.app on macOS can read the
+# licence text from Contents/Resources/ without hunting through the
+# source repo. cargo-bundle copies these verbatim into
+# Valenx.app/Contents/Resources/LICENSE-MIT and ...LICENSE-APACHE.
+resources = [
+    "../../LICENSE-MIT",
+    "../../LICENSE-APACHE",
+]
+short_description = "Native open-source desktop simulation + life-science suite"
+long_description = """
+Valenx unifies a stack of open-source simulation tools behind one
+Rust-native desktop shell — no browser, no subscription, no
+vendor lock-in. 141 live adapters total, including 123 biology +
+18 physics / chemistry / MD wrappers across the simulation surface
+(OpenFOAM, SU2, CalculiX, Code_Aster, Elmer, OpenRadioss, openEMS,
+Meep, PyBaMM, MuJoCo, preCICE, …) plus sequence alignment, variant
+calling, structure prediction (AlphaFold 2/3, ESMFold, OpenFold,
+RoseTTAFold, ColabFold), protein design (RFdiffusion, ProteinMPNN,
+ESM-IF, Chroma), CRISPR + base/prime editing design, RNA secondary
++ tertiary structure, mRNA design, cryo-EM, microscopy,
+phylogenetics, population genetics, quantum chemistry, molecular
+dynamics, single-cell omics, docking, systems biology, and
+reproducible-workflow runners. Ships a headless CLI suite for CI
+gates and reproducible pipelines.
+"""
+copyright = "MIT OR Apache-2.0 — see LICENSE-MIT and LICENSE-APACHE"
+category = "Education"
+osx_minimum_system_version = "11.0"
+
+# cargo-deb (Debian / Ubuntu .deb package).
+# Run: `cargo deb -p valenx-app` — produces target/debian/*.deb.
+[package.metadata.deb]
+name = "valenx"
+maintainer = "Valenx maintainers <maintainers@valenx.io>"
+section = "science"
+priority = "optional"
+extended-description = """\
+Valenx unifies a stack of open-source simulation tools behind one
+Rust-native desktop shell — no browser, no subscription, no
+vendor lock-in. 141 live adapters total, including 123 biology +
+18 physics / chemistry / MD wrappers across the simulation surface
+(OpenFOAM, SU2, CalculiX, Code_Aster, Elmer, OpenRadioss, openEMS,
+Meep, PyBaMM, MuJoCo, preCICE, …) plus sequence alignment,
+variant calling, structure prediction (AlphaFold 2/3, ESMFold,
+OpenFold, RoseTTAFold, ColabFold), protein design (RFdiffusion,
+ProteinMPNN, ESM-IF, Chroma), CRISPR + base/prime editing design,
+RNA secondary + tertiary structure, mRNA design (LinearDesign,
+DNA Chisel), cryo-EM (RELION, EMAN2, CTFFIND), microscopy,
+phylogenetics, population genetics, quantum chemistry, molecular
+dynamics, single-cell omics, docking, systems biology, and
+reproducible-workflow runners (Snakemake, Nextflow, Cromwell,
+cwltool). Ships a headless CLI suite (valenx, valenx-init,
+valenx-validate, valenx-mesh-info, valenx-audit, valenx-results,
+valenx-report) for CI gates and reproducible pipelines."""
+depends = "$auto, libgl1, libwayland-client0, libxkbcommon0"
+assets = [
+    ["target/release/valenx", "usr/bin/", "755"],
+    ["target/release/valenx-init", "usr/bin/", "755"],
+    ["target/release/valenx-validate", "usr/bin/", "755"],
+    ["target/release/valenx-mesh-info", "usr/bin/", "755"],
+    ["target/release/valenx-audit", "usr/bin/", "755"],
+    ["target/release/valenx-results", "usr/bin/", "755"],
+    ["target/release/valenx-report", "usr/bin/", "755"],
+    ["../../README.md", "usr/share/doc/valenx/README.md", "644"],
+    ["../../LICENSE-MIT", "usr/share/doc/valenx/LICENSE-MIT", "644"],
+    ["../../LICENSE-APACHE", "usr/share/doc/valenx/LICENSE-APACHE", "644"],
+    # Desktop integration: the .desktop entry is what makes Valenx
+    # appear in GNOME / KDE / XFCE / Unity application menus; the
+    # icons land under the freedesktop hicolor theme so the bare
+    # `Icon=valenx` reference in the .desktop file resolves to
+    # whichever pixel density the launcher needs.
+    ["../../packaging/linux/valenx.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/linux/valenx-256.png", "usr/share/icons/hicolor/256x256/apps/valenx.png", "644"],
+    ["../../packaging/linux/valenx.svg",     "usr/share/icons/hicolor/scalable/apps/valenx.svg", "644"],
+]
+
+# cargo-generate-rpm (RPM-based distros — Fedora, RHEL, openSUSE).
+# Run: `cargo build --release && cargo generate-rpm -p crates/valenx-app`.
+# Asset paths use a sane $RPM_BUILD_ROOT layout.
+[package.metadata.generate-rpm]
+name = "valenx"
+license = "MIT OR Apache-2.0"
+summary = "Native open-source desktop simulation suite"
+# RPM disallows '-' in version strings (allowed: alphanumeric, '.',
+# '_', '+', '%', '{', '}', '~', '^'). Pre-release SemVer like
+# `0.1.0-alpha.1` therefore needs to be transliterated to the RPM
+# convention `0.1.0~alpha.1` — the tilde sorts BEFORE the final
+# `0.1.0` release, matching SemVer pre-release ordering. cargo-
+# generate-rpm reads this override field; without it the version is
+# inferred from [workspace.package].version which contains the
+# rejected '-' character. Re-update when bumping the workspace
+# version (e.g. `0.1.0-beta.1` → `0.1.0~beta.1`).
+version = "0.1.0~alpha.1"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/valenx"
+dest = "/usr/bin/valenx"
+mode = "0755"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/valenx-init"
+dest = "/usr/bin/valenx-init"
+mode = "0755"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/valenx-validate"
+dest = "/usr/bin/valenx-validate"
+mode = "0755"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/valenx-mesh-info"
+dest = "/usr/bin/valenx-mesh-info"
+mode = "0755"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/valenx-audit"
+dest = "/usr/bin/valenx-audit"
+mode = "0755"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/valenx-results"
+dest = "/usr/bin/valenx-results"
+mode = "0755"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/valenx-report"
+dest = "/usr/bin/valenx-report"
+mode = "0755"
+[[package.metadata.generate-rpm.assets]]
+source = "../../README.md"
+dest = "/usr/share/doc/valenx/README.md"
+mode = "0644"
+[[package.metadata.generate-rpm.assets]]
+source = "../../LICENSE-MIT"
+dest = "/usr/share/doc/valenx/LICENSE-MIT"
+mode = "0644"
+[[package.metadata.generate-rpm.assets]]
+source = "../../LICENSE-APACHE"
+dest = "/usr/share/doc/valenx/LICENSE-APACHE"
+mode = "0644"
+# Desktop integration — mirrors the cargo-deb assets block above so
+# the RPM install lands Valenx in the GNOME / KDE / XFCE application
+# menus too, with the freedesktop hicolor theme resolving the bare
+# `Icon=valenx` reference to either the 256x256 raster (older
+# launchers) or the SVG (modern HiDPI launchers).
+[[package.metadata.generate-rpm.assets]]
+source = "../../packaging/linux/valenx.desktop"
+dest = "/usr/share/applications/valenx.desktop"
+mode = "0644"
+[[package.metadata.generate-rpm.assets]]
+source = "../../packaging/linux/valenx-256.png"
+dest = "/usr/share/icons/hicolor/256x256/apps/valenx.png"
+mode = "0644"
+[[package.metadata.generate-rpm.assets]]
+source = "../../packaging/linux/valenx.svg"
+dest = "/usr/share/icons/hicolor/scalable/apps/valenx.svg"
+mode = "0644"

@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-reinforcement"
+description = "Reinforcement workbench (Phase 33) — parametric concrete rebar (Straight / L / U / Hook / Spiral shapes), grade selection (40/60/75 ksi), cage generators for beams / columns / slabs, and a mesh emitter for the viewport. The FreeCAD Reinforcement community workbench analogue and the structural sister to Phase 15 Arch concrete."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

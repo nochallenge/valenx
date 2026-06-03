@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "beast2.mcmc"
+mesh    = "(none)"
+
+# BEAST 2 Bayesian MCMC phylogenetic inference. Drop the BEAUti-
+# generated `.xml` config alongside this case.toml. Use `seed`
+# for reproducible runs; `overwrite` lets you re-run without
+# moving the previous .log/.trees outputs first.
+[bio.beast2]
+xml         = "model.xml"
+# seed      = 42
+threads     = 1
+overwrite   = false
+extra_args  = []

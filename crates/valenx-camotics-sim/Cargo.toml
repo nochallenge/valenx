@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-camotics-sim"
+description = "CAMotics-style animated material-removal simulation (Phase 56). Wraps the Phase 17 voxel grid + cut algorithm in an Animation type that emits per-frame meshes + MRR metadata."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+nalgebra    = { workspace = true }
+ron         = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+valenx-cam  = { path = "../valenx-cam" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,33 @@
+[package]
+name        = "valenx-occt-surface"
+description = "OpenCASCADE (OCCT) surface-modeling feature parity for Valenx (Phases 70-100). Provides Rust-native signatures + scaffolding for 31 OCCT BRep*/GeomFill_*/Approx_*/sweep/feature-based APIs. v1 implements the operations that map cleanly onto truck-modeling / valenx-cad / valenx-surface; the rest return `OcctSurfaceError::NotYetImplemented` with rustdoc describing what real OCCT does and which follow-up phase will deliver the deep implementation."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+# Direct BRep builder access for the prim_api_* / sweep_api_* phases
+# that need rsweep / rigid transforms beyond what valenx-cad re-exports.
+truck-modeling = { workspace = true }
+
+valenx-cad       = { path = "../valenx-cad" }
+valenx-mesh      = { path = "../valenx-mesh" }
+valenx-surface   = { path = "../valenx-surface" }
+# Mesh-domain CSG fallback for the feat_make_* feature ops when the
+# BRep boolean path is unavailable (mesh-backed operand) or fails.
+valenx-cgal-port = { path = "../valenx-cgal-port" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

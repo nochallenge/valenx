@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "mafft.msa"
+mesh    = "(none)"
+
+# MAFFT multiple-sequence alignment. Strategy values: auto
+# (default — picks linsi / fftns by size), linsi / ginsi / einsi
+# (high-accuracy, ≤200 sequences), fftns1/2 / fftnsi (fast).
+# Threads = -1 lets MAFFT auto-detect.
+[bio.mafft]
+input      = "in.fa"
+strategy   = "auto"
+threads    = 1
+extra_args = []

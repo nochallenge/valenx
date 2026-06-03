@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "rosetta.protocol"
+mesh    = "(none)"
+
+# Rosetta protein modeling via rosetta_scripts. NOTE: Rosetta is
+# licensed for non-commercial / academic use only — confirm your
+# use case complies with the RosettaCommons license. The XML
+# protocol drives all sub-protocols (relax / dock / abinitio /
+# design / etc.). `database` is the path to Rosetta's main
+# database (`ROSETTA3_DB` env var equivalent).
+[bio.rosetta]
+protocol         = "design.xml"
+input_pdb        = "input.pdb"
+output_basename  = "design"
+nstruct          = 10
+database         = "/path/to/rosetta/main/database"
+extra_args       = []

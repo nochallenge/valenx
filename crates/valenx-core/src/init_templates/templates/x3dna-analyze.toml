@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "x3dna.analyze"
+mesh    = "(none)"
+
+# X3DNA DNA base-step parameter calculation. NOTE: X3DNA is
+# licensed for non-commercial / academic use only. Drop your PDB
+# alongside this case.toml. Outputs (`.par`, `.out`) land in the
+# workdir.
+[bio.x3dna]
+input_pdb        = "structure.pdb"
+output_basename  = "analysis"
+extra_args       = []

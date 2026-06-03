@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "gatk.haplotype-caller"
+mesh    = "(none)"
+
+# GATK HaplotypeCaller. The reference FASTA must be indexed
+# (`.fai` from samtools faidx + `.dict` from `gatk
+# CreateSequenceDictionary`). The input BAM must be sorted +
+# indexed. Optional `intervals` BED restricts calling to specific
+# regions. `java_heap` is e.g. "8g" / "16g" / "512m".
+[bio.gatk]
+reference   = "ref.fa"
+input_bam   = "aligned.sorted.bam"
+output_vcf  = "variants.vcf"
+java_heap   = "8g"
+extra_args  = []

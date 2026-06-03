@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "mmseqs2.search"
+mesh    = "(none)"
+
+# MMseqs2 fast protein search + clustering. Action is
+# `easy-search` / `easy-linsearch` / `easy-cluster`.
+# `target` is required for search modes, ignored for cluster.
+# `sensitivity` is 1.0..=7.5 (7.5 = max sensitivity, default).
+[bio.mmseqs2]
+action      = "easy-search"
+query       = "query.fa"
+target      = "target.fa"
+output      = "results.tsv"
+sensitivity = 7.5
+threads     = 1
+extra_args  = []

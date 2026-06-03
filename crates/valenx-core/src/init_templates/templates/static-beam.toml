@@ -1,0 +1,9 @@
+physics = "fea"
+solver  = "code_aster.as_run"
+mesh    = "(none)"
+
+# Drop your .export, .comm, and .mmed (or .med) into this case
+# directory. The .export references the .comm + mesh by basename
+# and the adapter stages every file alongside it into the workdir.
+[fea.code_aster]
+export = "static.export"

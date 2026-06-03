@@ -1,0 +1,248 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+  Valenx - Windows installer (WiX 3.x, built by cargo-wix).
+
+  This template is checked-in (it replaces the default produced by
+  `cargo wix init`). The release pipeline at
+  `.github/workflows/release.yml` is configured to only run
+  `cargo wix init` when this file is missing, so editing here is safe.
+
+  What it produces:
+
+  * Per-machine install (`InstallScope perMachine`) into
+    `%ProgramFiles%\Valenx\` (64-bit; the app is x86_64).
+  * A `Valenx` group under the Start Menu containing a `Valenx.lnk`
+    shortcut that points at the installed `valenx.exe`. This is the
+    shortcut that lets users pin Valenx to Start or taskbar; Windows
+    only allows pinning from Start Menu entries (or other shortcuts),
+    not from raw .exe files in Program Files.
+  * An optional `Valenx.lnk` on the user's desktop, controlled by the
+    `INSTALLDESKTOPSHORTCUT` property (1 = create, 0 = skip). The
+    WixUI_InstallDir flow surfaces this as a checkbox on the install
+    dialog.
+  * `ARPPRODUCTICON` so Add/Remove Programs shows the Valenx icon.
+  * `MajorUpgrade` so re-running the installer with a newer version
+    cleanly replaces the old install (no orphan side-by-side copies).
+  * `WixUI_InstallDir` UI with the licence text suppressed. Valenx is
+    dual-licensed under MIT OR Apache-2.0; both licence files already
+    ship in README and Program Files\Valenx (LICENSE-MIT,
+    LICENSE-APACHE), so a EULA dialog is overkill for OSS.
+
+  GUIDs:
+
+  All GUIDs below were freshly generated for the Valenx product and
+  MUST NOT be re-used by any other product. The `UpgradeCode` in
+  particular is the stable identifier Windows uses to recognise
+  "this is a newer copy of the same app", so it MUST stay stable
+  across all future releases; never regenerate it.
+
+    UpgradeCode (stable):   7530132B-431C-4F23-B9B3-2744F5BE49E1
+    Product   (per build):  *  (cargo-wix substitutes a new one each build)
+    Component valenx.exe:   63D5237D-A0CA-4114-9B6B-B0AC2A6D6CC2
+    Component StartMenu:    AC45D57D-2565-41E7-A3C6-6C0DE877D3D8
+    Component Desktop:      55163810-C628-4BF4-8ACC-ADB6B02FA8AA
+    Component Docs (top):   EA400BDF-0CD8-4A1E-892E-4A529C53702F  (README + CHANGELOG)
+    Component Docs (sub):   4EA96C50-032C-4F7D-977B-DD5FB60BEE0F  (docs\INSTALLER.md)
+    Component Licenses:     3D5A9BC4-7E11-49F2-A4D7-1C2F8E04C2A1  (LICENSE-MIT + LICENSE-APACHE)
+-->
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+
+    <Product
+        Id='*'
+        Name='Valenx'
+        UpgradeCode='7530132B-431C-4F23-B9B3-2744F5BE49E1'
+        Manufacturer='Valenx'
+        Language='1033'
+        Codepage='1252'
+        Version='$(var.Version)'>
+
+        <Package Id='*'
+            Keywords='Installer'
+            Description='Native open-source desktop simulation suite'
+            Manufacturer='Valenx'
+            InstallerVersion='450'
+            Languages='1033'
+            Compressed='yes'
+            InstallScope='perMachine'
+            SummaryCodepage='1252'/>
+
+        <MajorUpgrade
+            Schedule='afterInstallInitialize'
+            DowngradeErrorMessage='A newer version of Valenx is already installed. Setup will now exit.'/>
+
+        <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
+        <Property Id='DiskPrompt' Value='Valenx Installation'/>
+
+        <!-- Add/Remove Programs metadata. -->
+        <Icon Id='ProductIcon' SourceFile='wix\valenx.ico'/>
+        <Property Id='ARPPRODUCTICON'  Value='ProductIcon'/>
+        <Property Id='ARPHELPLINK'     Value='https://github.com/nochallenge/valenx'/>
+        <Property Id='ARPURLINFOABOUT' Value='https://github.com/nochallenge/valenx'/>
+        <!-- Hide the "Modify" button; installer has no per-feature toggles. -->
+        <Property Id='ARPNOMODIFY' Value='yes'/>
+
+        <!-- Desktop-shortcut toggle. Default 1 (create); users can
+             uncheck the box in the InstallDir dialog or override via
+             msiexec /i Valenx.msi INSTALLDESKTOPSHORTCUT=0. -->
+        <Property Id='INSTALLDESKTOPSHORTCUT' Value='1' Secure='yes'/>
+
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <!-- Per-machine install root. ProgramFiles64Folder = x64
+                 Program Files; APPLICATIONFOLDER is the canonical
+                 cargo-wix install destination and the property
+                 WixUI_InstallDir hooks INSTALLDIR onto. -->
+            <Directory Id='ProgramFiles64Folder' Name='PFiles'>
+                <Directory Id='APPLICATIONFOLDER' Name='Valenx'>
+                    <Component Id='Cmp_ValenxExe'
+                        Guid='63D5237D-A0CA-4114-9B6B-B0AC2A6D6CC2'
+                        Win64='yes'>
+                        <File Id='File_ValenxExe'
+                            Name='valenx.exe'
+                            DiskId='1'
+                            Source='target\release\valenx.exe'
+                            KeyPath='yes'/>
+                    </Component>
+                    <!--
+                      Documentation files installed alongside valenx.exe.
+                      Lets `landing_page::local_doc_or_url` on Windows
+                      resolve README.md / CHANGELOG.md / docs/INSTALLER.md
+                      to on-disk files (so the Learn-more / What's-new
+                      / Documentation links open the local copies).
+                      Without these, the Windows install was missing
+                      every doc and `local_doc_or_url` always fell
+                      through to the repo URL.
+                    -->
+                    <Component Id='Cmp_Docs'
+                        Guid='EA400BDF-0CD8-4A1E-892E-4A529C53702F'
+                        Win64='yes'>
+                        <File Id='File_Readme'
+                            Name='README.md'
+                            DiskId='1'
+                            Source='..\..\README.md'
+                            KeyPath='yes'/>
+                        <File Id='File_Changelog'
+                            Name='CHANGELOG.md'
+                            DiskId='1'
+                            Source='..\..\CHANGELOG.md'/>
+                    </Component>
+                    <!--
+                      Round-5 fix: ship both LICENSE files (MIT and
+                      Apache-2.0) alongside the install root. The
+                      previous .msi only included README + CHANGELOG —
+                      users who installed via .msi never saw the
+                      licence text on disk, even though the Cargo.toml
+                      [package.metadata.wix] block comment claimed
+                      they did.
+                      GUIDs hand-rolled following the same scheme as
+                      every other component in this file: standard
+                      8-4-4-4-12 hex from a fresh nonce. Never re-use.
+                    -->
+                    <Component Id='Cmp_Licenses'
+                        Guid='3D5A9BC4-7E11-49F2-A4D7-1C2F8E04C2A1'
+                        Win64='yes'>
+                        <File Id='File_LicenseMit'
+                            Name='LICENSE-MIT'
+                            DiskId='1'
+                            Source='..\..\LICENSE-MIT'
+                            KeyPath='yes'/>
+                        <File Id='File_LicenseApache'
+                            Name='LICENSE-APACHE'
+                            DiskId='1'
+                            Source='..\..\LICENSE-APACHE'/>
+                    </Component>
+                    <Directory Id='DocsFolder' Name='docs'>
+                        <Component Id='Cmp_DocsInstaller'
+                            Guid='4EA96C50-032C-4F7D-977B-DD5FB60BEE0F'
+                            Win64='yes'>
+                            <File Id='File_InstallerMd'
+                                Name='INSTALLER.md'
+                                DiskId='1'
+                                Source='..\..\docs\INSTALLER.md'
+                                KeyPath='yes'/>
+                        </Component>
+                    </Directory>
+                </Directory>
+            </Directory>
+
+            <!-- Start Menu - the source of pinning. -->
+            <Directory Id='ProgramMenuFolder'>
+                <Directory Id='ApplicationProgramsFolder' Name='Valenx'>
+                    <Component Id='Cmp_StartMenuShortcut'
+                        Guid='AC45D57D-2565-41E7-A3C6-6C0DE877D3D8'
+                        Win64='yes'>
+                        <Shortcut Id='Shortcut_StartMenu'
+                            Name='Valenx'
+                            Description='Native open-source desktop simulation suite'
+                            Target='[APPLICATIONFOLDER]valenx.exe'
+                            WorkingDirectory='APPLICATIONFOLDER'
+                            Icon='ProductIcon'
+                            IconIndex='0'/>
+                        <RemoveFolder Id='RemoveApplicationProgramsFolder'
+                            Directory='ApplicationProgramsFolder'
+                            On='uninstall'/>
+                        <!-- Per-machine shortcuts need a HKLM regkey to
+                             satisfy MSI's component-keypath rule. -->
+                        <RegistryValue Root='HKLM'
+                            Key='Software\Valenx\Valenx'
+                            Name='StartMenuShortcut'
+                            Type='integer'
+                            Value='1'
+                            KeyPath='yes'/>
+                    </Component>
+                </Directory>
+            </Directory>
+
+            <!-- Optional desktop shortcut; created only when
+                 INSTALLDESKTOPSHORTCUT=1 (the default; the UI exposes
+                 the toggle). -->
+            <Directory Id='DesktopFolder' Name='Desktop'>
+                <Component Id='Cmp_DesktopShortcut'
+                    Guid='55163810-C628-4BF4-8ACC-ADB6B02FA8AA'
+                    Win64='yes'>
+                    <Condition>INSTALLDESKTOPSHORTCUT=1</Condition>
+                    <Shortcut Id='Shortcut_Desktop'
+                        Name='Valenx'
+                        Description='Native open-source desktop simulation suite'
+                        Target='[APPLICATIONFOLDER]valenx.exe'
+                        WorkingDirectory='APPLICATIONFOLDER'
+                        Icon='ProductIcon'
+                        IconIndex='0'/>
+                    <RegistryValue Root='HKLM'
+                        Key='Software\Valenx\Valenx'
+                        Name='DesktopShortcut'
+                        Type='integer'
+                        Value='1'
+                        KeyPath='yes'/>
+                </Component>
+            </Directory>
+        </Directory>
+
+        <Feature
+            Id='MainProgram'
+            Title='Valenx (required)'
+            Description='The Valenx desktop binary and Start Menu shortcut.'
+            Display='expand'
+            Level='1'
+            ConfigurableDirectory='APPLICATIONFOLDER'
+            AllowAdvertise='no'
+            InstallDefault='local'
+            Absent='disallow'>
+            <ComponentRef Id='Cmp_ValenxExe'/>
+            <ComponentRef Id='Cmp_Docs'/>
+            <ComponentRef Id='Cmp_Licenses'/>
+            <ComponentRef Id='Cmp_DocsInstaller'/>
+            <ComponentRef Id='Cmp_StartMenuShortcut'/>
+            <ComponentRef Id='Cmp_DesktopShortcut'/>
+        </Feature>
+
+        <!-- WixUI_InstallDir = the "where do you want to install?" UI.
+             APPLICATIONFOLDER is the property it binds the chosen path
+             to. We suppress the licence dialog (OSS - no EULA needed)
+             via metadata.wix.eula = false in Cargo.toml. -->
+        <Property Id='WIXUI_INSTALLDIR' Value='APPLICATIONFOLDER'/>
+        <UIRef Id='WixUI_InstallDir'/>
+        <UIRef Id='WixUI_ErrorProgressText'/>
+
+    </Product>
+
+</Wix>

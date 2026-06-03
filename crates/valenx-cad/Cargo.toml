@@ -1,0 +1,30 @@
+[package]
+name = "valenx-cad"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+description = "Rust-native CAD kernel for Valenx — primitives, booleans, fillets, and BRep→mesh tessellation built on the `truck` library. Replaces the FreeCAD subprocess fallback for the common Part-workbench operations."
+
+publish.workspace     = true
+[dependencies]
+# Core BRep + builder API (primitives via sweeps, transformations).
+truck-modeling = { workspace = true }
+# Tessellation: BRep → PolygonMesh (Constrained Delaunay via spade).
+truck-meshalgo = { workspace = true }
+# Boolean set-ops (and / or) between Solids. Default features disabled
+# to keep our build off the STEP I/O test dep.
+truck-shapeops = { workspace = true }
+
+# Canonical Valenx mesh type that the toolbox/viewport consume.
+valenx-mesh = { path = "../valenx-mesh" }
+
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"

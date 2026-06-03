@@ -1,0 +1,40 @@
+[package]
+name         = "valenx-crash-reporter"
+description  = "In-app crash reporter — panic hook + sanitised report serialisation. Lane C of NEXT_PHASE."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+tracing     = { workspace = true }
+
+# Round-27 STRUCTURAL: depend on valenx-core so the crash-reporter's
+# atomic-write delegates to the canonical
+# `valenx_core::io_caps::atomic_write_bytes` helper. Pre-R27 the
+# atomic-write logic was copy-pasted inline (the comment explicitly
+# noted "two implementations must stay in lock-step; both are small
+# enough that occasional drift is cheap to fix" — and they DID drift:
+# crash-reporter shipped the pre-R24 single-`.tmp` shape without
+# fsync or parent-fsync, while state_paths had the latest unique-
+# sidecar + fsync logic). Consolidation closes the drift permanently.
+#
+# Direction is acyclic: valenx-core depends only on valenx-fields →
+# valenx-mesh; crash-reporter doesn't enter that chain. Verified by
+# `grep -l "valenx-crash" crates/valenx-core/Cargo.toml` returning
+# empty at consolidation time.
+valenx-core = { path = "../valenx-core" }
+
+# Test-only binary — see src/bin/panic-bin.rs. Used by the
+# `tests/panic_hook_integration.rs` test to spawn a deliberately-
+# panicking subprocess so the hook's disk-write path runs end-to-end
+# without poisoning the parent test process's panic hook.
+[[bin]]
+name = "panic-bin"
+path = "src/bin/panic-bin.rs"

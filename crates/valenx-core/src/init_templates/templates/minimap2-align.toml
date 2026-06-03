@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "minimap2.align"
+mesh    = "(none)"
+
+# minimap2 long-read + cross-domain alignment. Preset values:
+# map-ont (default, Nanopore), map-pb (PacBio CLR),
+# map-hifi (PacBio HiFi), sr (short reads), asm5/10/20 (asm-asm),
+# splice (spliced cDNA), ava-pb / ava-ont (overlap mode).
+[bio.minimap2]
+reference  = "ref.fa"
+reads      = ["reads.fq"]
+preset     = "map-ont"
+threads    = 1
+extra_args = []

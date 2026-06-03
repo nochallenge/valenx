@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "diamond.search"
+mesh    = "(none)"
+
+# DIAMOND ultra-fast protein search (BLAST-compatible).
+# Action is `blastp` / `blastx` / `makedb`. `sensitivity` is
+# `default` / `fast` / `sensitive` / `more-sensitive` /
+# `very-sensitive` / `ultra-sensitive`. For `makedb`, `query`
+# is the input FASTA and `database` is the output basename.
+[bio.diamond]
+action      = "blastp"
+query       = "query.fa"
+database    = "nr.dmnd"
+output      = "hits.tsv"
+sensitivity = "sensitive"
+threads     = 1
+extra_args  = []

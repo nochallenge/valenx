@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-frames"
+description = "Frames workbench (Phase 38) — structural-section frame generator. Sweep an I-beam, C-channel, L-angle, rectangular HSS, round CHS, or T-beam profile along a polyline path to produce a tessellated mesh ready for the viewport, BOM cut-list, or downstream FEM/CFD analysis."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh     = { path = "../valenx-mesh" }
+valenx-cad      = { path = "../valenx-cad" }
+# NurbsCurve path source for curved-member sweeps (Phase 38.5).
+valenx-surface  = { path = "../valenx-surface" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

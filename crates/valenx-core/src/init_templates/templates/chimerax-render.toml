@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "chimerax.script"
+mesh    = "(none)"
+
+# `.cxc` command script — line-oriented ChimeraX commands. The
+# adapter runs `chimerax --nogui --script view.cxc` so the script
+# should `exit` at the end. Flip `nogui = false` to record an
+# interactive session (rare; mostly for demo-recording workflows).
+[bio.chimerax]
+script = "view.cxc"
+nogui  = true

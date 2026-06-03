@@ -1,0 +1,40 @@
+[package]
+name        = "valenx-arch"
+description = "Arch/BIM workbench: walls, slabs, columns, beams, windows, doors, stairs, roofs, spaces, IFC4 export, schedules (BOM), BCF (BIM Collaboration Format)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-cad  = { path = "../valenx-cad" }
+valenx-mesh = { path = "../valenx-mesh" }
+# Round-27 STRUCTURAL: IfcWriter::write_to_path delegates to
+# valenx_core::io_caps::atomic_write_streaming so a concurrent
+# multi-MiB IFC export can't have its bytes interleaved with another
+# writer's at the destination. Pre-R27 the writer streamed via a bare
+# `File::create` + `BufWriter` — two threads racing to write the same
+# .ifc would share the file handle and the kernel could interleave
+# their writes byte-by-byte for any payload > PIPE_BUF (the same
+# class of bug R26 H1 closed for valenx-dock). The dep direction is
+# acyclic (valenx-core depends on valenx-fields → valenx-mesh; arch
+# already depends on valenx-mesh so no cycle introduced).
+valenx-core = { path = "../valenx-core" }
+
+[dev-dependencies]
+valenx-fem = { path = "../valenx-fem" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

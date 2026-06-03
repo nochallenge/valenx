@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "cellprofiler.segment"
+mesh    = "(none)"
+
+# CellProfiler Broad-Institute pipeline-driven cell segmentation.
+# `pipeline` is the .cppipe file authored in the GUI; `input_dir`
+# holds the raw images. Falls back to `<python> -m cellprofiler`
+# when the `cellprofiler` binary isn't on PATH.
+[bio.cellprofiler]
+pipeline        = "segmentation.cppipe"
+input_dir       = "raw_images"
+output_basename = "results"
+python          = "python3"
+extra_args      = []

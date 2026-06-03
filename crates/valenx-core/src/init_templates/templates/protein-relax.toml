@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "openmm.script"
+mesh    = "(none)"
+
+# Python-native OpenMM run. The adapter parses `output_pdb` into a
+# typed Structure on collect(); `output_dcd` lands in the artifacts
+# list (full DCD parse-on-collect lives in MDAnalysis).
+[bio.openmm]
+script     = "relax.py"
+python     = "python3"
+output_pdb = "minimised.pdb"
+output_dcd = "trajectory.dcd"

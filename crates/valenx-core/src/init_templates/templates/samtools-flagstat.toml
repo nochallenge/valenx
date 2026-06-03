@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "samtools.flagstat"
+mesh    = "(none)"
+
+# samtools multitool. Action is `view` / `sort` / `index` /
+# `flagstat`. `output` is required for view + sort, ignored
+# (auto-named) for index + flagstat. Switch action and rerun to
+# chain through a typical SAM → BAM → sorted-BAM → indexed pipeline.
+[bio.samtools]
+action     = "flagstat"
+input      = "in.bam"
+threads    = 1
+extra_args = []

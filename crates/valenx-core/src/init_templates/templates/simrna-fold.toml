@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "simrna.fold"
+mesh    = "(none)"
+
+# SimRNA 3D RNA tertiary structure prediction. Replica-
+# exchange Monte Carlo over a coarse-grained RNA model.
+[bio.simrna]
+config          = "params.dat"
+sequence        = "rna.seq"
+output_basename = "tertiary"
+n_replicas      = 4
+extra_args      = []

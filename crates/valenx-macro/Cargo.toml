@@ -1,0 +1,30 @@
+[package]
+name        = "valenx-macro"
+description = "Macro recorder + GUI hooks for Valenx. Records UI actions (add sketch entity, add feature, save/load project, switch panel, run Python) as a structured Macro that can be replayed against a fresh ValenxApp or exported as a Python script that calls the valenx-py module."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+anyhow      = { workspace = true }
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+ron         = { workspace = true }
+tracing     = { workspace = true }
+nalgebra    = { workspace = true }
+
+# We persist references to the feature-tree types so a recorded
+# macro can replay against the live tree.
+valenx-feature-tree = { path = "../valenx-feature-tree" }
+valenx-sketch       = { path = "../valenx-sketch" }
+# Round-28 H2: canonical atomic_write_str for persist.rs::write_to.
+valenx-core         = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

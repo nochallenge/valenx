@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "jalview.view"
+mesh    = "(none)"
+
+# Jalview Java alignment viewer (headless mode). Point `jar`
+# at the jalview.jar you downloaded; `output_format` picks
+# the export format (png / svg / html / fasta / clustal).
+[bio.jalview]
+jar             = "/path/to/jalview.jar"
+input           = "alignment.fa"
+output_basename = "image"
+output_format   = "png"
+extra_args      = []

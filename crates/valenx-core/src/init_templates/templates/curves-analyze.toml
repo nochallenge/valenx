@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "curves.analyze"
+mesh    = "(none)"
+
+# Curves+ DNA helical-axis + groove geometry analysis. NOTE:
+# Curves+ is licensed for non-commercial / academic use only.
+# `first_residue` and `last_residue` define the analysis window
+# (numbered as in the PDB).
+[bio.curves]
+input_pdb        = "structure.pdb"
+output_basename  = "analysis"
+first_residue    = 1
+last_residue    = 12
+extra_args       = []

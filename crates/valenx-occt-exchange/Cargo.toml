@@ -1,0 +1,37 @@
+[package]
+name        = "valenx-occt-exchange"
+description = "OpenCASCADE (OCCT) data-exchange feature parity for Valenx (Phases 101-130). Provides 30 Rust-native importers / exporters covering the STEP, IGES, ACIS, Parasolid, JT, and mesh-interchange (OBJ/PLY/STL/glTF/VRML/X3D/COLLADA) families. v1 implements the formats that map cleanly onto existing valenx-step-iges / valenx-mesh capabilities; the rest return `OcctExchangeError::NotYetImplemented` with rustdoc describing what real OCCT does and which follow-up phase will deliver the deep implementation."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+tracing    = { workspace = true }
+nalgebra   = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+ron        = { workspace = true }
+
+# ZLIB / deflate codec for the JT reader's compressed segment payloads
+# (most production JT files store the LSG + shape + meta segments as
+# raw zlib streams).
+flate2     = { workspace = true }
+
+# Direct BRep access for the AP203 assembly writer, which bakes each
+# part's placement transform into its geometry before STEP export.
+truck-modeling = { workspace = true }
+
+valenx-cad       = { path = "../valenx-cad" }
+valenx-core      = { path = "../valenx-core" }
+valenx-mesh      = { path = "../valenx-mesh" }
+valenx-step-iges = { path = "../valenx-step-iges" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

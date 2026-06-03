@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "physicell.simulate"
+mesh    = "(none)"
+
+# PhysiCell agent-based multicellular tissue simulation. Each
+# PhysiCell model compiles into its own per-project binary —
+# `binary` points at the compiled executable; `config` points
+# at the XML config it expects. Outputs land in `output/`
+# inside the workdir.
+[bio.physicell]
+binary       = "/path/to/compiled/physicell-tumor"
+config       = "config.xml"
+extra_args   = []

@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "bowtie2.align"
+mesh    = "(none)"
+
+# Bowtie2 short-read alignment (alternative to BWA). Drop the
+# reference FASTA + reads FASTQ alongside this case.toml. The
+# adapter runs `bowtie2-build` on first run unless
+# `skip_index = true`. `reads` accepts 1 entry (single-end) or
+# 2 entries (paired-end). `preset` ∈ {very-fast, fast,
+# sensitive, very-sensitive}.
+[bio.bowtie2]
+reference  = "ref.fa"
+reads      = ["reads.fq"]
+threads    = 1
+skip_index = false
+preset     = "sensitive"
+extra_args = []

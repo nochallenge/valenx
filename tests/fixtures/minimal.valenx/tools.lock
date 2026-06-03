@@ -1,0 +1,23 @@
+# Pinned tool versions for the minimal fixture. Per-project tools.lock
+# per RFC 0001 — makes the fixture reproducible across Valenx releases
+# without depending on the machine's installed toolset.
+
+format            = "1.0"
+generated_by      = "fixtures"
+generated_at      = "2026-04-23T00:00:00Z"
+
+[[tool]]
+name              = "openfoam"
+version           = "v2406"
+checksum          = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+channel           = "stable"
+integration_mode  = "subprocess"
+license           = "GPL-3.0-only"
+
+[[tool]]
+name              = "gmsh"
+version           = "4.12.2"
+checksum          = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+channel           = "stable"
+integration_mode  = "subprocess"
+license           = "GPL-2.0-or-later"

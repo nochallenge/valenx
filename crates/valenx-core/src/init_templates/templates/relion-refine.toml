@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "relion.refine"
+mesh    = "(none)"
+
+# RELION cryo-EM Bayesian 3D reconstruction. Drop your particle
+# STAR file + reference MRC alongside this case.toml. `mpi_procs
+# > 1` requires `mpirun` on PATH; the adapter switches to
+# `relion_refine_mpi` automatically.
+[bio.relion]
+particles        = "particles.star"
+reference        = "ref.mrc"
+output_basename  = "Refine3D/run"
+angpix           = 1.06
+mpi_procs        = 1
+threads          = 4
+extra_args       = []

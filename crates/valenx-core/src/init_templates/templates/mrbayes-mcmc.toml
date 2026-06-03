@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "mrbayes.mcmc"
+mesh    = "(none)"
+
+# MrBayes Bayesian MCMC phylogenetic inference. Drop your NEXUS
+# file (containing the `mrbayes` block) alongside this case.toml.
+# `batch = true` runs non-interactively (`mb -i`).
+[bio.mrbayes]
+nexus       = "alignment.nex"
+batch       = true
+extra_args  = []

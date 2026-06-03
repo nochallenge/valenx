@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-collision"
+description = "Collision Detection workbench (Phase 44) — advanced assembly collision detection. AABB bounding-box prune + Möller triangle-triangle intersection test for pairwise part interference checks across a valenx_assembly::Assembly."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh     = { path = "../valenx-mesh" }
+valenx-cad      = { path = "../valenx-cad" }
+valenx-assembly = { path = "../valenx-assembly" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

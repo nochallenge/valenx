@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-animate"
+description = "Animation workbench (Phase 29) — keyframe animation of assembly joint parameters. Linear / EaseIn / EaseOut / EaseInOut / Cubic tween modes. play() runs the assembly's apply_all_joints at each interpolated frame and returns the per-frame joint snapshot."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-assembly = { path = "../valenx-assembly" }
+valenx-core     = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

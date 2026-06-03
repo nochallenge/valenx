@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "foldseek.search"
+mesh    = "(none)"
+
+# FoldSeek Steinegger-lab protein structure search via the 3Di
+# alphabet — the 3D analogue of MMseqs2. `database` is the path
+# prefix; the actual files live at `<database>_*` in that
+# directory.
+[bio.foldseek]
+query           = "query.pdb"
+database        = "db/pdb100"
+output_basename = "search_results"
+threads         = 4
+extra_args      = []

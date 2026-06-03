@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-sysbio"
+description = "Systems- and synthetic-biology core for Valenx. Native Rust replacement for the classical core of COPASI, Tellurium / libRoadRunner, BioNetGen, CellDesigner, libSBML, PySB, iBioSim, SBOLCanvas / pySBOL, j5 and Synbiopython: a reaction-network model (species with compartments and amounts, reactions with stoichiometry and rate laws, global parameters); an SBML-subset reader and writer; mass-action, Michaelis-Menten and Hill kinetic rate laws; a BioNetGen-class rule-based model expander (pattern rules to a flat reaction network); deterministic simulation (stoichiometry-matrix ODE assembly, an RK4 fixed-step integrator, an adaptive Dormand-Prince RK45 integrator with error control, an implicit BDF integrator with a Newton inner solve for stiff systems, a damped-Newton steady-state solver, an event-aware time-course driver); stochastic simulation (the Gillespie direct-method SSA, explicit tau-leaping with a negative-population guard, the Gibson-Bruck next-reaction method with an indexed priority queue, and ensemble runs with mean / variance / percentile statistics); analysis (1-D and 2-D parameter scans, local finite-difference and global sampling sensitivity analysis, conserved-moiety detection from the stoichiometry-matrix null space, a steady-state continuation bifurcation scan); constraint-based modelling (a from-scratch simplex LP solver, flux-balance analysis, flux variability analysis and a parsimonious-FBA variant); and synthetic biology (an SBOL-class genetic-design data model of parts / components / devices with sequence annotations, a genetic-circuit model with Cello-class Boolean / truth-table simulation, a Hill-kinetics gene-regulatory-network ODE model, Gibson / Golden-Gate / BioBrick DNA-assembly planners, a standard part library and a top-level SysbioReport). Pure deterministic algorithms with a hand-rolled PRNG, no neural-network weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure numerical + graph algorithms. `nalgebra` supplies the dense
+# matrix / vector types behind the ODE Jacobians, the BDF Newton
+# solve, the conserved-moiety null-space computation and the FBA
+# linear algebra; `valenx-bioseq` supplies the `Seq` type used by the
+# SBOL part model and the DNA-assembly planners; `serde` drives the
+# data-model derives. No heavy or platform-specific dependencies — the
+# SBML reader / writer, the simplex LP solver, the BioNetGen-class
+# rule expander, the three stochastic simulators and the PRNG are all
+# hand-rolled.
+nalgebra      = { workspace = true }
+serde         = { workspace = true }
+valenx-bioseq = { path = "../valenx-bioseq" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

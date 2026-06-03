@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "fasttree.tree"
+mesh    = "(none)"
+
+# FastTree approximate-ML tree inference. Optimised for very
+# large trees (10k+ leaves). `seq_type` is `nt` (nucleotide)
+# or `aa` (amino acid). For nt, `use_gtr = true` enables GTR
+# (FastTree's default for nt is JC). `gamma = true` enables
+# rate variation across sites.
+[bio.fasttree]
+alignment    = "alignment.fa"
+output       = "tree.nwk"
+seq_type     = "aa"
+use_gtr      = false
+gamma        = false
+extra_args   = []

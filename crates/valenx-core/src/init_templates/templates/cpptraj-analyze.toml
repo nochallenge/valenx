@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "cpptraj.analyze"
+mesh    = "(none)"
+
+# cpptraj AmberTools canonical trajectory analysis. Drop your
+# Amber `.prmtop` topology + `.cpptraj` analysis script alongside
+# this case.toml.
+[bio.cpptraj]
+script       = "analysis.cpptraj"
+topology     = "system.prmtop"
+extra_args   = []

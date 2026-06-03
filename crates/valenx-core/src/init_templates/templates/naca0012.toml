@@ -1,0 +1,10 @@
+physics = "cfd"
+solver  = "su2.SU2_CFD"
+mesh    = "(none)"
+
+# Drop your SU2 .cfg + .su2 mesh into this case directory.
+# `gmsh` or external SU2 tutorials are good starter sources.
+[cfd.su2]
+config    = "naca0012.cfg"
+mesh      = "naca0012.su2"
+n_threads = 4

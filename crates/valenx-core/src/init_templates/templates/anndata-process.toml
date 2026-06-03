@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "anndata.process"
+mesh    = "(none)"
+
+# AnnData Python single-cell HDF5 (.h5ad) container. The user-
+# supplied .py script does `import anndata` and the data work;
+# it can read `valenx_params.json` for the configured
+# `output_basename` and the staged `input_h5ad` filename.
+[bio.anndata]
+script           = "process.py"
+python           = "python3"
+# input_h5ad     = "matrix.h5ad"
+output_basename  = "processed"

@@ -1,0 +1,19 @@
+physics = "bio"
+solver  = "star.align"
+mesh    = "(none)"
+
+# STAR spliced RNA-seq aligner. `genome_dir` is the pre-built
+# STAR index directory (or where the adapter writes a fresh
+# index when `skip_index = false`, in which case `reference`
+# is required). `output_type` ∈ {BAM_Unsorted,
+# BAM_SortedByCoordinate, SAM}. Optional `sjdb_gtf` enables
+# splice-junction-database-aware indexing.
+[bio.star]
+genome_dir   = "star-index"
+# reference  = "ref.fa"
+reads        = ["reads.fq"]
+threads      = 1
+skip_index   = true
+output_type  = "BAM_SortedByCoordinate"
+# sjdb_gtf   = "annotations.gtf"
+extra_args   = []

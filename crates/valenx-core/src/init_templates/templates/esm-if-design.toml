@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "esm-if.design"
+mesh    = "(none)"
+
+# ESM-IF inverse-folding sequence design (Meta). The user-
+# supplied Python script imports `esm` and reads
+# `valenx_params.json`. `model` selects the ESM-IF model
+# variant; the default is the canonical 142M-parameter UR50
+# release. Output FASTA lands at `<output_basename>.fa`.
+[bio.esm-if]
+script          = "design.py"
+python          = "python3"
+input_pdb       = "backbone.pdb"
+model           = "esm_if1_gvp4_t16_142M_UR50"
+temperature     = 1.0
+num_samples     = 8
+output_basename = "designed"

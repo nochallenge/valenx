@@ -1,0 +1,32 @@
+[package]
+name        = "valenx-rnadesign"
+description = "Unified synthetic-RNA design workflow for Valenx. A start-to-finish integration layer over the sibling RNA building blocks — it does not reimplement folding, it orchestrates it. Turns a design goal into a synthesis-ready candidate package: a `DesignGoal` (a structural RNA targeting a dot-bracket — aptamer / ribozyme / riboswitch / hairpin / custom; OR a coding mRNA encoding a given protein; OR a hybrid coding RNA with required structural elements), `DesignConstraints` (GC range, length bounds, forbidden motifs / restriction sites, required / forbidden subsequences, host organism, modified-nucleoside scheme) and a `DesignSession` workflow state machine (Goal -> Design -> Optimize -> Validate -> Export). Sequence design: structural inverse-folding (multi-start, reusing `valenx-rnastruct`); coding-mRNA construct assembly + codon optimisation (reusing `valenx-genediting`); riboswitch / two-state design; functional-motif scaffold templates; regulatory-element (UTR / Kozak) design. A multi-objective optimiser balances target-structure match, ensemble defect, GC content, repeat avoidance, restriction-site avoidance, codon adaptation, uridine content and off-target hairpins by weighted-objective local search / simulated annealing over synonymous (CDS) or structure-preserving mutations; a NUPACK-style ensemble-defect metric, a repeat / low-complexity scan, a forbidden-motif silent-removal pass and a synthesizability scan. In-silico validation: fold-back comparison to the target, partition-function / base-pair-probability ensemble validation, mutational-robustness + melting + co-transcriptional sanity checks, and a `ValidationReport` of pass / warn / fail against every constraint. Output: DNA-template generation with T7 / SP6 promoters, an in-vitro-transcription plan (NTP mix with modified nucleotides, cap + poly-A strategy, honest yield notes), a synthesis-order package (final RNA, DNA template, PCR primers via `valenx-bioseq`, annotated construct map) and FASTA / GenBank / text-report export. A top-level `design_rna` driver, a batch / rank mode and a typed MCP/LLM-controllable request / response surface. Honest framing: the output is a strong, validated-in-silico candidate — a prediction from an energy model, NOT a guarantee of correct in-vivo behaviour; physical RNA is made by chemical synthesis / in-vitro transcription in a wet lab and every design must be lab-validated. Pure deterministic algorithms, no trained-model weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure orchestration over the sibling RNA building blocks — this crate
+# is the integration layer, it never reimplements folding. `valenx-rnastruct`
+# supplies the Zuker MFE folder, the McCaskill partition
+# function and base-pair probabilities, inverse folding and structure
+# distance; `valenx-genediting` supplies the mRNA construct
+# model, codon optimisation, structure minimisation and uridine /
+# pseudouridine planning; `valenx-bioseq` supplies the `Seq`
+# type, transcription, the restriction-enzyme database, primer design,
+# and FASTA / GenBank I/O. serde drives the data-model derives. No heavy
+# or platform-specific dependencies — the workflow state machine, the
+# multi-objective optimiser, the validation aggregator and the
+# synthesis-plan builder are hand-rolled.
+valenx-bioseq    = { path = "../valenx-bioseq" }
+valenx-genediting = { path = "../valenx-genediting" }
+valenx-rnastruct = { path = "../valenx-rnastruct" }
+serde            = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

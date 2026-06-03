@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "rdkit.script"
+mesh    = "(none)"
+
+# User-supplied RDKit Python script. The optional `smiles` array is
+# a quick way to inline a small molecule set; remove or extend as
+# the screen grows.
+[bio.rdkit]
+script = "enumerate.py"
+python = "python3"
+smiles = ["CCO", "c1ccccc1"]

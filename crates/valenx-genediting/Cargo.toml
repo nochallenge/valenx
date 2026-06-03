@@ -1,0 +1,34 @@
+[package]
+name        = "valenx-genediting"
+description = "Gene-editing and mRNA-therapeutic design for Valenx. Native Rust research/therapeutic design tooling in the category of CHOPCHOP, CRISPOR, PrimeDesign, BE-Designer and Benchling's design tools: a CRISPR nuclease database (SpCas9, SpCas9-NG, SaCas9, Cas12a/Cpf1, Cas12f, Cas13, xCas9 with PAM, guide length, cut-site offset, end chemistry); a guide-RNA design workflow that reuses `valenx-genomics` PAM scanning + on-/off-target scoring and ranks candidates; NHEJ knockout strategy design (early-exon / functional-domain targeting, frameshift-optimal guide placement); HDR knock-in donor-template design (symmetric / asymmetric homology arms, silent PAM- and seed-blocking re-cut mutations, insert placement); multiplex / gRNA-array design; a base-editor database (CBE BE3 / BE4max / AncBE4max, ABE ABE7.10 / ABE8e) with editing windows, a reachable-edit finder, SNV-correcting guide design, editing-window + bystander analysis, and a transparent product-purity heuristic; a prime-editor database (PE2 / PE3 / PE3b / PEmax), pegRNA design (spacer + primer-binding site + reverse-transcriptase template) for substitutions / insertions / deletions, a PBS-/RT-length optimisation scan, PE3 / PE3b nicking-guide design and a transparent prime-editing efficiency heuristic; mRNA therapeutic construct design (5' cap, 5'UTR, CDS, 3'UTR, poly-A assembly + validation, CDS codon optimisation reusing `valenx-bioseq`, Kozak-aware 5'UTR design, AU-rich-element-aware 3'UTR design, secondary-structure minimisation reusing `valenx-rnastruct` MFE, uridine-content / pseudouridine planning, poly-A + cap-analog selection, self-amplifying and circular-RNA construct design); gene-therapy expression-cassette design with AAV (~4.7 kb) / lentivirus payload checks, informational delivery-vector planning, and off-target / genotoxicity / essential-gene-proximity safety aggregation; and an edit-strategy advisor, a variant-correction planner, a batch design driver and a typed LLM/MCP-controllable request/response surface. Pure deterministic algorithms; all efficiency predictors are documented transparent heuristics, no trained-model weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure sequence + numerical algorithms. `valenx-bioseq` (Block 6.1)
+# supplies the `Seq` type, the genetic-code translation tables and the
+# codon-optimisation / CAI machinery reused by the mRNA module;
+# `valenx-genomics` (Block 6.10) supplies the CRISPR PAM scanner, the
+# guide-RNA on-target score and the off-target enumerator — reused
+# directly, never duplicated; `valenx-rnastruct` (Block 6.5) supplies
+# the Zuker MFE folder behind the mRNA secondary-structure check.
+# `valenx-align` (Block 6.2) supplies the production SA-IS FM-index
+# behind the genome-wide off-target search.
+# serde drives the data-model derives. No heavy or platform-specific
+# deps — the nuclease / base-editor / prime-editor databases, the
+# donor-template designer, the pegRNA designer and the construct
+# assemblers are hand-rolled.
+valenx-align     = { path = "../valenx-align" }
+valenx-bioseq    = { path = "../valenx-bioseq" }
+valenx-genomics  = { path = "../valenx-genomics" }
+valenx-rnastruct = { path = "../valenx-rnastruct" }
+serde            = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

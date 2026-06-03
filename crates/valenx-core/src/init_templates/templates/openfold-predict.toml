@@ -1,0 +1,22 @@
+physics = "bio"
+solver  = "openfold.predict"
+mesh    = "(none)"
+
+# OpenFold protein structure prediction. Model preset names match
+# the upstream config (model_1 .. model_5_ptm, plus
+# model_*_multimer_v3 for complexes). `use_templates` enables
+# template-augmented prediction when reference structures are
+# available.
+#
+# The adapter writes a flat `valenx_params.json` into the workdir
+# during prepare() with these keys; the script can read it with
+# `json.load(open("valenx_params.json"))` to pick up the parsed
+# `model_preset` / `use_templates` / `num_recycles` / `query_fasta`
+# values without reparsing case.toml itself.
+[bio.openfold]
+script        = "predict.py"
+python        = "python3"
+query_fasta   = "query.fasta"
+model_preset  = "model_1_ptm"
+use_templates = false
+num_recycles  = 3

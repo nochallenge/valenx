@@ -1,0 +1,19 @@
+physics = "bio"
+solver  = "art.simulate"
+mesh    = "(none)"
+
+# ART Illumina short-read simulator. `sequencing_system` ∈
+# {HS25 (HiSeq 2500), HSXt (HiSeq X TruSeq), MSv3 (MiSeq v3),
+# NS50 (NextSeq 500), MinS (MiniSeq)}. Set `paired_end = true`
+# to simulate paired-end reads (then fragment_mean / fragment_sd
+# are required).
+[bio.art]
+reference          = "ref.fa"
+output_prefix      = "sim"
+sequencing_system  = "HS25"
+read_length        = 150
+fold_coverage      = 30.0
+paired_end         = true
+fragment_mean      = 200.0
+fragment_sd        = 10.0
+extra_args         = []

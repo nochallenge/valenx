@@ -1,0 +1,40 @@
+[package]
+name        = "valenx-dock-screen"
+description = "Docking and virtual-screening core for Valenx. Extends the native `valenx-dock` AutoDock Vina port into a full classical docking and structure-based virtual-screening toolkit, a native Rust replacement for the classical core of AutoDock 4, AutoDock Vina, smina, rDock and DOCK 6: receptor and ligand preparation (grid-box definition, ligand torsion-tree extraction with rotatable-bond detection, pH-aware Gasteiger-style protonation and partial-charge assignment, flexible-sidechain selection); scoring (a Vina-class empirical scoring function with gauss / repulsion / hydrophobic / H-bond terms and the rotatable-bond penalty, an AutoDock4-class 12-6 force-field scoring function with directional H-bonds, electrostatics and desolvation, per-receptor-atom-type affinity-map precomputation and trilinear-interpolated fast grid scoring); search (an AutoDock4-class Lamarckian genetic algorithm, a Monte-Carlo / simulated-annealing pose search, a Vina-class iterated local search with BFGS local optimisation, and rigid + flexible docking drivers); screening and analysis (batch virtual screening over a ligand library, RMSD-based pose clustering and ranking, ensemble docking against multiple receptor conformations, consensus scoring with rank aggregation, an MM-GBSA-class generalized-Born rescoring, a geometric fpocket-class binding-pocket detector, a protein-ligand interaction fingerprint, pose-RMSD redocking validation, pharmacophore-based and ADMET-lite library filtering, PDBQT-style docking result I/O and a covalent-docking driver); and honest subprocess-adapter scaffolding for the neural-network tools (AlphaFold / ColabFold / ESMFold / RoseTTAFold structure prediction, RFdiffusion / ProteinMPNN generative protein design, DiffDock / GNINA neural docking, RELION / cryoSPARC cryo-EM reconstruction) — each a typed request / result struct plus a `run_*` adapter that shells out when the external binary is on PATH and returns a clear `ToolNotAvailable` error otherwise, never a reimplemented model. Builds on `valenx-dock` for the Vina scoring and search core; `valenx-cheminf` for ligand molecule handling and `valenx-biostruct` for receptor structures."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# `nalgebra` supplies the 3-vector / quaternion / matrix types behind
+# the grid maps, pose transforms, Kabsch superposition and the
+# generalized-Born rescoring; `rayon` parallelises the batch-screening
+# loop; `rand` drives the genetic algorithm and Monte-Carlo search;
+# `serde` drives the data-model derives. `valenx-dock` is the native
+# AutoDock Vina port this crate extends — its scoring function, grid
+# maps and BFGS / iterated-local-search core are reused rather than
+# duplicated. `valenx-cheminf` supplies the `Molecule` graph for ligand
+# preparation; `valenx-biostruct` supplies the macromolecular
+# `Structure` hierarchy for receptor handling and pocket detection;
+# `valenx-bio` supplies the PDBQT reader / writer behind the docking
+# result I/O. No heavy or platform-specific dependencies — the
+# genetic algorithm, the
+# AutoDock4-class force field, the pocket detector, the interaction
+# fingerprint and the subprocess-adapter probes are all hand-rolled.
+nalgebra = { workspace = true }
+rayon    = { workspace = true }
+serde    = { workspace = true }
+rand     = "0.8"
+
+valenx-dock      = { path = "../valenx-dock" }
+valenx-bio       = { path = "../valenx-bio" }
+valenx-cheminf   = { path = "../valenx-cheminf" }
+valenx-biostruct = { path = "../valenx-biostruct" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

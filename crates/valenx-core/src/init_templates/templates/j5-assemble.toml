@@ -1,0 +1,13 @@
+physics = "bio"
+solver  = "j5.assemble"
+mesh    = "(none)"
+
+# j5 DNA assembly automation (JBEI). j5 is JAR-distributed —
+# point `jar` at the j5.jar you downloaded. Outputs land in
+# the workdir with `<output_basename>` prefix.
+[bio.j5]
+jar               = "/path/to/j5.jar"
+design_csv        = "design.csv"
+parts_csv         = "parts.csv"
+output_basename   = "assembly"
+extra_args        = []

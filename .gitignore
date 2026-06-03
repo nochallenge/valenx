@@ -1,0 +1,67 @@
+# Rust / Cargo
+target/
+**/target/
+Cargo.lock.backup
+# MSVC program-database build artifacts. Excludes the Protein Data
+# Bank fixtures under tests/fixtures/ (`!` un-ignore below).
+*.pdb
+!tests/fixtures/**/*.pdb
+
+# mdBook output
+book/
+docs/book/
+
+# User local data
+.env
+.env.*
+*.local
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+
+# OS detritus
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python caches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Logs / crash dumps
+*.log
+*.log.*
+logs/
+crash.log
+
+# Profiling / benchmarking
+perf.data
+perf.data.*
+flamegraph.svg
+callgrind.out.*
+cargo-flamegraph.svg
+
+# Temporary build artifacts
+*.tmp
+*.orig
+*.rej
+
+# Valenx runtime user data (if anyone runs from the repo root)
+.valenx-user/
+~/.valenx/
+
+# Claude tooling
+.claude/
+
+# Screenshot harness output — regenerated on demand by `cargo test
+# -p valenx-app --test headless_screenshots`. PNGs are build artifacts
+# (one per workbench panel for the live-aesthetic review pass); they
+# don't belong in git.
+screenshots/

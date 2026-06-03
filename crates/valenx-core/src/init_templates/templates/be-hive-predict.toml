@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "be-hive.predict"
+mesh    = "(none)"
+
+# BE-Hive Liu-lab base-editing outcome predictor. The user-
+# supplied .py script does `import be_predict` and runs the
+# prediction.
+[bio.be-hive]
+script           = "predict.py"
+python           = "python3"
+# input_fasta    = "target.fa"
+output_basename  = "predictions"

@@ -1,0 +1,36 @@
+[case]
+format  = "1.0"
+name    = "heat-cube"
+physics = "fea"
+solver  = "elmer.heat"
+mesh    = "default"
+
+# Steady-state heat-conduction demo case for the Elmer adapter.
+# Two opposing faces are pinned to fixed temperatures; the body
+# settles into a linear gradient. Mirrors what `valenx-init -t
+# elmer-heat` scaffolds and exercises the full case.toml schema the
+# Elmer SIF writer consumes.
+
+[heat]
+mesh_dir = "mesh"
+
+[heat.material]
+name              = "aluminium"
+density           = 2700.0
+heat_capacity     = 900.0
+heat_conductivity = 237.0
+
+[[heat.boundaries]]
+name        = "hot_face"
+target      = 1
+temperature = 373.15
+
+[[heat.boundaries]]
+name        = "cold_face"
+target      = 2
+temperature = 273.15
+
+[heat.simulation]
+max_output_level            = 5
+steady_state_max_iterations = 50
+convergence_tolerance       = 1.0e-6

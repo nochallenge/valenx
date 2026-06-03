@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "vmd.render"
+mesh    = "(none)"
+
+# VMD Tcl-scripted MD trajectory visualisation. NOTE: VMD is
+# licensed for non-commercial / academic use only. The adapter
+# runs `vmd -dispdev text -e <script>`; the script should `quit`
+# at the end. Optional `structure` pre-loads a PDB / GRO / PSF
+# (saves the script from having to `mol new`).
+[bio.vmd]
+script     = "view.tcl"
+headless   = true
+# structure = "system.pdb"
+extra_args = []

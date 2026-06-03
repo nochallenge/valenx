@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "snakemake.run"
+mesh    = "(none)"
+
+# Snakemake rule-based pipeline orchestrator. `targets` is the
+# list of rule outputs to build (empty = all default targets).
+# `cores` ≥ 1; pass `--use-conda` for conda-managed dependencies
+# or `--dry-run` (n) for a plan-only pass. `config_file` is an
+# optional YAML/JSON config.
+[bio.snakemake]
+snakefile   = "Snakefile"
+targets     = []
+cores       = 1
+use_conda   = false
+dry_run     = false
+# config_file = "config.yaml"
+extra_args  = []

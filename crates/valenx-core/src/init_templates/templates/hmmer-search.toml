@@ -1,0 +1,15 @@
+physics = "bio"
+solver  = "hmmer.search"
+mesh    = "(none)"
+
+# HMMER profile-HMM search. Tool is `hmmsearch` (profile vs
+# sequence DB) or `hmmscan` (sequence vs profile DB). The adapter
+# writes both `tblout.txt` (tab-separated hits) and `hmmer.out`
+# (verbose) into the workdir.
+[bio.hmmer]
+tool       = "hmmsearch"
+profile    = "profile.hmm"
+sequences  = "seqs.fa"
+cpus       = 1
+evalue     = 0.01
+extra_args = []

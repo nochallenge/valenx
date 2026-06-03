@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-qchem"
+description = "Quantum-chemistry core for Valenx. Native Rust replacement for the Hartree-Fock core of Psi4, NWChem, PySCF and GAMESS-US in the small-molecule regime: a MolecularGeometry data model (atoms with Cartesian coordinates, total charge, spin multiplicity, bohr / angstrom handling, xyz-file read and write); a Gaussian basis-set data model of shells, contracted Gaussians and primitive Gaussians with s / p / d angular momenta plus built-in STO-3G, 3-21G, 6-31G and 6-31G* sets for H through Ne; one-electron integrals (overlap, kinetic energy, nuclear attraction) and the two-electron repulsion-integral tensor via the McMurchie-Davidson Hermite-Gaussian recursion with a series-plus-asymptotic Boys function, multipole / dipole integrals and the nuclear-repulsion energy; a self-consistent-field engine (core Hamiltonian, Loewdin symmetric orthogonalisation with a canonical fallback for near-singular overlap, core-Hamiltonian density guess, Fock-matrix Coulomb-plus-exchange build, the Roothaan-Hall restricted-Hartree-Fock loop, Pulay DIIS acceleration, unrestricted Hartree-Fock with separate alpha / beta Fock matrices and density idempotency checks); molecular properties (Mulliken and Loewdin population analysis with atomic partial charges, electronic-plus-nuclear dipole moment, molecular-orbital energies and occupations with the HOMO-LUMO gap, orbital evaluation on a Gaussian-cube-style 3D grid, Mayer / Wiberg bond orders); the canonical second-order Moeller-Plesset MP2 correlation energy with an AO-to-MO integral transformation; the extended-Hueckel semi-empirical method for a fast no-SCF molecular-orbital preview; and top-level run_rhf / run_uhf / run_mp2 drivers with a QchemReport. DFT and geometry optimisation are honest typed NotYetImplemented stubs. Pure algorithms, no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure quantum-chemistry algorithms. `nalgebra` supplies the dense
+# matrix / vector types behind the generalized symmetric eigenproblem
+# `FC = SCe`, the matrix inverse-square-root used for Loewdin
+# orthogonalisation and the symmetric eigendecomposition driving every
+# SCF diagonalisation; serde drives the data-model derives. No heavy or
+# platform dependencies — the McMurchie-Davidson integral recursion,
+# the Boys function, the DIIS extrapolation and the AO-to-MO transform
+# are hand-rolled.
+nalgebra = { workspace = true }
+serde    = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

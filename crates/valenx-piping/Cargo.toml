@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-piping"
+description = "Piping (Phase 49) — P&ID-aware pipe sections, fittings, and valves. NPS-to-OD lookup, schedule-driven wall thickness, network graph of sections + junctions, and per-section CAD solids."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+valenx-cad = { path = "../valenx-cad" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

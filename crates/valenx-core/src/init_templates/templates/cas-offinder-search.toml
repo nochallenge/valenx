@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "cas-offinder.search"
+mesh    = "(none)"
+
+# Cas-OFFinder CRISPR off-target searching. `input` is Cas-OFFinder's
+# own input format (genome path + PAM + query patterns + mismatch
+# limits). `backend` ∈ {C (CPU), G (GPU), A (auto-pick)}. The
+# adapter just runs the binary; the input file is your contract
+# with Cas-OFFinder.
+[bio.cas-offinder]
+input        = "queries.txt"
+output       = "hits.tsv"
+backend      = "C"
+extra_args   = []

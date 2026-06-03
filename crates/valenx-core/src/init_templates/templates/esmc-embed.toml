@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "esmc.embed"
+mesh    = "(none)"
+
+# ESM Cambrian (ESMC) protein representation embeddings
+# (EvolutionaryScale). The user-supplied Python script imports
+# `esm` and reads `valenx_params.json`. `model_variant` selects
+# 300M or 600M parameter release. `pooling = "per-residue"`
+# yields per-position embeddings; `"mean"` yields one per
+# protein (aggregate).
+[bio.esmc]
+script           = "embed.py"
+python           = "python3"
+input_fasta      = "sequences.fa"
+model_variant    = "esmc-300m"
+pooling          = "mean"
+output_basename  = "embeddings"

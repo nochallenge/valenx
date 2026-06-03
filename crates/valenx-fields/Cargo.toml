@@ -1,0 +1,41 @@
+[package]
+name         = "valenx-fields"
+description  = "Canonical results, fields (scalar/vector/tensor), scalars, provenance, and unit-aware arithmetic."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow       = { workspace = true }
+thiserror    = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+toml         = { workspace = true }
+ndarray      = { workspace = true }
+nalgebra     = { workspace = true }
+sha2         = { workspace = true }
+uuid         = { workspace = true }
+semver       = { workspace = true }
+# valenx-mesh is needed for the VTU -> canonical Mesh converter in
+# `vtu::to_canonical`. The dep direction (fields -> mesh) is acyclic
+# — valenx-mesh stays standalone.
+valenx-mesh  = { path = "../valenx-mesh" }
+
+[features]
+default = []
+# Optional formats — pull in C deps only when requested.
+cgns  = []
+hdf5  = []
+
+# Headless results inspector. Reads a `results.json` produced by
+# any adapter's collect() pipeline and dumps a punch list of fields,
+# scalars, artifacts, and provenance — useful for post-run debugging
+# without firing up the GUI. text + JSON output, exit-code-driven.
+[[bin]]
+name = "valenx-results"
+path = "src/bin/valenx_results.rs"

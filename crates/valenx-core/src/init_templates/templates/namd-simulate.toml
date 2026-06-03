@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "namd.simulate"
+mesh    = "(none)"
+
+# NAMD UIUC all-atom MD engine. NAMD is licensed for academic /
+# non-commercial use only — see UIUC NAMD license terms for
+# commercial use. Resolved binary is `namd2` or `namd3`.
+[bio.namd]
+config     = "production.namd"
+processors = 4
+extra_args = []

@@ -1,0 +1,17 @@
+physics = "bio"
+solver  = "nupack.analyze"
+mesh    = "(none)"
+
+# NUPACK Caltech nucleic-acid analysis. NOTE: NUPACK is licensed
+# for non-commercial / academic use only — confirm your use case
+# complies before publishing analyses. The user-supplied Python
+# script imports `nupack` and reads `valenx_params.json` for
+# `temperature` / `sodium` / `output_basename` / optional
+# `input` filename.
+[bio.nupack]
+script           = "analyze.py"
+python           = "python3"
+# input          = "spec.npc"
+output_basename  = "analysis"
+temperature      = 37.0
+sodium           = 1.0

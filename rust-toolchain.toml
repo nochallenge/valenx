@@ -1,0 +1,19 @@
+# Pins the Rust toolchain used to build Valenx.
+#
+# The `channel` below is what `rustup` will install or use when you
+# `cd` into the repo. For reproducibility we pin a specific version
+# rather than floating on "stable" — if you need to test against
+# the latest stable, override with `rustup override`.
+#
+# MSRV policy ("stable - 3") lives in POLICIES.md. The version below
+# should equal the `rust-version` field in the workspace `Cargo.toml`;
+# bumping one without the other is a mistake.
+
+[toolchain]
+# Bumped from 1.85 to 1.88 so `image@0.25.10` (transitive via eframe
+# 0.28) resolves. MSRV policy in POLICIES.md stays "stable - 3"; this
+# bump tracks that policy as the floor moves.
+channel    = "1.88.0"
+components = ["rustfmt", "clippy", "rust-src"]
+profile    = "minimal"
+# targets = []   # add cross-compile targets here when we start cross-compiling

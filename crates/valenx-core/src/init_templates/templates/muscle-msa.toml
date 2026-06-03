@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "muscle.msa"
+mesh    = "(none)"
+
+# MUSCLE 5 multiple-sequence alignment. Mode is `align`
+# (≤1k sequences, default) or `super5` (large datasets).
+# Leave threads unset to let MUSCLE auto-pick.
+[bio.muscle]
+input      = "in.fa"
+mode       = "align"
+extra_args = []

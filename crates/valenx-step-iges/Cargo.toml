@@ -1,0 +1,54 @@
+[package]
+name        = "valenx-step-iges"
+description = "STEP (ISO 10303) and IGES (5.3) import / export for Valenx solids — wraps truck-stepio for STEP and ships a hand-rolled minimal IGES reader/writer for line + arc + point + transformation-matrix entity types."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+[dependencies]
+# Underlying CAD types — Solid (BRep + mesh-backed variants).
+valenx-cad   = { path = "../valenx-cad" }
+valenx-mesh  = { path = "../valenx-mesh" }
+# R29: atomic_write_str for STEP/IGES/AP242 text exports (crash-safe).
+valenx-core  = { path = "../valenx-core" }
+
+# truck-modeling is needed to peek at the BRep when serialising via
+# truck-stepio's Display facade.
+truck-modeling = { workspace = true }
+# Used by the STEP import path to triangulate the parsed shell into
+# a polygon mesh (truck-stepio gives us a CompressedShell of stepio's
+# own Curve3D/Surface enums, which we can't extract back to a truck
+# Solid; tessellation is the v1 fallback).
+truck-meshalgo = { workspace = true }
+
+# truck-stepio: STEP I/O bridge that turns a truck Solid into ISO-10303
+# AP203/AP214 text. Optional behind the `step` feature so the rest of
+# the crate (IGES, the import dispatcher, UI hooks) still builds if
+# the dep ever fails to resolve on a downstream platform.
+truck-stepio   = { version = "0.3", optional = true }
+truck-topology = { version = "0.6", optional = true }
+ruststep       = { version = "0.4", optional = true }
+
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+nalgebra  = { workspace = true }
+
+# No dev-dependencies — round-trip tests use only valenx-cad primitives
+# to avoid a circular dev-dep with valenx-feature-tree, which depends on
+# this crate for the ImportedSolid feature variant.
+
+[features]
+# `step` is enabled by default. Disabling it gates the truck-stepio
+# dep so the IGES path keeps building if STEP needs to be torn out.
+default = ["step"]
+step    = ["dep:truck-stepio", "dep:truck-topology", "dep:ruststep"]
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

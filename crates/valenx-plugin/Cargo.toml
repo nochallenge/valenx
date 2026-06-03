@@ -1,0 +1,33 @@
+[package]
+name         = "valenx-plugin"
+description  = "Plugin discovery + loading scaffold for runtime-loadable adapters. Phase 14."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+toml       = { workspace = true }
+semver     = { workspace = true }
+tracing    = { workspace = true }
+# Used by the loader module to dlopen plugin payloads. Small enough
+# to pull in unconditionally; the loader's tests exercise the error
+# paths without requiring a real plugin payload to exist.
+libloading = { workspace = true }
+
+valenx-core = { path = "../valenx-core" }
+
+[dev-dependencies]
+# Pulled in only for the cross-crate sync test that asserts the
+# host's HOST_PLUGIN_ABI_VERSION matches the SDK's
+# PLUGIN_ABI_VERSION. Bumping one side without the other breaks
+# the test, forcing the change to be atomic.
+valenx-plugin-sdk = { path = "../valenx-plugin-sdk" }

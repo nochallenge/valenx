@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-hvac"
+description = "HVAC (Phase 50) — heating / ventilation / air-conditioning ducting + equipment. Rectangular and round ducts swept along a path, AHU / VAV / Diffuser / Grille / Fan / Heater / Chiller / Damper equipment, CFM-to-duct-size sizing helpers, and Darcy-Weisbach pressure-drop calculation."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+valenx-cad = { path = "../valenx-cad" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

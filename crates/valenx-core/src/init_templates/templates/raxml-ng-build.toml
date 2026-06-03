@@ -1,0 +1,16 @@
+physics = "bio"
+solver  = "raxml-ng.tree"
+mesh    = "(none)"
+
+# RAxML-NG ML tree inference. `mode` is `search` (single ML
+# tree only), `all` (search + bootstrap), or `bootstrap`
+# (bootstrap-only on existing trees). `bootstrap` ≥ 1 required
+# when mode includes bootstrapping.
+[bio.raxml-ng]
+alignment   = "alignment.fa"
+model       = "GTR+G"
+mode        = "search"
+bootstrap   = 0
+threads     = 1
+prefix      = "tree"
+extra_args  = []

@@ -1,0 +1,12 @@
+physics = "bio"
+solver  = "hoomd.simulate"
+mesh    = "(none)"
+
+# HOOMD-blue Glotzer-lab GPU-native particle MD. v3+ is Python-
+# scripted (no native CLI) — the user-supplied .py script does
+# `import hoomd` and runs the simulation; it can read
+# `valenx_params.json` for the configured `output_basename`.
+[bio.hoomd]
+script           = "production.py"
+python           = "python3"
+output_basename  = "production"

@@ -1,0 +1,11 @@
+physics = "bio"
+solver  = "cwltool.run"
+mesh    = "(none)"
+
+# cwltool Common Workflow Language reference runner. Outputs
+# from the workflow land under `<output_dir>/`.
+[bio.cwltool]
+workflow   = "workflow.cwl"
+# inputs   = "inputs.json"
+output_dir = "results"
+extra_args = []

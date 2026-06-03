@@ -1,0 +1,25 @@
+[package]
+name         = "valenx-adapter-openems"
+description  = "Subprocess adapter driving openEMS FDTD via generated Octave scripts. Phase 6 — live for rectangular-box EM smoke cases."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+anyhow       = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+semver       = { workspace = true }
+toml         = { workspace = true }
+serde        = { workspace = true }
+
+valenx-core   = { path = "../../../valenx-core" }
+valenx-fields = { path = "../../../valenx-fields" }
+
+[dev-dependencies]
+valenx-test-utils = { path = "../../../valenx-test-utils" }

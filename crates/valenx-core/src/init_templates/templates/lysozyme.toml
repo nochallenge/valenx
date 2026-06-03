@@ -1,0 +1,9 @@
+physics = "md"
+solver  = "gromacs.mdrun"
+mesh    = "(none)"
+
+# Pre-run `gmx grompp` to produce the .tpr — this adapter only
+# drives `gmx mdrun`. Drop the .tpr next to this case.toml.
+[md.gromacs]
+tpr    = "system.tpr"
+deffnm = "md"

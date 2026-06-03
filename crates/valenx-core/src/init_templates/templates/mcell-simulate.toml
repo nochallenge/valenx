@@ -1,0 +1,10 @@
+physics = "bio"
+solver  = "mcell.simulate"
+mesh    = "(none)"
+
+# MCell Salk-Institute cell-scale spatial stochastic simulator.
+# Single-binary CLI driven by an MDL model description file.
+[bio.mcell]
+mdl        = "system.mdl"
+# seed     = 12345
+extra_args = []

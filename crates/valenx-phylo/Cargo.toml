@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-phylo"
+description = "Phylogenetics and molecular evolution for Valenx. Native Rust replacement for BEAST 2, MrBayes, IQ-TREE, RAxML-NG, PhyML, FastTree, RevBayes, Seq-Gen, FigTree and Dendroscope: a rooted/unrooted Tree data model, Newick / Nexus / PhyloXML / NeXML I/O with ASCII and SVG rendering, distance methods (p-distance, Jukes-Cantor, Kimura-2P, Tamura-Nei, UPGMA, WPGMA, neighbor-joining, BIONJ), Fitch and Sankoff parsimony with NNI/SPR heuristic search, maximum-likelihood inference (JC69/K80/F81/HKY85/GTR substitution models, Felsenstein pruning, discrete-gamma rate heterogeneity, branch-length and topology optimisation, ancestral-state reconstruction), bootstrap support, Robinson-Foulds and quartet distances, consensus trees, tree manipulation, and coalescent / birth-death / sequence-evolution simulation with molecular-clock dating. Pure algorithms, no neural-network weights."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure algorithms — the sequence-core and alignment crates supply the
+# inputs (alignment columns), serde drives the data-model derives, and
+# nalgebra provides the eigendecomposition behind the substitution
+# models' transition-probability matrices. No heavy or platform deps.
+valenx-bioseq = { path = "../valenx-bioseq" }
+valenx-align  = { path = "../valenx-align" }
+serde         = { workspace = true }
+nalgebra      = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

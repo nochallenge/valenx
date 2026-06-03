@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-subdivision"
+description = "Wings 3D-style subdivision modeling (Phase 61). Catmull-Clark + Loop subdivision schemes, semi-sharp creases, Wings-style face extrude."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

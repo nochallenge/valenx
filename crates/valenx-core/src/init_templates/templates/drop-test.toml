@@ -1,0 +1,12 @@
+physics = "fea"
+solver  = "openradioss.engine"
+mesh    = "(none)"
+
+# Pre-run `starter_<arch> -i model_0000.rad` on a workstation to
+# convert the starter deck into the engine deck (model_0001.rad)
+# + restart files. Drop the converted set into this directory and
+# point engine_input at the engine deck.
+[fea.openradioss]
+engine_input = "drop_test_0001.rad"
+nspmd        = 1
+nthread      = 1

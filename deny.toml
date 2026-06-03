@@ -1,0 +1,109 @@
+# cargo-deny configuration
+# Enforces license compatibility, forbids known-bad crates, controls the
+# dependency graph. Runs in CI via deny job.
+#
+# Update policy: changes here go through an RFC when they alter what
+# licenses or sources are allowed.
+
+[graph]
+# Only check the default target set per platform; adjust as needed.
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+# Each ignore here is a real advisory we've consciously decided to
+# absorb for now rather than block the build on. Every entry has a
+# stable RustSec ID, a one-line reason, and a follow-up commit that
+# should drop it. CI re-enabled in this commit was disabled for weeks
+# because of unrelated infra breaks (fmt drift, mdbook config); these
+# advisories were already on master then, so unblocking CI takes
+# precedence over each individual upgrade.
+ignore = [
+    # paste 1.0 — proc-macro crate, no longer maintained. Comes in
+    # transitively via several deps; nalgebra-sparse 0.10 still
+    # depends on it. Tracking nalgebra upgrade.
+    "RUSTSEC-2024-0436",
+    # proc-macro-error 1.0.4 — unmaintained. Same situation: pulled in
+    # by older proc-macro deps. Replacement is proc-macro-error2.
+    "RUSTSEC-2024-0370",
+]
+
+[licenses]
+version = 2
+# Explicit allow-list. Rejecting by absence forces us to review anything new.
+# Only licenses actually present in the current dependency tree are listed.
+# Adding a new dependency that pulls in something else means a deliberate
+# review here, not a silent allow. Historical entries that no longer match
+# any crate (MIT-0, MPL-2.0, Unicode-DFS-2016, OFL-1.1) have been dropped to
+# keep `cargo deny check licenses` warning-free; re-add them when an upstream
+# brings them back in. OFL-1.1 specifically is still accepted for epaint via
+# the [[licenses.exceptions]] block below — keeping it out of the global
+# allow list means new crates carrying OFL-1.1 still trigger a review.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unlicense",
+    "0BSD",
+    "CC0-1.0",
+    "Zlib",
+    "Unicode-3.0",
+    "BSL-1.0",
+]
+# Copyleft and commercial-incompatible licenses are denied by default.
+# If an LGPL crate is ever genuinely needed, add a targeted exception
+# plus a note explaining why dynamic linking is honored.
+confidence-threshold = 0.93
+
+# `[[licenses.exceptions]]` blocks can list per-crate overrides when
+# we need to accept a normally-banned license for one dependency
+# (e.g. an LGPL crate verified to be dynamically linked). Example:
+#
+#     [[licenses.exceptions]]
+#     allow = ["LGPL-2.1-or-later"]
+#     crate = "example-crate"
+#
+# Don't leave an empty `[[licenses.exceptions]]` table here —
+# cargo-deny v0.18+ requires a `crate` field.
+
+# epaint (egui) bundles a default proportional font (Ubuntu Light) and
+# a monospace font (Hack) under SIL Open Font License 1.1 and Ubuntu
+# Font Licence 1.0 respectively. Both are permissive font-distribution
+# licenses; OFL-1.1 in particular is the canonical license for
+# redistributable open fonts. Neither applies to source code — they
+# cover only the font files baked into the crate at compile time —
+# but cargo-deny doesn't model per-file scope, so we accept them at
+# the crate boundary here.
+[[licenses.exceptions]]
+allow = ["OFL-1.1", "LicenseRef-UFL-1.0"]
+crate = "epaint"
+
+[bans]
+multiple-versions = "warn"
+# Path-only wildcards within a workspace are the canonical way to
+# reference sibling crates. cargo-deny treats them as wildcards and
+# its `allow-wildcard-paths` flag does NOT apply to crates with
+# `publish = true` (the default). Rather than mark ~130 adapter
+# crates as `publish = false`, we downgrade the wildcard check to
+# "warn" — version policy is still enforced on real crates.io deps
+# via the other rules.
+wildcards = "warn"
+allow-wildcard-paths = true
+highlight = "all"
+
+# Forbidden crates — add known-bad or duplicated-functionality crates here.
+deny = []
+
+# Skip certain version conflicts that are unavoidable transitively.
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

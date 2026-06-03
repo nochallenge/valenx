@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "molstar.view"
+mesh    = "(none)"
+
+# Mol* PDBe / RCSB modern WebGL molecular viewer, wrapped via
+# its Python binding. The user-supplied .py script does
+# `import molstar` and the viewer composition; it can read
+# `valenx_params.json` for the configured `output_basename` and
+# the staged `input_structure` filename.
+[bio.molstar]
+script             = "viewer.py"
+python             = "python3"
+# input_structure  = "structure.pdb"
+output_basename    = "viewer"

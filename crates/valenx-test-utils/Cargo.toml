@@ -1,0 +1,16 @@
+[package]
+name         = "valenx-test-utils"
+description  = "Tiny test-only helpers shared across Valenx adapter unit tests. Centralises the per-adapter `tempdir()` boilerplate that previously lived in 120+ test modules."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+[dependencies]
+# Intentionally zero deps. The whole point of this crate is to be
+# `[dev-dependencies]`-pullable from every adapter without dragging
+# in serde / tokio / etc. — keep it std-only.

@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-defeaturing"
+description = "Defeaturing workbench (Phase 43) — auto-remove small features (fillets, holes, engraved text, slivers) from imported models. Tessellation-based v1 pipeline that walks the triangulated solid, classifies candidate features against per-defeature size thresholds, and emits a cleaned mesh ready for downstream meshing / simulation."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh = { path = "../valenx-mesh" }
+valenx-cad  = { path = "../valenx-cad" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

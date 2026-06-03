@@ -1,0 +1,16 @@
+physics = "meshing"
+solver  = "gmsh.delaunay"
+mesh    = "primary"
+
+# Procedural box mesh — gmsh's built-in meshers handle this without
+# any external geometry file. Switch `type` to "sphere" or
+# "merge" to import an external `.stl` / `.brep` / `.step`.
+[mesh]
+type                  = "box"
+origin                = [0.0, 0.0, 0.0]
+size                  = [1.0, 1.0, 1.0]
+characteristic_length = 0.1
+algorithm_3d          = "delaunay"
+dim                   = 3
+volume_name           = "fluid"
+surface_name          = "walls"

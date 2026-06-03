@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-reverse"
+description = "Reverse Engineering workbench (Phase 26) — point cloud loading (PLY), PCA normal estimation, k-nearest-neighbour mesh reconstruction, and a top-level cloud → BRep pipeline that delegates to Phase 23's valenx-mesh-to-brep. Pure-data; no subprocess."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+ron       = { workspace = true }
+
+valenx-mesh         = { path = "../valenx-mesh" }
+valenx-cad          = { path = "../valenx-cad" }
+valenx-mesh-to-brep = { path = "../valenx-mesh-to-brep" }
+valenx-core         = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

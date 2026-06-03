@@ -1,0 +1,14 @@
+physics = "bio"
+solver  = "fiji.process"
+mesh    = "(none)"
+
+# Fiji ImageJ headless image processing. `fiji_app` is the
+# path to the ImageJ launcher (ImageJ-linux64 / ImageJ.exe /
+# Contents/MacOS/ImageJ-macosx). The macro is responsible
+# for opening `input_image` (typically via `getArgument()`).
+[bio.fiji]
+fiji_app        = "/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx"
+macro_file      = "process.ijm"
+# input_image   = "raw.tif"
+output_basename = "processed"
+extra_args      = []
