@@ -21,6 +21,7 @@
 #![forbid(unsafe_code)]
 
 pub mod activating;
+pub mod aniso_field;
 pub mod bioheat;
 pub mod cable;
 pub mod engine;
@@ -33,6 +34,7 @@ pub mod strength_duration;
 pub mod units;
 
 pub use activating::activating_along_x;
+pub use aniso_field::{analytic_aniso_point_source_mv, AnisoTissue, Conductivity, SolvedField};
 pub use bioheat::{analytic_point_heat_k, solve_point_heat, BioheatField};
 pub use cable::{count_spikes, HhCable, HhCompartment, StimPulse};
 pub use engine::{recruitment_curve, stimulate, Axon, Recruitment, Scene};
