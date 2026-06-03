@@ -51,7 +51,7 @@ Rust solvers ship inside the app and work out of the box:
   analysis, pairwise + multiple alignment, phylogenetics, population genetics,
   RNA secondary structure, RNA/mRNA design, molecular dynamics,
   cheminformatics, macromolecular structure (PDB/mmCIF, DSSP, superposition),
-  quantum chemistry (Hartree–Fock / MP2), genomics, systems biology, docking,
+  quantum chemistry (Hartree–Fock / MP2 / Kohn–Sham DFT), genomics, systems biology, docking,
   and CRISPR / gene-edit design — all native (`valenx-bioseq`, `valenx-align`,
   `valenx-phylo`, `valenx-rnastruct`, `valenx-md`, `valenx-qchem`, …).
 - **Engineering** — native 3D external-aerodynamics (a **wind-tunnel
@@ -64,18 +64,42 @@ The external tools below are **optional** — reach for them when you want a
 reference implementation, a GPU/ML model, or a domain not yet native. A few
 domains are still external-only and on the roadmap: a native
 **electromagnetics** solver, **parametric CAD** history, native **unstructured
-meshing**, **industrial/turbulent CFD**, and **DFT**. **Contributors welcome —
+meshing**, and **large-scale 3-D / industrial CFD**. **Contributors welcome —
 AI-assisted included** (see [CONTRIBUTING.md](./CONTRIBUTING.md) +
 [AGENTS.md](./AGENTS.md)).
 
+## Validation
+
+Native solvers are checked against published references or analytic results —
+the figures below are reproduced by the test suite, not asserted. Full detail —
+every per-crate validation suite and the ~200 bugs surfaced and fixed by
+running them — lives in [docs/VALIDATION.md](./docs/VALIDATION.md).
+
+| Solver | Benchmark / reference | Result |
+| --- | --- | --- |
+| Orbital — `valenx-astro` | LEO→GEO Hohmann Δv vs textbook ~3.9 km/s | **3,892 m/s** total (2,425 + 1,467), ToF 5.27 h — [test](./crates/valenx-astro/src/maneuver.rs) |
+| CFD — `valenx-cfd-native` | Lid-driven cavity vs Ghia, Ghia & Shin 1982 | centerline MAE **0.035 / 0.016 / 0.024** at Re 100 / 400 / 1000 |
+| CFD — `valenx-cfd-native` | Poiseuille channel vs analytic | u_max **1.4949 vs 1.5000** (0.34% error) |
+| CFD — `valenx-cfd-native` | Backward-facing step vs Armaly / Gartling | reattachment x_r/h ≈ **4.5**, inside the published envelope |
+| FEA — `valenx-fem` | Constant-strain patch test | satisfied to **~1e-9**; Hex8 90% / Tet10 112% of the Euler–Bernoulli tip |
+| MD — `valenx-md` | Argon NVE energy conservation | std-to-mean **< 1%**, no secular drift; lattice sum < 0.5% vs analytic |
+| Quantum chem — `valenx-qchem` | Hydrogen atom, exact Kohn–Sham | reproduces **−0.212742 Ha**; LDA → uniform-gas and PBE → LDA limits hold |
+| Docking — `valenx-dock-screen` | 1HVR / 3PTB / 1STP redocking | RMSD **0.305 / 0.263 / 0.139 Å** (mean 0.236), 100% < 2 Å |
+
 ## Install
 
-| Platform | How |
+> **`0.1.0-alpha.1` builds from source today** — pre-built installers aren't
+> published yet. Building is one command ([Build from source](#build-from-source),
+> just below) and is the supported path for the alpha. The signed packages
+> below are the planned `1.0` distribution; they'll appear on
+> [Releases][releases] as they're cut.
+
+| Platform | Planned package |
 | --- | --- |
-| Windows | Download `Valenx-<ver>-x86_64.msi` from [Releases][releases] and run it |
-| macOS   | Download `Valenx-<ver>.dmg` from [Releases][releases] and drag to Applications |
-| Linux (Debian/Ubuntu) | `sudo apt install ./valenx_<ver>_amd64.deb` |
-| Linux (Fedora/RHEL/openSUSE) | `sudo dnf install ./valenx-<ver>.x86_64.rpm` |
+| Windows | `Valenx-<ver>-x86_64.msi` |
+| macOS   | `Valenx-<ver>.dmg` |
+| Linux (Debian/Ubuntu) | `valenx_<ver>_amd64.deb` |
+| Linux (Fedora/RHEL/openSUSE) | `valenx-<ver>.x86_64.rpm` |
 
 Full installer guide with per-OS pinning recipes:
 [docs/INSTALLER.md](./docs/INSTALLER.md).
