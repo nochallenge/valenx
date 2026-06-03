@@ -169,13 +169,20 @@ impl ExtracellularField {
         i + self.n * j + self.n * self.n * k
     }
 
-    /// Potential (mV) at the node nearest distance `r_mm` along +x from the
-    /// grid centre.
+    /// Potential (mV) at the node nearest the point `pos` (metres; the grid
+    /// is centred at the origin).
+    pub fn potential_mv_at(&self, pos: Vector3<f64>) -> f64 {
+        let c = (self.n as f64 - 1.0) / 2.0;
+        let to_idx = |coord: f64| -> usize {
+            (coord / self.spacing_m + c).round().clamp(0.0, self.n as f64 - 1.0) as usize
+        };
+        let idx = self.node_index(to_idx(pos.x), to_idx(pos.y), to_idx(pos.z));
+        self.potential_mv[idx]
+    }
+
+    /// Potential (mV) at distance `r_mm` along +x from the grid centre.
     pub fn potential_mv_at_radius_x(&self, r_mm: f64) -> f64 {
-        let c = self.n / 2;
-        let di = (r_mm * 1.0e-3 / self.spacing_m).round() as usize;
-        let i = (c + di).min(self.n - 1);
-        self.potential_mv[self.node_index(i, c, c)]
+        self.potential_mv_at(Vector3::new(r_mm * 1.0e-3, 0.0, 0.0))
     }
 }
 
