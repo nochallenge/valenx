@@ -382,3 +382,12 @@ Honest ceiling: this is **real neurostimulation-research-grade** modelling
 (standard membrane models, idealized geometry, quasi-static fields), not
 Neuralink-production or clinical software — that needs their hardware, data, and
 regulatory pipeline, not just code.
+
+**2026-06-03 — Extracellular recording added (forward-EAP, `recording`).** The
+read-out side of a neural interface (the rest of the crate stimulates). A firing
+axon's transmembrane currents act as extracellular point sources,
+`φ_e = 1/(4πσ_e)·Σ_k I_m,k/r_k`; the membrane currents are built from the axial-
+current divergence, so they conserve charge exactly (`|Σ I_m| ≈ 1e-21 A`).
+Validated: the recorded waveform is **biphasic with a dominant-negative (sink)
+phase** — the textbook extracellular action potential — and its amplitude falls
+off with electrode distance. `valenx-neuro` now 36 tests.

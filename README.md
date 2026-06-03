@@ -74,15 +74,16 @@ Rust solvers ship inside the app and work out of the box:
   (velocity-Verlet on quantum-chemistry forces) and a physically-based **path
   tracer** (light-tree importance sampling, bidirectional path tracing,
   subsurface scattering).
-- **Neuroengineering / BCI** — a neural-interface stimulation suite
-  (`valenx-neuro`): an implanted electrode's **extracellular FEM field**
+- **Neuroengineering / BCI** — a neural-interface stimulation **and recording**
+  suite (`valenx-neuro`): an implanted electrode's **extracellular FEM field**
   (reusing the FEA solver), **Hodgkin–Huxley** cable axons, the **Rattay
   activating function** coupling the two (an electrode recruits nearby
   neurons), **bioheat** tissue heating, and **electrode–tissue impedance**,
   plus an **unconditionally-stable implicit cable solver**, **myelinated
   saltatory fibers** (conduction velocity matched to the empirical 6·D rule),
   **strength–duration** curves, an **anisotropic-tensor FEM field**, and
-  **multi-contact current steering** — each validated against a textbook or
+  **multi-contact current steering**, and **extracellular recording** (the
+  forward-EAP read-out model) — each validated against a textbook or
   closed-form result (see [Validation](#validation)).
 
 The external tools below are **optional** — reach for them when you want a
@@ -118,6 +119,7 @@ running them — lives in [docs/VALIDATION.md](./docs/VALIDATION.md).
 | Neuro — `valenx-neuro` | implicit cable + myelinated fiber | unconditionally-stable implicit solver (stable at 100 µm, fixes the v1 RK4 limit); myelinated **CV ≈ 6·D** within ~6% (57 / 113 m/s at 10 / 20 µm), ∝ D not √D |
 | Neuro — `valenx-neuro` | strength–duration | rheobase + **chronaxie 1.65 ms** (≈ ½ membrane τ); Lapicque constant-charge law holds to **< 1%** at short widths |
 | Neuro — `valenx-neuro` | anisotropic FEM + steering | tensor-σ point source matches the **closed-form** anisotropic Green's function within ~10%; multi-contact **current steering** shifts the focus |
+| Neuro — `valenx-neuro` | extracellular recording (forward-EAP) | **biphasic** spike with a dominant-negative (sink) phase; amplitude falls off with electrode distance; membrane currents conserve charge (Σ ≈ 0) |
 
 ## Install
 
