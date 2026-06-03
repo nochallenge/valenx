@@ -26,6 +26,7 @@ pub mod cable;
 pub mod engine;
 pub mod error;
 pub mod field;
+pub mod impedance;
 pub mod units;
 
 pub use activating::activating_along_x;
@@ -34,3 +35,4 @@ pub use cable::{count_spikes, HhCable, HhCompartment, StimPulse};
 pub use engine::{stimulate, Axon, Recruitment, Scene};
 pub use error::{NeuroError, Result};
 pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};
+pub use impedance::{Cpe, ElectrodeImpedance};
