@@ -1,6 +1,6 @@
 # RFC 0011: Neural-interface / BCI simulation track (`valenx-neuro`)
 
-- **Status:** Draft
+- **Status:** Implemented (v1) — see Amendments
 - **Author(s):** nochallenge
 - **Created:** 2026-06-02
 - **Discussion PR:** _TBD_
@@ -258,7 +258,7 @@ time scrubber animating the AP) → plots (membrane V(t), recruitment curve, ΔT
 |---|---|---|
 | Extracellular field | point source, homogeneous medium | φ = I/(4πσr) within mesh error |
 | HH cable | Hodgkin–Huxley 1952 | AP ~100 mV overshoot, threshold, refractory period; conduction velocity in range |
-| Activating function | Rattay 1986 | cathodic threshold < anodic; recruitment threshold ∝ r² |
+| Activating function | Rattay 1986 | cathodic threshold < anodic; recruitment threshold rises with electrode distance |
 | Bioheat | Pennes, point source | ΔT = Q/(4πk r)·e^(−r/L) vs analytic |
 | Impedance | disk electrode | R_a = 1/(4σa); capacitive→resistive Bode shape |
 
@@ -329,3 +329,27 @@ against its reference.
 - **Bioheat / impedance depth in v1:** steady-state bioheat + R+CPE impedance
   first; transient bioheat and full EIS spectra later.
 - **Biphasic charge-balancing** waveform details (inter-phase gap, asymmetry).
+
+---
+
+## Amendments
+
+**2026-06-02 — v1 implemented (`valenx-neuro`, 20 tests).** Built per this RFC:
+extracellular FEM field (point-source φ = I/4πσr validated), Hodgkin–Huxley
+compartment + cable (textbook action potential + propagation), the Rattay
+activating function (cathodic/anodic sign), coupled recruitment, bioheat, and
+electrode impedance, plus a `valenx-app` workbench. Honest research-grade
+scoping notes / deviations from the original targets:
+
+- **Bioheat is conduction-only.** `valenx-fem`'s solver has no reaction term, so
+  v1 solves `−∇·(k∇T)=Q` (point-source ΔT validated); the Pennes perfusion term
+  (`e^{−r/L}` cooling) is deferred.
+- **1-mm cable compartments.** Explicit RK4 axial integration is stable only for
+  roughly `αΔt ≤ 0.5`; at 100 µm it diverges in the sub-threshold (linear)
+  regime. v1 uses 1-mm compartments (stable; the ~6 mm space constant is well
+  resolved). A finer cable needs an implicit (Crank–Nicolson) axial solver — the
+  proper fix.
+- **Strength–distance rises with distance, not exactly ∝ r².** On the coarse
+  (2-mm) FEM field the measured threshold exponent over 0.5–2 mm is ≈ 0.7–1, not
+  the textbook current-distance `r²`; the qualitative law (deeper fibers need
+  more current) holds, and a finer field should steepen it.
