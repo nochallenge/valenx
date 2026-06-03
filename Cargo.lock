@@ -6488,6 +6488,7 @@ dependencies = [
  "valenx-md",
  "valenx-mesh",
  "valenx-mesh-to-brep",
+ "valenx-neuro",
  "valenx-optimize",
  "valenx-phylo",
  "valenx-popgen",
@@ -7238,6 +7239,15 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "valenx-cad",
+ "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-neuro"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "valenx-fem",
  "valenx-mesh",
 ]
 

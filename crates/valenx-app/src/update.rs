@@ -382,6 +382,18 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
+                        .on_hover_text(
+                            "Show / hide the right-side Neural-Interface workbench — native \
+                             BCI stimulation: an electrode's extracellular field drives \
+                             Hodgkin-Huxley axons (recruitment, bioheat, electrode impedance), \
+                             solved in-process by valenx-neuro.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -860,6 +872,10 @@ impl eframe::App for ValenxApp {
         // Dynamics. Mounted before the CentralPanel so egui docks it to
         // the right alongside the other workbenches.
         crate::reactdyn_workbench::draw_reactdyn_workbench(self, ctx);
+
+        // Neural-Interface workbench (right) — native BCI stimulation on
+        // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
+        crate::neuro_workbench::draw_neuro_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled

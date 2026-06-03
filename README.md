@@ -9,7 +9,9 @@
 > cheminformatics; and **computational biology** — genomics, sequence
 > alignment, phylogenetics, population genetics, protein structure &
 > design, RNA/mRNA design, CRISPR gene-editing, cryo-EM, and systems
-> biology. Native Rust solvers plus 141 open-source tool integrations.
+> biology; and **neuroengineering** — neural-interface / BCI stimulation
+> (extracellular fields, Hodgkin–Huxley cable models, bioheat). Native
+> Rust solvers plus 141 open-source tool integrations.
 
 **Status:** `0.1.0-alpha.1` — pre-release. The workflow loop is
 usable end-to-end (load project, click a case, **Prepare**, **Run**,
@@ -72,6 +74,13 @@ Rust solvers ship inside the app and work out of the box:
   (velocity-Verlet on quantum-chemistry forces) and a physically-based **path
   tracer** (light-tree importance sampling, bidirectional path tracing,
   subsurface scattering).
+- **Neuroengineering / BCI** — a neural-interface stimulation suite
+  (`valenx-neuro`): an implanted electrode's **extracellular FEM field**
+  (reusing the FEA solver), **Hodgkin–Huxley** cable axons, the **Rattay
+  activating function** coupling the two (an electrode recruits nearby
+  neurons), **bioheat** tissue heating, and **electrode–tissue impedance** —
+  each validated against a textbook or closed-form result (see
+  [Validation](#validation)).
 
 The external tools below are **optional** — reach for them when you want a
 reference implementation, a GPU/ML model, or a domain not yet native. A few
@@ -99,6 +108,10 @@ running them — lives in [docs/VALIDATION.md](./docs/VALIDATION.md).
 | MD — `valenx-md` | Argon NVE energy conservation | std-to-mean **< 1%**, no secular drift; lattice sum < 0.5% vs analytic |
 | Quantum chem — `valenx-qchem` | Hydrogen atom, exact Kohn–Sham | reproduces **−0.212742 Ha**; LDA → uniform-gas and PBE → LDA limits hold |
 | Docking — `valenx-dock-screen` | 1HVR / 3PTB / 1STP redocking | RMSD **0.305 / 0.263 / 0.139 Å** (mean 0.236), 100% < 2 Å |
+| Neuro — `valenx-neuro` | Hodgkin–Huxley axon | textbook action potential (~100 mV overshoot, threshold, refractory) + propagating cable |
+| Neuro — `valenx-neuro` | field + activating function | point source φ = I/(4πσr); cathodic depolarizes, anodic hyperpolarizes (Rattay) |
+| Neuro — `valenx-neuro` | electrode recruitment | threshold **rises with electrode–fiber distance**; recruitment monotone in current |
+| Neuro — `valenx-neuro` | bioheat + impedance | ΔT = Q/(4πk r); electrode access resistance R = 1/(4σa) |
 
 ## Install
 
