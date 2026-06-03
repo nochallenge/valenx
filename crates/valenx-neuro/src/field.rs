@@ -153,6 +153,32 @@ impl TissueGrid {
             spacing_m: self.spacing_m,
         })
     }
+
+    /// Number of nodes per edge.
+    pub fn n(&self) -> usize {
+        self.n
+    }
+
+    /// Grid node spacing (metres).
+    pub fn spacing_m(&self) -> f64 {
+        self.spacing_m
+    }
+
+    /// Steady **conductive** temperature rise (K, per node) from a `power_w`
+    /// point heat source at the centre, with thermal conductivity `k_w_per_mk`
+    /// (W/m·K) and the outer boundary held at the baseline (ΔT = 0). Reuses
+    /// the same FEM solver as the electric field (`−∇·(k∇T)=q`). Pure
+    /// conduction; blood-perfusion cooling is future work (see RFC 0011).
+    pub fn solve_heat_raw(&self, k_w_per_mk: f64, power_w: f64) -> Result<Vec<f64>> {
+        let loads = vec![HeatLoad {
+            node: self.center_node(),
+            power: power_w,
+        }];
+        let fixed = self.boundary_fixed(0.0);
+        let sol = solve_steady_thermal(&self.mesh, k_w_per_mk, &fixed, &loads)
+            .map_err(|e| NeuroError::Solver(e.to_string()))?;
+        Ok(sol.temperature)
+    }
 }
 
 /// A solved extracellular potential field over a [`TissueGrid`].
