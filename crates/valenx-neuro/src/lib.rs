@@ -22,7 +22,9 @@
 
 pub mod cable;
 pub mod error;
+pub mod field;
 pub mod units;
 
 pub use cable::{count_spikes, HhCompartment, StimPulse};
 pub use error::{NeuroError, Result};
+pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};

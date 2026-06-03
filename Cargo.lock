@@ -7245,7 +7245,9 @@ dependencies = [
 name = "valenx-neuro"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "nalgebra",
  "valenx-fem",
+ "valenx-mesh",
 ]
 
 [[package]]

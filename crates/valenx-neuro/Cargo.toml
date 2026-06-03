@@ -12,7 +12,10 @@ repository.workspace   = true
 [dependencies]
 # The extracellular field and Pennes bioheat reuse valenx-fem's steady
 # conduction solver — the operator −∇·(σ∇φ)=I is identical to −∇·(k∇T)=q.
-valenx-fem = { path = "../valenx-fem" }
+# valenx-mesh supplies the Mesh/Tet4 types; nalgebra the Vector3 node coords.
+valenx-fem  = { path = "../valenx-fem" }
+valenx-mesh = { path = "../valenx-mesh" }
+nalgebra    = { workspace = true }
 
 [lints.rust]
 unused_imports = "warn"
