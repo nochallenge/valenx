@@ -100,6 +100,11 @@ valenx-cfd-native    = { path = "../valenx-cfd-native" }
 # Depends on valenx-qchem for the single-point energies its forces use.
 valenx-reactdyn      = { path = "../valenx-reactdyn" }
 
+# The native neural-interface / BCI stimulation suite, surfaced by the
+# Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
+# (FEM extracellular field + bioheat) and valenx-mesh; pure-Rust solver.
+valenx-neuro         = { path = "../valenx-neuro" }
+
 # The native launch-vehicle ascent + trajectory simulator, surfaced in
 # the desktop UI by the Astro / Launch workbench (src/astro_workbench.rs
 # + src/astro/). Like valenx-aero it's a pure-Rust solver library; the

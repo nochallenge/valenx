@@ -84,6 +84,11 @@ pub struct Recruitment {
 }
 
 impl Recruitment {
+    /// Per-axon fired flags (in scene-axon order).
+    pub fn fired(&self) -> &[bool] {
+        &self.fired
+    }
+
     /// Did any axon fire?
     pub fn any_fired(&self) -> bool {
         self.fired.iter().any(|&f| f)
@@ -139,6 +144,34 @@ pub fn stimulate(scene: &Scene, electrode_ua: f64) -> Result<Recruitment> {
     Ok(Recruitment { fired })
 }
 
+/// Recruited fraction vs cathodic current magnitude (µA). Efficient: the field
+/// is linear in current, so it is solved once and each axon's activating drive
+/// is scaled across the sweep. Returns `(magnitude_µA, fraction)` pairs.
+pub fn recruitment_curve(scene: &Scene, current_mags_ua: &[f64]) -> Result<Vec<(f64, f64)>> {
+    let field = scene.grid.solve_point_source(-1.0)?;
+    let unit_drives: Vec<Vec<f64>> = scene
+        .axons
+        .iter()
+        .map(|ax| activating_drive_along_axon(&field, ax))
+        .collect();
+    let n = scene.axons.len();
+    let mut out = Vec::with_capacity(current_mags_ua.len());
+    for &mag in current_mags_ua {
+        let mut fired = 0usize;
+        for (ax, unit) in scene.axons.iter().zip(&unit_drives) {
+            let drive: Vec<f64> = unit.iter().map(|d| d * mag).collect();
+            let mut cable = HhCable::uniform(ax.n_comp, ax.dx_um, ax.a_um, ax.ri_ohm_cm);
+            let run = cable.stimulate_extracellular(&drive, 1.0, 0.5, 12.0, 0.01);
+            if (0..ax.n_comp).any(|k| run.peak_time_ms(k).is_some()) {
+                fired += 1;
+            }
+        }
+        let frac = if n == 0 { 0.0 } else { fired as f64 / n as f64 };
+        out.push((mag, frac));
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,11 +225,8 @@ mod tests {
     #[test]
     fn recruitment_curve_is_monotonic() {
         let scene = Scene::bundle(10, 2.0);
-        let amps = [-10.0, -50.0, -200.0, -1000.0, -3000.0];
-        let fracs: Vec<f64> = amps
-            .iter()
-            .map(|&a| stimulate(&scene, a).expect("solve").recruited_fraction())
-            .collect();
+        let curve = recruitment_curve(&scene, &[10.0, 50.0, 200.0, 1000.0, 3000.0]).expect("solve");
+        let fracs: Vec<f64> = curve.iter().map(|&(_, f)| f).collect();
         for w in fracs.windows(2) {
             assert!(w[1] >= w[0], "recruitment must not decrease with current: {fracs:?}");
         }
