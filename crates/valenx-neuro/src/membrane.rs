@@ -170,9 +170,9 @@ impl<M: Membrane> ImplicitCable<M> {
             }
             self.step(&ext, dt);
             t += dt;
-            for k in 0..n {
-                if self.v[k] > peak[k] {
-                    peak[k] = self.v[k];
+            for (vk, pk) in self.v.iter().zip(peak.iter_mut()) {
+                if *vk > *pk {
+                    *pk = *vk;
                 }
             }
         }
