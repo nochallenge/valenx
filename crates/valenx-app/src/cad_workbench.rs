@@ -27,10 +27,13 @@ use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
 /// Which primitive a feature-tree step builds.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FeatureKind {
     Box,
     Cylinder,
+    Sphere,
+    Cone,
+    Torus,
 }
 
 /// One UI-editable feature-tree step. Carries both the box and cylinder
@@ -44,40 +47,56 @@ struct UiStep {
     dz: String,
     radius: String,
     height: String,
+    top_radius: String,
+    major: String,
+    minor: String,
     x: String,
     y: String,
     z: String,
 }
 
 impl UiStep {
-    fn new_box() -> Self {
+    /// A step with default dimension fields for every primitive; callers
+    /// override the ones the chosen `kind` actually uses.
+    fn base(op: Op, kind: FeatureKind) -> Self {
         Self {
-            op: Op::Join,
-            kind: FeatureKind::Box,
+            op,
+            kind,
             dx: "1".into(),
             dy: "1".into(),
             dz: "1".into(),
             radius: "0.5".into(),
             height: "1".into(),
+            top_radius: "0".into(),
+            major: "1".into(),
+            minor: "0.25".into(),
             x: "0".into(),
             y: "0".into(),
             z: "0".into(),
         }
     }
 
+    fn new_box() -> Self {
+        Self::base(Op::Join, FeatureKind::Box)
+    }
+
     fn new_cylinder() -> Self {
-        Self {
-            op: Op::Cut,
-            kind: FeatureKind::Cylinder,
-            dx: "1".into(),
-            dy: "1".into(),
-            dz: "1".into(),
-            radius: "0.25".into(),
-            height: "2".into(),
-            x: "0".into(),
-            y: "0".into(),
-            z: "0".into(),
-        }
+        let mut s = Self::base(Op::Cut, FeatureKind::Cylinder);
+        s.radius = "0.25".into();
+        s.height = "2".into();
+        s
+    }
+
+    fn new_sphere() -> Self {
+        Self::base(Op::Join, FeatureKind::Sphere)
+    }
+
+    fn new_cone() -> Self {
+        Self::base(Op::Join, FeatureKind::Cone)
+    }
+
+    fn new_torus() -> Self {
+        Self::base(Op::Join, FeatureKind::Torus)
     }
 
     /// Translate into a solver-crate [`Step`].
@@ -92,6 +111,18 @@ impl UiStep {
                 radius: self.radius.clone(),
                 height: self.height.clone(),
             },
+            FeatureKind::Sphere => Feature::Sphere {
+                radius: self.radius.clone(),
+            },
+            FeatureKind::Cone => Feature::Cone {
+                base_radius: self.radius.clone(),
+                top_radius: self.top_radius.clone(),
+                height: self.height.clone(),
+            },
+            FeatureKind::Torus => Feature::Torus {
+                major_radius: self.major.clone(),
+                minor_radius: self.minor.clone(),
+            },
         };
         Step::placed(self.op, feature, self.x.clone(), self.y.clone(), self.z.clone())
     }
@@ -100,32 +131,17 @@ impl UiStep {
 /// The default feature tree: a unit box with a cylinder punched through it —
 /// `valenx-cad`'s proven "punched cube" geometry, so the seed always rebuilds.
 fn default_steps() -> Vec<UiStep> {
-    vec![
-        UiStep {
-            op: Op::New,
-            kind: FeatureKind::Box,
-            dx: "size".into(),
-            dy: "size".into(),
-            dz: "size".into(),
-            radius: "hole_r".into(),
-            height: "hole_h".into(),
-            x: "0".into(),
-            y: "0".into(),
-            z: "0".into(),
-        },
-        UiStep {
-            op: Op::Cut,
-            kind: FeatureKind::Cylinder,
-            dx: "size".into(),
-            dy: "size".into(),
-            dz: "size".into(),
-            radius: "hole_r".into(),
-            height: "hole_h".into(),
-            x: "size / 2".into(),
-            y: "size / 2".into(),
-            z: "-0.5".into(),
-        },
-    ]
+    let mut base = UiStep::base(Op::New, FeatureKind::Box);
+    base.dx = "size".into();
+    base.dy = "size".into();
+    base.dz = "size".into();
+    let mut hole = UiStep::base(Op::Cut, FeatureKind::Cylinder);
+    hole.radius = "hole_r".into();
+    hole.height = "hole_h".into();
+    hole.x = "size / 2".into();
+    hole.y = "size / 2".into();
+    hole.z = "-0.5".into();
+    vec![base, hole]
 }
 
 /// Persistent state for the parametric-CAD workbench.
@@ -256,6 +272,21 @@ fn ui_step_from(step: &Step) -> Result<UiStep, String> {
             us.radius = radius.clone();
             us.height = height.clone();
         }
+        Feature::Sphere { radius } => {
+            us.kind = FeatureKind::Sphere;
+            us.radius = radius.clone();
+        }
+        Feature::Cone { base_radius, top_radius, height } => {
+            us.kind = FeatureKind::Cone;
+            us.radius = base_radius.clone();
+            us.top_radius = top_radius.clone();
+            us.height = height.clone();
+        }
+        Feature::Torus { major_radius, minor_radius } => {
+            us.kind = FeatureKind::Torus;
+            us.major = major_radius.clone();
+            us.minor = minor_radius.clone();
+        }
         Feature::Extrude { .. } => {
             return Err("extrude features aren't editable in this panel yet".to_string());
         }
@@ -319,6 +350,16 @@ fn op_label(op: Op) -> &'static str {
         Op::Join => "Join",
         Op::Cut => "Cut",
         Op::Intersect => "Intersect",
+    }
+}
+
+fn kind_label(kind: FeatureKind) -> &'static str {
+    match kind {
+        FeatureKind::Box => "Box",
+        FeatureKind::Cylinder => "Cylinder",
+        FeatureKind::Sphere => "Sphere",
+        FeatureKind::Cone => "Cone",
+        FeatureKind::Torus => "Torus",
     }
 }
 
@@ -439,21 +480,29 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         }
                                     });
                                 egui::ComboBox::from_id_source(("cad_kind", i))
-                                    .selected_text(match st.kind {
-                                        FeatureKind::Box => "Box",
-                                        FeatureKind::Cylinder => "Cylinder",
-                                    })
+                                    .selected_text(kind_label(st.kind))
                                     .width(92.0)
                                     .show_ui(ui, |ui| {
-                                        ui.selectable_value(
-                                            &mut st.kind,
-                                            FeatureKind::Box,
-                                            "Box",
-                                        );
+                                        ui.selectable_value(&mut st.kind, FeatureKind::Box, "Box");
                                         ui.selectable_value(
                                             &mut st.kind,
                                             FeatureKind::Cylinder,
                                             "Cylinder",
+                                        );
+                                        ui.selectable_value(
+                                            &mut st.kind,
+                                            FeatureKind::Sphere,
+                                            "Sphere",
+                                        );
+                                        ui.selectable_value(
+                                            &mut st.kind,
+                                            FeatureKind::Cone,
+                                            "Cone",
+                                        );
+                                        ui.selectable_value(
+                                            &mut st.kind,
+                                            FeatureKind::Torus,
+                                            "Torus",
                                         );
                                     });
                                 if ui.small_button("✕").clicked() {
@@ -476,6 +525,27 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         dim_edit(ui, &mut st.height);
                                     });
                                 }
+                                FeatureKind::Sphere => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("r");
+                                        dim_edit(ui, &mut st.radius);
+                                    });
+                                }
+                                FeatureKind::Cone => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("base r, top r, h");
+                                        dim_edit(ui, &mut st.radius);
+                                        dim_edit(ui, &mut st.top_radius);
+                                        dim_edit(ui, &mut st.height);
+                                    });
+                                }
+                                FeatureKind::Torus => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("major, minor");
+                                        dim_edit(ui, &mut st.major);
+                                        dim_edit(ui, &mut st.minor);
+                                    });
+                                }
                             }
                             ui.horizontal(|ui| {
                                 ui.label("at x,y,z");
@@ -488,12 +558,21 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     if let Some(i) = remove_step {
                         s.steps.remove(i);
                     }
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         if ui.button("+ Box").clicked() {
                             s.steps.push(UiStep::new_box());
                         }
                         if ui.button("+ Cylinder").clicked() {
                             s.steps.push(UiStep::new_cylinder());
+                        }
+                        if ui.button("+ Sphere").clicked() {
+                            s.steps.push(UiStep::new_sphere());
+                        }
+                        if ui.button("+ Cone").clicked() {
+                            s.steps.push(UiStep::new_cone());
+                        }
+                        if ui.button("+ Torus").clicked() {
+                            s.steps.push(UiStep::new_torus());
                         }
                     });
                     ui.horizontal(|ui| {
@@ -720,5 +799,38 @@ mod tests {
             history.last().unwrap().faces() > 6,
             "reloaded tree still punches a hole"
         );
+    }
+
+    #[test]
+    fn feature_tree_builds_new_primitives_standalone() {
+        // Each new UI primitive, as a lone New step, rebuilds to a real body —
+        // exercises to_step → rebuild for sphere / cone / torus.
+        for mut step in [UiStep::new_sphere(), UiStep::new_cone(), UiStep::new_torus()] {
+            step.op = Op::New;
+            let s = CadWorkbenchState {
+                steps: vec![step],
+                ..CadWorkbenchState::default()
+            };
+            let (history, _) = rebuild_tree(&s).expect("primitive rebuilds");
+            assert!(history.last().unwrap().faces() > 0, "primitive has faces");
+        }
+    }
+
+    #[test]
+    fn save_load_preserves_a_torus_step() {
+        // Round-trip a new primitive through to_step → RON → ui_step_from.
+        let torus = {
+            let mut t = UiStep::new_torus();
+            t.op = Op::New;
+            t
+        };
+        let s = CadWorkbenchState {
+            steps: vec![torus],
+            ..CadWorkbenchState::default()
+        };
+        let txt = save_string(&s).expect("serialize");
+        let (_params, steps) = load_from_string(&txt).expect("deserialize");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].kind, FeatureKind::Torus);
     }
 }
