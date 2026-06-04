@@ -40,6 +40,7 @@ pub mod aero_workbench;
 pub mod fem_workbench;
 pub mod cad_workbench;
 pub mod cfd_workbench;
+pub mod draft2d_workbench;
 pub mod neuro_workbench;
 pub mod reactdyn_workbench;
 pub mod astro;
@@ -402,6 +403,13 @@ pub struct ValenxApp {
     /// Form + result state for the Parametric-CAD workbench, wrapping
     /// `valenx-solvespace-3d`. See [`crate::cad_workbench`].
     pub(crate) cad: crate::cad_workbench::CadWorkbenchState,
+
+    /// Whether the right-side 2D Drafting workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_draft2d_workbench: bool,
+    /// State for the 2D Drafting workbench, wrapping `valenx-librecad-2d`. See
+    /// [`crate::draft2d_workbench`].
+    pub(crate) draft2d: crate::draft2d_workbench::Draft2dWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).

@@ -105,6 +105,7 @@ valenx-reactdyn      = { path = "../valenx-reactdyn" }
 # (FEM extracellular field + bioheat) and valenx-mesh; pure-Rust solver.
 valenx-neuro         = { path = "../valenx-neuro" }
 valenx-solvespace-3d = { path = "../valenx-solvespace-3d" }
+valenx-librecad-2d = { path = "../valenx-librecad-2d" }
 
 # The native launch-vehicle ascent + trajectory simulator, surfaced in
 # the desktop UI by the Astro / Launch workbench (src/astro_workbench.rs

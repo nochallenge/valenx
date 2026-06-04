@@ -405,6 +405,17 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_draft2d_workbench, "2D Drafting")
+                        .on_hover_text(
+                            "Show / hide the right-side 2D Drafting workbench — a \
+                             LibreCAD-style 2D drawing canvas (lines, circles, arcs, \
+                             polylines, text) with DXF export, on valenx-librecad-2d.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -891,6 +902,10 @@ impl eframe::App for ValenxApp {
         // Parametric-CAD workbench (right) — named parameters driving sketch
         // geometry on valenx-solvespace-3d. Off unless toggled via View.
         crate::cad_workbench::draw_cad_workbench(self, ctx);
+
+        // 2D Drafting workbench (right) — LibreCAD-style 2D canvas on
+        // valenx-librecad-2d. Off unless toggled via View.
+        crate::draft2d_workbench::draw_draft2d_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
