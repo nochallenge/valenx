@@ -439,4 +439,18 @@ mod tests {
             Err(TimelineError::Param(_))
         ));
     }
+
+    #[test]
+    fn extrude_builds_from_a_profile() {
+        let mut tl = FeatureTimeline::new();
+        tl.push(Step::at_origin(
+            Op::New,
+            Feature::Extrude {
+                profile: vec![(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)],
+                height: "1".into(),
+            },
+        ));
+        let m = tl.rebuild(&ParameterTable::new()).expect("extrude builds");
+        assert!(m.body.faces() >= 5, "an extruded quad is a box-like solid");
+    }
 }
