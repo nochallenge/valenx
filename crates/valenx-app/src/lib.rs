@@ -47,6 +47,7 @@ pub mod hvac_workbench;
 pub mod reverse_workbench;
 pub mod interior_workbench;
 pub mod animate_workbench;
+pub mod variant_effect_workbench;
 pub mod neuro_workbench;
 pub mod reactdyn_workbench;
 pub mod astro;
@@ -458,6 +459,13 @@ pub struct ValenxApp {
     /// State for the Animation workbench, wrapping `valenx-animate`. See
     /// [`crate::animate_workbench`].
     pub(crate) animate: crate::animate_workbench::AnimateWorkbenchState,
+
+    /// Whether the right-side Variant-Effect workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_variant_effect_workbench: bool,
+    /// State for the Variant-Effect workbench, wrapping `valenx-variant-effect`.
+    /// See [`crate::variant_effect_workbench`].
+    pub(crate) variant_effect: crate::variant_effect_workbench::VariantEffectWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).
