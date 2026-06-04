@@ -70,6 +70,8 @@ pub struct FemWorkbenchState {
     fos: Option<f64>,
     /// Structural mass (kg) = density × box volume, from the last run.
     mass_kg: Option<f64>,
+    /// Tip stiffness (N/m) = load / max displacement, from the last static run.
+    stiffness_n_per_m: Option<f64>,
     error: Option<String>,
     plot: Option<FemPlot>,
     /// Deformed mesh + von-Mises field, pending a push to the 3-D viewport.
@@ -97,6 +99,7 @@ impl Default for FemWorkbenchState {
             result: String::new(),
             fos: None,
             mass_kg: None,
+            stiffness_n_per_m: None,
             error: None,
             plot: None,
             viz: None,
@@ -294,6 +297,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
     s.push_viz = false;
     s.fos = None;
     s.mass_kg = None;
+    s.stiffness_n_per_m = None;
     let mesh = match structured_box_mesh(s.lx, s.ly, s.lz, s.nx, s.ny, s.nz) {
         Ok(m) => m,
         Err(e) => {
@@ -355,11 +359,23 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         Some(f) => format!("{f:.2}"),
                         None => "n/a".to_string(),
                     };
+                    // Tip stiffness k = F / δ (N/m).
+                    let stiffness = if max_disp > 0.0 {
+                        Some(s.force_n / max_disp)
+                    } else {
+                        None
+                    };
+                    s.stiffness_n_per_m = stiffness;
+                    let stiffness_str = match stiffness {
+                        Some(k) => format!("{k:.4e}"),
+                        None => "n/a".to_string(),
+                    };
                     s.result = format!(
                         "Linear static  ({} nodes, {} fixed)\n\
                          tip load        : {:.1} N downward\n\
                          max displacement: {:.6e} m\n\
                          max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
+                         tip stiffness   : {} N/m\n\
                          factor of safety: {} (σy = {:.0} MPa)",
                         mesh.nodes.len(),
                         constraints.len(),
@@ -367,6 +383,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         max_disp,
                         vm,
                         vm / 1e6,
+                        stiffness_str,
                         fos_str,
                         s.yield_mpa,
                     );
@@ -508,5 +525,23 @@ mod tests {
         let mut bad = FemWorkbenchState { nx: 0, ..Default::default() };
         run_fem(&mut bad);
         assert!(bad.mass_kg.is_none(), "a failed run clears the mass");
+    }
+
+    #[test]
+    fn linear_static_reports_tip_stiffness() {
+        let mut s = FemWorkbenchState {
+            solver: FemSolver::LinearStatic,
+            ..Default::default()
+        };
+        run_fem(&mut s);
+        let k1 = s.stiffness_n_per_m.expect("static run computes stiffness");
+        assert!(k1 > 0.0 && k1.is_finite());
+        assert!(s.result.contains("tip stiffness"));
+        // k = F/δ is a structural property: linear FEM ⇒ doubling the load
+        // doubles δ, so k is unchanged.
+        s.force_n *= 2.0;
+        run_fem(&mut s);
+        let k2 = s.stiffness_n_per_m.expect("stiffness recomputed");
+        assert!((k2 - k1).abs() / k1 < 1e-6, "stiffness is load-independent: {k1} → {k2}");
     }
 }
