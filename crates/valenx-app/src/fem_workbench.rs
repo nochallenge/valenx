@@ -72,6 +72,8 @@ pub struct FemWorkbenchState {
     mass_kg: Option<f64>,
     /// Tip stiffness (N/m) = load / max displacement, from the last static run.
     stiffness_n_per_m: Option<f64>,
+    /// Elastic strain energy `U = ½·Σ F·d` (J) from the last static run.
+    strain_energy_j: Option<f64>,
     error: Option<String>,
     plot: Option<FemPlot>,
     /// Deformed mesh + von-Mises field, pending a push to the 3-D viewport.
@@ -100,6 +102,7 @@ impl Default for FemWorkbenchState {
             fos: None,
             mass_kg: None,
             stiffness_n_per_m: None,
+            strain_energy_j: None,
             error: None,
             plot: None,
             viz: None,
@@ -290,6 +293,23 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
 /// Build the box mesh + boundary conditions and run the selected native
 /// solver. Extracted from the draw closure so it is unit-testable.
+/// Elastic strain energy `U = ½·Σ F·d` (joules). By Clapeyron's theorem the
+/// work the applied loads do on a linear elastic body equals the energy it
+/// stores, so summing `force · displacement` over the loaded DOFs (with the
+/// solved nodal displacements) is the exact strain energy — not the `½·F·δ_max`
+/// single-point approximation. Force node indices past the end of the
+/// displacement field are skipped.
+fn strain_energy_j(forces: &[NodalForce], displacement: &[[f64; 3]]) -> f64 {
+    0.5 * forces
+        .iter()
+        .filter_map(|f| {
+            displacement
+                .get(f.node)
+                .map(|d| f.force[0] * d[0] + f.force[1] * d[1] + f.force[2] * d[2])
+        })
+        .sum::<f64>()
+}
+
 fn run_fem(s: &mut FemWorkbenchState) {
     s.error = None;
     s.plot = None;
@@ -298,6 +318,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
     s.fos = None;
     s.mass_kg = None;
     s.stiffness_n_per_m = None;
+    s.strain_energy_j = None;
     let mesh = match structured_box_mesh(s.lx, s.ly, s.lz, s.nx, s.ny, s.nz) {
         Ok(m) => m,
         Err(e) => {
@@ -370,12 +391,17 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         Some(k) => format!("{k:.4e}"),
                         None => "n/a".to_string(),
                     };
+                    // Elastic strain energy U = ½·Σ F·d (Clapeyron), exact over
+                    // the loaded tip DOFs.
+                    let energy = strain_energy_j(&forces, &sol.displacement);
+                    s.strain_energy_j = Some(energy);
                     s.result = format!(
                         "Linear static  ({} nodes, {} fixed)\n\
                          tip load        : {:.1} N downward\n\
                          max displacement: {:.6e} m\n\
                          max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
                          tip stiffness   : {} N/m\n\
+                         strain energy   : {:.4e} J\n\
                          factor of safety: {} (σy = {:.0} MPa)",
                         mesh.nodes.len(),
                         constraints.len(),
@@ -384,6 +410,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         vm,
                         vm / 1e6,
                         stiffness_str,
+                        energy,
                         fos_str,
                         s.yield_mpa,
                     );
@@ -543,5 +570,42 @@ mod tests {
         run_fem(&mut s);
         let k2 = s.stiffness_n_per_m.expect("stiffness recomputed");
         assert!((k2 - k1).abs() / k1 < 1e-6, "stiffness is load-independent: {k1} → {k2}");
+    }
+
+    #[test]
+    fn strain_energy_sums_half_force_dot_displacement() {
+        // Two loaded nodes; the unloaded node 1 must not contribute.
+        let forces = vec![
+            NodalForce { node: 0, force: [0.0, -10.0, 0.0] },
+            NodalForce { node: 2, force: [4.0, 0.0, 0.0] },
+        ];
+        let disp = [[0.0, -2.0, 0.0], [9.0, 9.0, 9.0], [3.0, 0.0, 0.0]];
+        // U = ½[(-10)(-2) + 4·3] = ½[20 + 12] = 16 J.
+        assert!((strain_energy_j(&forces, &disp) - 16.0).abs() < 1e-12);
+        // An out-of-range node index is skipped, not a panic.
+        let bad = [NodalForce { node: 99, force: [1.0, 1.0, 1.0] }];
+        assert_eq!(strain_energy_j(&bad, &disp), 0.0);
+    }
+
+    #[test]
+    fn linear_static_reports_strain_energy() {
+        let mut s = FemWorkbenchState {
+            solver: FemSolver::LinearStatic,
+            ..Default::default()
+        };
+        run_fem(&mut s);
+        let u1 = s.strain_energy_j.expect("static run computes strain energy");
+        assert!(u1 > 0.0 && u1.is_finite(), "a loaded body stores positive energy");
+        assert!(s.result.contains("strain energy"));
+        // U = ½·Σ F·d with d ∝ F (linear FEM) ⇒ U ∝ F²: doubling the load
+        // quadruples the stored energy.
+        s.force_n *= 2.0;
+        run_fem(&mut s);
+        let u2 = s.strain_energy_j.expect("strain energy recomputed");
+        assert!((u2 / u1 - 4.0).abs() < 1e-3, "U scales with F²: {u1} → {u2}");
+        // A failed run clears it rather than leaving a stale value.
+        let mut bad = FemWorkbenchState { nx: 0, ..Default::default() };
+        run_fem(&mut bad);
+        assert!(bad.strain_energy_j.is_none(), "a failed run clears the energy");
     }
 }
