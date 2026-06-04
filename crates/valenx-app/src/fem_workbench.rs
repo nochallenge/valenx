@@ -10,10 +10,12 @@
 //! structured tetrahedral box mesh: set the box dimensions + material,
 //! the `x = 0` face is fixed, and either a tip load is applied to the
 //! `x = Lx` face (cantilever bending) or the natural frequencies are
-//! extracted. This exercises the real native FEM end-to-end — the same
-//! `valenx-fem` solvers that previously had no UI at all.
+//! extracted. Results are shown as text **and** a plot — a linear
+//! load–displacement line for the static case, the natural-frequency
+//! spectrum for the modal case.
 
 use eframe::egui;
+use egui_plot::{Line, Plot, PlotPoints, Points};
 
 use valenx_fem::material::FemMaterial;
 use valenx_fem::modal_solver::solve_modal;
@@ -29,6 +31,14 @@ enum FemSolver {
     #[default]
     LinearStatic,
     Modal,
+}
+
+/// Result data to plot from the most recent run.
+enum FemPlot {
+    /// Natural frequencies (Hz); index + 1 is the mode number.
+    Modal(Vec<f64>),
+    /// Tip load (N) vs maximum displacement (m).
+    LoadDisp(Vec<[f64; 2]>),
 }
 
 /// Persistent state for the FEM Workbench.
@@ -51,6 +61,7 @@ pub struct FemWorkbenchState {
     solver: FemSolver,
     result: String,
     error: Option<String>,
+    plot: Option<FemPlot>,
 }
 
 impl Default for FemWorkbenchState {
@@ -71,6 +82,7 @@ impl Default for FemWorkbenchState {
             solver: FemSolver::LinearStatic,
             result: String::new(),
             error: None,
+            plot: None,
         }
     }
 }
@@ -177,6 +189,29 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Result").strong());
                         ui.label(egui::RichText::new(&s.result).monospace());
                     }
+                    if let Some(plot) = &s.plot {
+                        ui.add_space(4.0);
+                        match plot {
+                            FemPlot::Modal(freqs) => {
+                                ui.label(egui::RichText::new("Natural frequencies").strong());
+                                Plot::new("fem_modal_plot").height(150.0).show(ui, |pui| {
+                                    let pts: Vec<[f64; 2]> = freqs
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, &f)| [(i + 1) as f64, f])
+                                        .collect();
+                                    pui.line(Line::new(PlotPoints::from(pts.clone())).name("Hz"));
+                                    pui.points(Points::new(PlotPoints::from(pts)).radius(3.0));
+                                });
+                            }
+                            FemPlot::LoadDisp(pts) => {
+                                ui.label(egui::RichText::new("Load – displacement").strong());
+                                Plot::new("fem_loaddisp_plot").height(150.0).show(ui, |pui| {
+                                    pui.line(Line::new(PlotPoints::from(pts.clone())).name("tip"));
+                                });
+                            }
+                        }
+                    }
                 });
         });
 }
@@ -185,6 +220,7 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 /// solver. Extracted from the draw closure so it is unit-testable.
 fn run_fem(s: &mut FemWorkbenchState) {
     s.error = None;
+    s.plot = None;
     let mesh = match structured_box_mesh(s.lx, s.ly, s.lz, s.nx, s.ny, s.nz) {
         Ok(m) => m,
         Err(e) => {
@@ -232,6 +268,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
             match solve_linear_static(&mesh, &material, &constraints, &forces) {
                 Ok(sol) => {
                     let vm = sol.max_von_mises();
+                    let max_disp = sol.max_displacement();
                     s.result = format!(
                         "Linear static  ({} nodes, {} fixed)\n\
                          tip load        : {:.1} N downward\n\
@@ -240,10 +277,18 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         mesh.nodes.len(),
                         constraints.len(),
                         s.force_n,
-                        sol.max_displacement(),
+                        max_disp,
                         vm,
                         vm / 1e6,
                     );
+                    // Linear FEM → displacement scales linearly with load.
+                    let pts = (0..=5)
+                        .map(|i| {
+                            let f = i as f64 / 5.0;
+                            [s.force_n * f, max_disp * f]
+                        })
+                        .collect();
+                    s.plot = Some(FemPlot::LoadDisp(pts));
                 }
                 Err(e) => s.error = Some(format!("solve: {e}")),
             }
@@ -261,6 +306,9 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         out.push_str(&format!("  mode {:>2}: {:>12.4} Hz\n", i + 1, m.frequency_hz));
                     }
                     s.result = out;
+                    s.plot = Some(FemPlot::Modal(
+                        sol.modes.iter().map(|m| m.frequency_hz).collect(),
+                    ));
                 }
                 Err(e) => s.error = Some(format!("solve: {e}")),
             }
@@ -281,6 +329,7 @@ mod tests {
         run_fem(&mut s);
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
         assert!(s.result.contains("max displacement"));
+        assert!(matches!(s.plot, Some(FemPlot::LoadDisp(_))), "static run plots a curve");
     }
 
     #[test]
@@ -292,6 +341,10 @@ mod tests {
         run_fem(&mut s);
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
         assert!(s.result.contains("Hz"));
+        match &s.plot {
+            Some(FemPlot::Modal(freqs)) => assert_eq!(freqs.len(), 6, "six modes plotted"),
+            other => panic!("modal run should plot frequencies, got {:?}", other.is_some()),
+        }
     }
 
     #[test]
@@ -302,5 +355,6 @@ mod tests {
         };
         run_fem(&mut s);
         assert!(s.error.is_some(), "nx=0 must surface an error, not panic");
+        assert!(s.plot.is_none(), "a failed run clears the plot");
     }
 }
