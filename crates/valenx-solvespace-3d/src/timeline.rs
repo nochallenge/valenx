@@ -18,7 +18,10 @@
 //! `intersection`), which never panic and never return a silently-invalid
 //! solid — a failed boolean surfaces here as [`TimelineError::Cad`].
 
-use valenx_cad::{box_solid, cylinder, difference, intersection, prism, union, CadError, Solid};
+use valenx_cad::{
+    box_solid, cone, cylinder, difference, intersection, prism, sphere, torus, union, CadError,
+    Solid,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::parameters::{ParamError, ParameterTable};
@@ -50,6 +53,29 @@ pub enum Feature {
         profile: Vec<(f64, f64)>,
         /// Extrusion-height expression.
         height: String,
+    },
+    /// A sphere of the given radius, centred on the step's placement.
+    Sphere {
+        /// Radius expression.
+        radius: String,
+    },
+    /// A (truncated) cone — base radius, top radius (`0` = pointed apex), and
+    /// height. Base disk on the placement, axis along +Z.
+    Cone {
+        /// Base-radius expression.
+        base_radius: String,
+        /// Top-radius expression (`0` for a pointed cone).
+        top_radius: String,
+        /// Height expression.
+        height: String,
+    },
+    /// A torus — `major_radius` (centre-circle) and `minor_radius` (tube).
+    /// Major axis along +Z, centred on the placement.
+    Torus {
+        /// Major-radius (centre-circle) expression.
+        major_radius: String,
+        /// Minor-radius (tube) expression.
+        minor_radius: String,
     },
 }
 
@@ -192,6 +218,17 @@ impl FeatureTimeline {
                 Feature::Extrude { profile, height } => {
                     prism(profile, resolve(height)?).map_err(TimelineError::Cad)?
                 }
+                Feature::Sphere { radius } => {
+                    sphere(resolve(radius)?).map_err(TimelineError::Cad)?
+                }
+                Feature::Cone { base_radius, top_radius, height } => {
+                    cone(resolve(base_radius)?, resolve(top_radius)?, resolve(height)?)
+                        .map_err(TimelineError::Cad)?
+                }
+                Feature::Torus { major_radius, minor_radius } => {
+                    torus(resolve(major_radius)?, resolve(minor_radius)?)
+                        .map_err(TimelineError::Cad)?
+                }
             };
 
             // 2. Place it (parametric offset).
@@ -325,5 +362,22 @@ mod tests {
             matches!(tl.rebuild(&p), Err(TimelineError::Param(_))),
             "the edited parameter is re-resolved each rebuild"
         );
+    }
+
+    #[test]
+    fn sphere_cone_torus_build_as_standalone_bodies() {
+        let mut p = ParameterTable::new();
+        p.set("r", "0.5");
+        let cases = [
+            Feature::Sphere { radius: "r".into() },
+            Feature::Cone { base_radius: "r".into(), top_radius: "0".into(), height: "1".into() },
+            Feature::Torus { major_radius: "1".into(), minor_radius: "r".into() },
+        ];
+        for feat in cases {
+            let mut tl = FeatureTimeline::new();
+            tl.push(Step::at_origin(Op::New, feat));
+            let m = tl.rebuild(&p).expect("primitive builds");
+            assert!(m.body.faces() > 0, "primitive should have faces");
+        }
     }
 }
