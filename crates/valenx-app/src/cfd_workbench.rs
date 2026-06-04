@@ -263,6 +263,12 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         });
 }
 
+/// Free-stream dynamic pressure `q = ½ ρ U²` (Pa) — the pressure scale that
+/// sizes hydrodynamic loads, from the fluid density and the drive speed.
+fn dynamic_pressure(density: f64, speed: f64) -> f64 {
+    0.5 * density * speed * speed
+}
+
 /// Build the grid + BCs and run the SIMPLE solver. Extracted from the
 /// draw closure so it is unit-testable, and it validates every input
 /// before calling [`Grid::new`] (which *panics* on a bad grid) — so a
@@ -308,6 +314,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     }
     let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
     let regime = flow_regime(re, s.case);
+    let q = dynamic_pressure(s.density, s.speed);
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -325,7 +332,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          Reynolds   : {:.1}  ({})\n\
          iterations : {} {}\n\
          residual   : {:.3e}\n\
-         max |u|    : {:.5} m/s",
+         max |u|    : {:.5} m/s\n\
+         dynamic q  : {:.4} Pa  (½ρU²)",
         s.case.label(),
         s.nx,
         s.ny,
@@ -341,6 +349,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         },
         sol.residual,
         max_speed,
+        q,
     );
 }
 
@@ -416,5 +425,18 @@ mod tests {
         };
         run_cfd(&mut s);
         assert!(s.result.contains("laminar"), "regime in result: {}", s.result);
+    }
+
+    #[test]
+    fn dynamic_pressure_is_half_rho_u_squared() {
+        assert!((dynamic_pressure(1.0, 10.0) - 50.0).abs() < 1e-12);
+        // Quadratic in speed: doubling U quadruples q.
+        assert!(
+            (dynamic_pressure(1.2, 20.0) - 4.0 * dynamic_pressure(1.2, 10.0)).abs() < 1e-9
+        );
+        // Linear in density.
+        assert!(
+            (dynamic_pressure(2.0, 10.0) - 2.0 * dynamic_pressure(1.0, 10.0)).abs() < 1e-9
+        );
     }
 }
