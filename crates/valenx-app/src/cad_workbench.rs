@@ -144,6 +144,11 @@ pub struct CadWorkbenchState {
     rebuilt_mesh: Option<valenx_mesh::Mesh>,
     /// Set when a fresh rebuild needs pushing into the viewport.
     push_rebuild: bool,
+    /// Snapshots from the last rebuild — `history[k]` is the running body
+    /// after step k (the last entry is the final body). Drives the scrubber.
+    history: Option<Vec<valenx_cad::Solid>>,
+    /// 1-based step the history scrubber is showing (`1..=history.len()`).
+    scrub: usize,
 }
 
 impl Default for CadWorkbenchState {
@@ -162,6 +167,8 @@ impl Default for CadWorkbenchState {
             tree_status: None,
             rebuilt_mesh: None,
             push_rebuild: false,
+            history: None,
+            scrub: 1,
         }
     }
 }
@@ -218,9 +225,10 @@ fn run_cad(s: &CadWorkbenchState) -> CadResults {
     CadResults { resolved, solved_radius, status }
 }
 
-/// Rebuild the feature tree against the parameters and tessellate the body.
-/// Returns the viewport mesh plus a one-line status, or an error message.
-fn rebuild_tree(s: &CadWorkbenchState) -> Result<(valenx_mesh::Mesh, String), String> {
+/// Rebuild the feature tree against the parameters. Returns the per-step
+/// snapshot solids (`snapshots[k]` = running body after step k; the last entry
+/// is the final body) plus a one-line status, or an error message.
+fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<valenx_cad::Solid>, String), String> {
     let table = build_table(&s.params);
     let mut tl = FeatureTimeline::new();
     for st in &s.steps {
@@ -230,15 +238,23 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(valenx_mesh::Mesh, String), St
     let faces = model.body.faces();
     let edges = model.body.edges();
     let verts = model.body.vertices();
-    let mesh = valenx_cad::solid_to_mesh(&model.body, valenx_cad::DEFAULT_TESS_TOLERANCE)
-        .map_err(|e| e.to_string())?;
-    Ok((
-        mesh,
-        format!(
-            "{faces} faces · {edges} edges · {verts} vertices · {} steps",
-            s.steps.len()
-        ),
-    ))
+    let status = format!(
+        "{faces} faces · {edges} edges · {verts} vertices · {} steps",
+        s.steps.len()
+    );
+    Ok((model.snapshots, status))
+}
+
+/// Tessellate the running body at a given 1-based step for viewport display.
+fn tessellate_step(
+    history: &[valenx_cad::Solid],
+    step_1based: usize,
+) -> Result<valenx_mesh::Mesh, String> {
+    let idx = step_1based
+        .saturating_sub(1)
+        .min(history.len().saturating_sub(1));
+    let solid = history.get(idx).ok_or_else(|| "no such step".to_string())?;
+    valenx_cad::solid_to_mesh(solid, valenx_cad::DEFAULT_TESS_TOLERANCE).map_err(|e| e.to_string())
 }
 
 fn op_label(op: Op) -> &'static str {
@@ -426,12 +442,26 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
                     if ui.button("▶ Rebuild → viewport").clicked() {
                         match rebuild_tree(s) {
-                            Ok((mesh, status)) => {
-                                s.rebuilt_mesh = Some(mesh);
-                                s.push_rebuild = true;
-                                s.tree_status = Some(Ok(status));
+                            Ok((history, status)) => {
+                                let k = history.len();
+                                match tessellate_step(&history, k) {
+                                    Ok(mesh) => {
+                                        s.rebuilt_mesh = Some(mesh);
+                                        s.push_rebuild = true;
+                                        s.tree_status = Some(Ok(status));
+                                        s.scrub = k;
+                                        s.history = Some(history);
+                                    }
+                                    Err(e) => {
+                                        s.history = None;
+                                        s.rebuilt_mesh = None;
+                                        s.push_rebuild = false;
+                                        s.tree_status = Some(Err(e));
+                                    }
+                                }
                             }
                             Err(e) => {
+                                s.history = None;
                                 s.rebuilt_mesh = None;
                                 s.push_rebuild = false;
                                 s.tree_status = Some(Err(e));
@@ -449,6 +479,36 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 format!("rebuild failed: {e}"),
                             ),
                         };
+                    }
+
+                    // History scrubber — roll the model back/forward through
+                    // the per-step snapshots from the last rebuild, pushing the
+                    // selected step into the viewport.
+                    let n = s.history.as_ref().map_or(0, |h| h.len());
+                    if n > 1 {
+                        ui.add_space(2.0);
+                        ui.label(egui::RichText::new("History").strong());
+                        let resp = ui
+                            .add(egui::Slider::new(&mut s.scrub, 1..=n).integer().text("step"));
+                        if resp.changed() {
+                            let scrub = s.scrub;
+                            let mesh =
+                                s.history.as_ref().and_then(|h| tessellate_step(h, scrub).ok());
+                            if let Some(mesh) = mesh {
+                                s.rebuilt_mesh = Some(mesh);
+                                s.push_rebuild = true;
+                            }
+                        }
+                        let label = s
+                            .history
+                            .as_ref()
+                            .and_then(|h| h.get(s.scrub.saturating_sub(1)))
+                            .map(|solid| {
+                                format!("step {} / {n} — {} faces", s.scrub, solid.faces())
+                            });
+                        if let Some(label) = label {
+                            ui.label(egui::RichText::new(label).small().monospace());
+                        }
                     }
                 });
         });
@@ -508,15 +568,24 @@ mod tests {
     }
 
     #[test]
-    fn feature_tree_rebuilds_punched_cube_to_a_mesh() {
+    fn feature_tree_rebuilds_punched_cube_with_history() {
         // The default tree is New box + Cut cylinder — the punched cube.
         let s = CadWorkbenchState::default();
-        let (mesh, status) = rebuild_tree(&s).expect("default tree rebuilds");
+        let (history, status) = rebuild_tree(&s).expect("default tree rebuilds");
+        assert_eq!(history.len(), 2, "two steps → two snapshots");
         assert!(status.contains("faces"), "status: {status}");
-        assert!(
-            crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
-            "tessellated body should be a non-empty mesh"
-        );
+        // The scrubber's intermediate history: step 1 is the bare box (6
+        // faces), step 2 is the punched cube (more than 6).
+        assert_eq!(history[0].faces(), 6, "first snapshot is the bare box");
+        assert!(history[1].faces() > 6, "second snapshot is punched");
+        // Every step tessellates to a non-empty viewport mesh.
+        for k in 1..=history.len() {
+            let mesh = tessellate_step(&history, k).expect("tessellate step");
+            assert!(
+                crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
+                "step {k} should tessellate to a non-empty mesh"
+            );
+        }
     }
 
     #[test]
