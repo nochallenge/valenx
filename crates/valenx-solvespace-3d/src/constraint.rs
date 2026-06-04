@@ -111,6 +111,28 @@ pub enum Constraint3D {
         /// Captured normal (nx, ny, nz).
         normal: [f64; 3],
     },
+    /// A circle's radius equals `target`. 1 residual.
+    CircleRadius {
+        /// Circle entity.
+        circle: EntityId,
+        /// Target radius.
+        target: f64,
+    },
+    /// A point lies on a circle — in the circle's plane *and* at the
+    /// radius distance from its centre. 2 residuals (in-plane, radial).
+    PointOnCircle {
+        /// Point id.
+        point: EntityId,
+        /// Circle id.
+        circle: EntityId,
+    },
+    /// Two circles share a radius. 1 residual.
+    EqualRadius {
+        /// First circle.
+        a: EntityId,
+        /// Second circle.
+        b: EntityId,
+    },
 }
 
 impl Constraint3D {
@@ -123,8 +145,11 @@ impl Constraint3D {
             | Constraint3D::LineAngle3 { .. }
             | Constraint3D::LinePerpendicular3 { .. }
             | Constraint3D::PointInPlane { .. }
-            | Constraint3D::OnPlane { .. } => 1,
+            | Constraint3D::OnPlane { .. }
+            | Constraint3D::CircleRadius { .. }
+            | Constraint3D::EqualRadius { .. } => 1,
             Constraint3D::LineParallel3 { .. } | Constraint3D::OnLine { .. } => 3,
+            Constraint3D::PointOnCircle { .. } => 2,
             Constraint3D::PlaneFixed { .. } => 6,
         }
     }
@@ -237,6 +262,26 @@ impl Constraint3D {
                 out[4] = ny - normal[1];
                 out[5] = nz - normal[2];
             }
+            Constraint3D::CircleRadius { circle, target } => {
+                let (_, _, _, r, _, _, _) = s.circle_data(*circle);
+                out[0] = r - target;
+            }
+            Constraint3D::PointOnCircle { point, circle } => {
+                let (px, py, pz) = s.point_xyz(*point);
+                let (cx, cy, cz, r, nx, ny, nz) = s.circle_data(*circle);
+                let (rx, ry, rz) = (px - cx, py - cy, pz - cz);
+                let nlen = (nx * nx + ny * ny + nz * nz).sqrt().max(1e-18);
+                // In the circle's plane …
+                out[0] = (nx * rx + ny * ry + nz * rz) / nlen;
+                // … and at the radius distance from the centre.
+                let dist = (rx * rx + ry * ry + rz * rz).sqrt();
+                out[1] = dist - r;
+            }
+            Constraint3D::EqualRadius { a, b } => {
+                let (_, _, _, ra, _, _, _) = s.circle_data(*a);
+                let (_, _, _, rb, _, _, _) = s.circle_data(*b);
+                out[0] = ra - rb;
+            }
         }
     }
 
@@ -285,6 +330,15 @@ impl Constraint3D {
             if let Some(Entity3D::Line3(l)) = s.entities.get(id.0) {
                 push_point(l.a, out);
                 push_point(l.b, out);
+            }
+        };
+        let push_circle = |id: EntityId, out: &mut Vec<usize>| {
+            if let Some(Entity3D::Circle3(c)) = s.entities.get(id.0) {
+                push_point(c.center, out);
+                out.push(c.radius_var);
+                out.push(c.nx_var);
+                out.push(c.ny_var);
+                out.push(c.nz_var);
             }
         };
         match self {
@@ -338,6 +392,15 @@ impl Constraint3D {
                 }
                 _ => {}
             },
+            Constraint3D::CircleRadius { circle, .. } => push_circle(*circle, &mut out),
+            Constraint3D::PointOnCircle { point, circle } => {
+                push_point(*point, &mut out);
+                push_circle(*circle, &mut out);
+            }
+            Constraint3D::EqualRadius { a, b } => {
+                push_circle(*a, &mut out);
+                push_circle(*b, &mut out);
+            }
         }
         out.sort_unstable();
         out.dedup();
