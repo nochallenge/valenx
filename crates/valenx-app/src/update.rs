@@ -416,6 +416,17 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_reinforcement_workbench, "Reinforcement")
+                        .on_hover_text(
+                            "Show / hide the right-side Concrete-Reinforcement workbench — \
+                             parametric beam/column rebar cages rendered in the 3D \
+                             viewport, on valenx-reinforcement.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -906,6 +917,10 @@ impl eframe::App for ValenxApp {
         // 2D Drafting workbench (right) — LibreCAD-style 2D canvas on
         // valenx-librecad-2d. Off unless toggled via View.
         crate::draft2d_workbench::draw_draft2d_workbench(self, ctx);
+
+        // Reinforcement workbench (right) — parametric rebar cages pushed to
+        // the 3D viewport, on valenx-reinforcement. Off unless toggled.
+        crate::reinforcement_workbench::draw_reinforcement_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
