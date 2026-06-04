@@ -52,14 +52,16 @@ pub mod constraint;
 pub mod entity;
 pub mod error;
 pub mod panel;
+pub mod parameters;
 pub mod persist;
 pub mod sketch;
 pub mod solver;
 
 pub use constraint::Constraint3D;
-pub use entity::{Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
+pub use entity::{Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
 pub use error::{ErrorCategory, Solve3DError};
 pub use panel::SolveSpace3DPanelState;
+pub use parameters::{ParamError, ParameterTable};
 pub use persist::{from_ron_str, to_ron_string, PanelFile, VERSION};
 pub use sketch::Sketch3D;
 pub use solver::{SolverConfig, SolverDiagnostics, SolverReport, SolverStatus};
@@ -175,5 +177,85 @@ mod tests_integration {
         let nb = (ub.0.powi(2) + ub.1.powi(2) + ub.2.powi(2)).sqrt();
         let cos = dot / (na * nb);
         assert!(cos.abs() < 1e-4, "lines not perpendicular: cos = {cos}");
+    }
+
+    /// CircleRadius — a free-radius circle pulled to a target radius.
+    #[test]
+    fn circle_radius_converges() {
+        let mut s = Sketch3D::new();
+        let c = s.add_point(0.0, 0.0, 0.0);
+        let circle = s.add_circle(c, 1.0, 0.0, 0.0, 1.0).unwrap();
+        s.add_constraint(Constraint3D::CircleRadius { circle, target: 5.0 });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
+        assert!(
+            (s.circle_radius(circle) - 5.0).abs() < 1e-6,
+            "radius = {}",
+            s.circle_radius(circle)
+        );
+    }
+
+    /// PointOnCircle — a free point dropped onto a radius-5 circle ends up
+    /// in the circle's plane and at the radius distance from its centre.
+    #[test]
+    fn point_lands_on_circle() {
+        let mut s = Sketch3D::new();
+        let center = s.add_point(0.0, 0.0, 0.0);
+        let circle = s.add_circle(center, 5.0, 0.0, 0.0, 1.0).unwrap();
+        s.add_constraint(Constraint3D::CircleRadius { circle, target: 5.0 });
+        let p = s.add_point(2.0, 1.0, 3.0);
+        s.add_constraint(Constraint3D::PointOnCircle { point: p, circle });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
+        let (cx, cy, cz, r, nx, ny, nz) = s.circle_data(circle);
+        let (px, py, pz) = s.point_xyz(p);
+        let (rx, ry, rz) = (px - cx, py - cy, pz - cz);
+        let dist = (rx * rx + ry * ry + rz * rz).sqrt();
+        let nlen = (nx * nx + ny * ny + nz * nz).sqrt();
+        let plane_resid = (nx * rx + ny * ry + nz * rz) / nlen;
+        assert!((dist - r).abs() < 1e-5, "point not at radius: dist={dist} r={r}");
+        assert!(plane_resid.abs() < 1e-5, "point not in circle plane: {plane_resid}");
+        assert!((r - 5.0).abs() < 1e-5, "radius drifted: {r}");
+    }
+
+    /// EqualRadius — two circles forced to share a radius.
+    #[test]
+    fn equal_radius_matches_two_circles() {
+        let mut s = Sketch3D::new();
+        let ca = s.add_point(0.0, 0.0, 0.0);
+        let cb = s.add_point(10.0, 0.0, 0.0);
+        let a = s.add_circle(ca, 3.0, 0.0, 0.0, 1.0).unwrap();
+        let b = s.add_circle(cb, 1.0, 0.0, 0.0, 1.0).unwrap();
+        s.add_constraint(Constraint3D::CircleRadius { circle: a, target: 3.0 });
+        s.add_constraint(Constraint3D::EqualRadius { a, b });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
+        assert!(
+            (s.circle_radius(b) - 3.0).abs() < 1e-6,
+            "b radius = {}",
+            s.circle_radius(b)
+        );
+    }
+
+    /// The parametric-modelling loop: a named parameter (defined by an
+    /// expression referencing another) drives a constraint target, which
+    /// drives the geometry. Editing `base` would re-drive the radius.
+    #[test]
+    fn parameter_drives_a_constraint_target() {
+        let mut params = ParameterTable::new();
+        params.set("base", "4");
+        params.set("radius", "base + 1"); // = 5
+        let r = params.value("radius").unwrap();
+        let mut s = Sketch3D::new();
+        let c = s.add_point(0.0, 0.0, 0.0);
+        let circle = s.add_circle(c, 1.0, 0.0, 0.0, 1.0).unwrap();
+        s.add_constraint(Constraint3D::CircleRadius { circle, target: r });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
+        assert!(
+            (s.circle_radius(circle) - 5.0).abs() < 1e-6,
+            "radius = {}",
+            s.circle_radius(circle)
+        );
     }
 }
