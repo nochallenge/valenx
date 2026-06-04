@@ -10,19 +10,23 @@
 //! structured tetrahedral box mesh: set the box dimensions + material,
 //! the `x = 0` face is fixed, and either a tip load is applied to the
 //! `x = Lx` face (cantilever bending) or the natural frequencies are
-//! extracted. Results are shown as text **and** a plot — a linear
-//! load–displacement line for the static case, the natural-frequency
-//! spectrum for the modal case.
+//! extracted. Results are shown as text, a plot (load–displacement line
+//! or frequency spectrum), **and** — for the static case — the
+//! **deformed shape coloured by von Mises stress** in the central 3-D
+//! viewport via the `(Mesh, Field)` colour-ramp overlay.
 
 use eframe::egui;
 use egui_plot::{Line, Plot, PlotPoints, Points};
+use nalgebra::Vector3;
 
 use valenx_fem::material::FemMaterial;
 use valenx_fem::modal_solver::solve_modal;
 use valenx_fem::native_solver::{
     solve_linear_static, structured_box_mesh, NodalConstraint, NodalForce,
 };
+use valenx_fields::{Field, FieldKind, Location, RegionRef, TimeKey};
 
+use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
 /// Which native solver the workbench runs.
@@ -62,6 +66,9 @@ pub struct FemWorkbenchState {
     result: String,
     error: Option<String>,
     plot: Option<FemPlot>,
+    /// Deformed mesh + von-Mises field, pending a push to the 3-D viewport.
+    viz: Option<(valenx_mesh::Mesh, Field)>,
+    push_viz: bool,
 }
 
 impl Default for FemWorkbenchState {
@@ -83,6 +90,8 @@ impl Default for FemWorkbenchState {
             result: String::new(),
             error: None,
             plot: None,
+            viz: None,
+            push_viz: false,
         }
     }
 }
@@ -166,7 +175,7 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     }
                     ui.label(
                         egui::RichText::new(
-                            "The x=0 face is fixed; the load / modes are evaluated on the bar.",
+                            "x=0 fixed. Static runs colour the deformed shape by von Mises in the 3D viewport.",
                         )
                         .weak()
                         .small(),
@@ -214,6 +223,29 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     }
                 });
         });
+
+    // Deferred (outside the panel borrow): push the deformed-shape field
+    // overlay into the central 3-D viewport.
+    if app.fem.push_viz {
+        app.fem.push_viz = false;
+        if let Some((mesh, field)) = app.fem.viz.take() {
+            let quality = valenx_mesh::quality_report(&mesh);
+            let aspect_hist =
+                valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+            let skew_hist =
+                valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+            app.stl = None;
+            app.mesh = Some(LoadedMesh {
+                path: std::path::PathBuf::from("<fem>/deformed"),
+                mesh,
+                quality,
+                aspect_hist,
+                skew_hist,
+            });
+            app.aero_field_overlay = Some(field);
+            app.frame_current_mesh();
+        }
+    }
 }
 
 /// Build the box mesh + boundary conditions and run the selected native
@@ -221,6 +253,8 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 fn run_fem(s: &mut FemWorkbenchState) {
     s.error = None;
     s.plot = None;
+    s.viz = None;
+    s.push_viz = false;
     let mesh = match structured_box_mesh(s.lx, s.ly, s.lz, s.nx, s.ny, s.nz) {
         Ok(m) => m,
         Err(e) => {
@@ -289,6 +323,31 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         })
                         .collect();
                     s.plot = Some(FemPlot::LoadDisp(pts));
+
+                    // Deformed shape (scaled for visibility), coloured by von Mises.
+                    let scale = if max_disp > 1e-12 {
+                        0.1 * s.lx / max_disp
+                    } else {
+                        0.0
+                    };
+                    let mut deformed = mesh.clone();
+                    for (node, d) in deformed.nodes.iter_mut().zip(&sol.displacement) {
+                        *node += Vector3::new(d[0], d[1], d[2]) * scale;
+                    }
+                    deformed.recompute_stats();
+                    let mut field = Field {
+                        name: "von Mises".to_string(),
+                        kind: FieldKind::Scalar,
+                        location: Location::OnNode,
+                        region: RegionRef("fem".to_string()),
+                        units: valenx_fields::units::PASCAL,
+                        time: TimeKey::Steady,
+                        data: sol.von_mises.clone(),
+                        range: None,
+                    };
+                    field.recompute_range();
+                    s.viz = Some((deformed, field));
+                    s.push_viz = true;
                 }
                 Err(e) => s.error = Some(format!("solve: {e}")),
             }
@@ -330,6 +389,10 @@ mod tests {
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
         assert!(s.result.contains("max displacement"));
         assert!(matches!(s.plot, Some(FemPlot::LoadDisp(_))), "static run plots a curve");
+        // The deformed-shape overlay is built and queued for the viewport.
+        assert!(s.push_viz, "static run queues the 3D viz");
+        let (mesh, field) = s.viz.as_ref().expect("static run builds the deformed mesh + field");
+        assert_eq!(field.data.len(), mesh.nodes.len(), "one von-Mises value per node");
     }
 
     #[test]
@@ -345,6 +408,7 @@ mod tests {
             Some(FemPlot::Modal(freqs)) => assert_eq!(freqs.len(), 6, "six modes plotted"),
             other => panic!("modal run should plot frequencies, got {:?}", other.is_some()),
         }
+        assert!(s.viz.is_none(), "modal has no deformation overlay");
     }
 
     #[test]
@@ -356,5 +420,6 @@ mod tests {
         run_fem(&mut s);
         assert!(s.error.is_some(), "nx=0 must surface an error, not panic");
         assert!(s.plot.is_none(), "a failed run clears the plot");
+        assert!(!s.push_viz, "a failed run does not queue a viz");
     }
 }
