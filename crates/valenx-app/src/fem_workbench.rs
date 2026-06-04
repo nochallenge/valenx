@@ -58,12 +58,16 @@ pub struct FemWorkbenchState {
     youngs_gpa: f64,
     poisson: f64,
     density: f64,
+    /// Yield strength (MPa) for the factor-of-safety readout.
+    yield_mpa: f64,
     // Linear-static tip load (newtons, applied downward in -Y).
     force_n: f64,
     // Modal: number of modes to extract.
     n_modes: usize,
     solver: FemSolver,
     result: String,
+    /// Factor of safety (σy / peak von-Mises) from the last static run.
+    fos: Option<f64>,
     error: Option<String>,
     plot: Option<FemPlot>,
     /// Deformed mesh + von-Mises field, pending a push to the 3-D viewport.
@@ -84,10 +88,12 @@ impl Default for FemWorkbenchState {
             youngs_gpa: 205.0,
             poisson: 0.29,
             density: 7850.0,
+            yield_mpa: 250.0,
             force_n: 1000.0,
             n_modes: 6,
             solver: FemSolver::LinearStatic,
             result: String::new(),
+            fos: None,
             error: None,
             plot: None,
             viz: None,
@@ -150,6 +156,10 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label("Density (kg/m³)");
                         ui.add(egui::DragValue::new(&mut s.density).speed(10.0));
                     });
+                    ui.horizontal(|ui| {
+                        ui.label("Yield σy (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.yield_mpa).speed(5.0));
+                    });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Analysis").strong());
@@ -197,6 +207,20 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.separator();
                         ui.label(egui::RichText::new("Result").strong());
                         ui.label(egui::RichText::new(&s.result).monospace());
+                        if let Some(f) = s.fos {
+                            let (txt, col) = if f >= 1.0 {
+                                (
+                                    format!("✔ factor of safety {f:.2} — within yield"),
+                                    egui::Color32::from_rgb(80, 220, 120),
+                                )
+                            } else {
+                                (
+                                    format!("✖ factor of safety {f:.2} — exceeds yield"),
+                                    egui::Color32::from_rgb(220, 90, 90),
+                                )
+                            };
+                            ui.colored_label(col, txt);
+                        }
                     }
                     if let Some(plot) = &s.plot {
                         ui.add_space(4.0);
@@ -255,6 +279,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
     s.plot = None;
     s.viz = None;
     s.push_viz = false;
+    s.fos = None;
     let mesh = match structured_box_mesh(s.lx, s.ly, s.lz, s.nx, s.ny, s.nz) {
         Ok(m) => m,
         Err(e) => {
@@ -303,17 +328,31 @@ fn run_fem(s: &mut FemWorkbenchState) {
                 Ok(sol) => {
                     let vm = sol.max_von_mises();
                     let max_disp = sol.max_displacement();
+                    // Factor of safety = yield strength / peak von-Mises stress.
+                    let fos = if vm > 0.0 {
+                        Some(s.yield_mpa * 1e6 / vm)
+                    } else {
+                        None
+                    };
+                    s.fos = fos;
+                    let fos_str = match fos {
+                        Some(f) => format!("{f:.2}"),
+                        None => "n/a".to_string(),
+                    };
                     s.result = format!(
                         "Linear static  ({} nodes, {} fixed)\n\
                          tip load        : {:.1} N downward\n\
                          max displacement: {:.6e} m\n\
-                         max von Mises   : {:.4e} Pa  ({:.3} MPa)",
+                         max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
+                         factor of safety: {} (σy = {:.0} MPa)",
                         mesh.nodes.len(),
                         constraints.len(),
                         s.force_n,
                         max_disp,
                         vm,
                         vm / 1e6,
+                        fos_str,
+                        s.yield_mpa,
                     );
                     // Linear FEM → displacement scales linearly with load.
                     let pts = (0..=5)
@@ -393,6 +432,25 @@ mod tests {
         assert!(s.push_viz, "static run queues the 3D viz");
         let (mesh, field) = s.viz.as_ref().expect("static run builds the deformed mesh + field");
         assert_eq!(field.data.len(), mesh.nodes.len(), "one von-Mises value per node");
+    }
+
+    #[test]
+    fn linear_static_reports_factor_of_safety() {
+        let mut s = FemWorkbenchState {
+            solver: FemSolver::LinearStatic,
+            ..Default::default()
+        };
+        run_fem(&mut s);
+        assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
+        let f1 = s.fos.expect("static run computes a factor of safety");
+        assert!(f1 > 0.0 && f1.is_finite());
+        assert!(s.result.contains("factor of safety"));
+        // FoS = σy / peak von-Mises; same load + geometry ⇒ same peak stress,
+        // so halving the yield strength halves the factor of safety.
+        s.yield_mpa *= 0.5;
+        run_fem(&mut s);
+        let f2 = s.fos.expect("FoS recomputed");
+        assert!((f2 - 0.5 * f1).abs() / f1 < 1e-6, "FoS ∝ σy: {f1} → {f2}");
     }
 
     #[test]
