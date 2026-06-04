@@ -111,6 +111,7 @@ valenx-pathtrace = { path = "../valenx-pathtrace" }
 valenx-hvac = { path = "../valenx-hvac" }
 valenx-reverse = { path = "../valenx-reverse" }
 valenx-interior = { path = "../valenx-interior" }
+valenx-animate = { path = "../valenx-animate" }
 
 # The native launch-vehicle ascent + trajectory simulator, surfaced in
 # the desktop UI by the Astro / Launch workbench (src/astro_workbench.rs

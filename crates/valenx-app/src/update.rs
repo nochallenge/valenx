@@ -469,6 +469,16 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_animate_workbench, "Animation")
+                        .on_hover_text(
+                            "Show / hide the right-side Animation workbench — a joint \
+                             keyframe timeline with easing curves, on valenx-animate.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -979,6 +989,10 @@ impl eframe::App for ValenxApp {
         // Interior-Design workbench (right) — 2D floor plan + furniture on
         // valenx-interior. Off unless toggled via View.
         crate::interior_workbench::draw_interior_workbench(self, ctx);
+
+        // Animation workbench (right) — joint keyframe timeline on
+        // valenx-animate. Off unless toggled via View.
+        crate::animate_workbench::draw_animate_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
