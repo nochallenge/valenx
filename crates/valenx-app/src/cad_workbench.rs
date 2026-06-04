@@ -376,6 +376,18 @@ fn tessellate_step(
     merged.ok_or_else(|| "no bodies to display".to_string())
 }
 
+/// Export the body set at a given 1-based step to a binary STL file. The actual
+/// write is `valenx_mesh::stl_write::write_stl_binary` (an allowlisted streaming
+/// export — see valenx-core's no-raw-fs-write guard).
+fn export_stl(
+    history: &[Vec<valenx_cad::Solid>],
+    step_1based: usize,
+    path: &std::path::Path,
+) -> Result<(), String> {
+    let mesh = tessellate_step(history, step_1based)?;
+    valenx_mesh::stl_write::write_stl_binary(&mesh, path).map_err(|e| e.to_string())
+}
+
 fn op_label(op: Op) -> &'static str {
     match op {
         Op::New => "New",
@@ -710,6 +722,26 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 }
                             }
                         }
+                        if ui.button("⭳ Export STL…").clicked() {
+                            match rebuild_tree(s) {
+                                Ok((history, _status)) => {
+                                    if let Some(path) = rfd::FileDialog::new()
+                                        .add_filter("STL mesh", &["stl"])
+                                        .set_file_name("valenx-cad.stl")
+                                        .save_file()
+                                    {
+                                        let res = export_stl(&history, history.len(), &path);
+                                        s.tree_status = Some(match res {
+                                            Ok(()) => Ok(format!("exported {}", path.display())),
+                                            Err(e) => Err(format!("export failed: {e}")),
+                                        });
+                                    }
+                                }
+                                Err(e) => {
+                                    s.tree_status = Some(Err(format!("rebuild failed: {e}")));
+                                }
+                            }
+                        }
                     });
                     if ui.button("▶ Rebuild → viewport").clicked() {
                         match rebuild_tree(s) {
@@ -988,5 +1020,17 @@ mod tests {
         // Both bodies concatenate into one non-empty display mesh.
         let mesh = tessellate_step(&history, history.len()).expect("merge");
         assert!(crate::mesh_loader::mesh_bounding_box(&mesh).is_some());
+    }
+
+    #[test]
+    fn export_writes_a_binary_stl() {
+        let s = CadWorkbenchState::default();
+        let (history, _) = rebuild_tree(&s).expect("rebuild");
+        let path =
+            std::env::temp_dir().join(format!("valenx_cad_export_{}.stl", std::process::id()));
+        export_stl(&history, history.len(), &path).expect("export");
+        let len = std::fs::metadata(&path).expect("stl file exists").len();
+        assert!(len > 84, "binary STL = 80B header + 4B count + triangles ({len} B)");
+        let _ = std::fs::remove_file(&path);
     }
 }
