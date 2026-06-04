@@ -83,6 +83,27 @@ pub struct Circle3 {
     pub nz_var: usize,
 }
 
+/// Arc — a circular arc: a centre, a free radius, a free normal (its
+/// plane), and start + end points bounding the swept span. The endpoints
+/// lie on the arc's circle (kept there by `ArcEndpointsOnArc`).
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub struct Arc3 {
+    /// Centre point id (must resolve to `Point3`).
+    pub center: EntityId,
+    /// Variable index for the radius.
+    pub radius_var: usize,
+    /// Normal X variable.
+    pub nx_var: usize,
+    /// Normal Y variable.
+    pub ny_var: usize,
+    /// Normal Z variable.
+    pub nz_var: usize,
+    /// Start point id (must resolve to `Point3`).
+    pub start: EntityId,
+    /// End point id (must resolve to `Point3`).
+    pub end: EntityId,
+}
+
 /// Sum-type wrapper so a sketch can hold heterogeneous entities in a
 /// single `Vec`.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -97,6 +118,8 @@ pub enum Entity3D {
     Workplane(Workplane),
     /// 3D circle.
     Circle3(Circle3),
+    /// 3D circular arc.
+    Arc3(Arc3),
 }
 
 impl Entity3D {
@@ -108,6 +131,7 @@ impl Entity3D {
             Entity3D::Plane3(_) => "Plane3",
             Entity3D::Workplane(_) => "Workplane",
             Entity3D::Circle3(_) => "Circle3",
+            Entity3D::Arc3(_) => "Arc3",
         }
     }
 }
