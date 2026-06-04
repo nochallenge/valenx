@@ -49,6 +49,9 @@ pub mod interior_workbench;
 pub mod animate_workbench;
 pub mod variant_effect_workbench;
 pub mod neuro_workbench;
+
+#[cfg(test)]
+mod coverage_ui_tests;
 pub mod reactdyn_workbench;
 pub mod astro;
 pub mod astro_workbench;
