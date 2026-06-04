@@ -56,6 +56,7 @@ pub mod parameters;
 pub mod persist;
 pub mod sketch;
 pub mod solver;
+pub mod timeline;
 
 pub use constraint::Constraint3D;
 pub use entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Spline3, Workplane};
@@ -65,6 +66,7 @@ pub use parameters::{ParamError, ParameterTable};
 pub use persist::{from_ron_str, to_ron_string, PanelFile, VERSION};
 pub use sketch::Sketch3D;
 pub use solver::{SolverConfig, SolverDiagnostics, SolverReport, SolverStatus};
+pub use timeline::{Feature, FeatureTimeline, TimelineError};
 
 #[cfg(test)]
 mod tests_integration {
