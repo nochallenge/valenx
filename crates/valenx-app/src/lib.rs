@@ -38,6 +38,7 @@
 pub mod aero;
 pub mod aero_workbench;
 pub mod fem_workbench;
+pub mod cad_workbench;
 pub mod cfd_workbench;
 pub mod neuro_workbench;
 pub mod reactdyn_workbench;
@@ -394,6 +395,13 @@ pub struct ValenxApp {
     /// Form + result state for the Neural-Interface workbench, wrapping
     /// `valenx-neuro`. See [`crate::neuro_workbench`].
     pub(crate) neuro: crate::neuro_workbench::NeuroWorkbenchState,
+
+    /// Whether the right-side Parametric-CAD workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_cad_workbench: bool,
+    /// Form + result state for the Parametric-CAD workbench, wrapping
+    /// `valenx-solvespace-3d`. See [`crate::cad_workbench`].
+    pub(crate) cad: crate::cad_workbench::CadWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).
