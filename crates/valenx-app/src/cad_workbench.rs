@@ -187,6 +187,9 @@ pub struct CadWorkbenchState {
     history: Option<Vec<Vec<valenx_cad::Solid>>>,
     /// 1-based step the history scrubber is showing (`1..=history.len()`).
     scrub: usize,
+    /// Per-body visibility for the final body set (multi-body). Empty = all
+    /// visible; `body_visible[i] == false` hides body i in the viewport.
+    body_visible: Vec<bool>,
 }
 
 impl Default for CadWorkbenchState {
@@ -207,6 +210,7 @@ impl Default for CadWorkbenchState {
             push_rebuild: false,
             history: None,
             scrub: 1,
+            body_visible: Vec::new(),
         }
     }
 }
@@ -359,13 +363,18 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
 fn tessellate_step(
     history: &[Vec<valenx_cad::Solid>],
     step_1based: usize,
+    visible: &[bool],
 ) -> Result<valenx_mesh::Mesh, String> {
     let idx = step_1based
         .saturating_sub(1)
         .min(history.len().saturating_sub(1));
     let bodies = history.get(idx).ok_or_else(|| "no such step".to_string())?;
     let mut merged: Option<valenx_mesh::Mesh> = None;
-    for solid in bodies {
+    for (i, solid) in bodies.iter().enumerate() {
+        // Empty `visible` ⇒ all bodies shown; otherwise honour the flag.
+        if !visible.get(i).copied().unwrap_or(true) {
+            continue;
+        }
         let m = valenx_cad::solid_to_mesh(solid, valenx_cad::DEFAULT_TESS_TOLERANCE)
             .map_err(|e| e.to_string())?;
         merged = Some(match merged {
@@ -373,7 +382,7 @@ fn tessellate_step(
             Some(acc) => valenx_mesh::boolean::concatenate(&acc, &m),
         });
     }
-    merged.ok_or_else(|| "no bodies to display".to_string())
+    merged.ok_or_else(|| "no visible bodies to display".to_string())
 }
 
 /// Export the body set at a given 1-based step to a binary STL file. The actual
@@ -384,7 +393,7 @@ fn export_stl(
     step_1based: usize,
     path: &std::path::Path,
 ) -> Result<(), String> {
-    let mesh = tessellate_step(history, step_1based)?;
+    let mesh = tessellate_step(history, step_1based, &[])?;
     valenx_mesh::stl_write::write_stl_binary(&mesh, path).map_err(|e| e.to_string())
 }
 
@@ -710,6 +719,7 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         s.params = params;
                                         s.steps = steps;
                                         s.history = None;
+                                        s.body_visible = Vec::new();
                                         s.tree_status = Some(Ok(format!(
                                             "loaded {} ({} steps)",
                                             path.display(),
@@ -747,13 +757,16 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         match rebuild_tree(s) {
                             Ok((history, status)) => {
                                 let k = history.len();
-                                match tessellate_step(&history, k) {
+                                let nbodies = history.last().map_or(0, |b| b.len());
+                                let visible = vec![true; nbodies];
+                                match tessellate_step(&history, k, &visible) {
                                     Ok(mesh) => {
                                         s.rebuilt_mesh = Some(mesh);
                                         s.push_rebuild = true;
                                         s.tree_status = Some(Ok(status));
                                         s.scrub = k;
                                         s.history = Some(history);
+                                        s.body_visible = visible;
                                     }
                                     Err(e) => {
                                         s.history = None;
@@ -796,7 +809,9 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         if resp.changed() {
                             let scrub = s.scrub;
                             let mesh =
-                                s.history.as_ref().and_then(|h| tessellate_step(h, scrub).ok());
+                                s.history.as_ref().and_then(|h| {
+                                    tessellate_step(h, scrub, &s.body_visible).ok()
+                                });
                             if let Some(mesh) = mesh {
                                 s.rebuilt_mesh = Some(mesh);
                                 s.push_rebuild = true;
@@ -816,6 +831,32 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             });
                         if let Some(label) = label {
                             ui.label(egui::RichText::new(label).small().monospace());
+                        }
+                    }
+
+                    // Per-body visibility (multi-body): toggle which bodies of
+                    // the final set are shown in the viewport.
+                    if s.body_visible.len() > 1 {
+                        ui.add_space(2.0);
+                        ui.label(egui::RichText::new("Bodies").strong());
+                        let mut changed = false;
+                        ui.horizontal_wrapped(|ui| {
+                            for (i, vis) in s.body_visible.iter_mut().enumerate() {
+                                if ui.checkbox(vis, format!("{}", i + 1)).changed() {
+                                    changed = true;
+                                }
+                            }
+                        });
+                        if changed {
+                            let scrub = s.scrub;
+                            let mesh = s
+                                .history
+                                .as_ref()
+                                .and_then(|h| tessellate_step(h, scrub, &s.body_visible).ok());
+                            if let Some(mesh) = mesh {
+                                s.rebuilt_mesh = Some(mesh);
+                                s.push_rebuild = true;
+                            }
                         }
                     }
                 });
@@ -888,7 +929,7 @@ mod tests {
         assert!(history[1][0].faces() > 6, "second snapshot is punched");
         // Every step tessellates to a non-empty viewport mesh.
         for k in 1..=history.len() {
-            let mesh = tessellate_step(&history, k).expect("tessellate step");
+            let mesh = tessellate_step(&history, k, &[]).expect("tessellate step");
             assert!(
                 crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
                 "step {k} should tessellate to a non-empty mesh"
@@ -973,7 +1014,7 @@ mod tests {
         };
         // A rotated box rebuilds and tessellates to a non-empty mesh.
         let (history, _) = rebuild_tree(&s).expect("rotated box rebuilds");
-        let mesh = tessellate_step(&history, 1).expect("tessellate");
+        let mesh = tessellate_step(&history, 1, &[]).expect("tessellate");
         assert!(crate::mesh_loader::mesh_bounding_box(&mesh).is_some());
         // Rotation survives save → load.
         let txt = save_string(&s).expect("serialize");
@@ -994,7 +1035,7 @@ mod tests {
         };
         // An extruded profile rebuilds and tessellates to a non-empty mesh.
         let (history, _) = rebuild_tree(&s).expect("extrude rebuilds");
-        let mesh = tessellate_step(&history, 1).expect("tessellate");
+        let mesh = tessellate_step(&history, 1, &[]).expect("tessellate");
         assert!(crate::mesh_loader::mesh_bounding_box(&mesh).is_some());
         // The profile survives save → load.
         let txt = save_string(&s).expect("serialize");
@@ -1018,8 +1059,30 @@ mod tests {
         assert_eq!(history.last().unwrap().len(), 2, "final step has two bodies");
         assert!(status.contains("2 bodies"), "status: {status}");
         // Both bodies concatenate into one non-empty display mesh.
-        let mesh = tessellate_step(&history, history.len()).expect("merge");
+        let mesh = tessellate_step(&history, history.len(), &[]).expect("merge");
         assert!(crate::mesh_loader::mesh_bounding_box(&mesh).is_some());
+    }
+
+    #[test]
+    fn body_visibility_filters_the_display() {
+        let mut a = UiStep::new_box();
+        a.op = Op::New;
+        let mut b = UiStep::new_box();
+        b.op = Op::New;
+        b.x = "3".into();
+        let s = CadWorkbenchState {
+            steps: vec![a, b],
+            ..CadWorkbenchState::default()
+        };
+        let (history, _) = rebuild_tree(&s).expect("two bodies");
+        let last = history.len();
+        // Both / one visible → a real mesh; none visible → an error.
+        assert!(tessellate_step(&history, last, &[true, true]).is_ok());
+        assert!(tessellate_step(&history, last, &[true, false]).is_ok());
+        assert!(
+            tessellate_step(&history, last, &[false, false]).is_err(),
+            "hiding all bodies is an error, not an empty mesh"
+        );
     }
 
     #[test]
