@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::constraint::Constraint3D;
-use crate::entity::{Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
+use crate::entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
 use crate::error::Solve3DError;
 
 /// Variable-backed 3D sketch.
@@ -162,6 +162,78 @@ impl Sketch3D {
         match &self.entities[id.0] {
             Entity3D::Circle3(c) => self.vars[c.radius_var],
             other => panic!("expected Circle3 at {id:?}, got {}", other.kind()),
+        }
+    }
+
+    /// Add a circular arc centred on `center` with `radius`, in the plane
+    /// with normal `(nx, ny, nz)`, bounded by the `start` and `end` points.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_arc(
+        &mut self,
+        center: EntityId,
+        radius: f64,
+        nx: f64,
+        ny: f64,
+        nz: f64,
+        start: EntityId,
+        end: EntityId,
+    ) -> Result<EntityId, Solve3DError> {
+        self.expect_point(center)?;
+        self.expect_point(start)?;
+        self.expect_point(end)?;
+        let rv = self.vars.len();
+        self.vars.push(radius);
+        let nxv = self.vars.len();
+        self.vars.push(nx);
+        let nyv = self.vars.len();
+        self.vars.push(ny);
+        let nzv = self.vars.len();
+        self.vars.push(nz);
+        let id = EntityId(self.entities.len());
+        self.entities.push(Entity3D::Arc3(Arc3 {
+            center,
+            radius_var: rv,
+            nx_var: nxv,
+            ny_var: nyv,
+            nz_var: nzv,
+            start,
+            end,
+        }));
+        Ok(id)
+    }
+
+    /// (cx, cy, cz, radius, nx, ny, nz) for an arc's underlying circle.
+    pub fn arc_circle(&self, id: EntityId) -> (f64, f64, f64, f64, f64, f64, f64) {
+        match &self.entities[id.0] {
+            Entity3D::Arc3(a) => {
+                let (cx, cy, cz) = self.point_xyz(a.center);
+                (
+                    cx,
+                    cy,
+                    cz,
+                    self.vars[a.radius_var],
+                    self.vars[a.nx_var],
+                    self.vars[a.ny_var],
+                    self.vars[a.nz_var],
+                )
+            }
+            other => panic!("expected Arc3 at {id:?}, got {}", other.kind()),
+        }
+    }
+
+    /// The (start, end) endpoint ids of an arc.
+    pub fn arc_endpoints(&self, id: EntityId) -> (EntityId, EntityId) {
+        match &self.entities[id.0] {
+            Entity3D::Arc3(a) => (a.start, a.end),
+            other => panic!("expected Arc3 at {id:?}, got {}", other.kind()),
+        }
+    }
+
+    /// An arc's current radius.
+    pub fn arc_radius(&self, id: EntityId) -> f64 {
+        match &self.entities[id.0] {
+            Entity3D::Arc3(a) => self.vars[a.radius_var],
+            other => panic!("expected Arc3 at {id:?}, got {}", other.kind()),
         }
     }
 
