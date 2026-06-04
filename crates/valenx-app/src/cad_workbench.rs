@@ -357,6 +357,17 @@ fn total_volume(bodies: &[valenx_cad::Solid]) -> f64 {
         .sum()
 }
 
+/// Total boundary surface area of a set of bodies, in square model units. Sums
+/// each body's best-effort area (`valenx_cad::solid_area`), skipping any that
+/// can't be evaluated. Exact for flat-faced solids; curved solids converge from
+/// below at the measure tolerance, so this slightly under-reports them.
+fn total_area(bodies: &[valenx_cad::Solid]) -> f64 {
+    bodies
+        .iter()
+        .filter_map(|b| valenx_cad::solid_area(b).ok())
+        .sum()
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -367,8 +378,9 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let nbodies = model.bodies.len();
     let faces: usize = model.bodies.iter().map(|b| b.faces()).sum();
     let volume = total_volume(&model.bodies);
+    let area = total_area(&model.bodies);
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {area:.4} u² · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -980,6 +992,25 @@ mod tests {
             punched_vol > 0.0 && punched_vol < 1.0,
             "punched unit cube volume should be in (0, 1): {punched_vol}"
         );
+    }
+
+    #[test]
+    fn rebuild_reports_total_surface_area() {
+        // A single 2×3×4 box — flat-faced, so its measured area is exact:
+        // 2·(2·3 + 3·4 + 2·4) = 2·26 = 52 u².
+        let mut bx = UiStep::base(Op::New, FeatureKind::Box);
+        bx.dx = "2".into();
+        bx.dy = "3".into();
+        bx.dz = "4".into();
+        let s = CadWorkbenchState {
+            steps: vec![bx],
+            ..CadWorkbenchState::default()
+        };
+        let (history, status) = rebuild_tree(&s).expect("box rebuilds");
+        let a = total_area(history.last().expect("one snapshot"));
+        assert!((a - 52.0).abs() < 1e-6, "2×3×4 box area should be 52, got {a}");
+        // The status line surfaces the area in square model units.
+        assert!(status.contains("u²"), "status should report area: {status}");
     }
 
     #[test]
