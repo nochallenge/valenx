@@ -91,6 +91,44 @@ fn characteristic_length(s: &CfdWorkbenchState) -> f64 {
     }
 }
 
+/// Flow regime inferred from the Reynolds number.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum FlowRegime {
+    Laminar,
+    Transitional,
+    Turbulent,
+}
+
+impl FlowRegime {
+    fn label(self) -> &'static str {
+        match self {
+            FlowRegime::Laminar => "laminar",
+            FlowRegime::Transitional => "transitional",
+            FlowRegime::Turbulent => "turbulent",
+        }
+    }
+}
+
+/// Classify the flow regime from the Reynolds number. The channel case uses
+/// the nominal internal-flow thresholds (laminar < 2300, transitional < 4000,
+/// turbulent above); the lid-driven cavity stays steady/laminar to much higher
+/// Re — its first instability is near Re ≈ 8000 — so its thresholds are raised.
+/// This is the validity gate for the laminar SIMPLE solver: a turbulent Re
+/// means the results are not physical.
+fn flow_regime(re: f64, case: CfdCase) -> FlowRegime {
+    let (laminar_max, turbulent_min) = match case {
+        CfdCase::ChannelFlow => (2300.0, 4000.0),
+        CfdCase::LidDrivenCavity => (8000.0, 10000.0),
+    };
+    if re < laminar_max {
+        FlowRegime::Laminar
+    } else if re < turbulent_min {
+        FlowRegime::Transitional
+    } else {
+        FlowRegime::Turbulent
+    }
+}
+
 /// Draw the CFD Workbench right-side panel. A no-op when the
 /// `show_cfd_workbench` toggle is off.
 pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -156,11 +194,30 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
                     if s.viscosity > 0.0 {
                         let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
+                        let regime = flow_regime(re, s.case);
                         ui.label(
-                            egui::RichText::new(format!("Reynolds number ≈ {re:.1}"))
-                                .weak()
-                                .small(),
+                            egui::RichText::new(format!(
+                                "Reynolds number ≈ {re:.1}  ({})",
+                                regime.label()
+                            ))
+                            .weak()
+                            .small(),
                         );
+                        match regime {
+                            FlowRegime::Turbulent => {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(220, 90, 90),
+                                    "⚠ turbulent — this laminar solver will be unphysical here",
+                                );
+                            }
+                            FlowRegime::Transitional => {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(220, 170, 80),
+                                    "⚠ transitional — laminar results are approximate",
+                                );
+                            }
+                            FlowRegime::Laminar => {}
+                        }
                     }
 
                     ui.add_space(4.0);
@@ -250,6 +307,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         }
     }
     let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
+    let regime = flow_regime(re, s.case);
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -264,7 +322,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     s.result = format!(
         "case       : {}\n\
          grid       : {}×{}  ({:.3} × {:.3} m)\n\
-         Reynolds   : {:.1}\n\
+         Reynolds   : {:.1}  ({})\n\
          iterations : {} {}\n\
          residual   : {:.3e}\n\
          max |u|    : {:.5} m/s",
@@ -274,6 +332,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         s.lx,
         s.ly,
         re,
+        regime.label(),
         sol.iterations,
         if sol.converged {
             "(converged)"
@@ -337,5 +396,25 @@ mod tests {
         };
         run_cfd(&mut s);
         assert!(s.error.is_some(), "zero viscosity must surface an error");
+    }
+
+    #[test]
+    fn flow_regime_classifies_by_reynolds() {
+        // Channel/pipe thresholds: laminar < 2300, transitional < 4000, then turbulent.
+        assert_eq!(flow_regime(100.0, CfdCase::ChannelFlow), FlowRegime::Laminar);
+        assert_eq!(flow_regime(3000.0, CfdCase::ChannelFlow), FlowRegime::Transitional);
+        assert_eq!(flow_regime(5000.0, CfdCase::ChannelFlow), FlowRegime::Turbulent);
+        // The lid-driven cavity stays laminar to much higher Re.
+        assert_eq!(flow_regime(3000.0, CfdCase::LidDrivenCavity), FlowRegime::Laminar);
+        assert_eq!(flow_regime(9000.0, CfdCase::LidDrivenCavity), FlowRegime::Transitional);
+        // The default cavity (Re = 100) reports "laminar" in the solve result.
+        let mut s = CfdWorkbenchState {
+            nx: 12,
+            ny: 12,
+            max_iterations: 60,
+            ..Default::default()
+        };
+        run_cfd(&mut s);
+        assert!(s.result.contains("laminar"), "regime in result: {}", s.result);
     }
 }
