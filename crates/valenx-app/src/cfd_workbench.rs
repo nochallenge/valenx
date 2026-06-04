@@ -13,6 +13,7 @@
 //! toggled from the View menu.
 
 use eframe::egui;
+use egui_plot::{Line, Plot, PlotPoints};
 
 use valenx_cfd_native::{solve_simple, Boundaries, Fluid, Grid, SimpleControls};
 
@@ -57,6 +58,8 @@ pub struct CfdWorkbenchState {
     case: CfdCase,
     result: String,
     error: Option<String>,
+    /// Vertical centreline velocity profile: [speed (m/s), height y (m)].
+    profile: Option<Vec<[f64; 2]>>,
 }
 
 impl Default for CfdWorkbenchState {
@@ -74,6 +77,7 @@ impl Default for CfdWorkbenchState {
             case: CfdCase::LidDrivenCavity,
             result: String::new(),
             error: None,
+            profile: None,
         }
     }
 }
@@ -187,6 +191,17 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Result").strong());
                         ui.label(egui::RichText::new(&s.result).monospace());
                     }
+                    if let Some(profile) = &s.profile {
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new("Centreline speed vs height").strong());
+                        Plot::new("cfd_profile_plot")
+                            .height(160.0)
+                            .x_axis_label("speed (m/s)")
+                            .y_axis_label("y (m)")
+                            .show(ui, |pui| {
+                                pui.line(Line::new(PlotPoints::from(profile.clone())).name("|u|"));
+                            });
+                    }
                 });
         });
 }
@@ -197,6 +212,7 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 /// bad input surfaces as an error, never a crash.
 fn run_cfd(s: &mut CfdWorkbenchState) {
     s.error = None;
+    s.profile = None;
     if s.nx == 0 || s.ny == 0 {
         s.error = Some("grid must have at least one cell per axis".into());
         return;
@@ -234,6 +250,16 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         }
     }
     let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
+
+    // Vertical centreline velocity profile: speed vs height.
+    let i_mid = s.nx / 2;
+    let profile: Vec<[f64; 2]> = (0..s.ny)
+        .map(|j| {
+            let y = (j as f64 + 0.5) * s.ly / s.ny as f64;
+            [sol.speed_at_cell(i_mid, j), y]
+        })
+        .collect();
+    s.profile = Some(profile);
 
     s.result = format!(
         "case       : {}\n\
@@ -275,6 +301,7 @@ mod tests {
         run_cfd(&mut s);
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
         assert!(s.result.contains("max |u|"));
+        assert!(s.profile.as_ref().is_some_and(|p| p.len() == 16), "centreline profile sampled");
     }
 
     #[test]
