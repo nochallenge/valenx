@@ -223,7 +223,10 @@ fn grid_fs(i: GVert) -> GFrag {
     let dist = length(wxz - u.cam_pos.xz);
     let fade_dist = max(u.grid.w, 1e-3);
     let raw_fade = clamp(1.0 - dist / fade_dist, 0.0, 1.0);
-    let fade = raw_fade * raw_fade;  // quadratic ease — softer near horizon
+    // Ease-OUT: keep the grid near full strength across most of the view and
+    // fade it hard only near the horizon (Blender-like), instead of dimming
+    // quadratically from the camera outward (which read as washed-out).
+    let fade = 1.0 - (1.0 - raw_fade) * (1.0 - raw_fade);
 
     // ---- 5. Three-level LOD grid with smooth crossfade --------------
     // minor_a: current minor spacing (fades out as blend_t → 1)
@@ -242,8 +245,8 @@ fn grid_fs(i: GVert) -> GFrag {
     let a_major2 = grid_line(wxz, major_b) * bt * 0.55;
     var a = max(max(a_minor, a_major), a_major2);
 
-    // ---- 6. Base grid colour — a calm cool grey. ---------------------
-    var col = vec3<f32>(0.42, 0.45, 0.52);
+    // ---- 6. Base grid colour — a near-neutral grey (Blender-like). ----
+    var col = vec3<f32>(0.47, 0.48, 0.50);
 
     // ---- 7. Principal axes — crisp ~1.5px ANTI-ALIASED lines, softly
     // saturated (Fusion-style) instead of a hard full-alpha band. The
@@ -256,11 +259,11 @@ fn grid_fs(i: GVert) -> GFrag {
     // Z axis runs along world Z → highlight where world X (wxz.x) ≈ 0.
     let ax_z = 1.0 - smoothstep(0.75 * fw.x, 1.75 * fw.x, abs(wxz.x));
     if ax_x > 0.001 {
-        col = mix(col, vec3<f32>(0.85, 0.33, 0.35), ax_x);
+        col = mix(col, vec3<f32>(0.80, 0.30, 0.33), ax_x);
         a = max(a, ax_x * 0.85);
     }
     if ax_z > 0.001 {
-        col = mix(col, vec3<f32>(0.34, 0.56, 0.90), ax_z);
+        col = mix(col, vec3<f32>(0.28, 0.49, 0.86), ax_z);
         a = max(a, ax_z * 0.85);
     }
 
@@ -275,6 +278,37 @@ fn grid_fs(i: GVert) -> GFrag {
 }
 "#;
 
+/// Screen-space vertical gradient backdrop, drawn first (behind the mesh and
+/// the transparent grid). A subtle dark gradient — lighter toward the top —
+/// gives the viewport depth instead of a flat fill, the way Blender's viewport
+/// background does. No uniforms: the colours are baked in.
+const BG_SHADER_WGSL: &str = r#"
+struct BgVert {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) ndc: vec2<f32>,
+}
+
+@vertex
+fn bg_vs(@builtin(vertex_index) vid: u32) -> BgVert {
+    var pos = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 3.0, -1.0),
+        vec2<f32>(-1.0,  3.0),
+    );
+    let p = pos[vid];
+    return BgVert(vec4<f32>(p.x, p.y, 1.0, 1.0), p);
+}
+
+@fragment
+fn bg_fs(i: BgVert) -> @location(0) vec4<f32> {
+    // ndc.y: -1 bottom → +1 top. Lighter near the top, darker low.
+    let t = clamp(i.ndc.y * 0.5 + 0.5, 0.0, 1.0);
+    let bottom = vec3<f32>(0.075, 0.085, 0.100);
+    let top    = vec3<f32>(0.150, 0.165, 0.190);
+    return vec4<f32>(mix(bottom, top, t), 1.0);
+}
+"#;
+
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// The viewport's wgpu render pipeline — owns the device, queue, and
@@ -286,6 +320,7 @@ pub struct WgpuRenderer {
 
     pipeline: wgpu::RenderPipeline,
     grid_pipeline: wgpu::RenderPipeline,
+    bg_pipeline: wgpu::RenderPipeline,
     // Kept alive for the pipeline even though no code reads it after
     // construction; dropping it would invalidate `bind_group`.
     #[allow(dead_code)]
@@ -436,6 +471,54 @@ impl WgpuRenderer {
             multiview: None,
         });
 
+        // Background gradient pipeline — a screen-space backdrop drawn before
+        // the mesh and grid. Depth test Always + no depth write, so it sits
+        // behind everything without touching the depth buffer. Empty layout
+        // (no uniforms — the gradient colours are baked into the shader).
+        let bg_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("valenx.viewport.bg_shader"),
+            source: wgpu::ShaderSource::Wgsl(BG_SHADER_WGSL.into()),
+        });
+        let bg_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("valenx.viewport.bg_pipeline_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+        let bg_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("valenx.viewport.bg_pipeline"),
+            layout: Some(&bg_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &bg_shader,
+                entry_point: "bg_vs",
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &bg_shader,
+                entry_point: "bg_fs",
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+        });
+
         let uniforms = Uniforms::default();
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("valenx.viewport.uniforms"),
@@ -468,6 +551,7 @@ impl WgpuRenderer {
             target_format,
             pipeline,
             grid_pipeline,
+            bg_pipeline,
             bind_group_layout,
             uniform_buffer,
             bind_group,
@@ -648,7 +732,12 @@ impl WgpuRenderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            // Mesh first (writes depth for later occlusion test).
+            // Background gradient first — a screen-space backdrop behind the
+            // mesh and the transparent grid (depth test Always, no depth write,
+            // so it never occludes geometry).
+            rpass.set_pipeline(&self.bg_pipeline);
+            rpass.draw(0..3, 0..1);
+            // Mesh next (writes depth for later occlusion test).
             if self.vertex_count > 0 {
                 rpass.set_pipeline(&self.pipeline);
                 rpass.set_bind_group(0, &self.bind_group, &[]);
