@@ -12,8 +12,9 @@ use egui_plot::{Legend, Line, Plot, PlotPoints};
 use nalgebra::Vector3;
 
 use valenx_neuro::{
-    recruitment_curve, solve_point_heat, stimulate, Axon, Cpe, ElectrodeImpedance,
-    ExtracellularRecorder, NeuroError, Scene, TissueGrid,
+    charge_density, is_safe, max_safe_charge_per_phase, recruitment_curve, shannon_k,
+    solve_point_heat, stimulate, Axon, Cpe, ElectrodeImpedance, ExtracellularRecorder, NeuroError,
+    Scene, TissueGrid,
 };
 
 use crate::ValenxApp;
@@ -26,6 +27,10 @@ pub struct NeuroWorkbenchState {
     n_axons: usize,
     depth_mm: f64,
     spread_mm: f64,
+    /// Stimulus pulse width (µs) — charge per phase = current × width.
+    pulse_width_us: f64,
+    /// Shannon damage-line limit (k-value); points below it are safe.
+    k_limit: f64,
     results: Option<NeuroResults>,
     error: Option<String>,
 }
@@ -39,6 +44,8 @@ impl Default for NeuroWorkbenchState {
             n_axons: 8,
             depth_mm: 0.5,
             spread_mm: 2.0,
+            pulse_width_us: 200.0,
+            k_limit: 1.85,
             results: None,
             error: None,
         }
@@ -116,6 +123,34 @@ fn run_neuro(s: &NeuroWorkbenchState) -> Result<NeuroResults, NeuroError> {
     })
 }
 
+/// Charge-injection safety readout for the current electrode + pulse, via the
+/// `valenx-neuro` Shannon model.
+struct SafetyReadout {
+    q_uc: f64,
+    area_cm2: f64,
+    density_uc_cm2: f64,
+    k_value: f64,
+    safe: bool,
+    max_safe_q_uc: f64,
+}
+
+/// Compute the charge-injection safety of the current settings. Charge per
+/// phase `Q = I·PW` (µA·µs → µC); electrode area from the disk radius.
+fn charge_safety(s: &NeuroWorkbenchState) -> SafetyReadout {
+    // µA × µs = 1e-12 C = 1e-6 µC.
+    let q_uc = s.electrode_ua.abs() * s.pulse_width_us.max(0.0) * 1.0e-6;
+    let r_cm = s.electrode_radius_um.max(1.0) * 1.0e-4; // µm → cm
+    let area_cm2 = std::f64::consts::PI * r_cm * r_cm;
+    SafetyReadout {
+        q_uc,
+        area_cm2,
+        density_uc_cm2: charge_density(q_uc, area_cm2),
+        k_value: shannon_k(q_uc, area_cm2),
+        safe: is_safe(q_uc, area_cm2, s.k_limit),
+        max_safe_q_uc: max_safe_charge_per_phase(area_cm2, s.k_limit),
+    }
+}
+
 /// Draw the neural-interface workbench (a no-op unless toggled on via
 /// View → Neural Interface).
 pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -164,6 +199,46 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label("spread (mm)");
                         ui.add(egui::DragValue::new(&mut s.spread_mm).speed(0.1));
                     });
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("Charge-injection safety (Shannon)").strong());
+                    ui.horizontal(|ui| {
+                        ui.label("pulse width (µs)");
+                        ui.add(egui::DragValue::new(&mut s.pulse_width_us).speed(5.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Shannon k limit");
+                        ui.add(egui::DragValue::new(&mut s.k_limit).speed(0.05));
+                    });
+                    {
+                        let sf = charge_safety(s);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Q {:.3} µC/ph · area {:.2e} cm² · density {:.0} µC/cm² · k = {:.2}\nmax safe Q (k={:.2}): {:.3} µC/ph",
+                                sf.q_uc,
+                                sf.area_cm2,
+                                sf.density_uc_cm2,
+                                sf.k_value,
+                                s.k_limit,
+                                sf.max_safe_q_uc,
+                            ))
+                            .monospace()
+                            .small(),
+                        );
+                        let (txt, col) = if sf.safe {
+                            (
+                                "● SAFE — below the Shannon limit",
+                                egui::Color32::from_rgb(80, 220, 120),
+                            )
+                        } else {
+                            (
+                                "● UNSAFE — above the Shannon limit",
+                                egui::Color32::from_rgb(220, 90, 90),
+                            )
+                        };
+                        ui.colored_label(col, txt);
+                    }
+
                     ui.separator();
                     if ui.button("▶ Run stimulation").clicked() {
                         match run_neuro(s) {
@@ -299,5 +374,19 @@ mod tests {
             ..Default::default()
         };
         assert!(run_neuro(&s).is_err());
+    }
+
+    #[test]
+    fn charge_safety_tracks_the_shannon_limit() {
+        let mut s = NeuroWorkbenchState::default();
+        let base = charge_safety(&s);
+        assert!(base.q_uc > 0.0 && base.area_cm2 > 0.0 && base.k_value.is_finite());
+        // Charge per phase scales linearly with current; half the max-safe
+        // charge is safe, double is unsafe.
+        let pw_factor = s.pulse_width_us * 1.0e-6; // µC per µA at this pulse width
+        s.electrode_ua = 0.5 * base.max_safe_q_uc / pw_factor;
+        assert!(charge_safety(&s).safe, "half the max-safe charge must be safe");
+        s.electrode_ua = 2.0 * base.max_safe_q_uc / pw_factor;
+        assert!(!charge_safety(&s).safe, "double the max-safe charge must be unsafe");
     }
 }
