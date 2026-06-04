@@ -668,7 +668,13 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         .set_file_name("feature-tree.ron")
                                         .save_file()
                                     {
-                                        s.tree_status = Some(match std::fs::write(&path, txt) {
+                                        // Durable small-state save → crash-safe
+                                        // atomic write (sidecar + fsync + rename),
+                                        // per the no-raw-fs-write guard.
+                                        let res = valenx_core::io_caps::atomic_write_str(
+                                            &path, &txt,
+                                        );
+                                        s.tree_status = Some(match res {
                                             Ok(()) => Ok(format!("saved {}", path.display())),
                                             Err(e) => Err(format!("save failed: {e}")),
                                         });
