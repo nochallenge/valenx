@@ -42,6 +42,7 @@ pub mod cad_workbench;
 pub mod cfd_workbench;
 pub mod draft2d_workbench;
 pub mod reinforcement_workbench;
+pub mod render_workbench;
 pub mod neuro_workbench;
 pub mod reactdyn_workbench;
 pub mod astro;
@@ -418,6 +419,13 @@ pub struct ValenxApp {
     /// State for the Reinforcement workbench, wrapping `valenx-reinforcement`.
     /// See [`crate::reinforcement_workbench`].
     pub(crate) reinforcement: crate::reinforcement_workbench::ReinforcementWorkbenchState,
+
+    /// Whether the right-side Path-Traced Render workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_render_workbench: bool,
+    /// State for the Render workbench, wrapping `valenx-pathtrace`. See
+    /// [`crate::render_workbench`].
+    pub(crate) render: crate::render_workbench::RenderWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).

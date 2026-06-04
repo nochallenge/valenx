@@ -427,6 +427,17 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_render_workbench, "Path-Traced Render")
+                        .on_hover_text(
+                            "Show / hide the right-side Path-Traced Render workbench — a \
+                             global-illumination Cornell-box render displayed as an image, \
+                             on the native valenx-pathtrace CPU path tracer.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -921,6 +932,10 @@ impl eframe::App for ValenxApp {
         // Reinforcement workbench (right) — parametric rebar cages pushed to
         // the 3D viewport, on valenx-reinforcement. Off unless toggled.
         crate::reinforcement_workbench::draw_reinforcement_workbench(self, ctx);
+
+        // Path-Traced Render workbench (right) — global-illumination image on
+        // valenx-pathtrace. Off unless toggled via View.
+        crate::render_workbench::draw_render_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
