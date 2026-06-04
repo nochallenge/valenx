@@ -345,6 +345,18 @@ fn load_from_string(txt: &str) -> Result<LoadedTree, String> {
     Ok((doc.parameters, steps))
 }
 
+/// Total solid volume of a set of bodies, in cubic model units. Sums each
+/// body's best-effort volume (`valenx_cad::solid_volume`); a body whose volume
+/// can't be evaluated is skipped rather than poisoning the total. Exact for
+/// flat-faced solids; curved solids converge from below at the measure
+/// tolerance, so this slightly under-reports them.
+fn total_volume(bodies: &[valenx_cad::Solid]) -> f64 {
+    bodies
+        .iter()
+        .filter_map(|b| valenx_cad::solid_volume(b).ok())
+        .sum()
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -354,7 +366,11 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let model = tl.rebuild(&table).map_err(|e| e.to_string())?;
     let nbodies = model.bodies.len();
     let faces: usize = model.bodies.iter().map(|b| b.faces()).sum();
-    let status = format!("{nbodies} bodies · {faces} faces · {} steps", s.steps.len());
+    let volume = total_volume(&model.bodies);
+    let status = format!(
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {} steps",
+        s.steps.len()
+    );
     Ok((model.snapshots, status))
 }
 
@@ -935,6 +951,35 @@ mod tests {
                 "step {k} should tessellate to a non-empty mesh"
             );
         }
+    }
+
+    #[test]
+    fn rebuild_reports_total_solid_volume() {
+        // A single 2×3×4 box — flat-faced, so its measured volume is exact.
+        let mut bx = UiStep::base(Op::New, FeatureKind::Box);
+        bx.dx = "2".into();
+        bx.dy = "3".into();
+        bx.dz = "4".into();
+        let s = CadWorkbenchState {
+            steps: vec![bx],
+            ..CadWorkbenchState::default()
+        };
+        let (history, status) = rebuild_tree(&s).expect("box rebuilds");
+        let v = total_volume(history.last().expect("one snapshot"));
+        assert!((v - 24.0).abs() < 1e-6, "2×3×4 box volume should be 24, got {v}");
+        // The status line surfaces the volume in cubic model units.
+        assert!(status.contains("u³"), "status should report volume: {status}");
+
+        // The default tree punches a cylinder through a unit (size = 1) box:
+        // the cut removes material, so the result has positive volume strictly
+        // below the 1×1×1 box it started from.
+        let punched = CadWorkbenchState::default();
+        let (ph, _) = rebuild_tree(&punched).expect("punched cube rebuilds");
+        let punched_vol = total_volume(ph.last().expect("snapshot"));
+        assert!(
+            punched_vol > 0.0 && punched_vol < 1.0,
+            "punched unit cube volume should be in (0, 1): {punched_vol}"
+        );
     }
 
     #[test]
