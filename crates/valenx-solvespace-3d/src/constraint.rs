@@ -133,6 +133,19 @@ pub enum Constraint3D {
         /// Second circle.
         b: EntityId,
     },
+    /// An arc's radius equals `target`. 1 residual.
+    ArcRadius {
+        /// Arc entity.
+        arc: EntityId,
+        /// Target radius.
+        target: f64,
+    },
+    /// An arc's start + end points lie on its circle — each in-plane and at
+    /// the radius distance from the centre. 4 residuals.
+    ArcEndpointsOnArc {
+        /// Arc entity.
+        arc: EntityId,
+    },
 }
 
 impl Constraint3D {
@@ -147,9 +160,11 @@ impl Constraint3D {
             | Constraint3D::PointInPlane { .. }
             | Constraint3D::OnPlane { .. }
             | Constraint3D::CircleRadius { .. }
-            | Constraint3D::EqualRadius { .. } => 1,
+            | Constraint3D::EqualRadius { .. }
+            | Constraint3D::ArcRadius { .. } => 1,
             Constraint3D::LineParallel3 { .. } | Constraint3D::OnLine { .. } => 3,
             Constraint3D::PointOnCircle { .. } => 2,
+            Constraint3D::ArcEndpointsOnArc { .. } => 4,
             Constraint3D::PlaneFixed { .. } => 6,
         }
     }
@@ -282,6 +297,23 @@ impl Constraint3D {
                 let (_, _, _, rb, _, _, _) = s.circle_data(*b);
                 out[0] = ra - rb;
             }
+            Constraint3D::ArcRadius { arc, target } => {
+                let (_, _, _, r, _, _, _) = s.arc_circle(*arc);
+                out[0] = r - target;
+            }
+            Constraint3D::ArcEndpointsOnArc { arc } => {
+                let (cx, cy, cz, r, nx, ny, nz) = s.arc_circle(*arc);
+                let (start, end) = s.arc_endpoints(*arc);
+                let nlen = (nx * nx + ny * ny + nz * nz).sqrt().max(1e-18);
+                let (sx, sy, sz) = s.point_xyz(start);
+                let (srx, sry, srz) = (sx - cx, sy - cy, sz - cz);
+                out[0] = (nx * srx + ny * sry + nz * srz) / nlen;
+                out[1] = (srx * srx + sry * sry + srz * srz).sqrt() - r;
+                let (ex, ey, ez) = s.point_xyz(end);
+                let (erx, ery, erz) = (ex - cx, ey - cy, ez - cz);
+                out[2] = (nx * erx + ny * ery + nz * erz) / nlen;
+                out[3] = (erx * erx + ery * ery + erz * erz).sqrt() - r;
+            }
         }
     }
 
@@ -339,6 +371,17 @@ impl Constraint3D {
                 out.push(c.nx_var);
                 out.push(c.ny_var);
                 out.push(c.nz_var);
+            }
+        };
+        let push_arc = |id: EntityId, out: &mut Vec<usize>| {
+            if let Some(Entity3D::Arc3(a)) = s.entities.get(id.0) {
+                push_point(a.center, out);
+                out.push(a.radius_var);
+                out.push(a.nx_var);
+                out.push(a.ny_var);
+                out.push(a.nz_var);
+                push_point(a.start, out);
+                push_point(a.end, out);
             }
         };
         match self {
@@ -401,6 +444,8 @@ impl Constraint3D {
                 push_circle(*a, &mut out);
                 push_circle(*b, &mut out);
             }
+            Constraint3D::ArcRadius { arc, .. } => push_arc(*arc, &mut out),
+            Constraint3D::ArcEndpointsOnArc { arc } => push_arc(*arc, &mut out),
         }
         out.sort_unstable();
         out.dedup();

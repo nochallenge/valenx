@@ -58,7 +58,7 @@ pub mod sketch;
 pub mod solver;
 
 pub use constraint::Constraint3D;
-pub use entity::{Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
+pub use entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
 pub use error::{ErrorCategory, Solve3DError};
 pub use panel::SolveSpace3DPanelState;
 pub use parameters::{ParamError, ParameterTable};
@@ -257,5 +257,45 @@ mod tests_integration {
             "radius = {}",
             s.circle_radius(circle)
         );
+    }
+
+    /// ArcRadius — a free-radius arc pulled to a target radius.
+    #[test]
+    fn arc_radius_converges() {
+        let mut s = Sketch3D::new();
+        let c = s.add_point(0.0, 0.0, 0.0);
+        let start = s.add_point(5.0, 0.0, 0.0);
+        let end = s.add_point(0.0, 5.0, 0.0);
+        let arc = s.add_arc(c, 1.0, 0.0, 0.0, 1.0, start, end).unwrap();
+        s.add_constraint(Constraint3D::ArcRadius { arc, target: 5.0 });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
+        assert!((s.arc_radius(arc) - 5.0).abs() < 1e-6, "radius = {}", s.arc_radius(arc));
+    }
+
+    /// ArcEndpointsOnArc — the start + end points are pulled onto the arc's
+    /// circle: in its plane and at the radius distance from the centre.
+    #[test]
+    fn arc_endpoints_land_on_circle() {
+        let mut s = Sketch3D::new();
+        let c = s.add_point(0.0, 0.0, 0.0);
+        let start = s.add_point(4.0, 1.0, 2.0);
+        let end = s.add_point(1.0, 4.0, -1.0);
+        let arc = s.add_arc(c, 5.0, 0.0, 0.0, 1.0, start, end).unwrap();
+        s.add_constraint(Constraint3D::ArcRadius { arc, target: 5.0 });
+        s.add_constraint(Constraint3D::ArcEndpointsOnArc { arc });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
+        let (cx, cy, cz, r, nx, ny, nz) = s.arc_circle(arc);
+        let nlen = (nx * nx + ny * ny + nz * nz).sqrt();
+        let (es, ee) = s.arc_endpoints(arc);
+        for pt in [es, ee] {
+            let (px, py, pz) = s.point_xyz(pt);
+            let (rx, ry, rz) = (px - cx, py - cy, pz - cz);
+            let dist = (rx * rx + ry * ry + rz * rz).sqrt();
+            let plane = (nx * rx + ny * ry + nz * rz) / nlen;
+            assert!((dist - r).abs() < 1e-5, "endpoint off radius: {dist} vs {r}");
+            assert!(plane.abs() < 1e-5, "endpoint off plane: {plane}");
+        }
     }
 }
