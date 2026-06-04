@@ -479,6 +479,17 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_variant_effect_workbench, "Variant Effect")
+                        .on_hover_text(
+                            "Show / hide the right-side Variant-Effect workbench — an HGVS \
+                             variant parser (protein / coding substitutions), on \
+                             valenx-variant-effect.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -993,6 +1004,10 @@ impl eframe::App for ValenxApp {
         // Animation workbench (right) — joint keyframe timeline on
         // valenx-animate. Off unless toggled via View.
         crate::animate_workbench::draw_animate_workbench(self, ctx);
+
+        // Variant-Effect workbench (right) — HGVS variant parser on
+        // valenx-variant-effect. Off unless toggled via View.
+        crate::variant_effect_workbench::draw_variant_effect_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
