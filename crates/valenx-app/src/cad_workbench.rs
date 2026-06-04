@@ -53,6 +53,9 @@ struct UiStep {
     x: String,
     y: String,
     z: String,
+    rx: String,
+    ry: String,
+    rz: String,
 }
 
 impl UiStep {
@@ -73,6 +76,9 @@ impl UiStep {
             x: "0".into(),
             y: "0".into(),
             z: "0".into(),
+            rx: "0".into(),
+            ry: "0".into(),
+            rz: "0".into(),
         }
     }
 
@@ -124,7 +130,10 @@ impl UiStep {
                 minor_radius: self.minor.clone(),
             },
         };
-        Step::placed(self.op, feature, self.x.clone(), self.y.clone(), self.z.clone())
+        let mut step =
+            Step::placed(self.op, feature, self.x.clone(), self.y.clone(), self.z.clone());
+        step.rotate_deg = [self.rx.clone(), self.ry.clone(), self.rz.clone()];
+        step
     }
 }
 
@@ -260,6 +269,9 @@ fn ui_step_from(step: &Step) -> Result<UiStep, String> {
     us.x = step.at[0].clone();
     us.y = step.at[1].clone();
     us.z = step.at[2].clone();
+    us.rx = step.rotate_deg[0].clone();
+    us.ry = step.rotate_deg[1].clone();
+    us.rz = step.rotate_deg[2].clone();
     match &step.feature {
         Feature::Box { dx, dy, dz } => {
             us.kind = FeatureKind::Box;
@@ -553,6 +565,12 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 dim_edit(ui, &mut st.y);
                                 dim_edit(ui, &mut st.z);
                             });
+                            ui.horizontal(|ui| {
+                                ui.label("rot x,y,z°");
+                                dim_edit(ui, &mut st.rx);
+                                dim_edit(ui, &mut st.ry);
+                                dim_edit(ui, &mut st.rz);
+                            });
                         });
                     }
                     if let Some(i) = remove_step {
@@ -832,5 +850,26 @@ mod tests {
         let (_params, steps) = load_from_string(&txt).expect("deserialize");
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].kind, FeatureKind::Torus);
+    }
+
+    #[test]
+    fn rotation_round_trips_and_rebuilds() {
+        let mut step = UiStep::new_box();
+        step.op = Op::New;
+        step.rx = "30".into();
+        step.rz = "45".into();
+        let s = CadWorkbenchState {
+            steps: vec![step],
+            ..CadWorkbenchState::default()
+        };
+        // A rotated box rebuilds and tessellates to a non-empty mesh.
+        let (history, _) = rebuild_tree(&s).expect("rotated box rebuilds");
+        let mesh = tessellate_step(&history, 1).expect("tessellate");
+        assert!(crate::mesh_loader::mesh_bounding_box(&mesh).is_some());
+        // Rotation survives save → load.
+        let txt = save_string(&s).expect("serialize");
+        let (_params, steps) = load_from_string(&txt).expect("deserialize");
+        assert_eq!(steps[0].rx, "30");
+        assert_eq!(steps[0].rz, "45");
     }
 }
