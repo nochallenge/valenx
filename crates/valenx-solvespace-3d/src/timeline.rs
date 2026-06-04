@@ -19,12 +19,13 @@
 //! solid — a failed boolean surfaces here as [`TimelineError::Cad`].
 
 use valenx_cad::{box_solid, cylinder, difference, intersection, prism, union, CadError, Solid};
+use serde::{Deserialize, Serialize};
 
 use crate::parameters::{ParamError, ParameterTable};
 
 /// One modelling primitive. Dimensions are parameter-expression strings
 /// (e.g. `"width"`, `"base * 2"`, `"40"`) resolved against a [`ParameterTable`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Feature {
     /// An axis-aligned box `dx × dy × dz`, corner at the step's placement.
     Box {
@@ -53,7 +54,7 @@ pub enum Feature {
 }
 
 /// How a step's feature combines with the body built so far.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Op {
     /// Start a fresh body from this feature, discarding any running body.
     /// The first step of a timeline must be `New`.
@@ -69,7 +70,7 @@ pub enum Op {
 
 /// One timeline step: a placed feature plus how it combines with the
 /// running body.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Step {
     /// How this feature combines with the body built by earlier steps.
     pub op: Op,
@@ -115,7 +116,7 @@ pub struct RebuiltModel {
 }
 
 /// An ordered list of parametric steps forming a feature tree.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FeatureTimeline {
     /// The steps, in build order.
     pub steps: Vec<Step>,

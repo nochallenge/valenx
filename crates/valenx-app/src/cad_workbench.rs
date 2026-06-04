@@ -19,7 +19,8 @@
 use eframe::egui;
 
 use valenx_solvespace_3d::{
-    Constraint3D, Feature, FeatureTimeline, Op, ParameterTable, Sketch3D, Step,
+    timeline_from_ron, timeline_to_ron, Constraint3D, Feature, FeatureTimeline, Op, ParameterTable,
+    Sketch3D, Step,
 };
 
 use crate::types::LoadedMesh;
@@ -225,15 +226,70 @@ fn run_cad(s: &CadWorkbenchState) -> CadResults {
     CadResults { resolved, solved_radius, status }
 }
 
+/// Build a solver-crate [`FeatureTimeline`] from the UI steps.
+fn steps_to_timeline(steps: &[UiStep]) -> FeatureTimeline {
+    let mut tl = FeatureTimeline::new();
+    for st in steps {
+        tl.push(st.to_step());
+    }
+    tl
+}
+
+/// Reconstruct a UI step from a persisted solver-crate [`Step`]. Only box and
+/// cylinder primitives are editable here; an extrude feature in a hand-authored
+/// file is reported as an error rather than silently mangled.
+fn ui_step_from(step: &Step) -> Result<UiStep, String> {
+    let mut us = UiStep::new_box();
+    us.op = step.op;
+    us.x = step.at[0].clone();
+    us.y = step.at[1].clone();
+    us.z = step.at[2].clone();
+    match &step.feature {
+        Feature::Box { dx, dy, dz } => {
+            us.kind = FeatureKind::Box;
+            us.dx = dx.clone();
+            us.dy = dy.clone();
+            us.dz = dz.clone();
+        }
+        Feature::Cylinder { radius, height } => {
+            us.kind = FeatureKind::Cylinder;
+            us.radius = radius.clone();
+            us.height = height.clone();
+        }
+        Feature::Extrude { .. } => {
+            return Err("extrude features aren't editable in this panel yet".to_string());
+        }
+    }
+    Ok(us)
+}
+
+/// Serialise the workbench's parameters + feature tree to a RON string.
+fn save_string(s: &CadWorkbenchState) -> Result<String, String> {
+    timeline_to_ron(&s.params, &steps_to_timeline(&s.steps)).map_err(|e| e.to_string())
+}
+
+/// Editable parameters (`(name, expression)` rows) plus UI steps, parsed from
+/// a saved document.
+type LoadedTree = (Vec<(String, String)>, Vec<UiStep>);
+
+/// Parse a RON document into editable parameters + UI steps.
+fn load_from_string(txt: &str) -> Result<LoadedTree, String> {
+    let doc = timeline_from_ron(txt).map_err(|e| e.to_string())?;
+    let steps = doc
+        .timeline
+        .steps
+        .iter()
+        .map(ui_step_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((doc.parameters, steps))
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshot solids (`snapshots[k]` = running body after step k; the last entry
 /// is the final body) plus a one-line status, or an error message.
 fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<valenx_cad::Solid>, String), String> {
     let table = build_table(&s.params);
-    let mut tl = FeatureTimeline::new();
-    for st in &s.steps {
-        tl.push(st.to_step());
-    }
+    let tl = steps_to_timeline(&s.steps);
     let model = tl.rebuild(&table).map_err(|e| e.to_string())?;
     let faces = model.body.faces();
     let edges = model.body.edges();
@@ -440,6 +496,52 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             s.steps.push(UiStep::new_cylinder());
                         }
                     });
+                    ui.horizontal(|ui| {
+                        if ui.button("💾 Save…").clicked() {
+                            match save_string(s) {
+                                Ok(txt) => {
+                                    if let Some(path) = rfd::FileDialog::new()
+                                        .add_filter("valenx CAD tree", &["ron"])
+                                        .set_file_name("feature-tree.ron")
+                                        .save_file()
+                                    {
+                                        s.tree_status = Some(match std::fs::write(&path, txt) {
+                                            Ok(()) => Ok(format!("saved {}", path.display())),
+                                            Err(e) => Err(format!("save failed: {e}")),
+                                        });
+                                    }
+                                }
+                                Err(e) => {
+                                    s.tree_status = Some(Err(format!("serialize failed: {e}")));
+                                }
+                            }
+                        }
+                        if ui.button("📂 Load…").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("valenx CAD tree", &["ron"])
+                                .pick_file()
+                            {
+                                let loaded = std::fs::read_to_string(&path)
+                                    .map_err(|e| e.to_string())
+                                    .and_then(|txt| load_from_string(&txt));
+                                match loaded {
+                                    Ok((params, steps)) => {
+                                        s.params = params;
+                                        s.steps = steps;
+                                        s.history = None;
+                                        s.tree_status = Some(Ok(format!(
+                                            "loaded {} ({} steps)",
+                                            path.display(),
+                                            s.steps.len()
+                                        )));
+                                    }
+                                    Err(e) => {
+                                        s.tree_status = Some(Err(format!("load failed: {e}")));
+                                    }
+                                }
+                            }
+                        }
+                    });
                     if ui.button("▶ Rebuild → viewport").clicked() {
                         match rebuild_tree(s) {
                             Ok((history, status)) => {
@@ -598,5 +700,25 @@ mod tests {
         };
         let err = rebuild_tree(&s).expect_err("a lone Cut must fail");
         assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn feature_tree_save_load_round_trips() {
+        let s = CadWorkbenchState::default();
+        let txt = save_string(&s).expect("serialize");
+        let (params, steps) = load_from_string(&txt).expect("deserialize");
+        assert_eq!(params.len(), s.params.len());
+        assert_eq!(steps.len(), s.steps.len());
+        // The reloaded tree rebuilds to the same punched cube.
+        let loaded = CadWorkbenchState {
+            params,
+            steps,
+            ..CadWorkbenchState::default()
+        };
+        let (history, _) = rebuild_tree(&loaded).expect("loaded tree rebuilds");
+        assert!(
+            history.last().unwrap().faces() > 6,
+            "reloaded tree still punches a hole"
+        );
     }
 }
