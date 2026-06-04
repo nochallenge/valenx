@@ -45,6 +45,7 @@ pub mod reinforcement_workbench;
 pub mod render_workbench;
 pub mod hvac_workbench;
 pub mod reverse_workbench;
+pub mod interior_workbench;
 pub mod neuro_workbench;
 pub mod reactdyn_workbench;
 pub mod astro;
@@ -442,6 +443,13 @@ pub struct ValenxApp {
     /// State for the Reverse-Engineering workbench, wrapping `valenx-reverse`.
     /// See [`crate::reverse_workbench`].
     pub(crate) reverse: crate::reverse_workbench::ReverseWorkbenchState,
+
+    /// Whether the right-side Interior-Design workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_interior_workbench: bool,
+    /// State for the Interior-Design workbench, wrapping `valenx-interior`. See
+    /// [`crate::interior_workbench`].
+    pub(crate) interior: crate::interior_workbench::InteriorWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).

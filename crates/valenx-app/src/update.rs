@@ -459,6 +459,16 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_interior_workbench, "Interior Design")
+                        .on_hover_text(
+                            "Show / hide the right-side Interior-Design workbench — a 2D \
+                             floor plan with a furniture palette, on valenx-interior.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -965,6 +975,10 @@ impl eframe::App for ValenxApp {
         // Reverse-Engineering workbench (right) — point-cloud reconstruction
         // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
         crate::reverse_workbench::draw_reverse_workbench(self, ctx);
+
+        // Interior-Design workbench (right) — 2D floor plan + furniture on
+        // valenx-interior. Off unless toggled via View.
+        crate::interior_workbench::draw_interior_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
