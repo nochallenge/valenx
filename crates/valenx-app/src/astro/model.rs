@@ -263,6 +263,11 @@ pub struct PlannerForm {
     pub azimuth_latitude_deg: f64,
     /// Launch azimuth — target orbit inclination (deg).
     pub azimuth_inclination_deg: f64,
+
+    /// Plane change — circular-orbit altitude (km) where the burn happens.
+    pub plane_change_altitude_km: f64,
+    /// Plane change — inclination change Δi (deg).
+    pub plane_change_delta_inc_deg: f64,
 }
 
 impl Default for PlannerForm {
@@ -284,6 +289,9 @@ impl Default for PlannerForm {
             // KSC latitude -> the ISS inclination.
             azimuth_latitude_deg: 28.5,
             azimuth_inclination_deg: 51.6,
+            // A 28.5° plane change at LEO — eye-wateringly expensive.
+            plane_change_altitude_km: 400.0,
+            plane_change_delta_inc_deg: 28.5,
         }
     }
 }
@@ -325,6 +333,14 @@ pub fn format_duration(secs: f64) -> String {
 /// radius (m) — the input the maneuver / rendezvous planners take.
 pub fn altitude_km_to_radius_m(altitude_km: f64) -> f64 {
     valenx_astro::constants::R_EARTH + altitude_km * 1_000.0
+}
+
+/// Δv (m/s) for a pure inclination change of `delta_inc_deg` on a circular
+/// orbit at `altitude_km` — a units wrapper (km, deg) over
+/// [`valenx_astro::maneuver::circular_plane_change_dv`] (`Δv = 2·v·sin(Δi/2)`).
+pub fn plane_change_dv(altitude_km: f64, delta_inc_deg: f64) -> Result<f64, AstroError> {
+    let r = altitude_km_to_radius_m(altitude_km);
+    valenx_astro::maneuver::circular_plane_change_dv(r, delta_inc_deg.to_radians())
 }
 
 #[cfg(test)]
@@ -376,6 +392,17 @@ mod tests {
     fn altitude_to_radius_adds_earth_radius() {
         let r = altitude_km_to_radius_m(300.0);
         assert!((r - (valenx_astro::constants::R_EARTH + 300_000.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn plane_change_dv_wraps_the_backend() {
+        // Zero inclination change is free; Δv grows with the angle.
+        assert_eq!(plane_change_dv(400.0, 0.0).unwrap(), 0.0);
+        let small = plane_change_dv(400.0, 15.0).unwrap();
+        let large = plane_change_dv(400.0, 45.0).unwrap();
+        assert!(large > small && small > 0.0, "Δv grows with Δi: {small} → {large}");
+        // A non-physical altitude (below the Earth's centre) errors, not panics.
+        assert!(plane_change_dv(-10_000.0, 30.0).is_err());
     }
 
     #[test]

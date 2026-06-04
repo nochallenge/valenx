@@ -552,6 +552,7 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
 /// each an input → output card with errors shown as text.
 pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_hohmann_planner(app, ui);
+    draw_plane_change_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -601,6 +602,61 @@ fn draw_hohmann_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             kv(ui, "total \u{0394}v", model::format_delta_v(t.total_delta_v));
                             kv(ui, "transfer time", model::format_duration(t.transfer_time));
                         });
+                }
+                Err(e) => derived(ui, format!("Cannot plan: {}", model::friendly_error(&e))),
+            }
+        });
+}
+
+/// Pure plane-change Δv on a circular orbit
+/// (`maneuver::circular_plane_change_dv`).
+fn draw_plane_change_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Plane change \u{0394}v")
+        .id_source("astro_plane_change")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_plane_change_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Orbit altitude").on_hover_text(
+                        "Circular-orbit altitude where the burn happens. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.plane_change_altitude_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Inclination change")
+                        .on_hover_text("Pure plane rotation Δi. SI unit: deg.");
+                    ui.add(
+                        egui::DragValue::new(&mut form.plane_change_delta_inc_deg)
+                            .speed(0.5)
+                            .range(0.0..=180.0)
+                            .suffix(" deg"),
+                    );
+                    ui.end_row();
+                });
+
+            match model::plane_change_dv(
+                form.plane_change_altitude_km,
+                form.plane_change_delta_inc_deg,
+            ) {
+                Ok(dv) => {
+                    egui::Grid::new("astro_plane_change_out")
+                        .num_columns(2)
+                        .spacing([8.0, 3.0])
+                        .show(ui, |ui| {
+                            kv(ui, "plane-change \u{0394}v", model::format_delta_v(dv));
+                        });
+                    derived(
+                        ui,
+                        "Pure plane changes are costly (Δv = 2·v·sin(Δi/2)); rotate where v is low or fold into another burn."
+                            .to_string(),
+                    );
                 }
                 Err(e) => derived(ui, format!("Cannot plan: {}", model::friendly_error(&e))),
             }
