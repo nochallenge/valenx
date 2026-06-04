@@ -12,9 +12,9 @@ use egui_plot::{Legend, Line, Plot, PlotPoints};
 use nalgebra::Vector3;
 
 use valenx_neuro::{
-    charge_density, is_safe, max_safe_charge_per_phase, recruitment_curve, shannon_k,
-    solve_point_heat, stimulate, Axon, Cpe, ElectrodeImpedance, ExtracellularRecorder, NeuroError,
-    Scene, TissueGrid,
+    activation_radius, charge_density, is_safe, max_safe_charge_per_phase, recruitment_curve,
+    shannon_k, solve_point_heat, stimulate, threshold_current, Axon, Cpe, ElectrodeImpedance,
+    ExtracellularRecorder, NeuroError, Scene, TissueGrid,
 };
 
 use crate::ValenxApp;
@@ -31,6 +31,10 @@ pub struct NeuroWorkbenchState {
     pulse_width_us: f64,
     /// Shannon damage-line limit (k-value); points below it are safe.
     k_limit: f64,
+    /// Current–distance: at-electrode threshold I₀ (µA).
+    cd_i0_ua: f64,
+    /// Current–distance constant k (µA/µm²): `I_th = I₀ + k·r²`.
+    cd_k_ua_per_um2: f64,
     results: Option<NeuroResults>,
     error: Option<String>,
 }
@@ -46,6 +50,8 @@ impl Default for NeuroWorkbenchState {
             spread_mm: 2.0,
             pulse_width_us: 200.0,
             k_limit: 1.85,
+            cd_i0_ua: 2.0,
+            cd_k_ua_per_um2: 0.001,
             results: None,
             error: None,
         }
@@ -151,6 +157,27 @@ fn charge_safety(s: &NeuroWorkbenchState) -> SafetyReadout {
     }
 }
 
+/// Current–distance selectivity readout for the current settings.
+struct CdReadout {
+    activation_radius_um: f64,
+    threshold_at_depth_ua: f64,
+    reaches_nearest: bool,
+}
+
+/// Apply the Stoney current–distance law to the current stimulus + geometry:
+/// the activation radius for `|I|`, and the threshold to reach the nearest
+/// axon at `depth_mm`.
+fn current_distance_readout(s: &NeuroWorkbenchState) -> CdReadout {
+    let i = s.electrode_ua.abs();
+    let depth_um = s.depth_mm.max(0.0) * 1000.0;
+    let threshold_at_depth_ua = threshold_current(s.cd_i0_ua, s.cd_k_ua_per_um2, depth_um);
+    CdReadout {
+        activation_radius_um: activation_radius(s.cd_i0_ua, s.cd_k_ua_per_um2, i),
+        threshold_at_depth_ua,
+        reaches_nearest: i >= threshold_at_depth_ua,
+    }
+}
+
 /// Draw the neural-interface workbench (a no-op unless toggled on via
 /// View → Neural Interface).
 pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -234,6 +261,46 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             (
                                 "● UNSAFE — above the Shannon limit",
                                 egui::Color32::from_rgb(220, 90, 90),
+                            )
+                        };
+                        ui.colored_label(col, txt);
+                    }
+
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new("Current–distance selectivity (Stoney)").strong(),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.label("at-electrode threshold I₀ (µA)");
+                        ui.add(egui::DragValue::new(&mut s.cd_i0_ua).speed(0.5));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("current–distance k (µA/µm²)");
+                        ui.add(egui::DragValue::new(&mut s.cd_k_ua_per_um2).speed(0.0005));
+                    });
+                    {
+                        let cd = current_distance_readout(s);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "activation radius {:.0} µm ({:.2} mm) at I = {:.0} µA\nthreshold at nearest axon ({:.1} mm): {:.0} µA",
+                                cd.activation_radius_um,
+                                cd.activation_radius_um / 1000.0,
+                                s.electrode_ua.abs(),
+                                s.depth_mm,
+                                cd.threshold_at_depth_ua,
+                            ))
+                            .monospace()
+                            .small(),
+                        );
+                        let (txt, col) = if cd.reaches_nearest {
+                            (
+                                "● nearest axon within activation radius",
+                                egui::Color32::from_rgb(80, 220, 120),
+                            )
+                        } else {
+                            (
+                                "● nearest axon beyond activation radius",
+                                egui::Color32::from_rgb(220, 170, 80),
                             )
                         };
                         ui.colored_label(col, txt);
@@ -388,5 +455,25 @@ mod tests {
         assert!(charge_safety(&s).safe, "half the max-safe charge must be safe");
         s.electrode_ua = 2.0 * base.max_safe_q_uc / pw_factor;
         assert!(!charge_safety(&s).safe, "double the max-safe charge must be unsafe");
+    }
+
+    #[test]
+    fn current_distance_readout_tracks_geometry() {
+        let mut s = NeuroWorkbenchState {
+            cd_i0_ua: 2.0,
+            cd_k_ua_per_um2: 0.002,
+            depth_mm: 0.5, // 500 µm
+            ..Default::default()
+        };
+        // I_th(500 µm) = 2 + 0.002·500² = 502 µA.
+        assert!((current_distance_readout(&s).threshold_at_depth_ua - 502.0).abs() < 1e-6);
+        // 600 µA reaches the nearest axon; 400 µA does not.
+        s.electrode_ua = -600.0;
+        assert!(current_distance_readout(&s).reaches_nearest);
+        s.electrode_ua = -400.0;
+        assert!(!current_distance_readout(&s).reaches_nearest);
+        // At exactly the threshold current, the activation radius == the depth.
+        s.electrode_ua = -502.0;
+        assert!((current_distance_readout(&s).activation_radius_um - 500.0).abs() < 1e-6);
     }
 }
