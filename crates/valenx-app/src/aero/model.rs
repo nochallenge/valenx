@@ -488,6 +488,17 @@ pub fn format_coefficient(c: f64) -> String {
     format!("{c:+.4}")
 }
 
+/// Lift-to-drag ratio `L/D = Cl / Cd` — the headline aerodynamic-efficiency
+/// number. `None` when drag is ~zero or non-finite (an empty tunnel or a
+/// degenerate run), where the ratio is meaningless.
+pub fn lift_to_drag(cl: f64, cd: f64) -> Option<f64> {
+    if !cl.is_finite() || !cd.is_finite() || cd.abs() < 1e-9 {
+        None
+    } else {
+        Some(cl / cd)
+    }
+}
+
 /// Format a force in newtons, switching to kN above 1000 N.
 pub fn format_force_n(force: f64) -> String {
     if !force.is_finite() {
@@ -722,6 +733,16 @@ mod tests {
         assert_eq!(format_coefficient(0.31), "+0.3100");
         assert_eq!(format_coefficient(-0.5), "-0.5000");
         assert_eq!(format_coefficient(f64::INFINITY), "—");
+    }
+
+    #[test]
+    fn lift_to_drag_is_cl_over_cd_and_guards_zero_drag() {
+        assert_eq!(lift_to_drag(0.6, 0.3), Some(2.0));
+        assert_eq!(lift_to_drag(-0.4, 0.2), Some(-2.0));
+        // Zero / non-finite drag → no meaningful ratio.
+        assert_eq!(lift_to_drag(0.5, 0.0), None);
+        assert_eq!(lift_to_drag(0.5, f64::NAN), None);
+        assert_eq!(lift_to_drag(f64::INFINITY, 0.3), None);
     }
 
     #[test]
