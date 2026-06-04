@@ -155,7 +155,7 @@ mod tests {
             table.set(n, e);
         }
         let model = f.timeline.rebuild(&table).unwrap();
-        assert!(model.body.faces() > 6, "round-tripped tree still punches a hole");
+        assert!(model.bodies[0].faces() > 6, "round-tripped tree still punches a hole");
     }
 
     #[test]

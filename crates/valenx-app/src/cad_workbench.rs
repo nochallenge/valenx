@@ -182,9 +182,9 @@ pub struct CadWorkbenchState {
     rebuilt_mesh: Option<valenx_mesh::Mesh>,
     /// Set when a fresh rebuild needs pushing into the viewport.
     push_rebuild: bool,
-    /// Snapshots from the last rebuild — `history[k]` is the running body
-    /// after step k (the last entry is the final body). Drives the scrubber.
-    history: Option<Vec<valenx_cad::Solid>>,
+    /// Snapshots from the last rebuild — `history[k]` is the set of bodies
+    /// present after step k. Drives the scrubber.
+    history: Option<Vec<Vec<valenx_cad::Solid>>>,
     /// 1-based step the history scrubber is showing (`1..=history.len()`).
     scrub: usize,
 }
@@ -342,32 +342,38 @@ fn load_from_string(txt: &str) -> Result<LoadedTree, String> {
 }
 
 /// Rebuild the feature tree against the parameters. Returns the per-step
-/// snapshot solids (`snapshots[k]` = running body after step k; the last entry
-/// is the final body) plus a one-line status, or an error message.
-fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<valenx_cad::Solid>, String), String> {
+/// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
+/// status, or an error message.
+fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, String), String> {
     let table = build_table(&s.params);
     let tl = steps_to_timeline(&s.steps);
     let model = tl.rebuild(&table).map_err(|e| e.to_string())?;
-    let faces = model.body.faces();
-    let edges = model.body.edges();
-    let verts = model.body.vertices();
-    let status = format!(
-        "{faces} faces · {edges} edges · {verts} vertices · {} steps",
-        s.steps.len()
-    );
+    let nbodies = model.bodies.len();
+    let faces: usize = model.bodies.iter().map(|b| b.faces()).sum();
+    let status = format!("{nbodies} bodies · {faces} faces · {} steps", s.steps.len());
     Ok((model.snapshots, status))
 }
 
-/// Tessellate the running body at a given 1-based step for viewport display.
+/// Tessellate the set of bodies at a given 1-based step into one display mesh
+/// (the bodies are concatenated — they're separate solids drawn together).
 fn tessellate_step(
-    history: &[valenx_cad::Solid],
+    history: &[Vec<valenx_cad::Solid>],
     step_1based: usize,
 ) -> Result<valenx_mesh::Mesh, String> {
     let idx = step_1based
         .saturating_sub(1)
         .min(history.len().saturating_sub(1));
-    let solid = history.get(idx).ok_or_else(|| "no such step".to_string())?;
-    valenx_cad::solid_to_mesh(solid, valenx_cad::DEFAULT_TESS_TOLERANCE).map_err(|e| e.to_string())
+    let bodies = history.get(idx).ok_or_else(|| "no such step".to_string())?;
+    let mut merged: Option<valenx_mesh::Mesh> = None;
+    for solid in bodies {
+        let m = valenx_cad::solid_to_mesh(solid, valenx_cad::DEFAULT_TESS_TOLERANCE)
+            .map_err(|e| e.to_string())?;
+        merged = Some(match merged {
+            None => m,
+            Some(acc) => valenx_mesh::boolean::concatenate(&acc, &m),
+        });
+    }
+    merged.ok_or_else(|| "no bodies to display".to_string())
 }
 
 fn op_label(op: Op) -> &'static str {
@@ -762,8 +768,13 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             .history
                             .as_ref()
                             .and_then(|h| h.get(s.scrub.saturating_sub(1)))
-                            .map(|solid| {
-                                format!("step {} / {n} — {} faces", s.scrub, solid.faces())
+                            .map(|bodies| {
+                                let faces: usize = bodies.iter().map(|b| b.faces()).sum();
+                                format!(
+                                    "step {} / {n} — {} bodies, {faces} faces",
+                                    s.scrub,
+                                    bodies.len()
+                                )
                             });
                         if let Some(label) = label {
                             ui.label(egui::RichText::new(label).small().monospace());
@@ -835,8 +846,8 @@ mod tests {
         assert!(status.contains("faces"), "status: {status}");
         // The scrubber's intermediate history: step 1 is the bare box (6
         // faces), step 2 is the punched cube (more than 6).
-        assert_eq!(history[0].faces(), 6, "first snapshot is the bare box");
-        assert!(history[1].faces() > 6, "second snapshot is punched");
+        assert_eq!(history[0][0].faces(), 6, "first snapshot is the bare box");
+        assert!(history[1][0].faces() > 6, "second snapshot is punched");
         // Every step tessellates to a non-empty viewport mesh.
         for k in 1..=history.len() {
             let mesh = tessellate_step(&history, k).expect("tessellate step");
@@ -874,7 +885,7 @@ mod tests {
         };
         let (history, _) = rebuild_tree(&loaded).expect("loaded tree rebuilds");
         assert!(
-            history.last().unwrap().faces() > 6,
+            history.last().unwrap()[0].faces() > 6,
             "reloaded tree still punches a hole"
         );
     }
@@ -890,7 +901,7 @@ mod tests {
                 ..CadWorkbenchState::default()
             };
             let (history, _) = rebuild_tree(&s).expect("primitive rebuilds");
-            assert!(history.last().unwrap().faces() > 0, "primitive has faces");
+            assert!(history.last().unwrap()[0].faces() > 0, "primitive has faces");
         }
     }
 
@@ -952,5 +963,24 @@ mod tests {
         let (_params, steps) = load_from_string(&txt).expect("deserialize");
         assert_eq!(steps[0].kind, FeatureKind::Extrude);
         assert_eq!(steps[0].profile.len(), 4);
+    }
+
+    #[test]
+    fn two_new_steps_produce_two_bodies() {
+        let mut a = UiStep::new_box();
+        a.op = Op::New;
+        let mut b = UiStep::new_box();
+        b.op = Op::New; // a second New keeps a separate body
+        b.x = "3".into();
+        let s = CadWorkbenchState {
+            steps: vec![a, b],
+            ..CadWorkbenchState::default()
+        };
+        let (history, status) = rebuild_tree(&s).expect("two bodies rebuild");
+        assert_eq!(history.last().unwrap().len(), 2, "final step has two bodies");
+        assert!(status.contains("2 bodies"), "status: {status}");
+        // Both bodies concatenate into one non-empty display mesh.
+        let mesh = tessellate_step(&history, history.len()).expect("merge");
+        assert!(crate::mesh_loader::mesh_bounding_box(&mesh).is_some());
     }
 }
