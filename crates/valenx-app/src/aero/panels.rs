@@ -799,6 +799,16 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
             &model::format_coefficient(report.cm),
             neutral,
         );
+        let ld = match model::lift_to_drag(report.cl, report.cd) {
+            Some(v) => format!("{v:.2}"),
+            None => "—".to_string(),
+        };
+        result_card(
+            ui,
+            "Lift/Drag  L/D",
+            &ld,
+            egui::Color32::from_rgb(140, 210, 150),
+        );
     });
 
     ui.add_space(4.0);
