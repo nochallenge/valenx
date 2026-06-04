@@ -34,6 +34,7 @@ enum FeatureKind {
     Sphere,
     Cone,
     Torus,
+    Extrude,
 }
 
 /// One UI-editable feature-tree step. Carries both the box and cylinder
@@ -42,6 +43,8 @@ enum FeatureKind {
 struct UiStep {
     op: Op,
     kind: FeatureKind,
+    /// Extrude profile — `(x, y)` points (literal coords, not expressions).
+    profile: Vec<(f64, f64)>,
     dx: String,
     dy: String,
     dz: String,
@@ -65,6 +68,7 @@ impl UiStep {
         Self {
             op,
             kind,
+            profile: vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
             dx: "1".into(),
             dy: "1".into(),
             dz: "1".into(),
@@ -105,6 +109,10 @@ impl UiStep {
         Self::base(Op::Join, FeatureKind::Torus)
     }
 
+    fn new_extrude() -> Self {
+        Self::base(Op::Join, FeatureKind::Extrude)
+    }
+
     /// Translate into a solver-crate [`Step`].
     fn to_step(&self) -> Step {
         let feature = match self.kind {
@@ -128,6 +136,10 @@ impl UiStep {
             FeatureKind::Torus => Feature::Torus {
                 major_radius: self.major.clone(),
                 minor_radius: self.minor.clone(),
+            },
+            FeatureKind::Extrude => Feature::Extrude {
+                profile: self.profile.clone(),
+                height: self.height.clone(),
             },
         };
         let mut step =
@@ -299,8 +311,10 @@ fn ui_step_from(step: &Step) -> Result<UiStep, String> {
             us.major = major_radius.clone();
             us.minor = minor_radius.clone();
         }
-        Feature::Extrude { .. } => {
-            return Err("extrude features aren't editable in this panel yet".to_string());
+        Feature::Extrude { profile, height } => {
+            us.kind = FeatureKind::Extrude;
+            us.profile = profile.clone();
+            us.height = height.clone();
         }
     }
     Ok(us)
@@ -372,6 +386,7 @@ fn kind_label(kind: FeatureKind) -> &'static str {
         FeatureKind::Sphere => "Sphere",
         FeatureKind::Cone => "Cone",
         FeatureKind::Torus => "Torus",
+        FeatureKind::Extrude => "Extrude",
     }
 }
 
@@ -516,6 +531,11 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                             FeatureKind::Torus,
                                             "Torus",
                                         );
+                                        ui.selectable_value(
+                                            &mut st.kind,
+                                            FeatureKind::Extrude,
+                                            "Extrude",
+                                        );
                                     });
                                 if ui.small_button("✕").clicked() {
                                     remove_step = Some(i);
@@ -558,6 +578,43 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         dim_edit(ui, &mut st.minor);
                                     });
                                 }
+                                FeatureKind::Extrude => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("height");
+                                        dim_edit(ui, &mut st.height);
+                                    });
+                                    ui.label(
+                                        egui::RichText::new("profile (x, y) — ≥3 points")
+                                            .weak()
+                                            .small(),
+                                    );
+                                    let mut rm_pt: Option<usize> = None;
+                                    for (j, pt) in st.profile.iter_mut().enumerate() {
+                                        ui.horizontal(|ui| {
+                                            ui.add(
+                                                egui::DragValue::new(&mut pt.0)
+                                                    .speed(0.1)
+                                                    .prefix("x "),
+                                            );
+                                            ui.add(
+                                                egui::DragValue::new(&mut pt.1)
+                                                    .speed(0.1)
+                                                    .prefix("y "),
+                                            );
+                                            if ui.small_button("✕").clicked() {
+                                                rm_pt = Some(j);
+                                            }
+                                        });
+                                    }
+                                    if let Some(j) = rm_pt {
+                                        if st.profile.len() > 3 {
+                                            st.profile.remove(j);
+                                        }
+                                    }
+                                    if ui.small_button("+ point").clicked() {
+                                        st.profile.push((0.0, 0.0));
+                                    }
+                                }
                             }
                             ui.horizontal(|ui| {
                                 ui.label("at x,y,z");
@@ -591,6 +648,9 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                         if ui.button("+ Torus").clicked() {
                             s.steps.push(UiStep::new_torus());
+                        }
+                        if ui.button("+ Extrude").clicked() {
+                            s.steps.push(UiStep::new_extrude());
                         }
                     });
                     ui.horizontal(|ui| {
@@ -871,5 +931,26 @@ mod tests {
         let (_params, steps) = load_from_string(&txt).expect("deserialize");
         assert_eq!(steps[0].rx, "30");
         assert_eq!(steps[0].rz, "45");
+    }
+
+    #[test]
+    fn extrude_profile_round_trips_and_rebuilds() {
+        let mut step = UiStep::new_extrude();
+        step.op = Op::New;
+        step.profile = vec![(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)];
+        step.height = "1".into();
+        let s = CadWorkbenchState {
+            steps: vec![step],
+            ..CadWorkbenchState::default()
+        };
+        // An extruded profile rebuilds and tessellates to a non-empty mesh.
+        let (history, _) = rebuild_tree(&s).expect("extrude rebuilds");
+        let mesh = tessellate_step(&history, 1).expect("tessellate");
+        assert!(crate::mesh_loader::mesh_bounding_box(&mesh).is_some());
+        // The profile survives save → load.
+        let txt = save_string(&s).expect("serialize");
+        let (_params, steps) = load_from_string(&txt).expect("deserialize");
+        assert_eq!(steps[0].kind, FeatureKind::Extrude);
+        assert_eq!(steps[0].profile.len(), 4);
     }
 }
