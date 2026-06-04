@@ -43,6 +43,10 @@ pub mod cfd_workbench;
 pub mod draft2d_workbench;
 pub mod reinforcement_workbench;
 pub mod render_workbench;
+pub mod hvac_workbench;
+pub mod reverse_workbench;
+pub mod interior_workbench;
+pub mod animate_workbench;
 pub mod neuro_workbench;
 pub mod reactdyn_workbench;
 pub mod astro;
@@ -426,6 +430,34 @@ pub struct ValenxApp {
     /// State for the Render workbench, wrapping `valenx-pathtrace`. See
     /// [`crate::render_workbench`].
     pub(crate) render: crate::render_workbench::RenderWorkbenchState,
+
+    /// Whether the right-side HVAC workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_hvac_workbench: bool,
+    /// State for the HVAC workbench, wrapping `valenx-hvac`. See
+    /// [`crate::hvac_workbench`].
+    pub(crate) hvac: crate::hvac_workbench::HvacWorkbenchState,
+
+    /// Whether the right-side Reverse-Engineering workbench is visible.
+    /// Defaults to `false`; flipped on from the View menu.
+    pub(crate) show_reverse_workbench: bool,
+    /// State for the Reverse-Engineering workbench, wrapping `valenx-reverse`.
+    /// See [`crate::reverse_workbench`].
+    pub(crate) reverse: crate::reverse_workbench::ReverseWorkbenchState,
+
+    /// Whether the right-side Interior-Design workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_interior_workbench: bool,
+    /// State for the Interior-Design workbench, wrapping `valenx-interior`. See
+    /// [`crate::interior_workbench`].
+    pub(crate) interior: crate::interior_workbench::InteriorWorkbenchState,
+
+    /// Whether the right-side Animation workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_animate_workbench: bool,
+    /// State for the Animation workbench, wrapping `valenx-animate`. See
+    /// [`crate::animate_workbench`].
+    pub(crate) animate: crate::animate_workbench::AnimateWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).
