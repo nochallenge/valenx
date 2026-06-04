@@ -552,6 +552,7 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
 /// each an input → output card with errors shown as text.
 pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_hohmann_planner(app, ui);
+    draw_bielliptic_planner(app, ui);
     draw_plane_change_planner(app, ui);
     draw_circular_basics_planner(app, ui);
     draw_hoverslam_planner(app, ui);
@@ -600,6 +601,72 @@ fn draw_hohmann_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         .show(ui, |ui| {
                             kv(ui, "burn 1 \u{0394}v", model::format_delta_v(t.delta_v1));
                             kv(ui, "burn 2 \u{0394}v", model::format_delta_v(t.delta_v2));
+                            kv(ui, "total \u{0394}v", model::format_delta_v(t.total_delta_v));
+                            kv(ui, "transfer time", model::format_duration(t.transfer_time));
+                        });
+                }
+                Err(e) => derived(ui, format!("Cannot plan: {}", model::friendly_error(&e))),
+            }
+        });
+}
+
+/// Bi-elliptic three-burn Δv between two circular altitudes via an
+/// intermediate apoapsis (`maneuver::bielliptic_transfer`).
+fn draw_bielliptic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Bi-elliptic transfer \u{0394}v")
+        .id_source("astro_bielliptic")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_bielliptic_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("From altitude")
+                        .on_hover_text("Departure circular-orbit altitude. SI unit: km.");
+                    ui.add(
+                        egui::DragValue::new(&mut form.bielliptic_from_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("To altitude")
+                        .on_hover_text("Arrival circular-orbit altitude. SI unit: km.");
+                    ui.add(
+                        egui::DragValue::new(&mut form.bielliptic_to_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Via apoapsis").on_hover_text(
+                        "Intermediate apoapsis altitude the transfer coasts out to before \
+                         dropping to the arrival orbit. Higher is cheaper in Δv but slower, \
+                         and beats Hohmann only for large radius ratios. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.bielliptic_via_km)
+                            .speed(50.0)
+                            .range(80.0..=1_000_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                });
+
+            match model::bielliptic_transfer_altitudes(
+                form.bielliptic_from_km,
+                form.bielliptic_to_km,
+                form.bielliptic_via_km,
+            ) {
+                Ok(t) => {
+                    egui::Grid::new("astro_bielliptic_out")
+                        .num_columns(2)
+                        .spacing([8.0, 3.0])
+                        .show(ui, |ui| {
+                            kv(ui, "burn 1 \u{0394}v", model::format_delta_v(t.delta_v1));
+                            kv(ui, "burn 2 \u{0394}v", model::format_delta_v(t.delta_v2));
+                            kv(ui, "burn 3 \u{0394}v", model::format_delta_v(t.delta_v3));
                             kv(ui, "total \u{0394}v", model::format_delta_v(t.total_delta_v));
                             kv(ui, "transfer time", model::format_duration(t.transfer_time));
                         });
