@@ -63,7 +63,10 @@ pub use entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Splin
 pub use error::{ErrorCategory, Solve3DError};
 pub use panel::SolveSpace3DPanelState;
 pub use parameters::{ParamError, ParameterTable};
-pub use persist::{from_ron_str, to_ron_string, PanelFile, VERSION};
+pub use persist::{
+    from_ron_str, timeline_from_ron, timeline_to_ron, to_ron_string, PanelFile, TimelineFile,
+    TIMELINE_VERSION, VERSION,
+};
 pub use sketch::Sketch3D;
 pub use solver::{SolverConfig, SolverDiagnostics, SolverReport, SolverStatus};
 pub use timeline::{Feature, FeatureTimeline, Op, RebuiltModel, Step, TimelineError};
