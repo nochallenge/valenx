@@ -104,6 +104,22 @@ pub struct Arc3 {
     pub end: EntityId,
 }
 
+/// Cubic Bézier spline — four control points (`p0`…`p3`). The curve starts
+/// at `p0`, ends at `p3`, and is pulled toward `p1`/`p2`. Storing exactly
+/// four control-point ids keeps the entity `Copy` (a variable-length list
+/// would not), and a cubic Bézier is the workhorse free-form curve.
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub struct Spline3 {
+    /// First control point — the start of the curve.
+    pub p0: EntityId,
+    /// Second control point.
+    pub p1: EntityId,
+    /// Third control point.
+    pub p2: EntityId,
+    /// Fourth control point — the end of the curve.
+    pub p3: EntityId,
+}
+
 /// Sum-type wrapper so a sketch can hold heterogeneous entities in a
 /// single `Vec`.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -120,6 +136,8 @@ pub enum Entity3D {
     Circle3(Circle3),
     /// 3D circular arc.
     Arc3(Arc3),
+    /// 3D cubic Bézier spline.
+    Spline3(Spline3),
 }
 
 impl Entity3D {
@@ -132,6 +150,7 @@ impl Entity3D {
             Entity3D::Workplane(_) => "Workplane",
             Entity3D::Circle3(_) => "Circle3",
             Entity3D::Arc3(_) => "Arc3",
+            Entity3D::Spline3(_) => "Spline3",
         }
     }
 }
