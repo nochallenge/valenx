@@ -43,6 +43,7 @@ pub mod cfd_workbench;
 pub mod draft2d_workbench;
 pub mod reinforcement_workbench;
 pub mod render_workbench;
+pub mod hvac_workbench;
 pub mod neuro_workbench;
 pub mod reactdyn_workbench;
 pub mod astro;
@@ -426,6 +427,13 @@ pub struct ValenxApp {
     /// State for the Render workbench, wrapping `valenx-pathtrace`. See
     /// [`crate::render_workbench`].
     pub(crate) render: crate::render_workbench::RenderWorkbenchState,
+
+    /// Whether the right-side HVAC workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_hvac_workbench: bool,
+    /// State for the HVAC workbench, wrapping `valenx-hvac`. See
+    /// [`crate::hvac_workbench`].
+    pub(crate) hvac: crate::hvac_workbench::HvacWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).

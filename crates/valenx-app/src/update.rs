@@ -438,6 +438,16 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_hvac_workbench, "HVAC")
+                        .on_hover_text(
+                            "Show / hide the right-side HVAC workbench — duct sizing and \
+                             Darcy-Weisbach pressure-drop calculation, on valenx-hvac.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -936,6 +946,10 @@ impl eframe::App for ValenxApp {
         // Path-Traced Render workbench (right) — global-illumination image on
         // valenx-pathtrace. Off unless toggled via View.
         crate::render_workbench::draw_render_workbench(self, ctx);
+
+        // HVAC workbench (right) — duct sizing + pressure drop on valenx-hvac.
+        // Off unless toggled via View.
+        crate::hvac_workbench::draw_hvac_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
