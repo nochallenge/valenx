@@ -3,15 +3,17 @@
 //! A right-side panel driving `valenx-neuro`: place a stimulating electrode in
 //! tissue with a bundle of axons, set the current, and Run — the panel shows
 //! which axons are recruited, the recruitment curve, the electrode-impedance
-//! Bode plot, the tissue temperature rise, and a cross-section schematic.
+//! Bode plot, the tissue temperature rise, the recorded extracellular spike
+//! (EAP), and a cross-section schematic.
 //! Compute is synchronous (a few seconds); a background runner is future work.
 
 use eframe::egui;
 use egui_plot::{Legend, Line, Plot, PlotPoints};
+use nalgebra::Vector3;
 
 use valenx_neuro::{
-    recruitment_curve, solve_point_heat, stimulate, Axon, Cpe, ElectrodeImpedance, NeuroError,
-    Scene, TissueGrid,
+    recruitment_curve, solve_point_heat, stimulate, Axon, Cpe, ElectrodeImpedance,
+    ExtracellularRecorder, NeuroError, Scene, TissueGrid,
 };
 
 use crate::ValenxApp;
@@ -51,6 +53,8 @@ struct NeuroResults {
     impedance_bode: Vec<(f64, f64)>,
     access_resistance_ohm: f64,
     dt_at_1mm_k: f64,
+    eap_uv: Vec<f64>,
+    eap_dt_ms: f64,
 }
 
 /// Run one stimulation + a recruitment sweep for the current settings.
@@ -94,6 +98,11 @@ fn run_neuro(s: &NeuroWorkbenchState) -> Result<NeuroResults, NeuroError> {
         .map(|&f| (f, imp.magnitude_ohm(f)))
         .collect();
 
+    // Forward recording: the extracellular spike (EAP) a nearby electrode would
+    // see from a representative axon at the bundle's nearest depth.
+    let recorder = ExtracellularRecorder::new(sigma, 100.0, 238.0, 35.4);
+    let eap = recorder.record(200, Vector3::new(10.0e-3, s.depth_mm.max(0.1) * 1.0e-3, 0.0));
+
     Ok(NeuroResults {
         recruited_fraction,
         fired,
@@ -102,6 +111,8 @@ fn run_neuro(s: &NeuroWorkbenchState) -> Result<NeuroResults, NeuroError> {
         impedance_bode,
         access_resistance_ohm,
         dt_at_1mm_k,
+        eap_uv: eap.eap_uv,
+        eap_dt_ms: eap.dt_ms,
     })
 }
 
@@ -202,6 +213,25 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 .collect();
                             pui.line(Line::new(PlotPoints::from(pts)).name("|Z|"));
                         });
+                        if !r.eap_uv.is_empty() {
+                            let lo = r.eap_uv.iter().cloned().fold(f64::INFINITY, f64::min);
+                            let hi = r.eap_uv.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Recorded spike (EAP): {lo:.0} … {hi:.0} µV (biphasic)"
+                                ))
+                                .strong(),
+                            );
+                            Plot::new("neuro_eap").height(130.0).show(ui, |pui| {
+                                let pts: Vec<[f64; 2]> = r
+                                    .eap_uv
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, &v)| [i as f64 * r.eap_dt_ms, v])
+                                    .collect();
+                                pui.line(Line::new(PlotPoints::from(pts)).name("φe (µV)"));
+                            });
+                        }
                         ui.label(
                             egui::RichText::new("Cross-section (● electrode, — axons)")
                                 .weak()
@@ -252,6 +282,10 @@ mod tests {
         assert_eq!(r.fired.len(), 8);
         assert!(r.access_resistance_ohm > 0.0);
         assert!(r.dt_at_1mm_k >= 0.0);
+        assert!(!r.eap_uv.is_empty(), "EAP recorded");
+        let lo = r.eap_uv.iter().cloned().fold(f64::INFINITY, f64::min);
+        let hi = r.eap_uv.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        assert!(lo < 0.0 && hi > 0.0, "recorded EAP must be biphasic: {lo}..{hi}");
         let fr: Vec<f64> = r.recruitment_curve.iter().map(|&(_, f)| f).collect();
         for w in fr.windows(2) {
             assert!(w[1] >= w[0], "recruitment curve must not decrease: {fr:?}");
