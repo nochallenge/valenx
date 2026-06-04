@@ -15,6 +15,7 @@ serde           = { workspace = true }
 nalgebra        = { workspace = true }
 nalgebra-sparse = { workspace = true }
 ron             = { workspace = true }
+valenx-cad      = { path = "../valenx-cad" }
 
 [lints.rust]
 unused_imports = "warn"
