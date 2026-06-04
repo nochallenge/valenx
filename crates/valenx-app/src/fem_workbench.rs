@@ -68,6 +68,8 @@ pub struct FemWorkbenchState {
     result: String,
     /// Factor of safety (σy / peak von-Mises) from the last static run.
     fos: Option<f64>,
+    /// Structural mass (kg) = density × box volume, from the last run.
+    mass_kg: Option<f64>,
     error: Option<String>,
     plot: Option<FemPlot>,
     /// Deformed mesh + von-Mises field, pending a push to the 3-D viewport.
@@ -94,6 +96,7 @@ impl Default for FemWorkbenchState {
             solver: FemSolver::LinearStatic,
             result: String::new(),
             fos: None,
+            mass_kg: None,
             error: None,
             plot: None,
             viz: None,
@@ -207,6 +210,16 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.separator();
                         ui.label(egui::RichText::new("Result").strong());
                         ui.label(egui::RichText::new(&s.result).monospace());
+                        if let Some(m) = s.mass_kg {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "structural mass: {m:.2} kg  (weight {:.1} N)",
+                                    m * 9.80665
+                                ))
+                                .monospace()
+                                .small(),
+                            );
+                        }
                         if let Some(f) = s.fos {
                             let (txt, col) = if f >= 1.0 {
                                 (
@@ -280,6 +293,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
     s.viz = None;
     s.push_viz = false;
     s.fos = None;
+    s.mass_kg = None;
     let mesh = match structured_box_mesh(s.lx, s.ly, s.lz, s.nx, s.ny, s.nz) {
         Ok(m) => m,
         Err(e) => {
@@ -287,6 +301,8 @@ fn run_fem(s: &mut FemWorkbenchState) {
             return;
         }
     };
+    // Structural mass of the solid box = density × volume.
+    s.mass_kg = Some(s.density * s.lx * s.ly * s.lz);
     let material = FemMaterial {
         youngs_modulus: s.youngs_gpa * 1e9,
         poisson_ratio: s.poisson,
@@ -479,5 +495,18 @@ mod tests {
         assert!(s.error.is_some(), "nx=0 must surface an error, not panic");
         assert!(s.plot.is_none(), "a failed run clears the plot");
         assert!(!s.push_viz, "a failed run does not queue a viz");
+    }
+
+    #[test]
+    fn run_reports_structural_mass() {
+        let mut s = FemWorkbenchState::default();
+        run_fem(&mut s);
+        // mass = ρ·Lx·Ly·Lz = 7850 · 1 · 0.1 · 0.1 = 78.5 kg.
+        let m = s.mass_kg.expect("mass computed on a successful run");
+        assert!((m - 78.5).abs() < 1e-9, "mass = {m}");
+        // A failed run (degenerate mesh) leaves mass cleared, not stale.
+        let mut bad = FemWorkbenchState { nx: 0, ..Default::default() };
+        run_fem(&mut bad);
+        assert!(bad.mass_kg.is_none(), "a failed run clears the mass");
     }
 }
