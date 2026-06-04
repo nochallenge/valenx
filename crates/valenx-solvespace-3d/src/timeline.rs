@@ -94,6 +94,13 @@ pub enum Op {
     Intersect,
 }
 
+/// The no-rotation default (`0°` about each axis), used by [`Step::placed`]
+/// and as the serde default so documents written before rotation existed
+/// still deserialise.
+fn zero_rotation() -> [String; 3] {
+    ["0".to_string(), "0".to_string(), "0".to_string()]
+}
+
 /// One timeline step: a placed feature plus how it combines with the
 /// running body.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -105,6 +112,12 @@ pub struct Step {
     /// Placement `(x, y, z)` as parameter expressions — where the feature's
     /// origin lands before the combine. `["0", "0", "0"]` for no offset.
     pub at: [String; 3],
+    /// Rotation about the feature's own origin, as parameter expressions in
+    /// **degrees** about the X, Y, Z axes (applied in that order, before the
+    /// placement offset). `["0", "0", "0"]` for no rotation. Defaulted on load
+    /// so documents written before rotation existed still parse.
+    #[serde(default = "zero_rotation")]
+    pub rotate_deg: [String; 3],
 }
 
 impl Step {
@@ -121,6 +134,7 @@ impl Step {
             op,
             feature,
             at: [x.into(), y.into(), z.into()],
+            rotate_deg: zero_rotation(),
         }
     }
 
@@ -231,11 +245,27 @@ impl FeatureTimeline {
                 }
             };
 
-            // 2. Place it (parametric offset).
+            // 2a. Orient it: rotate about the feature's own origin (degrees →
+            // radians), applying X, then Y, then Z. Identity rotations are
+            // skipped so an un-rotated feature isn't needlessly re-transformed.
+            let rot = [
+                ((1.0, 0.0, 0.0), resolve(&step.rotate_deg[0])?.to_radians()),
+                ((0.0, 1.0, 0.0), resolve(&step.rotate_deg[1])?.to_radians()),
+                ((0.0, 0.0, 1.0), resolve(&step.rotate_deg[2])?.to_radians()),
+            ];
+            let mut oriented = solid;
+            for (axis, ang) in rot {
+                if ang != 0.0 {
+                    oriented = oriented
+                        .rotated((0.0, 0.0, 0.0), axis, ang)
+                        .map_err(TimelineError::Cad)?;
+                }
+            }
+            // 2b. Place it (parametric offset).
             let x = resolve(&step.at[0])?;
             let y = resolve(&step.at[1])?;
             let z = resolve(&step.at[2])?;
-            let placed = solid.translated(x, y, z).map_err(TimelineError::Cad)?;
+            let placed = oriented.translated(x, y, z).map_err(TimelineError::Cad)?;
 
             // 3. Combine with the running body.
             let next = match (running.take(), step.op) {
@@ -379,5 +409,34 @@ mod tests {
             let m = tl.rebuild(&p).expect("primitive builds");
             assert!(m.body.faces() > 0, "primitive should have faces");
         }
+    }
+
+    #[test]
+    fn rotation_is_applied_and_validated() {
+        let mut p = ParameterTable::new();
+        p.set("ang", "45");
+        // A rotated box is still a box (6 faces) — the rotation path runs cleanly.
+        let mut step = Step::at_origin(
+            Op::New,
+            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+        );
+        step.rotate_deg = ["ang".into(), "0".into(), "0".into()];
+        let mut tl = FeatureTimeline::new();
+        tl.push(step);
+        let m = tl.rebuild(&p).expect("rotated box builds");
+        assert_eq!(m.body.faces(), 6, "a rotated box is still a box");
+
+        // A broken rotation expression surfaces as a Param error, not a panic.
+        let mut bad = Step::at_origin(
+            Op::New,
+            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+        );
+        bad.rotate_deg = ["1 +".into(), "0".into(), "0".into()];
+        let mut tl2 = FeatureTimeline::new();
+        tl2.push(bad);
+        assert!(matches!(
+            tl2.rebuild(&ParameterTable::new()),
+            Err(TimelineError::Param(_))
+        ));
     }
 }
