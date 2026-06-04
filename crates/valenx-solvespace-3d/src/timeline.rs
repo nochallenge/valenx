@@ -144,15 +144,19 @@ impl Step {
     }
 }
 
-/// The result of rebuilding a timeline: the final body plus a snapshot of the
-/// running body after each step (`snapshots[k]` is the model rolled forward
-/// through step `k`, so `snapshots.len() == steps.len()` and the last entry
-/// equals `body`).
+/// The result of rebuilding a timeline: every body in the model, plus a
+/// snapshot of the full body set after each step.
+///
+/// A timeline can hold more than one body: each [`Op::New`] finalises the
+/// current body and starts a fresh one (instead of replacing it), so a tree
+/// like `New … New …` ends with two separate bodies. `snapshots[k]` is the set
+/// of all bodies present after step `k` (`snapshots.len() == steps.len()`, and
+/// the last entry equals `bodies`).
 pub struct RebuiltModel {
-    /// The final combined solid.
-    pub body: Solid,
-    /// The running body after each step, in order.
-    pub snapshots: Vec<Solid>,
+    /// Every body in the final model (one entry per `New` group).
+    pub bodies: Vec<Solid>,
+    /// The full set of bodies after each step, in order.
+    pub snapshots: Vec<Vec<Solid>>,
 }
 
 /// An ordered list of parametric steps forming a feature tree.
@@ -217,8 +221,11 @@ impl FeatureTimeline {
     /// single body. Editing a parameter and rebuilding re-drives the model.
     pub fn rebuild(&self, params: &ParameterTable) -> Result<RebuiltModel, TimelineError> {
         let resolve = |expr: &str| params.compute(expr).map_err(TimelineError::Param);
-        let mut running: Option<Solid> = None;
-        let mut snapshots: Vec<Solid> = Vec::with_capacity(self.steps.len());
+        // Finalised bodies (from earlier `New`s) plus the body currently being
+        // built. `New` finalises `active` and starts a fresh body.
+        let mut finished: Vec<Solid> = Vec::new();
+        let mut active: Option<Solid> = None;
+        let mut snapshots: Vec<Vec<Solid>> = Vec::with_capacity(self.steps.len());
 
         for step in &self.steps {
             // 1. Build the feature's primitive solid.
@@ -267,24 +274,41 @@ impl FeatureTimeline {
             let z = resolve(&step.at[2])?;
             let placed = oriented.translated(x, y, z).map_err(TimelineError::Cad)?;
 
-            // 3. Combine with the running body.
-            let next = match (running.take(), step.op) {
-                (None, Op::New) => placed,
+            // 3. Combine with the active body. `New` finalises the active body
+            // (keeping it as a separate body) and starts a fresh one.
+            match (active.take(), step.op) {
+                (None, Op::New) => active = Some(placed),
                 (None, _) => return Err(TimelineError::NoBaseBody),
-                (Some(_), Op::New) => placed,
-                (Some(r), Op::Join) => union(&r, &placed).map_err(TimelineError::Cad)?,
-                (Some(r), Op::Cut) => difference(&r, &placed).map_err(TimelineError::Cad)?,
-                (Some(r), Op::Intersect) => {
-                    intersection(&r, &placed).map_err(TimelineError::Cad)?
+                (Some(prev), Op::New) => {
+                    finished.push(prev);
+                    active = Some(placed);
                 }
-            };
+                (Some(r), Op::Join) => {
+                    active = Some(union(&r, &placed).map_err(TimelineError::Cad)?)
+                }
+                (Some(r), Op::Cut) => {
+                    active = Some(difference(&r, &placed).map_err(TimelineError::Cad)?)
+                }
+                (Some(r), Op::Intersect) => {
+                    active = Some(intersection(&r, &placed).map_err(TimelineError::Cad)?)
+                }
+            }
 
-            snapshots.push(next.clone());
-            running = Some(next);
+            // Snapshot the full set of bodies present after this step.
+            let mut snap = finished.clone();
+            if let Some(a) = &active {
+                snap.push(a.clone());
+            }
+            snapshots.push(snap);
         }
 
-        let body = running.ok_or(TimelineError::EmptyTimeline)?;
-        Ok(RebuiltModel { body, snapshots })
+        if let Some(a) = active {
+            finished.push(a);
+        }
+        if finished.is_empty() {
+            return Err(TimelineError::EmptyTimeline);
+        }
+        Ok(RebuiltModel { bodies: finished, snapshots })
     }
 }
 
@@ -317,7 +341,7 @@ mod tests {
         let mut tl = FeatureTimeline::new();
         tl.push(Step::at_origin(Op::New, unit_box()));
         let m = tl.rebuild(&params()).expect("rebuild");
-        assert_eq!(m.body.faces(), 6, "a box has six faces");
+        assert_eq!(m.bodies[0].faces(), 6, "a box has six faces");
         assert_eq!(m.snapshots.len(), 1, "one snapshot per step");
     }
 
@@ -330,9 +354,9 @@ mod tests {
         // A punched cube has the cube's 6 outer faces plus the inner hole
         // walls — strictly more than 6.
         assert!(
-            m.body.faces() > 6,
+            m.bodies[0].faces() > 6,
             "punched body should have hole walls ({} vs 6)",
-            m.body.faces()
+            m.bodies[0].faces()
         );
         assert_eq!(m.snapshots.len(), 2);
     }
@@ -343,7 +367,7 @@ mod tests {
         tl.push(Step::at_origin(Op::New, unit_box()));
         tl.push(Step::placed(Op::Join, through_pin(), "0.5", "0.5", "-0.5"));
         let m = tl.rebuild(&params()).expect("weld");
-        assert!(m.body.faces() > 0, "welded body is a real solid");
+        assert!(m.bodies[0].faces() > 0, "welded body is a real solid");
     }
 
     #[test]
@@ -407,7 +431,7 @@ mod tests {
             let mut tl = FeatureTimeline::new();
             tl.push(Step::at_origin(Op::New, feat));
             let m = tl.rebuild(&p).expect("primitive builds");
-            assert!(m.body.faces() > 0, "primitive should have faces");
+            assert!(m.bodies[0].faces() > 0, "primitive should have faces");
         }
     }
 
@@ -424,7 +448,7 @@ mod tests {
         let mut tl = FeatureTimeline::new();
         tl.push(step);
         let m = tl.rebuild(&p).expect("rotated box builds");
-        assert_eq!(m.body.faces(), 6, "a rotated box is still a box");
+        assert_eq!(m.bodies[0].faces(), 6, "a rotated box is still a box");
 
         // A broken rotation expression surfaces as a Param error, not a panic.
         let mut bad = Step::at_origin(
@@ -451,6 +475,31 @@ mod tests {
             },
         ));
         let m = tl.rebuild(&ParameterTable::new()).expect("extrude builds");
-        assert!(m.body.faces() >= 5, "an extruded quad is a box-like solid");
+        assert!(m.bodies[0].faces() >= 5, "an extruded quad is a box-like solid");
+    }
+
+    #[test]
+    fn new_keeps_a_separate_body() {
+        let mut tl = FeatureTimeline::new();
+        tl.push(Step::at_origin(
+            Op::New,
+            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+        ));
+        // A second New starts a separate body instead of replacing the first.
+        tl.push(Step::placed(
+            Op::New,
+            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+            "3",
+            "0",
+            "0",
+        ));
+        let m = tl.rebuild(&ParameterTable::new()).expect("two bodies build");
+        assert_eq!(m.bodies.len(), 2, "a second New keeps a separate body");
+        assert_eq!(m.snapshots[0].len(), 1, "one body after the first step");
+        assert_eq!(
+            m.snapshots.last().unwrap().len(),
+            2,
+            "both bodies in the final snapshot"
+        );
     }
 }
