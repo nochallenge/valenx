@@ -52,6 +52,7 @@ pub mod constraint;
 pub mod entity;
 pub mod error;
 pub mod panel;
+pub mod parameters;
 pub mod persist;
 pub mod sketch;
 pub mod solver;
@@ -60,6 +61,7 @@ pub use constraint::Constraint3D;
 pub use entity::{Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
 pub use error::{ErrorCategory, Solve3DError};
 pub use panel::SolveSpace3DPanelState;
+pub use parameters::{ParamError, ParameterTable};
 pub use persist::{from_ron_str, to_ron_string, PanelFile, VERSION};
 pub use sketch::Sketch3D;
 pub use solver::{SolverConfig, SolverDiagnostics, SolverReport, SolverStatus};
@@ -232,6 +234,28 @@ mod tests_integration {
             (s.circle_radius(b) - 3.0).abs() < 1e-6,
             "b radius = {}",
             s.circle_radius(b)
+        );
+    }
+
+    /// The parametric-modelling loop: a named parameter (defined by an
+    /// expression referencing another) drives a constraint target, which
+    /// drives the geometry. Editing `base` would re-drive the radius.
+    #[test]
+    fn parameter_drives_a_constraint_target() {
+        let mut params = ParameterTable::new();
+        params.set("base", "4");
+        params.set("radius", "base + 1"); // = 5
+        let r = params.value("radius").unwrap();
+        let mut s = Sketch3D::new();
+        let c = s.add_point(0.0, 0.0, 0.0);
+        let circle = s.add_circle(c, 1.0, 0.0, 0.0, 1.0).unwrap();
+        s.add_constraint(Constraint3D::CircleRadius { circle, target: r });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
+        assert!(
+            (s.circle_radius(circle) - 5.0).abs() < 1e-6,
+            "radius = {}",
+            s.circle_radius(circle)
         );
     }
 }
