@@ -438,6 +438,47 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_hvac_workbench, "HVAC")
+                        .on_hover_text(
+                            "Show / hide the right-side HVAC workbench — duct sizing and \
+                             Darcy-Weisbach pressure-drop calculation, on valenx-hvac.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_reverse_workbench, "Reverse Engineering")
+                        .on_hover_text(
+                            "Show / hide the right-side Reverse-Engineering workbench — \
+                             point-cloud → mesh reconstruction shown in the 3D viewport, \
+                             on valenx-reverse.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_interior_workbench, "Interior Design")
+                        .on_hover_text(
+                            "Show / hide the right-side Interior-Design workbench — a 2D \
+                             floor plan with a furniture palette, on valenx-interior.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_animate_workbench, "Animation")
+                        .on_hover_text(
+                            "Show / hide the right-side Animation workbench — a joint \
+                             keyframe timeline with easing curves, on valenx-animate.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -936,6 +977,22 @@ impl eframe::App for ValenxApp {
         // Path-Traced Render workbench (right) — global-illumination image on
         // valenx-pathtrace. Off unless toggled via View.
         crate::render_workbench::draw_render_workbench(self, ctx);
+
+        // HVAC workbench (right) — duct sizing + pressure drop on valenx-hvac.
+        // Off unless toggled via View.
+        crate::hvac_workbench::draw_hvac_workbench(self, ctx);
+
+        // Reverse-Engineering workbench (right) — point-cloud reconstruction
+        // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
+        crate::reverse_workbench::draw_reverse_workbench(self, ctx);
+
+        // Interior-Design workbench (right) — 2D floor plan + furniture on
+        // valenx-interior. Off unless toggled via View.
+        crate::interior_workbench::draw_interior_workbench(self, ctx);
+
+        // Animation workbench (right) — joint keyframe timeline on
+        // valenx-animate. Off unless toggled via View.
+        crate::animate_workbench::draw_animate_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
