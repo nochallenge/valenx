@@ -827,6 +827,16 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
                 "drag area  Cd·A",
                 format!("{:.4} m²", report.drag_area),
             );
+            kv(
+                ui,
+                "drag force  Cd·A·q",
+                model::format_force_n(report.drag_force()),
+            );
+            kv(
+                ui,
+                "dynamic pressure  q∞",
+                model::format_pressure_pa(report.dynamic_pressure),
+            );
             kv(ui, "Reynolds number", model::format_reynolds(report.reynolds_number));
             kv(ui, "Mach number", format!("{:.3}", report.mach_number));
             kv(
