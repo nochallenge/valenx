@@ -271,6 +271,14 @@ pub struct PlannerForm {
 
     /// Orbit basics — circular-orbit altitude (km).
     pub basics_altitude_km: f64,
+
+    /// Bi-elliptic — departure circular-orbit altitude (km).
+    pub bielliptic_from_km: f64,
+    /// Bi-elliptic — arrival circular-orbit altitude (km).
+    pub bielliptic_to_km: f64,
+    /// Bi-elliptic — intermediate apoapsis altitude (km) the transfer
+    /// coasts out to before dropping onto the arrival orbit.
+    pub bielliptic_via_km: f64,
 }
 
 impl Default for PlannerForm {
@@ -296,6 +304,10 @@ impl Default for PlannerForm {
             plane_change_altitude_km: 400.0,
             plane_change_delta_inc_deg: 28.5,
             basics_altitude_km: 400.0,
+            // LEO -> GEO routed via a far apoapsis — the textbook 3-burn case.
+            bielliptic_from_km: 300.0,
+            bielliptic_to_km: 35_786.0,
+            bielliptic_via_km: 250_000.0,
         }
     }
 }
@@ -357,6 +369,23 @@ pub fn circular_orbit_basics(altitude_km: f64) -> (f64, f64, f64) {
     let v_esc = (2.0 * mu / r).sqrt();
     let period = std::f64::consts::TAU * (r * r * r / mu).sqrt();
     (v_circ, v_esc, period)
+}
+
+/// The three-burn Δv budget and timing of a **bi-elliptic** transfer between
+/// circular orbits at altitudes `from_km` and `to_km`, routed via an
+/// intermediate apoapsis at altitude `via_km` — a units wrapper (km) over
+/// [`valenx_astro::bielliptic_transfer`]. For large radius ratios a high
+/// enough `via_km` beats the Hohmann total Δv, at the cost of a far longer
+/// flight time.
+pub fn bielliptic_transfer_altitudes(
+    from_km: f64,
+    to_km: f64,
+    via_km: f64,
+) -> Result<valenx_astro::Transfer, AstroError> {
+    let r1 = altitude_km_to_radius_m(from_km);
+    let r2 = altitude_km_to_radius_m(to_km);
+    let r_b = altitude_km_to_radius_m(via_km);
+    valenx_astro::bielliptic_transfer(r1, r2, r_b)
 }
 
 #[cfg(test)]
@@ -432,6 +461,32 @@ mod tests {
         let (v300, _, t300) = circular_orbit_basics(300.0);
         assert!((v300 - 7730.0).abs() < 120.0, "v300 {v300}");
         assert!((t300 / 60.0 - 90.5).abs() < 3.0, "T300 {} min", t300 / 60.0);
+    }
+
+    #[test]
+    fn bielliptic_transfer_altitudes_is_a_three_burn_budget() {
+        // LEO 300 km -> GEO 35 786 km, routed via a far 250 000 km apoapsis.
+        let t = bielliptic_transfer_altitudes(300.0, 35_786.0, 250_000.0)
+            .expect("valid altitudes");
+        // Three finite, non-negative burns that sum to the reported total.
+        assert!(t.delta_v1 >= 0.0 && t.delta_v2 >= 0.0 && t.delta_v3 >= 0.0);
+        assert!(t.total_delta_v.is_finite());
+        assert!((t.total_delta_v - (t.delta_v1 + t.delta_v2 + t.delta_v3)).abs() < 1e-6);
+        // Unlike a two-burn Hohmann, the bi-elliptic uses a real third burn.
+        assert!(t.delta_v3 > 0.0, "the third (circularising) burn is non-zero");
+        // Coasting out past the target and back takes longer than the direct
+        // Hohmann between the same two orbits.
+        let h = valenx_astro::hohmann_transfer(
+            altitude_km_to_radius_m(300.0),
+            altitude_km_to_radius_m(35_786.0),
+        )
+        .expect("valid");
+        assert!(
+            t.transfer_time > h.transfer_time,
+            "bi-elliptic is the slow way round"
+        );
+        // A non-finite altitude surfaces as an error, not a panic.
+        assert!(bielliptic_transfer_altitudes(f64::NAN, 35_786.0, 250_000.0).is_err());
     }
 
     #[test]
