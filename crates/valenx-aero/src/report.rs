@@ -25,6 +25,8 @@ pub struct AeroReport {
     pub pressure_drag_fraction: f64,
     /// The drag area `Cd·A` (m²).
     pub drag_area: f64,
+    /// The free-stream dynamic pressure `q∞ = ½·ρ·U∞²` (Pa) of the run.
+    pub dynamic_pressure: f64,
     /// The free-stream Reynolds number.
     pub reynolds_number: f64,
     /// The free-stream Mach number.
@@ -95,6 +97,7 @@ impl AeroReport {
             cm: coeff.cmy,
             pressure_drag_fraction,
             drag_area: result.drag_area(),
+            dynamic_pressure: result.tunnel.dynamic_pressure(),
             reynolds_number: result.reynolds_number,
             mach_number: result.mach_number,
             converged: result.converged,
@@ -104,6 +107,13 @@ impl AeroReport {
             wake_peak_deficit: result.wake.peak_deficit(),
             caveats,
         }
+    }
+
+    /// The dimensional drag **force** in newtons — `F_D = (Cd·A)·q∞`, the
+    /// drag area scaled by the free-stream dynamic pressure. This is the load
+    /// the body actually feels, the number behind the dimensionless `cd`.
+    pub fn drag_force(&self) -> f64 {
+        self.drag_area * self.dynamic_pressure
     }
 
     /// Render the report as a plain-text block — the form a CLI prints
@@ -128,6 +138,14 @@ impl AeroReport {
         s.push_str(&format!(
             "  drag area CdA: {:.4} m^2\n",
             self.drag_area
+        ));
+        s.push_str(&format!(
+            "  dynamic press: {:.1} Pa  (q_inf)\n",
+            self.dynamic_pressure
+        ));
+        s.push_str(&format!(
+            "  drag force   : {:.1} N\n",
+            self.drag_force()
         ));
         s.push_str(&format!(
             "  pressure drag: {:.0}% of total ({}% friction)\n",
@@ -223,5 +241,24 @@ mod tests {
                 "a non-converged run should be flagged"
             );
         }
+    }
+
+    #[test]
+    fn report_carries_dynamic_pressure_and_drag_force() {
+        let body = box_body(Vector3::zeros(), Vector3::new(2.0, 1.0, 1.0));
+        let req = AeroRequest::new(20.0)
+            .with_turbulence(TurbulenceModel::KEpsilon)
+            .with_sizing(coarse())
+            .with_max_iterations(30);
+        let result = run_windtunnel(&body, &req).unwrap();
+        let report = AeroReport::from_result(&result);
+        // q∞ is copied straight from the tunnel's free-stream conditions.
+        assert_eq!(report.dynamic_pressure, result.tunnel.dynamic_pressure());
+        assert!(report.dynamic_pressure > 0.0, "moving air has positive q");
+        // Drag force is the drag area scaled by q: F_D = (Cd·A)·q∞.
+        let expected = report.drag_area * report.dynamic_pressure;
+        assert!((report.drag_force() - expected).abs() < 1e-9);
+        // It also surfaces in the text dump.
+        assert!(report.to_text().contains("drag force"));
     }
 }
