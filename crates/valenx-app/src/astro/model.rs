@@ -268,6 +268,9 @@ pub struct PlannerForm {
     pub plane_change_altitude_km: f64,
     /// Plane change — inclination change Δi (deg).
     pub plane_change_delta_inc_deg: f64,
+
+    /// Orbit basics — circular-orbit altitude (km).
+    pub basics_altitude_km: f64,
 }
 
 impl Default for PlannerForm {
@@ -292,6 +295,7 @@ impl Default for PlannerForm {
             // A 28.5° plane change at LEO — eye-wateringly expensive.
             plane_change_altitude_km: 400.0,
             plane_change_delta_inc_deg: 28.5,
+            basics_altitude_km: 400.0,
         }
     }
 }
@@ -341,6 +345,18 @@ pub fn altitude_km_to_radius_m(altitude_km: f64) -> f64 {
 pub fn plane_change_dv(altitude_km: f64, delta_inc_deg: f64) -> Result<f64, AstroError> {
     let r = altitude_km_to_radius_m(altitude_km);
     valenx_astro::maneuver::circular_plane_change_dv(r, delta_inc_deg.to_radians())
+}
+
+/// Circular-orbit speed, escape speed (m/s) and orbital period (s) at altitude
+/// `altitude_km`, from `r = R_⊕ + h` and Earth's μ:
+/// `v_circ = √(μ/r)`, `v_esc = √(2μ/r)`, `T = 2π·√(r³/μ)`.
+pub fn circular_orbit_basics(altitude_km: f64) -> (f64, f64, f64) {
+    let r = altitude_km_to_radius_m(altitude_km);
+    let mu = valenx_astro::constants::MU_EARTH;
+    let v_circ = (mu / r).sqrt();
+    let v_esc = (2.0 * mu / r).sqrt();
+    let period = std::f64::consts::TAU * (r * r * r / mu).sqrt();
+    (v_circ, v_esc, period)
 }
 
 #[cfg(test)]
@@ -403,6 +419,19 @@ mod tests {
         assert!(large > small && small > 0.0, "Δv grows with Δi: {small} → {large}");
         // A non-physical altitude (below the Earth's centre) errors, not panics.
         assert!(plane_change_dv(-10_000.0, 30.0).is_err());
+    }
+
+    #[test]
+    fn circular_orbit_basics_match_textbook_values() {
+        // At Earth's radius: ~7.9 km/s circular, escape = √2× that, ~84 min.
+        let (v_circ, v_esc, period) = circular_orbit_basics(0.0);
+        assert!((v_circ - 7910.0).abs() < 120.0, "v_circ {v_circ}");
+        assert!((v_esc - 2.0_f64.sqrt() * v_circ).abs() < 1e-6, "v_esc = √2·v_circ");
+        assert!((period / 60.0 - 84.4).abs() < 2.0, "T {} min", period / 60.0);
+        // 300 km LEO: ~7.73 km/s, ~90 min period.
+        let (v300, _, t300) = circular_orbit_basics(300.0);
+        assert!((v300 - 7730.0).abs() < 120.0, "v300 {v300}");
+        assert!((t300 / 60.0 - 90.5).abs() < 3.0, "T300 {} min", t300 / 60.0);
     }
 
     #[test]

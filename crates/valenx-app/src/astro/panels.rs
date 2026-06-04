@@ -553,6 +553,7 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
 pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_hohmann_planner(app, ui);
     draw_plane_change_planner(app, ui);
+    draw_circular_basics_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -660,6 +661,41 @@ fn draw_plane_change_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 }
                 Err(e) => derived(ui, format!("Cannot plan: {}", model::friendly_error(&e))),
             }
+        });
+}
+
+/// Circular-orbit speed / escape speed / period at an altitude
+/// (`model::circular_orbit_basics`).
+fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Circular orbit basics")
+        .id_source("astro_basics")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_basics_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Orbit altitude").on_hover_text(
+                        "Circular-orbit altitude above the equator. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.basics_altitude_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                });
+            let (v_circ, v_esc, period) = model::circular_orbit_basics(form.basics_altitude_km);
+            egui::Grid::new("astro_basics_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(ui, "circular speed", model::format_delta_v(v_circ));
+                    kv(ui, "escape speed", model::format_delta_v(v_esc));
+                    kv(ui, "orbital period", model::format_duration(period));
+                });
         });
 }
 
