@@ -104,6 +104,7 @@ valenx-reactdyn      = { path = "../valenx-reactdyn" }
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
 # (FEM extracellular field + bioheat) and valenx-mesh; pure-Rust solver.
 valenx-neuro         = { path = "../valenx-neuro" }
+valenx-solvespace-3d = { path = "../valenx-solvespace-3d" }
 
 # The native launch-vehicle ascent + trajectory simulator, surfaced in
 # the desktop UI by the Astro / Launch workbench (src/astro_workbench.rs
