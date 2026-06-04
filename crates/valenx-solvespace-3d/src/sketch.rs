@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::constraint::Constraint3D;
-use crate::entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
+use crate::entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Spline3, Workplane};
 use crate::error::Solve3DError;
 
 /// Variable-backed 3D sketch.
@@ -235,6 +235,48 @@ impl Sketch3D {
             Entity3D::Arc3(a) => self.vars[a.radius_var],
             other => panic!("expected Arc3 at {id:?}, got {}", other.kind()),
         }
+    }
+
+    /// Add a cubic Bézier spline through the four existing control points
+    /// `p0` (start), `p1`, `p2`, `p3` (end).
+    pub fn add_spline(
+        &mut self,
+        p0: EntityId,
+        p1: EntityId,
+        p2: EntityId,
+        p3: EntityId,
+    ) -> Result<EntityId, Solve3DError> {
+        self.expect_point(p0)?;
+        self.expect_point(p1)?;
+        self.expect_point(p2)?;
+        self.expect_point(p3)?;
+        let id = EntityId(self.entities.len());
+        self.entities.push(Entity3D::Spline3(Spline3 { p0, p1, p2, p3 }));
+        Ok(id)
+    }
+
+    /// The four control-point ids of a spline `(p0, p1, p2, p3)`.
+    pub fn spline_control_points(&self, id: EntityId) -> (EntityId, EntityId, EntityId, EntityId) {
+        match &self.entities[id.0] {
+            Entity3D::Spline3(sp) => (sp.p0, sp.p1, sp.p2, sp.p3),
+            other => panic!("expected Spline3 at {id:?}, got {}", other.kind()),
+        }
+    }
+
+    /// Evaluate a spline's cubic Bézier at parameter `t` ∈ [0, 1].
+    pub fn spline_point_at(&self, id: EntityId, t: f64) -> (f64, f64, f64) {
+        let (p0, p1, p2, p3) = self.spline_control_points(id);
+        let (x0, y0, z0) = self.point_xyz(p0);
+        let (x1, y1, z1) = self.point_xyz(p1);
+        let (x2, y2, z2) = self.point_xyz(p2);
+        let (x3, y3, z3) = self.point_xyz(p3);
+        let u = 1.0 - t;
+        let (b0, b1, b2, b3) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+        (
+            b0 * x0 + b1 * x1 + b2 * x2 + b3 * x3,
+            b0 * y0 + b1 * y1 + b2 * y2 + b3 * y3,
+            b0 * z0 + b1 * z1 + b2 * z2 + b3 * z3,
+        )
     }
 
     /// Append a constraint.

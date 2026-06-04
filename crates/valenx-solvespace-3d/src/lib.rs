@@ -58,7 +58,7 @@ pub mod sketch;
 pub mod solver;
 
 pub use constraint::Constraint3D;
-pub use entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Workplane};
+pub use entity::{Arc3, Circle3, Entity3D, EntityId, Line3, Plane3, Point3, Spline3, Workplane};
 pub use error::{ErrorCategory, Solve3DError};
 pub use panel::SolveSpace3DPanelState;
 pub use parameters::{ParamError, ParameterTable};
@@ -297,5 +297,25 @@ mod tests_integration {
             assert!((dist - r).abs() < 1e-5, "endpoint off radius: {dist} vs {r}");
             assert!(plane.abs() < 1e-5, "endpoint off plane: {plane}");
         }
+    }
+
+    /// Spline — a cubic Bézier evaluates to its endpoints at t=0/1, and its
+    /// control points are solvable like any other points.
+    #[test]
+    fn spline_evaluates_and_tracks_its_control_points() {
+        let mut s = Sketch3D::new();
+        let p0 = s.add_point(0.0, 0.0, 0.0);
+        let p1 = s.add_point(1.0, 2.0, 0.0);
+        let p2 = s.add_point(2.0, 2.0, 0.0);
+        let p3 = s.add_point(3.0, 0.0, 0.0);
+        let spline = s.add_spline(p0, p1, p2, p3).unwrap();
+        let start = s.spline_point_at(spline, 0.0);
+        let end = s.spline_point_at(spline, 1.0);
+        assert!(start.0.abs() < 1e-9 && start.1.abs() < 1e-9, "B(0) = p0");
+        assert!((end.0 - 3.0).abs() < 1e-9 && end.1.abs() < 1e-9, "B(1) = p3");
+        // The control points solve under ordinary constraints.
+        s.add_constraint(Constraint3D::PointDistance3 { a: p0, b: p3, target: 10.0 });
+        let rep = s.solve().expect("ok");
+        assert_eq!(rep.status, SolverStatus::Converged);
     }
 }
