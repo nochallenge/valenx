@@ -269,6 +269,15 @@ fn dynamic_pressure(density: f64, speed: f64) -> f64 {
     0.5 * density * speed * speed
 }
 
+/// Cell (grid) Reynolds number `Re_cell = U·Δx/ν` for a streamwise cell size
+/// `cell_size` — a numerical-resolution diagnostic, not a property of the
+/// flow. It equals the global Reynolds number divided by the streamwise cell
+/// count, so a coarse grid (large `Re_cell`) under-resolves the convective
+/// term and the first-order upwind scheme smears sharp gradients.
+fn cell_reynolds(speed: f64, cell_size: f64, viscosity: f64) -> f64 {
+    speed.abs() * cell_size / viscosity
+}
+
 /// Build the grid + BCs and run the SIMPLE solver. Extracted from the
 /// draw closure so it is unit-testable, and it validates every input
 /// before calling [`Grid::new`] (which *panics* on a bad grid) — so a
@@ -315,6 +324,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
     let regime = flow_regime(re, s.case);
     let q = dynamic_pressure(s.density, s.speed);
+    // Streamwise grid spacing Δx = lx / nx (nx > 0 guaranteed by the guard above).
+    let re_cell = cell_reynolds(s.speed, s.lx / s.nx as f64, s.viscosity);
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -333,7 +344,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          iterations : {} {}\n\
          residual   : {:.3e}\n\
          max |u|    : {:.5} m/s\n\
-         dynamic q  : {:.4} Pa  (½ρU²)",
+         dynamic q  : {:.4} Pa  (½ρU²)\n\
+         cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)",
         s.case.label(),
         s.nx,
         s.ny,
@@ -350,6 +362,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         sol.residual,
         max_speed,
         q,
+        re_cell,
     );
 }
 
@@ -438,5 +451,25 @@ mod tests {
         assert!(
             (dynamic_pressure(2.0, 10.0) - 2.0 * dynamic_pressure(1.0, 10.0)).abs() < 1e-9
         );
+    }
+
+    #[test]
+    fn cell_reynolds_is_speed_times_cell_over_nu() {
+        // Re_cell = U·Δx/ν; 10 · 0.1 / 0.01 = 100.
+        assert!((cell_reynolds(10.0, 0.1, 0.01) - 100.0).abs() < 1e-9);
+        // Equals the global Reynolds number divided by the streamwise cell
+        // count: with L = 1, ν = 0.01, U = 10 → Re = 1000; over nx = 10 cells
+        // (Δx = 0.1) that is Re/nx = 100.
+        let re_global = 10.0_f64 * 1.0 / 0.01;
+        assert!((cell_reynolds(10.0, 1.0 / 10.0, 0.01) - re_global / 10.0).abs() < 1e-9);
+        // Linear in speed and cell size, inverse in viscosity.
+        assert!(
+            (cell_reynolds(20.0, 0.1, 0.01) - 2.0 * cell_reynolds(10.0, 0.1, 0.01)).abs() < 1e-9
+        );
+        assert!(
+            (cell_reynolds(10.0, 0.1, 0.02) - 0.5 * cell_reynolds(10.0, 0.1, 0.01)).abs() < 1e-9
+        );
+        // Sign-independent in the drive direction (uses |U|).
+        assert!((cell_reynolds(-10.0, 0.1, 0.01) - cell_reynolds(10.0, 0.1, 0.01)).abs() < 1e-9);
     }
 }
