@@ -66,7 +66,7 @@ pub use parameters::{ParamError, ParameterTable};
 pub use persist::{from_ron_str, to_ron_string, PanelFile, VERSION};
 pub use sketch::Sketch3D;
 pub use solver::{SolverConfig, SolverDiagnostics, SolverReport, SolverStatus};
-pub use timeline::{Feature, FeatureTimeline, TimelineError};
+pub use timeline::{Feature, FeatureTimeline, Op, RebuiltModel, Step, TimelineError};
 
 #[cfg(test)]
 mod tests_integration {

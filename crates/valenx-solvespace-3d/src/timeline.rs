@@ -1,21 +1,32 @@
-//! Parametric feature timeline — Fusion-style feature history.
+//! Parametric feature tree — Fusion-style feature history.
 //!
-//! A [`FeatureTimeline`] is an ordered list of modelling [`Feature`]s whose
-//! dimensions are **parameter expressions**, resolved against a
-//! [`ParameterTable`]. [`FeatureTimeline::rebuild`] resolves every feature's
-//! expressions and produces the solids; editing a parameter and rebuilding
-//! re-drives the whole model — the parametric-history loop at the heart of
-//! Fusion / SolidWorks. The geometry kernel is `valenx-cad` (box / cylinder
-//! primitives + profile extrusion).
+//! A [`FeatureTimeline`] is an ordered list of [`Step`]s. Each step takes a
+//! modelling [`Feature`] (box / cylinder / extrude), **places** it at a
+//! parametric position, and **combines** it with the running body via an
+//! [`Op`] (start a new body, join, cut, or intersect). Every dimension and
+//! every placement coordinate is a *parameter expression*, resolved against a
+//! [`ParameterTable`].
+//!
+//! [`FeatureTimeline::rebuild`] folds the steps into a single solid — the same
+//! base-feature-plus-modifications model Fusion and SolidWorks expose. Edit a
+//! named parameter and rebuild, and the whole tree re-drives: a hole moves, a
+//! boss grows, the model updates. `rebuild` also returns a snapshot of the
+//! running body after each step, so a timeline UI can scrub history.
+//!
+//! The geometry kernel is `valenx-cad`: primitives (`box_solid` / `cylinder` /
+//! `prism`) plus the robust boolean wrappers (`union` / `difference` /
+//! `intersection`), which never panic and never return a silently-invalid
+//! solid — a failed boolean surfaces here as [`TimelineError::Cad`].
 
-use valenx_cad::{box_solid, cylinder, prism, CadError, Solid};
+use valenx_cad::{box_solid, cylinder, difference, intersection, prism, union, CadError, Solid};
 
 use crate::parameters::{ParamError, ParameterTable};
 
-/// One modelling operation. Dimensions are parameter-expression strings
+/// One modelling primitive. Dimensions are parameter-expression strings
 /// (e.g. `"width"`, `"base * 2"`, `"40"`) resolved against a [`ParameterTable`].
+#[derive(Clone, Debug)]
 pub enum Feature {
-    /// An axis-aligned box `dx × dy × dz`.
+    /// An axis-aligned box `dx × dy × dz`, corner at the step's placement.
     Box {
         /// Width expression (x).
         dx: String,
@@ -24,14 +35,15 @@ pub enum Feature {
         /// Height expression (z).
         dz: String,
     },
-    /// A cylinder of the given radius and height.
+    /// A cylinder of the given radius and height, base centred on the step's
+    /// placement, axis along +Z.
     Cylinder {
         /// Radius expression.
         radius: String,
         /// Height expression.
         height: String,
     },
-    /// A prism: a fixed 2-D profile extruded to the given height.
+    /// A prism: a fixed 2-D profile extruded along +Z to the given height.
     Extrude {
         /// Closed 2-D profile, as `(x, y)` points.
         profile: Vec<(f64, f64)>,
@@ -40,20 +52,88 @@ pub enum Feature {
     },
 }
 
-/// An ordered list of parametric features.
-#[derive(Default)]
+/// How a step's feature combines with the body built so far.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Op {
+    /// Start a fresh body from this feature, discarding any running body.
+    /// The first step of a timeline must be `New`.
+    New,
+    /// Weld this feature onto the running body (boolean union).
+    Join,
+    /// Subtract this feature from the running body (boolean difference).
+    Cut,
+    /// Keep only the overlap of this feature and the running body
+    /// (boolean intersection).
+    Intersect,
+}
+
+/// One timeline step: a placed feature plus how it combines with the
+/// running body.
+#[derive(Clone, Debug)]
+pub struct Step {
+    /// How this feature combines with the body built by earlier steps.
+    pub op: Op,
+    /// The feature to build at this step.
+    pub feature: Feature,
+    /// Placement `(x, y, z)` as parameter expressions — where the feature's
+    /// origin lands before the combine. `["0", "0", "0"]` for no offset.
+    pub at: [String; 3],
+}
+
+impl Step {
+    /// A step that places `feature` at `(x, y, z)` (parameter expressions)
+    /// and combines it with the running body via `op`.
+    pub fn placed(
+        op: Op,
+        feature: Feature,
+        x: impl Into<String>,
+        y: impl Into<String>,
+        z: impl Into<String>,
+    ) -> Self {
+        Self {
+            op,
+            feature,
+            at: [x.into(), y.into(), z.into()],
+        }
+    }
+
+    /// A step at the origin — placement `(0, 0, 0)`.
+    pub fn at_origin(op: Op, feature: Feature) -> Self {
+        Self::placed(op, feature, "0", "0", "0")
+    }
+}
+
+/// The result of rebuilding a timeline: the final body plus a snapshot of the
+/// running body after each step (`snapshots[k]` is the model rolled forward
+/// through step `k`, so `snapshots.len() == steps.len()` and the last entry
+/// equals `body`).
+pub struct RebuiltModel {
+    /// The final combined solid.
+    pub body: Solid,
+    /// The running body after each step, in order.
+    pub snapshots: Vec<Solid>,
+}
+
+/// An ordered list of parametric steps forming a feature tree.
+#[derive(Clone, Debug, Default)]
 pub struct FeatureTimeline {
-    /// The features, in build order.
-    pub features: Vec<Feature>,
+    /// The steps, in build order.
+    pub steps: Vec<Step>,
 }
 
 /// A failure while rebuilding the timeline.
 #[derive(Debug)]
 pub enum TimelineError {
-    /// A dimension expression failed to resolve.
+    /// A dimension or placement expression failed to resolve.
     Param(ParamError),
-    /// A geometry-kernel operation failed (e.g. a degenerate dimension).
+    /// A geometry-kernel operation failed (degenerate dimension, an empty or
+    /// disjoint boolean result, a mesh-backed boolean operand, …).
     Cad(CadError),
+    /// A `Join` / `Cut` / `Intersect` step ran with no body to act on — the
+    /// first step of a timeline must be [`Op::New`].
+    NoBaseBody,
+    /// `rebuild` was called on a timeline with no steps.
+    EmptyTimeline,
 }
 
 impl std::fmt::Display for TimelineError {
@@ -61,6 +141,10 @@ impl std::fmt::Display for TimelineError {
         match self {
             TimelineError::Param(e) => write!(f, "parameter: {e}"),
             TimelineError::Cad(e) => write!(f, "geometry: {e}"),
+            TimelineError::NoBaseBody => {
+                write!(f, "the first step must start a new body (Op::New)")
+            }
+            TimelineError::EmptyTimeline => write!(f, "the timeline has no steps"),
         }
     }
 }
@@ -73,28 +157,31 @@ impl FeatureTimeline {
         Self::default()
     }
 
-    /// Append a feature.
-    pub fn push(&mut self, feature: Feature) {
-        self.features.push(feature);
+    /// Append a step.
+    pub fn push(&mut self, step: Step) {
+        self.steps.push(step);
     }
 
-    /// Number of features.
+    /// Number of steps.
     pub fn len(&self) -> usize {
-        self.features.len()
+        self.steps.len()
     }
 
-    /// Whether the timeline has no features.
+    /// Whether the timeline has no steps.
     pub fn is_empty(&self) -> bool {
-        self.features.is_empty()
+        self.steps.is_empty()
     }
 
-    /// Rebuild every feature against `params`, returning one [`Solid`] per
-    /// feature. Editing a parameter and rebuilding re-drives the model.
-    pub fn rebuild(&self, params: &ParameterTable) -> Result<Vec<Solid>, TimelineError> {
+    /// Rebuild the whole tree against `params`, folding every step into a
+    /// single body. Editing a parameter and rebuilding re-drives the model.
+    pub fn rebuild(&self, params: &ParameterTable) -> Result<RebuiltModel, TimelineError> {
         let resolve = |expr: &str| params.compute(expr).map_err(TimelineError::Param);
-        let mut solids = Vec::with_capacity(self.features.len());
-        for feature in &self.features {
-            let solid = match feature {
+        let mut running: Option<Solid> = None;
+        let mut snapshots: Vec<Solid> = Vec::with_capacity(self.steps.len());
+
+        for step in &self.steps {
+            // 1. Build the feature's primitive solid.
+            let solid = match &step.feature {
                 Feature::Box { dx, dy, dz } => {
                     box_solid(resolve(dx)?, resolve(dy)?, resolve(dz)?).map_err(TimelineError::Cad)?
                 }
@@ -105,9 +192,31 @@ impl FeatureTimeline {
                     prism(profile, resolve(height)?).map_err(TimelineError::Cad)?
                 }
             };
-            solids.push(solid);
+
+            // 2. Place it (parametric offset).
+            let x = resolve(&step.at[0])?;
+            let y = resolve(&step.at[1])?;
+            let z = resolve(&step.at[2])?;
+            let placed = solid.translated(x, y, z).map_err(TimelineError::Cad)?;
+
+            // 3. Combine with the running body.
+            let next = match (running.take(), step.op) {
+                (None, Op::New) => placed,
+                (None, _) => return Err(TimelineError::NoBaseBody),
+                (Some(_), Op::New) => placed,
+                (Some(r), Op::Join) => union(&r, &placed).map_err(TimelineError::Cad)?,
+                (Some(r), Op::Cut) => difference(&r, &placed).map_err(TimelineError::Cad)?,
+                (Some(r), Op::Intersect) => {
+                    intersection(&r, &placed).map_err(TimelineError::Cad)?
+                }
+            };
+
+            snapshots.push(next.clone());
+            running = Some(next);
         }
-        Ok(solids)
+
+        let body = running.ok_or(TimelineError::EmptyTimeline)?;
+        Ok(RebuiltModel { body, snapshots })
     }
 }
 
@@ -117,58 +226,103 @@ mod tests {
 
     fn params() -> ParameterTable {
         let mut p = ParameterTable::new();
-        p.set("base", "10");
-        p.set("width", "base * 3"); // 30
-        p.set("height", "base * 2"); // 20
+        p.set("size", "1");
+        p.set("hole_r", "0.25");
+        p.set("hole_h", "2");
         p
     }
 
-    #[test]
-    fn rebuilds_parametric_features_into_solids() {
-        let mut tl = FeatureTimeline::new();
-        tl.push(Feature::Box { dx: "width".into(), dy: "height".into(), dz: "base".into() });
-        tl.push(Feature::Cylinder { radius: "base / 2".into(), height: "height".into() });
-        let solids = tl.rebuild(&params()).expect("rebuild");
-        assert_eq!(solids.len(), 2);
-        assert_eq!(solids[0].faces(), 6, "a box has six faces");
+    fn unit_box() -> Feature {
+        Feature::Box { dx: "size".into(), dy: "size".into(), dz: "size".into() }
+    }
+
+    /// The cut/join tests reuse `valenx-cad`'s proven "punched cube" boolean
+    /// geometry: a 1×1×1 box at the origin and a cylinder (r=0.25, h=2) whose
+    /// base sits at (0.5, 0.5, -0.5), so it straddles the box through its top
+    /// and bottom faces — a known-good shapeops input.
+    fn through_pin() -> Feature {
+        Feature::Cylinder { radius: "hole_r".into(), height: "hole_h".into() }
     }
 
     #[test]
-    fn extrudes_a_profile() {
+    fn base_box_seeds_the_model() {
         let mut tl = FeatureTimeline::new();
-        // A unit-square profile extruded to a parameter-driven height.
-        tl.push(Feature::Extrude {
-            profile: vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
-            height: "base".into(),
-        });
-        let solids = tl.rebuild(&params()).expect("extrude");
-        assert_eq!(solids.len(), 1);
-        assert!(solids[0].faces() >= 5, "an extruded quad is a box-like solid");
+        tl.push(Step::at_origin(Op::New, unit_box()));
+        let m = tl.rebuild(&params()).expect("rebuild");
+        assert_eq!(m.body.faces(), 6, "a box has six faces");
+        assert_eq!(m.snapshots.len(), 1, "one snapshot per step");
     }
 
     #[test]
-    fn editing_a_parameter_redrives_the_build() {
+    fn cut_punches_a_hole() {
         let mut tl = FeatureTimeline::new();
-        tl.push(Feature::Box { dx: "size".into(), dy: "size".into(), dz: "size".into() });
-        let mut p = ParameterTable::new();
-        p.set("size", "10");
-        assert!(tl.rebuild(&p).is_ok(), "a valid size builds");
-        // Edit the parameter to a broken expression — re-resolved on rebuild,
-        // so the edit surfaces as an error (proving the value is re-read).
-        p.set("size", "10 +");
+        tl.push(Step::at_origin(Op::New, unit_box()));
+        tl.push(Step::placed(Op::Cut, through_pin(), "0.5", "0.5", "-0.5"));
+        let m = tl.rebuild(&params()).expect("punch");
+        // A punched cube has the cube's 6 outer faces plus the inner hole
+        // walls — strictly more than 6.
         assert!(
-            matches!(tl.rebuild(&p), Err(TimelineError::Param(_))),
-            "the edited parameter is re-resolved each rebuild"
+            m.body.faces() > 6,
+            "punched body should have hole walls ({} vs 6)",
+            m.body.faces()
         );
+        assert_eq!(m.snapshots.len(), 2);
+    }
+
+    #[test]
+    fn join_welds_a_protrusion() {
+        let mut tl = FeatureTimeline::new();
+        tl.push(Step::at_origin(Op::New, unit_box()));
+        tl.push(Step::placed(Op::Join, through_pin(), "0.5", "0.5", "-0.5"));
+        let m = tl.rebuild(&params()).expect("weld");
+        assert!(m.body.faces() > 0, "welded body is a real solid");
+    }
+
+    #[test]
+    fn cut_without_a_base_body_errors() {
+        let mut tl = FeatureTimeline::new();
+        tl.push(Step::at_origin(Op::Cut, unit_box()));
+        assert!(matches!(
+            tl.rebuild(&params()),
+            Err(TimelineError::NoBaseBody)
+        ));
+    }
+
+    #[test]
+    fn empty_timeline_errors() {
+        let tl = FeatureTimeline::new();
+        assert!(matches!(
+            tl.rebuild(&params()),
+            Err(TimelineError::EmptyTimeline)
+        ));
     }
 
     #[test]
     fn undefined_parameter_errors() {
         let mut tl = FeatureTimeline::new();
-        tl.push(Feature::Cylinder { radius: "missing".into(), height: "1".into() });
+        tl.push(Step::at_origin(
+            Op::New,
+            Feature::Cylinder { radius: "missing".into(), height: "1".into() },
+        ));
         assert!(matches!(
             tl.rebuild(&ParameterTable::new()),
             Err(TimelineError::Param(_))
         ));
+    }
+
+    #[test]
+    fn editing_a_parameter_redrives_the_build() {
+        let mut tl = FeatureTimeline::new();
+        tl.push(Step::at_origin(Op::New, unit_box()));
+        let mut p = ParameterTable::new();
+        p.set("size", "1");
+        assert!(tl.rebuild(&p).is_ok(), "a valid size builds");
+        // Edit the parameter to a broken expression — re-resolved on rebuild,
+        // so the edit surfaces as an error (proving the value is re-read).
+        p.set("size", "1 +");
+        assert!(
+            matches!(tl.rebuild(&p), Err(TimelineError::Param(_))),
+            "the edited parameter is re-resolved each rebuild"
+        );
     }
 }
