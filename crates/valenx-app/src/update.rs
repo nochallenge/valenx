@@ -394,6 +394,17 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.show_cad_workbench, "Parametric CAD")
+                        .on_hover_text(
+                            "Show / hide the right-side Parametric-CAD workbench — named \
+                             parameters with expressions (Fusion-style) driving sketch \
+                             geometry through the valenx-solvespace-3d constraint solver.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -876,6 +887,10 @@ impl eframe::App for ValenxApp {
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
         crate::neuro_workbench::draw_neuro_workbench(self, ctx);
+
+        // Parametric-CAD workbench (right) — named parameters driving sketch
+        // geometry on valenx-solvespace-3d. Off unless toggled via View.
+        crate::cad_workbench::draw_cad_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
