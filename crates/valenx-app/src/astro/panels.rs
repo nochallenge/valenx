@@ -560,6 +560,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_target_period_planner(app, ui);
     draw_injection_planner(app, ui);
     draw_flight_path_planner(app, ui);
+    draw_orbital_speed_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -1011,6 +1012,67 @@ fn draw_flight_path_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         "flight-path angle \u{03B3}",
                         format!("{:.2} \u{00B0}", gamma.to_degrees()),
                     );
+                });
+        });
+}
+
+/// Orbital speed at a queried altitude (`model::orbital_speed_at_altitude`).
+fn draw_orbital_speed_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Orbital speed at altitude")
+        .id_source("astro_orbital_speed")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_orbital_speed_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Perigee altitude").on_hover_text(
+                        "Lowest point of the orbit, above the surface. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.speed_perigee_km)
+                            .speed(10.0)
+                            .range(0.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Apogee altitude").on_hover_text(
+                        "Highest point of the orbit, above the surface. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.speed_apogee_km)
+                            .speed(10.0)
+                            .range(0.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Query altitude").on_hover_text(
+                        "Altitude on the orbit to evaluate the speed at; must lie \
+                         between perigee and apogee. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.speed_query_km)
+                            .speed(10.0)
+                            .range(0.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                });
+            let speed = model::orbital_speed_at_altitude(
+                form.speed_perigee_km,
+                form.speed_apogee_km,
+                form.speed_query_km,
+            );
+            egui::Grid::new("astro_orbital_speed_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    let val = match speed {
+                        Some(v) => model::format_delta_v(v),
+                        None => "\u{2014} (outside orbit)".to_string(),
+                    };
+                    kv(ui, "orbital speed", val);
                 });
         });
 }
