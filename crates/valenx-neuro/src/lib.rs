@@ -78,5 +78,5 @@ pub use steering::ContactArray;
 pub use strength_duration::{
     chronaxie, lapicque_threshold, rheobase, threshold_amplitude, weiss_threshold_charge,
 };
-pub use synapse::alpha_synapse_conductance;
+pub use synapse::{alpha_synapse_conductance, dual_exponential_synapse_conductance};
 pub use temperature::{q10_scale, TYPICAL_GATING_Q10};
