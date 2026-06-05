@@ -595,6 +595,8 @@ fn draw_hohmann_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
             let r1 = model::altitude_km_to_radius_m(form.hohmann_from_km);
             let r2 = model::altitude_km_to_radius_m(form.hohmann_to_km);
+            let phase_deg =
+                model::hohmann_phase_angle(form.hohmann_from_km, form.hohmann_to_km).to_degrees();
             match maneuver::hohmann_transfer(r1, r2) {
                 Ok(t) => {
                     egui::Grid::new("astro_hohmann_out")
@@ -605,6 +607,7 @@ fn draw_hohmann_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             kv(ui, "burn 2 \u{0394}v", model::format_delta_v(t.delta_v2));
                             kv(ui, "total \u{0394}v", model::format_delta_v(t.total_delta_v));
                             kv(ui, "transfer time", model::format_duration(t.transfer_time));
+                            kv(ui, "phase angle", format!("{phase_deg:.1} °"));
                         });
                 }
                 Err(e) => derived(ui, format!("Cannot plan: {}", model::friendly_error(&e))),
