@@ -131,6 +131,20 @@ pub fn open_end_input_resistance(r_inf_ohms: f64, electrotonic_length: f64) -> f
     }
 }
 
+/// The membrane low-pass cutoff (corner) frequency `f_c = 1/(2π·τ)` in hertz,
+/// from the membrane time constant `tau_s` (s). The passive RC membrane behaves
+/// as a first-order low-pass filter: voltage signals slower than `f_c` pass
+/// through, faster ones are attenuated. With `τ ≈ 10 ms` a neuron passes only
+/// ~16 Hz. The frequency-domain companion of [`time_constant_s`]. Returns `0`
+/// for a non-positive time constant.
+pub fn membrane_cutoff_frequency(tau_s: f64) -> f64 {
+    if tau_s > 0.0 {
+        1.0 / (2.0 * std::f64::consts::PI * tau_s)
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,5 +279,22 @@ mod tests {
         // Degenerate length: sealed → R_∞, open → 0 (a direct short to rest).
         assert_eq!(sealed_end_input_resistance(r_inf, 0.0), r_inf);
         assert_eq!(open_end_input_resistance(r_inf, 0.0), 0.0);
+    }
+
+    #[test]
+    fn membrane_cutoff_frequency_is_the_rc_corner() {
+        // f_c = 1/(2π·τ); τ = 10 ms → ≈ 15.915 Hz.
+        assert!((membrane_cutoff_frequency(0.01) - 15.915).abs() < 1e-2);
+        // Inversely proportional to τ: a 2× slower membrane halves the cutoff.
+        assert!(
+            (membrane_cutoff_frequency(0.02) - 0.5 * membrane_cutoff_frequency(0.01)).abs() < 1e-9
+        );
+        // Round-trip: f_c · (2π·τ) = 1.
+        let tau = 0.005;
+        assert!(
+            (membrane_cutoff_frequency(tau) * 2.0 * std::f64::consts::PI * tau - 1.0).abs() < 1e-12
+        );
+        // Non-positive τ → 0.
+        assert_eq!(membrane_cutoff_frequency(0.0), 0.0);
     }
 }
