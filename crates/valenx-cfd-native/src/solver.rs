@@ -460,6 +460,26 @@ impl FlowSolution {
         }
         sum / n as f64
     }
+
+    /// The mean wall-normal velocity gradient `⟨|∂u/∂y|⟩` at the bottom wall
+    /// (1/s) — estimated one-sidedly from the no-slip wall (`u = 0`) to the first
+    /// cell centre, `2·u_cell(i, 0)/dy`, averaged over the streamwise cells.
+    /// Multiplying by the dynamic viscosity `μ = ρν` gives the wall shear stress
+    /// `τ_w` — the skin friction the wall exerts on the flow (and that the
+    /// streamwise pressure drop must overcome in a channel). Returns `0` for an
+    /// empty grid.
+    pub fn bottom_wall_shear_rate(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return 0.0;
+        }
+        let dy = self.grid.dy();
+        let mut sum = 0.0;
+        for i in 0..nx {
+            sum += (2.0 * self.u_at_cell(i, 0) / dy).abs();
+        }
+        sum / nx as f64
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1602,6 +1622,36 @@ mod tests {
         assert!((sol.bulk_velocity() - 2.0).abs() < 1e-12, "U_bulk {}", sol.bulk_velocity());
         // By definition U_bulk · H = Q_in.
         assert!((sol.bulk_velocity() * grid.ly - sol.inlet_flow_rate()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn bottom_wall_shear_rate_recovers_a_linear_shear() {
+        // A 4×4 unit grid (dy = 1) with a linear shear u(y) = γ·y, γ = 3. The
+        // one-sided wall gradient 2·u_cell(i,0)/dy recovers γ exactly.
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let gamma = 3.0;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5); // u_at_cell(i,j) = γ·(j+0.5)·dy
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // ⟨2·u_cell(i,0)/dy⟩ = 2·(γ·0.5)/1 = γ.
+        assert!(
+            (sol.bottom_wall_shear_rate() - gamma).abs() < 1e-9,
+            "wall shear rate {}",
+            sol.bottom_wall_shear_rate()
+        );
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
