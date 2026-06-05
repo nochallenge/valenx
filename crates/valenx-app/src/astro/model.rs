@@ -279,6 +279,11 @@ pub struct PlannerForm {
     /// Bi-elliptic — intermediate apoapsis altitude (km) the transfer
     /// coasts out to before dropping onto the arrival orbit.
     pub bielliptic_via_km: f64,
+
+    /// Elliptical orbit — perigee altitude (km).
+    pub ellipse_perigee_km: f64,
+    /// Elliptical orbit — apogee altitude (km).
+    pub ellipse_apogee_km: f64,
 }
 
 impl Default for PlannerForm {
@@ -308,6 +313,9 @@ impl Default for PlannerForm {
             bielliptic_from_km: 300.0,
             bielliptic_to_km: 35_786.0,
             bielliptic_via_km: 250_000.0,
+            // A geostationary transfer orbit — the classic eccentric orbit.
+            ellipse_perigee_km: 300.0,
+            ellipse_apogee_km: 35_786.0,
         }
     }
 }
@@ -386,6 +394,47 @@ pub fn bielliptic_transfer_altitudes(
     let r2 = altitude_km_to_radius_m(to_km);
     let r_b = altitude_km_to_radius_m(via_km);
     valenx_astro::bielliptic_transfer(r1, r2, r_b)
+}
+
+/// A summary of an elliptical Earth orbit specified by its perigee and apogee.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EllipticalOrbit {
+    /// Semi-major axis `a` (m).
+    pub semi_major_axis_m: f64,
+    /// Eccentricity `e` (0 = circular).
+    pub eccentricity: f64,
+    /// Orbital period `T` (s).
+    pub period_s: f64,
+    /// Speed at perigee (m/s) — the orbit's fastest point.
+    pub perigee_speed_ms: f64,
+    /// Speed at apogee (m/s) — the orbit's slowest point.
+    pub apogee_speed_ms: f64,
+}
+
+/// Summarize the elliptical Earth orbit with the two given altitudes (km),
+/// taking the lower as perigee (so the inputs may be in either order). Uses
+/// vis-viva `v = √(μ(2/r − 1/a))` and Kepler's third law `T = 2π√(a³/μ)` with
+/// Earth's μ, where `a = (r_peri + r_apo)/2` and
+/// `e = (r_apo − r_peri)/(r_apo + r_peri)`. Equal altitudes give a circle
+/// (`e = 0`, equal peri/apogee speeds).
+pub fn elliptical_orbit(altitude_a_km: f64, altitude_b_km: f64) -> EllipticalOrbit {
+    let ra = altitude_km_to_radius_m(altitude_a_km);
+    let rb = altitude_km_to_radius_m(altitude_b_km);
+    let r_peri = ra.min(rb);
+    let r_apo = ra.max(rb);
+    let mu = valenx_astro::constants::MU_EARTH;
+    let a = 0.5 * (r_peri + r_apo);
+    let eccentricity = (r_apo - r_peri) / (r_apo + r_peri);
+    let period_s = std::f64::consts::TAU * (a * a * a / mu).sqrt();
+    let perigee_speed_ms = (mu * (2.0 / r_peri - 1.0 / a)).sqrt();
+    let apogee_speed_ms = (mu * (2.0 / r_apo - 1.0 / a)).sqrt();
+    EllipticalOrbit {
+        semi_major_axis_m: a,
+        eccentricity,
+        period_s,
+        perigee_speed_ms,
+        apogee_speed_ms,
+    }
 }
 
 #[cfg(test)]
@@ -487,6 +536,38 @@ mod tests {
         );
         // A non-finite altitude surfaces as an error, not a panic.
         assert!(bielliptic_transfer_altitudes(f64::NAN, 35_786.0, 250_000.0).is_err());
+    }
+
+    #[test]
+    fn elliptical_orbit_matches_a_gto_and_reduces_to_circular() {
+        // A geostationary transfer orbit: 300 km perigee, 35 786 km apogee.
+        let gto = elliptical_orbit(300.0, 35_786.0);
+        assert!((0.70..=0.75).contains(&gto.eccentricity), "GTO e {}", gto.eccentricity);
+        let hours = gto.period_s / 3600.0;
+        assert!((10.0..=11.1).contains(&hours), "GTO period {hours} h");
+        // Vis-viva: ~10.2 km/s at perigee, ~1.6 km/s at apogee; perigee is
+        // always the faster end of an eccentric orbit.
+        assert!(
+            (9_800.0..=10_500.0).contains(&gto.perigee_speed_ms),
+            "v_peri {}",
+            gto.perigee_speed_ms
+        );
+        assert!(
+            (1_450.0..=1_750.0).contains(&gto.apogee_speed_ms),
+            "v_apo {}",
+            gto.apogee_speed_ms
+        );
+        assert!(gto.perigee_speed_ms > gto.apogee_speed_ms);
+        // The two altitudes may be given in either order.
+        assert_eq!(gto, elliptical_orbit(35_786.0, 300.0));
+        // Equal altitudes ⇒ a circle: e = 0, equal speeds, and both period and
+        // speed agree with circular_orbit_basics at that altitude.
+        let circ = elliptical_orbit(500.0, 500.0);
+        assert!(circ.eccentricity < 1e-12, "circular e {}", circ.eccentricity);
+        assert!((circ.perigee_speed_ms - circ.apogee_speed_ms).abs() < 1e-9);
+        let (v_circ, _, period) = circular_orbit_basics(500.0);
+        assert!((circ.perigee_speed_ms - v_circ).abs() < 1e-6, "circular speed");
+        assert!((circ.period_s - period).abs() < 1e-3, "circular period");
     }
 
     #[test]
