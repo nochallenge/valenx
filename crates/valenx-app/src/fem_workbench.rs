@@ -529,6 +529,36 @@ fn run_fem(s: &mut FemWorkbenchState) {
                     s.plot = Some(FemPlot::Modal(
                         sol.modes.iter().map(|m| m.frequency_hz).collect(),
                     ));
+                    // Visualise the fundamental mode shape: deform the mesh by
+                    // modes[0].shape (mass-normalised, so scaled for visibility),
+                    // coloured by per-node modal amplitude.
+                    if let Some(mode) = sol.modes.first() {
+                        let amp = mode.max_amplitude();
+                        let scale = if amp > 1e-12 { 0.1 * s.lx / amp } else { 0.0 };
+                        let mut deformed = mesh.clone();
+                        for (node, d) in deformed.nodes.iter_mut().zip(&mode.shape) {
+                            *node += Vector3::new(d[0], d[1], d[2]) * scale;
+                        }
+                        deformed.recompute_stats();
+                        let data: Vec<f64> = mode
+                            .shape
+                            .iter()
+                            .map(|d| (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt())
+                            .collect();
+                        let mut field = Field {
+                            name: "mode amplitude".to_string(),
+                            kind: FieldKind::Scalar,
+                            location: Location::OnNode,
+                            region: RegionRef("fem".to_string()),
+                            units: valenx_fields::units::DIMENSIONLESS,
+                            time: TimeKey::Steady,
+                            data,
+                            range: None,
+                        };
+                        field.recompute_range();
+                        s.viz = Some((deformed, field));
+                        s.push_viz = true;
+                    }
                 }
                 Err(e) => s.error = Some(format!("solve: {e}")),
             }
@@ -588,7 +618,14 @@ mod tests {
             Some(FemPlot::Modal(freqs)) => assert_eq!(freqs.len(), 6, "six modes plotted"),
             other => panic!("modal run should plot frequencies, got {:?}", other.is_some()),
         }
-        assert!(s.viz.is_none(), "modal has no deformation overlay");
+        // The modal run now visualises the fundamental mode shape: a deformed
+        // mesh coloured by per-node modal amplitude (one value per node).
+        let (mesh, field) = s
+            .viz
+            .as_ref()
+            .expect("modal run builds the fundamental mode-shape overlay");
+        assert_eq!(field.name, "mode amplitude");
+        assert_eq!(field.data.len(), mesh.nodes.len(), "one amplitude per node");
     }
 
     #[test]
