@@ -60,6 +60,9 @@ pub struct CfdWorkbenchState {
     error: Option<String>,
     /// Vertical centreline velocity profile: [speed (m/s), height y (m)].
     profile: Option<Vec<[f64; 2]>>,
+    /// Analytic fully-developed Poiseuille profile for channel flow, overlaid on
+    /// the plot for comparison; `None` for the lid-driven cavity.
+    analytic_profile: Option<Vec<[f64; 2]>>,
 }
 
 impl Default for CfdWorkbenchState {
@@ -78,6 +81,7 @@ impl Default for CfdWorkbenchState {
             result: String::new(),
             error: None,
             profile: None,
+            analytic_profile: None,
         }
     }
 }
@@ -257,6 +261,12 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             .y_axis_label("y (m)")
                             .show(ui, |pui| {
                                 pui.line(Line::new(PlotPoints::from(profile.clone())).name("|u|"));
+                                if let Some(analytic) = &s.analytic_profile {
+                                    pui.line(
+                                        Line::new(PlotPoints::from(analytic.clone()))
+                                            .name("Poiseuille (analytic)"),
+                                    );
+                                }
                             });
                     }
                 });
@@ -282,9 +292,26 @@ fn cell_reynolds(speed: f64, cell_size: f64, viscosity: f64) -> f64 {
 /// draw closure so it is unit-testable, and it validates every input
 /// before calling [`Grid::new`] (which *panics* on a bad grid) — so a
 /// bad input surfaces as an error, never a crash.
+/// The analytic fully-developed plane-Poiseuille velocity profile for a channel
+/// of height `height` driven at bulk speed `inlet_speed`, sampled at the same
+/// `ny` cell centres as the CFD profile: `u(y) = 1.5·U·(1 − ((y − h/2)/(h/2))²)`
+/// — the parabola the channel solve should converge to far from the inlet.
+fn poiseuille_profile(inlet_speed: f64, height: f64, ny: usize) -> Vec<[f64; 2]> {
+    let u_max = 1.5 * inlet_speed;
+    let half = 0.5 * height;
+    (0..ny)
+        .map(|j| {
+            let y = (j as f64 + 0.5) * height / ny as f64;
+            let eta = (y - half) / half;
+            [u_max * (1.0 - eta * eta), y]
+        })
+        .collect()
+}
+
 fn run_cfd(s: &mut CfdWorkbenchState) {
     s.error = None;
     s.profile = None;
+    s.analytic_profile = None;
     if s.nx == 0 || s.ny == 0 {
         s.error = Some("grid must have at least one cell per axis".into());
         return;
@@ -341,6 +368,12 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         })
         .collect();
     s.profile = Some(profile);
+    // For channel flow, the analytic Poiseuille parabola the solve converges to
+    // (the lid-driven cavity has no such 1-D profile).
+    s.analytic_profile = match s.case {
+        CfdCase::ChannelFlow => Some(poiseuille_profile(s.speed, s.ly, s.ny)),
+        CfdCase::LidDrivenCavity => None,
+    };
 
     s.result = format!(
         "case       : {}\n\
@@ -407,6 +440,42 @@ mod tests {
         run_cfd(&mut s);
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
         assert!(s.result.contains("channel flow"));
+    }
+
+    #[test]
+    fn poiseuille_profile_is_a_parabola_peaking_at_centreline() {
+        let prof = poiseuille_profile(1.0, 1.0, 16);
+        assert_eq!(prof.len(), 16);
+        let max_u = prof.iter().map(|p| p[0]).fold(0.0_f64, f64::max);
+        // Centreline speed ≈ 1.5× the inlet (bulk) speed.
+        assert!((max_u - 1.5).abs() < 0.02, "centreline ~1.5× inlet: {max_u}");
+        // Symmetric about the centre, non-negative, slower at the walls.
+        assert!((prof[0][0] - prof[15][0]).abs() < 1e-9, "symmetric");
+        assert!(prof[0][0] < max_u);
+        assert!(prof.iter().all(|p| p[0] >= 0.0));
+    }
+
+    #[test]
+    fn channel_flow_gets_an_analytic_overlay_cavity_does_not() {
+        let mut chan = CfdWorkbenchState {
+            nx: 20,
+            ny: 12,
+            max_iterations: 100,
+            case: CfdCase::ChannelFlow,
+            ..Default::default()
+        };
+        run_cfd(&mut chan);
+        assert!(
+            chan.analytic_profile.as_ref().is_some_and(|p| p.len() == chan.ny),
+            "channel flow should carry the analytic Poiseuille overlay"
+        );
+        // The lid-driven cavity has no 1-D analytic profile.
+        let mut cav = CfdWorkbenchState {
+            case: CfdCase::LidDrivenCavity,
+            ..Default::default()
+        };
+        run_cfd(&mut cav);
+        assert!(cav.analytic_profile.is_none(), "cavity has no analytic overlay");
     }
 
     #[test]
