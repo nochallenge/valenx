@@ -150,6 +150,14 @@ impl AeroReport {
         }
     }
 
+    /// The glide angle `γ = atan2(Cd, Cl)` (radians) — the descent slope in
+    /// unpowered flight, where `tan γ = D/L = 1/(L/D)`. Defined for any sign of
+    /// lift via `atan2`: a lifting body glides shallowly (small `γ`), a
+    /// non-lifting or draggy body descends steeply (`γ → π/2` and beyond).
+    pub fn glide_angle_rad(&self) -> f64 {
+        self.cd.atan2(self.cl)
+    }
+
     /// Render the report as a plain-text block — the form a CLI prints
     /// or an LLM relays.
     pub fn to_text(&self) -> String {
@@ -170,6 +178,10 @@ impl AeroReport {
         s.push_str(&format!("  side      Cs : {:+.4}\n", self.cs));
         s.push_str(&format!("  pitch Cm     : {:+.4}\n", self.cm));
         s.push_str(&format!("  lift/drag L/D: {:+.3}\n", self.lift_to_drag()));
+        s.push_str(&format!(
+            "  glide angle  : {:.2} deg\n",
+            self.glide_angle_rad().to_degrees()
+        ));
         s.push_str(&format!(
             "  drag area CdA: {:.4} m^2\n",
             self.drag_area
@@ -363,5 +375,26 @@ mod tests {
         assert!(report.lift_to_drag().is_finite());
         // It surfaces in the text dump.
         assert!(report.to_text().contains("L/D"));
+    }
+
+    #[test]
+    fn glide_angle_is_the_arctangent_of_drag_over_lift() {
+        let body = box_body(Vector3::zeros(), Vector3::new(2.0, 1.0, 1.0));
+        let req = AeroRequest::new(20.0)
+            .with_turbulence(TurbulenceModel::KEpsilon)
+            .with_sizing(coarse())
+            .with_max_iterations(30);
+        let result = run_windtunnel(&body, &req).unwrap();
+        let report = AeroReport::from_result(&result);
+        // γ = atan2(Cd, Cl): a body with positive drag descends at an angle
+        // strictly between 0 and π.
+        let g = report.glide_angle_rad();
+        assert!(g > 0.0 && g < std::f64::consts::PI && g.is_finite(), "γ {g}");
+        // For a lifting body, tan γ = D/L = 1/(L/D).
+        if report.cl > 0.0 && report.lift_to_drag() > 0.0 {
+            assert!((g.tan() - 1.0 / report.lift_to_drag()).abs() < 1e-9, "tan γ = 1/(L/D)");
+        }
+        // It surfaces in the text dump.
+        assert!(report.to_text().contains("glide angle"));
     }
 }

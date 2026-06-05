@@ -809,6 +809,12 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
             &ld,
             egui::Color32::from_rgb(140, 210, 150),
         );
+        result_card(
+            ui,
+            "Glide angle",
+            &format!("{:.1}\u{00B0}", report.glide_angle_rad().to_degrees()),
+            neutral,
+        );
     });
 
     ui.add_space(4.0);
