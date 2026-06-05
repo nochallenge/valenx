@@ -363,6 +363,29 @@ impl NativeSolution {
             .fold(0.0, f64::max)
     }
 
+    /// The maximum (most tensile) hydrostatic / mean stress over all nodes (Pa)
+    /// — `σ_m = (σxx + σyy + σzz)/3`, the volumetric (pressure-like) part of the
+    /// stress, complementary to the deviatoric von Mises measure. A high tensile
+    /// hydrostatic stress promotes void growth and cavitation. Returns
+    /// `f64::NEG_INFINITY` for an empty field.
+    pub fn max_hydrostatic_stress(&self) -> f64 {
+        self.stress
+            .iter()
+            .map(|s| (s[0] + s[1] + s[2]) / 3.0)
+            .fold(f64::NEG_INFINITY, f64::max)
+    }
+
+    /// The minimum (most compressive) hydrostatic / mean stress over all nodes
+    /// (Pa) — the compressive counterpart to
+    /// [`NativeSolution::max_hydrostatic_stress`]. Returns `f64::INFINITY` for an
+    /// empty field.
+    pub fn min_hydrostatic_stress(&self) -> f64 {
+        self.stress
+            .iter()
+            .map(|s| (s[0] + s[1] + s[2]) / 3.0)
+            .fold(f64::INFINITY, f64::min)
+    }
+
     /// Stress triaxiality `T = σ_m / σ_vm` (mean stress over von Mises stress)
     /// at the node of peak von Mises stress — the site where ductile failure
     /// initiates. Triaxiality sets the ductile-fracture mode: `1/3` in uniaxial
@@ -1242,6 +1265,22 @@ mod tests {
             stress: vec![],
         };
         assert_eq!(empty.max_shear_stress(), 0.0);
+    }
+
+    #[test]
+    fn hydrostatic_stress_extremes_are_the_mean_normal_stress() {
+        let sol = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![],
+            stress: vec![
+                [9.0, 0.0, 0.0, 0.0, 0.0, 0.0], // uniaxial tension → σ_m = 3
+                [-3.0, -3.0, -3.0, 0.0, 0.0, 0.0], // hydrostatic compression → σ_m = −3
+                [0.0, 0.0, 0.0, 5.0, 0.0, 0.0], // pure shear → σ_m = 0
+            ],
+        };
+        // σ_m = trace/3 per node; the field extremes are +3 and −3.
+        assert!((sol.max_hydrostatic_stress() - 3.0).abs() < 1e-12, "{}", sol.max_hydrostatic_stress());
+        assert!((sol.min_hydrostatic_stress() + 3.0).abs() < 1e-12, "{}", sol.min_hydrostatic_stress());
     }
 
     #[test]

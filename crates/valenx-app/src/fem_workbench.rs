@@ -386,6 +386,10 @@ fn run_fem(s: &mut FemWorkbenchState) {
                     let max_principal = sol.max_principal_stress();
                     let min_principal = sol.min_principal_stress();
                     let max_shear = sol.max_shear_stress();
+                    // Hydrostatic (mean / volumetric) stress extremes — the
+                    // pressure-like part complementary to the deviatoric measures.
+                    let max_hydro = sol.max_hydrostatic_stress();
+                    let min_hydro = sol.min_hydrostatic_stress();
                     // Stress triaxiality σ_m/σ_vm at the peak-von-Mises node.
                     let triax = sol.peak_triaxiality();
                     // Mean von Mises + stress-concentration factor Kt = peak/mean.
@@ -440,6 +444,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                          mean von Mises  : {:.4e} Pa  (Kt {:.1} = peak/mean)\n\
                          max principal   : {:.4e} Pa  (min {:.4e} Pa)\n\
                          max shear       : {:.4e} Pa  (Tresca)\n\
+                         hydrostatic     : {:.4e} Pa  (min {:.4e} Pa)\n\
                          peak stress @   : {}\n\
                          tip stiffness   : {} N/m\n\
                          strain energy   : {:.4e} J\n\
@@ -457,6 +462,8 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         max_principal,
                         min_principal,
                         max_shear,
+                        max_hydro,
+                        min_hydro,
                         peak_str,
                         stiffness_str,
                         energy,
