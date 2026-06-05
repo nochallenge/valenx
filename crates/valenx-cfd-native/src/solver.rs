@@ -344,6 +344,29 @@ impl FlowSolution {
         }
         sum / n as f64
     }
+
+    /// Peak vorticity magnitude `|∂v/∂x − ∂u/∂y|` (1/s) over the interior cells,
+    /// from central differences of the cell-centred velocity — the strongest
+    /// local rotation in the flow (the lid-driven cavity's central vortex, a
+    /// channel's wall shear layers). Returns `0` for a grid too small to take an
+    /// interior central difference (`nx < 3` or `ny < 3`).
+    pub fn max_vorticity(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let two_dx = 2.0 * self.grid.dx();
+        let two_dy = 2.0 * self.grid.dy();
+        let mut peak = 0.0_f64;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                peak = peak.max((dv_dx - du_dy).abs());
+            }
+        }
+        peak
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1226,6 +1249,25 @@ mod tests {
         // A driven flow has a positive mean that cannot exceed the peak.
         assert!(mean > 0.0, "driven flow should have a positive mean speed");
         assert!(mean <= peak + 1e-9, "mean {mean} cannot exceed peak {peak}");
+    }
+
+    #[test]
+    fn lid_driven_cavity_has_positive_vorticity_that_scales_with_the_lid() {
+        let grid = Grid::new(24, 24, 1.0, 1.0);
+        let fluid = Fluid::new(1.0, 0.05);
+        let controls = SimpleControls {
+            max_iterations: 2000,
+            tolerance: 1e-5,
+            ..SimpleControls::default()
+        };
+        let slow = solve_simple(&grid, &fluid, &Boundaries::lid_driven_cavity(1.0), &controls);
+        let fast = solve_simple(&grid, &fluid, &Boundaries::lid_driven_cavity(2.0), &controls);
+        let w_slow = slow.max_vorticity();
+        let w_fast = fast.max_vorticity();
+        // The lid shears the fluid into a rotating vortex: vorticity is positive
+        // and finite, and driving the lid harder spins it up.
+        assert!(w_slow > 0.0 && w_slow.is_finite(), "cavity vorticity {w_slow}");
+        assert!(w_fast > w_slow, "a faster lid raises vorticity: {w_slow} → {w_fast}");
     }
 
     #[test]
