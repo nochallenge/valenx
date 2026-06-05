@@ -904,8 +904,9 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             .and_then(|h| h.get(s.scrub.saturating_sub(1)))
                             .map(|bodies| {
                                 let faces: usize = bodies.iter().map(|b| b.faces()).sum();
+                                let vol = total_volume(bodies);
                                 format!(
-                                    "step {} / {n} — {} bodies, {faces} faces",
+                                    "step {} / {n} — {} bodies, {faces} faces, {vol:.4} u³",
                                     s.scrub,
                                     bodies.len()
                                 )
@@ -1016,6 +1017,23 @@ mod tests {
                 "step {k} should tessellate to a non-empty mesh"
             );
         }
+    }
+
+    #[test]
+    fn cut_step_reduces_the_per_step_volume() {
+        // The default tree is a box (step 1) with a cylinder cut (step 2). The
+        // per-step volume the scrubber now shows must drop when the hole is
+        // punched.
+        let s = CadWorkbenchState::default();
+        let (history, _) = rebuild_tree(&s).expect("default tree rebuilds");
+        assert_eq!(history.len(), 2, "two steps → two snapshots");
+        let v_box = total_volume(&history[0]);
+        let v_punched = total_volume(&history[1]);
+        assert!(v_box > 0.0, "the bare box has positive volume");
+        assert!(
+            v_punched < v_box,
+            "cutting the hole reduces the volume: {v_box} → {v_punched}"
+        );
     }
 
     #[test]
