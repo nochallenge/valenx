@@ -962,6 +962,11 @@ fn draw_polar_results(ui: &mut egui::Ui, curve: &valenx_aero::PolarCurve) {
                 "lift-curve slope",
                 format!("{:.3} /rad", curve.lift_curve_slope()),
             );
+            kv(
+                ui,
+                "pitch stab dCm/dCl",
+                format!("{:.3}  (<0 stable)", curve.pitch_stability_slope()),
+            );
         });
     derived(
         ui,
