@@ -480,6 +480,32 @@ impl FlowSolution {
         }
         sum / nx as f64
     }
+
+    /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
+    /// signed net rotation of the flow (Kelvin's circulation theorem; by
+    /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
+    /// interior central-difference vorticity stencil as
+    /// [`FlowSolution::max_vorticity`], summed and weighted by the cell area.
+    /// Unlike the always-positive peak vorticity it carries a sign (the sense of
+    /// the net swirl). Returns `0` for a grid too small for an interior
+    /// difference (`nx < 3` or `ny < 3`).
+    pub fn circulation(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let (two_dx, two_dy) = (2.0 * dx, 2.0 * dy);
+        let mut sum = 0.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                sum += dv_dx - du_dy;
+            }
+        }
+        sum * dx * dy
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1652,6 +1678,43 @@ mod tests {
             "wall shear rate {}",
             sol.bottom_wall_shear_rate()
         );
+    }
+
+    #[test]
+    fn circulation_integrates_vorticity_over_the_interior() {
+        // A 5×5 unit grid (dx=dy=1), v=0, linear shear u(y)=γ·y (γ=2) → ω = −γ.
+        // Γ = ∫ω dA = −γ·(interior area) = −2·9 = −18, carrying the sign of ω.
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+        let gamma = 2.0;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5); // u_at_cell(i,j) = γ·(j+0.5)
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((sol.circulation() - (-18.0)).abs() < 1e-9, "Γ {}", sol.circulation());
+        // A grid too small for an interior difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.circulation(), 0.0);
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
