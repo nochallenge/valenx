@@ -297,6 +297,11 @@ pub struct PlannerForm {
     pub injection_altitude_km: f64,
     /// Injection Δv — target hyperbolic excess speed v∞ (km/s).
     pub injection_v_inf_kms: f64,
+
+    /// Flight-path angle — orbit eccentricity (0–1).
+    pub fpa_eccentricity: f64,
+    /// Flight-path angle — true anomaly θ (degrees).
+    pub fpa_true_anomaly_deg: f64,
 }
 
 impl Default for PlannerForm {
@@ -337,6 +342,9 @@ impl Default for PlannerForm {
             // A 300 km LEO with a trans-Mars-class hyperbolic excess.
             injection_altitude_km: 300.0,
             injection_v_inf_kms: 3.0,
+            // A moderately eccentric orbit, sampled a third of the way to apogee.
+            fpa_eccentricity: 0.5,
+            fpa_true_anomaly_deg: 60.0,
         }
     }
 }
@@ -444,6 +452,17 @@ pub fn orbit_altitude_for_period_km(period_s: f64) -> f64 {
 pub fn injection_delta_v(altitude_km: f64, v_inf_ms: f64) -> f64 {
     let (v_circ, v_esc, _) = circular_orbit_basics(altitude_km);
     (v_esc * v_esc + v_inf_ms * v_inf_ms).sqrt() - v_circ
+}
+
+/// The flight-path angle `γ = atan( e·sinθ / (1 + e·cosθ) )` (radians) at true
+/// anomaly `theta_rad` on an orbit of eccentricity `eccentricity` — the angle of
+/// the velocity above the local horizontal (perpendicular to the radius). It is
+/// zero at both apsides (`θ = 0, π`, where the motion is purely tangential) and
+/// everywhere on a circular orbit (`e = 0`); positive while climbing from
+/// perigee toward apogee and negative while descending.
+pub fn flight_path_angle(eccentricity: f64, theta_rad: f64) -> f64 {
+    let (sin_t, cos_t) = theta_rad.sin_cos();
+    (eccentricity * sin_t).atan2(1.0 + eccentricity * cos_t)
 }
 
 /// The three-burn Δv budget and timing of a **bi-elliptic** transfer between
@@ -767,6 +786,23 @@ mod tests {
         assert!((tmi / 1000.0 - 3.6).abs() < 0.2, "TMI {} km/s", tmi / 1000.0);
         // A higher required hyperbolic excess always costs more Δv.
         assert!(injection_delta_v(300.0, 4000.0) > tmi);
+    }
+
+    #[test]
+    fn flight_path_angle_is_zero_at_apsides_and_peaks_between() {
+        use std::f64::consts::PI;
+        // A circular orbit (e = 0) is purely tangential everywhere → γ = 0.
+        assert!(flight_path_angle(0.0, 1.234).abs() < 1e-12);
+        // Both apsides (θ = 0, π) → γ = 0.
+        assert!(flight_path_angle(0.6, 0.0).abs() < 1e-12);
+        assert!(flight_path_angle(0.6, PI).abs() < 1e-12);
+        // e = 0.5 at θ = 90° → atan(0.5) ≈ 26.565°.
+        let g = flight_path_angle(0.5, PI / 2.0);
+        assert!((g - 0.5_f64.atan()).abs() < 1e-12, "γ {g}");
+        assert!((g.to_degrees() - 26.565).abs() < 1e-2);
+        // Positive while climbing (0 < θ < π), negative while descending.
+        assert!(flight_path_angle(0.5, PI / 4.0) > 0.0);
+        assert!(flight_path_angle(0.5, -PI / 4.0) < 0.0);
     }
 
     #[test]
