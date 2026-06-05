@@ -40,6 +40,7 @@ pub mod recording;
 pub mod safety;
 pub mod steering;
 pub mod strength_duration;
+pub mod temperature;
 pub mod units;
 
 pub use activating::activating_along_x;
@@ -64,3 +65,4 @@ pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{charge_density, is_safe, max_safe_charge_per_phase, shannon_k};
 pub use steering::ContactArray;
 pub use strength_duration::{chronaxie, rheobase, threshold_amplitude};
+pub use temperature::{q10_scale, TYPICAL_GATING_Q10};
