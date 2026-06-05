@@ -17,6 +17,11 @@ pub const R_EARTH: f64 = 6_378_137.0;
 /// Earth sidereal rotation rate (rad/s).
 pub const OMEGA_EARTH: f64 = 7.292_115_9e-5;
 
+/// Earth's mean orbital angular rate about the Sun (rad/s) — `2π` per tropical
+/// year (365.242190 days), ≈ 0.9856°/day. A **sun-synchronous** orbit's nodal
+/// precession must match this so the orbit plane keeps a fixed Sun angle.
+pub const EARTH_ORBITAL_RATE: f64 = 1.991_063e-7;
+
 /// Standard gravitational acceleration used to convert specific impulse
 /// (seconds) into effective exhaust velocity (m/s): `v_e = Isp · g₀`.
 pub const G0: f64 = 9.806_65;
