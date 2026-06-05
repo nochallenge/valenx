@@ -42,6 +42,7 @@ pub mod recording;
 pub mod safety;
 pub mod steering;
 pub mod strength_duration;
+pub mod synapse;
 pub mod temperature;
 pub mod units;
 
@@ -77,4 +78,5 @@ pub use steering::ContactArray;
 pub use strength_duration::{
     chronaxie, lapicque_threshold, rheobase, threshold_amplitude, weiss_threshold_charge,
 };
+pub use synapse::alpha_synapse_conductance;
 pub use temperature::{q10_scale, TYPICAL_GATING_Q10};
