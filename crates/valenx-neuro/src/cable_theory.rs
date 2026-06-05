@@ -51,6 +51,30 @@ pub fn semi_infinite_input_resistance(d_cm: f64, r_m_ohm_cm2: f64, r_i_ohm_cm: f
     (r_m * r_a).sqrt()
 }
 
+/// The fraction of the steady-state voltage a passive membrane has reached at
+/// time `t_s` (s) after a step of current — the RC charging curve
+/// `1 − e^(−t/τ)`, with `tau_s` the membrane time constant (s). It reaches
+/// ~63% at one time constant and ~95% at three. Returns `0` for a non-positive
+/// time constant.
+pub fn charging_fraction(t_s: f64, tau_s: f64) -> f64 {
+    if tau_s <= 0.0 {
+        return 0.0;
+    }
+    1.0 - (-t_s / tau_s).exp()
+}
+
+/// The time (s) for a passive membrane to charge to `fraction` of its
+/// steady-state voltage, `t = −τ·ln(1 − fraction)` — the inverse of
+/// [`charging_fraction`]. `None` for a `fraction` outside `[0, 1)` (the membrane
+/// approaches but never reaches 100%) or a non-positive time constant.
+pub fn time_to_charge_fraction(fraction: f64, tau_s: f64) -> Option<f64> {
+    if (0.0..1.0).contains(&fraction) && tau_s > 0.0 {
+        Some(-tau_s * (1.0 - fraction).ln())
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,5 +121,33 @@ mod tests {
         // R_∞ ∝ d^(−3/2): a 4× thicker fibre has 1/8 the input resistance.
         let thick = semi_infinite_input_resistance(16e-4, 1e4, 100.0);
         assert!((thick - r_inf / 8.0).abs() / r_inf < 1e-9, "d^(−3/2) scaling");
+    }
+
+    #[test]
+    fn charging_fraction_follows_the_rc_curve() {
+        // 0 at t=0, 1 − 1/e (~63.2%) at one τ, ~95.0% at three τ.
+        assert!(charging_fraction(0.0, 0.01).abs() < 1e-12);
+        assert!(
+            (charging_fraction(0.01, 0.01) - (1.0 - 1.0 / std::f64::consts::E)).abs() < 1e-12
+        );
+        assert!((charging_fraction(0.03, 0.01) - 0.9502).abs() < 1e-3);
+        // Monotonically rising toward 1; a non-positive τ gives 0.
+        assert!(charging_fraction(0.05, 0.01) > charging_fraction(0.03, 0.01));
+        assert_eq!(charging_fraction(0.01, 0.0), 0.0);
+    }
+
+    #[test]
+    fn time_to_charge_fraction_inverts_the_curve() {
+        let tau = 0.01;
+        // Reaching 1 − 1/e takes exactly one τ.
+        let t = time_to_charge_fraction(1.0 - 1.0 / std::f64::consts::E, tau).unwrap();
+        assert!((t - tau).abs() < 1e-12, "one τ to 63%, got {t}");
+        // Round-trip: charge to f over time t, and the fraction at t is f again.
+        let f = 0.8;
+        let tf = time_to_charge_fraction(f, tau).unwrap();
+        assert!((charging_fraction(tf, tau) - f).abs() < 1e-12);
+        // 100% (or out of range) is never reached → None.
+        assert!(time_to_charge_fraction(1.0, tau).is_none());
+        assert!(time_to_charge_fraction(-0.1, tau).is_none());
     }
 }
