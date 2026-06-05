@@ -393,7 +393,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          iterations : {} {}\n\
          residual   : {:.3e}\n\
          max |u|    : {:.5} m/s  (mean {:.5})\n\
-         dynamic q  : {:.4} Pa  (½ρU²)\n\
+         dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4})\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
          peak vort  : {:.4} 1/s  (max rotation){flow_str}",
@@ -414,6 +414,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         max_speed,
         mean_speed,
         q,
+        sol.mean_kinetic_energy_density(s.density),
         re_cell,
         dp,
         vorticity,

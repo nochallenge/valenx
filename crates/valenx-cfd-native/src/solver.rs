@@ -401,6 +401,25 @@ impl FlowSolution {
             (self.outlet_flow_rate() - q_in).abs() / q_in.abs()
         }
     }
+
+    /// Area-averaged kinetic-energy density `⟨½ρ|u|²⟩` (J/m³ = Pa) over the cell
+    /// grid — the mean specific kinetic energy of the flow, in the same units as
+    /// (and directly comparable to) the freestream dynamic pressure `½ρU²`.
+    /// `density` is the fluid density (kg/m³). Returns `0` for an empty grid.
+    pub fn mean_kinetic_energy_density(&self, density: f64) -> f64 {
+        let n = self.grid.nx * self.grid.ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut sum = 0.0;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                let speed = self.speed_at_cell(i, j);
+                sum += 0.5 * density * speed * speed;
+            }
+        }
+        sum / n as f64
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1448,6 +1467,36 @@ mod tests {
             converged: true,
         };
         assert_eq!(calm.continuity_error(), 0.0);
+    }
+
+    #[test]
+    fn mean_kinetic_energy_density_matches_dynamic_pressure_for_uniform_flow() {
+        // A uniform u = 3, v = 0 field over a 4×2 grid.
+        let grid = Grid::new(4, 2, 4.0, 2.0);
+        let mut u = grid.u_field(); // 5 × 2
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 3.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let rho = 1.2;
+        // Every cell has speed 3 → ⟨½ρ|u|²⟩ = ½·1.2·9 = 5.4 Pa, exactly the
+        // freestream dynamic pressure ½ρU².
+        let ke = sol.mean_kinetic_energy_density(rho);
+        assert!((ke - 0.5 * rho * 9.0).abs() < 1e-12, "mean KE density {ke}");
+        // Linear in density: doubling ρ doubles the energy.
+        assert!(
+            (sol.mean_kinetic_energy_density(2.0 * rho) - 2.0 * ke).abs() < 1e-12
+        );
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
