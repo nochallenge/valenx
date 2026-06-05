@@ -23,7 +23,7 @@ use std::f64::consts::TAU;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::{J2_EARTH, MU_EARTH, R_EARTH};
+use crate::constants::{EARTH_ORBITAL_RATE, J2_EARTH, MU_EARTH, R_EARTH};
 use crate::error::AstroError;
 use crate::sim::check_step_count;
 
@@ -399,6 +399,42 @@ pub fn j2_arg_periapsis_rate(coe: &ClassicalElements) -> f64 {
     1.5 * n * J2_EARTH * (R_EARTH / p).powi(2) * (2.0 - 2.5 * si * si)
 }
 
+/// The **sun-synchronous inclination** (rad) for an orbit of semi-major axis
+/// `semi_major_axis` (m) and `eccentricity` — the inclination at which the J2
+/// nodal regression [`j2_raan_rate`] exactly matches Earth's mean orbital rate
+/// about the Sun ([`crate::constants::EARTH_ORBITAL_RATE`]), so the orbit plane
+/// holds a fixed angle to the Sun and the ground track repeats at the same
+/// local solar time.
+///
+/// Inverts the secular nodal-rate condition
+/// `Ω̇ = −1.5·n·J2·(R⊕/p)²·cos i = Ω̇_sun` for `cos i`, giving
+/// `i = arccos( −Ω̇_sun / [1.5·n·J2·(R⊕/p)²] )` with `n = √(μ/a³)` and
+/// `p = a(1−e²)`. Because the required drift is prograde (eastward) the cosine
+/// is negative, so the inclination is always **retrograde** (`> 90°`) — the
+/// familiar ≈ 98° of a low-Earth sun-sync orbit.
+///
+/// Returns `None` when the elements are not a bound orbit (`a` not positive
+/// finite, `e ∉ [0, 1)`), or when the geometry cannot reach the solar rate
+/// (`|cos i| > 1`, i.e. an orbit too high for J2 to precess fast enough), where
+/// no real inclination exists.
+pub fn sun_synchronous_inclination(semi_major_axis: f64, eccentricity: f64) -> Option<f64> {
+    let a = semi_major_axis;
+    if !a.is_finite() || a <= 0.0 || !(0.0..1.0).contains(&eccentricity) {
+        return None;
+    }
+    let p = a * (1.0 - eccentricity * eccentricity);
+    if !p.is_finite() || p <= 0.0 {
+        return None;
+    }
+    let n = (MU_EARTH / a.powi(3)).sqrt();
+    let denom = 1.5 * n * J2_EARTH * (R_EARTH / p).powi(2);
+    let cos_i = -EARTH_ORBITAL_RATE / denom;
+    if !cos_i.is_finite() || cos_i.abs() > 1.0 {
+        return None;
+    }
+    Some(cos_i.acos())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -541,6 +577,46 @@ mod tests {
         let deg_per_day = rate.to_degrees() * 86_400.0;
         // Sun-sync target is ~+0.986°/day; this geometry lands in range.
         assert!((deg_per_day - 0.986).abs() < 0.5, "{deg_per_day} deg/day");
+    }
+
+    #[test]
+    fn sun_synchronous_inclination_inverts_the_nodal_rate() {
+        // The inverse of the regression test above: solve for the inclination
+        // that makes the J2 nodal rate equal Earth's solar rate. A ~700 km
+        // circular LEO is the textbook sun-synchronous case at i ≈ 98.2°.
+        let a = R_EARTH + 700_000.0;
+        let i = sun_synchronous_inclination(a, 0.0).expect("700 km is sun-syncable");
+        let deg = i.to_degrees();
+        assert!((deg - 98.2).abs() < 0.5, "sun-sync inclination ≈ 98.2°, got {deg}");
+        // Sun-sync orbits are retrograde (cos i < 0 ⇒ i > 90°).
+        assert!(deg > 90.0, "must be retrograde, got {deg}");
+
+        // Round-trip: feeding that inclination back into j2_raan_rate reproduces
+        // Earth's solar rate exactly (the defining sun-synchronous condition).
+        let coe = ClassicalElements {
+            semi_major_axis: a,
+            eccentricity: 0.0,
+            inclination: i,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        assert!(
+            (j2_raan_rate(&coe) - EARTH_ORBITAL_RATE).abs() < 1e-15,
+            "nodal rate must match the solar rate"
+        );
+
+        // A higher orbit needs a more retrograde (larger) inclination.
+        let i_high =
+            sun_synchronous_inclination(R_EARTH + 1_500_000.0, 0.0).expect("1500 km syncable");
+        assert!(i_high > i, "higher orbit → larger inclination");
+
+        // Too high for J2 to precess fast enough → no real inclination exists.
+        assert!(sun_synchronous_inclination(R_EARTH + 10_000_000.0, 0.0).is_none());
+        // Non-physical inputs → None (never a NaN).
+        assert!(sun_synchronous_inclination(-1.0, 0.0).is_none());
+        assert!(sun_synchronous_inclination(f64::NAN, 0.0).is_none());
+        assert!(sun_synchronous_inclination(a, 1.5).is_none()); // unbound eccentricity
     }
 
     #[test]
