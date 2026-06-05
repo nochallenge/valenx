@@ -38,6 +38,19 @@ pub fn electrotonic_length(length_cm: f64, lambda_cm: f64) -> f64 {
     length_cm / lambda_cm
 }
 
+/// Semi-infinite cable input resistance `R_∞ = √(r_m·r_a)` in ohms — the
+/// resistance seen looking into one end of a long cylindrical fibre, from fibre
+/// diameter `d_cm` (cm), specific membrane resistance `r_m_ohm_cm2` (Ω·cm²) and
+/// axial resistivity `r_i_ohm_cm` (Ω·cm). Equivalently `R_∞ = r_a·λ`, the axial
+/// resistance per unit length `r_a = 4·R_i/(π·d²)` times the length constant λ;
+/// it falls as `d^(−3/2)`, so a thicker fibre presents a much lower input load.
+pub fn semi_infinite_input_resistance(d_cm: f64, r_m_ohm_cm2: f64, r_i_ohm_cm: f64) -> f64 {
+    // Per-unit-length membrane (Ω·cm) and axial (Ω/cm) resistances.
+    let r_m = r_m_ohm_cm2 / (std::f64::consts::PI * d_cm);
+    let r_a = 4.0 * r_i_ohm_cm / (std::f64::consts::PI * d_cm * d_cm);
+    (r_m * r_a).sqrt()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,5 +81,21 @@ mod tests {
         assert!((electrotonic_length(0.2, 0.1) - 2.0).abs() < 1e-12);
         // A compartment much shorter than λ is electrically compact (L ≪ 1).
         assert!(electrotonic_length(0.01, 0.1) < 0.2);
+    }
+
+    #[test]
+    fn semi_infinite_input_resistance_relates_to_length_constant() {
+        // d=4e-4 cm (4 µm), R_m=1e4 Ω·cm², R_i=100 Ω·cm.
+        let r_inf = semi_infinite_input_resistance(4e-4, 1e4, 100.0);
+        assert!(r_inf > 0.0 && r_inf.is_finite());
+        // R_∞ = r_a·λ — cross-check against the length constant.
+        let lambda = length_constant_cm(4e-4, 1e4, 100.0);
+        let r_a = 4.0 * 100.0 / (std::f64::consts::PI * 4e-4 * 4e-4);
+        assert!((r_inf - r_a * lambda).abs() / r_inf < 1e-9, "R_∞ = r_a·λ: {r_inf}");
+        // ~80 MΩ for this thin fibre.
+        assert!((r_inf / 1e6 - 79.6).abs() < 1.0, "R_∞ {} MΩ", r_inf / 1e6);
+        // R_∞ ∝ d^(−3/2): a 4× thicker fibre has 1/8 the input resistance.
+        let thick = semi_infinite_input_resistance(16e-4, 1e4, 100.0);
+        assert!((thick - r_inf / 8.0).abs() / r_inf < 1e-9, "d^(−3/2) scaling");
     }
 }
