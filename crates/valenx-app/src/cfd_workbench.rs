@@ -416,7 +416,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4})\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
-         peak vort  : {:.4} 1/s{vort_loc}{flow_str}\n\
+         peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}{flow_str}\n\
          circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)\n\
          wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)",
         s.case.label(),
@@ -440,6 +440,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         re_cell,
         dp,
         vorticity,
+        sol.max_q_criterion(),
         sol.circulation(),
         sol.enstrophy(),
         tau_w,
@@ -465,6 +466,9 @@ mod tests {
         // The recirculating cavity has rotation everywhere → the enstrophy
         // readout is surfaced alongside the circulation.
         assert!(s.result.contains("enstrophy"), "enstrophy in result: {}", s.result);
+        // The cavity's primary vortex is rotation-dominated → the Q-criterion
+        // readout is surfaced on the peak-vorticity line.
+        assert!(s.result.contains("Q_max"), "Q-criterion in result: {}", s.result);
         assert!(s.profile.as_ref().is_some_and(|p| p.len() == 16), "centreline profile sampled");
     }
 

@@ -535,6 +535,44 @@ impl FlowSolution {
         }
         0.5 * sum * dx * dy
     }
+
+    /// The peak **Q-criterion** `Q = ½(‖Ω‖² − ‖S‖²)` (1/s²) over the interior
+    /// cells — the standard scalar that *identifies* a vortex as a region where
+    /// rotation (the spin tensor `Ω`) outweighs strain (the rate-of-strain tensor
+    /// `S`). Where the vorticity is also large in a straight shear layer, `Q > 0`
+    /// only where the fluid genuinely swirls: a **pure shear** flow has equal
+    /// rotation and strain and gives `Q = 0`, while **solid-body rotation** at
+    /// rate `Ω` gives `Q = Ω²`. This is the workhorse vortex-identification
+    /// criterion (Hunt, Wray & Moin 1988). Uses the same interior
+    /// central-difference stencil as [`FlowSolution::max_vorticity`], now also
+    /// forming the normal strains `∂u/∂x` and `∂v/∂y`. Returns `0` for a grid too
+    /// small for an interior difference (`nx < 3` or `ny < 3`), or when no cell is
+    /// rotation-dominated (`Q ≤ 0` everywhere — no vortex).
+    pub fn max_q_criterion(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let two_dx = 2.0 * self.grid.dx();
+        let two_dy = 2.0 * self.grid.dy();
+        let mut peak = 0.0_f64;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let du_dx = (self.u_at_cell(i + 1, j) - self.u_at_cell(i - 1, j)) / two_dx;
+                let dv_dy = (self.v_at_cell(i, j + 1) - self.v_at_cell(i, j - 1)) / two_dy;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                // ‖Ω‖² = ½ω² with ω = ∂v/∂x − ∂u/∂y; ‖S‖² from the symmetric part.
+                let omega = dv_dx - du_dy;
+                let s_off = 0.5 * (du_dy + dv_dx);
+                let omega_norm_sq = 0.5 * omega * omega;
+                let s_norm_sq = du_dx * du_dx + dv_dy * dv_dy + 2.0 * s_off * s_off;
+                let q = 0.5 * (omega_norm_sq - s_norm_sq);
+                peak = peak.max(q);
+            }
+        }
+        peak
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1522,6 +1560,79 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.enstrophy(), 0.0);
+    }
+
+    #[test]
+    fn max_q_criterion_tells_a_vortex_from_a_shear_layer() {
+        // The whole point of Q: vorticity alone cannot tell a vortex from a
+        // straight shear layer — Q can. Solid-body rotation u=−Ωy, v=Ωx has
+        // Q=Ω² everywhere; a pure shear u=γy, v=0 (with the *same* nonzero
+        // vorticity and enstrophy) has Q=0 — it is not a vortex.
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // --- solid-body rotation at rate Ω ---
+        let omega = 2.0_f64;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy; // u_at_cell = −Ω·y
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let mut v = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx; // v_at_cell = Ω·x
+            for j in 0..=grid.ny {
+                v.set(i, j, val);
+            }
+        }
+        let rot = FlowSolution {
+            grid,
+            u,
+            v,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let q_rot = rot.max_q_criterion();
+        assert!((q_rot - omega * omega).abs() < 1e-9, "rotation Q {q_rot} vs Ω² {}", omega * omega);
+
+        // --- pure shear u = γ·y, v = 0 ---
+        let gamma = 3.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(), // v ≡ 0
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // Q rejects the shear (Q=0) even though its enstrophy is clearly non-zero.
+        assert!(shear.max_q_criterion() < 1e-9, "shear Q {}", shear.max_q_criterion());
+        assert!(shear.enstrophy() > 0.0, "the shear still carries enstrophy");
+
+        // A grid too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.max_q_criterion(), 0.0);
     }
 
     #[test]
