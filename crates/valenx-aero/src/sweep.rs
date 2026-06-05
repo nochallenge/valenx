@@ -159,6 +159,28 @@ impl PolarCurve {
         }
         None
     }
+
+    /// The induced-drag factor `k` in the parabolic drag polar
+    /// `Cd = Cd₀ + k·Cl²` — the least-squares slope of `Cd` against `Cl²` over
+    /// the sweep. A larger `k` means drag climbs faster with lift (lower span
+    /// efficiency). Returns `0` for fewer than two points or a degenerate
+    /// (constant-`Cl²`) fit.
+    pub fn induced_drag_factor(&self) -> f64 {
+        if self.points.len() < 2 {
+            return 0.0;
+        }
+        let n = self.points.len() as f64;
+        let sx: f64 = self.points.iter().map(|p| p.cl * p.cl).sum();
+        let sy: f64 = self.points.iter().map(|p| p.cd).sum();
+        let sxx: f64 = self.points.iter().map(|p| (p.cl * p.cl).powi(2)).sum();
+        let sxy: f64 = self.points.iter().map(|p| p.cl * p.cl * p.cd).sum();
+        let denom = n * sxx - sx * sx;
+        if denom.abs() < 1e-30 {
+            0.0
+        } else {
+            (n * sxy - sx * sy) / denom
+        }
+    }
 }
 
 /// Run an angle-of-attack sweep and assemble the lift / drag polar.
@@ -370,6 +392,29 @@ mod tests {
             ],
         };
         assert!(positive.zero_lift_angle().is_none());
+    }
+
+    #[test]
+    fn induced_drag_factor_recovers_a_parabolic_polar() {
+        // Cd = 0.02 + 0.05·Cl² exactly → the least-squares fit recovers k = 0.05.
+        let pts: Vec<PolarPoint> = [0.0, 0.5, 1.0, 1.5]
+            .iter()
+            .map(|&cl| PolarPoint {
+                alpha: 0.0,
+                cd: 0.02 + 0.05 * cl * cl,
+                cl,
+                cm: 0.0,
+                converged: true,
+            })
+            .collect();
+        let curve = PolarCurve { points: pts };
+        assert!(
+            (curve.induced_drag_factor() - 0.05).abs() < 1e-9,
+            "k = {}",
+            curve.induced_drag_factor()
+        );
+        // Too few points → 0.
+        assert_eq!(PolarCurve { points: vec![] }.induced_drag_factor(), 0.0);
     }
 
     #[test]
