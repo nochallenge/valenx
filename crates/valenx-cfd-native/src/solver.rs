@@ -678,6 +678,33 @@ impl FlowSolution {
         }
         peak
     }
+
+    /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
+    /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
+    /// formed straight from the MAC face velocities the way the projection step
+    /// measures it: `(u_{i+1,j} − u_{i,j})/dx + (v_{i,j+1} − v_{i,j})/dy`. For an
+    /// incompressible solve this is exactly the field the pressure-Poisson
+    /// equation drives to zero, so its maximum is the honest *local* convergence
+    /// check — a well-converged flow reads ≈ 0 in every cell, and a large value
+    /// pinpoints a cell where continuity is still violated. This is distinct
+    /// from [`FlowSolution::continuity_error`], which is the *global*
+    /// inlet-to-outlet mass-balance ratio rather than the worst single cell.
+    /// Returns `0` for an empty grid. Note the discrete divergence uses the
+    /// cell's own bracketing faces directly, so it is defined on every cell (no
+    /// interior-stencil restriction).
+    pub fn max_divergence(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let mut worst = 0.0_f64;
+        for j in 0..ny {
+            for i in 0..nx {
+                let du_dx = (self.u.at(i + 1, j) - self.u.at(i, j)) / dx;
+                let dv_dy = (self.v.at(i, j + 1) - self.v.at(i, j)) / dy;
+                worst = worst.max((du_dx + dv_dy).abs());
+            }
+        }
+        worst
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -2228,6 +2255,103 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.circulation(), 0.0);
+    }
+
+    #[test]
+    fn max_divergence_is_the_peak_local_continuity_residual() {
+        // A 5×5 unit grid (dx = dy = 1).
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+
+        // Uniform flow u = U, v = 0 is divergence-free → max|∇·u| = 0.
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                u.set(i, j, 4.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            uniform.max_divergence() < 1e-12,
+            "uniform flow is divergence-free: {}",
+            uniform.max_divergence()
+        );
+
+        // A pure horizontal shear u(y) = γ·y, v = 0 is also divergence-free
+        // (∂u/∂x = 0) — divergence is not vorticity.
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = 2.0 * (j as f64 + 0.5);
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            shear.max_divergence() < 1e-12,
+            "shear is divergence-free: {}",
+            shear.max_divergence()
+        );
+
+        // A pure x-expansion u(x) = a·x, v = 0 → ∂u/∂x = a in every cell, so the
+        // peak local residual is exactly a.
+        let a = 3.0;
+        let mut ue = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                ue.set(i, j, a * (i as f64) * grid.dx()); // u-face at x = i·dx
+            }
+        }
+        let expanding = FlowSolution {
+            grid,
+            u: ue,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (expanding.max_divergence() - a).abs() < 1e-9,
+            "∇·u = a = {a}, got {}",
+            expanding.max_divergence()
+        );
+
+        // |∇·u| is sign-blind: a contraction reads the same magnitude.
+        let mut uc = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                uc.set(i, j, -a * (i as f64) * grid.dx());
+            }
+        }
+        let contracting = FlowSolution {
+            grid,
+            u: uc,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (contracting.max_divergence() - a).abs() < 1e-9,
+            "|∇·u| is sign-blind"
+        );
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
