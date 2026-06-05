@@ -197,6 +197,29 @@ impl PolarCurve {
         let mean_cl2: f64 = self.points.iter().map(|p| p.cl * p.cl).sum::<f64>() / n;
         mean_cd - k * mean_cl2
     }
+
+    /// The longitudinal static-stability slope `dCm/dCl` — the least-squares
+    /// slope of the pitching-moment coefficient against the lift coefficient
+    /// over the sweep. A **negative** slope is statically stable (a lift
+    /// increase yields a nose-down restoring moment); its magnitude about the
+    /// centre of gravity is the static margin. Returns `0` for fewer than two
+    /// points or a degenerate (constant-`Cl`) fit.
+    pub fn pitch_stability_slope(&self) -> f64 {
+        if self.points.len() < 2 {
+            return 0.0;
+        }
+        let n = self.points.len() as f64;
+        let sx: f64 = self.points.iter().map(|p| p.cl).sum();
+        let sy: f64 = self.points.iter().map(|p| p.cm).sum();
+        let sxx: f64 = self.points.iter().map(|p| p.cl * p.cl).sum();
+        let sxy: f64 = self.points.iter().map(|p| p.cl * p.cm).sum();
+        let denom = n * sxx - sx * sx;
+        if denom.abs() < 1e-30 {
+            0.0
+        } else {
+            (n * sxy - sx * sy) / denom
+        }
+    }
 }
 
 /// Run an angle-of-attack sweep and assemble the lift / drag polar.
@@ -462,6 +485,31 @@ mod tests {
             PolarCurve { points: vec![] }.parasitic_drag_coefficient(),
             0.0
         );
+    }
+
+    #[test]
+    fn pitch_stability_slope_recovers_a_linear_moment_curve() {
+        // A statically stable section: Cm = 0.05 − 0.12·Cl → slope dCm/dCl = −0.12.
+        let pts: Vec<PolarPoint> = [-0.2, 0.2, 0.6, 1.0]
+            .iter()
+            .map(|&cl| PolarPoint {
+                alpha: 0.0,
+                cd: 0.02,
+                cl,
+                cm: 0.05 - 0.12 * cl,
+                converged: true,
+            })
+            .collect();
+        let curve = PolarCurve { points: pts };
+        assert!(
+            (curve.pitch_stability_slope() - (-0.12)).abs() < 1e-9,
+            "dCm/dCl = {}",
+            curve.pitch_stability_slope()
+        );
+        // A negative slope flags static stability.
+        assert!(curve.pitch_stability_slope() < 0.0);
+        // Too few points → 0.
+        assert_eq!(PolarCurve { points: vec![] }.pitch_stability_slope(), 0.0);
     }
 
     #[test]
