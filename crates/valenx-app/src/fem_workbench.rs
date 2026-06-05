@@ -385,6 +385,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                     let vm = sol.max_von_mises();
                     let max_principal = sol.max_principal_stress();
                     let min_principal = sol.min_principal_stress();
+                    let max_shear = sol.max_shear_stress();
                     let max_disp = sol.max_displacement();
                     // Factor of safety = yield strength / peak von-Mises stress.
                     let fos = if vm > 0.0 {
@@ -426,6 +427,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                          deflection ratio: {}  (span/δ)\n\
                          max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
                          max principal   : {:.4e} Pa  (min {:.4e} Pa)\n\
+                         max shear       : {:.4e} Pa  (Tresca)\n\
                          tip stiffness   : {} N/m\n\
                          strain energy   : {:.4e} J\n\
                          factor of safety: {} (σy = {:.0} MPa)",
@@ -438,6 +440,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         vm / 1e6,
                         max_principal,
                         min_principal,
+                        max_shear,
                         stiffness_str,
                         energy,
                         fos_str,
@@ -677,5 +680,7 @@ mod tests {
         // the von Mises measure. (The eigenvalue maths is validated in
         // valenx-fem; here we just confirm the readout is wired through.)
         assert!(s.result.contains("max principal"), "result: {}", s.result);
+        // The Tresca maximum shear stress is reported alongside it.
+        assert!(s.result.contains("max shear"), "result: {}", s.result);
     }
 }
