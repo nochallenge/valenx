@@ -258,6 +258,26 @@ impl VibrationMode {
             0.0
         }
     }
+
+    /// This mode's **damped natural frequency** `f_d = f·√(1 − ζ²)` (Hz) under
+    /// Rayleigh damping `C = α·M + β·K` — the frequency at which the structure
+    /// *actually* rings in free decay, always at or below the undamped natural
+    /// frequency [`frequency_hz`](Self::frequency_hz) the eigen-solve returns.
+    /// The damping ratio `ζ` is this mode's
+    /// [`rayleigh_damping_ratio`](Self::rayleigh_damping_ratio) from `alpha` and
+    /// `beta`: light damping barely shifts the frequency (`ζ ≪ 1 → f_d ≈ f`),
+    /// but as `ζ → 1` the decay overwhelms the oscillation and the rung
+    /// frequency collapses to zero. Returns `0` for a zero-frequency rigid-body
+    /// mode and for a critically- or over-damped mode (`|ζ| ≥ 1`), where the
+    /// motion no longer oscillates and a damped frequency is undefined.
+    pub fn damped_natural_frequency_hz(&self, alpha: f64, beta: f64) -> f64 {
+        let zeta = self.rayleigh_damping_ratio(alpha, beta);
+        if self.frequency_hz > 0.0 && zeta.abs() < 1.0 {
+            self.frequency_hz * (1.0 - zeta * zeta).sqrt()
+        } else {
+            0.0
+        }
+    }
 }
 
 /// Result of a native modal solve: the lowest `n` modes, ascending in
@@ -943,6 +963,37 @@ mod tests {
         assert!(mode(omega_star * 0.5).rayleigh_damping_ratio(alpha, beta) > zeta_min);
         // A zero-frequency rigid-body mode → 0.
         assert_eq!(mode(0.0).rayleigh_damping_ratio(0.5, 0.001), 0.0);
+    }
+
+    #[test]
+    fn damped_natural_frequency_drops_below_the_undamped_value() {
+        use std::f64::consts::TAU;
+        let mode = |omega: f64| VibrationMode {
+            frequency_hz: omega / TAU,
+            angular_frequency: omega,
+            eigenvalue: omega * omega,
+            shape: vec![[1.0, 0.0, 0.0]],
+        };
+        // No damping (α=β=0 → ζ=0): the damped frequency equals the undamped one.
+        let m = mode(80.0);
+        assert!((m.damped_natural_frequency_hz(0.0, 0.0) - m.frequency_hz).abs() < 1e-12);
+        // Concrete: α=0.5, β=0.001, ω=10 → ζ=0.03 (the #146 worked point), so
+        // f_d = f·√(1 − 0.03²).
+        let m10 = mode(10.0);
+        let zeta = 0.03_f64;
+        let expected = m10.frequency_hz * (1.0 - zeta * zeta).sqrt();
+        assert!((m10.damped_natural_frequency_hz(0.5, 0.001) - expected).abs() < 1e-12);
+        // Underdamped: the damped frequency is strictly below the undamped one,
+        // and heavier damping pushes it lower still (while staying positive).
+        let f_light = m10.damped_natural_frequency_hz(0.5, 0.001);
+        let f_heavy = m10.damped_natural_frequency_hz(2.0, 0.001);
+        assert!(f_light < m10.frequency_hz, "damping lowers the rung frequency");
+        assert!(f_heavy < f_light, "heavier damping lowers it further");
+        assert!(f_heavy > 0.0, "still underdamped");
+        // Critically / over-damped (|ζ| ≥ 1): no oscillation → 0. ω=1, α=3 → ζ=1.5.
+        assert_eq!(mode(1.0).damped_natural_frequency_hz(3.0, 0.0), 0.0);
+        // A zero-frequency rigid-body mode → 0.
+        assert_eq!(mode(0.0).damped_natural_frequency_hz(0.5, 0.001), 0.0);
     }
 
     #[test]
