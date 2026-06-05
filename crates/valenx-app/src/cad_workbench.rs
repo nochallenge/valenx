@@ -619,6 +619,61 @@ fn mesh_euler_characteristic(mesh: &valenx_mesh::Mesh) -> Option<i64> {
     Some(verts.len() as i64 - edges.len() as i64 + faces)
 }
 
+/// The number of **connected shells** (disjoint solids) in a `Tri3` mesh — how
+/// many separate connected surfaces it holds, by union-find over the triangle
+/// vertices (every triangle ties its three nodes into one component). This is
+/// the count the watertight check (is the surface closed) and the Euler
+/// characteristic (which topology) leave implicit: a Cut that severed the body,
+/// or a Boolean that left two pieces, shows up here as more than one shell
+/// (`χ` is the sum over them). Returns `0` for a mesh with no triangles.
+fn mesh_shell_count(mesh: &valenx_mesh::Mesh) -> usize {
+    use std::collections::{HashMap, HashSet};
+    // Union-find (path-halving find) over the referenced vertices.
+    fn find(parent: &mut HashMap<u32, u32>, mut x: u32) -> u32 {
+        loop {
+            let p = parent.get(&x).copied().unwrap_or(x);
+            if p == x {
+                return x;
+            }
+            let gp = parent.get(&p).copied().unwrap_or(p);
+            parent.insert(x, gp); // path halving
+            x = gp;
+        }
+    }
+    let mut parent: HashMap<u32, u32> = HashMap::new();
+    let mut any = false;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            any = true;
+            for &v in tri {
+                parent.entry(v).or_insert(v);
+            }
+            let r0 = find(&mut parent, tri[0]);
+            let r1 = find(&mut parent, tri[1]);
+            let r2 = find(&mut parent, tri[2]);
+            if r1 != r0 {
+                parent.insert(r1, r0);
+            }
+            if r2 != r0 {
+                parent.insert(r2, r0);
+            }
+        }
+    }
+    if !any {
+        return 0;
+    }
+    let verts: Vec<u32> = parent.keys().copied().collect();
+    let mut roots: HashSet<u32> = HashSet::new();
+    for v in verts {
+        let r = find(&mut parent, v);
+        roots.insert(r);
+    }
+    roots.len()
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -737,8 +792,16 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
             }
         })
         .unwrap_or_default();
+    // Connected-shell count — how many disjoint solids the tessellation holds
+    // (1 for a single connected body). Dropped if tessellation failed or empty.
+    let shells_str = mesh
+        .as_ref()
+        .map(mesh_shell_count)
+        .filter(|&n| n >= 1)
+        .map(|n| format!(" · {n} shell{}", if n == 1 { "" } else { "s" }))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1714,6 +1777,46 @@ mod tests {
 
         // An empty mesh has no Euler characteristic.
         assert_eq!(mesh_euler_characteristic(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_shell_count_counts_disjoint_solids() {
+        use nalgebra::Vector3;
+        // One closed box → a single connected shell.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let closed: Vec<u32> = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0,
+            7, 3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = closed.clone();
+        mesh.element_blocks.push(block);
+        assert_eq!(mesh_shell_count(&mesh), 1, "one box is a single shell");
+
+        // Two disjoint boxes (a second block on fresh node indices) → two shells.
+        let mut two = mesh.clone();
+        let n = two.nodes.len() as u32;
+        let shifted: Vec<Vector3<f64>> =
+            mesh.nodes.iter().map(|p| *p + Vector3::new(10.0, 0.0, 0.0)).collect();
+        two.nodes.extend(shifted);
+        let mut block2 = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block2.connectivity = closed.iter().map(|&i| i + n).collect();
+        two.element_blocks.push(block2);
+        assert_eq!(mesh_shell_count(&two), 2, "two disjoint boxes are two shells");
+
+        // An empty mesh has no shells.
+        assert_eq!(mesh_shell_count(&valenx_mesh::Mesh::new("empty")), 0);
     }
 
     #[test]
