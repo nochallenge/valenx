@@ -92,6 +92,30 @@ pub fn finite_wing_lift_slope(
         / (1.0 + section_slope_per_rad / (std::f64::consts::PI * span_efficiency * aspect_ratio))
 }
 
+/// The level-flight **stall speed** `V_stall = √(2W / (ρ·S·C_Lmax))` (m/s) — the
+/// slowest speed at which a wing of area `wing_area_m2` (m²) can still carry the
+/// weight `weight_n` (N) in level flight at air density `air_density` (kg/m³),
+/// flying at its maximum lift coefficient `cl_max`. It is exactly the speed at
+/// which the available lift `L = ½ρV²S·C_Lmax` equals the weight; any slower and
+/// the wing cannot make enough lift and the aircraft stalls. This is the
+/// reference speed behind the approach and landing speeds (typically flown at
+/// `1.2–1.3·V_stall`). Returns `0` for any non-physical input (non-finite or
+/// non-positive).
+pub fn stall_speed(weight_n: f64, wing_area_m2: f64, air_density: f64, cl_max: f64) -> f64 {
+    if !weight_n.is_finite()
+        || weight_n <= 0.0
+        || !wing_area_m2.is_finite()
+        || wing_area_m2 <= 0.0
+        || !air_density.is_finite()
+        || air_density <= 0.0
+        || !cl_max.is_finite()
+        || cl_max <= 0.0
+    {
+        return 0.0;
+    }
+    (2.0 * weight_n / (air_density * wing_area_m2 * cl_max)).sqrt()
+}
+
 impl AeroReport {
     /// Build a report from a completed [`AeroResult`].
     pub fn from_result(result: &AeroResult) -> AeroReport {
@@ -493,5 +517,27 @@ mod tests {
         assert_eq!(finite_wing_lift_slope(a0, 6.0, 0.0), 0.0);
         assert_eq!(finite_wing_lift_slope(-1.0, 6.0, 1.0), 0.0);
         assert_eq!(finite_wing_lift_slope(f64::NAN, 6.0, 1.0), 0.0);
+    }
+
+    #[test]
+    fn stall_speed_is_where_lift_equals_weight_at_max_lift() {
+        // A light aircraft: 11 kN weight, 16 m² wing, sea-level air, C_Lmax = 1.5.
+        let (w, s, rho, cl_max) = (11_000.0, 16.0, 1.225, 1.5);
+        let v = stall_speed(w, s, rho, cl_max);
+        assert!((v - 27.36).abs() < 0.1, "stall speed {v} m/s");
+        // By construction the lift at V_stall and C_Lmax exactly balances the weight.
+        let lift = 0.5 * rho * v * v * s * cl_max;
+        assert!((lift - w).abs() < 1e-6, "L={lift} must equal W={w} at the stall");
+        // V_stall ∝ 1/√C_Lmax: a higher max lift coefficient lowers the stall speed.
+        let v_flapped = stall_speed(w, s, rho, 2.0 * cl_max);
+        assert!((v_flapped - v / 2.0_f64.sqrt()).abs() < 1e-9, "∝ 1/√C_Lmax");
+        // V_stall ∝ √W: four times the weight doubles the stall speed.
+        let v_heavy = stall_speed(4.0 * w, s, rho, cl_max);
+        assert!((v_heavy - 2.0 * v).abs() < 1e-9, "∝ √W");
+        // Non-physical inputs → 0.
+        assert_eq!(stall_speed(0.0, s, rho, cl_max), 0.0);
+        assert_eq!(stall_speed(w, s, rho, 0.0), 0.0);
+        assert_eq!(stall_speed(w, -1.0, rho, cl_max), 0.0);
+        assert_eq!(stall_speed(f64::NAN, s, rho, cl_max), 0.0);
     }
 }
