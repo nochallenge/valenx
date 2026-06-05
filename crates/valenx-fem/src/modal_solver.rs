@@ -239,6 +239,25 @@ impl VibrationMode {
         }
         cross * cross / denom
     }
+
+    /// This mode's damping ratio `ζ = ½·(α/ω + β·ω)` under **Rayleigh
+    /// (proportional) damping** `C = α·M + β·K`, from the mass-proportional
+    /// coefficient `alpha` and the stiffness-proportional coefficient `beta`
+    /// (the [`crate::dynamics`] `rayleigh_alpha` / `rayleigh_beta`). It is the
+    /// standard way to read a damping level off an *undamped* modal solve
+    /// without running a transient: the mass term `α/ω` damps the **low**-frequency
+    /// modes, the stiffness term `β·ω` the **high**-frequency ones, so `ζ` dips to
+    /// a minimum `√(αβ)` at `ω = √(α/β)` and rises on either side — the reason
+    /// Rayleigh damping is tuned to bracket the modes of interest. Returns `0` for
+    /// a zero-frequency rigid-body mode, where the ratio is undefined.
+    pub fn rayleigh_damping_ratio(&self, alpha: f64, beta: f64) -> f64 {
+        let omega = self.angular_frequency;
+        if omega > 0.0 {
+            0.5 * (alpha / omega + beta * omega)
+        } else {
+            0.0
+        }
+    }
 }
 
 /// Result of a native modal solve: the lowest `n` modes, ascending in
@@ -889,6 +908,41 @@ mod tests {
         assert_eq!(a.mac(&three), 0.0);
         let zero = mk(vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]);
         assert_eq!(a.mac(&zero), 0.0);
+    }
+
+    #[test]
+    fn rayleigh_damping_ratio_blends_mass_and_stiffness_damping() {
+        // A bare mode carrying only an angular frequency (the damping ratio uses
+        // only ω, not the shape).
+        let mode = |omega: f64| VibrationMode {
+            frequency_hz: omega / std::f64::consts::TAU,
+            angular_frequency: omega,
+            eigenvalue: omega * omega,
+            shape: vec![[1.0, 0.0, 0.0]],
+        };
+        // Concrete: α=0.5, β=0.001, ω=10 → ζ = ½(0.05 + 0.01) = 0.03.
+        assert!((mode(10.0).rayleigh_damping_ratio(0.5, 0.001) - 0.03).abs() < 1e-12);
+        // Mass-proportional (β=0): ζ = ½α/ω, falls with frequency.
+        assert!((mode(5.0).rayleigh_damping_ratio(1.0, 0.0) - 0.5 / 5.0).abs() < 1e-12);
+        assert!(
+            mode(5.0).rayleigh_damping_ratio(1.0, 0.0) > mode(50.0).rayleigh_damping_ratio(1.0, 0.0),
+            "mass-proportional damps low frequencies more"
+        );
+        // Stiffness-proportional (α=0): ζ = ½βω, rises with frequency.
+        assert!(
+            mode(50.0).rayleigh_damping_ratio(0.0, 0.01)
+                > mode(5.0).rayleigh_damping_ratio(0.0, 0.01),
+            "stiffness-proportional damps high frequencies more"
+        );
+        // The ratio is minimised at ω* = √(α/β), where ζ_min = √(αβ); larger off it.
+        let (alpha, beta) = (0.5_f64, 0.002_f64);
+        let omega_star = (alpha / beta).sqrt();
+        let zeta_min = mode(omega_star).rayleigh_damping_ratio(alpha, beta);
+        assert!((zeta_min - (alpha * beta).sqrt()).abs() < 1e-12, "ζ_min = √(αβ)");
+        assert!(mode(omega_star * 2.0).rayleigh_damping_ratio(alpha, beta) > zeta_min);
+        assert!(mode(omega_star * 0.5).rayleigh_damping_ratio(alpha, beta) > zeta_min);
+        // A zero-frequency rigid-body mode → 0.
+        assert_eq!(mode(0.0).rayleigh_damping_ratio(0.5, 0.001), 0.0);
     }
 
     #[test]
