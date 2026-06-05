@@ -940,6 +940,9 @@ fn draw_polar_results(ui: &mut egui::Ui, curve: &valenx_aero::PolarCurve) {
             if let Some(min) = curve.min_drag_point() {
                 kv(ui, "min drag  Cd", format!("{:.4}", min.cd));
             }
+            if let Some(a0) = curve.zero_lift_angle() {
+                kv(ui, "zero-lift α", format!("{:.1} °", model::rad_to_deg(a0)));
+            }
             kv(ui, "max lift  Cl", format!("{:.4}", curve.max_lift()));
             if let Some(stall) = curve.stall_angle() {
                 kv(
