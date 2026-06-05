@@ -25,6 +25,7 @@ pub mod aniso_field;
 pub mod bioheat;
 pub mod cable;
 pub mod cable_theory;
+pub mod chord_conductance;
 pub mod conduction;
 pub mod current_distance;
 pub mod engine;
@@ -51,6 +52,7 @@ pub use cable_theory::{
     charging_fraction, electrotonic_length, length_constant_cm, rall_equivalent_diameter,
     semi_infinite_input_resistance, time_constant_s, time_to_charge_fraction,
 };
+pub use chord_conductance::{chord_conductance_potential_mv, ConductanceChannel};
 pub use conduction::{
     myelinated_conduction_velocity, unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
 };
