@@ -506,6 +506,35 @@ impl FlowSolution {
         }
         sum * dx * dy
     }
+
+    /// The total **enstrophy** `E = ½∫ω² dA` (m²/s²) over the interior cells — the
+    /// integrated *squared* vorticity, a strictly non-negative measure of the
+    /// flow's total rotational intensity. Where the circulation `Γ = ∫ω dA` is a
+    /// signed sum in which equal-and-opposite swirl cancels, and the peak vorticity
+    /// is a single point, enstrophy accumulates rotation everywhere it occurs — the
+    /// quantity whose downscale cascade governs 2-D turbulence and that scales the
+    /// viscous dissipation in incompressible flow. Uses the same interior
+    /// central-difference vorticity stencil as [`FlowSolution::max_vorticity`],
+    /// summed with `½ω²` weighted by the cell area. Returns `0` for a grid too
+    /// small for an interior difference (`nx < 3` or `ny < 3`).
+    pub fn enstrophy(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let (two_dx, two_dy) = (2.0 * dx, 2.0 * dy);
+        let mut sum = 0.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                let omega = dv_dx - du_dy;
+                sum += omega * omega;
+            }
+        }
+        0.5 * sum * dx * dy
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1448,6 +1477,51 @@ mod tests {
             converged: true,
         };
         assert!(tiny.peak_vorticity_location().is_none());
+    }
+
+    #[test]
+    fn enstrophy_of_a_uniform_shear_matches_the_analytic_value() {
+        // A pure horizontal shear u(y) = γ·y, v = 0 has a *constant* vorticity
+        // ω = ∂v/∂x − ∂u/∂y = −γ everywhere, so its enstrophy is exactly
+        // ½·γ²·(area the interior stencil covers) = ½·γ²·(nx−2)(ny−2)·dx·dy.
+        let gamma = 2.0_f64;
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let mut u = grid.u_field(); // 6 × 5
+        for j in 0..grid.ny {
+            // u_at_cell(i, j) = γ·y_cell = γ·(j + 0.5)·dy → set every u-face on the row.
+            let val = gamma * (j as f64 + 0.5) * grid.dy();
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let interior = ((grid.nx - 2) * (grid.ny - 2)) as f64;
+        let expected = 0.5 * gamma * gamma * interior * grid.dx() * grid.dy();
+        let e = sol.enstrophy();
+        assert!((e - expected).abs() < 1e-9, "enstrophy {e} vs analytic {expected}");
+        // Strictly positive for a rotational field (and never negative — it is ½∑ω²).
+        assert!(e > 0.0);
+
+        // A grid too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.enstrophy(), 0.0);
     }
 
     #[test]
