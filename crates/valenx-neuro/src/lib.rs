@@ -62,7 +62,7 @@ pub use current_distance::{activation_radius, fit_constant, threshold_current};
 pub use engine::{recruitment_curve, stimulate, Axon, Recruitment, Scene};
 pub use error::{NeuroError, Result};
 pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};
-pub use ghk::{ghk_potential_mv, GhkIon};
+pub use ghk::{ghk_current_density, ghk_potential_mv, GhkIon};
 pub use impedance::{Cpe, ElectrodeImpedance};
 pub use ionic::{driving_force_mv, ionic_current};
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
