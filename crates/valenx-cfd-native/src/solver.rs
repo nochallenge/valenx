@@ -643,6 +643,41 @@ impl FlowSolution {
         }
         0.5 * sum * dx * dy
     }
+
+    /// The peak **strain rate** `√(2·S:S)` (1/s) over the interior cells — the
+    /// strongest local *rate of deformation*, the symmetric-tensor companion to
+    /// the [`FlowSolution::max_vorticity`] (rotation). The velocity gradient
+    /// splits into a symmetric rate-of-strain `S` and an antisymmetric spin: the
+    /// vorticity sees only the spin, this sees only `S = √(2·S_ij S_ij)`, so a
+    /// solid-body rotation (all spin, no deformation) reads zero here while a
+    /// pure strain (all deformation, no spin) reads zero on the vorticity. It is
+    /// the rate that stretches fluid elements and sets mixing, non-Newtonian
+    /// viscosity and cavitation onset. Uses the same interior central-difference
+    /// stencil as [`FlowSolution::max_q_criterion`], with
+    /// `S:S = u_x² + v_y² + ½(u_y+v_x)²`. Returns `0` for a grid too small for an
+    /// interior difference (`nx < 3` or `ny < 3`).
+    pub fn max_strain_rate(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let two_dx = 2.0 * self.grid.dx();
+        let two_dy = 2.0 * self.grid.dy();
+        let mut peak = 0.0_f64;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let du_dx = (self.u_at_cell(i + 1, j) - self.u_at_cell(i - 1, j)) / two_dx;
+                let dv_dy = (self.v_at_cell(i, j + 1) - self.v_at_cell(i, j - 1)) / two_dy;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let s_off = 0.5 * (du_dy + dv_dx);
+                // S:S = u_x² + v_y² + 2·(½(u_y+v_x))²; the strain rate is √(2·S:S).
+                let s_dd = du_dx * du_dx + dv_dy * dv_dy + 2.0 * s_off * s_off;
+                peak = peak.max((2.0 * s_dd).sqrt());
+            }
+        }
+        peak
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1855,6 +1890,77 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.palinstrophy(), 0.0);
+    }
+
+    #[test]
+    fn max_strain_rate_is_deformation_not_rotation() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // A uniform shear u = γy, v = 0: the strain rate is √(2·½γ²) = γ.
+        let gamma = 3.0_f64;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((shear.max_strain_rate() - gamma).abs() < 1e-9, "shear strain {}", shear.max_strain_rate());
+
+        // Solid-body rotation u=−Ωy, v=Ωx is *pure spin*: zero strain, even though
+        // its vorticity is 2Ω. This is the whole point — strain ≠ rotation.
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(rotation.max_strain_rate() < 1e-9, "rotation has no strain: {}", rotation.max_strain_rate());
+        assert!(
+            (rotation.max_vorticity() - 2.0 * omega).abs() < 1e-9,
+            "but it does rotate (ω = 2Ω)"
+        );
+
+        // A grid too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.max_strain_rate(), 0.0);
     }
 
     #[test]

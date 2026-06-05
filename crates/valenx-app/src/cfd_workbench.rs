@@ -416,7 +416,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4}; \u{03A6}_visc {:.3e} W/m)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
-         peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}{flow_str}\n\
+         peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}  \u{00B7}  S_max {:.4} 1/s{flow_str}\n\
          circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)  \u{00B7}  palin {:.3e} 1/s\u{00B2}  (\u{00BD}\u{222B}|\u{2207}\u{03C9}|\u{00B2}\u{00B7}dA)\n\
          wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)",
         s.case.label(),
@@ -442,6 +442,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         dp,
         vorticity,
         sol.max_q_criterion(),
+        sol.max_strain_rate(),
         sol.circulation(),
         sol.enstrophy(),
         sol.palinstrophy(),
@@ -471,6 +472,9 @@ mod tests {
         // The cavity's primary vortex is rotation-dominated → the Q-criterion
         // readout is surfaced on the peak-vorticity line.
         assert!(s.result.contains("Q_max"), "Q-criterion in result: {}", s.result);
+        // The sheared cavity flow also deforms → the peak strain-rate readout is
+        // surfaced alongside (the strain companion to peak vorticity).
+        assert!(s.result.contains("S_max"), "strain rate in result: {}", s.result);
         // The sheared cavity flow dissipates energy → the viscous-dissipation
         // readout is surfaced on the energy line.
         assert!(s.result.contains("\u{03A6}_visc"), "dissipation in result: {}", s.result);
