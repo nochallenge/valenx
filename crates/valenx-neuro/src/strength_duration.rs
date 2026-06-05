@@ -55,6 +55,33 @@ pub fn chronaxie() -> f64 {
     0.5 * (lo + hi)
 }
 
+/// The analytic Lapicque threshold amplitude `I_th(w) = I_rh·(1 + chronaxie/w)`
+/// (µA/cm²) at pulse width `width_ms`, from a measured `rheobase` and
+/// `chronaxie_ms`. This is the closed-form strength–duration hyperbola the
+/// bisection [`threshold_amplitude`] traces out — fast to evaluate at any width
+/// once the two summary parameters are known. `None` for a non-positive width.
+pub fn lapicque_threshold(rheobase: f64, chronaxie_ms: f64, width_ms: f64) -> Option<f64> {
+    if width_ms > 0.0 {
+        Some(rheobase * (1.0 + chronaxie_ms / width_ms))
+    } else {
+        None
+    }
+}
+
+/// The Weiss threshold charge `Q(w) = I_th·w = I_rh·(w + chronaxie)`
+/// (µA·ms/cm²) at pulse width `width_ms` — the charge–duration line. It rises
+/// linearly with width at slope `rheobase`, so the minimum charge
+/// `Q_min = I_rh·chronaxie` is the `w → 0` intercept: short pulses are
+/// charge-limited, long pulses current-limited. `None` for a non-positive
+/// width.
+pub fn weiss_threshold_charge(rheobase: f64, chronaxie_ms: f64, width_ms: f64) -> Option<f64> {
+    if width_ms > 0.0 {
+        Some(rheobase * (width_ms + chronaxie_ms))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,5 +122,28 @@ mod tests {
         let i_long = threshold_amplitude(5.0);
         let i_short = threshold_amplitude(0.1);
         assert!(i_short > i_long, "short pulse needs more current: {i_short} vs {i_long}");
+    }
+
+    #[test]
+    fn lapicque_and_weiss_models_match_the_textbook_relations() {
+        let i_rh = 10.0;
+        let cx = 2.0;
+        // At width = chronaxie the threshold is exactly 2·rheobase (the definition).
+        assert!((lapicque_threshold(i_rh, cx, cx).unwrap() - 2.0 * i_rh).abs() < 1e-12);
+        // A long pulse approaches the rheobase from above.
+        assert!((lapicque_threshold(i_rh, cx, 1000.0).unwrap() - i_rh).abs() < 0.05);
+        // Weiss charge is linear in width: slope = rheobase, intercept = I_rh·cx.
+        let q_min = weiss_threshold_charge(i_rh, cx, 1e-9).unwrap(); // w → 0
+        assert!((q_min - i_rh * cx).abs() < 1e-6, "Q_min {q_min}");
+        let q1 = weiss_threshold_charge(i_rh, cx, 1.0).unwrap();
+        let q2 = weiss_threshold_charge(i_rh, cx, 2.0).unwrap();
+        assert!((q2 - q1 - i_rh).abs() < 1e-12, "slope = rheobase");
+        // The two models agree: Q(w) = I_th(w)·w.
+        let w = 0.5;
+        let q = weiss_threshold_charge(i_rh, cx, w).unwrap();
+        assert!((q - lapicque_threshold(i_rh, cx, w).unwrap() * w).abs() < 1e-12);
+        // A non-positive width is undefined in both.
+        assert!(lapicque_threshold(i_rh, cx, 0.0).is_none());
+        assert!(weiss_threshold_charge(i_rh, cx, -1.0).is_none());
     }
 }
