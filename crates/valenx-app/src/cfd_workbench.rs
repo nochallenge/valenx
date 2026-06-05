@@ -375,6 +375,17 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         CfdCase::LidDrivenCavity => None,
     };
 
+    // Through-flow throughput + a global mass-continuity check (channel only;
+    // the enclosed cavity has no net inflow, so the relative error is undefined).
+    let flow_str = match s.case {
+        CfdCase::ChannelFlow => format!(
+            "\nflow rate  : {:.5} m²/s  (continuity err {:.2}%)",
+            sol.inlet_flow_rate(),
+            100.0 * sol.continuity_error()
+        ),
+        CfdCase::LidDrivenCavity => String::new(),
+    };
+
     s.result = format!(
         "case       : {}\n\
          grid       : {}×{}  ({:.3} × {:.3} m)\n\
@@ -385,7 +396,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          dynamic q  : {:.4} Pa  (½ρU²)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
-         peak vort  : {:.4} 1/s  (max rotation)",
+         peak vort  : {:.4} 1/s  (max rotation){flow_str}",
         s.case.label(),
         s.nx,
         s.ny,

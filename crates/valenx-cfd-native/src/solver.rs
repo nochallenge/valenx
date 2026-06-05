@@ -367,6 +367,40 @@ impl FlowSolution {
         }
         peak
     }
+
+    /// Net volumetric flow rate through the **inlet** (left, `x = 0`) face, per
+    /// unit depth (m²/s in 2-D): `Σ_j u(0, j)·dy`, the discrete `∫ u dy` along
+    /// the inlet. Positive for fluid entering the domain; ~0 for an enclosed
+    /// case (the lid-driven cavity).
+    pub fn inlet_flow_rate(&self) -> f64 {
+        let dy = self.grid.dy();
+        (0..self.grid.ny).map(|j| self.u.at(0, j) * dy).sum()
+    }
+
+    /// Net volumetric flow rate through the **outlet** (right, `x = lx`) face,
+    /// per unit depth (m²/s in 2-D): `Σ_j u(nx, j)·dy`. For an incompressible
+    /// steady solution it should equal [`FlowSolution::inlet_flow_rate`]; the
+    /// gap is the global continuity residual.
+    pub fn outlet_flow_rate(&self) -> f64 {
+        let dy = self.grid.dy();
+        (0..self.grid.ny)
+            .map(|j| self.u.at(self.grid.nx, j) * dy)
+            .sum()
+    }
+
+    /// Relative mass-continuity error `|Q_out − Q_in| / |Q_in|` between the
+    /// outlet and inlet volumetric flow rates — a global check that the
+    /// incompressible solver conserves mass across the domain (a well-converged
+    /// through-flow drives this toward zero). Returns `0` when there is no net
+    /// inflow (an enclosed case), where the relative measure is undefined.
+    pub fn continuity_error(&self) -> f64 {
+        let q_in = self.inlet_flow_rate();
+        if q_in.abs() < 1e-12 {
+            0.0
+        } else {
+            (self.outlet_flow_rate() - q_in).abs() / q_in.abs()
+        }
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1351,6 +1385,69 @@ mod tests {
         };
         // Cell (0,0) u = average of faces 0 and 1 = 3.
         assert!((sol.u_at_cell(0, 0) - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn flow_rate_integrates_the_inlet_and_uniform_flow_conserves_mass() {
+        // A 4×3 grid over a 4×1 channel (dy = 1/3). Every u-face = 2 (plug flow).
+        let grid = Grid::new(4, 3, 4.0, 1.0);
+        let mut u = grid.u_field(); // (nx+1) × ny = 5 × 3
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 2.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // Q = U·height = 2·1 = 2 per unit depth, identical at inlet and outlet.
+        assert!((sol.inlet_flow_rate() - 2.0).abs() < 1e-12, "Q_in {}", sol.inlet_flow_rate());
+        assert!((sol.outlet_flow_rate() - 2.0).abs() < 1e-12, "Q_out {}", sol.outlet_flow_rate());
+        // Uniform throughflow conserves mass exactly.
+        assert!(sol.continuity_error() < 1e-12, "continuity {}", sol.continuity_error());
+    }
+
+    #[test]
+    fn continuity_error_is_relative_and_safe_when_enclosed() {
+        // Inlet U = 1 over height 1 → Q_in = 1; outlet faces 10% higher.
+        let grid = Grid::new(3, 4, 3.0, 1.0);
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            u.set(0, j, 1.0); // inlet face
+            u.set(grid.nx, j, 1.1); // outlet face, +10%
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((sol.inlet_flow_rate() - 1.0).abs() < 1e-12);
+        assert!(
+            (sol.continuity_error() - 0.1).abs() < 1e-12,
+            "relative err {}",
+            sol.continuity_error()
+        );
+        // An enclosed case (no inflow) → 0, never a divide-by-zero.
+        let calm = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(calm.continuity_error(), 0.0);
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
