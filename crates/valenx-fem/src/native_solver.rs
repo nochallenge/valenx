@@ -324,17 +324,29 @@ impl NativeSolution {
             .map(|&s| max_principal_stress_voigt(s))
             .fold(f64::NEG_INFINITY, f64::max)
     }
+
+    /// Smallest principal (most compressive) stress over all nodes (Pa) — the
+    /// compressive counterpart to [`NativeSolution::max_principal_stress`].
+    /// Returns `f64::INFINITY` for an empty field.
+    pub fn min_principal_stress(&self) -> f64 {
+        self.stress
+            .iter()
+            .map(|&s| min_principal_stress_voigt(s))
+            .fold(f64::INFINITY, f64::min)
+    }
 }
 
-/// Largest principal stress (eigenvalue) of a symmetric Cauchy stress tensor in
-/// Voigt order `[σxx, σyy, σzz, σxy, σyz, σzx]`, via the closed-form
-/// trigonometric solution for a symmetric 3×3 matrix (Smith 1961).
-fn max_principal_stress_voigt(s: [f64; 6]) -> f64 {
+/// The (minimum, maximum) principal stresses (eigenvalues) of a symmetric
+/// Cauchy stress tensor in Voigt order `[σxx, σyy, σzz, σxy, σyz, σzx]`, via the
+/// closed-form trigonometric solution for a symmetric 3×3 matrix (Smith 1961).
+fn principal_extremes_voigt(s: [f64; 6]) -> (f64, f64) {
     let (sxx, syy, szz, sxy, syz, szx) = (s[0], s[1], s[2], s[3], s[4], s[5]);
     let p1 = sxy * sxy + syz * syz + szx * szx;
     if p1 <= 0.0 {
         // Already diagonal: the principals are the diagonal entries.
-        return sxx.max(syy).max(szz);
+        let lo = sxx.min(syy).min(szz);
+        let hi = sxx.max(syy).max(szz);
+        return (lo, hi);
     }
     let q = (sxx + syy + szz) / 3.0;
     let a = sxx - q;
@@ -347,8 +359,21 @@ fn max_principal_stress_voigt(s: [f64; 6]) -> f64 {
         a * (b * c - syz * syz) - sxy * (sxy * c - syz * szx) + szx * (sxy * syz - b * szx);
     let r = (det / (p * p * p) / 2.0).clamp(-1.0, 1.0);
     let phi = r.acos() / 3.0;
-    // The largest of the three eigenvalues.
-    q + 2.0 * p * phi.cos()
+    let two_thirds_pi = 2.0 * std::f64::consts::PI / 3.0;
+    // The cos(φ) branch is the largest eigenvalue; cos(φ + 2π/3) the smallest.
+    let eig_max = q + 2.0 * p * phi.cos();
+    let eig_min = q + 2.0 * p * (phi + two_thirds_pi).cos();
+    (eig_min, eig_max)
+}
+
+/// Largest principal stress (the maximum normal stress, Rankine criterion).
+fn max_principal_stress_voigt(s: [f64; 6]) -> f64 {
+    principal_extremes_voigt(s).1
+}
+
+/// Smallest principal stress (the most compressive normal stress).
+fn min_principal_stress_voigt(s: [f64; 6]) -> f64 {
+    principal_extremes_voigt(s).0
 }
 
 /// Solve a linear-static elasticity problem on a tetrahedral mesh.
@@ -1115,6 +1140,22 @@ mod tests {
         // maximum principal stress is 2 + √5 ≈ 4.236.
         let mohr = max_principal_stress_voigt([3.0, 1.0, 0.0, 2.0, 0.0, 0.0]);
         assert!((mohr - (2.0 + 5.0_f64.sqrt())).abs() < 1e-9, "Mohr max principal {mohr}");
+    }
+
+    #[test]
+    fn min_principal_stress_of_known_tensors() {
+        // Diagonal: min principal is the smallest diagonal entry.
+        assert!((min_principal_stress_voigt([10.0, 5.0, 2.0, 0.0, 0.0, 0.0]) - 2.0).abs() < 1e-9);
+        // Uniaxial tension σxx = 7 (σyy = σzz = 0): min principal = 0.
+        assert!(min_principal_stress_voigt([7.0, 0.0, 0.0, 0.0, 0.0, 0.0]).abs() < 1e-9);
+        // Hydrostatic: every principal equals the pressure.
+        assert!((min_principal_stress_voigt([4.0, 4.0, 4.0, 0.0, 0.0, 0.0]) - 4.0).abs() < 1e-9);
+        // Pure shear σxy = τ → principals τ, 0, −τ → min = −τ.
+        assert!((min_principal_stress_voigt([0.0, 0.0, 0.0, 3.0, 0.0, 0.0]) - (-3.0)).abs() < 1e-9);
+        // Mohr's circle (σxx=3, σyy=1, σxy=2): principals 2 ± √5 and 0, so the
+        // minimum principal stress is 2 − √5 ≈ −0.236.
+        let mohr = min_principal_stress_voigt([3.0, 1.0, 0.0, 2.0, 0.0, 0.0]);
+        assert!((mohr - (2.0 - 5.0_f64.sqrt())).abs() < 1e-9, "Mohr min principal {mohr}");
     }
 
     #[test]

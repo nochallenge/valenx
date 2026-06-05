@@ -384,6 +384,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                 Ok(sol) => {
                     let vm = sol.max_von_mises();
                     let max_principal = sol.max_principal_stress();
+                    let min_principal = sol.min_principal_stress();
                     let max_disp = sol.max_displacement();
                     // Factor of safety = yield strength / peak von-Mises stress.
                     let fos = if vm > 0.0 {
@@ -424,7 +425,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                          max displacement: {:.6e} m\n\
                          deflection ratio: {}  (span/δ)\n\
                          max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
-                         max principal   : {:.4e} Pa  ({:.3} MPa)\n\
+                         max principal   : {:.4e} Pa  (min {:.4e} Pa)\n\
                          tip stiffness   : {} N/m\n\
                          strain energy   : {:.4e} J\n\
                          factor of safety: {} (σy = {:.0} MPa)",
@@ -436,7 +437,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         vm,
                         vm / 1e6,
                         max_principal,
-                        max_principal / 1e6,
+                        min_principal,
                         stiffness_str,
                         energy,
                         fos_str,
