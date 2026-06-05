@@ -190,6 +190,27 @@ impl VibrationMode {
             f64::INFINITY
         }
     }
+
+    /// The axis (`0 = x, 1 = y, 2 = z`) along which this mode's motion is
+    /// largest — the axis with the greatest summed squared nodal displacement.
+    /// It labels a mode's character: for a cantilever, lateral bending shows a
+    /// transverse dominant axis while a stretching mode is dominant along the
+    /// beam axis. Returns `0` for an empty mode shape.
+    pub fn dominant_translation_axis(&self) -> usize {
+        let mut totals = [0.0_f64; 3];
+        for d in &self.shape {
+            totals[0] += d[0] * d[0];
+            totals[1] += d[1] * d[1];
+            totals[2] += d[2] * d[2];
+        }
+        let mut best = 0;
+        for axis in 1..3 {
+            if totals[axis] > totals[best] {
+                best = axis;
+            }
+        }
+        best
+    }
 }
 
 /// Result of a native modal solve: the lowest `n` modes, ascending in
@@ -773,6 +794,30 @@ mod tests {
     /// Node id of grid point `(i, j, k)` in a `structured_box_mesh`.
     fn nid(i: usize, j: usize, k: usize, nx: usize, ny: usize) -> usize {
         i + (nx + 1) * j + (nx + 1) * (ny + 1) * k
+    }
+
+    #[test]
+    fn dominant_translation_axis_picks_the_largest_component() {
+        // A mode that moves mostly along y.
+        let mode = VibrationMode {
+            frequency_hz: 1.0,
+            angular_frequency: std::f64::consts::TAU,
+            eigenvalue: std::f64::consts::TAU.powi(2),
+            shape: vec![[0.1, 0.9, 0.0], [0.2, 0.8, 0.1]],
+        };
+        assert_eq!(mode.dominant_translation_axis(), 1);
+        // One dominated by z.
+        let mode_z = VibrationMode {
+            shape: vec![[0.0, 0.1, 1.0], [0.1, 0.0, 0.9]],
+            ..mode.clone()
+        };
+        assert_eq!(mode_z.dominant_translation_axis(), 2);
+        // An empty mode shape defaults to axis 0.
+        let empty = VibrationMode {
+            shape: vec![],
+            ..mode
+        };
+        assert_eq!(empty.dominant_translation_axis(), 0);
     }
 
     #[test]
