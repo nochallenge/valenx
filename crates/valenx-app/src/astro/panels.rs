@@ -827,6 +827,11 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         "specific energy",
                         format!("{:.3} MJ/kg", orbit.specific_energy_j_per_kg / 1e6),
                     );
+                    kv(
+                        ui,
+                        "ang. momentum",
+                        format!("{:.0} km²/s", orbit.specific_angular_momentum_m2_s / 1e6),
+                    );
                 });
         });
 }
