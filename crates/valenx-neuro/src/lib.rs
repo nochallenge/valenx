@@ -47,7 +47,9 @@ pub use activating::activating_along_x;
 pub use aniso_field::{analytic_aniso_point_source_mv, AnisoTissue, Conductivity, SolvedField};
 pub use bioheat::{analytic_point_heat_k, solve_point_heat, BioheatField};
 pub use cable::{count_spikes, HhCable, HhCompartment, StimPulse};
-pub use cable_theory::{electrotonic_length, length_constant_cm, time_constant_s};
+pub use cable_theory::{
+    electrotonic_length, length_constant_cm, semi_infinite_input_resistance, time_constant_s,
+};
 pub use conduction::{
     myelinated_conduction_velocity, unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
 };
