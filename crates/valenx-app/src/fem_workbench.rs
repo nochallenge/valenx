@@ -74,6 +74,8 @@ pub struct FemWorkbenchState {
     stiffness_n_per_m: Option<f64>,
     /// Elastic strain energy `U = ½·Σ F·d` (J) from the last static run.
     strain_energy_j: Option<f64>,
+    /// Serviceability deflection ratio `L/δ` (span over tip deflection).
+    deflection_ratio: Option<f64>,
     error: Option<String>,
     plot: Option<FemPlot>,
     /// Deformed mesh + von-Mises field, pending a push to the 3-D viewport.
@@ -103,6 +105,7 @@ impl Default for FemWorkbenchState {
             mass_kg: None,
             stiffness_n_per_m: None,
             strain_energy_j: None,
+            deflection_ratio: None,
             error: None,
             plot: None,
             viz: None,
@@ -310,6 +313,17 @@ fn strain_energy_j(forces: &[NodalForce], displacement: &[[f64; 3]]) -> f64 {
         .sum::<f64>()
 }
 
+/// Serviceability deflection ratio — the span divided by the deflection, i.e.
+/// the `n` in the familiar `L/n` limit (a cantilever is typically held to
+/// `L/180`, a floor beam to `L/360`). `None` for a non-positive deflection.
+fn span_deflection_ratio(span_m: f64, deflection_m: f64) -> Option<f64> {
+    if deflection_m > 0.0 {
+        Some(span_m / deflection_m)
+    } else {
+        None
+    }
+}
+
 fn run_fem(s: &mut FemWorkbenchState) {
     s.error = None;
     s.plot = None;
@@ -319,6 +333,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
     s.mass_kg = None;
     s.stiffness_n_per_m = None;
     s.strain_energy_j = None;
+    s.deflection_ratio = None;
     let mesh = match structured_box_mesh(s.lx, s.ly, s.lz, s.nx, s.ny, s.nz) {
         Ok(m) => m,
         Err(e) => {
@@ -395,10 +410,18 @@ fn run_fem(s: &mut FemWorkbenchState) {
                     // the loaded tip DOFs.
                     let energy = strain_energy_j(&forces, &sol.displacement);
                     s.strain_energy_j = Some(energy);
+                    // Serviceability deflection ratio L/δ (span over tip deflection).
+                    let defl_ratio = span_deflection_ratio(s.lx, max_disp);
+                    s.deflection_ratio = defl_ratio;
+                    let defl_str = match defl_ratio {
+                        Some(n) => format!("L/{n:.0}"),
+                        None => "—".to_string(),
+                    };
                     s.result = format!(
                         "Linear static  ({} nodes, {} fixed)\n\
                          tip load        : {:.1} N downward\n\
                          max displacement: {:.6e} m\n\
+                         deflection ratio: {}  (span/δ)\n\
                          max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
                          tip stiffness   : {} N/m\n\
                          strain energy   : {:.4e} J\n\
@@ -407,6 +430,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         constraints.len(),
                         s.force_n,
                         max_disp,
+                        defl_str,
                         vm,
                         vm / 1e6,
                         stiffness_str,
@@ -612,5 +636,28 @@ mod tests {
         let mut bad = FemWorkbenchState { nx: 0, ..Default::default() };
         run_fem(&mut bad);
         assert!(bad.strain_energy_j.is_none(), "a failed run clears the energy");
+    }
+
+    #[test]
+    fn span_deflection_ratio_and_serviceability_readout() {
+        // The pure ratio is span / deflection (the n in L/n).
+        assert!((span_deflection_ratio(2.0, 0.01).unwrap() - 200.0).abs() < 1e-9);
+        // Non-positive deflection → no ratio.
+        assert!(span_deflection_ratio(2.0, 0.0).is_none());
+
+        // End to end: the cantilever reports a finite, positive ratio, and
+        // because δ ∝ load (linear FEM) the ratio halves when the load doubles.
+        let mut s = FemWorkbenchState {
+            solver: FemSolver::LinearStatic,
+            ..Default::default()
+        };
+        run_fem(&mut s);
+        let r1 = s.deflection_ratio.expect("static run computes a deflection ratio");
+        assert!(r1 > 0.0 && r1.is_finite());
+        assert!(s.result.contains("deflection ratio"));
+        s.force_n *= 2.0;
+        run_fem(&mut s);
+        let r2 = s.deflection_ratio.expect("ratio recomputed");
+        assert!((r2 - 0.5 * r1).abs() / r1 < 1e-6, "doubling the load halves L/δ: {r1} → {r2}");
     }
 }
