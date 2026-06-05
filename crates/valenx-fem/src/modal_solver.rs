@@ -178,6 +178,18 @@ impl VibrationMode {
             .map(|d| (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt())
             .fold(0.0, f64::max)
     }
+
+    /// Oscillation period in seconds, `T = 1/f` — how long one cycle of this
+    /// mode takes, the natural companion to the frequency for comparing
+    /// against a forcing period. A zero-frequency rigid-body mode has no
+    /// finite period and returns `f64::INFINITY`.
+    pub fn period_s(&self) -> f64 {
+        if self.frequency_hz > 0.0 {
+            1.0 / self.frequency_hz
+        } else {
+            f64::INFINITY
+        }
+    }
 }
 
 /// Result of a native modal solve: the lowest `n` modes, ascending in
@@ -761,6 +773,29 @@ mod tests {
     /// Node id of grid point `(i, j, k)` in a `structured_box_mesh`.
     fn nid(i: usize, j: usize, k: usize, nx: usize, ny: usize) -> usize {
         i + (nx + 1) * j + (nx + 1) * (ny + 1) * k
+    }
+
+    #[test]
+    fn vibration_mode_period_is_reciprocal_of_frequency() {
+        let omega = std::f64::consts::TAU * 50.0;
+        let m = VibrationMode {
+            frequency_hz: 50.0,
+            angular_frequency: omega,
+            eigenvalue: omega * omega,
+            shape: vec![[0.0, 0.0, 0.0]],
+        };
+        // T = 1/f = 20 ms.
+        assert!((m.period_s() - 0.02).abs() < 1e-12);
+        // Consistent with the angular frequency: T = 2π/ω.
+        assert!((m.period_s() - std::f64::consts::TAU / m.angular_frequency).abs() < 1e-12);
+        // A zero-frequency rigid-body mode has an infinite period.
+        let rigid = VibrationMode {
+            frequency_hz: 0.0,
+            angular_frequency: 0.0,
+            eigenvalue: 0.0,
+            shape: vec![[0.0, 0.0, 0.0]],
+        };
+        assert!(rigid.period_s().is_infinite());
     }
 
     #[test]

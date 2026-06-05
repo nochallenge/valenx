@@ -461,7 +461,12 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         constraints.len()
                     );
                     for (i, m) in sol.modes.iter().enumerate() {
-                        out.push_str(&format!("  mode {:>2}: {:>12.4} Hz\n", i + 1, m.frequency_hz));
+                        out.push_str(&format!(
+                            "  mode {:>2}: {:>12.4} Hz   (T = {:.3} ms)\n",
+                            i + 1,
+                            m.frequency_hz,
+                            m.period_s() * 1000.0,
+                        ));
                     }
                     s.result = out;
                     s.plot = Some(FemPlot::Modal(
