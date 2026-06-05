@@ -718,6 +718,40 @@ fn mesh_bounding_sphere_radius(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     Some(radius)
 }
 
+/// The **minimum normalized triangle shape quality** over every `Tri3` face —
+/// `Q = 4√3·A / (ℓ₁² + ℓ₂² + ℓ₃²)`, the triangle area over its sum of squared
+/// edge lengths, scaled so an *equilateral* triangle scores exactly `Q = 1` and
+/// a degenerate sliver scores `Q → 0`. Where every other measure here describes
+/// the *shape the mesh represents* (its volume, inertia, topology), this grades
+/// the *mesh itself*: the worst-shaped element caps interpolation accuracy and
+/// solver conditioning, so the minimum `Q` over all faces is the one number a
+/// mesher checks before handing a surface to analysis (a long, thin "sliver"
+/// triangle is the classic culprit). Returns `None` for a mesh with no
+/// non-degenerate triangles.
+fn mesh_min_triangle_quality(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let scale = 4.0 * 3.0_f64.sqrt();
+    let mut worst: Option<f64> = None;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let sum_sq_edges =
+                (b - a).norm_squared() + (c - b).norm_squared() + (a - c).norm_squared();
+            if sum_sq_edges <= 0.0 {
+                continue; // a zero-perimeter (coincident-vertex) triangle is not an element
+            }
+            let area = 0.5 * (b - a).cross(&(c - a)).norm();
+            let q = scale * area / sum_sq_edges;
+            worst = Some(worst.map_or(q, |w| w.min(q)));
+        }
+    }
+    worst
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -851,8 +885,15 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_bounding_sphere_radius)
         .map(|r| format!(" · r_enc {r:.3} u"))
         .unwrap_or_default();
+    // Worst triangle shape quality (4√3·A/Σℓ²; 1 = equilateral, →0 = sliver) —
+    // the mesh-quality gate, distinct from the shape/topology measures above.
+    let quality_str = mesh
+        .as_ref()
+        .and_then(mesh_min_triangle_quality)
+        .map(|q| format!(" · Qmin {q:.2}"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str}{quality_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1907,6 +1948,84 @@ mod tests {
         one.nodes = vec![Vector3::new(3.0, 4.0, 5.0)];
         assert_eq!(mesh_bounding_sphere_radius(&one), Some(0.0));
         assert!(mesh_bounding_sphere_radius(&valenx_mesh::Mesh::new("empty")).is_none());
+    }
+
+    #[test]
+    fn mesh_min_triangle_quality_grades_element_shape() {
+        use nalgebra::Vector3;
+        // A one-triangle mesh from three corners.
+        let tri_mesh = |a: Vector3<f64>, b: Vector3<f64>, c: Vector3<f64>| {
+            let mut mesh = valenx_mesh::Mesh::new("tri");
+            mesh.nodes = vec![a, b, c];
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = vec![0, 1, 2];
+            mesh.element_blocks.push(block);
+            mesh
+        };
+
+        // An equilateral triangle is the perfect element: Q = 1.
+        let equi = tri_mesh(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.5, 3.0_f64.sqrt() / 2.0, 0.0),
+        );
+        assert!(
+            (mesh_min_triangle_quality(&equi).unwrap() - 1.0).abs() < 1e-12,
+            "equilateral Q=1"
+        );
+
+        // A right isosceles triangle (legs 1,1) scores Q = √3/2 ≈ 0.866.
+        let right_iso = tri_mesh(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+        );
+        assert!(
+            (mesh_min_triangle_quality(&right_iso).unwrap() - 3.0_f64.sqrt() / 2.0).abs() < 1e-12,
+            "right isosceles Q=√3/2"
+        );
+
+        // The canonical 1×2×3 box: each face splits into right triangles, and the
+        // worst sits on the most-elongated (1×3) face → Q = 3√3/10 ≈ 0.5196.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut box_mesh = valenx_mesh::Mesh::new("box");
+        box_mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        box_mesh.element_blocks.push(block);
+        let qmin = mesh_min_triangle_quality(&box_mesh).expect("box has triangles");
+        assert!(
+            (qmin - 3.0 * 3.0_f64.sqrt() / 10.0).abs() < 1e-12,
+            "box Qmin = 3√3/10, got {qmin}"
+        );
+        // No element can beat the equilateral ideal, and a real face is positive.
+        assert!(qmin > 0.0 && qmin <= 1.0 + 1e-12, "0 < Qmin ≤ 1");
+
+        // A near-collinear sliver collapses toward zero quality.
+        let sliver = tri_mesh(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.5, 1e-6, 0.0),
+        );
+        assert!(
+            mesh_min_triangle_quality(&sliver).unwrap() < 1e-3,
+            "sliver Q→0"
+        );
+
+        // An empty mesh has no triangles to grade.
+        assert!(mesh_min_triangle_quality(&valenx_mesh::Mesh::new("empty")).is_none());
     }
 
     #[test]
