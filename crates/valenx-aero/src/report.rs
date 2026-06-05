@@ -126,6 +126,18 @@ impl AeroReport {
         self.cl * self.reference_area * self.dynamic_pressure
     }
 
+    /// The magnitude of the **total** aerodynamic force on the body (N) — the
+    /// vector sum of lift, drag, and side force, `√(L² + D² + S²)`. This is the
+    /// resultant load the structure must actually react; it always meets or
+    /// exceeds the largest single component because the others add in
+    /// quadrature.
+    pub fn resultant_force(&self) -> f64 {
+        let lift = self.lift_force();
+        let drag = self.drag_force();
+        let side = self.cs * self.reference_area * self.dynamic_pressure;
+        (lift * lift + drag * drag + side * side).sqrt()
+    }
+
     /// Render the report as a plain-text block — the form a CLI prints
     /// or an LLM relays.
     pub fn to_text(&self) -> String {
@@ -164,6 +176,10 @@ impl AeroReport {
         s.push_str(&format!(
             "  lift force   : {:.1} N\n",
             self.lift_force()
+        ));
+        s.push_str(&format!(
+            "  resultant F  : {:.1} N\n",
+            self.resultant_force()
         ));
         s.push_str(&format!(
             "  pressure drag: {:.0}% of total ({}% friction)\n",
@@ -297,5 +313,26 @@ mod tests {
         let expected = report.cl * report.reference_area * report.dynamic_pressure;
         assert!((report.lift_force() - expected).abs() < 1e-9);
         assert!(report.to_text().contains("lift force"));
+    }
+
+    #[test]
+    fn resultant_force_is_the_quadrature_sum_of_lift_drag_side() {
+        let body = box_body(Vector3::zeros(), Vector3::new(2.0, 1.0, 1.0));
+        let req = AeroRequest::new(20.0)
+            .with_turbulence(TurbulenceModel::KEpsilon)
+            .with_sizing(coarse())
+            .with_max_iterations(30);
+        let result = run_windtunnel(&body, &req).unwrap();
+        let report = AeroReport::from_result(&result);
+        // Resultant = √(L² + D² + S²), the quadrature sum of the three forces.
+        let side = report.cs * report.reference_area * report.dynamic_pressure;
+        let expected =
+            (report.lift_force().powi(2) + report.drag_force().powi(2) + side * side).sqrt();
+        assert!((report.resultant_force() - expected).abs() < 1e-9);
+        // It meets or exceeds every single component (quadrature, never smaller).
+        assert!(report.resultant_force() >= report.drag_force().abs() - 1e-9);
+        assert!(report.resultant_force() >= report.lift_force().abs() - 1e-9);
+        // And it surfaces in the text dump.
+        assert!(report.to_text().contains("resultant F"));
     }
 }
