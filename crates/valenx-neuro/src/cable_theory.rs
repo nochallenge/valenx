@@ -75,6 +75,23 @@ pub fn time_to_charge_fraction(fraction: f64, tau_s: f64) -> Option<f64> {
     }
 }
 
+/// Rall's 3/2-power rule — the **equivalent-cylinder** diameter for a set of
+/// daughter branches meeting at a node. Matching the cable input conductance at
+/// the branch point requires `d_eq^(3/2) = Σ dᵢ^(3/2)`, hence
+/// `d_eq = (Σ dᵢ^(3/2))^(2/3)` (all diameters in the same units). When every
+/// branch obeys this rule the whole dendritic tree collapses to one uniform
+/// cylinder, so the passive [`length_constant_cm`] / [`time_constant_s`]
+/// analysis applies to the tree as a single cable. Non-positive diameters are
+/// ignored; an empty branch list gives `0`.
+pub fn rall_equivalent_diameter(child_diameters: &[f64]) -> f64 {
+    child_diameters
+        .iter()
+        .filter(|&&d| d > 0.0)
+        .map(|&d| d.powf(1.5))
+        .sum::<f64>()
+        .powf(2.0 / 3.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +166,27 @@ mod tests {
         // 100% (or out of range) is never reached → None.
         assert!(time_to_charge_fraction(1.0, tau).is_none());
         assert!(time_to_charge_fraction(-0.1, tau).is_none());
+    }
+
+    #[test]
+    fn rall_equivalent_diameter_follows_the_three_halves_rule() {
+        // A lone branch is its own equivalent cylinder.
+        assert!((rall_equivalent_diameter(&[2.0]) - 2.0).abs() < 1e-12);
+        // Two equal d-branches → 2^(2/3)·d (≈ 1.587 d), NOT 2 d — the cross-
+        // sectional areas do not simply add.
+        let d = 1.5;
+        let eq = rall_equivalent_diameter(&[d, d]);
+        assert!(
+            (eq - 2.0_f64.powf(2.0 / 3.0) * d).abs() < 1e-12,
+            "two equal branches: {eq}"
+        );
+        // The defining identity holds for an uneven tree: d_eq^(3/2) = Σ dᵢ^(3/2).
+        let kids = [1.0, 0.8, 0.6];
+        let parent = rall_equivalent_diameter(&kids);
+        let rhs: f64 = kids.iter().map(|d| d.powf(1.5)).sum();
+        assert!((parent.powf(1.5) - rhs).abs() < 1e-12, "3/2 identity");
+        // Negative/zero diameters are ignored; an empty list gives 0.
+        assert!((rall_equivalent_diameter(&[d, -1.0, 0.0]) - d).abs() < 1e-12);
+        assert_eq!(rall_equivalent_diameter(&[]), 0.0);
     }
 }
