@@ -375,6 +375,19 @@ fn mesh_dimensions(mesh: &valenx_mesh::Mesh) -> Option<[f32; 3]> {
     Some([max[0] - min[0], max[1] - min[1], max[2] - min[2]])
 }
 
+/// Fill fraction (rectangularity): solid `volume` divided by the bounding-box
+/// volume implied by `dims`. `1.0` for a box that fills its bounding box, `~π/4`
+/// for a cylinder, `~π/6` for a sphere. `None` when the bounding box has
+/// effectively zero volume.
+fn fill_fraction(volume: f64, dims: [f32; 3]) -> Option<f64> {
+    let bbox_volume = dims[0] as f64 * dims[1] as f64 * dims[2] as f64;
+    if bbox_volume > 1e-12 {
+        Some(volume / bbox_volume)
+    } else {
+        None
+    }
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -386,15 +399,21 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let faces: usize = model.bodies.iter().map(|b| b.faces()).sum();
     let volume = total_volume(&model.bodies);
     let area = total_area(&model.bodies);
-    // Overall bounding-box size of the final model (best-effort: the bbox term
-    // is dropped from the status if tessellation fails).
-    let bbox_str = tessellate_step(&model.snapshots, model.snapshots.len(), &[])
+    // Overall bounding-box size + fill fraction of the final model (best-effort:
+    // these terms are dropped from the status if tessellation fails).
+    let dims = tessellate_step(&model.snapshots, model.snapshots.len(), &[])
         .ok()
-        .and_then(|mesh| mesh_dimensions(&mesh))
-        .map(|[dx, dy, dz]| format!(" · bbox {dx:.3}×{dy:.3}×{dz:.3} u"))
+        .and_then(|mesh| mesh_dimensions(&mesh));
+    let bbox_str = match dims {
+        Some([dx, dy, dz]) => format!(" · bbox {dx:.3}×{dy:.3}×{dz:.3} u"),
+        None => String::new(),
+    };
+    let fill_str = dims
+        .and_then(|d| fill_fraction(volume, d))
+        .map(|f| format!(" · fill {:.0}%", 100.0 * f))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {area:.4} u²{bbox_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {area:.4} u²{bbox_str}{fill_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1046,6 +1065,23 @@ mod tests {
         assert!((dims[2] - 4.0).abs() < 1e-4, "dz {}", dims[2]);
         // The status line surfaces the bounding box.
         assert!(status.contains("bbox"), "status should report bbox: {status}");
+        // A box fills its bounding box exactly — fill fraction ≈ 1.0.
+        let vol = total_volume(history.last().expect("snapshot"));
+        let fill = fill_fraction(vol, dims).expect("fill");
+        assert!((fill - 1.0).abs() < 1e-3, "box should fill its bbox: {fill}");
+        assert!(status.contains("fill"), "status should report fill: {status}");
+    }
+
+    #[test]
+    fn fill_fraction_relates_volume_to_bounding_box() {
+        // A box exactly fills its bounding box.
+        assert!((fill_fraction(24.0, [2.0, 3.0, 4.0]).unwrap() - 1.0).abs() < 1e-12);
+        // A unit-radius cylinder of height 2 (V = 2π) inside its 2×2×2 bounding
+        // box fills exactly π/4.
+        let cyl = fill_fraction(2.0 * std::f64::consts::PI, [2.0, 2.0, 2.0]).unwrap();
+        assert!((cyl - std::f64::consts::FRAC_PI_4).abs() < 1e-12);
+        // A degenerate (zero-volume) bounding box yields None, not a divide by zero.
+        assert!(fill_fraction(1.0, [0.0, 1.0, 1.0]).is_none());
     }
 
     #[test]
