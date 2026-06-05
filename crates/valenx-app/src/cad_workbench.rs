@@ -447,6 +447,49 @@ fn mesh_centroid(mesh: &valenx_mesh::Mesh) -> Option<[f64; 3]> {
     }
 }
 
+/// The radius of gyration about the centroid `k = √⟨r²⟩` (model units) of a
+/// closed `Tri3` mesh — the root-mean-square distance of the solid's volume from
+/// its centre of mass, the length that sets its rotational inertia (`I ≈ m·k²`).
+/// Extends the divergence-theorem volume integral with the diagonal second
+/// moments `∫x²,∫y²,∫z² dV` (tetrahedron covariance `(V/20)(Σpᵢ² + (Σpᵢ)²)` per
+/// axis), then removes the centroid offset via the parallel-axis theorem. For an
+/// `Lx×Ly×Lz` box it is `√((Lx²+Ly²+Lz²)/12)`. `None` for a mesh with no
+/// triangles or effectively zero signed volume.
+fn mesh_radius_of_gyration(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut total_vol = 0.0;
+    let mut first = [0.0_f64; 3]; // ∫x, ∫y, ∫z dV (→ centroid)
+    let mut second = [0.0_f64; 3]; // ∫x², ∫y², ∫z² dV about the origin
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let v = a.dot(&b.cross(&c)) / 6.0;
+            total_vol += v;
+            first[0] += v * (a.x + b.x + c.x) / 4.0;
+            first[1] += v * (a.y + b.y + c.y) / 4.0;
+            first[2] += v * (a.z + b.z + c.z) / 4.0;
+            second[0] +=
+                v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + (a.x + b.x + c.x).powi(2));
+            second[1] +=
+                v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + (a.y + b.y + c.y).powi(2));
+            second[2] +=
+                v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + (a.z + b.z + c.z).powi(2));
+        }
+    }
+    if total_vol.abs() < 1e-12 {
+        return None;
+    }
+    // ⟨r²⟩ about the origin, minus the centroid offset (parallel-axis theorem).
+    let mean_sq_origin = (second[0] + second[1] + second[2]) / total_vol;
+    let centroid_sq =
+        (first[0] * first[0] + first[1] * first[1] + first[2] * first[2]) / (total_vol * total_vol);
+    Some((mean_sq_origin - centroid_sq).max(0.0).sqrt())
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -525,8 +568,14 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_centroid)
         .map(|c| format!(" · centroid ({:.2}, {:.2}, {:.2}) u", c[0], c[1], c[2]))
         .unwrap_or_default();
+    // Radius of gyration about the centroid — the inertia length scale (I ≈ m·k²).
+    let gyration_str = mesh
+        .as_ref()
+        .and_then(mesh_radius_of_gyration)
+        .map(|k| format!(" · k_gyr {k:.3} u"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1315,6 +1364,40 @@ mod tests {
         assert!((c[2] - 1.0).abs() < 1e-9, "cz {} (should be h/4 = 1.0)", c[2]);
         // An empty mesh has no centroid.
         assert!(mesh_centroid(&valenx_mesh::Mesh::new("empty")).is_none());
+    }
+
+    #[test]
+    fn mesh_radius_of_gyration_matches_the_box_formula() {
+        use nalgebra::Vector3;
+        // A 1×2×3 box (corner at the origin). The radius of gyration about the
+        // centroid is √((Lx²+Ly²+Lz²)/12), independent of where the box sits.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, // −z bottom
+            4, 5, 6, 4, 6, 7, // +z top
+            0, 1, 5, 0, 5, 4, // −y front
+            3, 7, 6, 3, 6, 2, // +y back
+            0, 4, 7, 0, 7, 3, // −x left
+            1, 2, 6, 1, 6, 5, // +x right
+        ];
+        mesh.element_blocks.push(block);
+        let k = mesh_radius_of_gyration(&mesh).expect("closed box");
+        let expected = ((lx * lx + ly * ly + lz * lz) / 12.0_f64).sqrt();
+        assert!((k - expected).abs() < 1e-9, "k {k} vs {expected}");
+        // An empty mesh has no radius of gyration.
+        assert!(mesh_radius_of_gyration(&valenx_mesh::Mesh::new("empty")).is_none());
     }
 
     #[test]
