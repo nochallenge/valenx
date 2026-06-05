@@ -844,6 +844,11 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
             );
             kv(
                 ui,
+                "resultant force",
+                model::format_force_n(report.resultant_force()),
+            );
+            kv(
+                ui,
                 "dynamic pressure  q∞",
                 model::format_pressure_pa(report.dynamic_pressure),
             );
