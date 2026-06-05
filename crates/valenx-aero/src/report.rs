@@ -27,6 +27,9 @@ pub struct AeroReport {
     pub drag_area: f64,
     /// The free-stream dynamic pressure `q∞ = ½·ρ·U∞²` (Pa) of the run.
     pub dynamic_pressure: f64,
+    /// The reference area `A` (m²) the coefficients normalise against — the
+    /// body's frontal silhouette.
+    pub reference_area: f64,
     /// The free-stream Reynolds number.
     pub reynolds_number: f64,
     /// The free-stream Mach number.
@@ -98,6 +101,7 @@ impl AeroReport {
             pressure_drag_fraction,
             drag_area: result.drag_area(),
             dynamic_pressure: result.tunnel.dynamic_pressure(),
+            reference_area: result.tunnel.reference_area,
             reynolds_number: result.reynolds_number,
             mach_number: result.mach_number,
             converged: result.converged,
@@ -114,6 +118,12 @@ impl AeroReport {
     /// the body actually feels, the number behind the dimensionless `cd`.
     pub fn drag_force(&self) -> f64 {
         self.drag_area * self.dynamic_pressure
+    }
+
+    /// The aerodynamic lift **force** in newtons — `F_L = Cl·A·q∞` (negative
+    /// when the body makes downforce). The dimensional companion to `cl`.
+    pub fn lift_force(&self) -> f64 {
+        self.cl * self.reference_area * self.dynamic_pressure
     }
 
     /// Render the report as a plain-text block — the form a CLI prints
@@ -146,6 +156,14 @@ impl AeroReport {
         s.push_str(&format!(
             "  drag force   : {:.1} N\n",
             self.drag_force()
+        ));
+        s.push_str(&format!(
+            "  ref area A   : {:.4} m^2\n",
+            self.reference_area
+        ));
+        s.push_str(&format!(
+            "  lift force   : {:.1} N\n",
+            self.lift_force()
         ));
         s.push_str(&format!(
             "  pressure drag: {:.0}% of total ({}% friction)\n",
@@ -260,5 +278,24 @@ mod tests {
         assert!((report.drag_force() - expected).abs() < 1e-9);
         // It also surfaces in the text dump.
         assert!(report.to_text().contains("drag force"));
+    }
+
+    #[test]
+    fn report_carries_reference_area_and_lift_force() {
+        let body = box_body(Vector3::zeros(), Vector3::new(2.0, 1.0, 1.0));
+        let req = AeroRequest::new(20.0)
+            .with_turbulence(TurbulenceModel::KEpsilon)
+            .with_sizing(coarse())
+            .with_max_iterations(30);
+        let result = run_windtunnel(&body, &req).unwrap();
+        let report = AeroReport::from_result(&result);
+        // Reference area is the tunnel's, and drag_area = Cd·A stays consistent.
+        assert_eq!(report.reference_area, result.tunnel.reference_area);
+        assert!(report.reference_area > 0.0, "a real body has frontal area");
+        assert!((report.drag_area - report.cd * report.reference_area).abs() < 1e-9);
+        // Lift force is Cl·A·q (definitional), and it surfaces in the text dump.
+        let expected = report.cl * report.reference_area * report.dynamic_pressure;
+        assert!((report.lift_force() - expected).abs() < 1e-9);
+        assert!(report.to_text().contains("lift force"));
     }
 }

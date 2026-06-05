@@ -829,8 +829,18 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
             );
             kv(
                 ui,
+                "reference area  A",
+                format!("{:.4} m²", report.reference_area),
+            );
+            kv(
+                ui,
                 "drag force  Cd·A·q",
                 model::format_force_n(report.drag_force()),
+            );
+            kv(
+                ui,
+                "lift force  Cl·A·q",
+                model::format_force_n(report.lift_force()),
             );
             kv(
                 ui,
