@@ -607,6 +607,42 @@ impl FlowSolution {
         }
         2.0 * dynamic_viscosity * sum * dx * dy
     }
+
+    /// The total **palinstrophy** `P = ½∫|∇ω|² dA` (s⁻²) over the doubly-interior
+    /// cells — the integrated squared *gradient* of vorticity. It completes the
+    /// 2-D-turbulence cascade trio (kinetic energy → enstrophy → palinstrophy):
+    /// where the enstrophy `½∫ω²` measures how much rotation there is, the
+    /// palinstrophy measures how *finely structured* it is, and it sets the rate
+    /// at which viscosity destroys enstrophy. Because it sees the gradient, a flow
+    /// with strong but *uniform* vorticity (a plain shear layer) has large
+    /// enstrophy yet zero palinstrophy. Forms `ω = ∂v/∂x − ∂u/∂y` at each interior
+    /// cell with the same central-difference stencil as
+    /// [`FlowSolution::max_vorticity`], then central-differences `ω` itself for
+    /// `∇ω`. Returns `0` for a grid too small for a doubly-interior difference
+    /// (`nx < 5` or `ny < 5`).
+    pub fn palinstrophy(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 5 || ny < 5 {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let (two_dx, two_dy) = (2.0 * dx, 2.0 * dy);
+        // Vorticity at an interior cell (1 ≤ i ≤ nx−2, 1 ≤ j ≤ ny−2).
+        let vort = |i: usize, j: usize| -> f64 {
+            let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+            let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+            dv_dx - du_dy
+        };
+        let mut sum = 0.0;
+        for j in 2..ny - 2 {
+            for i in 2..nx - 2 {
+                let dw_dx = (vort(i + 1, j) - vort(i - 1, j)) / two_dx;
+                let dw_dy = (vort(i, j + 1) - vort(i, j - 1)) / two_dy;
+                sum += dw_dx * dw_dx + dw_dy * dw_dy;
+            }
+        }
+        0.5 * sum * dx * dy
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1751,6 +1787,74 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.viscous_dissipation(mu), 0.0);
+    }
+
+    #[test]
+    fn palinstrophy_of_a_quadratic_shear_matches_the_analytic_value() {
+        // A quadratic shear u = ½γy², v = 0 has ω = −∂u/∂y = −γy (linear), so
+        // ∇ω = (0, −γ) is constant and the palinstrophy is exactly
+        // ½γ²·(area the doubly-interior stencil covers) = ½γ²·(nx−4)(ny−4)·dx·dy.
+        let gamma = 2.0_f64;
+        let grid = Grid::new(7, 7, 7.0, 7.0); // dx = dy = 1
+        let dy = grid.dy();
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            // u_at_cell(i, j) = ½γ·y_cell² with y_cell = (j + 0.5)·dy.
+            let y = (j as f64 + 0.5) * dy;
+            let val = 0.5 * gamma * y * y;
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let interior = ((grid.nx - 4) * (grid.ny - 4)) as f64;
+        let expected = 0.5 * gamma * gamma * interior * grid.dx() * grid.dy();
+        let p = sol.palinstrophy();
+        assert!((p - expected).abs() < 1e-9, "palinstrophy {p} vs analytic {expected}");
+        assert!(p > 0.0, "a graded shear has positive palinstrophy");
+
+        // The discriminator vs enstrophy: a *uniform* shear u = γy has constant
+        // vorticity ω = −γ, so ∇ω = 0 and the palinstrophy vanishes — even though
+        // the enstrophy is large. Palinstrophy sees the gradient, not the magnitude.
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(uniform.palinstrophy() < 1e-9, "uniform shear → ∇ω=0 → 0, got {}", uniform.palinstrophy());
+        assert!(uniform.enstrophy() > 0.0, "but the uniform shear still has enstrophy");
+
+        // A grid too small for a doubly-interior difference → 0.
+        let tg = Grid::new(4, 4, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.palinstrophy(), 0.0);
     }
 
     #[test]
