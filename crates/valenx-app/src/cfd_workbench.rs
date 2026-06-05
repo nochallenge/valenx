@@ -321,6 +321,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
             max_speed = max_speed.max(sol.speed_at_cell(i, j));
         }
     }
+    let mean_speed = sol.mean_speed();
     let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
     let regime = flow_regime(re, s.case);
     let q = dynamic_pressure(s.density, s.speed);
@@ -345,7 +346,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          Reynolds   : {:.1}  ({})\n\
          iterations : {} {}\n\
          residual   : {:.3e}\n\
-         max |u|    : {:.5} m/s\n\
+         max |u|    : {:.5} m/s  (mean {:.5})\n\
          dynamic q  : {:.4} Pa  (½ρU²)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)",
@@ -364,6 +365,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         },
         sol.residual,
         max_speed,
+        mean_speed,
         q,
         re_cell,
         dp,
