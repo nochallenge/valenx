@@ -190,6 +190,8 @@ pub struct CadWorkbenchState {
     /// Per-body visibility for the final body set (multi-body). Empty = all
     /// visible; `body_visible[i] == false` hides body i in the viewport.
     body_visible: Vec<bool>,
+    /// Material density (mass per unit volume) — drives the mass readout.
+    density: f64,
 }
 
 impl Default for CadWorkbenchState {
@@ -211,6 +213,7 @@ impl Default for CadWorkbenchState {
             history: None,
             scrub: 1,
             body_visible: Vec::new(),
+            density: 1.0,
         }
     }
 }
@@ -399,6 +402,8 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let faces: usize = model.bodies.iter().map(|b| b.faces()).sum();
     let volume = total_volume(&model.bodies);
     let area = total_area(&model.bodies);
+    // Mass = density × solid volume (model mass units).
+    let mass = s.density * volume;
     // Overall bounding-box size + fill fraction of the final model (best-effort:
     // these terms are dropped from the status if tessellation fails).
     let dims = tessellate_step(&model.snapshots, model.snapshots.len(), &[])
@@ -413,7 +418,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|f| format!(" · fill {:.0}%", 100.0 * f))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {area:.4} u²{bbox_str}{fill_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{bbox_str}{fill_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -531,6 +536,21 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     if ui.button("+ parameter").clicked() {
                         s.params.push((String::new(), String::new()));
                     }
+
+                    // ---- Material: density → mass readout ----
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.label("Material density").on_hover_text(
+                            "Mass per unit volume; the rebuild status shows \
+                             mass = density × solid volume.",
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut s.density)
+                                .speed(0.1)
+                                .range(0.0..=1.0e9)
+                                .suffix(" /u³"),
+                        );
+                    });
 
                     // ---- Sketch: parameter-driven circle radius ----
                     ui.add_space(6.0);
@@ -1082,6 +1102,24 @@ mod tests {
         assert!((cyl - std::f64::consts::FRAC_PI_4).abs() < 1e-12);
         // A degenerate (zero-volume) bounding box yields None, not a divide by zero.
         assert!(fill_fraction(1.0, [0.0, 1.0, 1.0]).is_none());
+    }
+
+    #[test]
+    fn rebuild_reports_mass_from_density_and_volume() {
+        // A 2×3×4 box (volume 24) at density 2.5 → mass 60.
+        let mut bx = UiStep::base(Op::New, FeatureKind::Box);
+        bx.dx = "2".into();
+        bx.dy = "3".into();
+        bx.dz = "4".into();
+        let s = CadWorkbenchState {
+            steps: vec![bx],
+            density: 2.5,
+            ..CadWorkbenchState::default()
+        };
+        let (_history, status) = rebuild_tree(&s).expect("box rebuilds");
+        // mass = density × volume = 2.5 × 24 = 60.
+        assert!(status.contains("mass"), "status should report mass: {status}");
+        assert!(status.contains("60.0000 mass"), "mass = 2.5×24 = 60: {status}");
     }
 
     #[test]
