@@ -404,6 +404,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         CfdCase::LidDrivenCavity => String::new(),
     };
 
+    // Wall shear stress τ_w = μ·(∂u/∂y)|_wall = ρν·(wall shear rate), bottom wall.
+    let tau_w = s.density * s.viscosity * sol.bottom_wall_shear_rate();
     s.result = format!(
         "case       : {}\n\
          grid       : {}×{}  ({:.3} × {:.3} m)\n\
@@ -414,7 +416,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4})\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
-         peak vort  : {:.4} 1/s{vort_loc}{flow_str}",
+         peak vort  : {:.4} 1/s{vort_loc}{flow_str}\n\
+         wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)",
         s.case.label(),
         s.nx,
         s.ny,
@@ -436,6 +439,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         re_cell,
         dp,
         vorticity,
+        tau_w,
     );
 }
 
