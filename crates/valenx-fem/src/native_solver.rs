@@ -349,6 +349,31 @@ impl NativeSolution {
             })
             .fold(0.0, f64::max)
     }
+
+    /// Stress triaxiality `T = σ_m / σ_vm` (mean stress over von Mises stress)
+    /// at the node of peak von Mises stress — the site where ductile failure
+    /// initiates. Triaxiality sets the ductile-fracture mode: `1/3` in uniaxial
+    /// tension, `2/3` in equibiaxial tension, larger under hydrostatic tension
+    /// (void growth, brittle-like), negative under net compression. Returns `0`
+    /// for an empty solution or an unstressed body (zero peak von Mises).
+    pub fn peak_triaxiality(&self) -> f64 {
+        let Some((idx, &peak)) = self
+            .von_mises
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+        else {
+            return 0.0;
+        };
+        if peak <= 1e-12 {
+            return 0.0;
+        }
+        match self.stress.get(idx) {
+            // Mean (hydrostatic) stress = trace/3, divided by the von Mises peak.
+            Some(s) => (s[0] + s[1] + s[2]) / 3.0 / peak,
+            None => 0.0,
+        }
+    }
 }
 
 /// The (minimum, maximum) principal stresses (eigenvalues) of a symmetric
@@ -1192,6 +1217,51 @@ mod tests {
             stress: vec![],
         };
         assert_eq!(empty.max_shear_stress(), 0.0);
+    }
+
+    #[test]
+    fn peak_triaxiality_matches_textbook_uniaxial_and_biaxial_values() {
+        let sigma = 200.0e6;
+        // Uniaxial tension: σ_vm = σ, σ_m = σ/3 → T = 1/3.
+        let uni = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![sigma],
+            stress: vec![[sigma, 0.0, 0.0, 0.0, 0.0, 0.0]],
+        };
+        assert!(
+            (uni.peak_triaxiality() - 1.0 / 3.0).abs() < 1e-9,
+            "uniaxial {}",
+            uni.peak_triaxiality()
+        );
+        // Equibiaxial tension (σxx = σyy = σ): σ_vm = σ, σ_m = 2σ/3 → T = 2/3.
+        let bi = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![sigma],
+            stress: vec![[sigma, sigma, 0.0, 0.0, 0.0, 0.0]],
+        };
+        assert!(
+            (bi.peak_triaxiality() - 2.0 / 3.0).abs() < 1e-9,
+            "equibiaxial {}",
+            bi.peak_triaxiality()
+        );
+        // Evaluated at the PEAK von Mises node: a low-stress uniaxial node is
+        // ignored in favour of the high-stress equibiaxial node.
+        let mixed = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![0.1 * sigma, sigma],
+            stress: vec![
+                [0.1 * sigma, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [sigma, sigma, 0.0, 0.0, 0.0, 0.0],
+            ],
+        };
+        assert!((mixed.peak_triaxiality() - 2.0 / 3.0).abs() < 1e-9, "peak-node");
+        // Empty / unstressed → 0, never a divide-by-zero.
+        let empty = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![],
+            stress: vec![],
+        };
+        assert_eq!(empty.peak_triaxiality(), 0.0);
     }
 
     #[test]

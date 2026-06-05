@@ -386,6 +386,8 @@ fn run_fem(s: &mut FemWorkbenchState) {
                     let max_principal = sol.max_principal_stress();
                     let min_principal = sol.min_principal_stress();
                     let max_shear = sol.max_shear_stress();
+                    // Stress triaxiality σ_m/σ_vm at the peak-von-Mises node.
+                    let triax = sol.peak_triaxiality();
                     let max_disp = sol.max_displacement();
                     // Factor of safety = yield strength / peak von-Mises stress.
                     let fos = if vm > 0.0 {
@@ -425,7 +427,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                          tip load        : {:.1} N downward\n\
                          max displacement: {:.6e} m\n\
                          deflection ratio: {}  (span/δ)\n\
-                         max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
+                         max von Mises   : {:.4e} Pa  ({:.3} MPa, triax {:.2})\n\
                          max principal   : {:.4e} Pa  (min {:.4e} Pa)\n\
                          max shear       : {:.4e} Pa  (Tresca)\n\
                          tip stiffness   : {} N/m\n\
@@ -438,6 +440,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         defl_str,
                         vm,
                         vm / 1e6,
+                        triax,
                         max_principal,
                         min_principal,
                         max_shear,
