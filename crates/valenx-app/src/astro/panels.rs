@@ -822,6 +822,11 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     kv(ui, "perigee speed", model::format_delta_v(orbit.perigee_speed_ms));
                     kv(ui, "apogee speed", model::format_delta_v(orbit.apogee_speed_ms));
                     kv(ui, "orbital period", model::format_duration(orbit.period_s));
+                    kv(
+                        ui,
+                        "specific energy",
+                        format!("{:.3} MJ/kg", orbit.specific_energy_j_per_kg / 1e6),
+                    );
                 });
         });
 }
