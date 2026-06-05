@@ -314,6 +314,19 @@ impl NativeSolution {
         self.von_mises.iter().copied().fold(0.0, f64::max)
     }
 
+    /// Mean nodal von Mises stress over the field — the typical stress level, as
+    /// opposed to the peak that [`NativeSolution::max_von_mises`] reveals. Their
+    /// ratio (peak / mean) is the stress-concentration factor `Kt`: ~1 for a
+    /// uniform field, larger where stress crowds into a notch or fixed root.
+    /// Returns `0` for an empty field.
+    pub fn mean_von_mises(&self) -> f64 {
+        if self.von_mises.is_empty() {
+            0.0
+        } else {
+            self.von_mises.iter().sum::<f64>() / self.von_mises.len() as f64
+        }
+    }
+
     /// Largest principal (maximum normal) stress over all nodes (Pa) — the
     /// Rankine / maximum-normal-stress measure for brittle failure, the tensile
     /// counterpart to the von Mises (ductile) stress. Returns
@@ -1291,6 +1304,25 @@ mod tests {
             stress: vec![],
         };
         assert_eq!(empty.peak_von_mises_index(), None);
+    }
+
+    #[test]
+    fn mean_von_mises_is_the_nodal_average_and_gives_a_concentration_factor() {
+        let sol = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![2.0e6, 4.0e6, 6.0e6],
+            stress: vec![],
+        };
+        assert!((sol.mean_von_mises() - 4.0e6).abs() < 1e-3, "{}", sol.mean_von_mises());
+        // Stress-concentration factor Kt = peak/mean = 6/4 = 1.5 here.
+        assert!((sol.max_von_mises() / sol.mean_von_mises() - 1.5).abs() < 1e-9);
+        // Empty field → 0 (no divide-by-zero).
+        let empty = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![],
+            stress: vec![],
+        };
+        assert_eq!(empty.mean_von_mises(), 0.0);
     }
 
     #[test]
