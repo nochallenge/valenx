@@ -75,6 +75,44 @@ impl ClassicalElements {
         p / (1.0 + self.eccentricity * nu.cos())
     }
 
+    /// Solve **Kepler's equation** `M = E − e·sin E` for the eccentric anomaly
+    /// `E` (rad) given the mean anomaly `mean_anomaly` `M` (rad), by
+    /// Newton–Raphson iteration.
+    ///
+    /// This is the keystone of propagating an orbit *in time*: the mean anomaly
+    /// `M = n·(t − t_p)` advances uniformly with time, but the geometry needs
+    /// the eccentric anomaly `E`, and the link `M = E − e·sin E` is
+    /// transcendental — it has no closed form and must be inverted numerically.
+    /// With `E` in hand,
+    /// [`true_anomaly_from_eccentric`](Self::true_anomaly_from_eccentric) gives
+    /// `ν` and [`radius_at_true_anomaly`](Self::radius_at_true_anomaly) gives
+    /// `r`, completing the `time → M → E → ν → r` chain. Newton's step
+    /// `E ← E − (E − e·sin E − M)/(1 − e·cos E)` converges quadratically from the
+    /// seed `E₀ = M + e·sin M`; the derivative `1 − e·cos E ≥ 1 − e > 0` never
+    /// vanishes for a closed orbit, so the iteration is unconditionally stable.
+    ///
+    /// `M = 0` and `M = π` are fixed points (`E = 0`, `E = π`, where `sin E = 0`);
+    /// a circular orbit (`e = 0`) collapses Kepler's equation to `E = M`.
+    /// Defined for closed orbits (`0 ≤ e < 1`); a hyperbolic eccentricity
+    /// (`e ≥ 1`), which needs the *hyperbolic* Kepler equation
+    /// `M = e·sinh F − F`, or any non-finite `M`, yields `NaN`.
+    pub fn eccentric_anomaly_from_mean(&self, mean_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if !(0.0..1.0).contains(&e) || !mean_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        let m = mean_anomaly;
+        let mut ecc = m + e * m.sin(); // standard initial seed
+        for _ in 0..64 {
+            let delta = (ecc - e * ecc.sin() - m) / (1.0 - e * ecc.cos());
+            ecc -= delta;
+            if delta.abs() < 1e-14 {
+                break;
+            }
+        }
+        ecc
+    }
+
     /// True anomaly `ν` (rad) from the **eccentric anomaly** `E` (rad) via the
     /// half-angle relation `ν = 2·atan2(√(1+e)·sin(E/2), √(1−e)·cos(E/2))`.
     ///
@@ -527,6 +565,92 @@ mod tests {
         for nu in [0.0, 1.0, PI, 2.5] {
             assert!((circ.radius_at_true_anomaly(nu) - a).abs() < 1e-6, "circular r at {nu}");
         }
+    }
+
+    #[test]
+    fn true_anomaly_from_eccentric_inverts_keplers_geometry() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.5,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let e = coe.eccentricity;
+        // Apsides are fixed points: E=0 → ν=0, E=π → ν=π.
+        assert!(coe.true_anomaly_from_eccentric(0.0).abs() < 1e-12, "E=0 → ν=0");
+        assert!((coe.true_anomaly_from_eccentric(PI) - PI).abs() < 1e-12, "E=π → ν=π");
+        // Worked point e=0.5, E=π/2 → ν=2π/3, cross-checked against the standard
+        // cos ν = (cos E − e)/(1 − e·cos E) = −0.5.
+        let nu = coe.true_anomaly_from_eccentric(PI / 2.0);
+        assert!((nu - 2.0 * PI / 3.0).abs() < 1e-12, "e=0.5, E=π/2 → ν=2π/3, got {nu}");
+        assert!((nu.cos() + 0.5).abs() < 1e-12, "cos ν = −0.5 cross-check");
+        // Agrees with the closed cos-form at arbitrary E, stays in [0,2π), and
+        // shares E's quadrant (same sign of sine).
+        for ea in [0.3_f64, 1.0, 2.0, 3.0, 4.5, 6.0] {
+            let nu = coe.true_anomaly_from_eccentric(ea);
+            let cos_nu = (ea.cos() - e) / (1.0 - e * ea.cos());
+            assert!((nu.cos() - cos_nu).abs() < 1e-9, "cos ν at E={ea}");
+            assert!((0.0..TAU).contains(&nu), "ν in [0,2π) at E={ea}: {nu}");
+            assert!(nu.sin() * ea.sin() >= 0.0, "ν shares E's quadrant at E={ea}");
+        }
+        // A circular orbit collapses the map to ν = E.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for ea in [0.0_f64, 0.5, PI / 2.0, PI, 4.0, 5.5] {
+            assert!((circ.true_anomaly_from_eccentric(ea) - ea).abs() < 1e-12, "circular ν=E at {ea}");
+        }
+    }
+
+    #[test]
+    fn eccentric_anomaly_from_mean_solves_keplers_equation() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.3,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let e = coe.eccentricity;
+        // The returned E satisfies Kepler's equation M = E − e·sin E to tight tol.
+        for m in [0.1_f64, 1.0, 2.5, 4.0, 5.9] {
+            let ea = coe.eccentric_anomaly_from_mean(m);
+            assert!((ea - e * ea.sin() - m).abs() < 1e-12, "Kepler residual at M={m}");
+        }
+        // Apsides are fixed points: M=0 → E=0, M=π → E=π (sin E = 0 there).
+        assert!(coe.eccentric_anomaly_from_mean(0.0).abs() < 1e-12, "M=0 → E=0");
+        assert!((coe.eccentric_anomaly_from_mean(PI) - PI).abs() < 1e-12, "M=π → E=π");
+        // A circular orbit (e=0) collapses Kepler's equation to E = M.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for m in [0.0_f64, 0.7, PI, 4.2] {
+            assert!((circ.eccentric_anomaly_from_mean(m) - m).abs() < 1e-12, "circular E=M at {m}");
+        }
+        // Round-trips with the forward map M = E − e·sin E even at high eccentricity.
+        let ecc = ClassicalElements { eccentricity: 0.9, ..coe };
+        for e_true in [0.2_f64, 1.5, 3.0, 5.0] {
+            let m = e_true - 0.9 * e_true.sin();
+            assert!(
+                (ecc.eccentric_anomaly_from_mean(m) - e_true).abs() < 1e-10,
+                "round trip E={e_true}"
+            );
+        }
+        // Closes the position-from-time chain: M → E → ν → r is finite, r > 0,
+        // and the radius lies between perigee and apogee.
+        let ea = coe.eccentric_anomaly_from_mean(1.0);
+        let nu = coe.true_anomaly_from_eccentric(ea);
+        let r = coe.radius_at_true_anomaly(nu);
+        assert!(ea.is_finite() && nu.is_finite() && r.is_finite() && r > 0.0, "chain finite r>0");
+        assert!(
+            r >= coe.periapsis_radius() - 1.0 && r <= coe.apoapsis_radius() + 1.0,
+            "r in [r_p, r_a]: {r}"
+        );
+        // Out of domain: a hyperbolic eccentricity and a non-finite M → NaN.
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert!(hyp.eccentric_anomaly_from_mean(1.0).is_nan(), "e≥1 → NaN");
+        assert!(coe.eccentric_anomaly_from_mean(f64::NAN).is_nan(), "NaN M → NaN");
     }
 
     #[test]
