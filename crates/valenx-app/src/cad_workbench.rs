@@ -674,6 +674,50 @@ fn mesh_shell_count(mesh: &valenx_mesh::Mesh) -> usize {
     roots.len()
 }
 
+/// The radius of the **minimal enclosing sphere** (model units) of the mesh
+/// vertices, by **Ritter's two-pass algorithm**. Unlike the axis-aligned
+/// bounding box, the enclosing sphere is *orientation-independent* — the single
+/// tightest sphere that contains the whole part — which is why it is the
+/// standard bound for broad-phase collision tests and view-frustum culling.
+/// Ritter seeds the sphere on the most-separated vertex pair, then grows it
+/// minimally to swallow any outlier; the result is within a few percent of the
+/// true minimum (and never smaller). For the 8 corners of an `Lx×Ly×Lz` box it
+/// is exactly the half space-diagonal `½√(Lx²+Ly²+Lz²)`. `None` for a mesh with
+/// no vertices.
+fn mesh_bounding_sphere_radius(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let pts = &mesh.nodes;
+    if pts.is_empty() {
+        return None;
+    }
+    // The vertex farthest from `q` (squared distance, to avoid the sqrt).
+    let farthest = |q: nalgebra::Vector3<f64>| -> nalgebra::Vector3<f64> {
+        pts.iter()
+            .copied()
+            .max_by(|a, b| {
+                (a - q)
+                    .norm_squared()
+                    .partial_cmp(&(b - q).norm_squared())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(q)
+    };
+    // Pass 1: seed on the most-separated pair found by the two farthest-point hops.
+    let y = farthest(pts[0]);
+    let z = farthest(y);
+    let mut centre = (y + z) / 2.0;
+    let mut radius = (y - z).norm() / 2.0;
+    // Pass 2: grow the sphere just enough to cover any vertex left outside.
+    for &p in pts {
+        let d = (p - centre).norm();
+        if d > radius {
+            // Shift the centre toward `p` by (d−r)/2 (old radius), then update r.
+            centre += (p - centre) * ((d - radius) / (2.0 * d));
+            radius = (radius + d) / 2.0;
+        }
+    }
+    Some(radius)
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -800,8 +844,15 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .filter(|&n| n >= 1)
         .map(|n| format!(" · {n} shell{}", if n == 1 { "" } else { "s" }))
         .unwrap_or_default();
+    // Minimal enclosing-sphere radius (Ritter) — the orientation-independent
+    // tightest sphere around the part, the broad-phase culling/collision bound.
+    let encl_str = mesh
+        .as_ref()
+        .and_then(mesh_bounding_sphere_radius)
+        .map(|r| format!(" · r_enc {r:.3} u"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1817,6 +1868,45 @@ mod tests {
 
         // An empty mesh has no shells.
         assert_eq!(mesh_shell_count(&valenx_mesh::Mesh::new("empty")), 0);
+    }
+
+    #[test]
+    fn mesh_bounding_sphere_radius_is_the_half_space_diagonal_of_a_box() {
+        use nalgebra::Vector3;
+        // The minimal enclosing sphere of a box's 8 corners is centred at the box
+        // centre with radius = half the space diagonal ½√(Lx²+Ly²+Lz²).
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let corners = [
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = corners.to_vec();
+        let r = mesh_bounding_sphere_radius(&mesh).expect("box has vertices");
+        let expected = 0.5 * (lx * lx + ly * ly + lz * lz).sqrt();
+        assert!((r - expected).abs() < 1e-9, "radius {r} vs {expected}");
+
+        // Translating the part leaves the enclosing radius unchanged.
+        let mut shifted = mesh.clone();
+        for n in &mut shifted.nodes {
+            *n += Vector3::new(10.0, -5.0, 7.0);
+        }
+        assert!(
+            (mesh_bounding_sphere_radius(&shifted).unwrap() - expected).abs() < 1e-9,
+            "translation-invariant"
+        );
+
+        // A degenerate or empty point set: one vertex → radius 0; no vertices → None.
+        let mut one = valenx_mesh::Mesh::new("one");
+        one.nodes = vec![Vector3::new(3.0, 4.0, 5.0)];
+        assert_eq!(mesh_bounding_sphere_radius(&one), Some(0.0));
+        assert!(mesh_bounding_sphere_radius(&valenx_mesh::Mesh::new("empty")).is_none());
     }
 
     #[test]
