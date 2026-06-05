@@ -862,6 +862,11 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
             kv(ui, "Mach number", format!("{:.3}", report.mach_number));
             kv(
                 ui,
+                "P-G factor",
+                format!("{:.3}", report.prandtl_glauert_factor()),
+            );
+            kv(
+                ui,
                 "convergence",
                 if report.converged {
                     format!("converged · {} iters", report.iterations)

@@ -48,6 +48,20 @@ pub struct AeroReport {
     pub caveats: Vec<String>,
 }
 
+/// The Prandtl–Glauert compressibility factor `1/√(1 − M²)` at Mach `mach` — the
+/// subsonic correction that scales a thin-body's incompressible aerodynamic
+/// coefficients toward their compressible values (`Cl ≈ Cl_incompressible ·
+/// factor`). It is `1` at `M = 0` and grows toward `M = 1`, where the linearised
+/// theory diverges; valid only for `0 ≤ M < 1`. Returns `0` outside that range
+/// (sonic / supersonic / non-finite), where the correction does not apply.
+pub fn prandtl_glauert_factor(mach: f64) -> f64 {
+    if mach.is_finite() && (0.0..1.0).contains(&mach) {
+        1.0 / (1.0 - mach * mach).sqrt()
+    } else {
+        0.0
+    }
+}
+
 impl AeroReport {
     /// Build a report from a completed [`AeroResult`].
     pub fn from_result(result: &AeroResult) -> AeroReport {
@@ -158,6 +172,15 @@ impl AeroReport {
         self.cd.atan2(self.cl)
     }
 
+    /// The Prandtl–Glauert compressibility factor at this run's Mach number —
+    /// the subsonic correction that scales incompressible coefficients toward
+    /// their compressible values (`Cl ≈ Cl_incompressible · factor`). See the
+    /// free [`prandtl_glauert_factor`]; `1` at low speed, growing toward `M = 1`,
+    /// `0` once sonic/supersonic (the linearised correction breaks down).
+    pub fn prandtl_glauert_factor(&self) -> f64 {
+        prandtl_glauert_factor(self.mach_number)
+    }
+
     /// Render the report as a plain-text block — the form a CLI prints
     /// or an LLM relays.
     pub fn to_text(&self) -> String {
@@ -168,6 +191,10 @@ impl AeroReport {
             self.reynolds_number
         ));
         s.push_str(&format!("  Mach number     : {:.3}\n", self.mach_number));
+        s.push_str(&format!(
+            "  P-G factor      : {:.3}  (1/\u{221A}(1\u{2212}M\u{00B2}))\n",
+            self.prandtl_glauert_factor()
+        ));
         s.push_str(&format!(
             "  converged       : {} ({} iterations, residual {:.2e})\n",
             self.converged, self.iterations, self.residual
@@ -396,5 +423,21 @@ mod tests {
         }
         // It surfaces in the text dump.
         assert!(report.to_text().contains("glide angle"));
+    }
+
+    #[test]
+    fn prandtl_glauert_factor_matches_textbook_values() {
+        // M = 0 → no compressibility correction.
+        assert!((prandtl_glauert_factor(0.0) - 1.0).abs() < 1e-12);
+        // M = 0.6 → 1/√(1−0.36) = 1/0.8 = 1.25.
+        assert!((prandtl_glauert_factor(0.6) - 1.25).abs() < 1e-12);
+        // M = 0.8 → 1/√(1−0.64) = 1/0.6 ≈ 1.6667.
+        assert!((prandtl_glauert_factor(0.8) - 1.0 / 0.6).abs() < 1e-12);
+        // It rises monotonically through the subsonic range.
+        assert!(prandtl_glauert_factor(0.7) > prandtl_glauert_factor(0.3));
+        // Sonic / supersonic / out-of-range → 0 (the correction breaks down).
+        assert_eq!(prandtl_glauert_factor(1.0), 0.0);
+        assert_eq!(prandtl_glauert_factor(1.5), 0.0);
+        assert_eq!(prandtl_glauert_factor(-0.1), 0.0);
     }
 }
