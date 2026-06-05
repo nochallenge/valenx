@@ -490,6 +490,32 @@ fn mesh_radius_of_gyration(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     Some((mean_sq_origin - centroid_sq).max(0.0).sqrt())
 }
 
+/// Whether a `Tri3` surface mesh is **watertight** (a closed 2-manifold) — every
+/// triangle edge is shared by *exactly two* triangles, so the surface bounds a
+/// solid with no holes or cracks. This is the printability / validity gate a
+/// slicer applies before it can decide what is "inside": an open edge (count 1)
+/// is a boundary hole and a non-manifold edge (count ≥ 3) is a self-intersection
+/// or T-junction. Edges are counted undirected via a sorted `(min, max)`
+/// node-index key, so triangle winding is ignored. Returns `false` for a mesh
+/// with no triangles.
+fn mesh_is_watertight(mesh: &valenx_mesh::Mesh) -> bool {
+    let mut edges: std::collections::HashMap<(u32, u32), u32> = std::collections::HashMap::new();
+    let mut any = false;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            any = true;
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                let key = if i <= j { (i, j) } else { (j, i) };
+                *edges.entry(key).or_insert(0) += 1;
+            }
+        }
+    }
+    any && edges.values().all(|&c| c == 2)
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -574,8 +600,20 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_radius_of_gyration)
         .map(|k| format!(" · k_gyr {k:.3} u"))
         .unwrap_or_default();
+    // Watertightness — a closed 2-manifold (every edge shared by exactly two
+    // triangles) is the "is this a printable solid" gate. Dropped if tessellation failed.
+    let watertight_str = mesh
+        .as_ref()
+        .map(|m| {
+            if mesh_is_watertight(m) {
+                " · watertight \u{2713}"
+            } else {
+                " · OPEN \u{2717}"
+            }
+        })
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{watertight_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1398,6 +1436,50 @@ mod tests {
         assert!((k - expected).abs() < 1e-9, "k {k} vs {expected}");
         // An empty mesh has no radius of gyration.
         assert!(mesh_radius_of_gyration(&valenx_mesh::Mesh::new("empty")).is_none());
+    }
+
+    #[test]
+    fn mesh_is_watertight_distinguishes_a_closed_box_from_an_open_one() {
+        use nalgebra::Vector3;
+        // The same closed 1×2×3 box: 12 triangles, every edge shared by exactly two.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let closed = vec![
+            0, 2, 1, 0, 3, 2, // −z bottom
+            4, 5, 6, 4, 6, 7, // +z top
+            0, 1, 5, 0, 5, 4, // −y front
+            3, 7, 6, 3, 6, 2, // +y back
+            0, 4, 7, 0, 7, 3, // −x left
+            1, 2, 6, 1, 6, 5, // +x right
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = closed.clone();
+        mesh.element_blocks.push(block);
+        assert!(mesh_is_watertight(&mesh), "a closed box is watertight");
+
+        // Drop one triangle (the last) → its three edges now belong to a single
+        // triangle each, so the surface has a hole and is no longer watertight.
+        let mut open = mesh.clone();
+        open.element_blocks[0]
+            .connectivity
+            .truncate(closed.len() - 3);
+        assert!(
+            !mesh_is_watertight(&open),
+            "a box missing a face triangle is open"
+        );
+
+        // An empty mesh (no triangles) is not watertight.
+        assert!(!mesh_is_watertight(&valenx_mesh::Mesh::new("empty")));
     }
 
     #[test]
