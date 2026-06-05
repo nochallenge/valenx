@@ -138,6 +138,18 @@ impl AeroReport {
         (lift * lift + drag * drag + side * side).sqrt()
     }
 
+    /// The lift-to-drag ratio `L/D = Cl / Cd` at this operating point — the
+    /// single headline aerodynamic-efficiency number (in unpowered flight, the
+    /// glide ratio: horizontal distance travelled per unit height lost). Returns
+    /// `0` when the drag is non-positive.
+    pub fn lift_to_drag(&self) -> f64 {
+        if self.cd > 1e-9 {
+            self.cl / self.cd
+        } else {
+            0.0
+        }
+    }
+
     /// Render the report as a plain-text block — the form a CLI prints
     /// or an LLM relays.
     pub fn to_text(&self) -> String {
@@ -157,6 +169,7 @@ impl AeroReport {
         s.push_str(&format!("  lift      Cl : {:+.4}\n", self.cl));
         s.push_str(&format!("  side      Cs : {:+.4}\n", self.cs));
         s.push_str(&format!("  pitch Cm     : {:+.4}\n", self.cm));
+        s.push_str(&format!("  lift/drag L/D: {:+.3}\n", self.lift_to_drag()));
         s.push_str(&format!(
             "  drag area CdA: {:.4} m^2\n",
             self.drag_area
@@ -334,5 +347,21 @@ mod tests {
         assert!(report.resultant_force() >= report.lift_force().abs() - 1e-9);
         // And it surfaces in the text dump.
         assert!(report.to_text().contains("resultant F"));
+    }
+
+    #[test]
+    fn lift_to_drag_is_the_coefficient_ratio() {
+        let body = box_body(Vector3::zeros(), Vector3::new(2.0, 1.0, 1.0));
+        let req = AeroRequest::new(20.0)
+            .with_turbulence(TurbulenceModel::KEpsilon)
+            .with_sizing(coarse())
+            .with_max_iterations(30);
+        let result = run_windtunnel(&body, &req).unwrap();
+        let report = AeroReport::from_result(&result);
+        // L/D · Cd = Cl identically (the definitional ratio), and it is finite.
+        assert!((report.lift_to_drag() * report.cd - report.cl).abs() < 1e-9);
+        assert!(report.lift_to_drag().is_finite());
+        // It surfaces in the text dump.
+        assert!(report.to_text().contains("L/D"));
     }
 }
