@@ -334,6 +334,21 @@ impl NativeSolution {
             .map(|&s| min_principal_stress_voigt(s))
             .fold(f64::INFINITY, f64::min)
     }
+
+    /// Maximum shear stress over all nodes (Pa) — `(σ₁ − σ₃)/2` evaluated per
+    /// node, the Tresca / maximum-shear-stress measure (the conservative
+    /// ductile-yield criterion alongside von Mises). Computed per node so the
+    /// peak is a true point value, not the global principal range. Returns `0`
+    /// for an empty field.
+    pub fn max_shear_stress(&self) -> f64 {
+        self.stress
+            .iter()
+            .map(|&s| {
+                let (lo, hi) = principal_extremes_voigt(s);
+                0.5 * (hi - lo)
+            })
+            .fold(0.0, f64::max)
+    }
 }
 
 /// The (minimum, maximum) principal stresses (eigenvalues) of a symmetric
@@ -1156,6 +1171,27 @@ mod tests {
         // minimum principal stress is 2 − √5 ≈ −0.236.
         let mohr = min_principal_stress_voigt([3.0, 1.0, 0.0, 2.0, 0.0, 0.0]);
         assert!((mohr - (2.0 - 5.0_f64.sqrt())).abs() < 1e-9, "Mohr min principal {mohr}");
+    }
+
+    #[test]
+    fn max_shear_stress_is_the_peak_half_principal_range() {
+        let sol = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![],
+            stress: vec![
+                [10.0, 0.0, 0.0, 0.0, 0.0, 0.0], // uniaxial 10 → max shear 5
+                [0.0, 0.0, 0.0, 4.0, 0.0, 0.0],  // pure shear 4 → max shear 4
+            ],
+        };
+        // The peak per-node (σ₁ − σ₃)/2 is 5 (from the uniaxial node).
+        assert!((sol.max_shear_stress() - 5.0).abs() < 1e-9, "{}", sol.max_shear_stress());
+        // An empty field yields zero.
+        let empty = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![],
+            stress: vec![],
+        };
+        assert_eq!(empty.max_shear_stress(), 0.0);
     }
 
     #[test]
