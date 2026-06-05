@@ -368,6 +368,13 @@ fn total_area(bodies: &[valenx_cad::Solid]) -> f64 {
         .sum()
 }
 
+/// Overall bounding-box dimensions `[dx, dy, dz]` (model units) of a mesh, from
+/// its axis-aligned min/max corner. `None` for an empty mesh.
+fn mesh_dimensions(mesh: &valenx_mesh::Mesh) -> Option<[f32; 3]> {
+    let (min, max) = crate::mesh_loader::mesh_bounding_box(mesh)?;
+    Some([max[0] - min[0], max[1] - min[1], max[2] - min[2]])
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -379,8 +386,15 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let faces: usize = model.bodies.iter().map(|b| b.faces()).sum();
     let volume = total_volume(&model.bodies);
     let area = total_area(&model.bodies);
+    // Overall bounding-box size of the final model (best-effort: the bbox term
+    // is dropped from the status if tessellation fails).
+    let bbox_str = tessellate_step(&model.snapshots, model.snapshots.len(), &[])
+        .ok()
+        .and_then(|mesh| mesh_dimensions(&mesh))
+        .map(|[dx, dy, dz]| format!(" · bbox {dx:.3}×{dy:.3}×{dz:.3} u"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {area:.4} u² · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {area:.4} u²{bbox_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1011,6 +1025,27 @@ mod tests {
         assert!((a - 52.0).abs() < 1e-6, "2×3×4 box area should be 52, got {a}");
         // The status line surfaces the area in square model units.
         assert!(status.contains("u²"), "status should report area: {status}");
+    }
+
+    #[test]
+    fn rebuild_reports_bounding_box_dimensions() {
+        // A 2×3×4 box — flat faces ⇒ exact tessellated extents.
+        let mut bx = UiStep::base(Op::New, FeatureKind::Box);
+        bx.dx = "2".into();
+        bx.dy = "3".into();
+        bx.dz = "4".into();
+        let s = CadWorkbenchState {
+            steps: vec![bx],
+            ..CadWorkbenchState::default()
+        };
+        let (history, status) = rebuild_tree(&s).expect("box rebuilds");
+        let mesh = tessellate_step(&history, history.len(), &[]).expect("tessellate");
+        let dims = mesh_dimensions(&mesh).expect("non-empty mesh");
+        assert!((dims[0] - 2.0).abs() < 1e-4, "dx {}", dims[0]);
+        assert!((dims[1] - 3.0).abs() < 1e-4, "dy {}", dims[1]);
+        assert!((dims[2] - 4.0).abs() < 1e-4, "dz {}", dims[2]);
+        // The status line surfaces the bounding box.
+        assert!(status.contains("bbox"), "status should report bbox: {status}");
     }
 
     #[test]
