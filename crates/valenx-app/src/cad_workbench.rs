@@ -586,6 +586,39 @@ fn mesh_is_watertight(mesh: &valenx_mesh::Mesh) -> bool {
     any && edges.values().all(|&c| c == 2)
 }
 
+/// The **Euler characteristic** `χ = V − E + F` of a `Tri3` surface mesh — `V`
+/// the distinct *referenced* vertices, `E` the distinct undirected edges, `F`
+/// the triangles. This is the fundamental topological invariant of the surface:
+/// a closed genus-`g` orientable surface has `χ = 2 − 2g`, so a sphere or box
+/// gives `χ = 2` (genus 0), a torus `χ = 0` (genus 1), and every extra handle
+/// drops `χ` by 2. Unlike the geometric and mass measures it is invariant to any
+/// bending or scaling — it sees only the connectivity — and so reports *which*
+/// topology the watertight check has merely confirmed is closed. `None` for a
+/// mesh with no triangles.
+fn mesh_euler_characteristic(mesh: &valenx_mesh::Mesh) -> Option<i64> {
+    let mut verts: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    let mut edges: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    let mut faces = 0_i64;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            faces += 1;
+            for &v in tri {
+                verts.insert(v);
+            }
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                edges.insert(if i <= j { (i, j) } else { (j, i) });
+            }
+        }
+    }
+    if faces == 0 {
+        return None;
+    }
+    Some(verts.len() as i64 - edges.len() as i64 + faces)
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -689,8 +722,23 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
             }
         })
         .unwrap_or_default();
+    // Euler characteristic χ = V−E+F (and genus for a closed orientable surface)
+    // — the topology the watertight flag has confirmed is closed.
+    let euler_str = mesh
+        .as_ref()
+        .and_then(mesh_euler_characteristic)
+        .map(|chi| {
+            // genus g = (2−χ)/2 is meaningful only for a single closed orientable
+            // surface (χ ≤ 2, even); a multi-shell model (χ > 2) just shows χ.
+            if chi <= 2 && chi % 2 == 0 {
+                format!(" · χ {chi} (genus {})", (2 - chi) / 2)
+            } else {
+                format!(" · χ {chi}")
+            }
+        })
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1609,6 +1657,63 @@ mod tests {
 
         // An empty mesh (no triangles) is not watertight.
         assert!(!mesh_is_watertight(&valenx_mesh::Mesh::new("empty")));
+    }
+
+    #[test]
+    fn mesh_euler_characteristic_distinguishes_closed_from_open_topology() {
+        use nalgebra::Vector3;
+        // The closed 1×2×3 box: 8 vertices, 18 edges, 12 triangles →
+        // χ = 8 − 18 + 12 = 2 (genus 0, the topology of a sphere).
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let closed: Vec<u32> = vec![
+            0, 2, 1, 0, 3, 2, // −z
+            4, 5, 6, 4, 6, 7, // +z
+            0, 1, 5, 0, 5, 4, // −y
+            3, 7, 6, 3, 6, 2, // +y
+            0, 4, 7, 0, 7, 3, // −x
+            1, 2, 6, 1, 6, 5, // +x
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = closed.clone();
+        mesh.element_blocks.push(block);
+        assert_eq!(
+            mesh_euler_characteristic(&mesh),
+            Some(2),
+            "closed box: χ = 2 (genus 0)"
+        );
+
+        // Drop one triangle → an open surface: its vertices and edges survive on
+        // the neighbouring faces, so only F drops by 1 → χ = 8 − 18 + 11 = 1.
+        let mut open = mesh.clone();
+        open.element_blocks[0]
+            .connectivity
+            .truncate(closed.len() - 3);
+        assert_eq!(mesh_euler_characteristic(&open), Some(1), "box minus a face: χ = 1");
+
+        // Two disjoint boxes → χ is additive over components: 2 + 2 = 4.
+        let mut two = mesh.clone();
+        let n = two.nodes.len() as u32;
+        let shifted: Vec<Vector3<f64>> =
+            mesh.nodes.iter().map(|p| *p + Vector3::new(10.0, 0.0, 0.0)).collect();
+        two.nodes.extend(shifted);
+        let mut block2 = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block2.connectivity = closed.iter().map(|&i| i + n).collect();
+        two.element_blocks.push(block2);
+        assert_eq!(mesh_euler_characteristic(&two), Some(4), "two disjoint boxes: χ = 4");
+
+        // An empty mesh has no Euler characteristic.
+        assert_eq!(mesh_euler_characteristic(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
