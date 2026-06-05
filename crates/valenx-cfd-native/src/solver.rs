@@ -304,6 +304,29 @@ impl FlowSolution {
         let v = self.v_at_cell(i, j);
         (u * u + v * v).sqrt()
     }
+
+    /// Static-pressure range `Δp = p_max − p_min` (Pa) over the field — the
+    /// total pressure variation. Gauge-independent (a difference), so it is
+    /// meaningful despite the arbitrary absolute level: for channel flow it is
+    /// essentially the streamwise pressure drop driving the throughflow; for
+    /// the lid-driven cavity it is the swing that sustains the recirculation.
+    /// Returns `0` for an empty grid.
+    pub fn pressure_range(&self) -> f64 {
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                let p = self.pressure.at(i, j);
+                lo = lo.min(p);
+                hi = hi.max(p);
+            }
+        }
+        if hi >= lo {
+            hi - lo
+        } else {
+            0.0
+        }
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1134,6 +1157,35 @@ mod tests {
             (u_low - u_high).abs() < 0.2 * u_centre,
             "profile should be symmetric: low {u_low}, high {u_high}"
         );
+    }
+
+    #[test]
+    fn channel_flow_has_a_streamwise_pressure_drop() {
+        // Pushing a viscous flow down a channel needs a pressure drop, so the
+        // static-pressure range (gauge-independent max − min) must be strictly
+        // positive and finite.
+        let grid = Grid::new(60, 16, 6.0, 1.0);
+        let fluid = Fluid::new(1.0, 0.05);
+        let bcs = Boundaries::channel_flow(1.0);
+        let controls = SimpleControls {
+            max_iterations: 4000,
+            tolerance: 1e-5,
+            ..SimpleControls::default()
+        };
+        let sol = solve_simple(&grid, &fluid, &bcs, &controls);
+        let dp = sol.pressure_range();
+        assert!(dp.is_finite() && dp > 0.0, "channel flow needs a pressure drop, got {dp}");
+        // It matches an independent max − min scan of the cell pressures.
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let p = sol.pressure.at(i, j);
+                lo = lo.min(p);
+                hi = hi.max(p);
+            }
+        }
+        assert!((dp - (hi - lo)).abs() < 1e-12, "Δp {dp} vs max−min {}", hi - lo);
     }
 
     #[test]

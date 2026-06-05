@@ -326,6 +326,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     let q = dynamic_pressure(s.density, s.speed);
     // Streamwise grid spacing Δx = lx / nx (nx > 0 guaranteed by the guard above).
     let re_cell = cell_reynolds(s.speed, s.lx / s.nx as f64, s.viscosity);
+    // Static-pressure swing Δp = p_max − p_min (gauge-independent).
+    let dp = sol.pressure_range();
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -345,7 +347,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          residual   : {:.3e}\n\
          max |u|    : {:.5} m/s\n\
          dynamic q  : {:.4} Pa  (½ρU²)\n\
-         cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)",
+         cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
+         pressure Δp: {:.4e} Pa  (p_max−p_min)",
         s.case.label(),
         s.nx,
         s.ny,
@@ -363,6 +366,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         max_speed,
         q,
         re_cell,
+        dp,
     );
 }
 
