@@ -366,6 +366,11 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     let dp = sol.pressure_range();
     // Peak vorticity |∂v/∂x − ∂u/∂y| — the strongest local rotation.
     let vorticity = sol.max_vorticity();
+    // Location of that peak — the vortex core (when an interior difference exists).
+    let vort_loc = sol
+        .peak_vorticity_location()
+        .map(|(x, y)| format!("  (core @ {x:.2}, {y:.2} m)"))
+        .unwrap_or_else(|| "  (max rotation)".to_string());
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -409,7 +414,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4})\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
-         peak vort  : {:.4} 1/s  (max rotation){flow_str}",
+         peak vort  : {:.4} 1/s{vort_loc}{flow_str}",
         s.case.label(),
         s.nx,
         s.ny,

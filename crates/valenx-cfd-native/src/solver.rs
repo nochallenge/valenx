@@ -368,6 +368,34 @@ impl FlowSolution {
         peak
     }
 
+    /// The cell-centre location `(x, y)` (m) of the peak vorticity magnitude —
+    /// the vortex core (e.g. the centre of the lid-driven cavity's primary
+    /// vortex). Uses the same interior central-difference stencil as
+    /// [`FlowSolution::max_vorticity`]. `None` for a grid too small to take an
+    /// interior difference (`nx < 3` or `ny < 3`).
+    pub fn peak_vorticity_location(&self) -> Option<(f64, f64)> {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return None;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let (two_dx, two_dy) = (2.0 * dx, 2.0 * dy);
+        let mut peak = -1.0_f64;
+        let mut loc = (0.0, 0.0);
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                let w = (dv_dx - du_dy).abs();
+                if w > peak {
+                    peak = w;
+                    loc = ((i as f64 + 0.5) * dx, (j as f64 + 0.5) * dy);
+                }
+            }
+        }
+        Some(loc)
+    }
+
     /// Net volumetric flow rate through the **inlet** (left, `x = 0`) face, per
     /// unit depth (m²/s in 2-D): `Σ_j u(0, j)·dy`, the discrete `∫ u dy` along
     /// the inlet. Positive for fluid entering the domain; ~0 for an enclosed
@@ -1333,6 +1361,47 @@ mod tests {
         // and finite, and driving the lid harder spins it up.
         assert!(w_slow > 0.0 && w_slow.is_finite(), "cavity vorticity {w_slow}");
         assert!(w_fast > w_slow, "a faster lid raises vorticity: {w_slow} → {w_fast}");
+    }
+
+    #[test]
+    fn peak_vorticity_location_finds_the_strongest_shear_cell() {
+        // A 5×5 unit grid (dx = dy = 1). With v = 0 and u varying only with
+        // height as U(j) = j², the vorticity ω = −∂u/∂y grows with j, so the
+        // strongest shear is at the top interior row.
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+        let mut u = grid.u_field(); // 6 × 5
+        for j in 0..grid.ny {
+            let val = (j * j) as f64;
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let (x, y) = sol.peak_vorticity_location().unwrap();
+        // Peak central-difference shear is at interior row j = 3 → y = 3.5;
+        // it appears first at the leftmost interior column i = 1 → x = 1.5.
+        assert!((y - 3.5).abs() < 1e-12, "peak vort y {y}");
+        assert!((x - 1.5).abs() < 1e-12, "peak vort x {x}");
+        // A grid too small for an interior difference → None.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(tiny.peak_vorticity_location().is_none());
     }
 
     #[test]
