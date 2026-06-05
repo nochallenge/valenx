@@ -181,6 +181,22 @@ impl PolarCurve {
             (n * sxy - sx * sy) / denom
         }
     }
+
+    /// The parasitic (zero-lift) drag coefficient `Cd₀` — the intercept of the
+    /// parabolic drag polar `Cd = Cd₀ + k·Cl²`, i.e. the modeled drag at zero
+    /// lift. With [`PolarCurve::induced_drag_factor`] (`k`) it fully defines the
+    /// fitted polar. Computed from the same least-squares fit as
+    /// `mean(Cd) − k·mean(Cl²)`. Returns `0` for fewer than two points.
+    pub fn parasitic_drag_coefficient(&self) -> f64 {
+        if self.points.len() < 2 {
+            return 0.0;
+        }
+        let k = self.induced_drag_factor();
+        let n = self.points.len() as f64;
+        let mean_cd: f64 = self.points.iter().map(|p| p.cd).sum::<f64>() / n;
+        let mean_cl2: f64 = self.points.iter().map(|p| p.cl * p.cl).sum::<f64>() / n;
+        mean_cd - k * mean_cl2
+    }
 }
 
 /// Run an angle-of-attack sweep and assemble the lift / drag polar.
@@ -415,6 +431,37 @@ mod tests {
         );
         // Too few points → 0.
         assert_eq!(PolarCurve { points: vec![] }.induced_drag_factor(), 0.0);
+    }
+
+    #[test]
+    fn parasitic_drag_coefficient_recovers_the_polar_intercept() {
+        // The same exact polar Cd = 0.02 + 0.05·Cl² → intercept Cd₀ = 0.02.
+        let pts: Vec<PolarPoint> = [-0.3, 0.0, 0.5, 1.0, 1.5]
+            .iter()
+            .map(|&cl| PolarPoint {
+                alpha: 0.0,
+                cd: 0.02 + 0.05 * cl * cl,
+                cl,
+                cm: 0.0,
+                converged: true,
+            })
+            .collect();
+        let curve = PolarCurve { points: pts };
+        assert!(
+            (curve.induced_drag_factor() - 0.05).abs() < 1e-9,
+            "k = {}",
+            curve.induced_drag_factor()
+        );
+        assert!(
+            (curve.parasitic_drag_coefficient() - 0.02).abs() < 1e-9,
+            "Cd0 = {}",
+            curve.parasitic_drag_coefficient()
+        );
+        // Too few points → 0.
+        assert_eq!(
+            PolarCurve { points: vec![] }.parasitic_drag_coefficient(),
+            0.0
+        );
     }
 
     #[test]
