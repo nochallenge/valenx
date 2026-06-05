@@ -374,6 +374,18 @@ impl NativeSolution {
             None => 0.0,
         }
     }
+
+    /// The index of the node carrying the peak von Mises stress — the critical
+    /// location where ductile failure initiates (for a tip-loaded cantilever,
+    /// the fixed root). Pairs with the mesh node list to recover its
+    /// coordinates. `None` for an empty field.
+    pub fn peak_von_mises_index(&self) -> Option<usize> {
+        self.von_mises
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(i, _)| i)
+    }
 }
 
 /// The (minimum, maximum) principal stresses (eigenvalues) of a symmetric
@@ -1262,6 +1274,23 @@ mod tests {
             stress: vec![],
         };
         assert_eq!(empty.peak_triaxiality(), 0.0);
+    }
+
+    #[test]
+    fn peak_von_mises_index_finds_the_most_stressed_node() {
+        let sol = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![1.0e6, 5.0e6, 3.0e6],
+            stress: vec![],
+        };
+        assert_eq!(sol.peak_von_mises_index(), Some(1));
+        // An empty field has no peak node.
+        let empty = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![],
+            stress: vec![],
+        };
+        assert_eq!(empty.peak_von_mises_index(), None);
     }
 
     #[test]
