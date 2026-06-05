@@ -139,6 +139,26 @@ impl PolarCurve {
             .copied()
             .min_by(|a, b| a.cd.partial_cmp(&b.cd).unwrap_or(std::cmp::Ordering::Equal))
     }
+
+    /// The zero-lift angle of attack (radians) — where the lift curve crosses
+    /// `Cl = 0`, found by linear interpolation between the first pair of polar
+    /// points that bracket zero lift (negative for a cambered section, ~0 for a
+    /// symmetric one). `None` if the sweep never crosses zero lift.
+    pub fn zero_lift_angle(&self) -> Option<f64> {
+        for w in self.points.windows(2) {
+            let (lo, hi) = (w[0], w[1]);
+            let brackets = (lo.cl <= 0.0 && hi.cl >= 0.0) || (lo.cl >= 0.0 && hi.cl <= 0.0);
+            if brackets {
+                let dcl = hi.cl - lo.cl;
+                if dcl.abs() < 1e-12 {
+                    return Some(lo.alpha);
+                }
+                let t = -lo.cl / dcl;
+                return Some(lo.alpha + t * (hi.alpha - lo.alpha));
+            }
+        }
+        None
+    }
 }
 
 /// Run an angle-of-attack sweep and assemble the lift / drag polar.
@@ -328,6 +348,28 @@ mod tests {
         assert!(curve.points.iter().all(|p| p.cd >= min.cd - 1e-12));
         // An empty curve has no minimum-drag point.
         assert!(PolarCurve { points: vec![] }.min_drag_point().is_none());
+    }
+
+    #[test]
+    fn zero_lift_angle_interpolates_the_cl_crossing() {
+        // A cambered lift curve crossing Cl = 0: Cl=−0.1 at α=−0.05, Cl=+0.3 at
+        // α=+0.05. Linear interp t = 0.1/0.4 = 0.25 → α = −0.05 + 0.25·0.1.
+        let curve = PolarCurve {
+            points: vec![
+                PolarPoint { alpha: -0.05, cd: 0.02, cl: -0.1, cm: 0.0, converged: true },
+                PolarPoint { alpha: 0.05, cd: 0.03, cl: 0.3, cm: 0.0, converged: true },
+            ],
+        };
+        let a0 = curve.zero_lift_angle().expect("crosses zero lift");
+        assert!((a0 - (-0.025)).abs() < 1e-9, "zero-lift α {a0}");
+        // A purely positive-lift sweep never crosses zero → None.
+        let positive = PolarCurve {
+            points: vec![
+                PolarPoint { alpha: 0.0, cd: 0.02, cl: 0.5, cm: 0.0, converged: true },
+                PolarPoint { alpha: 0.1, cd: 0.03, cl: 1.0, cm: 0.0, converged: true },
+            ],
+        };
+        assert!(positive.zero_lift_angle().is_none());
     }
 
     #[test]
