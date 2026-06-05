@@ -555,6 +555,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_bielliptic_planner(app, ui);
     draw_plane_change_planner(app, ui);
     draw_circular_basics_planner(app, ui);
+    draw_elliptical_orbit_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -762,6 +763,57 @@ fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     kv(ui, "circular speed", model::format_delta_v(v_circ));
                     kv(ui, "escape speed", model::format_delta_v(v_esc));
                     kv(ui, "orbital period", model::format_duration(period));
+                });
+        });
+}
+
+/// Elliptical-orbit summary from perigee + apogee (`model::elliptical_orbit`).
+fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Elliptical orbit (perigee / apogee)")
+        .id_source("astro_ellipse")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_ellipse_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Perigee altitude").on_hover_text(
+                        "Lowest point of the orbit, above the equator. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.ellipse_perigee_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Apogee altitude").on_hover_text(
+                        "Highest point of the orbit, above the equator. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.ellipse_apogee_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                });
+            let orbit =
+                model::elliptical_orbit(form.ellipse_perigee_km, form.ellipse_apogee_km);
+            egui::Grid::new("astro_ellipse_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(ui, "eccentricity", format!("{:.4}", orbit.eccentricity));
+                    kv(
+                        ui,
+                        "semi-major axis",
+                        format!("{:.1} km", orbit.semi_major_axis_m / 1000.0),
+                    );
+                    kv(ui, "perigee speed", model::format_delta_v(orbit.perigee_speed_ms));
+                    kv(ui, "apogee speed", model::format_delta_v(orbit.apogee_speed_ms));
+                    kv(ui, "orbital period", model::format_duration(orbit.period_s));
                 });
         });
 }
