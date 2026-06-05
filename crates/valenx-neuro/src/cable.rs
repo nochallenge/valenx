@@ -66,6 +66,49 @@ fn steady(alpha: f64, beta: f64) -> f64 {
     alpha / (alpha + beta)
 }
 
+/// The voltage-dependent steady states and time constants of the three
+/// Hodgkin–Huxley gates at one membrane potential — the curves that define the
+/// channel kinetics.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GatingKinetics {
+    /// Na⁺ activation steady state `m∞(V)` (dimensionless, in `[0, 1]`).
+    pub m_inf: f64,
+    /// Na⁺ inactivation steady state `h∞(V)`.
+    pub h_inf: f64,
+    /// K⁺ activation steady state `n∞(V)`.
+    pub n_inf: f64,
+    /// Na⁺ activation time constant `τ_m(V)` (ms).
+    pub tau_m_ms: f64,
+    /// Na⁺ inactivation time constant `τ_h(V)` (ms).
+    pub tau_h_ms: f64,
+    /// K⁺ activation time constant `τ_n(V)` (ms).
+    pub tau_n_ms: f64,
+}
+
+/// Evaluate the Hodgkin–Huxley gating kinetics at membrane potential `v_mv` (mV).
+///
+/// Each gate `x ∈ {m, h, n}` relaxes toward its steady state
+/// `x∞ = α_x/(α_x+β_x)` with a time constant `τ_x = 1/(α_x+β_x)` (ms), from the
+/// classic squid-axon `α`/`β` rate functions. These voltage-dependent curves are
+/// the heart of the action potential: as the membrane **depolarises**, Na⁺
+/// activation `m∞` and K⁺ activation `n∞` rise toward 1 while Na⁺ inactivation
+/// `h∞` falls toward 0, and the fast-Na⁺ / slow-K⁺ separation `τ_m ≪ τ_n` is what
+/// shapes the spike. Surfaces the gating curves that the integrator
+/// ([`HhCompartment`]) otherwise only evaluates internally.
+pub fn hh_gating_kinetics(v_mv: f64) -> GatingKinetics {
+    let (am, bm) = (alpha_m(v_mv), beta_m(v_mv));
+    let (ah, bh) = (alpha_h(v_mv), beta_h(v_mv));
+    let (an, bn) = (alpha_n(v_mv), beta_n(v_mv));
+    GatingKinetics {
+        m_inf: am / (am + bm),
+        h_inf: ah / (ah + bh),
+        n_inf: an / (an + bn),
+        tau_m_ms: 1.0 / (am + bm),
+        tau_h_ms: 1.0 / (ah + bh),
+        tau_n_ms: 1.0 / (an + bn),
+    }
+}
+
 /// A rectangular stimulating current pulse (intracellular, µA/cm²).
 #[derive(Debug, Clone, Copy)]
 pub struct StimPulse {
@@ -388,6 +431,37 @@ mod tests {
         let peak = vmax(&trace);
         assert!(peak > 20.0, "AP should overshoot 0 mV; peak={peak}");
         assert!(peak < 60.0, "but not blow up; peak={peak}");
+    }
+
+    #[test]
+    fn hh_gating_kinetics_match_the_classic_resting_and_limit_values() {
+        // At the resting potential the classic HH gates sit near m≈0.05, h≈0.6, n≈0.32.
+        let rest = hh_gating_kinetics(-65.0);
+        assert!((rest.m_inf - 0.053).abs() < 0.005, "m∞(−65) {}", rest.m_inf);
+        assert!((rest.h_inf - 0.596).abs() < 0.01, "h∞(−65) {}", rest.h_inf);
+        assert!((0.30..0.34).contains(&rest.n_inf), "n∞(−65) ≈ 0.32, got {}", rest.n_inf);
+        // Na activation is fast, K activation slow — the separation that makes a spike.
+        assert!(rest.tau_m_ms < rest.tau_n_ms, "τ_m {} ≪ τ_n {}", rest.tau_m_ms, rest.tau_n_ms);
+        assert!(rest.tau_m_ms > 0.0 && rest.tau_h_ms > 0.0 && rest.tau_n_ms > 0.0);
+
+        // Strong hyperpolarisation: activation shut (m∞,n∞→0), Na de-inactivated (h∞→1).
+        let lo = hh_gating_kinetics(-100.0);
+        assert!(lo.m_inf < 0.02 && lo.n_inf < 0.1, "hyperpol activation {} {}", lo.m_inf, lo.n_inf);
+        assert!(lo.h_inf > 0.95, "hyperpol h∞ {}", lo.h_inf);
+
+        // Strong depolarisation: activation on (m∞,n∞→1), Na inactivated (h∞→0).
+        let hi = hh_gating_kinetics(50.0);
+        assert!(hi.m_inf > 0.98 && hi.n_inf > 0.9, "depol activation {} {}", hi.m_inf, hi.n_inf);
+        assert!(hi.h_inf < 0.02, "depol h∞ {}", hi.h_inf);
+
+        // Monotonic: m∞ and n∞ rise with depolarisation, h∞ falls; all stay in [0,1].
+        let mid = hh_gating_kinetics(-30.0);
+        assert!(lo.m_inf < mid.m_inf && mid.m_inf < hi.m_inf, "m∞ rises with V");
+        assert!(lo.n_inf < mid.n_inf && mid.n_inf < hi.n_inf, "n∞ rises with V");
+        assert!(lo.h_inf > mid.h_inf && mid.h_inf > hi.h_inf, "h∞ falls with V");
+        for x in [rest.m_inf, rest.h_inf, rest.n_inf, lo.m_inf, hi.h_inf, mid.n_inf] {
+            assert!((0.0..=1.0).contains(&x), "gate {x} must be in [0,1]");
+        }
     }
 
     #[test]
