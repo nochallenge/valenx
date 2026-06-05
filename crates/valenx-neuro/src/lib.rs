@@ -50,7 +50,8 @@ pub use bioheat::{analytic_point_heat_k, solve_point_heat, BioheatField};
 pub use cable::{count_spikes, HhCable, HhCompartment, StimPulse};
 pub use cable_theory::{
     charging_fraction, electrotonic_length, length_constant_cm, rall_equivalent_diameter,
-    semi_infinite_input_resistance, time_constant_s, time_to_charge_fraction,
+    semi_infinite_input_resistance, steady_state_attenuation, time_constant_s,
+    time_to_charge_fraction,
 };
 pub use chord_conductance::{chord_conductance_potential_mv, ConductanceChannel};
 pub use conduction::{

@@ -92,6 +92,16 @@ pub fn rall_equivalent_diameter(child_diameters: &[f64]) -> f64 {
         .powf(2.0 / 3.0)
 }
 
+/// Steady-state voltage attenuation `V/V₀ = e^(−L)` along a semi-infinite
+/// passive cable, as a function of the dimensionless electrotonic distance
+/// `L = x/λ` (see [`electrotonic_length`]). This is the spatial counterpart to
+/// the temporal [`charging_fraction`]: a steady subthreshold voltage decays to
+/// `1/e` (~37%) over one length constant and to ~5% by `L = 3`. Returns `1` at
+/// the injection site (`L = 0`); a negative `L` clamps to that injection value.
+pub fn steady_state_attenuation(electrotonic_length: f64) -> f64 {
+    (-electrotonic_length.max(0.0)).exp()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,5 +198,22 @@ mod tests {
         // Negative/zero diameters are ignored; an empty list gives 0.
         assert!((rall_equivalent_diameter(&[d, -1.0, 0.0]) - d).abs() < 1e-12);
         assert_eq!(rall_equivalent_diameter(&[]), 0.0);
+    }
+
+    #[test]
+    fn steady_state_attenuation_decays_exponentially_over_lambda() {
+        // V/V₀ = 1 at the injection site, 1/e at one λ, ~5% by L = 3.
+        assert!((steady_state_attenuation(0.0) - 1.0).abs() < 1e-12);
+        assert!(
+            (steady_state_attenuation(1.0) - 1.0 / std::f64::consts::E).abs() < 1e-12
+        );
+        assert!((steady_state_attenuation(3.0) - 0.049_787).abs() < 1e-5);
+        // Composes with electrotonic_length: a 0.2 cm segment on a λ = 0.1 cm
+        // cable (L = 2) attenuates to e^(−2).
+        let l = electrotonic_length(0.2, 0.1);
+        assert!((steady_state_attenuation(l) - (-2.0_f64).exp()).abs() < 1e-12);
+        // Monotonically decreasing; a negative L clamps to the injection value.
+        assert!(steady_state_attenuation(2.0) < steady_state_attenuation(1.0));
+        assert_eq!(steady_state_attenuation(-1.0), 1.0);
     }
 }
