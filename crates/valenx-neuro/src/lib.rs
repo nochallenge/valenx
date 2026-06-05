@@ -25,6 +25,7 @@ pub mod aniso_field;
 pub mod bioheat;
 pub mod cable;
 pub mod cable_theory;
+pub mod conduction;
 pub mod current_distance;
 pub mod engine;
 pub mod error;
@@ -45,6 +46,9 @@ pub use aniso_field::{analytic_aniso_point_source_mv, AnisoTissue, Conductivity,
 pub use bioheat::{analytic_point_heat_k, solve_point_heat, BioheatField};
 pub use cable::{count_spikes, HhCable, HhCompartment, StimPulse};
 pub use cable_theory::{electrotonic_length, length_constant_cm, time_constant_s};
+pub use conduction::{
+    myelinated_conduction_velocity, unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
+};
 pub use current_distance::{activation_radius, fit_constant, threshold_current};
 pub use engine::{recruitment_curve, stimulate, Axon, Recruitment, Scene};
 pub use error::{NeuroError, Result};
