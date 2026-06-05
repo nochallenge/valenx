@@ -561,6 +561,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_injection_planner(app, ui);
     draw_flight_path_planner(app, ui);
     draw_orbital_speed_planner(app, ui);
+    draw_time_of_flight_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -1073,6 +1074,63 @@ fn draw_orbital_speed_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         None => "\u{2014} (outside orbit)".to_string(),
                     };
                     kv(ui, "orbital speed", val);
+                });
+        });
+}
+
+/// Time since perigee at a true anomaly (`model::time_since_perigee`).
+fn draw_time_of_flight_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Time since perigee (Kepler)")
+        .id_source("astro_time_of_flight")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_tof_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Perigee altitude").on_hover_text(
+                        "Lowest point of the orbit, above the surface. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.tof_perigee_km)
+                            .speed(10.0)
+                            .range(0.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Apogee altitude").on_hover_text(
+                        "Highest point of the orbit, above the surface. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.tof_apogee_km)
+                            .speed(10.0)
+                            .range(0.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("True anomaly \u{03B8}").on_hover_text(
+                        "Angle from perigee along the orbit (0 = perigee, 180° = \
+                         apogee). SI unit: degrees.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.tof_true_anomaly_deg)
+                            .speed(1.0)
+                            .range(0.0..=360.0)
+                            .suffix(" \u{00B0}"),
+                    );
+                    ui.end_row();
+                });
+            let t = model::time_since_perigee(
+                form.tof_perigee_km,
+                form.tof_apogee_km,
+                form.tof_true_anomaly_deg,
+            );
+            egui::Grid::new("astro_tof_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(ui, "time since perigee", model::format_duration(t));
                 });
         });
 }
