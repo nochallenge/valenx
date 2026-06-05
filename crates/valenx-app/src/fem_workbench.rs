@@ -388,6 +388,9 @@ fn run_fem(s: &mut FemWorkbenchState) {
                     let max_shear = sol.max_shear_stress();
                     // Stress triaxiality σ_m/σ_vm at the peak-von-Mises node.
                     let triax = sol.peak_triaxiality();
+                    // Mean von Mises + stress-concentration factor Kt = peak/mean.
+                    let mean_vm = sol.mean_von_mises();
+                    let kt = if mean_vm > 0.0 { vm / mean_vm } else { 0.0 };
                     // Coordinates of the peak-von-Mises node (where failure initiates).
                     let peak_str = sol
                         .peak_von_mises_index()
@@ -434,6 +437,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                          max displacement: {:.6e} m\n\
                          deflection ratio: {}  (span/δ)\n\
                          max von Mises   : {:.4e} Pa  ({:.3} MPa, triax {:.2})\n\
+                         mean von Mises  : {:.4e} Pa  (Kt {:.1} = peak/mean)\n\
                          max principal   : {:.4e} Pa  (min {:.4e} Pa)\n\
                          max shear       : {:.4e} Pa  (Tresca)\n\
                          peak stress @   : {}\n\
@@ -448,6 +452,8 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         vm,
                         vm / 1e6,
                         triax,
+                        mean_vm,
+                        kt,
                         max_principal,
                         min_principal,
                         max_shear,
