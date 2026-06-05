@@ -490,6 +490,76 @@ fn mesh_radius_of_gyration(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     Some((mean_sq_origin - centroid_sq).max(0.0).sqrt())
 }
 
+/// The three **principal moments of inertia** about the centroid (unit density)
+/// of a closed `Tri3` mesh — the eigenvalues of the centroidal inertia tensor,
+/// returned sorted descending (`I₁ ≥ I₂ ≥ I₃`, model units `u⁵`). This completes
+/// the mass-property suite after the volume, centroid and radius of gyration:
+/// it extends the divergence-theorem second moments with the **products of
+/// inertia** `∫xy, ∫xz, ∫yz dV` (same tetrahedron covariance
+/// `(V/20)(Σpᵢpⱼ + (Σpᵢ)(Σpⱼ))` as the diagonal terms), shifts every second
+/// moment to the centroid by the parallel-axis theorem, assembles the symmetric
+/// inertia tensor `I = [[∫y²+z², −∫xy, −∫xz], [−∫xy, ∫x²+z², −∫yz], [−∫xz, −∫yz,
+/// ∫x²+y²]]`, and takes its symmetric eigendecomposition (the eigenvectors are
+/// the principal axes). For an `Lx×Ly×Lz` box they are `(m/12)(Lⱼ²+Lₖ²)` with
+/// `m = V`. `None` for a mesh with no triangles or effectively zero volume.
+fn mesh_principal_moments(mesh: &valenx_mesh::Mesh) -> Option<[f64; 3]> {
+    let mut vol = 0.0;
+    let mut first = [0.0_f64; 3]; // ∫x, ∫y, ∫z dV (→ centroid)
+    let mut m = [0.0_f64; 6]; // second moments about the origin: xx, yy, zz, xy, xz, yz
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let v = a.dot(&b.cross(&c)) / 6.0;
+            vol += v;
+            let s = a + b + c; // Σ pᵢ
+            first[0] += v * s.x / 4.0;
+            first[1] += v * s.y / 4.0;
+            first[2] += v * s.z / 4.0;
+            // ∫xᵢxⱼ contribution = (v/20)·(aᵢaⱼ + bᵢbⱼ + cᵢcⱼ + sᵢsⱼ).
+            m[0] += v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + s.x * s.x);
+            m[1] += v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + s.y * s.y);
+            m[2] += v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + s.z * s.z);
+            m[3] += v / 20.0 * (a.x * a.y + b.x * b.y + c.x * c.y + s.x * s.y);
+            m[4] += v / 20.0 * (a.x * a.z + b.x * b.z + c.x * c.z + s.x * s.z);
+            m[5] += v / 20.0 * (a.y * a.z + b.y * b.z + c.y * c.z + s.y * s.z);
+        }
+    }
+    if vol.abs() < 1e-12 {
+        return None;
+    }
+    let cx = first[0] / vol;
+    let cy = first[1] / vol;
+    let cz = first[2] / vol;
+    // Parallel-axis shift of every second moment to the centroid: M_ij,c = M_ij,o − V·cᵢcⱼ.
+    let mxx = m[0] - vol * cx * cx;
+    let myy = m[1] - vol * cy * cy;
+    let mzz = m[2] - vol * cz * cz;
+    let mxy = m[3] - vol * cx * cy;
+    let mxz = m[4] - vol * cx * cz;
+    let myz = m[5] - vol * cy * cz;
+    let tensor = nalgebra::Matrix3::new(
+        myy + mzz,
+        -mxy,
+        -mxz,
+        -mxy,
+        mxx + mzz,
+        -myz,
+        -mxz,
+        -myz,
+        mxx + myy,
+    );
+    let eig = tensor.symmetric_eigen().eigenvalues;
+    let mut vals = [eig[0], eig[1], eig[2]];
+    // Sort descending: I₁ ≥ I₂ ≥ I₃.
+    vals.sort_by(|p, q| q.partial_cmp(p).unwrap_or(std::cmp::Ordering::Equal));
+    Some(vals)
+}
+
 /// Whether a `Tri3` surface mesh is **watertight** (a closed 2-manifold) — every
 /// triangle edge is shared by *exactly two* triangles, so the surface bounds a
 /// solid with no holes or cracks. This is the printability / validity gate a
@@ -600,6 +670,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_radius_of_gyration)
         .map(|k| format!(" · k_gyr {k:.3} u"))
         .unwrap_or_default();
+    // Principal moments of inertia about the centroid (I₁≥I₂≥I₃, unit density) —
+    // the rotational-inertia completion of the mass-property suite.
+    let moments_str = mesh
+        .as_ref()
+        .and_then(mesh_principal_moments)
+        .map(|[i1, i2, i3]| format!(" · I ({i1:.3}, {i2:.3}, {i3:.3}) u⁵"))
+        .unwrap_or_default();
     // Watertightness — a closed 2-manifold (every edge shared by exactly two
     // triangles) is the "is this a printable solid" gate. Dropped if tessellation failed.
     let watertight_str = mesh
@@ -613,7 +690,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         })
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{watertight_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1436,6 +1513,58 @@ mod tests {
         assert!((k - expected).abs() < 1e-9, "k {k} vs {expected}");
         // An empty mesh has no radius of gyration.
         assert!(mesh_radius_of_gyration(&valenx_mesh::Mesh::new("empty")).is_none());
+    }
+
+    #[test]
+    fn mesh_principal_moments_match_the_box_formula() {
+        use nalgebra::Vector3;
+        // The same 1×2×3 box. For a box the principal moments about its centre
+        // are I = (m/12)(Lⱼ²+Lₖ²) with m = V = 6 (unit density):
+        //   I_x = (6/12)(2²+3²) = 6.5, I_y = (6/12)(1²+3²) = 5.0, I_z = (6/12)(1²+2²) = 2.5.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let nodes = [
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, // −z
+            4, 5, 6, 4, 6, 7, // +z
+            0, 1, 5, 0, 5, 4, // −y
+            3, 7, 6, 3, 6, 2, // +y
+            0, 4, 7, 0, 7, 3, // −x
+            1, 2, 6, 1, 6, 5, // +x
+        ];
+        let make = |offset: Vector3<f64>| {
+            let mut mesh = valenx_mesh::Mesh::new("box");
+            mesh.nodes = nodes.iter().map(|n| *n + offset).collect();
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = connectivity.clone();
+            mesh.element_blocks.push(block);
+            mesh
+        };
+
+        let [i1, i2, i3] = mesh_principal_moments(&make(Vector3::zeros())).expect("closed box");
+        let m = lx * ly * lz; // unit-density "mass" = volume = 6
+        assert!((i1 - m / 12.0 * (ly * ly + lz * lz)).abs() < 1e-9, "I1 {i1}"); // 6.5
+        assert!((i2 - m / 12.0 * (lx * lx + lz * lz)).abs() < 1e-9, "I2 {i2}"); // 5.0
+        assert!((i3 - m / 12.0 * (lx * lx + ly * ly)).abs() < 1e-9, "I3 {i3}"); // 2.5
+
+        // Principal moments are centroid-relative, so translating the box leaves
+        // them unchanged — this validates the parallel-axis shift.
+        let shifted =
+            mesh_principal_moments(&make(Vector3::new(10.0, -5.0, 7.0))).expect("shifted box");
+        assert!((shifted[0] - i1).abs() < 1e-6, "translation invariance I1");
+        assert!((shifted[1] - i2).abs() < 1e-6, "translation invariance I2");
+        assert!((shifted[2] - i3).abs() < 1e-6, "translation invariance I3");
+
+        // An empty mesh has no inertia tensor.
+        assert!(mesh_principal_moments(&valenx_mesh::Mesh::new("empty")).is_none());
     }
 
     #[test]
