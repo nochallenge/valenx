@@ -411,6 +411,43 @@ impl NativeSolution {
         }
     }
 
+    /// The **Lode parameter** `μ_L = (2σ₂ − σ₁ − σ₃)/(σ₁ − σ₃)` at the node of
+    /// peak von Mises stress — the *deviatoric* descriptor of the stress state,
+    /// the companion to [`NativeSolution::peak_triaxiality`]. Where triaxiality
+    /// fixes the hydrostatic axis, the Lode parameter places the state on the
+    /// deviatoric (π-)plane: `−1` in axisymmetric / uniaxial **tension**, `0` in
+    /// pure shear or plane strain, `+1` in axisymmetric / uniaxial
+    /// **compression**. Modern ductile-fracture loci depend on *both* the
+    /// triaxiality and the Lode parameter, so together they characterise the
+    /// failure-driving state at the critical point. Returns `0` for an empty
+    /// solution, an unstressed body, or the degenerate hydrostatic state
+    /// `σ₁ = σ₃` where the parameter is undefined.
+    pub fn peak_lode_parameter(&self) -> f64 {
+        let Some((idx, &peak)) = self
+            .von_mises
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+        else {
+            return 0.0;
+        };
+        if peak <= 1e-12 {
+            return 0.0;
+        }
+        match self.stress.get(idx) {
+            Some(&s) => {
+                let [s1, s2, s3] = principal_triple_voigt(s);
+                let range = s1 - s3;
+                if range <= 1e-12 {
+                    0.0 // σ₁ = σ₃ (hydrostatic) → undefined
+                } else {
+                    (2.0 * s2 - s1 - s3) / range
+                }
+            }
+            None => 0.0,
+        }
+    }
+
     /// The index of the node carrying the peak von Mises stress — the critical
     /// location where ductile failure initiates (for a tip-loaded cantilever,
     /// the fixed root). Pairs with the mesh node list to recover its
@@ -452,6 +489,36 @@ fn principal_extremes_voigt(s: [f64; 6]) -> (f64, f64) {
     let eig_max = q + 2.0 * p * phi.cos();
     let eig_min = q + 2.0 * p * (phi + two_thirds_pi).cos();
     (eig_min, eig_max)
+}
+
+/// The three principal stresses (eigenvalues) of a symmetric Cauchy stress
+/// tensor in Voigt order, sorted descending `[σ₁, σ₂, σ₃]` (`σ₁ ≥ σ₂ ≥ σ₃`).
+/// The same closed-form symmetric-3×3 solution as [`principal_extremes_voigt`],
+/// recovering the middle eigenvalue from the trace (`σ₂ = tr − σ₁ − σ₃`).
+fn principal_triple_voigt(s: [f64; 6]) -> [f64; 3] {
+    let (sxx, syy, szz, sxy, syz, szx) = (s[0], s[1], s[2], s[3], s[4], s[5]);
+    let p1 = sxy * sxy + syz * syz + szx * szx;
+    if p1 <= 0.0 {
+        // Already diagonal: sort the diagonal entries descending.
+        let mut e = [sxx, syy, szz];
+        e.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+        return e;
+    }
+    let q = (sxx + syy + szz) / 3.0;
+    let a = sxx - q;
+    let b = syy - q;
+    let c = szz - q;
+    let p2 = a * a + b * b + c * c + 2.0 * p1;
+    let p = (p2 / 6.0).sqrt();
+    let det =
+        a * (b * c - syz * syz) - sxy * (sxy * c - syz * szx) + szx * (sxy * syz - b * szx);
+    let r = (det / (p * p * p) / 2.0).clamp(-1.0, 1.0);
+    let phi = r.acos() / 3.0;
+    let two_thirds_pi = 2.0 * std::f64::consts::PI / 3.0;
+    let s1 = q + 2.0 * p * phi.cos(); // largest (cos φ branch)
+    let s3 = q + 2.0 * p * (phi + two_thirds_pi).cos(); // smallest
+    let s2 = 3.0 * q - s1 - s3; // middle: the three eigenvalues sum to the trace 3q
+    [s1, s2, s3]
 }
 
 /// Largest principal stress (the maximum normal stress, Rankine criterion).
@@ -1265,6 +1332,47 @@ mod tests {
             stress: vec![],
         };
         assert_eq!(empty.max_shear_stress(), 0.0);
+    }
+
+    #[test]
+    fn peak_lode_parameter_classifies_the_deviatoric_state() {
+        // Single-node solutions so the peak-von-Mises node is unambiguous. The
+        // Lode parameter classifies the deviatoric state at that critical point:
+        // −1 for axisymmetric/uniaxial tension, 0 for pure shear, +1 for
+        // axisymmetric/uniaxial compression.
+        let mk = |stress: [f64; 6], vm: f64| NativeSolution {
+            displacement: vec![[0.0, 0.0, 0.0]],
+            von_mises: vec![vm],
+            stress: vec![stress],
+        };
+        let sigma = 100.0e6;
+        let tension = mk([sigma, 0.0, 0.0, 0.0, 0.0, 0.0], sigma);
+        assert!(
+            (tension.peak_lode_parameter() + 1.0).abs() < 1e-9,
+            "tension {}",
+            tension.peak_lode_parameter()
+        );
+        let compression = mk([-sigma, 0.0, 0.0, 0.0, 0.0, 0.0], sigma);
+        assert!(
+            (compression.peak_lode_parameter() - 1.0).abs() < 1e-9,
+            "compression {}",
+            compression.peak_lode_parameter()
+        );
+        let shear = mk([0.0, 0.0, 0.0, sigma, 0.0, 0.0], sigma);
+        assert!(shear.peak_lode_parameter().abs() < 1e-9, "shear {}", shear.peak_lode_parameter());
+        // Always within [−1, 1].
+        for s in [&tension, &compression, &shear] {
+            assert!((-1.0..=1.0).contains(&s.peak_lode_parameter()));
+        }
+        // Empty solution → 0; an unstressed body (zero peak von Mises) → 0.
+        let empty = NativeSolution {
+            displacement: vec![],
+            von_mises: vec![],
+            stress: vec![],
+        };
+        assert_eq!(empty.peak_lode_parameter(), 0.0);
+        let unstressed = mk([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0.0);
+        assert_eq!(unstressed.peak_lode_parameter(), 0.0);
     }
 
     #[test]
