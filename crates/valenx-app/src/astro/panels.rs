@@ -760,12 +760,14 @@ fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     ui.end_row();
                 });
             let (v_circ, v_esc, period) = model::circular_orbit_basics(form.basics_altitude_km);
+            let escape_dv = model::escape_delta_v_from_circular(form.basics_altitude_km);
             egui::Grid::new("astro_basics_out")
                 .num_columns(2)
                 .spacing([8.0, 3.0])
                 .show(ui, |ui| {
                     kv(ui, "circular speed", model::format_delta_v(v_circ));
                     kv(ui, "escape speed", model::format_delta_v(v_esc));
+                    kv(ui, "escape \u{0394}v", model::format_delta_v(escape_dv));
                     kv(ui, "orbital period", model::format_duration(period));
                 });
         });
