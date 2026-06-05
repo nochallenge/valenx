@@ -292,6 +292,11 @@ pub struct PlannerForm {
 
     /// Target-period orbit — desired orbital period (hours).
     pub target_period_h: f64,
+
+    /// Injection Δv — parking-orbit altitude (km).
+    pub injection_altitude_km: f64,
+    /// Injection Δv — target hyperbolic excess speed v∞ (km/s).
+    pub injection_v_inf_kms: f64,
 }
 
 impl Default for PlannerForm {
@@ -329,6 +334,9 @@ impl Default for PlannerForm {
             synodic_b_km: 35_786.0,
             // One sidereal day → the geostationary altitude.
             target_period_h: 23.934,
+            // A 300 km LEO with a trans-Mars-class hyperbolic excess.
+            injection_altitude_km: 300.0,
+            injection_v_inf_kms: 3.0,
         }
     }
 }
@@ -426,6 +434,16 @@ pub fn orbit_altitude_for_period_km(period_s: f64) -> f64 {
     let four_pi_sq = 4.0 * std::f64::consts::PI * std::f64::consts::PI;
     let r = (mu * period_s * period_s / four_pi_sq).cbrt();
     (r - valenx_astro::constants::R_EARTH) / 1000.0
+}
+
+/// The departure Δv (m/s) from a circular parking orbit at altitude
+/// `altitude_km` onto a hyperbolic escape trajectory with hyperbolic excess
+/// speed `v_inf_ms` (m/s): `Δv = √(v_esc² + v_inf²) − v_circ`. With `v_inf = 0`
+/// it reduces to the bare escape Δv; a trans-Mars `v_inf ≈ 3 km/s` from LEO
+/// gives the classic ~3.6 km/s trans-Mars-injection burn.
+pub fn injection_delta_v(altitude_km: f64, v_inf_ms: f64) -> f64 {
+    let (v_circ, v_esc, _) = circular_orbit_basics(altitude_km);
+    (v_esc * v_esc + v_inf_ms * v_inf_ms).sqrt() - v_circ
 }
 
 /// The three-burn Δv budget and timing of a **bi-elliptic** transfer between
@@ -697,6 +715,21 @@ mod tests {
         // round-trips back to the input period.
         let (_, _, t) = circular_orbit_basics(geo);
         assert!((t - 86_164.0).abs() / 86_164.0 < 1e-6, "round-trip period");
+    }
+
+    #[test]
+    fn injection_delta_v_reduces_to_escape_and_matches_tmi() {
+        // v∞ = 0 is the bare escape Δv (no energy left at infinity).
+        let esc = escape_delta_v_from_circular(300.0);
+        assert!(
+            (injection_delta_v(300.0, 0.0) - esc).abs() < 1e-6,
+            "v∞=0 → escape Δv"
+        );
+        // A trans-Mars v∞ ≈ 3 km/s from a 300 km LEO → the classic ~3.6 km/s TMI.
+        let tmi = injection_delta_v(300.0, 3000.0);
+        assert!((tmi / 1000.0 - 3.6).abs() < 0.2, "TMI {} km/s", tmi / 1000.0);
+        // A higher required hyperbolic excess always costs more Δv.
+        assert!(injection_delta_v(300.0, 4000.0) > tmi);
     }
 
     #[test]

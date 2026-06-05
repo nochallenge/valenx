@@ -558,6 +558,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_elliptical_orbit_planner(app, ui);
     draw_synodic_planner(app, ui);
     draw_target_period_planner(app, ui);
+    draw_injection_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -902,6 +903,53 @@ fn draw_target_period_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .spacing([8.0, 3.0])
                 .show(ui, |ui| {
                     kv(ui, "circular altitude", format!("{altitude_km:.1} km"));
+                });
+        });
+}
+
+/// Departure Δv onto a hyperbolic escape (`model::injection_delta_v`).
+fn draw_injection_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Injection \u{0394}v (escape / interplanetary)")
+        .id_source("astro_injection")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_injection_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Parking altitude").on_hover_text(
+                        "Circular parking-orbit altitude the burn departs from. \
+                         SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.injection_altitude_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Hyperbolic excess v\u{221E}").on_hover_text(
+                        "Target speed left over at infinity: 0 is a bare escape, \
+                         ~3 km/s is a trans-Mars launch. SI unit: km/s.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.injection_v_inf_kms)
+                            .speed(0.05)
+                            .range(0.0..=20.0)
+                            .suffix(" km/s"),
+                    );
+                    ui.end_row();
+                });
+            let dv = model::injection_delta_v(
+                form.injection_altitude_km,
+                form.injection_v_inf_kms * 1000.0,
+            );
+            egui::Grid::new("astro_injection_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(ui, "injection \u{0394}v", model::format_delta_v(dv));
                 });
         });
 }
