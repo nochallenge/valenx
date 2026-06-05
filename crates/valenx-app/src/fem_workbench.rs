@@ -517,8 +517,9 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         constraints.len()
                     );
                     for (i, m) in sol.modes.iter().enumerate() {
+                        let axis = ["X", "Y", "Z"][m.dominant_translation_axis()];
                         out.push_str(&format!(
-                            "  mode {:>2}: {:>12.4} Hz   (T = {:.3} ms)\n",
+                            "  mode {:>2}: {:>12.4} Hz   (T = {:.3} ms, dom {axis})\n",
                             i + 1,
                             m.frequency_hz,
                             m.period_s() * 1000.0,
