@@ -476,6 +476,10 @@ pub struct EllipticalOrbit {
     pub perigee_speed_ms: f64,
     /// Speed at apogee (m/s) — the orbit's slowest point.
     pub apogee_speed_ms: f64,
+    /// Specific orbital energy `ε = −μ/(2a)` (J/kg) — the conserved total energy
+    /// per unit mass (kinetic + gravitational potential). Negative for a bound
+    /// ellipse; it rises toward zero as the orbit nears escape (`a → ∞`).
+    pub specific_energy_j_per_kg: f64,
 }
 
 /// Summarize the elliptical Earth orbit with the two given altitudes (km),
@@ -495,12 +499,14 @@ pub fn elliptical_orbit(altitude_a_km: f64, altitude_b_km: f64) -> EllipticalOrb
     let period_s = std::f64::consts::TAU * (a * a * a / mu).sqrt();
     let perigee_speed_ms = (mu * (2.0 / r_peri - 1.0 / a)).sqrt();
     let apogee_speed_ms = (mu * (2.0 / r_apo - 1.0 / a)).sqrt();
+    let specific_energy_j_per_kg = -mu / (2.0 * a);
     EllipticalOrbit {
         semi_major_axis_m: a,
         eccentricity,
         period_s,
         perigee_speed_ms,
         apogee_speed_ms,
+        specific_energy_j_per_kg,
     }
 }
 
@@ -652,6 +658,19 @@ mod tests {
         let (v_circ, _, period) = circular_orbit_basics(500.0);
         assert!((circ.perigee_speed_ms - v_circ).abs() < 1e-6, "circular speed");
         assert!((circ.period_s - period).abs() < 1e-3, "circular period");
+        // Specific orbital energy ε = −μ/(2a) equals the vis-viva energy
+        // ½v² − μ/r evaluated anywhere on the orbit — cross-check at perigee.
+        let mu = valenx_astro::constants::MU_EARTH;
+        let r_peri = altitude_km_to_radius_m(300.0);
+        let eps_visviva = 0.5 * gto.perigee_speed_ms.powi(2) - mu / r_peri;
+        assert!(
+            (gto.specific_energy_j_per_kg - eps_visviva).abs() / eps_visviva.abs() < 1e-9,
+            "ε {} vs vis-viva {}",
+            gto.specific_energy_j_per_kg,
+            eps_visviva
+        );
+        // A bound ellipse has negative specific energy.
+        assert!(gto.specific_energy_j_per_kg < 0.0, "bound orbit ε < 0");
     }
 
     #[test]
