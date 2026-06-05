@@ -284,6 +284,11 @@ pub struct PlannerForm {
     pub ellipse_perigee_km: f64,
     /// Elliptical orbit — apogee altitude (km).
     pub ellipse_apogee_km: f64,
+
+    /// Synodic period — first circular-orbit altitude (km).
+    pub synodic_a_km: f64,
+    /// Synodic period — second circular-orbit altitude (km).
+    pub synodic_b_km: f64,
 }
 
 impl Default for PlannerForm {
@@ -316,6 +321,9 @@ impl Default for PlannerForm {
             // A geostationary transfer orbit — the classic eccentric orbit.
             ellipse_perigee_km: 300.0,
             ellipse_apogee_km: 35_786.0,
+            // ISS-altitude LEO vs GEO — a wide period spread.
+            synodic_a_km: 400.0,
+            synodic_b_km: 35_786.0,
         }
     }
 }
@@ -434,6 +442,23 @@ pub fn elliptical_orbit(altitude_a_km: f64, altitude_b_km: f64) -> EllipticalOrb
         period_s,
         perigee_speed_ms,
         apogee_speed_ms,
+    }
+}
+
+/// Synodic period (s) between two circular Earth orbits at altitudes
+/// `alt_a_km` and `alt_b_km` — the time between successive
+/// same-relative-geometry alignments, `T_syn = 1 / |1/T_a − 1/T_b|`, which
+/// sets how often a transfer or rendezvous window recurs. Returns
+/// `f64::INFINITY` when the two periods are equal (the orbits never drift
+/// apart).
+pub fn synodic_period(alt_a_km: f64, alt_b_km: f64) -> f64 {
+    let (_, _, t_a) = circular_orbit_basics(alt_a_km);
+    let (_, _, t_b) = circular_orbit_basics(alt_b_km);
+    let rate = (1.0 / t_a - 1.0 / t_b).abs();
+    if rate > 0.0 {
+        1.0 / rate
+    } else {
+        f64::INFINITY
     }
 }
 
@@ -568,6 +593,25 @@ mod tests {
         let (v_circ, _, period) = circular_orbit_basics(500.0);
         assert!((circ.perigee_speed_ms - v_circ).abs() < 1e-6, "circular speed");
         assert!((circ.period_s - period).abs() < 1e-3, "circular period");
+    }
+
+    #[test]
+    fn synodic_period_combines_two_orbital_periods() {
+        let alt_a = 400.0;
+        let alt_b = 35_786.0;
+        let (_, _, t_a) = circular_orbit_basics(alt_a);
+        let (_, _, t_b) = circular_orbit_basics(alt_b);
+        let syn = synodic_period(alt_a, alt_b);
+        // T_syn = 1 / |1/T_a − 1/T_b|.
+        let expected = 1.0 / (1.0 / t_a - 1.0 / t_b).abs();
+        assert!((syn - expected).abs() / expected < 1e-9, "syn {syn} vs {expected}");
+        // Always longer than the shorter of the two periods: the faster craft
+        // needs more than one of its own orbits to lap the slower one.
+        assert!(syn > t_a.min(t_b));
+        // Identical orbits never realign → an infinite synodic period.
+        assert!(synodic_period(400.0, 400.0).is_infinite());
+        // Order-independent.
+        assert!((synodic_period(alt_a, alt_b) - synodic_period(alt_b, alt_a)).abs() < 1e-6);
     }
 
     #[test]
