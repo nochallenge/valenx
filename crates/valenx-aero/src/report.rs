@@ -141,6 +141,22 @@ pub fn breguet_range(velocity: f64, sfc: f64, lift_to_drag: f64, weight_ratio: f
     velocity / sfc * lift_to_drag * weight_ratio.ln()
 }
 
+/// The **Mach angle** `μ = arcsin(1/M)` (radians) — the half-angle of the Mach
+/// cone trailing a body moving at Mach number `mach`, the line along which the
+/// pressure disturbances pile into a shock. It is the *supersonic* companion to
+/// the subsonic [`prandtl_glauert_factor`]: at `M = 1` the cone is a flat disc
+/// (`μ = π/2`), and as the speed rises the cone narrows toward `μ → 0`, sweeping
+/// ever more sharply back. There is no Mach cone below the speed of sound, so it
+/// returns `0` for subsonic `M < 1` (or non-finite input), exactly as the
+/// Prandtl–Glauert factor returns `0` outside its valid range.
+pub fn mach_angle(mach: f64) -> f64 {
+    if mach.is_finite() && mach >= 1.0 {
+        (1.0 / mach).asin()
+    } else {
+        0.0
+    }
+}
+
 impl AeroReport {
     /// Build a report from a completed [`AeroResult`].
     pub fn from_result(result: &AeroResult) -> AeroReport {
@@ -592,5 +608,23 @@ mod tests {
         assert_eq!(breguet_range(-1.0, c, ld, ratio), 0.0);
         assert_eq!(breguet_range(v, c, ld, 0.5), 0.0);
         assert_eq!(breguet_range(v, c, ld, f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn mach_angle_is_the_mach_cone_half_angle() {
+        use std::f64::consts::PI;
+        // At M = 1 the Mach cone is a flat disc: μ = 90°.
+        assert!((mach_angle(1.0) - PI / 2.0).abs() < 1e-12);
+        // M = 2 → arcsin(0.5) = 30°; M = √2 → arcsin(1/√2) = 45°.
+        assert!((mach_angle(2.0) - PI / 6.0).abs() < 1e-12, "M=2 → 30°");
+        assert!((mach_angle(2.0_f64.sqrt()) - PI / 4.0).abs() < 1e-12, "M=√2 → 45°");
+        // The cone narrows as Mach rises, and → 0 at hypersonic speed.
+        assert!(mach_angle(5.0) < mach_angle(2.0), "narrows with Mach");
+        assert!(mach_angle(1.0e6) < 1e-3, "→ 0 as M → ∞");
+        // Subsonic (no Mach cone) and non-finite → 0.
+        assert_eq!(mach_angle(0.8), 0.0);
+        assert_eq!(mach_angle(0.0), 0.0);
+        assert_eq!(mach_angle(f64::NAN), 0.0);
+        assert_eq!(mach_angle(f64::INFINITY), 0.0);
     }
 }
