@@ -56,6 +56,58 @@ pub fn hill_sphere_radius(orbit_radius_m: f64, body_mass: f64, primary_mass: f64
     orbit_radius_m * (body_mass / (3.0 * primary_mass)).cbrt()
 }
 
+/// The fluid-body Roche coefficient (dimensionless): a fluid (deformable)
+/// satellite is tidally disrupted at `d ≈ 2.44·R·(ρ_M/ρ_m)^(1/3)`.
+pub const ROCHE_FLUID_COEFFICIENT: f64 = 2.44;
+
+/// Whether the Roche-limit inputs are physical — a positive finite primary
+/// radius and a positive finite density pair.
+fn roche_inputs_ok(primary_radius_m: f64, primary_density: f64, satellite_density: f64) -> bool {
+    primary_radius_m.is_finite()
+        && primary_radius_m > 0.0
+        && primary_density.is_finite()
+        && primary_density > 0.0
+        && satellite_density.is_finite()
+        && satellite_density > 0.0
+}
+
+/// The **rigid-body Roche limit** (m) — the distance from a primary of radius
+/// `primary_radius_m` (`R_M`) within which a *rigid* satellite held together only
+/// by its own self-gravity is pulled apart by the primary's tide:
+/// `d = R_M·(2·ρ_M/ρ_m)^(1/3)`, with `ρ_M = primary_density` and
+/// `ρ_m = satellite_density`. Only the density ratio and `R_M` enter (the masses
+/// cancel). This is the lower estimate — a real, deformable body disrupts farther
+/// out, see [`roche_limit_fluid`]. It complements [`hill_sphere_radius`]: the
+/// Hill sphere is where a satellite stays orbitally *bound*, the Roche limit is
+/// where its own *body* survives. Returns `0` for non-physical input.
+pub fn roche_limit_rigid(
+    primary_radius_m: f64,
+    primary_density: f64,
+    satellite_density: f64,
+) -> f64 {
+    if !roche_inputs_ok(primary_radius_m, primary_density, satellite_density) {
+        return 0.0;
+    }
+    primary_radius_m * (2.0 * primary_density / satellite_density).cbrt()
+}
+
+/// The **fluid-body Roche limit** (m) — the Roche limit for a *fluid*
+/// (deformable) satellite, which the tide elongates so it disrupts farther out:
+/// `d ≈ 2.44·R_M·(ρ_M/ρ_m)^(1/3)` (see [`ROCHE_FLUID_COEFFICIENT`]). It is the
+/// more realistic estimate for rubble-pile moons, and is where planetary ring
+/// systems sit (Saturn's rings lie inside it). As with the rigid form only the
+/// density ratio and `R_M` enter. Returns `0` for non-physical input.
+pub fn roche_limit_fluid(
+    primary_radius_m: f64,
+    primary_density: f64,
+    satellite_density: f64,
+) -> f64 {
+    if !roche_inputs_ok(primary_radius_m, primary_density, satellite_density) {
+        return 0.0;
+    }
+    ROCHE_FLUID_COEFFICIENT * primary_radius_m * (primary_density / satellite_density).cbrt()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +167,35 @@ mod tests {
         assert_eq!(sphere_of_influence_radius(AU_M, 0.0, M_SUN), 0.0);
         assert_eq!(hill_sphere_radius(AU_M, M_EARTH, f64::NAN), 0.0);
         assert_eq!(hill_sphere_radius(f64::INFINITY, M_EARTH, M_SUN), 0.0);
+    }
+
+    #[test]
+    fn roche_limit_scales_with_density_ratio_and_primary_radius() {
+        // Equal densities: the rigid limit is R·2^(1/3) ≈ 1.26·R, the fluid 2.44·R.
+        let r = 1.0_f64;
+        let rho = 3000.0_f64;
+        let rigid = roche_limit_rigid(r, rho, rho);
+        let fluid = roche_limit_fluid(r, rho, rho);
+        assert!((rigid - 2.0_f64.cbrt()).abs() < 1e-9, "rigid equal-density {rigid}");
+        assert!((fluid - 2.44).abs() < 1e-9, "fluid equal-density {fluid}");
+        // A fluid (deformable) body is disrupted farther out than a rigid one.
+        assert!(fluid > rigid, "fluid Roche {fluid} should exceed rigid {rigid}");
+
+        // Both scale linearly with the primary radius.
+        assert!((roche_limit_rigid(2.0, rho, rho) - 2.0 * rigid).abs() < 1e-9, "rigid ∝ R_M");
+        assert!((roche_limit_fluid(2.0, rho, rho) - 2.0 * fluid).abs() < 1e-9, "fluid ∝ R_M");
+
+        // A denser satellite has a SMALLER Roche limit (∝ ρ_m^(−1/3)): 8× density → ½.
+        let denser = roche_limit_rigid(r, rho, 8.0 * rho);
+        assert!((denser - rigid / 2.0).abs() < 1e-9, "8× satellite density halves it");
+
+        // Reference: the Moon's fluid Roche limit about Earth is ≈ 18,400 km.
+        let moon = roche_limit_fluid(6.371e6, 5514.0, 3344.0);
+        assert!((moon - 1.84e7).abs() < 6e5, "lunar fluid Roche ≈ 18,400 km, got {:.0} km", moon / 1e3);
+
+        // Non-physical inputs → 0.
+        assert_eq!(roche_limit_rigid(-1.0, rho, rho), 0.0);
+        assert_eq!(roche_limit_fluid(r, 0.0, rho), 0.0);
+        assert_eq!(roche_limit_rigid(r, rho, f64::NAN), 0.0);
     }
 }
