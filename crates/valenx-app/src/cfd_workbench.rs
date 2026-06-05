@@ -417,7 +417,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
          peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}{flow_str}\n\
-         circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)\n\
+         circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)  \u{00B7}  palin {:.3e} 1/s\u{00B2}  (\u{00BD}\u{222B}|\u{2207}\u{03C9}|\u{00B2}\u{00B7}dA)\n\
          wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)",
         s.case.label(),
         s.nx,
@@ -444,6 +444,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         sol.max_q_criterion(),
         sol.circulation(),
         sol.enstrophy(),
+        sol.palinstrophy(),
         tau_w,
     );
 }
@@ -473,6 +474,9 @@ mod tests {
         // The sheared cavity flow dissipates energy → the viscous-dissipation
         // readout is surfaced on the energy line.
         assert!(s.result.contains("\u{03A6}_visc"), "dissipation in result: {}", s.result);
+        // The vorticity field is non-uniform → the palinstrophy readout (the
+        // gradient-of-vorticity diagnostic) is surfaced on the cascade line.
+        assert!(s.result.contains("palin"), "palinstrophy in result: {}", s.result);
         assert!(s.profile.as_ref().is_some_and(|p| p.len() == 16), "centreline profile sampled");
     }
 
