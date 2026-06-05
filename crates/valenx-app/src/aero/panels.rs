@@ -942,6 +942,13 @@ fn draw_polar_results(ui: &mut egui::Ui, curve: &valenx_aero::PolarCurve) {
                     format!("{:.1} °", model::rad_to_deg(best.alpha)),
                 );
             }
+            if let Some(end) = curve.best_endurance_point() {
+                kv(
+                    ui,
+                    "best endurance α",
+                    format!("{:.1} °  (max Cl^1.5/Cd)", model::rad_to_deg(end.alpha)),
+                );
+            }
             if let Some(min) = curve.min_drag_point() {
                 kv(ui, "min drag  Cd", format!("{:.4}", min.cd));
             }
