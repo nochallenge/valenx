@@ -75,6 +75,32 @@ impl ClassicalElements {
         p / (1.0 + self.eccentricity * nu.cos())
     }
 
+    /// True anomaly `ν` (rad) from the **eccentric anomaly** `E` (rad) via the
+    /// half-angle relation `ν = 2·atan2(√(1+e)·sin(E/2), √(1−e)·cos(E/2))`.
+    ///
+    /// This is the geometric half of propagating a Kepler orbit in time: once
+    /// the time-driven *mean* anomaly `M = E − e·sin E` has been inverted for
+    /// `E` (Kepler's equation), this turns `E` into the true anomaly `ν` that
+    /// [`radius_at_true_anomaly`](Self::radius_at_true_anomaly) needs —
+    /// completing the `time → M → E → ν → r` position-from-time chain (the
+    /// reverse of the forward `ν → time` map). The half-angle `atan2` form is
+    /// preferred over `cos ν = (cos E − e)/(1 − e·cos E)`
+    /// because it resolves the quadrant directly, with no sign ambiguity past
+    /// apoapsis.
+    ///
+    /// `E = 0` and `E = π` are fixed points (`ν = 0`, `ν = π`); a circular orbit
+    /// (`e = 0`) collapses the map to the identity `ν = E`; and for a canonical
+    /// `E ∈ [0, 2π)` the result lies in `[0, 2π)` and increases monotonically
+    /// with `E`. (Defined for closed orbits, `e < 1`; the eccentric anomaly has
+    /// no meaning for an open orbit, so `e ≥ 1` yields `NaN`.)
+    pub fn true_anomaly_from_eccentric(&self, eccentric_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        let half = eccentric_anomaly / 2.0;
+        let y = (1.0 + e).sqrt() * half.sin();
+        let x = (1.0 - e).sqrt() * half.cos();
+        2.0 * y.atan2(x)
+    }
+
     /// Orbital period (s) for a bound orbit (`a > 0`), else `None`.
     pub fn period(&self) -> Option<f64> {
         if self.semi_major_axis > 0.0 {
