@@ -920,6 +920,13 @@ fn draw_polar_results(ui: &mut egui::Ui, curve: &valenx_aero::PolarCurve) {
                 "max lift / drag",
                 format!("{:.2}", curve.max_lift_to_drag()),
             );
+            if let Some(best) = curve.best_lift_to_drag_point() {
+                kv(
+                    ui,
+                    "best L/D at α",
+                    format!("{:.1} °", model::rad_to_deg(best.alpha)),
+                );
+            }
             kv(ui, "max lift  Cl", format!("{:.4}", curve.max_lift()));
             if let Some(stall) = curve.stall_angle() {
                 kv(

@@ -117,6 +117,19 @@ impl PolarCurve {
             (n * sxy - sx * sy) / denom
         }
     }
+
+    /// The polar point of best lift-to-drag ratio — the most efficient
+    /// (best-glide / cruise) angle of attack. Returns `None` for an empty
+    /// curve. Drag-free points contribute `L/D = 0` (see
+    /// [`PolarPoint::lift_to_drag`]), so they only win when every point is
+    /// drag-free.
+    pub fn best_lift_to_drag_point(&self) -> Option<PolarPoint> {
+        self.points.iter().copied().max_by(|a, b| {
+            a.lift_to_drag()
+                .partial_cmp(&b.lift_to_drag())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    }
 }
 
 /// Run an angle-of-attack sweep and assemble the lift / drag polar.
@@ -265,6 +278,27 @@ mod tests {
         assert!(curve.lift_curve_slope() > 0.0);
         // Max L/D is positive.
         assert!(curve.max_lift_to_drag() > 0.0);
+    }
+
+    #[test]
+    fn best_lift_to_drag_point_is_the_polar_peak() {
+        // L/D by point: 0, 16.7, 20.0 (peak), 10.0, 3.2.
+        let pts = vec![
+            PolarPoint { alpha: 0.0, cd: 0.02, cl: 0.0, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.1, cd: 0.03, cl: 0.5, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.2, cd: 0.05, cl: 1.0, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.3, cd: 0.12, cl: 1.2, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.4, cd: 0.25, cl: 0.8, cm: 0.0, converged: true },
+        ];
+        let curve = PolarCurve { points: pts };
+        let best = curve.best_lift_to_drag_point().expect("non-empty curve");
+        // Peak efficiency is at α = 0.2 rad (L/D = 1.0 / 0.05 = 20).
+        assert!((best.alpha - 0.2).abs() < 1e-12, "best-glide α");
+        assert!((best.lift_to_drag() - 20.0).abs() < 1e-9);
+        // It agrees with the curve's reported maximum L/D value.
+        assert!((best.lift_to_drag() - curve.max_lift_to_drag()).abs() < 1e-9);
+        // An empty curve has no best point.
+        assert!(PolarCurve { points: vec![] }.best_lift_to_drag_point().is_none());
     }
 
     #[test]
