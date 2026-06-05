@@ -427,6 +427,25 @@ fn surface_area_to_volume_ratio(area: f64, volume: f64) -> Option<f64> {
     }
 }
 
+/// Bounding-box aspect ratio (slenderness) — the longest box edge over the
+/// shortest, `max(dims) / min(dims)`. `1.0` for a cube; large for a slender rod
+/// or a thin plate, where it flags poor machinability / 3-D-print stability and
+/// a buckling tendency. `None` when the shortest extent is effectively zero (a
+/// degenerate flat box).
+fn bbox_aspect_ratio(dims: [f32; 3]) -> Option<f64> {
+    let (mut lo, mut hi) = (f64::INFINITY, 0.0_f64);
+    for d in dims {
+        let d = d as f64;
+        lo = lo.min(d);
+        hi = hi.max(d);
+    }
+    if lo > 1e-12 {
+        Some(hi / lo)
+    } else {
+        None
+    }
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -447,7 +466,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(|mesh| mesh_dimensions(&mesh));
     let bbox_str = match dims {
         Some(d @ [dx, dy, dz]) => {
-            format!(" · bbox {dx:.3}×{dy:.3}×{dz:.3} u (diag {:.3})", bbox_diagonal(d))
+            let ar = bbox_aspect_ratio(d)
+                .map(|r| format!(" · AR {r:.1}:1"))
+                .unwrap_or_default();
+            format!(
+                " · bbox {dx:.3}×{dy:.3}×{dz:.3} u (diag {:.3}{ar})",
+                bbox_diagonal(d)
+            )
         }
         None => String::new(),
     };
@@ -1213,6 +1238,18 @@ mod tests {
         assert!((big - cube / 2.0).abs() < 1e-12, "scaling {big}");
         // Non-positive volume → None, never a divide blow-up.
         assert!(surface_area_to_volume_ratio(1.0, 0.0).is_none());
+    }
+
+    #[test]
+    fn bbox_aspect_ratio_is_longest_over_shortest_extent() {
+        // A 3×4×12 box → 12/3 = 4.
+        assert!((bbox_aspect_ratio([3.0, 4.0, 12.0]).unwrap() - 4.0).abs() < 1e-9);
+        // A cube → 1.0.
+        assert!((bbox_aspect_ratio([5.0, 5.0, 5.0]).unwrap() - 1.0).abs() < 1e-9);
+        // Order-independent.
+        assert!((bbox_aspect_ratio([12.0, 3.0, 4.0]).unwrap() - 4.0).abs() < 1e-9);
+        // A degenerate flat box (zero shortest extent) → None.
+        assert!(bbox_aspect_ratio([0.0, 4.0, 12.0]).is_none());
     }
 
     #[test]
