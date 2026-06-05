@@ -415,6 +415,38 @@ fn bbox_diagonal(dims: [f32; 3]) -> f64 {
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
+/// The volume centroid (centre of mass at uniform density) `[x, y, z]` of a
+/// closed `Tri3` surface mesh, via the divergence theorem: each triangle forms
+/// a signed tetrahedron with the origin, contributing its signed volume
+/// `a·(b×c)/6` weighted by the tet centroid `(a+b+c)/4`. This is the true
+/// volume centroid — distinct from the vertex average for any non-symmetric
+/// tessellation. `None` for a mesh with no triangles or effectively zero signed
+/// volume (open / degenerate). Model units.
+fn mesh_centroid(mesh: &valenx_mesh::Mesh) -> Option<[f64; 3]> {
+    let mut total_vol = 0.0;
+    let mut acc = [0.0_f64; 3];
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let v = a.dot(&b.cross(&c)) / 6.0;
+            total_vol += v;
+            acc[0] += v * (a.x + b.x + c.x) / 4.0;
+            acc[1] += v * (a.y + b.y + c.y) / 4.0;
+            acc[2] += v * (a.z + b.z + c.z) / 4.0;
+        }
+    }
+    if total_vol.abs() > 1e-12 {
+        Some([acc[0] / total_vol, acc[1] / total_vol, acc[2] / total_vol])
+    } else {
+        None
+    }
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -461,9 +493,8 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let mass = s.density * volume;
     // Overall bounding-box size + fill fraction of the final model (best-effort:
     // these terms are dropped from the status if tessellation fails).
-    let dims = tessellate_step(&model.snapshots, model.snapshots.len(), &[])
-        .ok()
-        .and_then(|mesh| mesh_dimensions(&mesh));
+    let mesh = tessellate_step(&model.snapshots, model.snapshots.len(), &[]).ok();
+    let dims = mesh.as_ref().and_then(mesh_dimensions);
     let bbox_str = match dims {
         Some(d @ [dx, dy, dz]) => {
             let ar = bbox_aspect_ratio(d)
@@ -488,8 +519,14 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let sv_str = surface_area_to_volume_ratio(area, volume)
         .map(|sv| format!(" (S/V {sv:.3}/u)"))
         .unwrap_or_default();
+    // Volume centroid (centre of mass) of the tessellated model.
+    let centroid_str = mesh
+        .as_ref()
+        .and_then(mesh_centroid)
+        .map(|c| format!(" · centroid ({:.2}, {:.2}, {:.2}) u", c[0], c[1], c[2]))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1250,6 +1287,34 @@ mod tests {
         assert!((bbox_aspect_ratio([12.0, 3.0, 4.0]).unwrap() - 4.0).abs() < 1e-9);
         // A degenerate flat box (zero shortest extent) → None.
         assert!(bbox_aspect_ratio([0.0, 4.0, 12.0]).is_none());
+    }
+
+    #[test]
+    fn mesh_centroid_is_the_volume_centroid_not_the_vertex_average() {
+        use nalgebra::Vector3;
+        // A square pyramid: 2×2 base at z=0, apex at z=4. Its solid centroid sits
+        // at h/4 = 1.0 up the axis — distinct from the 5-vertex average (z = 0.8),
+        // so this discriminates the true volume centroid from a vertex mean.
+        let mut mesh = valenx_mesh::Mesh::new("pyramid");
+        mesh.nodes = vec![
+            Vector3::new(-1.0, -1.0, 0.0),
+            Vector3::new(1.0, -1.0, 0.0),
+            Vector3::new(1.0, 1.0, 0.0),
+            Vector3::new(-1.0, 1.0, 0.0),
+            Vector3::new(0.0, 0.0, 4.0),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, // base (outward normal −z)
+            0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4, // four sides
+        ];
+        mesh.element_blocks.push(block);
+        let c = mesh_centroid(&mesh).expect("closed mesh has a centroid");
+        assert!(c[0].abs() < 1e-9, "cx {}", c[0]);
+        assert!(c[1].abs() < 1e-9, "cy {}", c[1]);
+        assert!((c[2] - 1.0).abs() < 1e-9, "cz {} (should be h/4 = 1.0)", c[2]);
+        // An empty mesh has no centroid.
+        assert!(mesh_centroid(&valenx_mesh::Mesh::new("empty")).is_none());
     }
 
     #[test]
