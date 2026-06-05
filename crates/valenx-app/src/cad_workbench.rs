@@ -391,6 +391,21 @@ fn fill_fraction(volume: f64, dims: [f32; 3]) -> Option<f64> {
     }
 }
 
+/// Wadell sphericity `ψ = π^(1/3)·(6V)^(2/3) / A` — the dimensionless
+/// compactness of a solid of `volume` and surface `area`, normalised so a
+/// perfect sphere is `1.0` (a cube is ≈ 0.806; more elongated or branched
+/// shapes score lower). Independent of orientation and scale. `None` when the
+/// area or volume is non-positive. Because curved-solid `volume`/`area`
+/// under-report slightly at the measure tolerance, a tessellated sphere reads a
+/// hair under 1.
+fn sphericity(volume: f64, area: f64) -> Option<f64> {
+    if area > 1e-12 && volume > 0.0 {
+        Some(std::f64::consts::PI.cbrt() * (6.0 * volume).powf(2.0 / 3.0) / area)
+    } else {
+        None
+    }
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -417,8 +432,12 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(|d| fill_fraction(volume, d))
         .map(|f| format!(" · fill {:.0}%", 100.0 * f))
         .unwrap_or_default();
+    // Wadell sphericity (1.0 = sphere) — a shape-compactness readout alongside fill.
+    let sphericity_str = sphericity(volume, area)
+        .map(|psi| format!(" · ψ {psi:.2}"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{bbox_str}{fill_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{bbox_str}{fill_str}{sphericity_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1120,6 +1139,23 @@ mod tests {
         assert!((cyl - std::f64::consts::FRAC_PI_4).abs() < 1e-12);
         // A degenerate (zero-volume) bounding box yields None, not a divide by zero.
         assert!(fill_fraction(1.0, [0.0, 1.0, 1.0]).is_none());
+    }
+
+    #[test]
+    fn sphericity_is_one_for_a_sphere_and_known_for_a_cube() {
+        let pi = std::f64::consts::PI;
+        // The sphere is the maximally compact solid → ψ = 1 exactly.
+        let r = 2.5;
+        let v_sphere = 4.0 / 3.0 * pi * r * r * r;
+        let a_sphere = 4.0 * pi * r * r;
+        assert!((sphericity(v_sphere, a_sphere).unwrap() - 1.0).abs() < 1e-12);
+        // A cube has the classic Wadell sphericity ≈ 0.8060 (scale-independent).
+        let a = 2.0;
+        assert!((sphericity(a * a * a, 6.0 * a * a).unwrap() - 0.8060).abs() < 1e-3);
+        assert!((sphericity(1.0, 6.0).unwrap() - 0.8060).abs() < 1e-3);
+        // Non-positive area or volume → None, never a divide blow-up.
+        assert!(sphericity(1.0, 0.0).is_none());
+        assert!(sphericity(0.0, 1.0).is_none());
     }
 
     #[test]
