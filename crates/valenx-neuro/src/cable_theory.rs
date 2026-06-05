@@ -102,6 +102,35 @@ pub fn steady_state_attenuation(electrotonic_length: f64) -> f64 {
     (-electrotonic_length.max(0.0)).exp()
 }
 
+/// Input resistance of a finite passive cable with a **sealed** (closed,
+/// no-axial-leak) far end: `R_in = R_∞·coth(L)`, from the semi-infinite input
+/// resistance `r_inf_ohms` ([`semi_infinite_input_resistance`]) and the
+/// electrotonic length `electrotonic_length` `L` ([`electrotonic_length`]). A
+/// sealed terminal traps current, so a short cable presents a *higher*
+/// resistance than the semi-infinite case; as `L → ∞` it relaxes to `R_∞`.
+/// Returns `R_∞` for non-positive `L`.
+pub fn sealed_end_input_resistance(r_inf_ohms: f64, electrotonic_length: f64) -> f64 {
+    if electrotonic_length > 0.0 {
+        // coth(L) = 1 / tanh(L).
+        r_inf_ohms / electrotonic_length.tanh()
+    } else {
+        r_inf_ohms
+    }
+}
+
+/// Input resistance of a finite passive cable with an **open** (killed,
+/// clamped-to-rest) far end: `R_in = R_∞·tanh(L)`. An open terminal sinks
+/// current freely, so a short cable presents a *lower* resistance than the
+/// semi-infinite case; as `L → ∞` it relaxes to `R_∞`. Returns `0` for
+/// non-positive `L` (a zero-length open cable shorts straight to rest).
+pub fn open_end_input_resistance(r_inf_ohms: f64, electrotonic_length: f64) -> f64 {
+    if electrotonic_length > 0.0 {
+        r_inf_ohms * electrotonic_length.tanh()
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +244,26 @@ mod tests {
         // Monotonically decreasing; a negative L clamps to the injection value.
         assert!(steady_state_attenuation(2.0) < steady_state_attenuation(1.0));
         assert_eq!(steady_state_attenuation(-1.0), 1.0);
+    }
+
+    #[test]
+    fn finite_cable_input_resistances_bracket_the_semi_infinite_case() {
+        let r_inf = 80.0e6;
+        // As L → ∞ both boundary conditions relax to the semi-infinite R_∞.
+        assert!((sealed_end_input_resistance(r_inf, 10.0) - r_inf).abs() / r_inf < 1e-6);
+        assert!((open_end_input_resistance(r_inf, 10.0) - r_inf).abs() / r_inf < 1e-6);
+        // A sealed short cable traps current → higher than R_∞; open sinks it → lower.
+        assert!(sealed_end_input_resistance(r_inf, 0.5) > r_inf);
+        assert!(open_end_input_resistance(r_inf, 0.5) < r_inf);
+        // Known values at L = 1: coth(1) ≈ 1.31304, tanh(1) ≈ 0.76159.
+        assert!((sealed_end_input_resistance(r_inf, 1.0) / r_inf - 1.31304).abs() < 1e-4);
+        assert!((open_end_input_resistance(r_inf, 1.0) / r_inf - 0.76159).abs() < 1e-4);
+        // Sealed always exceeds open at the same length (trapped vs sunk current).
+        assert!(
+            sealed_end_input_resistance(r_inf, 0.8) > open_end_input_resistance(r_inf, 0.8)
+        );
+        // Degenerate length: sealed → R_∞, open → 0 (a direct short to rest).
+        assert_eq!(sealed_end_input_resistance(r_inf, 0.0), r_inf);
+        assert_eq!(open_end_input_resistance(r_inf, 0.0), 0.0);
     }
 }
