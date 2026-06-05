@@ -289,6 +289,9 @@ pub struct PlannerForm {
     pub synodic_a_km: f64,
     /// Synodic period — second circular-orbit altitude (km).
     pub synodic_b_km: f64,
+
+    /// Target-period orbit — desired orbital period (hours).
+    pub target_period_h: f64,
 }
 
 impl Default for PlannerForm {
@@ -324,6 +327,8 @@ impl Default for PlannerForm {
             // ISS-altitude LEO vs GEO — a wide period spread.
             synodic_a_km: 400.0,
             synodic_b_km: 35_786.0,
+            // One sidereal day → the geostationary altitude.
+            target_period_h: 23.934,
         }
     }
 }
@@ -408,6 +413,19 @@ pub fn circular_orbit_basics(altitude_km: f64) -> (f64, f64, f64) {
 pub fn escape_delta_v_from_circular(altitude_km: f64) -> f64 {
     let (v_circ, v_esc, _) = circular_orbit_basics(altitude_km);
     v_esc - v_circ
+}
+
+/// The circular-orbit altitude (km) whose period equals `period_s` — the
+/// inverse of [`circular_orbit_basics`]'s period via Kepler's third law,
+/// `r = (μ·T²/4π²)^(1/3)`, then altitude `= r − R_⊕`. One sidereal day
+/// (86 164 s) gives the geostationary altitude (≈ 35 786 km); half a sidereal
+/// day (≈ 43 082 s) the GPS orbit (≈ 20 200 km). Negative for a period too
+/// short to clear the surface.
+pub fn orbit_altitude_for_period_km(period_s: f64) -> f64 {
+    let mu = valenx_astro::constants::MU_EARTH;
+    let four_pi_sq = 4.0 * std::f64::consts::PI * std::f64::consts::PI;
+    let r = (mu * period_s * period_s / four_pi_sq).cbrt();
+    (r - valenx_astro::constants::R_EARTH) / 1000.0
 }
 
 /// The three-burn Δv budget and timing of a **bi-elliptic** transfer between
@@ -665,6 +683,20 @@ mod tests {
         assert!((dv / 1000.0 - 3.2).abs() < 0.2, "LEO escape Δv {} km/s", dv / 1000.0);
         // Positive, and less than the circular speed itself.
         assert!(dv > 0.0 && dv < v_circ);
+    }
+
+    #[test]
+    fn orbit_altitude_for_period_matches_geostationary_and_gps() {
+        // One sidereal day → geostationary, ≈ 35 786 km.
+        let geo = orbit_altitude_for_period_km(86_164.0);
+        assert!((geo - 35_786.0).abs() < 100.0, "geostationary {geo} km");
+        // Half a sidereal day → the GPS orbit, ≈ 20 200 km.
+        let gps = orbit_altitude_for_period_km(43_082.0);
+        assert!((gps - 20_200.0).abs() < 200.0, "GPS {gps} km");
+        // Inverse of circular_orbit_basics: the period at the computed altitude
+        // round-trips back to the input period.
+        let (_, _, t) = circular_orbit_basics(geo);
+        assert!((t - 86_164.0).abs() / 86_164.0 < 1e-6, "round-trip period");
     }
 
     #[test]

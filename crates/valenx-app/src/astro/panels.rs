@@ -557,6 +557,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_circular_basics_planner(app, ui);
     draw_elliptical_orbit_planner(app, ui);
     draw_synodic_planner(app, ui);
+    draw_target_period_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -866,6 +867,41 @@ fn draw_synodic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     kv(ui, "period A", model::format_duration(t_a));
                     kv(ui, "period B", model::format_duration(t_b));
                     kv(ui, "synodic period", model::format_duration(syn));
+                });
+        });
+}
+
+/// Circular-orbit altitude for a target period
+/// (`model::orbit_altitude_for_period_km`).
+fn draw_target_period_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Target-period orbit")
+        .id_source("astro_target_period")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_target_period_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Orbital period").on_hover_text(
+                        "Desired orbital period — one sidereal day (~23.93 h) is \
+                         geostationary, half that is the GPS orbit. SI unit: hours.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.target_period_h)
+                            .speed(0.1)
+                            .range(1.5..=2400.0)
+                            .suffix(" h"),
+                    );
+                    ui.end_row();
+                });
+            let altitude_km =
+                model::orbit_altitude_for_period_km(form.target_period_h * 3600.0);
+            egui::Grid::new("astro_target_period_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(ui, "circular altitude", format!("{altitude_km:.1} km"));
                 });
         });
 }
