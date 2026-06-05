@@ -50,7 +50,8 @@ pub use aniso_field::{analytic_aniso_point_source_mv, AnisoTissue, Conductivity,
 pub use bioheat::{analytic_point_heat_k, solve_point_heat, BioheatField};
 pub use cable::{count_spikes, hh_gating_kinetics, GatingKinetics, HhCable, HhCompartment, StimPulse};
 pub use cable_theory::{
-    charging_fraction, electrotonic_length, length_constant_cm, membrane_cutoff_frequency,
+    ac_length_constant, charging_fraction, electrotonic_length, length_constant_cm,
+    membrane_cutoff_frequency,
     open_end_input_resistance, rall_equivalent_diameter, sealed_end_input_resistance,
     semi_infinite_input_resistance, steady_state_attenuation, time_constant_s,
     time_to_charge_fraction,

@@ -145,6 +145,32 @@ pub fn membrane_cutoff_frequency(tau_s: f64) -> f64 {
     }
 }
 
+/// The frequency-dependent (**AC**) length constant
+/// `|λ_AC(f)| = λ / (1 + (2π·f·τ)²)^(1/4)` (same units as `dc_length_constant`) —
+/// how far a *sinusoidal* signal at `frequency_hz` spreads passively along a
+/// cable, given the steady (DC) length constant `dc_length_constant` (`λ`) and
+/// the membrane time constant `time_constant_s` (`τ`, s). Because the membrane is
+/// a low-pass RC filter, faster signals are shunted by the membrane capacitance
+/// and decay over a *shorter* distance than slow ones: `|λ_AC|` equals `λ` at DC
+/// (`f = 0`), falls monotonically, and at the membrane cutoff `f_c = 1/(2πτ)`
+/// ([`membrane_cutoff_frequency`]) has dropped to `λ/2^(1/4) ≈ 0.84·λ`. This is
+/// the spatial counterpart of the temporal low-pass filtering — dendrites blur
+/// fast synaptic input in space as well as time. Returns `0` for non-physical
+/// input (`λ` or `τ` non-positive, `f` negative, or non-finite).
+pub fn ac_length_constant(dc_length_constant: f64, time_constant_s: f64, frequency_hz: f64) -> f64 {
+    if !dc_length_constant.is_finite()
+        || dc_length_constant <= 0.0
+        || !time_constant_s.is_finite()
+        || time_constant_s <= 0.0
+        || !frequency_hz.is_finite()
+        || frequency_hz < 0.0
+    {
+        return 0.0;
+    }
+    let omega_tau = 2.0 * std::f64::consts::PI * frequency_hz * time_constant_s;
+    dc_length_constant / (1.0 + omega_tau * omega_tau).powf(0.25)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +322,34 @@ mod tests {
         );
         // Non-positive τ → 0.
         assert_eq!(membrane_cutoff_frequency(0.0), 0.0);
+    }
+
+    #[test]
+    fn ac_length_constant_low_pass_filters_in_space() {
+        let lambda = 0.1; // cm (DC length constant)
+        let tau = 0.01; // s (10 ms)
+        // At DC the AC length constant equals the steady length constant.
+        assert!((ac_length_constant(lambda, tau, 0.0) - lambda).abs() < 1e-12);
+        // It matches the closed form at an arbitrary frequency.
+        let f = 25.0;
+        let wt = 2.0 * std::f64::consts::PI * f * tau;
+        let expected = lambda / (1.0 + wt * wt).powf(0.25);
+        assert!((ac_length_constant(lambda, tau, f) - expected).abs() < 1e-12);
+        // At the membrane cutoff frequency it has dropped to λ/2^(1/4) ≈ 0.841·λ.
+        let fc = membrane_cutoff_frequency(tau);
+        let at_cutoff = ac_length_constant(lambda, tau, fc);
+        assert!(
+            (at_cutoff - lambda / 2.0_f64.powf(0.25)).abs() < 1e-9,
+            "at cutoff {at_cutoff}"
+        );
+        // Strictly decreasing in frequency, never exceeds λ, and → 0 at high f.
+        assert!(ac_length_constant(lambda, tau, 10.0) > ac_length_constant(lambda, tau, 100.0));
+        assert!(ac_length_constant(lambda, tau, 1.0) <= lambda);
+        assert!(ac_length_constant(lambda, tau, 1.0e6) < 0.01 * lambda);
+        // Non-physical inputs → 0.
+        assert_eq!(ac_length_constant(0.0, tau, f), 0.0);
+        assert_eq!(ac_length_constant(lambda, 0.0, f), 0.0);
+        assert_eq!(ac_length_constant(lambda, tau, -1.0), 0.0);
+        assert_eq!(ac_length_constant(f64::NAN, tau, f), 0.0);
     }
 }
