@@ -70,5 +70,7 @@ pub use nernst::{nernst_potential_mv, thermal_voltage_mv, BODY_TEMPERATURE_K};
 pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{charge_density, is_safe, max_safe_charge_per_phase, shannon_k};
 pub use steering::ContactArray;
-pub use strength_duration::{chronaxie, rheobase, threshold_amplitude};
+pub use strength_duration::{
+    chronaxie, lapicque_threshold, rheobase, threshold_amplitude, weiss_threshold_charge,
+};
 pub use temperature::{q10_scale, TYPICAL_GATING_Q10};
