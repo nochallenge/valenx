@@ -573,6 +573,40 @@ impl FlowSolution {
         }
         peak
     }
+
+    /// The total **viscous dissipation rate** `Φ = 2μ·∫(S:S) dA` (W·m⁻¹, i.e. per
+    /// unit depth in 2-D) over the interior cells — the rate at which the flow
+    /// *irreversibly* converts mechanical energy into heat, where `S` is the
+    /// rate-of-strain tensor and `S:S = S_ij S_ij`. `dynamic_viscosity` is the
+    /// fluid's dynamic viscosity `μ = ρ·ν` (Pa·s). Unlike the rotation diagnostics
+    /// it is built from the *full* strain rate, not just the vorticity, so a pure
+    /// straining flow — which has zero vorticity and zero enstrophy — still
+    /// dissipates: `Φ` is strictly non-negative and vanishes only for rigid
+    /// motion. Uses the same interior central-difference stencil as
+    /// [`FlowSolution::max_q_criterion`], with `S:S = u_x² + v_y² + ½(u_y+v_x)²`.
+    /// Returns `0` for a grid too small for an interior difference (`nx < 3` or
+    /// `ny < 3`).
+    pub fn viscous_dissipation(&self, dynamic_viscosity: f64) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let (two_dx, two_dy) = (2.0 * dx, 2.0 * dy);
+        let mut sum = 0.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let du_dx = (self.u_at_cell(i + 1, j) - self.u_at_cell(i - 1, j)) / two_dx;
+                let dv_dy = (self.v_at_cell(i, j + 1) - self.v_at_cell(i, j - 1)) / two_dy;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let s_off = 0.5 * (du_dy + dv_dx);
+                // S:S = u_x² + v_y² + 2·(½(u_y+v_x))².
+                sum += du_dx * du_dx + dv_dy * dv_dy + 2.0 * s_off * s_off;
+            }
+        }
+        2.0 * dynamic_viscosity * sum * dx * dy
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1633,6 +1667,90 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.max_q_criterion(), 0.0);
+    }
+
+    #[test]
+    fn viscous_dissipation_is_nonzero_for_a_vorticity_free_straining_flow() {
+        // The signature that separates dissipation from the rotation diagnostics:
+        // a pure (irrotational) straining flow u = ε·x, v = −ε·y has ZERO
+        // vorticity and zero enstrophy, yet still dissipates — S:S = 2ε², so the
+        // integral is 2ε²·(interior area).
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+        let eps = 2.0_f64;
+        let mu = 0.5_f64;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            // u at the x-face of index i sits at x = i·dx → u = ε·i·dx.
+            for i in 0..=grid.nx {
+                u.set(i, j, eps * i as f64 * dx);
+            }
+        }
+        let mut v = grid.v_field();
+        for j in 0..=grid.ny {
+            // v at the y-face of index j sits at y = j·dy → v = −ε·j·dy.
+            for i in 0..grid.nx {
+                v.set(i, j, -eps * j as f64 * dy);
+            }
+        }
+        let strain = FlowSolution {
+            grid,
+            u,
+            v,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            strain.enstrophy() < 1e-9,
+            "straining flow is irrotational: enstrophy {}",
+            strain.enstrophy()
+        );
+        let interior = ((grid.nx - 2) * (grid.ny - 2)) as f64;
+        // Φ = 2μ·(S:S = 2ε²)·area.
+        let expected = 2.0 * mu * 2.0 * eps * eps * interior * dx * dy;
+        let phi = strain.viscous_dissipation(mu);
+        assert!((phi - expected).abs() < 1e-9, "dissipation {phi} vs analytic {expected}");
+        assert!(phi > 0.0, "a straining flow dissipates despite zero enstrophy");
+
+        // A uniform shear u = γ·y gives S:S = ½γ², so Φ = 2μ·½γ²·area = μγ²·area.
+        let gamma = 3.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let expected_shear = mu * gamma * gamma * interior * dx * dy;
+        assert!(
+            (shear.viscous_dissipation(mu) - expected_shear).abs() < 1e-9,
+            "shear dissipation {}",
+            shear.viscous_dissipation(mu)
+        );
+
+        // A grid too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.viscous_dissipation(mu), 0.0);
     }
 
     #[test]

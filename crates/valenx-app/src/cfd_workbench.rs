@@ -413,7 +413,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          iterations : {} {}\n\
          residual   : {:.3e}\n\
          max |u|    : {:.5} m/s  (mean {:.5})\n\
-         dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4})\n\
+         dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4}; \u{03A6}_visc {:.3e} W/m)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
          peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}{flow_str}\n\
@@ -437,6 +437,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         mean_speed,
         q,
         sol.mean_kinetic_energy_density(s.density),
+        sol.viscous_dissipation(s.density * s.viscosity),
         re_cell,
         dp,
         vorticity,
@@ -469,6 +470,9 @@ mod tests {
         // The cavity's primary vortex is rotation-dominated → the Q-criterion
         // readout is surfaced on the peak-vorticity line.
         assert!(s.result.contains("Q_max"), "Q-criterion in result: {}", s.result);
+        // The sheared cavity flow dissipates energy → the viscous-dissipation
+        // readout is surfaced on the energy line.
+        assert!(s.result.contains("\u{03A6}_visc"), "dissipation in result: {}", s.result);
         assert!(s.profile.as_ref().is_some_and(|p| p.len() == 16), "centreline profile sampled");
     }
 
