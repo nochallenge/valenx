@@ -327,6 +327,23 @@ impl FlowSolution {
             0.0
         }
     }
+
+    /// Area-averaged velocity magnitude over the cell grid (m/s) — the typical
+    /// flow speed, as opposed to the peak that `speed_at_cell` reveals. Returns
+    /// `0` for an empty grid.
+    pub fn mean_speed(&self) -> f64 {
+        let n = self.grid.nx * self.grid.ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut sum = 0.0;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                sum += self.speed_at_cell(i, j);
+            }
+        }
+        sum / n as f64
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -1186,6 +1203,29 @@ mod tests {
             }
         }
         assert!((dp - (hi - lo)).abs() < 1e-12, "Δp {dp} vs max−min {}", hi - lo);
+    }
+
+    #[test]
+    fn channel_flow_mean_speed_is_positive_and_below_the_peak() {
+        let grid = Grid::new(60, 16, 6.0, 1.0);
+        let fluid = Fluid::new(1.0, 0.05);
+        let bcs = Boundaries::channel_flow(1.0);
+        let controls = SimpleControls {
+            max_iterations: 4000,
+            tolerance: 1e-5,
+            ..SimpleControls::default()
+        };
+        let sol = solve_simple(&grid, &fluid, &bcs, &controls);
+        let mean = sol.mean_speed();
+        let mut peak = 0.0_f64;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                peak = peak.max(sol.speed_at_cell(i, j));
+            }
+        }
+        // A driven flow has a positive mean that cannot exceed the peak.
+        assert!(mean > 0.0, "driven flow should have a positive mean speed");
+        assert!(mean <= peak + 1e-9, "mean {mean} cannot exceed peak {peak}");
     }
 
     #[test]
