@@ -62,6 +62,36 @@ pub fn prandtl_glauert_factor(mach: f64) -> f64 {
     }
 }
 
+/// The finite-wing (3-D) lift-curve slope `a = a₀ / (1 + a₀/(π·e·AR))` (per
+/// radian) from Prandtl's lifting-line theory — how a wing of finite aspect
+/// ratio `aspect_ratio` and span efficiency `span_efficiency` develops a
+/// *gentler* lift slope than its 2-D airfoil section `section_slope_per_rad`
+/// (typically ≈ `2π`/rad). The downwash induced by the trailing vortices tilts
+/// the local flow and cuts the effective angle of attack, so a given incidence
+/// makes less lift. This is the lift-side companion to the induced drag
+/// (`crate::sweep::PolarCurve::induced_drag_factor`) — both scale with the same
+/// `1/(π·e·AR)` finite-span group. As `AR → ∞` the downwash vanishes and the
+/// 2-D slope `a₀` is recovered. Returns `0` for non-physical inputs
+/// (`a₀ < 0`, `AR ≤ 0`, `e ≤ 0`, or any non-finite), where the relation does
+/// not apply.
+pub fn finite_wing_lift_slope(
+    section_slope_per_rad: f64,
+    aspect_ratio: f64,
+    span_efficiency: f64,
+) -> f64 {
+    if !section_slope_per_rad.is_finite()
+        || !aspect_ratio.is_finite()
+        || !span_efficiency.is_finite()
+        || section_slope_per_rad < 0.0
+        || aspect_ratio <= 0.0
+        || span_efficiency <= 0.0
+    {
+        return 0.0;
+    }
+    section_slope_per_rad
+        / (1.0 + section_slope_per_rad / (std::f64::consts::PI * span_efficiency * aspect_ratio))
+}
+
 impl AeroReport {
     /// Build a report from a completed [`AeroResult`].
     pub fn from_result(result: &AeroResult) -> AeroReport {
@@ -439,5 +469,29 @@ mod tests {
         assert_eq!(prandtl_glauert_factor(1.0), 0.0);
         assert_eq!(prandtl_glauert_factor(1.5), 0.0);
         assert_eq!(prandtl_glauert_factor(-0.1), 0.0);
+    }
+
+    #[test]
+    fn finite_wing_lift_slope_reduces_below_the_section_value() {
+        use std::f64::consts::PI;
+        let a0 = 2.0 * PI; // thin-airfoil section slope, per radian
+        // AR = 6, e = 1: a = 2π / (1 + 2π/(π·6)) = 2π / (1 + 1/3) = 2π·0.75.
+        let a = finite_wing_lift_slope(a0, 6.0, 1.0);
+        assert!((a - 2.0 * PI * 0.75).abs() < 1e-9, "AR=6 slope {a}");
+        // A finite wing is always gentler than its 2-D section.
+        assert!(a < a0, "finite-wing slope must be < section slope");
+
+        // As AR → ∞ the downwash vanishes and the 2-D slope is recovered.
+        let a_inf = finite_wing_lift_slope(a0, 1.0e6, 1.0);
+        assert!((a_inf - a0).abs() < 1e-3, "AR→∞ should recover a0, got {a_inf}");
+
+        // Monotonic: a higher-aspect-ratio wing has a steeper slope.
+        assert!(finite_wing_lift_slope(a0, 12.0, 1.0) > finite_wing_lift_slope(a0, 6.0, 1.0));
+
+        // Non-physical inputs → 0 (the relation does not apply).
+        assert_eq!(finite_wing_lift_slope(a0, 0.0, 1.0), 0.0);
+        assert_eq!(finite_wing_lift_slope(a0, 6.0, 0.0), 0.0);
+        assert_eq!(finite_wing_lift_slope(-1.0, 6.0, 1.0), 0.0);
+        assert_eq!(finite_wing_lift_slope(f64::NAN, 6.0, 1.0), 0.0);
     }
 }
