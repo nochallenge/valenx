@@ -383,6 +383,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
             match solve_linear_static(&mesh, &material, &constraints, &forces) {
                 Ok(sol) => {
                     let vm = sol.max_von_mises();
+                    let max_principal = sol.max_principal_stress();
                     let max_disp = sol.max_displacement();
                     // Factor of safety = yield strength / peak von-Mises stress.
                     let fos = if vm > 0.0 {
@@ -423,6 +424,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                          max displacement: {:.6e} m\n\
                          deflection ratio: {}  (span/δ)\n\
                          max von Mises   : {:.4e} Pa  ({:.3} MPa)\n\
+                         max principal   : {:.4e} Pa  ({:.3} MPa)\n\
                          tip stiffness   : {} N/m\n\
                          strain energy   : {:.4e} J\n\
                          factor of safety: {} (σy = {:.0} MPa)",
@@ -433,6 +435,8 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         defl_str,
                         vm,
                         vm / 1e6,
+                        max_principal,
+                        max_principal / 1e6,
                         stiffness_str,
                         energy,
                         fos_str,
@@ -659,5 +663,18 @@ mod tests {
         run_fem(&mut s);
         let r2 = s.deflection_ratio.expect("ratio recomputed");
         assert!((r2 - 0.5 * r1).abs() / r1 < 1e-6, "doubling the load halves L/δ: {r1} → {r2}");
+    }
+
+    #[test]
+    fn linear_static_reports_max_principal_stress() {
+        let mut s = FemWorkbenchState {
+            solver: FemSolver::LinearStatic,
+            ..Default::default()
+        };
+        run_fem(&mut s);
+        // The result surfaces the maximum principal (Rankine) stress alongside
+        // the von Mises measure. (The eigenvalue maths is validated in
+        // valenx-fem; here we just confirm the readout is wired through.)
+        assert!(s.result.contains("max principal"), "result: {}", s.result);
     }
 }
