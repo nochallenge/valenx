@@ -157,6 +157,36 @@ pub fn mach_angle(mach: f64) -> f64 {
     }
 }
 
+/// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
+/// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
+/// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
+/// and span efficiency `span_efficiency` `e` sheds trailing vortices whose
+/// downwash tilts the lift vector slightly aft, and that backward tilt *is* the
+/// induced drag. It is the drag-side companion to [`finite_wing_lift_slope`]:
+/// both carry the same `1/(π·e·AR)` finite-span group, here multiplied by the
+/// square of the lift coefficient `lift_coefficient` `C_L` (so it quadruples
+/// when `C_L` doubles, and is sign-blind — negative-lift downforce induces drag
+/// just the same). Elliptical loading (`e = 1`) gives the theoretical minimum
+/// `C_Di = C_L²/(π·AR)`, and the term vanishes for an infinite-span wing
+/// (`AR → ∞`). Returns `0` at zero lift and for any non-physical input
+/// (`AR ≤ 0`, `e ≤ 0`, or non-finite), where the relation does not apply.
+pub fn induced_drag_coefficient(
+    lift_coefficient: f64,
+    aspect_ratio: f64,
+    span_efficiency: f64,
+) -> f64 {
+    if !lift_coefficient.is_finite()
+        || !aspect_ratio.is_finite()
+        || !span_efficiency.is_finite()
+        || aspect_ratio <= 0.0
+        || span_efficiency <= 0.0
+    {
+        return 0.0;
+    }
+    lift_coefficient * lift_coefficient
+        / (std::f64::consts::PI * span_efficiency * aspect_ratio)
+}
+
 impl AeroReport {
     /// Build a report from a completed [`AeroResult`].
     pub fn from_result(result: &AeroResult) -> AeroReport {
@@ -626,5 +656,44 @@ mod tests {
         assert_eq!(mach_angle(0.0), 0.0);
         assert_eq!(mach_angle(f64::NAN), 0.0);
         assert_eq!(mach_angle(f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn induced_drag_coefficient_is_the_lifting_line_drag_due_to_lift() {
+        use std::f64::consts::PI;
+        // No lift, no induced drag.
+        assert_eq!(induced_drag_coefficient(0.0, 8.0, 0.8), 0.0);
+        // Worked point: C_L=0.5, AR=8, e=0.8 → 0.25/(π·6.4) ≈ 0.0124339.
+        let cdi = induced_drag_coefficient(0.5, 8.0, 0.8);
+        assert!((cdi - 0.25 / (PI * 6.4)).abs() < 1e-12, "C_Di {cdi}");
+        assert!((cdi - 0.012_433_9).abs() < 1e-6, "≈0.0124339, got {cdi}");
+        // Elliptical loading (e=1) is the theoretical minimum C_Di = C_L²/(π·AR),
+        // and it is strictly less than the e=0.8 case.
+        let cdi_ell = induced_drag_coefficient(0.5, 8.0, 1.0);
+        assert!((cdi_ell - 0.25 / (PI * 8.0)).abs() < 1e-12, "elliptical {cdi_ell}");
+        assert!(cdi_ell < cdi, "elliptical loading has the least induced drag");
+        // Quadratic in C_L: doubling the lift coefficient quadruples induced drag.
+        let base = induced_drag_coefficient(0.4, 8.0, 0.8);
+        assert!(
+            (induced_drag_coefficient(0.8, 8.0, 0.8) - 4.0 * base).abs() < 1e-12,
+            "∝ C_L²"
+        );
+        // Inverse in AR: doubling the aspect ratio halves the induced drag.
+        assert!(
+            (induced_drag_coefficient(0.5, 16.0, 0.8) - cdi / 2.0).abs() < 1e-12,
+            "∝ 1/AR"
+        );
+        // Sign-blind: negative-lift downforce induces drag just the same (∝ C_L²).
+        assert!(
+            (induced_drag_coefficient(-0.5, 8.0, 0.8) - cdi).abs() < 1e-12,
+            "C_L² is sign-blind"
+        );
+        // As AR → ∞ the induced drag vanishes (the downwash disappears).
+        assert!(induced_drag_coefficient(0.5, 1.0e6, 1.0) < 1e-6, "AR→∞ → 0");
+        // Non-physical inputs → 0 (the relation does not apply).
+        assert_eq!(induced_drag_coefficient(0.5, 0.0, 0.8), 0.0);
+        assert_eq!(induced_drag_coefficient(0.5, 8.0, 0.0), 0.0);
+        assert_eq!(induced_drag_coefficient(f64::NAN, 8.0, 0.8), 0.0);
+        assert_eq!(induced_drag_coefficient(0.5, f64::INFINITY, 0.8), 0.0);
     }
 }
