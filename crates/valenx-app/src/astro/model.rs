@@ -402,6 +402,14 @@ pub fn circular_orbit_basics(altitude_km: f64) -> (f64, f64, f64) {
     (v_circ, v_esc, period)
 }
 
+/// The prograde Δv (m/s) to escape from a circular orbit at altitude
+/// `altitude_km` — the burn from circular speed up to escape speed,
+/// `Δv = v_esc − v_circ = (√2 − 1)·v_circ ≈ 0.414·v_circ`.
+pub fn escape_delta_v_from_circular(altitude_km: f64) -> f64 {
+    let (v_circ, v_esc, _) = circular_orbit_basics(altitude_km);
+    v_esc - v_circ
+}
+
 /// The three-burn Δv budget and timing of a **bi-elliptic** transfer between
 /// circular orbits at altitudes `from_km` and `to_km`, routed via an
 /// intermediate apoapsis at altitude `via_km` — a units wrapper (km) over
@@ -645,6 +653,18 @@ mod tests {
         // The result is always a valid wrapped angle in (−π, π].
         let inward = hohmann_phase_angle(20_000.0, 300.0);
         assert!(inward > -std::f64::consts::PI - 1e-9 && inward <= std::f64::consts::PI + 1e-9);
+    }
+
+    #[test]
+    fn escape_delta_v_is_root_two_minus_one_times_circular_speed() {
+        let (v_circ, _, _) = circular_orbit_basics(300.0);
+        let dv = escape_delta_v_from_circular(300.0);
+        // Δv = (√2 − 1)·v_circ exactly.
+        assert!((dv - (2.0_f64.sqrt() - 1.0) * v_circ).abs() < 1e-6, "Δv {dv}");
+        // From a ~300 km LEO it is ~3.2 km/s.
+        assert!((dv / 1000.0 - 3.2).abs() < 0.2, "LEO escape Δv {} km/s", dv / 1000.0);
+        // Positive, and less than the circular speed itself.
+        assert!(dv > 0.0 && dv < v_circ);
     }
 
     #[test]
