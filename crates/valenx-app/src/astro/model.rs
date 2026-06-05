@@ -375,6 +375,21 @@ pub fn plane_change_dv(altitude_km: f64, delta_inc_deg: f64) -> Result<f64, Astr
     valenx_astro::maneuver::circular_plane_change_dv(r, delta_inc_deg.to_radians())
 }
 
+/// The Hohmann departure **phase angle** (radians, wrapped to (−π, π]) between
+/// circular orbits at altitudes `from_km` and `to_km` — the angular lead the
+/// destination must have over the spacecraft at the first burn so the two reach
+/// the arrival radius together: `φ = π·(1 − ((r1 + r2)/(2·r2))^{3/2})`. Positive
+/// means the target leads (an outward transfer); negative means it trails (an
+/// inward transfer); zero for equal orbits.
+pub fn hohmann_phase_angle(from_km: f64, to_km: f64) -> f64 {
+    let r1 = altitude_km_to_radius_m(from_km);
+    let r2 = altitude_km_to_radius_m(to_km);
+    let a_t = 0.5 * (r1 + r2);
+    let raw = std::f64::consts::PI * (1.0 - (a_t / r2).powf(1.5));
+    // Wrap into (−π, π] so an inward transfer's large lead reads as a lead/lag.
+    (raw + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI
+}
+
 /// Circular-orbit speed, escape speed (m/s) and orbital period (s) at altitude
 /// `altitude_km`, from `r = R_⊕ + h` and Earth's μ:
 /// `v_circ = √(μ/r)`, `v_esc = √(2μ/r)`, `T = 2π·√(r³/μ)`.
@@ -612,6 +627,24 @@ mod tests {
         assert!(synodic_period(400.0, 400.0).is_infinite());
         // Order-independent.
         assert!((synodic_period(alt_a, alt_b) - synodic_period(alt_b, alt_a)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hohmann_phase_angle_matches_known_transfers() {
+        // A 1 : 1.524 radius ratio (the Earth→Mars orbital ratio) gives the
+        // famous ~44° Hohmann phase angle, independent of absolute scale —
+        // 300 km → 3795 km altitude is r2/r1 ≈ 1.524 about Earth.
+        let mars_like = hohmann_phase_angle(300.0, 3795.0).to_degrees();
+        assert!((mars_like - 44.0).abs() < 2.0, "Mars-ratio phase {mars_like}°");
+        // LEO 300 km → GEO 35 786 km: the target leads by ~101° at departure.
+        let leo_geo = hohmann_phase_angle(300.0, 35_786.0).to_degrees();
+        assert!((leo_geo - 100.7).abs() < 2.0, "LEO→GEO phase {leo_geo}°");
+        assert!(hohmann_phase_angle(300.0, 35_786.0) > 0.0, "outward transfer leads");
+        // Equal orbits need no phasing.
+        assert!(hohmann_phase_angle(500.0, 500.0).abs() < 1e-9);
+        // The result is always a valid wrapped angle in (−π, π].
+        let inward = hohmann_phase_angle(20_000.0, 300.0);
+        assert!(inward > -std::f64::consts::PI - 1e-9 && inward <= std::f64::consts::PI + 1e-9);
     }
 
     #[test]
