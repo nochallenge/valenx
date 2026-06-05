@@ -406,6 +406,15 @@ fn sphericity(volume: f64, area: f64) -> Option<f64> {
     }
 }
 
+/// The space diagonal `√(dx² + dy² + dz²)` of a bounding box of dimensions
+/// `dims` (model units) — the part's overall reach, equal to the diameter of
+/// the smallest sphere that encloses the box. Exact from the axis-aligned
+/// extents, so it is independent of tessellation density.
+fn bbox_diagonal(dims: [f32; 3]) -> f64 {
+    let (dx, dy, dz) = (dims[0] as f64, dims[1] as f64, dims[2] as f64);
+    (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -425,7 +434,9 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .ok()
         .and_then(|mesh| mesh_dimensions(&mesh));
     let bbox_str = match dims {
-        Some([dx, dy, dz]) => format!(" · bbox {dx:.3}×{dy:.3}×{dz:.3} u"),
+        Some(d @ [dx, dy, dz]) => {
+            format!(" · bbox {dx:.3}×{dy:.3}×{dz:.3} u (diag {:.3})", bbox_diagonal(d))
+        }
         None => String::new(),
     };
     let fill_str = dims
@@ -1156,6 +1167,16 @@ mod tests {
         // Non-positive area or volume → None, never a divide blow-up.
         assert!(sphericity(1.0, 0.0).is_none());
         assert!(sphericity(0.0, 1.0).is_none());
+    }
+
+    #[test]
+    fn bbox_diagonal_is_the_euclidean_norm_of_the_extents() {
+        // A 3-4-12 box has space diagonal 13 (3²+4²+12² = 169).
+        assert!((bbox_diagonal([3.0, 4.0, 12.0]) - 13.0).abs() < 1e-6);
+        // A 1-2-2 box → 3.
+        assert!((bbox_diagonal([1.0, 2.0, 2.0]) - 3.0).abs() < 1e-6);
+        // A flat box collapses to its in-plane diagonal (3-4 → 5).
+        assert!((bbox_diagonal([3.0, 4.0, 0.0]) - 5.0).abs() < 1e-6);
     }
 
     #[test]
