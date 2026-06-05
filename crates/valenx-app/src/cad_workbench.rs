@@ -415,6 +415,18 @@ fn bbox_diagonal(dims: [f32; 3]) -> f64 {
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
+/// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
+/// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
+/// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
+/// `None` when the volume is non-positive.
+fn surface_area_to_volume_ratio(area: f64, volume: f64) -> Option<f64> {
+    if volume > 1e-12 {
+        Some(area / volume)
+    } else {
+        None
+    }
+}
+
 /// Rebuild the feature tree against the parameters. Returns the per-step
 /// snapshots (`snapshots[k]` = the set of bodies after step k) plus a one-line
 /// status, or an error message.
@@ -447,8 +459,12 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let sphericity_str = sphericity(volume, area)
         .map(|psi| format!(" · ψ {psi:.2}"))
         .unwrap_or_default();
+    // Surface-area-to-volume ratio (square–cube law) — paired onto the area term.
+    let sv_str = surface_area_to_volume_ratio(area, volume)
+        .map(|sv| format!(" (S/V {sv:.3}/u)"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{bbox_str}{fill_str}{sphericity_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1177,6 +1193,26 @@ mod tests {
         assert!((bbox_diagonal([1.0, 2.0, 2.0]) - 3.0).abs() < 1e-6);
         // A flat box collapses to its in-plane diagonal (3-4 → 5).
         assert!((bbox_diagonal([3.0, 4.0, 0.0]) - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn surface_area_to_volume_ratio_follows_the_square_cube_law() {
+        let pi = std::f64::consts::PI;
+        // A sphere of radius r: S/V = 4πr² / (4/3·πr³) = 3/r.
+        let r = 2.0;
+        let v = 4.0 / 3.0 * pi * r * r * r;
+        let a = 4.0 * pi * r * r;
+        assert!((surface_area_to_volume_ratio(a, v).unwrap() - 3.0 / r).abs() < 1e-12);
+        // A cube of side s: S/V = 6s² / s³ = 6/s.
+        let s = 4.0;
+        let cube = surface_area_to_volume_ratio(6.0 * s * s, s * s * s).unwrap();
+        assert!((cube - 6.0 / s).abs() < 1e-12, "cube S/V {cube}");
+        // Doubling every length halves S/V (the square–cube law).
+        let big =
+            surface_area_to_volume_ratio(6.0 * (2.0 * s) * (2.0 * s), (2.0 * s).powi(3)).unwrap();
+        assert!((big - cube / 2.0).abs() < 1e-12, "scaling {big}");
+        // Non-positive volume → None, never a divide blow-up.
+        assert!(surface_area_to_volume_ratio(1.0, 0.0).is_none());
     }
 
     #[test]
