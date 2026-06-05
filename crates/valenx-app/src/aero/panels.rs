@@ -944,6 +944,11 @@ fn draw_polar_results(ui: &mut egui::Ui, curve: &valenx_aero::PolarCurve) {
                 kv(ui, "zero-lift α", format!("{:.1} °", model::rad_to_deg(a0)));
             }
             kv(ui, "induced drag  k", format!("{:.4}", curve.induced_drag_factor()));
+            kv(
+                ui,
+                "parasitic drag  Cd\u{2080}",
+                format!("{:.4}", curve.parasitic_drag_coefficient()),
+            );
             kv(ui, "max lift  Cl", format!("{:.4}", curve.max_lift()));
             if let Some(stall) = curve.stall_angle() {
                 kv(
