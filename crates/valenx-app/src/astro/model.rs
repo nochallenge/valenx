@@ -480,6 +480,10 @@ pub struct EllipticalOrbit {
     /// per unit mass (kinetic + gravitational potential). Negative for a bound
     /// ellipse; it rises toward zero as the orbit nears escape (`a → ∞`).
     pub specific_energy_j_per_kg: f64,
+    /// Specific angular momentum `h = √(μ·a·(1−e²))` (m²/s) — conserved along the
+    /// orbit (Kepler's 2nd law: the areal sweep rate is `h/2`). Equals the
+    /// product `r·v` at both apsides.
+    pub specific_angular_momentum_m2_s: f64,
 }
 
 /// Summarize the elliptical Earth orbit with the two given altitudes (km),
@@ -500,6 +504,7 @@ pub fn elliptical_orbit(altitude_a_km: f64, altitude_b_km: f64) -> EllipticalOrb
     let perigee_speed_ms = (mu * (2.0 / r_peri - 1.0 / a)).sqrt();
     let apogee_speed_ms = (mu * (2.0 / r_apo - 1.0 / a)).sqrt();
     let specific_energy_j_per_kg = -mu / (2.0 * a);
+    let specific_angular_momentum_m2_s = (mu * a * (1.0 - eccentricity * eccentricity)).sqrt();
     EllipticalOrbit {
         semi_major_axis_m: a,
         eccentricity,
@@ -507,6 +512,7 @@ pub fn elliptical_orbit(altitude_a_km: f64, altitude_b_km: f64) -> EllipticalOrb
         perigee_speed_ms,
         apogee_speed_ms,
         specific_energy_j_per_kg,
+        specific_angular_momentum_m2_s,
     }
 }
 
@@ -671,6 +677,18 @@ mod tests {
         );
         // A bound ellipse has negative specific energy.
         assert!(gto.specific_energy_j_per_kg < 0.0, "bound orbit ε < 0");
+        // Specific angular momentum h = √(μ·a·(1−e²)) is conserved, so it equals
+        // the kinematic product r·v at both apsides.
+        let r_apo = altitude_km_to_radius_m(35_786.0);
+        let h_peri = r_peri * gto.perigee_speed_ms;
+        let h_apo = r_apo * gto.apogee_speed_ms;
+        assert!(
+            (gto.specific_angular_momentum_m2_s - h_peri).abs() / h_peri < 1e-9,
+            "h {} vs r_peri·v_peri {}",
+            gto.specific_angular_momentum_m2_s,
+            h_peri
+        );
+        assert!((h_peri - h_apo).abs() / h_peri < 1e-9, "h conserved peri↔apo");
     }
 
     #[test]
