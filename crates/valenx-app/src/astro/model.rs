@@ -302,6 +302,13 @@ pub struct PlannerForm {
     pub fpa_eccentricity: f64,
     /// Flight-path angle — true anomaly θ (degrees).
     pub fpa_true_anomaly_deg: f64,
+
+    /// Orbital speed at altitude — perigee altitude (km).
+    pub speed_perigee_km: f64,
+    /// Orbital speed at altitude — apogee altitude (km).
+    pub speed_apogee_km: f64,
+    /// Orbital speed at altitude — query altitude (km).
+    pub speed_query_km: f64,
 }
 
 impl Default for PlannerForm {
@@ -345,6 +352,10 @@ impl Default for PlannerForm {
             // A moderately eccentric orbit, sampled a third of the way to apogee.
             fpa_eccentricity: 0.5,
             fpa_true_anomaly_deg: 60.0,
+            // A GTO queried partway up its climb to apogee.
+            speed_perigee_km: 300.0,
+            speed_apogee_km: 35_786.0,
+            speed_query_km: 2_000.0,
         }
     }
 }
@@ -386,6 +397,28 @@ pub fn format_duration(secs: f64) -> String {
 /// radius (m) — the input the maneuver / rendezvous planners take.
 pub fn altitude_km_to_radius_m(altitude_km: f64) -> f64 {
     valenx_astro::constants::R_EARTH + altitude_km * 1_000.0
+}
+
+/// The orbital speed (m/s) at altitude `query_altitude_km` on the elliptical
+/// Earth orbit defined by the given perigee/apogee altitudes (km), from vis-viva
+/// `v = √(μ(2/r − 1/a))` with `a = (r_peri + r_apo)/2`. The perigee/apogee inputs
+/// may be given in either order. Returns `None` if the query altitude lies
+/// outside the orbit's `[perigee, apogee]` span — the orbit never reaches it.
+pub fn orbital_speed_at_altitude(
+    perigee_km: f64,
+    apogee_km: f64,
+    query_altitude_km: f64,
+) -> Option<f64> {
+    let r_peri = altitude_km_to_radius_m(perigee_km.min(apogee_km));
+    let r_apo = altitude_km_to_radius_m(perigee_km.max(apogee_km));
+    let r = altitude_km_to_radius_m(query_altitude_km);
+    // A 1 m tolerance keeps the apsides themselves in range against float error.
+    if r < r_peri - 1.0 || r > r_apo + 1.0 {
+        return None;
+    }
+    let mu = valenx_astro::constants::MU_EARTH;
+    let a = 0.5 * (r_peri + r_apo);
+    Some((mu * (2.0 / r - 1.0 / a)).sqrt())
 }
 
 /// Δv (m/s) for a pure inclination change of `delta_inc_deg` on a circular
@@ -803,6 +836,27 @@ mod tests {
         // Positive while climbing (0 < θ < π), negative while descending.
         assert!(flight_path_angle(0.5, PI / 4.0) > 0.0);
         assert!(flight_path_angle(0.5, -PI / 4.0) < 0.0);
+    }
+
+    #[test]
+    fn orbital_speed_at_altitude_matches_apsis_speeds_and_vis_viva() {
+        // GTO: 300 km perigee, 35 786 km apogee.
+        let gto = elliptical_orbit(300.0, 35_786.0);
+        // At the perigee altitude the speed equals the perigee speed.
+        let v_peri = orbital_speed_at_altitude(300.0, 35_786.0, 300.0).unwrap();
+        assert!((v_peri - gto.perigee_speed_ms).abs() < 1e-6, "v_peri {v_peri}");
+        // At the apogee altitude → apogee speed.
+        let v_apo = orbital_speed_at_altitude(300.0, 35_786.0, 35_786.0).unwrap();
+        assert!((v_apo - gto.apogee_speed_ms).abs() < 1e-6, "v_apo {v_apo}");
+        // Speed decreases monotonically from perigee to apogee.
+        let v_mid = orbital_speed_at_altitude(300.0, 35_786.0, 18_000.0).unwrap();
+        assert!(v_apo < v_mid && v_mid < v_peri, "mid {v_mid}");
+        // The perigee/apogee inputs are order-independent.
+        assert!(
+            (orbital_speed_at_altitude(35_786.0, 300.0, 300.0).unwrap() - v_peri).abs() < 1e-6
+        );
+        // An altitude the orbit never reaches → None.
+        assert!(orbital_speed_at_altitude(300.0, 35_786.0, 50_000.0).is_none());
     }
 
     #[test]
