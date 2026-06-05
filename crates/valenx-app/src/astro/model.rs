@@ -316,6 +316,9 @@ pub struct PlannerForm {
     pub tof_apogee_km: f64,
     /// Time of flight — true anomaly θ (degrees).
     pub tof_true_anomaly_deg: f64,
+
+    /// Horizon & coverage — satellite altitude (km).
+    pub horizon_altitude_km: f64,
 }
 
 impl Default for PlannerForm {
@@ -367,6 +370,8 @@ impl Default for PlannerForm {
             tof_perigee_km: 300.0,
             tof_apogee_km: 35_786.0,
             tof_true_anomaly_deg: 90.0,
+            // A typical LEO altitude.
+            horizon_altitude_km: 400.0,
         }
     }
 }
@@ -449,6 +454,25 @@ pub fn time_since_perigee(perigee_km: f64, apogee_km: f64, true_anomaly_deg: f64
     let ecc_anom = ecc_anom.rem_euclid(tau);
     let mean_anom = ecc_anom - e * ecc_anom.sin();
     mean_anom * orbit.period_s / tau
+}
+
+/// The line-of-sight slant range to the horizon (km) from a satellite at
+/// altitude `altitude_km` — `√(h² + 2·R⊕·h)`, the farthest ground point within
+/// line of sight (the geometric tangent range). Negative altitudes clamp to 0.
+pub fn horizon_slant_range_km(altitude_km: f64) -> f64 {
+    let h = (altitude_km * 1000.0).max(0.0); // m
+    let r = valenx_astro::constants::R_EARTH;
+    (h * h + 2.0 * r * h).sqrt() / 1000.0 // → km
+}
+
+/// The Earth-central half-angle (degrees) of a satellite's visibility footprint
+/// at altitude `altitude_km` — `acos(R⊕/(R⊕+h))`, the angular radius of the
+/// ground area within line of sight (twice this spans the full footprint). `0`
+/// at the surface, approaching 90° as the orbit grows.
+pub fn coverage_half_angle_deg(altitude_km: f64) -> f64 {
+    let h = (altitude_km * 1000.0).max(0.0);
+    let r = valenx_astro::constants::R_EARTH;
+    (r / (r + h)).acos().to_degrees()
 }
 
 /// Δv (m/s) for a pure inclination change of `delta_inc_deg` on a circular
@@ -905,6 +929,26 @@ mod tests {
         // leg takes longer than 0°→90° (Kepler's 2nd law / areal velocity).
         let t90 = time_since_perigee(300.0, 35_786.0, 90.0);
         assert!(t90 < t_apo - t90, "more time spent approaching apogee: {t90} vs {}", t_apo - t90);
+    }
+
+    #[test]
+    fn horizon_and_coverage_match_a_leo_satellite() {
+        // A 400 km LEO satellite: horizon ≈ 2293 km, coverage half-angle ≈ 19.85°.
+        let slant = horizon_slant_range_km(400.0);
+        assert!((slant - 2293.0).abs() < 5.0, "horizon slant {slant} km");
+        let half = coverage_half_angle_deg(400.0);
+        assert!((half - 19.85).abs() < 0.1, "coverage half-angle {half}°");
+        // At the surface both vanish.
+        assert!(horizon_slant_range_km(0.0).abs() < 1e-6);
+        assert!(coverage_half_angle_deg(0.0).abs() < 1e-9);
+        // A higher orbit sees a farther horizon and covers a wider footprint.
+        assert!(horizon_slant_range_km(35_786.0) > slant);
+        assert!(coverage_half_angle_deg(35_786.0) > half);
+        // Geometric identity slant = √(h²+2Rh).
+        let r = valenx_astro::constants::R_EARTH;
+        let h = 1_000.0e3;
+        let expected = (h * h + 2.0 * r * h).sqrt() / 1000.0;
+        assert!((horizon_slant_range_km(1000.0) - expected).abs() < 1e-6);
     }
 
     #[test]

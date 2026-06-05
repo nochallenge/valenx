@@ -562,6 +562,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_flight_path_planner(app, ui);
     draw_orbital_speed_planner(app, ui);
     draw_time_of_flight_planner(app, ui);
+    draw_horizon_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -916,6 +917,42 @@ fn draw_target_period_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .spacing([8.0, 3.0])
                 .show(ui, |ui| {
                     kv(ui, "circular altitude", format!("{altitude_km:.1} km"));
+                });
+        });
+}
+
+/// Satellite horizon range + coverage footprint
+/// (`model::horizon_slant_range_km` / `model::coverage_half_angle_deg`).
+fn draw_horizon_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Horizon & coverage")
+        .id_source("astro_horizon")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_horizon_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Satellite altitude").on_hover_text(
+                        "Orbit altitude above the surface. Higher orbits see \
+                         farther and cover more ground. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.horizon_altitude_km)
+                            .speed(10.0)
+                            .range(0.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                });
+            let slant = model::horizon_slant_range_km(form.horizon_altitude_km);
+            let half = model::coverage_half_angle_deg(form.horizon_altitude_km);
+            egui::Grid::new("astro_horizon_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(ui, "horizon range", format!("{slant:.1} km"));
+                    kv(ui, "coverage half-angle", format!("{half:.2} \u{00B0}"));
                 });
         });
 }
