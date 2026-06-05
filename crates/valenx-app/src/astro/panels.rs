@@ -559,6 +559,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_synodic_planner(app, ui);
     draw_target_period_planner(app, ui);
     draw_injection_planner(app, ui);
+    draw_flight_path_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -960,6 +961,56 @@ fn draw_injection_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .spacing([8.0, 3.0])
                 .show(ui, |ui| {
                     kv(ui, "injection \u{0394}v", model::format_delta_v(dv));
+                });
+        });
+}
+
+/// Flight-path angle at a true anomaly (`model::flight_path_angle`).
+fn draw_flight_path_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Flight-path angle")
+        .id_source("astro_flight_path")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_fpa_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Eccentricity").on_hover_text(
+                        "Orbit eccentricity (0 = circular, →1 = highly elongated). \
+                         Dimensionless.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.fpa_eccentricity)
+                            .speed(0.01)
+                            .range(0.0..=0.99),
+                    );
+                    ui.end_row();
+                    ui.label("True anomaly \u{03B8}").on_hover_text(
+                        "Angle from perigee along the orbit; 0 / 180° are the \
+                         apsides. SI unit: degrees.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.fpa_true_anomaly_deg)
+                            .speed(1.0)
+                            .range(-180.0..=180.0)
+                            .suffix(" \u{00B0}"),
+                    );
+                    ui.end_row();
+                });
+            let gamma = model::flight_path_angle(
+                form.fpa_eccentricity,
+                form.fpa_true_anomaly_deg.to_radians(),
+            );
+            egui::Grid::new("astro_fpa_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(
+                        ui,
+                        "flight-path angle \u{03B3}",
+                        format!("{:.2} \u{00B0}", gamma.to_degrees()),
+                    );
                 });
         });
 }
