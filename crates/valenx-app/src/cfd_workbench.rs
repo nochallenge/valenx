@@ -13,7 +13,7 @@
 //! toggled from the View menu.
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints};
+use egui_plot::{Line, Plot, PlotPoints, VLine};
 
 use valenx_cfd_native::{solve_simple, Boundaries, Fluid, Grid, SimpleControls};
 
@@ -63,6 +63,9 @@ pub struct CfdWorkbenchState {
     /// Analytic fully-developed Poiseuille profile for channel flow, overlaid on
     /// the plot for comparison; `None` for the lid-driven cavity.
     analytic_profile: Option<Vec<[f64; 2]>>,
+    /// Bulk (mean-throughflow) velocity drawn as a reference line on the channel
+    /// profile plot (⅔ of the Poiseuille peak); `None` for the lid-driven cavity.
+    bulk_velocity: Option<f64>,
 }
 
 impl Default for CfdWorkbenchState {
@@ -82,6 +85,7 @@ impl Default for CfdWorkbenchState {
             error: None,
             profile: None,
             analytic_profile: None,
+            bulk_velocity: None,
         }
     }
 }
@@ -267,6 +271,9 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                             .name("Poiseuille (analytic)"),
                                     );
                                 }
+                                if let Some(ub) = s.bulk_velocity {
+                                    pui.vline(VLine::new(ub).name("U_bulk (Q/H)"));
+                                }
                             });
                     }
                 });
@@ -312,6 +319,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     s.error = None;
     s.profile = None;
     s.analytic_profile = None;
+    s.bulk_velocity = None;
     if s.nx == 0 || s.ny == 0 {
         s.error = Some("grid must have at least one cell per axis".into());
         return;
@@ -372,6 +380,11 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     // (the lid-driven cavity has no such 1-D profile).
     s.analytic_profile = match s.case {
         CfdCase::ChannelFlow => Some(poiseuille_profile(s.speed, s.ly, s.ny)),
+        CfdCase::LidDrivenCavity => None,
+    };
+    // Bulk velocity reference (channel only): U_bulk = Q_in / H, ⅔ of the peak.
+    s.bulk_velocity = match s.case {
+        CfdCase::ChannelFlow => Some(sol.bulk_velocity()),
         CfdCase::LidDrivenCavity => None,
     };
 

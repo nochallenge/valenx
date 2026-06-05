@@ -402,6 +402,18 @@ impl FlowSolution {
         }
     }
 
+    /// The bulk (mean-throughflow) velocity `U_bulk = Q_in / H` (m/s) — the inlet
+    /// volumetric flow rate per unit channel height, the reference speed behind
+    /// the bulk Reynolds number. For fully-developed plane Poiseuille flow it is
+    /// exactly ⅔ of the centreline peak. Returns `0` for a zero-height grid.
+    pub fn bulk_velocity(&self) -> f64 {
+        if self.grid.ly > 0.0 {
+            self.inlet_flow_rate() / self.grid.ly
+        } else {
+            0.0
+        }
+    }
+
     /// Area-averaged kinetic-energy density `⟨½ρ|u|²⟩` (J/m³ = Pa) over the cell
     /// grid — the mean specific kinetic energy of the flow, in the same units as
     /// (and directly comparable to) the freestream dynamic pressure `½ρU²`.
@@ -1497,6 +1509,30 @@ mod tests {
         assert!(
             (sol.mean_kinetic_energy_density(2.0 * rho) - 2.0 * ke).abs() < 1e-12
         );
+    }
+
+    #[test]
+    fn bulk_velocity_is_the_flow_rate_per_height() {
+        // Uniform plug flow u = 2 over a 4×3 grid of height 1 → U_bulk = Q/H = 2.
+        let grid = Grid::new(4, 3, 4.0, 1.0);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 2.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((sol.bulk_velocity() - 2.0).abs() < 1e-12, "U_bulk {}", sol.bulk_velocity());
+        // By definition U_bulk · H = Q_in.
+        assert!((sol.bulk_velocity() * grid.ly - sol.inlet_flow_rate()).abs() < 1e-12);
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
