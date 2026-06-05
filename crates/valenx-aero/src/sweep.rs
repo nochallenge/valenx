@@ -130,6 +130,15 @@ impl PolarCurve {
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
+
+    /// The polar point of least drag — the bottom of the drag bucket (the
+    /// parasitic, near-zero-lift drag floor). Returns `None` for an empty curve.
+    pub fn min_drag_point(&self) -> Option<PolarPoint> {
+        self.points
+            .iter()
+            .copied()
+            .min_by(|a, b| a.cd.partial_cmp(&b.cd).unwrap_or(std::cmp::Ordering::Equal))
+    }
 }
 
 /// Run an angle-of-attack sweep and assemble the lift / drag polar.
@@ -299,6 +308,26 @@ mod tests {
         assert!((best.lift_to_drag() - curve.max_lift_to_drag()).abs() < 1e-9);
         // An empty curve has no best point.
         assert!(PolarCurve { points: vec![] }.best_lift_to_drag_point().is_none());
+    }
+
+    #[test]
+    fn min_drag_point_is_the_bottom_of_the_drag_bucket() {
+        let pts = vec![
+            PolarPoint { alpha: 0.0, cd: 0.02, cl: 0.0, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.1, cd: 0.03, cl: 0.5, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.2, cd: 0.05, cl: 1.0, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.3, cd: 0.12, cl: 1.2, cm: 0.0, converged: true },
+            PolarPoint { alpha: 0.4, cd: 0.25, cl: 0.8, cm: 0.0, converged: true },
+        ];
+        let curve = PolarCurve { points: pts };
+        let min = curve.min_drag_point().expect("non-empty curve");
+        // Lowest drag is Cd = 0.02 at α = 0.
+        assert!((min.cd - 0.02).abs() < 1e-12, "min drag cd {}", min.cd);
+        assert!((min.alpha - 0.0).abs() < 1e-12, "min drag α");
+        // No point has lower drag.
+        assert!(curve.points.iter().all(|p| p.cd >= min.cd - 1e-12));
+        // An empty curve has no minimum-drag point.
+        assert!(PolarCurve { points: vec![] }.min_drag_point().is_none());
     }
 
     #[test]
