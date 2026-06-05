@@ -64,6 +64,17 @@ impl ClassicalElements {
         self.semi_major_axis * (1.0 - self.eccentricity)
     }
 
+    /// Orbital radius `r = a(1−e²)/(1 + e·cos ν)` (m) at true anomaly `nu` (rad) —
+    /// the **polar equation of the conic**, the foundational relation behind the
+    /// orbit's shape. Its `ν = 0` and `ν = π` values are exactly the periapsis and
+    /// apoapsis radii; `ν = ±π/2` gives the semi-latus rectum `p = a(1−e²)`; a
+    /// circular orbit (`e = 0`) returns `a` at every angle. (For an open orbit
+    /// `e ≥ 1` it diverges to `±∞` at the asymptote `cos ν = −1/e`, as it should.)
+    pub fn radius_at_true_anomaly(&self, nu: f64) -> f64 {
+        let p = self.semi_major_axis * (1.0 - self.eccentricity * self.eccentricity);
+        p / (1.0 + self.eccentricity * nu.cos())
+    }
+
     /// Orbital period (s) for a bound orbit (`a > 0`), else `None`.
     pub fn period(&self) -> Option<f64> {
         if self.semi_major_axis > 0.0 {
@@ -460,6 +471,35 @@ mod tests {
             raan: 0.3,
             arg_periapsis: 0.7,
             true_anomaly: 1.0,
+        }
+    }
+
+    #[test]
+    fn radius_at_true_anomaly_traces_the_conic() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.2,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let (a, e) = (coe.semi_major_axis, coe.eccentricity);
+        // ν=0 → periapsis a(1−e); ν=π → apoapsis a(1+e).
+        assert!((coe.radius_at_true_anomaly(0.0) - coe.periapsis_radius()).abs() < 1e-6);
+        assert!((coe.radius_at_true_anomaly(PI) - coe.apoapsis_radius()).abs() < 1e-6);
+        assert!((coe.radius_at_true_anomaly(0.0) - a * (1.0 - e)).abs() < 1e-6, "perigee");
+        assert!((coe.radius_at_true_anomaly(PI) - a * (1.0 + e)).abs() < 1e-6, "apogee");
+        // ν=±π/2 → the semi-latus rectum p = a(1−e²).
+        let p = a * (1.0 - e * e);
+        assert!((coe.radius_at_true_anomaly(PI / 2.0) - p).abs() < 1e-6, "semi-latus rectum");
+        // Symmetric about the line of apsides: r(ν) = r(−ν).
+        assert!((coe.radius_at_true_anomaly(1.0) - coe.radius_at_true_anomaly(-1.0)).abs() < 1e-9);
+        // A circular orbit has constant radius a at every true anomaly.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for nu in [0.0, 1.0, PI, 2.5] {
+            assert!((circ.radius_at_true_anomaly(nu) - a).abs() < 1e-6, "circular r at {nu}");
         }
     }
 
