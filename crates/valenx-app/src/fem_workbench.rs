@@ -440,7 +440,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                          tip load        : {:.1} N downward\n\
                          max displacement: {:.6e} m\n\
                          deflection ratio: {}  (span/δ)\n\
-                         max von Mises   : {:.4e} Pa  ({:.3} MPa, triax {:.2})\n\
+                         max von Mises   : {:.4e} Pa  ({:.3} MPa, triax {:.2}, Lode {:.2})\n\
                          mean von Mises  : {:.4e} Pa  (Kt {:.1} = peak/mean)\n\
                          max principal   : {:.4e} Pa  (min {:.4e} Pa)\n\
                          max shear       : {:.4e} Pa  (Tresca)\n\
@@ -457,6 +457,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
                         vm,
                         vm / 1e6,
                         triax,
+                        sol.peak_lode_parameter(),
                         mean_vm,
                         kt,
                         max_principal,
@@ -579,6 +580,10 @@ mod tests {
         run_fem(&mut s);
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
         assert!(s.result.contains("max displacement"));
+        // The stress-state pair is surfaced: triaxiality (hydrostatic axis) and
+        // its deviatoric companion, the Lode parameter, on the von-Mises line.
+        assert!(s.result.contains("triax"), "triaxiality in result: {}", s.result);
+        assert!(s.result.contains("Lode"), "Lode parameter in result: {}", s.result);
         assert!(matches!(s.plot, Some(FemPlot::LoadDisp(_))), "static run plots a curve");
         // The deformed-shape overlay is built and queued for the viewport.
         assert!(s.push_viz, "static run queues the 3D viz");
