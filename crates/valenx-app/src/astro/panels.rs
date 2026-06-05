@@ -556,6 +556,7 @@ pub fn draw_planners_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     draw_plane_change_planner(app, ui);
     draw_circular_basics_planner(app, ui);
     draw_elliptical_orbit_planner(app, ui);
+    draw_synodic_planner(app, ui);
     draw_hoverslam_planner(app, ui);
     draw_rendezvous_planner(app, ui);
     draw_azimuth_planner(app, ui);
@@ -814,6 +815,52 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     kv(ui, "perigee speed", model::format_delta_v(orbit.perigee_speed_ms));
                     kv(ui, "apogee speed", model::format_delta_v(orbit.apogee_speed_ms));
                     kv(ui, "orbital period", model::format_duration(orbit.period_s));
+                });
+        });
+}
+
+/// Synodic period between two circular orbits (`model::synodic_period`).
+fn draw_synodic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Synodic period (window cadence)")
+        .id_source("astro_synodic")
+        .default_open(false)
+        .show(ui, |ui| {
+            let form = &mut app.astro.planner;
+            egui::Grid::new("astro_synodic_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("Orbit A altitude").on_hover_text(
+                        "First circular-orbit altitude above the equator. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.synodic_a_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                    ui.label("Orbit B altitude").on_hover_text(
+                        "Second circular-orbit altitude above the equator. SI unit: km.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.synodic_b_km)
+                            .speed(10.0)
+                            .range(80.0..=400_000.0)
+                            .suffix(" km"),
+                    );
+                    ui.end_row();
+                });
+            let (_, _, t_a) = model::circular_orbit_basics(form.synodic_a_km);
+            let (_, _, t_b) = model::circular_orbit_basics(form.synodic_b_km);
+            let syn = model::synodic_period(form.synodic_a_km, form.synodic_b_km);
+            egui::Grid::new("astro_synodic_out")
+                .num_columns(2)
+                .spacing([8.0, 3.0])
+                .show(ui, |ui| {
+                    kv(ui, "period A", model::format_duration(t_a));
+                    kv(ui, "period B", model::format_duration(t_b));
+                    kv(ui, "synodic period", model::format_duration(syn));
                 });
         });
 }
