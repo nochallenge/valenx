@@ -329,6 +329,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     let re_cell = cell_reynolds(s.speed, s.lx / s.nx as f64, s.viscosity);
     // Static-pressure swing Δp = p_max − p_min (gauge-independent).
     let dp = sol.pressure_range();
+    // Peak vorticity |∂v/∂x − ∂u/∂y| — the strongest local rotation.
+    let vorticity = sol.max_vorticity();
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -349,7 +351,8 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          max |u|    : {:.5} m/s  (mean {:.5})\n\
          dynamic q  : {:.4} Pa  (½ρU²)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
-         pressure Δp: {:.4e} Pa  (p_max−p_min)",
+         pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
+         peak vort  : {:.4} 1/s  (max rotation)",
         s.case.label(),
         s.nx,
         s.ny,
@@ -369,6 +372,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         q,
         re_cell,
         dp,
+        vorticity,
     );
 }
 
