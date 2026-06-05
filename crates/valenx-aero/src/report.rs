@@ -116,6 +116,31 @@ pub fn stall_speed(weight_n: f64, wing_area_m2: f64, air_density: f64, cl_max: f
     (2.0 * weight_n / (air_density * wing_area_m2 * cl_max)).sqrt()
 }
 
+/// The **Breguet range** `R = (V/c)·(L/D)·ln(W₀/W₁)` (m) of a jet in cruise —
+/// the classic flight-performance result for how far an aircraft flies burning
+/// its fuel. `velocity` `V` (m/s) is the cruise speed, `sfc` `c` (s⁻¹) the
+/// thrust-specific fuel consumption (fuel weight per unit thrust per second),
+/// `lift_to_drag` `L/D` the aerodynamic efficiency, and `weight_ratio` `W₀/W₁`
+/// the start-to-end (takeoff-to-landing) weight ratio — the fuel fraction in
+/// log form. It is maximised by cruising at the best-`L/D` point
+/// ([`crate::sweep::PolarCurve::best_lift_to_drag_point`]) at the highest
+/// `V`/`c`. Returns `0` when no fuel is burned (`W₀/W₁ = 1`) and for any
+/// non-physical input (`V`, `c`, or `L/D` non-positive, `W₀/W₁ < 1`, non-finite).
+pub fn breguet_range(velocity: f64, sfc: f64, lift_to_drag: f64, weight_ratio: f64) -> f64 {
+    if !velocity.is_finite()
+        || velocity <= 0.0
+        || !sfc.is_finite()
+        || sfc <= 0.0
+        || !lift_to_drag.is_finite()
+        || lift_to_drag <= 0.0
+        || !weight_ratio.is_finite()
+        || weight_ratio < 1.0
+    {
+        return 0.0;
+    }
+    velocity / sfc * lift_to_drag * weight_ratio.ln()
+}
+
 impl AeroReport {
     /// Build a report from a completed [`AeroResult`].
     pub fn from_result(result: &AeroResult) -> AeroReport {
@@ -539,5 +564,33 @@ mod tests {
         assert_eq!(stall_speed(w, s, rho, 0.0), 0.0);
         assert_eq!(stall_speed(w, -1.0, rho, cl_max), 0.0);
         assert_eq!(stall_speed(f64::NAN, s, rho, cl_max), 0.0);
+    }
+
+    #[test]
+    fn breguet_range_scales_with_speed_efficiency_and_fuel_fraction() {
+        // R = (V/c)·(L/D)·ln(W₀/W₁). A long-haul jet: V = 250 m/s, c = 0.6/hr,
+        // L/D = 17, W₀/W₁ = 1.5 → ≈ 1.03e7 m (~10,000 km).
+        let v = 250.0_f64;
+        let c = 0.6 / 3600.0; // 0.6 per hour → per second
+        let ld = 17.0_f64;
+        let ratio = 1.5_f64;
+        let r = breguet_range(v, c, ld, ratio);
+        let expected = v / c * ld * ratio.ln();
+        assert!((r - expected).abs() < 1e-6, "range {r} vs {expected}");
+        // A sensible long-haul figure (within a few thousand km of 10,000).
+        assert!((6.0e6..1.4e7).contains(&r), "airliner range {:.0} km", r / 1e3);
+
+        // Burning no fuel (W₀ = W₁) gives zero range.
+        assert_eq!(breguet_range(v, c, ld, 1.0), 0.0);
+        // R ∝ L/D, ∝ V, and ∝ ln(W₀/W₁) (ratio → ratio² doubles the log).
+        assert!((breguet_range(v, c, 2.0 * ld, ratio) - 2.0 * r).abs() < 1e-6, "∝ L/D");
+        assert!((breguet_range(2.0 * v, c, ld, ratio) - 2.0 * r).abs() < 1e-6, "∝ V");
+        assert!((breguet_range(v, c, ld, ratio * ratio) - 2.0 * r).abs() < 1e-6, "∝ ln(W₀/W₁)");
+
+        // Non-physical inputs → 0 (including an unphysical W₁ > W₀).
+        assert_eq!(breguet_range(v, 0.0, ld, ratio), 0.0);
+        assert_eq!(breguet_range(-1.0, c, ld, ratio), 0.0);
+        assert_eq!(breguet_range(v, c, ld, 0.5), 0.0);
+        assert_eq!(breguet_range(v, c, ld, f64::NAN), 0.0);
     }
 }
