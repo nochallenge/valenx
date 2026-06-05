@@ -211,6 +211,34 @@ impl VibrationMode {
         }
         best
     }
+
+    /// The **Modal Assurance Criterion** (MAC) between this mode shape and
+    /// `other` — the squared normalised dot product
+    /// `|φ_aᵀφ_b|² / ((φ_aᵀφ_a)·(φ_bᵀφ_b))`, the standard scalar measure of how
+    /// consistent two mode shapes are (Allemang & Brown, 1982). It is `1` for
+    /// shapes identical up to scale (perfectly correlated), `0` for orthogonal
+    /// shapes, and lies in `[0, 1]` between. Being normalised and squared it is
+    /// invariant to each shape's arbitrary sign and overall scale — the very
+    /// freedom a mode shape carries — which is what makes it the workhorse for
+    /// pairing FE modes against measured (test) modes or checking modal
+    /// orthogonality. Returns `0` when the two shapes have different node counts
+    /// or either has zero magnitude, where the criterion is undefined.
+    pub fn mac(&self, other: &VibrationMode) -> f64 {
+        if self.shape.len() != other.shape.len() || self.shape.is_empty() {
+            return 0.0;
+        }
+        let (mut cross, mut norm_a, mut norm_b) = (0.0_f64, 0.0_f64, 0.0_f64);
+        for (a, b) in self.shape.iter().zip(&other.shape) {
+            cross += a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+            norm_a += a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
+            norm_b += b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+        }
+        let denom = norm_a * norm_b;
+        if denom <= 0.0 {
+            return 0.0;
+        }
+        cross * cross / denom
+    }
 }
 
 /// Result of a native modal solve: the lowest `n` modes, ascending in
@@ -818,6 +846,49 @@ mod tests {
             ..mode
         };
         assert_eq!(empty.dominant_translation_axis(), 0);
+    }
+
+    #[test]
+    fn mac_correlates_mode_shapes_invariant_to_sign_and_scale() {
+        // A bare mode carrying only a shape (the frequency fields don't enter
+        // the MAC, which is purely a shape-correlation metric).
+        let mk = |shape: Vec<[f64; 3]>| VibrationMode {
+            frequency_hz: 0.0,
+            angular_frequency: 0.0,
+            eigenvalue: 0.0,
+            shape,
+        };
+        let a = mk(vec![[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]); // motion in +x
+
+        // A shape correlated with itself scores exactly 1.
+        assert!((a.mac(&a) - 1.0).abs() < 1e-12);
+
+        // Negated and rescaled (×−3) → still 1: MAC ignores a mode's arbitrary
+        // sign and overall scale.
+        let scaled = mk(a
+            .shape
+            .iter()
+            .map(|d| [-3.0 * d[0], -3.0 * d[1], -3.0 * d[2]])
+            .collect());
+        assert!((a.mac(&scaled) - 1.0).abs() < 1e-12);
+
+        // An orthogonal shape (all motion in y where a moves in x) → 0.
+        let b = mk(vec![[0.0, 1.0, 0.0], [0.0, 2.0, 0.0]]);
+        assert!(a.mac(&b) < 1e-12, "orthogonal shapes are uncorrelated");
+
+        // Partial overlap gives a known intermediate value: with c moving at
+        // both nodes but a1 only at the first, dot=1, |a1|²=1, |c|²=2 → 0.5.
+        let a1 = mk(vec![[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]);
+        let c = mk(vec![[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]);
+        let partial = a1.mac(&c);
+        assert!((partial - 0.5).abs() < 1e-12, "partial MAC {partial}");
+        assert!((0.0..=1.0).contains(&partial), "MAC stays in [0,1]");
+
+        // Mismatched node counts or a zero shape are undefined → 0.
+        let three = mk(vec![[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]);
+        assert_eq!(a.mac(&three), 0.0);
+        let zero = mk(vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]);
+        assert_eq!(a.mac(&zero), 0.0);
     }
 
     #[test]
