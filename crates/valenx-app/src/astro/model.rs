@@ -309,6 +309,13 @@ pub struct PlannerForm {
     pub speed_apogee_km: f64,
     /// Orbital speed at altitude — query altitude (km).
     pub speed_query_km: f64,
+
+    /// Time of flight — perigee altitude (km).
+    pub tof_perigee_km: f64,
+    /// Time of flight — apogee altitude (km).
+    pub tof_apogee_km: f64,
+    /// Time of flight — true anomaly θ (degrees).
+    pub tof_true_anomaly_deg: f64,
 }
 
 impl Default for PlannerForm {
@@ -356,6 +363,10 @@ impl Default for PlannerForm {
             speed_perigee_km: 300.0,
             speed_apogee_km: 35_786.0,
             speed_query_km: 2_000.0,
+            // A GTO sampled a quarter-turn past perigee.
+            tof_perigee_km: 300.0,
+            tof_apogee_km: 35_786.0,
+            tof_true_anomaly_deg: 90.0,
         }
     }
 }
@@ -419,6 +430,25 @@ pub fn orbital_speed_at_altitude(
     let mu = valenx_astro::constants::MU_EARTH;
     let a = 0.5 * (r_peri + r_apo);
     Some((mu * (2.0 / r - 1.0 / a)).sqrt())
+}
+
+/// The time since perigee (s) at true anomaly `true_anomaly_deg` on the
+/// elliptical Earth orbit with the given perigee/apogee altitudes (km), via
+/// Kepler's equation: eccentric anomaly
+/// `E = 2·atan2(√(1−e)·sin(θ/2), √(1+e)·cos(θ/2))`, mean anomaly
+/// `M = E − e·sin E`, and `t = M·T/2π`. The true anomaly wraps to one orbit, so
+/// the result is `0` at perigee (θ = 0) and half the period at apogee
+/// (θ = 180°) regardless of eccentricity.
+pub fn time_since_perigee(perigee_km: f64, apogee_km: f64, true_anomaly_deg: f64) -> f64 {
+    let orbit = elliptical_orbit(perigee_km, apogee_km);
+    let e = orbit.eccentricity;
+    let tau = std::f64::consts::TAU;
+    let theta = true_anomaly_deg.to_radians().rem_euclid(tau);
+    let (sin_half, cos_half) = (0.5 * theta).sin_cos();
+    let ecc_anom = 2.0 * ((1.0 - e).sqrt() * sin_half).atan2((1.0 + e).sqrt() * cos_half);
+    let ecc_anom = ecc_anom.rem_euclid(tau);
+    let mean_anom = ecc_anom - e * ecc_anom.sin();
+    mean_anom * orbit.period_s / tau
 }
 
 /// Δv (m/s) for a pure inclination change of `delta_inc_deg` on a circular
@@ -857,6 +887,24 @@ mod tests {
         );
         // An altitude the orbit never reaches → None.
         assert!(orbital_speed_at_altitude(300.0, 35_786.0, 50_000.0).is_none());
+    }
+
+    #[test]
+    fn time_since_perigee_follows_keplers_equation() {
+        let gto = elliptical_orbit(300.0, 35_786.0);
+        // Perigee (θ=0) → t = 0.
+        assert!(time_since_perigee(300.0, 35_786.0, 0.0).abs() < 1e-6);
+        // Apogee (θ=180°) → exactly half the orbital period (any eccentricity).
+        let t_apo = time_since_perigee(300.0, 35_786.0, 180.0);
+        assert!((t_apo - gto.period_s / 2.0).abs() / gto.period_s < 1e-9, "apogee at T/2");
+        // A circular orbit sweeps uniformly: θ=90° → a quarter period.
+        let circ = elliptical_orbit(500.0, 500.0);
+        let t_q = time_since_perigee(500.0, 500.0, 90.0);
+        assert!((t_q - circ.period_s / 4.0).abs() / circ.period_s < 1e-9, "circular θ=90 → T/4");
+        // On the eccentric GTO the satellite lingers near apogee: the 90°→180°
+        // leg takes longer than 0°→90° (Kepler's 2nd law / areal velocity).
+        let t90 = time_since_perigee(300.0, 35_786.0, 90.0);
+        assert!(t90 < t_apo - t90, "more time spent approaching apogee: {t90} vs {}", t_apo - t90);
     }
 
     #[test]
