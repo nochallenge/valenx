@@ -417,7 +417,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
          peak vort  : {:.4} 1/s{vort_loc}{flow_str}\n\
-         circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)\n\
+         circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)\n\
          wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)",
         s.case.label(),
         s.nx,
@@ -441,6 +441,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         dp,
         vorticity,
         sol.circulation(),
+        sol.enstrophy(),
         tau_w,
     );
 }
@@ -461,6 +462,9 @@ mod tests {
         run_cfd(&mut s);
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
         assert!(s.result.contains("max |u|"));
+        // The recirculating cavity has rotation everywhere → the enstrophy
+        // readout is surfaced alongside the circulation.
+        assert!(s.result.contains("enstrophy"), "enstrophy in result: {}", s.result);
         assert!(s.profile.as_ref().is_some_and(|p| p.len() == 16), "centreline profile sampled");
     }
 
