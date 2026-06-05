@@ -313,6 +313,42 @@ impl NativeSolution {
     pub fn max_von_mises(&self) -> f64 {
         self.von_mises.iter().copied().fold(0.0, f64::max)
     }
+
+    /// Largest principal (maximum normal) stress over all nodes (Pa) — the
+    /// Rankine / maximum-normal-stress measure for brittle failure, the tensile
+    /// counterpart to the von Mises (ductile) stress. Returns
+    /// `f64::NEG_INFINITY` for an empty field.
+    pub fn max_principal_stress(&self) -> f64 {
+        self.stress
+            .iter()
+            .map(|&s| max_principal_stress_voigt(s))
+            .fold(f64::NEG_INFINITY, f64::max)
+    }
+}
+
+/// Largest principal stress (eigenvalue) of a symmetric Cauchy stress tensor in
+/// Voigt order `[σxx, σyy, σzz, σxy, σyz, σzx]`, via the closed-form
+/// trigonometric solution for a symmetric 3×3 matrix (Smith 1961).
+fn max_principal_stress_voigt(s: [f64; 6]) -> f64 {
+    let (sxx, syy, szz, sxy, syz, szx) = (s[0], s[1], s[2], s[3], s[4], s[5]);
+    let p1 = sxy * sxy + syz * syz + szx * szx;
+    if p1 <= 0.0 {
+        // Already diagonal: the principals are the diagonal entries.
+        return sxx.max(syy).max(szz);
+    }
+    let q = (sxx + syy + szz) / 3.0;
+    let a = sxx - q;
+    let b = syy - q;
+    let c = szz - q;
+    let p2 = a * a + b * b + c * c + 2.0 * p1;
+    let p = (p2 / 6.0).sqrt();
+    // det(A − qI), then r = det((A − qI)/p) / 2 clamped to the acos domain.
+    let det =
+        a * (b * c - syz * syz) - sxy * (sxy * c - syz * szx) + szx * (sxy * syz - b * szx);
+    let r = (det / (p * p * p) / 2.0).clamp(-1.0, 1.0);
+    let phi = r.acos() / 3.0;
+    // The largest of the three eigenvalues.
+    q + 2.0 * p * phi.cos()
 }
 
 /// Solve a linear-static elasticity problem on a tetrahedral mesh.
@@ -1063,6 +1099,22 @@ mod tests {
     /// Node id of grid point `(i, j, k)` in a `structured_box_mesh`.
     fn nid(i: usize, j: usize, k: usize, nx: usize, ny: usize) -> usize {
         i + (nx + 1) * j + (nx + 1) * (ny + 1) * k
+    }
+
+    #[test]
+    fn max_principal_stress_of_known_tensors() {
+        // Diagonal: principals are the diagonal entries → max is the largest.
+        assert!((max_principal_stress_voigt([10.0, 5.0, 2.0, 0.0, 0.0, 0.0]) - 10.0).abs() < 1e-9);
+        // Uniaxial tension σxx = 7 → max principal = 7.
+        assert!((max_principal_stress_voigt([7.0, 0.0, 0.0, 0.0, 0.0, 0.0]) - 7.0).abs() < 1e-9);
+        // Hydrostatic: every principal equals the pressure.
+        assert!((max_principal_stress_voigt([4.0, 4.0, 4.0, 0.0, 0.0, 0.0]) - 4.0).abs() < 1e-9);
+        // Pure shear σxy = τ → principals ±τ, 0 → max = τ.
+        assert!((max_principal_stress_voigt([0.0, 0.0, 0.0, 3.0, 0.0, 0.0]) - 3.0).abs() < 1e-9);
+        // A 2-D state (σxx=3, σyy=1, σxy=2): Mohr's circle gives 2 ± √5, so the
+        // maximum principal stress is 2 + √5 ≈ 4.236.
+        let mohr = max_principal_stress_voigt([3.0, 1.0, 0.0, 2.0, 0.0, 0.0]);
+        assert!((mohr - (2.0 + 5.0_f64.sqrt())).abs() < 1e-9, "Mohr max principal {mohr}");
     }
 
     #[test]
