@@ -220,6 +220,25 @@ impl PolarCurve {
             (n * sxy - sx * sy) / denom
         }
     }
+
+    /// The polar point of maximum **endurance** — the angle of attack that
+    /// maximises `Cl^1.5 / Cd`, i.e. minimises the power required for steady
+    /// level flight (power ∝ `Cd / Cl^1.5`). This is the best-loiter /
+    /// minimum-sink condition; for a parabolic polar it sits at `√3` times the
+    /// lift of the best lift-to-drag (best-range) point, so it is a distinct,
+    /// higher-`Cl` optimum. Only positive-lift, finite-drag points qualify;
+    /// returns `None` if none do.
+    pub fn best_endurance_point(&self) -> Option<PolarPoint> {
+        self.points
+            .iter()
+            .copied()
+            .filter(|p| p.cl > 0.0 && p.cd > 1e-9)
+            .max_by(|a, b| {
+                let ea = a.cl.powf(1.5) / a.cd;
+                let eb = b.cl.powf(1.5) / b.cd;
+                ea.partial_cmp(&eb).unwrap_or(std::cmp::Ordering::Equal)
+            })
+    }
 }
 
 /// Run an angle-of-attack sweep and assemble the lift / drag polar.
@@ -510,6 +529,52 @@ mod tests {
         assert!(curve.pitch_stability_slope() < 0.0);
         // Too few points → 0.
         assert_eq!(PolarCurve { points: vec![] }.pitch_stability_slope(), 0.0);
+    }
+
+    #[test]
+    fn best_endurance_point_maximises_cl_to_the_three_halves_over_cd() {
+        // A parabolic polar Cd = 0.02 + 0.05·Cl² sampled over a lift sweep.
+        let pts: Vec<PolarPoint> = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+            .iter()
+            .map(|&cl| PolarPoint {
+                alpha: cl, // a monotone stand-in for the angle of attack
+                cd: 0.02 + 0.05 * cl * cl,
+                cl,
+                cm: 0.0,
+                converged: true,
+            })
+            .collect();
+        let curve = PolarCurve { points: pts.clone() };
+        let endurance = curve.best_endurance_point().unwrap();
+        // It is exactly the sample that maximises Cl^1.5 / Cd.
+        let best = pts
+            .iter()
+            .max_by(|a, b| {
+                (a.cl.powf(1.5) / a.cd)
+                    .partial_cmp(&(b.cl.powf(1.5) / b.cd))
+                    .unwrap()
+            })
+            .unwrap();
+        assert!((endurance.cl - best.cl).abs() < 1e-12, "endurance cl {}", endurance.cl);
+        // Max endurance sits at a higher lift than max range (best L/D).
+        let range = curve.best_lift_to_drag_point().unwrap();
+        assert!(
+            endurance.cl > range.cl,
+            "endurance cl {} should exceed best-range cl {}",
+            endurance.cl,
+            range.cl
+        );
+        // With no positive-lift points there is no endurance optimum.
+        let neg = PolarCurve {
+            points: vec![PolarPoint {
+                alpha: 0.0,
+                cd: 0.1,
+                cl: -0.5,
+                cm: 0.0,
+                converged: true,
+            }],
+        };
+        assert!(neg.best_endurance_point().is_none());
     }
 
     #[test]
