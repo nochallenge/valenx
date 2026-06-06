@@ -328,6 +328,33 @@ impl FlowSolution {
         }
     }
 
+    /// The **total (stagnation) pressure range** `Δp₀ = p₀_max − p₀_min` (Pa) over
+    /// the field, where `p₀ = p + ½ρ|u|²` is the total pressure (static plus the
+    /// dynamic head). For an ideal inviscid flow Bernoulli's theorem keeps `p₀`
+    /// constant along a streamline, so this variation is a direct read on the
+    /// **total-pressure loss** — the irreversible (viscous) degradation a real
+    /// flow suffers, the swing the static [`FlowSolution::pressure_range`] alone
+    /// cannot see (static pressure trades *reversibly* against the dynamic head
+    /// `½ρ|u|²`, but their sum only falls). `density` is the fluid density
+    /// (kg/m³). Gauge-independent (a difference). Returns `0` for an empty grid.
+    pub fn total_pressure_range(&self, density: f64) -> f64 {
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                let speed = self.speed_at_cell(i, j);
+                let p0 = self.pressure.at(i, j) + 0.5 * density * speed * speed;
+                lo = lo.min(p0);
+                hi = hi.max(p0);
+            }
+        }
+        if hi >= lo {
+            hi - lo
+        } else {
+            0.0
+        }
+    }
+
     /// Area-averaged velocity magnitude over the cell grid (m/s) — the typical
     /// flow speed, as opposed to the peak that `speed_at_cell` reveals. Returns
     /// `0` for an empty grid.
@@ -2403,6 +2430,77 @@ mod tests {
         assert!(
             (sol.mean_kinetic_energy_density(2.0 * rho) - 2.0 * ke).abs() < 1e-12
         );
+    }
+
+    #[test]
+    fn total_pressure_range_is_the_stagnation_pressure_variation() {
+        let density = 1.2;
+        // (a) A stationary fluid (u = v = 0) with a varying pressure field: the
+        // dynamic head is zero everywhere, so p0 = p and Δp0 equals the static
+        // range — ties total_pressure_range to pressure_range (non-tautological).
+        let grid = Grid::new(3, 2, 3.0, 2.0);
+        let mut p = grid.pressure_field();
+        p.set(0, 0, 100.0);
+        p.set(2, 1, -20.0);
+        let stationary = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (stationary.total_pressure_range(density) - stationary.pressure_range()).abs() < 1e-12,
+            "stationary fluid: Δp0 = static Δp"
+        );
+
+        // (b) A uniform-pressure field with the {5,10,5}-speed pattern (v = 0, the
+        // middle cell's two shared u-faces = 10): p0 = p + ½ρ·speed² with p uniform,
+        // so Δp0 = ½·ρ·(10² − 5²) = ½·1.2·75 = 45 Pa, while the STATIC range is 0.
+        let g2 = Grid::new(3, 1, 3.0, 1.0);
+        let mut u2 = g2.u_field();
+        u2.set(1, 0, 10.0);
+        u2.set(2, 0, 10.0);
+        let speedy = FlowSolution {
+            grid: g2,
+            u: u2,
+            v: g2.v_field(),
+            pressure: g2.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let expected = 0.5 * density * (10.0 * 10.0 - 5.0 * 5.0);
+        let dp0 = speedy.total_pressure_range(density);
+        assert!((dp0 - expected).abs() / expected < 1e-9, "Δp0 = ½ρ·75 = {expected}, got {dp0}");
+        assert_eq!(speedy.pressure_range(), 0.0, "static range is zero — the loss is all dynamic");
+
+        // (c) A fully uniform field (u = 3, v = 4, p = 0): p0 constant → Δp0 = 0.
+        let g3 = Grid::new(2, 2, 2.0, 2.0);
+        let mut u3 = g3.u_field();
+        for j in 0..g3.ny {
+            for i in 0..=g3.nx {
+                u3.set(i, j, 3.0);
+            }
+        }
+        let mut v3 = g3.v_field();
+        for j in 0..=g3.ny {
+            for i in 0..g3.nx {
+                v3.set(i, j, 4.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid: g3,
+            u: u3,
+            v: v3,
+            pressure: g3.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(uniform.total_pressure_range(density), 0.0, "uniform field → Δp0 = 0");
     }
 
     #[test]
