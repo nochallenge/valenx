@@ -143,8 +143,8 @@ pub use assembly::{
     recover_nodal_stress_mixed,
 };
 pub use beam::{
-    solve_beam_modal, solve_beam_static, BeamConstraint, BeamElement, BeamLoad, BeamModalSolution,
-    BeamMode, BeamSection, BeamSolution, BeamSolverError,
+    euler_bernoulli_beam_frequency, solve_beam_modal, solve_beam_static, BeamConstraint,
+    BeamElement, BeamLoad, BeamModalSolution, BeamMode, BeamSection, BeamSolution, BeamSolverError,
 };
 pub use buckling::{
     euler_critical_load, solve_buckling, BucklingMode, BucklingSolution, BucklingSolverError,
