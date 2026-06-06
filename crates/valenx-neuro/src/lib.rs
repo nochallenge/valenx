@@ -90,4 +90,4 @@ pub use synapse::{
     dual_exponential_conductance_integral, dual_exponential_peak_time,
     dual_exponential_synapse_conductance, nmda_mg_block,
 };
-pub use temperature::{q10_scale, TYPICAL_GATING_Q10};
+pub use temperature::{q10_from_rates, q10_scale, TYPICAL_GATING_Q10};
