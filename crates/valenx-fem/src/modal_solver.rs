@@ -278,6 +278,29 @@ impl VibrationMode {
             0.0
         }
     }
+
+    /// This mode's **quality factor** `Q = 1/(2ζ)` under Rayleigh damping
+    /// `C = α·M + β·K` — the dimensionless sharpness of the resonance. It is the
+    /// dynamic amplification at resonance, sets the number of cycles the free
+    /// response rings through before its envelope decays (`≈ Q/π` cycles per
+    /// `e^{−π}` drop), and equals the `f/Δf` ratio of the −3 dB half-power
+    /// bandwidth. The damping ratio `ζ` is this mode's
+    /// [`rayleigh_damping_ratio`](Self::rayleigh_damping_ratio) from `alpha` and
+    /// `beta`: a lightly damped mode (`ζ ≪ 1`) is a *high*-Q, sharply resonant
+    /// peak, while heavy damping (`ζ → ½`, `Q → 1`) barely resonates. It is the
+    /// amplification-side companion to [`damped_natural_frequency_hz`](Self::damped_natural_frequency_hz)
+    /// (the frequency-shift side) — both read the same `ζ`. Returns `0` for a
+    /// mode with no positive damping (`ζ ≤ 0` — a zero-frequency rigid-body mode
+    /// or a genuinely undamped one), where `Q` is unbounded; the lane reports
+    /// that degenerate case as `0`.
+    pub fn quality_factor(&self, alpha: f64, beta: f64) -> f64 {
+        let zeta = self.rayleigh_damping_ratio(alpha, beta);
+        if zeta > 0.0 {
+            0.5 / zeta
+        } else {
+            0.0
+        }
+    }
 }
 
 /// Result of a native modal solve: the lowest `n` modes, ascending in
@@ -994,6 +1017,36 @@ mod tests {
         assert_eq!(mode(1.0).damped_natural_frequency_hz(3.0, 0.0), 0.0);
         // A zero-frequency rigid-body mode → 0.
         assert_eq!(mode(0.0).damped_natural_frequency_hz(0.5, 0.001), 0.0);
+    }
+
+    #[test]
+    fn quality_factor_is_the_inverse_of_twice_the_damping_ratio() {
+        use std::f64::consts::TAU;
+        let mode = |omega: f64| VibrationMode {
+            frequency_hz: omega / TAU,
+            angular_frequency: omega,
+            eigenvalue: omega * omega,
+            shape: vec![[1.0, 0.0, 0.0]],
+        };
+        // The #146 worked point α=0.5, β=0.001, ω=10 → ζ=0.03 → Q = 1/0.06 ≈ 16.67.
+        let m = mode(10.0);
+        let zeta = m.rayleigh_damping_ratio(0.5, 0.001);
+        assert!((zeta - 0.03).abs() < 1e-12, "ζ = 0.03");
+        assert!(
+            (m.quality_factor(0.5, 0.001) - 1.0 / (2.0 * zeta)).abs() < 1e-12,
+            "Q = 1/(2ζ)"
+        );
+        assert!((m.quality_factor(0.5, 0.001) - 50.0 / 3.0).abs() < 1e-9, "Q ≈ 16.67");
+        // Q and ζ are reciprocal partners: Q·2ζ = 1.
+        assert!((m.quality_factor(0.5, 0.001) * 2.0 * zeta - 1.0).abs() < 1e-12);
+        // Lighter damping → higher Q (a sharper resonance); both stay finite > 0.
+        let light = mode(10.0).quality_factor(0.05, 0.0001); // ζ=0.003 → Q≈166.7
+        let heavy = mode(10.0).quality_factor(1.0, 0.01); // ζ=0.1 → Q=5
+        assert!(light > heavy, "lighter damping is higher Q: {light} vs {heavy}");
+        assert!(heavy > 0.0, "finite positive Q");
+        // No positive damping → 0: a rigid-body mode (ω=0) and an undamped mode.
+        assert_eq!(mode(0.0).quality_factor(0.5, 0.001), 0.0);
+        assert_eq!(mode(10.0).quality_factor(0.0, 0.0), 0.0);
     }
 
     #[test]
