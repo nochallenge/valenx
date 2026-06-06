@@ -359,6 +359,9 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
     let re_cell = cell_reynolds(s.speed, s.lx / s.nx as f64, s.viscosity);
     // Static-pressure swing Δp = p_max − p_min (gauge-independent).
     let dp = sol.pressure_range();
+    // Total (stagnation) pressure swing Δp₀ = max(p+½ρ|u|²) − min(…) — the Bernoulli
+    // total-pressure loss, the irreversible degradation the static Δp cannot see.
+    let dp0 = sol.total_pressure_range(s.density);
     // Peak vorticity |∂v/∂x − ∂u/∂y| — the strongest local rotation.
     let vorticity = sol.max_vorticity();
     // Location of that peak — the vortex core (when an interior difference exists).
@@ -420,7 +423,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          max |u|    : {:.5} m/s  (mean {:.5}){peak_speed_loc}\n\
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4}; \u{03A6}_visc {:.3e} W/m)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
-         pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}\n\
+         pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}  \u{00B7}  total \u{0394}p\u{2080} {dp0:.3e} Pa  (Bernoulli loss)\n\
          peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}  \u{00B7}  S_max {:.4} 1/s{flow_str}\n\
          circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)  \u{00B7}  palin {:.3e} 1/s\u{00B2}  (\u{00BD}\u{222B}|\u{2207}\u{03C9}|\u{00B2}\u{00B7}dA)\n\
          wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)  \u{00B7}  max|\u{2207}\u{00B7}u| {:.2e} 1/s  (peak local continuity residual)  \u{00B7}  reverse-flow {:.0}%  (recirculating area)  \u{00B7}  \u{03C8}-span {:.4} m\u{00B2}/s  (streamline range)",
