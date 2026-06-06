@@ -656,6 +656,27 @@ impl FlowSolution {
         sum / ny as f64
     }
 
+    /// The mean wall-tangential velocity gradient `⟨|∂v/∂x|⟩` at the **right** wall
+    /// (`x = lx`) (1/s) — the one-sided estimate `2·v_cell(nx−1, j)/dx` from the
+    /// no-slip wall to the last cell centre, averaged over the wall-normal (vertical)
+    /// cells: the companion to [`FlowSolution::left_wall_shear_rate`] on the opposite
+    /// side, completing the four-wall skin-friction set with the horizontal-wall
+    /// [`FlowSolution::bottom_wall_shear_rate`] / [`FlowSolution::top_wall_shear_rate`].
+    /// Multiplying by the dynamic viscosity `μ = ρν` gives the right-wall shear
+    /// stress `τ_w`. Returns `0` for an empty grid.
+    pub fn right_wall_shear_rate(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return 0.0;
+        }
+        let dx = self.grid.dx();
+        let mut sum = 0.0;
+        for j in 0..ny {
+            sum += (2.0 * self.v_at_cell(nx - 1, j) / dx).abs();
+        }
+        sum / ny as f64
+    }
+
     /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
     /// signed net rotation of the flow (Kelvin's circulation theorem; by
     /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
@@ -2713,6 +2734,48 @@ mod tests {
             "a pure-v field has no horizontal-wall shear"
         );
         assert!(sol.top_wall_shear_rate().abs() < 1e-12);
+    }
+
+    #[test]
+    fn right_wall_shear_rate_measures_the_side_wall_gradient() {
+        // A 4×4 unit grid (dx = 1, lx = 4) with a vertical-velocity field linear in x
+        // that is ZERO at the RIGHT wall (x = lx): v(x) = γ·(lx − x), γ = 3 — no-slip
+        // at the right, mirroring the left test's v = γ·x. The one-sided right-wall
+        // gradient 2·v_cell(nx−1, j)/dx then recovers γ.
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let gamma = 3.0;
+        let (dx, lx) = (grid.dx(), grid.lx);
+        let mut v = grid.v_field();
+        for i in 0..grid.nx {
+            let val = gamma * (lx - (i as f64 + 0.5) * dx); // v_at_cell(i,j) = γ·(lx − x_cell)
+            for j in 0..=grid.ny {
+                v.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // ⟨2·v_cell(nx−1, j)/dx⟩ = 2·(γ·0.5·dx)/dx = γ.
+        assert!(
+            (sol.right_wall_shear_rate() - gamma).abs() < 1e-9,
+            "right wall shear rate {}",
+            sol.right_wall_shear_rate()
+        );
+        // The field is largest near the LEFT wall and zero at the right, so the left
+        // wall reads a much larger gradient — confirming the two read DIFFERENT walls
+        // (this method the i = nx−1 column, not i = 0).
+        assert!(
+            sol.left_wall_shear_rate() > sol.right_wall_shear_rate(),
+            "asymmetric field: left {} > right {}",
+            sol.left_wall_shear_rate(),
+            sol.right_wall_shear_rate()
+        );
     }
 
     #[test]
