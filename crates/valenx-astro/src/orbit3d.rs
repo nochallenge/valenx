@@ -130,6 +130,27 @@ impl ClassicalElements {
         (v_r, v_theta)
     }
 
+    /// The **flight-path angle** `γ` (rad) at true anomaly `true_anomaly` `ν` —
+    /// the angle of the velocity vector above the local horizontal (the direction
+    /// perpendicular to the radius): `γ = atan2(e·sin ν, 1 + e·cos ν)`. It is
+    /// purely geometric in the eccentricity and true anomaly, *independent of* `μ`
+    /// and `a` — the orbit's shape alone fixes how steeply the motion climbs or
+    /// descends.
+    ///
+    /// `γ` is the angle whose tangent is `v_r/v_θ`, so it is exactly
+    /// `atan2(v_r, v_θ)` of the
+    /// [`velocity_components_at_true_anomaly`](Self::velocity_components_at_true_anomaly)
+    /// (the common `μ/h` speed factor cancels). It is `0` at both apsides
+    /// (`ν = 0, π`), where the motion is purely transverse; positive on the
+    /// ascending half `ν ∈ (0, π)` as the body climbs away from the focus toward
+    /// apoapsis, and negative on the descending half as it falls back in. A
+    /// circular orbit (`e = 0`) has `γ = 0` everywhere, and at `ν = ±π/2` it
+    /// reaches `±atan(e)`.
+    pub fn flight_path_angle(&self, true_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        (e * true_anomaly.sin()).atan2(1.0 + e * true_anomaly.cos())
+    }
+
     /// The orbital **specific angular momentum** `h = √(μ·a(1−e²))` (m²/s) —
     /// the angular momentum *per unit mass*, `h = |r × v|`, and the orbit's
     /// defining conserved quantity. It is constant everywhere along the path
@@ -973,6 +994,53 @@ mod tests {
             assert!(vr.abs() < 1e-9, "circular v_r = 0 at {nu}");
             assert!((vt - v_circ).abs() < 1e-3, "circular v_θ = √(μ/a) at {nu}");
         }
+    }
+
+    #[test]
+    fn flight_path_angle_is_zero_at_the_apsides() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let e = coe.eccentricity;
+        // Velocity is purely transverse at the apsides → γ = 0 exactly.
+        assert!(coe.flight_path_angle(0.0).abs() < 1e-12, "γ(0) = 0 (periapsis)");
+        assert!(coe.flight_path_angle(PI).abs() < 1e-12, "γ(π) = 0 (apoapsis)");
+        // At ν = π/2: γ = atan2(e·1, 1+0) = atan(e).
+        assert!(
+            (coe.flight_path_angle(PI / 2.0) - e.atan()).abs() < 1e-12,
+            "γ(π/2) = atan(e)"
+        );
+        // Positive on the ascending arc (climbing away from the focus toward
+        // apoapsis), negative on the descending arc (falling back toward periapsis).
+        assert!(coe.flight_path_angle(1.0) > 0.0, "ascending arc → γ > 0");
+        assert!(
+            coe.flight_path_angle(3.0 * PI / 2.0) < 0.0,
+            "descending arc → γ < 0"
+        );
+        // A circular orbit has γ = 0 everywhere (motion always transverse).
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for nu in [0.0_f64, 0.3, 1.0, PI, 4.5] {
+            assert!(circ.flight_path_angle(nu).abs() < 1e-12, "circular γ = 0 at {nu}");
+        }
+        // Strong cross-check: γ = atan2(v_r, v_θ) from the velocity components
+        // (#162). NON-tautological — the method uses (e, ν); this check uses the
+        // independent μ/a-scaled velocity components (the common μ/h factor cancels
+        // inside atan2).
+        for nu in [0.3_f64, 1.0, 2.0, PI, 4.5, 5.7] {
+            let (v_r, v_theta) = coe.velocity_components_at_true_anomaly(nu);
+            assert!(
+                (coe.flight_path_angle(nu) - v_r.atan2(v_theta)).abs() < 1e-12,
+                "γ = atan2(v_r, v_θ) at ν={nu}"
+            );
+        }
+        // A non-finite ν propagates to NaN (atan2 is total — no panic/guard).
+        assert!(coe.flight_path_angle(f64::NAN).is_nan(), "NaN ν → NaN γ");
     }
 
     #[test]
