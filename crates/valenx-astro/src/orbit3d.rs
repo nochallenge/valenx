@@ -75,6 +75,31 @@ impl ClassicalElements {
         p / (1.0 + self.eccentricity * nu.cos())
     }
 
+    /// The orbital **velocity components** `(v_r, v_θ)` (m/s) at true anomaly
+    /// `nu` (rad), in the rotating polar frame: the *radial* component
+    /// `v_r = (μ/h)·e·sin ν` along the outward radius, and the *transverse*
+    /// component `v_θ = (μ/h)·(1 + e·cos ν)` perpendicular to it (the direction
+    /// of orbital motion), with `μ/h = √(μ/p)` and `p = a(1−e²)`.
+    ///
+    /// This is the velocity companion to
+    /// [`radius_at_true_anomaly`](Self::radius_at_true_anomaly): together `r(ν)`
+    /// and `(v_r, v_θ)(ν)` give the full in-plane state at any point of the
+    /// orbit. The radial part vanishes at the apsides (`ν = 0, π`), where the
+    /// motion is purely transverse and `v_θ` hits its extremes (fastest at
+    /// periapsis, slowest at apoapsis); `v_r` is positive climbing out toward
+    /// apoapsis and negative falling back in. The speed `√(v_r² + v_θ²)`
+    /// reproduces the vis-viva law `√(μ(2/r − 1/a))`, and `v_r/v_θ` is the
+    /// tangent of the flight-path angle. Uses Earth's `μ`; intended for closed
+    /// orbits (`e < 1`).
+    pub fn velocity_components_at_true_anomaly(&self, nu: f64) -> (f64, f64) {
+        let e = self.eccentricity;
+        let p = self.semi_major_axis * (1.0 - e * e);
+        let mu_over_h = (MU_EARTH / p).sqrt(); // μ/h = √(μ/p)
+        let v_r = mu_over_h * e * nu.sin();
+        let v_theta = mu_over_h * (1.0 + e * nu.cos());
+        (v_r, v_theta)
+    }
+
     /// Solve **Kepler's equation** `M = E − e·sin E` for the eccentric anomaly
     /// `E` (rad) given the mean anomaly `mean_anomaly` `M` (rad), by
     /// Newton–Raphson iteration.
@@ -651,6 +676,49 @@ mod tests {
         let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
         assert!(hyp.eccentric_anomaly_from_mean(1.0).is_nan(), "e≥1 → NaN");
         assert!(coe.eccentric_anomaly_from_mean(f64::NAN).is_nan(), "NaN M → NaN");
+    }
+
+    #[test]
+    fn velocity_components_at_true_anomaly_decompose_the_orbital_speed() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let (a, e) = (coe.semi_major_axis, coe.eccentricity);
+        let mu = MU_EARTH;
+        // At perigee (ν=0): purely transverse, v_θ = √(μ/a·(1+e)/(1−e)) (max speed).
+        let (vr0, vt0) = coe.velocity_components_at_true_anomaly(0.0);
+        assert!(vr0.abs() < 1e-6, "v_r = 0 at perigee, got {vr0}");
+        assert!((vt0 - (mu / a * (1.0 + e) / (1.0 - e)).sqrt()).abs() < 1e-3, "perigee speed");
+        // At apogee (ν=π): purely transverse, v_θ = √(μ/a·(1−e)/(1+e)) (min speed).
+        let (vrp, vtp) = coe.velocity_components_at_true_anomaly(PI);
+        assert!(vrp.abs() < 1e-6, "v_r = 0 at apogee, got {vrp}");
+        assert!((vtp - (mu / a * (1.0 - e) / (1.0 + e)).sqrt()).abs() < 1e-3, "apogee speed");
+        assert!(vt0 > vtp, "faster at perigee than apogee");
+        // The speed √(v_r²+v_θ²) reproduces vis-viva μ(2/r − 1/a) at the matching r.
+        for nu in [0.3_f64, 1.0, 2.0, PI, 4.0, 5.5] {
+            let (vr, vt) = coe.velocity_components_at_true_anomaly(nu);
+            let speed_sq = vr * vr + vt * vt;
+            let r = coe.radius_at_true_anomaly(nu);
+            let vis_viva_sq = mu * (2.0 / r - 1.0 / a);
+            assert!((speed_sq - vis_viva_sq).abs() / vis_viva_sq < 1e-12, "vis-viva at ν={nu}");
+        }
+        // Radial velocity is positive climbing out (0<ν<π) and negative falling in.
+        assert!(coe.velocity_components_at_true_anomaly(1.0).0 > 0.0, "outbound v_r > 0");
+        assert!(coe.velocity_components_at_true_anomaly(4.0).0 < 0.0, "inbound v_r < 0");
+        // A circular orbit: no radial velocity, constant transverse speed √(μ/a).
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let v_circ = (mu / a).sqrt();
+        for nu in [0.0_f64, 1.0, PI, 4.2] {
+            let (vr, vt) = circ.velocity_components_at_true_anomaly(nu);
+            assert!(vr.abs() < 1e-9, "circular v_r = 0 at {nu}");
+            assert!((vt - v_circ).abs() < 1e-3, "circular v_θ = √(μ/a) at {nu}");
+        }
     }
 
     #[test]
