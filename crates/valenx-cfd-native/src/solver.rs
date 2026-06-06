@@ -732,6 +732,48 @@ impl FlowSolution {
         }
         reversed as f64 / n as f64
     }
+
+    /// The **stream-function span** `max ψ − min ψ` (m²/s) over the domain — the
+    /// total volumetric throughflow carried between the extreme streamlines (for
+    /// an enclosed cavity, the strength of its recirculating vortex). The stream
+    /// function `ψ`, defined by `u = ∂ψ/∂y` and `v = −∂ψ/∂x`, is the foundational
+    /// 2-D incompressible field whose iso-contours *are* the streamlines — the
+    /// single scalar that encodes the whole flow's path structure, which none of
+    /// the velocity / vorticity / pressure diagnostics expose directly.
+    ///
+    /// `ψ` is reconstructed at the `(nx+1)×(ny+1)` grid corners by integrating
+    /// the staggered face velocities from a `ψ = 0` corner: up a column
+    /// `ψ_{i,j+1} = ψ_{i,j} + u_{i,j}·dy`, along the base row
+    /// `ψ_{i+1,0} = ψ_{i,0} − v_{i,0}·dx`. For a divergence-free field this is
+    /// path-independent; the converged incompressible solution is divergence-free
+    /// to the solver tolerance, so the span is well defined. Returns `0` for an
+    /// empty grid.
+    pub fn stream_function_range(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        // ψ at the (nx+1)×(ny+1) corners, indexed [column i][row j], ψ[0][0] = 0.
+        let mut psi = vec![vec![0.0_f64; ny + 1]; nx + 1];
+        // Base row (j = 0): integrate the v faces, ψ_{i+1,0} = ψ_{i,0} − v·dx.
+        for i in 0..nx {
+            psi[i + 1][0] = psi[i][0] - self.v.at(i, 0) * dx;
+        }
+        // Each column: integrate the u faces upward, ψ_{i,j+1} = ψ_{i,j} + u·dy.
+        for (i, col) in psi.iter_mut().enumerate() {
+            for j in 0..ny {
+                col[j + 1] = col[j] + self.u.at(i, j) * dy;
+            }
+        }
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for &p in psi.iter().flatten() {
+            lo = lo.min(p);
+            hi = hi.max(p);
+        }
+        hi - lo
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -2444,6 +2486,97 @@ mod tests {
             "half-and-half → 0.5, got {}",
             split.reverse_flow_fraction()
         );
+    }
+
+    #[test]
+    fn stream_function_range_recovers_the_throughflow_and_vortex_strength() {
+        let grid = Grid::new(5, 4, 5.0, 8.0); // dx = 1, dy = 2, Lx = 5, Ly = 8
+        let (lx, ly) = (5.0_f64, 8.0_f64);
+
+        // (1) Uniform forward flow u = U, v = 0: horizontal streamlines, the span
+        // is the throughflow U·Ly.
+        let big_u = 3.0;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                u.set(i, j, big_u);
+            }
+        }
+        let uflow = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (uflow.stream_function_range() - big_u * ly).abs() < 1e-9,
+            "u-flow span = U·Ly, got {}",
+            uflow.stream_function_range()
+        );
+
+        // (2) Uniform upward flow u = 0, v = V: span = V·Lx. This exercises the
+        // v / base-row term — a sign error there passes (1) but fails here.
+        let big_v = 2.0;
+        let mut v = grid.v_field();
+        for j in 0..=grid.ny {
+            for i in 0..grid.nx {
+                v.set(i, j, big_v);
+            }
+        }
+        let vflow = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (vflow.stream_function_range() - big_v * lx).abs() < 1e-9,
+            "v-flow span = V·Lx, got {}",
+            vflow.stream_function_range()
+        );
+
+        // (3) Horizontal shear u(y) = γ·y, v = 0: span = ∫₀^Ly γy dy = γ·Ly²/2.
+        let gamma = 0.5;
+        let dy = grid.dy();
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy; // u-face value = γ·y_cell
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (shear.stream_function_range() - gamma * ly * ly / 2.0).abs() < 1e-9,
+            "shear span = γ·Ly²/2, got {}",
+            shear.stream_function_range()
+        );
+
+        // (4) A quiescent field has no spanning streamlines → 0.
+        let calm = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(calm.stream_function_range(), 0.0);
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
