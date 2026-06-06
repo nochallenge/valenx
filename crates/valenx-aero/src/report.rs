@@ -157,6 +157,33 @@ pub fn mach_angle(mach: f64) -> f64 {
     }
 }
 
+/// The **Prandtl–Meyer function** `ν(M)` (radians) — the angle through which a
+/// supersonic stream turns, in a centred expansion fan, as it accelerates
+/// isentropically from `M = 1` to Mach number `mach` `M` (heat-capacity ratio
+/// `gamma` `γ`):
+///
+/// ```text
+///   ν = √((γ+1)/(γ−1))·atan√((γ−1)/(γ+1)·(M²−1)) − atan√(M²−1)
+/// ```
+///
+/// It is the workhorse of supersonic *expansion* (and the method of
+/// characteristics): a wall turning away from the flow expands it, raising the Mach
+/// number by the `Δν` swept across the fan. `ν(1) = 0` (no turning at the sonic
+/// line) and it rises monotonically, asymptoting to the finite maximum
+/// `ν_max = (π/2)·(√((γ+1)/(γ−1)) − 1)` (≈ 130.5° for air, `γ = 1.4`) as `M → ∞` —
+/// the most a stream can ever turn while expanding into a vacuum. It is the
+/// expansion-side companion to the compression-side [`mach_angle`]; at `M = 2`
+/// (`γ = 1.4`) `ν ≈ 26.4°`, at `M = 3` `≈ 49.8°`. Returns `0` for subsonic `M < 1`
+/// (no expansion fan) or non-physical input (non-finite `M` or `γ`, or `γ ≤ 1`).
+pub fn prandtl_meyer_angle(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 1.0 {
+        return 0.0;
+    }
+    let s = (mach * mach - 1.0).sqrt();
+    let k = ((gamma + 1.0) / (gamma - 1.0)).sqrt();
+    k * (s / k).atan() - s.atan()
+}
+
 /// The **isentropic stagnation temperature ratio** `T₀/T = 1 + ((γ−1)/2)·M²` at
 /// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the total-to-
 /// static temperature relation that follows directly from adiabatic energy
@@ -940,6 +967,37 @@ mod tests {
         assert_eq!(mach_angle(0.0), 0.0);
         assert_eq!(mach_angle(f64::NAN), 0.0);
         assert_eq!(mach_angle(f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn prandtl_meyer_angle_matches_expansion_tables() {
+        use std::f64::consts::PI;
+        let g = 1.4;
+        // ν(1) = 0: no turning at the sonic line.
+        assert!(prandtl_meyer_angle(1.0, g).abs() < 1e-12, "ν(1) = 0");
+        // Standard expansion-table points (γ = 1.4), in degrees.
+        assert!((prandtl_meyer_angle(2.0, g).to_degrees() - 26.380).abs() < 1e-2, "ν(2) ≈ 26.38°");
+        assert!((prandtl_meyer_angle(3.0, g).to_degrees() - 49.757).abs() < 1e-2, "ν(3) ≈ 49.76°");
+        assert!((prandtl_meyer_angle(5.0, g).to_degrees() - 76.920).abs() < 1e-2, "ν(5) ≈ 76.92°");
+        // Monotonically increasing in M for M > 1.
+        let (a, b, c) = (
+            prandtl_meyer_angle(1.5, g),
+            prandtl_meyer_angle(2.5, g),
+            prandtl_meyer_angle(4.0, g),
+        );
+        assert!(a < b && b < c, "ν rises with M: {a} {b} {c}");
+        // Bounded above by the vacuum limit ν_max = (π/2)·(√((γ+1)/(γ−1)) − 1), which a
+        // very large Mach number approaches from below (≈ 130.45° for air). The limit
+        // is an independent closed form; the impl is the two-atan expression.
+        let nu_max = 0.5 * PI * (((g + 1.0) / (g - 1.0)).sqrt() - 1.0);
+        assert!((nu_max.to_degrees() - 130.454).abs() < 1e-2, "ν_max ≈ 130.45°");
+        let nu_big = prandtl_meyer_angle(1.0e6, g);
+        assert!(nu_big < nu_max && nu_big > 0.999 * nu_max, "ν(1e6) → ν_max⁻: {nu_big} vs {nu_max}");
+        // Subsonic / non-physical → 0 (no expansion fan).
+        assert_eq!(prandtl_meyer_angle(0.5, g), 0.0);
+        assert_eq!(prandtl_meyer_angle(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(prandtl_meyer_angle(f64::NAN, g), 0.0);
+        assert_eq!(prandtl_meyer_angle(2.0, f64::INFINITY), 0.0);
     }
 
     #[test]
