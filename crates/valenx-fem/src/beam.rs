@@ -43,6 +43,53 @@ use thiserror::Error;
 
 use crate::material::FemMaterial;
 
+/// The analytic **Euler–Bernoulli beam natural frequency**
+/// `f = (β·L)²/(2π·L²)·√(E·I / (ρ·A))` (Hz) of a slender prismatic beam in
+/// transverse (bending) vibration. `beta_l` is the dimensionless mode eigenvalue
+/// `β·L` for the boundary condition — `π` for the simply-supported (pinned–pinned)
+/// fundamental, `1.875104` for the cantilever (clamped–free) fundamental,
+/// `4.730041` for clamped–clamped — `e_modulus` is `E` (Pa),
+/// `area_moment_of_inertia` the section's `I` (m⁴) about the bending axis,
+/// `density` `ρ` (kg/m³), `area` the cross-section `A` (m²), and `length` the
+/// span `L` (m).
+///
+/// This is the *analytic* slender-beam reference the finite-element modal solver
+/// ([`solve_beam_modal`], and the tet [`crate::modal_solver`]) converges to as
+/// the mesh refines — the bending-vibration companion to the
+/// [`crate::buckling::euler_critical_load`] stability reference. It gives a quick
+/// hand-check without meshing: the frequency rises with the bending stiffness
+/// `√(E·I)`, falls with the running mass `√(ρ·A)`, drops as `1/L²`, and scales
+/// with the square of the mode eigenvalue `(β·L)²` (so the cantilever fundamental
+/// sits a factor `(1.875104/π)² ≈ 0.356` below the simply-supported one). Returns
+/// `0` for any non-physical input (`E`, `I`, `ρ`, `A`, or `L` non-positive, or any
+/// argument non-finite).
+pub fn euler_bernoulli_beam_frequency(
+    beta_l: f64,
+    e_modulus: f64,
+    area_moment_of_inertia: f64,
+    density: f64,
+    area: f64,
+    length: f64,
+) -> f64 {
+    if !beta_l.is_finite()
+        || !e_modulus.is_finite()
+        || e_modulus <= 0.0
+        || !area_moment_of_inertia.is_finite()
+        || area_moment_of_inertia <= 0.0
+        || !density.is_finite()
+        || density <= 0.0
+        || !area.is_finite()
+        || area <= 0.0
+        || !length.is_finite()
+        || length <= 0.0
+    {
+        return 0.0;
+    }
+    let beta = beta_l / length; // β = (β·L)/L, the bending wavenumber (1/m)
+    beta * beta / (2.0 * std::f64::consts::PI)
+        * (e_modulus * area_moment_of_inertia / (density * area)).sqrt()
+}
+
 /// Errors from the native 3D beam solver.
 #[derive(Debug, Error)]
 pub enum BeamSolverError {
@@ -1343,15 +1390,49 @@ mod tests {
         let sol = solve_beam_modal(&nodes, &elements, &mat, &constraints, 4).unwrap();
         let f_fe = sol.fundamental_hz().unwrap();
 
-        let i = section.iy;
-        let beta1_l_sq = 3.516_015_f64;
-        let f_analytic = beta1_l_sq / (2.0 * std::f64::consts::PI)
-            * (mat.youngs_modulus * i / (mat.density * section.area * l.powi(4))).sqrt();
+        // The analytic cantilever-fundamental reference via this module's helper
+        // (β₁L = 1.875104 for clamped–free), which the FE modal solver converges to.
+        let f_analytic = euler_bernoulli_beam_frequency(
+            1.875_104,
+            mat.youngs_modulus,
+            section.iy,
+            mat.density,
+            section.area,
+            l,
+        );
         let rel = (f_fe - f_analytic).abs() / f_analytic;
         assert!(
             rel < 0.03,
             "FE fundamental {f_fe} Hz vs analytic {f_analytic} Hz (rel {rel})"
         );
+    }
+
+    #[test]
+    fn euler_bernoulli_beam_frequency_matches_the_closed_form_and_modes() {
+        use std::f64::consts::PI;
+        // A simply-supported steel beam (β₁L = π): f = π²/(2π·L²)·√(EI/(ρA)).
+        let (e, i, rho, area, l) = (200.0e9, 1.0e-8, 7850.0, 1.0e-4, 1.0);
+        let f_ss = euler_bernoulli_beam_frequency(PI, e, i, rho, area, l);
+        let omega = PI.powi(2) / (l * l) * (e * i / (rho * area)).sqrt();
+        assert!((f_ss - omega / (2.0 * PI)).abs() < 1e-9, "f = ω/2π");
+        assert!((f_ss - 79.28).abs() < 0.5, "SS fundamental ≈ 79.3 Hz, got {f_ss}");
+        // The boundary/mode enters only through (β·L)²: the cantilever fundamental
+        // (β₁L = 1.875104) sits a factor (1.875104/π)² below the simply-supported one.
+        let f_cant = euler_bernoulli_beam_frequency(1.875_104, e, i, rho, area, l);
+        assert!(
+            (f_cant / f_ss - (1.875_104_f64 / PI).powi(2)).abs() < 1e-9,
+            "f ∝ (β·L)²"
+        );
+        // Scaling: ∝ √E, ∝ √I, ∝ 1/√ρ, ∝ 1/L².
+        assert!((euler_bernoulli_beam_frequency(PI, 4.0 * e, i, rho, area, l) - 2.0 * f_ss).abs() < 1e-6, "∝ √E");
+        assert!((euler_bernoulli_beam_frequency(PI, e, 4.0 * i, rho, area, l) - 2.0 * f_ss).abs() < 1e-6, "∝ √I");
+        assert!((euler_bernoulli_beam_frequency(PI, e, i, 4.0 * rho, area, l) - f_ss / 2.0).abs() < 1e-6, "∝ 1/√ρ");
+        assert!((euler_bernoulli_beam_frequency(PI, e, i, rho, area, 2.0 * l) - f_ss / 4.0).abs() < 1e-6, "∝ 1/L²");
+        // Non-physical input → 0.
+        assert_eq!(euler_bernoulli_beam_frequency(PI, 0.0, i, rho, area, l), 0.0);
+        assert_eq!(euler_bernoulli_beam_frequency(PI, e, i, rho, area, 0.0), 0.0);
+        assert_eq!(euler_bernoulli_beam_frequency(PI, e, i, 0.0, area, l), 0.0);
+        assert_eq!(euler_bernoulli_beam_frequency(f64::NAN, e, i, rho, area, l), 0.0);
     }
 
     #[test]
