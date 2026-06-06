@@ -845,6 +845,38 @@ fn mesh_min_triangle_quality(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     worst
 }
 
+/// The largest **triangle aspect ratio** over every `Tri3` face — the worst
+/// longest-edge-to-shortest-edge ratio `ℓ_max/ℓ_min`, which is exactly `1` for an
+/// equilateral triangle and grows without bound as the triangle is stretched into
+/// a sliver. It is the *elongation* companion to [`mesh_min_triangle_quality`]:
+/// that radius-ratio score grades overall triangle shape, while this isolates pure
+/// stretch, and the two together are the standard mesh-quality pair a mesher
+/// reports — a high aspect ratio warns of the anisotropy that skews interpolation
+/// gradients and solver conditioning even when the area-based quality still looks
+/// acceptable. Degenerate (zero-shortest-edge) triangles are skipped; returns
+/// `None` for a mesh with no usable triangles. Dimensionless.
+fn mesh_max_aspect_ratio(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut worst: Option<f64> = None;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let edges = [(b - a).norm(), (c - b).norm(), (a - c).norm()];
+            let shortest = edges[0].min(edges[1]).min(edges[2]);
+            if shortest <= 0.0 {
+                continue; // a coincident-vertex edge is not a real triangle
+            }
+            let longest = edges[0].max(edges[1]).max(edges[2]);
+            worst = Some(worst.map_or(longest / shortest, |w| w.max(longest / shortest)));
+        }
+    }
+    worst
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -1000,6 +1032,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_min_triangle_quality)
         .map(|q| format!(" · Qmin {q:.2}"))
         .unwrap_or_default();
+    // Worst triangle aspect ratio (longest/shortest edge; 1 = equilateral, ↑ for a
+    // stretched sliver) — the elongation companion to the Qmin shape score.
+    let aspect_str = mesh
+        .as_ref()
+        .and_then(mesh_max_aspect_ratio)
+        .map(|r| format!(" · ARtri {r:.2}"))
+        .unwrap_or_default();
     // Sharp (feature) edges — interior edges that fold past a 30° crease angle,
     // the chamfer/fillet candidates, distinct from the topology/quality measures.
     let sharp_str = mesh
@@ -1009,7 +1048,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|n| format!(" · {n} sharp edges"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{sharp_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{aspect_str}{sharp_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1928,6 +1967,63 @@ mod tests {
 
         // An empty mesh (no triangles) is not watertight.
         assert!(!mesh_is_watertight(&valenx_mesh::Mesh::new("empty")));
+    }
+
+    #[test]
+    fn mesh_max_aspect_ratio_finds_the_most_stretched_triangle() {
+        use nalgebra::Vector3;
+        // The canonical 1×2×3 box: each rectangular face splits into two right
+        // triangles with legs (a,b) and hypotenuse √(a²+b²), so that triangle's
+        // aspect ratio is √(a²+b²)/min(a,b). The most stretched faces are the 1×3
+        // pair → √10/1 = √10 ≈ 3.162 (vs √5 on the 1×2 faces, √13/2 on the 2×3).
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = connectivity;
+        mesh.element_blocks.push(block);
+        let ar = mesh_max_aspect_ratio(&mesh).expect("box has triangles");
+        assert!((ar - 10.0_f64.sqrt()).abs() < 1e-9, "box max aspect ratio = √10, got {ar}");
+
+        // A single equilateral triangle is the ideal: AR = 1 exactly.
+        let mut eq = valenx_mesh::Mesh::new("equilateral");
+        eq.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.5, 3.0_f64.sqrt() / 2.0, 0.0),
+        ];
+        let mut eb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        eb.connectivity = vec![0, 1, 2];
+        eq.element_blocks.push(eb);
+        assert!((mesh_max_aspect_ratio(&eq).unwrap() - 1.0).abs() < 1e-9, "equilateral → 1");
+
+        // A 3-4-5 right triangle → longest/shortest = 5/3.
+        let mut r345 = valenx_mesh::Mesh::new("3-4-5");
+        r345.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+            Vector3::new(0.0, 4.0, 0.0),
+        ];
+        let mut rb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        rb.connectivity = vec![0, 1, 2];
+        r345.element_blocks.push(rb);
+        assert!((mesh_max_aspect_ratio(&r345).unwrap() - 5.0 / 3.0).abs() < 1e-9, "3-4-5 → 5/3");
+
+        // No triangles → None.
+        assert_eq!(mesh_max_aspect_ratio(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
