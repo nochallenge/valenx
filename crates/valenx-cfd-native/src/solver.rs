@@ -345,6 +345,22 @@ impl FlowSolution {
         sum / n as f64
     }
 
+    /// Peak velocity magnitude `max √(u²+v²)` (m/s) over the cell grid — the
+    /// fastest the flow moves anywhere, the peak counterpart to the area-averaged
+    /// [`FlowSolution::mean_speed`]. It is the speed that sets the convective CFL
+    /// limit `U_max·Δt/Δx`, the maximum dynamic pressure `½ρ·U_max²`, and (in the
+    /// lid-driven cavity) it cannot exceed the lid speed that drives the flow.
+    /// Returns `0` for an empty grid.
+    pub fn max_speed(&self) -> f64 {
+        let mut peak = 0.0_f64;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                peak = peak.max(self.speed_at_cell(i, j));
+            }
+        }
+        peak
+    }
+
     /// Peak vorticity magnitude `|∂v/∂x − ∂u/∂y|` (1/s) over the interior cells,
     /// from central differences of the cell-centred velocity — the strongest
     /// local rotation in the flow (the lid-driven cavity's central vortex, a
@@ -1572,12 +1588,7 @@ mod tests {
         let lid = 1.0;
         let bcs = Boundaries::lid_driven_cavity(lid);
         let sol = solve_simple(&grid, &fluid, &bcs, &SimpleControls::default());
-        let mut max_speed = 0.0f64;
-        for j in 0..grid.ny {
-            for i in 0..grid.nx {
-                max_speed = max_speed.max(sol.speed_at_cell(i, j));
-            }
-        }
+        let max_speed = sol.max_speed();
         assert!(
             max_speed <= lid * 1.15,
             "interior speed {max_speed} should not exceed the lid speed {lid}"
@@ -1676,15 +1687,70 @@ mod tests {
         };
         let sol = solve_simple(&grid, &fluid, &bcs, &controls);
         let mean = sol.mean_speed();
-        let mut peak = 0.0_f64;
-        for j in 0..grid.ny {
-            for i in 0..grid.nx {
-                peak = peak.max(sol.speed_at_cell(i, j));
-            }
-        }
+        let peak = sol.max_speed();
         // A driven flow has a positive mean that cannot exceed the peak.
         assert!(mean > 0.0, "driven flow should have a positive mean speed");
         assert!(mean <= peak + 1e-9, "mean {mean} cannot exceed peak {peak}");
+    }
+
+    #[test]
+    fn max_speed_is_the_peak_velocity_magnitude() {
+        // A uniform field u = 3, v = 4 gives every cell the speed √(3²+4²) = 5,
+        // so the peak equals the mean equals 5.
+        let grid = Grid::new(3, 2, 3.0, 2.0);
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                u.set(i, j, 3.0);
+            }
+        }
+        let mut v = grid.v_field();
+        for j in 0..=grid.ny {
+            for i in 0..grid.nx {
+                v.set(i, j, 4.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((uniform.max_speed() - 5.0).abs() < 1e-12, "uniform peak speed = 5");
+        assert!(
+            (uniform.max_speed() - uniform.mean_speed()).abs() < 1e-12,
+            "a uniform field has peak == mean"
+        );
+
+        // A non-uniform field whose cell speeds are {5, 10, 5}: v = 0 and the
+        // middle cell's two shared u-faces both set to 10 (u_at_cell averages the
+        // two faces), so cell 1 reaches 10 while its neighbours sit at 5. The peak
+        // picks out the fast cell (10), strictly above the mean (20/3 ≈ 6.67).
+        let g2 = Grid::new(3, 1, 3.0, 1.0);
+        let mut u2 = g2.u_field();
+        u2.set(1, 0, 10.0); // right face of cell 0 / left face of cell 1
+        u2.set(2, 0, 10.0); // right face of cell 1 / left face of cell 2
+        let peaked = FlowSolution {
+            grid: g2,
+            u: u2,
+            v: g2.v_field(),
+            pressure: g2.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (peaked.max_speed() - 10.0).abs() < 1e-12,
+            "peak = 10, got {}",
+            peaked.max_speed()
+        );
+        assert!(
+            peaked.max_speed() > peaked.mean_speed(),
+            "the peak strictly exceeds the mean for a non-uniform field"
+        );
     }
 
     #[test]
