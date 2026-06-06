@@ -361,6 +361,33 @@ impl FlowSolution {
         peak
     }
 
+    /// The cell-centre location `(x, y)` (m) of the **fastest cell** — the *where*
+    /// of the peak speed, the locational companion to [`FlowSolution::max_speed`]
+    /// (which gives the magnitude). It marks the convective hot-spot that sets the
+    /// CFL limit and, in a constriction, the lowest-pressure point by Bernoulli.
+    /// Like [`FlowSolution::min_pressure_location`] it scans every cell-centred
+    /// speed `√(u²+v²)` and returns the centre of the argmax cell. `None` for an
+    /// empty grid.
+    pub fn max_speed_location(&self) -> Option<(f64, f64)> {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return None;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let mut fastest = f64::NEG_INFINITY;
+        let mut loc = (0.0, 0.0);
+        for j in 0..ny {
+            for i in 0..nx {
+                let speed = self.speed_at_cell(i, j);
+                if speed > fastest {
+                    fastest = speed;
+                    loc = ((i as f64 + 0.5) * dx, (j as f64 + 0.5) * dy);
+                }
+            }
+        }
+        Some(loc)
+    }
+
     /// Peak vorticity magnitude `|∂v/∂x − ∂u/∂y|` (1/s) over the interior cells,
     /// from central differences of the cell-centred velocity — the strongest
     /// local rotation in the flow (the lid-driven cavity's central vortex, a
@@ -1750,6 +1777,54 @@ mod tests {
         assert!(
             peaked.max_speed() > peaked.mean_speed(),
             "the peak strictly exceeds the mean for a non-uniform field"
+        );
+    }
+
+    #[test]
+    fn max_speed_location_finds_the_fastest_cell() {
+        // A 3×1 grid (dx = dy = 1), v = 0, the middle cell's two shared u-faces
+        // set to 10 → cell speeds {5, 10, 5}; the fastest is cell (1, 0), whose
+        // centre is ((1+0.5)·dx, (0+0.5)·dy) = (1.5, 0.5).
+        let grid = Grid::new(3, 1, 3.0, 1.0);
+        let mut u = grid.u_field();
+        u.set(1, 0, 10.0);
+        u.set(2, 0, 10.0);
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let (x, y) = sol.max_speed_location().expect("a non-empty grid has a fastest cell");
+        assert!(
+            (x - 1.5).abs() < 1e-12 && (y - 0.5).abs() < 1e-12,
+            "fastest cell centre (1.5, 0.5), got ({x}, {y})"
+        );
+        // The located cell's speed is indeed the peak (ties to max_speed).
+        assert!((sol.speed_at_cell(1, 0) - sol.max_speed()).abs() < 1e-12, "cell (1,0) is the peak");
+
+        // A 2×2 grid (dx = dy = 1) with the peak planted at cell (1, 1) → centre
+        // (1.5, 1.5) — confirms the locator picks the right cell in 2-D.
+        let g2 = Grid::new(2, 2, 2.0, 2.0);
+        let mut u2 = g2.u_field();
+        u2.set(1, 1, 8.0);
+        u2.set(2, 1, 8.0);
+        let sol2 = FlowSolution {
+            grid: g2,
+            u: u2,
+            v: g2.v_field(),
+            pressure: g2.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let (x2, y2) = sol2.max_speed_location().unwrap();
+        assert!(
+            (x2 - 1.5).abs() < 1e-12 && (y2 - 1.5).abs() < 1e-12,
+            "fastest cell (1,1) centre (1.5, 1.5), got ({x2}, {y2})"
         );
     }
 

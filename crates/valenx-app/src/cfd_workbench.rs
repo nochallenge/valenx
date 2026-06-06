@@ -371,6 +371,11 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         .min_pressure_location()
         .map(|(x, y)| format!("  (suction peak @ {x:.2}, {y:.2} m)"))
         .unwrap_or_default();
+    // Where the flow is fastest — the convective hot-spot (CFL-limiting cell).
+    let peak_speed_loc = sol
+        .max_speed_location()
+        .map(|(x, y)| format!("  (peak @ {x:.2}, {y:.2} m)"))
+        .unwrap_or_default();
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -412,7 +417,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          Reynolds   : {:.1}  ({})\n\
          iterations : {} {}\n\
          residual   : {:.3e}\n\
-         max |u|    : {:.5} m/s  (mean {:.5})\n\
+         max |u|    : {:.5} m/s  (mean {:.5}){peak_speed_loc}\n\
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4}; \u{03A6}_visc {:.3e} W/m)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}\n\
