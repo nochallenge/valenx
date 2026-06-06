@@ -238,6 +238,33 @@ impl ClassicalElements {
         2.0 * y.atan2(x)
     }
 
+    /// The **mean anomaly** `M` (rad) from the true anomaly `true_anomaly` `ν`
+    /// (rad) — the *reverse* of the time-to-position chain, mapping a point on the
+    /// orbit back to the uniformly-advancing time coordinate. It first inverts the
+    /// geometry to the eccentric anomaly,
+    /// `E = 2·atan2(√(1−e)·sin(ν/2), √(1+e)·cos(ν/2))` (the inverse of
+    /// [`true_anomaly_from_eccentric`](Self::true_anomaly_from_eccentric)), then
+    /// applies Kepler's equation forward, `M = E − e·sin E`.
+    ///
+    /// Where [`eccentric_anomaly_from_mean`](Self::eccentric_anomaly_from_mean)
+    /// and [`true_anomaly_from_eccentric`](Self::true_anomaly_from_eccentric)
+    /// together propagate `time → M → E → ν → r` *forward*, this closes the loop
+    /// `ν → E → M`: with the mean motion `n` it gives the time since periapsis
+    /// `t − t_p = M/n` of any point on the orbit — the basis of arrival-time and
+    /// phasing calculations. `ν = 0` and `ν = π` are fixed points (`M = 0`,
+    /// `M = π`); a circular orbit (`e = 0`) collapses it to the identity `M = ν`.
+    /// Defined for closed orbits (`0 ≤ e < 1`); an open orbit (`e ≥ 1`), whose
+    /// eccentric/mean anomaly is undefined, or a non-finite `ν`, yields `NaN`.
+    pub fn mean_anomaly_from_true(&self, true_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if !(0.0..1.0).contains(&e) || !true_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        let half = true_anomaly / 2.0;
+        let ecc = 2.0 * ((1.0 - e).sqrt() * half.sin()).atan2((1.0 + e).sqrt() * half.cos());
+        ecc - e * ecc.sin()
+    }
+
     /// Orbital period (s) for a bound orbit (`a > 0`), else `None`.
     pub fn period(&self) -> Option<f64> {
         if self.semi_major_axis > 0.0 {
@@ -806,6 +833,39 @@ mod tests {
         let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
         assert!(hyp.eccentric_anomaly_from_mean(1.0).is_nan(), "e≥1 → NaN");
         assert!(coe.eccentric_anomaly_from_mean(f64::NAN).is_nan(), "NaN M → NaN");
+    }
+
+    #[test]
+    fn mean_anomaly_from_true_inverts_the_time_to_position_map() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.3,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        // Apsides are fixed points: ν=0 → M=0, ν=π → M=π (sin E = 0 there).
+        assert!(coe.mean_anomaly_from_true(0.0).abs() < 1e-12, "ν=0 → M=0");
+        assert!((coe.mean_anomaly_from_true(PI) - PI).abs() < 1e-12, "ν=π → M=π");
+        // A circular orbit (e=0) collapses the map to the identity M = ν.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for nu in [0.3_f64, 1.0, 2.0, 4.5] {
+            assert!((circ.mean_anomaly_from_true(nu) - nu).abs() < 1e-12, "circular M=ν at {nu}");
+        }
+        // Strong round-trip M → E (#156) → ν (#150) → M (this), tying three
+        // independent methods (non-tautological); angle_diff handles the 2π branch.
+        for m in [0.3_f64, 1.0, 2.5, 3.5, 5.0, 5.9] {
+            let ea = coe.eccentric_anomaly_from_mean(m);
+            let nu = coe.true_anomaly_from_eccentric(ea);
+            let m_back = coe.mean_anomaly_from_true(nu);
+            assert!(angle_diff(m_back, m).abs() < 1e-9, "round trip M={m}, got {m_back}");
+        }
+        // An open orbit has no mean anomaly; a non-finite ν is undefined.
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert!(hyp.mean_anomaly_from_true(1.0).is_nan(), "e≥1 → NaN");
+        assert!(coe.mean_anomaly_from_true(f64::NAN).is_nan(), "non-finite ν → NaN");
     }
 
     #[test]
