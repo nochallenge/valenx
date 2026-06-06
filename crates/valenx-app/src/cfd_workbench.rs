@@ -371,6 +371,11 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         .peak_vorticity_location()
         .map(|(x, y)| format!("  (core @ {x:.2}, {y:.2} m)"))
         .unwrap_or_else(|| "  (max rotation)".to_string());
+    // Suction peak: where the static pressure bottoms out (cavitation / vortex core).
+    let suction_loc = sol
+        .min_pressure_location()
+        .map(|(x, y)| format!("  (suction peak @ {x:.2}, {y:.2} m)"))
+        .unwrap_or_default();
 
     // Vertical centreline velocity profile: speed vs height.
     let i_mid = s.nx / 2;
@@ -415,7 +420,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          max |u|    : {:.5} m/s  (mean {:.5})\n\
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4}; \u{03A6}_visc {:.3e} W/m)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
-         pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
+         pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}\n\
          peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}  \u{00B7}  S_max {:.4} 1/s{flow_str}\n\
          circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)  \u{00B7}  palin {:.3e} 1/s\u{00B2}  (\u{00BD}\u{222B}|\u{2207}\u{03C9}|\u{00B2}\u{00B7}dA)\n\
          wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)  \u{00B7}  max|\u{2207}\u{00B7}u| {:.2e} 1/s  (peak local continuity residual)  \u{00B7}  reverse-flow {:.0}%  (recirculating area)  \u{00B7}  \u{03C8}-span {:.4} m\u{00B2}/s  (streamline range)",
