@@ -902,6 +902,44 @@ impl FlowSolution {
         worst
     }
 
+    /// The **vorticity (shear-layer) thickness** `δ_ω = (u_max − u_min)/max|∂u/∂y|`
+    /// (m) — the canonical mixing-layer length scale: the streamwise-velocity span
+    /// across the flow divided by the steepest wall-normal velocity gradient. Where
+    /// the other field diagnostics report a magnitude, rate, location, or area, this
+    /// is a *length* — the characteristic distance over which the shear is spread,
+    /// the scale that sets a free-shear layer's growth and instability. `u_max` and
+    /// `u_min` are taken over the cell-centred streamwise velocity, and `max|∂u/∂y|`
+    /// from a central difference over the interior rows. Returns `0` for a grid too
+    /// small for an interior row (`ny < 3`), an empty grid, or a uniform
+    /// (shear-free) flow, where no shear layer is defined.
+    pub fn vorticity_thickness(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny < 3 {
+            return 0.0;
+        }
+        let dy = self.grid.dy();
+        let mut u_min = f64::INFINITY;
+        let mut u_max = f64::NEG_INFINITY;
+        for j in 0..ny {
+            for i in 0..nx {
+                let u = self.u_at_cell(i, j);
+                u_min = u_min.min(u);
+                u_max = u_max.max(u);
+            }
+        }
+        let mut max_du_dy = 0.0_f64;
+        for j in 1..ny - 1 {
+            for i in 0..nx {
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / (2.0 * dy);
+                max_du_dy = max_du_dy.max(du_dy.abs());
+            }
+        }
+        if max_du_dy <= 0.0 {
+            return 0.0;
+        }
+        (u_max - u_min) / max_du_dy
+    }
+
     /// The **reverse-flow (recirculation) area fraction** — the share of cells
     /// whose streamwise (`x`) velocity `u` is negative, i.e. running *back*
     /// against the main throughflow. This is the quantitative separation /
@@ -2910,6 +2948,78 @@ mod tests {
             (contracting.max_divergence() - a).abs() < 1e-9,
             "|∇·u| is sign-blind"
         );
+    }
+
+    #[test]
+    fn vorticity_thickness_measures_the_shear_layer() {
+        // A 5×5 unit grid (dy = 1, ly = 5) with a linear shear u(y) = γ·y, γ = 2, v = 0.
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+        let gamma = 2.0;
+        let (dy, ly) = (grid.dy(), grid.ly);
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy; // u_at_cell(i,j) = γ·y_cell
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // The cell-centre u spans γ·(ly−dy) and the central-difference ∂u/∂y is
+        // exactly γ, so δ_ω = γ(ly−dy)/γ = ly − dy (the discrete full-domain shear
+        // resolves the span between the outermost cell centres).
+        assert!(
+            (sol.vorticity_thickness() - (ly - dy)).abs() < 1e-9,
+            "δ_ω = ly−dy = {}, got {}",
+            ly - dy,
+            sol.vorticity_thickness()
+        );
+        // δ_ω is a LENGTH — independent of the shear magnitude: doubling γ scales the
+        // velocity span and the gradient equally, leaving the thickness unchanged.
+        let mut u2 = grid.u_field();
+        for j in 0..grid.ny {
+            let val = 2.0 * gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                u2.set(i, j, val);
+            }
+        }
+        let sol2 = FlowSolution {
+            grid,
+            u: u2,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (sol2.vorticity_thickness() - sol.vorticity_thickness()).abs() < 1e-9,
+            "δ_ω is independent of the shear rate γ"
+        );
+        // A uniform flow has no shear layer → 0.
+        let mut uc = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                uc.set(i, j, 3.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u: uc,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(uniform.vorticity_thickness(), 0.0, "uniform flow → no shear layer");
     }
 
     #[test]
