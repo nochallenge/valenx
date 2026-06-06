@@ -396,6 +396,35 @@ impl FlowSolution {
         Some(loc)
     }
 
+    /// The cell-centre location `(x, y)` (m) of the **lowest static pressure** —
+    /// the *suction peak*: the cavitation-inception site and the low-pressure
+    /// core of a vortex (the heart of the lid-driven cavity's primary vortex, or
+    /// the suction side of a bluff-body wake). Where
+    /// [`FlowSolution::pressure_range`] gives the *magnitude* of the pressure
+    /// swing, this gives the *position* of its minimum — the locational reading
+    /// none of the field-magnitude diagnostics expose. Unlike the vorticity-core
+    /// locator it needs no interior stencil — pressure is stored cell-centred
+    /// everywhere — so it scans every cell. `None` for an empty grid.
+    pub fn min_pressure_location(&self) -> Option<(f64, f64)> {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return None;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let mut lowest = f64::INFINITY;
+        let mut loc = (0.0, 0.0);
+        for j in 0..ny {
+            for i in 0..nx {
+                let p = self.pressure.at(i, j);
+                if p < lowest {
+                    lowest = p;
+                    loc = ((i as f64 + 0.5) * dx, (j as f64 + 0.5) * dy);
+                }
+            }
+        }
+        Some(loc)
+    }
+
     /// Net volumetric flow rate through the **inlet** (left, `x = 0`) face, per
     /// unit depth (m²/s in 2-D): `Σ_j u(0, j)·dy`, the discrete `∫ u dy` along
     /// the inlet. Positive for fluid entering the domain; ~0 for an enclosed
@@ -2577,6 +2606,58 @@ mod tests {
             converged: true,
         };
         assert_eq!(calm.stream_function_range(), 0.0);
+    }
+
+    #[test]
+    fn min_pressure_location_finds_the_suction_peak() {
+        let grid = Grid::new(5, 4, 5.0, 8.0); // dx = 1, dy = 2
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Plant the pressure minimum at cell (3, 1): a uniform 100 Pa field with a dip.
+        let mut p = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p.set(i, j, 100.0);
+            }
+        }
+        p.set(3, 1, -50.0);
+        let sol = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let (x, y) = sol.min_pressure_location().expect("non-empty grid");
+        assert!(
+            (x - (3.0 + 0.5) * dx).abs() < 1e-9 && (y - (1.0 + 0.5) * dy).abs() < 1e-9,
+            "suction peak at cell (3,1) centre, got ({x}, {y})"
+        );
+
+        // Move the minimum to cell (0, 3) → the located point follows.
+        let mut p2 = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p2.set(i, j, 10.0);
+            }
+        }
+        p2.set(0, 3, -1.0);
+        let sol2 = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: p2,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let (x2, y2) = sol2.min_pressure_location().unwrap();
+        assert!(
+            (x2 - 0.5 * dx).abs() < 1e-9 && (y2 - (3.0 + 0.5) * dy).abs() < 1e-9,
+            "suction peak at cell (0,3) centre, got ({x2}, {y2})"
+        );
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
