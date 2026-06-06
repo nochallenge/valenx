@@ -35,23 +35,17 @@ pub fn lif_firing_rate(
     v_threshold: f64,
     t_refractory_s: f64,
 ) -> f64 {
-    if !current.is_finite()
-        || !resistance.is_finite()
-        || resistance <= 0.0
-        || !tau_m_s.is_finite()
-        || tau_m_s <= 0.0
-        || !v_threshold.is_finite()
-        || v_threshold <= 0.0
-        || !t_refractory_s.is_finite()
-        || t_refractory_s < 0.0
-    {
+    if !t_refractory_s.is_finite() || t_refractory_s < 0.0 {
         return 0.0;
     }
-    let drive = resistance * current; // the asymptotic membrane voltage R·I
-    if drive <= v_threshold {
-        return 0.0; // subthreshold — the membrane never reaches the threshold
+    // The inter-spike interval is the refractory dead time plus the climb time
+    // from reset to threshold; the rate is its reciprocal. A non-finite latency
+    // means a subthreshold (or non-physical) drive — the cell is silent.
+    let climb = lif_time_to_first_spike(current, resistance, tau_m_s, v_threshold);
+    if !climb.is_finite() {
+        return 0.0;
     }
-    1.0 / (t_refractory_s + tau_m_s * (drive / (drive - v_threshold)).ln())
+    1.0 / (t_refractory_s + climb)
 }
 
 /// The **leaky integrate-and-fire subthreshold membrane potential** `V(t)` (V)
@@ -85,6 +79,44 @@ pub fn lif_membrane_potential(current: f64, resistance: f64, tau_m_s: f64, t_s: 
         return 0.0;
     }
     resistance * current * (1.0 - (-t_s / tau_m_s).exp())
+}
+
+/// The **leaky integrate-and-fire time-to-first-spike** (response latency, s) —
+/// the time `t₁ = τ_m·ln(R·I/(R·I − V_th))` for the leaky membrane, driven from
+/// reset by a *constant* current `current` `I` (A), to climb to the threshold
+/// `v_threshold` `V_th` and fire. `resistance` is the input resistance `R` (Ω)
+/// and `tau_m_s` the membrane time constant `τ_m` (s).
+///
+/// This is the spike-timing companion to the rate and the trajectory: it is the
+/// climb time [`lif_firing_rate`] adds to the refractory dead time to form the
+/// inter-spike interval (`f = 1/(t_ref + t₁)`), and the exact instant at which
+/// [`lif_membrane_potential`] reaches `V_th`. A stronger drive `R·I` shortens the
+/// latency (the membrane charges past threshold sooner), and as `R·I` approaches
+/// the threshold from above the latency diverges. Returns `f64::INFINITY` — the
+/// cell never spikes — when the asymptotic drive does not exceed the threshold
+/// (`R·I ≤ V_th`, the rheobase) or for non-physical input (`R`, `τ_m`, or `V_th`
+/// non-positive, or any non-finite argument).
+pub fn lif_time_to_first_spike(
+    current: f64,
+    resistance: f64,
+    tau_m_s: f64,
+    v_threshold: f64,
+) -> f64 {
+    if !current.is_finite()
+        || !resistance.is_finite()
+        || resistance <= 0.0
+        || !tau_m_s.is_finite()
+        || tau_m_s <= 0.0
+        || !v_threshold.is_finite()
+        || v_threshold <= 0.0
+    {
+        return f64::INFINITY;
+    }
+    let drive = resistance * current; // the asymptotic membrane voltage R·I
+    if drive <= v_threshold {
+        return f64::INFINITY; // subthreshold — the membrane never reaches threshold
+    }
+    tau_m_s * (drive / (drive - v_threshold)).ln()
 }
 
 #[cfg(test)]
@@ -140,7 +172,7 @@ mod tests {
         // Cross-check tying the trajectory to lif_firing_rate (#173): at the climb
         // time t* = τ·ln(R·I/(R·I − V_th)) the membrane reaches EXACTLY V_th.
         let v_th = 0.015;
-        let t_climb = tau * (drive / (drive - v_th)).ln();
+        let t_climb = lif_time_to_first_spike(i, r, tau, v_th);
         let v_at_climb = lif_membrane_potential(i, r, tau, t_climb);
         assert!((v_at_climb - v_th).abs() < 1e-9, "V(t*) = V_th, got {v_at_climb}");
         // A hyperpolarising (negative) current drives V negative.
@@ -151,5 +183,35 @@ mod tests {
         assert_eq!(lif_membrane_potential(i, r, 0.0, tau), 0.0); // τ_m ≤ 0
         assert_eq!(lif_membrane_potential(f64::NAN, r, tau, tau), 0.0); // non-finite I
         assert_eq!(lif_membrane_potential(i, r, tau, f64::INFINITY), 0.0); // non-finite t
+    }
+
+    #[test]
+    fn lif_time_to_first_spike_is_the_latency_to_threshold() {
+        let (r, tau, v_th) = (1.0e8, 0.02, 0.015); // 100 MΩ, 20 ms, 15 mV
+        let i = 2.0e-10; // 0.2 nA → R·I = 20 mV, the firing-rate worked point
+        let t1 = lif_time_to_first_spike(i, r, tau, v_th);
+        // Closed form τ·ln(R·I/(R·I − V_th)) = 0.02·ln(0.02/0.005) = 0.02·ln 4 ≈ 27.7 ms.
+        assert!((t1 - tau * (0.02_f64 / 0.005).ln()).abs() < 1e-12, "closed form");
+        assert!((t1 - 0.02773).abs() < 1e-4, "≈27.7 ms, got {t1}");
+        // The membrane reaches threshold EXACTLY at this latency (ties to #191,
+        // non-tautological): V(t1) = R·I·(1 − e^(−t1/τ)) = V_th.
+        let v_at_t1 = lif_membrane_potential(i, r, tau, t1);
+        assert!((v_at_t1 - v_th).abs() < 1e-12, "V(t1) = V_th, got {v_at_t1}");
+        // It is the climb time the firing rate is built on: f = 1/(t_ref + t1).
+        let t_ref = 0.002;
+        let f = lif_firing_rate(i, r, tau, v_th, t_ref);
+        assert!((f - 1.0 / (t_ref + t1)).abs() < 1e-9, "f = 1/(t_ref + t1)");
+        // A stronger drive shortens the latency (charges past threshold sooner).
+        assert!(
+            lif_time_to_first_spike(5.0e-10, r, tau, v_th) < t1,
+            "more current → shorter latency"
+        );
+        // Subthreshold (R·I ≤ V_th) → never spikes → infinite latency.
+        assert!(lif_time_to_first_spike(1.4e-10, r, tau, v_th).is_infinite(), "subthreshold → ∞");
+        // Non-physical input → ∞ (so the firing rate it feeds returns 0).
+        assert!(lif_time_to_first_spike(i, 0.0, tau, v_th).is_infinite()); // R ≤ 0
+        assert!(lif_time_to_first_spike(i, r, 0.0, v_th).is_infinite()); // τ_m ≤ 0
+        assert!(lif_time_to_first_spike(i, r, tau, 0.0).is_infinite()); // V_th ≤ 0
+        assert!(lif_time_to_first_spike(f64::NAN, r, tau, v_th).is_infinite()); // non-finite I
     }
 }
