@@ -64,6 +64,22 @@ impl ClassicalElements {
         self.semi_major_axis * (1.0 - self.eccentricity)
     }
 
+    /// The **semi-latus rectum** `p = a(1−e²)` (m) — the orbit's conic parameter:
+    /// the orbital radius at `ν = ±90°` (a quarter-turn from periapsis), and the
+    /// scale of the conic that is *independent of where periapsis points*. It is
+    /// the natural size parameter of the polar equation
+    /// [`radius_at_true_anomaly`](Self::radius_at_true_anomaly)
+    /// `r = p/(1 + e·cos ν)`, and it ties the geometry to the dynamics through
+    /// `p = h²/μ` (with `h` the
+    /// [`specific_angular_momentum`](Self::specific_angular_momentum)) and the
+    /// harmonic mean of the apsidal radii, `p = 2·r_a·r_p/(r_a + r_p)`. For a
+    /// circular orbit (`e = 0`) it reduces to `a`; it stays positive for both
+    /// closed (`e < 1`) and open (`e > 1`) orbits and vanishes only for the
+    /// degenerate parabola (`e = 1`).
+    pub fn semi_latus_rectum(&self) -> f64 {
+        self.semi_major_axis * (1.0 - self.eccentricity * self.eccentricity)
+    }
+
     /// Orbital radius `r = a(1−e²)/(1 + e·cos ν)` (m) at true anomaly `nu` (rad) —
     /// the **polar equation of the conic**, the foundational relation behind the
     /// orbit's shape. Its `ν = 0` and `ν = π` values are exactly the periapsis and
@@ -735,6 +751,39 @@ mod tests {
         for nu in [0.0, 1.0, PI, 2.5] {
             assert!((circ.radius_at_true_anomaly(nu) - a).abs() < 1e-6, "circular r at {nu}");
         }
+    }
+
+    #[test]
+    fn semi_latus_rectum_is_the_conic_parameter() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let p = coe.semi_latus_rectum();
+        // Worked point: p = a(1−e²) = 8e6·0.9375 = 7.5e6 m.
+        assert!((p - 7.5e6).abs() / p < 1e-12, "p = a(1−e²) = 7.5e6 m, got {p}");
+        // Cross-check (a): p = h²/μ, tying the geometry to the dynamics via the
+        // specific angular momentum #174 (h = √(μ·p) round-trips through sqrt).
+        let h = coe.specific_angular_momentum().expect("closed orbit has h");
+        assert!((p - h * h / MU_EARTH).abs() / p < 1e-12, "p = h²/μ");
+        // Cross-check (b): p is the harmonic mean of the apsidal radii,
+        // p = 2·r_a·r_p/(r_a + r_p) (r_a = 1e7, r_p = 6e6 → 7.5e6) — an independent
+        // path through apoapsis_radius/periapsis_radius.
+        let (ra, rp) = (coe.apoapsis_radius(), coe.periapsis_radius());
+        assert!((p - 2.0 * ra * rp / (ra + rp)).abs() / p < 1e-12, "p = harmonic mean of r_a, r_p");
+        // Cross-check (c): the radius at ν = π/2 IS the semi-latus rectum (#168).
+        assert!((p - coe.radius_at_true_anomaly(PI / 2.0)).abs() / p < 1e-9, "p = r(π/2)");
+        // A circular orbit collapses to p = a.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        assert!(
+            (circ.semi_latus_rectum() - circ.semi_major_axis).abs() / circ.semi_major_axis < 1e-12,
+            "circular p = a"
+        );
     }
 
     #[test]
