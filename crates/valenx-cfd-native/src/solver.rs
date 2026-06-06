@@ -633,6 +633,29 @@ impl FlowSolution {
         sum / nx as f64
     }
 
+    /// The mean wall-tangential velocity gradient `⟨|∂v/∂x|⟩` at the **left** wall
+    /// (`x = 0`) (1/s) — the one-sided estimate `2·v_cell(0, j)/dx` from the no-slip
+    /// wall to the first cell centre, averaged over the wall-normal (vertical)
+    /// cells: the *vertical-wall* companion to the horizontal-wall
+    /// [`FlowSolution::bottom_wall_shear_rate`] / [`FlowSolution::top_wall_shear_rate`].
+    /// Where those measure `∂u/∂y` on the top and bottom, this measures the
+    /// tangential velocity `v` shearing past the side wall (`∂v/∂x`); multiplying by
+    /// the dynamic viscosity `μ = ρν` gives the side-wall shear stress `τ_w`. In the
+    /// **lid-driven cavity** the side walls carry the vertical drag of the
+    /// recirculating vortex. Returns `0` for an empty grid.
+    pub fn left_wall_shear_rate(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return 0.0;
+        }
+        let dx = self.grid.dx();
+        let mut sum = 0.0;
+        for j in 0..ny {
+            sum += (2.0 * self.v_at_cell(0, j) / dx).abs();
+        }
+        sum / ny as f64
+    }
+
     /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
     /// signed net rotation of the flow (Kelvin's circulation theorem; by
     /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
@@ -2649,6 +2672,47 @@ mod tests {
             sol.top_wall_shear_rate() < sol.bottom_wall_shear_rate(),
             "the top wall is the no-slip one for this profile"
         );
+    }
+
+    #[test]
+    fn left_wall_shear_rate_measures_the_side_wall_gradient() {
+        // A 4×4 unit grid (dx = 1, lx = 4) with a vertical-velocity field linear in x
+        // that is ZERO at the LEFT wall (x = 0): v(x) = γ·x, γ = 3 — no-slip at the
+        // left, the vertical-wall analogue of the bottom test's u = γ·y. The one-sided
+        // left-wall gradient 2·v_cell(0, j)/dx then recovers γ.
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let gamma = 3.0;
+        let dx = grid.dx();
+        let mut v = grid.v_field();
+        for i in 0..grid.nx {
+            let val = gamma * (i as f64 + 0.5) * dx; // v_at_cell(i,j) = γ·x_cell
+            for j in 0..=grid.ny {
+                v.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // ⟨2·v_cell(0, j)/dx⟩ = 2·(γ·0.5·dx)/dx = γ.
+        assert!(
+            (sol.left_wall_shear_rate() - gamma).abs() < 1e-9,
+            "left wall shear rate {}",
+            sol.left_wall_shear_rate()
+        );
+        // Distinct axis from the horizontal walls: this field has no u, so the
+        // top/bottom (∂u/∂y) shear is zero while the left wall (∂v/∂x) reads γ —
+        // confirming the new method measures a genuinely different quantity.
+        assert!(
+            sol.bottom_wall_shear_rate().abs() < 1e-12,
+            "a pure-v field has no horizontal-wall shear"
+        );
+        assert!(sol.top_wall_shear_rate().abs() < 1e-12);
     }
 
     #[test]
