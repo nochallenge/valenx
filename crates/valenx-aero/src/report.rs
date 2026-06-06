@@ -233,6 +233,39 @@ pub fn isentropic_stagnation_density_ratio(mach: f64, gamma: f64) -> f64 {
     temperature_ratio.powf(1.0 / (gamma - 1.0))
 }
 
+/// The **downstream Mach number** `M₂` behind a stationary **normal shock** with
+/// upstream Mach `mach` `M₁` and heat-capacity ratio `gamma` `γ`, from the
+/// Rankine–Hugoniot jump conditions:
+///
+/// ```text
+///   M₂² = (1 + ((γ−1)/2)·M₁²) / (γ·M₁² − (γ−1)/2)
+/// ```
+///
+/// Unlike the isentropic stagnation relations above — which describe a *smooth,
+/// reversible* deceleration — a normal shock is an abrupt, **irreversible**
+/// (entropy-increasing) compression that forms only in **supersonic** flow, and
+/// it always leaves the flow **subsonic** (`M₂ < 1` for every `M₁ > 1`). The
+/// downstream Mach falls as the shock strengthens, approaching the finite
+/// strong-shock limit `√((γ−1)/2γ)` (≈ `0.378` for air) as `M₁ → ∞`. This is the
+/// foundational shock relation the static pressure, density and temperature jumps
+/// are all built on.
+///
+/// `M₁ = 1` is the infinitesimal (no-shock) limit, `M₂ = 1`. For **subsonic or
+/// sonic** upstream (`M₁ ≤ 1`) no shock forms and the flow passes through
+/// unchanged, so the input `mach` is returned. Returns `1.0` (the sonic identity)
+/// for non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn normal_shock_downstream_mach(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 1.0;
+    }
+    if mach <= 1.0 {
+        return mach; // subsonic/sonic: no shock forms, the flow is unchanged
+    }
+    let numerator = 1.0 + 0.5 * (gamma - 1.0) * mach * mach;
+    let denominator = gamma * mach * mach - 0.5 * (gamma - 1.0);
+    (numerator / denominator).sqrt()
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -932,5 +965,36 @@ mod tests {
         assert_eq!(isentropic_stagnation_density_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_density_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_density_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn normal_shock_downstream_mach_matches_compressible_flow_tables() {
+        // M1 = 1 is the no-shock (infinitesimal) limit: M2 = 1 exactly.
+        assert!((normal_shock_downstream_mach(1.0, 1.4) - 1.0).abs() < 1e-12);
+        // Worked points against the normal-shock tables (γ = 1.4):
+        // M1 = 2 → M2² = 1.8/5.4 = 1/3 → M2 ≈ 0.5774.
+        assert!((normal_shock_downstream_mach(2.0, 1.4) - (1.0_f64 / 3.0).sqrt()).abs() < 1e-12);
+        assert!((normal_shock_downstream_mach(2.0, 1.4) - 0.5774).abs() < 1e-3, "M1=2 → 0.5774");
+        // M1 = 3 → M2 ≈ 0.4752.
+        assert!((normal_shock_downstream_mach(3.0, 1.4) - 0.4752).abs() < 1e-3, "M1=3 → 0.4752");
+        // A normal shock is always supersonic → subsonic: M2 < 1 for M1 > 1, and
+        // the downstream Mach falls as the shock strengthens.
+        let m_15 = normal_shock_downstream_mach(1.5, 1.4);
+        let m_5 = normal_shock_downstream_mach(5.0, 1.4);
+        assert!(m_15 < 1.0 && m_5 < 1.0 && m_5 < m_15, "M2 < 1 and falls with M1: {m_15} {m_5}");
+        // Strong-shock limit M1 → ∞: M2 → √((γ−1)/2γ) ≈ 0.378, approached from above.
+        let limit = (0.4_f64 / 2.8).sqrt();
+        let m_big = normal_shock_downstream_mach(1.0e6, 1.4);
+        assert!(
+            (m_big - limit).abs() < 1e-3 && m_big > limit,
+            "strong-shock limit ≈ {limit:.4}, got {m_big}"
+        );
+        // Subsonic/sonic upstream: no shock forms, the flow passes through unchanged.
+        assert_eq!(normal_shock_downstream_mach(0.5, 1.4), 0.5);
+        // Non-physical input → the sonic identity 1.0.
+        assert_eq!(normal_shock_downstream_mach(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(normal_shock_downstream_mach(f64::NAN, 1.4), 1.0);
+        assert_eq!(normal_shock_downstream_mach(-1.0, 1.4), 1.0);
+        assert_eq!(normal_shock_downstream_mach(2.0, f64::INFINITY), 1.0);
     }
 }
