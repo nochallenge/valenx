@@ -102,6 +102,45 @@ use crate::native_solver::{
     solve_linear_static, tet_volume, NativeSolverError, NodalConstraint, NodalForce,
 };
 
+/// The **Euler critical buckling load** `P_cr = π²·E·I / (K·L)²` of an ideal
+/// slender column (Euler, 1744) — the compressive axial load at which a perfect
+/// idealised column becomes elastically unstable and bows sideways.
+/// `e_modulus` is Young's modulus `E` (Pa), `area_moment_of_inertia` the
+/// section's second moment of area `I` (m⁴) about the bending axis, `length`
+/// the column length `L` (m), and `effective_length_factor` the end-condition
+/// factor `K` — `1` pinned–pinned, `0.5` fixed–fixed, `0.7` fixed–pinned, `2`
+/// fixed–free (a cantilever column).
+///
+/// This is the *analytic* slender-column reference — the closed form that the
+/// mesh-based finite-element eigenvalue solver [`solve_buckling`] is validated
+/// against (a real column's FE buckling load approaches it as the mesh refines).
+/// Use it for a quick design estimate without meshing: the load scales with the
+/// bending stiffness `E·I`, falls as the square of the length, and falls as the
+/// square of `K` (so a fixed–free cantilever column, `K = 2`, buckles at a
+/// quarter of the pinned–pinned load). Returns `0` for any non-physical input
+/// (`E`, `I`, `L`, or `K` non-positive or non-finite).
+pub fn euler_critical_load(
+    e_modulus: f64,
+    area_moment_of_inertia: f64,
+    length: f64,
+    effective_length_factor: f64,
+) -> f64 {
+    if !e_modulus.is_finite()
+        || e_modulus <= 0.0
+        || !area_moment_of_inertia.is_finite()
+        || area_moment_of_inertia <= 0.0
+        || !length.is_finite()
+        || length <= 0.0
+        || !effective_length_factor.is_finite()
+        || effective_length_factor <= 0.0
+    {
+        return 0.0;
+    }
+    let effective_length = effective_length_factor * length;
+    std::f64::consts::PI.powi(2) * e_modulus * area_moment_of_inertia
+        / (effective_length * effective_length)
+}
+
 /// Errors from the native buckling solver.
 #[derive(Debug, Error)]
 pub enum BucklingSolverError {
@@ -511,6 +550,34 @@ mod tests {
     }
 
     #[test]
+    fn euler_critical_load_matches_the_closed_form_and_end_conditions() {
+        use std::f64::consts::PI;
+        let (e, i, l) = (200.0e9, 1.0e-6, 2.0); // steel, I = 1e-6 m⁴, 2 m column
+        // Pinned–pinned (K=1): P_cr = π²EI/L² ≈ 4.93e5 N.
+        let pinned = euler_critical_load(e, i, l, 1.0);
+        assert!((pinned - PI.powi(2) * e * i / (l * l)).abs() < 1e-3, "closed form");
+        assert!((pinned - 4.9348e5).abs() < 1e2, "≈493 kN, got {pinned}");
+        // End conditions scale as 1/K² relative to pinned–pinned: fixed–free K=2
+        // → ¼, fixed–fixed K=0.5 → 4×, fixed–pinned K=0.7 → ~2.04×.
+        assert!((euler_critical_load(e, i, l, 2.0) - pinned / 4.0).abs() < 1.0, "fixed-free ¼");
+        assert!((euler_critical_load(e, i, l, 0.5) - 4.0 * pinned).abs() < 1.0, "fixed-fixed 4×");
+        assert!(
+            (euler_critical_load(e, i, l, 0.7) / pinned - 1.0 / 0.49).abs() < 1e-9,
+            "fixed-pinned ~2.04×"
+        );
+        // Scaling: ∝ E, ∝ I, ∝ 1/L².
+        assert!((euler_critical_load(2.0 * e, i, l, 1.0) - 2.0 * pinned).abs() < 1.0, "∝ E");
+        assert!((euler_critical_load(e, 3.0 * i, l, 1.0) - 3.0 * pinned).abs() < 1.0, "∝ I");
+        assert!((euler_critical_load(e, i, 2.0 * l, 1.0) - pinned / 4.0).abs() < 1.0, "∝ 1/L²");
+        // Non-physical input → 0.
+        assert_eq!(euler_critical_load(0.0, i, l, 1.0), 0.0);
+        assert_eq!(euler_critical_load(e, 0.0, l, 1.0), 0.0);
+        assert_eq!(euler_critical_load(e, i, 0.0, 1.0), 0.0);
+        assert_eq!(euler_critical_load(e, i, l, 0.0), 0.0);
+        assert_eq!(euler_critical_load(f64::NAN, i, l, 1.0), 0.0);
+    }
+
+    #[test]
     fn geometric_stiffness_is_symmetric() {
         // K_g is a symmetric matrix.
         let coords = [
@@ -703,12 +770,11 @@ mod tests {
         // load factor.
         let p_cr_fe = lambda * total_ref;
 
-        // Analytic Euler load for the fixed-free column (K = 2):
-        //   P_cr = π²·E·I / (2L)²,  I = b·b³/12 for the square section.
+        // Analytic Euler load for the fixed-free column (K = 2),
+        //   P_cr = π²·E·I / (2L)²,  I = b·b³/12 for the square section,
+        // via the analytic helper this module exposes.
         let i_section = b * b.powi(3) / 12.0;
-        let effective_length = 2.0 * l;
-        let p_cr_euler = std::f64::consts::PI.powi(2) * e_mod * i_section
-            / effective_length.powi(2);
+        let p_cr_euler = euler_critical_load(e_mod, i_section, l, 2.0);
 
         assert!(p_cr_euler > 0.0);
         // A linear-tet column is stiffer in bending than slender-beam

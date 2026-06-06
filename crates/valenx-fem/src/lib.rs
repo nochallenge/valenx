@@ -146,7 +146,9 @@ pub use beam::{
     solve_beam_modal, solve_beam_static, BeamConstraint, BeamElement, BeamLoad, BeamModalSolution,
     BeamMode, BeamSection, BeamSolution, BeamSolverError,
 };
-pub use buckling::{solve_buckling, BucklingMode, BucklingSolution, BucklingSolverError};
+pub use buckling::{
+    euler_critical_load, solve_buckling, BucklingMode, BucklingSolution, BucklingSolverError,
+};
 pub use constraints::FemConstraint;
 pub use contact::{
     solve_contact, ContactControls, ContactPlane, ContactSolution,
