@@ -187,6 +187,35 @@ pub fn induced_drag_coefficient(
         / (std::f64::consts::PI * span_efficiency * aspect_ratio)
 }
 
+/// The **maximum lift-to-drag ratio** `(L/D)_max = ½·√(π·e·AR / C_D0)` of a wing
+/// with parabolic drag polar `C_D = C_D0 + C_L²/(π·e·AR)` — the single headline
+/// aircraft-performance number, the best-glide and best-range/endurance
+/// operating point. `cd0` is the zero-lift (parasite) drag coefficient `C_D0`,
+/// `aspect_ratio` the wing `AR`, and `span_efficiency` the Oswald factor `e`.
+///
+/// It is reached at the lift coefficient `C_L* = √(π·e·AR·C_D0)`, the point where
+/// the lift-induced drag (see [`induced_drag_coefficient`]) exactly equals the
+/// parasite drag `C_D0`; the total drag is then `2·C_D0`, so
+/// `(L/D)_max = C_L*/(2·C_D0)`. It improves with span efficiency and aspect ratio
+/// (a long, clean wing glides far, `∝ √AR`) and degrades as the parasite drag
+/// grows (`∝ 1/√C_D0`). This is the closed-form value from the polar
+/// *parameters* — the analytic counterpart to
+/// [`crate::sweep::PolarCurve::max_lift_to_drag`], which instead reads the peak
+/// off a set of *measured* polar points. Returns `0` for any non-physical input
+/// (`C_D0 ≤ 0`, `AR ≤ 0`, `e ≤ 0`, or non-finite).
+pub fn max_lift_to_drag_ratio(cd0: f64, aspect_ratio: f64, span_efficiency: f64) -> f64 {
+    if !cd0.is_finite()
+        || cd0 <= 0.0
+        || !aspect_ratio.is_finite()
+        || aspect_ratio <= 0.0
+        || !span_efficiency.is_finite()
+        || span_efficiency <= 0.0
+    {
+        return 0.0;
+    }
+    0.5 * (std::f64::consts::PI * span_efficiency * aspect_ratio / cd0).sqrt()
+}
+
 impl AeroReport {
     /// Build a report from a completed [`AeroResult`].
     pub fn from_result(result: &AeroResult) -> AeroReport {
@@ -695,5 +724,43 @@ mod tests {
         assert_eq!(induced_drag_coefficient(0.5, 8.0, 0.0), 0.0);
         assert_eq!(induced_drag_coefficient(f64::NAN, 8.0, 0.8), 0.0);
         assert_eq!(induced_drag_coefficient(0.5, f64::INFINITY, 0.8), 0.0);
+    }
+
+    #[test]
+    fn max_lift_to_drag_ratio_is_the_best_glide_optimum() {
+        use std::f64::consts::PI;
+        let (cd0, ar, e) = (0.02, 8.0, 0.8);
+        let ld_max = max_lift_to_drag_ratio(cd0, ar, e);
+        // Closed form ½·√(π·e·AR/C_D0); worked point ≈ 15.85.
+        assert!(
+            (ld_max - 0.5 * (PI * e * ar / cd0).sqrt()).abs() < 1e-12,
+            "closed form"
+        );
+        assert!((ld_max - 15.85).abs() < 0.05, "≈15.85, got {ld_max}");
+        // The optimum is where induced drag equals parasite drag: at
+        // C_L* = √(π·e·AR·C_D0), induced_drag_coefficient(C_L*) = C_D0, the total
+        // drag is 2·C_D0 and (L/D)_max = C_L*/(2·C_D0).
+        let cl_star = (PI * e * ar * cd0).sqrt();
+        let cdi = induced_drag_coefficient(cl_star, ar, e);
+        assert!((cdi - cd0).abs() < 1e-12, "induced = parasite at the optimum: {cdi}");
+        assert!(
+            (ld_max - cl_star / (2.0 * cd0)).abs() < 1e-9,
+            "(L/D)_max = C_L*/(2·C_D0)"
+        );
+        // Scaling: ∝ √AR (4× the aspect ratio doubles it) and ∝ 1/√C_D0
+        // (4× the parasite drag halves it).
+        assert!(
+            (max_lift_to_drag_ratio(cd0, 4.0 * ar, e) - 2.0 * ld_max).abs() < 1e-9,
+            "∝ √AR"
+        );
+        assert!(
+            (max_lift_to_drag_ratio(4.0 * cd0, ar, e) - ld_max / 2.0).abs() < 1e-9,
+            "∝ 1/√C_D0"
+        );
+        // Non-physical inputs → 0.
+        assert_eq!(max_lift_to_drag_ratio(0.0, ar, e), 0.0);
+        assert_eq!(max_lift_to_drag_ratio(cd0, 0.0, e), 0.0);
+        assert_eq!(max_lift_to_drag_ratio(cd0, ar, 0.0), 0.0);
+        assert_eq!(max_lift_to_drag_ratio(f64::NAN, ar, e), 0.0);
     }
 }
