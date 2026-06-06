@@ -721,6 +721,33 @@ fn mesh_open_edge_count(mesh: &valenx_mesh::Mesh) -> usize {
     edges.values().filter(|&&c| c == 1).count()
 }
 
+/// The number of **non-manifold edges** of a `Tri3` surface mesh — edges shared by
+/// *three or more* triangles, the self-intersection / T-junction defect a
+/// well-formed 2-manifold never has (every interior edge of a clean surface joins
+/// exactly two faces). It is the quantitative companion to
+/// [`mesh_open_edge_count`] on the *other* side of the manifold ideal: where the
+/// open-edge count sizes the holes (edges with too *few* — one — incident
+/// triangles), this sizes the self-intersections (edges with too *many*), the two
+/// failure modes the boolean [`mesh_is_watertight`] collapses into a single
+/// yes/no. Non-manifold edges are the harder mesh-repair case — a slicer cannot
+/// decide inside-from-outside across them. Edges are counted undirected via the
+/// same sorted `(min, max)` node-index key. Returns `0` for a clean or empty mesh.
+fn mesh_nonmanifold_edge_count(mesh: &valenx_mesh::Mesh) -> usize {
+    let mut edges: std::collections::HashMap<(u32, u32), u32> = std::collections::HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                let key = if i <= j { (i, j) } else { (j, i) };
+                *edges.entry(key).or_insert(0) += 1;
+            }
+        }
+    }
+    edges.values().filter(|&&c| c >= 3).count()
+}
+
 /// The **mean edge length** — the characteristic element size `h̄` (model units)
 /// of a `Tri3` mesh, the average length of its *distinct* undirected edges. This
 /// is the single "mesh resolution" scalar: the typical element size that sets the
@@ -1176,6 +1203,14 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .filter(|&n| n > 0)
         .map(|n| format!(" · {n} hole{}", if n == 1 { "" } else { "s" }))
         .unwrap_or_default();
+    // Non-manifold edges (shared by ≥3 triangles) — the self-intersection / T-junction
+    // defect, the other manifold failure beside the holes above; shown only when > 0.
+    let nonmanifold_str = mesh
+        .as_ref()
+        .map(mesh_nonmanifold_edge_count)
+        .filter(|&n| n > 0)
+        .map(|n| format!(" · {n} non-manifold edge{}", if n == 1 { "" } else { "s" }))
+        .unwrap_or_default();
     // Euler characteristic χ = V−E+F (and genus for a closed orientable surface)
     // — the topology the watertight flag has confirmed is closed.
     let euler_str = mesh
@@ -1264,7 +1299,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|n| format!(" · max valence {n}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2509,6 +2544,54 @@ mod tests {
 
         // An empty mesh has no edges.
         assert_eq!(mesh_open_edge_count(&valenx_mesh::Mesh::new("empty")), 0);
+    }
+
+    #[test]
+    fn mesh_nonmanifold_edge_count_finds_self_intersections() {
+        use nalgebra::Vector3;
+        // The canonical closed 1×2×3 box: a clean 2-manifold — every edge shared by
+        // exactly two triangles, so zero non-manifold edges.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        mesh.element_blocks.push(block);
+        assert_eq!(mesh_nonmanifold_edge_count(&mesh), 0, "a clean box is 2-manifold");
+
+        // A "fan" of three triangles all sharing the edge 0–1 (a T-junction): edge
+        // 0–1 has multiplicity 3 → exactly one non-manifold edge; the other six edges
+        // each belong to a single triangle (boundary, multiplicity 1).
+        let mut fan = valenx_mesh::Mesh::new("fan");
+        fan.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(0.0, -1.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+        ];
+        let mut fblock = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        fblock.connectivity = vec![0, 1, 2, 0, 1, 3, 0, 1, 4];
+        fan.element_blocks.push(fblock);
+        assert_eq!(mesh_nonmanifold_edge_count(&fan), 1, "edge 0–1 is shared by 3 triangles");
+        // A genuinely different defect than a hole: the over-shared edge is invisible
+        // to the open-edge (under-shared) count, yet both break watertightness.
+        assert!(mesh_open_edge_count(&fan) > 0 && !mesh_is_watertight(&fan));
+
+        // An empty mesh reports zero.
+        assert_eq!(mesh_nonmanifold_edge_count(&valenx_mesh::Mesh::new("empty")), 0);
     }
 
     #[test]
