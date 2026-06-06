@@ -482,6 +482,48 @@ fn mesh_sharp_edge_count(mesh: &valenx_mesh::Mesh, angle_threshold_rad: f64) -> 
         .count()
 }
 
+/// The largest **dihedral (crease) angle** anywhere on the surface (rad) — the
+/// sharpest fold, the maximum over every interior manifold edge (shared by
+/// exactly two triangles) of the angle between the two triangles' outward face
+/// normals (`0` where the surface is flat, `π` where it folds back on itself).
+/// Where [`mesh_sharp_edge_count`] *counts* how many edges fold past a fixed
+/// threshold, this reports *how sharp the sharpest fold is* — the single number
+/// that sizes the smallest fillet/chamfer the part needs and flags its crispest
+/// feature. A box rim folds at exactly `π/2`; a smoothly tessellated curved
+/// patch folds only gently. The in-facet diagonals a tessellator adds to split a
+/// flat polygon are coplanar (zero fold), and degenerate (zero-area) triangles
+/// and boundary edges (one incident triangle) are ignored. `None` for a mesh
+/// with no interior manifold edge.
+fn mesh_max_dihedral_angle(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    use std::collections::HashMap;
+    let mut edge_normals: HashMap<(u32, u32), Vec<nalgebra::Vector3<f64>>> = HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let normal = (b - a).cross(&(c - a));
+            let len = normal.norm();
+            if len <= 0.0 {
+                continue; // degenerate triangle has no defined normal
+            }
+            let unit = normal / len;
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                let key = if i <= j { (i, j) } else { (j, i) };
+                edge_normals.entry(key).or_default().push(unit);
+            }
+        }
+    }
+    edge_normals
+        .values()
+        .filter(|normals| normals.len() == 2)
+        .map(|normals| normals[0].dot(&normals[1]).clamp(-1.0, 1.0).acos())
+        .reduce(f64::max)
+}
+
 /// The volume centroid (centre of mass at uniform density) `[x, y, z]` of a
 /// closed `Tri3` surface mesh, via the divergence theorem: each triangle forms
 /// a signed tetrahedron with the origin, contributing its signed volume
@@ -1047,8 +1089,15 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .filter(|&n| n > 0)
         .map(|n| format!(" · {n} sharp edges"))
         .unwrap_or_default();
+    // Sharpest fold — the maximum dihedral (crease) angle on the surface; the
+    // single number that sizes the smallest fillet, vs the sharp-edge count.
+    let crease_str = mesh
+        .as_ref()
+        .and_then(mesh_max_dihedral_angle)
+        .map(|theta| format!(" · max crease {:.0}°", theta.to_degrees()))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{aspect_str}{sharp_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{aspect_str}{sharp_str}{crease_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2024,6 +2073,71 @@ mod tests {
 
         // No triangles → None.
         assert_eq!(mesh_max_aspect_ratio(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_max_dihedral_angle_finds_the_sharpest_fold() {
+        use nalgebra::Vector3;
+        use std::f64::consts::FRAC_PI_2;
+        // The canonical 1×2×3 box: every one of the 12 cube-rim edges folds at a
+        // right angle (adjacent faces' outward normals are perpendicular), while
+        // the 6 in-face diagonals are flat (coplanar). So the sharpest fold is π/2.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = connectivity;
+        mesh.element_blocks.push(block);
+        let theta = mesh_max_dihedral_angle(&mesh).expect("box has interior edges");
+        assert!((theta - FRAC_PI_2).abs() < 1e-9, "box sharpest fold = π/2, got {theta}");
+
+        // Two coplanar triangles sharing an edge: the surface is flat → 0 fold.
+        let mut flat = valenx_mesh::Mesh::new("flat");
+        flat.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(1.0, 1.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+        ];
+        let mut fb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        fb.connectivity = vec![0, 1, 2, 0, 2, 3];
+        flat.element_blocks.push(fb);
+        assert!(
+            mesh_max_dihedral_angle(&flat).unwrap().abs() < 1e-9,
+            "a coplanar patch has zero fold"
+        );
+
+        // Two flaps meeting at a right angle along their shared edge → π/2.
+        let mut fold = valenx_mesh::Mesh::new("fold");
+        fold.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0), // flap in the z=0 plane
+            Vector3::new(0.0, 0.0, 1.0), // flap in the y=0 plane
+        ];
+        let mut gb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        gb.connectivity = vec![0, 1, 2, 0, 1, 3];
+        fold.element_blocks.push(gb);
+        assert!(
+            (mesh_max_dihedral_angle(&fold).unwrap() - FRAC_PI_2).abs() < 1e-9,
+            "a right-angle fold = π/2"
+        );
+
+        // No interior manifold edge → None.
+        assert_eq!(mesh_max_dihedral_angle(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
