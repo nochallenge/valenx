@@ -349,6 +349,43 @@ pub fn normal_shock_temperature_ratio(mach: f64, gamma: f64) -> f64 {
         / ((gamma + 1.0) * (gamma + 1.0) * m2)
 }
 
+/// The **stagnation-pressure ratio** `p₀₂/p₀₁` across a stationary **normal shock**
+/// with upstream Mach `mach` `M₁` and heat-capacity ratio `gamma` `γ` — the
+/// total-pressure *recovery*, the canonical measure of the shock's irreversible
+/// loss:
+///
+/// ```text
+///   p₀₂/p₀₁ = [ (γ+1)M₁² / ((γ−1)M₁² + 2) ]^(γ/(γ−1))
+///           · [ (γ+1) / (2γM₁² − (γ−1)) ]^(1/(γ−1))
+/// ```
+///
+/// Unlike the *static* pressure jump [`normal_shock_pressure_ratio`] (which rises
+/// without bound), the total pressure is always **lost** across a shock:
+/// `p₀₂/p₀₁ < 1` for any `M₁ > 1`, falling monotonically as the shock strengthens
+/// (a Mach-2 shock in air, `γ = 1.4`, recovers ~72%, a Mach-3 shock only ~33%).
+/// The loss is the thermodynamic signature of the entropy the shock generates,
+/// `p₀₂/p₀₁ = e^(−Δs/R)`, and is the headline figure of merit for a supersonic
+/// inlet/diffuser. (Distinct from the *isentropic*
+/// [`isentropic_stagnation_pressure_ratio`], the reversible total-to-static
+/// `p₀/p` of a single stream; this is total-to-total *across* the irreversible
+/// jump.) For **subsonic or sonic** upstream (`M₁ ≤ 1`) no shock forms and the
+/// total pressure is conserved (`1.0`). Returns `1.0` (the no-loss identity) for
+/// non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn normal_shock_stagnation_pressure_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 1.0;
+    }
+    if mach <= 1.0 {
+        return 1.0; // subsonic/sonic: no shock forms, the total pressure is conserved
+    }
+    let m2 = mach * mach;
+    let density_term =
+        ((gamma + 1.0) * m2 / ((gamma - 1.0) * m2 + 2.0)).powf(gamma / (gamma - 1.0));
+    let pressure_term =
+        ((gamma + 1.0) / (2.0 * gamma * m2 - (gamma - 1.0))).powf(1.0 / (gamma - 1.0));
+    density_term * pressure_term
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1182,5 +1219,59 @@ mod tests {
         assert_eq!(normal_shock_temperature_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(normal_shock_temperature_ratio(-1.0, 1.4), 1.0);
         assert_eq!(normal_shock_temperature_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn normal_shock_stagnation_pressure_ratio_matches_compressible_flow_tables() {
+        // M1 = 1 is the isentropic no-shock limit: total pressure conserved.
+        assert!((normal_shock_stagnation_pressure_ratio(1.0, 1.4) - 1.0).abs() < 1e-12);
+        // Worked table points (γ = 1.4): M1 = 2 → 0.7209, M1 = 3 → 0.3283.
+        assert!(
+            (normal_shock_stagnation_pressure_ratio(2.0, 1.4) - 0.7209).abs() < 1e-3,
+            "M1=2 → 0.7209"
+        );
+        assert!(
+            (normal_shock_stagnation_pressure_ratio(3.0, 1.4) - 0.3283).abs() < 1e-3,
+            "M1=3 → 0.3283"
+        );
+        // The total pressure is always LOST and the loss deepens with M (strictly
+        // DECREASING for M1 > 1) — the opposite sense to the rising static ratios.
+        let (a, b, c) = (
+            normal_shock_stagnation_pressure_ratio(1.5, 1.4),
+            normal_shock_stagnation_pressure_ratio(2.5, 1.4),
+            normal_shock_stagnation_pressure_ratio(5.0, 1.4),
+        );
+        assert!(a > b && b > c, "loss deepens with M1: {a} {b} {c}");
+        // Strictly between 0 and 1 for any shock.
+        assert!(a < 1.0 && c > 0.0, "0 < p02/p01 < 1");
+        // STRONG non-tautological cross-check via the ENTROPY relation: the total-
+        // pressure loss IS the entropy the shock generates, p02/p01 = exp(−Δs/R) with
+        // Δs/R = (γ/(γ−1))·ln(T2/T1) − ln(p2/p1). The impl is the gas-dynamic closed
+        // form; this is the thermodynamic identity composing #199 (T2/T1) and #187
+        // (p2/p1) — an entirely different derivation.
+        for &m in &[1.2_f64, 1.5, 2.0, 3.0, 5.0, 8.0] {
+            let g = 1.4;
+            let ds_over_r = g / (g - 1.0) * normal_shock_temperature_ratio(m, g).ln()
+                - normal_shock_pressure_ratio(m, g).ln();
+            assert!(
+                (normal_shock_stagnation_pressure_ratio(m, g) - (-ds_over_r).exp()).abs() < 1e-9,
+                "p02/p01 = exp(−Δs/R) at M={m}"
+            );
+        }
+        // Holds for a different γ too (monatomic, γ = 5/3) — not air-specific.
+        let g = 5.0 / 3.0;
+        let ds_over_r = g / (g - 1.0) * normal_shock_temperature_ratio(2.5, g).ln()
+            - normal_shock_pressure_ratio(2.5, g).ln();
+        assert!(
+            (normal_shock_stagnation_pressure_ratio(2.5, g) - (-ds_over_r).exp()).abs() < 1e-9,
+            "γ=5/3 entropy cross-check"
+        );
+        // Subsonic/sonic upstream: no shock forms, total pressure conserved.
+        assert_eq!(normal_shock_stagnation_pressure_ratio(0.5, 1.4), 1.0);
+        // Non-physical input → the no-loss identity 1.0.
+        assert_eq!(normal_shock_stagnation_pressure_ratio(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(normal_shock_stagnation_pressure_ratio(f64::NAN, 1.4), 1.0);
+        assert_eq!(normal_shock_stagnation_pressure_ratio(-1.0, 1.4), 1.0);
+        assert_eq!(normal_shock_stagnation_pressure_ratio(2.0, f64::INFINITY), 1.0);
     }
 }
