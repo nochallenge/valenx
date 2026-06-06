@@ -75,6 +75,36 @@ impl ClassicalElements {
         p / (1.0 + self.eccentricity * nu.cos())
     }
 
+    /// The **outbound true anomaly** `ν = arccos((p/r − 1)/e)` (rad, in `[0, π]`)
+    /// at which the orbit reaches radius `radius` `r` (m) — the inverse of
+    /// [`radius_at_true_anomaly`](Self::radius_at_true_anomaly), which maps the
+    /// other way (`ν → r`). It answers "where in the orbit does it pass through
+    /// this radius?", the geometric basis of altitude-crossing and event timing
+    /// (feed the result through the `ν → E → M → time` chain for the *when*). The
+    /// inbound pass is the mirror `2π − ν`, since `r(ν) = r(−ν)`.
+    ///
+    /// `r = periapsis` gives `ν = 0`, `r = apoapsis` gives `ν = π`, and the
+    /// semi-latus rectum `r = p = a(1−e²)` gives `ν = π/2`. Returns `None` when
+    /// the orbit never reaches that radius (outside `[periapsis, apoapsis]`), and
+    /// for input where the inverse is undefined — a circular orbit (`e = 0`, no
+    /// apsides), an open orbit (`e ≥ 1`), or a non-finite `r`. The `arccos`
+    /// argument is clamped to `[−1, 1]` so the apsidal boundaries are exact
+    /// despite floating-point round-off.
+    pub fn true_anomaly_at_radius(&self, radius: f64) -> Option<f64> {
+        let e = self.eccentricity;
+        if !radius.is_finite() || e <= 0.0 || e >= 1.0 {
+            return None; // bound, non-circular orbits only (0 < e < 1)
+        }
+        let r_peri = self.semi_major_axis * (1.0 - e);
+        let r_apo = self.semi_major_axis * (1.0 + e);
+        if radius < r_peri - 1e-6 || radius > r_apo + 1e-6 {
+            return None; // the orbit never reaches this radius
+        }
+        let p = self.semi_major_axis * (1.0 - e * e);
+        let cos_nu = ((p / radius - 1.0) / e).clamp(-1.0, 1.0);
+        Some(cos_nu.acos())
+    }
+
     /// The orbital **velocity components** `(v_r, v_θ)` (m/s) at true anomaly
     /// `nu` (rad), in the rotating polar frame: the *radial* component
     /// `v_r = (μ/h)·e·sin ν` along the outward radius, and the *transverse*
@@ -590,6 +620,62 @@ mod tests {
         for nu in [0.0, 1.0, PI, 2.5] {
             assert!((circ.radius_at_true_anomaly(nu) - a).abs() < 1e-6, "circular r at {nu}");
         }
+    }
+
+    #[test]
+    fn true_anomaly_at_radius_inverts_the_orbit_equation() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.2,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let (a, e) = (coe.semi_major_axis, coe.eccentricity);
+        // Apsides and the semi-latus rectum are the fixed points of the inverse.
+        // (The apsidal checks use 1e-6: acos is ill-conditioned at cos = ±1, so a
+        // ~1e-16 round-off in the argument shows up as a ~1e-8 angle error.)
+        assert!(
+            coe.true_anomaly_at_radius(coe.periapsis_radius()).unwrap().abs() < 1e-6,
+            "perigee → ν=0"
+        );
+        assert!(
+            (coe.true_anomaly_at_radius(coe.apoapsis_radius()).unwrap() - PI).abs() < 1e-6,
+            "apogee → ν=π"
+        );
+        let p = a * (1.0 - e * e);
+        assert!(
+            (coe.true_anomaly_at_radius(p).unwrap() - PI / 2.0).abs() < 1e-9,
+            "semi-latus rectum → ν=π/2"
+        );
+        // Round-trips with radius_at_true_anomaly (#144) across the outbound half.
+        for nu in [0.3_f64, 1.0, 2.0, PI] {
+            let r = coe.radius_at_true_anomaly(nu);
+            let nu_back = coe.true_anomaly_at_radius(r).expect("r is reachable");
+            // 1e-6: the ν=π round-trip touches the acos cos=−1 boundary.
+            assert!((nu_back - nu).abs() < 1e-6, "round trip at ν={nu}: got {nu_back}");
+        }
+        // Radii the orbit never reaches → None.
+        assert!(
+            coe.true_anomaly_at_radius(coe.periapsis_radius() * 0.5).is_none(),
+            "below perigee"
+        );
+        assert!(
+            coe.true_anomaly_at_radius(coe.apoapsis_radius() * 2.0).is_none(),
+            "above apogee"
+        );
+        // Undefined for a circular, hyperbolic, or non-finite case → None.
+        assert!(
+            ClassicalElements { eccentricity: 0.0, ..coe }.true_anomaly_at_radius(a).is_none(),
+            "circular"
+        );
+        assert!(
+            ClassicalElements { eccentricity: 1.5, ..coe }.true_anomaly_at_radius(a).is_none(),
+            "hyperbolic"
+        );
+        assert!(coe.true_anomaly_at_radius(f64::NAN).is_none(), "non-finite r");
     }
 
     #[test]
