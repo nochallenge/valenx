@@ -157,6 +157,32 @@ pub fn mach_angle(mach: f64) -> f64 {
     }
 }
 
+/// The **isentropic stagnation pressure ratio** `p₀/p = (1 + ((γ−1)/2)·M²)^(γ/(γ−1))`
+/// at Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the exact
+/// compressible total-to-static pressure relation for an adiabatic, reversible
+/// (isentropic) deceleration of the flow to rest. This is the compressible
+/// Pitot law: it is what converts a measured total-minus-static pressure into
+/// airspeed once the flow is fast enough that the incompressible `½ρV²` no
+/// longer holds.
+///
+/// It is the *exact* compressibility relation that complements the two
+/// linearised/limiting Mach functions here — [`prandtl_glauert_factor`], the
+/// thin-body subsonic correction that diverges at `M = 1`, and [`mach_angle`],
+/// the supersonic cone half-angle — whereas this stagnation ratio is finite and
+/// well-behaved across the **whole** range `M ≥ 0`, subsonic and supersonic
+/// alike. It is `1` at `M = 0` (a body at rest compresses nothing) and rises
+/// monotonically with Mach; at low speed it reduces to `1 + (γ/2)·M²`, the
+/// leading compressible form of the dynamic-pressure rise. Returns `1.0` (the
+/// no-correction identity) for non-physical input (non-finite `M` or `γ`,
+/// `M < 0`, or `γ ≤ 1`).
+pub fn isentropic_stagnation_pressure_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 1.0;
+    }
+    let temperature_ratio = 1.0 + 0.5 * (gamma - 1.0) * mach * mach;
+    temperature_ratio.powf(gamma / (gamma - 1.0))
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -762,5 +788,33 @@ mod tests {
         assert_eq!(max_lift_to_drag_ratio(cd0, 0.0, e), 0.0);
         assert_eq!(max_lift_to_drag_ratio(cd0, ar, 0.0), 0.0);
         assert_eq!(max_lift_to_drag_ratio(f64::NAN, ar, e), 0.0);
+    }
+
+    #[test]
+    fn isentropic_stagnation_pressure_ratio_matches_compressible_flow_tables() {
+        // M = 0 → no compression, p0/p = 1.
+        assert!((isentropic_stagnation_pressure_ratio(0.0, 1.4) - 1.0).abs() < 1e-12);
+        // M = 1, γ = 1.4 → 1.2^3.5 ≈ 1.8929 (the sonic stagnation ratio for air).
+        assert!((isentropic_stagnation_pressure_ratio(1.0, 1.4) - 1.2_f64.powf(3.5)).abs() < 1e-12);
+        assert!((isentropic_stagnation_pressure_ratio(1.0, 1.4) - 1.8929).abs() < 1e-3, "sonic ≈ 1.893");
+        // M = 2, γ = 1.4 → 1.8^3.5 ≈ 7.824.
+        assert!((isentropic_stagnation_pressure_ratio(2.0, 1.4) - 1.8_f64.powf(3.5)).abs() < 1e-12);
+        assert!((isentropic_stagnation_pressure_ratio(2.0, 1.4) - 7.824).abs() < 1e-2, "M=2 ≈ 7.82");
+        // Monotonic increasing in Mach, and always ≥ 1.
+        let (a, b, c) = (
+            isentropic_stagnation_pressure_ratio(0.5, 1.4),
+            isentropic_stagnation_pressure_ratio(1.5, 1.4),
+            isentropic_stagnation_pressure_ratio(3.0, 1.4),
+        );
+        assert!(a >= 1.0 && a < b && b < c, "monotone ≥ 1: {a} {b} {c}");
+        // Low-Mach limit reduces to 1 + (γ/2)·M² (the incompressible dynamic-pressure form).
+        let m = 0.05;
+        let exact = isentropic_stagnation_pressure_ratio(m, 1.4);
+        assert!((exact - (1.0 + 0.5 * 1.4 * m * m)).abs() < 1e-4, "low-M ≈ 1+(γ/2)M²");
+        // Non-physical input → the no-correction identity 1.0.
+        assert_eq!(isentropic_stagnation_pressure_ratio(-0.5, 1.4), 1.0);
+        assert_eq!(isentropic_stagnation_pressure_ratio(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(isentropic_stagnation_pressure_ratio(f64::NAN, 1.4), 1.0);
+        assert_eq!(isentropic_stagnation_pressure_ratio(2.0, f64::INFINITY), 1.0);
     }
 }
