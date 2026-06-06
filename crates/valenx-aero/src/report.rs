@@ -157,6 +157,29 @@ pub fn mach_angle(mach: f64) -> f64 {
     }
 }
 
+/// The **isentropic stagnation temperature ratio** `T₀/T = 1 + ((γ−1)/2)·M²` at
+/// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the total-to-
+/// static temperature relation that follows directly from adiabatic energy
+/// conservation (`cₚ·T₀ = cₚ·T + ½V²`). `T₀` is the temperature the flow reaches
+/// when it is brought to rest: the **recovery / stagnation temperature** that
+/// drives aerodynamic heating and sizes a high-speed vehicle's thermal
+/// protection, the thermal counterpart to the Pitot-airspeed role of the
+/// [`isentropic_stagnation_pressure_ratio`].
+///
+/// It is the more fundamental member of the isentropic-stagnation pair — the
+/// pressure ratio is exactly `(T₀/T)^(γ/(γ−1))` — and, like it, is finite and
+/// well-behaved across the **whole** range `M ≥ 0`, subsonic and supersonic
+/// alike: `1` at `M = 0` (no kinetic energy to recover) and rising linearly in
+/// `M²` (a Mach-2 stream stagnates ~80 % hotter in absolute terms; Mach 5, six-
+/// fold). Returns `1.0` (the no-rise identity) for non-physical input (non-finite
+/// `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn isentropic_stagnation_temperature_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 1.0;
+    }
+    1.0 + 0.5 * (gamma - 1.0) * mach * mach
+}
+
 /// The **isentropic stagnation pressure ratio** `p₀/p = (1 + ((γ−1)/2)·M²)^(γ/(γ−1))`
 /// at Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the exact
 /// compressible total-to-static pressure relation for an adiabatic, reversible
@@ -816,5 +839,37 @@ mod tests {
         assert_eq!(isentropic_stagnation_pressure_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_pressure_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_pressure_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn isentropic_stagnation_temperature_ratio_matches_compressible_flow_tables() {
+        // M = 0 → no heating, T0/T = 1.
+        assert!((isentropic_stagnation_temperature_ratio(0.0, 1.4) - 1.0).abs() < 1e-12);
+        // M = 1, γ = 1.4 → 1.2; M = 2 → 1.8; M = 5 → 6.0 (hypersonic).
+        assert!((isentropic_stagnation_temperature_ratio(1.0, 1.4) - 1.2).abs() < 1e-12);
+        assert!((isentropic_stagnation_temperature_ratio(2.0, 1.4) - 1.8).abs() < 1e-12);
+        assert!((isentropic_stagnation_temperature_ratio(5.0, 1.4) - 6.0).abs() < 1e-12);
+        // Monotone increasing in Mach, and always ≥ 1.
+        let (a, b, c) = (
+            isentropic_stagnation_temperature_ratio(0.5, 1.4),
+            isentropic_stagnation_temperature_ratio(1.5, 1.4),
+            isentropic_stagnation_temperature_ratio(3.0, 1.4),
+        );
+        assert!(a >= 1.0 && a < b && b < c, "monotone ≥ 1: {a} {b} {c}");
+        // Cross-check the isentropic identity p0/p = (T0/T)^(γ/(γ−1)) against #163.
+        for m in [0.3_f64, 0.8, 1.0, 2.5, 4.0] {
+            let t_ratio = isentropic_stagnation_temperature_ratio(m, 1.4);
+            let p_from_t = t_ratio.powf(1.4 / 0.4);
+            let p_ratio = isentropic_stagnation_pressure_ratio(m, 1.4);
+            assert!(
+                (p_from_t - p_ratio).abs() / p_ratio < 1e-12,
+                "p0/p = (T0/T)^(γ/(γ−1)) at M={m}"
+            );
+        }
+        // Non-physical input → the no-rise identity 1.0.
+        assert_eq!(isentropic_stagnation_temperature_ratio(-0.5, 1.4), 1.0);
+        assert_eq!(isentropic_stagnation_temperature_ratio(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(isentropic_stagnation_temperature_ratio(f64::NAN, 1.4), 1.0);
+        assert_eq!(isentropic_stagnation_temperature_ratio(2.0, f64::INFINITY), 1.0);
     }
 }
