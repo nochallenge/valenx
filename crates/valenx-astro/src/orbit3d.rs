@@ -155,6 +155,25 @@ impl ClassicalElements {
         }
     }
 
+    /// The orbital **specific energy** `ε = −μ/(2a)` (J/kg) — the total orbital
+    /// energy *per unit mass* (kinetic plus gravitational potential), the orbit's
+    /// other conserved invariant alongside the
+    /// [`specific_angular_momentum`](Self::specific_angular_momentum). It depends
+    /// only on the semi-major axis, so a more energetic orbit is simply a *larger*
+    /// one.
+    ///
+    /// Its sign classifies the conic: `ε < 0` for a **bound** ellipse (`a > 0`),
+    /// `ε = 0` for the parabolic escape limit (`a → ∞`), and `ε > 0` for a
+    /// **hyperbolic** flyby (`a < 0`) — so unlike the specific angular momentum it
+    /// is meaningful for *every* orbit and is returned as a plain value, not an
+    /// `Option`. It ties speed to radius through the **vis-viva** relation
+    /// `½v² − μ/r = ε`, i.e. `v = √(μ(2/r − 1/a))`: the kinetic and potential terms
+    /// trade off along the path while their sum stays fixed. Uses Earth's `μ`; the
+    /// degenerate `a = 0` (a point orbit) gives `±∞`.
+    pub fn specific_orbital_energy(&self) -> f64 {
+        -MU_EARTH / (2.0 * self.semi_major_axis)
+    }
+
     /// Solve **Kepler's equation** `M = E − e·sin E` for the eccentric anomaly
     /// `E` (rad) given the mean anomaly `mean_anomaly` `M` (rad), by
     /// Newton–Raphson iteration.
@@ -874,6 +893,46 @@ mod tests {
         assert!(hyp.specific_angular_momentum().is_none(), "hyperbolic (e>1) → None");
         let neg_a = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
         assert!(neg_a.specific_angular_momentum().is_none(), "a ≤ 0 → None");
+    }
+
+    #[test]
+    fn specific_orbital_energy_is_minus_mu_over_2a() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let a = coe.semi_major_axis;
+        let eps = coe.specific_orbital_energy();
+        // Closed form ε = −μ/(2a) (relative tol; ε ≈ −2.49e7 J/kg).
+        assert!(
+            (eps - (-MU_EARTH / (2.0 * a))).abs() / eps.abs() < 1e-12,
+            "closed form, got {eps}"
+        );
+        // A bound ellipse has negative specific energy.
+        assert!(eps < 0.0, "bound orbit ε < 0");
+        // Vis-viva cross-check: ½·v(ν)² − μ/r(ν) = ε at every true anomaly — ties
+        // the energy to #162's velocity components and the conic radius.
+        for nu in [0.0_f64, 0.7, PI / 2.0, 2.0, PI, 4.5, 5.7] {
+            let r = coe.radius_at_true_anomaly(nu);
+            let (v_r, v_theta) = coe.velocity_components_at_true_anomaly(nu);
+            let speed_sq = v_r * v_r + v_theta * v_theta;
+            let e_at_nu = 0.5 * speed_sq - MU_EARTH / r;
+            assert!((e_at_nu - eps).abs() / eps.abs() < 1e-9, "vis-viva at ν={nu}");
+        }
+        // A larger orbit is more energetic (ε rises toward 0 as a grows).
+        let bigger = ClassicalElements { semi_major_axis: 2.0e7, ..coe };
+        assert!(
+            bigger.specific_orbital_energy() > eps,
+            "larger a → higher (less negative) energy"
+        );
+        // A hyperbolic orbit (a < 0) has positive specific energy (unbound).
+        let hyper = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
+        assert!(hyper.specific_orbital_energy() > 0.0, "hyperbolic ε > 0");
     }
 
     #[test]
