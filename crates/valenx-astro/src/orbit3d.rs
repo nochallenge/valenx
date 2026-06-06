@@ -160,6 +160,23 @@ impl ClassicalElements {
         (v_r, v_theta)
     }
 
+    /// The orbital **speed** `v = √(μ(2/r − 1/a))` (m/s) at a distance `radius` `r`
+    /// from the focus — the **vis-viva equation**, the energy integral of the
+    /// two-body problem: it follows directly from `½v² − μ/r = −μ/(2a)`, the
+    /// constant specific orbital energy
+    /// [`specific_orbital_energy`](Self::specific_orbital_energy). It is the
+    /// radius-parameterised speed companion to the angle-parameterised
+    /// [`velocity_components_at_true_anomaly`](Self::velocity_components_at_true_anomaly)
+    /// (whose magnitude `√(v_r² + v_θ²)` it reproduces): the body runs fastest at
+    /// periapsis (smallest `r`) and slowest at apoapsis, and at the apsides — where
+    /// the motion is purely transverse — `v·r` equals the
+    /// [`specific_angular_momentum`](Self::specific_angular_momentum). Uses Earth's
+    /// `μ`. Real for the physical range of a closed orbit (`r ≤ 2a`); a non-physical
+    /// radius (`r > 2a` on an ellipse, or `r ≤ 0`) yields `NaN`.
+    pub fn speed_at_radius(&self, radius: f64) -> f64 {
+        (MU_EARTH * (2.0 / radius - 1.0 / self.semi_major_axis)).sqrt()
+    }
+
     /// The **flight-path angle** `γ` (rad) at true anomaly `true_anomaly` `ν` —
     /// the angle of the velocity vector above the local horizontal (the direction
     /// perpendicular to the radius): `γ = atan2(e·sin ν, 1 + e·cos ν)`. It is
@@ -1089,6 +1106,55 @@ mod tests {
             assert!(vr.abs() < 1e-9, "circular v_r = 0 at {nu}");
             assert!((vt - v_circ).abs() < 1e-3, "circular v_θ = √(μ/a) at {nu}");
         }
+    }
+
+    #[test]
+    fn speed_at_radius_matches_vis_viva() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let (a, mu) = (coe.semi_major_axis, MU_EARTH);
+        let (rp, ra) = (coe.periapsis_radius(), coe.apoapsis_radius());
+        // Worked closed form at the apsides: fastest at periapsis, slowest at apoapsis.
+        let v_peri = coe.speed_at_radius(rp);
+        let v_apo = coe.speed_at_radius(ra);
+        assert!((v_peri - (mu * (2.0 / rp - 1.0 / a)).sqrt()).abs() / v_peri < 1e-12, "vis-viva at periapsis");
+        assert!((v_apo - (mu * (2.0 / ra - 1.0 / a)).sqrt()).abs() / v_apo < 1e-12, "vis-viva at apoapsis");
+        assert!(v_peri > v_apo, "fastest at periapsis: {v_peri} > {v_apo}");
+        // Cross-check (a): at the apsides the motion is purely transverse, so v·r = h
+        // (angular momentum) — ties to specific_angular_momentum #174.
+        let h = coe.specific_angular_momentum().expect("closed orbit has h");
+        assert!((v_peri * rp - h).abs() / h < 1e-12, "v_peri·r_peri = h");
+        assert!((v_apo * ra - h).abs() / h < 1e-12, "v_apo·r_apo = h");
+        // Cross-check (b): the speed equals the magnitude of the velocity components
+        // (#162) at the matching radius, for several ν — vis-viva in r vs (v_r,v_θ) in ν.
+        for nu in [0.3_f64, 1.0, 2.0, PI, 4.5] {
+            let r = coe.radius_at_true_anomaly(nu);
+            let (vr, vt) = coe.velocity_components_at_true_anomaly(nu);
+            let mag = (vr * vr + vt * vt).sqrt();
+            assert!((coe.speed_at_radius(r) - mag).abs() / mag < 1e-12, "speed = ‖(v_r,v_θ)‖ at ν={nu}");
+        }
+        // Cross-check (c): the vis-viva energy identity ½v² − μ/r = ε (#180).
+        let energy = coe.specific_orbital_energy();
+        for r in [rp, 7.0e6, ra] {
+            let v = coe.speed_at_radius(r);
+            assert!(
+                (0.5 * v * v - mu / r - energy).abs() / energy.abs() < 1e-12,
+                "½v²−μ/r = ε at r={r}"
+            );
+        }
+        // A circular orbit runs at the constant circular speed √(μ/a).
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        assert!(
+            (circ.speed_at_radius(a) - (mu / a).sqrt()).abs() / (mu / a).sqrt() < 1e-12,
+            "circular v = √(μ/a)"
+        );
     }
 
     #[test]
