@@ -90,6 +90,42 @@ pub fn euler_bernoulli_beam_frequency(
         * (e_modulus * area_moment_of_inertia / (density * area)).sqrt()
 }
 
+/// The analytic **cantilever tip deflection** `δ = P·L³/(3·E·I)` (m) of a
+/// slender Euler–Bernoulli cantilever — a prismatic beam clamped at one end and
+/// loaded by a transverse point force `load` `P` (N) at the free end, with span
+/// `length` `L` (m), Young's modulus `youngs_modulus` `E` (Pa), and section
+/// second moment of area `second_moment_area` `I` (m⁴) about the bending axis.
+///
+/// This is the *analytic* slender-beam reference the finite-element beam solver
+/// ([`solve_beam_static`]) converges to as the mesh refines — the static-bending
+/// companion to the [`euler_bernoulli_beam_frequency`] vibration reference and
+/// the [`crate::buckling::euler_critical_load`] stability reference. It gives a
+/// quick hand-check without meshing: the deflection grows *linearly* with the
+/// load `P` (and is sign-preserving — an upward load lifts the tip), with the
+/// *cube* of the span `L` (the dominant lever: doubling the length softens the
+/// tip eight-fold), and falls inversely with the flexural rigidity `E·I`. (A real
+/// short/Timoshenko beam adds a small shear term `P·L/(κ·G·A)` on top; this is
+/// the pure-bending part.) Returns `0` for non-physical input (`P` non-finite, or
+/// `E`, `I`, or `L` non-positive or non-finite).
+pub fn cantilever_tip_deflection(
+    load: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load * length.powi(3) / (3.0 * youngs_modulus * second_moment_area)
+}
+
 /// Errors from the native 3D beam solver.
 #[derive(Debug, Error)]
 pub enum BeamSolverError {
@@ -1254,7 +1290,7 @@ mod tests {
         let tip = sol.translation[n_elem][2];
         // Bending about local y (the x-z plane). Iy = w·h³/12.
         let i = section.iy;
-        let bending = p * l.powi(3) / (3.0 * mat.youngs_modulus * i);
+        let bending = cantilever_tip_deflection(p, l, mat.youngs_modulus, i);
         let g = mat.youngs_modulus / (2.0 * (1.0 + mat.poisson_ratio));
         let shear = p * l / (section.shear_z * g * section.area);
         let analytic = bending + shear;
@@ -1265,6 +1301,29 @@ mod tests {
             tip.abs()
         );
         assert!(tip < 0.0, "tip should deflect in -Z, got {tip}");
+    }
+
+    #[test]
+    fn cantilever_tip_deflection_matches_the_closed_form() {
+        // Worked point: P = 1 kN at the tip of a 2 m steel cantilever,
+        // E = 200 GPa, I = 1e-6 m⁴ → δ = P·L³/(3·E·I) = 8000/6e5 = 1/75 ≈ 0.01333 m.
+        let (p, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let delta = cantilever_tip_deflection(p, l, e, i);
+        assert!((delta - 1.0 / 75.0).abs() / delta < 1e-9, "δ = 1/75 m, got {delta}");
+        // Linear in the load, and sign-preserving (an upward load lifts the tip).
+        assert!((cantilever_tip_deflection(2.0 * p, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
+        assert!((cantilever_tip_deflection(-p, l, e, i) + delta).abs() / delta < 1e-12, "sign-preserving");
+        // Cubic in the span: double L → 8× δ.
+        assert!((cantilever_tip_deflection(p, 2.0 * l, e, i) - 8.0 * delta).abs() / delta < 1e-9, "L³ scaling");
+        // Inverse in the flexural rigidity E·I: double E or I → half δ.
+        assert!((cantilever_tip_deflection(p, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
+        assert!((cantilever_tip_deflection(p, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        // Non-physical input → 0.
+        assert_eq!(cantilever_tip_deflection(p, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(cantilever_tip_deflection(p, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(cantilever_tip_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(cantilever_tip_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
+        assert_eq!(cantilever_tip_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
