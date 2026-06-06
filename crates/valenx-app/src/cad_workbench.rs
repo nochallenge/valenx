@@ -415,6 +415,31 @@ fn bbox_diagonal(dims: [f32; 3]) -> f64 {
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
+/// The exact **mesh diameter** — the largest straight-line distance between any
+/// two vertices (the longest chord, the caliper extent of the part). Unlike the
+/// axis-aligned `bbox_diagonal`, which measures the box *around* the part and so
+/// overestimates the true span of any shape not aligned to the axes, this is the
+/// genuine maximum reach of the geometry; and unlike the *approximate* Ritter
+/// enclosing-sphere radius from `mesh_bounding_sphere_radius`, it is the exact
+/// extremal pair — the diameter satisfies `d ≤ 2·R_enc`, with equality only when
+/// the farthest pair is antipodal through the sphere centre. Computed by an
+/// exact all-pairs scan, `O(n²)` in the vertex count, which is comfortably fast
+/// for the workshop-scale tessellations the workbench produces. `None` for a
+/// mesh with no vertices; a lone vertex gives `0`. Model units.
+fn mesh_diameter(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let pts = &mesh.nodes;
+    if pts.is_empty() {
+        return None;
+    }
+    let mut max_sq = 0.0_f64;
+    for (i, a) in pts.iter().enumerate() {
+        for b in &pts[i + 1..] {
+            max_sq = max_sq.max((a - b).norm_squared());
+        }
+    }
+    Some(max_sq.sqrt())
+}
+
 /// The volume centroid (centre of mass at uniform density) `[x, y, z]` of a
 /// closed `Tri3` surface mesh, via the divergence theorem: each triangle forms
 /// a signed tetrahedron with the origin, contributing its signed volume
@@ -885,6 +910,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_bounding_sphere_radius)
         .map(|r| format!(" · r_enc {r:.3} u"))
         .unwrap_or_default();
+    // Exact mesh diameter (longest chord between vertices) — the true caliper
+    // extent, distinct from the axis-aligned bbox diagonal and the Ritter sphere.
+    let diam_str = mesh
+        .as_ref()
+        .and_then(mesh_diameter)
+        .map(|d| format!(" · diam {d:.3} u"))
+        .unwrap_or_default();
     // Worst triangle shape quality (4√3·A/Σℓ²; 1 = equilateral, →0 = sliver) —
     // the mesh-quality gate, distinct from the shape/topology measures above.
     let quality_str = mesh
@@ -893,7 +925,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|q| format!(" · Qmin {q:.2}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str}{quality_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2026,6 +2058,49 @@ mod tests {
 
         // An empty mesh has no triangles to grade.
         assert!(mesh_min_triangle_quality(&valenx_mesh::Mesh::new("empty")).is_none());
+    }
+
+    #[test]
+    fn mesh_diameter_is_the_longest_chord_not_the_bbox_diagonal() {
+        use nalgebra::Vector3;
+        // The 1×2×3 box: the longest chord is the space diagonal between opposite
+        // corners (0,0,0) and (1,2,3) → √(1+4+9) = √14.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut box_mesh = valenx_mesh::Mesh::new("box");
+        box_mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let d = mesh_diameter(&box_mesh).expect("box has vertices");
+        assert!((d - 14.0_f64.sqrt()).abs() < 1e-12, "box diameter √14, got {d}");
+
+        // A non-axis-aligned flat triangle: the diameter is the longest side (the
+        // base, 6), strictly less than the bbox diagonal √(6²+4²)=√52≈7.21 —
+        // proving it is the true caliper extent, NOT the axis-aligned box diagonal.
+        let mut tri = valenx_mesh::Mesh::new("tri");
+        tri.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(3.0, 4.0, 0.0),
+            Vector3::new(6.0, 0.0, 0.0),
+        ];
+        let dt = mesh_diameter(&tri).expect("triangle has vertices");
+        assert!((dt - 6.0).abs() < 1e-12, "triangle diameter = base 6, got {dt}");
+        assert!(
+            dt < bbox_diagonal([6.0, 4.0, 0.0]) - 1e-9,
+            "diameter is strictly below the bbox diagonal"
+        );
+
+        // A single vertex spans nothing; an empty mesh has no diameter.
+        let mut one = valenx_mesh::Mesh::new("one");
+        one.nodes = vec![Vector3::new(3.0, 4.0, 5.0)];
+        assert_eq!(mesh_diameter(&one), Some(0.0));
+        assert!(mesh_diameter(&valenx_mesh::Mesh::new("empty")).is_none());
     }
 
     #[test]
