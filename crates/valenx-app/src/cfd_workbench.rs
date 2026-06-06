@@ -418,7 +418,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          pressure Δp: {:.4e} Pa  (p_max−p_min)\n\
          peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}  \u{00B7}  S_max {:.4} 1/s{flow_str}\n\
          circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)  \u{00B7}  palin {:.3e} 1/s\u{00B2}  (\u{00BD}\u{222B}|\u{2207}\u{03C9}|\u{00B2}\u{00B7}dA)\n\
-         wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)  \u{00B7}  max|\u{2207}\u{00B7}u| {:.2e} 1/s  (peak local continuity residual)",
+         wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)  \u{00B7}  max|\u{2207}\u{00B7}u| {:.2e} 1/s  (peak local continuity residual)  \u{00B7}  reverse-flow {:.0}%  (recirculating area)",
         s.case.label(),
         s.nx,
         s.ny,
@@ -448,6 +448,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         sol.palinstrophy(),
         tau_w,
         sol.max_divergence(),
+        100.0 * sol.reverse_flow_fraction(),
     );
 }
 
