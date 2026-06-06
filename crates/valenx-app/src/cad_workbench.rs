@@ -807,6 +807,36 @@ fn mesh_max_vertex_valence(mesh: &valenx_mesh::Mesh) -> Option<usize> {
     neighbours.values().map(HashSet::len).max()
 }
 
+/// The **mean vertex valence** (average graph-degree) of a `Tri3` surface mesh —
+/// the number of incident edges per vertex averaged over all vertices, `2·E/V`. It
+/// is the regularity hallmark of a triangle mesh: a well-formed closed surface
+/// tends toward a mean valence of **6** (Euler's relation forces `2E/V = 6 − 12/V`
+/// for a closed triangulation), and a mean far from 6 signals an irregular or open
+/// mesh. It is the *average*-case companion to the worst-case
+/// [`mesh_max_vertex_valence`]: the max flags the single most irregular "pole"
+/// vertex, the mean reports the typical connectivity. Returns `None` for an empty
+/// mesh with no `Tri3` faces.
+fn mesh_mean_vertex_valence(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    use std::collections::{HashMap, HashSet};
+    let mut neighbours: HashMap<u32, HashSet<u32>> = HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                neighbours.entry(i).or_default().insert(j);
+                neighbours.entry(j).or_default().insert(i);
+            }
+        }
+    }
+    if neighbours.is_empty() {
+        return None;
+    }
+    let total: usize = neighbours.values().map(HashSet::len).sum();
+    Some(total as f64 / neighbours.len() as f64)
+}
+
 /// The number of **boundary loops** (holes) in a `Tri3` surface mesh — the
 /// connected components of the boundary-edge graph (the multiplicity-1 edges that
 /// bound an open patch). It answers the headline mesh-repair question — *how many
@@ -1298,8 +1328,15 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_max_vertex_valence)
         .map(|n| format!(" · max valence {n}"))
         .unwrap_or_default();
+    // Mean vertex valence (average graph-degree) — the typical connectivity, → 6 for a
+    // well-formed closed triangle mesh; the average-case companion to the max above.
+    let mean_valence_str = mesh
+        .as_ref()
+        .and_then(mesh_mean_vertex_valence)
+        .map(|v| format!(" · mean valence {v:.2}"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2442,6 +2479,58 @@ mod tests {
 
         // No Tri3 faces → None.
         assert_eq!(mesh_max_vertex_valence(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_mean_vertex_valence_averages_the_degree() {
+        use nalgebra::Vector3;
+        use std::collections::HashSet;
+        // The canonical 1×2×3 box: 8 corners, 12 Tri3 faces, 18 distinct edges.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = connectivity.clone();
+        mesh.element_blocks.push(block);
+
+        // Mean valence = 2E/V = 2·18/8 = 4.5 exactly.
+        let mean = mesh_mean_vertex_valence(&mesh).expect("box has vertices");
+        assert!((mean - 4.5).abs() < 1e-12, "box mean valence = 4.5, got {mean}");
+        // NON-TAUTOLOGICAL handshaking-lemma cross-check: independently count the
+        // distinct edges and vertices; the mean degree is 2·|edges|/|V|. (The helper
+        // sums per-vertex degrees; this uses the global edge set — different paths.)
+        let mut edges: HashSet<(u32, u32)> = HashSet::new();
+        let mut verts: HashSet<u32> = HashSet::new();
+        for tri in connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                edges.insert(if i <= j { (i, j) } else { (j, i) });
+                verts.insert(i);
+                verts.insert(j);
+            }
+        }
+        assert_eq!((edges.len(), verts.len()), (18, 8), "box has 18 edges, 8 vertices");
+        assert!(
+            (mean - 2.0 * edges.len() as f64 / verts.len() as f64).abs() < 1e-12,
+            "mean = 2E/V"
+        );
+        // The mean never exceeds the worst-case max (#201): 4.5 ≤ 6.
+        let max = mesh_max_vertex_valence(&mesh).expect("box has vertices") as f64;
+        assert!(mean <= max, "mean {mean} ≤ max {max}");
+        // No Tri3 faces → None.
+        assert_eq!(mesh_mean_vertex_valence(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
