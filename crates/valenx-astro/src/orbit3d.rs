@@ -80,6 +80,20 @@ impl ClassicalElements {
         self.semi_major_axis * (1.0 - self.eccentricity * self.eccentricity)
     }
 
+    /// The **semi-minor axis** `b = a√(1−e²)` (m) — the shorter of the ellipse's two
+    /// semi-axes, completing the closed-orbit geometry trio with the semi-major axis
+    /// `a` and the [`semi_latus_rectum`](Self::semi_latus_rectum) `p`. The three are
+    /// linked by `b = √(a·p)`: the semi-minor axis is the *geometric* mean of `a`
+    /// and `p`, and equivalently the geometric mean of the apsidal radii
+    /// `b = √(r_a·r_p)` — the elegant counterpart to the semi-latus rectum, which is
+    /// their *harmonic* mean. A circular orbit (`e = 0`) has `b = a`. Defined for a
+    /// closed orbit (`e < 1`); for an open orbit (`e ≥ 1`) the ellipse formula's
+    /// `√(1−e²)` is imaginary and this returns `NaN` (the hyperbola's conjugate
+    /// semi-axis is `a√(e²−1)` instead).
+    pub fn semi_minor_axis(&self) -> f64 {
+        self.semi_major_axis * (1.0 - self.eccentricity * self.eccentricity).sqrt()
+    }
+
     /// Orbital radius `r = a(1−e²)/(1 + e·cos ν)` (m) at true anomaly `nu` (rad) —
     /// the **polar equation of the conic**, the foundational relation behind the
     /// orbit's shape. Its `ν = 0` and `ν = π` values are exactly the periapsis and
@@ -784,6 +798,38 @@ mod tests {
             (circ.semi_latus_rectum() - circ.semi_major_axis).abs() / circ.semi_major_axis < 1e-12,
             "circular p = a"
         );
+    }
+
+    #[test]
+    fn semi_minor_axis_is_the_ellipse_minor_axis() {
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let b = coe.semi_minor_axis();
+        let (a, e) = (coe.semi_major_axis, coe.eccentricity);
+        // Worked point: b = a√(1−e²) = 8e6·√0.9375 ≈ 7.745967e6 m.
+        assert!((b - 7.745966692e6).abs() / b < 1e-9, "b = a√(1−e²) ≈ 7.746e6 m, got {b}");
+        // Cross-check (a): b is the GEOMETRIC mean of a and the semi-latus rectum,
+        // b² = a·p (#204) — the geometric-mean counterpart to p = harmonic mean.
+        let p = coe.semi_latus_rectum();
+        assert!((b * b - a * p).abs() / (a * p) < 1e-12, "b² = a·p");
+        // Cross-check (b): b is also the GEOMETRIC mean of the apsidal radii,
+        // b = √(r_a·r_p) — vs p = their harmonic mean 2·r_a·r_p/(r_a+r_p) (#204).
+        let (ra, rp) = (coe.apoapsis_radius(), coe.periapsis_radius());
+        assert!((b - (ra * rp).sqrt()).abs() / b < 1e-12, "b = √(r_a·r_p)");
+        // Cross-check (c): the defining closed form, recomputed independently.
+        assert!((b - a * (1.0 - e * e).sqrt()).abs() / b < 1e-12, "b = a√(1−e²)");
+        // A circular orbit collapses: b = a (= p).
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        assert!((circ.semi_minor_axis() - circ.semi_major_axis).abs() / a < 1e-12, "circular b = a");
+        // An open orbit (e ≥ 1) has no real ellipse minor axis → NaN.
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert!(hyp.semi_minor_axis().is_nan(), "open orbit → NaN");
     }
 
     #[test]
