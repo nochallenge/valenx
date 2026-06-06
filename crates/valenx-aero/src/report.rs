@@ -206,6 +206,33 @@ pub fn isentropic_stagnation_pressure_ratio(mach: f64, gamma: f64) -> f64 {
     temperature_ratio.powf(gamma / (gamma - 1.0))
 }
 
+/// The **isentropic stagnation density ratio** `ρ₀/ρ = (1 + ((γ−1)/2)·M²)^(1/(γ−1))`
+/// at Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the total-to-
+/// static *density* relation for an adiabatic, reversible (isentropic) deceleration
+/// of the flow to rest. `ρ₀` is the density the gas reaches when brought to rest;
+/// this is the third member of the isentropic-stagnation trio, completing the
+/// [`isentropic_stagnation_temperature_ratio`] and the
+/// [`isentropic_stagnation_pressure_ratio`].
+///
+/// The three are locked together by the perfect-gas isentrope: writing
+/// `τ = T₀/T = 1 + ((γ−1)/2)·M²`, the density ratio is `τ^(1/(γ−1))` and the
+/// pressure ratio is `τ^(γ/(γ−1))`, so `p₀/p = (ρ₀/ρ)^γ = (T₀/T)^(γ/(γ−1))` — the
+/// polytropic chain `p ∝ ρ^γ ∝ T^(γ/(γ−1))`. Like its companions it is finite and
+/// well-behaved across the **whole** range `M ≥ 0`, subsonic and supersonic alike:
+/// `1` at `M = 0` (a body at rest compresses nothing) and rising monotonically with
+/// Mach (a sonic air stream, `γ = 1.4`, stagnates ~58 % denser — `ρ₀/ρ = 1.2^2.5 ≈
+/// 1.577`). It is the quantity behind the density rise in a Pitot/total-condition
+/// reduction and in sizing the mass flux of a high-speed intake. Returns `1.0` (the
+/// no-compression identity) for non-physical input (non-finite `M` or `γ`, `M < 0`,
+/// or `γ ≤ 1`).
+pub fn isentropic_stagnation_density_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 1.0;
+    }
+    let temperature_ratio = 1.0 + 0.5 * (gamma - 1.0) * mach * mach;
+    temperature_ratio.powf(1.0 / (gamma - 1.0))
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -871,5 +898,39 @@ mod tests {
         assert_eq!(isentropic_stagnation_temperature_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_temperature_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_temperature_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn isentropic_stagnation_density_ratio_matches_compressible_flow_tables() {
+        // M = 0 → no compression, ρ0/ρ = 1.
+        assert!((isentropic_stagnation_density_ratio(0.0, 1.4) - 1.0).abs() < 1e-12);
+        // M = 1, γ = 1.4 → 1.2^2.5 ≈ 1.5774 (the sonic stagnation density ratio for air).
+        assert!((isentropic_stagnation_density_ratio(1.0, 1.4) - 1.2_f64.powf(2.5)).abs() < 1e-12);
+        assert!((isentropic_stagnation_density_ratio(1.0, 1.4) - 1.5774).abs() < 1e-3, "sonic ≈ 1.577");
+        // M = 2, γ = 1.4 → 1.8^2.5 ≈ 4.347.
+        assert!((isentropic_stagnation_density_ratio(2.0, 1.4) - 1.8_f64.powf(2.5)).abs() < 1e-12);
+        assert!((isentropic_stagnation_density_ratio(2.0, 1.4) - 4.347).abs() < 1e-2, "M=2 ≈ 4.35");
+        // Monotone increasing in Mach, and always ≥ 1.
+        let (a, b, c) = (
+            isentropic_stagnation_density_ratio(0.5, 1.4),
+            isentropic_stagnation_density_ratio(1.5, 1.4),
+            isentropic_stagnation_density_ratio(3.0, 1.4),
+        );
+        assert!(a >= 1.0 && a < b && b < c, "monotone ≥ 1: {a} {b} {c}");
+        // Cross-checks completing the isentropic trio (ties #163 + #169, non-tautological):
+        //   ρ0/ρ = (T0/T)^(1/(γ−1)) = (p0/p)^(1/γ),  and  p0/p = (ρ0/ρ)^γ.
+        for m in [0.3_f64, 0.8, 1.0, 2.5, 4.0] {
+            let rho = isentropic_stagnation_density_ratio(m, 1.4);
+            let t_ratio = isentropic_stagnation_temperature_ratio(m, 1.4);
+            let p_ratio = isentropic_stagnation_pressure_ratio(m, 1.4);
+            assert!((rho - t_ratio.powf(1.0 / 0.4)).abs() / rho < 1e-12, "ρ0/ρ=(T0/T)^(1/(γ−1)) at M={m}");
+            assert!((rho - p_ratio.powf(1.0 / 1.4)).abs() / rho < 1e-12, "ρ0/ρ=(p0/p)^(1/γ) at M={m}");
+            assert!((p_ratio - rho.powf(1.4)).abs() / p_ratio < 1e-12, "p0/p=(ρ0/ρ)^γ at M={m}");
+        }
+        // Non-physical input → the no-compression identity 1.0.
+        assert_eq!(isentropic_stagnation_density_ratio(-0.5, 1.4), 1.0);
+        assert_eq!(isentropic_stagnation_density_ratio(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(isentropic_stagnation_density_ratio(f64::NAN, 1.4), 1.0);
+        assert_eq!(isentropic_stagnation_density_ratio(2.0, f64::INFINITY), 1.0);
     }
 }
