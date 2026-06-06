@@ -105,6 +105,22 @@ impl ClassicalElements {
         p / (1.0 + self.eccentricity * nu.cos())
     }
 
+    /// Orbital radius `r = a(1 − e·cos E)` (m) at eccentric anomaly
+    /// `eccentric_anomaly` `E` (rad) — the **eccentric-anomaly form** of the orbit
+    /// equation, the companion parameterisation to the true-anomaly polar form
+    /// [`radius_at_true_anomaly`](Self::radius_at_true_anomaly). This is the radius
+    /// the Kepler time machinery works in: `E` advances the body uniformly-ish along
+    /// the auxiliary circle, and `a(1 − e·cos E)` projects it back to the orbital
+    /// radius. Its `E = 0` and `E = π` values are the periapsis and apoapsis radii
+    /// (the two forms agree at the apsides), `E = ±π/2` gives exactly the semi-major
+    /// axis `a`, and a circular orbit (`e = 0`) returns `a` at every `E`. At a
+    /// corresponding `(E, ν)` pair — linked by
+    /// [`true_anomaly_from_eccentric`](Self::true_anomaly_from_eccentric) — it equals
+    /// `radius_at_true_anomaly(ν)`.
+    pub fn radius_at_eccentric_anomaly(&self, eccentric_anomaly: f64) -> f64 {
+        self.semi_major_axis * (1.0 - self.eccentricity * eccentric_anomaly.cos())
+    }
+
     /// The **outbound true anomaly** `ν = arccos((p/r − 1)/e)` (rad, in `[0, π]`)
     /// at which the orbit reaches radius `radius` `r` (m) — the inverse of
     /// [`radius_at_true_anomaly`](Self::radius_at_true_anomaly), which maps the
@@ -781,6 +797,41 @@ mod tests {
         let circ = ClassicalElements { eccentricity: 0.0, ..coe };
         for nu in [0.0, 1.0, PI, 2.5] {
             assert!((circ.radius_at_true_anomaly(nu) - a).abs() < 1e-6, "circular r at {nu}");
+        }
+    }
+
+    #[test]
+    fn radius_at_eccentric_anomaly_is_the_keplerian_radius() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let a = coe.semi_major_axis;
+        // E=0 → periapsis a(1−e); E=π → apoapsis a(1+e): the two radius forms agree
+        // at the apsides.
+        assert!((coe.radius_at_eccentric_anomaly(0.0) - coe.periapsis_radius()).abs() / a < 1e-12, "E=0 → periapsis");
+        assert!((coe.radius_at_eccentric_anomaly(PI) - coe.apoapsis_radius()).abs() / a < 1e-12, "E=π → apoapsis");
+        // E=±π/2 → exactly the semi-major axis a.
+        assert!((coe.radius_at_eccentric_anomaly(PI / 2.0) - a).abs() / a < 1e-12, "E=π/2 → a");
+        assert!((coe.radius_at_eccentric_anomaly(-PI / 2.0) - a).abs() / a < 1e-12, "E=−π/2 → a");
+        // STRONG cross-check: at a corresponding (E, ν) pair the eccentric-anomaly
+        // radius a(1−e·cos E) equals the true-anomaly polar form p/(1+e·cos ν) (#168),
+        // with ν from true_anomaly_from_eccentric (#150) — different formulas, same r.
+        for e_anom in [0.3_f64, 1.0, 2.0, PI, 4.5, 5.7] {
+            let nu = coe.true_anomaly_from_eccentric(e_anom);
+            let r_e = coe.radius_at_eccentric_anomaly(e_anom);
+            let r_nu = coe.radius_at_true_anomaly(nu);
+            assert!((r_e - r_nu).abs() / r_e < 1e-9, "r(E) = r(ν) at E={e_anom}");
+        }
+        // A circular orbit has constant radius a at every E.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for ea in [0.0_f64, 1.0, PI, 4.2] {
+            assert!((circ.radius_at_eccentric_anomaly(ea) - a).abs() / a < 1e-12, "circular r=a at E={ea}");
         }
     }
 
