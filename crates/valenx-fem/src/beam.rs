@@ -126,6 +126,42 @@ pub fn cantilever_tip_deflection(
     load * length.powi(3) / (3.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **angle of twist** `θ = T·L/(G·J)` (rad) of a prismatic shaft in
+/// pure torsion — a shaft of length `length` `L` (m), shear modulus
+/// `shear_modulus` `G` (Pa) and polar second moment of area (the St-Venant
+/// torsion constant) `polar_moment` `J` (m⁴), twisted by an axial torque `torque`
+/// `T` (N·m).
+///
+/// This is the *torsion* member of the analytic beam-reference set the
+/// finite-element solver ([`solve_beam_static`]) converges to — the companion to
+/// the bending [`cantilever_tip_deflection`], the
+/// [`euler_bernoulli_beam_frequency`] vibration reference and the
+/// [`crate::buckling::euler_critical_load`] stability reference, each covering a
+/// different deformation mode. The twist grows *linearly* with the torque `T`
+/// (and is sign-preserving — reversing the torque reverses the twist) and with
+/// the length `L`, and falls inversely with the **torsional rigidity** `G·J` (a
+/// stiffer material or a fatter section twists less). For a solid circular shaft
+/// `J = πr⁴/2`. Returns `0` for non-physical input (`T` non-finite, or `G`, `J`,
+/// or `L` non-positive or non-finite).
+pub fn beam_angle_of_twist(
+    torque: f64,
+    length: f64,
+    shear_modulus: f64,
+    polar_moment: f64,
+) -> f64 {
+    if !torque.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !shear_modulus.is_finite()
+        || shear_modulus <= 0.0
+        || !polar_moment.is_finite()
+        || polar_moment <= 0.0
+    {
+        return 0.0;
+    }
+    torque * length / (shear_modulus * polar_moment)
+}
+
 /// Errors from the native 3D beam solver.
 #[derive(Debug, Error)]
 pub enum BeamSolverError {
@@ -1363,9 +1399,38 @@ mod tests {
         let loads = [BeamLoad::moment(1, [torque, 0.0, 0.0])];
         let sol = solve_beam_static(&nodes, &elements, &mat, &constraints, &loads).unwrap();
         let g = mat.youngs_modulus / (2.0 * (1.0 + mat.poisson_ratio));
-        let analytic = torque * l / (g * section.j);
+        let analytic = beam_angle_of_twist(torque, l, g, section.j);
         let rel = (sol.rotation[1][0] - analytic).abs() / analytic;
         assert!(rel < 1e-6, "twist {} vs analytic {analytic}", sol.rotation[1][0]);
+    }
+
+    #[test]
+    fn beam_angle_of_twist_matches_the_closed_form() {
+        // Worked point: T = 100 N·m over a 2 m shaft, G = 80 GPa steel,
+        // J = 1e-8 m⁴ → θ = T·L/(G·J) = 200 / 800 = 0.25 rad.
+        let (t, l, g, j) = (100.0, 2.0, 80.0e9, 1.0e-8);
+        let theta = beam_angle_of_twist(t, l, g, j);
+        assert!((theta - 0.25).abs() / theta < 1e-9, "θ = 0.25 rad, got {theta}");
+        // Linear in the torque, and sign-preserving (reverse T → reverse twist).
+        assert!((beam_angle_of_twist(2.0 * t, l, g, j) - 2.0 * theta).abs() / theta < 1e-12);
+        assert!(
+            (beam_angle_of_twist(-t, l, g, j) + theta).abs() / theta < 1e-12,
+            "sign-preserving"
+        );
+        // Linear in the length: double L → double θ.
+        assert!(
+            (beam_angle_of_twist(t, 2.0 * l, g, j) - 2.0 * theta).abs() / theta < 1e-12,
+            "L scaling"
+        );
+        // Inverse in the torsional rigidity G·J: double G or J → half θ.
+        assert!((beam_angle_of_twist(t, l, 2.0 * g, j) - 0.5 * theta).abs() / theta < 1e-12, "1/G");
+        assert!((beam_angle_of_twist(t, l, g, 2.0 * j) - 0.5 * theta).abs() / theta < 1e-12, "1/J");
+        // Non-physical input → 0.
+        assert_eq!(beam_angle_of_twist(t, l, g, -1.0e-8), 0.0); // J ≤ 0
+        assert_eq!(beam_angle_of_twist(t, l, 0.0, j), 0.0); // G ≤ 0
+        assert_eq!(beam_angle_of_twist(t, -1.0, g, j), 0.0); // L ≤ 0
+        assert_eq!(beam_angle_of_twist(f64::NAN, l, g, j), 0.0); // non-finite T
+        assert_eq!(beam_angle_of_twist(t, l, f64::INFINITY, j), 0.0); // non-finite G
     }
 
     #[test]
