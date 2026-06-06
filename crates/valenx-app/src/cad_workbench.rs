@@ -721,6 +721,38 @@ fn mesh_open_edge_count(mesh: &valenx_mesh::Mesh) -> usize {
     edges.values().filter(|&&c| c == 1).count()
 }
 
+/// The **mean edge length** — the characteristic element size `h̄` (model units)
+/// of a `Tri3` mesh, the average length of its *distinct* undirected edges. This
+/// is the single "mesh resolution" scalar: the typical element size that sets the
+/// interpolation and quadrature accuracy of any analysis run on the surface
+/// (discretisation error usually scaling as a power of `h`). Where the shape
+/// metrics ([`mesh_min_triangle_quality`], [`mesh_max_aspect_ratio`]) grade *how
+/// well-formed* each element is, and the [`mesh_diameter`] / bounding box give
+/// the part's *overall* extent, this reports the *local* discretisation scale.
+/// Each edge is counted once however many triangles share it (the in-facet
+/// diagonals a tessellator adds are included). `None` for a mesh with no edges.
+fn mesh_mean_edge_length(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut edges: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                edges.insert(if i <= j { (i, j) } else { (j, i) });
+            }
+        }
+    }
+    if edges.is_empty() {
+        return None;
+    }
+    let total: f64 = edges
+        .iter()
+        .map(|&(i, j)| (mesh.nodes[i as usize] - mesh.nodes[j as usize]).norm())
+        .sum();
+    Some(total / edges.len() as f64)
+}
+
 /// The **Euler characteristic** `χ = V − E + F` of a `Tri3` surface mesh — `V`
 /// the distinct *referenced* vertices, `E` the distinct undirected edges, `F`
 /// the triangles. This is the fundamental topological invariant of the surface:
@@ -1067,6 +1099,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_diameter)
         .map(|d| format!(" · diam {d:.3} u"))
         .unwrap_or_default();
+    // Mean edge length — the characteristic element size (mesh resolution), the
+    // typical discretisation scale distinct from the caliper extent above.
+    let mean_edge_str = mesh
+        .as_ref()
+        .and_then(mesh_mean_edge_length)
+        .map(|h| format!(" · mean edge {h:.3} u"))
+        .unwrap_or_default();
     // Worst triangle shape quality (4√3·A/Σℓ²; 1 = equilateral, →0 = sliver) —
     // the mesh-quality gate, distinct from the shape/topology measures above.
     let quality_str = mesh
@@ -1097,7 +1136,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|theta| format!(" · max crease {:.0}°", theta.to_degrees()))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{aspect_str}{sharp_str}{crease_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{aspect_str}{sharp_str}{crease_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2138,6 +2177,52 @@ mod tests {
 
         // No interior manifold edge → None.
         assert_eq!(mesh_max_dihedral_angle(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_mean_edge_length_is_the_characteristic_element_size() {
+        use nalgebra::Vector3;
+        // A single 3-4-5 right triangle: distinct edges {3, 4, 5}, mean = 12/3 = 4.
+        let mut tri = valenx_mesh::Mesh::new("3-4-5");
+        tri.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+            Vector3::new(0.0, 4.0, 0.0),
+        ];
+        let mut tb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        tb.connectivity = vec![0, 1, 2];
+        tri.element_blocks.push(tb);
+        assert!((mesh_mean_edge_length(&tri).unwrap() - 4.0).abs() < 1e-9, "3-4-5 mean edge = 4");
+
+        // The 1×2×3 box: 18 distinct edges — 12 cube (4×1 + 4×2 + 4×3 = 24) and 6
+        // face diagonals (2√5 + 2√10 + 2√13) — so the mean is
+        // (24 + 2√5 + 2√10 + 2√13) / 18 ≈ 2.334.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = connectivity;
+        mesh.element_blocks.push(block);
+        let expected =
+            (24.0 + 2.0 * 5.0_f64.sqrt() + 2.0 * 10.0_f64.sqrt() + 2.0 * 13.0_f64.sqrt()) / 18.0;
+        let mean = mesh_mean_edge_length(&mesh).expect("box has edges");
+        assert!((mean - expected).abs() < 1e-9, "box mean edge ≈ 2.334, got {mean}");
+
+        // No edges → None.
+        assert_eq!(mesh_mean_edge_length(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
