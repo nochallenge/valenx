@@ -264,6 +264,42 @@ pub fn simply_supported_center_deflection(
     load * length.powi(3) / (48.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **simply-supported (pinned–pinned) mid-span deflection under a
+/// uniformly distributed load** `δ = 5·w·L⁴/(384·E·I)` (m) of a slender
+/// Euler–Bernoulli beam — span `length` `L` (m) carrying a transverse load of
+/// intensity `load_per_length` `w` (N/m) spread evenly over the whole span, with
+/// Young's modulus `youngs_modulus` `E` (Pa) and section second moment of area
+/// `second_moment_area` `I` (m⁴).
+///
+/// This is the **distributed-load companion** to the point-load
+/// [`simply_supported_center_deflection`] (`P·L³/(48·E·I)`), completing the
+/// `{cantilever, simply-supported} × {point, UDL}` set of beam-deflection
+/// references. The *same total load* `W = w·L`, spread uniformly instead of
+/// concentrated at mid-span, deflects the centre to only `5/8` as far (`5/384`
+/// versus `1/48`). The deflection grows linearly with the intensity `w` (and is
+/// sign-preserving — an upward load lifts mid-span), with the *fourth* power of
+/// the span `L`, and falls inversely with the flexural rigidity `E·I`. Returns
+/// `0` for non-physical input (`w` non-finite, or `E`, `I`, or `L` non-positive
+/// or non-finite).
+pub fn simply_supported_udl_center_deflection(
+    load_per_length: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load_per_length.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    5.0 * load_per_length * length.powi(4) / (384.0 * youngs_modulus * second_moment_area)
+}
+
 /// Errors from the native 3D beam solver.
 #[derive(Debug, Error)]
 pub enum BeamSolverError {
@@ -1667,6 +1703,48 @@ mod tests {
         assert_eq!(simply_supported_center_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_center_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(simply_supported_center_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn simply_supported_udl_center_deflection_matches_closed_form() {
+        // Worked point: w = 1 kN/m UDL on a 2 m simply-supported steel beam,
+        // E = 200 GPa, I = 1e-6 m⁴ → δ = 5·w·L⁴/(384·E·I) = 80000/7.68e7 = 1/960 m.
+        let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let delta = simply_supported_udl_center_deflection(w, l, e, i);
+        assert!((delta - 1.0 / 960.0).abs() / delta < 1e-9, "δ = 1/960 m, got {delta}");
+        // Linear in the load intensity, and sign-preserving (an upward load lifts mid-span).
+        assert!((simply_supported_udl_center_deflection(2.0 * w, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
+        assert!(
+            (simply_supported_udl_center_deflection(-w, l, e, i) + delta).abs() / delta < 1e-12,
+            "sign-preserving"
+        );
+        // Quartic in the span: double L → 16× δ.
+        assert!(
+            (simply_supported_udl_center_deflection(w, 2.0 * l, e, i) - 16.0 * delta).abs() / delta < 1e-9,
+            "L⁴ scaling"
+        );
+        // Inverse in the flexural rigidity E·I: double E or I → half δ.
+        assert!((simply_supported_udl_center_deflection(w, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
+        assert!((simply_supported_udl_center_deflection(w, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        // STRONG non-tautological cross-check: the same TOTAL load W = w·L, spread as a
+        // UDL, deflects mid-span to exactly 5/8 of the same total as a central point
+        // load. The UDL impl uses 5wL⁴/(384EI); the check uses the independent point-
+        // load fn simply_supported_center_deflection (P·L³/(48EI)) with P = w·L — a
+        // known structural-mechanics ratio, a different code path.
+        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (300.0, 1.5), (-750.0, 3.0), (4200.0, 0.8)] {
+            let udl = simply_supported_udl_center_deflection(ww, ll, e, i);
+            let point = simply_supported_center_deflection(ww * ll, ll, e, i);
+            assert!(
+                (udl - 5.0 / 8.0 * point).abs() / point.abs() < 1e-12,
+                "UDL = 5/8 × point-load(W=w·L) at w={ww}, L={ll}: {udl} vs {point}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_udl_center_deflection(w, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(simply_supported_udl_center_deflection(w, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(simply_supported_udl_center_deflection(w, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(simply_supported_udl_center_deflection(f64::NAN, l, e, i), 0.0); // non-finite w
+        assert_eq!(simply_supported_udl_center_deflection(w, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
