@@ -88,11 +88,38 @@ pub fn dual_exponential_synapse_conductance(
     if (tau_rise_s - tau_decay_s).abs() <= f64::EPSILON * tau_rise_s.max(tau_decay_s) {
         return 0.0;
     }
-    let t_peak =
-        (tau_rise_s * tau_decay_s / (tau_decay_s - tau_rise_s)) * (tau_decay_s / tau_rise_s).ln();
+    let t_peak = dual_exponential_peak_time(tau_rise_s, tau_decay_s);
     let norm = (-t_peak / tau_decay_s).exp() - (-t_peak / tau_rise_s).exp();
     let raw = (-t_s / tau_decay_s).exp() - (-t_s / tau_rise_s).exp();
     g_max * raw / norm
+}
+
+/// The **time-to-peak** of the double-exponential synaptic conductance,
+/// `t_p = (τ_r·τ_d / (τ_d − τ_r))·ln(τ_d/τ_r)` (s) — the moment after the
+/// presynaptic event at which [`dual_exponential_synapse_conductance`] reaches
+/// its maximum `g_max`, given the rise time constant `tau_rise_s` (`τ_r`, s) and
+/// decay time constant `tau_decay_s` (`τ_d`, s).
+///
+/// It is the synapse's **rise time** — the characteristic the single decay
+/// constant cannot express, and what distinguishes a fast AMPA contact from a
+/// slow NMDA one. It always lies strictly between `τ_r` and `τ_d`, and is
+/// symmetric in the two constants. (For equal time constants the waveform is the
+/// alpha function, whose peak is simply `τ` — see [`alpha_synapse_conductance`].)
+/// Returns `0` for non-physical input (`τ ≤ 0` or non-finite) and for the
+/// degenerate `τ_r = τ_d` singularity, matching
+/// [`dual_exponential_synapse_conductance`].
+pub fn dual_exponential_peak_time(tau_rise_s: f64, tau_decay_s: f64) -> f64 {
+    if !tau_rise_s.is_finite()
+        || !tau_decay_s.is_finite()
+        || tau_rise_s <= 0.0
+        || tau_decay_s <= 0.0
+    {
+        return 0.0;
+    }
+    if (tau_rise_s - tau_decay_s).abs() <= f64::EPSILON * tau_rise_s.max(tau_decay_s) {
+        return 0.0; // the τ_r = τ_d limit is the alpha function (peak at τ)
+    }
+    (tau_rise_s * tau_decay_s / (tau_decay_s - tau_rise_s)) * (tau_decay_s / tau_rise_s).ln()
 }
 
 /// The **NMDA-receptor Mg²⁺ block** `B(V) = 1/(1 + ([Mg²⁺]/3.57)·e^(−0.062·V))` —
@@ -194,7 +221,7 @@ mod tests {
             0.0
         );
         // The peak is exactly g_max at the analytic peak time t_p.
-        let tp = (tau_r * tau_d / (tau_d - tau_r)) * (tau_d / tau_r).ln();
+        let tp = dual_exponential_peak_time(tau_r, tau_d);
         assert!(
             (dual_exponential_synapse_conductance(g_max, tau_r, tau_d, tp) - g_max).abs() < 1e-18,
             "peak g_max at t_p"
@@ -223,6 +250,29 @@ mod tests {
         assert_eq!(dual_exponential_synapse_conductance(g_max, tau_r, -1.0, 0.001), 0.0);
         assert_eq!(dual_exponential_synapse_conductance(g_max, f64::NAN, tau_d, 0.001), 0.0);
         assert_eq!(dual_exponential_synapse_conductance(g_max, 0.002, 0.002, 0.001), 0.0); // τ_r = τ_d
+    }
+
+    #[test]
+    fn dual_exponential_peak_time_matches_the_closed_form() {
+        let (tau_r, tau_d) = (0.0005, 0.003); // 0.5 ms rise, 3 ms decay
+        let tp = dual_exponential_peak_time(tau_r, tau_d);
+        // Closed form (τ_r·τ_d/(τ_d−τ_r))·ln(τ_d/τ_r).
+        let expected = (tau_r * tau_d / (tau_d - tau_r)) * (tau_d / tau_r).ln();
+        assert!((tp - expected).abs() < 1e-15, "closed form, got {tp}");
+        // The rise time lies strictly between the two time constants.
+        assert!(tp > tau_r && tp < tau_d, "τ_r < t_p < τ_d, got {tp}");
+        // It is the time at which the conductance (#155) actually peaks at g_max.
+        let g = dual_exponential_synapse_conductance(1.0, tau_r, tau_d, tp);
+        assert!((g - 1.0).abs() < 1e-12, "g(t_p) = g_max, got {g}");
+        // Symmetric in the two time constants (swapping τ_r and τ_d is invariant).
+        assert!(
+            (dual_exponential_peak_time(tau_d, tau_r) - tp).abs() < 1e-15,
+            "symmetric in τ_r, τ_d"
+        );
+        // Degenerate / non-physical input → 0.
+        assert_eq!(dual_exponential_peak_time(tau_r, tau_r), 0.0); // τ_r = τ_d (alpha limit)
+        assert_eq!(dual_exponential_peak_time(0.0, tau_d), 0.0); // τ ≤ 0
+        assert_eq!(dual_exponential_peak_time(tau_r, f64::NAN), 0.0); // non-finite
     }
 
     #[test]

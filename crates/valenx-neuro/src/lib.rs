@@ -84,7 +84,7 @@ pub use strength_duration::{
     chronaxie, lapicque_threshold, rheobase, threshold_amplitude, weiss_threshold_charge,
 };
 pub use synapse::{
-    alpha_synapse_conductance, alpha_synapse_conductance_integral,
+    alpha_synapse_conductance, alpha_synapse_conductance_integral, dual_exponential_peak_time,
     dual_exponential_synapse_conductance, nmda_mg_block,
 };
 pub use temperature::{q10_scale, TYPICAL_GATING_Q10};
