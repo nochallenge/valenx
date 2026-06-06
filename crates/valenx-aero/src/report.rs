@@ -292,6 +292,33 @@ pub fn normal_shock_pressure_ratio(mach: f64, gamma: f64) -> f64 {
     1.0 + 2.0 * gamma / (gamma + 1.0) * (mach * mach - 1.0)
 }
 
+/// The static **density ratio** `ρ₂/ρ₁ = (γ+1)·M₁² / ((γ−1)·M₁² + 2)` across a
+/// stationary **normal shock** with upstream Mach `mach` `M₁` and heat-capacity
+/// ratio `gamma` `γ` — the Rankine–Hugoniot density jump, the third member of the
+/// shock-relations family with [`normal_shock_downstream_mach`] and
+/// [`normal_shock_pressure_ratio`]. (Distinct from the *stagnation* ratio
+/// [`isentropic_stagnation_density_ratio`], the reversible total-to-static
+/// relation; this is the irreversible jump across the shock itself.)
+///
+/// Unlike the pressure jump — which grows without bound (`∝ M₁²`) — the density
+/// jump **saturates** at the finite strong-shock limit `(γ+1)/(γ−1)` (`= 6` for
+/// air, `γ = 1.4`) as `M₁ → ∞`: a gas can be compressed only so far, because the
+/// post-shock temperature (and the thermal motion resisting further packing)
+/// climbs without limit. `M₁ = 1` is the no-shock limit (`ρ₂/ρ₁ = 1`); a Mach-2
+/// shock in air compresses the gas ~2.67-fold, a Mach-3 shock ~3.86-fold. For
+/// **subsonic or sonic** upstream (`M₁ ≤ 1`) no shock forms and the density is
+/// unchanged (`1.0`). Returns `1.0` (the no-jump identity) for non-physical input
+/// (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn normal_shock_density_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 1.0;
+    }
+    if mach <= 1.0 {
+        return 1.0; // subsonic/sonic: no shock forms, the density is unchanged
+    }
+    (gamma + 1.0) * mach * mach / ((gamma - 1.0) * mach * mach + 2.0)
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1047,5 +1074,33 @@ mod tests {
         assert_eq!(normal_shock_pressure_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(normal_shock_pressure_ratio(-1.0, 1.4), 1.0);
         assert_eq!(normal_shock_pressure_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn normal_shock_density_ratio_matches_compressible_flow_tables() {
+        // M1 = 1 is the no-shock limit: no density jump.
+        assert!((normal_shock_density_ratio(1.0, 1.4) - 1.0).abs() < 1e-12);
+        // Worked table points (γ = 1.4): M1 = 2 → 9.6/3.6 = 8/3 ≈ 2.667, M1 = 3 → 3.857.
+        assert!((normal_shock_density_ratio(2.0, 1.4) - 8.0 / 3.0).abs() < 1e-12, "M1=2 → 8/3");
+        assert!((normal_shock_density_ratio(3.0, 1.4) - 3.857).abs() < 1e-3, "M1=3 → 3.857");
+        // A shock always compresses: ρ2/ρ1 > 1 and strictly increasing for M1 > 1.
+        let (a, b, c) = (
+            normal_shock_density_ratio(1.5, 1.4),
+            normal_shock_density_ratio(2.5, 1.4),
+            normal_shock_density_ratio(5.0, 1.4),
+        );
+        assert!(a > 1.0 && a < b && b < c, "compresses & rises with M1: {a} {b} {c}");
+        // Strong-shock ceiling M1 → ∞: ρ2/ρ1 → (γ+1)/(γ−1) = 6, approached from BELOW
+        // (the finite limit that distinguishes it from the unbounded pressure jump).
+        let limit = 2.4 / 0.4; // (γ+1)/(γ−1) = 6 for air
+        let r_big = normal_shock_density_ratio(1.0e4, 1.4);
+        assert!((r_big - limit).abs() < 1e-3 && r_big < limit, "strong-shock ceiling 6, got {r_big}");
+        // Subsonic/sonic upstream: no shock forms, the density is unchanged.
+        assert_eq!(normal_shock_density_ratio(0.5, 1.4), 1.0);
+        // Non-physical input → the no-jump identity 1.0.
+        assert_eq!(normal_shock_density_ratio(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(normal_shock_density_ratio(f64::NAN, 1.4), 1.0);
+        assert_eq!(normal_shock_density_ratio(-1.0, 1.4), 1.0);
+        assert_eq!(normal_shock_density_ratio(2.0, f64::INFINITY), 1.0);
     }
 }
