@@ -350,12 +350,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
 
     let sol = solve_simple(&grid, &fluid, &bcs, &controls);
 
-    let mut max_speed = 0.0_f64;
-    for j in 0..s.ny {
-        for i in 0..s.nx {
-            max_speed = max_speed.max(sol.speed_at_cell(i, j));
-        }
-    }
+    let max_speed = sol.max_speed();
     let mean_speed = sol.mean_speed();
     let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
     let regime = flow_regime(re, s.case);
