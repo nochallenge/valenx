@@ -319,6 +319,36 @@ pub fn normal_shock_density_ratio(mach: f64, gamma: f64) -> f64 {
     (gamma + 1.0) * mach * mach / ((gamma - 1.0) * mach * mach + 2.0)
 }
 
+/// The static **temperature ratio** `T₂/T₁ = [2γM₁² − (γ−1)]·[(γ−1)M₁² + 2] /
+/// ((γ+1)²·M₁²)` across a stationary **normal shock** with upstream Mach `mach`
+/// `M₁` and heat-capacity ratio `gamma` `γ` — the Rankine–Hugoniot temperature
+/// jump, completing the static-property trio with [`normal_shock_pressure_ratio`]
+/// and [`normal_shock_density_ratio`]. By the ideal-gas law `T = p/(ρR)` it is
+/// exactly their quotient, `T₂/T₁ = (p₂/p₁)/(ρ₂/ρ₁)`. (Distinct from the
+/// *stagnation* ratio [`isentropic_stagnation_temperature_ratio`], the reversible
+/// total-to-static relation; this is the irreversible jump across the shock
+/// itself.)
+///
+/// Unlike the density jump — which saturates at `(γ+1)/(γ−1)` — the temperature
+/// jump **grows without bound** (`∝ M₁²` as `M₁ → ∞`): the kinetic energy of the
+/// supersonic stream is dumped irreversibly into heat. `M₁ = 1` is the no-shock
+/// limit (`T₂/T₁ = 1`); a Mach-2 shock in air (`γ = 1.4`) raises the static
+/// temperature 1.6875-fold, a Mach-3 shock ~2.68-fold. For **subsonic or sonic**
+/// upstream (`M₁ ≤ 1`) no shock forms and the temperature is unchanged (`1.0`).
+/// Returns `1.0` (the no-jump identity) for non-physical input (non-finite `M` or
+/// `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn normal_shock_temperature_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 1.0;
+    }
+    if mach <= 1.0 {
+        return 1.0; // subsonic/sonic: no shock forms, the static temperature is unchanged
+    }
+    let m2 = mach * mach;
+    (2.0 * gamma * m2 - (gamma - 1.0)) * ((gamma - 1.0) * m2 + 2.0)
+        / ((gamma + 1.0) * (gamma + 1.0) * m2)
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1102,5 +1132,55 @@ mod tests {
         assert_eq!(normal_shock_density_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(normal_shock_density_ratio(-1.0, 1.4), 1.0);
         assert_eq!(normal_shock_density_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn normal_shock_temperature_ratio_matches_rankine_hugoniot() {
+        // M1 = 1 is the no-shock limit: no temperature jump.
+        assert!((normal_shock_temperature_ratio(1.0, 1.4) - 1.0).abs() < 1e-12);
+        // Worked table points (γ = 1.4): M1 = 2 → 1.6875 (= 4.5 / (8/3)), M1 = 3 → 2.679.
+        assert!(
+            (normal_shock_temperature_ratio(2.0, 1.4) - 1.6875).abs() < 1e-12,
+            "M1=2 → 1.6875"
+        );
+        assert!(
+            (normal_shock_temperature_ratio(3.0, 1.4) - 2.679).abs() < 1e-3,
+            "M1=3 → 2.679"
+        );
+        // A shock always heats: T2/T1 > 1 and strictly increasing for M1 > 1.
+        let (a, b, c) = (
+            normal_shock_temperature_ratio(1.5, 1.4),
+            normal_shock_temperature_ratio(2.5, 1.4),
+            normal_shock_temperature_ratio(5.0, 1.4),
+        );
+        assert!(a > 1.0 && a < b && b < c, "heats & rises with M1: {a} {b} {c}");
+        // Grows without bound (∝ M1²) — exceeds the density jump's finite ceiling (6).
+        assert!(normal_shock_temperature_ratio(10.0, 1.4) > 8.0, "unbounded growth");
+        // STRONG non-tautological cross-check: by the ideal-gas law T = p/(ρR), the
+        // temperature jump is the quotient of the pressure and density jumps. This
+        // impl uses the single closed form in M; the check composes the OTHER two
+        // Rankine–Hugoniot relations (#187, #193) — different code paths.
+        for &m in &[1.2_f64, 1.5, 2.0, 3.0, 5.0, 8.0] {
+            let expected =
+                normal_shock_pressure_ratio(m, 1.4) / normal_shock_density_ratio(m, 1.4);
+            assert!(
+                (normal_shock_temperature_ratio(m, 1.4) - expected).abs() < 1e-12,
+                "T2/T1 = (p2/p1)/(ρ2/ρ1) at M={m}"
+            );
+        }
+        // Holds for a different γ too (monatomic, γ = 5/3) — not air-specific.
+        let g = 5.0 / 3.0;
+        let expected = normal_shock_pressure_ratio(2.5, g) / normal_shock_density_ratio(2.5, g);
+        assert!(
+            (normal_shock_temperature_ratio(2.5, g) - expected).abs() < 1e-12,
+            "γ=5/3 cross-check"
+        );
+        // Subsonic/sonic upstream: no shock forms, the static temperature is unchanged.
+        assert_eq!(normal_shock_temperature_ratio(0.5, 1.4), 1.0);
+        // Non-physical input → the no-jump identity 1.0.
+        assert_eq!(normal_shock_temperature_ratio(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(normal_shock_temperature_ratio(f64::NAN, 1.4), 1.0);
+        assert_eq!(normal_shock_temperature_ratio(-1.0, 1.4), 1.0);
+        assert_eq!(normal_shock_temperature_ratio(2.0, f64::INFINITY), 1.0);
     }
 }
