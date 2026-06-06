@@ -753,6 +753,33 @@ fn mesh_mean_edge_length(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     Some(total / edges.len() as f64)
 }
 
+/// The **maximum vertex valence** (graph-degree) of a `Tri3` surface mesh — the
+/// largest number of DISTINCT neighbouring vertices joined to any single vertex by
+/// a triangle edge. It is a topological mesh-quality indicator: a regular
+/// triangulation has interior valence 6, and an unusually high maximum flags an
+/// irregular "pole"/fan vertex (many triangles crowding one point) — the kind of
+/// singular vertex that degrades subdivision and FEM conditioning. It is the
+/// connectivity companion to the geometric worst-case indicators
+/// [`mesh_max_aspect_ratio`] and [`mesh_max_dihedral_angle`], and is distinct from
+/// [`mesh_sharp_edge_count`] / [`mesh_open_edge_count`] (which count EDGES, not
+/// vertex degree). Returns `None` for an empty mesh with no `Tri3` faces.
+fn mesh_max_vertex_valence(mesh: &valenx_mesh::Mesh) -> Option<usize> {
+    use std::collections::{HashMap, HashSet};
+    let mut neighbours: HashMap<u32, HashSet<u32>> = HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                neighbours.entry(i).or_default().insert(j);
+                neighbours.entry(j).or_default().insert(i);
+            }
+        }
+    }
+    neighbours.values().map(HashSet::len).max()
+}
+
 /// The number of **boundary loops** (holes) in a `Tri3` surface mesh — the
 /// connected components of the boundary-edge graph (the multiplicity-1 edges that
 /// bound an open patch). It answers the headline mesh-repair question — *how many
@@ -1197,8 +1224,15 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_max_dihedral_angle)
         .map(|theta| format!(" · max crease {:.0}°", theta.to_degrees()))
         .unwrap_or_default();
+    // Maximum vertex valence (graph-degree) — the connectivity-irregularity
+    // indicator; a high value flags a "pole"/fan vertex, vs the geometric crease.
+    let valence_str = mesh
+        .as_ref()
+        .and_then(mesh_max_vertex_valence)
+        .map(|n| format!(" · max valence {n}"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{aspect_str}{sharp_str}{crease_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{aspect_str}{sharp_str}{crease_str}{valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2285,6 +2319,62 @@ mod tests {
 
         // No edges → None.
         assert_eq!(mesh_mean_edge_length(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_max_vertex_valence_counts_incident_edges() {
+        use nalgebra::Vector3;
+        use std::collections::{HashMap, HashSet};
+        // The canonical 1×2×3 box: 8 corners, 12 Tri3 faces, 18 distinct edges.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = connectivity.clone();
+        mesh.element_blocks.push(block);
+
+        // In this triangulation the two diagonal "pole" corners (vertices 0 and 6)
+        // each touch 6 of the other 7 corners; the remaining six corners have
+        // valence 4. So the maximum vertex valence is 6 — a hand-derived fact.
+        assert_eq!(mesh_max_vertex_valence(&mesh), Some(6), "box max valence = 6");
+
+        // STRONG non-tautological cross-check via the HANDSHAKING LEMMA: build the
+        // distinct-edge set independently (the global edge-dedup path, as in
+        // mesh_mean_edge_length) and a per-vertex degree map, then assert
+        // Σ(degree) == 2·|edges|. Two different aggregations of the same topology.
+        let mut edges: HashSet<(u32, u32)> = HashSet::new();
+        let mut nbr: HashMap<u32, HashSet<u32>> = HashMap::new();
+        for tri in connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                edges.insert(if i <= j { (i, j) } else { (j, i) });
+                nbr.entry(i).or_default().insert(j);
+                nbr.entry(j).or_default().insert(i);
+            }
+        }
+        let sum_deg: usize = nbr.values().map(HashSet::len).sum();
+        assert_eq!(edges.len(), 18, "box has 18 distinct edges");
+        assert_eq!(sum_deg, 2 * edges.len(), "handshaking lemma: Σdeg = 2E = 36");
+        // Mean valence = 2E/V = 36/8 = 4.5 (the average matches; the max exceeds it).
+        assert!(
+            (sum_deg as f64 / mesh.nodes.len() as f64 - 4.5).abs() < 1e-12,
+            "mean valence 4.5"
+        );
+
+        // No Tri3 faces → None.
+        assert_eq!(mesh_max_vertex_valence(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
