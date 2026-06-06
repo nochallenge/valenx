@@ -299,6 +299,40 @@ pub fn simply_supported_center_deflection(
     load * length.powi(3) / (48.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **simply-supported (pinned–pinned) end slope** `θ = P·L²/(16·E·I)`
+/// (rad) — the rotation of the elastic curve at *each support* of a slender
+/// Euler–Bernoulli beam under a *central* transverse point load `load` `P` (N),
+/// span `length` `L` (m), Young's modulus `youngs_modulus` `E` (Pa), section second
+/// moment of area `second_moment_area` `I` (m⁴).
+///
+/// This is the *rotational* companion to the mid-span deflection
+/// [`simply_supported_center_deflection`], and the simply-supported counterpart to
+/// the clamped–free [`cantilever_tip_slope`]. The two simply-supported point-load
+/// quantities are locked together by `δ_centre = (L/3)·θ_end`: the central
+/// deflection is a third of the span times the support rotation. Like the
+/// deflection it grows linearly with the load `P` (sign-preserving), with the
+/// *square* of the span `L`, and falls inversely with the flexural rigidity `E·I`.
+/// Returns `0` for non-physical input (`P` non-finite, or `E`, `I`, or `L`
+/// non-positive or non-finite).
+pub fn simply_supported_end_slope(
+    load: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load * length.powi(2) / (16.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **simply-supported (pinned–pinned) mid-span deflection under a
 /// uniformly distributed load** `δ = 5·w·L⁴/(384·E·I)` (m) of a slender
 /// Euler–Bernoulli beam — span `length` `L` (m) carrying a transverse load of
@@ -1773,6 +1807,46 @@ mod tests {
         assert_eq!(simply_supported_center_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_center_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(simply_supported_center_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn simply_supported_end_slope_matches_closed_form() {
+        // Worked point: P = 1 kN central load on a 4 m simply-supported steel beam,
+        // E = 200 GPa, I = 1e-6 m⁴ → θ = P·L²/(16·E·I) = 16000/3.2e6 = 0.005 rad.
+        let (p, l, e, i) = (1000.0, 4.0, 200.0e9, 1.0e-6);
+        let theta = simply_supported_end_slope(p, l, e, i);
+        assert!((theta - 0.005).abs() / theta < 1e-12, "θ = 0.005 rad, got {theta}");
+        // Linear in the load (and sign-preserving).
+        assert!((simply_supported_end_slope(2.0 * p, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
+        assert!((simply_supported_end_slope(-p, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
+        // Quadratic in the span; inverse in the flexural rigidity E·I.
+        assert!((simply_supported_end_slope(p, 2.0 * l, e, i) - 4.0 * theta).abs() / theta < 1e-12, "L² scaling");
+        assert!((simply_supported_end_slope(p, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
+        assert!((simply_supported_end_slope(p, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        // STRONG non-tautological cross-check tying it to #194: for a centrally loaded
+        // simply-supported beam the mid-span deflection is a third of the span times
+        // the support rotation, δ = (L/3)·θ. The slope impl uses L²/(16EI); the check
+        // uses the independent deflection fn L³/(48EI) — a known beam relation.
+        for &(pp, ll) in &[(1000.0_f64, 4.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+            let slope = simply_supported_end_slope(pp, ll, e, i);
+            let defl = simply_supported_center_deflection(pp, ll, e, i);
+            assert!(
+                (defl - ll / 3.0 * slope).abs() / defl.abs() < 1e-12,
+                "δ = (L/3)·θ at P={pp}, L={ll}: {defl} vs {slope}"
+            );
+        }
+        // The support rotation is 1/8 of the cantilever tip slope (#212) for the same
+        // P, L, E, I (P·L²/16EI vs P·L²/2EI) — ties the two slope references.
+        assert!(
+            (theta - cantilever_tip_slope(p, l, e, i) / 8.0).abs() / theta < 1e-12,
+            "θ_ss = θ_cantilever / 8"
+        );
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_end_slope(p, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(simply_supported_end_slope(p, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(simply_supported_end_slope(p, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(simply_supported_end_slope(f64::NAN, l, e, i), 0.0); // non-finite P
+        assert_eq!(simply_supported_end_slope(p, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
