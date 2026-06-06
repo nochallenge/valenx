@@ -126,6 +126,44 @@ pub fn cantilever_tip_deflection(
     load * length.powi(3) / (3.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **cantilever tip deflection under a uniformly distributed load**
+/// `δ = w·L⁴/(8·E·I)` (m) of a slender Euler–Bernoulli cantilever — a prismatic
+/// beam clamped at one end carrying a transverse load of intensity
+/// `load_per_length` `w` (N/m) spread evenly over its full span `length` `L` (m),
+/// with Young's modulus `youngs_modulus` `E` (Pa) and section second moment of
+/// area `second_moment_area` `I` (m⁴) about the bending axis.
+///
+/// This is the **distributed-load companion** to the point-load
+/// [`cantilever_tip_deflection`] (`P·L³/(3·E·I)`): the *same total load*
+/// `W = w·L`, spread uniformly along the span instead of concentrated at the
+/// free end, deflects the tip only `3/8` as far — the load near the clamp acts on
+/// a short lever arm and contributes little. The deflection grows *linearly* with
+/// the intensity `w` (and is sign-preserving — an upward load lifts the tip) and
+/// with the *fourth* power of the span `L` (doubling the length softens the tip
+/// sixteen-fold), and falls inversely with the flexural rigidity `E·I`. It is the
+/// self-weight / pressure-loading member of the analytic beam-reference set the
+/// finite-element solver ([`solve_beam_static`]) converges to. Returns `0` for
+/// non-physical input (`w` non-finite, or `E`, `I`, or `L` non-positive or
+/// non-finite).
+pub fn cantilever_udl_tip_deflection(
+    load_per_length: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load_per_length.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load_per_length * length.powi(4) / (8.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **angle of twist** `θ = T·L/(G·J)` (rad) of a prismatic shaft in
 /// pure torsion — a shaft of length `length` `L` (m), shear modulus
 /// `shear_modulus` `G` (Pa) and polar second moment of area (the St-Venant
@@ -1424,6 +1462,42 @@ mod tests {
         assert_eq!(cantilever_tip_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_tip_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(cantilever_tip_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn cantilever_udl_tip_deflection_matches_closed_form() {
+        // Worked point: w = 1 kN/m uniformly along a 2 m steel cantilever,
+        // E = 200 GPa, I = 1e-6 m⁴ → δ = w·L⁴/(8·E·I) = 16000/1.6e6 = 0.01 m.
+        let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let delta = cantilever_udl_tip_deflection(w, l, e, i);
+        assert!((delta - 0.01).abs() / delta < 1e-9, "δ = 0.01 m, got {delta}");
+        // Linear in the load intensity, and sign-preserving (an upward load lifts the tip).
+        assert!((cantilever_udl_tip_deflection(2.0 * w, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
+        assert!((cantilever_udl_tip_deflection(-w, l, e, i) + delta).abs() / delta < 1e-12, "sign-preserving");
+        // Quartic in the span: double L → 16× δ.
+        assert!((cantilever_udl_tip_deflection(w, 2.0 * l, e, i) - 16.0 * delta).abs() / delta < 1e-9, "L⁴ scaling");
+        // Inverse in the flexural rigidity E·I: double E or I → half δ.
+        assert!((cantilever_udl_tip_deflection(w, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
+        assert!((cantilever_udl_tip_deflection(w, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        // STRONG non-tautological cross-check: the same TOTAL load W = w·L, spread as a
+        // UDL, deflects the tip to exactly 3/8 of the same total concentrated at the
+        // tip. The UDL impl uses w·L⁴/(8EI); the check uses the independent point-load
+        // fn cantilever_tip_deflection (P·L³/(3EI)) with P = w·L — a known
+        // structural-mechanics ratio, a different code path.
+        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+            let udl = cantilever_udl_tip_deflection(ww, ll, e, i);
+            let point = cantilever_tip_deflection(ww * ll, ll, e, i);
+            assert!(
+                (udl - 3.0 / 8.0 * point).abs() / point.abs() < 1e-12,
+                "UDL = 3/8 × point-load(W=w·L) at w={ww}, L={ll}: {udl} vs {point}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(cantilever_udl_tip_deflection(w, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(cantilever_udl_tip_deflection(w, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(cantilever_udl_tip_deflection(w, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(cantilever_udl_tip_deflection(f64::NAN, l, e, i), 0.0); // non-finite w
+        assert_eq!(cantilever_udl_tip_deflection(w, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]

@@ -144,7 +144,8 @@ pub use assembly::{
 };
 pub use beam::{
     beam_angle_of_twist, beam_axial_extension, cantilever_tip_deflection,
-    euler_bernoulli_beam_frequency, simply_supported_center_deflection, solve_beam_modal,
+    cantilever_udl_tip_deflection, euler_bernoulli_beam_frequency,
+    simply_supported_center_deflection, solve_beam_modal,
     solve_beam_static, BeamConstraint, BeamElement, BeamLoad, BeamModalSolution, BeamMode,
     BeamSection, BeamSolution, BeamSolverError,
 };
