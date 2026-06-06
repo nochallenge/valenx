@@ -162,6 +162,35 @@ pub fn beam_angle_of_twist(
     torque * length / (shear_modulus * polar_moment)
 }
 
+/// The analytic **axial extension** `δ = F·L/(E·A)` (m) of a prismatic bar in
+/// pure tension or compression — a member of length `length` `L` (m), Young's
+/// modulus `youngs_modulus` `E` (Pa) and cross-section area `area` `A` (m²) under
+/// an axial force `force` `F` (N). This is Hooke's law for an axially-loaded bar
+/// (`δ = F·L/(E·A)`, equivalently `σ = E·ε`).
+///
+/// It is the *axial* member of the analytic beam-reference set the finite-element
+/// solver ([`solve_beam_static`]) converges to — the simplest deformation mode,
+/// completing the trio with the bending [`cantilever_tip_deflection`] and the
+/// torsional [`beam_angle_of_twist`] (the three ways a straight member yields,
+/// under a transverse load, a torque, and an axial force). The extension grows
+/// *linearly* with the force `F` (and is sign-preserving — tension lengthens,
+/// compression shortens) and with the length `L`, and falls inversely with the
+/// **axial rigidity** `E·A`. Returns `0` for non-physical input (`F` non-finite,
+/// or `E`, `A`, or `L` non-positive or non-finite).
+pub fn beam_axial_extension(force: f64, length: f64, youngs_modulus: f64, area: f64) -> f64 {
+    if !force.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !area.is_finite()
+        || area <= 0.0
+    {
+        return 0.0;
+    }
+    force * length / (youngs_modulus * area)
+}
+
 /// Errors from the native 3D beam solver.
 #[derive(Debug, Error)]
 pub enum BeamSolverError {
@@ -1377,9 +1406,38 @@ mod tests {
         let constraints = [BeamConstraint::clamped(0)];
         let loads = [BeamLoad::force(1, [f, 0.0, 0.0])];
         let sol = solve_beam_static(&nodes, &elements, &mat, &constraints, &loads).unwrap();
-        let analytic = f * l / (mat.youngs_modulus * section.area);
+        let analytic = beam_axial_extension(f, l, mat.youngs_modulus, section.area);
         let rel = (sol.translation[1][0] - analytic).abs() / analytic;
         assert!(rel < 1e-6, "axial δ {} vs {analytic}", sol.translation[1][0]);
+    }
+
+    #[test]
+    fn beam_axial_extension_matches_the_closed_form() {
+        // Worked point: F = 10 kN on a 2 m steel bar, E = 200 GPa, A = 1e-4 m²
+        // → δ = F·L/(E·A) = 20000 / 2e7 = 0.001 m = 1 mm.
+        let (f, l, e, a) = (10_000.0, 2.0, 200.0e9, 1.0e-4);
+        let delta = beam_axial_extension(f, l, e, a);
+        assert!((delta - 0.001).abs() / delta < 1e-9, "δ = 1 mm, got {delta}");
+        // Linear in the force, and sign-preserving (tension lengthens, compression shortens).
+        assert!((beam_axial_extension(2.0 * f, l, e, a) - 2.0 * delta).abs() / delta < 1e-12);
+        assert!(
+            (beam_axial_extension(-f, l, e, a) + delta).abs() / delta < 1e-12,
+            "compression shortens"
+        );
+        // Linear in the length: double L → double δ.
+        assert!(
+            (beam_axial_extension(f, 2.0 * l, e, a) - 2.0 * delta).abs() / delta < 1e-12,
+            "L scaling"
+        );
+        // Inverse in the axial rigidity E·A: double E or A → half δ.
+        assert!((beam_axial_extension(f, l, 2.0 * e, a) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
+        assert!((beam_axial_extension(f, l, e, 2.0 * a) - 0.5 * delta).abs() / delta < 1e-12, "1/A");
+        // Non-physical input → 0.
+        assert_eq!(beam_axial_extension(f, l, e, -1.0e-4), 0.0); // A ≤ 0
+        assert_eq!(beam_axial_extension(f, l, 0.0, a), 0.0); // E ≤ 0
+        assert_eq!(beam_axial_extension(f, -1.0, e, a), 0.0); // L ≤ 0
+        assert_eq!(beam_axial_extension(f64::NAN, l, e, a), 0.0); // non-finite F
+        assert_eq!(beam_axial_extension(f, l, f64::INFINITY, a), 0.0); // non-finite E
     }
 
     #[test]
