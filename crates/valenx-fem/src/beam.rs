@@ -126,6 +126,41 @@ pub fn cantilever_tip_deflection(
     load * length.powi(3) / (3.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **cantilever tip slope** `θ = P·L²/(2·E·I)` (rad) — the
+/// end-rotation of a slender Euler–Bernoulli cantilever clamped at one end and
+/// loaded by a transverse point force `load` `P` (N) at the free end, with span
+/// `length` `L` (m), Young's modulus `youngs_modulus` `E` (Pa), and section second
+/// moment of area `second_moment_area` `I` (m⁴).
+///
+/// This is the *rotational* companion to the deflection
+/// [`cantilever_tip_deflection`] — the slope of the elastic curve at the free end,
+/// the quantity slope-continuity and moment-area methods track. The two are locked
+/// together by `δ = (2/3)·L·θ`: integrating the curvature `M/(E·I)` once gives the
+/// slope (`∝ L²`), twice the deflection (`∝ L³`), so the tip deflection is
+/// two-thirds of the span times the tip slope. Like the deflection it grows
+/// linearly with the load `P` (and is sign-preserving — an upward load rotates the
+/// tip up), with the *square* of the span `L`, and falls inversely with the
+/// flexural rigidity `E·I`. Returns `0` for non-physical input (`P` non-finite, or
+/// `E`, `I`, or `L` non-positive or non-finite).
+pub fn cantilever_tip_slope(
+    load: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load * length.powi(2) / (2.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **cantilever tip deflection under a uniformly distributed load**
 /// `δ = w·L⁴/(8·E·I)` (m) of a slender Euler–Bernoulli cantilever — a prismatic
 /// beam clamped at one end carrying a transverse load of intensity
@@ -1498,6 +1533,41 @@ mod tests {
         assert_eq!(cantilever_tip_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_tip_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(cantilever_tip_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn cantilever_tip_slope_matches_closed_form() {
+        // Worked point: P = 1 kN at the tip of a 2 m steel cantilever, E = 200 GPa,
+        // I = 1e-6 m⁴ → θ = P·L²/(2·E·I) = 4000/4e5 = 0.01 rad.
+        let (p, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let theta = cantilever_tip_slope(p, l, e, i);
+        assert!((theta - 0.01).abs() / theta < 1e-12, "θ = 0.01 rad, got {theta}");
+        // Linear in the load, and sign-preserving (an upward load rotates the tip up).
+        assert!((cantilever_tip_slope(2.0 * p, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
+        assert!((cantilever_tip_slope(-p, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
+        // Quadratic in the span: double L → 4× θ.
+        assert!((cantilever_tip_slope(p, 2.0 * l, e, i) - 4.0 * theta).abs() / theta < 1e-12, "L² scaling");
+        // Inverse in the flexural rigidity E·I: double E or I → half θ.
+        assert!((cantilever_tip_slope(p, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
+        assert!((cantilever_tip_slope(p, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        // STRONG non-tautological cross-check tying it to #176: for a tip-loaded
+        // cantilever the tip deflection is exactly two-thirds of the span times the
+        // tip slope, δ = (2/3)·L·θ. The slope impl uses L²/(2EI); the check uses the
+        // independent deflection fn L³/(3EI) — a known beam relation, different path.
+        for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+            let slope = cantilever_tip_slope(pp, ll, e, i);
+            let defl = cantilever_tip_deflection(pp, ll, e, i);
+            assert!(
+                (defl - 2.0 / 3.0 * ll * slope).abs() / defl.abs() < 1e-12,
+                "δ = (2/3)·L·θ at P={pp}, L={ll}: {defl} vs {slope}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(cantilever_tip_slope(p, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(cantilever_tip_slope(p, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(cantilever_tip_slope(p, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(cantilever_tip_slope(f64::NAN, l, e, i), 0.0); // non-finite P
+        assert_eq!(cantilever_tip_slope(p, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
