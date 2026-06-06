@@ -705,6 +705,33 @@ impl FlowSolution {
         }
         worst
     }
+
+    /// The **reverse-flow (recirculation) area fraction** — the share of cells
+    /// whose streamwise (`x`) velocity `u` is negative, i.e. running *back*
+    /// against the main throughflow. This is the quantitative separation /
+    /// recirculation diagnostic: a fully attached forward flow reads `0`, while
+    /// a recirculation zone — the lid-driven cavity's returning lower vortex, or
+    /// a separation bubble behind a step or bluff body — reads the share of the
+    /// domain flowing backward. Where every other field measure here reads a
+    /// *magnitude* (speed, vorticity, strain, pressure), this reads the *sign*
+    /// of the streamwise velocity, the flow-reversal topology those miss.
+    /// Returns `0` for an empty grid.
+    pub fn reverse_flow_fraction(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        let n = nx * ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut reversed = 0usize;
+        for j in 0..ny {
+            for i in 0..nx {
+                if self.u_at_cell(i, j) < 0.0 {
+                    reversed += 1;
+                }
+            }
+        }
+        reversed as f64 / n as f64
+    }
 }
 
 /// Solve a steady laminar flow with the SIMPLE algorithm.
@@ -2351,6 +2378,71 @@ mod tests {
         assert!(
             (contracting.max_divergence() - a).abs() < 1e-9,
             "|∇·u| is sign-blind"
+        );
+    }
+
+    #[test]
+    fn reverse_flow_fraction_measures_the_recirculating_share() {
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+
+        // A uniform forward flow u = +U has no reverse flow → fraction 0.
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                u.set(i, j, 2.0);
+            }
+        }
+        let forward = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(forward.reverse_flow_fraction(), 0.0);
+
+        // Every cell running backward (u = −U) → fraction 1.
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                ur.set(i, j, -2.0);
+            }
+        }
+        let reverse = FlowSolution {
+            grid,
+            u: ur,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(reverse.reverse_flow_fraction(), 1.0);
+
+        // Half the rows flow back (j=0,1 → u<0) and half forward (j=2,3 → u>0):
+        // 8 of the 16 cells are reversed → exactly 0.5.
+        let mut uh = grid.u_field();
+        for j in 0..grid.ny {
+            let val = if j < 2 { -1.0 } else { 1.0 };
+            for i in 0..=grid.nx {
+                uh.set(i, j, val);
+            }
+        }
+        let split = FlowSolution {
+            grid,
+            u: uh,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (split.reverse_flow_fraction() - 0.5).abs() < 1e-12,
+            "half-and-half → 0.5, got {}",
+            split.reverse_flow_fraction()
         );
     }
 
