@@ -130,6 +130,31 @@ impl ClassicalElements {
         (v_r, v_theta)
     }
 
+    /// The orbital **specific angular momentum** `h = √(μ·a(1−e²))` (m²/s) —
+    /// the angular momentum *per unit mass*, `h = |r × v|`, and the orbit's
+    /// defining conserved quantity. It is constant everywhere along the path
+    /// (Kepler's second law: the radius vector sweeps equal areas in equal
+    /// times, at the areal rate `h/2`) and is the `μ/h` factor that scales the
+    /// [`velocity_components_at_true_anomaly`](Self::velocity_components_at_true_anomaly).
+    ///
+    /// Equivalently `h = r·v_θ` at *every* true anomaly — orbital radius times
+    /// transverse speed — so the large radius at apoapsis exactly offsets the
+    /// small transverse speed there (and the reverse at periapsis), the product
+    /// held fixed. In terms of the semi-latus rectum `p = a(1−e²)` it is simply
+    /// `h = √(μ·p)`; a circular orbit (`e = 0`) gives `h = √(μ·a)`.
+    ///
+    /// Uses Earth's `μ`. Returns `None` for an orbit that is not bound and
+    /// closed (`a ≤ 0`, or `e ≥ 1`), where the radicand `μ·a(1−e²)` is not a
+    /// positive real and this closed form does not apply.
+    pub fn specific_angular_momentum(&self) -> Option<f64> {
+        let p = self.semi_major_axis * (1.0 - self.eccentricity * self.eccentricity);
+        if self.semi_major_axis > 0.0 && p > 0.0 {
+            Some((MU_EARTH * p).sqrt())
+        } else {
+            None
+        }
+    }
+
     /// Solve **Kepler's equation** `M = E − e·sin E` for the eccentric anomaly
     /// `E` (rad) given the mean anomaly `mean_anomaly` `M` (rad), by
     /// Newton–Raphson iteration.
@@ -805,6 +830,50 @@ mod tests {
             assert!(vr.abs() < 1e-9, "circular v_r = 0 at {nu}");
             assert!((vt - v_circ).abs() < 1e-3, "circular v_θ = √(μ/a) at {nu}");
         }
+    }
+
+    #[test]
+    fn specific_angular_momentum_is_the_conserved_h() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let (a, e) = (coe.semi_major_axis, coe.eccentricity);
+        let h = coe.specific_angular_momentum().expect("bound orbit has h");
+        // Closed form h = √(μ·a(1−e²)) = √(μ·p) (relative tol: h ≈ 5.5e10 m²/s).
+        let expected = (MU_EARTH * a * (1.0 - e * e)).sqrt();
+        assert!((h - expected).abs() / h < 1e-9, "closed form, got {h}");
+        // Conserved: h = r·v_θ at *every* true anomaly — cross-checks #162's
+        // velocity components and the conic radius (Kepler's second law).
+        for nu in [0.0_f64, 0.7, PI / 2.0, 2.0, PI, 4.5, 5.7] {
+            let r = coe.radius_at_true_anomaly(nu);
+            let (_, v_theta) = coe.velocity_components_at_true_anomaly(nu);
+            assert!((r * v_theta - h).abs() / h < 1e-12, "h = r·v_θ at ν={nu}");
+        }
+        // Apsidal form: h = r_peri·v_peri = r_apo·v_apo.
+        let (_, vt_peri) = coe.velocity_components_at_true_anomaly(0.0);
+        let (_, vt_apo) = coe.velocity_components_at_true_anomaly(PI);
+        assert!((coe.periapsis_radius() * vt_peri - h).abs() / h < 1e-12, "h at periapsis");
+        assert!((coe.apoapsis_radius() * vt_apo - h).abs() / h < 1e-12, "h at apoapsis");
+        // A circular orbit (e=0): h = √(μ·a).
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let h_circ = circ.specific_angular_momentum().expect("circular orbit has h");
+        assert!((h_circ - (MU_EARTH * a).sqrt()).abs() / h_circ < 1e-9, "circular h = √(μ·a)");
+        // Same a, higher eccentricity carries less angular momentum (smaller p).
+        let ecc = ClassicalElements { eccentricity: 0.6, ..coe };
+        assert!(ecc.specific_angular_momentum().unwrap() < h, "more eccentric → smaller h");
+        // Not bound/closed → None.
+        let para = ClassicalElements { eccentricity: 1.0, ..coe };
+        assert!(para.specific_angular_momentum().is_none(), "parabolic (e=1) → None");
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert!(hyp.specific_angular_momentum().is_none(), "hyperbolic (e>1) → None");
+        let neg_a = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
+        assert!(neg_a.specific_angular_momentum().is_none(), "a ≤ 0 → None");
     }
 
     #[test]
