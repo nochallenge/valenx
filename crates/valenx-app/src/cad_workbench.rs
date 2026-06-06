@@ -1032,6 +1032,31 @@ fn mesh_max_aspect_ratio(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     worst
 }
 
+/// The **smallest triangle (facet) area** in a `Tri3` surface mesh (model units²)
+/// — a degeneracy / resolution indicator: a near-zero-area sliver triangle wrecks
+/// finite-element conditioning and shading, and the minimum facet area sets the
+/// finest spatial scale the tessellation resolves. It is the *area* companion to
+/// the *shape* score [`mesh_min_triangle_quality`] (a unitless 0–1 measure) and
+/// the *length* scale [`mesh_mean_edge_length`], measuring magnitude rather than
+/// shape or edge length. Each facet's area is `½‖(b−a)×(c−a)‖`. Returns `None` for
+/// an empty mesh with no `Tri3` faces.
+fn mesh_min_triangle_area(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut smallest: Option<f64> = None;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let area = 0.5 * (b - a).cross(&(c - a)).norm();
+            smallest = Some(smallest.map_or(area, |s| s.min(area)));
+        }
+    }
+    smallest
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -1202,6 +1227,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_min_triangle_quality)
         .map(|q| format!(" · Qmin {q:.2}"))
         .unwrap_or_default();
+    // Smallest facet area — the area-scale resolution/degeneracy flag (a near-zero
+    // sliver wrecks conditioning & shading), vs the unitless Qmin shape score.
+    let min_tri_area_str = mesh
+        .as_ref()
+        .and_then(mesh_min_triangle_area)
+        .map(|a| format!(" · min tri area {a:.3} u²"))
+        .unwrap_or_default();
     // Worst triangle aspect ratio (longest/shortest edge; 1 = equilateral, ↑ for a
     // stretched sliver) — the elongation companion to the Qmin shape score.
     let aspect_str = mesh
@@ -1232,7 +1264,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|n| format!(" · max valence {n}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{aspect_str}{sharp_str}{crease_str}{valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2375,6 +2407,56 @@ mod tests {
 
         // No Tri3 faces → None.
         assert_eq!(mesh_max_vertex_valence(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_min_triangle_area_finds_the_smallest_facet() {
+        use nalgebra::Vector3;
+        // The canonical 1×2×3 box: 12 Tri3 facets — four of area 1 (the 1×2 faces),
+        // four of area 1.5 (the 1×3 faces), four of area 3 (the 2×3 faces).
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = connectivity.clone();
+        mesh.element_blocks.push(block);
+
+        // The smallest facet is one of the 1×2-face half-triangles, area 1.0.
+        let min = mesh_min_triangle_area(&mesh).expect("box has facets");
+        assert!((min - 1.0).abs() < 1e-9, "box min facet area = 1.0, got {min}");
+
+        // NON-TAUTOLOGICAL cross-checks: independently recompute all 12 facet areas;
+        // the returned min must be ≤ every one, AND the areas must SUM to the box's
+        // closed-form surface area 2·(1·2 + 1·3 + 2·3) = 22 (an independent total
+        // tying the facet areas to the known geometry).
+        let areas: Vec<f64> = connectivity
+            .chunks_exact(3)
+            .map(|t| {
+                let a = mesh.nodes[t[0] as usize];
+                let b = mesh.nodes[t[1] as usize];
+                let c = mesh.nodes[t[2] as usize];
+                0.5 * (b - a).cross(&(c - a)).norm()
+            })
+            .collect();
+        assert!(areas.iter().all(|&a| min <= a + 1e-12), "min ≤ every facet area");
+        let total: f64 = areas.iter().sum();
+        assert!((total - 22.0).abs() < 1e-9, "Σ facet areas = box surface area 22, got {total}");
+
+        // No Tri3 faces → None.
+        assert_eq!(mesh_min_triangle_area(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
