@@ -273,6 +273,29 @@ impl ClassicalElements {
             None
         }
     }
+
+    /// The **time since periapsis passage** `t = M/n = M(ν)·T/(2π)` (s) to reach
+    /// true anomaly `true_anomaly` `ν` — the *seconds* a satellite takes to coast
+    /// from periapsis to the given point, the physical end of the position→time
+    /// map. It scales the mean anomaly
+    /// [`mean_anomaly_from_true`](Self::mean_anomaly_from_true) (`ν → M`) by the
+    /// inverse mean motion `1/n = T/(2π)` (the orbital [`period`](Self::period)
+    /// `T`), completing the *reverse* of the `time → M → E → ν → r` propagation
+    /// chain — the conversion from *where* the satellite is to *when* it is there.
+    ///
+    /// `ν = 0` (periapsis) gives `t = 0`; `ν = π` (apoapsis) gives exactly `T/2`;
+    /// a circular orbit advances uniformly, `t = ν·T/(2π)`. Returns `None` for an
+    /// orbit that is not a bound ellipse — an open orbit (`e ≥ 1`, whose mean
+    /// anomaly is undefined) or a non-positive semi-major axis (`a ≤ 0`, no
+    /// period).
+    pub fn time_since_periapsis(&self, true_anomaly: f64) -> Option<f64> {
+        let period = self.period()?;
+        let m = self.mean_anomaly_from_true(true_anomaly);
+        if !m.is_finite() {
+            return None;
+        }
+        Some(m * period / TAU)
+    }
 }
 
 /// Convert an inertial state vector to classical orbital elements.
@@ -866,6 +889,47 @@ mod tests {
         let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
         assert!(hyp.mean_anomaly_from_true(1.0).is_nan(), "e≥1 → NaN");
         assert!(coe.mean_anomaly_from_true(f64::NAN).is_nan(), "non-finite ν → NaN");
+    }
+
+    #[test]
+    fn time_since_periapsis_completes_the_position_to_time_map() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.3,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let t_period = coe.period().expect("bound orbit has a period");
+        // Periapsis (ν=0) is t=0; apoapsis (ν=π) is exactly half the period.
+        assert_eq!(coe.time_since_periapsis(0.0), Some(0.0), "ν=0 → t=0");
+        let t_apo = coe.time_since_periapsis(PI).expect("bound");
+        assert!((t_apo - t_period / 2.0).abs() / t_period < 1e-9, "apoapsis at T/2, got {t_apo}");
+        // A circular orbit advances uniformly: t = ν·T/(2π).
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let tc = circ.period().unwrap();
+        for nu in [0.5_f64, 1.0, PI / 2.0, 3.0] {
+            let expected = nu * tc / (2.0 * PI);
+            assert!(
+                (circ.time_since_periapsis(nu).unwrap() - expected).abs() / tc < 1e-9,
+                "circular t = ν·T/2π at {nu}"
+            );
+        }
+        // Consistency with the mean anomaly: t·(2π/T) = M(ν).
+        for nu in [0.3_f64, 1.0, 2.5, 4.0, 5.7] {
+            let t = coe.time_since_periapsis(nu).unwrap();
+            let m = coe.mean_anomaly_from_true(nu);
+            assert!((t * 2.0 * PI / t_period - m).abs() < 1e-9, "t·n = M at ν={nu}");
+        }
+        // Monotone increasing over [0, 2π).
+        assert!(coe.time_since_periapsis(1.0).unwrap() < coe.time_since_periapsis(2.0).unwrap());
+        // Unbound / non-elliptical → None.
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert_eq!(hyp.time_since_periapsis(1.0), None, "e≥1 → None");
+        let neg_a = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
+        assert_eq!(neg_a.time_since_periapsis(1.0), None, "a≤0 → None");
     }
 
     #[test]
