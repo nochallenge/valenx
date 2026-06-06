@@ -13,8 +13,9 @@
 /// The `e^(1−t/τ)` normalisation makes the conductance reach **exactly** `g_max`
 /// at `t = τ`: it is zero at the moment of the spike, rises to the peak at `τ`,
 /// then decays smoothly back toward zero — the textbook single-parameter
-/// postsynaptic conductance transient. (Its area is `g_max·τ·e`, the total
-/// charge the synapse passes.) Returns `0` before the event (`t < 0`) and for
+/// postsynaptic conductance transient. (Its time-integral is `g_max·τ·e` — the
+/// synaptic efficacy, exposed as [`alpha_synapse_conductance_integral`].)
+/// Returns `0` before the event (`t < 0`) and for
 /// non-physical input (`τ ≤ 0`, or any non-finite argument).
 pub fn alpha_synapse_conductance(g_max: f64, tau_s: f64, t_s: f64) -> f64 {
     if !g_max.is_finite()
@@ -27,6 +28,26 @@ pub fn alpha_synapse_conductance(g_max: f64, tau_s: f64, t_s: f64) -> f64 {
     }
     let x = t_s / tau_s;
     g_max * x * (1.0 - x).exp()
+}
+
+/// The **time-integral of the alpha-function conductance**,
+/// `∫₀^∞ g(t) dt = g_max·τ·e` (S·s) — the area under the
+/// [`alpha_synapse_conductance`] transient, with peak conductance `g_max` and
+/// time-to-peak `tau_s` (`τ`, s).
+///
+/// This single number is the synapse's **efficacy** (its "weight"): multiplied
+/// by the synaptic driving force `(V − E_syn)` it gives the total charge the
+/// event injects postsynaptically, so two synapses with the same integral
+/// deliver the same charge however differently their `g_max` and `τ` trade off.
+/// The closed form follows from `∫₀^∞ (t/τ)·e^(1−t/τ) dt = τ·e` (substitute
+/// `u = t/τ`: `e·∫₀^∞ u·e^(−u) du = e·Γ(2) = e`), so it is linear in both `g_max`
+/// and `τ`. Returns `0` for non-physical input (`τ ≤ 0`, or any non-finite
+/// argument), matching [`alpha_synapse_conductance`].
+pub fn alpha_synapse_conductance_integral(g_max: f64, tau_s: f64) -> f64 {
+    if !g_max.is_finite() || !tau_s.is_finite() || tau_s <= 0.0 {
+        return 0.0;
+    }
+    g_max * tau_s * std::f64::consts::E
 }
 
 /// The **double-exponential** ("bi-exponential", Exp2Syn) synaptic conductance
@@ -129,6 +150,39 @@ mod tests {
         assert_eq!(alpha_synapse_conductance(g_max, tau, -0.001), 0.0);
         assert_eq!(alpha_synapse_conductance(g_max, 0.0, tau), 0.0);
         assert_eq!(alpha_synapse_conductance(g_max, f64::NAN, tau), 0.0);
+    }
+
+    #[test]
+    fn alpha_synapse_conductance_integral_is_g_max_tau_e() {
+        use std::f64::consts::E;
+        let (g_max, tau) = (5.0e-9, 2.0e-3); // 5 nS peak, 2 ms time-to-peak
+        let area = alpha_synapse_conductance_integral(g_max, tau);
+        // Closed form: the area under the alpha transient is exactly g_max·τ·e.
+        assert!((area - g_max * tau * E).abs() / area < 1e-12, "closed form g_max·τ·e");
+        // Numerical cross-check: midpoint-integrate the alpha conductance (#149)
+        // out to 20τ — ties the closed form to the time course (non-tautological).
+        let n = 100_000;
+        let dt = 20.0 * tau / n as f64;
+        let mut sum = 0.0;
+        for k in 0..n {
+            let t = (k as f64 + 0.5) * dt;
+            sum += alpha_synapse_conductance(g_max, tau, t) * dt;
+        }
+        assert!((sum - area).abs() / area < 1e-3, "numerical ∫g dt {sum} ≈ {area}");
+        // Linear in g_max and in τ.
+        assert!(
+            (alpha_synapse_conductance_integral(2.0 * g_max, tau) - 2.0 * area).abs() / area < 1e-12,
+            "linear in g_max"
+        );
+        assert!(
+            (alpha_synapse_conductance_integral(g_max, 3.0 * tau) - 3.0 * area).abs() / area < 1e-12,
+            "linear in τ"
+        );
+        // Non-physical input → 0 (mirrors alpha_synapse_conductance).
+        assert_eq!(alpha_synapse_conductance_integral(g_max, 0.0), 0.0);
+        assert_eq!(alpha_synapse_conductance_integral(g_max, -1.0e-3), 0.0);
+        assert_eq!(alpha_synapse_conductance_integral(f64::NAN, tau), 0.0);
+        assert_eq!(alpha_synapse_conductance_integral(g_max, f64::INFINITY), 0.0);
     }
 
     #[test]
