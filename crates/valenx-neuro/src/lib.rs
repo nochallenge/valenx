@@ -73,7 +73,7 @@ pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};
 pub use ghk::{ghk_current_density, ghk_potential_mv, GhkIon};
 pub use impedance::{Cpe, ElectrodeImpedance};
 pub use ionic::{driving_force_mv, ionic_current};
-pub use lif::lif_firing_rate;
+pub use lif::{lif_firing_rate, lif_membrane_potential};
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
 pub use myelinated::MyelinatedFiber;
 pub use nernst::{nernst_potential_mv, thermal_voltage_mv, BODY_TEMPERATURE_K};
