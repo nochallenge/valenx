@@ -119,6 +119,32 @@ pub fn lif_time_to_first_spike(
     tau_m_s * (drive / (drive - v_threshold)).ln()
 }
 
+/// The **leaky integrate-and-fire rheobase current** `I_rh = V_th / R` (A) — the
+/// minimum *constant* input current that makes the neuron fire at all. The leaky
+/// membrane charges toward the steady value `R·I`; only if that asymptote exceeds
+/// the threshold `v_threshold` `V_th` (V) does `V` ever reach it, so the firing
+/// boundary is `R·I = V_th`, i.e. `I = V_th/R`. `resistance` is the input
+/// resistance `R` (Ω).
+///
+/// This is the current-axis threshold the rest of the LIF family is defined
+/// against: [`lif_firing_rate`] is `0` for `I ≤ I_rh` and positive above it,
+/// [`lif_time_to_first_spike`] is `f64::INFINITY` for `I ≤ I_rh` and finite above
+/// it, and [`lif_membrane_potential`] driven by exactly `I_rh` asymptotes to
+/// `V_th` from below (the marginal drive that never quite fires). Returns
+/// `f64::INFINITY` — no finite current elicits a spike — for non-physical input
+/// (`R` or `V_th` non-positive, or either non-finite), mirroring the triad's
+/// treatment of the subthreshold / non-physical regime.
+pub fn lif_rheobase_current(resistance: f64, v_threshold: f64) -> f64 {
+    if !resistance.is_finite()
+        || resistance <= 0.0
+        || !v_threshold.is_finite()
+        || v_threshold <= 0.0
+    {
+        return f64::INFINITY;
+    }
+    v_threshold / resistance
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,5 +239,41 @@ mod tests {
         assert!(lif_time_to_first_spike(i, r, 0.0, v_th).is_infinite()); // τ_m ≤ 0
         assert!(lif_time_to_first_spike(i, r, tau, 0.0).is_infinite()); // V_th ≤ 0
         assert!(lif_time_to_first_spike(f64::NAN, r, tau, v_th).is_infinite()); // non-finite I
+    }
+
+    #[test]
+    fn lif_rheobase_current_is_the_firing_threshold() {
+        let (r, tau, v_th, t_ref) = (1.0e8, 0.02, 0.015, 0.002); // the LIF fixture
+        let i_rh = lif_rheobase_current(r, v_th);
+        // Worked point: I_rh = V_th/R = 0.015 / 1e8 = 1.5e-10 A (0.15 nA) — exactly
+        // the silent/fire boundary the f–I test brackets at 1.4e-10 / 1.5e-10.
+        assert!((i_rh - 1.5e-10).abs() / i_rh < 1e-12, "I_rh = V_th/R = 0.15 nA, got {i_rh}");
+        // Definitional identity: R·I_rh = V_th exactly (the asymptote sits AT threshold).
+        assert!((r * i_rh - v_th).abs() / v_th < 1e-12, "R·I_rh = V_th");
+        // Inversely proportional to R, linearly proportional to V_th.
+        assert!((lif_rheobase_current(2.0 * r, v_th) - 0.5 * i_rh).abs() / i_rh < 1e-12, "∝ 1/R");
+        assert!((lif_rheobase_current(r, 2.0 * v_th) - 2.0 * i_rh).abs() / i_rh < 1e-12, "∝ V_th");
+        // STRONG non-tautological cross-check to the whole triad: just BELOW I_rh the
+        // cell is silent (rate 0, infinite latency); just ABOVE it fires (rate > 0,
+        // finite latency). The impl is V_th/R; the checks use the three triad fns.
+        let (below, above) = (0.99 * i_rh, 1.01 * i_rh);
+        assert_eq!(lif_firing_rate(below, r, tau, v_th, t_ref), 0.0, "below rheobase → silent");
+        assert!(lif_time_to_first_spike(below, r, tau, v_th).is_infinite(), "below → ∞ latency");
+        assert!(lif_firing_rate(above, r, tau, v_th, t_ref) > 0.0, "above rheobase → fires");
+        assert!(lif_time_to_first_spike(above, r, tau, v_th).is_finite(), "above → finite latency");
+        // Driven by EXACTLY the rheobase current the membrane asymptotes to V_th from
+        // below (ties to #191): V(10·τ) is within 0.1% of V_th but strictly under it —
+        // the marginal drive that never quite fires.
+        let v_marginal = lif_membrane_potential(i_rh, r, tau, 10.0 * tau);
+        assert!(
+            v_marginal < v_th && v_marginal > 0.999 * v_th,
+            "V(I_rh, 10τ) → V_th⁻, got {v_marginal}"
+        );
+        // Non-physical input → ∞ (no finite current elicits a spike).
+        assert!(lif_rheobase_current(0.0, v_th).is_infinite()); // R ≤ 0
+        assert!(lif_rheobase_current(-1.0e8, v_th).is_infinite()); // R < 0
+        assert!(lif_rheobase_current(r, 0.0).is_infinite()); // V_th ≤ 0
+        assert!(lif_rheobase_current(f64::NAN, v_th).is_infinite()); // non-finite R
+        assert!(lif_rheobase_current(r, f64::INFINITY).is_infinite()); // non-finite V_th
     }
 }
