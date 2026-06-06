@@ -233,6 +233,32 @@ pub fn isentropic_stagnation_density_ratio(mach: f64, gamma: f64) -> f64 {
     temperature_ratio.powf(1.0 / (gamma - 1.0))
 }
 
+/// The **isentropic area ratio**
+/// `A/A* = (1/M)·[(2/(γ+1))·(1 + ((γ−1)/2)·M²)]^((γ+1)/(2(γ−1)))` at Mach number
+/// `mach` `M` and heat-capacity ratio `gamma` `γ` — the ratio of the local duct
+/// area to the sonic-throat area `A*` in a 1-D isentropic (de Laval) nozzle: the
+/// area a streamtube must have to carry the flow from the choked throat (`M = 1`)
+/// to Mach `M`, the foundational relation of converging–diverging nozzle design.
+///
+/// Unlike the monotonic stagnation ratios, `A/A*` has a **minimum of exactly 1 at
+/// the sonic throat** `M = 1` and rises on *both* sides: a converging duct
+/// accelerates a subsonic flow toward the throat, and only a *diverging* duct
+/// downstream accelerates it supersonically — so every area ratio `> 1` is shared
+/// by one subsonic and one supersonic solution. It diverges as `M → 0` (an
+/// infinite reservoir feeds the throat); at `M = 2` (`γ = 1.4`) the area is
+/// `1.6875·A*`, at `M = 3` `4.2346·A*`. Returns `f64::INFINITY` — the `M → 0`
+/// limit — for a zero/negative or non-physical Mach (non-finite `M` or `γ`,
+/// `M < 0`, or `γ ≤ 1`), distinguishing it from the finite `≥ 1` values of a real
+/// `M > 0` flow.
+pub fn isentropic_area_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return f64::INFINITY;
+    }
+    let temperature_ratio = 1.0 + 0.5 * (gamma - 1.0) * mach * mach;
+    let exponent = (gamma + 1.0) / (2.0 * (gamma - 1.0));
+    (1.0 / mach) * (2.0 / (gamma + 1.0) * temperature_ratio).powf(exponent)
+}
+
 /// The **downstream Mach number** `M₂` behind a stationary **normal shock** with
 /// upstream Mach `mach` `M₁` and heat-capacity ratio `gamma` `γ`, from the
 /// Rankine–Hugoniot jump conditions:
@@ -1085,6 +1111,42 @@ mod tests {
         assert_eq!(isentropic_stagnation_density_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_density_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_density_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn isentropic_area_ratio_matches_compressible_flow_tables() {
+        // M = 1 is the sonic throat: A/A* = 1 exactly.
+        assert!((isentropic_area_ratio(1.0, 1.4) - 1.0).abs() < 1e-12, "throat A/A* = 1");
+        // Standard compressible-flow table points (γ = 1.4).
+        assert!((isentropic_area_ratio(2.0, 1.4) - 1.6875).abs() < 1e-3, "M=2 → 1.6875");
+        assert!((isentropic_area_ratio(3.0, 1.4) - 4.2346).abs() < 1e-3, "M=3 → 4.2346");
+        assert!((isentropic_area_ratio(0.5, 1.4) - 1.3398).abs() < 1e-3, "M=0.5 → 1.3398");
+        // A/A* has its MINIMUM (= 1) at the throat and rises on BOTH sides — the same
+        // area ratio serves one subsonic and one supersonic solution.
+        let throat = isentropic_area_ratio(1.0, 1.4);
+        assert!(isentropic_area_ratio(0.9, 1.4) > throat, "subsonic side rises above the throat");
+        assert!(isentropic_area_ratio(1.1, 1.4) > throat, "supersonic side rises above the throat");
+        // Diverges as M → 0 (an infinite reservoir); non-physical → ∞.
+        assert!(isentropic_area_ratio(0.0, 1.4).is_infinite(), "M→0 → ∞");
+        assert!(isentropic_area_ratio(-1.0, 1.4).is_infinite(), "M<0 → ∞");
+        assert!(isentropic_area_ratio(2.0, 1.0).is_infinite(), "γ≤1 → ∞");
+        assert!(isentropic_area_ratio(f64::NAN, 1.4).is_infinite(), "non-finite M → ∞");
+        // STRONG non-tautological cross-check via mass conservation ρAV = ρ*A*V*:
+        //   A/A* = (ρ*/ρ)·(1/M)·√(T*/T) = [ρ0/ρ(M) / ρ0/ρ*(1)]·(1/M)·√((2/(γ+1))·T0/T),
+        // composing the isentropic density ratio #175 and temperature ratio #169 — an
+        // independent derivation (those use powf(1/(γ−1)) and a separate sqrt; the impl
+        // is the single closed form in M).
+        for m in [0.3_f64, 0.8, 1.0, 2.0, 3.5] {
+            let g = 1.4;
+            let rho = isentropic_stagnation_density_ratio(m, g);
+            let rho_star = isentropic_stagnation_density_ratio(1.0, g);
+            let t0_over_t = isentropic_stagnation_temperature_ratio(m, g);
+            let expected = (rho / rho_star) * (1.0 / m) * (2.0 / (g + 1.0) * t0_over_t).sqrt();
+            assert!(
+                (isentropic_area_ratio(m, g) - expected).abs() / expected < 1e-9,
+                "A/A* from mass conservation at M={m}"
+            );
+        }
     }
 
     #[test]
