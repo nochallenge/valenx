@@ -753,6 +753,60 @@ fn mesh_mean_edge_length(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     Some(total / edges.len() as f64)
 }
 
+/// The number of **boundary loops** (holes) in a `Tri3` surface mesh — the
+/// connected components of the boundary-edge graph (the multiplicity-1 edges that
+/// bound an open patch). It answers the headline mesh-repair question — *how many
+/// distinct holes are there to fill* — and is distinct from
+/// [`mesh_open_edge_count`], which counts the boundary EDGES (a triangular hole is
+/// 3 open edges but **one** loop), from [`mesh_shell_count`] (disjoint solids),
+/// and from the global [`mesh_euler_characteristic`]. A closed (watertight) mesh
+/// has `0`; each missing patch contributes one loop. Returns `0` for a closed or
+/// empty mesh.
+fn mesh_boundary_loop_count(mesh: &valenx_mesh::Mesh) -> usize {
+    use std::collections::{HashMap, HashSet};
+    // Edge multiplicities — a boundary edge belongs to exactly one triangle.
+    let mut mult: HashMap<(u32, u32), u32> = HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                let key = if i <= j { (i, j) } else { (j, i) };
+                *mult.entry(key).or_insert(0) += 1;
+            }
+        }
+    }
+    // Adjacency among the endpoints of the boundary (multiplicity-1) edges.
+    let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (&(i, j), &c) in &mult {
+        if c == 1 {
+            adj.entry(i).or_default().push(j);
+            adj.entry(j).or_default().push(i);
+        }
+    }
+    // Count the connected components — each closed boundary loop is one hole.
+    let mut visited: HashSet<u32> = HashSet::new();
+    let mut loops = 0;
+    for &start in adj.keys() {
+        if !visited.insert(start) {
+            continue; // already part of a counted loop
+        }
+        loops += 1;
+        let mut stack = vec![start];
+        while let Some(v) = stack.pop() {
+            if let Some(neighbours) = adj.get(&v) {
+                for &n in neighbours {
+                    if visited.insert(n) {
+                        stack.push(n);
+                    }
+                }
+            }
+        }
+    }
+    loops
+}
+
 /// The **Euler characteristic** `χ = V − E + F` of a `Tri3` surface mesh — `V`
 /// the distinct *referenced* vertices, `E` the distinct undirected edges, `F`
 /// the triangles. This is the fundamental topological invariant of the surface:
@@ -1062,6 +1116,14 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .filter(|&n| n > 0)
         .map(|n| format!(" · {n} open edges"))
         .unwrap_or_default();
+    // Distinct holes (boundary loops) — how many gaps to fill, vs the open-edge
+    // count above (one triangular hole is 3 open edges); shown only when > 0.
+    let hole_str = mesh
+        .as_ref()
+        .map(mesh_boundary_loop_count)
+        .filter(|&n| n > 0)
+        .map(|n| format!(" · {n} hole{}", if n == 1 { "" } else { "s" }))
+        .unwrap_or_default();
     // Euler characteristic χ = V−E+F (and genus for a closed orientable surface)
     // — the topology the watertight flag has confirmed is closed.
     let euler_str = mesh
@@ -1136,7 +1198,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|theta| format!(" · max crease {:.0}°", theta.to_degrees()))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{aspect_str}{sharp_str}{crease_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{aspect_str}{sharp_str}{crease_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2275,6 +2337,53 @@ mod tests {
 
         // An empty mesh has no edges.
         assert_eq!(mesh_open_edge_count(&valenx_mesh::Mesh::new("empty")), 0);
+    }
+
+    #[test]
+    fn mesh_boundary_loop_count_counts_the_holes() {
+        use nalgebra::Vector3;
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let closed: Vec<u32> = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let make = |conn: Vec<u32>| {
+            let mut m = valenx_mesh::Mesh::new("box");
+            m.nodes = nodes.clone();
+            let mut b = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            b.connectivity = conn;
+            m.element_blocks.push(b);
+            m
+        };
+        // The closed (watertight) box has no holes.
+        assert_eq!(mesh_boundary_loop_count(&make(closed.clone())), 0, "closed box → 0 holes");
+
+        // Drop the last triangle → one triangular gap (3 open edges, but ONE loop).
+        let mut one = closed.clone();
+        one.truncate(closed.len() - 3);
+        assert_eq!(mesh_boundary_loop_count(&make(one)), 1, "one missing triangle → 1 hole");
+
+        // Omit two vertex-disjoint triangles — T0=[0,2,1] (verts {0,1,2}) and
+        // T3=[4,6,7] (verts {4,6,7}) — leaving two separate triangular holes.
+        // (mesh_open_edge_count would report 6 open edges here; the loop count is 2.)
+        let two: Vec<u32> = vec![
+            0, 3, 2, 4, 5, 6, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6,
+            5,
+        ];
+        assert_eq!(mesh_boundary_loop_count(&make(two)), 2, "two disjoint gaps → 2 holes");
+
+        // An empty mesh has no boundary loops.
+        assert_eq!(mesh_boundary_loop_count(&valenx_mesh::Mesh::new("empty")), 0);
     }
 
     #[test]
