@@ -122,6 +122,42 @@ pub fn dual_exponential_peak_time(tau_rise_s: f64, tau_decay_s: f64) -> f64 {
     (tau_rise_s * tau_decay_s / (tau_decay_s - tau_rise_s)) * (tau_decay_s / tau_rise_s).ln()
 }
 
+/// The **time-integral of the double-exponential conductance**,
+/// `∫₀^∞ g(t) dt = g_max·(τ_d − τ_r)/norm` (S·s) — the synapse's **efficacy** (its
+/// "weight"), the dual-exponential analogue of
+/// [`alpha_synapse_conductance_integral`]. Multiplied by the synaptic driving
+/// force `(V − E_syn)` it gives the total charge a single event injects
+/// postsynaptically, so it is the size-of-the-PSP figure independent of how the
+/// rise time constant `tau_rise_s` (`τ_r`, s) and decay time constant
+/// `tau_decay_s` (`τ_d`, s) trade off; `g_max` is the (normalised) peak
+/// conductance.
+///
+/// The bare difference of exponentials integrates to `τ_d − τ_r`
+/// (`∫₀^∞ e^(−t/τ) dt = τ`), and the peak-normalisation factor `norm` (the same one
+/// [`dual_exponential_synapse_conductance`] divides by, evaluated at the peak time
+/// [`dual_exponential_peak_time`]) scales that to the `g_max`-peaked waveform — so
+/// the efficacy is linear in `g_max`. Returns `0` for non-physical input (any
+/// `τ ≤ 0` or non-finite) and for the degenerate `τ_r = τ_d` singularity (use
+/// [`alpha_synapse_conductance_integral`], `g_max·τ·e`, for equal time constants),
+/// matching [`dual_exponential_synapse_conductance`].
+pub fn dual_exponential_conductance_integral(g_max: f64, tau_rise_s: f64, tau_decay_s: f64) -> f64 {
+    if !g_max.is_finite()
+        || !tau_rise_s.is_finite()
+        || !tau_decay_s.is_finite()
+        || tau_rise_s <= 0.0
+        || tau_decay_s <= 0.0
+    {
+        return 0.0;
+    }
+    // The τ_r = τ_d limit is the alpha function — this form is 0/0 there.
+    if (tau_rise_s - tau_decay_s).abs() <= f64::EPSILON * tau_rise_s.max(tau_decay_s) {
+        return 0.0;
+    }
+    let t_peak = dual_exponential_peak_time(tau_rise_s, tau_decay_s);
+    let norm = (-t_peak / tau_decay_s).exp() - (-t_peak / tau_rise_s).exp();
+    g_max * (tau_decay_s - tau_rise_s) / norm
+}
+
 /// The **NMDA-receptor Mg²⁺ block** `B(V) = 1/(1 + ([Mg²⁺]/3.57)·e^(−0.062·V))` —
 /// the fraction of NMDA channels *unblocked* (conducting) at membrane potential
 /// `voltage_mv` `V` (mV) and extracellular magnesium concentration `mg_conc_mm`
@@ -273,6 +309,41 @@ mod tests {
         assert_eq!(dual_exponential_peak_time(tau_r, tau_r), 0.0); // τ_r = τ_d (alpha limit)
         assert_eq!(dual_exponential_peak_time(0.0, tau_d), 0.0); // τ ≤ 0
         assert_eq!(dual_exponential_peak_time(tau_r, f64::NAN), 0.0); // non-finite
+    }
+
+    #[test]
+    fn dual_exponential_conductance_integral_is_the_synaptic_efficacy() {
+        let (g_max, tau_r, tau_d) = (1.0, 0.001, 0.005); // 1 ms rise, 5 ms decay
+        let area = dual_exponential_conductance_integral(g_max, tau_r, tau_d);
+        // Worked point: t_p ≈ 2.012 ms, norm ≈ 0.53499, ∫ = g_max·(τd−τr)/norm ≈ 7.4767e-3.
+        assert!((area - 7.4767e-3).abs() / area < 1e-4, "efficacy ≈ 7.4767e-3 S·s, got {area}");
+        // Linear in g_max (the peak conductance scales the whole waveform).
+        assert!(
+            (dual_exponential_conductance_integral(2.0 * g_max, tau_r, tau_d) - 2.0 * area).abs()
+                / area
+                < 1e-12,
+            "linear in g_max"
+        );
+        // STRONG non-tautological cross-check: midpoint-integrate the actual
+        // conductance #155 over [0, 60·τd] (the tail beyond is ~e^(−60), negligible).
+        // The impl is a closed form; this is an independent Riemann sum of the fn.
+        let dt = tau_d / 2000.0;
+        let n = (60.0 * tau_d / dt) as usize;
+        let mut numeric = 0.0;
+        for k in 0..n {
+            let t = (k as f64 + 0.5) * dt;
+            numeric += dual_exponential_synapse_conductance(g_max, tau_r, tau_d, t) * dt;
+        }
+        assert!(
+            (numeric - area).abs() / area < 1e-4,
+            "∫g dt (numeric {numeric}) matches the closed form {area}"
+        );
+        // Degenerate τ_r = τ_d → 0 (use the alpha integral there).
+        assert_eq!(dual_exponential_conductance_integral(g_max, tau_r, tau_r), 0.0);
+        // Non-physical input → 0.
+        assert_eq!(dual_exponential_conductance_integral(g_max, 0.0, tau_d), 0.0); // τ ≤ 0
+        assert_eq!(dual_exponential_conductance_integral(g_max, tau_r, f64::NAN), 0.0); // non-finite τ
+        assert_eq!(dual_exponential_conductance_integral(f64::NAN, tau_r, tau_d), 0.0); // non-finite g
     }
 
     #[test]
