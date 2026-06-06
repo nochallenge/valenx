@@ -74,6 +74,33 @@ pub fn dual_exponential_synapse_conductance(
     g_max * raw / norm
 }
 
+/// The **NMDA-receptor Mg²⁺ block** `B(V) = 1/(1 + ([Mg²⁺]/3.57)·e^(−0.062·V))` —
+/// the fraction of NMDA channels *unblocked* (conducting) at membrane potential
+/// `voltage_mv` `V` (mV) and extracellular magnesium concentration `mg_conc_mm`
+/// `[Mg²⁺]` (mM), from the Jahr–Stevens (1990) fit.
+///
+/// At rest the channel pore is plugged by an extracellular Mg²⁺ ion, so the
+/// receptor barely conducts; depolarising the membrane electrostatically expels
+/// the ion and *relieves* the block. This voltage dependence is what makes the
+/// NMDA receptor a molecular **coincidence detector** — it passes current only
+/// when presynaptic transmitter (which opens the channel) and postsynaptic
+/// depolarisation (which clears the Mg²⁺) arrive together, the biophysical basis
+/// of Hebbian long-term potentiation. It is the orthogonal voltage *gate* that
+/// multiplies the synaptic conductance *time course*
+/// ([`alpha_synapse_conductance`], [`dual_exponential_synapse_conductance`]):
+/// the full NMDA current is `g_max · g(t) · B(V) · (V − E_syn)`.
+///
+/// `B` rises monotonically from ≈0 (deeply hyperpolarised, blocked) toward `1`
+/// (strongly depolarised, fully relieved); with no magnesium (`[Mg²⁺] = 0`) it
+/// is `1` at every voltage (nothing to block). Returns `0` for non-physical
+/// input (non-finite `V` or `[Mg²⁺]`, or negative `[Mg²⁺]`).
+pub fn nmda_mg_block(voltage_mv: f64, mg_conc_mm: f64) -> f64 {
+    if !voltage_mv.is_finite() || !mg_conc_mm.is_finite() || mg_conc_mm < 0.0 {
+        return 0.0;
+    }
+    1.0 / (1.0 + (mg_conc_mm / 3.57) * (-0.062 * voltage_mv).exp())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,5 +169,40 @@ mod tests {
         assert_eq!(dual_exponential_synapse_conductance(g_max, tau_r, -1.0, 0.001), 0.0);
         assert_eq!(dual_exponential_synapse_conductance(g_max, f64::NAN, tau_d, 0.001), 0.0);
         assert_eq!(dual_exponential_synapse_conductance(g_max, 0.002, 0.002, 0.001), 0.0); // τ_r = τ_d
+    }
+
+    #[test]
+    fn nmda_mg_block_relieves_with_depolarisation() {
+        let mg = 1.0; // 1 mM physiological extracellular magnesium
+        // At rest (V = −80 mV) the channel is deeply blocked.
+        let rest = nmda_mg_block(-80.0, mg);
+        assert!(rest < 0.05, "blocked at rest: {rest}");
+        assert!(
+            (rest - 1.0 / (1.0 + (1.0 / 3.57) * (0.062_f64 * 80.0).exp())).abs() < 1e-12,
+            "closed form at rest"
+        );
+        // Strong depolarisation (V = +40 mV) relieves the block.
+        let depol = nmda_mg_block(40.0, mg);
+        assert!(depol > 0.9, "relieved when depolarised: {depol}");
+        // Monotonic in voltage: more depolarised → more unblocked.
+        let mid = nmda_mg_block(0.0, mg);
+        assert!(mid > rest && depol > mid, "monotone in V");
+        // Always a valid open fraction in (0, 1].
+        for v in [-100.0_f64, -60.0, -20.0, 0.0, 20.0, 60.0] {
+            let b = nmda_mg_block(v, mg);
+            assert!(b > 0.0 && b <= 1.0, "B in (0,1] at V={v}: {b}");
+        }
+        // No magnesium → no block: B = 1 at any voltage (from the formula itself).
+        assert!((nmda_mg_block(-80.0, 0.0) - 1.0).abs() < 1e-12, "Mg=0 → open at rest");
+        assert!((nmda_mg_block(40.0, 0.0) - 1.0).abs() < 1e-12, "Mg=0 → open depolarised");
+        // Heavier magnesium deepens the block at a fixed voltage.
+        assert!(
+            nmda_mg_block(-30.0, 100.0) < nmda_mg_block(-30.0, 1.0),
+            "more Mg → more block"
+        );
+        // Non-physical input → 0.
+        assert_eq!(nmda_mg_block(f64::NAN, mg), 0.0);
+        assert_eq!(nmda_mg_block(-80.0, -1.0), 0.0);
+        assert_eq!(nmda_mg_block(-80.0, f64::INFINITY), 0.0);
     }
 }
