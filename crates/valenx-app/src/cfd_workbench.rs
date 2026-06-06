@@ -412,8 +412,10 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         CfdCase::LidDrivenCavity => String::new(),
     };
 
-    // Wall shear stress τ_w = μ·(∂u/∂y)|_wall = ρν·(wall shear rate), bottom wall.
+    // Wall shear stress τ_w = μ·(∂u/∂y)|_wall = ρν·(wall shear rate), bottom + top
+    // walls (the top wall is the moving lid in the lid-driven cavity).
     let tau_w = s.density * s.viscosity * sol.bottom_wall_shear_rate();
+    let tau_w_top = s.density * s.viscosity * sol.top_wall_shear_rate();
     s.result = format!(
         "case       : {}\n\
          grid       : {}×{}  ({:.3} × {:.3} m)\n\
@@ -426,7 +428,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}  \u{00B7}  total \u{0394}p\u{2080} {dp0:.3e} Pa  (Bernoulli loss)\n\
          peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}  \u{00B7}  S_max {:.4} 1/s{flow_str}\n\
          circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)  \u{00B7}  palin {:.3e} 1/s\u{00B2}  (\u{00BD}\u{222B}|\u{2207}\u{03C9}|\u{00B2}\u{00B7}dA)\n\
-         wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)  \u{00B7}  max|\u{2207}\u{00B7}u| {:.2e} 1/s  (peak local continuity residual)  \u{00B7}  reverse-flow {:.0}%  (recirculating area)  \u{00B7}  \u{03C8}-span {:.4} m\u{00B2}/s  (streamline range)",
+         wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)  \u{00B7}  {tau_w_top:.4e} Pa (top)  \u{00B7}  max|\u{2207}\u{00B7}u| {:.2e} 1/s  (peak local continuity residual)  \u{00B7}  reverse-flow {:.0}%  (recirculating area)  \u{00B7}  \u{03C8}-span {:.4} m\u{00B2}/s  (streamline range)",
         s.case.label(),
         s.nx,
         s.ny,

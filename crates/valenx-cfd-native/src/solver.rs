@@ -580,6 +580,28 @@ impl FlowSolution {
         sum / nx as f64
     }
 
+    /// The mean wall-normal velocity gradient `⟨|∂u/∂y|⟩` at the **top** wall
+    /// (`y = ly`) (1/s) — the one-sided estimate `2·u_cell(i, ny−1)/dy` from the
+    /// no-slip wall to the first cell centre, averaged over the streamwise cells:
+    /// the companion to [`FlowSolution::bottom_wall_shear_rate`]. Multiplying by
+    /// the dynamic viscosity `μ = ρν` gives the top-wall shear stress `τ_w`. In the
+    /// **lid-driven cavity** the top wall is the moving lid, so this is the drag
+    /// the lid feels — the skin friction through which it pumps power into the
+    /// flow; in a channel it is the second, symmetric wall. Returns `0` for an
+    /// empty grid.
+    pub fn top_wall_shear_rate(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return 0.0;
+        }
+        let dy = self.grid.dy();
+        let mut sum = 0.0;
+        for i in 0..nx {
+            sum += (2.0 * self.u_at_cell(i, ny - 1) / dy).abs();
+        }
+        sum / nx as f64
+    }
+
     /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
     /// signed net rotation of the flow (Kelvin's circulation theorem; by
     /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
@@ -2554,6 +2576,47 @@ mod tests {
             (sol.bottom_wall_shear_rate() - gamma).abs() < 1e-9,
             "wall shear rate {}",
             sol.bottom_wall_shear_rate()
+        );
+    }
+
+    #[test]
+    fn top_wall_shear_rate_recovers_a_linear_shear() {
+        // A 4×4 unit grid (dy = 1, ly = 4) with a linear shear that is ZERO at the
+        // TOP wall: u(y) = γ·(ly − y), γ = 3 — no-slip at the top, exactly as the
+        // bottom test's u = γ·y is no-slip at the bottom. The one-sided top-wall
+        // gradient 2·u_cell(i, ny−1)/dy then recovers γ.
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let gamma = 3.0;
+        let dy = grid.dy();
+        let ly = grid.ly;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (ly - (j as f64 + 0.5) * dy); // u_at_cell(i,j) = γ·(ly − y_cell)
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // ⟨2·u_cell(i, ny−1)/dy⟩ = 2·(γ·0.5·dy)/dy = γ.
+        assert!(
+            (sol.top_wall_shear_rate() - gamma).abs() < 1e-9,
+            "top wall shear rate {}",
+            sol.top_wall_shear_rate()
+        );
+        // This profile is no-slip at the TOP only, so the top estimate recovers γ
+        // while the bottom (where u ≠ 0) does not — confirming the two read
+        // different boundaries.
+        assert!(
+            sol.top_wall_shear_rate() < sol.bottom_wall_shear_rate(),
+            "the top wall is the no-slip one for this profile"
         );
     }
 
