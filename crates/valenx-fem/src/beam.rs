@@ -191,6 +191,41 @@ pub fn beam_axial_extension(force: f64, length: f64, youngs_modulus: f64, area: 
     force * length / (youngs_modulus * area)
 }
 
+/// The analytic **simply-supported (pinned–pinned) mid-span deflection**
+/// `δ = P·L³/(48·E·I)` (m) of a slender Euler–Bernoulli beam under a *central*
+/// transverse point load `load` `P` (N) — span `length` `L` (m), Young's modulus
+/// `youngs_modulus` `E` (Pa), section second moment of area `second_moment_area`
+/// `I` (m⁴).
+///
+/// This is the *simply-supported* bending reference the finite-element solver
+/// ([`solve_beam_static`]) converges to — the boundary-condition companion to the
+/// clamped–free [`cantilever_tip_deflection`]. Same load type, different
+/// supports: pinning *both* ends makes the beam **16× stiffer** at mid-span than a
+/// cantilever of the same length is at its tip (the `1/48` coefficient versus
+/// `1/3`), so `δ_ss = `[`cantilever_tip_deflection`]`(P, L, E, I)/16`. It grows
+/// linearly with the load `P` (and is sign-preserving), with the cube of the span
+/// `L`, and falls inversely with the flexural rigidity `E·I`. Returns `0` for
+/// non-physical input (`P` non-finite, or `E`, `I`, or `L` non-positive or
+/// non-finite).
+pub fn simply_supported_center_deflection(
+    load: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load * length.powi(3) / (48.0 * youngs_modulus * second_moment_area)
+}
+
 /// Errors from the native 3D beam solver.
 #[derive(Debug, Error)]
 pub enum BeamSolverError {
@@ -1517,7 +1552,7 @@ mod tests {
         let loads = [BeamLoad::force(mid, [0.0, 0.0, -p])];
         let sol = solve_beam_static(&nodes, &elements, &mat, &constraints, &loads).unwrap();
         let i = section.iy;
-        let bending = p * l.powi(3) / (48.0 * mat.youngs_modulus * i);
+        let bending = simply_supported_center_deflection(p, l, mat.youngs_modulus, i);
         // Allow a few % for the Timoshenko shear contribution.
         let centre = sol.translation[mid][2].abs();
         let rel = (centre - bending).abs() / bending;
@@ -1525,6 +1560,39 @@ mod tests {
             rel < 0.05,
             "mid-span deflection {centre} vs Euler-Bernoulli {bending} (rel {rel})"
         );
+    }
+
+    #[test]
+    fn simply_supported_center_deflection_matches_the_closed_form() {
+        // Worked point: P = 1 kN central load on a 4 m simply-supported steel
+        // beam, E = 200 GPa, I = 1e-6 m⁴ → δ = P·L³/(48·E·I) = 64000/9.6e6 = 1/150 m.
+        let (p, l, e, i) = (1000.0, 4.0, 200.0e9, 1.0e-6);
+        let delta = simply_supported_center_deflection(p, l, e, i);
+        assert!((delta - 1.0 / 150.0).abs() / delta < 1e-9, "δ = 1/150 m, got {delta}");
+        // 16× stiffer than a cantilever of the same span/section under the same load.
+        assert!(
+            (delta - cantilever_tip_deflection(p, l, e, i) / 16.0).abs() / delta < 1e-12,
+            "δ_ss = δ_cantilever / 16"
+        );
+        // Linear in the load (and sign-preserving).
+        assert!((simply_supported_center_deflection(2.0 * p, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
+        assert!(
+            (simply_supported_center_deflection(-p, l, e, i) + delta).abs() / delta < 1e-12,
+            "sign-preserving"
+        );
+        // Cubic in the span; inverse in the flexural rigidity E·I.
+        assert!(
+            (simply_supported_center_deflection(p, 2.0 * l, e, i) - 8.0 * delta).abs() / delta < 1e-9,
+            "L³ scaling"
+        );
+        assert!((simply_supported_center_deflection(p, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
+        assert!((simply_supported_center_deflection(p, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_center_deflection(p, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(simply_supported_center_deflection(p, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(simply_supported_center_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(simply_supported_center_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
+        assert_eq!(simply_supported_center_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
