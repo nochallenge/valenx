@@ -109,6 +109,33 @@ pub fn hh_gating_kinetics(v_mv: f64) -> GatingKinetics {
     }
 }
 
+/// The **Boltzmann steady-state (in)activation** `x∞(V) = 1/(1 + e^(−(V−V½)/k))`
+/// of a voltage-gated channel — the universal two-parameter sigmoid fit to a
+/// measured voltage-clamp activation (or inactivation) curve, at membrane
+/// potential `voltage_mv` `V` (mV), half-(in)activation voltage
+/// `half_activation_mv` `V½` (mV) and slope factor `slope_mv` `k` (mV).
+///
+/// Where [`hh_gating_kinetics`] gives the *specific* Hodgkin–Huxley gates from
+/// the squid-axon `α`/`β` rate equations, this is the *general* empirical form
+/// every channel's steady state is reported as (Kᵥ, Naᵥ, Caᵥ, HCN, …). The slope
+/// `k` sets both the steepness (smaller `|k|` ⇒ sharper switch) and, through its
+/// **sign**, the direction: `k > 0` is **activation** — the gate opens with
+/// depolarisation (rises `0 → 1` as `V` increases) — while `k < 0` is
+/// **inactivation**, which closes with depolarisation. The curve is exactly
+/// `0.5` at `V = V½`, point-symmetric about it (`x∞(V½+Δ) + x∞(V½−Δ) = 1`), and
+/// lies strictly in `(0, 1)`. Returns `0.5` (the midpoint) for the degenerate
+/// step-function limit `k = 0` and for any non-finite input.
+pub fn boltzmann_activation(voltage_mv: f64, half_activation_mv: f64, slope_mv: f64) -> f64 {
+    if !voltage_mv.is_finite()
+        || !half_activation_mv.is_finite()
+        || !slope_mv.is_finite()
+        || slope_mv == 0.0
+    {
+        return 0.5;
+    }
+    1.0 / (1.0 + (-(voltage_mv - half_activation_mv) / slope_mv).exp())
+}
+
 /// A rectangular stimulating current pulse (intracellular, µA/cm²).
 #[derive(Debug, Clone, Copy)]
 pub struct StimPulse {
@@ -462,6 +489,47 @@ mod tests {
         for x in [rest.m_inf, rest.h_inf, rest.n_inf, lo.m_inf, hi.h_inf, mid.n_inf] {
             assert!((0.0..=1.0).contains(&x), "gate {x} must be in [0,1]");
         }
+    }
+
+    #[test]
+    fn boltzmann_activation_is_the_universal_voltage_clamp_sigmoid() {
+        let (v_half, k) = (-30.0, 9.0); // a typical Kᵥ activation: V½ = −30 mV, k = 9 mV
+        // Half-activated exactly at V = V½, for any slope (and either sign).
+        assert!((boltzmann_activation(v_half, v_half, k) - 0.5).abs() < 1e-15);
+        assert!((boltzmann_activation(v_half, v_half, -4.0) - 0.5).abs() < 1e-15);
+        // One slope-factor either side of V½ → the textbook 0.7311 / 0.2689.
+        let up = boltzmann_activation(v_half + k, v_half, k);
+        assert!((up - 1.0 / (1.0 + (-1.0_f64).exp())).abs() < 1e-12, "closed form");
+        assert!((up - 0.7311).abs() < 1e-3, "+k → 0.7311, got {up}");
+        assert!((boltzmann_activation(v_half - k, v_half, k) - 0.2689).abs() < 1e-3, "−k → 0.2689");
+        // Activation (k>0): opens (rises 0→1) with depolarisation, saturating both ways.
+        assert!(boltzmann_activation(30.0, v_half, k) > 0.99, "far-depol → open");
+        assert!(boltzmann_activation(-90.0, v_half, k) < 0.01, "far-hyperpol → shut");
+        assert!(
+            boltzmann_activation(0.0, v_half, k) > boltzmann_activation(-60.0, v_half, k),
+            "activation is monotone up in V"
+        );
+        // Inactivation (k<0): the mirror — closes with depolarisation.
+        assert!(boltzmann_activation(30.0, v_half, -k) < 0.01, "inactivation shuts when depolarised");
+        assert!(
+            boltzmann_activation(0.0, v_half, -k) < boltzmann_activation(-60.0, v_half, -k),
+            "inactivation is monotone down in V"
+        );
+        // Point-symmetric about V½: x∞(V½+Δ) + x∞(V½−Δ) = 1 exactly.
+        for d in [1.0_f64, 7.5, 20.0, 50.0] {
+            let s = boltzmann_activation(v_half + d, v_half, k)
+                + boltzmann_activation(v_half - d, v_half, k);
+            assert!((s - 1.0).abs() < 1e-12, "symmetric at Δ={d}: {s}");
+        }
+        // Always a valid open fraction in (0, 1).
+        for v in [-120.0_f64, -50.0, -30.0, 0.0, 50.0] {
+            let x = boltzmann_activation(v, v_half, k);
+            assert!(x > 0.0 && x < 1.0, "x∞ in (0,1) at V={v}: {x}");
+        }
+        // The degenerate step (k=0) and any non-finite input → the 0.5 midpoint.
+        assert!((boltzmann_activation(0.0, v_half, 0.0) - 0.5).abs() < 1e-15, "k=0 → 0.5");
+        assert!((boltzmann_activation(f64::NAN, v_half, k) - 0.5).abs() < 1e-15, "NaN → 0.5");
+        assert!((boltzmann_activation(0.0, v_half, f64::INFINITY) - 0.5).abs() < 1e-15, "∞ → 0.5");
     }
 
     #[test]
