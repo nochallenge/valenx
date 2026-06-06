@@ -653,6 +653,32 @@ fn mesh_is_watertight(mesh: &valenx_mesh::Mesh) -> bool {
     any && edges.values().all(|&c| c == 2)
 }
 
+/// The number of **open (boundary) edges** of a `Tri3` surface mesh — edges
+/// belonging to exactly *one* triangle, i.e. the combined perimeter of every
+/// hole and crack in the surface. Where [`mesh_is_watertight`] answers the
+/// yes/no "is the surface closed?", this answers *how* open it is: a watertight
+/// solid reports `0`, and a larger count means bigger or more numerous holes —
+/// the number a mesh-repair or slicer step reports to size the defect before
+/// deciding whether the mesh can be printed or Boolean-ed. Edges are counted
+/// undirected via the same sorted `(min, max)` node-index key as the watertight
+/// check, so triangle winding is ignored. Returns `0` for a mesh with no
+/// triangles.
+fn mesh_open_edge_count(mesh: &valenx_mesh::Mesh) -> usize {
+    let mut edges: std::collections::HashMap<(u32, u32), u32> = std::collections::HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                let key = if i <= j { (i, j) } else { (j, i) };
+                *edges.entry(key).or_insert(0) += 1;
+            }
+        }
+    }
+    edges.values().filter(|&&c| c == 1).count()
+}
+
 /// The **Euler characteristic** `χ = V − E + F` of a `Tri3` surface mesh — `V`
 /// the distinct *referenced* vertices, `E` the distinct undirected edges, `F`
 /// the triangles. This is the fundamental topological invariant of the surface:
@@ -922,6 +948,14 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
             }
         })
         .unwrap_or_default();
+    // Boundary-edge count — quantifies the holes the OPEN flag warns of (the
+    // perimeter to repair); shown only when the surface is actually open.
+    let open_str = mesh
+        .as_ref()
+        .map(mesh_open_edge_count)
+        .filter(|&n| n > 0)
+        .map(|n| format!(" · {n} open edges"))
+        .unwrap_or_default();
     // Euler characteristic χ = V−E+F (and genus for a closed orientable surface)
     // — the topology the watertight flag has confirmed is closed.
     let euler_str = mesh
@@ -975,7 +1009,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|n| format!(" · {n} sharp edges"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{sharp_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{sharp_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -1894,6 +1928,58 @@ mod tests {
 
         // An empty mesh (no triangles) is not watertight.
         assert!(!mesh_is_watertight(&valenx_mesh::Mesh::new("empty")));
+    }
+
+    #[test]
+    fn mesh_open_edge_count_measures_the_hole_perimeter() {
+        use nalgebra::Vector3;
+        // The canonical closed 1×2×3 box: every edge is shared by two triangles.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let closed = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = closed.clone();
+        mesh.element_blocks.push(block);
+        assert_eq!(mesh_open_edge_count(&mesh), 0, "a closed box has no open edges");
+
+        // Drop one triangle → its 3 edges fall from multiplicity 2 to 1.
+        let mut open = mesh.clone();
+        open.element_blocks[0].connectivity.truncate(closed.len() - 3);
+        assert_eq!(mesh_open_edge_count(&open), 3, "a box missing one triangle has 3 open edges");
+
+        // A lone triangle: all three edges are boundary.
+        let mut tri = valenx_mesh::Mesh::new("tri");
+        tri.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(1.0, 1.0, 0.0),
+        ];
+        let mut tblock = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        tblock.connectivity = vec![0, 1, 2];
+        tri.element_blocks.push(tblock);
+        assert_eq!(mesh_open_edge_count(&tri), 3, "a lone triangle has a 3-edge boundary");
+
+        // Two coplanar triangles sharing edge 1–2: 5 edges, the shared one closed → 4 open.
+        let mut sheet = tri.clone();
+        sheet.element_blocks[0].connectivity = vec![0, 1, 2, 1, 3, 2];
+        assert_eq!(mesh_open_edge_count(&sheet), 4, "a 2-triangle sheet has a 4-edge boundary");
+
+        // An empty mesh has no edges.
+        assert_eq!(mesh_open_edge_count(&valenx_mesh::Mesh::new("empty")), 0);
     }
 
     #[test]
