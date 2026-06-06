@@ -54,6 +54,39 @@ pub fn lif_firing_rate(
     1.0 / (t_refractory_s + tau_m_s * (drive / (drive - v_threshold)).ln())
 }
 
+/// The **leaky integrate-and-fire subthreshold membrane potential** `V(t)` (V)
+/// of a neuron driven from rest (`V(0) = 0`) by a *constant* input current
+/// `current` `I` (A), the closed-form `RC` charging curve:
+///
+/// ```text
+///   V(t) = R·I·(1 − e^(−t/τ_m))     for  t ≥ 0
+/// ```
+///
+/// The leaky membrane `τ_m·dV/dt = −V + R·I` relaxes exponentially toward its
+/// steady value `R·I` with time constant `tau_m_s` `τ_m` (s); `resistance` is the
+/// input resistance `R` (Ω). This is the *time-course* companion to
+/// [`lif_firing_rate`]: that gives the steady spike rate, this gives the membrane
+/// trajectory leading up to a spike (the depolarisation that, once it reaches the
+/// threshold, triggers one). `V(0) = 0` at the reset, `V(τ_m) = R·I·(1 − 1/e) ≈
+/// 0.632·R·I`, and `V → R·I` as `t → ∞`. If the asymptote `R·I` is below the
+/// firing threshold the cell never spikes and `V` simply saturates there (the LIF
+/// rheobase); a hyperpolarising (negative) current drives `V` negative the same
+/// way. Returns `0` before the stimulus (`t < 0`) and for non-physical input
+/// (`R` or `τ_m` non-positive, or any non-finite argument).
+pub fn lif_membrane_potential(current: f64, resistance: f64, tau_m_s: f64, t_s: f64) -> f64 {
+    if !current.is_finite()
+        || !resistance.is_finite()
+        || resistance <= 0.0
+        || !tau_m_s.is_finite()
+        || tau_m_s <= 0.0
+        || !t_s.is_finite()
+        || t_s < 0.0
+    {
+        return 0.0;
+    }
+    resistance * current * (1.0 - (-t_s / tau_m_s).exp())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +117,39 @@ mod tests {
         assert_eq!(lif_firing_rate(2.0e-10, r, tau, 0.0, t_ref), 0.0);
         assert_eq!(lif_firing_rate(2.0e-10, r, tau, v_th, -1.0), 0.0);
         assert_eq!(lif_firing_rate(f64::NAN, r, tau, v_th, t_ref), 0.0);
+    }
+
+    #[test]
+    fn lif_membrane_potential_traces_the_rc_charging_curve() {
+        use std::f64::consts::E;
+        let (r, tau) = (1.0e8, 0.02); // 100 MΩ, 20 ms (the firing-rate fixture)
+        let i = 2.0e-10; // 0.2 nA → R·I = 20 mV, the worked point
+        let drive = r * i; // 0.02 V steady value
+        // Starts from rest at the reset.
+        assert_eq!(lif_membrane_potential(i, r, tau, 0.0), 0.0);
+        // One time constant → R·I·(1 − 1/e) ≈ 0.632·R·I.
+        let v_tau = lif_membrane_potential(i, r, tau, tau);
+        assert!((v_tau - drive * (1.0 - 1.0 / E)).abs() / drive < 1e-12, "V(τ) = R·I·(1−1/e)");
+        // Saturates toward the steady value R·I: at 10·τ_m the membrane is within
+        // 0.1% of R·I but still strictly below it (e^(−10) ≈ 4.5e-5; a larger t
+        // would round the exponential gap below f64 precision at this R·I).
+        let v_inf = lif_membrane_potential(i, r, tau, 10.0 * tau);
+        assert!(v_inf < drive && v_inf > 0.999 * drive, "V → R·I, got {v_inf} vs {drive}");
+        // Monotone increasing with time for a depolarising current.
+        assert!(lif_membrane_potential(i, r, tau, 2.0 * tau) > v_tau, "charges over time");
+        // Cross-check tying the trajectory to lif_firing_rate (#173): at the climb
+        // time t* = τ·ln(R·I/(R·I − V_th)) the membrane reaches EXACTLY V_th.
+        let v_th = 0.015;
+        let t_climb = tau * (drive / (drive - v_th)).ln();
+        let v_at_climb = lif_membrane_potential(i, r, tau, t_climb);
+        assert!((v_at_climb - v_th).abs() < 1e-9, "V(t*) = V_th, got {v_at_climb}");
+        // A hyperpolarising (negative) current drives V negative.
+        assert!(lif_membrane_potential(-i, r, tau, tau) < 0.0, "negative current → negative V");
+        // Before the stimulus and non-physical input → 0.
+        assert_eq!(lif_membrane_potential(i, r, tau, -0.001), 0.0);
+        assert_eq!(lif_membrane_potential(i, 0.0, tau, tau), 0.0); // R ≤ 0
+        assert_eq!(lif_membrane_potential(i, r, 0.0, tau), 0.0); // τ_m ≤ 0
+        assert_eq!(lif_membrane_potential(f64::NAN, r, tau, tau), 0.0); // non-finite I
+        assert_eq!(lif_membrane_potential(i, r, tau, f64::INFINITY), 0.0); // non-finite t
     }
 }
