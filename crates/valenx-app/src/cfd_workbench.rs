@@ -374,6 +374,11 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         .min_pressure_location()
         .map(|(x, y)| format!("  (suction peak @ {x:.2}, {y:.2} m)"))
         .unwrap_or_default();
+    // Stagnation point: where the static pressure peaks (the flow brought to rest).
+    let stagnation_loc = sol
+        .max_pressure_location()
+        .map(|(x, y)| format!("  (stagnation @ {x:.2}, {y:.2} m)"))
+        .unwrap_or_default();
     // Where the flow is fastest — the convective hot-spot (CFL-limiting cell).
     let peak_speed_loc = sol
         .max_speed_location()
@@ -425,7 +430,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          max |u|    : {:.5} m/s  (mean {:.5}){peak_speed_loc}\n\
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4}; \u{03A6}_visc {:.3e} W/m)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
-         pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}  \u{00B7}  total \u{0394}p\u{2080} {dp0:.3e} Pa  (Bernoulli loss)\n\
+         pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}{stagnation_loc}  \u{00B7}  total \u{0394}p\u{2080} {dp0:.3e} Pa  (Bernoulli loss)\n\
          peak vort  : {:.4} 1/s{vort_loc}  \u{00B7}  Q_max {:.4} 1/s\u{00B2}  \u{00B7}  S_max {:.4} 1/s{flow_str}\n\
          circulation: {:.4} m\u{00B2}/s  (\u{222B}\u{03C9}\u{00B7}dA, signed)  \u{00B7}  enstrophy {:.4} m\u{00B2}/s\u{00B2}  (\u{00BD}\u{222B}\u{03C9}\u{00B2}\u{00B7}dA)  \u{00B7}  palin {:.3e} 1/s\u{00B2}  (\u{00BD}\u{222B}|\u{2207}\u{03C9}|\u{00B2}\u{00B7}dA)\n\
          wall shear : {:.4e} Pa  (\u{03C4}_w, bottom)  \u{00B7}  {tau_w_top:.4e} Pa (top)  \u{00B7}  max|\u{2207}\u{00B7}u| {:.2e} 1/s  (peak local continuity residual)  \u{00B7}  reverse-flow {:.0}%  (recirculating area)  \u{00B7}  \u{03C8}-span {:.4} m\u{00B2}/s  (streamline range)",
