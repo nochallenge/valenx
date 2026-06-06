@@ -440,6 +440,48 @@ fn mesh_diameter(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     Some(max_sq.sqrt())
 }
 
+/// The number of **sharp (feature) edges** of a `Tri3` mesh — interior edges
+/// (shared by exactly two triangles) where the surface *folds* by more than
+/// `angle_threshold_rad`, the angle between the two triangles' outward face
+/// normals. These are the crease / feature edges a CAD kernel walks for
+/// filleting, chamfering and crisp shaded display: unlike the volume, inertia,
+/// topology and quality measures — which describe how *much* material there is
+/// or how the mesh connects — this finds *where the surface bends*. A flat or
+/// smoothly curved patch contributes none; a hard edge (a box rim, a Boolean
+/// seam) contributes one each. The in-facet diagonals a tessellator adds to
+/// split a flat polygon are coplanar (zero fold) and so are never counted.
+/// Degenerate (zero-area) triangles and boundary edges (only one incident
+/// triangle) are skipped.
+fn mesh_sharp_edge_count(mesh: &valenx_mesh::Mesh, angle_threshold_rad: f64) -> usize {
+    use std::collections::HashMap;
+    let mut edge_normals: HashMap<(u32, u32), Vec<nalgebra::Vector3<f64>>> = HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let normal = (b - a).cross(&(c - a));
+            let len = normal.norm();
+            if len <= 0.0 {
+                continue; // degenerate triangle has no defined normal
+            }
+            let unit = normal / len;
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                let key = if i <= j { (i, j) } else { (j, i) };
+                edge_normals.entry(key).or_default().push(unit);
+            }
+        }
+    }
+    edge_normals
+        .values()
+        .filter(|normals| normals.len() == 2)
+        .filter(|normals| normals[0].dot(&normals[1]).clamp(-1.0, 1.0).acos() > angle_threshold_rad)
+        .count()
+}
+
 /// The volume centroid (centre of mass at uniform density) `[x, y, z]` of a
 /// closed `Tri3` surface mesh, via the divergence theorem: each triangle forms
 /// a signed tetrahedron with the origin, contributing its signed volume
@@ -924,8 +966,16 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_min_triangle_quality)
         .map(|q| format!(" · Qmin {q:.2}"))
         .unwrap_or_default();
+    // Sharp (feature) edges — interior edges that fold past a 30° crease angle,
+    // the chamfer/fillet candidates, distinct from the topology/quality measures.
+    let sharp_str = mesh
+        .as_ref()
+        .map(|m| mesh_sharp_edge_count(m, std::f64::consts::FRAC_PI_6))
+        .filter(|&n| n > 0)
+        .map(|n| format!(" · {n} sharp edges"))
+        .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{euler_str}{shells_str}{encl_str}{diam_str}{quality_str}{sharp_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2101,6 +2151,60 @@ mod tests {
         one.nodes = vec![Vector3::new(3.0, 4.0, 5.0)];
         assert_eq!(mesh_diameter(&one), Some(0.0));
         assert!(mesh_diameter(&valenx_mesh::Mesh::new("empty")).is_none());
+    }
+
+    #[test]
+    fn mesh_sharp_edge_count_finds_the_box_feature_edges() {
+        use nalgebra::Vector3;
+        // The canonical 1×2×3 box: 12 cube edges (adjacent faces meet at 90°) plus
+        // 6 in-face triangulation diagonals (coplanar, 0° fold).
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut box_mesh = valenx_mesh::Mesh::new("box");
+        box_mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        box_mesh.element_blocks.push(block);
+        // At a 30° crease angle the 12 right-angle cube edges are sharp; the 6
+        // coplanar in-face diagonals (0° fold) are not.
+        assert_eq!(mesh_sharp_edge_count(&box_mesh, 30.0_f64.to_radians()), 12);
+        // Raise the threshold past the 90° cube fold and even those drop out → 0.
+        assert_eq!(mesh_sharp_edge_count(&box_mesh, 100.0_f64.to_radians()), 0);
+
+        // A coplanar two-triangle sheet folds nowhere; its lone boundary edges have
+        // a single incident triangle each → no sharp edges.
+        let mut sheet = valenx_mesh::Mesh::new("sheet");
+        sheet.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(1.0, 1.0, 0.0),
+        ];
+        let mut sblock = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        sblock.connectivity = vec![0, 1, 2, 1, 3, 2]; // two coplanar triangles sharing edge 1–2
+        sheet.element_blocks.push(sblock);
+        assert_eq!(
+            mesh_sharp_edge_count(&sheet, 30.0_f64.to_radians()),
+            0,
+            "a flat sheet has no folds"
+        );
+
+        // An empty mesh has no edges to fold.
+        assert_eq!(
+            mesh_sharp_edge_count(&valenx_mesh::Mesh::new("empty"), 30.0_f64.to_radians()),
+            0
+        );
     }
 
     #[test]
