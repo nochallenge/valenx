@@ -495,6 +495,37 @@ impl FlowSolution {
         Some(loc)
     }
 
+    /// The cell-centre location `(x, y)` (m) of the **highest static pressure** —
+    /// the *stagnation point*: where the flow is brought to rest and the Bernoulli
+    /// pressure peaks (the windward face of a bluff body, or the downstream corner
+    /// where a wall turns the flow). It is the high-pressure companion to
+    /// [`FlowSolution::min_pressure_location`] (the suction peak / vortex core):
+    /// together they bracket where the pressure field does its work, and where
+    /// [`FlowSolution::pressure_range`] gives the *magnitude* of the swing this
+    /// gives the *position* of its maximum. Like the minimum locator it needs no
+    /// interior stencil — pressure is stored cell-centred everywhere — so it scans
+    /// every cell, and like it the result is gauge-invariant (adding a constant to
+    /// the whole field leaves the argmax fixed). `None` for an empty grid.
+    pub fn max_pressure_location(&self) -> Option<(f64, f64)> {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return None;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let mut highest = f64::NEG_INFINITY;
+        let mut loc = (0.0, 0.0);
+        for j in 0..ny {
+            for i in 0..nx {
+                let p = self.pressure.at(i, j);
+                if p > highest {
+                    highest = p;
+                    loc = ((i as f64 + 0.5) * dx, (j as f64 + 0.5) * dy);
+                }
+            }
+        }
+        Some(loc)
+    }
+
     /// Net volumetric flow rate through the **inlet** (left, `x = 0`) face, per
     /// unit depth (m²/s in 2-D): `Σ_j u(0, j)·dy`, the discrete `∫ u dy` along
     /// the inlet. Positive for fluid entering the domain; ~0 for an enclosed
@@ -2960,6 +2991,59 @@ mod tests {
             (x2 - 0.5 * dx).abs() < 1e-9 && (y2 - (3.0 + 0.5) * dy).abs() < 1e-9,
             "suction peak at cell (0,3) centre, got ({x2}, {y2})"
         );
+    }
+
+    #[test]
+    fn max_pressure_location_finds_the_stagnation_point() {
+        let grid = Grid::new(5, 4, 5.0, 8.0); // dx = 1, dy = 2
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Uniform 100 Pa field with a unique spike at cell (3, 1) — the stagnation
+        // point — and a distinct dip at (0, 3) so the max and min sit apart.
+        let mut p = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p.set(i, j, 100.0);
+            }
+        }
+        p.set(3, 1, 250.0); // the stagnation spike (unique maximum)
+        p.set(0, 3, -50.0); // a distinct minimum elsewhere
+        let sol = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // The located point is the centre of the peak cell (3, 1).
+        let (x, y) = sol.max_pressure_location().expect("non-empty grid");
+        assert!(
+            (x - (3.0 + 0.5) * dx).abs() < 1e-9 && (y - (1.0 + 0.5) * dy).abs() < 1e-9,
+            "stagnation point at cell (3,1) centre, got ({x}, {y})"
+        );
+
+        // Non-tautological re-scan: the located cell's pressure is ≥ every cell's.
+        let peak = sol.pressure.at(3, 1);
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                assert!(
+                    sol.pressure.at(i, j) <= peak,
+                    "cell ({i},{j}) exceeds the located peak"
+                );
+            }
+        }
+
+        // The stagnation point (max) is a distinct cell from the suction peak (min).
+        assert_ne!(
+            sol.max_pressure_location(),
+            sol.min_pressure_location(),
+            "max and min pressure sit at distinct cells for a non-constant field"
+        );
+        // (The `None`-on-empty-grid branch mirrors min_pressure_location but is
+        // unreachable through the public API — `Grid::new` panics on zero cells.)
     }
 
     // ----- EffectiveViscosity / SST in the SIMPLE driver ------------
