@@ -90,6 +90,21 @@ pub fn delta_v_from_mass_ratio(mass_ratio: f64, isp: f64) -> Result<f64> {
     Ok(isp * G0 * mass_ratio.ln())
 }
 
+/// The **effective exhaust velocity** `c = Isp · g₀` (m/s) — the conversion between a
+/// stage's **specific impulse** `isp` (s) and the exhaust velocity that enters the
+/// rocket equation directly. It is the `c` for which the Tsiolkovsky [`mass_ratio`]
+/// is `exp(Δv/c)` and [`delta_v_from_mass_ratio`] is `c · ln(MR)`.
+///
+/// # Errors
+///
+/// Returns [`AstroError::InvalidParameter`] if `isp` is non-finite or non-positive.
+pub fn effective_exhaust_velocity(isp: f64) -> Result<f64> {
+    if !isp.is_finite() || isp <= 0.0 {
+        return Err(AstroError::InvalidParameter("isp must be finite and > 0"));
+    }
+    Ok(isp * G0)
+}
+
 /// Structural mass fraction `ε = m_dry / (m_dry + m_prop)` of a stage.
 ///
 /// # Errors
@@ -178,6 +193,35 @@ pub fn tank_volume(propellant_mass: f64, rho: f64) -> Result<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn effective_exhaust_velocity_threads_the_rocket_equation() {
+        // c = Isp·g₀: a 300 s engine has v_e ≈ 2942 m/s.
+        assert!((effective_exhaust_velocity(300.0).unwrap() - 300.0 * G0).abs() < 1e-9);
+
+        // Threads mass_ratio (MR = exp(Δv/c)) and delta_v_from_mass_ratio (Δv = c·ln MR).
+        for &(dv, isp) in &[(9_000.0_f64, 350.0_f64), (3_000.0, 300.0), (7_800.0, 311.0)] {
+            let c = effective_exhaust_velocity(isp).unwrap();
+            let mr = mass_ratio(dv, isp).unwrap();
+            assert!((mr - (dv / c).exp()).abs() / mr < 1e-12, "MR = exp(Δv/c)");
+            assert!(
+                (delta_v_from_mass_ratio(mr, isp).unwrap() - c * mr.ln()).abs() / dv < 1e-12,
+                "Δv = c·ln(MR)"
+            );
+        }
+
+        // Linear in Isp; error on non-physical input.
+        assert!(
+            (effective_exhaust_velocity(600.0).unwrap()
+                - 2.0 * effective_exhaust_velocity(300.0).unwrap())
+            .abs()
+                < 1e-9,
+            "linear in Isp"
+        );
+        assert!(effective_exhaust_velocity(0.0).is_err());
+        assert!(effective_exhaust_velocity(-1.0).is_err());
+        assert!(effective_exhaust_velocity(f64::NAN).is_err());
+    }
 
     #[test]
     fn mass_ratio_matches_tsiolkovsky() {
