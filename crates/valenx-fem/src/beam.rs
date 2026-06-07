@@ -199,6 +199,38 @@ pub fn cantilever_udl_tip_deflection(
     load_per_length * length.powi(4) / (8.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **cantilever tip slope under a uniformly distributed load**
+/// `θ = w·L³/(6·E·I)` (rad) — the end-rotation of a slender Euler–Bernoulli
+/// cantilever carrying a transverse load of intensity `load_per_length` `w` (N/m)
+/// over its full span `length` `L` (m), with Young's modulus `youngs_modulus` `E`
+/// (Pa) and section second moment of area `second_moment_area` `I` (m⁴).
+///
+/// This is the *distributed-load* slope companion to the point-load
+/// [`cantilever_tip_slope`] (`P·L²/(2EI)`) and the rotational companion to the UDL
+/// deflection [`cantilever_udl_tip_deflection`] (`w·L⁴/(8EI)`); the two UDL
+/// quantities are locked by `δ = (3/4)·L·θ`. The slope grows linearly with the
+/// intensity `w` (sign-preserving), with the *cube* of the span `L`, and falls
+/// inversely with the flexural rigidity `E·I`. Returns `0` for non-physical input
+/// (`w` non-finite, or `E`, `I`, or `L` non-positive or non-finite).
+pub fn cantilever_udl_tip_slope(
+    load_per_length: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load_per_length.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load_per_length * length.powi(3) / (6.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **angle of twist** `θ = T·L/(G·J)` (rad) of a prismatic shaft in
 /// pure torsion — a shaft of length `length` `L` (m), shear modulus
 /// `shear_modulus` `G` (Pa) and polar second moment of area (the St-Venant
@@ -1638,6 +1670,46 @@ mod tests {
         assert_eq!(cantilever_udl_tip_deflection(w, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_udl_tip_deflection(f64::NAN, l, e, i), 0.0); // non-finite w
         assert_eq!(cantilever_udl_tip_deflection(w, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn cantilever_udl_tip_slope_matches_closed_form() {
+        // Worked point: w = 1 kN/m uniformly along a 2 m steel cantilever, E = 200 GPa,
+        // I = 1e-6 m⁴ → θ = w·L³/(6·E·I) = 8000/1.2e6 = 1/150 rad.
+        let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let theta = cantilever_udl_tip_slope(w, l, e, i);
+        assert!((theta - 1.0 / 150.0).abs() / theta < 1e-12, "θ = 1/150 rad, got {theta}");
+        // Linear in the load intensity (sign-preserving); cubic in span; inverse in E·I.
+        assert!((cantilever_udl_tip_slope(2.0 * w, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
+        assert!((cantilever_udl_tip_slope(-w, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
+        assert!((cantilever_udl_tip_slope(w, 2.0 * l, e, i) - 8.0 * theta).abs() / theta < 1e-12, "L³ scaling");
+        assert!((cantilever_udl_tip_slope(w, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
+        assert!((cantilever_udl_tip_slope(w, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        // Cross-check (a) tying it to the UDL deflection #200: δ = (3/4)·L·θ.
+        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0)] {
+            let slope = cantilever_udl_tip_slope(ww, ll, e, i);
+            let defl = cantilever_udl_tip_deflection(ww, ll, e, i);
+            assert!(
+                (defl - 3.0 / 4.0 * ll * slope).abs() / defl.abs() < 1e-12,
+                "δ = (3/4)·L·θ at w={ww}, L={ll}"
+            );
+        }
+        // Cross-check (b) tying it to the point-load slope #212: the same TOTAL load
+        // W = w·L spread as a UDL rotates the tip to 1/3 of the concentrated case.
+        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0)] {
+            let udl = cantilever_udl_tip_slope(ww, ll, e, i);
+            let point = cantilever_tip_slope(ww * ll, ll, e, i);
+            assert!(
+                (udl - point / 3.0).abs() / udl.abs() < 1e-12,
+                "θ_udl = θ_point(W=w·L)/3 at w={ww}, L={ll}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(cantilever_udl_tip_slope(w, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(cantilever_udl_tip_slope(w, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(cantilever_udl_tip_slope(w, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(cantilever_udl_tip_slope(f64::NAN, l, e, i), 0.0); // non-finite w
+        assert_eq!(cantilever_udl_tip_slope(w, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
