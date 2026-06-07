@@ -51,7 +51,7 @@ pub use boolean::{difference, intersection, union};
 pub use fillet::fillet_edges;
 pub use measure::{
     euler_characteristic, is_closed_solid, is_closed_solid_tol, solid_area, solid_area_tol,
-    solid_volume, solid_volume_tol,
+    solid_centroid, solid_centroid_tol, solid_volume, solid_volume_tol,
 };
 pub use primitives::{box_solid, cone, cylinder, prism, sphere, torus};
 pub use solid::{CadError, Solid};
