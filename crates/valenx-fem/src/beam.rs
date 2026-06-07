@@ -442,6 +442,25 @@ pub fn simply_supported_center_deflection(
     load * length.powi(3) / (48.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **maximum bending moment of a simply-supported beam under a central
+/// point load** `M = P·L/4` (N·m) — the peak moment, at mid-span beneath the load,
+/// which sets the maximum bending stress and so governs the strength design of the
+/// member. `load` `P` is the transverse load (N) and `length` `L` the span (m).
+///
+/// It is the simply-supported companion to the clamped–clamped
+/// [`fixed_fixed_point_load_end_moment`] (`P·L/8`): building in the ends halves the
+/// peak moment, redistributing it so the same magnitude `P·L/8` appears at both
+/// fixed ends *and* at mid-span instead of the bare `P·L/4` of the pinned span.
+/// Linear and sign-preserving in `P`, linear in `L`, and — being a statics result —
+/// independent of `E` and `I`. Returns `0` for non-physical input (`P` non-finite,
+/// or `L` non-positive or non-finite).
+pub fn simply_supported_point_load_max_moment(load: f64, length: f64) -> f64 {
+    if !load.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load * length / 4.0
+}
+
 /// The analytic **fixed-fixed (clamped–clamped) beam mid-span deflection**
 /// `δ = P·L³/(192·E·I)` (m) — the deflection at mid-span of a slender
 /// Euler–Bernoulli beam **built in at both ends** (encastré) carrying a transverse
@@ -2329,6 +2348,49 @@ mod tests {
         assert_eq!(fixed_fixed_center_deflection(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0); // L = 0
         assert_eq!(fixed_fixed_center_deflection(1000.0, 4.0, -1.0, 1.0e-6), 0.0); // E < 0
         assert_eq!(fixed_fixed_center_deflection(1000.0, 4.0, 200.0e9, 0.0), 0.0); // I = 0
+    }
+
+    #[test]
+    fn simply_supported_point_load_max_moment_matches_statics() {
+        // Worked point: P = 1 kN central load on a 4 m span → M_max = P·L/4 = 1000 N·m.
+        let m = simply_supported_point_load_max_moment(1000.0, 4.0);
+        assert!((m - 1000.0).abs() < 1e-9, "M_max = P·L/4, got {m}");
+
+        // Classic "clamping halves the peak moment": the simply-supported mid-span
+        // moment P·L/4 is exactly twice the clamped-clamped fixing moment P·L/8 (the
+        // fixed-fixed beam shares the same magnitude between mid-span and both ends).
+        assert!(
+            (m - 2.0 * fixed_fixed_point_load_end_moment(1000.0, 4.0)).abs() < 1e-9,
+            "M_ss = 2 · M_ff_end"
+        );
+
+        // Deflection relation threading simply_supported_center_deflection: the
+        // mid-span deflection δ = P·L³/48EI equals M·L²/(12EI).
+        for &(p, l, e, i) in &[
+            (1000.0_f64, 4.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-650.0, 2.5, 70.0e9, 4.2e-7),
+            (8200.0, 1.2, 120.0e9, 9.0e-8),
+        ] {
+            let from_moment =
+                simply_supported_point_load_max_moment(p, l) * l * l / (12.0 * e * i);
+            let delta = simply_supported_center_deflection(p, l, e, i);
+            assert!((from_moment - delta).abs() <= 1e-12 * delta.abs(), "M·L²/12EI = δ_center");
+        }
+
+        // Linear and sign-preserving in P; linear in L.
+        assert!(simply_supported_point_load_max_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+        assert!(
+            (simply_supported_point_load_max_moment(1000.0, 8.0)
+                - 2.0 * simply_supported_point_load_max_moment(1000.0, 4.0))
+            .abs()
+                < 1e-9,
+            "linear in L"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_point_load_max_moment(f64::NAN, 4.0), 0.0);
+        assert_eq!(simply_supported_point_load_max_moment(1000.0, 0.0), 0.0);
+        assert_eq!(simply_supported_point_load_max_moment(1000.0, -1.0), 0.0);
     }
 
     #[test]
