@@ -364,6 +364,33 @@ impl ClassicalElements {
         2.0 * y.atan2(x)
     }
 
+    /// The **eccentric anomaly** `E` (rad) from the true anomaly `true_anomaly` `ν`
+    /// (rad) via the half-angle relation
+    /// `E = 2·atan2(√(1−e)·sin(ν/2), √(1+e)·cos(ν/2))` — the exact **inverse** of
+    /// [`true_anomaly_from_eccentric`](Self::true_anomaly_from_eccentric).
+    ///
+    /// This is the geometric first leg of mapping a point on the orbit back to time:
+    /// it turns the position angle `ν` into the eccentric anomaly `E`, which
+    /// [`mean_anomaly_from_eccentric`](Self::mean_anomaly_from_eccentric) then
+    /// carries to the mean anomaly `M` — so
+    /// [`mean_anomaly_from_true`](Self::mean_anomaly_from_true) is exactly
+    /// `mean_anomaly_from_eccentric ∘ eccentric_anomaly_from_true`. The half-angle
+    /// `atan2` form resolves the quadrant directly, with no sign ambiguity past
+    /// apoapsis. `ν = 0` and `ν = π` are fixed points (`E = 0`, `E = π`); a circular
+    /// orbit (`e = 0`) collapses it to the identity `E = ν`, and over a canonical
+    /// `ν ∈ [0, 2π)` the result lies in `[0, 2π)` and increases monotonically with
+    /// `ν`. Defined for closed orbits (`0 ≤ e < 1`); a hyperbolic eccentricity
+    /// (`e ≥ 1`), whose eccentric anomaly is undefined, or a non-finite `ν`, yields
+    /// `NaN`.
+    pub fn eccentric_anomaly_from_true(&self, true_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if !(0.0..1.0).contains(&e) || !true_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        let half = true_anomaly / 2.0;
+        2.0 * ((1.0 - e).sqrt() * half.sin()).atan2((1.0 + e).sqrt() * half.cos())
+    }
+
     /// The **mean anomaly** `M` (rad) from the true anomaly `true_anomaly` `ν`
     /// (rad) — the *reverse* of the time-to-position chain, mapping a point on the
     /// orbit back to the uniformly-advancing time coordinate. It first inverts the
@@ -1032,6 +1059,50 @@ mod tests {
         for ea in [0.0_f64, 0.5, PI / 2.0, PI, 4.0, 5.5] {
             assert!((circ.true_anomaly_from_eccentric(ea) - ea).abs() < 1e-12, "circular ν=E at {ea}");
         }
+    }
+
+    #[test]
+    fn eccentric_anomaly_from_true_inverts_true_anomaly_from_eccentric() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.5,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        // Apsides are fixed points: ν=0 → E=0, ν=π → E=π.
+        assert!(coe.eccentric_anomaly_from_true(0.0).abs() < 1e-12, "ν=0 → E=0");
+        assert!((coe.eccentric_anomaly_from_true(PI) - PI).abs() < 1e-12, "ν=π → E=π");
+        // Worked inverse of the true-anomaly test: e=0.5, ν=2π/3 → E=π/2.
+        let ea = coe.eccentric_anomaly_from_true(2.0 * PI / 3.0);
+        assert!((ea - PI / 2.0).abs() < 1e-12, "e=0.5, ν=2π/3 → E=π/2, got {ea}");
+        // STRONG round-trip threading true_anomaly_from_eccentric: ν→E→ν recovers the
+        // input over the full revolution, and E stays in the canonical [0,2π).
+        for nu in [0.3_f64, 1.0, 2.0, 3.0, 4.5, 6.0] {
+            let e_val = coe.eccentric_anomaly_from_true(nu);
+            assert!((0.0..TAU).contains(&e_val), "E in [0,2π) at ν={nu}: {e_val}");
+            let back = coe.true_anomaly_from_eccentric(e_val);
+            assert!((back - nu).abs() < 1e-9, "ν→E→ν round-trip at ν={nu}: {back}");
+        }
+        // STRONG composition cross-check: mean_anomaly_from_true must equal
+        // mean_anomaly_from_eccentric ∘ eccentric_anomaly_from_true, tying three
+        // independent methods (non-tautological, different code paths).
+        for nu in [0.4_f64, 1.3, 2.7, 5.0] {
+            let direct = coe.mean_anomaly_from_true(nu);
+            let composed = coe.mean_anomaly_from_eccentric(coe.eccentric_anomaly_from_true(nu));
+            assert!((direct - composed).abs() < 1e-9, "M direct vs E-composition at ν={nu}");
+        }
+        // A circular orbit collapses the map to E = ν.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for nu in [0.0_f64, 0.5, PI / 2.0, PI, 4.0, 5.5] {
+            assert!((circ.eccentric_anomaly_from_true(nu) - nu).abs() < 1e-12, "circular E=ν at {nu}");
+        }
+        // Out of domain: a hyperbolic eccentricity and a non-finite ν → NaN.
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert!(hyp.eccentric_anomaly_from_true(1.0).is_nan(), "e≥1 → NaN");
+        assert!(coe.eccentric_anomaly_from_true(f64::NAN).is_nan(), "NaN ν → NaN");
     }
 
     #[test]
