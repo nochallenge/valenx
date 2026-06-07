@@ -524,6 +524,38 @@ fn mesh_max_dihedral_angle(mesh: &valenx_mesh::Mesh) -> Option<f64> {
         .reduce(f64::max)
 }
 
+/// The volume enclosed by a closed `Tri3` surface mesh `V = ⅙·|Σ aᵢ·(bᵢ×cᵢ)|`
+/// (cubic model units), via the divergence theorem: each triangle spans a signed
+/// tetrahedron with the origin contributing `a·(b×c)/6`, the parts outside the
+/// surface cancelling. This is the **zeroth mass-moment** that the volume centroid
+/// [`mesh_centroid`], radius of gyration [`mesh_radius_of_gyration`] and principal
+/// moments [`mesh_principal_moments`] are all weighted by — surfaced here in its own
+/// right to lead that suite. It is integrated over the **tessellated boundary**, so
+/// comparing it to the CSG [`total_volume`] of the source solid gauges tessellation
+/// fidelity: the two agree for an exact watertight mesh and diverge as faceting
+/// coarsens. The magnitude is returned, so the result is independent of the global
+/// winding direction. `None` for a mesh with no triangles or effectively zero
+/// volume (open / degenerate).
+fn mesh_volume(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut total_vol = 0.0;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            total_vol += a.dot(&b.cross(&c)) / 6.0;
+        }
+    }
+    if total_vol.abs() > 1e-12 {
+        Some(total_vol.abs())
+    } else {
+        None
+    }
+}
+
 /// The volume centroid (centre of mass at uniform density) `[x, y, z]` of a
 /// closed `Tri3` surface mesh, via the divergence theorem: each triangle forms
 /// a signed tetrahedron with the origin, contributing its signed volume
@@ -1210,6 +1242,14 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let sv_str = surface_area_to_volume_ratio(area, volume)
         .map(|sv| format!(" (S/V {sv:.3}/u)"))
         .unwrap_or_default();
+    // Enclosed volume of the tessellated boundary (divergence theorem) — the zeroth
+    // mass-moment leading the centroid/gyration/inertia suite, and a tessellation-
+    // fidelity check against the solid `volume` above (equal for an exact mesh).
+    let meshvol_str = mesh
+        .as_ref()
+        .and_then(mesh_volume)
+        .map(|v| format!(" · mesh vol {v:.4} u³"))
+        .unwrap_or_default();
     // Volume centroid (centre of mass) of the tessellated model.
     let centroid_str = mesh
         .as_ref()
@@ -1367,7 +1407,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|v| format!(" · mean valence {v:.2}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2190,6 +2230,59 @@ mod tests {
         assert!((k - expected).abs() < 1e-9, "k {k} vs {expected}");
         // An empty mesh has no radius of gyration.
         assert!(mesh_radius_of_gyration(&valenx_mesh::Mesh::new("empty")).is_none());
+    }
+
+    #[test]
+    fn mesh_volume_matches_the_box_volume() {
+        use nalgebra::Vector3;
+        // The canonical 1×2×3 box (corner at the origin). The divergence-theorem
+        // enclosed volume must equal the elementary Lx·Ly·Lz = 6, reached by a
+        // completely different route (signed-tetrahedron sum vs length×width×height).
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, // −z bottom
+            4, 5, 6, 4, 6, 7, // +z top
+            0, 1, 5, 0, 5, 4, // −y front
+            3, 7, 6, 3, 6, 2, // +y back
+            0, 4, 7, 0, 7, 3, // −x left
+            1, 2, 6, 1, 6, 5, // +x right
+        ];
+        mesh.element_blocks.push(block);
+        let v = mesh_volume(&mesh).expect("closed box has a volume");
+        assert!((v - 6.0).abs() < 1e-9, "box volume Lx·Ly·Lz = 6, got {v}");
+        // Winding-direction independence: reversing every triangle flips the signed
+        // sum, but the returned magnitude is unchanged (validates the abs()).
+        for tri in mesh.element_blocks[0].connectivity.chunks_exact_mut(3) {
+            tri.swap(1, 2);
+        }
+        let v_rev = mesh_volume(&mesh).expect("reversed box");
+        assert!((v_rev - 6.0).abs() < 1e-9, "winding-independent magnitude: {v_rev}");
+        // Translation invariance: a closed surface's signed volume ignores position.
+        for n in mesh.nodes.iter_mut() {
+            *n += Vector3::new(10.0, -5.0, 7.0);
+        }
+        let v_shift = mesh_volume(&mesh).expect("translated box");
+        assert!((v_shift - 6.0).abs() < 1e-9, "translation-invariant: {v_shift}");
+        // Cubic scaling: doubling every coordinate scales the volume by 2³ = 8.
+        for n in mesh.nodes.iter_mut() {
+            *n *= 2.0;
+        }
+        let v_scaled = mesh_volume(&mesh).expect("scaled box");
+        assert!((v_scaled - 48.0).abs() < 1e-9, "V ∝ length³: 6·8 = 48, got {v_scaled}");
+        // An empty / triangle-free mesh has no enclosed volume.
+        assert!(mesh_volume(&valenx_mesh::Mesh::new("empty")).is_none());
     }
 
     #[test]
