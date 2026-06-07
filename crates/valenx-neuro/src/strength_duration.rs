@@ -82,6 +82,18 @@ pub fn weiss_threshold_charge(rheobase: f64, chronaxie_ms: f64, width_ms: f64) -
     }
 }
 
+/// The **minimum stimulating charge** `Q_min = I_rh·chronaxie` (µA·ms/cm²) — the
+/// `w → 0` intercept of the Weiss charge–duration line [`weiss_threshold_charge`],
+/// from the `rheobase` `I_rh` and `chronaxie_ms`. It is the *charge-axis* asymptote
+/// of the strength–duration curve: as the pulse shrinks the threshold *current*
+/// diverges as `1/w`, but the *charge* `I_th·w` falls to this finite floor — the
+/// least charge that can ever excite the membrane. It complements the rheobase (the
+/// current-axis, long-pulse asymptote): short pulses are charge-limited at `Q_min`,
+/// long pulses current-limited at `I_rh`. Linear in both factors.
+pub fn minimum_stimulating_charge(rheobase: f64, chronaxie_ms: f64) -> f64 {
+    rheobase * chronaxie_ms
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,5 +157,27 @@ mod tests {
         // A non-positive width is undefined in both.
         assert!(lapicque_threshold(i_rh, cx, 0.0).is_none());
         assert!(weiss_threshold_charge(i_rh, cx, -1.0).is_none());
+    }
+
+    #[test]
+    fn minimum_stimulating_charge_is_the_weiss_intercept() {
+        let (rh, cx) = (10.0, 0.5); // 10 µA/cm² rheobase, 0.5 ms chronaxie
+        let q_min = minimum_stimulating_charge(rh, cx);
+        // Worked point: Q_min = I_rh·chronaxie = 5 µA·ms/cm².
+        assert!((q_min - 5.0).abs() < 1e-12, "Q_min = rheobase·chronaxie = 5, got {q_min}");
+        // STRONG cross-check: Q_min is the w → 0 intercept of the Weiss line
+        // Q(w) = I_rh·(w + chronaxie), so Q_min = Q(w) − I_rh·w for ANY width, and the
+        // short-pulse floor lies below the charge required at any finite width.
+        for w in [0.1_f64, 0.5, 2.0, 10.0] {
+            let q = weiss_threshold_charge(rh, cx, w).unwrap();
+            assert!((q_min - (q - rh * w)).abs() < 1e-12, "Q_min = Weiss(w) − I_rh·w at w={w}");
+            assert!(q_min < q, "Q_min < Q(w) at w={w}");
+        }
+        // Linear in both factors.
+        assert!((minimum_stimulating_charge(2.0 * rh, cx) - 2.0 * q_min).abs() < 1e-12, "∝ rheobase");
+        assert!((minimum_stimulating_charge(rh, 2.0 * cx) - 2.0 * q_min).abs() < 1e-12, "∝ chronaxie");
+        // The model's own rheobase()·chronaxie() gives a finite positive Q_min.
+        let q_model = minimum_stimulating_charge(rheobase(), chronaxie());
+        assert!(q_model > 0.0 && q_model.is_finite(), "model Q_min plausible: {q_model}");
     }
 }

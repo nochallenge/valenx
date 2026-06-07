@@ -83,7 +83,8 @@ pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{charge_density, is_safe, max_safe_charge_per_phase, shannon_k};
 pub use steering::ContactArray;
 pub use strength_duration::{
-    chronaxie, lapicque_threshold, rheobase, threshold_amplitude, weiss_threshold_charge,
+    chronaxie, lapicque_threshold, minimum_stimulating_charge, rheobase, threshold_amplitude,
+    weiss_threshold_charge,
 };
 pub use synapse::{
     alpha_synapse_conductance, alpha_synapse_conductance_integral,
