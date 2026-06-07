@@ -119,6 +119,18 @@ pub fn blasius_flat_plate_cf(re_l: f64) -> f64 {
     1.328 / re_l.sqrt()
 }
 
+/// The **local laminar (Blasius) skin-friction coefficient**
+/// `c_f(x) = 0.664·Re_x⁻¹ᐟ²` at the local length Reynolds number `re_x`
+/// `Re_x = U·x/ν` — the coefficient of the wall shear stress at a single
+/// station `x` along a flat plate. The plate-length *average*
+/// [`blasius_flat_plate_cf`] (`C_F = 1.328·Re_L⁻¹ᐟ²`) is exactly twice this
+/// value evaluated at the trailing-edge Reynolds number, because
+/// `C_F = (1/L)·∫₀^L c_f dx` and `c_f ∝ x⁻¹ᐟ²`.
+pub fn blasius_local_cf(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    0.664 / re_x.sqrt()
+}
+
 /// The thin-airfoil-theory lift-curve slope — `2π` per radian, the
 /// classic inviscid result for a thin symmetric section at a small
 /// angle of attack.
@@ -557,6 +569,30 @@ mod tests {
              sphere drag",
             after.cd
         );
+    }
+
+    #[test]
+    fn blasius_local_cf_is_half_the_plate_average() {
+        // The plate-length-average C_F = 1.328/√Re is exactly twice the trailing-edge
+        // local c_f = 0.664/√Re (since C_F = (1/L)∫ c_f dx and c_f ∝ x^−1/2).
+        for &re in &[1.0e5, 1.0e6, 5.0e6] {
+            let avg = blasius_flat_plate_cf(re);
+            let local = blasius_local_cf(re);
+            assert!((avg - 2.0 * local).abs() <= 1e-12 * avg, "C_F = 2·c_f at Re={re}");
+        }
+
+        // Worked value: c_f(1e6) = 0.664/1000 = 6.64e-4.
+        assert!((blasius_local_cf(1.0e6) - 6.64e-4).abs() <= 1e-12 * 6.64e-4, "c_f(1e6) = 6.64e-4");
+
+        // Scales as Re^(−1/2): quadrupling Re halves c_f.
+        assert!(
+            (blasius_local_cf(4.0e6) - 0.5 * blasius_local_cf(1.0e6)).abs()
+                <= 1e-12 * blasius_local_cf(1.0e6),
+            "c_f ∝ Re^(−1/2)"
+        );
+
+        // The Re < 1 clamp (matching blasius_flat_plate_cf): c_f(0.5) = 0.664.
+        assert!((blasius_local_cf(0.5) - 0.664).abs() < 1e-12, "clamped to Re = 1");
     }
 
     #[test]
