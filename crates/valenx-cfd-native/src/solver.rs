@@ -844,6 +844,33 @@ impl FlowSolution {
         0.5 * (omega_norm_sq - s_norm_sq)
     }
 
+    /// The **strain rate** `√(2·S:S)` (1/s) at the centre of cell `(i, j)` — the
+    /// local *rate of deformation*, the symmetric (rate-of-strain `S`) part of the
+    /// velocity gradient, completing the per-cell decomposition with the
+    /// antisymmetric [`FlowSolution::vorticity_at_cell`] (spin `ω`), the trace
+    /// [`FlowSolution::divergence_at_cell`] (dilatation `∇·u`), and their balance
+    /// [`FlowSolution::q_criterion_at_cell`] (`Q`). It is the per-cell field that
+    /// [`FlowSolution::max_strain_rate`] takes the peak of, with
+    /// `S:S = u_x² + v_y² + ½(u_y+v_x)²`. A **solid-body rotation** (pure spin) reads
+    /// `0` here, a **pure strain** reads `0` on the vorticity, and the three are
+    /// locked by `Q = (ω² − strain²)/4`. Computed with the same interior
+    /// central-difference stencil as the other accessors; **boundary cells**
+    /// (first/last row or column) return `0`.
+    pub fn strain_rate_at_cell(&self, i: usize, j: usize) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if i == 0 || j == 0 || i + 1 >= nx || j + 1 >= ny {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let du_dx = (self.u_at_cell(i + 1, j) - self.u_at_cell(i - 1, j)) / (2.0 * dx);
+        let dv_dy = (self.v_at_cell(i, j + 1) - self.v_at_cell(i, j - 1)) / (2.0 * dy);
+        let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / (2.0 * dy);
+        let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / (2.0 * dx);
+        let s_off = 0.5 * (du_dy + dv_dx);
+        let s_dd = du_dx * du_dx + dv_dy * dv_dy + 2.0 * s_off * s_off;
+        (2.0 * s_dd).sqrt()
+    }
+
     /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
     /// signed net rotation of the flow (Kelvin's circulation theorem; by
     /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
@@ -3335,6 +3362,98 @@ mod tests {
         // Solid-body rotation: Γ = 2Ω · interior area.
         let interior_area = (grid.nx - 2) as f64 * (grid.ny - 2) as f64 * dx * dy;
         assert!((gamma - 2.0 * omega * interior_area).abs() / gamma < 1e-9, "Γ = 2Ω·A_interior");
+    }
+
+    #[test]
+    fn strain_rate_at_cell_completes_the_velocity_gradient_decomposition() {
+        // 6×6 unit grid (dx = dy = 1).
+        let grid = Grid::new(6, 6, 6.0, 6.0);
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // (1) Solid-body rotation u = −Ω·y, v = +Ω·x — pure spin → strain rate 0.
+        let rate = 2.0_f64;
+        let mut ur = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ur.set(fi, j, -rate * (j as f64 + 0.5) * dy);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            for fj in 0..=grid.ny {
+                vr.set(i, fj, rate * (i as f64 + 0.5) * dx);
+            }
+        }
+        let rot = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(rot.strain_rate_at_cell(3, 3).abs() < 1e-9, "solid-body rotation has zero strain");
+
+        // (2) Pure straining u = a·x, v = −a·y — strain rate 2a, zero spin.
+        let a = 1.5_f64;
+        let mut ue = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ue.set(fi, j, a * (fi as f64) * dx);
+            }
+        }
+        let mut ve = grid.v_field();
+        for i in 0..grid.nx {
+            for fj in 0..=grid.ny {
+                ve.set(i, fj, -a * (fj as f64) * dy);
+            }
+        }
+        let strain = FlowSolution {
+            grid,
+            u: ue,
+            v: ve,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((strain.strain_rate_at_cell(3, 3) - 2.0 * a).abs() < 1e-9, "pure strain rate = 2a");
+        // STRONG cross-check threading the independent max_strain_rate reducer.
+        assert!((strain.max_strain_rate() - 2.0 * a).abs() < 1e-9, "max strain rate = 2a");
+
+        // (3) Pure shear u = γ·y, v = 0 — strain rate |γ| (equals the vorticity
+        // magnitude, which is exactly why a shear layer has Q = 0).
+        let gamma = 3.0_f64;
+        let mut us = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                us.set(fi, j, gamma * (j as f64 + 0.5) * dy);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((shear.strain_rate_at_cell(3, 3) - gamma).abs() < 1e-9, "pure shear strain = γ");
+
+        // STRONG three-way identity tying all per-cell accessors together: the
+        // Q-criterion is Q = (ω² − strain²)/4 (since Q = ½(‖Ω‖² − ‖S‖²), ‖Ω‖² = ½ω²,
+        // ‖S‖² = strain²/2). Holds on every field — rotation, strain, shear.
+        for sol in [&rot, &strain, &shear] {
+            let q = sol.q_criterion_at_cell(3, 3);
+            let w = sol.vorticity_at_cell(3, 3);
+            let s = sol.strain_rate_at_cell(3, 3);
+            assert!((q - (w * w - s * s) / 4.0).abs() < 1e-9, "Q = (ω² − strain²)/4");
+        }
+
+        // Boundary cells have no centred stencil → 0.
+        assert_eq!(rot.strain_rate_at_cell(0, 3), 0.0);
     }
 
     #[test]
