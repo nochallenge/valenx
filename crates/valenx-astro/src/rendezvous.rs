@@ -69,6 +69,24 @@ pub fn mean_motion(semi_major_axis: f64) -> Result<f64> {
     Ok((MU_EARTH / semi_major_axis.powi(3)).sqrt())
 }
 
+/// The **synodic period** `T_syn = 2π / |n₁ − n₂|` (s) between two circular orbits
+/// of semi-major axes `a1` and `a2` (m) — the time between successive conjunctions
+/// (the two bodies lining up again), where `nₖ = √(μ/aₖ³)` is each orbit's
+/// [`mean_motion`]. The faster (inner) orbit gains a full lap of phase on the slower
+/// one over exactly this interval, so it is the *beat period* of the two orbital
+/// frequencies — equivalently `1/T_syn = |1/T₁ − 1/T₂|` in terms of the orbital
+/// periods `Tₖ = 2π/nₖ`. For two nearby orbits the beat is slow (`T_syn → ∞` as
+/// `a1 → a2`, returned as `+∞` from the `2π/0` limit); for widely separated orbits
+/// it approaches the shorter period.
+///
+/// # Errors
+///
+/// Returns [`AstroError::InvalidParameter`] (via [`mean_motion`]) if either
+/// semi-major axis is non-finite or non-positive.
+pub fn synodic_period(a1: f64, a2: f64) -> Result<f64> {
+    Ok(std::f64::consts::TAU / (mean_motion(a1)? - mean_motion(a2)?).abs())
+}
+
 /// The four 3×3 blocks `(Φrr, Φrv, Φvr, Φvv)` of the Clohessy–Wiltshire
 /// state-transition matrix at elapsed time `t` (s) for mean motion `n`
 /// (rad/s).
@@ -246,6 +264,34 @@ mod tests {
         assert!((period - expected).abs() / expected < 1e-12);
         // ~400 km LEO period is ~92.6 min ≈ 5554 s.
         assert!((period - 5_554.0).abs() < 10.0, "period {period} s");
+    }
+
+    #[test]
+    fn synodic_period_is_the_beat_of_two_mean_motions() {
+        let (a1, a2) = (7.0e6, 7.5e6);
+        let n1 = mean_motion(a1).expect("valid");
+        let n2 = mean_motion(a2).expect("valid");
+        let t_syn = synodic_period(a1, a2).expect("valid");
+        // Definition: T_syn = 2π/|n1 − n2|.
+        assert!((t_syn - TAU / (n1 - n2).abs()).abs() / t_syn < 1e-12, "T_syn = 2π/|Δn|");
+        // Beat-of-periods identity 1/T_syn = |1/P1 − 1/P2| (Pk = 2π/nk) — an
+        // independent derivation threading mean_motion.
+        let (p1, p2) = (TAU / n1, TAU / n2);
+        assert!(
+            (1.0 / t_syn - (1.0 / p1 - 1.0 / p2).abs()).abs() * t_syn < 1e-12,
+            "1/T_syn = |1/P1 − 1/P2|"
+        );
+        // For nearby orbits the beat is slow — longer than either orbital period.
+        assert!(t_syn > p1 && t_syn > p2, "close orbits → T_syn exceeds both periods");
+        // Symmetric in its arguments.
+        assert!(
+            (synodic_period(a2, a1).expect("valid") - t_syn).abs() / t_syn < 1e-12,
+            "symmetric"
+        );
+        // Identical orbits never re-conjunct → infinite synodic period (2π/0).
+        assert!(synodic_period(a1, a1).expect("valid").is_infinite(), "equal orbits → ∞");
+        // A non-positive semi-major axis is rejected (propagated from mean_motion).
+        assert!(synodic_period(-1.0, a2).is_err(), "a ≤ 0 → Err");
     }
 
     #[test]
