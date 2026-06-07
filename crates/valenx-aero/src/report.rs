@@ -595,6 +595,25 @@ pub fn rayleigh_flow_temperature_ratio(mach: f64, gamma: f64) -> f64 {
     ratio * ratio
 }
 
+/// The **Rayleigh-flow static-pressure ratio** `p/p* = (1+γ)/(1 + γ·M²)` at Mach
+/// number `mach` `M` and heat-capacity ratio `gamma` `γ` — the static pressure
+/// referenced to the sonic (thermally choked) state `p*` for **Rayleigh flow**:
+/// steady, frictionless, constant-area flow with **heat addition**.
+///
+/// It completes the Rayleigh static-state set alongside
+/// [`rayleigh_flow_temperature_ratio`] (which is exactly `M²·(p/p*)²`) and
+/// [`rayleigh_flow_total_temperature_ratio`]. Adding heat drives the Mach number
+/// toward `1`: a subsonic stream sees its static pressure fall (`p/p* > 1`, down to
+/// `1` at the choke) while a supersonic stream sees it rise (`p/p* < 1`). It is `1`
+/// at the sonic point `M = 1` and tends to its maximum `1+γ` as `M → 0`. Returns `0`
+/// for non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn rayleigh_flow_pressure_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (1.0 + gamma) / (1.0 + gamma * mach * mach)
+}
+
 /// The **Fanno-flow static temperature ratio** `T/T* = (γ+1)/(2 + (γ−1)·M²)` at
 /// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the static
 /// temperature referenced to the sonic (choked) state `T*` for **Fanno flow**:
@@ -1812,6 +1831,34 @@ mod tests {
         assert_eq!(rayleigh_flow_total_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_total_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn rayleigh_flow_pressure_ratio_threads_the_temperature_ratio() {
+        let g = 1.4;
+        // Sonic reference: p/p* = 1 exactly at M = 1.
+        assert!((rayleigh_flow_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        // STRONG cross-check threading rayleigh_flow_temperature_ratio: T/T* = M²·(p/p*)².
+        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+            let expected = m * m * rayleigh_flow_pressure_ratio(m, gam).powi(2);
+            assert!(
+                (rayleigh_flow_temperature_ratio(m, gam) - expected).abs() / expected < 1e-12,
+                "T/T* = M²·(p/p*)² at M={m}, γ={gam}"
+            );
+        }
+        // Standard Rayleigh-table values (γ = 1.4): M=0.5 → 1.7778, M=2 → 0.36364.
+        assert!((rayleigh_flow_pressure_ratio(0.5, g) - 1.7778).abs() < 1e-3, "M=0.5 table value");
+        assert!((rayleigh_flow_pressure_ratio(2.0, g) - 0.36364).abs() < 1e-3, "M=2 table value");
+        // Subsonic p/p* > 1, supersonic p/p* < 1; tends to the max (1+γ) as M → 0.
+        assert!(
+            rayleigh_flow_pressure_ratio(0.5, g) > 1.0 && rayleigh_flow_pressure_ratio(2.0, g) < 1.0,
+            "subsonic > 1 > supersonic"
+        );
+        assert!((rayleigh_flow_pressure_ratio(1.0e-6, g) - 2.4).abs() < 1e-3, "M→0 limit 1+γ");
+        // Non-physical input → 0.
+        assert_eq!(rayleigh_flow_pressure_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(rayleigh_flow_pressure_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(rayleigh_flow_pressure_ratio(f64::NAN, g), 0.0); // non-finite M
     }
 
     #[test]
