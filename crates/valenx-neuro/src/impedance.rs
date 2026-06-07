@@ -76,6 +76,19 @@ impl ElectrodeImpedance {
         let im = -mag_cpe * phase.sin();
         im.atan2(re).to_degrees()
     }
+
+    /// The electrode's **corner (crossover) frequency** `f_c` (Hz) — where the
+    /// double-layer CPE magnitude equals the access resistance `R_a`, i.e. the Bode
+    /// "knee" separating the low-frequency **capacitive** regime (the CPE dominates,
+    /// `|Z| → ∞` as `f → 0`) from the high-frequency **resistive** plateau
+    /// (`|Z| → R_a`). Setting `1/(Q·ωⁿ) = R_a` gives `ω_c = (1/(Q·R_a))^(1/n)` and
+    /// `f_c = ω_c/2π`. It is the natural single-number summary of the
+    /// [`ElectrodeImpedance::magnitude_ohm`] / [`ElectrodeImpedance::phase_deg`]
+    /// sweep — below it the impedance is reactive, above it nearly real.
+    pub fn crossover_frequency_hz(&self) -> f64 {
+        let w_c = (1.0 / (self.cpe.q * self.access_resistance_ohm())).powf(1.0 / self.cpe.n);
+        w_c / (2.0 * std::f64::consts::PI)
+    }
 }
 
 #[cfg(test)]
@@ -140,5 +153,36 @@ mod tests {
         // The double layer lags the current: phase is strictly negative and never
         // steeper than the −n·90° CPE asymptote.
         assert!(phi < 0.0 && phi > -n * 90.0, "capacitive lag in (−n·90°, 0°): {phi}");
+    }
+
+    #[test]
+    fn crossover_frequency_is_where_the_cpe_equals_the_access_resistance() {
+        use std::f64::consts::{FRAC_PI_2, PI};
+        let (q, n) = (1.0e-5, 0.9);
+        let z = ElectrodeImpedance::disk(50.0, 0.2, Cpe { q, n });
+        let f_c = z.crossover_frequency_hz();
+        assert!(f_c > 0.0, "corner frequency is positive, got {f_c}");
+
+        // Defining property: at f_c the bare-CPE magnitude 1/(Q·ωⁿ) equals R_a
+        // (threads access_resistance_ohm).
+        let r_a = z.access_resistance_ohm();
+        let w = 2.0 * PI * f_c;
+        let mag_cpe = 1.0 / (q * w.powf(n));
+        assert!((mag_cpe - r_a).abs() / r_a < 1e-9, "|Z_CPE(f_c)| = R_a");
+
+        // At the knee the two equal-magnitude legs (R_a + Z_CPE at constant phase
+        // −nπ/2) sum to |Z| = R_a·√(2(1+cos(nπ/2))) — threads magnitude_ohm.
+        let expected = r_a * (2.0 * (1.0 + (n * FRAC_PI_2).cos())).sqrt();
+        assert!(
+            (z.magnitude_ohm(f_c) - expected).abs() / expected < 1e-9,
+            "|Z(f_c)| from two equal-magnitude legs"
+        );
+
+        // Capacitive below the knee, resistive above: |Z| a decade below exceeds
+        // |Z| a decade above.
+        assert!(
+            z.magnitude_ohm(f_c / 10.0) > z.magnitude_ohm(f_c * 10.0),
+            "magnitude falls through the corner"
+        );
     }
 }
