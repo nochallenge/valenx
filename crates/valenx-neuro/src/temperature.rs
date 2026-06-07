@@ -84,9 +84,64 @@ pub fn q10_from_activation_energy(activation_energy: f64, temp_k: f64) -> f64 {
     (10.0 * activation_energy / (crate::nernst::GAS_CONSTANT * temp_k * (temp_k + 10.0))).exp()
 }
 
+/// The **Arrhenius rate ratio** `k(T)/k(T_ref) = exp(Ea/R · (1/T_ref − 1/T))` — the
+/// exact temperature dependence of a reaction or channel-gating rate with activation
+/// energy `activation_energy` `Ea` (J/mol), referenced to absolute temperature
+/// `temp_k_ref` and evaluated at `temp_k`, where `R` is the molar gas constant
+/// [`crate::nernst::GAS_CONSTANT`]. This is the textbook Arrhenius law as a ratio,
+/// without the `Q₁₀` linearisation: a warmer temperature (`temp_k > temp_k_ref`) gives
+/// a ratio above `1` for `Ea > 0`. Over a 10 °C step it equals the `Q₁₀`
+/// [`q10_from_activation_energy`]. Like the other rate functions it is total —
+/// non-physical input (non-positive temperature) yields a non-finite result the caller
+/// is expected to guard.
+pub fn arrhenius_rate_ratio(activation_energy: f64, temp_k_ref: f64, temp_k: f64) -> f64 {
+    (activation_energy / crate::nernst::GAS_CONSTANT * (1.0 / temp_k_ref - 1.0 / temp_k)).exp()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arrhenius_rate_ratio_threads_the_q10_conversions() {
+        use crate::nernst::GAS_CONSTANT as R;
+        let t = 300.0;
+
+        // No temperature change → ratio 1.
+        assert!((arrhenius_rate_ratio(85_000.0, t, t) - 1.0).abs() < 1e-12, "ratio(T,T) = 1");
+
+        // Definition: k(T)/k(T_ref) = exp(Ea/R·(1/T_ref − 1/T)).
+        let ea = 85_000.0;
+        let expected = (ea / R * (1.0 / t - 1.0 / 310.0)).exp();
+        assert!(
+            (arrhenius_rate_ratio(ea, t, 310.0) - expected).abs() <= 1e-12 * expected,
+            "Arrhenius definition"
+        );
+
+        // Threads q10_from_activation_energy: the rate ratio over a 10 °C step IS the Q10.
+        for &e in &[40_000.0_f64, 85_000.0, 120_000.0] {
+            let q10 = q10_from_activation_energy(e, t);
+            assert!(
+                (arrhenius_rate_ratio(e, t, t + 10.0) - q10).abs() <= 1e-12 * q10,
+                "ratio(T, T+10) = Q10"
+            );
+        }
+
+        // Round-trips arrhenius_activation_energy_from_q10: Ea(q10) then ratio over 10° = q10.
+        for &q10 in &[2.0_f64, 3.0, 4.5] {
+            let e = arrhenius_activation_energy_from_q10(q10, t);
+            assert!(
+                (arrhenius_rate_ratio(e, t, t + 10.0) - q10).abs() <= 1e-9 * q10,
+                "round-trip via activation energy"
+            );
+        }
+
+        // Monotonic increasing in T for Ea > 0 (warming speeds the reaction).
+        assert!(
+            arrhenius_rate_ratio(ea, t, 320.0) > arrhenius_rate_ratio(ea, t, 305.0),
+            "warmer → faster"
+        );
+    }
 
     #[test]
     fn q10_from_activation_energy_inverts_arrhenius() {
