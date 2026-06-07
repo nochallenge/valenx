@@ -51,7 +51,8 @@ pub use boolean::{difference, intersection, union};
 pub use fillet::fillet_edges;
 pub use measure::{
     euler_characteristic, is_closed_solid, is_closed_solid_tol, solid_area, solid_area_tol,
-    solid_bounding_box, solid_bounding_box_fill_ratio, solid_bounding_box_fill_ratio_tol,
+    solid_bounding_box, solid_bounding_box_diagonal, solid_bounding_box_diagonal_tol,
+    solid_bounding_box_fill_ratio, solid_bounding_box_fill_ratio_tol,
     solid_bounding_box_tol, solid_centroid, solid_centroid_tol,
     solid_genus, solid_principal_moments, solid_principal_moments_tol,
     solid_radius_of_gyration,
