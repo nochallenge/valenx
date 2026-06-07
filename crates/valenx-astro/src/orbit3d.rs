@@ -239,6 +239,22 @@ impl ClassicalElements {
         }
     }
 
+    /// The orbital **areal velocity** `dA/dt = h/2` (m²/s) — the rate at which the
+    /// radius vector sweeps out area, which **Kepler's second law** holds *constant*
+    /// over the orbit: the body covers equal areas in equal times, racing through
+    /// periapsis and dawdling at apoapsis exactly so. It is half the
+    /// [`specific_angular_momentum`](Self::specific_angular_momentum) `h` (the swept
+    /// triangle `½·r × v` is the angular momentum's geometric twin). Integrated over
+    /// one [`period`](Self::period) it sweeps the whole ellipse,
+    /// `(h/2)·T = π·a·b` (with `b` the
+    /// [`semi_minor_axis`](Self::semi_minor_axis)) — Kepler's second law made global.
+    /// Uses Earth's `μ`. Returns `None` for an orbit that is not bound and closed
+    /// (`a ≤ 0`, or `e ≥ 1`), matching
+    /// [`specific_angular_momentum`](Self::specific_angular_momentum).
+    pub fn areal_velocity(&self) -> Option<f64> {
+        self.specific_angular_momentum().map(|h| 0.5 * h)
+    }
+
     /// The orbital **specific energy** `ε = −μ/(2a)` (J/kg) — the total orbital
     /// energy *per unit mass* (kinetic plus gravitational potential), the orbit's
     /// other conserved invariant alongside the
@@ -1297,6 +1313,48 @@ mod tests {
         assert!(hyp.specific_angular_momentum().is_none(), "hyperbolic (e>1) → None");
         let neg_a = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
         assert!(neg_a.specific_angular_momentum().is_none(), "a ≤ 0 → None");
+    }
+
+    #[test]
+    fn areal_velocity_is_keplers_second_law_constant() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 8.0e6,
+            eccentricity: 0.25,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let h = coe.specific_angular_momentum().expect("bound orbit has h");
+        let da_dt = coe.areal_velocity().expect("bound orbit has areal velocity");
+        // It is exactly half the specific angular momentum.
+        assert!((da_dt - 0.5 * h).abs() / da_dt < 1e-12, "dA/dt = h/2");
+        // STRONG cross-check — Kepler's 2nd law made global: swept over one full
+        // period it covers the entire ellipse area, (h/2)·T = π·a·b. Ties to period()
+        // and semi_minor_axis #210, independent of the h/2 definition.
+        let t = coe.period().expect("bound orbit has a period");
+        let ellipse_area = PI * coe.semi_major_axis * coe.semi_minor_axis();
+        assert!(
+            (da_dt * t - ellipse_area).abs() / ellipse_area < 1e-9,
+            "(h/2)·T = π·a·b"
+        );
+        // A circular orbit: dA/dt = √(μ·a)/2.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let da_circ = circ.areal_velocity().unwrap();
+        assert!(
+            (da_circ - 0.5 * (MU_EARTH * coe.semi_major_axis).sqrt()).abs() / da_circ < 1e-9,
+            "circular dA/dt = √(μa)/2"
+        );
+        // Not bound/closed → None (matching specific_angular_momentum).
+        assert!(
+            ClassicalElements { eccentricity: 1.5, ..coe }.areal_velocity().is_none(),
+            "hyperbolic → None"
+        );
+        assert!(
+            ClassicalElements { semi_major_axis: -8.0e6, ..coe }.areal_velocity().is_none(),
+            "a ≤ 0 → None"
+        );
     }
 
     #[test]
