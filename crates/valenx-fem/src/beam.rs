@@ -367,6 +367,41 @@ pub fn simply_supported_center_deflection(
     load * length.powi(3) / (48.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **strain energy of a simply-supported beam under a central point
+/// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
+/// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
+/// `youngs_modulus` `E` (Pa) and section second moment of area `second_moment_area`
+/// `I` (m⁴) carries a transverse point force `load` `P` (N) at mid-span.
+///
+/// It is the simply-supported companion to the cantilever
+/// [`cantilever_point_load_strain_energy`] in the energy-method family, and like it
+/// follows from **Clapeyron's theorem** `U = ½·P·δ` with the mid-span deflection
+/// [`simply_supported_center_deflection`] `δ = P·L³/(48EI)`. Comparing the two load
+/// cases, a cantilever stores `16×` the energy of a simply-supported beam under the
+/// same point load (`P²L³/(6EI)` vs `P²L³/(96EI)`) — the far stiffer propped-span
+/// support condition. The energy grows with the *square* of the load (so it is
+/// sign-independent), the *cube* of the span, and falls inversely with the flexural
+/// rigidity `E·I`. Returns `0` for non-physical input (`P` non-finite, or `E`, `I`,
+/// or `L` non-positive or non-finite).
+pub fn simply_supported_point_load_strain_energy(
+    load: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load * load * length.powi(3) / (96.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **simply-supported (pinned–pinned) end slope** `θ = P·L²/(16·E·I)`
 /// (rad) — the rotation of the elastic curve at *each support* of a slender
 /// Euler–Bernoulli beam under a *central* transverse point load `load` `P` (N),
@@ -1706,6 +1741,44 @@ mod tests {
         assert_eq!(cantilever_point_load_strain_energy(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_point_load_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(cantilever_point_load_strain_energy(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn simply_supported_point_load_strain_energy_matches_clapeyron() {
+        // Worked point: P = 1 kN central load on a 2 m simply-supported steel beam,
+        // E = 200 GPa, I = 1e-6 m⁴ → U = P²·L³/(96·E·I) = 8e6/1.92e7 = 5/12 ≈ 0.4167 J.
+        let (p, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let u = simply_supported_point_load_strain_energy(p, l, e, i);
+        assert!((u - 5.0 / 12.0).abs() / u < 1e-9, "U = 5/12 J, got {u}");
+        // Quadratic in the load → SIGN-INDEPENDENT; cubic in span; inverse in E·I.
+        assert!((simply_supported_point_load_strain_energy(2.0 * p, l, e, i) - 4.0 * u).abs() / u < 1e-9, "P² scaling");
+        assert!((simply_supported_point_load_strain_energy(-p, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
+        assert!((simply_supported_point_load_strain_energy(p, 2.0 * l, e, i) - 8.0 * u).abs() / u < 1e-9, "L³ scaling");
+        assert!((simply_supported_point_load_strain_energy(p, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
+        assert!((simply_supported_point_load_strain_energy(p, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        // STRONG cross-check (1) via Clapeyron's theorem U = ½·P·δ_centre, threading
+        // the independent simply_supported_center_deflection (δ = P·L³/(48EI)).
+        for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+            let energy = simply_supported_point_load_strain_energy(pp, ll, e, i);
+            let half_p_delta = 0.5 * pp * simply_supported_center_deflection(pp, ll, e, i);
+            assert!(
+                (energy - half_p_delta).abs() / energy < 1e-12,
+                "Clapeyron U = ½·P·δ at P={pp}, L={ll}: {energy} vs {half_p_delta}"
+            );
+        }
+        // STRONG cross-check (2): for equal P,L,E,I a cantilever stores exactly 16× the
+        // energy of the propped span (P²L³/(6EI) vs P²L³/(96EI)), threading #236.
+        for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (4200.0, 0.8)] {
+            let ss = simply_supported_point_load_strain_energy(pp, ll, e, i);
+            let cant = cantilever_point_load_strain_energy(pp, ll, e, i);
+            assert!((cant - 16.0 * ss).abs() / cant < 1e-12, "cantilever = 16× SS at P={pp}, L={ll}");
+        }
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_point_load_strain_energy(p, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(simply_supported_point_load_strain_energy(p, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(simply_supported_point_load_strain_energy(p, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(simply_supported_point_load_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite P
+        assert_eq!(simply_supported_point_load_strain_energy(p, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
