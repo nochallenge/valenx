@@ -286,6 +286,32 @@ pub fn isentropic_area_ratio(mach: f64, gamma: f64) -> f64 {
     (1.0 / mach) * (2.0 / (gamma + 1.0) * temperature_ratio).powf(exponent)
 }
 
+/// The **compressible mass-flow function**
+/// `FF = √γ · M · (1 + ((γ−1)/2)·M²)^(−(γ+1)/(2(γ−1)))` at Mach number `mach` `M`
+/// and heat-capacity ratio `gamma` `γ` — the non-dimensional mass flow
+/// `ṁ·√(R·T₀)/(A·p₀)` an isentropic stream of total temperature `T₀` and total
+/// pressure `p₀` carries through area `A`. It is the relation behind nozzle and
+/// turbomachinery sizing: for fixed `A`, `p₀`, `T₀` the mass flow is set by `M`.
+///
+/// Unlike the monotonic stagnation ratios it **peaks at exactly `M = 1`** — the
+/// *choking* condition: a converging duct accelerates the flow only up to the sonic
+/// throat, where the mass flux is maximal, so no subsonic duct can pass more than
+/// `FF(1)·A·p₀/√(R·T₀)`. It is `0` at rest (`M = 0`) and falls again on the
+/// supersonic branch, so each value `< FF(1)` is shared by one subsonic and one
+/// supersonic solution — the reciprocal face of [`isentropic_area_ratio`], to which
+/// it is tied by mass conservation `A/A* = FF(1)/FF(M)`. For `γ = 1.4` the choked
+/// peak is `FF(1) = √γ·(2/(γ+1))^((γ+1)/(2(γ−1))) ≈ 0.6847`. Returns `0` for a
+/// non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`) — the `M = 0`
+/// no-flow limit.
+pub fn mass_flow_function(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 0.0;
+    }
+    let temperature_ratio = 1.0 + 0.5 * (gamma - 1.0) * mach * mach;
+    let exponent = (gamma + 1.0) / (2.0 * (gamma - 1.0));
+    gamma.sqrt() * mach * temperature_ratio.powf(-exponent)
+}
+
 /// The **characteristic (sonic-referenced) Mach number** `M* = V/a* =
 /// M·√((γ+1) / (2 + (γ−1)·M²))` at Mach number `mach` `M` and heat-capacity ratio
 /// `gamma` `γ` — the flow speed `V` measured against the *critical* (sonic) speed
@@ -1262,6 +1288,43 @@ mod tests {
                 "A/A* from mass conservation at M={m}"
             );
         }
+    }
+
+    #[test]
+    fn mass_flow_function_peaks_at_choking_and_inverts_the_area_ratio() {
+        let g = 1.4;
+        // No flow at rest.
+        assert!(mass_flow_function(0.0, g).abs() < 1e-12, "FF(0) = 0");
+        // The choked peak FF(1) = √γ·(2/(γ+1))^((γ+1)/(2(γ−1))) ≈ 0.6847 for air,
+        // re-derived here via the (2/(γ+1))^b form (the impl uses √γ·M·(…)^(−b)).
+        let choke = g.sqrt() * (2.0 / (g + 1.0)).powf((g + 1.0) / (2.0 * (g - 1.0)));
+        assert!((mass_flow_function(1.0, g) - choke).abs() < 1e-12, "FF(1) = choke constant");
+        assert!((mass_flow_function(1.0, g) - 0.684731).abs() < 1e-5, "FF(1) ≈ 0.6847");
+        // FF is MAXIMISED at M = 1 — the choking condition: a converging duct cannot
+        // pass more than the sonic-throat flux. Both branches sit below the peak.
+        let peak = mass_flow_function(1.0, g);
+        assert!(mass_flow_function(0.5, g) < peak, "subsonic below the choke peak");
+        assert!(mass_flow_function(2.0, g) < peak, "supersonic below the choke peak");
+        assert!(
+            mass_flow_function(0.9, g) < peak && mass_flow_function(1.1, g) < peak,
+            "peak is at M = 1"
+        );
+        // STRONG non-tautological cross-check threading isentropic_area_ratio: by mass
+        // conservation A/A* = FF(1)/FF(M). The area ratio is its own independent closed
+        // form ((2/(γ+1)·T0/T)^b / M), so this ties two separately-derived relations.
+        let ff_star = mass_flow_function(1.0, g);
+        for m in [0.3_f64, 0.5, 2.0, 3.0] {
+            let area_from_ff = ff_star / mass_flow_function(m, g);
+            assert!(
+                (isentropic_area_ratio(m, g) - area_from_ff).abs() / area_from_ff < 1e-9,
+                "A/A* = FF(1)/FF(M) at M={m}"
+            );
+        }
+        // Non-physical input → 0 (the no-flow sentinel).
+        assert_eq!(mass_flow_function(-1.0, g), 0.0); // M < 0
+        assert_eq!(mass_flow_function(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(mass_flow_function(f64::NAN, g), 0.0); // non-finite M
+        assert_eq!(mass_flow_function(2.0, f64::INFINITY), 0.0); // non-finite γ
     }
 
     #[test]
