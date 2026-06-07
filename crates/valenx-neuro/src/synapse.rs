@@ -185,9 +185,48 @@ pub fn nmda_mg_block(voltage_mv: f64, mg_conc_mm: f64) -> f64 {
     1.0 / (1.0 + (mg_conc_mm / 3.57) * (-0.062 * voltage_mv).exp())
 }
 
+/// The **NMDA Mg²⁺ half-block voltage** `V½ = ln([Mg²⁺]/3.57) / 0.062` (mV) — the
+/// membrane potential at which the Jahr–Stevens block [`nmda_mg_block`] is exactly
+/// half-relieved (`B = 0.5`), for extracellular magnesium `mg_conc_mm` `[Mg²⁺]` (mM).
+/// It is the inflection of the receptor's sigmoidal voltage dependence and the single
+/// number that summarises how depolarised the cell must be to unblock the channel:
+/// ≈ −20.5 mV at the physiological 1 mM `[Mg²⁺]`, rising to `0` mV at 3.57 mM and more
+/// positive as magnesium increases. Returns `NaN` for non-physical input (non-finite
+/// or non-positive `[Mg²⁺]`, where there is no block to half-relieve).
+pub fn nmda_mg_block_half_voltage(mg_conc_mm: f64) -> f64 {
+    if !mg_conc_mm.is_finite() || mg_conc_mm <= 0.0 {
+        return f64::NAN;
+    }
+    (mg_conc_mm / 3.57).ln() / 0.062
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nmda_mg_block_half_voltage_relieves_half_the_block() {
+        // Round-trip: at V½ the Jahr–Stevens block is exactly half-relieved (B = 0.5).
+        for &mg in &[0.5_f64, 1.0, 1.5, 3.57] {
+            let v_half = nmda_mg_block_half_voltage(mg);
+            assert!((nmda_mg_block(v_half, mg) - 0.5).abs() < 1e-12, "B(V½) = 0.5 at [Mg]={mg}");
+        }
+
+        // Worked: V½ = 0 at [Mg] = 3.57 mM, ≈ −20.5 mV at the physiological 1 mM.
+        assert!((nmda_mg_block_half_voltage(3.57) - 0.0).abs() < 1e-12, "V½(3.57) = 0");
+        assert!((nmda_mg_block_half_voltage(1.0) - (-20.526)).abs() < 1e-2, "V½(1 mM) ≈ −20.5 mV");
+
+        // More magnesium needs more depolarisation to half-relieve.
+        assert!(
+            nmda_mg_block_half_voltage(2.0) > nmda_mg_block_half_voltage(1.0),
+            "V½ rises with [Mg²⁺]"
+        );
+
+        // Non-physical [Mg²⁺] → NaN (0 mV is a valid output, so NaN, not 0).
+        assert!(nmda_mg_block_half_voltage(0.0).is_nan());
+        assert!(nmda_mg_block_half_voltage(-1.0).is_nan());
+        assert!(nmda_mg_block_half_voltage(f64::NAN).is_nan());
+    }
 
     #[test]
     fn alpha_synapse_peaks_at_g_max_at_the_time_constant() {
