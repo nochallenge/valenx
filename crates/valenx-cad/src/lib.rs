@@ -54,7 +54,8 @@ pub use measure::{
     solid_bounding_box, solid_bounding_box_tol, solid_centroid, solid_centroid_tol,
     solid_genus, solid_principal_moments, solid_principal_moments_tol,
     solid_radius_of_gyration,
-    solid_radius_of_gyration_tol, solid_volume, solid_volume_tol,
+    solid_radius_of_gyration_tol, solid_sphericity, solid_sphericity_tol, solid_volume,
+    solid_volume_tol,
 };
 pub use primitives::{box_solid, cone, cylinder, prism, sphere, torus};
 pub use solid::{CadError, Solid};
