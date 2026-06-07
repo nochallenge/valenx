@@ -312,6 +312,32 @@ impl ClassicalElements {
         ecc
     }
 
+    /// The **mean anomaly** `M` (rad) from the eccentric anomaly `eccentric_anomaly`
+    /// `E` (rad) via Kepler's equation in its native forward form,
+    /// `M = E − e·sin E`.
+    ///
+    /// This is the direct complement of
+    /// [`eccentric_anomaly_from_mean`](Self::eccentric_anomaly_from_mean), which
+    /// inverts the same equation by Newton iteration: where that maps the
+    /// uniformly-advancing (time-driven) mean anomaly to the geometric eccentric
+    /// anomaly, this maps `E → M` back, recovering the time coordinate
+    /// (`t − t_p = M/n` with the mean motion `n`) directly, with no iteration. It is
+    /// also the second leg of [`mean_anomaly_from_true`](Self::mean_anomaly_from_true)
+    /// (`ν → E → M`) exposed on its own, so
+    /// `mean_anomaly_from_true(ν) = mean_anomaly_from_eccentric(E(ν))`.
+    ///
+    /// `E = 0` and `E = π` are fixed points (`M = 0`, `M = π`, where `sin E = 0`);
+    /// a circular orbit (`e = 0`) collapses it to the identity `M = E`. Defined for
+    /// closed orbits (`0 ≤ e < 1`); a hyperbolic eccentricity (`e ≥ 1`), whose
+    /// eccentric anomaly is undefined, or a non-finite `E`, yields `NaN`.
+    pub fn mean_anomaly_from_eccentric(&self, eccentric_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if !(0.0..1.0).contains(&e) || !eccentric_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        eccentric_anomaly - e * eccentric_anomaly.sin()
+    }
+
     /// True anomaly `ν` (rad) from the **eccentric anomaly** `E` (rad) via the
     /// half-angle relation `ν = 2·atan2(√(1+e)·sin(E/2), √(1−e)·cos(E/2))`.
     ///
@@ -1056,6 +1082,55 @@ mod tests {
         let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
         assert!(hyp.eccentric_anomaly_from_mean(1.0).is_nan(), "e≥1 → NaN");
         assert!(coe.eccentric_anomaly_from_mean(f64::NAN).is_nan(), "NaN M → NaN");
+    }
+
+    #[test]
+    fn mean_anomaly_from_eccentric_is_keplers_equation_and_inverts_the_solver() {
+        use std::f64::consts::{PI, TAU};
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.3,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        // Worked value: M = E − e·sin E at E = 1.0 rad, e = 0.3 (≈ 0.747558705).
+        let m = coe.mean_anomaly_from_eccentric(1.0);
+        assert!((m - (1.0 - 0.3 * 1.0_f64.sin())).abs() < 1e-12, "M = E − e·sin E, got {m}");
+        // Apsides are fixed points: E=0 → M=0, E=π → M=π, E=2π → M=2π (sin E = 0).
+        assert!(coe.mean_anomaly_from_eccentric(0.0).abs() < 1e-12, "E=0 → M=0");
+        assert!((coe.mean_anomaly_from_eccentric(PI) - PI).abs() < 1e-12, "E=π → M=π");
+        assert!((coe.mean_anomaly_from_eccentric(TAU) - TAU).abs() < 1e-12, "E=2π → M=2π");
+        // A circular orbit (e=0) collapses Kepler's equation to M = E.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for ea in [0.0_f64, 0.7, PI, 4.2] {
+            assert!((circ.mean_anomaly_from_eccentric(ea) - ea).abs() < 1e-12, "circular M=E at {ea}");
+        }
+        // Strictly monotone in E over a period (dM/dE = 1 − e·cos E ≥ 1 − e > 0).
+        let mut prev = coe.mean_anomaly_from_eccentric(0.0);
+        for k in 1..=20 {
+            let cur = coe.mean_anomaly_from_eccentric(k as f64 * TAU / 20.0);
+            assert!(cur > prev, "M monotone in E (step {k}): {cur} !> {prev}");
+            prev = cur;
+        }
+        // STRONG round-trip threading the Newton solver: forward Kepler then invert.
+        for ea in [0.2_f64, 1.0, 2.5, 4.0, 5.9] {
+            let back = coe.eccentric_anomaly_from_mean(coe.mean_anomaly_from_eccentric(ea));
+            assert!((back - ea).abs() < 1e-9, "E → M → E round-trip at E={ea}: {back}");
+        }
+        // STRONG cross-check threading TWO other methods: E → ν (true_anomaly_from_
+        // eccentric) → M (mean_anomaly_from_true) must equal the direct E → M here —
+        // ties the forward Kepler to the geometric chain (non-tautological).
+        for ea in [0.3_f64, 1.2, 2.8, 5.0] {
+            let via_true = coe.mean_anomaly_from_true(coe.true_anomaly_from_eccentric(ea));
+            let direct = coe.mean_anomaly_from_eccentric(ea);
+            assert!((via_true - direct).abs() < 1e-9, "M via ν vs direct at E={ea}: {via_true} vs {direct}");
+        }
+        // Out of domain: a hyperbolic eccentricity and a non-finite E → NaN.
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert!(hyp.mean_anomaly_from_eccentric(1.0).is_nan(), "e≥1 → NaN");
+        assert!(coe.mean_anomaly_from_eccentric(f64::NAN).is_nan(), "NaN E → NaN");
     }
 
     #[test]
