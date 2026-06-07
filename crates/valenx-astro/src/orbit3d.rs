@@ -236,6 +236,26 @@ impl ClassicalElements {
         }
     }
 
+    /// The **Tisserand parameter** `T = a_ref/a + 2·√((a/a_ref)·(1−e²))·cos(i)` with
+    /// respect to a perturbing body on a circular orbit of semi-major axis
+    /// `reference_semi_major_axis` `a_ref` — the near-invariant of the circular
+    /// restricted three-body problem. It is (approximately) conserved across a close
+    /// encounter with the perturber even as `a`, `e` and `i` all change, so it is the
+    /// standard tool for **identifying a comet or asteroid before and after a planetary
+    /// flyby** and for classifying small-body orbits relative to (most often)
+    /// Jupiter: `T > 3` cannot cross the perturber's orbit, `2 < T < 3` marks the
+    /// Jupiter-family comets, and `T < 2` the nearly-isotropic / Halley-type bodies
+    /// and hyperbolic encounters. A body co-orbital with the perturber (`a = a_ref`,
+    /// `e = 0`, `i = 0`) gives the reference value `T = 3`. Uses the orbit's own
+    /// `a`, `e`, `i`.
+    pub fn tisserand_parameter(&self, reference_semi_major_axis: f64) -> f64 {
+        let a = self.semi_major_axis;
+        let e = self.eccentricity;
+        let i = self.inclination;
+        reference_semi_major_axis / a
+            + 2.0 * (a / reference_semi_major_axis * (1.0 - e * e)).sqrt() * i.cos()
+    }
+
     /// The orbital **specific angular momentum** `h = √(μ·a(1−e²))` (m²/s) —
     /// the angular momentum *per unit mass*, `h = |r × v|`, and the orbit's
     /// defining conserved quantity. It is constant everywhere along the path
@@ -1512,6 +1532,48 @@ mod tests {
         }
         // A non-finite ν propagates to NaN (atan2 is total — no panic/guard).
         assert!(coe.flight_path_angle(f64::NAN).is_nan(), "NaN ν → NaN γ");
+    }
+
+    #[test]
+    fn tisserand_parameter_classifies_orbits_against_a_perturber() {
+        use std::f64::consts::FRAC_PI_3;
+        let a_j = 7.784e11; // ≈ Jupiter's semi-major axis (m), the perturber reference
+        let circ = |a: f64, e: f64, i: f64| ClassicalElements {
+            semi_major_axis: a,
+            eccentricity: e,
+            inclination: i,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+
+        // Co-orbital circle (a = a_J, e = 0, i = 0): T = 1 + 2 = 3.
+        assert!(
+            (circ(a_j, 0.0, 0.0).tisserand_parameter(a_j) - 3.0).abs() < 1e-12,
+            "co-orbital T = 3"
+        );
+        // Inner coplanar circle at a = a_J/4: T = 4 + 2·√(1/4) = 5.
+        assert!(
+            (circ(a_j / 4.0, 0.0, 0.0).tisserand_parameter(a_j) - 5.0).abs() < 1e-12,
+            "inner circle T = 5"
+        );
+        // a = a_J, e = 0, i = 60°: T = 1 + 2·cos(60°) = 2.
+        assert!(
+            (circ(a_j, 0.0, FRAC_PI_3).tisserand_parameter(a_j) - 2.0).abs() < 1e-12,
+            "T = 1 + 2cos(60°) = 2"
+        );
+
+        // Monotonic: T falls as inclination rises (cos i ↓) and as eccentricity rises
+        // (√(1−e²) ↓), holding the other elements fixed.
+        let base = circ(4.0e11, 0.3, 0.2);
+        assert!(
+            base.tisserand_parameter(a_j) < circ(4.0e11, 0.3, 0.1).tisserand_parameter(a_j),
+            "T decreases with inclination"
+        );
+        assert!(
+            circ(4.0e11, 0.6, 0.2).tisserand_parameter(a_j) < base.tisserand_parameter(a_j),
+            "T decreases with eccentricity"
+        );
     }
 
     #[test]
