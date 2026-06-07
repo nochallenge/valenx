@@ -532,6 +532,26 @@ pub fn fixed_fixed_point_load_end_moment(load: f64, length: f64) -> f64 {
     load * length / 8.0
 }
 
+/// The analytic **fixed-end (fixing) moment under a uniformly distributed load**
+/// `M = w·L²/12` (N·m) of a clamped–clamped beam — the reaction moment each built-in
+/// end supplies to hold its slope at zero under a transverse load of intensity
+/// `load_per_length` `w` (N/m) over a span `length` `L` (m).
+///
+/// It is the UDL companion to the point-load [`fixed_fixed_point_load_end_moment`]
+/// (`P·L/8`), completing the clamped–clamped fixed-end-moment pair of the
+/// slope-deflection and moment-distribution methods. Like its sibling it is the end
+/// moment that, superposed on a pinned span, stiffens it into a clamped one (lifting
+/// mid-span by `M·L²/8EI`, the difference between the pinned and clamped UDL centre
+/// deflections). Quadratic in `L`, linear and sign-preserving in `w`, and — being a
+/// pure statics result — independent of `E` and `I`. Returns `0` for non-physical
+/// input (`w` non-finite, or `L` non-positive or non-finite).
+pub fn fixed_fixed_udl_end_moment(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * length * length / 12.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -2382,6 +2402,44 @@ mod tests {
         assert_eq!(simply_supported_end_slope(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_end_slope(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(simply_supported_end_slope(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn fixed_fixed_udl_end_moment_matches_superposition() {
+        // Worked point: w = 1 kN/m UDL on a 4 m clamped–clamped beam → the fixing
+        // moment at each end is M = w·L²/12 = 16000/12 = 4000/3 N·m.
+        let m = fixed_fixed_udl_end_moment(1000.0, 4.0);
+        assert!((m - 4000.0 / 3.0).abs() < 1e-9, "M_end = w·L²/12, got {m}");
+
+        // STRONG cross-check threading the two UDL centre-deflection formulas via
+        // superposition: two equal end moments lift a simply-supported span's
+        // mid-span by M·L²/(8EI), which must equal δ_ss_udl − δ_ff_udl
+        // (5wL⁴/384EI − wL⁴/384EI = wL⁴/96EI = (wL²/12)·L²/8EI).
+        for &(w, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 70.0e9, 4.2e-7),
+            (8200.0, 0.8, 120.0e9, 9.0e-8),
+        ] {
+            let lift = fixed_fixed_udl_end_moment(w, l) * l * l / (8.0 * e * i);
+            let diff = simply_supported_udl_center_deflection(w, l, e, i)
+                - fixed_fixed_udl_center_deflection(w, l, e, i);
+            assert!((lift - diff).abs() <= 1e-12 * diff.abs(), "M·L²/8EI = δ_ss_udl − δ_ff_udl");
+        }
+
+        // Quadratic in span; linear and sign-preserving in w.
+        assert!(
+            (fixed_fixed_udl_end_moment(1000.0, 2.0)
+                - 4.0 * fixed_fixed_udl_end_moment(1000.0, 1.0))
+            .abs()
+                < 1e-9,
+            "quadratic in L"
+        );
+        assert!(fixed_fixed_udl_end_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(fixed_fixed_udl_end_moment(f64::NAN, 4.0), 0.0); // w NaN
+        assert_eq!(fixed_fixed_udl_end_moment(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(fixed_fixed_udl_end_moment(1000.0, -1.0), 0.0); // L < 0
     }
 
     #[test]
