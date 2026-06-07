@@ -148,9 +148,53 @@ pub fn circular_speed(radius: f64) -> Result<f64, AstroError> {
     Ok((MU_EARTH / radius).sqrt())
 }
 
+/// Escape speed (m/s) at a given radius from Earth's centre — the minimum speed
+/// for an unbound (parabolic) trajectory, `v_esc = √(2·μ/r) = √2 · v_circ`. At this
+/// speed the specific orbital energy is exactly zero, so the body just reaches
+/// infinity with no kinetic energy to spare.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `radius` is non-finite or
+/// non-positive, which would otherwise yield a `NaN`/`Inf` speed.
+pub fn escape_speed(radius: f64) -> Result<f64, AstroError> {
+    if !radius.is_finite() || radius <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "escape_speed radius must be finite and > 0",
+        ));
+    }
+    Ok((2.0 * MU_EARTH / radius).sqrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn escape_speed_is_root_two_times_circular() {
+        // v_esc = √2 · v_circ (threads circular_speed) and v_esc² = 2μ/r (zero energy).
+        for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2e7] {
+            let v_esc = escape_speed(r).unwrap();
+            let v_circ = circular_speed(r).unwrap();
+            assert!((v_esc - 2.0_f64.sqrt() * v_circ).abs() / v_esc < 1e-12, "v_esc = √2·v_circ");
+            assert!(
+                (v_esc * v_esc - 2.0 * MU_EARTH / r).abs() / (v_esc * v_esc) < 1e-12,
+                "v_esc² = 2μ/r"
+            );
+        }
+        // Earth-surface escape speed is the textbook ≈ 11.2 km/s.
+        let surface = escape_speed(R_EARTH).unwrap();
+        assert!((11_000.0..11_400.0).contains(&surface), "surface escape ≈ 11.2 km/s, got {surface}");
+        // A higher orbit escapes more slowly.
+        assert!(
+            escape_speed(R_EARTH + 1.0e6).unwrap() < escape_speed(R_EARTH).unwrap(),
+            "escape speed decreases with radius"
+        );
+        // Non-physical radius → error.
+        assert!(escape_speed(0.0).is_err());
+        assert!(escape_speed(-1.0).is_err());
+        assert!(escape_speed(f64::NAN).is_err());
+    }
 
     #[test]
     fn circular_orbit_has_zero_eccentricity() {
