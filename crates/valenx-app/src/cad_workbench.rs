@@ -812,6 +812,36 @@ fn mesh_mean_edge_length(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     Some(total / edges.len() as f64)
 }
 
+/// The **total edge length** — the cumulative length of all *distinct* undirected
+/// edges of a `Tri3` mesh (model units), i.e. the length of its 1-skeleton
+/// (wireframe). It is the 1-D member of the tessellation's dimensional-measure
+/// family — alongside the 2-D [`mesh_surface_area`] and the 3-D [`mesh_volume`] —
+/// and the aggregate companion to the *average* [`mesh_mean_edge_length`]
+/// (`total = mean · edge_count`). Each edge is counted once however many triangles
+/// share it (the in-facet diagonals a tessellator adds are included). `None` for a
+/// mesh with no edges.
+fn mesh_total_edge_length(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut edges: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            for &(i, j) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                edges.insert(if i <= j { (i, j) } else { (j, i) });
+            }
+        }
+    }
+    if edges.is_empty() {
+        return None;
+    }
+    let total: f64 = edges
+        .iter()
+        .map(|&(i, j)| (mesh.nodes[i as usize] - mesh.nodes[j as usize]).norm())
+        .sum();
+    Some(total)
+}
+
 /// The **maximum vertex valence** (graph-degree) of a `Tri3` surface mesh — the
 /// largest number of DISTINCT neighbouring vertices joined to any single vertex by
 /// a triangle edge. It is a topological mesh-quality indicator: a regular
@@ -1381,6 +1411,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_mean_edge_length)
         .map(|h| format!(" · mean edge {h:.3} u"))
         .unwrap_or_default();
+    // Total edge (wireframe / 1-skeleton) length — the 1-D tessellation measure
+    // completing the trio with mesh area (2-D) and mesh vol (3-D).
+    let wire_str = mesh
+        .as_ref()
+        .and_then(mesh_total_edge_length)
+        .map(|w| format!(" · wire {w:.3} u"))
+        .unwrap_or_default();
     // Worst triangle shape quality (4√3·A/Σℓ²; 1 = equilateral, →0 = sliver) —
     // the mesh-quality gate, distinct from the shape/topology measures above.
     let quality_str = mesh
@@ -1439,7 +1476,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|v| format!(" · mean valence {v:.2}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{wire_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2579,6 +2616,52 @@ mod tests {
 
         // No edges → None.
         assert_eq!(mesh_mean_edge_length(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_total_edge_length_sums_the_box_wireframe() {
+        use nalgebra::Vector3;
+        // A single 3-4-5 right triangle: distinct edges {3, 4, 5} → wireframe 12.
+        let mut tri = valenx_mesh::Mesh::new("3-4-5");
+        tri.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+            Vector3::new(0.0, 4.0, 0.0),
+        ];
+        let mut tb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        tb.connectivity = vec![0, 1, 2];
+        tri.element_blocks.push(tb);
+        assert!((mesh_total_edge_length(&tri).unwrap() - 12.0).abs() < 1e-9, "3-4-5 wireframe = 12");
+
+        // The canonical 1×2×3 box: 18 distinct edges — 12 cuboid (4×1 + 4×2 + 4×3 =
+        // 24) and 6 face diagonals (2√5 + 2√10 + 2√13) → total ≈ 42.008.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        mesh.element_blocks.push(block);
+        let expected = 24.0 + 2.0 * 5.0_f64.sqrt() + 2.0 * 10.0_f64.sqrt() + 2.0 * 13.0_f64.sqrt();
+        let total = mesh_total_edge_length(&mesh).expect("box has edges");
+        assert!((total - expected).abs() < 1e-9, "box wireframe ≈ 42.008, got {total}");
+        // STRONG cross-check: total = mean × edge_count, threading mesh_mean_edge_length
+        // (the box has 18 distinct edges, counted independently here).
+        let mean = mesh_mean_edge_length(&mesh).expect("box has edges");
+        assert!((total - mean * 18.0).abs() < 1e-9, "total = mean × 18 distinct edges");
+        // No edges → None.
+        assert_eq!(mesh_total_edge_length(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
