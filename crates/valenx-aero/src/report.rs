@@ -286,6 +286,29 @@ pub fn isentropic_area_ratio(mach: f64, gamma: f64) -> f64 {
     (1.0 / mach) * (2.0 / (gamma + 1.0) * temperature_ratio).powf(exponent)
 }
 
+/// The **characteristic (sonic-referenced) Mach number** `M* = V/a* =
+/// M·√((γ+1) / (2 + (γ−1)·M²))` at Mach number `mach` `M` and heat-capacity ratio
+/// `gamma` `γ` — the flow speed `V` measured against the *critical* (sonic) speed
+/// `a*` rather than the local sound speed `a` (which is what the ordinary Mach
+/// number `M = V/a` uses). Because `a*` stays constant along an adiabatic flow while
+/// the local `a` varies, `M*` is the more convenient speed variable in several
+/// compressible-flow relations.
+///
+/// It is `0` at rest, crosses `1` exactly at the sonic point (`M = 1`, where
+/// `V = a = a*`) so it labels subsonic/supersonic the same way `M` does, and —
+/// unlike `M`, which is unbounded — **saturates** at the finite limit
+/// `√((γ+1)/(γ−1))` (`≈ 2.449` for air) as `M → ∞`. Its signature use is the
+/// **Prandtl relation** for a normal shock, `M₁*·M₂* = 1`: the up- and downstream
+/// characteristic Mach numbers are reciprocals (with `M₂` from
+/// [`normal_shock_downstream_mach`]). Returns `0` for non-physical input
+/// (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn characteristic_mach(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 0.0;
+    }
+    mach * ((gamma + 1.0) / (2.0 + (gamma - 1.0) * mach * mach)).sqrt()
+}
+
 /// The **downstream Mach number** `M₂` behind a stationary **normal shock** with
 /// upstream Mach `mach` `M₁` and heat-capacity ratio `gamma` `γ`, from the
 /// Rankine–Hugoniot jump conditions:
@@ -1205,6 +1228,41 @@ mod tests {
                 "A/A* from mass conservation at M={m}"
             );
         }
+    }
+
+    #[test]
+    fn characteristic_mach_matches_the_sonic_referenced_speed() {
+        let g = 1.4;
+        // M* = 0 at rest; M* = 1 exactly at the sonic point (V = a = a*).
+        assert!(characteristic_mach(0.0, g).abs() < 1e-12, "M*(0) = 0");
+        assert!((characteristic_mach(1.0, g) - 1.0).abs() < 1e-12, "M*(1) = 1");
+        // Worked point: M = 2 → M* = 2·√(2.4/3.6) ≈ 1.633.
+        assert!((characteristic_mach(2.0, g) - 1.63299).abs() < 1e-4, "M*(2) ≈ 1.633");
+        // M* labels subsonic/supersonic the same way M does (crosses 1 with M).
+        assert!(
+            characteristic_mach(0.5, g) < 1.0 && characteristic_mach(3.0, g) > 1.0,
+            "subsonic < 1 < supersonic"
+        );
+        // Monotone in M, and SATURATES at the finite limit √((γ+1)/(γ−1)) (≈ 2.449 for
+        // air) as M → ∞ — unlike the unbounded ordinary Mach number.
+        assert!(characteristic_mach(1.5, g) < characteristic_mach(2.5, g), "monotone in M");
+        let limit = ((g + 1.0) / (g - 1.0)).sqrt();
+        assert!((limit - 6.0_f64.sqrt()).abs() < 1e-12, "limit = √6 for air");
+        let m_big = characteristic_mach(1.0e6, g);
+        assert!(m_big < limit && m_big > 0.999 * limit, "M*(1e6) → √6⁻: {m_big} vs {limit}");
+        // STRONG cross-check — the PRANDTL relation across a normal shock M₁*·M₂* = 1,
+        // with M₂ = normal_shock_downstream_mach(M₁) (#181). Ties #223 to #181: M* via
+        // its closed form, M₂ via the Rankine–Hugoniot relation — different derivations.
+        for &m1 in &[1.2_f64, 1.5, 2.0, 3.0, 5.0] {
+            let m2 = normal_shock_downstream_mach(m1, g);
+            let product = characteristic_mach(m1, g) * characteristic_mach(m2, g);
+            assert!((product - 1.0).abs() < 1e-9, "M1*·M2* = 1 at M1={m1}: got {product}");
+        }
+        // Non-physical input → 0.
+        assert_eq!(characteristic_mach(-1.0, g), 0.0);
+        assert_eq!(characteristic_mach(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(characteristic_mach(f64::NAN, g), 0.0);
+        assert_eq!(characteristic_mach(2.0, f64::INFINITY), 0.0);
     }
 
     #[test]
