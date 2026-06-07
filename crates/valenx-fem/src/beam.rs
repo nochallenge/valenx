@@ -145,6 +145,27 @@ pub fn cantilever_point_load_root_moment(load: f64, length: f64) -> f64 {
     load * length
 }
 
+/// The analytic **maximum bending moment at the fixed root of a cantilever under a
+/// uniformly distributed load** `M = w·L²/2` (N·m) — the peak moment, at the built-in
+/// (encastré) end, which sets the maximum bending stress and governs the strength
+/// design of the member. `load_per_length` `w` is the load intensity (N/m) and
+/// `length` `L` the span (m).
+///
+/// The moment grows quadratically from zero at the free tip to `w·L²/2` at the root;
+/// this root value is the design maximum. It is the UDL companion to the point-load
+/// [`cantilever_point_load_root_moment`] (`P·L`), and threads the tip deflection
+/// [`cantilever_udl_tip_deflection`] (`δ = w·L⁴/8EI = M·L²/4EI`) and the strain energy
+/// [`cantilever_udl_strain_energy`] (`U = w²L⁵/40EI = M²·L/10EI`). Quadratic in `L`,
+/// linear and sign-preserving in `w`, and — a statics result — independent of `E` and
+/// `I`. Returns `0` for non-physical input (`w` non-finite, or `L` non-positive or
+/// non-finite).
+pub fn cantilever_udl_root_moment(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * length * length / 2.0
+}
+
 /// The analytic **strain energy of a tip-loaded cantilever**
 /// `U = P²·L³/(6·E·I)` (J) — the elastic energy stored in bending when a slender
 /// Euler–Bernoulli cantilever of span `length` `L` (m), Young's modulus
@@ -1925,6 +1946,43 @@ mod tests {
             tip.abs()
         );
         assert!(tip < 0.0, "tip should deflect in -Z, got {tip}");
+    }
+
+    #[test]
+    fn cantilever_udl_root_moment_matches_statics() {
+        // Worked: w = 1 kN/m on a 2 m cantilever → M_root = w·L²/2 = 2000 N·m.
+        let m = cantilever_udl_root_moment(1000.0, 2.0);
+        assert!((m - 2000.0).abs() < 1e-9, "M_root = w·L²/2, got {m}");
+
+        // Threads cantilever_udl_tip_deflection (δ = wL⁴/8EI = M·L²/4EI) and
+        // cantilever_udl_strain_energy (U = w²L⁵/40EI = M²·L/10EI).
+        for &(w, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 70.0e9, 4.2e-7),
+            (8200.0, 1.2, 120.0e9, 9.0e-8),
+        ] {
+            let from_moment = cantilever_udl_root_moment(w, l) * l * l / (4.0 * e * i);
+            let delta = cantilever_udl_tip_deflection(w, l, e, i);
+            assert!((from_moment - delta).abs() <= 1e-12 * delta.abs(), "M·L²/4EI = δ_udl");
+
+            let from_moment_u = cantilever_udl_root_moment(w, l).powi(2) * l / (10.0 * e * i);
+            let energy = cantilever_udl_strain_energy(w, l, e, i);
+            assert!((from_moment_u - energy).abs() <= 1e-12 * energy.abs(), "M²·L/10EI = U");
+        }
+
+        // Quadratic in span; linear and sign-preserving in w.
+        assert!(
+            (cantilever_udl_root_moment(1000.0, 4.0) - 4.0 * cantilever_udl_root_moment(1000.0, 2.0))
+                .abs()
+                < 1e-9,
+            "quadratic in L"
+        );
+        assert!(cantilever_udl_root_moment(-1000.0, 2.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(cantilever_udl_root_moment(f64::NAN, 2.0), 0.0);
+        assert_eq!(cantilever_udl_root_moment(1000.0, 0.0), 0.0);
+        assert_eq!(cantilever_udl_root_moment(1000.0, -1.0), 0.0);
     }
 
     #[test]
