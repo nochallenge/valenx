@@ -593,6 +593,32 @@ impl FlowSolution {
         (0..ny).map(|j| (1.0 - self.u.at(nx, j) / u_ref) * dy).sum()
     }
 
+    /// The **momentum thickness** `θ = ∫₀^Ly (u/u_ref)(1 − u/u_ref) dy` (m) at the
+    /// outlet cross-section (`x = lx`) — the height of an inviscid stream of edge
+    /// speed `u_ref` whose momentum flux equals the momentum *deficit* the viscous
+    /// boundary layer carries. `u_ref` is the edge / free-stream (or channel-
+    /// centreline) reference speed (the [`FlowSolution::bulk_velocity`] or a known
+    /// inlet speed), matching [`FlowSolution::displacement_thickness`]. It is the
+    /// momentum-deficit companion to that mass-deficit `δ*`, and the two define the
+    /// shape factor `H = δ*/θ` (≈ 2.6 for a laminar Blasius layer, falling toward
+    /// ~1.3–1.4 as a profile fills out turbulently). Since `δ* − θ = ∫(1 − u/u_ref)²
+    /// dy ≥ 0`, always `θ ≤ δ*`. Plug flow (uniform `u = u_ref`) gives `0`; the more
+    /// the near-wall fluid lags, the larger `θ`. Returns `0` for a non-finite or
+    /// non-positive `u_ref` or an empty grid.
+    pub fn momentum_thickness(&self, u_ref: f64) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 || !u_ref.is_finite() || u_ref <= 0.0 {
+            return 0.0;
+        }
+        let dy = self.grid.dy();
+        (0..ny)
+            .map(|j| {
+                let r = self.u.at(nx, j) / u_ref;
+                r * (1.0 - r) * dy
+            })
+            .sum()
+    }
+
     /// Area-averaged kinetic-energy density `⟨½ρ|u|²⟩` (J/m³ = Pa) over the cell
     /// grid — the mean specific kinetic energy of the flow, in the same units as
     /// (and directly comparable to) the freestream dynamic pressure `½ρU²`.
@@ -2599,6 +2625,89 @@ mod tests {
         assert_eq!(sol.displacement_thickness(0.0), 0.0); // u_ref = 0
         assert_eq!(sol.displacement_thickness(-1.0), 0.0); // u_ref < 0
         assert_eq!(sol.displacement_thickness(f64::NAN), 0.0); // non-finite
+    }
+
+    #[test]
+    fn momentum_thickness_matches_the_definitions_and_bounds_displacement() {
+        // EXACT anchor: a uniform half-speed profile u = U/2 over a 4×8 channel of
+        // height Ly = 3, referenced to u_ref = U. The momentum integrand
+        // (u/U)(1−u/U) = ½·½ = ¼ is CONSTANT, so the midpoint sum is exact:
+        // θ = ¼·Ly and δ* = ½·Ly with no discretisation error.
+        let (u_full, ly) = (2.0_f64, 3.0_f64);
+        let grid = Grid::new(4, 8, 4.0, ly);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 0.5 * u_full);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let theta = sol.momentum_thickness(u_full);
+        assert!((theta - ly / 4.0).abs() < 1e-12, "θ = Ly/4 = 0.75, got {theta}");
+        let dstar = sol.displacement_thickness(u_full);
+        assert!((dstar - ly / 2.0).abs() < 1e-12, "δ* = Ly/2 = 1.5, got {dstar}");
+        // θ ≤ δ* always (δ* − θ = ∫(1−u/U)² dy ≥ 0) — threads displacement_thickness.
+        assert!(theta <= dstar + 1e-12, "θ ≤ δ*: {theta} vs {dstar}");
+
+        // Physical Couette profile u(y) = U·y/Ly on a fine grid → θ ≈ Ly/6. The
+        // momentum integrand is quadratic in y, so the midpoint rule carries an
+        // O(dy²) error; a fine grid drives it well below 1e-3 relative.
+        let cgrid = Grid::new(4, 200, 4.0, ly);
+        let dy = cgrid.dy();
+        let mut cu = cgrid.u_field();
+        for i in 0..=cgrid.nx {
+            for j in 0..cgrid.ny {
+                let y = (j as f64 + 0.5) * dy;
+                cu.set(i, j, u_full * y / ly);
+            }
+        }
+        let couette = FlowSolution {
+            grid: cgrid,
+            u: cu,
+            v: cgrid.v_field(),
+            pressure: cgrid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let theta_c = couette.momentum_thickness(u_full);
+        assert!((theta_c - ly / 6.0).abs() / (ly / 6.0) < 1e-3, "Couette θ ≈ Ly/6, got {theta_c}");
+        // Couette δ* = Ly/2 (exact, linear integrand) ⇒ shape factor H = δ*/θ ≈ 3.
+        let dstar_c = couette.displacement_thickness(u_full);
+        let h = dstar_c / theta_c;
+        assert!((h - 3.0).abs() < 5e-3, "Couette H = δ*/θ ≈ 3, got {h}");
+        assert!(theta_c <= dstar_c, "θ ≤ δ* for Couette");
+
+        // Plug flow (uniform u = U) carries no momentum deficit → θ = 0.
+        let mut plug_u = cgrid.u_field();
+        for i in 0..=cgrid.nx {
+            for j in 0..cgrid.ny {
+                plug_u.set(i, j, u_full);
+            }
+        }
+        let plug = FlowSolution {
+            grid: cgrid,
+            u: plug_u,
+            v: cgrid.v_field(),
+            pressure: cgrid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(plug.momentum_thickness(u_full).abs() < 1e-12, "plug flow → θ = 0");
+
+        // A non-physical reference speed is undefined → 0.
+        assert_eq!(sol.momentum_thickness(0.0), 0.0); // u_ref = 0
+        assert_eq!(sol.momentum_thickness(-1.0), 0.0); // u_ref < 0
+        assert_eq!(sol.momentum_thickness(f64::NAN), 0.0); // non-finite
     }
 
     #[test]
