@@ -813,6 +813,37 @@ impl FlowSolution {
         du_dx + dv_dy
     }
 
+    /// The **Q-criterion** `Q = ½(‖Ω‖² − ‖S‖²)` (1/s²) at the centre of cell
+    /// `(i, j)` — the per-cell vortex-identification scalar (Hunt, Wray & Moin 1988)
+    /// that [`FlowSolution::max_q_criterion`] takes the peak of. It completes the
+    /// per-cell first-order field-accessor trio with the curl
+    /// [`FlowSolution::vorticity_at_cell`] (`ω = ∂v/∂x − ∂u/∂y`) and the divergence
+    /// [`FlowSolution::divergence_at_cell`] (`∇·u`): `Q` weighs the rotation tensor
+    /// `Ω` against the strain-rate tensor `S`, so it is **positive only where the
+    /// fluid genuinely swirls**. Solid-body rotation at rate `Ω` gives `Q = Ω²`
+    /// (`= ω²/4`, since `ω = 2Ω`); a pure shear layer — equal rotation and strain —
+    /// gives `Q = 0` despite its non-zero vorticity; and a pure straining flow gives
+    /// `Q < 0`. Unlike the clamped `max_q_criterion`, this returns the **raw** `Q`
+    /// (which may be negative). Computed with the same interior central-difference
+    /// stencil as the other accessors; **boundary cells** (first/last row or column)
+    /// return `0`.
+    pub fn q_criterion_at_cell(&self, i: usize, j: usize) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if i == 0 || j == 0 || i + 1 >= nx || j + 1 >= ny {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let du_dx = (self.u_at_cell(i + 1, j) - self.u_at_cell(i - 1, j)) / (2.0 * dx);
+        let dv_dy = (self.v_at_cell(i, j + 1) - self.v_at_cell(i, j - 1)) / (2.0 * dy);
+        let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / (2.0 * dy);
+        let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / (2.0 * dx);
+        let omega = dv_dx - du_dy;
+        let s_off = 0.5 * (du_dy + dv_dx);
+        let omega_norm_sq = 0.5 * omega * omega;
+        let s_norm_sq = du_dx * du_dx + dv_dy * dv_dy + 2.0 * s_off * s_off;
+        0.5 * (omega_norm_sq - s_norm_sq)
+    }
+
     /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
     /// signed net rotation of the flow (Kelvin's circulation theorem; by
     /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
@@ -3304,6 +3335,98 @@ mod tests {
         // Solid-body rotation: Γ = 2Ω · interior area.
         let interior_area = (grid.nx - 2) as f64 * (grid.ny - 2) as f64 * dx * dy;
         assert!((gamma - 2.0 * omega * interior_area).abs() / gamma < 1e-9, "Γ = 2Ω·A_interior");
+    }
+
+    #[test]
+    fn q_criterion_at_cell_identifies_rotation_over_strain() {
+        // 6×6 unit grid (dx = dy = 1).
+        let grid = Grid::new(6, 6, 6.0, 6.0);
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // (1) Solid-body rotation u = −Ω·y, v = +Ω·x — pure rotation (strain S = 0):
+        // Q = Ω² > 0 everywhere, and Q = ω²/4 (ω = vorticity_at_cell = 2Ω).
+        let rate = 2.0_f64;
+        let mut ur = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ur.set(fi, j, -rate * (j as f64 + 0.5) * dy);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            for fj in 0..=grid.ny {
+                vr.set(i, fj, rate * (i as f64 + 0.5) * dx);
+            }
+        }
+        let rot = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let q = rot.q_criterion_at_cell(3, 3);
+        assert!((q - rate * rate).abs() < 1e-9, "solid-body rotation Q = Ω², got {q}");
+        let w = rot.vorticity_at_cell(3, 3);
+        assert!((q - w * w / 4.0).abs() < 1e-9, "pure rotation Q = ω²/4");
+        assert!(q > 0.0, "rotation-dominated → Q > 0");
+        // Boundary cells have no centred stencil → 0.
+        assert_eq!(rot.q_criterion_at_cell(0, 3), 0.0);
+        assert_eq!(rot.q_criterion_at_cell(3, grid.ny - 1), 0.0);
+        // STRONG cross-check threading the independent max_q_criterion reducer.
+        assert!((rot.max_q_criterion() - rate * rate).abs() < 1e-9, "max Q = Ω²");
+
+        // (2) Pure shear u = γ·y, v = 0 — equal rotation and strain → Q = 0, even
+        // though the vorticity is non-zero (a shear layer is not a vortex).
+        let gamma = 3.0_f64;
+        let mut us = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                us.set(fi, j, gamma * (j as f64 + 0.5) * dy);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(shear.q_criterion_at_cell(3, 3).abs() < 1e-9, "pure shear → Q = 0");
+        assert!(shear.vorticity_at_cell(3, 3).abs() > 0.1, "...yet shear has vorticity");
+
+        // (3) Pure straining u = a·x, v = −a·y (incompressible, irrotational) → Q = −a²
+        // < 0 (strain-dominated, not a vortex), and max_q_criterion clamps to 0.
+        let a = 1.5_f64;
+        let mut ue = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ue.set(fi, j, a * (fi as f64) * dx);
+            }
+        }
+        let mut ve = grid.v_field();
+        for i in 0..grid.nx {
+            for fj in 0..=grid.ny {
+                ve.set(i, fj, -a * (fj as f64) * dy);
+            }
+        }
+        let strain = FlowSolution {
+            grid,
+            u: ue,
+            v: ve,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let qs = strain.q_criterion_at_cell(3, 3);
+        assert!((qs + a * a).abs() < 1e-9, "pure strain Q = −a², got {qs}");
+        assert!(strain.vorticity_at_cell(3, 3).abs() < 1e-9, "pure strain is irrotational");
+        assert_eq!(strain.max_q_criterion(), 0.0, "no vortex → max Q clamps to 0");
     }
 
     #[test]
