@@ -618,6 +618,23 @@ pub fn fanno_flow_temperature_ratio(mach: f64, gamma: f64) -> f64 {
     (gamma + 1.0) / (2.0 + (gamma - 1.0) * mach * mach)
 }
 
+/// The **Fanno-flow static pressure ratio** `p/p* = (1/M)·√((γ+1)/(2 + (γ−1)·M²))`
+/// at Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the static
+/// pressure referenced to the sonic (choked) state for **Fanno flow** (steady,
+/// adiabatic, constant-area flow with wall friction), the pressure companion to the
+/// [`fanno_flow_temperature_ratio`] `T/T*`. It is exactly `√(T/T*)/M`, so it is `1`
+/// at the sonic point (`M = 1`), exceeds `1` for subsonic flow, falls below `1` for
+/// supersonic flow, and decreases monotonically as friction drives the Mach number
+/// toward `1`. It diverges (`→ +∞`) as `M → 0` (the static pressure far from the
+/// choked state). Returns `0` for non-physical input (non-finite `M` or `γ`,
+/// `M < 0`, or `γ ≤ 1`).
+pub fn fanno_flow_pressure_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (1.0 / mach) * ((gamma + 1.0) / (2.0 + (gamma - 1.0) * mach * mach)).sqrt()
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1786,6 +1803,36 @@ mod tests {
         assert_eq!(rayleigh_flow_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn fanno_flow_pressure_ratio_threads_the_temperature_ratio() {
+        let g = 1.4;
+        // Sonic reference: p/p* = 1 exactly at M = 1.
+        assert!((fanno_flow_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        // STRONG cross-check threading fanno_flow_temperature_ratio (#259): the Fanno
+        // pressure ratio is √(T/T*)/M — a distinct closed form.
+        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+            let expected = fanno_flow_temperature_ratio(m, gam).sqrt() / m;
+            assert!(
+                (fanno_flow_pressure_ratio(m, gam) - expected).abs() / expected < 1e-12,
+                "p/p* = √(T/T*)/M at M={m}, γ={gam}"
+            );
+        }
+        // Subsonic pressure exceeds sonic; supersonic falls below it.
+        assert!(fanno_flow_pressure_ratio(0.5, g) > 1.0, "subsonic p/p* > 1");
+        assert!(fanno_flow_pressure_ratio(2.0, g) < 1.0, "supersonic p/p* < 1");
+        // Monotonic decreasing in M (friction drives the flow toward sonic).
+        assert!(
+            fanno_flow_pressure_ratio(0.5, g) > fanno_flow_pressure_ratio(1.5, g),
+            "p/p* decreases with M"
+        );
+        // Diverges at rest: p/p* → ∞ as M → 0.
+        assert!(fanno_flow_pressure_ratio(0.0, g).is_infinite(), "M=0 → ∞");
+        // Non-physical input → 0.
+        assert_eq!(fanno_flow_pressure_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(fanno_flow_pressure_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(fanno_flow_pressure_ratio(f64::NAN, g), 0.0); // non-finite M
     }
 
     #[test]
