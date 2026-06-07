@@ -255,9 +255,56 @@ pub fn semi_major_axis_from_period(period: f64) -> Result<f64, AstroError> {
     Ok((MU_EARTH * period * period / (4.0 * std::f64::consts::PI * std::f64::consts::PI)).cbrt())
 }
 
+/// The **circular-orbit radius from the circular speed** `r = μ / v²` (m) — the orbit
+/// radius about Earth at which a body circles at speed `speed` `v` (m/s); the inverse of
+/// [`circular_speed`]. Given a measured circular orbital speed it recovers the altitude,
+/// and a faster orbit is a lower (smaller) one.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `speed` is non-finite or non-positive.
+pub fn orbital_radius_from_circular_speed(speed: f64) -> Result<f64, AstroError> {
+    if !speed.is_finite() || speed <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "orbital_radius_from_circular_speed speed must be finite and > 0",
+        ));
+    }
+    Ok(MU_EARTH / (speed * speed))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orbital_radius_from_circular_speed_inverts_circular_speed() {
+        // Round-trip: recover r from the circular speed it implies (the exact inverse
+        // of √(μ/r)).
+        for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2164e7] {
+            let recovered = orbital_radius_from_circular_speed(circular_speed(r).unwrap()).unwrap();
+            assert!((recovered - r).abs() <= 1e-12 * r, "r = μ/v² inverts v = √(μ/r)");
+        }
+
+        // Worked: a ≈ 7.67 km/s LEO orbital speed gives roughly a 400 km altitude (a
+        // rough textbook anchor within 1%; the exact relationship is the round-trip).
+        let r = orbital_radius_from_circular_speed(7672.6).unwrap();
+        assert!(
+            (r - (R_EARTH + 400_000.0)).abs() / (R_EARTH + 400_000.0) < 1e-2,
+            "7.67 km/s → ≈ 400 km LEO, got r = {r}"
+        );
+
+        // A faster circular speed means a smaller orbit.
+        assert!(
+            orbital_radius_from_circular_speed(8000.0).unwrap()
+                < orbital_radius_from_circular_speed(3000.0).unwrap(),
+            "faster → smaller orbit"
+        );
+
+        // Non-physical speed → error.
+        assert!(orbital_radius_from_circular_speed(0.0).is_err());
+        assert!(orbital_radius_from_circular_speed(-1.0).is_err());
+        assert!(orbital_radius_from_circular_speed(f64::NAN).is_err());
+    }
 
     #[test]
     fn semi_major_axis_from_period_inverts_kepler_third_law() {
