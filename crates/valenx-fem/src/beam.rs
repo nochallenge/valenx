@@ -461,6 +461,26 @@ pub fn simply_supported_point_load_max_moment(load: f64, length: f64) -> f64 {
     load * length / 4.0
 }
 
+/// The analytic **maximum bending moment of a simply-supported beam under a
+/// uniformly distributed load** `M = w·L²/8` (N·m) — the peak moment, at mid-span,
+/// which sets the maximum bending stress and so governs the strength design of the
+/// member. `load_per_length` `w` is the load intensity (N/m) and `length` `L` the
+/// span (m).
+///
+/// It is the UDL companion to the point-load
+/// [`simply_supported_point_load_max_moment`] (`P·L/4`), completing the
+/// simply-supported peak-moment pair. It is `3/2` of the clamped–clamped fixing
+/// moment [`fixed_fixed_udl_end_moment`] (`w·L²/12`) — building in the ends sheds
+/// a third of the peak moment. Quadratic in `L`, linear and sign-preserving in `w`,
+/// and — a statics result — independent of `E` and `I`. Returns `0` for non-physical
+/// input (`w` non-finite, or `L` non-positive or non-finite).
+pub fn simply_supported_udl_max_moment(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * length * length / 8.0
+}
+
 /// The analytic **fixed-fixed (clamped–clamped) beam mid-span deflection**
 /// `δ = P·L³/(192·E·I)` (m) — the deflection at mid-span of a slender
 /// Euler–Bernoulli beam **built in at both ends** (encastré) carrying a transverse
@@ -2348,6 +2368,46 @@ mod tests {
         assert_eq!(fixed_fixed_center_deflection(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0); // L = 0
         assert_eq!(fixed_fixed_center_deflection(1000.0, 4.0, -1.0, 1.0e-6), 0.0); // E < 0
         assert_eq!(fixed_fixed_center_deflection(1000.0, 4.0, 200.0e9, 0.0), 0.0); // I = 0
+    }
+
+    #[test]
+    fn simply_supported_udl_max_moment_matches_statics() {
+        // Worked point: w = 1 kN/m on a 4 m span → M_max = w·L²/8 = 2000 N·m.
+        let m = simply_supported_udl_max_moment(1000.0, 4.0);
+        assert!((m - 2000.0).abs() < 1e-9, "M_max = w·L²/8, got {m}");
+
+        // Threads fixed_fixed_udl_end_moment (#278): the simply-supported UDL mid-span
+        // moment wL²/8 is 3/2 the clamped-clamped fixing moment wL²/12.
+        assert!(
+            (m - 1.5 * fixed_fixed_udl_end_moment(1000.0, 4.0)).abs() < 1e-9,
+            "M_ss = 1.5 · M_ff_end"
+        );
+
+        // Threads simply_supported_udl_center_deflection: δ = 5wL⁴/384EI = 5·M·L²/(48EI).
+        for &(w, l, e, i) in &[
+            (1000.0_f64, 4.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 70.0e9, 4.2e-7),
+            (8200.0, 0.8, 120.0e9, 9.0e-8),
+        ] {
+            let from_moment = 5.0 * simply_supported_udl_max_moment(w, l) * l * l / (48.0 * e * i);
+            let delta = simply_supported_udl_center_deflection(w, l, e, i);
+            assert!((from_moment - delta).abs() <= 1e-12 * delta.abs(), "5·M·L²/48EI = δ_udl");
+        }
+
+        // Quadratic in span; linear and sign-preserving in w.
+        assert!(
+            (simply_supported_udl_max_moment(1000.0, 8.0)
+                - 4.0 * simply_supported_udl_max_moment(1000.0, 4.0))
+            .abs()
+                < 1e-9,
+            "quadratic in L"
+        );
+        assert!(simply_supported_udl_max_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_udl_max_moment(f64::NAN, 4.0), 0.0);
+        assert_eq!(simply_supported_udl_max_moment(1000.0, 0.0), 0.0);
+        assert_eq!(simply_supported_udl_max_moment(1000.0, -1.0), 0.0);
     }
 
     #[test]
