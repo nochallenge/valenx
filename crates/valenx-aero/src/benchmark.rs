@@ -143,6 +143,18 @@ pub fn blasius_boundary_layer_thickness_ratio(re_x: f64) -> f64 {
     5.0 / re_x.sqrt()
 }
 
+/// The **Blasius laminar displacement thickness ratio** `δ*/x = 1.721·Re_x⁻¹ᐟ²`
+/// (dimensionless) at local length Reynolds number `re_x` `Re_x = U·x/ν` — the
+/// distance the outer inviscid streamlines are pushed away from the wall by the
+/// boundary layer's mass-flow deficit. It is the laminar flat-plate companion to the
+/// 99% thickness [`blasius_boundary_layer_thickness_ratio`] (a fixed fraction
+/// `1.721/5.0 ≈ 0.34` of it) and is what an inviscid outer solution adds to the body to
+/// account for viscous blockage (effective-body / displacement coupling).
+pub fn blasius_displacement_thickness_ratio(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    1.721 / re_x.sqrt()
+}
+
 /// The thin-airfoil-theory lift-curve slope — `2π` per radian, the
 /// classic inviscid result for a thin symmetric section at a small
 /// angle of attack.
@@ -580,6 +592,42 @@ mod tests {
             "near-wall-model sphere Cd {} should be a plausible \
              sphere drag",
             after.cd
+        );
+    }
+
+    #[test]
+    fn blasius_displacement_thickness_is_a_fixed_fraction_of_the_layer() {
+        // Worked: δ*/x = 1.721/√Re; at Re = 1e6, δ*/x = 1.721/1000 = 1.721e-3.
+        assert!(
+            (blasius_displacement_thickness_ratio(1.0e6) - 1.721e-3).abs() <= 1e-12 * 1.721e-3,
+            "δ*/x(1e6) = 1.721e-3"
+        );
+
+        for &re in &[1.0e5, 1.0e6, 5.0e6] {
+            // Threads the 99% thickness (#313): constant ratio 1.721/5.0.
+            let from_delta = blasius_boundary_layer_thickness_ratio(re) * (1.721 / 5.0);
+            assert!(
+                (blasius_displacement_thickness_ratio(re) - from_delta).abs() <= 1e-12 * from_delta,
+                "δ*/x = (δ/x)·1.721/5.0 at Re={re}"
+            );
+            // Threads the local skin friction (#307): constant ratio 1.721/0.664.
+            let from_cf = blasius_local_cf(re) * (1.721 / 0.664);
+            assert!(
+                (blasius_displacement_thickness_ratio(re) - from_cf).abs() <= 1e-12 * from_cf,
+                "δ*/x = c_f·1.721/0.664 at Re={re}"
+            );
+            // The displacement thickness is a fraction of the 99% thickness.
+            assert!(
+                blasius_displacement_thickness_ratio(re)
+                    < blasius_boundary_layer_thickness_ratio(re),
+                "δ* < δ"
+            );
+        }
+
+        // The Re < 1 clamp (matching the family): δ*/x(0.5) = 1.721.
+        assert!(
+            (blasius_displacement_thickness_ratio(0.5) - 1.721).abs() < 1e-12,
+            "clamped to Re = 1"
         );
     }
 
