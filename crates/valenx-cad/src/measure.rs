@@ -367,6 +367,32 @@ pub fn solid_bounding_box(solid: &Solid) -> Result<([f64; 3], [f64; 3]), CadErro
     solid_bounding_box_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box space diagonal** `d = √(Δx² + Δy² + Δz²)` (model
+/// units) of a solid — the length of the main diagonal of its AABB, computed at
+/// tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is the standard
+/// single-number measure of a solid's overall size (level-of-detail selection, frustum
+/// culling, a conservative bounding radius for broad-phase collision, and tolerance
+/// scaling); it is `a√3` for a cube of side `a` and `2R√3` for a sphere of radius `R`,
+/// and is always at least as large as the longest individual extent.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the
+/// solid is empty (no bounding box).
+pub fn solid_bounding_box_diagonal_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let (min, max) = solid_bounding_box_tol(solid, tol)?;
+    let dx = max[0] - min[0];
+    let dy = max[1] - min[1];
+    let dz = max[2] - min[2];
+    Ok((dx * dx + dy * dy + dz * dz).sqrt())
+}
+
+/// AABB space diagonal of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_diagonal_tol`].
+pub fn solid_bounding_box_diagonal(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_diagonal_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box fill ratio** `V / V_bbox` (dimensionless) of a
 /// solid — the fraction of its AABB that the solid actually occupies, the 3-D analogue
 /// of rectangularity / extent. It is `1` for an axis-aligned box (which fills its AABB
@@ -791,6 +817,47 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let v = solid_volume(&cube).unwrap();
         assert!((v - 1.0).abs() < 1e-9, "unit cube volume {v} != 1.0");
+    }
+
+    #[test]
+    fn solid_bounding_box_diagonal_matches_the_aabb_extents() {
+        use crate::primitives::sphere;
+
+        // box(2,4,6): AABB extents (2,4,6) → d = √(4+16+36) = √56 ≈ 7.4833148.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_bounding_box_diagonal(&b).unwrap() - 56.0_f64.sqrt()).abs() < 1e-9,
+            "box diagonal = √56"
+        );
+
+        // Threads solid_bounding_box: d = √(Σ extent²).
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let (mn, mx) = solid_bounding_box(&s).unwrap();
+            let expected =
+                ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt();
+            assert!(
+                (solid_bounding_box_diagonal(&s).unwrap() - expected).abs() / expected < 1e-9,
+                "d = √(Σ extent²)"
+            );
+        }
+
+        // A cube of side a has diagonal a√3; a sphere's AABB is the cube of side 2R.
+        assert!(
+            (solid_bounding_box_diagonal(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap()
+                - 2.0 * 3.0_f64.sqrt())
+            .abs()
+                < 1e-9,
+            "cube side 2 → 2√3"
+        );
+        assert!(
+            (solid_bounding_box_diagonal(&sphere(2.0).unwrap()).unwrap() - 4.0 * 3.0_f64.sqrt())
+                .abs()
+                < 1e-2,
+            "sphere R=2 → 4√3"
+        );
+
+        // The space diagonal exceeds the largest single extent.
+        assert!(solid_bounding_box_diagonal(&b).unwrap() > 6.0, "diagonal > z-extent");
     }
 
     #[test]
