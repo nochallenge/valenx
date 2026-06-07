@@ -32,6 +32,20 @@ pub fn nernst_potential_mv(temp_k: f64, z: f64, c_out: f64, c_in: f64) -> f64 {
     1.0e3 * (GAS_CONSTANT * temp_k) / (z * FARADAY) * (c_out / c_in).ln()
 }
 
+/// The **inverse Nernst relation** — the trans-membrane concentration ratio
+/// `c_out/c_in = exp(z·E_rev / V_T)` implied by a measured reversal (equilibrium)
+/// potential `reversal_potential_mv` `E_rev` (mV) for an ion of valence `valence` `z`
+/// at absolute temperature `temp_k`, with `V_T` the thermal voltage
+/// [`thermal_voltage_mv`]. It inverts [`nernst_potential_mv`]: given the equilibrium
+/// potential read off an I–V curve, it recovers the out/in concentration gradient that
+/// sets it. `E_rev = 0` gives a ratio of `1` (equal concentrations); a negative
+/// `E_rev` (for `z > 0`) gives a ratio below `1` (the cation is more concentrated
+/// inside). Like [`nernst_potential_mv`] it is total — non-physical input
+/// (`temp_k ≤ 0`) yields a non-finite result the caller is expected to guard.
+pub fn nernst_concentration_ratio(temp_k: f64, valence: f64, reversal_potential_mv: f64) -> f64 {
+    (valence * reversal_potential_mv / thermal_voltage_mv(temp_k)).exp()
+}
+
 /// The thermal voltage `R·T/F` in **millivolts** — the Nernst slope for a
 /// monovalent ion (≈ 26.7 mV at body temperature, equivalently ≈ 61.5 mV per
 /// tenfold concentration ratio).
@@ -65,6 +79,44 @@ pub fn ussing_flux_ratio(temp_k: f64, z: f64, c_out: f64, c_in: f64, v_membrane_
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nernst_concentration_ratio_inverts_the_nernst_potential() {
+        let t = BODY_TEMPERATURE_K;
+
+        // Round-trip: the inverse recovers c_out/c_in exactly from nernst_potential_mv.
+        for &(z, c_out, c_in) in &[(1.0_f64, 5.0_f64, 140.0_f64), (1.0, 145.0, 12.0), (2.0, 2.0, 0.1)]
+        {
+            let e = nernst_potential_mv(t, z, c_out, c_in);
+            let ratio = nernst_concentration_ratio(t, z, e);
+            assert!(
+                (ratio - c_out / c_in).abs() / (c_out / c_in) < 1e-9,
+                "inverse Nernst round-trip"
+            );
+        }
+
+        // Threads thermal_voltage_mv: ratio = exp(z·E/V_T).
+        let (z, e) = (2.0_f64, -45.0_f64);
+        assert!(
+            (nernst_concentration_ratio(t, z, e) - (z * e / thermal_voltage_mv(t)).exp()).abs()
+                < 1e-12,
+            "ratio = exp(z·E/V_T)"
+        );
+
+        // E_rev = 0 → equal concentrations (ratio 1).
+        assert!((nernst_concentration_ratio(t, 1.0, 0.0) - 1.0).abs() < 1e-12, "E=0 → 1");
+
+        // Worked: a K⁺-like ion at E = −90 mV (z = 1) has c_out/c_in ≈ 0.034 — about 29×
+        // more concentrated inside.
+        let r = nernst_concentration_ratio(t, 1.0, -90.0);
+        assert!((r - 0.0345).abs() < 1e-2, "K⁺-like ratio ≈ 0.034, got {r}");
+
+        // Monotonic increasing in E_rev for a cation.
+        assert!(
+            nernst_concentration_ratio(t, 1.0, -30.0) < nernst_concentration_ratio(t, 1.0, 30.0),
+            "ratio rises with E_rev"
+        );
+    }
 
     #[test]
     fn thermal_voltage_is_about_26_7_mv_at_body_temp() {

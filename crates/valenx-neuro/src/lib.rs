@@ -80,7 +80,10 @@ pub use lif::{
 };
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
 pub use myelinated::MyelinatedFiber;
-pub use nernst::{nernst_potential_mv, thermal_voltage_mv, ussing_flux_ratio, BODY_TEMPERATURE_K};
+pub use nernst::{
+    nernst_concentration_ratio, nernst_potential_mv, thermal_voltage_mv, ussing_flux_ratio,
+    BODY_TEMPERATURE_K,
+};
 pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{charge_density, is_safe, max_safe_charge_per_phase, shannon_k};
 pub use steering::ContactArray;
