@@ -1170,6 +1170,31 @@ fn mesh_max_triangle_area(mesh: &valenx_mesh::Mesh) -> Option<f64> {
     largest
 }
 
+/// The **total surface area** of a `Tri3` surface mesh (model units²) — the sum of
+/// every facet area `Σ ½‖(b−a)×(c−a)‖`. Integrated over the *tessellation*, it is
+/// the 2-D companion to the divergence-theorem [`mesh_volume`]: comparing it to the
+/// CSG [`total_area`] of the source solid gauges tessellation fidelity (the two
+/// agree for an exact mesh and diverge as faceting coarsens), and together with
+/// `mesh_volume` it yields a mesh-only Wadell sphericity. It necessarily lies
+/// between `n·`[`mesh_min_triangle_area`] and `n·`[`mesh_max_triangle_area`] for `n`
+/// facets. Returns `None` for an empty mesh with no `Tri3` faces.
+fn mesh_surface_area(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut total: Option<f64> = None;
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let a = mesh.nodes[tri[0] as usize];
+            let b = mesh.nodes[tri[1] as usize];
+            let c = mesh.nodes[tri[2] as usize];
+            let area = 0.5 * (b - a).cross(&(c - a)).norm();
+            total = Some(total.map_or(area, |s| s + area));
+        }
+    }
+    total
+}
+
 /// Surface-area-to-volume ratio `S/V` (per model unit) — the compactness /
 /// heat-exchange scaling figure: a sphere of radius `r` gives `3/r`, a cube of
 /// side `a` gives `6/a`, and it falls as a body grows (the square–cube law).
@@ -1249,6 +1274,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .as_ref()
         .and_then(mesh_volume)
         .map(|v| format!(" · mesh vol {v:.4} u³"))
+        .unwrap_or_default();
+    // Tessellated total surface area (Σ facet areas) — the 2-D companion to mesh vol
+    // and a tessellation-fidelity check against the solid `area` above.
+    let mesharea_str = mesh
+        .as_ref()
+        .and_then(mesh_surface_area)
+        .map(|a| format!(" · mesh area {a:.3} u²"))
         .unwrap_or_default();
     // Volume centroid (centre of mass) of the tessellated model.
     let centroid_str = mesh
@@ -1407,7 +1439,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|v| format!(" · mean valence {v:.2}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -2755,6 +2787,58 @@ mod tests {
 
         // No Tri3 faces → None.
         assert_eq!(mesh_max_triangle_area(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_surface_area_sums_the_box_facets() {
+        use nalgebra::Vector3;
+        // The canonical 1×2×3 box: 12 Tri3 facets of areas {1×4, 1.5×4, 3×4} → Σ = 22.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = connectivity.clone();
+        mesh.element_blocks.push(block);
+
+        // The 1×2×3 box has surface area 2(1·2 + 1·3 + 2·3) = 22 exactly.
+        let area = mesh_surface_area(&mesh).expect("box has facets");
+        assert!((area - 22.0).abs() < 1e-9, "box surface area = 22, got {area}");
+
+        // STRONG non-tautological cross-checks: independently re-sum all 12 facet
+        // areas == the returned total; it is bracketed by n·min #207 ≤ area ≤ n·max
+        // #225 (n = 12 facets) and bounded below by the single largest facet.
+        let areas: Vec<f64> = connectivity
+            .chunks_exact(3)
+            .map(|t| {
+                let a = mesh.nodes[t[0] as usize];
+                let b = mesh.nodes[t[1] as usize];
+                let c = mesh.nodes[t[2] as usize];
+                0.5 * (b - a).cross(&(c - a)).norm()
+            })
+            .collect();
+        let resum: f64 = areas.iter().sum();
+        assert!((area - resum).abs() < 1e-12, "area == Σ facet areas: {area} vs {resum}");
+        let n = areas.len() as f64;
+        let min = mesh_min_triangle_area(&mesh).expect("box has facets");
+        let max = mesh_max_triangle_area(&mesh).expect("box has facets");
+        assert!(n * min <= area + 1e-12 && area <= n * max + 1e-12, "n·min ≤ area ≤ n·max");
+        assert!(area >= max, "a single facet cannot exceed the total");
+
+        // No Tri3 faces → None.
+        assert_eq!(mesh_surface_area(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
