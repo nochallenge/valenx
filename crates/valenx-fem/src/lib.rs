@@ -146,7 +146,7 @@ pub use beam::{
     beam_angle_of_twist, beam_axial_extension, cantilever_point_load_strain_energy,
     cantilever_tip_deflection, cantilever_tip_slope,
     cantilever_udl_strain_energy, cantilever_udl_tip_deflection, cantilever_udl_tip_slope,
-    euler_bernoulli_beam_frequency,
+    euler_bernoulli_beam_frequency, fixed_fixed_center_deflection,
     simply_supported_center_deflection, simply_supported_end_slope,
     simply_supported_point_load_strain_energy, simply_supported_udl_center_deflection,
     simply_supported_udl_end_slope, simply_supported_udl_strain_energy, solve_beam_modal,
