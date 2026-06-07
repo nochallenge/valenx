@@ -67,7 +67,7 @@ pub use conduction::{
     unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
 };
 pub use current_distance::{activation_radius, fit_constant, threshold_current};
-pub use donnan::{donnan_potential_mv, donnan_ratio};
+pub use donnan::{donnan_osmotic_pressure_pa, donnan_potential_mv, donnan_ratio};
 pub use engine::{recruitment_curve, stimulate, Axon, Recruitment, Scene};
 pub use error::{NeuroError, Result};
 pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};

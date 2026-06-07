@@ -57,10 +57,71 @@ pub fn donnan_potential_mv(temp_k: f64, salt_conc: f64, impermeant_charge: f64) 
     -thermal_voltage_mv(temp_k) * donnan_ratio(salt_conc, impermeant_charge).ln()
 }
 
+/// The **Gibbs–Donnan osmotic pressure** `Δπ = 2·R·T·c·(r − 1)` (Pa) at absolute
+/// temperature `temp_k` (K) — the osmotic-pressure excess on the side holding the
+/// trapped impermeant charge, the third member of the Donnan triad alongside
+/// [`donnan_ratio`] and [`donnan_potential_mv`]. The trapped charge forces extra
+/// permeant ions inside, so the interior carries more total solute and draws water
+/// in (the classic Donnan swelling of cells, cartilage and charged gels). With
+/// `r = donnan_ratio(c, A)`, electroneutrality and the Donnan condition give
+/// internal solute `[cat]_i + [an]_i + A = r·c + c/r + A = 2·r·c` against the
+/// external `2·c`, so van 't Hoff's law `Δπ = R·T·Δ(Σc)` collapses to
+/// `2·R·T·c·(r − 1)`.
+///
+/// `salt_conc` (`c`) and `impermeant_charge` (`A`) are in **mol·m⁻³** (≡ mM), so
+/// `R` (`crate::nernst::GAS_CONSTANT`, J·mol⁻¹·K⁻¹) makes `Δπ` come out in **Pa**.
+/// It is `0` with no trapped charge (`A = 0`, where `r = 1`) and rises with `A`.
+/// Returns `0` for non-physical input (`T ≤ 0`, `c ≤ 0`, `A < 0`, or non-finite).
+pub fn donnan_osmotic_pressure_pa(temp_k: f64, salt_conc: f64, impermeant_charge: f64) -> f64 {
+    if !temp_k.is_finite()
+        || temp_k <= 0.0
+        || !salt_conc.is_finite()
+        || salt_conc <= 0.0
+        || !impermeant_charge.is_finite()
+        || impermeant_charge < 0.0
+    {
+        return 0.0;
+    }
+    let r = donnan_ratio(salt_conc, impermeant_charge);
+    2.0 * crate::nernst::GAS_CONSTANT * temp_k * salt_conc * (r - 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::nernst::BODY_TEMPERATURE_K;
+
+    #[test]
+    fn donnan_osmotic_pressure_is_the_particle_imbalance() {
+        use crate::nernst::GAS_CONSTANT;
+        let t = BODY_TEMPERATURE_K;
+
+        // No trapped charge → no osmotic imbalance.
+        assert!(donnan_osmotic_pressure_pa(t, 150.0, 0.0).abs() < 1e-9, "A=0 → Δπ=0");
+
+        // STRONG cross-check threading donnan_ratio: van 't Hoff Δπ = R·T·(Σc_in − Σc_out)
+        // with internal solute r·c + c/r + A and external 2c. This direct
+        // particle-count form must equal the 2·R·T·c·(r−1) closed form (they agree
+        // because electroneutrality forces A = r·c − c/r exactly).
+        for &(c, a) in &[(100.0_f64, 50.0_f64), (150.0, 20.0), (120.0, 120.0)] {
+            let r = donnan_ratio(c, a);
+            let by_count = GAS_CONSTANT * t * (r * c + c / r + a - 2.0 * c);
+            let pi = donnan_osmotic_pressure_pa(t, c, a);
+            assert!((pi - by_count).abs() / by_count < 1e-9, "Δπ = RT·ΔΣc at c={c}, A={a}");
+            assert!(pi > 0.0, "trapped charge draws water in (Δπ > 0)");
+        }
+
+        // Monotonic increasing in the trapped charge.
+        assert!(
+            donnan_osmotic_pressure_pa(t, 120.0, 40.0) < donnan_osmotic_pressure_pa(t, 120.0, 120.0),
+            "Δπ grows with A"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(donnan_osmotic_pressure_pa(t, 0.0, 50.0), 0.0); // c ≤ 0
+        assert_eq!(donnan_osmotic_pressure_pa(0.0, 150.0, 50.0), 0.0); // T ≤ 0
+        assert_eq!(donnan_osmotic_pressure_pa(t, 150.0, -1.0), 0.0); // A < 0
+    }
 
     #[test]
     fn no_impermeant_charge_gives_no_partition() {
