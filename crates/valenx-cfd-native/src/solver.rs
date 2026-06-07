@@ -633,6 +633,28 @@ impl FlowSolution {
         sum / nx as f64
     }
 
+    /// The **friction velocity** `u_τ = √(ν · ⟨|∂u/∂y|⟩_wall)` (m/s) at the bottom
+    /// wall — the characteristic velocity scale of wall turbulence, formed from the
+    /// kinematic viscosity `kinematic_viscosity` `ν` (m²/s) and the bottom-wall shear
+    /// rate [`FlowSolution::bottom_wall_shear_rate`] (equivalently `u_τ = √(τ_w/ρ)`).
+    /// It is the velocity that non-dimensionalises the near-wall region: the wall
+    /// coordinate `y⁺ = u_τ·y/ν` and the law-of-the-wall velocity `u⁺ = u/u_τ` are
+    /// both built on it, and it sets the inner-layer scaling of any wall-bounded
+    /// turbulent flow. Unlike the shear *rate* (1/s) it is a *velocity* (m/s).
+    ///
+    /// This is the wall-**resolved** `u_τ`, read straight from the computed wall
+    /// gradient (the DNS / wall-resolved route); the wall-function turbulence model
+    /// (`turbulence::WallFunction::friction_velocity`) gives the complementary
+    /// wall-**modelled** `u_τ`, solved from a near-wall velocity sample via the log
+    /// law when the near-wall region is left unresolved. Returns `0` for a
+    /// non-positive or non-finite viscosity, or an empty grid / zero wall shear.
+    pub fn friction_velocity(&self, kinematic_viscosity: f64) -> f64 {
+        if !kinematic_viscosity.is_finite() || kinematic_viscosity <= 0.0 {
+            return 0.0;
+        }
+        (kinematic_viscosity * self.bottom_wall_shear_rate()).sqrt()
+    }
+
     /// The mean wall-tangential velocity gradient `⟨|∂v/∂x|⟩` at the **left** wall
     /// (`x = 0`) (1/s) — the one-sided estimate `2·v_cell(0, j)/dx` from the no-slip
     /// wall to the first cell centre, averaged over the wall-normal (vertical)
@@ -2690,6 +2712,56 @@ mod tests {
             "wall shear rate {}",
             sol.bottom_wall_shear_rate()
         );
+    }
+
+    #[test]
+    fn friction_velocity_is_the_wall_turbulence_scale() {
+        // A 4×4 unit grid with a linear shear u(y) = γ·y, γ = 3 → bottom-wall shear
+        // rate = γ (per the bottom_wall_shear_rate test).
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let gamma = 3.0;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5);
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let nu = 1.0e-3;
+        // u_τ = √(ν·(∂u/∂y)_wall) = √(ν·γ) — the worked value for the imposed shear γ.
+        let u_tau = sol.friction_velocity(nu);
+        assert!((u_tau - (nu * gamma).sqrt()).abs() < 1e-12, "u_τ = √(νγ), got {u_tau}");
+        // The defining relation u_τ² = ν·(wall shear), against the field's own wall
+        // shear (independent path through bottom_wall_shear_rate).
+        assert!(
+            (u_tau * u_tau - nu * sol.bottom_wall_shear_rate()).abs() < 1e-12,
+            "u_τ² = ν·τ_w/ρ"
+        );
+        // It is a velocity that scales as √ν: quadrupling ν doubles u_τ.
+        assert!((sol.friction_velocity(4.0 * nu) - 2.0 * u_tau).abs() < 1e-12, "u_τ ∝ √ν");
+        // Non-physical viscosity → 0.
+        assert_eq!(sol.friction_velocity(0.0), 0.0);
+        assert_eq!(sol.friction_velocity(-1.0e-3), 0.0);
+        // A quiescent field (no wall shear) → u_τ = 0.
+        let still = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(still.friction_velocity(nu), 0.0, "no wall shear → u_τ = 0");
     }
 
     #[test]
