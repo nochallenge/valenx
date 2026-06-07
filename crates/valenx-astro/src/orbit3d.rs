@@ -329,6 +329,26 @@ impl ClassicalElements {
         -MU_EARTH / self.semi_major_axis
     }
 
+    /// The **hyperbolic excess velocity** `v∞ = √(−μ/a) = √C₃` (m/s) — the residual
+    /// speed the spacecraft retains relative to the central body **at infinity**, on
+    /// an escaping/flyby hyperbola. It is the arrival/departure speed at the edge of
+    /// the body's sphere of influence: the `√` of the characteristic energy
+    /// [`characteristic_energy_c3`](Self::characteristic_energy_c3) (`C₃ = v∞²`), and
+    /// equivalently `√(2ε)` of the
+    /// [`specific_orbital_energy`](Self::specific_orbital_energy) `ε` (a hyperbola has
+    /// `ε > 0`, the kinetic energy left after climbing out of the well). Defined only
+    /// for a **hyperbolic** orbit (`a < 0`, where `C₃ > 0`); returns `None` for a
+    /// bound elliptic/circular orbit (`a > 0`), which is trapped and reaches infinity
+    /// at zero speed — there is no excess.
+    pub fn hyperbolic_excess_velocity(&self) -> Option<f64> {
+        let c3 = self.characteristic_energy_c3();
+        if c3 > 0.0 {
+            Some(c3.sqrt())
+        } else {
+            None
+        }
+    }
+
     /// Solve **Kepler's equation** `M = E − e·sin E` for the eccentric anomaly
     /// `E` (rad) given the mean anomaly `mean_anomaly` `M` (rad), by
     /// Newton–Raphson iteration.
@@ -1758,6 +1778,35 @@ mod tests {
         // A hyperbolic orbit (a < 0) has positive specific energy (unbound).
         let hyper = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
         assert!(hyper.specific_orbital_energy() > 0.0, "hyperbolic ε > 0");
+    }
+
+    #[test]
+    fn hyperbolic_excess_velocity_is_the_root_of_c3() {
+        // A hyperbolic orbit (a < 0, e > 1) has a positive C₃ and a real v∞.
+        let hyp = ClassicalElements {
+            semi_major_axis: -1.0e7,
+            eccentricity: 1.5,
+            inclination: 0.2,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let v_inf = hyp.hyperbolic_excess_velocity().expect("hyperbolic orbit has v∞");
+        // Threads characteristic_energy_c3: v∞² = C₃.
+        let c3 = hyp.characteristic_energy_c3();
+        assert!((v_inf * v_inf - c3).abs() / c3 < 1e-12, "v∞² = C₃");
+        // Threads specific_orbital_energy: v∞ = √(2ε) (since 2ε = −μ/a = C₃).
+        let from_energy = (2.0 * hyp.specific_orbital_energy()).sqrt();
+        assert!((v_inf - from_energy).abs() / from_energy < 1e-12, "v∞ = √(2ε)");
+        assert!(v_inf > 0.0, "hyperbolic excess speed is positive");
+
+        // A bound orbit reaches infinity at zero speed — no hyperbolic excess.
+        let bound = ClassicalElements {
+            semi_major_axis: 1.0e7,
+            eccentricity: 0.1,
+            ..hyp
+        };
+        assert!(bound.hyperbolic_excess_velocity().is_none(), "bound orbit → None");
     }
 
     #[test]
