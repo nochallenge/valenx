@@ -260,6 +260,51 @@ pub fn solid_centroid(solid: &Solid) -> Result<[f64; 3], CadError> {
     solid_centroid_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding box** of a solid — `(min, max)` corners `[x, y, z]`
+/// in model units — computed at tessellation tolerance `tol`.
+///
+/// The spatial companion to [`solid_centroid_tol`] / [`solid_volume_tol`]: the
+/// tightest box, aligned to the model axes, that encloses the solid's boundary. It
+/// is the min and max of every coordinate over the boundary tessellation, so it is
+/// exact for a flat-faced solid and converges inward (the inscribed facets cut the
+/// corners by `O(tol)`) for a curved one. Useful for view-fitting, broad-phase
+/// culling, and as a quick size readout. The box always contains the
+/// [`solid_centroid_tol`].
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or if
+/// the tessellation yields no boundary vertices (a degenerate / empty solid).
+pub fn solid_bounding_box_tol(solid: &Solid, tol: f64) -> Result<([f64; 3], [f64; 3]), CadError> {
+    let poly = match solid {
+        Solid::Brep(b) => brep_polygon(b, tol)?,
+        Solid::Mesh(m) => mesh_to_polygon(m),
+    };
+    let positions = poly.positions();
+    if positions.is_empty() {
+        return Err(CadError::Tessellation(
+            "solid has no boundary vertices; bounding box undefined".to_string(),
+        ));
+    }
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for p in positions {
+        min[0] = min[0].min(p.x);
+        min[1] = min[1].min(p.y);
+        min[2] = min[2].min(p.z);
+        max[0] = max[0].max(p.x);
+        max[1] = max[1].max(p.y);
+        max[2] = max[2].max(p.z);
+    }
+    Ok((min, max))
+}
+
+/// Axis-aligned bounding box of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_tol`].
+pub fn solid_bounding_box(solid: &Solid) -> Result<([f64; 3], [f64; 3]), CadError> {
+    solid_bounding_box_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Weld a polygon mesh's triangle indices onto a deduplicated vertex
 /// set, so coincident positions collapse to one index.
 ///
@@ -490,6 +535,36 @@ mod tests {
         // A box is genus-0: V−E+F = 8−12+6 = 2.
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         assert_eq!(euler_characteristic(&cube), Some(2));
+    }
+
+    #[test]
+    fn solid_bounding_box_brackets_the_geometry() {
+        // A box from the origin to (2,4,6): exact AABB for a flat-faced solid.
+        let (min, max) = solid_bounding_box(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
+        let (emin, emax) = ([0.0, 0.0, 0.0], [2.0, 4.0, 6.0]);
+        for k in 0..3 {
+            assert!((min[k] - emin[k]).abs() < 1e-9, "min[{k}] = {} != {}", min[k], emin[k]);
+            assert!((max[k] - emax[k]).abs() < 1e-9, "max[{k}] = {} != {}", max[k], emax[k]);
+        }
+        // Its centre is the box centroid (threads solid_centroid, #261).
+        let c = solid_centroid(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
+        for k in 0..3 {
+            assert!(((min[k] + max[k]) / 2.0 - c[k]).abs() < 1e-9, "bbox centre = centroid at {k}");
+        }
+
+        // A cylinder (base disk on the origin in X-Y, axis +Z): z-extent is exactly [0,h].
+        let h = 5.0;
+        let (cmin, cmax) = solid_bounding_box(&cylinder(1.5, h).unwrap()).unwrap();
+        assert!(cmin[2].abs() < 1e-9 && (cmax[2] - h).abs() < 1e-9, "cylinder z ∈ [0, h]");
+        // The bounding box must contain the solid's centroid; min ≤ max on every axis.
+        let cc = solid_centroid(&cylinder(1.5, h).unwrap()).unwrap();
+        for k in 0..3 {
+            assert!(cmin[k] <= cmax[k], "min ≤ max at {k}");
+            assert!(
+                cmin[k] - 1e-9 <= cc[k] && cc[k] <= cmax[k] + 1e-9,
+                "centroid inside bbox at {k}"
+            );
+        }
     }
 
     #[test]
