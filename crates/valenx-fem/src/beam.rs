@@ -512,6 +512,26 @@ pub fn fixed_fixed_udl_center_deflection(
     load_per_length * length.powi(4) / (384.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **fixed-end (fixing) moment** `M = P·L/8` (N·m) of a slender
+/// Euler–Bernoulli beam **built in at both ends** (clamped–clamped) under a central
+/// transverse point force `load` `P` (N) on a span `length` `L` (m) — the reaction
+/// moment the clamps must supply to hold the ends at zero slope.
+///
+/// This is the classic **fixed-end moment** of the slope-deflection and
+/// moment-distribution methods, and the structural complement to the deflection
+/// [`fixed_fixed_center_deflection`]: it is exactly the end moment that, superposed
+/// on a pinned span, stiffens it into a clamped one (lifting mid-span by
+/// `M·L²/8EI`, the difference between the pinned and clamped centre deflections).
+/// It is linear and sign-preserving in `P` and linear in `L`, and — being a pure
+/// statics result — is independent of `E` and `I`. Returns `0` for non-physical
+/// input (`P` non-finite, or `L` non-positive or non-finite).
+pub fn fixed_fixed_point_load_end_moment(load: f64, length: f64) -> f64 {
+    if !load.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load * length / 8.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -2362,6 +2382,45 @@ mod tests {
         assert_eq!(simply_supported_end_slope(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_end_slope(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(simply_supported_end_slope(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn fixed_fixed_point_load_end_moment_matches_superposition() {
+        // Worked point: P = 1 kN central load on a 4 m clamped–clamped beam → the
+        // fixing moment at each end is M = P·L/8 = 500 N·m.
+        let m = fixed_fixed_point_load_end_moment(1000.0, 4.0);
+        assert!((m - 500.0).abs() < 1e-9, "M_end = P·L/8 = 500, got {m}");
+
+        // STRONG cross-check threading the two centre-deflection formulas via
+        // superposition: the end fixing moment is exactly what stiffens a pinned span
+        // into a clamped one. Two equal end moments lift a simply-supported beam's
+        // mid-span by M·L²/(8EI), which must equal δ_ss − δ_ff
+        // (PL³/48EI − PL³/192EI = PL³/64EI = (PL/8)·L²/8EI).
+        for &(p, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 70.0e9, 4.2e-7),
+            (8200.0, 0.8, 120.0e9, 9.0e-8),
+        ] {
+            let lift = fixed_fixed_point_load_end_moment(p, l) * l * l / (8.0 * e * i);
+            let diff = simply_supported_center_deflection(p, l, e, i)
+                - fixed_fixed_center_deflection(p, l, e, i);
+            assert!((lift - diff).abs() <= 1e-12 * diff.abs(), "M·L²/8EI = δ_ss − δ_ff");
+        }
+
+        // Linear in P (sign-preserving) and linear in L.
+        assert!(
+            (fixed_fixed_point_load_end_moment(2000.0, 4.0)
+                - 2.0 * fixed_fixed_point_load_end_moment(1000.0, 4.0))
+            .abs()
+                < 1e-9,
+            "linear in P"
+        );
+        assert!(fixed_fixed_point_load_end_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(fixed_fixed_point_load_end_moment(f64::NAN, 4.0), 0.0); // P NaN
+        assert_eq!(fixed_fixed_point_load_end_moment(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(fixed_fixed_point_load_end_moment(1000.0, -1.0), 0.0); // L < 0
     }
 
     #[test]
