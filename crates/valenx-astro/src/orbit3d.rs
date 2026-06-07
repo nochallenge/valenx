@@ -214,6 +214,28 @@ impl ClassicalElements {
         (e * true_anomaly.sin()).atan2(1.0 + e * true_anomaly.cos())
     }
 
+    /// The **hyperbolic turn (deflection) angle** `δ = 2·arcsin(1/e)` (rad) — the
+    /// angle through which a flyby bends the velocity, i.e. the angle between the
+    /// incoming and outgoing asymptotes of a hyperbolic trajectory. This is the heart
+    /// of a **gravity assist**: a closer, slower pass (smaller `e`, nearer 1) bends
+    /// the path more, toward the `δ → π` head-on limit, while a fast, distant pass
+    /// (large `e`) is barely deflected, `δ → 0`.
+    ///
+    /// Equivalently `δ = 2·ν_∞ − π`, where `ν_∞ = arccos(−1/e)` is the asymptotic
+    /// true anomaly (the direction the body comes from / heads to as `r → ∞`); and
+    /// `sin(δ/2) = 1/e` inverts it to recover the eccentricity from a measured turn.
+    /// Defined only for a **hyperbolic** orbit (`e > 1`); returns `None` for a
+    /// parabolic (`e = 1`) or bound elliptic/circular (`e < 1`) orbit, which have no
+    /// finite asymptotic deflection.
+    pub fn hyperbolic_turn_angle(&self) -> Option<f64> {
+        let e = self.eccentricity;
+        if e > 1.0 {
+            Some(2.0 * (1.0 / e).asin())
+        } else {
+            None
+        }
+    }
+
     /// The orbital **specific angular momentum** `h = √(μ·a(1−e²))` (m²/s) —
     /// the angular momentum *per unit mass*, `h = |r × v|`, and the orbit's
     /// defining conserved quantity. It is constant everywhere along the path
@@ -1490,6 +1512,64 @@ mod tests {
         }
         // A non-finite ν propagates to NaN (atan2 is total — no panic/guard).
         assert!(coe.flight_path_angle(f64::NAN).is_nan(), "NaN ν → NaN γ");
+    }
+
+    #[test]
+    fn hyperbolic_turn_angle_is_the_flyby_deflection() {
+        use std::f64::consts::{FRAC_PI_2, FRAC_PI_3, PI, SQRT_2};
+        // Only the eccentricity enters the turn angle; the rest are placeholders
+        // (a < 0 marks the orbit hyperbolic).
+        let base = ClassicalElements {
+            semi_major_axis: -1.0e7,
+            eccentricity: 2.0,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        let with_e = |e: f64| ClassicalElements { eccentricity: e, ..base };
+
+        // Exact anchors: e = 2 → 60° (π/3); e = √2 → 90° (π/2).
+        assert!(
+            (with_e(2.0).hyperbolic_turn_angle().unwrap() - FRAC_PI_3).abs() < 1e-12,
+            "e=2 → δ = 60°"
+        );
+        assert!(
+            (with_e(SQRT_2).hyperbolic_turn_angle().unwrap() - FRAC_PI_2).abs() < 1e-12,
+            "e=√2 → δ = 90°"
+        );
+
+        // STRONG cross-check (independent derivation): δ = 2·ν_∞ − π via the
+        // asymptotic true anomaly ν_∞ = arccos(−1/e). The two inverse-trig forms
+        // 2·arcsin(1/e) and 2·arccos(−1/e) − π are identically equal.
+        for &e in &[1.0001_f64, 1.1, 1.5, 2.0, 5.0, 100.0] {
+            let delta = with_e(e).hyperbolic_turn_angle().unwrap();
+            let via_asymptote = 2.0 * (-1.0 / e).acos() - PI;
+            assert!(
+                (delta - via_asymptote).abs() < 1e-12,
+                "e={e}: 2·asin(1/e) = 2·acos(−1/e) − π"
+            );
+            // sin(δ/2) = 1/e recovers the eccentricity from a measured turn.
+            assert!(((delta / 2.0).sin() - 1.0 / e).abs() < 1e-12, "e={e}: sin(δ/2) = 1/e");
+        }
+
+        // Limits: a near-parabolic pass (e → 1⁺) bends ~180°; a fast distant pass
+        // (large e) is barely deflected.
+        assert!(with_e(1.0001).hyperbolic_turn_angle().unwrap() > 3.10, "e→1⁺ → δ → π");
+        assert!(with_e(1.0e6).hyperbolic_turn_angle().unwrap() < 1e-3, "large e → δ → 0");
+
+        // Monotonic decreasing in e.
+        let (d15, d3, d10) = (
+            with_e(1.5).hyperbolic_turn_angle().unwrap(),
+            with_e(3.0).hyperbolic_turn_angle().unwrap(),
+            with_e(10.0).hyperbolic_turn_angle().unwrap(),
+        );
+        assert!(d15 > d3 && d3 > d10, "δ decreases with e: {d15} > {d3} > {d10}");
+
+        // Not a hyperbola → no finite turn: None for circular / elliptic / parabolic.
+        assert!(with_e(0.0).hyperbolic_turn_angle().is_none(), "circular e=0");
+        assert!(with_e(0.5).hyperbolic_turn_angle().is_none(), "elliptic e=0.5");
+        assert!(with_e(1.0).hyperbolic_turn_angle().is_none(), "parabolic e=1");
     }
 
     #[test]
