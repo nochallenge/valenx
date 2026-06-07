@@ -63,7 +63,8 @@ pub use cable_theory::{
 };
 pub use chord_conductance::{chord_conductance_potential_mv, ConductanceChannel};
 pub use conduction::{
-    myelinated_conduction_velocity, unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
+    myelinated_conduction_velocity, myelination_crossover_diameter,
+    unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
 };
 pub use current_distance::{activation_radius, fit_constant, threshold_current};
 pub use donnan::{donnan_potential_mv, donnan_ratio};
