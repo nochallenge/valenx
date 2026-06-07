@@ -634,6 +634,27 @@ pub fn rayleigh_flow_velocity_ratio(mach: f64, gamma: f64) -> f64 {
     (1.0 + gamma) * mach * mach / (1.0 + gamma * mach * mach)
 }
 
+/// The **Rayleigh-flow stagnation (total) pressure ratio** `p₀/p₀* =
+/// ((1+γ)/(1+γ·M²))·((2 + (γ−1)·M²)/(γ+1))^(γ/(γ−1))` at Mach number `mach` `M` and
+/// heat-capacity ratio `gamma` `γ` — the stagnation pressure referenced to the sonic
+/// (thermally choked) state `p₀*` for **Rayleigh flow** (steady, frictionless,
+/// constant-area flow with **heat addition**).
+///
+/// It completes the Rayleigh family alongside [`rayleigh_flow_temperature_ratio`],
+/// [`rayleigh_flow_pressure_ratio`] and [`rayleigh_flow_velocity_ratio`], and equals
+/// `(p/p*)·((2+(γ−1)M²)/(γ+1))^(γ/(γ−1))`. It is `1` at the sonic point and `> 1`
+/// everywhere else (a minimum at `M = 1`): adding heat always erodes the stagnation
+/// pressure toward the choked value, the irreversible Rayleigh loss. Returns `0` for
+/// non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn rayleigh_flow_total_pressure_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    let exponent = gamma / (gamma - 1.0);
+    (gamma + 1.0) / (1.0 + gamma * mach * mach)
+        * ((2.0 + (gamma - 1.0) * mach * mach) / (gamma + 1.0)).powf(exponent)
+}
+
 /// The **Fanno-flow static temperature ratio** `T/T* = (γ+1)/(2 + (γ−1)·M²)` at
 /// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the static
 /// temperature referenced to the sonic (choked) state `T*` for **Fanno flow**:
@@ -1851,6 +1872,36 @@ mod tests {
         assert_eq!(rayleigh_flow_total_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_total_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn rayleigh_flow_total_pressure_ratio_threads_the_pressure_ratio() {
+        let g = 1.4;
+        // Sonic reference: p₀/p₀* = 1 exactly at M = 1.
+        assert!((rayleigh_flow_total_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        // STRONG cross-check threading rayleigh_flow_pressure_ratio:
+        // p₀/p₀* = (p/p*)·((2+(γ−1)M²)/(γ+1))^(γ/(γ−1)).
+        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+            let expected = rayleigh_flow_pressure_ratio(m, gam)
+                * ((2.0 + (gam - 1.0) * m * m) / (gam + 1.0)).powf(gam / (gam - 1.0));
+            assert!(
+                (rayleigh_flow_total_pressure_ratio(m, gam) - expected).abs() / expected < 1e-12,
+                "p₀/p₀* = (p/p*)·bracket^(γ/(γ−1)) at M={m}, γ={gam}"
+            );
+        }
+        // Standard Rayleigh-table values (γ = 1.4): M=0.5 → 1.1141, M=2 → 1.5031.
+        assert!((rayleigh_flow_total_pressure_ratio(0.5, g) - 1.1141).abs() < 1e-3, "M=0.5 table");
+        assert!((rayleigh_flow_total_pressure_ratio(2.0, g) - 1.5031).abs() < 1e-3, "M=2 table");
+        // p₀/p₀* ≥ 1 with the minimum at the sonic point (heat addition erodes p₀).
+        assert!(
+            rayleigh_flow_total_pressure_ratio(0.5, g) > 1.0
+                && rayleigh_flow_total_pressure_ratio(2.0, g) > 1.0,
+            "p₀/p₀* > 1 away from the choke"
+        );
+        // Non-physical input → 0.
+        assert_eq!(rayleigh_flow_total_pressure_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(rayleigh_flow_total_pressure_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(rayleigh_flow_total_pressure_ratio(f64::NAN, g), 0.0); // non-finite M
     }
 
     #[test]
