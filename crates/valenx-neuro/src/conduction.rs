@@ -78,6 +78,20 @@ pub fn conduction_delay_s(distance_m: f64, velocity_m_per_s: f64) -> f64 {
     distance_m / velocity_m_per_s
 }
 
+/// The **conduction velocity at the myelination crossover diameter** (m/s) — the
+/// single speed at which a myelinated fibre (`v = k_m·d`) and an unmyelinated fibre
+/// (`v = k_u·√d`) conduct equally. Below it, myelination gives no velocity benefit
+/// (it is why the thinnest fibres are left unmyelinated); ≈ 1–2 m/s in mammals.
+/// `k_myel_per_um` `k_m` and `k_unmyel_per_sqrt_um` `k_u` are the two velocity
+/// constants (see [`myelinated_conduction_velocity`] /
+/// [`unmyelinated_conduction_velocity`]). It is the myelinated velocity evaluated at
+/// the [`myelination_crossover_diameter`], analytically `k_u²/k_m`. Returns `0` for
+/// the same non-physical inputs as [`myelination_crossover_diameter`].
+pub fn conduction_velocity_at_crossover(k_myel_per_um: f64, k_unmyel_per_sqrt_um: f64) -> f64 {
+    let d = myelination_crossover_diameter(k_myel_per_um, k_unmyel_per_sqrt_um);
+    myelinated_conduction_velocity(d, k_myel_per_um)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,6 +156,31 @@ mod tests {
         let myelinated = myelinated_conduction_velocity(10.0, HURSH_FACTOR_M_PER_S_PER_UM);
         let unmyelinated = unmyelinated_conduction_velocity(1.0, 2.0);
         assert!(myelinated > 10.0 * unmyelinated, "{myelinated} vs {unmyelinated}");
+    }
+
+    #[test]
+    fn conduction_velocity_at_crossover_is_where_the_curves_meet() {
+        // At the crossover diameter the myelinated and unmyelinated velocity curves
+        // intersect, so the crossover velocity equals BOTH (the impl takes the
+        // myelinated branch; this confirms the unmyelinated branch agrees) and the
+        // closed form k_u²/k_m.
+        for &(km, ku) in &[(6.0_f64, 4.0_f64), (5.0, 3.0), (6.0, 2.0)] {
+            let v = conduction_velocity_at_crossover(km, ku);
+            let d = myelination_crossover_diameter(km, ku);
+            assert!(
+                (v - unmyelinated_conduction_velocity(d, ku)).abs() / v < 1e-12,
+                "crossover velocity = unmyelinated v at d*"
+            );
+            assert!((v - ku * ku / km).abs() / v < 1e-12, "= k_u²/k_m");
+            assert!(
+                (v - myelinated_conduction_velocity(d, km)).abs() / v < 1e-12,
+                "= myelinated v at d*"
+            );
+            assert!(v > 0.0, "positive crossover velocity");
+        }
+        // Non-physical k_m → 0.
+        assert_eq!(conduction_velocity_at_crossover(0.0, 4.0), 0.0);
+        assert_eq!(conduction_velocity_at_crossover(-1.0, 4.0), 0.0);
     }
 
     #[test]
