@@ -105,6 +105,21 @@ pub fn effective_exhaust_velocity(isp: f64) -> Result<f64> {
     Ok(isp * G0)
 }
 
+/// The **propellant mass fraction** `ζ = (m₀ − m_f)/m₀ = 1 − 1/MR` — the fraction of a
+/// stage's lift-off mass `m₀` that is propellant, where `MR` is the Tsiolkovsky
+/// [`mass_ratio`] for the given `delta_v` (m/s) and `isp` (s). It is the "a rocket is
+/// mostly fuel" number: it climbs toward `1` as the Δv demand grows (an SSTO-class Δv
+/// puts it near 0.9) and is `0` for a zero-Δv stage.
+///
+/// # Errors
+///
+/// Propagates [`AstroError::InvalidParameter`] from [`mass_ratio`] (non-finite or
+/// negative `delta_v`, or non-finite / non-positive `isp`).
+pub fn propellant_mass_fraction(delta_v: f64, isp: f64) -> Result<f64> {
+    let mr = mass_ratio(delta_v, isp)?;
+    Ok(1.0 - 1.0 / mr)
+}
+
 /// Structural mass fraction `ε = m_dry / (m_dry + m_prop)` of a stage.
 ///
 /// # Errors
@@ -193,6 +208,35 @@ pub fn tank_volume(propellant_mass: f64, rho: f64) -> Result<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn propellant_mass_fraction_threads_the_mass_ratio() {
+        // ζ = 1 − 1/MR, threading mass_ratio and (via 1/MR = exp(−Δv/c))
+        // effective_exhaust_velocity.
+        for &(dv, isp) in &[(9_000.0_f64, 350.0_f64), (3_000.0, 300.0), (7_800.0, 311.0)] {
+            let zeta = propellant_mass_fraction(dv, isp).unwrap();
+            assert!(
+                (zeta - (1.0 - 1.0 / mass_ratio(dv, isp).unwrap())).abs() < 1e-12,
+                "ζ = 1 − 1/MR"
+            );
+            let c = effective_exhaust_velocity(isp).unwrap();
+            assert!((zeta - (1.0 - (-dv / c).exp())).abs() < 1e-12, "ζ = 1 − exp(−Δv/c)");
+            assert!((0.0..1.0).contains(&zeta), "0 ≤ ζ < 1");
+        }
+        // Zero Δv needs no propellant.
+        assert!(propellant_mass_fraction(0.0, 350.0).unwrap().abs() < 1e-12, "Δv=0 → ζ=0");
+        // Worked: Δv = 9 km/s, Isp = 350 s → MR ≈ 13.765 → ζ ≈ 0.9274.
+        assert!((propellant_mass_fraction(9_000.0, 350.0).unwrap() - 0.9274).abs() < 1e-3);
+        // Monotonic increasing in Δv.
+        assert!(
+            propellant_mass_fraction(3_000.0, 350.0).unwrap()
+                < propellant_mass_fraction(9_000.0, 350.0).unwrap(),
+            "ζ grows with Δv"
+        );
+        // Errors propagate from mass_ratio.
+        assert!(propellant_mass_fraction(-1.0, 350.0).is_err());
+        assert!(propellant_mass_fraction(9_000.0, 0.0).is_err());
+    }
 
     #[test]
     fn effective_exhaust_velocity_threads_the_rocket_equation() {
