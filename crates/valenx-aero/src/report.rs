@@ -488,6 +488,36 @@ pub fn normal_shock_stagnation_pressure_ratio(mach: f64, gamma: f64) -> f64 {
     density_term * pressure_term
 }
 
+/// The **specific entropy rise** `Δs/R` (dimensionless, in units of the gas
+/// constant `R`) across a stationary **normal shock** with upstream Mach `mach`
+/// `M₁` and heat-capacity ratio `gamma` `γ` — the second-law signature of the
+/// shock's irreversibility. A shock is adiabatic but *not* isentropic: it turns
+/// ordered supersonic kinetic energy into heat, generating entropy
+///
+/// ```text
+///   Δs/R = (γ/(γ−1))·ln(T₂/T₁) − ln(p₂/p₁)
+/// ```
+///
+/// from the Rankine–Hugoniot static [`normal_shock_temperature_ratio`] and
+/// [`normal_shock_pressure_ratio`] jumps. This entropy production is exactly what
+/// drives the total-pressure loss [`normal_shock_stagnation_pressure_ratio`]:
+/// `p₀₂/p₀₁ = e^(−Δs/R)`, so equivalently `Δs/R = −ln(p₀₂/p₀₁)`. It is `0` at
+/// `M₁ = 1` (a vanishingly weak shock is reversible) and **grows monotonically**
+/// with shock strength — the thermodynamic reason a stronger shock recovers less
+/// total pressure. For **subsonic or sonic** upstream (`M₁ ≤ 1`) no shock forms and
+/// no entropy is generated (`0`). Returns `0` for non-physical input (non-finite
+/// `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn normal_shock_entropy_rise(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 0.0;
+    }
+    if mach <= 1.0 {
+        return 0.0; // subsonic/sonic: no shock forms, no entropy is generated
+    }
+    gamma / (gamma - 1.0) * normal_shock_temperature_ratio(mach, gamma).ln()
+        - normal_shock_pressure_ratio(mach, gamma).ln()
+}
+
 /// The **Rayleigh supersonic pitot ratio** `p₀₂/p₁` — the total pressure a pitot
 /// probe reads relative to the freestream *static* pressure at upstream Mach `mach`
 /// `M₁` (heat-capacity ratio `gamma` `γ`). It is the working formula of a
@@ -1548,6 +1578,42 @@ mod tests {
         assert_eq!(normal_shock_stagnation_pressure_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(normal_shock_stagnation_pressure_ratio(-1.0, 1.4), 1.0);
         assert_eq!(normal_shock_stagnation_pressure_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn normal_shock_entropy_rise_matches_the_second_law_total_pressure_loss() {
+        let g = 1.4;
+        // M = 1: a vanishingly weak shock is reversible → no entropy generated.
+        assert!(normal_shock_entropy_rise(1.0, g).abs() < 1e-12, "M=1 → Δs/R = 0");
+        // Worked point M=2, γ=1.4: Δs/R = (γ/(γ−1))·ln(T2/T1) − ln(p2/p1) ≈ 0.3273.
+        assert!((normal_shock_entropy_rise(2.0, g) - 0.3273).abs() < 1e-3, "M=2 → Δs/R ≈ 0.3273");
+        // Monotone increasing with shock strength (a stronger shock generates more
+        // entropy — the thermodynamic reason it recovers less total pressure).
+        let (s15, s2, s3, s5) = (
+            normal_shock_entropy_rise(1.5, g),
+            normal_shock_entropy_rise(2.0, g),
+            normal_shock_entropy_rise(3.0, g),
+            normal_shock_entropy_rise(5.0, g),
+        );
+        assert!(0.0 < s15 && s15 < s2 && s2 < s3 && s3 < s5, "monotone: {s15} {s2} {s3} {s5}");
+        // STRONG non-tautological cross-check via the second-law identity
+        // Δs/R = −ln(p02/p01): the impl uses the static T/p jumps, this uses the
+        // independently-derived stagnation-pressure recovery — two separate closed
+        // forms (and a different γ too, monatomic 5/3, to show it is not air-specific).
+        for &(m, gg) in &[(1.5_f64, 1.4_f64), (2.0, 1.4), (3.0, 1.4), (5.0, 1.4), (2.5, 5.0 / 3.0)] {
+            let from_static = normal_shock_entropy_rise(m, gg);
+            let from_stagnation = -normal_shock_stagnation_pressure_ratio(m, gg).ln();
+            assert!(
+                (from_static - from_stagnation).abs() / from_static < 1e-9,
+                "Δs/R = −ln(p02/p01) at M={m}, γ={gg}: {from_static} vs {from_stagnation}"
+            );
+        }
+        // Subsonic/sonic and non-physical → 0 (no shock, no entropy).
+        assert_eq!(normal_shock_entropy_rise(0.5, g), 0.0); // subsonic
+        assert_eq!(normal_shock_entropy_rise(-1.0, g), 0.0); // M < 0
+        assert_eq!(normal_shock_entropy_rise(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(normal_shock_entropy_rise(f64::NAN, g), 0.0); // non-finite M
+        assert_eq!(normal_shock_entropy_rise(2.0, f64::INFINITY), 0.0); // non-finite γ
     }
 
     #[test]
