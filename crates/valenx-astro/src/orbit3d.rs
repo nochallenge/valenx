@@ -274,6 +274,19 @@ impl ClassicalElements {
         -MU_EARTH / (2.0 * self.semi_major_axis)
     }
 
+    /// The orbital **characteristic energy** `C3 = v∞² = −μ/a` (m²/s²) — the square
+    /// of the hyperbolic excess velocity, the standard interplanetary launch-energy
+    /// parameter quoted for every escape mission. It is exactly twice the
+    /// [`specific_orbital_energy`](Self::specific_orbital_energy) (`C3 = 2ε`), so its
+    /// sign classifies the orbit: `C3 < 0` for a **bound** ellipse (`a > 0`),
+    /// `C3 = 0` at the parabolic escape limit, and `C3 > 0` for a **hyperbolic**
+    /// flyby (`a < 0`), where `√C3` is the speed `v∞` the spacecraft retains
+    /// infinitely far from the body — the `r → ∞` limit of the vis-viva relation
+    /// `v² = μ(2/r − 1/a)`. Uses Earth's `μ`; the degenerate `a = 0` gives `±∞`.
+    pub fn characteristic_energy_c3(&self) -> f64 {
+        -MU_EARTH / self.semi_major_axis
+    }
+
     /// Solve **Kepler's equation** `M = E − e·sin E` for the eccentric anomaly
     /// `E` (rad) given the mean anomaly `mean_anomaly` `M` (rad), by
     /// Newton–Raphson iteration.
@@ -1541,6 +1554,39 @@ mod tests {
         // A hyperbolic orbit (a < 0) has positive specific energy (unbound).
         let hyper = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
         assert!(hyper.specific_orbital_energy() > 0.0, "hyperbolic ε > 0");
+    }
+
+    #[test]
+    fn characteristic_energy_c3_is_twice_specific_energy_and_the_vis_viva_limit() {
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.1,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        // Regime signs: bound (a>0) → C3 < 0; hyperbolic (a<0) → C3 > 0.
+        assert!(coe.characteristic_energy_c3() < 0.0, "bound orbit → C3 < 0");
+        let hyp = ClassicalElements { semi_major_axis: -1.0e7, ..coe };
+        assert!(hyp.characteristic_energy_c3() > 0.0, "hyperbolic orbit → C3 > 0");
+        // STRONG cross-check: C3 = 2·ε, threading specific_orbital_energy (exact),
+        // over several semi-major axes of both signs.
+        for a in [7.0e6_f64, 4.2e7, -1.0e7, -5.0e6] {
+            let o = ClassicalElements { semi_major_axis: a, ..coe };
+            let c3 = o.characteristic_energy_c3();
+            let two_e = 2.0 * o.specific_orbital_energy();
+            assert!((c3 - two_e).abs() / two_e.abs() < 1e-12, "C3 = 2ε at a={a}: {c3} vs {two_e}");
+        }
+        // STRONG vis-viva cross-check: for a hyperbolic orbit C3 = lim_{r→∞} v(r)².
+        // At a large finite r the residual is 2μ/r (relative ~2e-6 at r = 1e13).
+        let c3 = hyp.characteristic_energy_c3();
+        let v_far_sq = hyp.speed_at_radius(1.0e13).powi(2);
+        assert!((v_far_sq - c3).abs() / c3 < 1e-4, "C3 = lim v² (vis-viva): {v_far_sq} vs {c3}");
+        // C3 scales as 1/a: doubling a halves C3.
+        let c3a = coe.characteristic_energy_c3();
+        let c3_2a = ClassicalElements { semi_major_axis: 1.4e7, ..coe }.characteristic_energy_c3();
+        assert!((c3_2a - 0.5 * c3a).abs() / c3a.abs() < 1e-12, "C3 ∝ 1/a");
     }
 
     #[test]
