@@ -479,6 +479,26 @@ impl FlowSolution {
         self.max_speed() * dt / h
     }
 
+    /// The **diffusive (von Neumann) stability number** `d = ν·Δt / min(Δx, Δy)²` for
+    /// kinematic viscosity `kinematic_viscosity` `ν` (m²/s) and explicit time step `dt`
+    /// (s) — the viscous-diffusion counterpart of the [`convective_cfl_number`]. An
+    /// explicit diffusion update is stable only for `d ≤ 1/4` in 2-D, so together with
+    /// the convective CFL it bounds the stable time step. Their ratio is the cell
+    /// Reynolds number `CFL/d = U_max·h/ν`. Returns `0` for a non-positive grid
+    /// spacing, or non-finite / negative `dt` or `ν`.
+    pub fn diffusive_number(&self, kinematic_viscosity: f64, dt: f64) -> f64 {
+        let h = self.grid.dx().min(self.grid.dy());
+        if h <= 0.0
+            || !dt.is_finite()
+            || dt < 0.0
+            || !kinematic_viscosity.is_finite()
+            || kinematic_viscosity < 0.0
+        {
+            return 0.0;
+        }
+        kinematic_viscosity * dt / (h * h)
+    }
+
     /// Peak vorticity magnitude `|∂v/∂x − ∂u/∂y|` (1/s) over the interior cells,
     /// from central differences of the cell-centred velocity — the strongest
     /// local rotation in the flow (the lid-driven cavity's central vortex, a
@@ -2138,6 +2158,56 @@ mod tests {
         // A driven flow has a positive mean that cannot exceed the peak.
         assert!(mean > 0.0, "driven flow should have a positive mean speed");
         assert!(mean <= peak + 1e-9, "mean {mean} cannot exceed peak {peak}");
+    }
+
+    #[test]
+    fn diffusive_number_pairs_with_the_convective_cfl() {
+        // Grid 5×4 over 5×8 → dx = 1.0, dy = 2.0, h = min = 1.0; uniform u = 3.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let h = grid.dx().min(grid.dy());
+        let nu = 0.1;
+        let dt = 0.05;
+
+        // Definition + worked value: d = ν·Δt/h² = 0.1·0.05/1 = 0.005.
+        assert!((sol.diffusive_number(nu, dt) - nu * dt / (h * h)).abs() < 1e-12, "d = ν·Δt/h²");
+        assert!((sol.diffusive_number(0.1, 0.05) - 0.005).abs() < 1e-12);
+
+        // Threads convective_cfl_number via the cell Reynolds number: CFL/d = U_max·h/ν.
+        let re_cell = sol.max_speed() * h / nu;
+        assert!(
+            (sol.convective_cfl_number(dt) - sol.diffusive_number(nu, dt) * re_cell).abs() < 1e-12,
+            "CFL = d · Re_cell"
+        );
+
+        // Linear in ν; the d = 1/4 stability limit at Δt = h²/(4ν).
+        assert!(
+            (sol.diffusive_number(0.2, dt) - 2.0 * sol.diffusive_number(0.1, dt)).abs() < 1e-12,
+            "linear in ν"
+        );
+        assert!(
+            (sol.diffusive_number(nu, h * h / (4.0 * nu)) - 0.25).abs() < 1e-12,
+            "d = 1/4 at Δt = h²/4ν"
+        );
+
+        // Sentinel: zero / negative / non-finite inputs → 0.
+        assert_eq!(sol.diffusive_number(nu, 0.0), 0.0);
+        assert_eq!(sol.diffusive_number(-0.1, dt), 0.0);
+        assert_eq!(sol.diffusive_number(nu, f64::NAN), 0.0);
     }
 
     #[test]
