@@ -273,6 +273,43 @@ pub fn cantilever_udl_strain_energy(
         / (40.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **strain energy of a simply-supported beam under a uniformly
+/// distributed load** `U = w²·L⁵/(240·E·I)` (J) — the elastic energy stored in
+/// bending when a slender Euler–Bernoulli beam of span `length` `L` (m), Young's
+/// modulus `youngs_modulus` `E` (Pa) and section second moment of area
+/// `second_moment_area` `I` (m⁴) carries a uniformly distributed transverse load of
+/// intensity `load_per_length` `w` (N/m) over its full span.
+///
+/// It is the **last corner of the energy-method 2×2 matrix** {cantilever,
+/// simply-supported} × {point, UDL}, the simply-supported-UDL companion to the
+/// cantilever [`cantilever_udl_strain_energy`]. It is the bending-energy integral
+/// `U = ∫₀^L M²/(2EI) dx` with the simply-supported-UDL moment `M(x) = (w/2)·x·(L−x)`
+/// (parabolic, zero at the pinned ends, peaking at mid-span). For the same `w, L, E,
+/// I` a cantilever stores exactly `6×` this energy (`w²L⁵/(40EI)` vs `w²L⁵/(240EI)`)
+/// — the far more compliant free end. The energy grows with the *square* of the load
+/// intensity (so it is sign-independent), the *fifth* power of the span, and falls
+/// inversely with the flexural rigidity `E·I`. Returns `0` for non-physical input
+/// (`w` non-finite, or `E`, `I`, or `L` non-positive or non-finite).
+pub fn simply_supported_udl_strain_energy(
+    load_per_length: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load_per_length.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load_per_length * load_per_length * length.powi(5)
+        / (240.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **cantilever tip slope under a uniformly distributed load**
 /// `θ = w·L³/(6·E·I)` (rad) — the end-rotation of a slender Euler–Bernoulli
 /// cantilever carrying a transverse load of intensity `load_per_length` `w` (N/m)
@@ -1931,6 +1968,45 @@ mod tests {
         assert_eq!(cantilever_udl_strain_energy(w, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_udl_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite w
         assert_eq!(cantilever_udl_strain_energy(w, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn simply_supported_udl_strain_energy_completes_the_energy_matrix() {
+        // Worked point: w = 1 kN/m UDL on a 2 m simply-supported steel beam, E = 200
+        // GPa, I = 1e-6 m⁴ → U = w²·L⁵/(240·E·I) = 3.2e7/4.8e7 = 2/3 ≈ 0.6667 J.
+        let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let u = simply_supported_udl_strain_energy(w, l, e, i);
+        assert!((u - 2.0 / 3.0).abs() / u < 1e-9, "U = 2/3 J, got {u}");
+        // Quadratic in w → SIGN-INDEPENDENT; L⁵ scaling; inverse in E·I.
+        assert!((simply_supported_udl_strain_energy(2.0 * w, l, e, i) - 4.0 * u).abs() / u < 1e-9, "w² scaling");
+        assert!((simply_supported_udl_strain_energy(-w, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
+        assert!((simply_supported_udl_strain_energy(w, 2.0 * l, e, i) - 32.0 * u).abs() / u < 1e-9, "L⁵ scaling");
+        assert!((simply_supported_udl_strain_energy(w, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
+        assert!((simply_supported_udl_strain_energy(w, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        // STRONG cross-check (1): a first-principles NUMERICAL Riemann integral of the
+        // bending energy ∫₀^L M(x)²/(2EI) dx with the SS-UDL moment M(x) = (w/2)·x·(L−x).
+        let n = 100_000;
+        let dx = l / n as f64;
+        let mut energy_sum = 0.0;
+        for k in 0..n {
+            let x = (k as f64 + 0.5) * dx; // midpoint
+            let m = 0.5 * w * x * (l - x);
+            energy_sum += m * m / (2.0 * e * i) * dx;
+        }
+        assert!((u - energy_sum).abs() / u < 1e-5, "U = ∫M²/(2EI)dx numerically: {u} vs {energy_sum}");
+        // STRONG cross-check (2): completing the energy 2×2 matrix — for equal w,L,E,I
+        // a cantilever stores exactly 6× the simply-supported UDL energy (threads #248).
+        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (300.0, 1.5), (-750.0, 3.0)] {
+            let ss = simply_supported_udl_strain_energy(ww, ll, e, i);
+            let cant = cantilever_udl_strain_energy(ww, ll, e, i);
+            assert!((cant - 6.0 * ss).abs() / cant < 1e-12, "cantilever = 6× SS UDL at w={ww}, L={ll}");
+        }
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_udl_strain_energy(w, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(simply_supported_udl_strain_energy(w, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(simply_supported_udl_strain_energy(w, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(simply_supported_udl_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite w
+        assert_eq!(simply_supported_udl_strain_energy(w, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]

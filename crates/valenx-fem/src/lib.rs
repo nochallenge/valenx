@@ -149,7 +149,7 @@ pub use beam::{
     euler_bernoulli_beam_frequency,
     simply_supported_center_deflection, simply_supported_end_slope,
     simply_supported_point_load_strain_energy, simply_supported_udl_center_deflection,
-    simply_supported_udl_end_slope, solve_beam_modal,
+    simply_supported_udl_end_slope, simply_supported_udl_strain_energy, solve_beam_modal,
     solve_beam_static, BeamConstraint, BeamElement, BeamLoad, BeamModalSolution, BeamMode,
     BeamSection, BeamSolution, BeamSolverError,
 };
