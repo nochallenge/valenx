@@ -371,6 +371,23 @@ fn total_area(bodies: &[valenx_cad::Solid]) -> f64 {
         .sum()
 }
 
+/// The **B-rep Euler–Poincaré characteristic** `χ = V − E + F` summed over a set of
+/// solid bodies, threading [`valenx_cad::euler_characteristic`] (each body's exact
+/// boundary-representation `V − E + F`). Unlike the *tessellation* Euler
+/// characteristic [`mesh_euler_characteristic`] — which counts the triangle mesh —
+/// this reads the solid's true CAD topology directly: a single closed orientable body
+/// has `χ = 2 − 2g` (`2` for a box or sphere, genus 0; `0` for a torus), and the
+/// value is additive over disjoint bodies. Because the Euler characteristic is a
+/// topological invariant the two must agree (a B-rep-vs-mesh consistency check). A
+/// mesh-backed solid contributes `0` (no B-rep topology — its `euler_characteristic`
+/// is `None`); `0` for an empty body list.
+fn brep_euler_characteristic(bodies: &[valenx_cad::Solid]) -> i64 {
+    bodies
+        .iter()
+        .filter_map(valenx_cad::euler_characteristic)
+        .sum()
+}
+
 /// Overall bounding-box dimensions `[dx, dy, dz]` (model units) of a mesh, from
 /// its axis-aligned min/max corner. `None` for an empty mesh.
 fn mesh_dimensions(mesh: &valenx_mesh::Mesh) -> Option<[f32; 3]> {
@@ -1302,6 +1319,13 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
     let model = tl.rebuild(&table).map_err(|e| e.to_string())?;
     let nbodies = model.bodies.len();
     let faces: usize = model.bodies.iter().map(|b| b.faces()).sum();
+    // B-rep Euler–Poincaré characteristic χ = V−E+F — the solid's true CAD topology
+    // (distinct from the tessellation euler); shown only when there are B-rep faces.
+    let brep_str = if faces > 0 {
+        format!(" · brep χ {}", brep_euler_characteristic(&model.bodies))
+    } else {
+        String::new()
+    };
     let volume = total_volume(&model.bodies);
     let area = total_area(&model.bodies);
     // Mass = density × solid volume (model mass units).
@@ -1521,7 +1545,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|v| format!(" · mean valence {v:.2}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{defect_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{wire_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces{brep_str} · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{defect_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{wire_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -3171,6 +3195,58 @@ mod tests {
 
         // An empty mesh has no Euler characteristic.
         assert_eq!(mesh_euler_characteristic(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn brep_euler_characteristic_sums_the_solid_topology() {
+        use nalgebra::Vector3;
+        // A box B-rep has 6 faces, 12 edges, 8 vertices → χ = 8 − 12 + 6 = 2, the
+        // genus-0 (sphere-topology) invariant read straight from the CAD topology.
+        let cube = valenx_cad::box_solid(1.0, 2.0, 3.0).expect("box builds");
+        assert_eq!(cube.faces(), 6);
+        assert_eq!(cube.edges(), 12);
+        assert_eq!(cube.vertices(), 8);
+        let brep_chi = brep_euler_characteristic(std::slice::from_ref(&cube));
+        assert_eq!(brep_chi, 2, "box B-rep χ = 8 − 12 + 6 = 2");
+
+        // STRONG cross-check against an INDEPENDENT topology computation: the
+        // tessellation Euler characteristic of a welded triangle mesh of the same
+        // box. B-rep V−E+F (CAD topology) and triangulation V−E+F must agree — χ is a
+        // topological invariant, blind to how the boundary is discretised.
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut bm = valenx_mesh::Mesh::new("box");
+        bm.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        bm.element_blocks.push(block);
+        let mesh_chi = mesh_euler_characteristic(&bm).expect("box mesh has triangles");
+        assert_eq!(mesh_chi, 2);
+        assert_eq!(
+            brep_chi, mesh_chi,
+            "B-rep χ must equal the tessellation χ (topological invariance)"
+        );
+
+        // Additivity over disjoint bodies: two boxes → 2 + 2 = 4.
+        let two = [
+            valenx_cad::box_solid(1.0, 2.0, 3.0).unwrap(),
+            valenx_cad::box_solid(2.0, 2.0, 2.0).unwrap(),
+        ];
+        assert_eq!(brep_euler_characteristic(&two), 4, "χ is additive over bodies");
+
+        // No bodies → 0.
+        assert_eq!(brep_euler_characteristic(&[]), 0);
     }
 
     #[test]
