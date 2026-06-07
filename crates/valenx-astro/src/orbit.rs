@@ -185,9 +185,79 @@ pub fn orbital_period(semi_major_axis: f64) -> Result<f64, AstroError> {
     Ok(2.0 * std::f64::consts::PI * (semi_major_axis.powi(3) / MU_EARTH).sqrt())
 }
 
+/// The **orbital speed** `v = √(μ·(2/r − 1/a))` (m/s) at radius `radius` `r` (m) on an
+/// orbit of semi-major axis `semi_major_axis` `a` (m) about Earth — the **vis-viva
+/// equation**, expressing conservation of specific orbital energy `v²/2 − μ/r =
+/// −μ/(2a)`. It is the general speed of which [`circular_speed`] (`r = a`) and
+/// [`escape_speed`] (the `a → ∞` parabolic limit) are special cases: faster at
+/// periapsis, slower at apoapsis, with the product `v·r` constant on the line of
+/// apsides (the conserved angular momentum).
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `radius` or `semi_major_axis` is
+/// non-finite or non-positive, or if `radius > 2a` (beyond the apoapsis the orbit
+/// does not reach, where `v²` would be negative).
+pub fn orbital_speed(radius: f64, semi_major_axis: f64) -> Result<f64, AstroError> {
+    if !radius.is_finite()
+        || !semi_major_axis.is_finite()
+        || radius <= 0.0
+        || semi_major_axis <= 0.0
+    {
+        return Err(AstroError::NonPhysicalState(
+            "orbital_speed radius and semi_major_axis must be finite and > 0",
+        ));
+    }
+    let v_sq = MU_EARTH * (2.0 / radius - 1.0 / semi_major_axis);
+    if v_sq < 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "orbital_speed radius lies beyond the orbit (radius > 2·semi_major_axis)",
+        ));
+    }
+    Ok(v_sq.sqrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orbital_speed_matches_vis_viva_and_threads_circular_escape() {
+        // Circular orbit (r = a): vis-viva reduces to the circular speed.
+        for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2e7] {
+            let v = orbital_speed(r, r).unwrap();
+            assert!((v - circular_speed(r).unwrap()).abs() <= 1e-12 * v, "orbital_speed(a,a) = v_circ");
+        }
+
+        // Parabolic limit (a → ∞): vis-viva tends to the escape speed.
+        let r = R_EARTH + 1.0e6;
+        let v_far = orbital_speed(r, 1.0e15).unwrap();
+        assert!(
+            (v_far - escape_speed(r).unwrap()).abs() / escape_speed(r).unwrap() < 1e-6,
+            "orbital_speed(r, ∞) → v_esc"
+        );
+
+        // Angular momentum: v·r is equal at periapsis and apoapsis of an ellipse.
+        let a = 1.5 * R_EARTH;
+        let e = 0.3;
+        let v_peri = orbital_speed(a * (1.0 - e), a).unwrap();
+        let v_apo = orbital_speed(a * (1.0 + e), a).unwrap();
+        assert!(
+            (v_peri * a * (1.0 - e) - v_apo * a * (1.0 + e)).abs() <= 1e-9 * (v_peri * a * (1.0 - e)),
+            "v·r conserved across the apsides"
+        );
+        assert!(v_peri > v_apo, "faster at periapsis");
+
+        // Worked: a 400 km circular LEO orbits at ≈ 7.67 km/s.
+        let leo = orbital_speed(R_EARTH + 400_000.0, R_EARTH + 400_000.0).unwrap();
+        assert!((leo - 7670.0).abs() < 20.0, "LEO speed ≈ 7.67 km/s, got {leo}");
+
+        // Non-physical: r beyond apoapsis (r > 2a), non-positive, or NaN → Err.
+        assert!(orbital_speed(3.0 * a, a).is_err(), "r > 2a → Err");
+        assert!(orbital_speed(0.0, a).is_err());
+        assert!(orbital_speed(r, -1.0).is_err());
+        assert!(orbital_speed(f64::NAN, a).is_err());
+    }
 
     #[test]
     fn orbital_period_matches_kepler_third_law() {
