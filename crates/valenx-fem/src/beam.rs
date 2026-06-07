@@ -468,6 +468,26 @@ pub fn beam_curvature(moment: f64, youngs_modulus: f64, second_moment_area: f64)
     moment / (youngs_modulus * second_moment_area)
 }
 
+/// The **bending (flexure) stress** `σ = M·y/I` (Pa) — the longitudinal normal stress
+/// a bending moment `moment` `M` (N·m) induces at distance `distance_from_neutral_axis`
+/// `y` (m) from the neutral axis in a section of second moment of area
+/// `second_moment_area` `I` (m⁴). It varies linearly across the section: zero at the
+/// neutral axis, tensile on the convex face and compressive on the concave one, with
+/// the design-critical maximum at the extreme fibre `y = c` (checked against the
+/// material's yield strength). It is the stress conjugate of the curvature
+/// [`beam_curvature`] through Hooke's law `σ = E·κ·y`. Returns `0` for non-physical
+/// input (`M` or `y` non-finite, or `I` non-positive or non-finite).
+pub fn bending_stress(moment: f64, distance_from_neutral_axis: f64, second_moment_area: f64) -> f64 {
+    if !moment.is_finite()
+        || !distance_from_neutral_axis.is_finite()
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    moment * distance_from_neutral_axis / second_moment_area
+}
+
 /// The analytic **simply-supported (pinned–pinned) mid-span deflection**
 /// `δ = P·L³/(48·E·I)` (m) of a slender Euler–Bernoulli beam under a *central*
 /// transverse point load `load` `P` (N) — span `length` `L` (m), Young's modulus
@@ -2353,6 +2373,54 @@ mod tests {
         let analytic = beam_axial_extension(f, l, mat.youngs_modulus, section.area);
         let rel = (sol.translation[1][0] - analytic).abs() / analytic;
         assert!(rel < 1e-6, "axial δ {} vs {analytic}", sol.translation[1][0]);
+    }
+
+    #[test]
+    fn bending_stress_is_the_flexure_formula() {
+        // Worked: σ = M·y/I = 2000·0.05/1e-6 = 100 MPa.
+        let s = bending_stress(2000.0, 0.05, 1.0e-6);
+        assert!((s - 1.0e8).abs() <= 1e-12 * 1.0e8, "σ = M·y/I, got {s}");
+
+        // Threads beam_curvature via Hooke's law σ = E·κ·y (the E cancels).
+        let e = 200.0e9;
+        for &(m, y, i) in &[
+            (2000.0_f64, 0.05_f64, 1.0e-6_f64),
+            (-450.0, -0.02, 4.2e-7),
+            (8200.0, 0.12, 9.0e-8),
+        ] {
+            let from_curvature = e * beam_curvature(m, e, i) * y;
+            assert!(
+                (bending_stress(m, y, i) - from_curvature).abs() <= 1e-12 * from_curvature.abs(),
+                "σ = E·κ·y"
+            );
+        }
+
+        // Threads the cantilever moment family: σ_root = M_root·c/I = P·L·c/I.
+        for &(p, l, c, i) in &[(1000.0_f64, 2.0_f64, 0.05_f64, 1.0e-6_f64), (-450.0, 3.5, 0.03, 4.2e-7)]
+        {
+            let sigma_root = bending_stress(cantilever_point_load_root_moment(p, l), c, i);
+            assert!(
+                (sigma_root - p * l * c / i).abs() <= 1e-12 * (p * l * c / i).abs(),
+                "σ_root = PLc/I"
+            );
+        }
+
+        // Opposite faces carry opposite (tension/compression) stress; inverse in I.
+        assert!(
+            (bending_stress(2000.0, -0.05, 1.0e-6) + bending_stress(2000.0, 0.05, 1.0e-6)).abs() < 1e-3,
+            "σ(−y) = −σ(y)"
+        );
+        assert!(
+            (bending_stress(2000.0, 0.05, 2.0e-6) - 0.5 * bending_stress(2000.0, 0.05, 1.0e-6)).abs()
+                < 1e-3,
+            "inverse in I"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(bending_stress(f64::NAN, 0.05, 1.0e-6), 0.0);
+        assert_eq!(bending_stress(2000.0, f64::NAN, 1.0e-6), 0.0);
+        assert_eq!(bending_stress(2000.0, 0.05, 0.0), 0.0);
+        assert_eq!(bending_stress(2000.0, 0.05, -1.0e-6), 0.0);
     }
 
     #[test]
