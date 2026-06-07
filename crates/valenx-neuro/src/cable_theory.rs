@@ -102,6 +102,19 @@ pub fn steady_state_attenuation(electrotonic_length: f64) -> f64 {
     (-electrotonic_length.max(0.0)).exp()
 }
 
+/// The **electrotonic distance** `L = −ln(V/V₀)` recovered from a measured
+/// steady-state voltage `attenuation` `V/V₀` along a semi-infinite passive cable —
+/// the exact inverse of [`steady_state_attenuation`] (`V/V₀ = e^(−L)`). It turns an
+/// observed signal decay back into the number of length constants `L = x/λ` (see
+/// [`electrotonic_length`]) the signal travelled, the basis for estimating `λ` from
+/// paired recordings at a known separation. A unit attenuation (no decay) gives
+/// `L = 0`; `1/e` gives `L = 1`; total attenuation (`→ 0`) diverges. An
+/// `attenuation ≥ 1` (no physical decay is possible along a passive cable) clamps to
+/// `L = 0`, mirroring the one-sided clamp of the forward map.
+pub fn electrotonic_length_from_attenuation(attenuation: f64) -> f64 {
+    -attenuation.min(1.0).ln()
+}
+
 /// Input resistance of a finite passive cable with a **sealed** (closed,
 /// no-axial-leak) far end: `R_in = R_∞·coth(L)`, from the semi-infinite input
 /// resistance `r_inf_ohms` ([`semi_infinite_input_resistance`]) and the
@@ -284,6 +297,42 @@ mod tests {
         // Monotonically decreasing; a negative L clamps to the injection value.
         assert!(steady_state_attenuation(2.0) < steady_state_attenuation(1.0));
         assert_eq!(steady_state_attenuation(-1.0), 1.0);
+    }
+
+    #[test]
+    fn electrotonic_length_from_attenuation_inverts_steady_state_attenuation() {
+        use std::f64::consts::E;
+        // Worked points: att = 1 → L = 0 (no decay); att = 1/e → L = 1; att = 0.5 →
+        // L = ln 2 ≈ 0.6931.
+        assert!(electrotonic_length_from_attenuation(1.0).abs() < 1e-12, "att=1 → L=0");
+        assert!((electrotonic_length_from_attenuation(1.0 / E) - 1.0).abs() < 1e-12, "att=1/e → L=1");
+        assert!(
+            (electrotonic_length_from_attenuation(0.5) - 2.0_f64.ln()).abs() < 1e-12,
+            "att=0.5 → ln 2"
+        );
+        // att ≥ 1 (no physical decay along a passive cable) clamps to L = 0.
+        assert!(electrotonic_length_from_attenuation(1.5).abs() < 1e-12, "att>1 clamps to 0");
+        // STRONG round-trip cross-checks threading steady_state_attenuation BOTH ways.
+        for &l in &[0.0_f64, 0.3, 1.0, 2.5, 5.0] {
+            let back = electrotonic_length_from_attenuation(steady_state_attenuation(l));
+            assert!((back - l).abs() < 1e-9, "L→att→L at L={l}: {back}");
+        }
+        for &att in &[0.05_f64, 0.2, 0.5, 0.9, 1.0] {
+            let back = steady_state_attenuation(electrotonic_length_from_attenuation(att));
+            assert!((back - att).abs() < 1e-12, "att→L→att at att={att}: {back}");
+        }
+        // Multi-thread tie: a physical cable (length, λ) → geometric L → att → recovered
+        // L closes the loop across electrotonic_length and steady_state_attenuation.
+        for &(len, lambda) in &[(0.5_f64, 1.0_f64), (3.0, 2.0), (1.2, 0.7)] {
+            let l_geom = electrotonic_length(len, lambda);
+            let l_recovered = electrotonic_length_from_attenuation(steady_state_attenuation(l_geom));
+            assert!((l_recovered - l_geom).abs() < 1e-9, "geom vs recovered L at len={len}, λ={lambda}");
+        }
+        // Monotone decreasing in attenuation (more decay ⇒ greater distance).
+        assert!(
+            electrotonic_length_from_attenuation(0.2) > electrotonic_length_from_attenuation(0.8),
+            "more attenuation → larger L"
+        );
     }
 
     #[test]
