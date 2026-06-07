@@ -574,6 +574,27 @@ pub fn rayleigh_flow_total_temperature_ratio(mach: f64, gamma: f64) -> f64 {
     2.0 * (gamma + 1.0) * m2 * (1.0 + 0.5 * (gamma - 1.0) * m2) / (denom * denom)
 }
 
+/// The **Rayleigh-flow static temperature ratio** `T/T* = (M(γ+1)/(1+γM²))²` at
+/// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the static
+/// temperature of a frictionless heat-addition (Rayleigh) flow relative to its sonic
+/// value `T*`, the static-property companion to the stagnation
+/// [`rayleigh_flow_total_temperature_ratio`].
+///
+/// Its hallmark is a **maximum at `M = 1/√γ`** (≈ 0.845 for air), *below* the sonic
+/// point: as heat is added to a subsonic stream the static temperature rises only
+/// until `M = 1/√γ`, then *falls* even as more heat keeps driving the total
+/// temperature `T₀` toward the thermal-choking limit — past that Mach the flow
+/// accelerates faster than it heats, converting the added enthalpy into kinetic
+/// energy. `T/T* = 1` at the sonic point `M = 1`, and `0` at rest (`M = 0`). Returns
+/// `0` for non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn rayleigh_flow_temperature_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    let ratio = mach * (gamma + 1.0) / (1.0 + gamma * mach * mach);
+    ratio * ratio
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1707,5 +1728,40 @@ mod tests {
         assert_eq!(rayleigh_flow_total_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_total_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn rayleigh_flow_temperature_ratio_peaks_below_sonic() {
+        let g = 1.4;
+        // Sonic reference: T/T* = 1 at M = 1; no flow at rest.
+        assert!((rayleigh_flow_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(rayleigh_flow_temperature_ratio(0.0, g).abs() < 1e-12, "M=0 → 0");
+        // Standard Rayleigh-flow table points (γ = 1.4).
+        assert!((rayleigh_flow_temperature_ratio(2.0, g) - 0.5289).abs() < 1e-3, "M=2 → 0.5289");
+        assert!((rayleigh_flow_temperature_ratio(0.5, g) - 0.7901).abs() < 1e-3, "M=0.5 → 0.7901");
+        // The static-temperature MAX is at M = 1/√γ (≈ 0.845), BELOW the sonic point,
+        // and there T/T* > 1 (hotter than at sonic) — the classic Rayleigh feature.
+        let m_peak = 1.0 / g.sqrt();
+        let t_peak = rayleigh_flow_temperature_ratio(m_peak, g);
+        assert!(t_peak > 1.0, "T/T* at M=1/√γ exceeds 1, got {t_peak}");
+        for &m in &[0.6_f64, 0.75, 0.95, 1.0, 1.2] {
+            assert!(t_peak >= rayleigh_flow_temperature_ratio(m, g), "peak at M=1/√γ, beaten at M={m}");
+        }
+        // STRONG cross-check threading rayleigh_flow_total_temperature_ratio #247 AND
+        // isentropic_stagnation_temperature_ratio: since T0/T0* = (T0/T)·(T/T*)/(T0*/T*)
+        // with T0*/T* = (γ+1)/2, we have T/T* = (T0/T0*)·((γ+1)/2)/(T0/T).
+        for &m in &[0.3_f64, 0.7, 1.0, 1.5, 2.0, 3.5] {
+            let expected = rayleigh_flow_total_temperature_ratio(m, g) * ((g + 1.0) / 2.0)
+                / isentropic_stagnation_temperature_ratio(m, g);
+            assert!(
+                (rayleigh_flow_temperature_ratio(m, g) - expected).abs() / expected < 1e-9,
+                "T/T* via T0/T0* and isentropic at M={m}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(rayleigh_flow_temperature_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(rayleigh_flow_temperature_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(rayleigh_flow_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
+        assert_eq!(rayleigh_flow_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
     }
 }
