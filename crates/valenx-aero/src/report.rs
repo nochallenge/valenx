@@ -635,6 +635,25 @@ pub fn fanno_flow_pressure_ratio(mach: f64, gamma: f64) -> f64 {
     (1.0 / mach) * ((gamma + 1.0) / (2.0 + (gamma - 1.0) * mach * mach)).sqrt()
 }
 
+/// The **Fanno-flow velocity ratio** `V/V* = M·√((γ+1)/(2 + (γ−1)·M²))` at Mach
+/// number `mach` `M` and heat-capacity ratio `gamma` `γ` — the flow speed referenced
+/// to the sonic (choked) state for **Fanno flow** (steady, adiabatic, constant-area
+/// flow with wall friction), the velocity companion to the
+/// [`fanno_flow_temperature_ratio`] `T/T*` and [`fanno_flow_pressure_ratio`] `p/p*`.
+/// It is exactly `M·√(T/T*) = M²·(p/p*)`, so it is `1` at the sonic point (`M = 1`),
+/// approaches it from below (`V/V* < 1` for subsonic flow) and exceeds it from above
+/// (`V/V* > 1` for supersonic) — the opposite trend to the temperature and pressure
+/// ratios, since friction accelerates a subsonic stream and decelerates a supersonic
+/// one toward `M = 1`. Unlike them it stays bounded as `M → ∞`, approaching the
+/// maximum `√((γ+1)/(γ−1))`. Returns `0` at rest (`M = 0`, no flow) and for
+/// non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn fanno_flow_velocity_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    mach * ((gamma + 1.0) / (2.0 + (gamma - 1.0) * mach * mach)).sqrt()
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1803,6 +1822,41 @@ mod tests {
         assert_eq!(rayleigh_flow_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn fanno_flow_velocity_ratio_threads_the_fanno_family() {
+        let g = 1.4;
+        // Sonic reference: V/V* = 1 exactly at M = 1.
+        assert!((fanno_flow_velocity_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        // STRONG dual cross-check threading the Fanno temperature (#259) and pressure
+        // (#265) ratios: V/V* = M·√(T/T*) = M²·(p/p*) — two distinct closed forms.
+        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+            let v = fanno_flow_velocity_ratio(m, gam);
+            let via_t = m * fanno_flow_temperature_ratio(m, gam).sqrt();
+            let via_p = m * m * fanno_flow_pressure_ratio(m, gam);
+            assert!((v - via_t).abs() / via_t < 1e-12, "V/V* = M·√(T/T*) at M={m}, γ={gam}");
+            assert!((v - via_p).abs() / via_p < 1e-12, "V/V* = M²·(p/p*) at M={m}, γ={gam}");
+        }
+        // Subsonic V/V* < 1, supersonic > 1 — the opposite trend to T/T* and p/p*.
+        assert!(fanno_flow_velocity_ratio(0.5, g) < 1.0, "subsonic V/V* < 1");
+        assert!(fanno_flow_velocity_ratio(2.0, g) > 1.0, "supersonic V/V* > 1");
+        // Monotonic increasing in M.
+        assert!(
+            fanno_flow_velocity_ratio(1.5, g) > fanno_flow_velocity_ratio(0.5, g),
+            "V/V* increases with M"
+        );
+        // Bounded high-Mach limit: V/V* → √((γ+1)/(γ−1)) (= √6 for γ = 1.4).
+        let v_inf = ((g + 1.0) / (g - 1.0)).sqrt();
+        assert!(
+            (fanno_flow_velocity_ratio(1.0e4, g) - v_inf).abs() / v_inf < 1e-6,
+            "V/V* → √((γ+1)/(γ−1))"
+        );
+        // No flow at rest; non-physical input → 0.
+        assert_eq!(fanno_flow_velocity_ratio(0.0, g), 0.0); // M = 0
+        assert_eq!(fanno_flow_velocity_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(fanno_flow_velocity_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(fanno_flow_velocity_ratio(f64::NAN, g), 0.0); // non-finite M
     }
 
     #[test]
