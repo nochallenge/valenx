@@ -55,8 +55,8 @@ pub use cable::{
     StimPulse,
 };
 pub use cable_theory::{
-    ac_length_constant, charging_fraction, electrotonic_length, length_constant_cm,
-    membrane_cutoff_frequency,
+    ac_length_constant, charging_fraction, electrotonic_length,
+    electrotonic_length_from_attenuation, length_constant_cm, membrane_cutoff_frequency,
     open_end_input_resistance, rall_equivalent_diameter, sealed_end_input_resistance,
     semi_infinite_input_resistance, steady_state_attenuation, time_constant_s,
     time_to_charge_fraction,
