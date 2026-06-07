@@ -305,6 +305,16 @@ impl FlowSolution {
         (u * u + v * v).sqrt()
     }
 
+    /// The **kinetic-energy density** `½·ρ·|u|²` (J/m³ = Pa) at the centre of cell
+    /// `(i, j)`, for fluid density `density` `ρ` (kg/m³) — the per-cell scalar field
+    /// that [`FlowSolution::mean_kinetic_energy_density`] area-averages over the grid,
+    /// and the local form of the freestream dynamic pressure `½ρU²`. Built from the
+    /// cell-centred [`FlowSolution::speed_at_cell`], so it is defined on every cell.
+    pub fn kinetic_energy_density_at_cell(&self, i: usize, j: usize, density: f64) -> f64 {
+        let speed = self.speed_at_cell(i, j);
+        0.5 * density * speed * speed
+    }
+
     /// Static-pressure range `Δp = p_max − p_min` (Pa) over the field — the
     /// total pressure variation. Gauge-independent (a difference), so it is
     /// meaningful despite the arbitrary absolute level: for channel flow it is
@@ -2944,6 +2954,88 @@ mod tests {
             converged: true,
         };
         assert_eq!(calm.continuity_error(), 0.0);
+    }
+
+    #[test]
+    fn kinetic_energy_density_at_cell_threads_speed_and_the_mean() {
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+        let rho = 1.225_f64; // air
+
+        // A non-uniform field: linear shear u = γ·y, v = 0.
+        let gamma = 2.0_f64;
+        let dy = grid.dy();
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, gamma * (j as f64 + 0.5) * dy);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // Threads speed_at_cell: KE density = ½·ρ·speed² at every cell.
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let s = sol.speed_at_cell(i, j);
+                assert!(
+                    (sol.kinetic_energy_density_at_cell(i, j, rho) - 0.5 * rho * s * s).abs() < 1e-12,
+                    "KE density = ½ρ·speed² at ({i},{j})"
+                );
+            }
+        }
+
+        // STRONG cross-check threading mean_kinetic_energy_density: the cell-average
+        // of the per-cell KE density reproduces the independently-implemented mean.
+        let mut sum = 0.0;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                sum += sol.kinetic_energy_density_at_cell(i, j, rho);
+            }
+        }
+        let mean = sum / (grid.nx * grid.ny) as f64;
+        assert!(
+            (mean - sol.mean_kinetic_energy_density(rho)).abs() / mean < 1e-12,
+            "⟨KE density⟩ = mean_kinetic_energy_density"
+        );
+
+        // Uniform flow u = U → KE density = ½ρU² (the dynamic pressure) everywhere.
+        let u_inf = 4.0_f64;
+        let mut uu = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                uu.set(i, j, u_inf);
+            }
+        }
+        let uni = FlowSolution {
+            grid,
+            u: uu,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let q_dyn = 0.5 * rho * u_inf * u_inf;
+        assert!(
+            (uni.kinetic_energy_density_at_cell(2, 2, rho) - q_dyn).abs() < 1e-12,
+            "uniform flow → ½ρU²"
+        );
+
+        // Linear in density.
+        assert!(
+            (uni.kinetic_energy_density_at_cell(2, 2, 2.0 * rho)
+                - 2.0 * uni.kinetic_energy_density_at_cell(2, 2, rho))
+            .abs()
+                < 1e-9,
+            "linear in ρ"
+        );
     }
 
     #[test]
