@@ -315,6 +315,18 @@ impl FlowSolution {
         0.5 * density * speed * speed
     }
 
+    /// The **total (stagnation) pressure** `p₀ = p + ½·ρ·|u|²` (Pa) at the centre of
+    /// cell `(i, j)`, for fluid density `density` `ρ` (kg/m³) — the sum of the static
+    /// pressure and the dynamic head, i.e. the pressure the flow would reach if brought
+    /// reversibly to rest (Bernoulli's constant). It is the per-cell field that
+    /// [`FlowSolution::total_pressure_range`] takes the max–min of, formed from the
+    /// static [`FlowSolution::pressure`] and the dynamic
+    /// [`FlowSolution::kinetic_energy_density_at_cell`]. In a steady inviscid flow it is
+    /// constant along a streamline; its decline marks irreversible (viscous) loss.
+    pub fn total_pressure_at_cell(&self, i: usize, j: usize, density: f64) -> f64 {
+        self.pressure.at(i, j) + self.kinetic_energy_density_at_cell(i, j, density)
+    }
+
     /// Static-pressure range `Δp = p_max − p_min` (Pa) over the field — the
     /// total pressure variation. Gauge-independent (a difference), so it is
     /// meaningful despite the arbitrary absolute level: for channel flow it is
@@ -2954,6 +2966,98 @@ mod tests {
             converged: true,
         };
         assert_eq!(calm.continuity_error(), 0.0);
+    }
+
+    #[test]
+    fn total_pressure_at_cell_threads_ke_and_the_range() {
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+        let rho = 1.225_f64;
+        let gamma = 2.0_f64;
+        let dy = grid.dy();
+
+        // A shear velocity field u = γ·y plus an arbitrary varying static pressure.
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, gamma * (j as f64 + 0.5) * dy);
+            }
+        }
+        let mut p = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p.set(i, j, 100.0 + (i as f64) * 3.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // Threads pressure + kinetic_energy_density_at_cell: p₀ = p + ½ρ|u|².
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let expect = sol.pressure.at(i, j) + sol.kinetic_energy_density_at_cell(i, j, rho);
+                assert!(
+                    (sol.total_pressure_at_cell(i, j, rho) - expect).abs() < 1e-12,
+                    "p₀ = p + ½ρ|u|² at ({i},{j})"
+                );
+            }
+        }
+
+        // STRONG cross-check threading total_pressure_range: the spread of the per-cell
+        // total pressure reproduces the independently-implemented range reducer.
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let p0 = sol.total_pressure_at_cell(i, j, rho);
+                lo = lo.min(p0);
+                hi = hi.max(p0);
+            }
+        }
+        assert!(
+            (hi - lo - sol.total_pressure_range(rho)).abs() < 1e-9,
+            "max − min p₀ = total_pressure_range"
+        );
+
+        // Bernoulli: a field whose static pressure compensates the local dynamic head
+        // (p = p_ref − ½ρ|u|²) has a spatially uniform total pressure.
+        let p_ref = 500.0_f64;
+        let mut ub = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ub.set(fi, j, gamma * (j as f64 + 0.5) * dy);
+            }
+        }
+        let mut pb = grid.pressure_field();
+        for j in 0..grid.ny {
+            let speed = gamma * (j as f64 + 0.5) * dy; // cell-centre speed of the shear
+            for i in 0..grid.nx {
+                pb.set(i, j, p_ref - 0.5 * rho * speed * speed);
+            }
+        }
+        let bern = FlowSolution {
+            grid,
+            u: ub,
+            v: grid.v_field(),
+            pressure: pb,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                assert!(
+                    (bern.total_pressure_at_cell(i, j, rho) - p_ref).abs() < 1e-9,
+                    "Bernoulli: uniform total pressure at ({i},{j})"
+                );
+            }
+        }
     }
 
     #[test]
