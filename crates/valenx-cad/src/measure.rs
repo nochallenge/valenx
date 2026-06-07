@@ -193,6 +193,73 @@ pub fn solid_area(solid: &Solid) -> Result<f64, CadError> {
     solid_area_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **volume centroid** (centre of mass at uniform density) of a solid,
+/// `[x, y, z]` in model units, computed at tessellation tolerance `tol`.
+///
+/// This is the third mass-property measure promised in the module overview,
+/// alongside [`solid_volume_tol`] and [`solid_area_tol`]. It is the
+/// divergence-theorem volume centroid summed over the boundary triangulation:
+/// each boundary triangle `(p, q, r)` spans a signed tetrahedron with the origin
+/// of volume `vₜ/6` (with the scalar triple product `vₜ = p·(q×r)`) whose own
+/// centroid is `(p + q + r)/4`, so the solid centroid is their volume-weighted
+/// mean `C = Σ vₜ·(p + q + r) / (4·Σ vₜ)`. Like [`solid_volume_tol`] it is exact
+/// for a flat-faced solid and converges as `tol → 0` for a curved one, and it is
+/// translation-equivariant (moving the solid moves the centroid the same way).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or if
+/// the boundary encloses no volume (a degenerate / empty solid, where the centroid
+/// is undefined).
+pub fn solid_centroid_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], CadError> {
+    let poly = match solid {
+        Solid::Brep(b) => brep_polygon(b, tol)?,
+        Solid::Mesh(m) => mesh_to_polygon(m),
+    };
+    let positions = poly.positions();
+    // Divergence-theorem volume centroid: accumulate 6× the signed tetrahedron
+    // volume `vol6 = Σ p·(q×r)` and the first moment `Σ vₜ·(p+q+r)`; the centroid
+    // is the moment over `4·vol6`.
+    let mut vol6 = 0.0;
+    let (mut mx, mut my, mut mz) = (0.0, 0.0, 0.0);
+    for tri in poly.tri_faces() {
+        let p = positions[tri[0].pos];
+        let q = positions[tri[1].pos];
+        let r = positions[tri[2].pos];
+        let v = p.x * (q.y * r.z - q.z * r.y) + p.y * (q.z * r.x - q.x * r.z)
+            + p.z * (q.x * r.y - q.y * r.x);
+        vol6 += v;
+        mx += v * (p.x + q.x + r.x);
+        my += v * (p.y + q.y + r.y);
+        mz += v * (p.z + q.z + r.z);
+    }
+    for quad in poly.quad_faces() {
+        for tri in [[quad[0], quad[1], quad[2]], [quad[0], quad[2], quad[3]]] {
+            let p = positions[tri[0].pos];
+            let q = positions[tri[1].pos];
+            let r = positions[tri[2].pos];
+            let v = p.x * (q.y * r.z - q.z * r.y) + p.y * (q.z * r.x - q.x * r.z)
+                + p.z * (q.x * r.y - q.y * r.x);
+            vol6 += v;
+            mx += v * (p.x + q.x + r.x);
+            my += v * (p.y + q.y + r.y);
+            mz += v * (p.z + q.z + r.z);
+        }
+    }
+    if vol6.abs() < 1e-12 {
+        return Err(CadError::Tessellation(
+            "solid boundary encloses no volume; centroid undefined".to_string(),
+        ));
+    }
+    Ok([mx / (4.0 * vol6), my / (4.0 * vol6), mz / (4.0 * vol6)])
+}
+
+/// Volume centroid of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_centroid_tol`].
+pub fn solid_centroid(solid: &Solid) -> Result<[f64; 3], CadError> {
+    solid_centroid_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Weld a polygon mesh's triangle indices onto a deduplicated vertex
 /// set, so coincident positions collapse to one index.
 ///
@@ -423,6 +490,37 @@ mod tests {
         // A box is genus-0: V−E+F = 8−12+6 = 2.
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         assert_eq!(euler_characteristic(&cube), Some(2));
+    }
+
+    #[test]
+    fn solid_centroid_matches_analytic_geometry() {
+        use crate::primitives::sphere;
+        // A box runs from the origin to (dx, dy, dz), so its centroid is the
+        // half-diagonal — exact for a flat-faced solid (tessellation is exact).
+        let c = solid_centroid(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
+        assert!((c[0] - 1.0).abs() < 1e-9, "box cx {} != 1", c[0]);
+        assert!((c[1] - 2.0).abs() < 1e-9, "box cy {} != 2", c[1]);
+        assert!((c[2] - 3.0).abs() < 1e-9, "box cz {} != 3", c[2]);
+
+        // A cylinder's base disk is centred on the origin in the X-Y plane with its
+        // axis along +Z, so the centroid sits on the axis at half height.
+        let h = 5.0;
+        let cc = solid_centroid(&cylinder(1.5, h).unwrap()).unwrap();
+        assert!(cc[0].abs() < 1e-6 && cc[1].abs() < 1e-6, "cylinder off-axis: {cc:?}");
+        assert!((cc[2] - h / 2.0).abs() < 1e-6, "cylinder cz {} != h/2", cc[2]);
+
+        // An origin-centred sphere is centroid-symmetric about the origin (a looser
+        // bound than the box/cylinder: the revolved-semicircle tessellation is not
+        // perfectly pole-symmetric, leaving a ~1e-5 residual on a radius-2 sphere).
+        let cs = solid_centroid(&sphere(2.0).unwrap()).unwrap();
+        assert!(
+            cs[0].abs() < 1e-4 && cs[1].abs() < 1e-4 && cs[2].abs() < 1e-4,
+            "sphere centroid not at origin: {cs:?}"
+        );
+
+        // SANITY (threads solid_volume — same tessellation): the box encloses 48 u³.
+        let v = solid_volume(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
+        assert!((v - 48.0).abs() < 1e-9, "box volume {v} != 48");
     }
 
     #[test]
