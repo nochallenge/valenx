@@ -94,7 +94,7 @@ pub use strength_duration::{
 pub use synapse::{
     alpha_synapse_conductance, alpha_synapse_conductance_integral,
     dual_exponential_conductance_integral, dual_exponential_peak_time,
-    dual_exponential_synapse_conductance, nmda_mg_block,
+    dual_exponential_synapse_conductance, nmda_mg_block, nmda_mg_block_half_voltage,
 };
 pub use temperature::{
     arrhenius_activation_energy_from_q10, arrhenius_rate_ratio, q10_from_activation_energy,
