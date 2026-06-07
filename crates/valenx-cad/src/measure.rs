@@ -334,6 +334,36 @@ pub fn solid_bounding_box(solid: &Solid) -> Result<([f64; 3], [f64; 3]), CadErro
     solid_bounding_box_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box fill ratio** `V / V_bbox` (dimensionless) of a
+/// solid — the fraction of its AABB that the solid actually occupies, the 3-D analogue
+/// of rectangularity / extent. It is `1` for an axis-aligned box (which fills its AABB
+/// exactly), `π/6 ≈ 0.524` for a sphere, and `π/4 ≈ 0.785` for an axis-aligned
+/// cylinder; a box maximises it. A standard packing / shape descriptor (collision
+/// pre-tests, nesting, particle morphology). Computed at tessellation tolerance `tol`
+/// from [`solid_volume_tol`] and [`solid_bounding_box_tol`].
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the
+/// bounding box is degenerate (zero extent on some axis).
+pub fn solid_bounding_box_fill_ratio_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let v = solid_volume_tol(solid, tol)?;
+    let (min, max) = solid_bounding_box_tol(solid, tol)?;
+    let bbox_vol = (max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]);
+    if bbox_vol <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate bounding box; fill ratio undefined".to_string(),
+        ));
+    }
+    Ok(v / bbox_vol)
+}
+
+/// AABB fill ratio of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_fill_ratio_tol`].
+pub fn solid_bounding_box_fill_ratio(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_fill_ratio_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **centroidal radius of gyration** `k = √(⟨r²⟩ − |c|²)` (model units) of a
 /// solid — the root-mean-square distance of the solid's volume from its centre of
 /// mass, the length scale that sets its rotational inertia (`I ≈ V·k²` at unit
@@ -728,6 +758,46 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let v = solid_volume(&cube).unwrap();
         assert!((v - 1.0).abs() < 1e-9, "unit cube volume {v} != 1.0");
+    }
+
+    #[test]
+    fn solid_bounding_box_fill_ratio_is_one_for_a_box() {
+        use crate::primitives::sphere;
+        use std::f64::consts::PI;
+
+        // A box fills its AABB exactly: V = 48, bbox = 2·4·6 = 48 → ratio 1.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!((solid_bounding_box_fill_ratio(&b).unwrap() - 1.0).abs() < 1e-9, "box fills its AABB");
+
+        // Threads solid_volume + solid_bounding_box: ratio = V / (extent product).
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let (mn, mx) = solid_bounding_box(&s).unwrap();
+            let bbox_vol = (mx[0] - mn[0]) * (mx[1] - mn[1]) * (mx[2] - mn[2]);
+            let expected = solid_volume(&s).unwrap() / bbox_vol;
+            assert!(
+                (solid_bounding_box_fill_ratio(&s).unwrap() - expected).abs() / expected < 1e-9,
+                "ratio = V / V_bbox"
+            );
+        }
+
+        // A sphere fills π/6 of its cube AABB; a cylinder π/4 of its square-section AABB.
+        assert!(
+            (solid_bounding_box_fill_ratio(&sphere(2.0).unwrap()).unwrap() - PI / 6.0).abs() < 1e-2,
+            "sphere → π/6"
+        );
+        assert!(
+            (solid_bounding_box_fill_ratio(&cylinder(2.0, 5.0).unwrap()).unwrap() - PI / 4.0).abs()
+                < 1e-2,
+            "cylinder → π/4"
+        );
+
+        // The box maximises the fill ratio (and 0 < ratio ≤ 1).
+        let r_sphere = solid_bounding_box_fill_ratio(&sphere(2.0).unwrap()).unwrap();
+        assert!(r_sphere > 0.0 && r_sphere < 1.0, "sphere fill in (0,1)");
+        assert!(
+            solid_bounding_box_fill_ratio(&b).unwrap() > r_sphere,
+            "box fills more of its AABB than a sphere"
+        );
     }
 
     #[test]
