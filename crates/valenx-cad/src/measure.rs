@@ -393,6 +393,28 @@ pub fn solid_bounding_box_diagonal(solid: &Solid) -> Result<f64, CadError> {
     solid_bounding_box_diagonal_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box volume** `V_bbox = Δx·Δy·Δz` (model units³) of a
+/// solid — the product of its AABB extents, computed at tessellation tolerance `tol`
+/// from [`solid_bounding_box_tol`]. It is the occupancy volume used by spatial indices
+/// (octree / BVH node extents, broad-phase culling) and the denominator of the fill
+/// ratio [`solid_bounding_box_fill_ratio_tol`] (`fill = V / V_bbox`). It is always at
+/// least the solid's own volume, with equality for an axis-aligned box.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the
+/// solid is empty (no bounding box).
+pub fn solid_bounding_box_volume_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let (min, max) = solid_bounding_box_tol(solid, tol)?;
+    Ok((max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]))
+}
+
+/// AABB volume of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_volume_tol`].
+pub fn solid_bounding_box_volume(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_volume_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box fill ratio** `V / V_bbox` (dimensionless) of a
 /// solid — the fraction of its AABB that the solid actually occupies, the 3-D analogue
 /// of rectangularity / extent. It is `1` for an axis-aligned box (which fills its AABB
@@ -817,6 +839,49 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let v = solid_volume(&cube).unwrap();
         assert!((v - 1.0).abs() < 1e-9, "unit cube volume {v} != 1.0");
+    }
+
+    #[test]
+    fn solid_bounding_box_volume_is_the_extent_product() {
+        use crate::primitives::sphere;
+
+        // box(2,4,6): V_bbox = 2·4·6 = 48, and a box fills its AABB so = solid_volume.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!((solid_bounding_box_volume(&b).unwrap() - 48.0).abs() < 1e-9, "box V_bbox = 48");
+        assert!(
+            (solid_bounding_box_volume(&b).unwrap() - solid_volume(&b).unwrap()).abs() < 1e-9,
+            "box fills its AABB"
+        );
+
+        // Threads solid_bounding_box: V_bbox = product of extents.
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let (mn, mx) = solid_bounding_box(&s).unwrap();
+            let expected = (mx[0] - mn[0]) * (mx[1] - mn[1]) * (mx[2] - mn[2]);
+            assert!(
+                (solid_bounding_box_volume(&s).unwrap() - expected).abs() / expected < 1e-9,
+                "V_bbox = Π extent"
+            );
+        }
+
+        // Double-threads fill_ratio + volume via the exact identity V_bbox = V / fill.
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let from_fill = solid_volume(&s).unwrap() / solid_bounding_box_fill_ratio(&s).unwrap();
+            assert!(
+                (solid_bounding_box_volume(&s).unwrap() - from_fill).abs() / from_fill < 1e-9,
+                "V_bbox = V / fill_ratio"
+            );
+        }
+
+        // A sphere's AABB is the cube of side 2R, and the AABB volume bounds the solid.
+        let sph = sphere(2.0).unwrap();
+        assert!(
+            (solid_bounding_box_volume(&sph).unwrap() - 64.0).abs() / 64.0 < 1e-2,
+            "sphere R=2 → 64"
+        );
+        assert!(
+            solid_bounding_box_volume(&sph).unwrap() >= solid_volume(&sph).unwrap(),
+            "AABB ⊇ solid"
+        );
     }
 
     #[test]
