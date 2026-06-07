@@ -415,6 +415,32 @@ pub fn solid_bounding_box_volume(solid: &Solid) -> Result<f64, CadError> {
     solid_bounding_box_volume_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box surface area** `2·(Δx·Δy + Δy·Δz + Δz·Δx)` (model
+/// units²) of a solid — the total area of the six AABB faces, computed at tessellation
+/// tolerance `tol` from [`solid_bounding_box_tol`]. It is the cost metric of the
+/// **surface-area heuristic (SAH)** used to build BVH / k-d-tree / octree ray-tracing
+/// and broad-phase collision acceleration structures, where a node's expected traversal
+/// cost is proportional to the surface area of its bounding box. For an axis-aligned box
+/// it equals the solid's own surface area.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// is empty (no bounding box).
+pub fn solid_bounding_box_surface_area_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let (min, max) = solid_bounding_box_tol(solid, tol)?;
+    let dx = max[0] - min[0];
+    let dy = max[1] - min[1];
+    let dz = max[2] - min[2];
+    Ok(2.0 * (dx * dy + dy * dz + dz * dx))
+}
+
+/// AABB surface area of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_surface_area_tol`].
+pub fn solid_bounding_box_surface_area(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_surface_area_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box fill ratio** `V / V_bbox` (dimensionless) of a
 /// solid — the fraction of its AABB that the solid actually occupies, the 3-D analogue
 /// of rectangularity / extent. It is `1` for an axis-aligned box (which fills its AABB
@@ -839,6 +865,53 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let v = solid_volume(&cube).unwrap();
         assert!((v - 1.0).abs() < 1e-9, "unit cube volume {v} != 1.0");
+    }
+
+    #[test]
+    fn solid_bounding_box_surface_area_is_the_aabb_face_area() {
+        use crate::primitives::sphere;
+
+        // box(2,4,6): SA = 2·(2·4 + 4·6 + 2·6) = 2·44 = 88, and a box's AABB surface IS
+        // the box, so = solid_area.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_bounding_box_surface_area(&b).unwrap() - 88.0).abs() < 1e-9,
+            "box AABB SA = 88"
+        );
+        assert!(
+            (solid_bounding_box_surface_area(&b).unwrap() - solid_area(&b).unwrap()).abs() < 1e-9,
+            "box's AABB surface is the box"
+        );
+
+        // Threads solid_bounding_box: SA = 2·(ΔxΔy + ΔyΔz + ΔzΔx).
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let (mn, mx) = solid_bounding_box(&s).unwrap();
+            let (dx, dy, dz) = (mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+            let expected = 2.0 * (dx * dy + dy * dz + dz * dx);
+            assert!(
+                (solid_bounding_box_surface_area(&s).unwrap() - expected).abs() / expected < 1e-9,
+                "SA = 2(ΔxΔy + ΔyΔz + ΔzΔx)"
+            );
+        }
+
+        // A cube of side a has AABB SA 6a²; a sphere's AABB is the cube of side 2R.
+        assert!(
+            (solid_bounding_box_surface_area(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap() - 24.0)
+                .abs()
+                < 1e-9,
+            "cube side 2 → 24"
+        );
+        let sph = sphere(2.0).unwrap();
+        assert!(
+            (solid_bounding_box_surface_area(&sph).unwrap() - 96.0).abs() / 96.0 < 1e-2,
+            "sphere R=2 → 96"
+        );
+
+        // The AABB surface exceeds the inscribed sphere's own area.
+        assert!(
+            solid_bounding_box_surface_area(&sph).unwrap() > solid_area(&sph).unwrap(),
+            "AABB surface > sphere area"
+        );
     }
 
     #[test]
