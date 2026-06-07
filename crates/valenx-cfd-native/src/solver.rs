@@ -455,6 +455,21 @@ impl FlowSolution {
         variance.max(0.0).sqrt()
     }
 
+    /// The **coefficient of variation of the speed field** `σ_u / ⟨|u|⟩` (dimensionless)
+    /// — the spatial standard deviation [`FlowSolution::speed_std_dev`] normalised by the
+    /// mean speed [`FlowSolution::mean_speed`], a scale-free measure of how non-uniform
+    /// the flow is (the resolved-field analogue of a turbulence-intensity level, distinct
+    /// from the modelled RANS intensity of [`crate::turbulence`]). It is `0` for a
+    /// perfectly uniform field. Returns `0` for a quiescent or empty field (non-positive
+    /// mean speed), so it never yields `NaN`.
+    pub fn speed_coefficient_of_variation(&self) -> f64 {
+        let mean = self.mean_speed();
+        if mean <= 0.0 {
+            return 0.0;
+        }
+        self.speed_std_dev() / mean
+    }
+
     /// Peak velocity magnitude `max √(u²+v²)` (m/s) over the cell grid — the
     /// fastest the flow moves anywhere, the peak counterpart to the area-averaged
     /// [`FlowSolution::mean_speed`]. It is the speed that sets the convective CFL
@@ -3449,6 +3464,83 @@ mod tests {
                 < 1e-9,
             "linear in ρ"
         );
+    }
+
+    #[test]
+    fn speed_coefficient_of_variation_normalises_the_spread() {
+        // Uniform field u = 3 → zero dispersion.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(uniform.speed_coefficient_of_variation().abs() < 1e-12, "uniform → CV = 0");
+
+        // Quiescent field (all-zero velocity) → 0, not NaN (mean ≤ 0 guard).
+        let quiescent = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(quiescent.speed_coefficient_of_variation(), 0.0, "zero field → 0, no NaN");
+
+        // Non-uniform field (streamwise gradient).
+        let mut ug = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ug.set(fi, j, fi as f64);
+            }
+        }
+        let varied = FlowSolution {
+            grid,
+            u: ug,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // Non-tautological: CV = σ_direct / mean, with σ from the deviation-sum form.
+        let mean = varied.mean_speed();
+        let mut acc = 0.0;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let d = varied.speed_at_cell(i, j) - mean;
+                acc += d * d;
+            }
+        }
+        let sigma_direct = (acc / (grid.nx * grid.ny) as f64).sqrt();
+        assert!(
+            (varied.speed_coefficient_of_variation() - sigma_direct / mean).abs()
+                <= 1e-9 * (sigma_direct / mean),
+            "CV = σ / ⟨|u|⟩"
+        );
+
+        // Recovers the spread: CV · mean = σ; and CV > 0 for a varying field.
+        assert!(
+            (varied.speed_coefficient_of_variation() * varied.mean_speed()
+                - varied.speed_std_dev())
+            .abs()
+                <= 1e-9 * varied.speed_std_dev(),
+            "CV · mean = σ"
+        );
+        assert!(varied.speed_coefficient_of_variation() > 0.0, "varying field → CV > 0");
     }
 
     #[test]
