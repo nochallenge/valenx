@@ -193,6 +193,35 @@ pub fn solid_area(solid: &Solid) -> Result<f64, CadError> {
     solid_area_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **Wadell sphericity** `Ψ = π^(1/3)·(6·V)^(2/3) / A` (dimensionless) of a solid
+/// — the surface area of a sphere of the same volume divided by the solid's own
+/// surface area, the standard measure of how *sphere-like* a shape is. It is exactly
+/// `1` for a sphere (which minimises surface area for a given volume) and strictly
+/// less than `1` for every other shape; it is widely used in sedimentation, powder
+/// technology and granular-flow modelling. Computed at tessellation tolerance `tol`
+/// from [`solid_volume_tol`] and [`solid_area_tol`].
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the
+/// solid has no surface area (a degenerate / empty solid).
+pub fn solid_sphericity_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let v = solid_volume_tol(solid, tol)?;
+    let a = solid_area_tol(solid, tol)?;
+    if a <= 0.0 {
+        return Err(CadError::Tessellation(
+            "solid has no surface area; sphericity undefined".to_string(),
+        ));
+    }
+    Ok(std::f64::consts::PI.cbrt() * (6.0 * v).powf(2.0 / 3.0) / a)
+}
+
+/// Wadell sphericity of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_sphericity_tol`].
+pub fn solid_sphericity(solid: &Solid) -> Result<f64, CadError> {
+    solid_sphericity_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **volume centroid** (centre of mass at uniform density) of a solid,
 /// `[x, y, z]` in model units, computed at tessellation tolerance `tol`.
 ///
@@ -699,6 +728,38 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let v = solid_volume(&cube).unwrap();
         assert!((v - 1.0).abs() < 1e-9, "unit cube volume {v} != 1.0");
+    }
+
+    #[test]
+    fn solid_sphericity_is_one_for_a_sphere() {
+        use crate::primitives::sphere;
+        use std::f64::consts::PI;
+
+        // A unit cube: Ψ = π^(1/3)·6^(2/3)/6 ≈ 0.806 (computed independently).
+        let cube = box_solid(1.0, 1.0, 1.0).unwrap();
+        let psi_cube = solid_sphericity(&cube).unwrap();
+        let expect_cube = PI.cbrt() * 6.0_f64.powf(2.0 / 3.0) / 6.0;
+        assert!((psi_cube - expect_cube).abs() / expect_cube < 1e-9, "cube Ψ = {psi_cube}");
+
+        // Threads solid_volume + solid_area: Ψ = π^(1/3)·(6V)^(2/3)/A.
+        for s in [box_solid(1.0, 2.0, 4.0).unwrap(), sphere(2.0).unwrap()] {
+            let psi = solid_sphericity(&s).unwrap();
+            let from_va = PI.cbrt() * (6.0 * solid_volume(&s).unwrap()).powf(2.0 / 3.0)
+                / solid_area(&s).unwrap();
+            assert!((psi - from_va).abs() / from_va < 1e-9, "Ψ = π^⅓(6V)^⅔/A");
+        }
+
+        // The sphere maximises sphericity → Ψ ≈ 1.
+        let psi_sphere = solid_sphericity(&sphere(2.0).unwrap()).unwrap();
+        assert!((psi_sphere - 1.0).abs() < 1e-2, "sphere Ψ ≈ 1, got {psi_sphere}");
+
+        // Dimensionless ⇒ scale-invariant: a 1-cube and a 3-cube share Ψ.
+        let psi_big = solid_sphericity(&box_solid(3.0, 3.0, 3.0).unwrap()).unwrap();
+        assert!((psi_cube - psi_big).abs() / psi_cube < 1e-9, "Ψ is scale-invariant");
+
+        // A non-cube box is less sphere-like than the cube, and still below 1.
+        let psi_slab = solid_sphericity(&box_solid(1.0, 2.0, 4.0).unwrap()).unwrap();
+        assert!(psi_slab < psi_cube && psi_slab < 1.0, "slab less spherical: {psi_slab}");
     }
 
     #[test]
