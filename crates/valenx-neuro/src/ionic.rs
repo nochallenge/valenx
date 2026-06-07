@@ -32,6 +32,18 @@ pub fn ionic_current(conductance: f64, vm_mv: f64, e_rev_mv: f64) -> f64 {
     conductance * driving_force_mv(vm_mv, e_rev_mv)
 }
 
+/// The **chord conductance** `g = I / (V_m − E_rev)` recovered from a measured ionic
+/// current — the inverse of [`ionic_current`], the whole-cell I–V operation that turns
+/// a current recorded at a known membrane potential `vm_mv` and reversal potential
+/// `e_rev_mv` back into the channel conductance that carried it. With `current` in
+/// µA/cm² and the potentials in mV it is in mS/cm² (the [`ionic_current`] convention).
+/// Like the other functions here it is total: at the reversal potential the driving
+/// force is zero, so a non-zero current gives a non-finite conductance the caller is
+/// expected to guard.
+pub fn ionic_conductance(current: f64, vm_mv: f64, e_rev_mv: f64) -> f64 {
+    current / driving_force_mv(vm_mv, e_rev_mv)
+}
+
 /// Ohmic **power dissipated** by an ionic current `P = I·(V_m − E_rev) = g·(V_m −
 /// E_rev)²` — the Joule heating of the channel conductance, and the electrical part
 /// of the metabolic cost of holding current against the ion's battery. With
@@ -51,6 +63,30 @@ pub fn ionic_power_density(conductance: f64, vm_mv: f64, e_rev_mv: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ionic_conductance_inverts_the_ohmic_current() {
+        // Round-trip: recover g from the current it produces (the exact inverse of
+        // ionic_current), for several (g, vm, e) with a non-zero driving force.
+        for &(g, vm, e) in &[(5.0_f64, -50.0_f64, -80.0_f64), (0.3, -65.0, 0.0), (1.2, -70.0, -90.0)]
+        {
+            let recovered = ionic_conductance(ionic_current(g, vm, e), vm, e);
+            assert!((recovered - g).abs() <= 1e-12 * g.abs(), "g = I/(V−E) inverts I = g(V−E)");
+        }
+
+        // Worked: I = 1 µA/cm² at V = −50, E = −80 → driving force 30 mV → g = 1/30 mS/cm².
+        assert!(
+            (ionic_conductance(1.0, -50.0, -80.0) - 1.0 / 30.0).abs() < 1e-12,
+            "g = I / driving force"
+        );
+
+        // Conductance is positive when current and driving force share a sign.
+        assert!(ionic_conductance(1.0, -50.0, -80.0) > 0.0, "above E_rev, outward current");
+        assert!(ionic_conductance(-2.0, -90.0, -80.0) > 0.0, "below E_rev, inward current");
+
+        // At the reversal potential the driving force vanishes → non-finite conductance.
+        assert!(ionic_conductance(1.0, -65.0, -65.0).is_infinite(), "zero driving force → ∞");
+    }
 
     #[test]
     fn ionic_power_density_is_the_dissipated_joule_heating() {
