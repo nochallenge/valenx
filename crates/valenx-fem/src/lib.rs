@@ -145,7 +145,8 @@ pub use assembly::{
 pub use beam::{
     beam_angle_of_twist, beam_axial_extension, cantilever_point_load_root_moment,
     cantilever_point_load_strain_energy, cantilever_tip_deflection, cantilever_tip_slope,
-    cantilever_udl_strain_energy, cantilever_udl_tip_deflection, cantilever_udl_tip_slope,
+    cantilever_udl_root_moment, cantilever_udl_strain_energy, cantilever_udl_tip_deflection,
+    cantilever_udl_tip_slope,
     euler_bernoulli_beam_frequency, fixed_fixed_center_deflection,
     fixed_fixed_point_load_end_moment, fixed_fixed_udl_center_deflection,
     fixed_fixed_udl_end_moment,
