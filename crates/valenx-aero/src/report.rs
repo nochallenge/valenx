@@ -552,6 +552,28 @@ pub fn rayleigh_pitot_ratio(mach: f64, gamma: f64) -> f64 {
     total_term * shock_term
 }
 
+/// The **Rayleigh-flow stagnation-temperature ratio**
+/// `T₀/T₀* = 2(γ+1)M²(1 + ((γ−1)/2)·M²) / (1 + γM²)²` at Mach number `mach` `M` and
+/// heat-capacity ratio `gamma` `γ` — the driving relation of **Rayleigh flow**
+/// (frictionless, constant-area duct flow with heat addition), the heat-addition
+/// counterpart to the isentropic and normal-shock toolkits.
+///
+/// Adding heat raises the stagnation temperature `T₀` and drives the Mach number
+/// toward `1` from *both* sides, so `T₀/T₀*` against the sonic reference `T₀*`
+/// **peaks at exactly `1` at `M = 1`** — the *thermal-choking* limit: a given duct
+/// can accept only enough heat to bring the flow to sonic, no more. It is `0` at
+/// rest (`M = 0`) and rises on both the subsonic and supersonic branches to that
+/// shared maximum (a Mach-2 stream sits at `0.793·T₀*`, Mach 0.5 at `0.691`).
+/// Returns `0` for non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn rayleigh_flow_total_temperature_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    let m2 = mach * mach;
+    let denom = 1.0 + gamma * m2;
+    2.0 * (gamma + 1.0) * m2 * (1.0 + 0.5 * (gamma - 1.0) * m2) / (denom * denom)
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1649,5 +1671,41 @@ mod tests {
         assert_eq!(rayleigh_pitot_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(rayleigh_pitot_ratio(f64::NAN, g), 1.0);
         assert_eq!(rayleigh_pitot_ratio(-1.0, g), 1.0);
+    }
+
+    #[test]
+    fn rayleigh_flow_total_temperature_ratio_matches_heat_addition_tables() {
+        let g = 1.4;
+        // Thermal-choking limit: T0/T0* = 1 exactly at M = 1 (the maximum).
+        assert!((rayleigh_flow_total_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        // No flow at rest.
+        assert!(rayleigh_flow_total_temperature_ratio(0.0, g).abs() < 1e-12, "M=0 → 0");
+        // Standard Rayleigh-flow table points (γ = 1.4).
+        assert!((rayleigh_flow_total_temperature_ratio(2.0, g) - 0.7934).abs() < 1e-3, "M=2 → 0.7934");
+        assert!((rayleigh_flow_total_temperature_ratio(0.5, g) - 0.6914).abs() < 1e-3, "M=0.5 → 0.6914");
+        assert!((rayleigh_flow_total_temperature_ratio(3.0, g) - 0.6540).abs() < 1e-3, "M=3 → 0.6540");
+        // The peak is at M = 1: both subsonic and supersonic branches sit below 1.
+        let peak = rayleigh_flow_total_temperature_ratio(1.0, g);
+        for m in [0.3_f64, 0.5, 0.9, 1.1, 2.0, 4.0] {
+            assert!(rayleigh_flow_total_temperature_ratio(m, g) < peak, "T0/T0* < 1 at M={m}");
+        }
+        // STRONG non-tautological cross-check: the (1+(γ−1)/2·M²) factor IS the
+        // isentropic T0/T, so T0/T0* = 2(γ+1)M²·[T0/T](M)/(1+γM²)² composing the
+        // independently-implemented isentropic_stagnation_temperature_ratio.
+        for m in [0.3_f64, 0.7, 1.0, 1.5, 2.0, 3.5] {
+            let denom = 1.0 + g * m * m;
+            let expected = 2.0 * (g + 1.0) * m * m
+                * isentropic_stagnation_temperature_ratio(m, g)
+                / (denom * denom);
+            assert!(
+                (rayleigh_flow_total_temperature_ratio(m, g) - expected).abs() / expected < 1e-12,
+                "T0/T0* via isentropic T0/T at M={m}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(rayleigh_flow_total_temperature_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(rayleigh_flow_total_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
+        assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
     }
 }
