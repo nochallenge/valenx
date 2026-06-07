@@ -380,6 +380,113 @@ pub fn solid_radius_of_gyration(solid: &Solid) -> Result<f64, CadError> {
     solid_radius_of_gyration_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The three **centroidal principal moments of inertia** `[I₁, I₂, I₃]` (unit
+/// density, model units `u⁵`, sorted descending `I₁ ≥ I₂ ≥ I₃`) of a solid — the
+/// eigenvalues of the centroidal inertia tensor, whose eigenvectors are the
+/// principal axes. Computed at tessellation tolerance `tol`.
+///
+/// This is the full rotational mass property, completing the suite after
+/// [`solid_volume_tol`], [`solid_area_tol`], [`solid_centroid_tol`],
+/// [`solid_bounding_box_tol`] and [`solid_radius_of_gyration_tol`]. The
+/// divergence-theorem volume integral is extended with the six second moments
+/// `∫x², ∫y², ∫z², ∫xy, ∫xz, ∫yz dV` (the tetrahedron covariance
+/// `(V/20)(Σpᵢpⱼ + (Σpᵢ)(Σpⱼ))`), every moment is shifted to the centroid by the
+/// parallel-axis theorem, the symmetric inertia tensor `I = [[∫y²+z², −∫xy, −∫xz],
+/// [−∫xy, ∫x²+z², −∫yz], [−∫xz, −∫yz, ∫x²+y²]]` is assembled, and its symmetric
+/// eigendecomposition is taken. For an `Lx×Ly×Lz` box the values are
+/// `(V/12)(Lⱼ²+Lₖ²)`; the trace relates to the radius of gyration `k` by
+/// `I₁+I₂+I₃ = 2·V·k²`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or if
+/// the boundary encloses no volume (a degenerate / empty solid).
+pub fn solid_principal_moments_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], CadError> {
+    let poly = match solid {
+        Solid::Brep(b) => brep_polygon(b, tol)?,
+        Solid::Mesh(m) => mesh_to_polygon(m),
+    };
+    let positions = poly.positions();
+    let mut vol = 0.0;
+    let mut first = [0.0_f64; 3]; // ∫x, ∫y, ∫z dV (→ centroid)
+    let mut m = [0.0_f64; 6]; // origin second moments: xx, yy, zz, xy, xz, yz
+    for tri in poly.tri_faces() {
+        let a = positions[tri[0].pos];
+        let b = positions[tri[1].pos];
+        let c = positions[tri[2].pos];
+        let (sx, sy, sz) = (a.x + b.x + c.x, a.y + b.y + c.y, a.z + b.z + c.z);
+        let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+            + a.z * (b.x * c.y - b.y * c.x))
+            / 6.0;
+        vol += v;
+        first[0] += v * sx / 4.0;
+        first[1] += v * sy / 4.0;
+        first[2] += v * sz / 4.0;
+        m[0] += v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + sx * sx);
+        m[1] += v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + sy * sy);
+        m[2] += v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + sz * sz);
+        m[3] += v / 20.0 * (a.x * a.y + b.x * b.y + c.x * c.y + sx * sy);
+        m[4] += v / 20.0 * (a.x * a.z + b.x * b.z + c.x * c.z + sx * sz);
+        m[5] += v / 20.0 * (a.y * a.z + b.y * b.z + c.y * c.z + sy * sz);
+    }
+    for quad in poly.quad_faces() {
+        for tri in [[quad[0], quad[1], quad[2]], [quad[0], quad[2], quad[3]]] {
+            let a = positions[tri[0].pos];
+            let b = positions[tri[1].pos];
+            let c = positions[tri[2].pos];
+            let (sx, sy, sz) = (a.x + b.x + c.x, a.y + b.y + c.y, a.z + b.z + c.z);
+            let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+                + a.z * (b.x * c.y - b.y * c.x))
+                / 6.0;
+            vol += v;
+            first[0] += v * sx / 4.0;
+            first[1] += v * sy / 4.0;
+            first[2] += v * sz / 4.0;
+            m[0] += v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + sx * sx);
+            m[1] += v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + sy * sy);
+            m[2] += v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + sz * sz);
+            m[3] += v / 20.0 * (a.x * a.y + b.x * b.y + c.x * c.y + sx * sy);
+            m[4] += v / 20.0 * (a.x * a.z + b.x * b.z + c.x * c.z + sx * sz);
+            m[5] += v / 20.0 * (a.y * a.z + b.y * b.z + c.y * c.z + sy * sz);
+        }
+    }
+    if vol.abs() < 1e-12 {
+        return Err(CadError::Tessellation(
+            "solid encloses no volume; inertia undefined".to_string(),
+        ));
+    }
+    let (cx, cy, cz) = (first[0] / vol, first[1] / vol, first[2] / vol);
+    // Parallel-axis shift of every second moment to the centroid.
+    let mxx = m[0] - vol * cx * cx;
+    let myy = m[1] - vol * cy * cy;
+    let mzz = m[2] - vol * cz * cz;
+    let mxy = m[3] - vol * cx * cy;
+    let mxz = m[4] - vol * cx * cz;
+    let myz = m[5] - vol * cy * cz;
+    let tensor = nalgebra::Matrix3::new(
+        myy + mzz,
+        -mxy,
+        -mxz,
+        -mxy,
+        mxx + mzz,
+        -myz,
+        -mxz,
+        -myz,
+        mxx + myy,
+    );
+    let eig = tensor.symmetric_eigen().eigenvalues;
+    let mut vals = [eig[0], eig[1], eig[2]];
+    // Sort descending: I₁ ≥ I₂ ≥ I₃.
+    vals.sort_by(|p, q| q.partial_cmp(p).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(vals)
+}
+
+/// Centroidal principal moments of inertia of a solid at
+/// [`DEFAULT_MEASURE_TOLERANCE`]. See [`solid_principal_moments_tol`].
+pub fn solid_principal_moments(solid: &Solid) -> Result<[f64; 3], CadError> {
+    solid_principal_moments_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Weld a polygon mesh's triangle indices onto a deduplicated vertex
 /// set, so coincident positions collapse to one index.
 ///
@@ -610,6 +717,34 @@ mod tests {
         // A box is genus-0: V−E+F = 8−12+6 = 2.
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         assert_eq!(euler_characteristic(&cube), Some(2));
+    }
+
+    #[test]
+    fn solid_principal_moments_match_the_box_inertia() {
+        use crate::primitives::sphere;
+        // For an Lx×Ly×Lz box (unit density) the centroidal principal moments are
+        // I = (V/12)(Lⱼ²+Lₖ²): with V=48, I_x=4·(16+36)=208, I_y=4·(4+36)=160,
+        // I_z=4·(4+16)=80 — exact for a flat-faced solid and independent of the
+        // tensor/eigendecomposition path.
+        let i = solid_principal_moments(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
+        let expect = [208.0, 160.0, 80.0];
+        for (got, want) in i.iter().zip(expect.iter()) {
+            assert!((got - want).abs() / want < 1e-9, "principal moments {i:?} vs {expect:?}");
+        }
+        // Sorted descending.
+        assert!(i[0] >= i[1] && i[1] >= i[2], "I₁ ≥ I₂ ≥ I₃");
+
+        // THREADS solid_radius_of_gyration + solid_volume: the trace of the inertia
+        // tensor is 2·V·⟨r²⟩, so √((I₁+I₂+I₃)/(2V)) = k.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        let v = solid_volume(&b).unwrap();
+        let k_from_inertia = ((i[0] + i[1] + i[2]) / (2.0 * v)).sqrt();
+        let k = solid_radius_of_gyration(&b).unwrap();
+        assert!((k_from_inertia - k).abs() / k < 1e-9, "√(ΣI/2V) = radius of gyration");
+
+        // A sphere is isotropic: the three principal moments are equal.
+        let s = solid_principal_moments(&sphere(2.0).unwrap()).unwrap();
+        assert!((s[0] - s[2]).abs() / s[0] < 1e-3, "sphere principal moments equal: {s:?}");
     }
 
     #[test]
