@@ -155,6 +155,19 @@ pub fn blasius_displacement_thickness_ratio(re_x: f64) -> f64 {
     1.721 / re_x.sqrt()
 }
 
+/// The **Blasius laminar momentum thickness ratio** `θ/x = 0.664·Re_x⁻¹ᐟ²`
+/// (dimensionless) at local length Reynolds number `re_x` `Re_x = U·x/ν` — the thickness
+/// of an ideal-flow layer that would carry the boundary layer's momentum deficit;
+/// through the von Kármán momentum integral it sets the wall drag. It is the smallest of
+/// the three Blasius thicknesses (`θ < δ* < δ`), and the Blasius shape factor is
+/// `δ*/θ = 1.721/0.664 ≈ 2.59`. Numerically its coefficient `0.664` coincides with the
+/// local skin-friction coefficient [`blasius_local_cf`], though the two are distinct
+/// quantities.
+pub fn blasius_momentum_thickness_ratio(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    0.664 / re_x.sqrt()
+}
+
 /// The thin-airfoil-theory lift-curve slope — `2π` per radian, the
 /// classic inviscid result for a thin symmetric section at a small
 /// angle of attack.
@@ -592,6 +605,44 @@ mod tests {
             "near-wall-model sphere Cd {} should be a plausible \
              sphere drag",
             after.cd
+        );
+    }
+
+    #[test]
+    fn blasius_momentum_thickness_completes_the_thickness_trio() {
+        // Worked: θ/x = 0.664/√Re; at Re = 1e6, θ/x = 0.664/1000 = 6.64e-4.
+        assert!(
+            (blasius_momentum_thickness_ratio(1.0e6) - 6.64e-4).abs() <= 1e-12 * 6.64e-4,
+            "θ/x(1e6) = 6.64e-4"
+        );
+
+        for &re in &[1.0e5, 1.0e6, 5.0e6] {
+            // Threads the 99% thickness (#313): constant ratio 0.664/5.0.
+            let from_delta = blasius_boundary_layer_thickness_ratio(re) * (0.664 / 5.0);
+            assert!(
+                (blasius_momentum_thickness_ratio(re) - from_delta).abs() <= 1e-12 * from_delta,
+                "θ/x = (δ/x)·0.664/5.0 at Re={re}"
+            );
+            // Threads the displacement thickness (#319): the Blasius shape factor
+            // δ*/θ = 1.721/0.664 ≈ 2.59.
+            let from_theta = blasius_momentum_thickness_ratio(re) * (1.721 / 0.664);
+            assert!(
+                (blasius_displacement_thickness_ratio(re) - from_theta).abs() <= 1e-12 * from_theta,
+                "δ*/θ = 1.721/0.664 at Re={re}"
+            );
+            // The three Blasius thicknesses are ordered θ < δ* < δ.
+            assert!(
+                blasius_momentum_thickness_ratio(re) < blasius_displacement_thickness_ratio(re)
+                    && blasius_displacement_thickness_ratio(re)
+                        < blasius_boundary_layer_thickness_ratio(re),
+                "θ < δ* < δ"
+            );
+        }
+
+        // The Re < 1 clamp (matching the family): θ/x(0.5) = 0.664.
+        assert!(
+            (blasius_momentum_thickness_ratio(0.5) - 0.664).abs() < 1e-12,
+            "clamped to Re = 1"
         );
     }
 
