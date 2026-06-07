@@ -404,6 +404,24 @@ impl ClassicalElements {
         2.0 * ((1.0 - e).sqrt() * half.sin()).atan2((1.0 + e).sqrt() * half.cos())
     }
 
+    /// The **true anomaly** `ν` (rad) from the mean anomaly `mean_anomaly` `M` (rad)
+    /// — the full **time → position** propagation of a Kepler orbit, composing the
+    /// Newton solve of Kepler's equation
+    /// [`eccentric_anomaly_from_mean`](Self::eccentric_anomaly_from_mean) (`M → E`)
+    /// with the half-angle geometry
+    /// [`true_anomaly_from_eccentric`](Self::true_anomaly_from_eccentric) (`E → ν`).
+    /// Given the mean anomaly `M = n·(t − t_p)` that advances uniformly with time,
+    /// this returns the actual angular position `ν` on the ellipse — the single call
+    /// a propagator makes to turn a clock reading into a place on the orbit, the exact
+    /// inverse of [`mean_anomaly_from_true`](Self::mean_anomaly_from_true) and the last
+    /// of the six directed conversions among `M`, `E`, `ν`. `M = 0` and `M = π` are
+    /// fixed points (`ν = 0`, `ν = π`); a circular orbit (`e = 0`) collapses it to the
+    /// identity `ν = M`. Defined for closed orbits (`0 ≤ e < 1`); a hyperbolic
+    /// eccentricity (`e ≥ 1`) or a non-finite `M` yields `NaN`.
+    pub fn true_anomaly_from_mean(&self, mean_anomaly: f64) -> f64 {
+        self.true_anomaly_from_eccentric(self.eccentric_anomaly_from_mean(mean_anomaly))
+    }
+
     /// The **mean anomaly** `M` (rad) from the true anomaly `true_anomaly` `ν`
     /// (rad) — the *reverse* of the time-to-position chain, mapping a point on the
     /// orbit back to the uniformly-advancing time coordinate. It first inverts the
@@ -1248,6 +1266,50 @@ mod tests {
         let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
         assert!(hyp.mean_anomaly_from_true(1.0).is_nan(), "e≥1 → NaN");
         assert!(coe.mean_anomaly_from_true(f64::NAN).is_nan(), "non-finite ν → NaN");
+    }
+
+    #[test]
+    fn true_anomaly_from_mean_propagates_time_to_position() {
+        use std::f64::consts::PI;
+        let coe = ClassicalElements {
+            semi_major_axis: 7.0e6,
+            eccentricity: 0.3,
+            inclination: 0.0,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        // Apsides are fixed points: M=0 → ν=0, M=π → ν=π.
+        assert!(coe.true_anomaly_from_mean(0.0).abs() < 1e-12, "M=0 → ν=0");
+        assert!((coe.true_anomaly_from_mean(PI) - PI).abs() < 1e-9, "M=π → ν=π");
+        // STRONG round-trip cross-check threading mean_anomaly_from_true: M → ν → M
+        // recovers the input (angle_diff absorbs the 2π branch), and r(ν) stays
+        // between perigee and apogee at every step.
+        for m in [0.4_f64, 1.0, 2.5, 4.0, 5.5] {
+            let nu = coe.true_anomaly_from_mean(m);
+            assert!(angle_diff(coe.mean_anomaly_from_true(nu), m).abs() < 1e-9, "M→ν→M at M={m}");
+            let r = coe.radius_at_true_anomaly(nu);
+            assert!(
+                r >= coe.periapsis_radius() - 1.0 && r <= coe.apoapsis_radius() + 1.0,
+                "r in [r_p, r_a] at M={m}: {r}"
+            );
+        }
+        // Monotone in M over a period (the position angle advances with time).
+        let mut prev = coe.true_anomaly_from_mean(0.0);
+        for k in 1..20 {
+            let nu = coe.true_anomaly_from_mean(k as f64 * 2.0 * PI / 20.0);
+            assert!(nu > prev, "ν monotone in M at step {k}: {nu} !> {prev}");
+            prev = nu;
+        }
+        // A circular orbit (e=0) collapses the map to the identity ν = M.
+        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        for m in [0.3_f64, 1.0, 2.0, 4.5] {
+            assert!((circ.true_anomaly_from_mean(m) - m).abs() < 1e-9, "circular ν=M at M={m}");
+        }
+        // Out of domain: a hyperbolic eccentricity and a non-finite M → NaN.
+        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        assert!(hyp.true_anomaly_from_mean(1.0).is_nan(), "e≥1 → NaN");
+        assert!(coe.true_anomaly_from_mean(f64::NAN).is_nan(), "NaN M → NaN");
     }
 
     #[test]
