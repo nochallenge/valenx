@@ -97,6 +97,6 @@ pub use synapse::{
     dual_exponential_synapse_conductance, nmda_mg_block,
 };
 pub use temperature::{
-    arrhenius_activation_energy_from_q10, q10_from_activation_energy, q10_from_rates, q10_scale,
-    TYPICAL_GATING_Q10,
+    arrhenius_activation_energy_from_q10, arrhenius_rate_ratio, q10_from_activation_energy,
+    q10_from_rates, q10_scale, TYPICAL_GATING_Q10,
 };
