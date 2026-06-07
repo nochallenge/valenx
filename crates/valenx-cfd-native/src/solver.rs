@@ -421,6 +421,28 @@ impl FlowSolution {
         sum / n as f64
     }
 
+    /// The **root-mean-square speed** `u_rms = √(⟨|u|²⟩)` (m/s) — the square root of the
+    /// cell-averaged squared speed. It is the velocity scale that carries the flow's
+    /// kinetic energy: `½·ρ·u_rms²` equals the mean kinetic-energy density
+    /// [`FlowSolution::mean_kinetic_energy_density`]. By the Cauchy–Schwarz inequality
+    /// it never falls below the arithmetic-mean speed [`FlowSolution::mean_speed`] (the
+    /// two are equal only for a perfectly uniform field) and never exceeds
+    /// [`FlowSolution::max_speed`]. Returns `0` for an empty grid.
+    pub fn rms_speed(&self) -> f64 {
+        let n = self.grid.nx * self.grid.ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut sum = 0.0;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                let speed = self.speed_at_cell(i, j);
+                sum += speed * speed;
+            }
+        }
+        (sum / n as f64).sqrt()
+    }
+
     /// Peak velocity magnitude `max √(u²+v²)` (m/s) over the cell grid — the
     /// fastest the flow moves anywhere, the peak counterpart to the area-averaged
     /// [`FlowSolution::mean_speed`]. It is the speed that sets the convective CFL
@@ -3415,6 +3437,57 @@ mod tests {
                 < 1e-9,
             "linear in ρ"
         );
+    }
+
+    #[test]
+    fn rms_speed_is_the_kinetic_energy_velocity_scale() {
+        // Uniform field u = 3 → rms = mean = max = 3.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((uniform.rms_speed() - 3.0).abs() < 1e-12, "uniform rms = 3");
+        assert!((uniform.rms_speed() - uniform.mean_speed()).abs() < 1e-12, "uniform: rms = mean");
+        assert!((uniform.rms_speed() - uniform.max_speed()).abs() < 1e-12, "uniform: rms = max");
+
+        // Non-uniform field (streamwise gradient) → rms strictly exceeds the mean.
+        let mut ug = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ug.set(fi, j, fi as f64);
+            }
+        }
+        let varied = FlowSolution {
+            grid,
+            u: ug,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(varied.rms_speed() > varied.mean_speed(), "RMS > mean for a varying field");
+        assert!(varied.rms_speed() <= varied.max_speed() + 1e-12, "rms ≤ max");
+
+        // Threads mean_kinetic_energy_density exactly: ½·ρ·u_rms² = ⟨½ρ|u|²⟩.
+        let rho = 1.225;
+        for sol in [&uniform, &varied] {
+            let from_rms = 0.5 * rho * sol.rms_speed().powi(2);
+            let mean_ke = sol.mean_kinetic_energy_density(rho);
+            assert!((from_rms - mean_ke).abs() <= 1e-9 * mean_ke, "½ρ·u_rms² = ⟨KE⟩");
+        }
     }
 
     #[test]
