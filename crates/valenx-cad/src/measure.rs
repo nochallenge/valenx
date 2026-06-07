@@ -222,6 +222,39 @@ pub fn solid_sphericity(solid: &Solid) -> Result<f64, CadError> {
     solid_sphericity_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **specific surface area** `A/V` (units of inverse length) of a solid — its
+/// total surface area per unit volume, computed at tessellation tolerance `tol` from
+/// [`solid_area_tol`] and [`solid_volume_tol`]. It is `3/R` for a sphere of radius
+/// `R`, `6/a` for a cube of side `a`, and in general decreases as `1/length` as a
+/// shape is scaled up.
+///
+/// Unlike the dimensionless [`solid_sphericity_tol`], this is a *dimensional* measure
+/// that captures size as well as shape: it is the governing quantity for surface-rate
+/// processes — convective and radiative heat transfer, catalytic and dissolution
+/// reaction rates, drying, and biological exchange — where flux scales with the
+/// exposed area but capacity with the enclosed volume.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or if the
+/// solid encloses no volume (a degenerate / empty solid, where `A/V` is undefined).
+pub fn solid_specific_surface_area_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let v = solid_volume_tol(solid, tol)?;
+    let a = solid_area_tol(solid, tol)?;
+    if v <= 0.0 {
+        return Err(CadError::Tessellation(
+            "solid encloses no volume; specific surface area undefined".to_string(),
+        ));
+    }
+    Ok(a / v)
+}
+
+/// Specific surface area `A/V` of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_specific_surface_area_tol`].
+pub fn solid_specific_surface_area(solid: &Solid) -> Result<f64, CadError> {
+    solid_specific_surface_area_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **volume centroid** (centre of mass at uniform density) of a solid,
 /// `[x, y, z]` in model units, computed at tessellation tolerance `tol`.
 ///
@@ -758,6 +791,43 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let v = solid_volume(&cube).unwrap();
         assert!((v - 1.0).abs() < 1e-9, "unit cube volume {v} != 1.0");
+    }
+
+    #[test]
+    fn solid_specific_surface_area_matches_area_over_volume() {
+        use crate::primitives::sphere;
+
+        // box(2,4,6): A = 2·(2·4+2·6+4·6) = 88, V = 48 → A/V = 88/48 = 11/6.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_specific_surface_area(&b).unwrap() - 88.0 / 48.0).abs() < 1e-9,
+            "box A/V = 88/48"
+        );
+
+        // Threads solid_area + solid_volume: A/V is exactly their ratio.
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let expected = solid_area(&s).unwrap() / solid_volume(&s).unwrap();
+            assert!(
+                (solid_specific_surface_area(&s).unwrap() - expected).abs() / expected < 1e-9,
+                "A/V = area / volume"
+            );
+        }
+
+        // A sphere of radius R has A/V = 3/R; a cube of side a has 6/a.
+        assert!(
+            (solid_specific_surface_area(&sphere(2.0).unwrap()).unwrap() - 3.0 / 2.0).abs() < 1e-2,
+            "sphere → 3/R"
+        );
+        let cube = box_solid(2.0, 2.0, 2.0).unwrap();
+        assert!(
+            (solid_specific_surface_area(&cube).unwrap() - 3.0).abs() < 1e-9,
+            "cube side 2 → 6/2 = 3"
+        );
+
+        // Dimensional: A/V scales as 1/length, so doubling the size halves it.
+        let small = solid_specific_surface_area(&box_solid(1.0, 1.0, 1.0).unwrap()).unwrap();
+        let big = solid_specific_surface_area(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap();
+        assert!((big - 0.5 * small).abs() < 1e-9, "A/V ∝ 1/length");
     }
 
     #[test]
