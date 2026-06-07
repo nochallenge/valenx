@@ -59,9 +59,55 @@ pub fn myelination_crossover_diameter(k_myel_per_um: f64, k_unmyel_per_sqrt_um: 
     (k_unmyel_per_sqrt_um / k_myel_per_um).powi(2)
 }
 
+/// The **axonal conduction delay** (latency) `t = distance / velocity` in seconds —
+/// the time an action potential takes to propagate a distance `distance_m` (m) along
+/// a fibre conducting at `velocity_m_per_s` (m/s, e.g. from
+/// [`myelinated_conduction_velocity`]). It completes the conduction kinematic triple
+/// with the velocity and the distance, and is the quantity a nerve-conduction study
+/// actually measures: the latency over a known nerve segment yields the velocity.
+/// Returns `0` for non-physical input (negative or non-finite distance, or a
+/// non-positive / non-finite velocity, where the latency is undefined).
+pub fn conduction_delay_s(distance_m: f64, velocity_m_per_s: f64) -> f64 {
+    if !distance_m.is_finite()
+        || !velocity_m_per_s.is_finite()
+        || distance_m < 0.0
+        || velocity_m_per_s <= 0.0
+    {
+        return 0.0;
+    }
+    distance_m / velocity_m_per_s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conduction_delay_is_distance_over_velocity() {
+        // Worked point: 0.5 m at 50 m/s → 10 ms latency.
+        assert!((conduction_delay_s(0.5, 50.0) - 0.01).abs() < 1e-12, "10 ms over 0.5 m @ 50 m/s");
+
+        // Defining inverse: delay · velocity = distance.
+        for &(d, v) in &[(1.0_f64, 72.0_f64), (0.3, 12.0), (2.0, 0.5)] {
+            assert!((conduction_delay_s(d, v) * v - d).abs() < 1e-12, "delay·v = distance");
+        }
+
+        // Threads myelinated_conduction_velocity: a 12 µm fibre (Hursh v = 6·12 = 72 m/s)
+        // has latency 1/v over a 1 m segment.
+        let v = myelinated_conduction_velocity(12.0, HURSH_FACTOR_M_PER_S_PER_UM);
+        assert!((conduction_delay_s(1.0, v) - 1.0 / v).abs() < 1e-12, "latency = 1/v(12 µm)");
+
+        // Faster fibres have shorter latency.
+        assert!(
+            conduction_delay_s(1.0, 80.0) < conduction_delay_s(1.0, 40.0),
+            "latency falls with conduction velocity"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(conduction_delay_s(1.0, 0.0), 0.0); // velocity 0
+        assert_eq!(conduction_delay_s(-1.0, 50.0), 0.0); // distance < 0
+        assert_eq!(conduction_delay_s(1.0, f64::NAN), 0.0); // non-finite
+    }
 
     #[test]
     fn myelinated_follows_hursh_six_times_diameter() {
