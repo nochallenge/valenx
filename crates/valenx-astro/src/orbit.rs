@@ -237,9 +237,53 @@ pub fn specific_orbital_energy(semi_major_axis: f64) -> Result<f64, AstroError> 
     Ok(-MU_EARTH / (2.0 * semi_major_axis))
 }
 
+/// The **semi-major axis from the orbital period** `a = (μ·T² / (4π²))^(1/3)` (m) —
+/// Kepler's third law inverted: given an observed period `period` `T` (s) it recovers
+/// the size of the orbit about Earth. It is the inverse of [`orbital_period`] and the
+/// relation that fixes mission altitudes — a sidereal-day period gives the
+/// geostationary radius (≈ 42 164 km), the GPS 11 h 58 m period its ≈ 26 560 km orbit.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `period` is non-finite or non-positive.
+pub fn semi_major_axis_from_period(period: f64) -> Result<f64, AstroError> {
+    if !period.is_finite() || period <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "semi_major_axis_from_period period must be finite and > 0",
+        ));
+    }
+    Ok((MU_EARTH * period * period / (4.0 * std::f64::consts::PI * std::f64::consts::PI)).cbrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn semi_major_axis_from_period_inverts_kepler_third_law() {
+        // Round-trip: recover a from the period it implies (the exact inverse of
+        // orbital_period).
+        for &a in &[R_EARTH + 400_000.0, 1.5e7, 4.2164e7] {
+            let recovered = semi_major_axis_from_period(orbital_period(a).unwrap()).unwrap();
+            assert!((recovered - a).abs() <= 1e-12 * a, "a = (μT²/4π²)^⅓ inverts T = 2π√(a³/μ)");
+        }
+
+        // Worked: a sidereal-day period gives the geostationary radius ≈ 42 164 km.
+        let geo = semi_major_axis_from_period(86164.0).unwrap();
+        assert!((geo - 4.2164e7).abs() / 4.2164e7 < 1e-3, "GEO radius ≈ 42164 km, got {geo}");
+
+        // Monotonic increasing in the period.
+        assert!(
+            semi_major_axis_from_period(7200.0).unwrap()
+                < semi_major_axis_from_period(86164.0).unwrap(),
+            "longer period → larger orbit"
+        );
+
+        // Non-physical period → error.
+        assert!(semi_major_axis_from_period(0.0).is_err());
+        assert!(semi_major_axis_from_period(-1.0).is_err());
+        assert!(semi_major_axis_from_period(f64::NAN).is_err());
+    }
 
     #[test]
     fn specific_orbital_energy_matches_vis_viva() {
