@@ -131,6 +131,18 @@ pub fn blasius_local_cf(re_x: f64) -> f64 {
     0.664 / re_x.sqrt()
 }
 
+/// The **Blasius laminar boundary-layer thickness ratio** `δ/x = 5.0·Re_x⁻¹ᐟ²`
+/// (dimensionless) at local length Reynolds number `re_x` `Re_x = U·x/ν` — the
+/// 99%-of-free-stream velocity boundary-layer thickness `δ` divided by the streamwise
+/// distance `x` from the leading edge. It is the laminar flat-plate companion to the
+/// local skin friction [`blasius_local_cf`] (both decay as `Re_x⁻¹ᐟ²`), and the
+/// quantity that sizes the boundary-layer edge for near-wall mesh resolution and
+/// blockage estimates.
+pub fn blasius_boundary_layer_thickness_ratio(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    5.0 / re_x.sqrt()
+}
+
 /// The thin-airfoil-theory lift-curve slope — `2π` per radian, the
 /// classic inviscid result for a thin symmetric section at a small
 /// angle of attack.
@@ -569,6 +581,37 @@ mod tests {
              sphere drag",
             after.cd
         );
+    }
+
+    #[test]
+    fn blasius_boundary_layer_thickness_ratio_scales_with_skin_friction() {
+        // Worked: δ/x = 5.0/√Re; at Re = 1e6, δ/x = 5.0/1000 = 5.0e-3.
+        assert!(
+            (blasius_boundary_layer_thickness_ratio(1.0e6) - 5.0e-3).abs() <= 1e-12 * 5.0e-3,
+            "δ/x(1e6) = 5.0e-3"
+        );
+
+        // The BL thickness and local skin friction share the √Re scaling, so their ratio
+        // is the constant 5.0/0.664 (threads blasius_local_cf).
+        for &re in &[1.0e5, 1.0e6, 5.0e6] {
+            let expected = blasius_local_cf(re) * (5.0 / 0.664);
+            assert!(
+                (blasius_boundary_layer_thickness_ratio(re) - expected).abs() <= 1e-12 * expected,
+                "δ/x = c_f · 5.0/0.664 at Re={re}"
+            );
+        }
+
+        // Scales as Re^(−1/2): quadrupling Re halves δ/x.
+        assert!(
+            (blasius_boundary_layer_thickness_ratio(4.0e6)
+                - 0.5 * blasius_boundary_layer_thickness_ratio(1.0e6))
+            .abs()
+                <= 1e-12 * blasius_boundary_layer_thickness_ratio(1.0e6),
+            "δ/x ∝ Re^(−1/2)"
+        );
+
+        // The Re < 1 clamp (matching blasius_local_cf): δ/x(0.5) = 5.0.
+        assert!((blasius_boundary_layer_thickness_ratio(0.5) - 5.0).abs() < 1e-12, "clamped to Re = 1");
     }
 
     #[test]
