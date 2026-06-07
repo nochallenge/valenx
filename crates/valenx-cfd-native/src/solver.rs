@@ -327,6 +327,33 @@ impl FlowSolution {
         self.pressure.at(i, j) + self.kinetic_energy_density_at_cell(i, j, density)
     }
 
+    /// The **pressure coefficient** `Cp = (p − p_ref) / (½·ρ·U_ref²)` at the centre of
+    /// cell `(i, j)` — the static pressure normalised by the reference dynamic head,
+    /// the dimensionless pressure field of aerodynamic post-processing.
+    /// `reference_pressure` `p_ref` (Pa) is the freestream static pressure, `density`
+    /// `ρ` (kg/m³) and `reference_speed` `U_ref` (m/s) set the reference dynamic
+    /// pressure `½ρU_ref²`.
+    ///
+    /// `Cp = 1` at a stagnation point (the flow brought fully to rest), `0` in the
+    /// undisturbed freestream, and negative where the flow accelerates past `U_ref`
+    /// (suction). For an incompressible inviscid flow it reduces to `Cp = 1 −
+    /// (V/U_ref)²` by Bernoulli. Returns `0` if the reference dynamic pressure is not
+    /// positive (`density` or `reference_speed` non-positive).
+    pub fn pressure_coefficient_at_cell(
+        &self,
+        i: usize,
+        j: usize,
+        reference_pressure: f64,
+        density: f64,
+        reference_speed: f64,
+    ) -> f64 {
+        let q_ref = 0.5 * density * reference_speed * reference_speed;
+        if q_ref <= 0.0 {
+            return 0.0;
+        }
+        (self.pressure.at(i, j) - reference_pressure) / q_ref
+    }
+
     /// Static-pressure range `Δp = p_max − p_min` (Pa) over the field — the
     /// total pressure variation. Gauge-independent (a difference), so it is
     /// meaningful despite the arbitrary absolute level: for channel flow it is
@@ -2966,6 +2993,62 @@ mod tests {
             converged: true,
         };
         assert_eq!(calm.continuity_error(), 0.0);
+    }
+
+    #[test]
+    fn pressure_coefficient_at_cell_follows_bernoulli() {
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+        let rho = 1.225_f64;
+        let u_ref = 10.0_f64;
+        let p_ref = 101_325.0_f64;
+        let gamma = 0.6_f64;
+        let dy = grid.dy();
+
+        // A shear field u = γ·y plus a Bernoulli-consistent static pressure
+        // p = p_ref + ½ρ(U_ref² − V²), so Cp should reduce to 1 − (V/U_ref)².
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, gamma * (j as f64 + 0.5) * dy);
+            }
+        }
+        let mut p = grid.pressure_field();
+        for j in 0..grid.ny {
+            let v = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..grid.nx {
+                p.set(i, j, p_ref + 0.5 * rho * (u_ref * u_ref - v * v));
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        let q_ref = 0.5 * rho * u_ref * u_ref;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let cp = sol.pressure_coefficient_at_cell(i, j, p_ref, rho, u_ref);
+                // Threads speed_at_cell via the incompressible Bernoulli relation.
+                let speed = sol.speed_at_cell(i, j);
+                assert!(
+                    (cp - (1.0 - (speed / u_ref).powi(2))).abs() < 1e-9,
+                    "Cp = 1 − (V/U_ref)² at ({i},{j})"
+                );
+                // Definition: Cp = (p − p_ref)/q_ref.
+                assert!(
+                    (cp - (sol.pressure.at(i, j) - p_ref) / q_ref).abs() < 1e-9,
+                    "Cp = (p − p_ref)/(½ρU_ref²)"
+                );
+            }
+        }
+        // Non-positive reference dynamic pressure → 0 sentinel.
+        assert_eq!(sol.pressure_coefficient_at_cell(2, 2, p_ref, rho, 0.0), 0.0);
+        assert_eq!(sol.pressure_coefficient_at_cell(2, 2, p_ref, 0.0, u_ref), 0.0);
     }
 
     #[test]
