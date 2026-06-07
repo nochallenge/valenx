@@ -217,9 +217,55 @@ pub fn orbital_speed(radius: f64, semi_major_axis: f64) -> Result<f64, AstroErro
     Ok(v_sq.sqrt())
 }
 
+/// The **specific orbital energy** `ε = −μ / (2·a)` (J/kg) of an orbit with semi-major
+/// axis `semi_major_axis` `a` (m) about Earth — the conserved total mechanical energy
+/// per unit mass (kinetic plus gravitational potential), the constant of the vis-viva
+/// equation `v²/2 − μ/r = −μ/(2a)`. It is negative for a bound ellipse and rises toward
+/// `0` as the orbit grows (`a → ∞`, the parabolic escape limit), so a higher (less
+/// negative) energy means a larger orbit.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `semi_major_axis` is non-finite or
+/// non-positive (a bound orbit requires `a > 0`).
+pub fn specific_orbital_energy(semi_major_axis: f64) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite() || semi_major_axis <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "specific_orbital_energy semi_major_axis must be finite and > 0",
+        ));
+    }
+    Ok(-MU_EARTH / (2.0 * semi_major_axis))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn specific_orbital_energy_matches_vis_viva() {
+        // Threads orbital_speed via the vis-viva energy ε = v²/2 − μ/r, for any reachable
+        // r on the orbit (all of a, 1.3a, 0.8a satisfy r < 2a).
+        for &a in &[R_EARTH + 400_000.0, 1.0e7, 2.5e7] {
+            let eps = specific_orbital_energy(a).unwrap();
+            for &r in &[a, 1.3 * a, 0.8 * a] {
+                let from_speed = orbital_speed(r, a).unwrap().powi(2) / 2.0 - MU_EARTH / r;
+                assert!((eps - from_speed).abs() <= 1e-12 * eps.abs(), "ε = v²/2 − μ/r");
+            }
+        }
+
+        // Worked: a 400 km circular LEO has ε ≈ −2.943e7 J/kg.
+        let leo = specific_orbital_energy(R_EARTH + 400_000.0).unwrap();
+        assert!((leo - (-2.943e7)).abs() / 2.943e7 < 1e-3, "LEO energy ≈ −29.4 MJ/kg, got {leo}");
+
+        // Larger orbit → higher (less negative) energy; bound orbits have ε < 0.
+        assert!(specific_orbital_energy(2.0e7).unwrap() > specific_orbital_energy(1.0e7).unwrap());
+        assert!(specific_orbital_energy(1.0e7).unwrap() < 0.0, "bound orbit ε < 0");
+
+        // Non-physical semi-major axis → error.
+        assert!(specific_orbital_energy(0.0).is_err());
+        assert!(specific_orbital_energy(-1.0).is_err());
+        assert!(specific_orbital_energy(f64::NAN).is_err());
+    }
 
     #[test]
     fn orbital_speed_matches_vis_viva_and_threads_circular_escape() {
