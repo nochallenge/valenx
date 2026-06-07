@@ -676,6 +676,16 @@ pub fn euler_characteristic(solid: &Solid) -> Option<i64> {
     }
 }
 
+/// The **topological genus** `g` of a closed B-rep solid — the number of
+/// through-holes ("handles") in its boundary surface. From the Euler characteristic
+/// `χ = 2 − 2g` of a closed orientable surface (see [`euler_characteristic`]),
+/// `g = (2 − χ)/2`: a simply-connected solid (box, sphere, cylinder, cone) is genus
+/// `0`, a torus genus `1`, a double torus genus `2`. `None` for a mesh-backed solid
+/// (triangle counts are not B-rep topology), matching [`euler_characteristic`].
+pub fn solid_genus(solid: &Solid) -> Option<i64> {
+    euler_characteristic(solid).map(|chi| (2 - chi) / 2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -717,6 +727,26 @@ mod tests {
         // A box is genus-0: V−E+F = 8−12+6 = 2.
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         assert_eq!(euler_characteristic(&cube), Some(2));
+    }
+
+    #[test]
+    fn solid_genus_counts_handles() {
+        use crate::primitives::{sphere, torus};
+        // g = (2 − χ)/2 threads euler_characteristic for every solid; simply-connected
+        // primitives (χ = 2) are genus 0.
+        for s in [
+            box_solid(1.0, 1.0, 1.0).unwrap(),
+            cylinder(1.0, 2.0).unwrap(),
+            sphere(1.0).unwrap(),
+        ] {
+            assert_eq!(solid_genus(&s), euler_characteristic(&s).map(|c| (2 - c) / 2));
+            assert_eq!(solid_genus(&s), Some(0), "simply-connected → genus 0");
+        }
+        // A torus has one through-hole → genus 1 (χ = 0).
+        let t = torus(2.0, 0.5).unwrap();
+        assert_eq!(euler_characteristic(&t), Some(0), "torus χ = 0");
+        assert_eq!(solid_genus(&t), Some(1), "torus → genus 1");
+        // A mesh-backed solid has no B-rep topology → None (matches euler).
     }
 
     #[test]
