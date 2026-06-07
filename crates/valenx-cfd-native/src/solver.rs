@@ -464,6 +464,21 @@ impl FlowSolution {
         Some(loc)
     }
 
+    /// The **convective Courant–Friedrichs–Lewy (CFL) number** `C = U_max·Δt /
+    /// min(Δx, Δy)` for an explicit time step `dt` (s) — how many cells the fastest
+    /// parcel crosses in one step, the stability gauge of an explicit advection
+    /// scheme (which needs `C ≤ 1`; at `C = 1` a parcel traverses exactly one cell per
+    /// step). It is built from [`FlowSolution::max_speed`] (whose doc notes it "sets
+    /// the convective CFL limit") and the finer grid spacing. Returns `0` for a
+    /// non-positive grid spacing or a non-finite / negative `dt`.
+    pub fn convective_cfl_number(&self, dt: f64) -> f64 {
+        let h = self.grid.dx().min(self.grid.dy());
+        if h <= 0.0 || !dt.is_finite() || dt < 0.0 {
+            return 0.0;
+        }
+        self.max_speed() * dt / h
+    }
+
     /// Peak vorticity magnitude `|∂v/∂x − ∂u/∂y|` (1/s) over the interior cells,
     /// from central differences of the cell-centred velocity — the strongest
     /// local rotation in the flow (the lid-driven cavity's central vortex, a
@@ -2123,6 +2138,50 @@ mod tests {
         // A driven flow has a positive mean that cannot exceed the peak.
         assert!(mean > 0.0, "driven flow should have a positive mean speed");
         assert!(mean <= peak + 1e-9, "mean {mean} cannot exceed peak {peak}");
+    }
+
+    #[test]
+    fn convective_cfl_number_threads_max_speed() {
+        // Grid 5×4 over 5×8 → dx = 1.0, dy = 2.0, so h = min = 1.0.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0); // uniform u = 3 → max_speed = 3
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let h = grid.dx().min(grid.dy());
+
+        // Threads max_speed: C = U_max·Δt / min(Δx, Δy).
+        assert!(
+            (sol.convective_cfl_number(0.1) - sol.max_speed() * 0.1 / h).abs() < 1e-12,
+            "C = U_max·Δt/h"
+        );
+        // Worked: max_speed = 3, Δt = 0.1, h = 1 → C = 0.3.
+        assert!((sol.convective_cfl_number(0.1) - 0.3).abs() < 1e-12, "C(0.1) = 0.3");
+        // Linear in Δt.
+        assert!(
+            (sol.convective_cfl_number(0.2) - 2.0 * sol.convective_cfl_number(0.1)).abs() < 1e-12,
+            "linear in Δt"
+        );
+        // The unit-CFL stability limit: Δt = h/U_max → C = 1.
+        assert!(
+            (sol.convective_cfl_number(h / sol.max_speed()) - 1.0).abs() < 1e-12,
+            "C = 1 at Δt = h/U_max"
+        );
+        // Sentinel: zero / negative / non-finite Δt → 0.
+        assert_eq!(sol.convective_cfl_number(0.0), 0.0);
+        assert_eq!(sol.convective_cfl_number(-0.1), 0.0);
+        assert_eq!(sol.convective_cfl_number(f64::NAN), 0.0);
     }
 
     #[test]
