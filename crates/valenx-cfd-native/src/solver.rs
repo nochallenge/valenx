@@ -443,6 +443,18 @@ impl FlowSolution {
         (sum / n as f64).sqrt()
     }
 
+    /// The **spatial standard deviation of the speed field** `σ_u = √(⟨|u|²⟩ − ⟨|u|⟩²)`
+    /// (m/s) — the root-mean-square spread of the cell speeds about their area-average,
+    /// a measure of how non-uniform the flow is (and the numerator of a
+    /// turbulence-intensity estimate `σ_u / ⟨|u|⟩`). By the variance identity it is built
+    /// from the [`FlowSolution::rms_speed`] and [`FlowSolution::mean_speed`] reducers; it
+    /// is `0` for a perfectly uniform field and never exceeds the RMS speed. Returns `0`
+    /// for an empty grid.
+    pub fn speed_std_dev(&self) -> f64 {
+        let variance = self.rms_speed().powi(2) - self.mean_speed().powi(2);
+        variance.max(0.0).sqrt()
+    }
+
     /// Peak velocity magnitude `max √(u²+v²)` (m/s) over the cell grid — the
     /// fastest the flow moves anywhere, the peak counterpart to the area-averaged
     /// [`FlowSolution::mean_speed`]. It is the speed that sets the convective CFL
@@ -3437,6 +3449,66 @@ mod tests {
                 < 1e-9,
             "linear in ρ"
         );
+    }
+
+    #[test]
+    fn speed_std_dev_matches_the_deviation_sum() {
+        // Uniform field u = 3 → zero spread.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(uniform.speed_std_dev().abs() < 1e-12, "uniform → σ = 0");
+        assert!(uniform.speed_std_dev() <= uniform.rms_speed() + 1e-12, "σ ≤ rms");
+
+        // Non-uniform field (streamwise gradient).
+        let mut ug = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ug.set(fi, j, fi as f64);
+            }
+        }
+        let varied = FlowSolution {
+            grid,
+            u: ug,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // Non-tautological: the rms²−mean² identity equals the mean-of-squared-deviations
+        // form, computed here over the same cells by a different code path.
+        let mean = varied.mean_speed();
+        let mut acc = 0.0;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let d = varied.speed_at_cell(i, j) - mean;
+                acc += d * d;
+            }
+        }
+        let sigma_direct = (acc / (grid.nx * grid.ny) as f64).sqrt();
+        assert!(
+            (varied.speed_std_dev() - sigma_direct).abs() <= 1e-9 * sigma_direct,
+            "σ = √⟨(u − ⟨u⟩)²⟩"
+        );
+
+        // The spread is positive for a varying field and bounded by the RMS speed.
+        assert!(varied.speed_std_dev() > 0.0, "varying field → σ > 0");
+        assert!(varied.speed_std_dev() <= varied.rms_speed(), "σ ≤ rms");
     }
 
     #[test]
