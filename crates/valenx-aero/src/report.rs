@@ -654,6 +654,31 @@ pub fn fanno_flow_velocity_ratio(mach: f64, gamma: f64) -> f64 {
     mach * ((gamma + 1.0) / (2.0 + (gamma - 1.0) * mach * mach)).sqrt()
 }
 
+/// The **Fanno friction parameter** `4fL*/D` (dimensionless) at Mach number `mach`
+/// `M` and heat-capacity ratio `gamma` `γ` — the friction factor times the duct
+/// length-to-diameter ratio needed to drive **Fanno flow** (steady, adiabatic,
+/// constant-area flow with wall friction) from `M` to the sonic choke at `M = 1`:
+///
+/// ```text
+///   4fL*/D = (1 − M²)/(γ·M²) + ((γ+1)/(2γ))·ln[ (γ+1)·M² / (2 + (γ−1)·M²) ]
+/// ```
+///
+/// It is the master Fanno design variable — the *maximum* run of duct a given inlet
+/// Mach can take before it chokes — completing the Fanno family with
+/// [`fanno_flow_temperature_ratio`], [`fanno_flow_pressure_ratio`] and
+/// [`fanno_flow_velocity_ratio`]. It is `0` at the choke (`M = 1`, no length left)
+/// and strictly positive on both sides — friction drives a subsonic stream up to
+/// `M = 1` and a supersonic stream down to it — diverging as `M → 0`. Returns `0`
+/// for non-physical input (non-finite `M` or `γ`, `M ≤ 0`, or `γ ≤ 1`).
+pub fn fanno_friction_parameter(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach <= 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (1.0 - mach * mach) / (gamma * mach * mach)
+        + (gamma + 1.0) / (2.0 * gamma)
+            * ((gamma + 1.0) * mach * mach / (2.0 + (gamma - 1.0) * mach * mach)).ln()
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1822,6 +1847,36 @@ mod tests {
         assert_eq!(rayleigh_flow_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn fanno_friction_parameter_is_the_choking_length() {
+        let g = 1.4;
+        // At the sonic choke (M = 1) no further friction length remains.
+        assert!(fanno_friction_parameter(1.0, g).abs() < 1e-12, "M=1 → 0");
+        // STRONG cross-check threading fanno_flow_temperature_ratio (#259): the ln
+        // argument (γ+1)M²/(2+(γ−1)M²) is exactly M²·(T/T*).
+        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+            let expected = (1.0 - m * m) / (gam * m * m)
+                + (gam + 1.0) / (2.0 * gam) * (m * m * fanno_flow_temperature_ratio(m, gam)).ln();
+            assert!(
+                (fanno_friction_parameter(m, gam) - expected).abs() / expected.abs() < 1e-12,
+                "4fL*/D via M²·(T/T*) at M={m}, γ={gam}"
+            );
+        }
+        // Standard Fanno-table values (γ = 1.4): M=0.5 → 1.0691, M=2 → 0.3050.
+        assert!((fanno_friction_parameter(0.5, g) - 1.0691).abs() < 1e-3, "M=0.5 table value");
+        assert!((fanno_friction_parameter(2.0, g) - 0.3050).abs() < 1e-3, "M=2 table value");
+        // Positive on both sides of the choke (the minimum is 0 at M = 1).
+        assert!(
+            fanno_friction_parameter(0.5, g) > 0.0 && fanno_friction_parameter(2.0, g) > 0.0,
+            "4fL*/D ≥ 0, positive away from the choke"
+        );
+        // Non-physical input → 0.
+        assert_eq!(fanno_friction_parameter(0.0, g), 0.0); // M = 0
+        assert_eq!(fanno_friction_parameter(-1.0, g), 0.0); // M < 0
+        assert_eq!(fanno_friction_parameter(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(fanno_friction_parameter(f64::NAN, g), 0.0); // non-finite M
     }
 
     #[test]
