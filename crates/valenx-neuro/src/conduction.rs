@@ -78,6 +78,20 @@ pub fn conduction_delay_s(distance_m: f64, velocity_m_per_s: f64) -> f64 {
     distance_m / velocity_m_per_s
 }
 
+/// The **conduction propagation distance** `distance = velocity · time` in metres — how
+/// far an action potential travels in time `time_s` (s) along a fibre conducting at
+/// `velocity_m_per_s` (m/s, e.g. from [`myelinated_conduction_velocity`]). It is the
+/// inverse of the [`conduction_delay_s`] latency and the third member of the conduction
+/// kinematic triple (velocity, distance, delay). Returns `0` for non-physical input
+/// (negative or non-finite velocity or time).
+pub fn conduction_distance_m(velocity_m_per_s: f64, time_s: f64) -> f64 {
+    if !velocity_m_per_s.is_finite() || !time_s.is_finite() || velocity_m_per_s < 0.0 || time_s < 0.0
+    {
+        return 0.0;
+    }
+    velocity_m_per_s * time_s
+}
+
 /// The **conduction velocity at the myelination crossover diameter** (m/s) — the
 /// single speed at which a myelinated fibre (`v = k_m·d`) and an unmyelinated fibre
 /// (`v = k_u·√d`) conduct equally. Below it, myelination gives no velocity benefit
@@ -95,6 +109,38 @@ pub fn conduction_velocity_at_crossover(k_myel_per_um: f64, k_unmyel_per_sqrt_um
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conduction_distance_inverts_the_delay() {
+        // Round-trip: distance recovered from the latency it produces (the exact inverse
+        // of conduction_delay_s).
+        for &(d, v) in &[(0.05_f64, 50.0_f64), (1.0, 120.0), (0.3, 2.5)] {
+            let recovered = conduction_distance_m(v, conduction_delay_s(d, v));
+            assert!((recovered - d).abs() <= 1e-12 * d, "distance = v·t inverts t = d/v");
+        }
+
+        // Worked: a 50 m/s myelinated fibre travels 5 cm in 1 ms.
+        assert!((conduction_distance_m(50.0, 0.001) - 0.05).abs() < 1e-12, "50 m/s × 1 ms = 5 cm");
+
+        // Linear in velocity and time.
+        assert!(
+            (conduction_distance_m(100.0, 0.002) - 2.0 * conduction_distance_m(50.0, 0.002)).abs()
+                < 1e-12,
+            "linear in v"
+        );
+        assert!(
+            (conduction_distance_m(50.0, 0.004) - 2.0 * conduction_distance_m(50.0, 0.002)).abs()
+                < 1e-12,
+            "linear in t"
+        );
+
+        // Zero velocity or time → zero distance (valid); negatives / NaN → 0 sentinel.
+        assert_eq!(conduction_distance_m(0.0, 0.001), 0.0);
+        assert_eq!(conduction_distance_m(50.0, 0.0), 0.0);
+        assert_eq!(conduction_distance_m(-50.0, 0.001), 0.0);
+        assert_eq!(conduction_distance_m(50.0, -0.001), 0.0);
+        assert_eq!(conduction_distance_m(f64::NAN, 0.001), 0.0);
+    }
 
     #[test]
     fn conduction_delay_is_distance_over_velocity() {
