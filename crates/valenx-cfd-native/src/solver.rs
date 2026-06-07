@@ -572,6 +572,27 @@ impl FlowSolution {
         }
     }
 
+    /// The **displacement thickness** `δ* = ∫₀^Ly (1 − u/u_ref) dy` (m) at the
+    /// outlet cross-section (`x = lx`) — the distance the wall would have to be
+    /// displaced into an inviscid stream of edge speed `u_ref` to impose the same
+    /// mass-flow deficit the viscous boundary layer does. `u_ref` is the
+    /// edge / free-stream (or channel-centreline) reference speed, typically the
+    /// [`FlowSolution::bulk_velocity`] or a known inlet speed. By construction it
+    /// obeys the mass-deficit identity `δ* = Ly − Q_out/u_ref` against the
+    /// [`FlowSolution::outlet_flow_rate`] `Q_out`: the channel height minus the
+    /// height an inviscid `u_ref` stream would need to carry the actual outflow.
+    /// Plug flow (uniform `u = u_ref`) gives `0`; the more the near-wall fluid
+    /// lags, the larger `δ*`. Returns `0` for a non-finite or non-positive `u_ref`
+    /// or an empty grid.
+    pub fn displacement_thickness(&self, u_ref: f64) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 || !u_ref.is_finite() || u_ref <= 0.0 {
+            return 0.0;
+        }
+        let dy = self.grid.dy();
+        (0..ny).map(|j| (1.0 - self.u.at(nx, j) / u_ref) * dy).sum()
+    }
+
     /// Area-averaged kinetic-energy density `⟨½ρ|u|²⟩` (J/m³ = Pa) over the cell
     /// grid — the mean specific kinetic energy of the flow, in the same units as
     /// (and directly comparable to) the freestream dynamic pressure `½ρU²`.
@@ -2520,6 +2541,64 @@ mod tests {
         assert!((sol.outlet_flow_rate() - 2.0).abs() < 1e-12, "Q_out {}", sol.outlet_flow_rate());
         // Uniform throughflow conserves mass exactly.
         assert!(sol.continuity_error() < 1e-12, "continuity {}", sol.continuity_error());
+    }
+
+    #[test]
+    fn displacement_thickness_matches_the_couette_profile_and_the_deficit_identity() {
+        // A 4×6 grid over a 4×3 channel (dy = 0.5) carrying a linear Couette
+        // profile u(y) = U·y/Ly, U = 2 (zero at the bottom wall, U at the top).
+        let (u_top, ly) = (2.0_f64, 3.0_f64);
+        let grid = Grid::new(4, 6, 4.0, ly);
+        let dy = grid.dy();
+        let mut u = grid.u_field(); // (nx+1) × ny
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                let y = (j as f64 + 0.5) * dy; // cell-centre height
+                u.set(i, j, u_top * y / ly);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // δ* = ∫(1 − u/U) dy = ∫(1 − y/Ly) dy = Ly/2 for a Couette profile; the
+        // midpoint rule integrates the linear integrand exactly.
+        let dstar = sol.displacement_thickness(u_top);
+        assert!((dstar - ly / 2.0).abs() < 1e-12, "δ* = Ly/2 = 1.5, got {dstar}");
+        // STRONG non-tautological cross-check: the mass-deficit identity
+        // δ* = Ly − Q_out/U against the independently-implemented outlet_flow_rate.
+        let identity = ly - sol.outlet_flow_rate() / u_top;
+        assert!((dstar - identity).abs() < 1e-12, "δ* = Ly − Q_out/U: {dstar} vs {identity}");
+        // Bounded by the channel height (0 ≤ δ* ≤ Ly for u ∈ [0, U]).
+        assert!((0.0..=ly + 1e-12).contains(&dstar));
+
+        // Plug flow (uniform u = U) carries no deficit → δ* = 0.
+        let mut plug_u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                plug_u.set(i, j, u_top);
+            }
+        }
+        let plug = FlowSolution {
+            grid,
+            u: plug_u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(plug.displacement_thickness(u_top).abs() < 1e-12, "plug flow → δ* = 0");
+
+        // A non-physical reference speed is undefined → 0.
+        assert_eq!(sol.displacement_thickness(0.0), 0.0); // u_ref = 0
+        assert_eq!(sol.displacement_thickness(-1.0), 0.0); // u_ref < 0
+        assert_eq!(sol.displacement_thickness(f64::NAN), 0.0); // non-finite
     }
 
     #[test]
