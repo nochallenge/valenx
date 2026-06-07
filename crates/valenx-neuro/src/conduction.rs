@@ -34,6 +34,31 @@ pub fn unmyelinated_conduction_velocity(diameter_um: f64, k_m_per_s_per_sqrt_um:
     k_m_per_s_per_sqrt_um * diameter_um.max(0.0).sqrt()
 }
 
+/// The **conduction-velocity crossover diameter** `d* = (k_u/k_m)²` (µm) — the fibre
+/// diameter at which a myelinated fibre (Hursh `CV = k_m·d`,
+/// [`myelinated_conduction_velocity`]) and an unmyelinated one (cable-theory
+/// `CV = k_u·√d`, [`unmyelinated_conduction_velocity`]) conduct at the *same* speed,
+/// from the myelinated constant `k_myel_per_um` `k_m` (m/s per µm) and the
+/// unmyelinated constant `k_unmyel_per_sqrt_um` `k_u` (m/s per √µm).
+///
+/// Setting `k_m·d = k_u·√d` and solving gives `d* = (k_u/k_m)²`. **Below** `d*` the
+/// `√d` law wins and an *unmyelinated* axon is actually faster (and metabolically
+/// cheaper), which is why the thinnest fibres — the bulk of a peripheral nerve — are
+/// left bare; **above** `d*` myelin's linear scaling pulls ahead, the payoff that
+/// makes thick fibres worth insulating. Returns `0` for a non-positive or non-finite
+/// myelinated constant, or a negative / non-finite unmyelinated constant (the
+/// crossover is then undefined).
+pub fn myelination_crossover_diameter(k_myel_per_um: f64, k_unmyel_per_sqrt_um: f64) -> f64 {
+    if !k_myel_per_um.is_finite()
+        || k_myel_per_um <= 0.0
+        || !k_unmyel_per_sqrt_um.is_finite()
+        || k_unmyel_per_sqrt_um < 0.0
+    {
+        return 0.0;
+    }
+    (k_unmyel_per_sqrt_um / k_myel_per_um).powi(2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,5 +96,35 @@ mod tests {
         let myelinated = myelinated_conduction_velocity(10.0, HURSH_FACTOR_M_PER_S_PER_UM);
         let unmyelinated = unmyelinated_conduction_velocity(1.0, 2.0);
         assert!(myelinated > 10.0 * unmyelinated, "{myelinated} vs {unmyelinated}");
+    }
+
+    #[test]
+    fn myelination_crossover_diameter_equalises_the_two_conduction_velocities() {
+        // k_m = 6 m/s/µm (Hursh), k_u = 2 m/s/√µm → d* = (k_u/k_m)² = (1/3)² = 1/9 µm.
+        let d_star = myelination_crossover_diameter(6.0, 2.0);
+        assert!((d_star - 1.0 / 9.0).abs() < 1e-12, "d* = (k_u/k_m)² = 1/9, got {d_star}");
+        // STRONG dual cross-check: at d* the two CV laws agree exactly (threading BOTH
+        // conduction-velocity functions); below d* the √d law is faster, above it the
+        // linear (myelinated) law wins.
+        for &(km, ku) in &[(6.0_f64, 2.0_f64), (5.0, 3.0), (10.0, 1.5), (4.0, 4.0)] {
+            let d = myelination_crossover_diameter(km, ku);
+            let cv_m = myelinated_conduction_velocity(d, km);
+            let cv_u = unmyelinated_conduction_velocity(d, ku);
+            assert!((cv_m - cv_u).abs() / cv_m < 1e-9, "CVs equal at d* for k_m={km}, k_u={ku}");
+            assert!(
+                unmyelinated_conduction_velocity(0.5 * d, ku) > myelinated_conduction_velocity(0.5 * d, km),
+                "below d*: unmyelinated faster (k_m={km}, k_u={ku})"
+            );
+            assert!(
+                myelinated_conduction_velocity(2.0 * d, km) > unmyelinated_conduction_velocity(2.0 * d, ku),
+                "above d*: myelinated faster (k_m={km}, k_u={ku})"
+            );
+        }
+        // Non-physical input → 0 (the crossover is undefined).
+        assert_eq!(myelination_crossover_diameter(0.0, 2.0), 0.0); // k_m ≤ 0
+        assert_eq!(myelination_crossover_diameter(-6.0, 2.0), 0.0); // k_m < 0
+        assert_eq!(myelination_crossover_diameter(f64::NAN, 2.0), 0.0); // non-finite k_m
+        assert_eq!(myelination_crossover_diameter(6.0, f64::INFINITY), 0.0); // non-finite k_u
+        assert_eq!(myelination_crossover_diameter(6.0, -1.0), 0.0); // k_u < 0
     }
 }
