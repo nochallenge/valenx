@@ -63,9 +63,65 @@ pub fn arrhenius_activation_energy_from_q10(q10: f64, temp_k: f64) -> f64 {
     crate::nernst::GAS_CONSTANT * temp_k * (temp_k + 10.0) * q10.ln() / 10.0
 }
 
+/// The **temperature coefficient `Q10`** implied by an Arrhenius activation energy
+/// `activation_energy` `Eₐ` (J/mol) taken around absolute temperature `temp_k` `T`
+/// (K) — the inverse of [`arrhenius_activation_energy_from_q10`]. Inverting
+/// `Eₐ = R·T·(T+10)·ln(Q10)/10` gives
+///
+/// ```text
+/// Q10 = exp(10·Eₐ / (R·T·(T+10)))
+/// ```
+///
+/// with `R` the molar gas constant (`crate::nernst::GAS_CONSTANT`). This is the
+/// *mechanistic → empirical* direction (the reverse of
+/// [`arrhenius_activation_energy_from_q10`]): given a reaction's activation energy,
+/// predict how much faster it runs per 10 °C. A zero activation energy gives
+/// `Q10 = 1` (temperature-independent); a larger `Eₐ` is more temperature-sensitive
+/// (larger `Q10`). Like its siblings [`q10_scale`] / [`q10_from_rates`] it is a bare
+/// closed form, so a non-finite or non-positive `temp_k` yields a non-finite result
+/// the caller is expected to guard.
+pub fn q10_from_activation_energy(activation_energy: f64, temp_k: f64) -> f64 {
+    (10.0 * activation_energy / (crate::nernst::GAS_CONSTANT * temp_k * (temp_k + 10.0))).exp()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn q10_from_activation_energy_inverts_arrhenius() {
+        // Eₐ = 0 ⇒ temperature-independent ⇒ Q10 = 1 exactly.
+        assert!((q10_from_activation_energy(0.0, 300.0) - 1.0).abs() < 1e-12, "Eₐ=0 → Q10=1");
+
+        // STRONG round-trip cross-check threading arrhenius_activation_energy_from_q10
+        // (#233): Q10 → Eₐ → Q10 and Eₐ → Q10 → Eₐ both recover exactly — two
+        // independent closed forms (exp of the group vs ln of it).
+        for &(q10, t) in &[(3.0_f64, 279.45_f64), (2.0, 293.15), (2.5, 310.15), (1.5, 300.0)] {
+            let ea = arrhenius_activation_energy_from_q10(q10, t);
+            assert!(
+                (q10_from_activation_energy(ea, t) - q10).abs() < 1e-9,
+                "Q10→Eₐ→Q10 at q10={q10}"
+            );
+        }
+        for &(ea, t) in &[(74000.0_f64, 279.45_f64), (50000.0, 300.0), (100000.0, 310.0)] {
+            let q10 = q10_from_activation_energy(ea, t);
+            assert!(
+                (arrhenius_activation_energy_from_q10(q10, t) - ea).abs() / ea < 1e-12,
+                "Eₐ→Q10→Eₐ at ea={ea}"
+            );
+        }
+
+        // Physical anchor: HH gating Eₐ ≈ 74 kJ/mol at 6.3 °C ⇒ Q10 ≈ 3.
+        let q10_hh = q10_from_activation_energy(74_000.0, 6.3 + 273.15);
+        assert!((q10_hh - 3.0).abs() < 0.05, "HH gating Q10 ≈ 3, got {q10_hh}");
+
+        // Monotonic increasing in Eₐ (a higher activation energy is more T-sensitive).
+        let t = 300.0;
+        assert!(
+            q10_from_activation_energy(40_000.0, t) < q10_from_activation_energy(80_000.0, t),
+            "Q10 rises with Eₐ"
+        );
+    }
 
     #[test]
     fn q10_scaling_matches_the_definition() {
