@@ -788,6 +788,31 @@ impl FlowSolution {
         dv_dx - du_dy
     }
 
+    /// The **velocity divergence** `∇·u = ∂u/∂x + ∂v/∂y` (1/s) at the centre of cell
+    /// `(i, j)` — the per-cell field that [`FlowSolution::max_divergence`] takes the
+    /// peak `|∇·u|` of, and the local mass-continuity residual the pressure-projection
+    /// step drives to zero. It is the **divergence** companion to the **curl**
+    /// [`FlowSolution::vorticity_at_cell`]: together `∇·u` and `ω = ∇×u` are the two
+    /// fundamental first-order differential invariants of a 2-D velocity field, and a
+    /// flow can carry either without the other — incompressible **solid-body rotation**
+    /// (`u = −Ω·y`, `v = Ω·x`) has `∇·u = 0` yet `ω = 2Ω`, while a **radial source**
+    /// (`u = a·x`, `v = a·y`) has `∇·u = 2a` yet `ω = 0`. Formed from the MAC face
+    /// velocities exactly as the projection measures continuity —
+    /// `(u_{i+1,j} − u_{i,j})/dx + (v_{i,j+1} − v_{i,j})/dy` — so unlike the centred
+    /// vorticity stencil it is defined on **every** cell, boundaries included. A
+    /// well-converged incompressible solution reads ≈ 0 everywhere; out-of-range
+    /// indices return `0`.
+    pub fn divergence_at_cell(&self, i: usize, j: usize) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if i >= nx || j >= ny {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let du_dx = (self.u.at(i + 1, j) - self.u.at(i, j)) / dx;
+        let dv_dy = (self.v.at(i, j + 1) - self.v.at(i, j)) / dy;
+        du_dx + dv_dy
+    }
+
     /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
     /// signed net rotation of the flow (Kelvin's circulation theorem; by
     /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
@@ -3279,6 +3304,105 @@ mod tests {
         // Solid-body rotation: Γ = 2Ω · interior area.
         let interior_area = (grid.nx - 2) as f64 * (grid.ny - 2) as f64 * dx * dy;
         assert!((gamma - 2.0 * omega * interior_area).abs() / gamma < 1e-9, "Γ = 2Ω·A_interior");
+    }
+
+    #[test]
+    fn divergence_at_cell_is_the_per_cell_continuity_residual() {
+        // 5×5 unit grid (dx = dy = 1).
+        let grid = Grid::new(5, 5, 5.0, 5.0);
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Incompressible solid-body rotation u = −Ω·y, v = +Ω·x: ∂u/∂x = ∂v/∂y = 0, so
+        // it is divergence-free in EVERY cell — yet it genuinely spins
+        // (vorticity_at_cell = 2Ω). Divergence (∇·u) and curl (ω) are independent.
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ur.set(fi, j, -omega * (j as f64 + 0.5) * dy);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            for fj in 0..=grid.ny {
+                vr.set(i, fj, omega * (i as f64 + 0.5) * dx);
+            }
+        }
+        let rot = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                assert!(
+                    rot.divergence_at_cell(i, j).abs() < 1e-12,
+                    "solid-body rotation is divergence-free at ({i},{j})"
+                );
+            }
+        }
+        assert!(
+            (rot.vorticity_at_cell(2, 2) - 2.0 * omega).abs() < 1e-9,
+            "...but it carries vorticity 2Ω (curl is not divergence)"
+        );
+
+        // Radial source u = a·x, v = a·y: ∂u/∂x = ∂v/∂y = a → ∇·u = 2a in every cell,
+        // and it is irrotational (vorticity 0) — the exact dual of the rotation case.
+        let a = 3.0;
+        let mut us = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                us.set(fi, j, a * (fi as f64) * dx); // u-face at x = fi·dx
+            }
+        }
+        let mut vs = grid.v_field();
+        for i in 0..grid.nx {
+            for fj in 0..=grid.ny {
+                vs.set(i, fj, a * (fj as f64) * dy); // v-face at y = fj·dy
+            }
+        }
+        let src = FlowSolution {
+            grid,
+            u: us,
+            v: vs,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (src.divergence_at_cell(2, 2) - 2.0 * a).abs() < 1e-9,
+            "radial source ∇·u = 2a"
+        );
+        assert!(
+            src.vorticity_at_cell(2, 2).abs() < 1e-9,
+            "radial source is irrotational"
+        );
+
+        // STRONG cross-check (independent implementation): the peak |∇·u| over the
+        // cells reproduces max_divergence, which forms the MAC divergence on its own.
+        let mut worst = 0.0_f64;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                worst = worst.max(src.divergence_at_cell(i, j).abs());
+            }
+        }
+        assert!(
+            (worst - src.max_divergence()).abs() < 1e-12,
+            "max|∇·u| (per-cell accessor) = max_divergence (reducer)"
+        );
+        assert!(
+            (src.max_divergence() - 2.0 * a).abs() < 1e-9,
+            "peak source divergence = 2a"
+        );
+
+        // Out-of-range indices return 0 (the accessor is defined on valid cells only).
+        assert_eq!(src.divergence_at_cell(grid.nx, 0), 0.0);
+        assert_eq!(src.divergence_at_cell(0, grid.ny), 0.0);
     }
 
     #[test]
