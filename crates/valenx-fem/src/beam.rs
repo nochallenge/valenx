@@ -447,6 +447,27 @@ pub fn beam_axial_extension(force: f64, length: f64, youngs_modulus: f64, area: 
     force * length / (youngs_modulus * area)
 }
 
+/// The **moment–curvature relation** `κ = M/(E·I)` (1/m) — the local bending curvature
+/// produced in a beam section by a bending moment `moment` `M` (N·m), for Young's
+/// modulus `youngs_modulus` `E` (Pa) and second moment of area `second_moment_area`
+/// `I` (m⁴). This is the Euler–Bernoulli constitutive law `M = E·I·κ` that underlies
+/// every deflection and slope in this module: integrating the curvature once gives the
+/// slope and twice the deflection. The curvature is linear in the moment (and so
+/// follows its sign — sagging vs hogging) and falls inversely with the flexural
+/// rigidity `E·I`. Returns `0` for non-physical input (`M` non-finite, or `E` or `I`
+/// non-positive or non-finite).
+pub fn beam_curvature(moment: f64, youngs_modulus: f64, second_moment_area: f64) -> f64 {
+    if !moment.is_finite()
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    moment / (youngs_modulus * second_moment_area)
+}
+
 /// The analytic **simply-supported (pinned–pinned) mid-span deflection**
 /// `δ = P·L³/(48·E·I)` (m) of a slender Euler–Bernoulli beam under a *central*
 /// transverse point load `load` `P` (N) — span `length` `L` (m), Young's modulus
@@ -2332,6 +2353,50 @@ mod tests {
         let analytic = beam_axial_extension(f, l, mat.youngs_modulus, section.area);
         let rel = (sol.translation[1][0] - analytic).abs() / analytic;
         assert!(rel < 1e-6, "axial δ {} vs {analytic}", sol.translation[1][0]);
+    }
+
+    #[test]
+    fn beam_curvature_is_the_moment_curvature_law() {
+        // Worked: κ = M/(EI) = 2000/(200e9·1e-6) = 0.01 1/m.
+        let k = beam_curvature(2000.0, 200.0e9, 1.0e-6);
+        assert!((k - 0.01).abs() < 1e-12, "κ = M/EI, got {k}");
+
+        // Moment–curvature inverse: M = E·I·κ.
+        for &(m, e, i) in &[
+            (2000.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 70.0e9, 4.2e-7),
+            (8200.0, 120.0e9, 9.0e-8),
+        ] {
+            assert!((beam_curvature(m, e, i) * e * i - m).abs() <= 1e-12 * m.abs(), "M = E·I·κ");
+        }
+
+        // Threads the cantilever family: δ_tip = κ_root·L²/3 (since δ = PL³/3EI and
+        // κ_root = M_root/EI = PL/EI).
+        for &(p, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 70.0e9, 4.2e-7),
+            (8200.0, 1.2, 120.0e9, 9.0e-8),
+        ] {
+            let from_curvature =
+                beam_curvature(cantilever_point_load_root_moment(p, l), e, i) * l * l / 3.0;
+            let delta = cantilever_tip_deflection(p, l, e, i);
+            assert!((from_curvature - delta).abs() <= 1e-12 * delta.abs(), "δ_tip = κ_root·L²/3");
+        }
+
+        // Linear & sign-preserving in M; inverse in E·I.
+        assert!(beam_curvature(-2000.0, 200.0e9, 1.0e-6) < 0.0, "sign follows the moment");
+        assert!(
+            (beam_curvature(2000.0, 400.0e9, 2.0e-6)
+                - 0.25 * beam_curvature(2000.0, 200.0e9, 1.0e-6))
+            .abs()
+                < 1e-12,
+            "inverse in E·I"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(beam_curvature(f64::NAN, 200.0e9, 1.0e-6), 0.0);
+        assert_eq!(beam_curvature(2000.0, 0.0, 1.0e-6), 0.0);
+        assert_eq!(beam_curvature(2000.0, 200.0e9, -1.0e-6), 0.0);
     }
 
     #[test]
