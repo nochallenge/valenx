@@ -401,6 +401,41 @@ pub fn simply_supported_udl_center_deflection(
     5.0 * load_per_length * length.powi(4) / (384.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **simply-supported (pinned–pinned) end slope under a uniformly
+/// distributed load** `θ = w·L³/(24·E·I)` (rad) — the support rotation of a slender
+/// Euler–Bernoulli beam carrying a transverse load of intensity `load_per_length`
+/// `w` (N/m) over its full span `length` `L` (m), with Young's modulus
+/// `youngs_modulus` `E` (Pa) and section second moment of area `second_moment_area`
+/// `I` (m⁴).
+///
+/// This is the *distributed-load* slope companion to the point-load
+/// [`simply_supported_end_slope`] (`P·L²/(16EI)`) and the rotational companion to
+/// the UDL mid-span deflection [`simply_supported_udl_center_deflection`]
+/// (`5wL⁴/(384EI)`); the two UDL quantities are locked by `δ_centre = (5/16)·L·θ`.
+/// With it the analytic slope set spans both support conditions and both load
+/// types. The slope grows linearly with `w` (sign-preserving), with the *cube* of
+/// the span `L`, and falls inversely with the flexural rigidity `E·I`. Returns `0`
+/// for non-physical input (`w` non-finite, or `E`, `I`, or `L` non-positive or
+/// non-finite).
+pub fn simply_supported_udl_end_slope(
+    load_per_length: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load_per_length.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load_per_length * length.powi(3) / (24.0 * youngs_modulus * second_moment_area)
+}
+
 /// Errors from the native 3D beam solver.
 #[derive(Debug, Error)]
 pub enum BeamSolverError {
@@ -1961,6 +1996,46 @@ mod tests {
         assert_eq!(simply_supported_udl_center_deflection(w, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_udl_center_deflection(f64::NAN, l, e, i), 0.0); // non-finite w
         assert_eq!(simply_supported_udl_center_deflection(w, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn simply_supported_udl_end_slope_matches_closed_form() {
+        // Worked point: w = 1 kN/m UDL on a 4 m simply-supported steel beam, E = 200
+        // GPa, I = 1e-6 m⁴ → θ = w·L³/(24·E·I) = 64000/4.8e6 = 1/75 rad.
+        let (w, l, e, i) = (1000.0, 4.0, 200.0e9, 1.0e-6);
+        let theta = simply_supported_udl_end_slope(w, l, e, i);
+        assert!((theta - 1.0 / 75.0).abs() / theta < 1e-12, "θ = 1/75 rad, got {theta}");
+        // Linear in w (sign-preserving); cubic in span; inverse in E·I.
+        assert!((simply_supported_udl_end_slope(2.0 * w, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
+        assert!((simply_supported_udl_end_slope(-w, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
+        assert!((simply_supported_udl_end_slope(w, 2.0 * l, e, i) - 8.0 * theta).abs() / theta < 1e-12, "L³ scaling");
+        assert!((simply_supported_udl_end_slope(w, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
+        assert!((simply_supported_udl_end_slope(w, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        // Cross-check (a) tying it to the UDL centre deflection #206: δ = (5/16)·L·θ.
+        for &(ww, ll) in &[(1000.0_f64, 4.0_f64), (300.0, 1.5), (-750.0, 3.0)] {
+            let slope = simply_supported_udl_end_slope(ww, ll, e, i);
+            let defl = simply_supported_udl_center_deflection(ww, ll, e, i);
+            assert!(
+                (defl - 5.0 / 16.0 * ll * slope).abs() / defl.abs() < 1e-12,
+                "δ = (5/16)·L·θ at w={ww}, L={ll}"
+            );
+        }
+        // Cross-check (b) tying it to the point-load end slope #218: the same TOTAL
+        // load W = w·L spread as a UDL rotates the supports to 2/3 of the point case.
+        for &(ww, ll) in &[(1000.0_f64, 4.0_f64), (300.0, 1.5), (-750.0, 3.0)] {
+            let udl = simply_supported_udl_end_slope(ww, ll, e, i);
+            let point = simply_supported_end_slope(ww * ll, ll, e, i);
+            assert!(
+                (udl - 2.0 / 3.0 * point).abs() / udl.abs() < 1e-12,
+                "θ_udl = (2/3)·θ_point(W=w·L) at w={ww}, L={ll}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_udl_end_slope(w, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(simply_supported_udl_end_slope(w, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(simply_supported_udl_end_slope(w, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(simply_supported_udl_end_slope(f64::NAN, l, e, i), 0.0); // non-finite w
+        assert_eq!(simply_supported_udl_end_slope(w, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]

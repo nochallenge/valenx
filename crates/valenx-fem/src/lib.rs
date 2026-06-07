@@ -146,7 +146,7 @@ pub use beam::{
     beam_angle_of_twist, beam_axial_extension, cantilever_tip_deflection, cantilever_tip_slope,
     cantilever_udl_tip_deflection, cantilever_udl_tip_slope, euler_bernoulli_beam_frequency,
     simply_supported_center_deflection, simply_supported_end_slope,
-    simply_supported_udl_center_deflection, solve_beam_modal,
+    simply_supported_udl_center_deflection, simply_supported_udl_end_slope, solve_beam_modal,
     solve_beam_static, BeamConstraint, BeamElement, BeamLoad, BeamModalSolution, BeamMode,
     BeamSection, BeamSolution, BeamSolverError,
 };
