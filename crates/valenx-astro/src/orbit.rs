@@ -166,9 +166,51 @@ pub fn escape_speed(radius: f64) -> Result<f64, AstroError> {
     Ok((2.0 * MU_EARTH / radius).sqrt())
 }
 
+/// The **Keplerian orbital period** `T = 2π·√(a³/μ)` (s) of an orbit with semi-major
+/// axis `semi_major_axis` `a` (m) about Earth — Kepler's third law, the time to
+/// complete one revolution. For a circular orbit (`a = r`) it is equivalently
+/// `2π·r / v_circ`; it grows with the 3/2 power of the semi-major axis, so a 400 km
+/// LEO takes ≈ 92 min while a geostationary orbit takes a sidereal day.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `semi_major_axis` is non-finite or
+/// non-positive.
+pub fn orbital_period(semi_major_axis: f64) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite() || semi_major_axis <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "orbital_period semi_major_axis must be finite and > 0",
+        ));
+    }
+    Ok(2.0 * std::f64::consts::PI * (semi_major_axis.powi(3) / MU_EARTH).sqrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orbital_period_matches_kepler_third_law() {
+        use std::f64::consts::PI;
+        // Threads circular_speed: for a circular orbit T = 2π·r / v_circ = 2π√(r³/μ).
+        for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2e7] {
+            let t = orbital_period(r).unwrap();
+            let from_speed = 2.0 * PI * r / circular_speed(r).unwrap();
+            assert!((t - from_speed).abs() / t < 1e-12, "T = 2πr/v_circ");
+        }
+        // Kepler's third law: T ∝ a^(3/2), so quadrupling a multiplies T by 8.
+        let a = R_EARTH + 1.0e6;
+        let ta = orbital_period(a).unwrap();
+        let t4a = orbital_period(4.0 * a).unwrap();
+        assert!((t4a - 8.0 * ta).abs() / ta < 1e-12, "T(4a) = 8·T(a)");
+        // A 400 km LEO orbits in ≈ 92 min (≈ 5544 s).
+        let leo = orbital_period(R_EARTH + 400_000.0).unwrap();
+        assert!((leo - 5544.0).abs() < 60.0, "LEO period ≈ 92 min, got {leo} s");
+        // Non-physical semi-major axis → error.
+        assert!(orbital_period(0.0).is_err());
+        assert!(orbital_period(-1.0).is_err());
+        assert!(orbital_period(f64::NAN).is_err());
+    }
 
     #[test]
     fn escape_speed_is_root_two_times_circular() {
