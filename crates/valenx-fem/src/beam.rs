@@ -478,6 +478,40 @@ pub fn fixed_fixed_center_deflection(
     load * length.powi(3) / (192.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **fixed-fixed (clamped–clamped) beam mid-span deflection under a
+/// uniformly distributed load** `δ = w·L⁴/(384·E·I)` (m) — the mid-span deflection
+/// of a slender Euler–Bernoulli beam **built in at both ends** carrying a transverse
+/// load of intensity `load_per_length` `w` (N/m) over its full span `length` `L`
+/// (m), with Young's modulus `youngs_modulus` `E` (Pa) and section second moment of
+/// area `second_moment_area` `I` (m⁴).
+///
+/// It is the distributed-load companion to the point-load
+/// [`fixed_fixed_center_deflection`] (`P·L³/192EI`), and the clamped–clamped
+/// counterpart to the pinned–pinned [`simply_supported_udl_center_deflection`]
+/// (`5·w·L⁴/384EI`). Clamping *both* ends makes the span exactly **5× stiffer** at
+/// mid-span than pinning both under the same UDL. The deflection is linear (and
+/// sign-preserving) in `w`, grows with the *fourth* power of the span, and falls
+/// inversely with the flexural rigidity `E·I`. Returns `0` for non-physical input
+/// (`w` non-finite, or `E`, `I`, or `L` non-positive or non-finite).
+pub fn fixed_fixed_udl_center_deflection(
+    load_per_length: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load_per_length.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load_per_length * length.powi(4) / (384.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -2328,6 +2362,40 @@ mod tests {
         assert_eq!(simply_supported_end_slope(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_end_slope(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(simply_supported_end_slope(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn fixed_fixed_udl_center_deflection_is_the_stiff_clamped_clamped_udl() {
+        // Worked point: w = 1 kN/m UDL on a 4 m clamped–clamped steel beam,
+        // E = 200 GPa, I = 1e-6 m⁴ → δ = w·L⁴/(384·E·I) = 256000/7.68e7 = 1/300 m.
+        let d = fixed_fixed_udl_center_deflection(1000.0, 4.0, 200.0e9, 1.0e-6);
+        assert!((d - 1.0 / 300.0).abs() / (1.0 / 300.0) < 1e-12, "worked δ = 1/300 m, got {d}");
+
+        // STRONG cross-check threading simply_supported_udl_center_deflection: clamping
+        // both ends is exactly 5× stiffer at mid-span than pinning both under a UDL
+        // (w·L⁴/384EI vs 5·w·L⁴/384EI), so δ_ff = δ_ss/5.
+        for &(w, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 70.0e9, 4.2e-7),
+            (8200.0, 0.8, 120.0e9, 9.0e-8),
+        ] {
+            let ff = fixed_fixed_udl_center_deflection(w, l, e, i);
+            let ss = simply_supported_udl_center_deflection(w, l, e, i);
+            assert!((ff - ss / 5.0).abs() <= 1e-12 * (ss / 5.0).abs(), "δ_ff_udl = δ_ss_udl/5");
+            // Sign-preserving: a downward (negative) load gives a downward deflection.
+            assert!(ff * w > 0.0, "deflection follows the load sign");
+        }
+
+        // Quartic in span: doubling L multiplies the deflection by 16.
+        let d1 = fixed_fixed_udl_center_deflection(1000.0, 1.0, 200.0e9, 1.0e-6);
+        let d2 = fixed_fixed_udl_center_deflection(1000.0, 2.0, 200.0e9, 1.0e-6);
+        assert!((d2 - 16.0 * d1).abs() / (16.0 * d1) < 1e-12, "δ ∝ L⁴");
+
+        // Non-physical input → 0.
+        assert_eq!(fixed_fixed_udl_center_deflection(f64::NAN, 4.0, 200.0e9, 1.0e-6), 0.0); // w NaN
+        assert_eq!(fixed_fixed_udl_center_deflection(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0); // L = 0
+        assert_eq!(fixed_fixed_udl_center_deflection(1000.0, 4.0, -1.0, 1.0e-6), 0.0); // E < 0
+        assert_eq!(fixed_fixed_udl_center_deflection(1000.0, 4.0, 200.0e9, 0.0), 0.0); // I = 0
     }
 
     #[test]
