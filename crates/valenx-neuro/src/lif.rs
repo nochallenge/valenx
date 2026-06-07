@@ -145,6 +145,26 @@ pub fn lif_rheobase_current(resistance: f64, v_threshold: f64) -> f64 {
     v_threshold / resistance
 }
 
+/// The **leaky integrate-and-fire steady-state potential** `V∞ = R·I` (V) — the
+/// passive subthreshold depolarisation the leaky membrane relaxes to under a
+/// constant current `current` `I` (A) through input resistance `resistance` `R`
+/// (Ω), measured from the `0` reset/rest level.
+///
+/// It is the `t → ∞` asymptote of the charging trajectory
+/// [`lif_membrane_potential`] (`V(t) = R·I·(1 − e^(−t/τ)) → R·I`) and the quantity
+/// the rheobase is defined against: firing needs `V∞ > V_th`, so the
+/// [`lif_rheobase_current`] `I_rh = V_th/R` is exactly the current whose steady
+/// state sits *at* the threshold. Linear in both the current and the resistance,
+/// and sign-preserving (a hyperpolarising current gives a negative `V∞`). Returns
+/// `0` for non-physical input (`R` non-positive, or either argument non-finite),
+/// matching [`lif_membrane_potential`].
+pub fn lif_steady_state_potential(current: f64, resistance: f64) -> f64 {
+    if !current.is_finite() || !resistance.is_finite() || resistance <= 0.0 {
+        return 0.0;
+    }
+    resistance * current
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +295,35 @@ mod tests {
         assert!(lif_rheobase_current(r, 0.0).is_infinite()); // V_th ≤ 0
         assert!(lif_rheobase_current(f64::NAN, v_th).is_infinite()); // non-finite R
         assert!(lif_rheobase_current(r, f64::INFINITY).is_infinite()); // non-finite V_th
+    }
+
+    #[test]
+    fn lif_steady_state_potential_is_the_charging_asymptote_and_rheobase_basis() {
+        // Worked point: I = 0.5 nA through R = 100 MΩ → V∞ = R·I = 0.05 V.
+        let (i, r) = (0.5e-9, 100.0e6);
+        let v_inf = lif_steady_state_potential(i, r);
+        assert!((v_inf - 0.05).abs() < 1e-12, "V∞ = R·I = 0.05 V, got {v_inf}");
+        // Linear in I and in R; sign-preserving (a hyperpolarising current → −V∞).
+        assert!((lif_steady_state_potential(2.0 * i, r) - 2.0 * v_inf).abs() < 1e-12, "∝ I");
+        assert!((lif_steady_state_potential(i, 3.0 * r) - 3.0 * v_inf).abs() < 1e-12, "∝ R");
+        assert!((lif_steady_state_potential(-i, r) + v_inf).abs() < 1e-12, "sign-preserving");
+        // STRONG cross-check (1): it is the t→∞ limit of the charging curve
+        // lif_membrane_potential — at t = 20·τ the transient e^(−20) ≈ 2e-9 has died.
+        let tau = 10.0e-3;
+        let v_late = lif_membrane_potential(i, r, tau, 20.0 * tau);
+        assert!(
+            (v_inf - v_late).abs() / v_inf < 1e-7,
+            "V∞ = lim_t lif_membrane_potential: {v_inf} vs {v_late}"
+        );
+        // STRONG cross-check (2): the rheobase identity V∞(I_rh) = V_th — the rheobase
+        // current is exactly the one whose steady state sits at threshold.
+        let v_th = 0.015; // 15 mV threshold
+        let i_rh = lif_rheobase_current(r, v_th);
+        assert!((lif_steady_state_potential(i_rh, r) - v_th).abs() < 1e-12, "V∞(I_rh) = V_th");
+        // Non-physical input → 0 (matching lif_membrane_potential).
+        assert_eq!(lif_steady_state_potential(i, 0.0), 0.0); // R ≤ 0
+        assert_eq!(lif_steady_state_potential(i, -1.0e6), 0.0); // R < 0
+        assert_eq!(lif_steady_state_potential(f64::NAN, r), 0.0); // non-finite I
+        assert_eq!(lif_steady_state_potential(i, f64::INFINITY), 0.0); // non-finite R
     }
 }
