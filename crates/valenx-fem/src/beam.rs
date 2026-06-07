@@ -235,6 +235,44 @@ pub fn cantilever_udl_tip_deflection(
     load_per_length * length.powi(4) / (8.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **strain energy of a uniformly-loaded cantilever**
+/// `U = w²·L⁵/(40·E·I)` (J) — the elastic energy stored in bending when a slender
+/// Euler–Bernoulli cantilever of span `length` `L` (m), Young's modulus
+/// `youngs_modulus` `E` (Pa) and section second moment of area `second_moment_area`
+/// `I` (m⁴) carries a uniformly distributed transverse load of intensity
+/// `load_per_length` `w` (N/m) over its full length.
+///
+/// It extends the energy-method family (Castigliano / Clapeyron) into the
+/// distributed-load case — the UDL companion to the point-load
+/// [`cantilever_point_load_strain_energy`] — and is the bending-energy integral
+/// `U = ∫₀^L M²/(2EI) dx` with the cantilever-UDL moment `M(x) = w(L−x)²/2`. Because
+/// the load is distributed, the tip deflection alone does not give the work
+/// directly, but `U = (1/5)·(w·L)·δ_tip` ties it to
+/// [`cantilever_udl_tip_deflection`] `δ = wL⁴/(8EI)`. The energy grows with the
+/// *square* of the load intensity (so it is sign-independent), the *fifth* power of
+/// the span, and falls inversely with the flexural rigidity `E·I`. Returns `0` for
+/// non-physical input (`w` non-finite, or `E`, `I`, or `L` non-positive or
+/// non-finite).
+pub fn cantilever_udl_strain_energy(
+    load_per_length: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load_per_length.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load_per_length * load_per_length * length.powi(5)
+        / (40.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **cantilever tip slope under a uniformly distributed load**
 /// `θ = w·L³/(6·E·I)` (rad) — the end-rotation of a slender Euler–Bernoulli
 /// cantilever carrying a transverse load of intensity `load_per_length` `w` (N/m)
@@ -1850,6 +1888,49 @@ mod tests {
         assert_eq!(cantilever_udl_tip_deflection(w, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_udl_tip_deflection(f64::NAN, l, e, i), 0.0); // non-finite w
         assert_eq!(cantilever_udl_tip_deflection(w, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn cantilever_udl_strain_energy_matches_the_moment_integral() {
+        // Worked point: w = 1 kN/m UDL on a 2 m steel cantilever, E = 200 GPa,
+        // I = 1e-6 m⁴ → U = w²·L⁵/(40·E·I) = 3.2e7/8e6 = 4.0 J.
+        let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let u = cantilever_udl_strain_energy(w, l, e, i);
+        assert!((u - 4.0).abs() / u < 1e-9, "U = 4.0 J, got {u}");
+        // Quadratic in w → SIGN-INDEPENDENT; L⁵ scaling; inverse in E·I.
+        assert!((cantilever_udl_strain_energy(2.0 * w, l, e, i) - 4.0 * u).abs() / u < 1e-9, "w² scaling");
+        assert!((cantilever_udl_strain_energy(-w, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
+        assert!((cantilever_udl_strain_energy(w, 2.0 * l, e, i) - 32.0 * u).abs() / u < 1e-9, "L⁵ scaling");
+        assert!((cantilever_udl_strain_energy(w, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
+        assert!((cantilever_udl_strain_energy(w, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        // STRONG cross-check (1): a first-principles NUMERICAL Riemann integral of the
+        // bending energy ∫₀^L M(x)²/(2EI) dx with the cantilever-UDL moment
+        // M(x) = w(L−x)²/2 — an independent derivation of the closed form.
+        let n = 100_000;
+        let dx = l / n as f64;
+        let mut energy_sum = 0.0;
+        for k in 0..n {
+            let x = (k as f64 + 0.5) * dx; // midpoint
+            let m = w * (l - x) * (l - x) / 2.0;
+            energy_sum += m * m / (2.0 * e * i) * dx;
+        }
+        assert!((u - energy_sum).abs() / u < 1e-5, "U = ∫M²/(2EI)dx numerically: {u} vs {energy_sum}");
+        // STRONG cross-check (2): U = (1/5)·(w·L)·δ_tip, threading the independent
+        // cantilever_udl_tip_deflection (δ = wL⁴/(8EI)).
+        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (300.0, 1.5), (-750.0, 3.0)] {
+            let energy = cantilever_udl_strain_energy(ww, ll, e, i);
+            let from_defl = 0.2 * ww * ll * cantilever_udl_tip_deflection(ww, ll, e, i);
+            assert!(
+                (energy - from_defl).abs() / energy < 1e-12,
+                "U = (1/5)·wL·δ_tip at w={ww}, L={ll}: {energy} vs {from_defl}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(cantilever_udl_strain_energy(w, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(cantilever_udl_strain_energy(w, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(cantilever_udl_strain_energy(w, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(cantilever_udl_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite w
+        assert_eq!(cantilever_udl_strain_energy(w, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
