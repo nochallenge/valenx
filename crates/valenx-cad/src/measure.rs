@@ -305,6 +305,81 @@ pub fn solid_bounding_box(solid: &Solid) -> Result<([f64; 3], [f64; 3]), CadErro
     solid_bounding_box_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **centroidal radius of gyration** `k = √(⟨r²⟩ − |c|²)` (model units) of a
+/// solid — the root-mean-square distance of the solid's volume from its centre of
+/// mass, the length scale that sets its rotational inertia (`I ≈ V·k²` at unit
+/// density). Computed at tessellation tolerance `tol`.
+///
+/// It completes the mass-property suite after [`solid_volume_tol`],
+/// [`solid_area_tol`], [`solid_centroid_tol`] and [`solid_bounding_box_tol`]. The
+/// divergence-theorem volume integral is extended with the diagonal second moments
+/// `∫x², ∫y², ∫z² dV` (the tetrahedron covariance `(V/20)(Σpᵢ² + (Σpᵢ)²)` per axis),
+/// then the centroid offset is removed by the parallel-axis theorem. Exact for a
+/// flat-faced solid, converging for a curved one. For an `Lx×Ly×Lz` box it is
+/// `√((Lx²+Ly²+Lz²)/12)`; for a solid sphere of radius `R`, `√(3/5)·R`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or if
+/// the boundary encloses no volume (a degenerate / empty solid).
+pub fn solid_radius_of_gyration_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let poly = match solid {
+        Solid::Brep(b) => brep_polygon(b, tol)?,
+        Solid::Mesh(m) => mesh_to_polygon(m),
+    };
+    let positions = poly.positions();
+    let mut vol = 0.0;
+    let mut first = [0.0_f64; 3]; // ∫x, ∫y, ∫z dV (→ centroid)
+    let mut second = [0.0_f64; 3]; // ∫x², ∫y², ∫z² dV about the origin
+    for tri in poly.tri_faces() {
+        let a = positions[tri[0].pos];
+        let b = positions[tri[1].pos];
+        let c = positions[tri[2].pos];
+        let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+            + a.z * (b.x * c.y - b.y * c.x))
+            / 6.0;
+        vol += v;
+        first[0] += v * (a.x + b.x + c.x) / 4.0;
+        first[1] += v * (a.y + b.y + c.y) / 4.0;
+        first[2] += v * (a.z + b.z + c.z) / 4.0;
+        second[0] += v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + (a.x + b.x + c.x).powi(2));
+        second[1] += v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + (a.y + b.y + c.y).powi(2));
+        second[2] += v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + (a.z + b.z + c.z).powi(2));
+    }
+    for quad in poly.quad_faces() {
+        for tri in [[quad[0], quad[1], quad[2]], [quad[0], quad[2], quad[3]]] {
+            let a = positions[tri[0].pos];
+            let b = positions[tri[1].pos];
+            let c = positions[tri[2].pos];
+            let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+                + a.z * (b.x * c.y - b.y * c.x))
+                / 6.0;
+            vol += v;
+            first[0] += v * (a.x + b.x + c.x) / 4.0;
+            first[1] += v * (a.y + b.y + c.y) / 4.0;
+            first[2] += v * (a.z + b.z + c.z) / 4.0;
+            second[0] += v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + (a.x + b.x + c.x).powi(2));
+            second[1] += v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + (a.y + b.y + c.y).powi(2));
+            second[2] += v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + (a.z + b.z + c.z).powi(2));
+        }
+    }
+    if vol.abs() < 1e-12 {
+        return Err(CadError::Tessellation(
+            "solid encloses no volume; radius of gyration undefined".to_string(),
+        ));
+    }
+    // ⟨r²⟩ about the origin, minus the centroid offset (parallel-axis theorem).
+    let mean_sq = (second[0] + second[1] + second[2]) / vol;
+    let cen_sq = (first[0] * first[0] + first[1] * first[1] + first[2] * first[2]) / (vol * vol);
+    Ok((mean_sq - cen_sq).max(0.0).sqrt())
+}
+
+/// Centroidal radius of gyration of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_radius_of_gyration_tol`].
+pub fn solid_radius_of_gyration(solid: &Solid) -> Result<f64, CadError> {
+    solid_radius_of_gyration_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Weld a polygon mesh's triangle indices onto a deduplicated vertex
 /// set, so coincident positions collapse to one index.
 ///
@@ -535,6 +610,28 @@ mod tests {
         // A box is genus-0: V−E+F = 8−12+6 = 2.
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         assert_eq!(euler_characteristic(&cube), Some(2));
+    }
+
+    #[test]
+    fn solid_radius_of_gyration_matches_the_box_formula() {
+        use crate::primitives::sphere;
+        // For an Lx×Ly×Lz box the centroidal radius of gyration is
+        // k = √((Lx²+Ly²+Lz²)/12) — exact for a flat-faced solid (textbook formula,
+        // independent of the divergence-theorem integral the impl uses).
+        let k = solid_radius_of_gyration(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
+        let expect = ((2.0_f64 * 2.0 + 4.0 * 4.0 + 6.0 * 6.0) / 12.0).sqrt();
+        assert!((k - expect).abs() / expect < 1e-9, "box k = √(56/12) = {expect}, got {k}");
+
+        // A solid sphere of radius R has k = √(3/5)·R about its centre.
+        let r = 2.0;
+        let ks = solid_radius_of_gyration(&sphere(r).unwrap()).unwrap();
+        let expect_s = (3.0_f64 / 5.0).sqrt() * r;
+        assert!((ks - expect_s).abs() / expect_s < 1e-3, "sphere k = √(3/5)·R = {expect_s}, got {ks}");
+
+        // k is a length: scaling the box ×2 scales k ×2.
+        let k1 = solid_radius_of_gyration(&box_solid(1.0, 1.0, 1.0).unwrap()).unwrap();
+        let k2 = solid_radius_of_gyration(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap();
+        assert!((k2 - 2.0 * k1).abs() / (2.0 * k1) < 1e-9, "k ∝ length");
     }
 
     #[test]
