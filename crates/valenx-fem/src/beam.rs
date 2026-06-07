@@ -488,6 +488,24 @@ pub fn bending_stress(moment: f64, distance_from_neutral_axis: f64, second_momen
     moment * distance_from_neutral_axis / second_moment_area
 }
 
+/// The **elastic section modulus** `S = I/c` (m³) — the cross-section property (the `W`
+/// or `Z` of structural beam tables) that turns a bending moment directly into the peak
+/// fibre stress, `σ_max = M/S`. `second_moment_area` `I` (m⁴) is the section's second
+/// moment of area and `extreme_fiber_distance` `c` (m) the distance from the neutral
+/// axis to the most-stressed (outermost) fibre. A larger `S` carries a given moment at a
+/// lower stress, so it is the single number beam selection optimises. Returns `0` for
+/// non-physical input (`I` or `c` non-positive or non-finite).
+pub fn elastic_section_modulus(second_moment_area: f64, extreme_fiber_distance: f64) -> f64 {
+    if !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+        || !extreme_fiber_distance.is_finite()
+        || extreme_fiber_distance <= 0.0
+    {
+        return 0.0;
+    }
+    second_moment_area / extreme_fiber_distance
+}
+
 /// The analytic **simply-supported (pinned–pinned) mid-span deflection**
 /// `δ = P·L³/(48·E·I)` (m) of a slender Euler–Bernoulli beam under a *central*
 /// transverse point load `load` `P` (N) — span `length` `L` (m), Young's modulus
@@ -2373,6 +2391,43 @@ mod tests {
         let analytic = beam_axial_extension(f, l, mat.youngs_modulus, section.area);
         let rel = (sol.translation[1][0] - analytic).abs() / analytic;
         assert!(rel < 1e-6, "axial δ {} vs {analytic}", sol.translation[1][0]);
+    }
+
+    #[test]
+    fn elastic_section_modulus_threads_the_flexure_formula() {
+        // Worked: S = I/c = 1e-6 / 0.05 = 2e-5 m³.
+        let s = elastic_section_modulus(1.0e-6, 0.05);
+        assert!((s - 2.0e-5).abs() <= 1e-12 * 2.0e-5, "S = I/c, got {s}");
+
+        // Threads bending_stress: the peak stress is the moment over the section modulus.
+        for &(m, c, i) in &[
+            (2000.0_f64, 0.05_f64, 1.0e-6_f64),
+            (-450.0, 0.02, 4.2e-7),
+            (8200.0, 0.12, 9.0e-8),
+        ] {
+            let from_modulus = m / elastic_section_modulus(i, c);
+            assert!(
+                (bending_stress(m, c, i) - from_modulus).abs() <= 1e-12 * from_modulus.abs(),
+                "σ_max = M/S"
+            );
+        }
+
+        // Linear in I, inverse in c.
+        let base = elastic_section_modulus(1.0e-6, 0.05);
+        assert!(
+            (elastic_section_modulus(2.0e-6, 0.05) - 2.0 * base).abs() <= 1e-12 * base,
+            "linear in I"
+        );
+        assert!(
+            (elastic_section_modulus(1.0e-6, 0.10) - 0.5 * base).abs() <= 1e-12 * base,
+            "inverse in c"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(elastic_section_modulus(0.0, 0.05), 0.0);
+        assert_eq!(elastic_section_modulus(1.0e-6, 0.0), 0.0);
+        assert_eq!(elastic_section_modulus(1.0e-6, -0.05), 0.0);
+        assert_eq!(elastic_section_modulus(f64::NAN, 0.05), 0.0);
     }
 
     #[test]
