@@ -595,6 +595,29 @@ pub fn rayleigh_flow_temperature_ratio(mach: f64, gamma: f64) -> f64 {
     ratio * ratio
 }
 
+/// The **Fanno-flow static temperature ratio** `T/T* = (γ+1)/(2 + (γ−1)·M²)` at
+/// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the static
+/// temperature referenced to the sonic (choked) state `T*` for **Fanno flow**:
+/// steady, adiabatic, constant-area flow with **wall friction**. It is the
+/// friction-driven dual of the heat-addition
+/// [`rayleigh_flow_temperature_ratio`]: friction, like heat addition, drives the
+/// Mach number monotonically toward `1`, where the duct thermally/frictionally
+/// chokes.
+///
+/// Because Fanno flow is adiabatic the **stagnation** temperature `T₀` is
+/// conserved, so `T/T*` is fixed entirely by the isentropic static-to-total ratios
+/// at `M` and at the sonic reference — `T/T* = (T₀/T*)/(T₀/T)` with
+/// `T₀/T* = (γ+1)/2`. It is `(γ+1)/2` at rest (`M = 0`, the hottest static
+/// temperature on a Fanno line), falls monotonically through `1` at the sonic
+/// point (`M = 1`), and `→ 0` as `M → ∞`. Returns `0` for non-physical input
+/// (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn fanno_flow_temperature_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (gamma + 1.0) / (2.0 + (gamma - 1.0) * mach * mach)
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1763,5 +1786,45 @@ mod tests {
         assert_eq!(rayleigh_flow_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn fanno_flow_temperature_ratio_is_the_friction_dual_of_rayleigh() {
+        let g = 1.4;
+        // Sonic reference: T/T* = 1 exactly at M = 1.
+        assert!((fanno_flow_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        // Hottest static temperature is at rest: T/T* = (γ+1)/2 at M = 0.
+        assert!(
+            (fanno_flow_temperature_ratio(0.0, g) - (g + 1.0) / 2.0).abs() < 1e-12,
+            "M=0 → (γ+1)/2"
+        );
+        // STRONG cross-check threading isentropic_stagnation_temperature_ratio: Fanno
+        // flow is ADIABATIC ⇒ T0 constant ⇒ T/T* = (T0/T*)/(T0/T) =
+        // isentropic(1, γ)/isentropic(M, γ). Two different closed forms (a single
+        // rational vs a ratio of two affine-in-M² terms) — non-tautological.
+        for &gam in &[1.4_f64, 1.3, 1.667] {
+            for &m in &[0.0_f64, 0.3, 0.5, 0.845, 1.0, 2.0, 4.0] {
+                let expected = isentropic_stagnation_temperature_ratio(1.0, gam)
+                    / isentropic_stagnation_temperature_ratio(m, gam);
+                assert!(
+                    (fanno_flow_temperature_ratio(m, gam) - expected).abs() < 1e-12,
+                    "T/T* = T0T(1)/T0T(M) at M={m}, γ={gam}"
+                );
+            }
+        }
+        // Monotonic decreasing in M — friction always drives the flow toward sonic.
+        let mut prev = f64::INFINITY;
+        for &m in &[0.0_f64, 0.5, 1.0, 2.0, 5.0, 20.0] {
+            let t = fanno_flow_temperature_ratio(m, g);
+            assert!(t < prev, "T/T* decreases with M at M={m} ({t} !< {prev})");
+            prev = t;
+        }
+        // Vanishes in the high-Mach limit.
+        assert!(fanno_flow_temperature_ratio(1.0e4, g) < 1e-6, "large M → 0");
+        // Non-physical input → 0.
+        assert_eq!(fanno_flow_temperature_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(fanno_flow_temperature_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(fanno_flow_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
+        assert_eq!(fanno_flow_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
     }
 }
