@@ -462,6 +462,40 @@ pub fn normal_shock_stagnation_pressure_ratio(mach: f64, gamma: f64) -> f64 {
     density_term * pressure_term
 }
 
+/// The **Rayleigh supersonic pitot ratio** `p₀₂/p₁` — the total pressure a pitot
+/// probe reads relative to the freestream *static* pressure at upstream Mach `mach`
+/// `M₁` (heat-capacity ratio `gamma` `γ`). It is the working formula of a
+/// supersonic pitot tube: above `M = 1` the probe sits behind its own detached bow
+/// shock, so it senses the *post-shock* total pressure, not the freestream total —
+/// the Rayleigh pitot formula
+///
+/// ```text
+///   p₀₂/p₁ = [ (γ+1)M₁²/2 ]^(γ/(γ−1)) · [ (γ+1)/(2γM₁² − (γ−1)) ]^(1/(γ−1))   (M₁ > 1)
+/// ```
+///
+/// — what inverts a measured pitot-to-static ratio back into a supersonic Mach
+/// number. By construction it is the product of the across-shock total-pressure
+/// recovery [`normal_shock_stagnation_pressure_ratio`] and the post-shock isentropic
+/// rise [`isentropic_stagnation_pressure_ratio`]: `p₀₂/p₁ = (p₀₂/p₀₁)·(p₀₁/p₁)`. For
+/// **subsonic** flow (`M ≤ 1`) no shock forms and it reduces to the ordinary
+/// isentropic total-to-static ratio [`isentropic_stagnation_pressure_ratio`]; at
+/// `M = 2` (`γ = 1.4`) a pitot reads ~5.64× the static pressure. Returns `1.0` for
+/// non-physical input (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn rayleigh_pitot_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || gamma <= 1.0 || mach < 0.0 {
+        return 1.0;
+    }
+    if mach <= 1.0 {
+        // Subsonic: no bow shock — the pitot reads the isentropic total pressure.
+        return isentropic_stagnation_pressure_ratio(mach, gamma);
+    }
+    let m2 = mach * mach;
+    let total_term = ((gamma + 1.0) * m2 / 2.0).powf(gamma / (gamma - 1.0));
+    let shock_term =
+        ((gamma + 1.0) / (2.0 * gamma * m2 - (gamma - 1.0))).powf(1.0 / (gamma - 1.0));
+    total_term * shock_term
+}
+
 /// The **induced-drag coefficient** `C_Di = C_L² / (π·e·AR)` of a finite wing
 /// (Prandtl lifting-line theory) — the unavoidable "drag-due-to-lift" that comes
 /// with making lift at all. A wing of finite aspect ratio `aspect_ratio` `AR`
@@ -1451,5 +1485,40 @@ mod tests {
         assert_eq!(normal_shock_stagnation_pressure_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(normal_shock_stagnation_pressure_ratio(-1.0, 1.4), 1.0);
         assert_eq!(normal_shock_stagnation_pressure_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn rayleigh_pitot_ratio_matches_supersonic_pitot_tables() {
+        let g = 1.4;
+        // Subsonic: no bow shock → the pitot reads the isentropic total-to-static
+        // ratio (continuous with the supersonic branch at M = 1).
+        for m in [0.3_f64, 0.7, 1.0] {
+            assert!(
+                (rayleigh_pitot_ratio(m, g) - isentropic_stagnation_pressure_ratio(m, g)).abs()
+                    < 1e-12,
+                "subsonic pitot = isentropic at M={m}"
+            );
+        }
+        // Standard supersonic-pitot table points (γ = 1.4): M=2 → 5.640, M=3 → 12.06.
+        assert!((rayleigh_pitot_ratio(2.0, g) - 5.640).abs() < 1e-2, "M=2 → 5.640");
+        assert!((rayleigh_pitot_ratio(3.0, g) - 12.061).abs() < 1e-2, "M=3 → 12.06");
+        // Monotonically increasing with M (a pitot reads ever-higher overpressure).
+        assert!(rayleigh_pitot_ratio(1.5, g) < rayleigh_pitot_ratio(2.5, g), "rises with M");
+        // STRONG cross-check: p₀₂/p₁ = (p₀₂/p₀₁)·(p₀₁/p₁) — the across-shock total
+        // recovery (#205) times the post-shock isentropic rise (#163), for several
+        // M > 1. The impl uses the combined [(γ+1)M²/2]^… closed form; the check
+        // composes the two independent stagnation-ratio fns (different expansions).
+        for m in [1.2_f64, 1.5, 2.0, 3.0, 5.0] {
+            let expected = normal_shock_stagnation_pressure_ratio(m, g)
+                * isentropic_stagnation_pressure_ratio(m, g);
+            assert!(
+                (rayleigh_pitot_ratio(m, g) - expected).abs() / expected < 1e-9,
+                "p02/p1 = (p02/p01)·(p01/p1) at M={m}"
+            );
+        }
+        // Non-physical input → 1.0.
+        assert_eq!(rayleigh_pitot_ratio(2.0, 1.0), 1.0); // γ ≤ 1
+        assert_eq!(rayleigh_pitot_ratio(f64::NAN, g), 1.0);
+        assert_eq!(rayleigh_pitot_ratio(-1.0, g), 1.0);
     }
 }
