@@ -614,6 +614,26 @@ pub fn rayleigh_flow_pressure_ratio(mach: f64, gamma: f64) -> f64 {
     (1.0 + gamma) / (1.0 + gamma * mach * mach)
 }
 
+/// The **Rayleigh-flow velocity ratio** `V/V* = (1+γ)·M²/(1 + γ·M²)` at Mach number
+/// `mach` `M` and heat-capacity ratio `gamma` `γ` — the flow speed referenced to the
+/// sonic (thermally choked) state `V*` for **Rayleigh flow** (steady, frictionless,
+/// constant-area flow with **heat addition**). By continuity `ρV = ρ*V*` it is also
+/// the inverse density ratio `ρ*/ρ`.
+///
+/// It completes the Rayleigh static-state ratios alongside
+/// [`rayleigh_flow_temperature_ratio`] and [`rayleigh_flow_pressure_ratio`], and is
+/// exactly `M²·(p/p*)`. Adding heat drives the Mach number toward `1`, so the speed
+/// rises toward `V*` from below in a subsonic stream (`V/V* < 1`) and falls toward it
+/// from above in a supersonic stream (`V/V* > 1`); it is `1` at the sonic point and
+/// `0` at rest. Returns `0` for non-physical input (non-finite `M` or `γ`, `M < 0`,
+/// or `γ ≤ 1`).
+pub fn rayleigh_flow_velocity_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (1.0 + gamma) * mach * mach / (1.0 + gamma * mach * mach)
+}
+
 /// The **Fanno-flow static temperature ratio** `T/T* = (γ+1)/(2 + (γ−1)·M²)` at
 /// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the static
 /// temperature referenced to the sonic (choked) state `T*` for **Fanno flow**:
@@ -1831,6 +1851,33 @@ mod tests {
         assert_eq!(rayleigh_flow_total_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_total_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
         assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+    }
+
+    #[test]
+    fn rayleigh_flow_velocity_ratio_threads_the_pressure_ratio() {
+        let g = 1.4;
+        // Sonic reference: V/V* = 1 exactly at M = 1.
+        assert!((rayleigh_flow_velocity_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        // STRONG cross-check threading rayleigh_flow_pressure_ratio: V/V* = M²·(p/p*).
+        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+            let expected = m * m * rayleigh_flow_pressure_ratio(m, gam);
+            assert!(
+                (rayleigh_flow_velocity_ratio(m, gam) - expected).abs() / expected < 1e-12,
+                "V/V* = M²·(p/p*) at M={m}, γ={gam}"
+            );
+        }
+        // Standard Rayleigh-table values (γ = 1.4): M=0.5 → 0.44444, M=2 → 1.45454.
+        assert!((rayleigh_flow_velocity_ratio(0.5, g) - 0.44444).abs() < 1e-3, "M=0.5 table value");
+        assert!((rayleigh_flow_velocity_ratio(2.0, g) - 1.45454).abs() < 1e-3, "M=2 table value");
+        // Monotone through the sonic point: subsonic < 1 < supersonic.
+        assert!(
+            rayleigh_flow_velocity_ratio(0.5, g) < 1.0 && rayleigh_flow_velocity_ratio(2.0, g) > 1.0,
+            "subsonic V/V* < 1 < supersonic"
+        );
+        // Non-physical input → 0.
+        assert_eq!(rayleigh_flow_velocity_ratio(-1.0, g), 0.0); // M < 0
+        assert_eq!(rayleigh_flow_velocity_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(rayleigh_flow_velocity_ratio(f64::NAN, g), 0.0); // non-finite M
     }
 
     #[test]
