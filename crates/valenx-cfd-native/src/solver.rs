@@ -765,6 +765,29 @@ impl FlowSolution {
         sum / ny as f64
     }
 
+    /// The **vorticity** `ω = ∂v/∂x − ∂u/∂y` (1/s) at the centre of cell `(i, j)` —
+    /// the local signed rate of fluid rotation, the per-cell field that
+    /// [`FlowSolution::circulation`] (`∫ω dA`) and [`FlowSolution::enstrophy`]
+    /// (`½∫ω² dA`) integrate and that [`FlowSolution::max_vorticity`] takes the peak
+    /// of. It complements the [`FlowSolution::u_at_cell`] / [`FlowSolution::v_at_cell`]
+    /// / [`FlowSolution::speed_at_cell`] accessors, exposing the rotation a user would
+    /// otherwise have to difference by hand. Computed with the same interior
+    /// central-difference stencil as those integrals; **boundary cells** (the first or
+    /// last row/column, where the centred stencil has no neighbour) return `0`,
+    /// matching the interior-only domain of `circulation`/`enstrophy`. Positive `ω` is
+    /// anticlockwise swirl; pure translation or a uniform field gives `0`, and
+    /// solid-body rotation at rate `Ω` gives `2Ω`.
+    pub fn vorticity_at_cell(&self, i: usize, j: usize) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if i == 0 || j == 0 || i + 1 >= nx || j + 1 >= ny {
+            return 0.0;
+        }
+        let (dx, dy) = (self.grid.dx(), self.grid.dy());
+        let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / (2.0 * dx);
+        let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / (2.0 * dy);
+        dv_dx - du_dy
+    }
+
     /// The total circulation `Γ = ∫ ω dA` (m²/s) over the interior cells — the
     /// signed net rotation of the flow (Kelvin's circulation theorem; by
     /// Kutta–Joukowski it ties to lift on an immersed body). Uses the same
@@ -3204,6 +3227,58 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.circulation(), 0.0);
+    }
+
+    #[test]
+    fn vorticity_at_cell_integrates_to_circulation_and_enstrophy() {
+        // Solid-body rotation u = −Ω·y, v = Ω·x → ω = ∂v/∂x − ∂u/∂y = 2Ω everywhere.
+        let omega = 2.0_f64;
+        let grid = Grid::new(6, 6, 6.0, 6.0);
+        let (dx, dy) = (grid.dx(), grid.dy());
+        let mut u = grid.u_field(); // (nx+1) × ny
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, -omega * (j as f64 + 0.5) * dy); // u_at_cell(i,j) = −Ω·y_j
+            }
+        }
+        let mut v = grid.v_field(); // nx × (ny+1)
+        for i in 0..grid.nx {
+            for fj in 0..=grid.ny {
+                v.set(i, fj, omega * (i as f64 + 0.5) * dx); // v_at_cell(i,j) = Ω·x_i
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // Each interior cell sees ω = 2Ω = 4.
+        assert!((sol.vorticity_at_cell(3, 3) - 2.0 * omega).abs() < 1e-9, "interior ω = 2Ω");
+        // Boundary cells (centred stencil unavailable) → 0.
+        assert_eq!(sol.vorticity_at_cell(0, 3), 0.0);
+        assert_eq!(sol.vorticity_at_cell(3, 0), 0.0);
+        assert_eq!(sol.vorticity_at_cell(grid.nx - 1, 3), 0.0);
+        // STRONG cross-checks: integrating the per-cell field reproduces the
+        // independently-implemented circulation (∫ω dA) and enstrophy (½∫ω² dA).
+        let mut gamma = 0.0;
+        let mut ens = 0.0;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let w = sol.vorticity_at_cell(i, j);
+                gamma += w * dx * dy;
+                ens += w * w;
+            }
+        }
+        ens *= 0.5 * dx * dy;
+        assert!((gamma - sol.circulation()).abs() / gamma.abs() < 1e-9, "Σω·dA = circulation");
+        assert!((ens - sol.enstrophy()).abs() / ens < 1e-9, "½Σω²·dA = enstrophy");
+        // Solid-body rotation: Γ = 2Ω · interior area.
+        let interior_area = (grid.nx - 2) as f64 * (grid.ny - 2) as f64 * dx * dy;
+        assert!((gamma - 2.0 * omega * interior_area).abs() / gamma < 1e-9, "Γ = 2Ω·A_interior");
     }
 
     #[test]
