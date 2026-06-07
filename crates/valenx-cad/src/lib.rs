@@ -52,7 +52,8 @@ pub use fillet::fillet_edges;
 pub use measure::{
     euler_characteristic, is_closed_solid, is_closed_solid_tol, solid_area, solid_area_tol,
     solid_bounding_box, solid_bounding_box_tol, solid_centroid, solid_centroid_tol,
-    solid_principal_moments, solid_principal_moments_tol, solid_radius_of_gyration,
+    solid_genus, solid_principal_moments, solid_principal_moments_tol,
+    solid_radius_of_gyration,
     solid_radius_of_gyration_tol, solid_volume, solid_volume_tol,
 };
 pub use primitives::{box_solid, cone, cylinder, prism, sphere, torus};
