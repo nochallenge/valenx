@@ -58,6 +58,24 @@ impl ElectrodeImpedance {
         let im = -mag_cpe * phase.sin();
         (re * re + im * im).sqrt()
     }
+
+    /// Phase angle of the total impedance `∠Z(ω) = ∠(R_a + Z_CPE)` (degrees) at
+    /// frequency `freq_hz` — the second half of the electrode's Bode response and the
+    /// companion to [`ElectrodeImpedance::magnitude_ohm`] (which forms the same
+    /// `Re`/`Im` and keeps only `|Z|`). The double-layer CPE lags the current, so the
+    /// phase is **negative** (capacitive): it tends to the bare-CPE constant `−n·90°`
+    /// at low frequency, where the reactive double layer dominates, and rises toward
+    /// `0°` (purely resistive) at high frequency, where the access-resistance plateau
+    /// `R_a` takes over. Together with the magnitude this is what an
+    /// impedance-spectroscopy sweep of the electrode reports.
+    pub fn phase_deg(&self, freq_hz: f64) -> f64 {
+        let w = 2.0 * std::f64::consts::PI * freq_hz;
+        let mag_cpe = 1.0 / (self.cpe.q * w.powf(self.cpe.n));
+        let phase = self.cpe.n * std::f64::consts::FRAC_PI_2;
+        let re = self.access_resistance_ohm() + mag_cpe * phase.cos();
+        let im = -mag_cpe * phase.sin();
+        im.atan2(re).to_degrees()
+    }
 }
 
 #[cfg(test)]
@@ -85,5 +103,42 @@ mod tests {
             (hi - r_a).abs() / r_a < 0.2,
             "high-f magnitude should approach the R_a plateau; hi={hi} R_a={r_a}"
         );
+    }
+
+    #[test]
+    fn phase_is_the_bode_companion_of_the_magnitude() {
+        use std::f64::consts::{FRAC_PI_2, PI};
+        let n = 0.9;
+        let z = ElectrodeImpedance::disk(50.0, 0.2, Cpe { q: 1.0e-5, n });
+
+        // High frequency: the CPE shorts out → the impedance is the resistive R_a
+        // plateau, so the phase → 0°.
+        assert!(z.phase_deg(1.0e9).abs() < 1e-3, "high-f phase → 0° (resistive)");
+
+        // Low frequency: the double-layer CPE dominates → the phase → the bare-CPE
+        // constant phase −n·90° (= −81° for n = 0.9).
+        let lo = z.phase_deg(1.0e-9);
+        assert!((lo - (-n * 90.0)).abs() < 1e-3, "low-f phase → −n·90°, got {lo}");
+
+        // At an arbitrary frequency: recompute Re/Im of Z = R_a + Z_CPE independently
+        // and check (i) phase_deg = atan2(Im, Re) and (ii) the (magnitude, phase) pair
+        // reconstructs that same complex impedance — tying phase_deg to the existing
+        // magnitude_ohm via |Z|·cosφ = Re and |Z|·sinφ = Im.
+        let f = 1.0e3;
+        let w = 2.0 * PI * f;
+        let mag_cpe = 1.0 / (1.0e-5 * w.powf(n));
+        let cpe_phase = n * FRAC_PI_2;
+        let re = z.access_resistance_ohm() + mag_cpe * cpe_phase.cos();
+        let im = -mag_cpe * cpe_phase.sin();
+        let phi = z.phase_deg(f);
+        assert!((phi - im.atan2(re).to_degrees()).abs() < 1e-9, "phase = atan2(Im, Re)");
+        let mag = z.magnitude_ohm(f);
+        let phi_rad = phi.to_radians();
+        assert!((mag * phi_rad.cos() - re).abs() < 1e-9, "|Z|·cosφ = Re Z");
+        assert!((mag * phi_rad.sin() - im).abs() < 1e-9, "|Z|·sinφ = Im Z");
+
+        // The double layer lags the current: phase is strictly negative and never
+        // steeper than the −n·90° CPE asymptote.
+        assert!(phi < 0.0 && phi > -n * 90.0, "capacitive lag in (−n·90°, 0°): {phi}");
     }
 }
