@@ -619,6 +619,25 @@ impl FlowSolution {
             .sum()
     }
 
+    /// The boundary-layer **shape factor** `H = δ*/θ` (dimensionless) — the ratio of
+    /// the [`FlowSolution::displacement_thickness`] to the
+    /// [`FlowSolution::momentum_thickness`] at the outlet, evaluated against edge
+    /// speed `u_ref`. It is the single number that classifies how *full* the velocity
+    /// profile is: `H ≈ 2.6` for a laminar Blasius layer, falling toward `~1.3–1.4`
+    /// as the profile fills out turbulently, and rising toward `~3.5–4` as the
+    /// near-wall flow stalls — the classic precursor of **separation**. Because
+    /// `δ* ≥ θ` always, `H ≥ 1`. It completes the boundary-layer integral-thickness
+    /// family with `δ*` and `θ`. Returns `0` when the momentum thickness is `0` (plug
+    /// flow, or a non-finite / non-positive `u_ref` or empty grid, where both
+    /// thicknesses vanish).
+    pub fn shape_factor(&self, u_ref: f64) -> f64 {
+        let theta = self.momentum_thickness(u_ref);
+        if theta.abs() < 1e-12 {
+            return 0.0;
+        }
+        self.displacement_thickness(u_ref) / theta
+    }
+
     /// Area-averaged kinetic-energy density `⟨½ρ|u|²⟩` (J/m³ = Pa) over the cell
     /// grid — the mean specific kinetic energy of the flow, in the same units as
     /// (and directly comparable to) the freestream dynamic pressure `½ρU²`.
@@ -2708,6 +2727,80 @@ mod tests {
         assert_eq!(sol.momentum_thickness(0.0), 0.0); // u_ref = 0
         assert_eq!(sol.momentum_thickness(-1.0), 0.0); // u_ref < 0
         assert_eq!(sol.momentum_thickness(f64::NAN), 0.0); // non-finite
+    }
+
+    #[test]
+    fn shape_factor_completes_the_boundary_layer_family() {
+        // EXACT anchor: a uniform half-speed profile u = U/2 (u_ref = U) → δ* = Ly/2,
+        // θ = Ly/4 (both exact, constant integrands) → H = δ*/θ = 2 exactly.
+        let (u_full, ly) = (2.0_f64, 3.0_f64);
+        let grid = Grid::new(4, 8, 4.0, ly);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 0.5 * u_full);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let h = sol.shape_factor(u_full);
+        assert!((h - 2.0).abs() < 1e-12, "uniform-half H = 2 exactly, got {h}");
+        assert!(h >= 1.0, "H ≥ 1 (δ* ≥ θ)");
+        // Sanity tie H·θ == δ* (catches a ratio inversion), threading #232/#238.
+        assert!(
+            (h * sol.momentum_thickness(u_full) - sol.displacement_thickness(u_full)).abs() < 1e-12,
+            "H·θ = δ*"
+        );
+
+        // Physical Couette profile u = U·y/Ly on a fine grid → H ≈ 3 (the linear-
+        // profile shape factor); θ's quadratic integrand carries the only error.
+        let cgrid = Grid::new(4, 200, 4.0, ly);
+        let dy = cgrid.dy();
+        let mut cu = cgrid.u_field();
+        for i in 0..=cgrid.nx {
+            for j in 0..cgrid.ny {
+                cu.set(i, j, u_full * (j as f64 + 0.5) * dy / ly);
+            }
+        }
+        let couette = FlowSolution {
+            grid: cgrid,
+            u: cu,
+            v: cgrid.v_field(),
+            pressure: cgrid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let hc = couette.shape_factor(u_full);
+        assert!((hc - 3.0).abs() < 5e-3, "Couette H ≈ 3, got {hc}");
+        assert!(hc >= 1.0, "H ≥ 1 for Couette");
+
+        // Plug flow (θ = 0) and non-physical u_ref → 0 (shape factor undefined).
+        let mut plug_u = cgrid.u_field();
+        for i in 0..=cgrid.nx {
+            for j in 0..cgrid.ny {
+                plug_u.set(i, j, u_full);
+            }
+        }
+        let plug = FlowSolution {
+            grid: cgrid,
+            u: plug_u,
+            v: cgrid.v_field(),
+            pressure: cgrid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(plug.shape_factor(u_full), 0.0, "plug flow → H = 0 (θ = 0)");
+        assert_eq!(sol.shape_factor(0.0), 0.0); // u_ref = 0
+        assert_eq!(sol.shape_factor(f64::NAN), 0.0); // non-finite
     }
 
     #[test]
