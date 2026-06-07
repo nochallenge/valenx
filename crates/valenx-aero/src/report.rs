@@ -157,6 +157,23 @@ pub fn mach_angle(mach: f64) -> f64 {
     }
 }
 
+/// The **dynamic-pressure ratio** `q/p = ½·γ·M²` — the compressible dynamic pressure
+/// `q = ½ρV²` normalised by the static pressure `p`, at Mach number `mach` `M` and
+/// heat-capacity ratio `gamma` `γ`. Because `ρV² = γ·p·M²` (from `a² = γp/ρ`), the
+/// dynamic head is `q = ½γpM²`, so `q/p` depends only on `M` and `γ`.
+///
+/// In the low-Mach (incompressible) limit it recovers Bernoulli's `p₀ = p + q`: the
+/// stagnation excess [`isentropic_stagnation_pressure_ratio`] `p₀/p − 1 → ½γM²`. At
+/// higher Mach the compressible stagnation excess exceeds `q/p`. It is `0` at rest and
+/// grows with the square of the Mach number. Returns `0` for non-physical input
+/// (non-finite `M` or `γ`, `M < 0`, or `γ ≤ 1`).
+pub fn dynamic_pressure_ratio(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach < 0.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    0.5 * gamma * mach * mach
+}
+
 /// The **Prandtl–Meyer function** `ν(M)` (radians) — the angle through which a
 /// supersonic stream turns, in a centred expansion fan, as it accelerates
 /// isentropically from `M = 1` to Mach number `mach` `M` (heat-capacity ratio
@@ -1249,6 +1266,37 @@ mod tests {
         assert_eq!(breguet_range(-1.0, c, ld, ratio), 0.0);
         assert_eq!(breguet_range(v, c, ld, 0.5), 0.0);
         assert_eq!(breguet_range(v, c, ld, f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn dynamic_pressure_ratio_is_half_gamma_mach_squared() {
+        let g = 1.4;
+        // q/p = ½γM²: worked values.
+        assert!((dynamic_pressure_ratio(1.0, g) - 0.7).abs() < 1e-12, "M=1 → γ/2 = 0.7");
+        assert!((dynamic_pressure_ratio(2.0, g) - 2.8).abs() < 1e-12, "M=2 → 2.8");
+        assert!(dynamic_pressure_ratio(0.0, g).abs() < 1e-12, "M=0 → 0");
+
+        // Quadratic in M (2× M → 4×) and linear in γ.
+        assert!(
+            (dynamic_pressure_ratio(2.0, g) - 4.0 * dynamic_pressure_ratio(1.0, g)).abs() < 1e-12,
+            "quadratic in M"
+        );
+        assert!(
+            (dynamic_pressure_ratio(2.0, 2.8) - 2.0 * dynamic_pressure_ratio(2.0, g)).abs() < 1e-12,
+            "linear in γ"
+        );
+
+        // Incompressible Bernoulli limit: as M → 0, q/p ≈ p₀/p − 1 (threads
+        // isentropic_stagnation_pressure_ratio).
+        let m = 0.01;
+        let q_over_p = dynamic_pressure_ratio(m, g);
+        let stag_excess = isentropic_stagnation_pressure_ratio(m, g) - 1.0;
+        assert!((q_over_p / stag_excess - 1.0).abs() < 1e-3, "q/p ≈ p₀/p − 1 as M→0");
+
+        // Non-physical input → 0.
+        assert_eq!(dynamic_pressure_ratio(-1.0, g), 0.0);
+        assert_eq!(dynamic_pressure_ratio(2.0, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(dynamic_pressure_ratio(f64::NAN, g), 0.0);
     }
 
     #[test]
