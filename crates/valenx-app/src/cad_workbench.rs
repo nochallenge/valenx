@@ -986,6 +986,43 @@ fn mesh_euler_characteristic(mesh: &valenx_mesh::Mesh) -> Option<i64> {
     Some(verts.len() as i64 - edges.len() as i64 + faces)
 }
 
+/// The **total angle defect** `Σ_v (2π − Σθ)` over a `Tri3` surface mesh (rad) —
+/// the discrete **total Gaussian curvature**. At each vertex the *angle defect* is
+/// `2π` minus the sum of the incident triangles' interior angles there (positive at
+/// a convex corner, negative at a saddle, zero where the surface is locally flat),
+/// and this is their sum over every vertex. By the **Gauss–Bonnet theorem** it
+/// equals `2π·χ` for a closed surface — `4π` for a sphere or box (genus 0), `0` for
+/// a torus — so it is the *geometric* (angle-based) reading of the very topology
+/// that [`mesh_euler_characteristic`] reads combinatorially from `V − E + F`. Being
+/// built from angles it is invariant to translation and uniform scaling. `None` for
+/// a mesh with no triangles.
+fn mesh_total_angle_defect(mesh: &valenx_mesh::Mesh) -> Option<f64> {
+    let mut angle_sum: std::collections::HashMap<u32, f64> = std::collections::HashMap::new();
+    for block in &mesh.element_blocks {
+        if block.element_type != valenx_mesh::ElementType::Tri3 {
+            continue;
+        }
+        for tri in block.connectivity.chunks_exact(3) {
+            let p = [
+                mesh.nodes[tri[0] as usize],
+                mesh.nodes[tri[1] as usize],
+                mesh.nodes[tri[2] as usize],
+            ];
+            for k in 0..3 {
+                let u = p[(k + 1) % 3] - p[k];
+                let v = p[(k + 2) % 3] - p[k];
+                *angle_sum.entry(tri[k]).or_insert(0.0) += u.cross(&v).norm().atan2(u.dot(&v));
+            }
+        }
+    }
+    if angle_sum.is_empty() {
+        return None;
+    }
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let total: f64 = angle_sum.values().map(|&s| two_pi - s).sum();
+    Some(total)
+}
+
 /// The number of **connected shells** (disjoint solids) in a `Tri3` mesh — how
 /// many separate connected surfaces it holds, by union-find over the triangle
 /// vertices (every triangle ties its three nodes into one component). This is
@@ -1382,6 +1419,14 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
             }
         })
         .unwrap_or_default();
+    // Total angle defect ∑(2π−Σθ) = discrete total Gaussian curvature — by Gauss–
+    // Bonnet it equals 2π·χ for a closed surface (4π for a genus-0 box), the
+    // angle-based reading of the topology χ reports combinatorially.
+    let defect_str = mesh
+        .as_ref()
+        .and_then(mesh_total_angle_defect)
+        .map(|d| format!(" · ∑κ {d:.3}"))
+        .unwrap_or_default();
     // Connected-shell count — how many disjoint solids the tessellation holds
     // (1 for a single connected body). Dropped if tessellation failed or empty.
     let shells_str = mesh
@@ -1476,7 +1521,7 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .map(|v| format!(" · mean valence {v:.2}"))
         .unwrap_or_default();
     let status = format!(
-        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{wire_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
+        "{nbodies} bodies · {faces} faces · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{defect_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{wire_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
         s.steps.len()
     );
     Ok((model.snapshots, status))
@@ -3126,6 +3171,49 @@ mod tests {
 
         // An empty mesh has no Euler characteristic.
         assert_eq!(mesh_euler_characteristic(&valenx_mesh::Mesh::new("empty")), None);
+    }
+
+    #[test]
+    fn mesh_total_angle_defect_satisfies_gauss_bonnet() {
+        use nalgebra::Vector3;
+        use std::f64::consts::PI;
+        // The canonical 1×2×3 box: 8 corners, each a 3-right-angle corner, so each
+        // angle defect is 2π − 3·(π/2) = π/2, summing to 4π = 2π·χ (χ = 2, genus 0).
+        let (lx, ly, lz) = (1.0, 2.0, 3.0);
+        let mut mesh = valenx_mesh::Mesh::new("box");
+        mesh.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(lx, 0.0, 0.0),
+            Vector3::new(lx, ly, 0.0),
+            Vector3::new(0.0, ly, 0.0),
+            Vector3::new(0.0, 0.0, lz),
+            Vector3::new(lx, 0.0, lz),
+            Vector3::new(lx, ly, lz),
+            Vector3::new(0.0, ly, lz),
+        ];
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ];
+        mesh.element_blocks.push(block);
+
+        let defect = mesh_total_angle_defect(&mesh).expect("box has triangles");
+        assert!((defect - 4.0 * PI).abs() < 1e-9, "box ∑defect = 4π, got {defect}");
+        // STRONG cross-check (Gauss–Bonnet): ∑defect == 2π·χ, threading the
+        // combinatorial mesh_euler_characteristic (geometric vs topological paths).
+        let chi = mesh_euler_characteristic(&mesh).expect("box has triangles");
+        assert!((defect - 2.0 * PI * chi as f64).abs() < 1e-9, "Gauss–Bonnet ∑defect = 2πχ");
+        // STRONG count identity: ∑defect == 2π·V − π·F (V=8 distinct verts, F=12).
+        assert!((defect - (2.0 * PI * 8.0 - PI * 12.0)).abs() < 1e-9, "∑defect = 2πV − πF");
+        // Scale-invariant — built from angles, so a ×10 zoom leaves it unchanged.
+        for n in mesh.nodes.iter_mut() {
+            *n *= 10.0;
+        }
+        let scaled = mesh_total_angle_defect(&mesh).expect("scaled box");
+        assert!((scaled - 4.0 * PI).abs() < 1e-9, "angle defect is scale-invariant: {scaled}");
+        // No triangles → None.
+        assert_eq!(mesh_total_angle_defect(&valenx_mesh::Mesh::new("empty")), None);
     }
 
     #[test]
