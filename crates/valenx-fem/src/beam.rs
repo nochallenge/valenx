@@ -126,6 +126,42 @@ pub fn cantilever_tip_deflection(
     load * length.powi(3) / (3.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **strain energy of a tip-loaded cantilever**
+/// `U = P²·L³/(6·E·I)` (J) — the elastic energy stored in bending when a slender
+/// Euler–Bernoulli cantilever of span `length` `L` (m), Young's modulus
+/// `youngs_modulus` `E` (Pa) and section second moment of area `second_moment_area`
+/// `I` (m⁴) carries a transverse point force `load` `P` (N) at its free end.
+///
+/// It is the bending-energy integral `U = ∫₀^L M²/(2EI) dx` with the linearly
+/// varying moment `M(x) = P·x`, and the first of the energy-method references
+/// (Castigliano's theorems, unit-load deflections). By **Clapeyron's theorem** the
+/// work a single static load does equals half the load times the deflection it
+/// produces, so `U = ½·P·δ_tip` with the tip deflection
+/// [`cantilever_tip_deflection`] `δ = P·L³/(3EI)` — a useful consistency check and
+/// the basis of energy methods for deflection. The energy grows with the *square*
+/// of the load (so it is sign-independent — an up- or down-load store the same
+/// energy), with the *cube* of the span, and falls inversely with the flexural
+/// rigidity `E·I`. Returns `0` for non-physical input (`P` non-finite, or `E`, `I`,
+/// or `L` non-positive or non-finite).
+pub fn cantilever_point_load_strain_energy(
+    load: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load * load * length.powi(3) / (6.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **cantilever tip slope** `θ = P·L²/(2·E·I)` (rad) — the
 /// end-rotation of a slender Euler–Bernoulli cantilever clamped at one end and
 /// loaded by a transverse point force `load` `P` (N) at the free end, with span
@@ -1634,6 +1670,42 @@ mod tests {
         assert_eq!(cantilever_tip_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_tip_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(cantilever_tip_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn cantilever_point_load_strain_energy_matches_clapeyron() {
+        // Worked point: P = 1 kN at the tip of a 2 m steel cantilever, E = 200 GPa,
+        // I = 1e-6 m⁴ → U = P²·L³/(6·E·I) = 8e6/1.2e6 = 20/3 ≈ 6.6667 J.
+        let (p, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
+        let u = cantilever_point_load_strain_energy(p, l, e, i);
+        assert!((u - 20.0 / 3.0).abs() / u < 1e-9, "U = 20/3 J, got {u}");
+        // Quadratic in the load → SIGN-INDEPENDENT: an up- or down-load store equal
+        // energy (unlike deflection, which is sign-preserving).
+        assert!((cantilever_point_load_strain_energy(2.0 * p, l, e, i) - 4.0 * u).abs() / u < 1e-9, "P² scaling");
+        assert!((cantilever_point_load_strain_energy(-p, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
+        // Cubic in the span: double L → 8× U.
+        assert!((cantilever_point_load_strain_energy(p, 2.0 * l, e, i) - 8.0 * u).abs() / u < 1e-9, "L³ scaling");
+        // Inverse in the flexural rigidity E·I: double E or I → half U.
+        assert!((cantilever_point_load_strain_energy(p, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
+        assert!((cantilever_point_load_strain_energy(p, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        // STRONG non-tautological cross-check via Clapeyron's theorem: the work a
+        // single static load does is half the load times the deflection it makes,
+        // U = ½·P·δ_tip. The energy impl is ∫M²/(2EI) → P²L³/(6EI); the check uses the
+        // independent deflection fn (P·L³/(3EI)) — different path, same value.
+        for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+            let energy = cantilever_point_load_strain_energy(pp, ll, e, i);
+            let half_p_delta = 0.5 * pp * cantilever_tip_deflection(pp, ll, e, i);
+            assert!(
+                (energy - half_p_delta).abs() / energy < 1e-12,
+                "Clapeyron U = ½·P·δ at P={pp}, L={ll}: {energy} vs {half_p_delta}"
+            );
+        }
+        // Non-physical input → 0.
+        assert_eq!(cantilever_point_load_strain_energy(p, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(cantilever_point_load_strain_energy(p, l, 0.0, i), 0.0); // E ≤ 0
+        assert_eq!(cantilever_point_load_strain_energy(p, -1.0, e, i), 0.0); // L ≤ 0
+        assert_eq!(cantilever_point_load_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite P
+        assert_eq!(cantilever_point_load_strain_energy(p, l, f64::INFINITY, i), 0.0); // non-finite E
     }
 
     #[test]
