@@ -58,6 +58,17 @@ pub fn max_safe_charge_density(area_cm2: f64, k_limit: f64) -> f64 {
     max_safe_charge_per_phase(area_cm2, k_limit) / area_cm2
 }
 
+/// The **minimum safe electrode area** `A_min = Q² / 10^k_limit` (cm²) — the smallest
+/// geometric electrode area that keeps a charge per phase of `q_uc` `Q` (µC/phase) at or
+/// below the Shannon limit line `k_limit`, inverting [`shannon_k`] for the area
+/// (`k = log10(Q²/A)` ⟹ `A = Q²/10^k`). It is the electrode-sizing companion to
+/// [`max_safe_charge_per_phase`] (the charge inverse): a smaller electrode concentrates the
+/// same charge into a higher density, so below `A_min` the operating point crosses the
+/// damage line. Inputs are `Q` in µC/phase and the dimensionless `k_limit`.
+pub fn min_safe_electrode_area(q_uc: f64, k_limit: f64) -> f64 {
+    q_uc * q_uc / 10f64.powf(k_limit)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,6 +113,38 @@ mod tests {
         // is_safe straddles the boundary: just inside is safe, just outside is not.
         assert!(is_safe(0.999 * q_max, a, k), "just inside the limit is safe");
         assert!(!is_safe(1.001 * q_max, a, k), "just outside the limit is unsafe");
+    }
+
+    #[test]
+    fn min_safe_electrode_area_is_the_charge_boundary_in_area_terms() {
+        // (a) WORKED: A_min = Q²/10^k. Q = 10 µC, k = 2 → 100/100 = 1 cm².
+        assert!(
+            (min_safe_electrode_area(10.0, 2.0) - 1.0).abs() <= 1e-9,
+            "A_min = Q²/10^k = 1 cm²"
+        );
+
+        // (b) ROUND-TRIP threading max_safe_charge_per_phase (non-tautological): the area
+        // that just admits Q lets exactly Q through as the max safe charge. (c) BOUNDARY
+        // threading shannon_k: at (Q, A_min) the k-value is exactly k_limit.
+        for &(q, k) in &[(5.0_f64, 1.85_f64), (20.0, 2.0), (0.8, 1.5)] {
+            let a = min_safe_electrode_area(q, k);
+            assert!(
+                (max_safe_charge_per_phase(a, k) - q).abs() <= 1e-9 * q,
+                "max_safe_charge_per_phase(A_min, k) = Q"
+            );
+            assert!((shannon_k(q, a) - k).abs() <= 1e-9 * k, "shannon_k(Q, A_min) = k");
+        }
+
+        // (d) MONOTONICITY: more charge needs more area; a stricter (lower) k needs more
+        // area for the same charge.
+        assert!(
+            min_safe_electrode_area(20.0, 2.0) > min_safe_electrode_area(10.0, 2.0),
+            "more charge → larger area"
+        );
+        assert!(
+            min_safe_electrode_area(10.0, 1.5) > min_safe_electrode_area(10.0, 2.0),
+            "stricter k → larger area"
+        );
     }
 
     #[test]
