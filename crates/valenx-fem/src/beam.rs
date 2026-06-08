@@ -545,6 +545,20 @@ pub fn axial_strain_energy(force: f64, length: f64, youngs_modulus: f64, area: f
     force * force * length / (2.0 * youngs_modulus * area)
 }
 
+/// The **axial (extensional) rigidity** `EA = E·A` (N) — the product of Young's modulus
+/// `youngs_modulus` `E` (Pa) and the cross-sectional area `area` `A` (m²). It is the
+/// constant of proportionality between axial force and strain (`F = EA·ε`) and the
+/// extensional companion to the [`flexural_rigidity`] (`EI`): the stiffness in the
+/// [`beam_axial_extension`] (`δ = FL/EA`) and the [`axial_strain_energy`] (`U = F²L/2EA`).
+/// A stiffer or thicker bar stretches less under the same load. Returns `0` for
+/// non-physical input (`E` or `A` non-positive or non-finite).
+pub fn axial_rigidity(youngs_modulus: f64, area: f64) -> f64 {
+    if !youngs_modulus.is_finite() || youngs_modulus <= 0.0 || !area.is_finite() || area <= 0.0 {
+        return 0.0;
+    }
+    youngs_modulus * area
+}
+
 /// The **axial normal stress** `σ = F / A` (Pa) in a prismatic bar of cross-section area
 /// `area` `A` (m²) under an axial force `force` `F` (N) — positive in tension, negative in
 /// compression. It is the axial member of the beam stress family alongside the bending
@@ -2841,6 +2855,47 @@ mod tests {
         assert_eq!(flexural_rigidity(200.0e9, 0.0), 0.0);
         assert_eq!(flexural_rigidity(f64::NAN, 1.0e-6), 0.0);
         assert_eq!(flexural_rigidity(200.0e9, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn axial_rigidity_is_the_extensional_stiffness() {
+        // (a) WORKED: EA = E·A = 200e9·1e-4 = 2e7 N.
+        assert!(
+            (axial_rigidity(200.0e9, 1.0e-4) - 2.0e7).abs() <= 1e-9 * 2.0e7,
+            "EA = E·A = 2e7 N"
+        );
+
+        // (b) THREAD beam_axial_extension (non-tautological): EA = F·L/δ.
+        let (f, l, e, a) = (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-4_f64);
+        assert!(
+            (axial_rigidity(e, a) - f * l / beam_axial_extension(f, l, e, a)).abs()
+                <= 1e-9 * axial_rigidity(e, a),
+            "EA = F·L/δ"
+        );
+
+        // (c) THREAD axial_strain_energy (non-tautological): EA = F²·L/(2·U).
+        assert!(
+            (axial_rigidity(e, a) - f * f * l / (2.0 * axial_strain_energy(f, l, e, a))).abs()
+                <= 1e-9 * axial_rigidity(e, a),
+            "EA = F²·L/(2U)"
+        );
+
+        // (d) LINEARITY: linear in both E and A.
+        let base = axial_rigidity(200.0e9, 1.0e-4);
+        assert!(
+            (axial_rigidity(2.0 * 200.0e9, 1.0e-4) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in E"
+        );
+        assert!(
+            (axial_rigidity(200.0e9, 2.0e-4) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in A"
+        );
+
+        // (e) GUARD: non-positive E or A, or non-finite → 0 sentinel.
+        assert_eq!(axial_rigidity(0.0, 1.0e-4), 0.0);
+        assert_eq!(axial_rigidity(200.0e9, 0.0), 0.0);
+        assert_eq!(axial_rigidity(f64::NAN, 1.0e-4), 0.0);
+        assert_eq!(axial_rigidity(200.0e9, -1.0e-4), 0.0);
     }
 
     #[test]
