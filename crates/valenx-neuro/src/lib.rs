@@ -99,5 +99,5 @@ pub use synapse::{
 };
 pub use temperature::{
     arrhenius_activation_energy_from_q10, arrhenius_rate_ratio, q10_from_activation_energy,
-    q10_from_rates, q10_scale, TYPICAL_GATING_Q10,
+    q10_from_rates, q10_scale, temperature_for_q10_rate, TYPICAL_GATING_Q10,
 };
