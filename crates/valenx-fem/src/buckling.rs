@@ -141,6 +141,27 @@ pub fn euler_critical_load(
         / (effective_length * effective_length)
 }
 
+/// The **Euler critical buckling stress** `σ_cr = P_cr / A = π²·E·I / (A·(K·L)²)` (Pa) —
+/// the [`euler_critical_load`] spread over the cross-section area `area` `A` (m²). It is
+/// the stress that decides a column's *failure mode*: compared against the material yield
+/// strength, a slender column reaches this elastic-instability stress first and **buckles**
+/// (`σ_cr < σ_yield`), while a stocky one yields and **crushes** first (`σ_cr > σ_yield`).
+/// Like its parent it falls as `1/L²` and rises with `E·I`. Returns `0` for a non-physical
+/// area (non-finite or non-positive), or whenever [`euler_critical_load`] itself returns
+/// `0`.
+pub fn critical_buckling_stress(
+    e_modulus: f64,
+    area_moment_of_inertia: f64,
+    length: f64,
+    effective_length_factor: f64,
+    area: f64,
+) -> f64 {
+    if !area.is_finite() || area <= 0.0 {
+        return 0.0;
+    }
+    euler_critical_load(e_modulus, area_moment_of_inertia, length, effective_length_factor) / area
+}
+
 /// Errors from the native buckling solver.
 #[derive(Debug, Error)]
 pub enum BucklingSolverError {
@@ -547,6 +568,45 @@ mod tests {
     /// Node id of grid point `(i, j, k)` in a `structured_box_mesh`.
     fn nid(i: usize, j: usize, k: usize, nx: usize, ny: usize) -> usize {
         i + (nx + 1) * j + (nx + 1) * (ny + 1) * k
+    }
+
+    #[test]
+    fn critical_buckling_stress_is_the_euler_load_over_area() {
+        use std::f64::consts::PI;
+        let (e, i, l, k) = (200.0e9, 1.0e-6, 2.0, 1.0); // steel, 2 m pinned-pinned column
+        let a = 1.0e-3; // 10 cm² cross-section
+
+        // Threads euler_critical_load: σ_cr = P_cr / A (the round-trip σ_cr·A = P_cr).
+        let sigma = critical_buckling_stress(e, i, l, k, a);
+        assert!((sigma - euler_critical_load(e, i, l, k) / a).abs() <= 1e-9 * sigma, "σ = P_cr/A");
+        assert!(
+            (sigma * a - euler_critical_load(e, i, l, k)).abs()
+                <= 1e-9 * euler_critical_load(e, i, l, k),
+            "σ·A = P_cr"
+        );
+
+        // Independent formula (NOT via euler_critical_load): σ_cr = π²·E·I / (A·(K·L)²).
+        let raw = PI.powi(2) * e * i / (a * (k * l) * (k * l));
+        assert!((sigma - raw).abs() <= 1e-9 * raw, "σ = π²EI/(A(KL)²)");
+
+        // Scaling: ∝ I, ∝ 1/L², ∝ 1/A.
+        assert!(
+            (critical_buckling_stress(e, 3.0 * i, l, k, a) - 3.0 * sigma).abs() <= 1e-9 * (3.0 * sigma),
+            "∝ I"
+        );
+        assert!(
+            (critical_buckling_stress(e, i, 2.0 * l, k, a) - sigma / 4.0).abs() <= 1e-9 * (sigma / 4.0),
+            "∝ 1/L² (2× longer → ¼ stress)"
+        );
+        assert!(
+            (critical_buckling_stress(e, i, l, k, 2.0 * a) - sigma / 2.0).abs() <= 1e-9 * (sigma / 2.0),
+            "∝ 1/A (2× area → ½ stress)"
+        );
+
+        // Area guard, and propagation of euler_critical_load's 0-sentinel.
+        assert_eq!(critical_buckling_stress(e, i, l, k, 0.0), 0.0, "A ≤ 0 → 0");
+        assert_eq!(critical_buckling_stress(e, i, l, k, -1.0e-3), 0.0);
+        assert_eq!(critical_buckling_stress(0.0, i, l, k, a), 0.0, "non-physical E → 0");
     }
 
     #[test]
