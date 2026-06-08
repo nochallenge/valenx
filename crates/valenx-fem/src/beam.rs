@@ -558,6 +558,22 @@ pub fn axial_stress(force: f64, area: f64) -> f64 {
     force / area
 }
 
+/// The **axial force capacity** `F = σ·A` (N) — the axial force a prismatic bar carries
+/// when its cross-section of area `area` `A` (m²) reaches the normal stress `stress` `σ`
+/// (Pa), positive in tension and negative in compression. It is the inverse of
+/// [`axial_stress`] (`σ = F/A` ⟹ `F = σ·A`): feeding the *allowable* stress gives the
+/// member's allowable axial load, and feeding the *yield* stress gives the squash / yield
+/// load. The axial member of the capacity family alongside the bending
+/// [`bending_moment_capacity`] and the [`torsional_moment_capacity`]. Linear in both the
+/// stress and the area. Returns `0` for non-physical input (non-finite, or a non-positive
+/// area).
+pub fn axial_force_capacity(stress: f64, area: f64) -> f64 {
+    if !stress.is_finite() || !area.is_finite() || area <= 0.0 {
+        return 0.0;
+    }
+    stress * area
+}
+
 /// The **moment–curvature relation** `κ = M/(E·I)` (1/m) — the local bending curvature
 /// produced in a beam section by a bending moment `moment` `M` (N·m), for Young's
 /// modulus `youngs_modulus` `E` (Pa) and second moment of area `second_moment_area`
@@ -2799,6 +2815,51 @@ mod tests {
         assert_eq!(axial_stress(10000.0, 0.0), 0.0);
         assert_eq!(axial_stress(10000.0, -1.0e-4), 0.0);
         assert_eq!(axial_stress(f64::NAN, 1.0e-4), 0.0);
+    }
+
+    #[test]
+    fn axial_force_capacity_inverts_the_axial_stress() {
+        // (a) WORKED: F = σ·A = 2.0e8·5.0e-4 = 1.0e5 N.
+        assert!(
+            (axial_force_capacity(2.0e8, 5.0e-4) - 1.0e5).abs() <= 1e-9 * 1.0e5,
+            "F = σ·A = 100 kN"
+        );
+
+        // (b) ROUND-TRIP threading axial_stress (non-tautological): the force that
+        // produces stress σ is recovered from σ and the area.
+        for &(f, a) in &[(10000.0_f64, 1.0e-4_f64), (-5000.0, 3.0e-4)] {
+            assert!(
+                (axial_force_capacity(axial_stress(f, a), a) - f).abs() <= 1e-9 * f.abs().max(1.0),
+                "σ·A recovers F"
+            );
+        }
+
+        // (c) YIELD round-trip: a member's squash load F_y = σ_y·A maps back to σ_y.
+        let (sy, a) = (250.0e6_f64, 5.0e-4_f64);
+        let fy = axial_force_capacity(sy, a);
+        assert!((axial_stress(fy, a) - sy).abs() <= 1e-9 * sy, "F_y = σ_y·A maps back to σ_y");
+
+        // (d) LINEARITY + SIGN: linear in stress and area; a negative (compressive)
+        // stress yields a negative force.
+        let base = axial_force_capacity(2.0e8, 5.0e-4);
+        assert!(
+            (axial_force_capacity(2.0 * 2.0e8, 5.0e-4) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in stress"
+        );
+        assert!(
+            (axial_force_capacity(2.0e8, 1.0e-3) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in area"
+        );
+        assert!(
+            axial_force_capacity(-2.0e8, 5.0e-4) < 0.0,
+            "compressive stress → negative force"
+        );
+
+        // (e) GUARD: non-positive area or non-finite input → 0 sentinel.
+        assert_eq!(axial_force_capacity(2.0e8, 0.0), 0.0);
+        assert_eq!(axial_force_capacity(2.0e8, -1.0e-4), 0.0);
+        assert_eq!(axial_force_capacity(f64::NAN, 5.0e-4), 0.0);
+        assert_eq!(axial_force_capacity(2.0e8, f64::NAN), 0.0);
     }
 
     #[test]
