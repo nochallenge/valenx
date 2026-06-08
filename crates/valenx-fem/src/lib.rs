@@ -143,7 +143,8 @@ pub use assembly::{
     recover_nodal_stress_mixed,
 };
 pub use beam::{
-    beam_angle_of_twist, beam_axial_extension, beam_curvature, bending_stress,
+    axial_strain_energy, beam_angle_of_twist, beam_axial_extension, beam_curvature,
+    bending_stress,
     cantilever_point_load_root_moment,
     cantilever_point_load_strain_energy, cantilever_tip_deflection, cantilever_tip_slope,
     cantilever_udl_root_moment, cantilever_udl_strain_energy, cantilever_udl_tip_deflection,
