@@ -48,6 +48,17 @@ pub fn analytic_point_heat_k(power_w: f64, k_w_per_mk: f64, r_mm: f64) -> f64 {
     power_w / (4.0 * std::f64::consts::PI * k_w_per_mk * (r_mm * 1.0e-3))
 }
 
+/// The **point-source isotherm radius** `r = Q / (4πk·ΔT)` (mm) — the radius at which the
+/// steady conductive temperature rise of a `power_w`-W (Q) point heat source falls to
+/// `delta_t_k` `ΔT` (K), in tissue of thermal conductivity `k_w_per_mk` (W/m·K). It is the
+/// inverse of [`analytic_point_heat_k`] solved for the radius: the thermal-reach (or
+/// lesion-boundary) radius of a damaging isotherm, the sizing figure for a thermal safety
+/// margin around a stimulating electrode. Inputs are positive; `ΔT → 0` sends the radius
+/// to infinity (the rise reaches everywhere).
+pub fn point_heat_isotherm_radius_mm(power_w: f64, k_w_per_mk: f64, delta_t_k: f64) -> f64 {
+    1.0e3 * power_w / (4.0 * std::f64::consts::PI * k_w_per_mk * delta_t_k)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,6 +75,45 @@ mod tests {
         assert!(
             (0.4..2.0).contains(&(num4 / ana4)),
             "ΔT within mesh error of Q/(4πk r); ΔT(4mm)={num4} analytic={ana4}"
+        );
+    }
+
+    #[test]
+    fn point_heat_isotherm_radius_inverts_the_analytic_rise() {
+        // (a) ROUND-TRIP threading analytic_point_heat_k (non-tautological): the radius at
+        // which ΔT occurs, fed back, reproduces ΔT — and a known radius recovers itself.
+        for &(p, k, dt) in &[(0.01_f64, 0.5_f64, 0.5_f64), (0.02, 0.6, 0.2), (0.005, 0.49, 1.0)] {
+            let r = point_heat_isotherm_radius_mm(p, k, dt);
+            assert!((analytic_point_heat_k(p, k, r) - dt).abs() <= 1e-9 * dt, "ΔT(r(ΔT)) = ΔT");
+        }
+        for &(p, k, r0) in &[(0.01_f64, 0.5_f64, 4.0_f64), (0.02, 0.6, 8.0)] {
+            assert!(
+                (point_heat_isotherm_radius_mm(p, k, analytic_point_heat_k(p, k, r0)) - r0).abs()
+                    <= 1e-9 * r0,
+                "r(ΔT(r)) = r"
+            );
+        }
+
+        // (b) WORKED: P = 10 mW, k = 0.5, ΔT = 0.5 K → r = 1000·P/(4πk·ΔT) = 10/π ≈ 3.183 mm.
+        let r = point_heat_isotherm_radius_mm(0.01, 0.5, 0.5);
+        assert!((r - 10.0 / std::f64::consts::PI).abs() <= 1e-9 * r, "r = 10/π ≈ 3.183 mm");
+
+        // (c) MONOTONICITY: a hotter contour sits closer to the source; more power or lower
+        // conductivity pushes a given contour farther out.
+        assert!(
+            point_heat_isotherm_radius_mm(0.01, 0.5, 1.0)
+                < point_heat_isotherm_radius_mm(0.01, 0.5, 0.5),
+            "hotter contour → smaller radius"
+        );
+        assert!(
+            point_heat_isotherm_radius_mm(0.02, 0.5, 0.5)
+                > point_heat_isotherm_radius_mm(0.01, 0.5, 0.5),
+            "more power → larger radius"
+        );
+        assert!(
+            point_heat_isotherm_radius_mm(0.01, 0.25, 0.5)
+                > point_heat_isotherm_radius_mm(0.01, 0.5, 0.5),
+            "lower conductivity → larger radius"
         );
     }
 }
