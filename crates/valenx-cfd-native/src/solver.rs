@@ -564,6 +564,21 @@ impl FlowSolution {
         self.max_speed() * h / kinematic_viscosity
     }
 
+    /// The **domain (flow) Reynolds number** `Re_L = U·Lₓ / ν` (dimensionless) — the peak
+    /// speed `U` ([`FlowSolution::max_speed`]) times the streamwise domain length
+    /// `Lₓ = nx·dx`, divided by the kinematic viscosity `kinematic_viscosity` `ν` (m²/s).
+    /// Unlike the [`FlowSolution::cell_reynolds_number`] (a per-cell numerical-resolution
+    /// measure on the grid spacing `h`), this is the *physical* flow-regime classifier:
+    /// `Re_L ≲ 5×10⁵` is laminar over a flat plate, above it transitions to turbulence.
+    /// Returns `0` for non-physical viscosity (`ν ≤ 0` or non-finite).
+    pub fn domain_reynolds_number(&self, kinematic_viscosity: f64) -> f64 {
+        if !kinematic_viscosity.is_finite() || kinematic_viscosity <= 0.0 {
+            return 0.0;
+        }
+        let lx = (self.grid.nx as f64) * self.grid.dx();
+        self.max_speed() * lx / kinematic_viscosity
+    }
+
     /// Peak vorticity magnitude `|∂v/∂x − ∂u/∂y|` (1/s) over the interior cells,
     /// from central differences of the cell-centred velocity — the strongest
     /// local rotation in the flow (the lid-driven cavity's central vortex, a
@@ -2234,6 +2249,83 @@ mod tests {
         // A driven flow has a positive mean that cannot exceed the peak.
         assert!(mean > 0.0, "driven flow should have a positive mean speed");
         assert!(mean <= peak + 1e-9, "mean {mean} cannot exceed peak {peak}");
+    }
+
+    #[test]
+    fn domain_reynolds_number_is_the_flow_regime_classifier() {
+        // Grid 5×4 over 5×8 → Lₓ = nx·dx = 5·1 = 5; uniform u = 2 → max_speed = 2.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 2.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // Worked: Re_L = U·Lₓ/ν = 2·5/0.01 = 1000.
+        assert!(
+            (sol.domain_reynolds_number(0.01) - 1000.0).abs() <= 1e-9 * 1000.0,
+            "Re_L = U·Lₓ/ν"
+        );
+
+        // Threads max_speed: Re_L = max_speed · Lₓ / ν.
+        let lx = grid.nx as f64 * grid.dx();
+        assert!(
+            (sol.domain_reynolds_number(0.01) - sol.max_speed() * lx / 0.01).abs()
+                <= 1e-12 * sol.domain_reynolds_number(0.01),
+            "Re_L via max_speed"
+        );
+
+        // Threads cell_reynolds_number: Re_L / Re_cell = Lₓ / h (h = min cell size).
+        let h = grid.dx().min(grid.dy());
+        assert!(
+            (sol.domain_reynolds_number(0.01) - sol.cell_reynolds_number(0.01) * (lx / h)).abs()
+                <= 1e-9 * sol.domain_reynolds_number(0.01),
+            "Re_L = Re_cell · Lₓ/h"
+        );
+
+        // Inverse in ν.
+        assert!(
+            (sol.domain_reynolds_number(0.02) - 0.5 * sol.domain_reynolds_number(0.01)).abs()
+                <= 1e-9 * sol.domain_reynolds_number(0.01),
+            "inverse in ν"
+        );
+
+        // Linear in U: doubling the speed doubles Re_L.
+        let mut u4 = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u4.set(fi, j, 4.0);
+            }
+        }
+        let fast = FlowSolution {
+            grid,
+            u: u4,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (fast.domain_reynolds_number(0.01) - 2.0 * sol.domain_reynolds_number(0.01)).abs()
+                <= 1e-9 * fast.domain_reynolds_number(0.01),
+            "linear in U"
+        );
+
+        // 0 sentinel for non-physical viscosity.
+        assert_eq!(sol.domain_reynolds_number(0.0), 0.0);
+        assert_eq!(sol.domain_reynolds_number(-1.0), 0.0);
+        assert_eq!(sol.domain_reynolds_number(f64::NAN), 0.0);
     }
 
     #[test]
