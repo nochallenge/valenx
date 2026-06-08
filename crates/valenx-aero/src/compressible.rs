@@ -41,6 +41,17 @@ pub fn mach_number(speed: f64, speed_of_sound: f64) -> f64 {
     speed / speed_of_sound
 }
 
+/// The **flow speed for a given Mach number** `v = M·a` (m/s) — the inverse of
+/// [`mach_number`], recovering the free-stream speed from a Mach number `mach` `M` and a
+/// `speed_of_sound` `a` (m/s). `M = 1` returns exactly the speed of sound. Mirrors
+/// [`mach_number`]'s guard: a non-positive sound speed yields `0`.
+pub fn speed_from_mach(mach: f64, speed_of_sound: f64) -> f64 {
+    if speed_of_sound <= 0.0 {
+        return 0.0;
+    }
+    mach * speed_of_sound
+}
+
 /// The flow regime a Mach number falls in — used to qualify whether
 /// the incompressible result + the Prandtl-Glauert correction is
 /// trustworthy.
@@ -175,6 +186,43 @@ mod tests {
     fn mach_number_is_speed_over_sound_speed() {
         let m = mach_number(170.0, 340.0);
         assert!((m - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn speed_from_mach_inverts_the_mach_number() {
+        // (a) WORKED: at M = 2, a = 340 m/s → v = 680 m/s.
+        assert!((speed_from_mach(2.0, 340.0) - 680.0).abs() <= 1e-9 * 680.0, "v = M·a = 680");
+
+        // (b) ROUND-TRIP threading mach_number (non-tautological), both directions.
+        for &(m, a) in &[(0.5_f64, 340.0_f64), (2.0, 295.0), (0.0, 340.0)] {
+            assert!(
+                (mach_number(speed_from_mach(m, a), a) - m).abs() <= 1e-9 * m.max(1e-12),
+                "M(v(M)) = M"
+            );
+        }
+        for &(v, a) in &[(170.0_f64, 340.0_f64), (590.0, 295.0)] {
+            assert!(
+                (speed_from_mach(mach_number(v, a), a) - v).abs() <= 1e-9 * v,
+                "v(M(v)) = v"
+            );
+        }
+
+        // (c) SONIC cross-check threading speed_of_sound: Mach 1 IS the speed of sound.
+        for &t in &[216.65_f64, 288.15, 320.0] {
+            let a = speed_of_sound(t);
+            assert!((speed_from_mach(1.0, a) - a).abs() <= 1e-9 * a, "M=1 → v = a at T={t}");
+        }
+
+        // (d) LINEAR + ZERO: linear in Mach; M = 0 → at rest.
+        assert_eq!(speed_from_mach(0.0, 340.0), 0.0, "M=0 → v=0");
+        assert!(
+            (speed_from_mach(2.0, 340.0) - 2.0 * speed_from_mach(1.0, 340.0)).abs() <= 1e-9 * 680.0,
+            "linear in Mach"
+        );
+
+        // (e) GUARD: non-positive sound speed → 0 (mirrors mach_number).
+        assert_eq!(speed_from_mach(2.0, 0.0), 0.0);
+        assert_eq!(speed_from_mach(2.0, -340.0), 0.0);
     }
 
     #[test]
