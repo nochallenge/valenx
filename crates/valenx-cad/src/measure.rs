@@ -160,6 +160,30 @@ pub fn solid_equivalent_sphere_radius(solid: &Solid) -> Result<f64, CadError> {
     solid_equivalent_sphere_radius_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **volume-equivalent sphere surface area** `A_eq = 4π·r_eq²` (model units²) of a
+/// solid — the surface area of the sphere that has the same volume, with the
+/// equivalent-sphere radius `r_eq` from [`solid_equivalent_sphere_radius_tol`], evaluated
+/// at tessellation tolerance `tol`. By the isoperimetric inequality it is the **minimum
+/// possible surface area** for the solid's volume, so `A_eq ≤ A` always; their ratio is
+/// exactly the [`solid_sphericity_tol`]. Unlike that dimensionless sphericity this is an
+/// area — the least surface a given volume can present (the diffusion / heat-transfer
+/// floor).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// volume cannot be computed.
+pub fn solid_equivalent_sphere_area_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let r = solid_equivalent_sphere_radius_tol(solid, tol)?;
+    Ok(4.0 * std::f64::consts::PI * r * r)
+}
+
+/// Volume-equivalent sphere surface area of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_equivalent_sphere_area_tol`].
+pub fn solid_equivalent_sphere_area(solid: &Solid) -> Result<f64, CadError> {
+    solid_equivalent_sphere_area_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Total boundary surface area of a solid, in square model units.
 ///
 /// Computed as the sum of every boundary triangle's area. Like
@@ -1195,6 +1219,47 @@ mod tests {
             solid_equivalent_sphere_radius(&box_solid(4.0, 4.0, 4.0).unwrap()).unwrap()
                 > solid_equivalent_sphere_radius(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap(),
             "bigger box → bigger r_eq"
+        );
+    }
+
+    #[test]
+    fn solid_equivalent_sphere_area_is_the_isoperimetric_floor() {
+        use crate::primitives::sphere;
+
+        // Threads solid_equivalent_sphere_radius: A_eq = 4π·r_eq².
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let r = solid_equivalent_sphere_radius(&s).unwrap();
+            let expected = 4.0 * std::f64::consts::PI * r * r;
+            assert!(
+                (solid_equivalent_sphere_area(&s).unwrap() - expected).abs() / expected < 1e-9,
+                "A_eq = 4π·r_eq²"
+            );
+        }
+
+        // Validates the sphericity definition: Ψ = A_eq / A_actual (a different code path
+        // than sphericity's π^(1/3)(6V)^(2/3) numerator, so it cross-checks both).
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_sphericity(&b).unwrap()
+                - solid_equivalent_sphere_area(&b).unwrap() / solid_area(&b).unwrap())
+            .abs()
+                < 1e-9,
+            "Ψ = A_eq / A"
+        );
+
+        // Isoperimetric bound: the equivalent sphere has the least surface, so A_eq < A.
+        assert!(
+            solid_equivalent_sphere_area(&b).unwrap() < solid_area(&b).unwrap(),
+            "A_eq ≤ A (sphere minimises surface)"
+        );
+
+        // A sphere is its own equivalent sphere → A_eq ≈ its actual area.
+        let sph = sphere(2.0).unwrap();
+        assert!(
+            (solid_equivalent_sphere_area(&sph).unwrap() - solid_area(&sph).unwrap()).abs()
+                / solid_area(&sph).unwrap()
+                < 2e-2,
+            "sphere → A_eq ≈ A"
         );
     }
 

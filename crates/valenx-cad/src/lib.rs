@@ -57,6 +57,7 @@ pub use measure::{
     solid_bounding_box_surface_area, solid_bounding_box_surface_area_tol, solid_bounding_box_tol,
     solid_bounding_box_volume, solid_bounding_box_volume_tol,
     solid_centroid, solid_centroid_tol,
+    solid_equivalent_sphere_area, solid_equivalent_sphere_area_tol,
     solid_equivalent_sphere_radius, solid_equivalent_sphere_radius_tol,
     solid_genus, solid_principal_moments, solid_principal_moments_tol,
     solid_radius_of_gyration,
