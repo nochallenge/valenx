@@ -418,6 +418,22 @@ pub fn beam_angle_of_twist(
     torque * length / (shear_modulus * polar_moment)
 }
 
+/// The **torsional shear stress** `τ = T·r/J` (Pa) — the shear stress a torque `torque`
+/// `T` (N·m) induces at radius `radius` `r` (m) from the axis of a shaft of polar second
+/// moment of area `polar_moment` `J` (m⁴). Like the bending [`bending_stress`] it varies
+/// linearly across the section — zero on the axis, maximal at the outer surface
+/// (`r = r_outer`), which sets the failure check — and it is the shear conjugate of the
+/// [`beam_angle_of_twist`] through Hooke's law `τ = G·γ` with the shear strain
+/// `γ = r·θ/L`. Returns `0` for non-physical input (`T` or `r` non-finite, or `J`
+/// non-positive or non-finite).
+pub fn torsional_shear_stress(torque: f64, radius: f64, polar_moment: f64) -> f64 {
+    if !torque.is_finite() || !radius.is_finite() || !polar_moment.is_finite() || polar_moment <= 0.0
+    {
+        return 0.0;
+    }
+    torque * radius / polar_moment
+}
+
 /// The analytic **axial extension** `δ = F·L/(E·A)` (m) of a prismatic bar in
 /// pure tension or compression — a member of length `length` `L` (m), Young's
 /// modulus `youngs_modulus` `E` (Pa) and cross-section area `area` `A` (m²) under
@@ -2571,6 +2587,43 @@ mod tests {
         let analytic = beam_angle_of_twist(torque, l, g, section.j);
         let rel = (sol.rotation[1][0] - analytic).abs() / analytic;
         assert!(rel < 1e-6, "twist {} vs analytic {analytic}", sol.rotation[1][0]);
+    }
+
+    #[test]
+    fn torsional_shear_stress_is_the_torsion_formula() {
+        // Worked: τ = T·r/J = 1000·0.05/1e-6 = 50 MPa.
+        let t = torsional_shear_stress(1000.0, 0.05, 1.0e-6);
+        assert!((t - 5.0e7).abs() <= 1e-12 * 5.0e7, "τ = T·r/J, got {t}");
+
+        // Threads beam_angle_of_twist via Hooke's law in shear τ = G·θ·r/L (G and L
+        // cancel, since θ = T·L/(G·J)).
+        let g = 80.0e9;
+        for &(tq, r, j, l) in &[
+            (1000.0_f64, 0.05_f64, 1.0e-6_f64, 2.0_f64),
+            (-450.0, 0.02, 4.2e-7, 0.8),
+            (8200.0, 0.12, 9.0e-8, 3.5),
+        ] {
+            let from_twist = g * beam_angle_of_twist(tq, l, g, j) * r / l;
+            assert!(
+                (torsional_shear_stress(tq, r, j) - from_twist).abs() <= 1e-12 * from_twist.abs(),
+                "τ = G·θ·r/L"
+            );
+        }
+
+        // Linear & sign-preserving in T and r, inverse in J.
+        assert!(torsional_shear_stress(-1000.0, 0.05, 1.0e-6) < 0.0, "sign follows the torque");
+        assert!(
+            (torsional_shear_stress(1000.0, 0.05, 2.0e-6)
+                - 0.5 * torsional_shear_stress(1000.0, 0.05, 1.0e-6))
+            .abs()
+                < 1e-3,
+            "inverse in J"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(torsional_shear_stress(f64::NAN, 0.05, 1.0e-6), 0.0);
+        assert_eq!(torsional_shear_stress(1000.0, 0.05, 0.0), 0.0);
+        assert_eq!(torsional_shear_stress(1000.0, 0.05, -1.0e-6), 0.0);
     }
 
     #[test]
