@@ -143,7 +143,8 @@ pub use assembly::{
     recover_nodal_stress_mixed,
 };
 pub use beam::{
-    axial_strain_energy, axial_stress, beam_angle_of_twist, beam_axial_extension,
+    axial_force_capacity, axial_strain_energy, axial_stress, beam_angle_of_twist,
+    beam_axial_extension,
     beam_curvature, beam_transverse_shear_stress,
     bending_moment_capacity,
     bending_stress,
