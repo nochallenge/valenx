@@ -160,6 +160,26 @@ pub fn solid_equivalent_sphere_radius(solid: &Solid) -> Result<f64, CadError> {
     solid_equivalent_sphere_radius_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **volume-equivalent cube edge** `s = V^(1/3)` (model units) of a solid — the edge
+/// length of the cube that has the same volume `V` (from [`solid_volume_tol`]), evaluated
+/// at tessellation tolerance `tol`. It is the cube companion to the equivalent-sphere
+/// diameter ([`solid_equivalent_sphere_radius_tol`]) — another standard nominal "size" of
+/// an irregular body — and equals the actual edge for a cube.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// volume cannot be computed.
+pub fn solid_equivalent_cube_edge_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    Ok(solid_volume_tol(solid, tol)?.cbrt())
+}
+
+/// Volume-equivalent cube edge of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_equivalent_cube_edge_tol`].
+pub fn solid_equivalent_cube_edge(solid: &Solid) -> Result<f64, CadError> {
+    solid_equivalent_cube_edge_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **volume-equivalent sphere surface area** `A_eq = 4π·r_eq²` (model units²) of a
 /// solid — the surface area of the sphere that has the same volume, with the
 /// equivalent-sphere radius `r_eq` from [`solid_equivalent_sphere_radius_tol`], evaluated
@@ -1807,6 +1827,40 @@ mod tests {
             solid_equivalent_sphere_radius(&box_solid(4.0, 4.0, 4.0).unwrap()).unwrap()
                 > solid_equivalent_sphere_radius(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap(),
             "bigger box → bigger r_eq"
+        );
+    }
+
+    #[test]
+    fn solid_equivalent_cube_edge_is_the_volume_cube_root() {
+        use crate::primitives::sphere;
+
+        // (a) WORKED: box(2,3,4) → V = 24 → s = 24^(1/3) ≈ 2.88450.
+        let bx = box_solid(2.0, 3.0, 4.0).unwrap();
+        let edge = solid_equivalent_cube_edge(&bx).unwrap();
+        assert!((edge - 24.0_f64.cbrt()).abs() <= 1e-9 * edge, "s = V^(1/3)");
+
+        // (b) THREAD solid_volume (non-tautological round-trip): s³ = V.
+        assert!(
+            (edge.powi(3) - solid_volume(&bx).unwrap()).abs() <= 1e-9 * solid_volume(&bx).unwrap(),
+            "s³ = V"
+        );
+
+        // (c) CUBE recovers its own side: box(5,5,5) → V = 125 → s = 5.
+        let cube = box_solid(5.0, 5.0, 5.0).unwrap();
+        assert!(
+            (solid_equivalent_cube_edge(&cube).unwrap() - 5.0).abs() <= 1e-9 * 5.0,
+            "cube → s = 5"
+        );
+
+        // (d) SPHERE: V = (4/3)π·R³ → s = ((4/3)π)^(1/3)·R ≈ 3.224 for R = 2 (tessellation).
+        let s_sphere = solid_equivalent_cube_edge(&sphere(2.0).unwrap()).unwrap();
+        let expected = ((4.0 / 3.0) * std::f64::consts::PI).cbrt() * 2.0;
+        assert!((s_sphere - expected).abs() / expected < 3e-2, "sphere → s ≈ 3.224");
+
+        // (e) The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (edge - solid_equivalent_cube_edge_tol(&bx, 0.1).unwrap()).abs() < 1e-9,
+            "_tol wrapper agrees"
         );
     }
 
