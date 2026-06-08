@@ -1266,6 +1266,31 @@ impl FlowSolution {
         sum * dx * dy
     }
 
+    /// The **area-averaged interior vorticity** `⟨ω⟩ = (1/A)∫∫ω dA` (1/s) over the
+    /// interior cells — the mean of the central-difference vorticity `ω = ∂v/∂x − ∂u/∂y`,
+    /// the *net* solid-body rotation rate of the field. By Stokes' theorem it equals the
+    /// [`FlowSolution::circulation`] per unit interior area (`⟨ω⟩ = Γ/A`); unlike the
+    /// strictly-positive [`FlowSolution::enstrophy`] it is *signed*, so equal-and-opposite
+    /// swirl cancels and a symmetric vortex pair averages to `0`. Uses the same interior
+    /// stencil as [`FlowSolution::max_vorticity`]. Returns `0` for a grid too small for an
+    /// interior difference (`nx < 3` or `ny < 3`).
+    pub fn mean_vorticity(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let (two_dx, two_dy) = (2.0 * self.grid.dx(), 2.0 * self.grid.dy());
+        let mut sum = 0.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                sum += dv_dx - du_dy;
+            }
+        }
+        sum / ((nx - 2) * (ny - 2)) as f64
+    }
+
     /// The total **enstrophy** `E = ½∫ω² dA` (m²/s²) over the interior cells — the
     /// integrated *squared* vorticity, a strictly non-negative measure of the
     /// flow's total rotational intensity. Where the circulation `Γ = ∫ω dA` is a
@@ -3070,6 +3095,64 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.enstrophy(), 0.0);
+    }
+
+    #[test]
+    fn mean_vorticity_is_the_area_averaged_interior_vorticity() {
+        // (a) ANALYTIC: a pure horizontal shear u(y) = γ·y, v = 0 has a constant
+        // vorticity ω = ∂v/∂x − ∂u/∂y = −γ everywhere, so its area-average is −γ.
+        let gamma = 2.0_f64;
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * grid.dy();
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((sol.mean_vorticity() - (-gamma)).abs() < 1e-9, "⟨ω⟩ = −γ = −2");
+
+        // (b) STOKES cross-check threading circulation (non-tautological — a different
+        // code path): the area-average equals the circulation per unit interior area.
+        let interior_area = (grid.nx - 2) as f64 * (grid.ny - 2) as f64 * grid.dx() * grid.dy();
+        assert!(
+            (sol.mean_vorticity() - sol.circulation() / interior_area).abs() <= 1e-9 * gamma,
+            "⟨ω⟩ = Γ/A"
+        );
+
+        // (c) IRROTATIONAL: a uniform (zero) field has zero mean vorticity.
+        let uni = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(uni.mean_vorticity(), 0.0, "uniform → ⟨ω⟩ = 0");
+
+        // (d) SMALL GRID: too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.mean_vorticity(), 0.0);
     }
 
     #[test]
