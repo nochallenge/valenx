@@ -527,6 +527,57 @@ pub fn specific_angular_momentum_from_elements(
     Ok((MU_EARTH * semi_major_axis * (1.0 - eccentricity * eccentricity)).sqrt())
 }
 
+/// The **apoapsis (apogee) radius from the orbital elements** `r_a = a·(1 + e)` (m) — the
+/// farthest distance from the focus, where `semi_major_axis` `a` (m) is the orbit size and
+/// `eccentricity` `e` (`0 ≤ e < 1` for a bound ellipse) its shape. With the
+/// [`periapsis_radius_from_elements`] (`a(1−e)`) it is the forward `(a, e) → apsides`
+/// direction, the inverse of [`semi_major_axis_from_apsides`] /
+/// [`eccentricity_from_apsides`] (which go `apsides → (a, e)`).
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `a` is non-finite or non-positive, or `e`
+/// is non-finite or outside the bound-ellipse range `0 ≤ e < 1`.
+pub fn apoapsis_radius_from_elements(
+    semi_major_axis: f64,
+    eccentricity: f64,
+) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+        || !eccentricity.is_finite()
+        || !(0.0..1.0).contains(&eccentricity)
+    {
+        return Err(AstroError::NonPhysicalState(
+            "apoapsis_radius_from_elements requires semi_major_axis > 0 and 0 <= eccentricity < 1",
+        ));
+    }
+    Ok(semi_major_axis * (1.0 + eccentricity))
+}
+
+/// The **periapsis (perigee) radius from the orbital elements** `r_p = a·(1 − e)` (m) — the
+/// closest distance to the focus, the lower companion to
+/// [`apoapsis_radius_from_elements`] (`a(1+e)`). For a circle (`e = 0`) both equal `a`.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `a` is non-finite or non-positive, or `e`
+/// is non-finite or outside the bound-ellipse range `0 ≤ e < 1`.
+pub fn periapsis_radius_from_elements(
+    semi_major_axis: f64,
+    eccentricity: f64,
+) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+        || !eccentricity.is_finite()
+        || !(0.0..1.0).contains(&eccentricity)
+    {
+        return Err(AstroError::NonPhysicalState(
+            "periapsis_radius_from_elements requires semi_major_axis > 0 and 0 <= eccentricity < 1",
+        ));
+    }
+    Ok(semi_major_axis * (1.0 - eccentricity))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,6 +713,60 @@ mod tests {
         assert!(specific_angular_momentum_from_elements(-1.0, 0.1).is_err());
         assert!(specific_angular_momentum_from_elements(7.0e6, 1.0).is_err());
         assert!(specific_angular_momentum_from_elements(f64::NAN, 0.1).is_err());
+    }
+
+    #[test]
+    fn apsis_radius_from_elements_completes_the_apsides_bijection() {
+        // (a) WORKED: a = 7e6, e = 0.1 → r_a = 7.7e6, r_p = 6.3e6.
+        assert!(
+            (apoapsis_radius_from_elements(7.0e6, 0.1).unwrap() - 7.7e6).abs() <= 1e-9 * 7.7e6,
+            "r_a = a(1+e) = 7.7e6"
+        );
+        assert!(
+            (periapsis_radius_from_elements(7.0e6, 0.1).unwrap() - 6.3e6).abs() <= 1e-9 * 6.3e6,
+            "r_p = a(1−e) = 6.3e6"
+        );
+
+        // (b) DOUBLE ROUND-TRIP threading #372 + #378 (non-tautological): the computed
+        // apsides recover BOTH (e, a) via eccentricity/semi_major_axis_from_apsides; and
+        // (c) their harmonic mean is the semi_latus_rectum (#384), with (d) r_p ≤ a ≤ r_a.
+        for &(a, e) in &[(7.0e6_f64, 0.1_f64), (4.2e7, 0.0), (1.0e7, 0.3)] {
+            let r_a = apoapsis_radius_from_elements(a, e).unwrap();
+            let r_p = periapsis_radius_from_elements(a, e).unwrap();
+            assert!(
+                (eccentricity_from_apsides(r_a, r_p).unwrap() - e).abs() <= 1e-9 * e.max(1e-12),
+                "e recovered"
+            );
+            assert!(
+                (semi_major_axis_from_apsides(r_a, r_p).unwrap() - a).abs() <= 1e-9 * a,
+                "a recovered"
+            );
+            let p = semi_latus_rectum_from_elements(a, e).unwrap();
+            assert!(
+                (2.0 * r_a * r_p / (r_a + r_p) - p).abs() <= 1e-9 * p,
+                "2·r_a·r_p/(r_a+r_p) = p"
+            );
+            assert!(r_p <= a && a <= r_a, "r_p ≤ a ≤ r_a");
+            assert!((r_a + r_p - 2.0 * a).abs() <= 1e-9 * (2.0 * a), "r_a + r_p = 2a");
+        }
+
+        // (e) CIRCULAR: at e = 0, both apsides collapse to a.
+        assert!(
+            (apoapsis_radius_from_elements(2.0e7, 0.0).unwrap() - 2.0e7).abs() <= 1e-9 * 2.0e7,
+            "circle: r_a = a"
+        );
+        assert!(
+            (periapsis_radius_from_elements(2.0e7, 0.0).unwrap() - 2.0e7).abs() <= 1e-9 * 2.0e7,
+            "circle: r_p = a"
+        );
+
+        // (f) Err on non-physical input (both fns).
+        assert!(apoapsis_radius_from_elements(-1.0, 0.1).is_err());
+        assert!(apoapsis_radius_from_elements(7.0e6, 1.0).is_err());
+        assert!(apoapsis_radius_from_elements(f64::NAN, 0.1).is_err());
+        assert!(periapsis_radius_from_elements(-1.0, 0.1).is_err());
+        assert!(periapsis_radius_from_elements(7.0e6, 1.0).is_err());
+        assert!(periapsis_radius_from_elements(f64::NAN, 0.1).is_err());
     }
 
     #[test]
