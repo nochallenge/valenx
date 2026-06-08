@@ -164,7 +164,8 @@ pub use beam::{
     BeamSection, BeamSolution, BeamSolverError,
 };
 pub use buckling::{
-    euler_critical_load, solve_buckling, BucklingMode, BucklingSolution, BucklingSolverError,
+    critical_buckling_stress, euler_critical_load, solve_buckling, BucklingMode, BucklingSolution,
+    BucklingSolverError,
 };
 pub use constraints::FemConstraint;
 pub use contact::{
