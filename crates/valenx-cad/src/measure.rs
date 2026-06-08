@@ -751,6 +751,39 @@ pub fn solid_bounding_box_max_projection_sphericity(solid: &Solid) -> Result<f64
     solid_bounding_box_max_projection_sphericity_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **Krumbein (1941) intercept sphericity** `ψ_i = ∛(b·c / a²)` (dimensionless, in
+/// `(0, 1]`) of a solid, where `a ≥ b ≥ c` are the sorted AABB extents — the cube root of
+/// the volume ratio of an equal-axes ellipsoid to its circumscribing sphere, the third
+/// classic operational sphericity alongside the Sneed–Folk
+/// [`solid_bounding_box_max_projection_sphericity`] and the Wadell-true [`solid_sphericity`].
+/// It is `1` for an equant cube or sphere and drops toward `0` for a blade, rod, or disc.
+/// Evaluated at tessellation tolerance `tol`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid is
+/// degenerate (a zero longest extent).
+pub fn solid_bounding_box_intercept_sphericity_tol(
+    solid: &Solid,
+    tol: f64,
+) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    let (shortest, mid, longest) = (s[0], s[1], s[2]);
+    if longest <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate (zero extent); intercept sphericity undefined".to_string(),
+        ));
+    }
+    Ok((mid * shortest / (longest * longest)).cbrt())
+}
+
+/// AABB Krumbein intercept sphericity of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_intercept_sphericity_tol`].
+pub fn solid_bounding_box_intercept_sphericity(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_intercept_sphericity_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
 /// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
 /// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
@@ -1587,6 +1620,54 @@ mod tests {
         assert!(
             (solid_bounding_box_max_projection_sphericity(&bx).unwrap()
                 - solid_bounding_box_max_projection_sphericity_tol(&bx, 0.1).unwrap())
+            .abs()
+                < 1e-9,
+            "_tol wrapper agrees"
+        );
+    }
+
+    #[test]
+    fn solid_bounding_box_intercept_sphericity_is_cbrt_bc_over_a2() {
+        // (a) WORKED: box(2,4,6) → sorted a=6, b=4, c=2, ψ_i = ∛(4·2/6²) = ∛(8/36) ≈ 0.60570.
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_bounding_box_intercept_sphericity(&bx).unwrap() - (8.0_f64 / 36.0).cbrt()).abs()
+                <= 1e-9,
+            "ψ_i = ∛(8/36) ≈ 0.60570"
+        );
+
+        // (b) THREAD the three extent accessors (#411/#420) (non-tautological): ψ_i =
+        // ∛(intermediate·shortest / longest²).
+        let a = solid_bounding_box_longest_extent(&bx).unwrap();
+        let b = solid_bounding_box_intermediate_extent(&bx).unwrap();
+        let c = solid_bounding_box_shortest_extent(&bx).unwrap();
+        assert!(
+            (solid_bounding_box_intercept_sphericity(&bx).unwrap() - (b * c / (a * a)).cbrt()).abs()
+                <= 1e-9,
+            "ψ_i = ∛(b·c/a²)"
+        );
+
+        // (c) CUBE: all extents equal → ψ_i = ∛(1) = 1.
+        let cube = box_solid(5.0, 5.0, 5.0).unwrap();
+        assert!(
+            (solid_bounding_box_intercept_sphericity(&cube).unwrap() - 1.0).abs() <= 1e-9,
+            "cube → 1"
+        );
+
+        // (d) DISTINCT from the Sneed–Folk max-projection sphericity (a genuinely different
+        // descriptor): for box(2,4,6), ∛(8/36) ≈ 0.6057 vs ∛(1/6) ≈ 0.5503.
+        assert!(
+            (solid_bounding_box_intercept_sphericity(&bx).unwrap()
+                - solid_bounding_box_max_projection_sphericity(&bx).unwrap())
+            .abs()
+                > 0.01,
+            "intercept ≠ max-projection sphericity"
+        );
+
+        // (e) The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (solid_bounding_box_intercept_sphericity(&bx).unwrap()
+                - solid_bounding_box_intercept_sphericity_tol(&bx, 0.1).unwrap())
             .abs()
                 < 1e-9,
             "_tol wrapper agrees"
