@@ -605,6 +605,60 @@ pub fn areal_velocity_from_elements(
     Ok(0.5 * (MU_EARTH * semi_major_axis * (1.0 - eccentricity * eccentricity)).sqrt())
 }
 
+/// The **periapsis speed from the orbital elements** `v_p = √(μ·(1+e)/(a·(1−e)))` (m/s) —
+/// the orbital speed at periapsis (closest approach), the FASTEST point of the orbit, where
+/// `semi_major_axis` `a` (m) is the orbit size and `eccentricity` `e` (`0 ≤ e < 1`) its
+/// shape. With the [`apoapsis_speed_from_elements`] it completes the apsis kinematics
+/// alongside the apsis radii ([`periapsis_radius_from_elements`]). It is the vis-viva speed
+/// [`orbital_speed`] evaluated at the periapsis radius, and `r_p·v_p` is the conserved
+/// specific angular momentum [`specific_angular_momentum_from_elements`].
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `a` is non-finite or non-positive, or `e`
+/// is non-finite or outside the bound-ellipse range `0 ≤ e < 1`.
+pub fn periapsis_speed_from_elements(
+    semi_major_axis: f64,
+    eccentricity: f64,
+) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+        || !eccentricity.is_finite()
+        || !(0.0..1.0).contains(&eccentricity)
+    {
+        return Err(AstroError::NonPhysicalState(
+            "periapsis_speed_from_elements requires semi_major_axis > 0 and 0 <= eccentricity < 1",
+        ));
+    }
+    Ok((MU_EARTH * (1.0 + eccentricity) / (semi_major_axis * (1.0 - eccentricity))).sqrt())
+}
+
+/// The **apoapsis speed from the orbital elements** `v_a = √(μ·(1−e)/(a·(1+e)))` (m/s) —
+/// the orbital speed at apoapsis (farthest point), the SLOWEST point of the orbit, the lower
+/// companion to [`periapsis_speed_from_elements`]. For a circle (`e = 0`) both equal the
+/// [`circular_speed`]. It is the vis-viva [`orbital_speed`] at the apoapsis radius, and
+/// `r_a·v_a` is the same conserved specific angular momentum as at periapsis.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `a` is non-finite or non-positive, or `e`
+/// is non-finite or outside the bound-ellipse range `0 ≤ e < 1`.
+pub fn apoapsis_speed_from_elements(
+    semi_major_axis: f64,
+    eccentricity: f64,
+) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+        || !eccentricity.is_finite()
+        || !(0.0..1.0).contains(&eccentricity)
+    {
+        return Err(AstroError::NonPhysicalState(
+            "apoapsis_speed_from_elements requires semi_major_axis > 0 and 0 <= eccentricity < 1",
+        ));
+    }
+    Ok((MU_EARTH * (1.0 - eccentricity) / (semi_major_axis * (1.0 + eccentricity))).sqrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -832,6 +886,56 @@ mod tests {
         assert!(areal_velocity_from_elements(-1.0, 0.1).is_err());
         assert!(areal_velocity_from_elements(7.0e6, 1.0).is_err());
         assert!(areal_velocity_from_elements(f64::NAN, 0.1).is_err());
+    }
+
+    #[test]
+    fn apsis_speed_from_elements_threads_vis_viva_and_angular_momentum() {
+        for &(a, e) in &[(7.0e6_f64, 0.1_f64), (4.2e7, 0.0), (1.0e7, 0.3)] {
+            let v_p = periapsis_speed_from_elements(a, e).unwrap();
+            let v_a = apoapsis_speed_from_elements(a, e).unwrap();
+            let r_p = periapsis_radius_from_elements(a, e).unwrap();
+            let r_a = apoapsis_radius_from_elements(a, e).unwrap();
+
+            // (a) VIS-VIVA threading orbital_speed (#238) at the apsis radii (#396).
+            assert!(
+                (v_p - orbital_speed(r_p, a).unwrap()).abs() <= 1e-9 * v_p,
+                "v_p = vis-viva(r_p)"
+            );
+            assert!(
+                (v_a - orbital_speed(r_a, a).unwrap()).abs() <= 1e-9 * v_a,
+                "v_a = vis-viva(r_a)"
+            );
+
+            // (b) ANGULAR-MOMENTUM conservation (#390): r_p·v_p = r_a·v_a = h.
+            let h = specific_angular_momentum_from_elements(a, e).unwrap();
+            assert!((r_p * v_p - h).abs() <= 1e-9 * h, "r_p·v_p = h");
+            assert!((r_a * v_a - h).abs() <= 1e-9 * h, "r_a·v_a = h");
+
+            // (c) ORDERING + RATIO: faster at periapsis; v_p/v_a = r_a/r_p = (1+e)/(1−e).
+            assert!(v_p >= v_a, "v_p ≥ v_a");
+            assert!((v_p / v_a - r_a / r_p).abs() <= 1e-9 * (v_p / v_a), "v_p/v_a = r_a/r_p");
+        }
+
+        // (d) CIRCULAR threading circular_speed (#142): at e = 0 both apsis speeds equal it.
+        for &a in &[7.0e6_f64, 4.2e7] {
+            let vc = circular_speed(a).unwrap();
+            assert!(
+                (periapsis_speed_from_elements(a, 0.0).unwrap() - vc).abs() <= 1e-9 * vc,
+                "circle: v_p = v_circ"
+            );
+            assert!(
+                (apoapsis_speed_from_elements(a, 0.0).unwrap() - vc).abs() <= 1e-9 * vc,
+                "circle: v_a = v_circ"
+            );
+        }
+
+        // (e) Err on non-physical input (both fns).
+        assert!(periapsis_speed_from_elements(-1.0, 0.1).is_err());
+        assert!(periapsis_speed_from_elements(7.0e6, 1.0).is_err());
+        assert!(periapsis_speed_from_elements(f64::NAN, 0.1).is_err());
+        assert!(apoapsis_speed_from_elements(-1.0, 0.1).is_err());
+        assert!(apoapsis_speed_from_elements(7.0e6, 1.0).is_err());
+        assert!(apoapsis_speed_from_elements(f64::NAN, 0.1).is_err());
     }
 
     #[test]
