@@ -61,7 +61,9 @@ pub use cable_theory::{
     semi_infinite_input_resistance, steady_state_attenuation, time_constant_s,
     time_to_charge_fraction,
 };
-pub use chord_conductance::{chord_conductance_potential_mv, ConductanceChannel};
+pub use chord_conductance::{
+    chord_conductance_potential_mv, total_chord_conductance, ConductanceChannel,
+};
 pub use conduction::{
     conduction_delay_s, conduction_distance_m, conduction_velocity_at_crossover,
     conduction_velocity_from_latency, myelinated_conduction_velocity,
