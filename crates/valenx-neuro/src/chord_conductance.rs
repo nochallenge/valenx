@@ -58,9 +58,60 @@ pub fn chord_conductance_potential_mv(channels: &[ConductanceChannel]) -> f64 {
     }
 }
 
+/// The **total chord (input) conductance** `G = Σ gᵢ` (siemens) — the sum of the parallel
+/// channel conductances, the membrane's input conductance and the reciprocal of its input
+/// resistance. It is the denominator of [`chord_conductance_potential_mv`]: the resting
+/// potential is `Σ gᵢ·Eᵢ / G`. Channels with non-positive conductance are ignored (matching
+/// the potential), so `G` is `0` for a membrane with no open channels.
+pub fn total_chord_conductance(channels: &[ConductanceChannel]) -> f64 {
+    channels
+        .iter()
+        .filter(|ch| ch.conductance_s > 0.0)
+        .map(|ch| ch.conductance_s)
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn total_chord_conductance_is_the_potential_denominator() {
+        // Worked sum: g = [1, 3] nS → total = 4 nS.
+        let chs = [
+            ConductanceChannel::new(1.0e-9, -90.0),
+            ConductanceChannel::new(3.0e-9, 60.0),
+        ];
+        let total = total_chord_conductance(&chs);
+        assert!((total - 4.0e-9).abs() <= 1e-9 * 4.0e-9, "Σg = 4 nS");
+
+        // Threads chord_conductance_potential_mv: V_rest = Σ(g·E) / total_g.
+        let numerator: f64 = chs.iter().map(|c| c.conductance_s * c.reversal_mv).sum();
+        let v_rest = numerator / total;
+        assert!(
+            (chord_conductance_potential_mv(&chs) - v_rest).abs() <= 1e-9 * v_rest.abs(),
+            "V_rest = Σ(g·E)/G"
+        );
+
+        // Single channel: total == its g, and V_rest == its reversal.
+        let one = [ConductanceChannel::new(2.0e-9, -70.0)];
+        assert!((total_chord_conductance(&one) - 2.0e-9).abs() <= 1e-9 * 2.0e-9, "single → g");
+        assert!(
+            (chord_conductance_potential_mv(&one) + 70.0).abs() < 1e-9,
+            "single → its reversal"
+        );
+
+        // V_rest is bounded by the channel reversals (−90 ≤ V_rest ≤ 60).
+        assert!(
+            (-90.0..=60.0).contains(&chord_conductance_potential_mv(&chs)),
+            "V_rest within [E_min, E_max]"
+        );
+
+        // Additive: the total of the union equals the sum of the parts' totals.
+        let part_a = total_chord_conductance(&chs[..1]);
+        let part_b = total_chord_conductance(&chs[1..]);
+        assert!((total - (part_a + part_b)).abs() <= 1e-9 * total, "additive");
+    }
 
     #[test]
     fn chord_conductance_is_the_conductance_weighted_reversal_mean() {
