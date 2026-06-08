@@ -1026,6 +1026,29 @@ pub fn solid_principal_moments(solid: &Solid) -> Result<[f64; 3], CadError> {
     solid_principal_moments_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **trace of the inertia tensor** `I₁ + I₂ + I₃` (model units⁵, unit density) of a
+/// solid — the sum of its three centroidal principal moments
+/// ([`solid_principal_moments_tol`]), evaluated at tessellation tolerance `tol`. It is a
+/// **rotation invariant** (a matrix trace is basis-independent), equal to `2·V·⟨r²⟩` —
+/// twice the volume times the mean-square distance from the centroid — i.e. `2V` times the
+/// squared [`solid_radius_of_gyration_tol`]. Unlike the dimensionless
+/// [`solid_inertia_anisotropy_tol`] this is the absolute rotational "size".
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// encloses no volume.
+pub fn solid_inertia_trace_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let m = solid_principal_moments_tol(solid, tol)?;
+    Ok(m[0] + m[1] + m[2])
+}
+
+/// Trace of the centroidal inertia tensor of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_inertia_trace_tol`].
+pub fn solid_inertia_trace(solid: &Solid) -> Result<f64, CadError> {
+    solid_inertia_trace_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **inertia anisotropy** `I_max / I_min` (dimensionless, `≥ 1`) of a solid — the
 /// ratio of its largest to smallest centroidal principal moment of inertia
 /// ([`solid_principal_moments_tol`]), evaluated at tessellation tolerance `tol`. Unlike
@@ -2152,6 +2175,58 @@ mod tests {
         // A sphere is isotropic: the three principal moments are equal.
         let s = solid_principal_moments(&sphere(2.0).unwrap()).unwrap();
         assert!((s[0] - s[2]).abs() / s[0] < 1e-3, "sphere principal moments equal: {s:?}");
+    }
+
+    #[test]
+    fn solid_inertia_trace_is_the_sum_of_principal_moments() {
+        use crate::primitives::sphere;
+
+        // (a) WORKED ANALYTIC: box(2,4,6) → principal moments [208, 160, 80] → trace = 448
+        // (= V·(a²+b²+c²)/6 = 48·56/6).
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_inertia_trace(&bx).unwrap() - 448.0).abs() / 448.0 < 1e-9,
+            "trace = ΣI = 448"
+        );
+
+        // (b) THREAD solid_principal_moments: trace == I₁+I₂+I₃.
+        let m = solid_principal_moments(&bx).unwrap();
+        assert!(
+            (solid_inertia_trace(&bx).unwrap() - (m[0] + m[1] + m[2])).abs()
+                / solid_inertia_trace(&bx).unwrap()
+                < 1e-9,
+            "trace = m0+m1+m2"
+        );
+
+        // (c) THREAD solid_radius_of_gyration + solid_volume (non-tautological): the trace
+        // is 2·V·k² (trace = 2V⟨r²⟩, k = √⟨r²⟩ the radius of gyration).
+        let v = solid_volume(&bx).unwrap();
+        let k = solid_radius_of_gyration(&bx).unwrap();
+        assert!(
+            (solid_inertia_trace(&bx).unwrap() - 2.0 * v * k * k).abs()
+                / solid_inertia_trace(&bx).unwrap()
+                < 1e-9,
+            "trace = 2·V·k²"
+        );
+
+        // (d) SPHERE (isotropic): trace = (6/5)·V·r² for r = 2 (tessellation).
+        let s = sphere(2.0).unwrap();
+        let vs = solid_volume(&s).unwrap();
+        assert!(
+            (solid_inertia_trace(&s).unwrap() - 1.2 * vs * 4.0).abs()
+                / solid_inertia_trace(&s).unwrap()
+                < 3e-2,
+            "sphere trace = (6/5)·V·r²"
+        );
+
+        // (e) POSITIVITY + _tol wrapper agreement.
+        assert!(solid_inertia_trace(&bx).unwrap() > 0.0, "trace > 0");
+        assert!(
+            (solid_inertia_trace(&bx).unwrap() - solid_inertia_trace_tol(&bx, 0.1).unwrap()).abs()
+                / solid_inertia_trace(&bx).unwrap()
+                < 1e-9,
+            "_tol wrapper agrees"
+        );
     }
 
     #[test]
