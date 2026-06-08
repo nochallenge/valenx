@@ -753,6 +753,20 @@ pub fn circular_second_moment_of_area(diameter: f64) -> f64 {
     std::f64::consts::PI * diameter.powi(4) / 64.0
 }
 
+/// The **plastic section modulus of a solid circular section** `Z = d³/6` (m³), for a round
+/// bar of diameter `diameter` `d` (m) — the section property for fully-plastic limit bending
+/// of a shaft (`M_plastic = σ_y·Z`), the circular companion to
+/// [`rectangular_plastic_section_modulus`]. For a solid circle the shape factor is
+/// `Z/S = 16/(3π) ≈ 1.698` (`Z = d³/6` vs the elastic `S = π·d³/32`, the
+/// [`elastic_section_modulus`] of [`circular_second_moment_of_area`]). Returns `0` for
+/// non-physical input (`d` non-positive or non-finite).
+pub fn circular_plastic_section_modulus(diameter: f64) -> f64 {
+    if !diameter.is_finite() || diameter <= 0.0 {
+        return 0.0;
+    }
+    diameter * diameter * diameter / 6.0
+}
+
 /// The **polar second moment of area of a solid circular shaft** about its longitudinal
 /// axis `J = π·d⁴/32` (m⁴), for a round bar of diameter `diameter` `d` (m) — the **torsion
 /// constant** that feeds [`polar_section_modulus`] (`Z_p = J/(d/2)`) and
@@ -2826,6 +2840,41 @@ mod tests {
         assert_eq!(circular_second_moment_of_area(0.0), 0.0);
         assert_eq!(circular_second_moment_of_area(f64::NAN), 0.0);
         assert_eq!(circular_second_moment_of_area(-0.1), 0.0);
+    }
+
+    #[test]
+    fn circular_plastic_section_modulus_is_d3_over_6() {
+        // (a) WORKED: d = 0.1 → Z = d³/6 = 0.001/6 ≈ 1.6667e-4 m³.
+        let z = circular_plastic_section_modulus(0.1);
+        assert!((z - 0.1_f64.powi(3) / 6.0).abs() <= 1e-9 * z, "Z = d³/6");
+
+        // (b) THREAD elastic_section_modulus + circular_second_moment_of_area (#419)
+        // (non-tautological): the circular elastic modulus is S = I/(d/2) = π·d³/32, and the
+        // plastic modulus is exactly (16/(3π))·S — the solid-circle shape factor.
+        let d = 0.1_f64;
+        let s = elastic_section_modulus(circular_second_moment_of_area(d), d / 2.0);
+        let shape = 16.0 / (3.0 * std::f64::consts::PI);
+        assert!(
+            (circular_plastic_section_modulus(d) - shape * s).abs()
+                <= 1e-9 * circular_plastic_section_modulus(d),
+            "Z = (16/3π)·S"
+        );
+        assert!(
+            (circular_plastic_section_modulus(d) / s - shape).abs() <= 1e-9 * shape,
+            "shape factor Z/S = 16/(3π)"
+        );
+
+        // (c) SCALING: cubic in diameter.
+        let base = circular_plastic_section_modulus(0.1);
+        assert!(
+            (circular_plastic_section_modulus(0.2) - 8.0 * base).abs() <= 1e-9 * 8.0 * base,
+            "cubic in diameter"
+        );
+
+        // (d) GUARD: non-positive or non-finite → 0.
+        assert_eq!(circular_plastic_section_modulus(0.0), 0.0);
+        assert_eq!(circular_plastic_section_modulus(f64::NAN), 0.0);
+        assert_eq!(circular_plastic_section_modulus(-0.1), 0.0);
     }
 
     #[test]
