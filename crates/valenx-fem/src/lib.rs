@@ -156,7 +156,7 @@ pub use beam::{
     euler_bernoulli_beam_frequency, fixed_fixed_center_deflection,
     fixed_fixed_point_load_end_moment, fixed_fixed_udl_center_deflection,
     fixed_fixed_udl_end_moment, flexural_rigidity, polar_section_modulus,
-    rectangular_second_moment_of_area,
+    rectangular_plastic_section_modulus, rectangular_second_moment_of_area,
     simply_supported_center_deflection, simply_supported_end_slope,
     simply_supported_point_load_max_moment, simply_supported_point_load_strain_energy,
     simply_supported_udl_center_deflection,
