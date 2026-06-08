@@ -1291,6 +1291,32 @@ impl FlowSolution {
         sum / ((nx - 2) * (ny - 2)) as f64
     }
 
+    /// The **root-mean-square interior vorticity** `ω_rms = √(⟨ω²⟩)` (1/s) over the
+    /// interior cells — the magnitude scale of the central-difference vorticity, completing
+    /// the peak / mean / rms set ([`FlowSolution::max_vorticity`],
+    /// [`FlowSolution::mean_vorticity`]). It relates to the [`FlowSolution::enstrophy`] by
+    /// `ω_rms = √(2E/A)` (enstrophy is `½∫ω² dA`), and it is always `≥ |⟨ω⟩|` (Cauchy–
+    /// Schwarz), with equality only for a spatially uniform vorticity. Uses the same
+    /// interior stencil as [`FlowSolution::mean_vorticity`]; returns `0` for a grid too
+    /// small for an interior difference (`nx < 3` or `ny < 3`).
+    pub fn rms_vorticity(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let (two_dx, two_dy) = (2.0 * self.grid.dx(), 2.0 * self.grid.dy());
+        let mut sum_sq = 0.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                let omega = dv_dx - du_dy;
+                sum_sq += omega * omega;
+            }
+        }
+        (sum_sq / ((nx - 2) * (ny - 2)) as f64).sqrt()
+    }
+
     /// The total **enstrophy** `E = ½∫ω² dA` (m²/s²) over the interior cells — the
     /// integrated *squared* vorticity, a strictly non-negative measure of the
     /// flow's total rotational intensity. Where the circulation `Γ = ∫ω dA` is a
@@ -3153,6 +3179,61 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.mean_vorticity(), 0.0);
+    }
+
+    #[test]
+    fn rms_vorticity_is_the_root_mean_square_interior_vorticity() {
+        // A pure horizontal shear u(y) = γ·y has constant vorticity ω = −γ everywhere, so
+        // its rms is exactly |ω| = γ.
+        let gamma = 2.0_f64;
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * grid.dy();
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) ANALYTIC: ω_rms = |ω| = γ for the constant-vorticity field.
+        assert!((sol.rms_vorticity() - gamma).abs() < 1e-9, "ω_rms = γ = 2");
+
+        // (b) THREAD enstrophy (non-tautological — a different code path): ω_rms = √(2E/A).
+        let interior_area = (grid.nx - 2) as f64 * (grid.ny - 2) as f64 * grid.dx() * grid.dy();
+        assert!(
+            (sol.rms_vorticity() - (2.0 * sol.enstrophy() / interior_area).sqrt()).abs()
+                <= 1e-9 * sol.rms_vorticity(),
+            "ω_rms = √(2E/A)"
+        );
+
+        // (c) RMS ≥ |MEAN| (Cauchy–Schwarz), with equality for this uniform field.
+        assert!(sol.rms_vorticity() >= sol.mean_vorticity().abs() - 1e-12, "rms ≥ |mean|");
+        assert!(
+            (sol.rms_vorticity() - sol.mean_vorticity().abs()).abs() < 1e-9,
+            "uniform ω → rms = |mean|"
+        );
+
+        // (d) SMALL GRID: too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.rms_vorticity(), 0.0);
     }
 
     #[test]
