@@ -629,6 +629,21 @@ pub fn elastic_section_modulus(second_moment_area: f64, extreme_fiber_distance: 
     second_moment_area / extreme_fiber_distance
 }
 
+/// The **elastic bending-moment capacity** `M = σ·S` (N·m) — the bending moment a
+/// section carries when its most-stressed fibre reaches the stress `stress` `σ` (Pa),
+/// given the [`elastic_section_modulus`] `section_modulus` `S` (m³). It is the inverse
+/// of the flexure formula `σ_max = M/S` ([`bending_stress`] at the extreme fibre):
+/// feeding the *allowable* stress gives the section's allowable working moment, and
+/// feeding the *yield* stress gives the first-yield moment `M_y`. Linear in both the
+/// stress and the section modulus. Returns `0` for non-physical input (non-finite, or a
+/// non-positive section modulus).
+pub fn bending_moment_capacity(stress: f64, section_modulus: f64) -> f64 {
+    if !stress.is_finite() || !section_modulus.is_finite() || section_modulus <= 0.0 {
+        return 0.0;
+    }
+    stress * section_modulus
+}
+
 /// The analytic **simply-supported (pinned–pinned) mid-span deflection**
 /// `δ = P·L³/(48·E·I)` (m) of a slender Euler–Bernoulli beam under a *central*
 /// transverse point load `load` `P` (N) — span `length` `L` (m), Young's modulus
@@ -2636,6 +2651,58 @@ mod tests {
         assert_eq!(bending_stress(2000.0, f64::NAN, 1.0e-6), 0.0);
         assert_eq!(bending_stress(2000.0, 0.05, 0.0), 0.0);
         assert_eq!(bending_stress(2000.0, 0.05, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn bending_moment_capacity_inverts_the_flexure_formula() {
+        // (a) WORKED: M = σ·S = 1.0e8·2.0e-5 = 2000 N·m.
+        assert!(
+            (bending_moment_capacity(1.0e8, 2.0e-5) - 2000.0).abs() <= 1e-9 * 2000.0,
+            "M = σ·S = 2000 N·m"
+        );
+
+        // (b) ROUND-TRIP threading bending_stress + elastic_section_modulus
+        // (non-tautological): σ·S = (M/S)·S = M at the extreme fibre y = c.
+        for &(m, c, i) in &[(2000.0_f64, 0.05_f64, 1.0e-6_f64), (8200.0, 0.12, 9.0e-8)] {
+            let s = elastic_section_modulus(i, c);
+            let sigma = bending_stress(m, c, i);
+            assert!(
+                (bending_moment_capacity(sigma, s) - m).abs() <= 1e-9 * m,
+                "σ·S recovers M for (M,c,I)=({m},{c},{i})"
+            );
+        }
+
+        // (c) FIRST-YIELD round-trip threading all three: a section's first-yield
+        // moment M_y = σ_y·S maps back to exactly σ_y at the extreme fibre.
+        let (sy, c, i) = (250.0e6_f64, 0.05_f64, 1.0e-6_f64);
+        let s = elastic_section_modulus(i, c);
+        let my = bending_moment_capacity(sy, s);
+        assert!(
+            (bending_stress(my, c, i) - sy).abs() <= 1e-9 * sy,
+            "M_y = σ_y·S maps back to σ_y"
+        );
+
+        // (d) LINEARITY + SIGN: linear in stress and in section modulus; a negative
+        // stress yields a negative (reversed) moment.
+        let base = bending_moment_capacity(1.0e8, 2.0e-5);
+        assert!(
+            (bending_moment_capacity(2.0e8, 2.0e-5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in stress"
+        );
+        assert!(
+            (bending_moment_capacity(1.0e8, 4.0e-5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in section modulus"
+        );
+        assert!(
+            bending_moment_capacity(-1.0e8, 2.0e-5) < 0.0,
+            "negative stress → negative moment"
+        );
+
+        // (e) GUARD: non-positive section modulus or non-finite input → 0 sentinel.
+        assert_eq!(bending_moment_capacity(1.0e8, 0.0), 0.0);
+        assert_eq!(bending_moment_capacity(1.0e8, -1.0e-5), 0.0);
+        assert_eq!(bending_moment_capacity(f64::NAN, 2.0e-5), 0.0);
+        assert_eq!(bending_moment_capacity(1.0e8, f64::NAN), 0.0);
     }
 
     #[test]
