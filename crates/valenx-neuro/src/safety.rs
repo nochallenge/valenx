@@ -26,6 +26,15 @@ pub fn charge_density(q_uc: f64, area_cm2: f64) -> f64 {
     q_uc / area_cm2
 }
 
+/// **Charge per phase** `Q = I·t` (µC/phase) — the charge a single rectangular stimulus
+/// phase of amplitude `current_ma` (mA) and duration `pulse_width_ms` (ms) injects. Since
+/// `1 mA · 1 ms = 1 µC`, the product is already in µC/phase: the source quantity that feeds
+/// the Shannon chain — the [`charge_density`] (`Q/A`), the [`shannon_k`] value, and the
+/// [`is_safe`] check, bounded by [`max_safe_charge_per_phase`].
+pub fn charge_per_phase_uc(current_ma: f64, pulse_width_ms: f64) -> f64 {
+    current_ma * pulse_width_ms
+}
+
 /// Shannon **k-value** of an operating point:
 /// `k = log10(D) + log10(Q) = log10(Q² / A)`.
 ///
@@ -145,6 +154,35 @@ mod tests {
             min_safe_electrode_area(10.0, 1.5) > min_safe_electrode_area(10.0, 2.0),
             "stricter k → larger area"
         );
+    }
+
+    #[test]
+    fn charge_per_phase_uc_feeds_the_shannon_chain() {
+        // (a) WORKED: 2 mA × 0.5 ms → Q = 1.0 µC (since mA·ms = µC).
+        assert!((charge_per_phase_uc(2.0, 0.5) - 1.0).abs() <= 1e-9, "Q = I·t = 1 µC");
+
+        // (b) THREAD charge_density (non-tautological): D = Q/A.
+        let (i, pw, a) = (2.0_f64, 0.5_f64, 0.01_f64);
+        assert!(
+            (charge_density(charge_per_phase_uc(i, pw), a) - i * pw / a).abs()
+                <= 1e-9 * (i * pw / a),
+            "D = (I·t)/A"
+        );
+
+        // (c) THREAD max_safe_charge_per_phase + is_safe (non-tautological): a 2 mA × 0.5 ms
+        // pulse on a 0.01 cm² electrode delivers exactly the k = 2.0 limit charge (1 µC).
+        assert!(
+            (charge_per_phase_uc(2.0, 0.5) - max_safe_charge_per_phase(0.01, 2.0)).abs() <= 1e-9,
+            "Q = Q_max at k = 2.0"
+        );
+        assert!(!is_safe(charge_per_phase_uc(2.0, 0.5), 0.01, 2.0), "at the boundary → unsafe");
+        assert!(is_safe(charge_per_phase_uc(2.0, 0.495), 0.01, 2.0), "just below → safe");
+
+        // (d) PROPORTIONALITY + ZERO: linear in I and t; no current → no charge.
+        let base = charge_per_phase_uc(2.0, 0.5);
+        assert!((charge_per_phase_uc(4.0, 0.5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base, "∝ I");
+        assert!((charge_per_phase_uc(2.0, 1.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base, "∝ t");
+        assert_eq!(charge_per_phase_uc(0.0, 0.5), 0.0);
     }
 
     #[test]

@@ -98,7 +98,8 @@ pub use nernst::{
 };
 pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{
-    charge_density, is_safe, max_safe_charge_density, max_safe_charge_per_phase,
+    charge_density, charge_per_phase_uc, is_safe, max_safe_charge_density,
+    max_safe_charge_per_phase,
     min_safe_electrode_area, shannon_k,
 };
 pub use steering::ContactArray;
