@@ -351,6 +351,35 @@ pub fn solid_mean_chord_length(solid: &Solid) -> Result<f64, CadError> {
     solid_mean_chord_length_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **Sauter mean diameter** `d₃₂ = 6·V / A` (model units) of a solid — the diameter
+/// of a sphere with the same volume-to-surface ratio, evaluated at tessellation tolerance
+/// `tol`. It is the standard particle-sizing diameter in sprays, aerosols, powders, and
+/// packed beds (the interfacial-area-weighted mean), and the surface-to-volume companion
+/// to the Cauchy mean chord [`solid_mean_chord_length_tol`] (`4V/A`): `d₃₂ = 1.5·⟨ℓ⟩`. For
+/// a sphere it returns the true diameter `2r`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid is
+/// degenerate (non-positive surface area).
+pub fn solid_sauter_mean_diameter_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let v = solid_volume_tol(solid, tol)?;
+    let a = solid_area_tol(solid, tol)?;
+    if a <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate solid (non-positive surface area); Sauter mean diameter undefined"
+                .to_string(),
+        ));
+    }
+    Ok(6.0 * v / a)
+}
+
+/// Sauter mean diameter of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_sauter_mean_diameter_tol`].
+pub fn solid_sauter_mean_diameter(solid: &Solid) -> Result<f64, CadError> {
+    solid_sauter_mean_diameter_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **volume centroid** (centre of mass at uniform density) of a solid,
 /// `[x, y, z]` in model units, computed at tessellation tolerance `tol`.
 ///
@@ -1547,6 +1576,46 @@ mod tests {
         assert!(
             (solid_mean_chord_length_tol(&b, 0.1).unwrap() - 192.0 / 88.0).abs()
                 <= 1e-9 * (192.0 / 88.0),
+            "_tol wrapper agrees"
+        );
+    }
+
+    #[test]
+    fn solid_sauter_mean_diameter_is_six_v_over_a() {
+        use crate::primitives::sphere;
+
+        // (a) WORKED: cube(3) → d₃₂ = 6·27/54 = 3 (= side); box(2,4,6): V=48, A=88 →
+        // d₃₂ = 6·48/88 = 288/88 ≈ 3.2727 (flat-faced, exact).
+        let cube = box_solid(3.0, 3.0, 3.0).unwrap();
+        assert!(
+            (solid_sauter_mean_diameter(&cube).unwrap() - 3.0).abs() <= 1e-9 * 3.0,
+            "cube → side"
+        );
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let d = solid_sauter_mean_diameter(&bx).unwrap();
+        assert!((d - 6.0 * 48.0 / 88.0).abs() <= 1e-9 * d, "box → 6·48/88");
+
+        // (b) THREAD solid_mean_chord_length (#357): d₃₂ = 1.5·⟨ℓ⟩ (6V/A = 1.5·4V/A).
+        assert!(
+            (d - 1.5 * solid_mean_chord_length(&bx).unwrap()).abs() <= 1e-9 * d,
+            "d₃₂ = 1.5·mean_chord"
+        );
+
+        // (c) THREAD solid_specific_surface_area (A/V): d₃₂ = 6 / SSA (independent path).
+        assert!(
+            (d - 6.0 / solid_specific_surface_area(&bx).unwrap()).abs() <= 1e-9 * d,
+            "d₃₂ = 6/SSA"
+        );
+
+        // (d) SPHERE → diameter: a sphere of radius 2 returns its true diameter 2r = 4.
+        assert!(
+            (solid_sauter_mean_diameter(&sphere(2.0).unwrap()).unwrap() - 4.0).abs() <= 3e-2 * 4.0,
+            "sphere → 2r = 4"
+        );
+
+        // (e) The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (d - solid_sauter_mean_diameter_tol(&bx, 0.1).unwrap()).abs() < 1e-9,
             "_tol wrapper agrees"
         );
     }
