@@ -59,6 +59,17 @@ pub fn point_heat_isotherm_radius_mm(power_w: f64, k_w_per_mk: f64, delta_t_k: f
     1.0e3 * power_w / (4.0 * std::f64::consts::PI * k_w_per_mk * delta_t_k)
 }
 
+/// The **point-source power for a target temperature rise** `Q = ΔT·4πk·r` (W) — the
+/// deposited power that makes a point heat source's steady conductive temperature rise
+/// reach `delta_t_k` `ΔT` (K) at radius `r_mm` (mm), in tissue of thermal conductivity
+/// `k_w_per_mk` (W/m·K). It is the power solve of `ΔT = Q/(4πk·r)` — the third member of
+/// the point-source inverse trio with [`analytic_point_heat_k`] (the rise) and
+/// [`point_heat_isotherm_radius_mm`] (the radius) — the thermal-dose planning quantity
+/// (how much power reaches a target rise at a given distance). `ΔT = 0` needs no power.
+pub fn point_heat_power_for_delta_t_w(delta_t_k: f64, k_w_per_mk: f64, r_mm: f64) -> f64 {
+    delta_t_k * 4.0 * std::f64::consts::PI * k_w_per_mk * (r_mm * 1.0e-3)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +126,54 @@ mod tests {
                 > point_heat_isotherm_radius_mm(0.01, 0.5, 0.5),
             "lower conductivity → larger radius"
         );
+    }
+
+    #[test]
+    fn point_heat_power_for_delta_t_completes_the_inverse_trio() {
+        // (a) ROUND-TRIP threading analytic_point_heat_k (non-tautological, both directions).
+        for &(dt, k, r) in &[(0.5_f64, 0.5_f64, 4.0_f64), (0.2, 0.6, 8.0), (1.0, 0.49, 2.0)] {
+            let p = point_heat_power_for_delta_t_w(dt, k, r);
+            assert!((analytic_point_heat_k(p, k, r) - dt).abs() <= 1e-9 * dt, "ΔT(Q(ΔT)) = ΔT");
+        }
+        for &(p, k, r) in &[(0.01_f64, 0.5_f64, 4.0_f64), (0.02, 0.6, 8.0)] {
+            assert!(
+                (point_heat_power_for_delta_t_w(analytic_point_heat_k(p, k, r), k, r) - p).abs()
+                    <= 1e-9 * p,
+                "Q(ΔT(Q)) = Q"
+            );
+        }
+
+        // (b) THREAD point_heat_isotherm_radius_mm (#401) (non-tautological): the power to
+        // reach ΔT at the isotherm radius of a source P0 recovers P0.
+        let (p0, k, dt) = (0.01_f64, 0.5_f64, 0.5_f64);
+        assert!(
+            (point_heat_power_for_delta_t_w(dt, k, point_heat_isotherm_radius_mm(p0, k, dt)) - p0)
+                .abs()
+                <= 1e-9 * p0,
+            "Q at the ΔT-isotherm radius = P0"
+        );
+
+        // (c) WORKED: ΔT = 1 K, k = 0.5, r = 1 mm → Q = 4π·0.5·1·1e-3 = 2π·1e-3 ≈ 6.283 mW.
+        let q = point_heat_power_for_delta_t_w(1.0, 0.5, 1.0);
+        let expected = 2.0 * std::f64::consts::PI * 1.0e-3;
+        assert!((q - expected).abs() <= 1e-9 * expected, "Q = 2π·1e-3 W");
+
+        // (d) PROPORTIONALITY: Q is linear in ΔT, k, and r.
+        let base = point_heat_power_for_delta_t_w(1.0, 0.5, 1.0);
+        assert!(
+            (point_heat_power_for_delta_t_w(2.0, 0.5, 1.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "∝ ΔT"
+        );
+        assert!(
+            (point_heat_power_for_delta_t_w(1.0, 1.0, 1.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "∝ k"
+        );
+        assert!(
+            (point_heat_power_for_delta_t_w(1.0, 0.5, 2.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "∝ r"
+        );
+
+        // (e) ZERO: no temperature rise needs no power.
+        assert_eq!(point_heat_power_for_delta_t_w(0.0, 0.5, 1.0), 0.0);
     }
 }
