@@ -53,6 +53,17 @@ pub fn thermal_voltage_mv(temp_k: f64) -> f64 {
     1.0e3 * GAS_CONSTANT * temp_k / FARADAY
 }
 
+/// The **per-decade Nernst slope** `S = (R·T/F)·ln(10)` in millivolts — the change in a
+/// monovalent ion's equilibrium potential per *tenfold* change in its concentration
+/// ratio. It is `ln(10) ≈ 2.303` times the [`thermal_voltage_mv`] (the per-e-fold slope),
+/// the classic **≈ 59 mV/decade at 25 °C** (≈ 61.5 mV at body temperature) quoted for
+/// ion-selective and pH electrodes, and the decade form of the Nernst equation
+/// `E = (S/z)·log₁₀(c_out/c_in)`. Like its siblings it is a bare closed form; a
+/// non-positive `temp_k` yields a non-physical result the caller is expected to guard.
+pub fn nernst_slope_per_decade_mv(temp_k: f64) -> f64 {
+    thermal_voltage_mv(temp_k) * std::f64::consts::LN_10
+}
+
 /// The **Ussing flux ratio** `M_in/M_out = (c_out/c_in)·exp(−z·V/V_T)` — the ratio
 /// of an ion's unidirectional **influx to efflux** across the membrane under
 /// combined diffusion and electrical drift (Ussing, 1949), at membrane potential
@@ -159,6 +170,49 @@ mod tests {
         let a = nernst_potential_mv(BODY_TEMPERATURE_K, 1.0, 10.0, 1.0);
         let b = nernst_potential_mv(BODY_TEMPERATURE_K, 1.0, 1.0, 10.0);
         assert!((a + b).abs() < 1e-9, "swapping out/in should negate E");
+    }
+
+    #[test]
+    fn nernst_slope_per_decade_mv_is_the_decade_nernst_slope() {
+        use std::f64::consts::LN_10;
+
+        // Threads thermal_voltage_mv: S = V_T · ln(10).
+        for &t in &[298.15_f64, 310.15, 273.15] {
+            assert!(
+                (nernst_slope_per_decade_mv(t) - thermal_voltage_mv(t) * LN_10).abs()
+                    <= 1e-12 * nernst_slope_per_decade_mv(t),
+                "S = V_T·ln(10)"
+            );
+        }
+
+        // Threads nernst_potential_mv via the decade form E = (S/z)·log10(c_out/c_in)
+        // (ln(10)·log10(x) = ln(x), a different code path than R·T/zF·ln).
+        for &(t, c_out, c_in) in &[(310.15_f64, 145.0_f64, 15.0_f64), (298.15, 4.0, 140.0)] {
+            let from_slope = nernst_slope_per_decade_mv(t) * (c_out / c_in).log10();
+            assert!(
+                (nernst_potential_mv(t, 1.0, c_out, c_in) - from_slope).abs() <= 1e-9 * from_slope.abs(),
+                "E = S·log10(ratio) for z=1"
+            );
+            // z = 2 carries the 1/z.
+            let from_slope_z2 = nernst_slope_per_decade_mv(t) * (c_out / c_in).log10() / 2.0;
+            assert!(
+                (nernst_potential_mv(t, 2.0, c_out, c_in) - from_slope_z2).abs()
+                    <= 1e-9 * from_slope_z2.abs(),
+                "E = (S/z)·log10(ratio)"
+            );
+        }
+
+        // Textbook: ≈ 59 mV/decade at 25 °C, ≈ 61.5 mV at body temperature.
+        assert!((nernst_slope_per_decade_mv(298.15) - 59.16).abs() < 0.3, "≈ 59 mV/decade at 25 °C");
+        assert!((nernst_slope_per_decade_mv(310.15) - 61.5).abs() < 0.3, "≈ 61.5 mV at body temp");
+
+        // Linear in absolute temperature.
+        assert!(
+            (nernst_slope_per_decade_mv(2.0 * 298.15) - 2.0 * nernst_slope_per_decade_mv(298.15))
+                .abs()
+                <= 1e-12 * nernst_slope_per_decade_mv(2.0 * 298.15),
+            "linear in T"
+        );
     }
 
     #[test]
