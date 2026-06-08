@@ -57,6 +57,7 @@ pub use measure::{
     solid_bounding_box_elongation, solid_bounding_box_elongation_tol,
     solid_bounding_box_extents, solid_bounding_box_extents_tol,
     solid_bounding_box_fill_ratio, solid_bounding_box_fill_ratio_tol,
+    solid_bounding_box_flatness, solid_bounding_box_flatness_tol,
     solid_bounding_box_surface_area, solid_bounding_box_surface_area_tol, solid_bounding_box_tol,
     solid_bounding_box_volume, solid_bounding_box_volume_tol,
     solid_centroid, solid_centroid_tol,
