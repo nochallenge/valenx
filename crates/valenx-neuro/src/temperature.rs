@@ -117,9 +117,56 @@ pub fn arrhenius_rate_ratio(activation_energy: f64, temp_k_ref: f64, temp_k: f64
     (activation_energy / crate::nernst::GAS_CONSTANT * (1.0 / temp_k_ref - 1.0 / temp_k)).exp()
 }
 
+/// The **temperature for a target Arrhenius rate ratio** `T = 1 / (1/T_ref − R·ln(ratio)/Ea)`
+/// (K) — the inverse of [`arrhenius_rate_ratio`]: the absolute temperature at which a
+/// reaction or channel-gating rate with activation energy `activation_energy` `Ea` (J/mol),
+/// referenced to `temp_k_ref`, runs `rate_ratio` times its reference rate (`R` is
+/// [`crate::nernst::GAS_CONSTANT`]). A `rate_ratio` of `1` returns `temp_k_ref`; for `Ea > 0`
+/// a faster target (`> 1`) needs a warmer temperature. Total — non-physical input yields a
+/// non-finite result the caller is expected to guard.
+pub fn temperature_for_arrhenius_rate_ratio(
+    rate_ratio: f64,
+    activation_energy: f64,
+    temp_k_ref: f64,
+) -> f64 {
+    1.0 / (1.0 / temp_k_ref - crate::nernst::GAS_CONSTANT * rate_ratio.ln() / activation_energy)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temperature_for_arrhenius_rate_ratio_inverts_the_rate_ratio() {
+        let (ea, t_ref) = (50_000.0_f64, 298.15_f64);
+
+        // Round-trips arrhenius_rate_ratio for several temperatures.
+        for &t in &[280.0, 298.15, 310.0, 330.0] {
+            let ratio = arrhenius_rate_ratio(ea, t_ref, t);
+            assert!(
+                (temperature_for_arrhenius_rate_ratio(ratio, ea, t_ref) - t).abs() <= 1e-9 * t,
+                "round-trip T = {t}"
+            );
+        }
+
+        // Identity: rate_ratio = 1 → T_ref (ln 1 = 0).
+        assert!(
+            (temperature_for_arrhenius_rate_ratio(1.0, ea, t_ref) - t_ref).abs() <= 1e-9 * t_ref,
+            "ratio 1 → T_ref"
+        );
+
+        // Monotonic (Ea > 0): a faster target needs a warmer T, a slower one a cooler T.
+        assert!(temperature_for_arrhenius_rate_ratio(2.0, ea, t_ref) > t_ref, "2× → warmer");
+        assert!(temperature_for_arrhenius_rate_ratio(0.5, ea, t_ref) < t_ref, "0.5× → cooler");
+
+        // Worked closed form.
+        let expected = 1.0 / (1.0 / t_ref - crate::nernst::GAS_CONSTANT * 2.0_f64.ln() / ea);
+        assert!(
+            (temperature_for_arrhenius_rate_ratio(2.0, ea, t_ref) - expected).abs()
+                <= 1e-9 * expected,
+            "worked value"
+        );
+    }
 
     #[test]
     fn arrhenius_rate_ratio_threads_the_q10_conversions() {
