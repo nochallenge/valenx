@@ -265,6 +265,15 @@ pub fn thin_airfoil_lift_slope() -> f64 {
     std::f64::consts::TAU
 }
 
+/// The **thin-airfoil lift coefficient** `C_l = 2π·α` (dimensionless) at a small angle of
+/// attack `angle_of_attack_rad` `α` (radians) — the incompressible inviscid lift of a thin
+/// symmetric section, the [`thin_airfoil_lift_slope`] (`2π`) times the angle. It is exactly
+/// linear in `α` (thin-airfoil theory; valid for small `α` before stall), and it is the
+/// building block a Prandtl–Glauert correction scales up for compressibility.
+pub fn thin_airfoil_lift_coefficient(angle_of_attack_rad: f64) -> f64 {
+    std::f64::consts::TAU * angle_of_attack_rad
+}
+
 /// Run a single sphere-drag case and return the achieved / reference
 /// drag-coefficient pair.
 ///
@@ -577,6 +586,38 @@ mod tests {
         assert!(turb > lam);
         // Both fall with Reynolds number.
         assert!(reference_flat_plate_cf(1.0e7) < reference_flat_plate_cf(1.0e6));
+    }
+
+    #[test]
+    fn thin_airfoil_lift_coefficient_is_two_pi_alpha() {
+        // Threads thin_airfoil_lift_slope: C_l = slope·α.
+        for &a in &[0.05, 0.10, 0.15] {
+            assert!(
+                (thin_airfoil_lift_coefficient(a) - thin_airfoil_lift_slope() * a).abs()
+                    <= 1e-12 * thin_airfoil_lift_coefficient(a),
+                "C_l = slope·α at α={a}"
+            );
+        }
+
+        // Worked: C_l(0.1) = 2π·0.1 ≈ 0.6283.
+        assert!(
+            (thin_airfoil_lift_coefficient(0.1) - std::f64::consts::TAU * 0.1).abs()
+                <= 1e-12 * (std::f64::consts::TAU * 0.1),
+            "C_l(0.1) = 2π·0.1"
+        );
+
+        // Zero, linear, sign-preserving.
+        assert_eq!(thin_airfoil_lift_coefficient(0.0), 0.0, "α=0 → C_l=0");
+        assert!(
+            (thin_airfoil_lift_coefficient(0.2) - 2.0 * thin_airfoil_lift_coefficient(0.1)).abs()
+                <= 1e-12 * thin_airfoil_lift_coefficient(0.2),
+            "linear in α"
+        );
+        assert_eq!(
+            thin_airfoil_lift_coefficient(-0.1),
+            -thin_airfoil_lift_coefficient(0.1),
+            "negative incidence → negative lift"
+        );
     }
 
     #[test]
