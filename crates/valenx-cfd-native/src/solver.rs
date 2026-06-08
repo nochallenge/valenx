@@ -462,6 +462,28 @@ impl FlowSolution {
         (sum_sq / n as f64).sqrt()
     }
 
+    /// The **root-mean-square static pressure** `p_rms = √(⟨p²⟩)` (Pa) over the `nx·ny`
+    /// cells — the quadratic-mean pressure magnitude, the static-pressure analogue of the
+    /// [`FlowSolution::rms_speed`]. By the variance identity it satisfies
+    /// `p_rms² = ⟨p⟩² + σ_p²`, so it combines the area-averaged
+    /// [`FlowSolution::mean_pressure`] with the fluctuation [`FlowSolution::pressure_std_dev`];
+    /// it is `≥ |⟨p⟩|`, equal only for a uniform field, and unlike the signed mean it is
+    /// always non-negative. Returns `0` for an empty grid.
+    pub fn rms_pressure(&self) -> f64 {
+        let n = self.grid.nx * self.grid.ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut sum = 0.0;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                let p = self.pressure.at(i, j);
+                sum += p * p;
+            }
+        }
+        (sum / n as f64).sqrt()
+    }
+
     /// The **total (stagnation) pressure range** `Δp₀ = p₀_max − p₀_min` (Pa) over
     /// the field, where `p₀ = p + ½ρ|u|²` is the total pressure (static plus the
     /// dynamic head). For an ideal inviscid flow Bernoulli's theorem keeps `p₀`
@@ -3840,6 +3862,59 @@ mod tests {
         // (e) BOUND: non-negative, and ≤ the pressure range (here σ_p = range/2).
         assert!(sol.pressure_std_dev() >= 0.0, "non-negative");
         assert!(sol.pressure_std_dev() <= sol.pressure_range(), "σ_p ≤ range");
+    }
+
+    #[test]
+    fn rms_pressure_is_the_quadratic_mean_pressure() {
+        // Builder seeding a per-cell pressure field (velocity left zero).
+        let build = |nx: usize, ny: usize, vals: &[f64]| {
+            let grid = Grid::new(nx, ny, nx as f64, ny as f64);
+            let mut p = grid.pressure_field();
+            for j in 0..grid.ny {
+                for i in 0..grid.nx {
+                    p.set(i, j, vals[j * grid.nx + i]);
+                }
+            }
+            FlowSolution {
+                grid,
+                u: grid.u_field(),
+                v: grid.v_field(),
+                pressure: p,
+                iterations: 0,
+                residual: 0.0,
+                converged: true,
+            }
+        };
+
+        // (a) WORKED: a 2×1 field {3, 7} → ⟨p²⟩ = (9+49)/2 = 29 → p_rms = √29 ≈ 5.385.
+        let sol = build(2, 1, &[3.0, 7.0]);
+        assert!(
+            (sol.rms_pressure() - 29.0_f64.sqrt()).abs() <= 1e-12 * sol.rms_pressure(),
+            "p_rms = √29"
+        );
+
+        // (b) VARIANCE IDENTITY (non-tautological): p_rms² = ⟨p⟩² + σ_p² (threads
+        // mean_pressure + pressure_std_dev).
+        assert!(
+            (sol.rms_pressure().powi(2)
+                - (sol.mean_pressure().powi(2) + sol.pressure_std_dev().powi(2)))
+            .abs()
+                <= 1e-9 * sol.rms_pressure().powi(2),
+            "p_rms² = ⟨p⟩² + σ_p²"
+        );
+
+        // (c) UNIFORM: a constant p = 5 field → p_rms = |mean| = 5.
+        let uniform = build(3, 2, &[5.0; 6]);
+        assert!((uniform.rms_pressure() - 5.0).abs() <= 1e-12 * 5.0, "uniform → p_rms = |mean|");
+
+        // (d) BOUND: p_rms ≥ |⟨p⟩| and p_rms ≥ σ_p (both follow from p_rms² = ⟨p⟩² + σ_p²).
+        assert!(sol.rms_pressure() >= sol.mean_pressure().abs(), "p_rms ≥ |mean|");
+        assert!(sol.rms_pressure() >= sol.pressure_std_dev(), "p_rms ≥ σ_p");
+
+        // (e) ZERO-MEAN field {−3, 3}: p_rms = σ_p = 3 (mean = 0), always non-negative.
+        let zero_mean = build(2, 1, &[-3.0, 3.0]);
+        assert!((zero_mean.rms_pressure() - 3.0).abs() <= 1e-12 * 3.0, "{{-3,3}} → p_rms = 3");
+        assert!(zero_mean.rms_pressure() >= 0.0, "non-negative");
     }
 
     #[test]
