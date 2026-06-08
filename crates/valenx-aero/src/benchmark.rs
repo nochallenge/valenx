@@ -286,6 +286,15 @@ pub fn thin_airfoil_leading_edge_moment_coefficient(angle_of_attack_rad: f64) ->
     -std::f64::consts::FRAC_PI_2 * angle_of_attack_rad
 }
 
+/// The **thin-airfoil angle of attack for a target lift coefficient** `α = C_l / (2π)`
+/// (radians) — the inverse of [`thin_airfoil_lift_coefficient`], the incidence a thin
+/// symmetric section must be set to in order to develop a desired lift coefficient
+/// `lift_coefficient` `C_l`. It is `C_l` divided by the [`thin_airfoil_lift_slope`]
+/// (`2π` per radian), exactly linear and valid for the small angles before stall.
+pub fn thin_airfoil_angle_for_lift_coefficient(lift_coefficient: f64) -> f64 {
+    lift_coefficient / std::f64::consts::TAU
+}
+
 /// Run a single sphere-drag case and return the achieved / reference
 /// drag-coefficient pair.
 ///
@@ -674,6 +683,56 @@ mod tests {
             thin_airfoil_leading_edge_moment_coefficient(-0.1),
             -thin_airfoil_leading_edge_moment_coefficient(0.1),
             "odd in α"
+        );
+    }
+
+    #[test]
+    fn thin_airfoil_angle_for_lift_coefficient_inverts_the_lift() {
+        // (a) WORKED INDEPENDENT: α(C_l = 0.62831853) ≈ 0.1 rad (since C_l = 2π·0.1).
+        assert!(
+            (thin_airfoil_angle_for_lift_coefficient(0.62831853) - 0.1).abs() <= 1e-7,
+            "α = C_l/(2π) ≈ 0.1 at C_l ≈ 0.6283"
+        );
+
+        // (b) ROUND-TRIP (non-tautological): recover α from the C_l it produces, and
+        // C_l from the α it implies.
+        for &a in &[0.05_f64, 0.10, 0.15] {
+            assert!(
+                (thin_airfoil_angle_for_lift_coefficient(thin_airfoil_lift_coefficient(a)) - a)
+                    .abs()
+                    <= 1e-12 * a,
+                "α(C_l(α)) = α at α={a}"
+            );
+        }
+        for &cl in &[0.2_f64, 0.5, 0.8] {
+            assert!(
+                (thin_airfoil_lift_coefficient(thin_airfoil_angle_for_lift_coefficient(cl)) - cl)
+                    .abs()
+                    <= 1e-12 * cl,
+                "C_l(α(C_l)) = C_l at C_l={cl}"
+            );
+        }
+
+        // (c) THREAD the slope: α = C_l / lift_slope.
+        assert!(
+            (thin_airfoil_angle_for_lift_coefficient(1.0) - 1.0 / thin_airfoil_lift_slope()).abs()
+                <= 1e-12,
+            "α = C_l / lift_slope"
+        );
+
+        // (d) ZERO, LINEAR, SIGN: no lift → no incidence; linear; sign-preserving.
+        assert_eq!(thin_airfoil_angle_for_lift_coefficient(0.0), 0.0, "C_l=0 → α=0");
+        assert!(
+            (thin_airfoil_angle_for_lift_coefficient(1.0)
+                - 2.0 * thin_airfoil_angle_for_lift_coefficient(0.5))
+            .abs()
+                <= 1e-12,
+            "linear in C_l"
+        );
+        assert_eq!(
+            thin_airfoil_angle_for_lift_coefficient(-0.5),
+            -thin_airfoil_angle_for_lift_coefficient(0.5),
+            "odd in C_l"
         );
     }
 
