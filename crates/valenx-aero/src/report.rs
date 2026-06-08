@@ -306,6 +306,21 @@ pub fn isentropic_stagnation_density_ratio(mach: f64, gamma: f64) -> f64 {
     temperature_ratio.powf(1.0 / (gamma - 1.0))
 }
 
+/// The **Mach number from the isentropic stagnation density ratio**
+/// `M = √(2·((ρ₀/ρ)^(γ−1) − 1)/(γ−1))` — the inverse of
+/// [`isentropic_stagnation_density_ratio`], recovering the flight Mach number from a
+/// measured total-to-static density ratio `rho0_over_rho` `ρ₀/ρ` at heat-capacity ratio
+/// `gamma` `γ`. With [`mach_from_stagnation_temperature_ratio`] and
+/// [`mach_from_stagnation_pressure_ratio`] it completes the stagnation-ratio inverse trio.
+/// Returns the at-rest sentinel `0.0` (the inverse of the ratio's `1.0` no-compression
+/// identity) for non-physical input: non-finite `ρ₀/ρ` or `γ`, `ρ₀/ρ < 1`, or `γ ≤ 1`.
+pub fn mach_from_stagnation_density_ratio(rho0_over_rho: f64, gamma: f64) -> f64 {
+    if !rho0_over_rho.is_finite() || !gamma.is_finite() || rho0_over_rho < 1.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (2.0 * (rho0_over_rho.powf(gamma - 1.0) - 1.0) / (gamma - 1.0)).sqrt()
+}
+
 /// The **isentropic area ratio**
 /// `A/A* = (1/M)·[(2/(γ+1))·(1 + ((γ−1)/2)·M²)]^((γ+1)/(2(γ−1)))` at Mach number
 /// `mach` `M` and heat-capacity ratio `gamma` `γ` — the ratio of the local duct
@@ -1626,6 +1641,56 @@ mod tests {
         assert_eq!(isentropic_stagnation_density_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_density_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_density_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn mach_from_stagnation_density_ratio_inverts_the_ratio() {
+        // (a) ROUND-TRIP threading isentropic_stagnation_density_ratio (both directions).
+        for m in [0.5_f64, 1.0, 2.0, 5.0] {
+            let r = isentropic_stagnation_density_ratio(m, 1.4);
+            assert!(
+                (mach_from_stagnation_density_ratio(r, 1.4) - m).abs() <= 1e-9 * m.max(1e-12),
+                "M(rho0/rho(M)) = M at M={m}"
+            );
+        }
+        for rho in [1.2_f64, 2.0, 4.0] {
+            let mm = mach_from_stagnation_density_ratio(rho, 1.4);
+            assert!(
+                (isentropic_stagnation_density_ratio(mm, 1.4) - rho).abs() <= 1e-9 * rho,
+                "rho0/rho(M(rho0/rho)) = rho0/rho at rho0/rho={rho}"
+            );
+        }
+
+        // (b) WORKED: at M = 1, γ = 1.4 the sonic density ratio is rho0/rho = 1.2^2.5 -> M = 1.
+        assert!(
+            (mach_from_stagnation_density_ratio((1.2_f64).powf(2.5), 1.4) - 1.0).abs() <= 1e-9,
+            "M = 1 at the sonic rho0/rho = 1.2^2.5"
+        );
+
+        // (c) CONSISTENCY with the temperature- and pressure-ratio inverses: for the same
+        // Mach all three stagnation-ratio reductions return the same Mach.
+        for m in [0.5_f64, 2.0, 4.0] {
+            let rho = isentropic_stagnation_density_ratio(m, 1.4);
+            let pr = isentropic_stagnation_pressure_ratio(m, 1.4);
+            let tr = isentropic_stagnation_temperature_ratio(m, 1.4);
+            let from_rho = mach_from_stagnation_density_ratio(rho, 1.4);
+            assert!(
+                (from_rho - mach_from_stagnation_pressure_ratio(pr, 1.4)).abs() <= 1e-9 * m,
+                "density and pressure reductions agree at M={m}"
+            );
+            assert!(
+                (from_rho - mach_from_stagnation_temperature_ratio(tr, 1.4)).abs() <= 1e-9 * m,
+                "density and temperature reductions agree at M={m}"
+            );
+        }
+
+        // (d) AT REST: rho0/rho = 1 -> M = 0.
+        assert_eq!(mach_from_stagnation_density_ratio(1.0, 1.4), 0.0);
+
+        // (e) GUARD: non-physical -> the 0.0 at-rest sentinel.
+        assert_eq!(mach_from_stagnation_density_ratio(0.5, 1.4), 0.0); // rho0/rho < 1
+        assert_eq!(mach_from_stagnation_density_ratio(1.5, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(mach_from_stagnation_density_ratio(f64::NAN, 1.4), 0.0);
     }
 
     #[test]
