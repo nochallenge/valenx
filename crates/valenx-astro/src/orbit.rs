@@ -296,6 +296,27 @@ pub fn semi_major_axis_from_energy(specific_energy: f64) -> Result<f64, AstroErr
     Ok(-MU_EARTH / (2.0 * specific_energy))
 }
 
+/// The **hyperbolic excess speed** `v∞ = √(2·ε)` (m/s) — the residual speed an unbound
+/// orbit keeps infinitely far from Earth, where the gravitational well has been fully
+/// climbed and only the surplus specific energy `ε` remains as kinetic energy. Its square
+/// is the characteristic energy `C3 = v∞²` that sizes an interplanetary departure. It is
+/// the escape-regime complement of [`semi_major_axis_from_energy`]: composed with
+/// [`specific_orbital_energy_from_state`], a state vector's energy maps to the orbit's
+/// semi-major axis when bound (`ε < 0`) and to this excess speed when unbound (`ε > 0`).
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `specific_energy` is non-finite or
+/// non-positive (a bound or parabolic orbit never reaches infinity with speed to spare).
+pub fn hyperbolic_excess_speed(specific_energy: f64) -> Result<f64, AstroError> {
+    if !specific_energy.is_finite() || specific_energy <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "hyperbolic_excess_speed requires an unbound orbit (specific energy > 0)",
+        ));
+    }
+    Ok((2.0 * specific_energy).sqrt())
+}
+
 /// The **semi-major axis from the orbital period** `a = (μ·T² / (4π²))^(1/3)` (m) —
 /// Kepler's third law inverted: given an observed period `period` `T` (s) it recovers
 /// the size of the orbit about Earth. It is the inverse of [`orbital_period`] and the
@@ -442,6 +463,41 @@ mod tests {
         assert!(semi_major_axis_from_period(0.0).is_err());
         assert!(semi_major_axis_from_period(-1.0).is_err());
         assert!(semi_major_axis_from_period(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn hyperbolic_excess_speed_is_the_residual_speed_of_an_unbound_orbit() {
+        let r = R_EARTH + 400_000.0;
+
+        // Threads specific_orbital_energy_from_state via the vis-viva limit
+        // v∞ = √(v² − 2μ/r): a clearly-hyperbolic launch (v = 1.2·escape).
+        let v = 1.2 * escape_speed(r).unwrap();
+        let eps = specific_orbital_energy_from_state(v, r).unwrap();
+        assert!(eps > 0.0, "1.2·escape is unbound");
+        let vinf = hyperbolic_excess_speed(eps).unwrap();
+        assert!(
+            (vinf - (v * v - 2.0 * MU_EARTH / r).sqrt()).abs() <= 1e-9 * vinf,
+            "v∞ = √(v² − 2μ/r)"
+        );
+
+        // Round-trips the energy: v∞² = 2ε.
+        assert!((vinf.powi(2) - 2.0 * eps).abs() <= 1e-9 * (2.0 * eps), "v∞² = 2ε");
+
+        // Worked: ε = 2e7 → v∞ = √(4e7) ≈ 6324.6 m/s.
+        assert!(
+            (hyperbolic_excess_speed(2.0e7).unwrap() - (4.0e7_f64).sqrt()).abs()
+                <= 1e-9 * (4.0e7_f64).sqrt(),
+            "√(2·2e7) = √4e7"
+        );
+
+        // Monotonic increasing in ε.
+        assert!(hyperbolic_excess_speed(1.0e8).unwrap() > hyperbolic_excess_speed(2.0e7).unwrap());
+
+        // Err for a bound/parabolic orbit (ε ≤ 0) — the complement of
+        // semi_major_axis_from_energy.
+        assert!(hyperbolic_excess_speed(-1.0e7).is_err());
+        assert!(hyperbolic_excess_speed(0.0).is_err());
+        assert!(hyperbolic_excess_speed(f64::NAN).is_err());
     }
 
     #[test]
