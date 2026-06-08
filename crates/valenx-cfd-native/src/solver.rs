@@ -1317,6 +1317,33 @@ impl FlowSolution {
         (sum_sq / ((nx - 2) * (ny - 2)) as f64).sqrt()
     }
 
+    /// The **standard deviation of the interior vorticity** `σ_ω = √(⟨(ω − ⟨ω⟩)²⟩)` (1/s)
+    /// over the interior cells — the spatial fluctuation of the central-difference vorticity
+    /// about its area-average, completing the mean / rms / std triad
+    /// ([`FlowSolution::mean_vorticity`], [`FlowSolution::rms_vorticity`]). By the variance
+    /// identity it satisfies `σ_ω² = ω_rms² − ⟨ω⟩²`; it is `0` exactly for a spatially
+    /// uniform vorticity and grows as the swirl becomes more non-uniform. Uses the same
+    /// interior stencil as [`FlowSolution::mean_vorticity`] (deviation-sum form); returns `0`
+    /// for a grid too small for an interior difference (`nx < 3` or `ny < 3`).
+    pub fn vorticity_std_dev(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let mean = self.mean_vorticity();
+        let (two_dx, two_dy) = (2.0 * self.grid.dx(), 2.0 * self.grid.dy());
+        let mut sum_sq = 0.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let dv_dx = (self.v_at_cell(i + 1, j) - self.v_at_cell(i - 1, j)) / two_dx;
+                let du_dy = (self.u_at_cell(i, j + 1) - self.u_at_cell(i, j - 1)) / two_dy;
+                let d = (dv_dx - du_dy) - mean;
+                sum_sq += d * d;
+            }
+        }
+        (sum_sq / ((nx - 2) * (ny - 2)) as f64).sqrt()
+    }
+
     /// The total **enstrophy** `E = ½∫ω² dA` (m²/s²) over the interior cells — the
     /// integrated *squared* vorticity, a strictly non-negative measure of the
     /// flow's total rotational intensity. Where the circulation `Γ = ∫ω dA` is a
@@ -3234,6 +3261,70 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.rms_vorticity(), 0.0);
+    }
+
+    #[test]
+    fn vorticity_std_dev_completes_the_variance_identity() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+
+        // (a) UNIFORM shear u(y) = γ·y has constant vorticity ω = −γ, so its spatial
+        // standard deviation is exactly 0.
+        let gamma = 2.0_f64;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * grid.dy();
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(uniform.vorticity_std_dev() < 1e-9, "constant ω → σ = 0");
+
+        // (b) QUADRATIC shear u(y) = a·y² has ω = −2a·y, varying in space, so σ > 0 — and the
+        // variance identity σ² = ω_rms² − ⟨ω⟩² threads mean_vorticity + rms_vorticity (three
+        // separate loops, non-tautological).
+        let a = 0.5_f64;
+        let mut u2 = grid.u_field();
+        for j in 0..grid.ny {
+            let val = a * ((j as f64 + 0.5) * grid.dy()).powi(2);
+            for i in 0..=grid.nx {
+                u2.set(i, j, val);
+            }
+        }
+        let quad = FlowSolution {
+            grid,
+            u: u2,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let sigma = quad.vorticity_std_dev();
+        assert!(sigma > 0.0, "varying ω → σ > 0");
+        let identity = (quad.rms_vorticity().powi(2) - quad.mean_vorticity().powi(2)).sqrt();
+        assert!((sigma - identity).abs() <= 1e-9 * sigma, "σ = √(ω_rms² − ⟨ω⟩²)");
+
+        // (c) SMALL GRID: too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.vorticity_std_dev(), 0.0);
     }
 
     #[test]
