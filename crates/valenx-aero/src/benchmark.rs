@@ -274,6 +274,18 @@ pub fn thin_airfoil_lift_coefficient(angle_of_attack_rad: f64) -> f64 {
     std::f64::consts::TAU * angle_of_attack_rad
 }
 
+/// The **thin-airfoil leading-edge pitching-moment coefficient** `C_{m,LE} = −C_l/4 =
+/// −(π/2)·α` (dimensionless) at a small angle of attack `angle_of_attack_rad` `α`
+/// (radians) — the moment about the leading edge of a thin symmetric section, nose-down
+/// (negative) when the lift is positive. Thin-airfoil theory puts the symmetric section's
+/// quarter-chord moment at zero, so the leading-edge moment is exactly `−C_l/4` (with `C_l`
+/// the [`thin_airfoil_lift_coefficient`]) — the classic statement that the **aerodynamic
+/// centre sits at the quarter chord**. Like the lift it is exactly linear in `α` (valid for
+/// small `α` before stall).
+pub fn thin_airfoil_leading_edge_moment_coefficient(angle_of_attack_rad: f64) -> f64 {
+    -std::f64::consts::FRAC_PI_2 * angle_of_attack_rad
+}
+
 /// Run a single sphere-drag case and return the achieved / reference
 /// drag-coefficient pair.
 ///
@@ -617,6 +629,51 @@ mod tests {
             thin_airfoil_lift_coefficient(-0.1),
             -thin_airfoil_lift_coefficient(0.1),
             "negative incidence → negative lift"
+        );
+    }
+
+    #[test]
+    fn thin_airfoil_leading_edge_moment_is_minus_quarter_lift() {
+        // (a) WORKED INDEPENDENT: Cm_LE(0.1) = −(π/2)·0.1 ≈ −0.15708 (decimal
+        // literal, independent of the body's FRAC_PI_2 form).
+        assert!(
+            (thin_airfoil_leading_edge_moment_coefficient(0.1) + 0.15708).abs() <= 1e-5,
+            "Cm_LE(0.1) ≈ −0.15708"
+        );
+
+        // (b) THREAD #373 (non-tautological): Cm_LE = −C_l/4, and the lift-to-moment
+        // ratio is exactly −4 — the aerodynamic centre at the quarter chord.
+        for &a in &[0.05_f64, 0.10, 0.15] {
+            let cl = thin_airfoil_lift_coefficient(a);
+            assert!(
+                (thin_airfoil_leading_edge_moment_coefficient(a) - (-cl / 4.0)).abs() <= 1e-12 * cl,
+                "Cm_LE = −C_l/4 at α={a}"
+            );
+            assert!(
+                (cl / thin_airfoil_leading_edge_moment_coefficient(a) + 4.0).abs() <= 1e-12,
+                "C_l / Cm_LE = −4 at α={a}"
+            );
+        }
+
+        // (c) ZERO: α=0 → no moment.
+        assert_eq!(thin_airfoil_leading_edge_moment_coefficient(0.0), 0.0, "α=0 → Cm_LE=0");
+
+        // (d) SIGN + LINEARITY: nose-down for positive α, linear, odd in α.
+        assert!(
+            thin_airfoil_leading_edge_moment_coefficient(0.1) < 0.0,
+            "positive α → nose-down moment"
+        );
+        assert!(
+            (thin_airfoil_leading_edge_moment_coefficient(0.2)
+                - 2.0 * thin_airfoil_leading_edge_moment_coefficient(0.1))
+            .abs()
+                <= 1e-12 * thin_airfoil_leading_edge_moment_coefficient(0.2).abs(),
+            "linear in α"
+        );
+        assert_eq!(
+            thin_airfoil_leading_edge_moment_coefficient(-0.1),
+            -thin_airfoil_leading_edge_moment_coefficient(0.1),
+            "odd in α"
         );
     }
 
