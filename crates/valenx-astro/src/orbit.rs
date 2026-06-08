@@ -388,9 +388,71 @@ pub fn orbital_radius_from_escape_speed(speed: f64) -> Result<f64, AstroError> {
     Ok(2.0 * MU_EARTH / (speed * speed))
 }
 
+/// The **radius from vis-viva** `r = 2 / (v²/μ + 1/a)` (m) — the unique radius at which a
+/// body on a bound orbit of semi-major axis `semi_major_axis` `a` (m) moves at speed `speed`
+/// `v` (m/s). It inverts [`orbital_speed`] (vis-viva `v = √(μ(2/r − 1/a))`, which is strictly
+/// decreasing in `r`, so the inverse is single-valued), and is the general case the circular
+/// ([`orbital_radius_from_circular_speed`]) and escape ([`orbital_radius_from_escape_speed`])
+/// inverses specialise.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `speed` is non-finite or negative, or
+/// `semi_major_axis` is non-finite or non-positive.
+pub fn orbital_radius_from_speed(speed: f64, semi_major_axis: f64) -> Result<f64, AstroError> {
+    if !speed.is_finite()
+        || speed < 0.0
+        || !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+    {
+        return Err(AstroError::NonPhysicalState(
+            "orbital_radius_from_speed requires finite speed >= 0 and semi_major_axis > 0",
+        ));
+    }
+    let inv_r = speed * speed / (2.0 * MU_EARTH) + 1.0 / (2.0 * semi_major_axis);
+    Ok(1.0 / inv_r)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orbital_radius_from_speed_inverts_vis_viva() {
+        // Round-trips orbital_speed for bound (r, a) pairs with r ≤ 2a.
+        let r0 = R_EARTH + 400_000.0;
+        for &(r, a) in &[(r0, r0), (r0, 1.2 * r0), (1.0e7, 2.0e7), (1.0e7, 1.0e7)] {
+            let v = orbital_speed(r, a).unwrap();
+            assert!(
+                (orbital_radius_from_speed(v, a).unwrap() - r).abs() <= 1e-9 * r,
+                "round-trip r = {r}"
+            );
+        }
+
+        // Reduces to the circular case (a = r): the circular speed recovers r.
+        let r = 7.0e6;
+        assert!(
+            (orbital_radius_from_speed(circular_speed(r).unwrap(), r).unwrap() - r).abs()
+                <= 1e-9 * r,
+            "circular: a = r"
+        );
+
+        // Monotonic: faster speed ⇒ smaller radius (vis-viva is decreasing in r).
+        let a = 1.5e7;
+        let v_slow = orbital_speed(1.2e7, a).unwrap();
+        let v_fast = orbital_speed(8.0e6, a).unwrap();
+        assert!(
+            orbital_radius_from_speed(v_fast, a).unwrap()
+                < orbital_radius_from_speed(v_slow, a).unwrap(),
+            "faster → smaller radius"
+        );
+
+        // Err on non-physical input.
+        assert!(orbital_radius_from_speed(7000.0, 0.0).is_err());
+        assert!(orbital_radius_from_speed(7000.0, -1.0).is_err());
+        assert!(orbital_radius_from_speed(-1.0, 1.0e7).is_err());
+        assert!(orbital_radius_from_speed(f64::NAN, 1.0e7).is_err());
+    }
 
     #[test]
     fn orbital_radius_from_escape_speed_inverts_escape_speed() {
