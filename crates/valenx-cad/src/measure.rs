@@ -570,6 +570,36 @@ pub fn solid_bounding_box_flatness(solid: &Solid) -> Result<f64, CadError> {
     solid_bounding_box_flatness_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **Corey shape factor** `CSF = c / √(a·b)` (dimensionless, in `(0, 1]`) of a
+/// solid, where `a ≥ b ≥ c` are the sorted AABB extents — the standard
+/// sedimentology / hydraulics particle-shape descriptor (it governs the drag and
+/// settling velocity of a non-spherical grain), evaluated at tessellation tolerance
+/// `tol` from the sorted [`solid_bounding_box_extents_tol`]. It is `1` for an equant
+/// cube or sphere and tends to `0` for a flat plate or a thin rod. It compounds the two
+/// Zingg axes: `CSF =` [`solid_bounding_box_flatness_tol`] `· √(`[`solid_bounding_box_elongation_tol`]`)`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid is
+/// degenerate (a zero intermediate or longest extent).
+pub fn solid_bounding_box_corey_shape_factor_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    let (shortest, mid, longest) = (s[0], s[1], s[2]);
+    if mid <= 0.0 || longest <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate (zero extent); Corey shape factor undefined".to_string(),
+        ));
+    }
+    Ok(shortest / (mid * longest).sqrt())
+}
+
+/// AABB Corey shape factor of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_corey_shape_factor_tol`].
+pub fn solid_bounding_box_corey_shape_factor(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_corey_shape_factor_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
 /// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
 /// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
@@ -1296,6 +1326,48 @@ mod tests {
         assert!(
             (solid_bounding_box_flatness(&bx).unwrap()
                 - solid_bounding_box_flatness_tol(&bx, 0.1).unwrap())
+            .abs()
+                < 1e-9,
+            "_tol wrapper agrees"
+        );
+    }
+
+    #[test]
+    fn solid_bounding_box_corey_shape_factor_is_c_over_sqrt_ab() {
+        use crate::primitives::sphere;
+
+        // Worked: box(2,4,6) → sorted [2,4,6], CSF = 2/√(4·6) = 2/√24 ≈ 0.40824829.
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let csf = solid_bounding_box_corey_shape_factor(&bx).unwrap();
+        assert!((csf - 0.40824829046).abs() <= 1e-9, "CSF = 2/√24 ≈ 0.40825");
+
+        // Threads solid_bounding_box_extents (#363): c/√(a·b) of the sorted extents.
+        let mut s = solid_bounding_box_extents(&bx).unwrap();
+        s.sort_by(|a, b| a.total_cmp(b));
+        assert!((csf - s[0] / (s[1] * s[2]).sqrt()).abs() <= 1e-9 * csf, "= s0/√(s1·s2)");
+
+        // Cross-check threading flatness (#381) + elongation (#375): CSF = flatness·√elongation.
+        let f = solid_bounding_box_flatness(&bx).unwrap();
+        let e = solid_bounding_box_elongation(&bx).unwrap();
+        assert!((csf - f * e.sqrt()).abs() <= 1e-9 * csf, "CSF = flatness·√elongation");
+
+        // Range 0 < CSF ≤ 1; equant cube and sphere → ≈ 1.
+        assert!(csf > 0.0 && csf <= 1.0, "0 < CSF ≤ 1");
+        let cube = box_solid(3.0, 3.0, 3.0).unwrap();
+        assert!(
+            (solid_bounding_box_corey_shape_factor(&cube).unwrap() - 1.0).abs() <= 1e-9,
+            "cube → 1"
+        );
+        assert!(
+            (solid_bounding_box_corey_shape_factor(&sphere(2.0).unwrap()).unwrap() - 1.0).abs()
+                <= 3e-2,
+            "sphere → 1"
+        );
+
+        // The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (solid_bounding_box_corey_shape_factor(&bx).unwrap()
+                - solid_bounding_box_corey_shape_factor_tol(&bx, 0.1).unwrap())
             .abs()
                 < 1e-9,
             "_tol wrapper agrees"
