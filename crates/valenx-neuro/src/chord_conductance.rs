@@ -71,6 +71,23 @@ pub fn total_chord_conductance(channels: &[ConductanceChannel]) -> f64 {
         .sum()
 }
 
+/// The **net chord-conductance membrane current** `I = Σ gᵢ·(V_m − Eᵢ)` — the
+/// parallel-conductance (Hodgkin–Huxley ohmic) current driven across a membrane at
+/// potential `vm_mv` `V_m` (mV) by the channel populations `channels`, each contributing
+/// `gᵢ·(V_m − Eᵢ)`. It equals `G·(V_m − V_rest)` with `G` the [`total_chord_conductance`]
+/// and `V_rest` the [`chord_conductance_potential_mv`], so it **vanishes exactly at the
+/// resting potential** and reverses sign across it — outward (positive) above `V_rest`,
+/// inward (negative) below. Channels with non-positive conductance are ignored (matching
+/// the rest of the module); the current is in the product units of conductance and
+/// millivolts.
+pub fn chord_conductance_current(channels: &[ConductanceChannel], vm_mv: f64) -> f64 {
+    channels
+        .iter()
+        .filter(|ch| ch.conductance_s > 0.0)
+        .map(|ch| ch.conductance_s * (vm_mv - ch.reversal_mv))
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,6 +128,58 @@ mod tests {
         let part_a = total_chord_conductance(&chs[..1]);
         let part_b = total_chord_conductance(&chs[1..]);
         assert!((total - (part_a + part_b)).abs() <= 1e-9 * total, "additive");
+    }
+
+    #[test]
+    fn chord_conductance_current_vanishes_at_the_resting_potential() {
+        let chs = [
+            ConductanceChannel::new(1.0e-9, -90.0),
+            ConductanceChannel::new(3.0e-9, 60.0),
+        ];
+        // (a) WORKED: at V_m = 0, I = 1e-9·(0−(−90)) + 3e-9·(0−60) = 90e-9 − 180e-9 = −90e-9.
+        assert!(
+            (chord_conductance_current(&chs, 0.0) - (-90.0e-9)).abs() <= 1e-9 * 90.0e-9,
+            "I(0) = −90e-9"
+        );
+
+        // (b) VANISHES at the resting potential (threads chord_conductance_potential_mv):
+        // the net current is exactly zero at the conductance-weighted reversal.
+        let v_rest = chord_conductance_potential_mv(&chs);
+        assert!(chord_conductance_current(&chs, v_rest).abs() < 1e-15, "I(V_rest) = 0");
+
+        // (c) THREAD total_chord_conductance + potential (non-tautological): I = G·(V − V_rest).
+        for &vm in &[-100.0_f64, -65.0, 0.0, 30.0] {
+            let expected = total_chord_conductance(&chs) * (vm - v_rest);
+            assert!(
+                (chord_conductance_current(&chs, vm) - expected).abs()
+                    <= 1e-9 * expected.abs().max(1e-12),
+                "I = G·(V−V_rest) at V={vm}"
+            );
+        }
+
+        // (d) SIGN + LINEARITY: outward above the rest, inward below, linear in V − V_rest.
+        assert!(chord_conductance_current(&chs, v_rest + 10.0) > 0.0, "above rest → outward");
+        assert!(chord_conductance_current(&chs, v_rest - 10.0) < 0.0, "below rest → inward");
+        assert!(
+            (chord_conductance_current(&chs, v_rest + 20.0)
+                - 2.0 * chord_conductance_current(&chs, v_rest + 10.0))
+            .abs()
+                <= 1e-9 * chord_conductance_current(&chs, v_rest + 20.0).abs(),
+            "linear in V − V_rest"
+        );
+
+        // (e) Non-positive conductances are ignored (matching the family convention).
+        let with_dead = [
+            ConductanceChannel::new(1.0e-9, -90.0),
+            ConductanceChannel::new(3.0e-9, 60.0),
+            ConductanceChannel::new(0.0, 1000.0),
+            ConductanceChannel::new(-2.0e-9, -1000.0),
+        ];
+        assert!(
+            (chord_conductance_current(&with_dead, 0.0) - chord_conductance_current(&chs, 0.0)).abs()
+                <= 1e-9 * 90.0e-9,
+            "dead channels ignored"
+        );
     }
 
     #[test]
