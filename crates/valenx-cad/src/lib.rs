@@ -53,6 +53,7 @@ pub use measure::{
     euler_characteristic, is_closed_solid, is_closed_solid_tol, solid_area, solid_area_tol,
     solid_bounding_box, solid_bounding_box_aspect_ratio, solid_bounding_box_aspect_ratio_tol,
     solid_bounding_box_center, solid_bounding_box_center_tol,
+    solid_bounding_box_corey_shape_factor, solid_bounding_box_corey_shape_factor_tol,
     solid_bounding_box_diagonal, solid_bounding_box_diagonal_tol,
     solid_bounding_box_elongation, solid_bounding_box_elongation_tol,
     solid_bounding_box_extents, solid_bounding_box_extents_tol,
