@@ -24,6 +24,25 @@ pub fn q10_scale(rate_ref: f64, q10: f64, temp_c: f64, ref_temp_c: f64) -> f64 {
     rate_ref * q10.powf((temp_c - ref_temp_c) / 10.0)
 }
 
+/// The **temperature at which a `Q10`-scaled process runs at a target rate** (°C) — the
+/// inverse of [`q10_scale`] for temperature. Given a `rate` relative to its reference
+/// `rate_ref` (measured at `ref_temp_c`, °C) and the temperature coefficient `q10`,
+///
+/// ```text
+/// T = ref_temp_c + 10 · ln(rate / rate_ref) / ln(q10)
+/// ```
+///
+/// recovers the temperature that produces that rate — the thermal-acclimation question
+/// (at what temperature does a channel-gating or enzyme process reach a target rate?).
+/// At `rate = rate_ref` it returns `ref_temp_c`, and for `q10 > 1` a faster rate maps to a
+/// higher temperature. Like its siblings [`q10_scale`] and [`q10_from_rates`] it is a bare
+/// closed form: a non-positive `rate` / `rate_ref` (where `ln` is undefined) or `q10 ≤ 0`
+/// or `q10 = 1` (where `ln(q10)` is `0`) yields a non-finite result the caller is expected
+/// to guard.
+pub fn temperature_for_q10_rate(rate: f64, rate_ref: f64, q10: f64, ref_temp_c: f64) -> f64 {
+    ref_temp_c + 10.0 * (rate / rate_ref).ln() / q10.ln()
+}
+
 /// Recover the **temperature coefficient `Q10`** from two rate measurements — the
 /// inverse of [`q10_scale`]. Given a rate `rate_cold` at `temp_cold_c` (°C) and
 /// `rate_hot` at `temp_hot_c` (°C),
@@ -189,6 +208,43 @@ mod tests {
         assert!((q10_scale(1.0, 3.0, -3.7, 6.3) - 1.0 / 3.0).abs() < 1e-12);
         // Linear in the reference rate.
         assert!((q10_scale(2.0, 3.0, 16.3, 6.3) - 2.0 * q10_scale(1.0, 3.0, 16.3, 6.3)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn temperature_for_q10_rate_inverts_q10_scale() {
+        // Round-trip: recover T from the rate q10_scale produces (the exact inverse).
+        for &(r0, q, t, tref) in &[
+            (1.0_f64, 2.0_f64, 30.0_f64, 20.0_f64),
+            (0.5, 3.0, 15.0, 25.0),
+            (2.0, 2.5, 40.0, 10.0),
+        ] {
+            let recovered = temperature_for_q10_rate(q10_scale(r0, q, t, tref), r0, q, tref);
+            assert!((recovered - t).abs() <= 1e-12 * t.abs(), "T = T_ref + 10·ln(r/r0)/ln(q10)");
+        }
+
+        // Worked: rate = 2·3² = 18 at Q10 = 3 is two decades above ref → +20 °C.
+        assert!(
+            (temperature_for_q10_rate(18.0, 2.0, 3.0, 10.0) - 30.0).abs() < 1e-12,
+            "2·3² → ref + 20"
+        );
+
+        // Identity: rate == rate_ref → the reference temperature (ln 1 = 0).
+        assert!(
+            (temperature_for_q10_rate(5.0, 5.0, 2.0, 22.0) - 22.0).abs() < 1e-12,
+            "rate = ref → T_ref"
+        );
+
+        // Monotonic: with Q10 > 1, a higher rate maps to a higher temperature.
+        assert!(
+            temperature_for_q10_rate(4.0, 1.0, 2.0, 20.0)
+                > temperature_for_q10_rate(2.0, 1.0, 2.0, 20.0),
+            "faster → warmer"
+        );
+
+        // Bare closed form (like q10_scale): non-physical input is non-finite, not 0.
+        assert!(temperature_for_q10_rate(-1.0, 1.0, 2.0, 20.0).is_nan(), "ln of negative");
+        assert!(!temperature_for_q10_rate(4.0, 1.0, 1.0, 20.0).is_finite(), "q10 = 1 → /0");
+        assert!(temperature_for_q10_rate(4.0, -1.0, 2.0, 20.0).is_nan(), "negative rate_ref");
     }
 
     #[test]
