@@ -68,6 +68,7 @@ pub use measure::{
     solid_bounding_box_volume, solid_bounding_box_volume_tol,
     solid_centroid, solid_centroid_tol,
     solid_equivalent_cube_edge, solid_equivalent_cube_edge_tol,
+    solid_equivalent_ellipsoid_semi_axes, solid_equivalent_ellipsoid_semi_axes_tol,
     solid_equivalent_sphere_area, solid_equivalent_sphere_area_tol,
     solid_equivalent_sphere_diameter, solid_equivalent_sphere_diameter_tol,
     solid_equivalent_sphere_radius, solid_equivalent_sphere_radius_tol,

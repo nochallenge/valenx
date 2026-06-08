@@ -1102,6 +1102,38 @@ pub fn solid_principal_moments(solid: &Solid) -> Result<[f64; 3], CadError> {
     solid_principal_moments_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **semi-axes of the equivalent uniform ellipsoid of inertia** (model units, sorted
+/// descending `p ≥ q ≥ r`) of a solid — the uniform solid ellipsoid with the *same volume
+/// and the same three centroidal principal moments* ([`solid_principal_moments_tol`]). From
+/// the sorted moments `I_max ≥ I_mid ≥ I_min` and the volume `V`, each semi-axis is
+/// `√((5/(2V))·(ΣI − 2·Iᵢ))`, where the **longest** semi-axis pairs with the **smallest**
+/// moment (mass farthest from an axis ⇒ that axis is the shortest). Unlike the axis-aligned
+/// [`solid_bounding_box_extents_tol`] this is a **rotation-invariant**, mass-weighted shape:
+/// for a uniform box it returns semi-axes proportional to the box half-extents, and for a
+/// sphere of radius `R` it returns `[R, R, R]`. Evaluated at tessellation tolerance `tol`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// encloses no volume.
+pub fn solid_equivalent_ellipsoid_semi_axes_tol(
+    solid: &Solid,
+    tol: f64,
+) -> Result<[f64; 3], CadError> {
+    let m = solid_principal_moments_tol(solid, tol)?;
+    let v = solid_volume_tol(solid, tol)?;
+    let s = m[0] + m[1] + m[2];
+    let k = 5.0 / (2.0 * v);
+    let semi = |moment: f64| (k * (s - 2.0 * moment)).max(0.0).sqrt();
+    Ok([semi(m[2]), semi(m[1]), semi(m[0])])
+}
+
+/// Equivalent inertia-ellipsoid semi-axes of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_equivalent_ellipsoid_semi_axes_tol`].
+pub fn solid_equivalent_ellipsoid_semi_axes(solid: &Solid) -> Result<[f64; 3], CadError> {
+    solid_equivalent_ellipsoid_semi_axes_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **trace of the inertia tensor** `I₁ + I₂ + I₃` (model units⁵, unit density) of a
 /// solid — the sum of its three centroidal principal moments
 /// ([`solid_principal_moments_tol`]), evaluated at tessellation tolerance `tol`. It is a
@@ -2353,6 +2385,40 @@ mod tests {
         // A sphere is isotropic: the three principal moments are equal.
         let s = solid_principal_moments(&sphere(2.0).unwrap()).unwrap();
         assert!((s[0] - s[2]).abs() / s[0] < 1e-3, "sphere principal moments equal: {s:?}");
+    }
+
+    #[test]
+    fn solid_equivalent_ellipsoid_recovers_the_inertia_shape() {
+        use crate::primitives::sphere;
+
+        // (a) BOX RATIO (non-tautological — recovers the geometric extents from the inertia
+        // tensor): box(2,4,6) has principal moments [208,160,80], V=48, so the semi-axes are
+        // [√15, √(20/3), √(5/3)] = [3.8730, 2.5820, 1.2910], ratio 3:2:1 (the box extents halved).
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let e = solid_equivalent_ellipsoid_semi_axes(&bx).unwrap();
+        assert!((e[0] / e[2] - 3.0).abs() <= 1e-9 * 3.0, "longest:shortest = 3");
+        assert!((e[1] / e[2] - 2.0).abs() <= 1e-9 * 2.0, "mid:shortest = 2");
+        assert!(
+            (e[0] - 15.0_f64.sqrt()).abs() <= 1e-9 * e[0],
+            "longest semi-axis = √15"
+        );
+
+        // (b) SPHERE: the equivalent ellipsoid of a sphere is the sphere itself — all three
+        // semi-axes equal the radius.
+        let s = sphere(2.0).unwrap();
+        let es = solid_equivalent_ellipsoid_semi_axes(&s).unwrap();
+        for a in es {
+            assert!((a - 2.0).abs() <= 3e-2 * 2.0, "sphere semi-axis = R: {a}");
+        }
+
+        // (c) Sorted descending and strictly positive.
+        assert!(e[0] >= e[1] && e[1] >= e[2] && e[2] > 0.0, "p ≥ q ≥ r > 0: {e:?}");
+
+        // (d) The _tol wrapper agrees with the default on the box (exact at any tol).
+        let et = solid_equivalent_ellipsoid_semi_axes_tol(&bx, 0.1).unwrap();
+        for (a, b) in e.iter().zip(et.iter()) {
+            assert!((a - b).abs() <= 1e-9 * a, "_tol wrapper agrees");
+        }
     }
 
     #[test]
