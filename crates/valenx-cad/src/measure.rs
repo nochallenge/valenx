@@ -732,6 +732,37 @@ pub fn solid_principal_moments(solid: &Solid) -> Result<[f64; 3], CadError> {
     solid_principal_moments_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **inertia anisotropy** `I_max / I_min` (dimensionless, `≥ 1`) of a solid — the
+/// ratio of its largest to smallest centroidal principal moment of inertia
+/// ([`solid_principal_moments_tol`]), evaluated at tessellation tolerance `tol`. Unlike
+/// the axis-aligned [`solid_bounding_box_aspect_ratio_tol`] this is **rotation-invariant**
+/// (it depends only on the mass distribution, not the orientation): it is `1` for any
+/// inertially isotropic body — a sphere *and* a cube — and grows large for a slender rod
+/// or thin plate, so it is a robust elongation / shape descriptor for grain and particle
+/// classification.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, the solid is
+/// degenerate, or a principal moment is non-positive.
+pub fn solid_inertia_anisotropy_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let m = solid_principal_moments_tol(solid, tol)?;
+    let max = m[0].max(m[1]).max(m[2]);
+    let min = m[0].min(m[1]).min(m[2]);
+    if min <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate inertia (non-positive principal moment)".to_string(),
+        ));
+    }
+    Ok(max / min)
+}
+
+/// Inertia anisotropy of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_inertia_anisotropy_tol`].
+pub fn solid_inertia_anisotropy(solid: &Solid) -> Result<f64, CadError> {
+    solid_inertia_anisotropy_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Weld a polygon mesh's triangle indices onto a deduplicated vertex
 /// set, so coincident positions collapse to one index.
 ///
@@ -1341,6 +1372,41 @@ mod tests {
         assert_eq!(euler_characteristic(&t), Some(0), "torus χ = 0");
         assert_eq!(solid_genus(&t), Some(1), "torus → genus 1");
         // A mesh-backed solid has no B-rep topology → None (matches euler).
+    }
+
+    #[test]
+    fn solid_inertia_anisotropy_is_rotation_invariant_shape() {
+        use crate::primitives::sphere;
+
+        // Inertially isotropic bodies → anisotropy 1: a cube has equal principal moments.
+        assert!(
+            (solid_inertia_anisotropy(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap() - 1.0).abs()
+                < 1e-9,
+            "cube → 1 (isotropic inertia)"
+        );
+        // ... and so does a sphere (tessellated, looser tol).
+        assert!(
+            (solid_inertia_anisotropy(&sphere(2.0).unwrap()).unwrap() - 1.0).abs() < 2e-2,
+            "sphere → ≈ 1"
+        );
+
+        // box(2,4,6): principal moments [208, 160, 80] → I_max/I_min = 208/80 = 2.6.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_inertia_anisotropy(&b).unwrap() - 2.6).abs() < 1e-9 * 2.6,
+            "box 2×4×6 → 208/80 = 2.6"
+        );
+
+        // Threads solid_principal_moments: max/min of the moments.
+        let m = solid_principal_moments(&b).unwrap();
+        let expected = m[0].max(m[1]).max(m[2]) / m[0].min(m[1]).min(m[2]);
+        assert!(
+            (solid_inertia_anisotropy(&b).unwrap() - expected).abs() / expected < 1e-9,
+            "= I_max/I_min"
+        );
+
+        // Always ≥ 1.
+        assert!(solid_inertia_anisotropy(&b).unwrap() >= 1.0, "anisotropy ≥ 1");
     }
 
     #[test]
