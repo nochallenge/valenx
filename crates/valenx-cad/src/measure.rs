@@ -367,6 +367,38 @@ pub fn solid_bounding_box(solid: &Solid) -> Result<([f64; 3], [f64; 3]), CadErro
     solid_bounding_box_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
+/// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
+/// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
+/// or a sphere and grows as a shape becomes more elongated or plate-like; a standard
+/// descriptor for mesh-quality screening, particle / grain shape classification, and
+/// camera view-fit.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// is degenerate (a zero-extent bounding box, where the ratio is undefined).
+pub fn solid_bounding_box_aspect_ratio_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let (min, max) = solid_bounding_box_tol(solid, tol)?;
+    let dx = max[0] - min[0];
+    let dy = max[1] - min[1];
+    let dz = max[2] - min[2];
+    let longest = dx.max(dy).max(dz);
+    let shortest = dx.min(dy).min(dz);
+    if shortest <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate (zero-extent) bounding box; aspect ratio undefined".to_string(),
+        ));
+    }
+    Ok(longest / shortest)
+}
+
+/// AABB aspect ratio of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_aspect_ratio_tol`].
+pub fn solid_bounding_box_aspect_ratio(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_aspect_ratio_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box space diagonal** `d = √(Δx² + Δy² + Δz²)` (model
 /// units) of a solid — the length of the main diagonal of its AABB, computed at
 /// tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is the standard
@@ -955,6 +987,39 @@ mod tests {
             solid_bounding_box_volume(&sph).unwrap() >= solid_volume(&sph).unwrap(),
             "AABB ⊇ solid"
         );
+    }
+
+    #[test]
+    fn solid_bounding_box_aspect_ratio_is_the_extent_elongation() {
+        use crate::primitives::sphere;
+
+        // box(2,4,6): longest/shortest = 6/2 = 3.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!((solid_bounding_box_aspect_ratio(&b).unwrap() - 3.0).abs() < 1e-9, "box 2×4×6 → 3");
+
+        // Threads solid_bounding_box: longest extent over shortest.
+        let (mn, mx) = solid_bounding_box(&b).unwrap();
+        let (dx, dy, dz) = (mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+        let expected = dx.max(dy).max(dz) / dx.min(dy).min(dz);
+        assert!(
+            (solid_bounding_box_aspect_ratio(&b).unwrap() - expected).abs() / expected < 1e-9,
+            "aspect = longest/shortest extent"
+        );
+
+        // A cube and a sphere have aspect ratio 1 (isotropic AABB).
+        assert!(
+            (solid_bounding_box_aspect_ratio(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap() - 1.0)
+                .abs()
+                < 1e-9,
+            "cube → 1"
+        );
+        assert!(
+            (solid_bounding_box_aspect_ratio(&sphere(2.0).unwrap()).unwrap() - 1.0).abs() < 1e-2,
+            "sphere → ≈ 1"
+        );
+
+        // The aspect ratio is always ≥ 1 (long over short).
+        assert!(solid_bounding_box_aspect_ratio(&b).unwrap() >= 1.0, "ratio ≥ 1");
     }
 
     #[test]
