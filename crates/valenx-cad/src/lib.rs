@@ -69,7 +69,8 @@ pub use measure::{
     solid_mean_chord_length, solid_mean_chord_length_tol,
     solid_principal_moments, solid_principal_moments_tol,
     solid_radius_of_gyration,
-    solid_radius_of_gyration_tol, solid_specific_surface_area, solid_specific_surface_area_tol,
+    solid_radius_of_gyration_tol, solid_sauter_mean_diameter, solid_sauter_mean_diameter_tol,
+    solid_specific_surface_area, solid_specific_surface_area_tol,
     solid_sphericity, solid_sphericity_tol, solid_volume,
     solid_volume_tol,
 };
