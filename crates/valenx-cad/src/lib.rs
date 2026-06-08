@@ -60,6 +60,7 @@ pub use measure::{
     solid_bounding_box_volume, solid_bounding_box_volume_tol,
     solid_centroid, solid_centroid_tol,
     solid_equivalent_sphere_area, solid_equivalent_sphere_area_tol,
+    solid_equivalent_sphere_diameter, solid_equivalent_sphere_diameter_tol,
     solid_equivalent_sphere_radius, solid_equivalent_sphere_radius_tol,
     solid_genus, solid_inertia_anisotropy, solid_inertia_anisotropy_tol,
     solid_mean_chord_length, solid_mean_chord_length_tol,

@@ -184,6 +184,27 @@ pub fn solid_equivalent_sphere_area(solid: &Solid) -> Result<f64, CadError> {
     solid_equivalent_sphere_area_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **equivalent spherical diameter** `d_eq = 2·r_eq` (model units) of a solid — the
+/// diameter of the sphere with the same volume, evaluated at tessellation tolerance `tol`
+/// from the [`solid_equivalent_sphere_radius_tol`]. It is the standard reported particle
+/// size in particle sizing, powder metallurgy and sedimentology (the "ESD"). Its square
+/// times π is the volume-equivalent sphere surface area [`solid_equivalent_sphere_area_tol`]
+/// (`A = π·d²`).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// encloses no volume.
+pub fn solid_equivalent_sphere_diameter_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    Ok(2.0 * solid_equivalent_sphere_radius_tol(solid, tol)?)
+}
+
+/// Equivalent spherical diameter of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_equivalent_sphere_diameter_tol`].
+pub fn solid_equivalent_sphere_diameter(solid: &Solid) -> Result<f64, CadError> {
+    solid_equivalent_sphere_diameter_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Total boundary surface area of a solid, in square model units.
 ///
 /// Computed as the sum of every boundary triangle's area. Like
@@ -1429,6 +1450,45 @@ mod tests {
             solid_equivalent_sphere_radius(&box_solid(4.0, 4.0, 4.0).unwrap()).unwrap()
                 > solid_equivalent_sphere_radius(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap(),
             "bigger box → bigger r_eq"
+        );
+    }
+
+    #[test]
+    fn solid_equivalent_sphere_diameter_is_twice_the_radius() {
+        use crate::primitives::sphere;
+        use std::f64::consts::PI;
+
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            // Threads solid_equivalent_sphere_radius: d = 2·r_eq.
+            let d = solid_equivalent_sphere_diameter(&s).unwrap();
+            assert!(
+                (d - 2.0 * solid_equivalent_sphere_radius(&s).unwrap()).abs() <= 1e-9 * d,
+                "d = 2·r_eq"
+            );
+            // Threads solid_equivalent_sphere_area via the sphere-surface relation A = π·d²
+            // (A_eq = 4πr² = π(2r)² = πd²) — area-via-radius vs π·diameter² (independent).
+            assert!(
+                (solid_equivalent_sphere_area(&s).unwrap() - PI * d.powi(2)).abs()
+                    <= 1e-9 * solid_equivalent_sphere_area(&s).unwrap(),
+                "A_eq = π·d²"
+            );
+        }
+
+        // A sphere's equivalent sphere is itself: sphere(2) → d ≈ 4 (= 2·radius).
+        assert!(
+            (solid_equivalent_sphere_diameter(&sphere(2.0).unwrap()).unwrap() - 4.0).abs()
+                <= 2e-2 * 4.0,
+            "sphere → d = 4"
+        );
+
+        // The _tol wrapper agrees with the default (a flat-faced box is exact at any tol).
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_equivalent_sphere_diameter(&b).unwrap()
+                - solid_equivalent_sphere_diameter_tol(&b, 0.1).unwrap())
+            .abs()
+                < 1e-9,
+            "_tol wrapper agrees"
         );
     }
 
