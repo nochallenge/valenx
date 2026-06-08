@@ -578,6 +578,33 @@ pub fn periapsis_radius_from_elements(
     Ok(semi_major_axis * (1.0 - eccentricity))
 }
 
+/// The **areal velocity** `dA/dt = h/2 = ½·√(μ·a·(1−e²))` (m²/s) — the rate at which the
+/// radius vector from the focus sweeps out area, where `semi_major_axis` `a` (m) is the
+/// orbit size and `eccentricity` `e` (`0 ≤ e < 1`) its shape. It is the **constant of
+/// Kepler's second law** (the radius vector sweeps equal areas in equal times), exactly half
+/// the specific angular momentum [`specific_angular_momentum_from_elements`]; integrated over
+/// one period it gives the whole ellipse area `π·a·b`.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `a` is non-finite or non-positive, or `e`
+/// is non-finite or outside the bound-ellipse range `0 ≤ e < 1`.
+pub fn areal_velocity_from_elements(
+    semi_major_axis: f64,
+    eccentricity: f64,
+) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+        || !eccentricity.is_finite()
+        || !(0.0..1.0).contains(&eccentricity)
+    {
+        return Err(AstroError::NonPhysicalState(
+            "areal_velocity_from_elements requires semi_major_axis > 0 and 0 <= eccentricity < 1",
+        ));
+    }
+    Ok(0.5 * (MU_EARTH * semi_major_axis * (1.0 - eccentricity * eccentricity)).sqrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -767,6 +794,44 @@ mod tests {
         assert!(periapsis_radius_from_elements(-1.0, 0.1).is_err());
         assert!(periapsis_radius_from_elements(7.0e6, 1.0).is_err());
         assert!(periapsis_radius_from_elements(f64::NAN, 0.1).is_err());
+    }
+
+    #[test]
+    fn areal_velocity_from_elements_is_keplers_second_law_constant() {
+        // (a) THREAD specific_angular_momentum_from_elements (#390) (non-tautological): the
+        // areal velocity is exactly half the specific angular momentum, dA/dt = h/2.
+        for &(a, e) in &[(7.0e6_f64, 0.1_f64), (4.2e7, 0.0), (1.0e7, 0.3)] {
+            let av = areal_velocity_from_elements(a, e).unwrap();
+            assert!(
+                (av - 0.5 * specific_angular_momentum_from_elements(a, e).unwrap()).abs()
+                    <= 1e-9 * av,
+                "dA/dt = h/2"
+            );
+
+            // (b) KEPLER-2ND cross-check threading orbital_period (#216): the area swept in
+            // one period is the whole ellipse, dA/dt · T = π·a·b with b = a√(1−e²).
+            let b = a * (1.0 - e * e).sqrt();
+            let ellipse_area = std::f64::consts::PI * a * b;
+            assert!(
+                (av * orbital_period(a).unwrap() - ellipse_area).abs() <= 1e-7 * ellipse_area,
+                "dA/dt·T = π·a·b"
+            );
+        }
+
+        // (c) CIRCULAR threading circular_angular_momentum (#348): at e = 0,
+        // dA/dt = ½√(μ·a) = ½·circular_angular_momentum(a).
+        for &a in &[7.0e6_f64, 4.2e7] {
+            let av = areal_velocity_from_elements(a, 0.0).unwrap();
+            assert!(
+                (av - 0.5 * circular_angular_momentum(a).unwrap()).abs() <= 1e-9 * av,
+                "circular: dA/dt = h_circ/2"
+            );
+        }
+
+        // (d) Err on non-physical input.
+        assert!(areal_velocity_from_elements(-1.0, 0.1).is_err());
+        assert!(areal_velocity_from_elements(7.0e6, 1.0).is_err());
+        assert!(areal_velocity_from_elements(f64::NAN, 0.1).is_err());
     }
 
     #[test]
