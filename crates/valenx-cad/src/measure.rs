@@ -414,6 +414,32 @@ pub fn solid_bounding_box(solid: &Solid) -> Result<([f64; 3], [f64; 3]), CadErro
     solid_bounding_box_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box center** `c = (min + max) / 2` (model units) of a solid
+/// — the geometric mid-point of its AABB ([`solid_bounding_box_tol`]), evaluated at
+/// tessellation tolerance `tol`. It is the natural pivot / camera-framing point. Unlike the
+/// mass [`solid_centroid_tol`] it weights only the extremes of the geometry, so the two
+/// coincide for a centro-symmetric body (a box, a sphere) but differ for a lopsided one
+/// (the centroid leans toward the bulk, the box center toward the extent).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// is empty (no bounding box).
+pub fn solid_bounding_box_center_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], CadError> {
+    let (min, max) = solid_bounding_box_tol(solid, tol)?;
+    Ok([
+        (min[0] + max[0]) * 0.5,
+        (min[1] + max[1]) * 0.5,
+        (min[2] + max[2]) * 0.5,
+    ])
+}
+
+/// AABB center of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_center_tol`].
+pub fn solid_bounding_box_center(solid: &Solid) -> Result<[f64; 3], CadError> {
+    solid_bounding_box_center_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
 /// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
 /// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
@@ -1098,6 +1124,35 @@ mod tests {
 
         // The aspect ratio is always ≥ 1 (long over short).
         assert!(solid_bounding_box_aspect_ratio(&b).unwrap() >= 1.0, "ratio ≥ 1");
+    }
+
+    #[test]
+    fn solid_bounding_box_center_is_the_aabb_midpoint() {
+        use crate::primitives::sphere;
+
+        // Threads solid_bounding_box: c = (min + max)/2.
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let (mn, mx) = solid_bounding_box(&s).unwrap();
+            let c = solid_bounding_box_center(&s).unwrap();
+            for k in 0..3 {
+                assert!((c[k] - (mn[k] + mx[k]) * 0.5).abs() < 1e-9, "c = (min+max)/2");
+            }
+        }
+
+        // Validates against solid_centroid (independent path): for a centro-symmetric
+        // solid the AABB center equals the mass centroid.
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        let cb = solid_bounding_box_center(&b).unwrap();
+        let gb = solid_centroid(&b).unwrap();
+        for k in 0..3 {
+            assert!((cb[k] - gb[k]).abs() < 1e-9, "box: bbox center = mass centroid");
+        }
+        let sph = sphere(2.0).unwrap();
+        let cs = solid_bounding_box_center(&sph).unwrap();
+        let gs = solid_centroid(&sph).unwrap();
+        for k in 0..3 {
+            assert!((cs[k] - gs[k]).abs() < 2e-2, "sphere: bbox center ≈ mass centroid");
+        }
     }
 
     #[test]
