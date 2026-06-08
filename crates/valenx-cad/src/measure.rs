@@ -995,6 +995,33 @@ pub fn solid_radius_of_gyration(solid: &Solid) -> Result<f64, CadError> {
     solid_radius_of_gyration_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The three **principal radii of gyration** `[k₁, k₂, k₃]` with `kᵢ = √(Iᵢ / V)` (model
+/// units, sorted descending `k₁ ≥ k₂ ≥ k₃`) of a solid — the radius at which the solid's
+/// mass (unit density, so mass = volume) could be concentrated to reproduce each centroidal
+/// principal moment ([`solid_principal_moments_tol`]). Unlike the single overall
+/// [`solid_radius_of_gyration_tol`] (`√(ΣI/2V)`, the combined invariant), these resolve the
+/// per-axis spread; the **smallest** `k₃` is the weak-axis radius that governs Euler column
+/// buckling. Evaluated at tessellation tolerance `tol`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// encloses no volume.
+pub fn solid_principal_radii_of_gyration_tol(
+    solid: &Solid,
+    tol: f64,
+) -> Result<[f64; 3], CadError> {
+    let m = solid_principal_moments_tol(solid, tol)?;
+    let v = solid_volume_tol(solid, tol)?;
+    Ok([(m[0] / v).sqrt(), (m[1] / v).sqrt(), (m[2] / v).sqrt()])
+}
+
+/// Centroidal principal radii of gyration of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_principal_radii_of_gyration_tol`].
+pub fn solid_principal_radii_of_gyration(solid: &Solid) -> Result<[f64; 3], CadError> {
+    solid_principal_radii_of_gyration_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The three **centroidal principal moments of inertia** `[I₁, I₂, I₃]` (unit
 /// density, model units `u⁵`, sorted descending `I₁ ≥ I₂ ≥ I₃`) of a solid — the
 /// eigenvalues of the centroidal inertia tensor, whose eigenvectors are the
@@ -2368,6 +2395,44 @@ mod tests {
                 (k - 2.0 * PI * (2.0 - 2.0 * solid_genus(s).unwrap() as f64)).abs() < 1e-9,
                 "K = 2π·(2 − 2g)"
             );
+        }
+    }
+
+    #[test]
+    fn solid_principal_radii_of_gyration_are_sqrt_i_over_v() {
+        use crate::primitives::sphere;
+
+        // (a) WORKED: box(2,4,6) has principal moments [208,160,80] and V=48, so the principal
+        // radii of gyration are [√(208/48), √(160/48), √(80/48)] = [2.0817, 1.8257, 1.2910].
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let k = solid_principal_radii_of_gyration(&bx).unwrap();
+        assert!((k[0] - (208.0_f64 / 48.0).sqrt()).abs() <= 1e-9, "k₁ = √(208/48)");
+        assert!((k[2] - (80.0_f64 / 48.0).sqrt()).abs() <= 1e-9, "k₃ = √(80/48)");
+
+        // (b) THREAD solid_radius_of_gyration (non-tautological): the overall radius is
+        // √((k₁²+k₂²+k₃²)/2) (since k_overall² = trace/2V and kᵢ² = Iᵢ/V).
+        let kg = solid_radius_of_gyration(&bx).unwrap();
+        assert!(
+            (kg - ((k[0] * k[0] + k[1] * k[1] + k[2] * k[2]) / 2.0).sqrt()).abs() <= 1e-9 * kg,
+            "k_overall = √(Σkᵢ²/2)"
+        );
+
+        // (c) THREAD solid_principal_moments + solid_volume: kᵢ = √(Iᵢ/V).
+        let m = solid_principal_moments(&bx).unwrap();
+        let v = solid_volume(&bx).unwrap();
+        for (ki, mi) in k.iter().copied().zip(m.iter().copied()) {
+            assert!((ki - (mi / v).sqrt()).abs() <= 1e-9 * ki, "kᵢ = √(Iᵢ/V)");
+        }
+
+        // (d) SPHERE (isotropic): all three radii equal.
+        let ks = solid_principal_radii_of_gyration(&sphere(2.0).unwrap()).unwrap();
+        assert!((ks[0] - ks[2]).abs() <= 3e-2 * ks[0], "sphere radii equal: {ks:?}");
+
+        // (e) Sorted descending, positive, and the _tol wrapper agrees with the default.
+        assert!(k[0] >= k[1] && k[1] >= k[2] && k[2] > 0.0, "k₁ ≥ k₂ ≥ k₃ > 0: {k:?}");
+        let kt = solid_principal_radii_of_gyration_tol(&bx, 0.1).unwrap();
+        for (a, b) in k.iter().zip(kt.iter()) {
+            assert!((a - b).abs() <= 1e-9 * a, "_tol wrapper agrees");
         }
     }
 
