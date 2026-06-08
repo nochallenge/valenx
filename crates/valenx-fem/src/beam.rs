@@ -434,6 +434,33 @@ pub fn torsional_shear_stress(torque: f64, radius: f64, polar_moment: f64) -> f6
     torque * radius / polar_moment
 }
 
+/// The **torsional strain energy** `U = T²·L / (2·G·J)` (J) stored in a prismatic shaft
+/// of length `length` `L` (m), shear modulus `shear_modulus` `G` (Pa) and polar second
+/// moment of area `polar_moment` `J` (m⁴) carrying a torque `torque` `T` (N·m). It is the
+/// elastic work done twisting the shaft — equivalently the Clapeyron form `½·T·θ` with the
+/// [`beam_angle_of_twist`] `θ` — and the torsion analogue of the bending strain energy.
+/// Being a square in `T` it is non-negative regardless of the torque's sign. Returns `0`
+/// for non-physical input (non-finite torque, or a non-positive / non-finite length, shear
+/// modulus or polar moment).
+pub fn torsional_strain_energy(
+    torque: f64,
+    length: f64,
+    shear_modulus: f64,
+    polar_moment: f64,
+) -> f64 {
+    if !torque.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !shear_modulus.is_finite()
+        || shear_modulus <= 0.0
+        || !polar_moment.is_finite()
+        || polar_moment <= 0.0
+    {
+        return 0.0;
+    }
+    torque * torque * length / (2.0 * shear_modulus * polar_moment)
+}
+
 /// The **polar (torsional) section modulus** `Z_p = J / r` (m³) — the torsion design
 /// property that maps an applied torque to the peak surface shear stress through
 /// `τ_max = T / Z_p`, where `polar_moment` `J` (m⁴) is the polar second moment of area
@@ -2682,6 +2709,49 @@ mod tests {
         assert_eq!(torsional_shear_stress(f64::NAN, 0.05, 1.0e-6), 0.0);
         assert_eq!(torsional_shear_stress(1000.0, 0.05, 0.0), 0.0);
         assert_eq!(torsional_shear_stress(1000.0, 0.05, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn torsional_strain_energy_is_the_clapeyron_work() {
+        // Threads beam_angle_of_twist via Clapeyron U = ½·T·θ (exact, incl. negative T).
+        for &(tq, l, g, j) in &[
+            (100.0_f64, 2.0_f64, 80.0e9_f64, 1.0e-6_f64),
+            (-450.0, 0.8, 27.0e9, 4.2e-7),
+            (8200.0, 3.5, 80.0e9, 9.0e-8),
+        ] {
+            let from_twist = 0.5 * tq * beam_angle_of_twist(tq, l, g, j);
+            assert!(
+                (torsional_strain_energy(tq, l, g, j) - from_twist).abs() <= 1e-12 * from_twist.abs(),
+                "U = ½·T·θ"
+            );
+        }
+
+        // Worked: U = T²L/2GJ = 100²·2/(2·80e9·1e-6) = 0.125 J.
+        assert!(
+            (torsional_strain_energy(100.0, 2.0, 80.0e9, 1.0e-6) - 0.125).abs() <= 1e-12 * 0.125,
+            "U = T²L/2GJ = 0.125 J"
+        );
+
+        // Energy is non-negative and quadratic in T (sign-independent).
+        assert_eq!(
+            torsional_strain_energy(-100.0, 2.0, 80.0e9, 1.0e-6),
+            torsional_strain_energy(100.0, 2.0, 80.0e9, 1.0e-6),
+            "even in T"
+        );
+        assert!(
+            (torsional_strain_energy(200.0, 2.0, 80.0e9, 1.0e-6)
+                - 4.0 * torsional_strain_energy(100.0, 2.0, 80.0e9, 1.0e-6))
+            .abs()
+                < 1e-12,
+            "quadratic in T"
+        );
+        assert!(torsional_strain_energy(100.0, 2.0, 80.0e9, 1.0e-6) > 0.0, "non-negative");
+
+        // 0 sentinel for non-physical input.
+        assert_eq!(torsional_strain_energy(100.0, 0.0, 80.0e9, 1.0e-6), 0.0);
+        assert_eq!(torsional_strain_energy(100.0, 2.0, 0.0, 1.0e-6), 0.0);
+        assert_eq!(torsional_strain_energy(100.0, 2.0, 80.0e9, 0.0), 0.0);
+        assert_eq!(torsional_strain_energy(f64::NAN, 2.0, 80.0e9, 1.0e-6), 0.0);
     }
 
     #[test]
