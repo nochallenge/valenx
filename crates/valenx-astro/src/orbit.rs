@@ -441,6 +441,35 @@ pub fn eccentricity_from_apsides(
     Ok((apoapsis_radius - periapsis_radius) / (apoapsis_radius + periapsis_radius))
 }
 
+/// The **semi-major axis of a conic from its apsis radii** `a = (r_a + r_p) / 2`
+/// (m) — the orbit size specified by its apoapsis radius `apoapsis_radius` `r_a`
+/// and periapsis radius `periapsis_radius` `r_p` (m), the arithmetic mean of the
+/// two turning-point distances. Together with the shape
+/// [`eccentricity_from_apsides`] (which takes the same `(r_a, r_p)`) it fully fixes
+/// the orbit — `r_a = a(1+e)`, `r_p = a(1−e)` — so `a` then feeds the period
+/// [`orbital_period`], the energy [`specific_orbital_energy`], and the vis-viva
+/// speed [`orbital_speed`]. For a circle (`r_a = r_p`) it is just the common radius.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if either radius is non-finite, the periapsis is
+/// non-positive, or the apoapsis is smaller than the periapsis.
+pub fn semi_major_axis_from_apsides(
+    apoapsis_radius: f64,
+    periapsis_radius: f64,
+) -> Result<f64, AstroError> {
+    if !apoapsis_radius.is_finite()
+        || !periapsis_radius.is_finite()
+        || periapsis_radius <= 0.0
+        || apoapsis_radius < periapsis_radius
+    {
+        return Err(AstroError::NonPhysicalState(
+            "semi_major_axis_from_apsides requires finite radii with apoapsis >= periapsis > 0",
+        ));
+    }
+    Ok((apoapsis_radius + periapsis_radius) / 2.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -470,6 +499,41 @@ mod tests {
         assert!(eccentricity_from_apsides(7.0e6, 0.0).is_err());
         assert!(eccentricity_from_apsides(7.0e6, 8.0e6).is_err()); // apoapsis < periapsis
         assert!(eccentricity_from_apsides(f64::NAN, 7.0e6).is_err());
+    }
+
+    #[test]
+    fn semi_major_axis_from_apsides_averages_the_apsis_radii() {
+        // (a) WORKED: a = (8e6 + 7e6)/2 = 7.5e6.
+        let a = semi_major_axis_from_apsides(8.0e6, 7.0e6).unwrap();
+        assert!((a - 7.5e6).abs() <= 1e-9 * a, "a = (r_a+r_p)/2 = 7.5e6");
+
+        // (b) CIRCULAR: r_a == r_p → a == that radius (non-zero float → tolerance).
+        let ac = semi_major_axis_from_apsides(7.0e6, 7.0e6).unwrap();
+        assert!((ac - 7.0e6).abs() <= 1e-9 * 7.0e6, "circular → a = r");
+
+        // (c) ROUND-TRIP threading #372 eccentricity_from_apsides (non-tautological):
+        // a and e recover BOTH input apsides (r_a = a(1+e), r_p = a(1−e)).
+        for &(r_a, r_p) in &[(8.0e6_f64, 7.0e6_f64), (4.2e7, 7.0e6), (1.0e7, 1.0e7)] {
+            let a = semi_major_axis_from_apsides(r_a, r_p).unwrap();
+            let e = eccentricity_from_apsides(r_a, r_p).unwrap();
+            assert!((a * (1.0 + e) - r_a).abs() <= 1e-9 * r_a, "r_a = a(1+e)");
+            assert!((a * (1.0 - e) - r_p).abs() <= 1e-9 * r_p, "r_p = a(1−e)");
+        }
+
+        // (d) BOUND: periapsis ≤ a ≤ apoapsis, and (e) the orbit is faster at
+        // periapsis than apoapsis for the same a (vis-viva, threads orbital_speed).
+        let (r_a, r_p) = (4.2e7_f64, 7.0e6_f64);
+        let a = semi_major_axis_from_apsides(r_a, r_p).unwrap();
+        assert!(r_p <= a && a <= r_a, "r_p ≤ a ≤ r_a");
+        assert!(
+            orbital_speed(r_p, a).unwrap() > orbital_speed(r_a, a).unwrap(),
+            "periapsis speed > apoapsis speed"
+        );
+
+        // (f) Err on non-physical input (mirrors eccentricity_from_apsides).
+        assert!(semi_major_axis_from_apsides(7.0e6, 0.0).is_err());
+        assert!(semi_major_axis_from_apsides(7.0e6, 8.0e6).is_err()); // apoapsis < periapsis
+        assert!(semi_major_axis_from_apsides(f64::NAN, 7.0e6).is_err());
     }
 
     #[test]
