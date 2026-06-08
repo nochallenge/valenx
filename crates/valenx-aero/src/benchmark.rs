@@ -125,6 +125,18 @@ pub fn turbulent_boundary_layer_thickness_ratio(re_x: f64) -> f64 {
     0.37 * re_x.powf(-0.2)
 }
 
+/// The **turbulent local skin-friction coefficient** `c_f = 0.0592·Re_x⁻¹ᐟ⁵`
+/// (dimensionless) at local length Reynolds number `re_x` `Re_x = U·x/ν` — the Prandtl
+/// one-seventh-power-law *local* skin friction at distance `x` along a smooth flat plate,
+/// the turbulent companion to the laminar [`blasius_local_cf`]. Integrating it over the
+/// plate gives the average [`reference_flat_plate_cf`] `= c_f / 0.8` (since
+/// `0.0592 = 0.8·0.074`), so the plate-average drag coefficient is `1.25×` the
+/// trailing-edge local value.
+pub fn turbulent_local_cf(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    0.0592 * re_x.powf(-0.2)
+}
+
 /// The laminar (Blasius) flat-plate skin-friction drag coefficient at a
 /// length Reynolds number `re_l` — `C_F = 1.328·Re_L⁻¹ᐟ²`.
 pub fn blasius_flat_plate_cf(re_l: f64) -> f64 {
@@ -648,6 +660,45 @@ mod tests {
              sphere drag",
             after.cd
         );
+    }
+
+    #[test]
+    fn turbulent_local_cf_relates_to_the_average_and_thickness() {
+        // Worked: c_f = 0.0592·Re⁻⁰·²; at Re = 1e7, c_f = 0.0592/(1e7)^0.2.
+        let expected = 0.0592 * (1.0e7_f64).powf(-0.2);
+        assert!(
+            (turbulent_local_cf(1.0e7) - expected).abs() <= 1e-12 * expected,
+            "c_f = 0.0592·Re⁻¹ᐟ⁵"
+        );
+
+        for &re in &[1.0e6, 5.0e6, 1.0e7] {
+            // Threads reference_flat_plate_cf: the average is the local / 0.8 (the
+            // 1/7-power integral), so c_f_local = 0.8·C_F_avg.
+            assert!(
+                (turbulent_local_cf(re) - 0.8 * reference_flat_plate_cf(re)).abs()
+                    <= 1e-12 * turbulent_local_cf(re),
+                "c_f = 0.8·C_F at Re={re}"
+            );
+            // Threads turbulent_boundary_layer_thickness_ratio (#343): constant ratio
+            // 0.0592/0.37.
+            let from_delta = (0.0592 / 0.37) * turbulent_boundary_layer_thickness_ratio(re);
+            assert!(
+                (turbulent_local_cf(re) - from_delta).abs() <= 1e-12 * turbulent_local_cf(re),
+                "c_f = (0.0592/0.37)·(δ/x) at Re={re}"
+            );
+        }
+
+        // Re⁻⁰·² scaling and monotonic decrease.
+        assert!(
+            (turbulent_local_cf(1.0e2) - 10.0 * turbulent_local_cf(1.0e7)).abs()
+                / turbulent_local_cf(1.0e2)
+                < 1e-9,
+            "Re⁻¹ᐟ⁵ scaling"
+        );
+        assert!(turbulent_local_cf(1.0e5) > turbulent_local_cf(1.0e7));
+
+        // The Re < 1 clamp.
+        assert!((turbulent_local_cf(0.5) - 0.0592).abs() < 1e-12, "clamped to Re = 1");
     }
 
     #[test]
