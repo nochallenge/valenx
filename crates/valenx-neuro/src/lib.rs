@@ -76,7 +76,10 @@ pub use error::{NeuroError, Result};
 pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};
 pub use ghk::{ghk_current_density, ghk_potential_mv, GhkIon};
 pub use impedance::{Cpe, ElectrodeImpedance};
-pub use ionic::{driving_force_mv, ionic_conductance, ionic_current, ionic_power_density};
+pub use ionic::{
+    driving_force_mv, ionic_conductance, ionic_current, ionic_power_density,
+    ionic_reversal_potential,
+};
 pub use lif::{
     lif_firing_rate, lif_interspike_interval, lif_membrane_potential, lif_rheobase_current,
     lif_steady_state_potential,

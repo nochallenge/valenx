@@ -44,6 +44,18 @@ pub fn ionic_conductance(current: f64, vm_mv: f64, e_rev_mv: f64) -> f64 {
     current / driving_force_mv(vm_mv, e_rev_mv)
 }
 
+/// The **ionic reversal potential** `E_rev = V_m − I/g` (mV) recovered from a measured
+/// current — the I–V intercept, the second inverse of [`ionic_current`]
+/// `I = g·(V_m − E_rev)` (the [`ionic_conductance`] solves it for `g`; this solves it for
+/// `E_rev`). It is the membrane potential `vm_mv` (mV) at which the recorded `current`
+/// (µA/cm²) through a known `conductance` (mS/cm²) would vanish — the channel's
+/// equilibrium potential read off *electrically* rather than from concentrations
+/// ([`crate::nernst`]). Like the rest of the module it is total: a zero `conductance`
+/// gives a non-finite intercept the caller is expected to guard.
+pub fn ionic_reversal_potential(current: f64, conductance: f64, vm_mv: f64) -> f64 {
+    vm_mv - current / conductance
+}
+
 /// Ohmic **power dissipated** by an ionic current `P = I·(V_m − E_rev) = g·(V_m −
 /// E_rev)²` — the Joule heating of the channel conductance, and the electrical part
 /// of the metabolic cost of holding current against the ion's battery. With
@@ -86,6 +98,50 @@ mod tests {
 
         // At the reversal potential the driving force vanishes → non-finite conductance.
         assert!(ionic_conductance(1.0, -65.0, -65.0).is_infinite(), "zero driving force → ∞");
+    }
+
+    #[test]
+    fn ionic_reversal_potential_is_the_iv_intercept() {
+        // (a) ROUND-TRIP (non-tautological): the recovered E_rev reproduces the current,
+        // and inverts the current ionic_current produces from E.
+        for &(g, vm, e) in &[(5.0_f64, -50.0_f64, -80.0_f64), (0.3, -65.0, 0.0), (1.2, -70.0, -90.0)]
+        {
+            let i = ionic_current(g, vm, e);
+            assert!(
+                (ionic_reversal_potential(i, g, vm) - e).abs() <= 1e-9 * e.abs().max(1.0),
+                "E_rev = V − I/g inverts I = g(V−E)"
+            );
+            assert!(
+                (ionic_current(g, vm, ionic_reversal_potential(i, g, vm)) - i).abs()
+                    <= 1e-12 * i.abs().max(1.0),
+                "current round-trips through E_rev"
+            );
+        }
+
+        // (b) WORKED: I = 1 µA/cm², g = 0.5 mS/cm², V = −50 → E = −50 − 1/0.5 = −52 mV.
+        assert!(
+            (ionic_reversal_potential(1.0, 0.5, -50.0) - (-52.0)).abs() < 1e-12,
+            "E_rev = V − I/g = −52 mV"
+        );
+
+        // (c) ZERO CURRENT: at I = 0 the cell sits at its reversal potential (E = V).
+        assert!(
+            (ionic_reversal_potential(0.0, 0.5, -65.0) - (-65.0)).abs() < 1e-12,
+            "I = 0 → E_rev = V"
+        );
+
+        // (d) CROSS-CHECK threading ionic_conductance (non-tautological): the two I–V
+        // inverses agree — recovering g from (I, V, E_rev) returns the original g.
+        let (g, vm) = (0.8_f64, -55.0_f64);
+        let i = ionic_current(g, vm, -75.0);
+        let e_rec = ionic_reversal_potential(i, g, vm);
+        assert!((ionic_conductance(i, vm, e_rec) - g).abs() <= 1e-9 * g, "g recovered via E_rev");
+
+        // (e) THREAD driving_force: the implied driving force V − E_rev is exactly I/g.
+        assert!(
+            (driving_force_mv(vm, e_rec) - i / g).abs() <= 1e-9 * (i / g).abs(),
+            "V − E_rev = I/g"
+        );
     }
 
     #[test]
