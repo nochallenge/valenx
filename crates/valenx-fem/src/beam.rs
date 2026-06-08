@@ -711,6 +711,20 @@ pub fn elastic_section_modulus(second_moment_area: f64, extreme_fiber_distance: 
     second_moment_area / extreme_fiber_distance
 }
 
+/// The **second moment of area of a rectangular cross-section** about its centroidal
+/// bending axis `I = b·h³/12` (m⁴), for a section of `width` `b` (m) and `height` `h`
+/// (m). It is the foundational section property of the commonest beam section — the `I`
+/// that feeds [`elastic_section_modulus`] (`S = I/(h/2)`), [`flexural_rigidity`] (`EI`),
+/// and every Euler–Bernoulli deflection. The bending axis is normal to `height`, so the
+/// depth enters cubed (a deeper beam is far stiffer). Returns `0` for non-physical input
+/// (`b` or `h` non-positive or non-finite).
+pub fn rectangular_second_moment_of_area(width: f64, height: f64) -> f64 {
+    if !width.is_finite() || width <= 0.0 || !height.is_finite() || height <= 0.0 {
+        return 0.0;
+    }
+    width * height.powi(3) / 12.0
+}
+
 /// The **elastic bending-moment capacity** `M = σ·S` (N·m) — the bending moment a
 /// section carries when its most-stressed fibre reaches the stress `stress` `σ` (Pa),
 /// given the [`elastic_section_modulus`] `section_modulus` `S` (m³). It is the inverse
@@ -2648,6 +2662,49 @@ mod tests {
         assert_eq!(elastic_section_modulus(1.0e-6, 0.0), 0.0);
         assert_eq!(elastic_section_modulus(1.0e-6, -0.05), 0.0);
         assert_eq!(elastic_section_modulus(f64::NAN, 0.05), 0.0);
+    }
+
+    #[test]
+    fn rectangular_second_moment_of_area_is_bh3_over_12() {
+        // (a) WORKED: b=0.1, h=0.2 → I = b·h³/12 = 6.6667e-5 m⁴.
+        let i = rectangular_second_moment_of_area(0.1, 0.2);
+        assert!((i - 0.1 * 0.2_f64.powi(3) / 12.0).abs() <= 1e-9 * i, "I = b·h³/12");
+
+        // (b) THREAD elastic_section_modulus (#380) (non-tautological): the rectangular
+        // section modulus is S = I/(h/2) = b·h²/6.
+        let (b, h) = (0.1_f64, 0.2_f64);
+        assert!(
+            (elastic_section_modulus(rectangular_second_moment_of_area(b, h), h / 2.0)
+                - b * h * h / 6.0)
+            .abs()
+                <= 1e-9 * (b * h * h / 6.0),
+            "S = I/(h/2) = b·h²/6"
+        );
+
+        // (c) THREAD flexural_rigidity (#398): EI of a steel rectangle.
+        let ei = 200.0e9 * rectangular_second_moment_of_area(0.1, 0.2);
+        assert!(
+            (flexural_rigidity(200.0e9, rectangular_second_moment_of_area(0.1, 0.2)) - ei).abs()
+                <= 1e-6 * ei,
+            "EI = E·I"
+        );
+
+        // (d) SCALING: linear in width, cubic in height.
+        let base = rectangular_second_moment_of_area(0.1, 0.2);
+        assert!(
+            (rectangular_second_moment_of_area(0.2, 0.2) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in width"
+        );
+        assert!(
+            (rectangular_second_moment_of_area(0.1, 0.4) - 8.0 * base).abs() <= 1e-9 * 8.0 * base,
+            "cubic in height"
+        );
+
+        // (e) GUARD: non-positive or non-finite → 0.
+        assert_eq!(rectangular_second_moment_of_area(0.0, 0.2), 0.0);
+        assert_eq!(rectangular_second_moment_of_area(0.1, 0.0), 0.0);
+        assert_eq!(rectangular_second_moment_of_area(f64::NAN, 0.2), 0.0);
+        assert_eq!(rectangular_second_moment_of_area(0.1, -0.2), 0.0);
     }
 
     #[test]
