@@ -168,6 +168,18 @@ pub fn blasius_momentum_thickness_ratio(re_x: f64) -> f64 {
     0.664 / re_x.sqrt()
 }
 
+/// The **Blasius laminar boundary-layer shape factor** `H = δ*/θ = 1.721/0.664 ≈ 2.59`
+/// (dimensionless) — the ratio of the displacement thickness
+/// [`blasius_displacement_thickness_ratio`] to the momentum thickness
+/// [`blasius_momentum_thickness_ratio`]. It is Reynolds-number-independent (a pure
+/// constant) for the Blasius profile and is the canonical descriptor of a boundary
+/// layer's fullness: `≈ 2.59` for laminar Blasius flow, falling to `≈ 1.3–1.4` in a
+/// turbulent layer and rising toward `≈ 3.5` as laminar separation approaches — so it
+/// doubles as a transition / separation indicator.
+pub fn blasius_shape_factor() -> f64 {
+    1.721 / 0.664
+}
+
 /// The thin-airfoil-theory lift-curve slope — `2π` per radian, the
 /// classic inviscid result for a thin symmetric section at a small
 /// angle of attack.
@@ -605,6 +617,28 @@ mod tests {
             "near-wall-model sphere Cd {} should be a plausible \
              sphere drag",
             after.cd
+        );
+    }
+
+    #[test]
+    fn blasius_shape_factor_is_the_displacement_over_momentum_thickness() {
+        // Threads #319 + #325: H = δ*/θ, and the Re cancels in the ratio (a pure constant).
+        for &re in &[1.0e5, 1.0e6, 5.0e6] {
+            let ratio =
+                blasius_displacement_thickness_ratio(re) / blasius_momentum_thickness_ratio(re);
+            assert!(
+                (blasius_shape_factor() - ratio).abs() <= 1e-12 * ratio,
+                "H = δ*/θ, Re-independent at Re={re}"
+            );
+        }
+
+        // Known textbook value H ≈ 2.59 for the laminar Blasius profile.
+        assert!((blasius_shape_factor() - 2.5918).abs() < 1e-3, "laminar H ≈ 2.59");
+
+        // δ* always exceeds θ (H > 1), and laminar H stays below the ≈3.5 separation value.
+        assert!(
+            blasius_shape_factor() > 1.0 && blasius_shape_factor() < 3.0,
+            "1 < H < 3 (laminar)"
         );
     }
 
