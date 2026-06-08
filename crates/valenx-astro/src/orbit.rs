@@ -258,6 +258,26 @@ pub fn specific_orbital_energy_from_state(speed: f64, radius: f64) -> Result<f64
     Ok(0.5 * speed * speed - MU_EARTH / radius)
 }
 
+/// The **semi-major axis from the specific orbital energy** `a = −μ / (2·ε)` (m) — the
+/// inverse of [`specific_orbital_energy`]. Composed with
+/// [`specific_orbital_energy_from_state`] it is the vis-viva *orbit determination* step:
+/// a state vector's speed and radius give the energy `ε`, which fixes the orbit's size
+/// `a`. Only a bound (elliptical) orbit has a finite semi-major axis — its energy is
+/// negative — so `ε ≥ 0` (a parabolic or hyperbolic trajectory) is rejected.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `specific_energy` is non-finite or
+/// non-negative (not a bound orbit).
+pub fn semi_major_axis_from_energy(specific_energy: f64) -> Result<f64, AstroError> {
+    if !specific_energy.is_finite() || specific_energy >= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "semi_major_axis_from_energy requires a bound orbit (specific energy < 0)",
+        ));
+    }
+    Ok(-MU_EARTH / (2.0 * specific_energy))
+}
+
 /// The **semi-major axis from the orbital period** `a = (μ·T² / (4π²))^(1/3)` (m) —
 /// Kepler's third law inverted: given an observed period `period` `T` (s) it recovers
 /// the size of the orbit about Earth. It is the inverse of [`orbital_period`] and the
@@ -404,6 +424,32 @@ mod tests {
         assert!(semi_major_axis_from_period(0.0).is_err());
         assert!(semi_major_axis_from_period(-1.0).is_err());
         assert!(semi_major_axis_from_period(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn semi_major_axis_from_energy_inverts_the_orbit_energy() {
+        // Round-trip inverting specific_orbital_energy: a → ε → a.
+        for &a in &[7_000_000.0_f64, 4.2164e7, R_EARTH + 800_000.0] {
+            let recovered = semi_major_axis_from_energy(specific_orbital_energy(a).unwrap()).unwrap();
+            assert!((recovered - a).abs() <= 1e-9 * a, "a = −μ/2ε inverts ε = −μ/2a");
+        }
+
+        // Vis-viva orbit determination: recover a from a STATE (speed + radius), threading
+        // specific_orbital_energy_from_state + orbital_speed.
+        for &(r, a) in &[(7_000_000.0_f64, 7_000_000.0_f64), (6_800_000.0, 8_000_000.0)] {
+            let energy = specific_orbital_energy_from_state(orbital_speed(r, a).unwrap(), r).unwrap();
+            let recovered = semi_major_axis_from_energy(energy).unwrap();
+            assert!((recovered - a).abs() <= 1e-9 * a, "state → ε → a");
+        }
+
+        // Worked: ε = −μ/(2·7e6) → a = 7e6.
+        let a = semi_major_axis_from_energy(-MU_EARTH / (2.0 * 7_000_000.0)).unwrap();
+        assert!((a - 7_000_000.0).abs() <= 1e-9 * 7_000_000.0, "a = −μ/2ε");
+
+        // Err on a non-bound orbit (parabolic ε = 0, hyperbolic ε > 0) or NaN.
+        assert!(semi_major_axis_from_energy(0.0).is_err());
+        assert!(semi_major_axis_from_energy(1.0e6).is_err());
+        assert!(semi_major_axis_from_energy(f64::NAN).is_err());
     }
 
     #[test]
