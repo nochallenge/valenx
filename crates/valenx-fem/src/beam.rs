@@ -725,6 +725,19 @@ pub fn rectangular_second_moment_of_area(width: f64, height: f64) -> f64 {
     width * height.powi(3) / 12.0
 }
 
+/// The **second moment of area of a solid circular cross-section** about a centroidal
+/// diameter `I = π·d⁴/64` (m⁴), for a round bar of diameter `diameter` `d` (m) — the
+/// shaft/rod companion to [`rectangular_second_moment_of_area`], the `I` that feeds
+/// [`elastic_section_modulus`] (`S = I/(d/2) = π·d³/32`) and [`flexural_rigidity`] (`EI`).
+/// The diameter enters to the fourth power. Returns `0` for non-physical input (`d`
+/// non-positive or non-finite).
+pub fn circular_second_moment_of_area(diameter: f64) -> f64 {
+    if !diameter.is_finite() || diameter <= 0.0 {
+        return 0.0;
+    }
+    std::f64::consts::PI * diameter.powi(4) / 64.0
+}
+
 /// The **elastic bending-moment capacity** `M = σ·S` (N·m) — the bending moment a
 /// section carries when its most-stressed fibre reaches the stress `stress` `σ` (Pa),
 /// given the [`elastic_section_modulus`] `section_modulus` `S` (m³). It is the inverse
@@ -2705,6 +2718,47 @@ mod tests {
         assert_eq!(rectangular_second_moment_of_area(0.1, 0.0), 0.0);
         assert_eq!(rectangular_second_moment_of_area(f64::NAN, 0.2), 0.0);
         assert_eq!(rectangular_second_moment_of_area(0.1, -0.2), 0.0);
+    }
+
+    #[test]
+    fn circular_second_moment_of_area_is_pi_d4_over_64() {
+        // (a) WORKED: d = 0.1 → I = π·d⁴/64 ≈ 4.9087e-6 m⁴.
+        let i = circular_second_moment_of_area(0.1);
+        assert!(
+            (i - std::f64::consts::PI * 0.1_f64.powi(4) / 64.0).abs() <= 1e-9 * i,
+            "I = π·d⁴/64"
+        );
+
+        // (b) THREAD elastic_section_modulus (#380) (non-tautological): the circular section
+        // modulus S = I/(d/2) = π·d³/32.
+        let d = 0.1_f64;
+        assert!(
+            (elastic_section_modulus(circular_second_moment_of_area(d), d / 2.0)
+                - std::f64::consts::PI * d.powi(3) / 32.0)
+            .abs()
+                <= 1e-9 * (std::f64::consts::PI * d.powi(3) / 32.0),
+            "S = I/(d/2) = π·d³/32"
+        );
+
+        // (c) THREAD flexural_rigidity (#398): EI of a steel round bar.
+        let ei = 200.0e9 * circular_second_moment_of_area(0.1);
+        assert!(
+            (flexural_rigidity(200.0e9, circular_second_moment_of_area(0.1)) - ei).abs()
+                <= 1e-6 * ei,
+            "EI = E·I"
+        );
+
+        // (d) SCALING: quartic in diameter.
+        let base = circular_second_moment_of_area(0.1);
+        assert!(
+            (circular_second_moment_of_area(0.2) - 16.0 * base).abs() <= 1e-9 * 16.0 * base,
+            "quartic in diameter"
+        );
+
+        // (e) GUARD: non-positive or non-finite → 0.
+        assert_eq!(circular_second_moment_of_area(0.0), 0.0);
+        assert_eq!(circular_second_moment_of_area(f64::NAN), 0.0);
+        assert_eq!(circular_second_moment_of_area(-0.1), 0.0);
     }
 
     #[test]
