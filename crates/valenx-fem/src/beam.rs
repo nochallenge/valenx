@@ -740,6 +740,21 @@ pub fn rectangular_plastic_section_modulus(width: f64, height: f64) -> f64 {
     width * height * height / 4.0
 }
 
+/// The **polar second moment of area of a rectangular cross-section** about the centroidal
+/// axis normal to the section `J = I_x + I_y = (b·h/12)·(b² + h²)` (m⁴), for a section of
+/// `width` `b` (m) and `height` `h` (m) — by the perpendicular-axis theorem the sum of the
+/// two bending [`rectangular_second_moment_of_area`]s. **NB:** this is the polar *second
+/// moment of area*; for a non-circular section it is **not** the St-Venant torsion constant
+/// (a rectangle's torsion constant is the separate, smaller `β·b·h³` value). `J` equals the
+/// torsion constant only for a circle. Returns `0` for non-physical input (`b` or `h`
+/// non-positive or non-finite).
+pub fn rectangular_polar_second_moment_of_area(width: f64, height: f64) -> f64 {
+    if !width.is_finite() || width <= 0.0 || !height.is_finite() || height <= 0.0 {
+        return 0.0;
+    }
+    width * height * (width * width + height * height) / 12.0
+}
+
 /// The **second moment of area of a solid circular cross-section** about a centroidal
 /// diameter `I = π·d⁴/64` (m⁴), for a round bar of diameter `diameter` `d` (m) — the
 /// shaft/rod companion to [`rectangular_second_moment_of_area`], the `I` that feeds
@@ -2799,6 +2814,50 @@ mod tests {
         assert_eq!(rectangular_plastic_section_modulus(0.1, 0.0), 0.0);
         assert_eq!(rectangular_plastic_section_modulus(f64::NAN, 0.2), 0.0);
         assert_eq!(rectangular_plastic_section_modulus(0.1, -0.2), 0.0);
+    }
+
+    #[test]
+    fn rectangular_polar_second_moment_of_area_is_ix_plus_iy() {
+        // (a) WORKED: b=0.1, h=0.2 → J = (b·h/12)(b²+h²) = (0.02/12)(0.05) ≈ 8.3333e-5 m⁴.
+        let j = rectangular_polar_second_moment_of_area(0.1, 0.2);
+        assert!(
+            (j - 0.1 * 0.2_f64 * (0.1 * 0.1 + 0.2 * 0.2) / 12.0).abs() <= 1e-9 * j,
+            "J = (b·h/12)(b²+h²)"
+        );
+
+        // (b) THREAD rectangular_second_moment_of_area (#415) (non-tautological, perpendicular-
+        // axis theorem): J = I_x + I_y = I(b,h) + I(h,b).
+        let (b, h) = (0.1_f64, 0.2_f64);
+        assert!(
+            (rectangular_polar_second_moment_of_area(b, h)
+                - (rectangular_second_moment_of_area(b, h)
+                    + rectangular_second_moment_of_area(h, b)))
+            .abs()
+                <= 1e-9 * rectangular_polar_second_moment_of_area(b, h),
+            "J = I_x + I_y"
+        );
+
+        // (c) SQUARE: for b = h = a the polar moment is a⁴/6.
+        assert!(
+            (rectangular_polar_second_moment_of_area(0.1, 0.1) - 0.1_f64.powi(4) / 6.0).abs()
+                <= 1e-9 * rectangular_polar_second_moment_of_area(0.1, 0.1),
+            "square → a⁴/6"
+        );
+
+        // (d) SYMMETRY: the polar moment is symmetric in the two dimensions, J(b,h) = J(h,b).
+        assert!(
+            (rectangular_polar_second_moment_of_area(0.1, 0.2)
+                - rectangular_polar_second_moment_of_area(0.2, 0.1))
+            .abs()
+                <= 1e-9 * rectangular_polar_second_moment_of_area(0.1, 0.2),
+            "J(b,h) = J(h,b)"
+        );
+
+        // (e) GUARD: non-positive or non-finite → 0.
+        assert_eq!(rectangular_polar_second_moment_of_area(0.0, 0.2), 0.0);
+        assert_eq!(rectangular_polar_second_moment_of_area(0.1, 0.0), 0.0);
+        assert_eq!(rectangular_polar_second_moment_of_area(f64::NAN, 0.2), 0.0);
+        assert_eq!(rectangular_polar_second_moment_of_area(0.1, -0.2), 0.0);
     }
 
     #[test]
