@@ -438,6 +438,30 @@ impl FlowSolution {
         hi
     }
 
+    /// The **spatial standard deviation of the static-pressure field**
+    /// `σ_p = √(⟨(p − ⟨p⟩)²⟩)` (Pa) — the root-mean-square fluctuation of the cell
+    /// pressures about their area-average [`FlowSolution::mean_pressure`], a measure of
+    /// how non-uniform the pressure field is (the static-pressure analogue of the
+    /// [`FlowSolution::speed_std_dev`] and the acoustic/turbulent `p_rms`). It is `0` for
+    /// a perfectly uniform field and **gauge-independent** — shifting every pressure by a
+    /// constant datum leaves it unchanged, like the [`FlowSolution::pressure_range`].
+    /// Returns `0` for an empty grid.
+    pub fn pressure_std_dev(&self) -> f64 {
+        let n = self.grid.nx * self.grid.ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mean = self.mean_pressure();
+        let mut sum_sq = 0.0;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                let d = self.pressure.at(i, j) - mean;
+                sum_sq += d * d;
+            }
+        }
+        (sum_sq / n as f64).sqrt()
+    }
+
     /// The **total (stagnation) pressure range** `Δp₀ = p₀_max − p₀_min` (Pa) over
     /// the field, where `p₀ = p + ½ρ|u|²` is the total pressure (static plus the
     /// dynamic head). For an ideal inviscid flow Bernoulli's theorem keeps `p₀`
@@ -3759,6 +3783,63 @@ mod tests {
             (neg.max_pressure() - ((grid.nx - 1) as f64 - 10.0)).abs() <= 1e-9,
             "negative max = (nx−1) − 10"
         );
+    }
+
+    #[test]
+    fn pressure_std_dev_is_the_rms_pressure_fluctuation() {
+        // Builder seeding a per-cell pressure field (velocity left zero).
+        let build = |nx: usize, ny: usize, vals: &[f64]| {
+            let grid = Grid::new(nx, ny, nx as f64, ny as f64);
+            let mut p = grid.pressure_field();
+            for j in 0..grid.ny {
+                for i in 0..grid.nx {
+                    p.set(i, j, vals[j * grid.nx + i]);
+                }
+            }
+            FlowSolution {
+                grid,
+                u: grid.u_field(),
+                v: grid.v_field(),
+                pressure: p,
+                iterations: 0,
+                residual: 0.0,
+                converged: true,
+            }
+        };
+
+        // (a) WORKED: a 2×1 field {3, 7} → mean 5, deviations ±2 → σ_p = 2.
+        let sol = build(2, 1, &[3.0, 7.0]);
+        assert!((sol.pressure_std_dev() - 2.0).abs() <= 1e-12 * 2.0, "σ_p = 2");
+
+        // (b) VARIANCE IDENTITY (non-tautological — a different formula): σ_p² = ⟨p²⟩ − ⟨p⟩².
+        let mut sum_p2 = 0.0;
+        for j in 0..sol.grid.ny {
+            for i in 0..sol.grid.nx {
+                let p = sol.pressure.at(i, j);
+                sum_p2 += p * p;
+            }
+        }
+        let mean_p2 = sum_p2 / (sol.grid.nx * sol.grid.ny) as f64;
+        assert!(
+            (sol.pressure_std_dev().powi(2) - (mean_p2 - sol.mean_pressure().powi(2))).abs()
+                <= 1e-9 * mean_p2,
+            "σ_p² = ⟨p²⟩ − ⟨p⟩²"
+        );
+
+        // (c) UNIFORM: a constant field has no spread.
+        let uniform = build(3, 2, &[5.0; 6]);
+        assert_eq!(uniform.pressure_std_dev(), 0.0, "uniform → σ_p = 0");
+
+        // (d) SHIFT-INVARIANCE (gauge-independent): {103,107} = {3,7}+100 → same σ_p.
+        let shifted = build(2, 1, &[103.0, 107.0]);
+        assert!(
+            (shifted.pressure_std_dev() - sol.pressure_std_dev()).abs() <= 1e-12,
+            "σ_p unchanged by a constant datum shift"
+        );
+
+        // (e) BOUND: non-negative, and ≤ the pressure range (here σ_p = range/2).
+        assert!(sol.pressure_std_dev() >= 0.0, "non-negative");
+        assert!(sol.pressure_std_dev() <= sol.pressure_range(), "σ_p ≤ range");
     }
 
     #[test]
