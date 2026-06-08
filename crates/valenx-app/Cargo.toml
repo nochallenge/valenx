@@ -483,7 +483,7 @@ valenx-i18n                = { path = "../valenx-i18n" }
 # `$USER` first, which let an unprivileged Windows shell `set
 # USER=admin@example.com` and bypass both. License is
 # Apache-2.0 OR BSL-1.0 OR MIT (all in deny.toml allow-list).
-whoami = "2.1.1"
+whoami = "2.1.2"
 
 [dev-dependencies]
 # Used by the run-orchestration unit test's dummy adapter.
