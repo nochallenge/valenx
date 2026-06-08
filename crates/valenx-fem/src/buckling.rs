@@ -180,6 +180,30 @@ pub fn section_radius_of_gyration(second_moment_area: f64, area: f64) -> f64 {
     (second_moment_area / area).sqrt()
 }
 
+/// The **column slenderness ratio** `λ = K·L / r` (dimensionless) — the single parameter
+/// that classifies a compression member: short / stocky (low `λ`, fails by yielding) versus
+/// long / slender (high `λ`, fails by Euler buckling). `length` is the column length `L`
+/// (m), `effective_length_factor` the end-condition factor `K` (see [`euler_critical_load`]),
+/// and `radius_of_gyration` the section's `r` ([`section_radius_of_gyration`]). The Euler
+/// critical stress is `σ_cr = π²E / λ²` (see [`critical_buckling_stress`]), so slenderness is
+/// what sets the buckling stress. Returns `0` for non-physical input.
+pub fn slenderness_ratio(
+    length: f64,
+    effective_length_factor: f64,
+    radius_of_gyration: f64,
+) -> f64 {
+    if !length.is_finite()
+        || length < 0.0
+        || !effective_length_factor.is_finite()
+        || effective_length_factor <= 0.0
+        || !radius_of_gyration.is_finite()
+        || radius_of_gyration <= 0.0
+    {
+        return 0.0;
+    }
+    effective_length_factor * length / radius_of_gyration
+}
+
 /// Errors from the native buckling solver.
 #[derive(Debug, Error)]
 pub enum BucklingSolverError {
@@ -586,6 +610,50 @@ mod tests {
     /// Node id of grid point `(i, j, k)` in a `structured_box_mesh`.
     fn nid(i: usize, j: usize, k: usize, nx: usize, ny: usize) -> usize {
         i + (nx + 1) * j + (nx + 1) * (ny + 1) * k
+    }
+
+    #[test]
+    fn slenderness_ratio_sets_the_buckling_stress() {
+        use std::f64::consts::PI;
+        // Worked: λ = K·L/r = 1·3/0.02 = 150.
+        assert!(
+            (slenderness_ratio(3.0, 1.0, 0.02) - 150.0).abs() <= 1e-9 * 150.0,
+            "λ = KL/r = 150"
+        );
+
+        // Chains section_radius_of_gyration (#362) + critical_buckling_stress (#356) via
+        // the keystone σ_cr = π²E/λ².
+        let (b, h) = (0.05_f64, 0.10_f64);
+        let i = b * h.powi(3) / 12.0;
+        let a = b * h;
+        let (e, l, k) = (200.0e9, 3.0, 1.0);
+        let r = section_radius_of_gyration(i, a);
+        let lambda = slenderness_ratio(l, k, r);
+        assert!(
+            (critical_buckling_stress(e, i, l, k, a) - PI.powi(2) * e / (lambda * lambda)).abs()
+                <= 1e-9 * critical_buckling_stress(e, i, l, k, a),
+            "σ_cr = π²E/λ²"
+        );
+
+        // Scaling: ∝ L, ∝ K, ∝ 1/r.
+        let base = slenderness_ratio(3.0, 1.0, 0.02);
+        assert!(
+            (slenderness_ratio(6.0, 1.0, 0.02) - 2.0 * base).abs() <= 1e-9 * (2.0 * base),
+            "∝ L"
+        );
+        assert!(
+            (slenderness_ratio(3.0, 2.0, 0.02) - 2.0 * base).abs() <= 1e-9 * (2.0 * base),
+            "∝ K"
+        );
+        assert!(
+            (slenderness_ratio(3.0, 1.0, 0.04) - 0.5 * base).abs() <= 1e-9 * (0.5 * base),
+            "∝ 1/r"
+        );
+
+        // 0-sentinel for non-physical input.
+        assert_eq!(slenderness_ratio(3.0, 1.0, 0.0), 0.0);
+        assert_eq!(slenderness_ratio(3.0, 0.0, 0.02), 0.0);
+        assert_eq!(slenderness_ratio(3.0, 1.0, f64::NAN), 0.0);
     }
 
     #[test]
