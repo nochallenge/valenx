@@ -62,7 +62,8 @@ pub use cable_theory::{
     time_to_charge_fraction,
 };
 pub use chord_conductance::{
-    chord_conductance_potential_mv, total_chord_conductance, ConductanceChannel,
+    chord_conductance_current, chord_conductance_potential_mv, total_chord_conductance,
+    ConductanceChannel,
 };
 pub use conduction::{
     conduction_delay_s, conduction_distance_m, conduction_velocity_at_crossover,
