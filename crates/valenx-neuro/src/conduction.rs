@@ -59,6 +59,40 @@ pub fn myelination_crossover_diameter(k_myel_per_um: f64, k_unmyel_per_sqrt_um: 
     (k_unmyel_per_sqrt_um / k_myel_per_um).powi(2)
 }
 
+/// The **myelinated fibre diameter from a measured conduction velocity** `d = CV/k` (µm) —
+/// the inverse of Hursh's rule [`myelinated_conduction_velocity`] (`CV = k·d`), recovering
+/// outer fibre diameter from a velocity `velocity_m_per_s` (m/s) and the proportionality
+/// `k_m_per_s_per_um` (m/s per µm; classic [`HURSH_FACTOR_M_PER_S_PER_UM`]). This is the
+/// standard nerve-conduction-study size estimate (a 60 m/s response ≈ a 10 µm fibre).
+/// Returns `0` for non-physical input (negative or non-finite velocity, or non-positive /
+/// non-finite `k`).
+pub fn myelinated_fiber_diameter_um(velocity_m_per_s: f64, k_m_per_s_per_um: f64) -> f64 {
+    if !velocity_m_per_s.is_finite()
+        || velocity_m_per_s < 0.0
+        || !k_m_per_s_per_um.is_finite()
+        || k_m_per_s_per_um <= 0.0
+    {
+        return 0.0;
+    }
+    velocity_m_per_s / k_m_per_s_per_um
+}
+
+/// The **unmyelinated fibre diameter from a measured conduction velocity** `d = (CV/k)²`
+/// (µm) — the inverse of the cable-theory `CV = k·√d` law
+/// ([`unmyelinated_conduction_velocity`]), for a velocity `velocity_m_per_s` (m/s) and the
+/// scale constant `k_m_per_s_per_sqrt_um` (m/s per √µm). Returns `0` for non-physical input
+/// (negative or non-finite velocity, or non-positive / non-finite `k`).
+pub fn unmyelinated_fiber_diameter_um(velocity_m_per_s: f64, k_m_per_s_per_sqrt_um: f64) -> f64 {
+    if !velocity_m_per_s.is_finite()
+        || velocity_m_per_s < 0.0
+        || !k_m_per_s_per_sqrt_um.is_finite()
+        || k_m_per_s_per_sqrt_um <= 0.0
+    {
+        return 0.0;
+    }
+    (velocity_m_per_s / k_m_per_s_per_sqrt_um).powi(2)
+}
+
 /// The **axonal conduction delay** (latency) `t = distance / velocity` in seconds —
 /// the time an action potential takes to propagate a distance `distance_m` (m) along
 /// a fibre conducting at `velocity_m_per_s` (m/s, e.g. from
@@ -319,5 +353,54 @@ mod tests {
         assert_eq!(myelination_crossover_diameter(f64::NAN, 2.0), 0.0); // non-finite k_m
         assert_eq!(myelination_crossover_diameter(6.0, f64::INFINITY), 0.0); // non-finite k_u
         assert_eq!(myelination_crossover_diameter(6.0, -1.0), 0.0); // k_u < 0
+    }
+
+    #[test]
+    fn fiber_diameter_from_conduction_velocity_inverts_the_velocity_laws() {
+        // (a) WORKED myelinated: v = 60 m/s at Hursh k = 6 → d = 10 µm.
+        assert!(
+            (myelinated_fiber_diameter_um(60.0, 6.0) - 10.0).abs() <= 1e-9 * 10.0,
+            "myelinated d = CV/k = 10 µm"
+        );
+
+        // (b) ROUND-TRIP myelinated threading myelinated_conduction_velocity (both directions).
+        for &(d, k) in &[(10.0_f64, 6.0_f64), (5.0, 4.5)] {
+            let cv = myelinated_conduction_velocity(d, k);
+            assert!(
+                (myelinated_conduction_velocity(myelinated_fiber_diameter_um(cv, k), k) - cv).abs()
+                    <= 1e-9 * cv,
+                "CV(d(CV)) = CV"
+            );
+            assert!((myelinated_fiber_diameter_um(cv, k) - d).abs() <= 1e-9 * d, "d(CV(d)) = d");
+        }
+
+        // (c) WORKED + ROUND-TRIP unmyelinated: v = 2 m/s at k = 2 → d = (2/2)² = 1 µm.
+        assert!(
+            (unmyelinated_fiber_diameter_um(2.0, 2.0) - 1.0).abs() <= 1e-9,
+            "unmyelinated d = (CV/k)² = 1 µm"
+        );
+        for &(v, k) in &[(2.0_f64, 2.0_f64), (1.5, 0.8)] {
+            assert!(
+                (unmyelinated_conduction_velocity(unmyelinated_fiber_diameter_um(v, k), k) - v)
+                    .abs()
+                    <= 1e-9 * v,
+                "CV(d(CV)) = CV (unmyelinated)"
+            );
+        }
+
+        // (d) HURSH constant thread: a 60 m/s response is a ~10 µm fibre.
+        assert!(
+            (myelinated_fiber_diameter_um(60.0, HURSH_FACTOR_M_PER_S_PER_UM) - 10.0).abs()
+                <= 1e-9 * 10.0,
+            "Hursh: 60 m/s → 10 µm"
+        );
+
+        // (e) GUARD: non-physical input → 0 (both fns).
+        assert_eq!(myelinated_fiber_diameter_um(60.0, 0.0), 0.0);
+        assert_eq!(myelinated_fiber_diameter_um(-1.0, 6.0), 0.0);
+        assert_eq!(myelinated_fiber_diameter_um(f64::NAN, 6.0), 0.0);
+        assert_eq!(unmyelinated_fiber_diameter_um(2.0, 0.0), 0.0);
+        assert_eq!(unmyelinated_fiber_diameter_um(-1.0, 2.0), 0.0);
+        assert_eq!(unmyelinated_fiber_diameter_um(f64::NAN, 2.0), 0.0);
     }
 }
