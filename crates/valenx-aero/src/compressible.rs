@@ -103,6 +103,16 @@ pub fn prandtl_glauert_beta(mach: f64) -> f64 {
     (1.0 - m * m).sqrt().max(1e-3)
 }
 
+/// The **Prandtl–Glauert (compressible) thin-airfoil lift-curve slope**
+/// `a = a₀ / β = 2π / √(1 − M²)` (per radian) — the incompressible thin-airfoil slope
+/// [`crate::benchmark::thin_airfoil_lift_slope`] (`2π`) amplified by subsonic
+/// compressibility, where `β` is the [`prandtl_glauert_beta`] factor at free-stream Mach
+/// `mach`. The slope rises from `2π` at `M = 0` toward the (linearised) singularity at
+/// `M = 1`; because it is built on the clamped `β`, it stays finite for any input.
+pub fn prandtl_glauert_lift_slope(mach: f64) -> f64 {
+    crate::benchmark::thin_airfoil_lift_slope() / prandtl_glauert_beta(mach)
+}
+
 /// The compressibility-corrected aerodynamic coefficients.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CompressibleCoefficients {
@@ -185,6 +195,39 @@ mod tests {
         // The factor stays finite even at M → 1.
         assert!(prandtl_glauert_beta(1.0).is_finite());
         assert!(prandtl_glauert_beta(1.0) > 0.0);
+    }
+
+    #[test]
+    fn prandtl_glauert_lift_slope_amplifies_the_incompressible_slope() {
+        // (a) WORKED INDEPENDENT: at M = 0.6, β = √(1−0.36) = 0.8 → a = 2π/0.8 ≈ 7.854.
+        let s = prandtl_glauert_lift_slope(0.6);
+        assert!(
+            (s - std::f64::consts::TAU / 0.8).abs() <= 1e-9 * s,
+            "a = 2π/0.8 at M = 0.6"
+        );
+
+        // (b) INCOMPRESSIBLE LIMIT: at M = 0, β = 1 → a = the thin-airfoil 2π slope.
+        assert!(
+            (prandtl_glauert_lift_slope(0.0) - crate::benchmark::thin_airfoil_lift_slope()).abs()
+                <= 1e-9 * crate::benchmark::thin_airfoil_lift_slope(),
+            "M = 0 → a = thin_airfoil_lift_slope"
+        );
+
+        // (c) CROSS-CHECK threading report::prandtl_glauert_factor (a different module,
+        // 1/√(1−M²) — non-tautological vs the body's prandtl_glauert_beta): a = a₀ · factor.
+        for &m in &[0.0_f64, 0.3, 0.6, 0.8] {
+            let expected = crate::benchmark::thin_airfoil_lift_slope()
+                * crate::report::prandtl_glauert_factor(m);
+            assert!(
+                (prandtl_glauert_lift_slope(m) - expected).abs()
+                    <= 1e-9 * prandtl_glauert_lift_slope(m),
+                "a = a₀ · (1/β) at M = {m}"
+            );
+        }
+
+        // (d) MONOTONICITY: compressibility steepens the slope.
+        assert!(prandtl_glauert_lift_slope(0.8) > prandtl_glauert_lift_slope(0.5));
+        assert!(prandtl_glauert_lift_slope(0.5) > prandtl_glauert_lift_slope(0.0));
     }
 
     #[test]
