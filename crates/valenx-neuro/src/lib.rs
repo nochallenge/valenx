@@ -88,7 +88,9 @@ pub use nernst::{
     BODY_TEMPERATURE_K,
 };
 pub use recording::{ExtracellularRecorder, Recording};
-pub use safety::{charge_density, is_safe, max_safe_charge_per_phase, shannon_k};
+pub use safety::{
+    charge_density, is_safe, max_safe_charge_density, max_safe_charge_per_phase, shannon_k,
+};
 pub use steering::ContactArray;
 pub use strength_duration::{
     chronaxie, lapicque_threshold, minimum_stimulating_charge, rheobase, threshold_amplitude,

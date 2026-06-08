@@ -48,6 +48,16 @@ pub fn max_safe_charge_per_phase(area_cm2: f64, k_limit: f64) -> f64 {
     (area_cm2 * 10f64.powf(k_limit)).sqrt()
 }
 
+/// Largest charge **density** (µC/cm²/phase) that stays at or below `k_limit` for an
+/// electrode of area `area_cm2` — the [`max_safe_charge_per_phase`] spread over the
+/// electrode area, `D_max = Q_max / A = sqrt(10^k_limit / A)`. This is the y-axis of the
+/// Shannon–McCreery plot: the charge density is the quantity directly compared against the
+/// tissue-damage threshold, so this is the safe ceiling a stimulator's [`charge_density`]
+/// must stay under.
+pub fn max_safe_charge_density(area_cm2: f64, k_limit: f64) -> f64 {
+    max_safe_charge_per_phase(area_cm2, k_limit) / area_cm2
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,6 +81,27 @@ mod tests {
         assert!((q4 - 20.0).abs() < 1e-9, "q4 = {q4}");
         // A point exactly at Q_max sits on the limit line (k == k_limit).
         assert!((shannon_k(q1, 1.0) - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn max_safe_charge_density_is_the_boundary_in_density_terms() {
+        let (a, k) = (0.01, 1.85); // 0.01 cm² electrode, classic Shannon k = 1.85
+        let q_max = max_safe_charge_per_phase(a, k);
+        let d_max = max_safe_charge_density(a, k);
+
+        // Threads max_safe_charge_per_phase + charge_density: D_max = Q_max / A.
+        assert!((d_max - q_max / a).abs() <= 1e-9 * d_max, "D_max = Q_max / A");
+        assert!(
+            (d_max - charge_density(q_max, a)).abs() <= 1e-9 * d_max,
+            "D_max = charge_density(Q_max, A)"
+        );
+
+        // Boundary round-trip via shannon_k: at the max charge, k == k_limit.
+        assert!((shannon_k(q_max, a) - k).abs() <= 1e-9 * k, "shannon_k(Q_max, A) = k");
+
+        // is_safe straddles the boundary: just inside is safe, just outside is not.
+        assert!(is_safe(0.999 * q_max, a, k), "just inside the limit is safe");
+        assert!(!is_safe(1.001 * q_max, a, k), "just outside the limit is unsafe");
     }
 
     #[test]
