@@ -180,6 +180,23 @@ pub fn blasius_shape_factor() -> f64 {
     1.721 / 0.664
 }
 
+/// The **dynamic viscosity of air by Sutherland's law** `μ(T) = μ_ref·(T/T_ref)^(3/2)·
+/// (T_ref + S)/(T + S)` (Pa·s) at absolute temperature `temp_k` `T` (K), with the standard
+/// air constants `μ_ref = 1.716×10⁻⁵ Pa·s`, `T_ref = 273.15 K` and Sutherland constant
+/// `S = 110.4 K`. This is the temperature–viscosity relation used to evaluate `μ` (hence
+/// the kinematic viscosity `ν = μ/ρ` and the Reynolds number) at flight or altitude
+/// conditions, where the air is far from sea level. Unlike a liquid, a gas grows *more*
+/// viscous as it heats. Returns `0` for non-physical temperature (`T ≤ 0` or non-finite).
+pub fn sutherland_viscosity(temp_k: f64) -> f64 {
+    const MU_REF: f64 = 1.716e-5;
+    const T_REF: f64 = 273.15;
+    const S: f64 = 110.4;
+    if !temp_k.is_finite() || temp_k <= 0.0 {
+        return 0.0;
+    }
+    MU_REF * (temp_k / T_REF).powf(1.5) * (T_REF + S) / (temp_k + S)
+}
+
 /// The thin-airfoil-theory lift-curve slope — `2π` per radian, the
 /// classic inviscid result for a thin symmetric section at a small
 /// angle of attack.
@@ -618,6 +635,31 @@ mod tests {
              sphere drag",
             after.cd
         );
+    }
+
+    #[test]
+    fn sutherland_viscosity_matches_air_at_reference_and_sea_level() {
+        // Identity: at the reference temperature both factors are 1 → μ = μ_ref.
+        assert!(
+            (sutherland_viscosity(273.15) - 1.716e-5).abs() <= 1e-12 * 1.716e-5,
+            "μ(T_ref) = μ_ref"
+        );
+
+        // Textbook sea-level (15 °C): air dynamic viscosity ≈ 1.79×10⁻⁵ Pa·s.
+        assert!(
+            (sutherland_viscosity(288.15) - 1.79e-5).abs() < 5.0e-7,
+            "μ(288 K) ≈ 1.79e-5 Pa·s"
+        );
+
+        // A gas thickens when heated (the opposite of a liquid).
+        assert!(sutherland_viscosity(400.0) > sutherland_viscosity(300.0));
+        assert!(sutherland_viscosity(300.0) > sutherland_viscosity(200.0));
+
+        // Positive for physical T; 0 sentinel for non-physical input.
+        assert!(sutherland_viscosity(250.0) > 0.0);
+        assert_eq!(sutherland_viscosity(0.0), 0.0);
+        assert_eq!(sutherland_viscosity(-10.0), 0.0);
+        assert_eq!(sutherland_viscosity(f64::NAN), 0.0);
     }
 
     #[test]
