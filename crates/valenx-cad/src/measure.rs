@@ -468,6 +468,28 @@ pub fn solid_bounding_box_center(solid: &Solid) -> Result<[f64; 3], CadError> {
     solid_bounding_box_center_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box extents** `[Δx, Δy, Δz] = max − min` (model units) of a
+/// solid — the per-axis width, height and depth of its AABB, evaluated at tessellation
+/// tolerance `tol` from [`solid_bounding_box_tol`]. These are the raw dimensions the rest of
+/// the AABB family is built from: the [`solid_bounding_box_diagonal_tol`] is their Euclidean
+/// norm, the [`solid_bounding_box_volume_tol`] their product, and the
+/// [`solid_bounding_box_aspect_ratio_tol`] the ratio of the largest to the smallest.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid is
+/// empty (no bounding box).
+pub fn solid_bounding_box_extents_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], CadError> {
+    let (min, max) = solid_bounding_box_tol(solid, tol)?;
+    Ok([max[0] - min[0], max[1] - min[1], max[2] - min[2]])
+}
+
+/// AABB extents of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_extents_tol`].
+pub fn solid_bounding_box_extents(solid: &Solid) -> Result<[f64; 3], CadError> {
+    solid_bounding_box_extents_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
 /// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
 /// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
@@ -1180,6 +1202,51 @@ mod tests {
         let gs = solid_centroid(&sph).unwrap();
         for k in 0..3 {
             assert!((cs[k] - gs[k]).abs() < 2e-2, "sphere: bbox center ≈ mass centroid");
+        }
+    }
+
+    #[test]
+    fn solid_bounding_box_extents_are_the_raw_dimensions() {
+        use crate::primitives::sphere;
+
+        // Worked: box(2,4,6) extents are {2,4,6} (sorted, axis-order-independent).
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        let mut sorted = solid_bounding_box_extents(&b).unwrap();
+        sorted.sort_by(|a, c| a.total_cmp(c));
+        assert!(
+            (sorted[0] - 2.0).abs() < 1e-9
+                && (sorted[1] - 4.0).abs() < 1e-9
+                && (sorted[2] - 6.0).abs() < 1e-9,
+            "box extents are {{2, 4, 6}}"
+        );
+
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let e = solid_bounding_box_extents(&s).unwrap();
+
+            // Threads solid_bounding_box: extents == [max − min].
+            let (mn, mx) = solid_bounding_box(&s).unwrap();
+            for k in 0..3 {
+                assert!((e[k] - (mx[k] - mn[k])).abs() < 1e-9, "extent = max − min");
+            }
+
+            // Cross-check solid_bounding_box_diagonal: d = √Σextent².
+            let diag = (e[0] * e[0] + e[1] * e[1] + e[2] * e[2]).sqrt();
+            assert!(
+                (diag - solid_bounding_box_diagonal(&s).unwrap()).abs() <= 1e-9 * diag,
+                "√Σe² = diagonal"
+            );
+            // Cross-check solid_bounding_box_volume: V = ∏extent.
+            let vol = e[0] * e[1] * e[2];
+            assert!(
+                (vol - solid_bounding_box_volume(&s).unwrap()).abs() <= 1e-9 * vol,
+                "∏e = bbox volume"
+            );
+            // Cross-check solid_bounding_box_aspect_ratio: max/min.
+            let aspect = e[0].max(e[1]).max(e[2]) / e[0].min(e[1]).min(e[2]);
+            assert!(
+                (aspect - solid_bounding_box_aspect_ratio(&s).unwrap()).abs() <= 1e-9 * aspect,
+                "max/min = aspect ratio"
+            );
         }
     }
 
