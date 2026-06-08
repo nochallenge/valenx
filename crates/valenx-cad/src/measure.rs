@@ -302,6 +302,34 @@ pub fn solid_specific_surface_area(solid: &Solid) -> Result<f64, CadError> {
     solid_specific_surface_area_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **mean chord length** `⟨ℓ⟩ = 4·V / A` (model units) of a solid — the average length
+/// of a uniformly-random straight chord through it, evaluated at tessellation tolerance
+/// `tol`. This is Cauchy's classic result for a convex body (the mean free path / mean
+/// linear intercept of stereology and radiation transport): a sphere of radius `r` has mean
+/// chord exactly `4r/3`. It is the reciprocal-scaled companion of the
+/// [`solid_specific_surface_area_tol`] (`A/V`), since `⟨ℓ⟩ = 4 / (A/V)`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, the solid is
+/// empty, or its surface area is non-positive (degenerate).
+pub fn solid_mean_chord_length_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let v = solid_volume_tol(solid, tol)?;
+    let a = solid_area_tol(solid, tol)?;
+    if a <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate solid (non-positive surface area); mean chord undefined".to_string(),
+        ));
+    }
+    Ok(4.0 * v / a)
+}
+
+/// Mean chord length `4·V/A` of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_mean_chord_length_tol`].
+pub fn solid_mean_chord_length(solid: &Solid) -> Result<f64, CadError> {
+    solid_mean_chord_length_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **volume centroid** (centre of mass at uniform density) of a solid,
 /// `[x, y, z]` in model units, computed at tessellation tolerance `tol`.
 ///
@@ -1194,6 +1222,35 @@ mod tests {
 
         // The space diagonal exceeds the largest single extent.
         assert!(solid_bounding_box_diagonal(&b).unwrap() > 6.0, "diagonal > z-extent");
+    }
+
+    #[test]
+    fn solid_mean_chord_length_is_cauchys_four_v_over_a() {
+        use crate::primitives::sphere;
+
+        // Threads solid_specific_surface_area (A/V): ⟨ℓ⟩ = 4 / SSA (independent path).
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let mc = solid_mean_chord_length(&s).unwrap();
+            let ssa = solid_specific_surface_area(&s).unwrap();
+            assert!((mc - 4.0 / ssa).abs() <= 1e-9 * mc, "⟨ℓ⟩ = 4/SSA");
+        }
+
+        // Worked sphere (Cauchy): the mean chord of a sphere of radius r is exactly 4r/3.
+        let sph = solid_mean_chord_length(&sphere(2.0).unwrap()).unwrap();
+        assert!((sph - 4.0 * 2.0 / 3.0).abs() <= 2e-2 * (4.0 * 2.0 / 3.0), "sphere → 4r/3 = 8/3");
+
+        // Worked box(2,4,6): V=48, A=88 → ⟨ℓ⟩ = 192/88 ≈ 2.1818 (flat-faced, exact at any
+        // tolerance — also exercises the _tol wrapper directly).
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_mean_chord_length(&b).unwrap() - 192.0 / 88.0).abs() <= 1e-9 * (192.0 / 88.0),
+            "box → 192/88"
+        );
+        assert!(
+            (solid_mean_chord_length_tol(&b, 0.1).unwrap() - 192.0 / 88.0).abs()
+                <= 1e-9 * (192.0 / 88.0),
+            "_tol wrapper agrees"
+        );
     }
 
     #[test]
