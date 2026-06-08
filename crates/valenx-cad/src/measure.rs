@@ -511,6 +511,35 @@ pub fn solid_bounding_box_extents(solid: &Solid) -> Result<[f64; 3], CadError> {
     solid_bounding_box_extents_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box elongation** = intermediate extent / longest extent
+/// (dimensionless, in `(0, 1]`) of a solid — the Zingg `b/a` shape ratio, evaluated at
+/// tessellation tolerance `tol` from the sorted [`solid_bounding_box_extents_tol`]. It
+/// classifies a shape from rod-like (low, one axis dominates) to equant (`1`, all three
+/// extents comparable); together with the flatness `c/b` it locates a particle on the Zingg
+/// diagram. Distinct from the [`solid_bounding_box_aspect_ratio_tol`] (longest / shortest).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid is
+/// degenerate (a zero longest extent).
+pub fn solid_bounding_box_elongation_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    let (mid, longest) = (s[1], s[2]);
+    if longest <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate (zero longest extent); elongation undefined".to_string(),
+        ));
+    }
+    Ok(mid / longest)
+}
+
+/// AABB elongation of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_elongation_tol`].
+pub fn solid_bounding_box_elongation(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_elongation_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
 /// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
 /// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
@@ -1161,6 +1190,41 @@ mod tests {
         assert!(
             solid_bounding_box_volume(&sph).unwrap() >= solid_volume(&sph).unwrap(),
             "AABB ⊇ solid"
+        );
+    }
+
+    #[test]
+    fn solid_bounding_box_elongation_is_the_zingg_mid_over_long() {
+        use crate::primitives::sphere;
+
+        // Worked: box(2,4,6) → sorted extents [2,4,6], elongation = 4/6 ≈ 0.6667.
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let e = solid_bounding_box_elongation(&bx).unwrap();
+        assert!((e - 4.0 / 6.0).abs() <= 1e-9 * e, "elongation = mid/longest = 4/6");
+
+        // Threads solid_bounding_box_extents (#363): mid/longest of the sorted extents.
+        let mut s = solid_bounding_box_extents(&bx).unwrap();
+        s.sort_by(|a, b| a.total_cmp(b));
+        assert!((e - s[1] / s[2]).abs() <= 1e-9 * e, "= sorted[1]/sorted[2]");
+
+        // Range 0 < elongation ≤ 1.
+        assert!(e > 0.0 && e <= 1.0, "0 < elongation ≤ 1");
+
+        // Equant: a cube and a sphere → ≈ 1 (all extents comparable).
+        let cube = box_solid(3.0, 3.0, 3.0).unwrap();
+        assert!((solid_bounding_box_elongation(&cube).unwrap() - 1.0).abs() <= 1e-9, "cube → 1");
+        assert!(
+            (solid_bounding_box_elongation(&sphere(2.0).unwrap()).unwrap() - 1.0).abs() <= 2e-2,
+            "sphere → 1"
+        );
+
+        // The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (solid_bounding_box_elongation(&bx).unwrap()
+                - solid_bounding_box_elongation_tol(&bx, 0.1).unwrap())
+            .abs()
+                < 1e-9,
+            "_tol wrapper agrees"
         );
     }
 
