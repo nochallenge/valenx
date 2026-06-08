@@ -69,6 +69,7 @@ pub use measure::{
     solid_equivalent_sphere_diameter, solid_equivalent_sphere_diameter_tol,
     solid_equivalent_sphere_radius, solid_equivalent_sphere_radius_tol,
     solid_genus, solid_inertia_anisotropy, solid_inertia_anisotropy_tol,
+    solid_inertia_trace, solid_inertia_trace_tol,
     solid_mean_chord_length, solid_mean_chord_length_tol,
     solid_principal_moments, solid_principal_moments_tol,
     solid_radius_of_gyration,
