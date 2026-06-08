@@ -1537,6 +1537,28 @@ impl FlowSolution {
         sum / ((nx - 2) * (ny - 2)) as f64
     }
 
+    /// The **root-mean-square rate-of-strain magnitude** `√(⟨|S|²⟩)` (1/s) over the interior
+    /// cells — the L2 deformation rate. Since `|S|² = 2 SᵢⱼSᵢⱼ`, this is the quantity that
+    /// sets the viscous dissipation `ε = 2ν⟨SᵢⱼSᵢⱼ⟩ = ν⟨|S|²⟩`, so it measures how strongly
+    /// the flow is being strained (and thus dissipating energy). It completes the strain-rate
+    /// family with [`FlowSolution::mean_strain_rate`] and the peak
+    /// [`FlowSolution::max_strain_rate`], mirroring [`FlowSolution::rms_vorticity`]; `0` for a
+    /// grid too small for an interior central difference (`nx < 3` or `ny < 3`).
+    pub fn rms_strain_rate(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx < 3 || ny < 3 {
+            return 0.0;
+        }
+        let mut sum_sq = 0.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let sr = self.strain_rate_at_cell(i, j);
+                sum_sq += sr * sr;
+            }
+        }
+        (sum_sq / ((nx - 2) * (ny - 2)) as f64).sqrt()
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -3782,6 +3804,105 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.mean_strain_rate(), 0.0);
+    }
+
+    #[test]
+    fn rms_strain_rate_is_the_l2_deformation_rate() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // (a) PURE SHEAR u(y) = γy, v = 0: |S| = γ uniformly → rms = γ. For a pure shear the
+        // strain-rate magnitude equals the vorticity magnitude (|S| = |ω| = γ), so
+        // rms_strain_rate == rms_vorticity (threads rms_vorticity via the ∇u decomposition).
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((shear.rms_strain_rate() - gamma).abs() <= 1e-9, "uniform shear → rms = γ");
+        assert!(
+            (shear.rms_strain_rate() - shear.rms_vorticity()).abs() <= 1e-9 * shear.rms_vorticity(),
+            "pure shear: |S| = |ω| ⟹ rms_strain_rate = rms_vorticity"
+        );
+
+        // (b) SOLID-BODY ROTATION (u = −Ωy, v = Ωx) is pure spin: rms strain = 0, but the rms
+        // vorticity is 2Ω ≠ 0 (strain ≠ rotation).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(rotation.rms_strain_rate().abs() < 1e-9, "rotation → 0 strain");
+        assert!(rotation.rms_vorticity() > 1e-9, "but it does rotate");
+
+        // (c) NON-UNIFORM quadratic shear u(y) = a·y²: the rms is ≥ the mean (Jensen) and
+        // strictly positive.
+        let a = 0.5_f64;
+        let mut uq = grid.u_field();
+        for j in 0..grid.ny {
+            let yc = (j as f64 + 0.5) * dy;
+            let val = a * yc * yc;
+            for i in 0..=grid.nx {
+                uq.set(i, j, val);
+            }
+        }
+        let quad = FlowSolution {
+            grid,
+            u: uq,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            quad.rms_strain_rate() >= quad.mean_strain_rate() && quad.rms_strain_rate() > 0.0,
+            "rms ≥ mean > 0"
+        );
+
+        // (d) A grid too small for an interior central difference → 0.
+        let tg = Grid::new(2, 2, 1.0, 1.0);
+        let tiny = FlowSolution {
+            grid: tg,
+            u: tg.u_field(),
+            v: tg.v_field(),
+            pressure: tg.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(tiny.rms_strain_rate(), 0.0);
     }
 
     #[test]
