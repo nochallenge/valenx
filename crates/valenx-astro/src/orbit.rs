@@ -413,9 +413,64 @@ pub fn orbital_radius_from_speed(speed: f64, semi_major_axis: f64) -> Result<f64
     Ok(1.0 / inv_r)
 }
 
+/// The **orbit eccentricity from its apsis radii** `e = (r_a − r_p) / (r_a + r_p)`
+/// (dimensionless) — the shape of the conic specified by its apoapsis radius
+/// `apoapsis_radius` `r_a` and periapsis radius `periapsis_radius` `r_p` (m). Together with
+/// the semi-major axis `a = (r_a + r_p)/2` it fully fixes the orbit (`r_a = a(1+e)`,
+/// `r_p = a(1−e)`); it is `0` for a circle (`r_a = r_p`) and tends to `1` as the orbit
+/// becomes radial (`r_p → 0`). This recovers the eccentricity that [`elements`] computes from
+/// a state vector.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if either radius is non-finite, the periapsis is
+/// non-positive, or the apoapsis is smaller than the periapsis.
+pub fn eccentricity_from_apsides(
+    apoapsis_radius: f64,
+    periapsis_radius: f64,
+) -> Result<f64, AstroError> {
+    if !apoapsis_radius.is_finite()
+        || !periapsis_radius.is_finite()
+        || periapsis_radius <= 0.0
+        || apoapsis_radius < periapsis_radius
+    {
+        return Err(AstroError::NonPhysicalState(
+            "eccentricity_from_apsides requires finite radii with apoapsis >= periapsis > 0",
+        ));
+    }
+    Ok((apoapsis_radius - periapsis_radius) / (apoapsis_radius + periapsis_radius))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn eccentricity_from_apsides_specifies_the_conic() {
+        // Worked: r_a=8e6, r_p=7e6 → e = 1e6/1.5e7 ≈ 0.066667.
+        let e = eccentricity_from_apsides(8.0e6, 7.0e6).unwrap();
+        assert!((e - 1.0e6 / 1.5e7).abs() <= 1e-9 * e, "e = (r_a−r_p)/(r_a+r_p)");
+
+        // Circular: r_a == r_p → e == 0.
+        assert_eq!(eccentricity_from_apsides(7.0e6, 7.0e6).unwrap(), 0.0, "circular → e = 0");
+
+        // Reconstruction: a and e recover BOTH apsides (r_a = a(1+e), r_p = a(1−e)).
+        for &(r_a, r_p) in &[(8.0e6, 7.0e6), (4.2e7, 7.0e6), (1.0e7, 1.0e7)] {
+            let a = (r_a + r_p) / 2.0;
+            let e = eccentricity_from_apsides(r_a, r_p).unwrap();
+            assert!((a * (1.0 + e) - r_a).abs() <= 1e-9 * r_a, "r_a = a(1+e)");
+            assert!((a * (1.0 - e) - r_p).abs() <= 1e-9 * r_p, "r_p = a(1−e)");
+            assert!((0.0..1.0).contains(&e), "0 ≤ e < 1 for a bound ellipse");
+        }
+
+        // Near-radial: r_p → 0 gives e → 1.
+        assert!(eccentricity_from_apsides(1.0e7, 1.0).unwrap() > 0.999, "near-radial → e ≈ 1");
+
+        // Err on non-physical input.
+        assert!(eccentricity_from_apsides(7.0e6, 0.0).is_err());
+        assert!(eccentricity_from_apsides(7.0e6, 8.0e6).is_err()); // apoapsis < periapsis
+        assert!(eccentricity_from_apsides(f64::NAN, 7.0e6).is_err());
+    }
 
     #[test]
     fn orbital_radius_from_speed_inverts_vis_viva() {
