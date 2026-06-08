@@ -48,6 +48,29 @@ pub fn lif_firing_rate(
     1.0 / (t_refractory_s + climb)
 }
 
+/// The **leaky integrate-and-fire inter-spike interval** `ISI = t_refractory + climb` (s)
+/// — the period between successive spikes of a constant-current-driven LIF neuron, the
+/// reciprocal of the [`lif_firing_rate`]. It is the dead time `t_refractory_s` plus the
+/// [`lif_time_to_first_spike`] climb from reset to threshold, and is the quantity a spike
+/// train actually delivers (rate is derived as `1/ISI`; the ISI and its variability are
+/// the staples of spike-train analysis). It falls toward the refractory floor
+/// `t_refractory_s` as the drive grows, and is **infinite** for a sub-rheobase (silent)
+/// cell that never reaches threshold.
+pub fn lif_interspike_interval(
+    current: f64,
+    resistance: f64,
+    tau_m_s: f64,
+    v_threshold: f64,
+    t_refractory_s: f64,
+) -> f64 {
+    let rate = lif_firing_rate(current, resistance, tau_m_s, v_threshold, t_refractory_s);
+    if rate > 0.0 {
+        1.0 / rate
+    } else {
+        f64::INFINITY
+    }
+}
+
 /// The **leaky integrate-and-fire subthreshold membrane potential** `V(t)` (V)
 /// of a neuron driven from rest (`V(0) = 0`) by a *constant* input current
 /// `current` `I` (A), the closed-form `RC` charging curve:
@@ -168,6 +191,37 @@ pub fn lif_steady_state_potential(current: f64, resistance: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lif_interspike_interval_is_the_reciprocal_rate() {
+        // A clearly-firing cell: R·I = 1e8·2e-7 = 20 (> V_th = 0.015).
+        let (r, i, tau, vth, tref) = (1.0e8, 2.0e-7, 0.01, 0.015, 0.002);
+
+        // Round-trip: ISI = 1 / firing_rate.
+        let isi = lif_interspike_interval(i, r, tau, vth, tref);
+        let f = lif_firing_rate(i, r, tau, vth, tref);
+        assert!((isi - 1.0 / f).abs() <= 1e-9 * isi, "ISI = 1/rate");
+
+        // Decomposition (independent path): ISI = t_refractory + climb time.
+        let climb = lif_time_to_first_spike(i, r, tau, vth);
+        assert!((isi - (tref + climb)).abs() <= 1e-9 * isi, "ISI = t_ref + climb");
+
+        // Refractory floor: a huge current shrinks the climb so ISI → t_refractory from
+        // above; and more current fires faster (shorter ISI).
+        let isi_huge = lif_interspike_interval(1.0, r, tau, vth, tref);
+        assert!((isi_huge - tref).abs() / tref < 1e-3 && isi_huge > tref, "ISI → t_ref");
+        assert!(
+            lif_interspike_interval(4.0e-7, r, tau, vth, tref) < isi,
+            "more current → shorter ISI"
+        );
+
+        // Silent (sub-rheobase) cell: R·I = 1e8·1e-10 = 0.01 < V_th = 0.015 → ISI = ∞.
+        assert!(
+            lif_interspike_interval(1.0e-10, r, tau, vth, tref).is_infinite(),
+            "silent → ∞"
+        );
+        assert_eq!(lif_firing_rate(1.0e-10, r, tau, vth, tref), 0.0, "silent → rate 0");
+    }
 
     #[test]
     fn lif_firing_rate_traces_the_f_i_curve() {
