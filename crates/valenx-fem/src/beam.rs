@@ -595,6 +595,24 @@ pub fn beam_curvature(moment: f64, youngs_modulus: f64, second_moment_area: f64)
     moment / (youngs_modulus * second_moment_area)
 }
 
+/// The **flexural rigidity (bending stiffness)** `EI = E·I` (N·m²) — the product of
+/// Young's modulus `youngs_modulus` `E` (Pa) and the section's second moment of area
+/// `second_moment_area` `I` (m⁴). It is the constant of proportionality between bending
+/// moment and curvature ([`beam_curvature`]: `M = EI·κ`) and the stiffness in every
+/// Euler–Bernoulli deflection formula (e.g. [`cantilever_tip_deflection`] `δ = PL³/(3·EI)`):
+/// a stiffer or deeper section resists bending more. Returns `0` for non-physical input
+/// (`E` or `I` non-positive or non-finite).
+pub fn flexural_rigidity(youngs_modulus: f64, second_moment_area: f64) -> f64 {
+    if !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    youngs_modulus * second_moment_area
+}
+
 /// The **bending (flexure) stress** `σ = M·y/I` (Pa) — the longitudinal normal stress
 /// a bending moment `moment` `M` (N·m) induces at distance `distance_from_neutral_axis`
 /// `y` (m) from the neutral axis in a section of second moment of area
@@ -2778,6 +2796,51 @@ mod tests {
         assert_eq!(beam_curvature(f64::NAN, 200.0e9, 1.0e-6), 0.0);
         assert_eq!(beam_curvature(2000.0, 0.0, 1.0e-6), 0.0);
         assert_eq!(beam_curvature(2000.0, 200.0e9, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn flexural_rigidity_is_the_bending_stiffness() {
+        // (a) WORKED: EI = E·I = 200e9·1e-6 = 2e5 N·m².
+        assert!(
+            (flexural_rigidity(200.0e9, 1.0e-6) - 2.0e5).abs() <= 1e-9 * 2.0e5,
+            "EI = E·I = 2e5 N·m²"
+        );
+
+        // (b) THREAD beam_curvature (non-tautological): EI = M/κ.
+        for &(m, e, i) in &[(2000.0_f64, 200.0e9_f64, 1.0e-6_f64), (8200.0, 70.0e9, 9.0e-8)] {
+            assert!(
+                (flexural_rigidity(e, i) - m / beam_curvature(m, e, i)).abs()
+                    <= 1e-9 * flexural_rigidity(e, i),
+                "EI = M/κ"
+            );
+        }
+
+        // (c) THREAD cantilever_tip_deflection (non-tautological): EI = P·L³/(3·δ).
+        let (p, l, e, i) = (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64);
+        assert!(
+            (flexural_rigidity(e, i)
+                - p * l * l * l / (3.0 * cantilever_tip_deflection(p, l, e, i)))
+            .abs()
+                <= 1e-9 * flexural_rigidity(e, i),
+            "EI = PL³/(3δ)"
+        );
+
+        // (d) LINEARITY: linear in both E and I.
+        let base = flexural_rigidity(200.0e9, 1.0e-6);
+        assert!(
+            (flexural_rigidity(2.0 * 200.0e9, 1.0e-6) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in E"
+        );
+        assert!(
+            (flexural_rigidity(200.0e9, 2.0e-6) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in I"
+        );
+
+        // (e) GUARD: non-positive E or I, or non-finite → 0 sentinel.
+        assert_eq!(flexural_rigidity(0.0, 1.0e-6), 0.0);
+        assert_eq!(flexural_rigidity(200.0e9, 0.0), 0.0);
+        assert_eq!(flexural_rigidity(f64::NAN, 1.0e-6), 0.0);
+        assert_eq!(flexural_rigidity(200.0e9, -1.0e-6), 0.0);
     }
 
     #[test]
