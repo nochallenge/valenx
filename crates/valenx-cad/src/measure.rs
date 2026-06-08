@@ -586,6 +586,49 @@ pub fn solid_bounding_box_intermediate_extent(solid: &Solid) -> Result<f64, CadE
     solid_bounding_box_intermediate_extent_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **longest bounding-box extent** = the largest of the three sorted AABB extents
+/// (model units) of a solid, at tessellation tolerance `tol` — the particle "length" (its
+/// major axial dimension), completing the triaxial set with the
+/// [`solid_bounding_box_intermediate_extent_tol`] (breadth) and the shortest extent
+/// (thickness). The [`solid_bounding_box_aspect_ratio_tol`] is this over the shortest extent.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// bounding box cannot be computed.
+pub fn solid_bounding_box_longest_extent_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    Ok(s[2])
+}
+
+/// Longest AABB extent of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_longest_extent_tol`].
+pub fn solid_bounding_box_longest_extent(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_longest_extent_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
+/// The **shortest bounding-box extent** = the smallest of the three sorted AABB extents
+/// (model units) of a solid, at tessellation tolerance `tol` — the particle "thickness"
+/// (its minor axial dimension), completing the triaxial set with the
+/// [`solid_bounding_box_intermediate_extent_tol`] (breadth) and the longest extent (length).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// bounding box cannot be computed.
+pub fn solid_bounding_box_shortest_extent_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    Ok(s[0])
+}
+
+/// Shortest AABB extent of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_shortest_extent_tol`].
+pub fn solid_bounding_box_shortest_extent(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_shortest_extent_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box elongation** = intermediate extent / longest extent
 /// (dimensionless, in `(0, 1]`) of a solid — the Zingg `b/a` shape ratio, evaluated at
 /// tessellation tolerance `tol` from the sorted [`solid_bounding_box_extents_tol`]. It
@@ -1695,6 +1738,60 @@ mod tests {
             .abs()
                 < 1e-9,
             "_tol wrapper agrees"
+        );
+    }
+
+    #[test]
+    fn solid_bounding_box_extreme_extents_are_the_sorted_ends() {
+        // (a) WORKED: box(2,4,6) → sorted [2,4,6] → longest = 6, shortest = 2.
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_bounding_box_longest_extent(&bx).unwrap() - 6.0).abs() <= 1e-9 * 6.0,
+            "longest = 6"
+        );
+        assert!(
+            (solid_bounding_box_shortest_extent(&bx).unwrap() - 2.0).abs() <= 1e-9 * 2.0,
+            "shortest = 2"
+        );
+
+        // (b) THREAD solid_bounding_box_extents (independent re-sort): longest == sorted[2],
+        // shortest == sorted[0], and shortest ≤ intermediate ≤ longest.
+        let mut s = solid_bounding_box_extents(&bx).unwrap();
+        s.sort_by(|a, b| a.total_cmp(b));
+        let longest = solid_bounding_box_longest_extent(&bx).unwrap();
+        let shortest = solid_bounding_box_shortest_extent(&bx).unwrap();
+        assert!((longest - s[2]).abs() <= 1e-9 * s[2], "longest = sorted max");
+        assert!((shortest - s[0]).abs() <= 1e-9 * s[0], "shortest = sorted min");
+        let mid = solid_bounding_box_intermediate_extent(&bx).unwrap();
+        assert!((shortest..=longest).contains(&mid), "shortest ≤ mid ≤ longest");
+
+        // (c) THREAD solid_bounding_box_aspect_ratio (non-tautological): longest/shortest is
+        // exactly the aspect ratio.
+        assert!(
+            (longest / shortest - solid_bounding_box_aspect_ratio(&bx).unwrap()).abs()
+                <= 1e-9 * solid_bounding_box_aspect_ratio(&bx).unwrap(),
+            "longest/shortest = aspect ratio"
+        );
+
+        // (d) CUBE: all extents equal → longest == shortest == the edge.
+        let cube = box_solid(5.0, 5.0, 5.0).unwrap();
+        assert!(
+            (solid_bounding_box_longest_extent(&cube).unwrap() - 5.0).abs() <= 1e-9 * 5.0,
+            "cube longest = 5"
+        );
+        assert!(
+            (solid_bounding_box_shortest_extent(&cube).unwrap() - 5.0).abs() <= 1e-9 * 5.0,
+            "cube shortest = 5"
+        );
+
+        // (e) The _tol wrappers agree with the defaults (box exact at any tol).
+        assert!(
+            (longest - solid_bounding_box_longest_extent_tol(&bx, 0.1).unwrap()).abs() < 1e-9,
+            "longest _tol wrapper agrees"
+        );
+        assert!(
+            (shortest - solid_bounding_box_shortest_extent_tol(&bx, 0.1).unwrap()).abs() < 1e-9,
+            "shortest _tol wrapper agrees"
         );
     }
 
