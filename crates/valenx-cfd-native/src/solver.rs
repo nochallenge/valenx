@@ -582,6 +582,30 @@ impl FlowSolution {
         slowest
     }
 
+    /// The **speed range** `Δ|u| = max√(u²+v²) − min√(u²+v²)` (m/s) over the cell grid —
+    /// the spread between the fastest and slowest cell, the velocity analogue of the
+    /// [`FlowSolution::pressure_range`]. It is a gauge-independent measure of how
+    /// non-uniform the flow is: `0` for plug / uniform flow, growing as the field
+    /// develops shear, recirculation, or stagnation. The peak-to-trough companion to the
+    /// individual [`FlowSolution::max_speed`] and [`FlowSolution::min_speed`] (whose
+    /// difference it equals). Returns `0` for an empty grid.
+    pub fn speed_range(&self) -> f64 {
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                let s = self.speed_at_cell(i, j);
+                lo = lo.min(s);
+                hi = hi.max(s);
+            }
+        }
+        if hi >= lo {
+            hi - lo
+        } else {
+            0.0
+        }
+    }
+
     /// The cell-centre location `(x, y)` (m) of the **fastest cell** — the *where*
     /// of the peak speed, the locational companion to [`FlowSolution::max_speed`]
     /// (which gives the magnitude). It marks the convective hot-spot that sets the
@@ -2780,6 +2804,73 @@ mod tests {
             }
         }
         assert!(m >= 0.0, "non-negative");
+    }
+
+    #[test]
+    fn speed_range_is_the_velocity_peak_to_trough() {
+        // (a) WORKED: a 3×1 grid (v = 0), the middle cell's two shared u-faces set to
+        // 10 → cell speeds {5, 10, 5}, so the speed range = 10 − 5 = 5.
+        let g = Grid::new(3, 1, 3.0, 1.0);
+        let mut u = g.u_field();
+        u.set(1, 0, 10.0);
+        u.set(2, 0, 10.0);
+        let sol = FlowSolution {
+            grid: g,
+            u,
+            v: g.v_field(),
+            pressure: g.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let sr = sol.speed_range();
+        assert!((sr - 5.0).abs() <= 1e-12 * 5.0, "speed_range = 10 − 5 = 5, got {sr}");
+
+        // (b) THREAD max_speed + min_speed (non-tautological — the body is one loop,
+        // these are separate loops): speed_range == max_speed − min_speed.
+        assert!(
+            (sr - (sol.max_speed() - sol.min_speed())).abs() <= 1e-12 * sr,
+            "speed_range = max_speed − min_speed"
+        );
+
+        // (c) UNIFORM: a uniform u = 4 field → all cell speeds 4 → range 0.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u4 = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u4.set(fi, j, 4.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u: u4,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(uniform.speed_range(), 0.0, "uniform field → range 0");
+
+        // (d) NON-NEGATIVE + BOUND: range ≥ 0 always, and ≤ max_speed (min_speed ≥ 0).
+        assert!(sol.speed_range() >= 0.0, "non-negative");
+        assert!(sol.speed_range() <= sol.max_speed(), "range ≤ max_speed");
+
+        // (e) MONOTONE SPREAD: a narrower field has a smaller range. Middle faces set
+        // to 6 give cell speeds {3, 6, 3} (range 3) vs the {5, 10, 5} field's range 5.
+        let mut u2 = g.u_field();
+        u2.set(1, 0, 6.0);
+        u2.set(2, 0, 6.0);
+        let narrow = FlowSolution {
+            grid: g,
+            u: u2,
+            v: g.v_field(),
+            pressure: g.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(narrow.speed_range() < sol.speed_range(), "narrower spread → smaller range");
     }
 
     #[test]
