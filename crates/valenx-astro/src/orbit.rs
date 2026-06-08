@@ -272,9 +272,62 @@ pub fn orbital_radius_from_circular_speed(speed: f64) -> Result<f64, AstroError>
     Ok(MU_EARTH / (speed * speed))
 }
 
+/// The **orbit radius from the escape speed** `r = 2μ / v²` (m) — the radius about Earth
+/// at which the local escape speed is `speed` `v` (m/s); the inverse of [`escape_speed`].
+/// Since the escape speed is `√2` times the circular speed at the same radius, for a
+/// given speed this radius is exactly twice [`orbital_radius_from_circular_speed`].
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `speed` is non-finite or non-positive.
+pub fn orbital_radius_from_escape_speed(speed: f64) -> Result<f64, AstroError> {
+    if !speed.is_finite() || speed <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "orbital_radius_from_escape_speed speed must be finite and > 0",
+        ));
+    }
+    Ok(2.0 * MU_EARTH / (speed * speed))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orbital_radius_from_escape_speed_inverts_escape_speed() {
+        // Round-trip: recover r from the escape speed it implies (the exact inverse of
+        // √(2μ/r)).
+        for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2164e7] {
+            let recovered = orbital_radius_from_escape_speed(escape_speed(r).unwrap()).unwrap();
+            assert!((recovered - r).abs() <= 1e-12 * r, "r = 2μ/v² inverts v = √(2μ/r)");
+        }
+
+        // Worked: Earth's surface escape speed ≈ 11.18 km/s → back to ≈ Earth's radius
+        // (a rough textbook anchor at 1%; the exact relation is the round-trip).
+        let r = orbital_radius_from_escape_speed(11_180.0).unwrap();
+        assert!((r - R_EARTH).abs() / R_EARTH < 1e-2, "11.18 km/s → ≈ Earth's surface");
+
+        // Threads orbital_radius_from_circular_speed: for the same speed the escape radius
+        // is exactly twice the circular radius (escape speed is √2 × circular speed).
+        for &v in &[3000.0, 7672.6, 11_180.0] {
+            assert!(
+                (orbital_radius_from_escape_speed(v).unwrap()
+                    - 2.0 * orbital_radius_from_circular_speed(v).unwrap())
+                .abs()
+                    <= 1e-9 * orbital_radius_from_escape_speed(v).unwrap(),
+                "escape radius = 2 × circular radius at the same speed"
+            );
+        }
+
+        // Monotonic decreasing in speed; Err on non-physical input.
+        assert!(
+            orbital_radius_from_escape_speed(12000.0).unwrap()
+                < orbital_radius_from_escape_speed(8000.0).unwrap()
+        );
+        assert!(orbital_radius_from_escape_speed(0.0).is_err());
+        assert!(orbital_radius_from_escape_speed(-1.0).is_err());
+        assert!(orbital_radius_from_escape_speed(f64::NAN).is_err());
+    }
 
     #[test]
     fn orbital_radius_from_circular_speed_inverts_circular_speed() {
