@@ -1559,6 +1559,18 @@ impl FlowSolution {
         (sum_sq / ((nx - 2) * (ny - 2)) as f64).sqrt()
     }
 
+    /// The **mean viscous dissipation rate** `ε = ν·⟨|S|²⟩` (m²/s³, specific — per unit mass)
+    /// for a fluid of kinematic viscosity `kinematic_viscosity` `ν` (m²/s) — the rate at which
+    /// the flow irreversibly converts kinetic energy to heat by viscosity, the quantity that
+    /// closes the turbulent energy budget (the Kolmogorov cascade rate). Since
+    /// `|S|² = 2 SᵢⱼSᵢⱼ`, `ε = 2ν⟨SᵢⱼSᵢⱼ⟩ = ν·⟨|S|²⟩ = ν·(rms_strain_rate)²`; it is the
+    /// strain-squared companion to the [`FlowSolution::rms_strain_rate`]. A pure rotation
+    /// strains nothing and dissipates nothing; only deformation dissipates. Returns `0` for
+    /// zero viscosity or a grid too small for an interior strain-rate stencil.
+    pub fn mean_dissipation_rate(&self, kinematic_viscosity: f64) -> f64 {
+        kinematic_viscosity * self.rms_strain_rate().powi(2)
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -3903,6 +3915,77 @@ mod tests {
             converged: true,
         };
         assert_eq!(tiny.rms_strain_rate(), 0.0);
+    }
+
+    #[test]
+    fn mean_dissipation_rate_is_viscosity_times_strain_squared() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // (a) WORKED: a pure shear u(y) = γy has |S| = γ uniformly, so with ν = 0.1 the
+        // dissipation is ε = ν·γ² = 0.1·4 = 0.4.
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((shear.mean_dissipation_rate(0.1) - 0.4).abs() <= 1e-9, "ε = ν·γ² = 0.4");
+
+        // (b) THREAD rms_vorticity (#406) (non-tautological): for a pure shear |S| = |ω| = γ,
+        // so the dissipation also equals ν·rms_vorticity².
+        assert!(
+            (shear.mean_dissipation_rate(0.1) - 0.1 * shear.rms_vorticity().powi(2)).abs()
+                <= 1e-9 * shear.mean_dissipation_rate(0.1),
+            "ε = ν·|ω|² for a pure shear"
+        );
+
+        // (c) SOLID-BODY ROTATION (u = −Ωy, v = Ωx): pure spin strains nothing, so it
+        // dissipates nothing even though it rotates.
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(rotation.mean_dissipation_rate(0.1).abs() < 1e-9, "rotation → no dissipation");
+
+        // (d) Proportional to viscosity, and zero at ν = 0.
+        assert!(
+            (shear.mean_dissipation_rate(0.2) - 2.0 * shear.mean_dissipation_rate(0.1)).abs()
+                <= 1e-9 * shear.mean_dissipation_rate(0.2),
+            "ε ∝ ν"
+        );
+        assert_eq!(shear.mean_dissipation_rate(0.0), 0.0);
     }
 
     #[test]
