@@ -486,6 +486,25 @@ impl FlowSolution {
         peak
     }
 
+    /// The **minimum speed** `min √(u²+v²)` (m/s) over the cell grid — the slowest the flow
+    /// moves anywhere, marking stagnation points and recirculation cores. It is the
+    /// lower-bound counterpart to [`FlowSolution::max_speed`]; together they bracket the
+    /// area-averaged [`FlowSolution::mean_speed`] (`min ≤ ⟨|u|⟩ ≤ max`). Returns `0` for an
+    /// empty grid.
+    pub fn min_speed(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return 0.0;
+        }
+        let mut slowest = f64::INFINITY;
+        for j in 0..ny {
+            for i in 0..nx {
+                slowest = slowest.min(self.speed_at_cell(i, j));
+            }
+        }
+        slowest
+    }
+
     /// The cell-centre location `(x, y)` (m) of the **fastest cell** — the *where*
     /// of the peak speed, the locational companion to [`FlowSolution::max_speed`]
     /// (which gives the magnitude). It marks the convective hot-spot that sets the
@@ -2629,6 +2648,61 @@ mod tests {
             peaked.max_speed() > peaked.mean_speed(),
             "the peak strictly exceeds the mean for a non-uniform field"
         );
+    }
+
+    #[test]
+    fn min_speed_is_the_slowest_cell_and_bounds_the_mean() {
+        // Uniform field u = 3 → zero spread: min = mean = max.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((uniform.min_speed() - 3.0).abs() <= 1e-9 * 3.0, "uniform → min = 3");
+        assert!((uniform.min_speed() - uniform.max_speed()).abs() <= 1e-9, "uniform: min = max");
+        assert!((uniform.min_speed() - uniform.mean_speed()).abs() <= 1e-9, "uniform: min = mean");
+
+        // Non-uniform field (streamwise gradient).
+        let mut ug = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ug.set(fi, j, fi as f64);
+            }
+        }
+        let varied = FlowSolution {
+            grid,
+            u: ug,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // Statistical ordering min ≤ mean ≤ max, strict for a varying field (threads both).
+        assert!(varied.min_speed() <= varied.mean_speed(), "min ≤ mean");
+        assert!(varied.mean_speed() <= varied.max_speed(), "mean ≤ max");
+        assert!(varied.min_speed() < varied.max_speed(), "min < max for a varying field");
+
+        // It is the actual minimum: ≤ every cell speed, and non-negative.
+        let m = varied.min_speed();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                assert!(m <= varied.speed_at_cell(i, j) + 1e-12, "≤ every cell");
+            }
+        }
+        assert!(m >= 0.0, "non-negative");
     }
 
     #[test]
