@@ -1387,6 +1387,17 @@ pub fn solid_genus(solid: &Solid) -> Option<i64> {
     euler_characteristic(solid).map(|chi| (2 - chi) / 2)
 }
 
+/// The **total Gaussian curvature** `∮ K dA = 2π·χ` (dimensionless, steradians) of a solid's
+/// boundary surface — by the **Gauss–Bonnet theorem** the integral of Gaussian curvature over
+/// a closed surface is a topological invariant, equal to `2π` times the
+/// [`euler_characteristic`] `χ`. It is therefore independent of the solid's *geometry*: a
+/// sphere and a box both return `4π` (`χ = 2`, [`solid_genus`] 0), and each handle subtracts
+/// `4π` (`χ = 2 − 2g`), so a torus returns `0`. `None` for a mesh-backed solid with no B-rep
+/// topology (matching [`euler_characteristic`]).
+pub fn solid_total_gaussian_curvature(solid: &Solid) -> Option<f64> {
+    euler_characteristic(solid).map(|chi| 2.0 * std::f64::consts::PI * chi as f64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2322,6 +2333,42 @@ mod tests {
         assert_eq!(euler_characteristic(&t), Some(0), "torus χ = 0");
         assert_eq!(solid_genus(&t), Some(1), "torus → genus 1");
         // A mesh-backed solid has no B-rep topology → None (matches euler).
+    }
+
+    #[test]
+    fn solid_total_gaussian_curvature_is_gauss_bonnet() {
+        use crate::primitives::{sphere, torus};
+
+        // (a) TOPOLOGICAL INVARIANCE: a box AND a sphere are both genus 0 (χ = 2), so both
+        // integrate to 4π despite having totally different geometry (Gauss–Bonnet).
+        let bx = box_solid(2.0, 3.0, 4.0).unwrap();
+        assert!(
+            (solid_total_gaussian_curvature(&bx).unwrap() - 4.0 * PI).abs() < 1e-9,
+            "box → 4π"
+        );
+        let sp = sphere(2.0).unwrap();
+        assert!(
+            (solid_total_gaussian_curvature(&sp).unwrap() - 4.0 * PI).abs() < 1e-9,
+            "sphere → 4π (same as the box!)"
+        );
+
+        // (b) TORUS (genus 1, χ = 0) → 0: a handle subtracts 4π.
+        let t = torus(2.0, 0.5).unwrap();
+        assert!(solid_total_gaussian_curvature(&t).unwrap().abs() < 1e-9, "torus → 0");
+
+        // (c) THREAD euler_characteristic + solid_genus (non-tautological): total = 2π·χ =
+        // 2π·(2 − 2g).
+        for s in [&bx, &t] {
+            let k = solid_total_gaussian_curvature(s).unwrap();
+            assert!(
+                (k - 2.0 * PI * euler_characteristic(s).unwrap() as f64).abs() < 1e-9,
+                "K = 2π·χ"
+            );
+            assert!(
+                (k - 2.0 * PI * (2.0 - 2.0 * solid_genus(s).unwrap() as f64)).abs() < 1e-9,
+                "K = 2π·(2 − 2g)"
+            );
+        }
     }
 
     #[test]
