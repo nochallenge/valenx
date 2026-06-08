@@ -584,6 +584,33 @@ pub fn bending_stress(moment: f64, distance_from_neutral_axis: f64, second_momen
     moment * distance_from_neutral_axis / second_moment_area
 }
 
+/// The **transverse (flexural) shear stress** `τ = V·Q / (I·b)` (Pa) — Jourawski's formula
+/// for the shear in a beam cross-section under a transverse shear force `shear_force` `V`
+/// (N), where `first_moment_area` `Q` (m³) is the first moment about the neutral axis of the
+/// area beyond the cut, `second_moment_area` `I` (m⁴) the section's second moment, and
+/// `width` `b` (m) the section width at the cut. It is the third classic beam stress
+/// alongside the bending normal stress [`bending_stress`] (`σ = M·y/I`) and the
+/// [`torsional_shear_stress`] (`τ = T·r/J`); for a rectangular section it peaks at the
+/// neutral axis at `τ_max = 1.5·V/A`, half again the average shear `V/A`. Returns `0` for
+/// non-physical input (`I` or `b` non-positive, or any non-finite argument).
+pub fn beam_transverse_shear_stress(
+    shear_force: f64,
+    first_moment_area: f64,
+    second_moment_area: f64,
+    width: f64,
+) -> f64 {
+    if !shear_force.is_finite()
+        || !first_moment_area.is_finite()
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+        || !width.is_finite()
+        || width <= 0.0
+    {
+        return 0.0;
+    }
+    shear_force * first_moment_area / (second_moment_area * width)
+}
+
 /// The **elastic section modulus** `S = I/c` (m³) — the cross-section property (the `W`
 /// or `Z` of structural beam tables) that turns a bending moment directly into the peak
 /// fibre stress, `σ_max = M/S`. `second_moment_area` `I` (m⁴) is the section's second
@@ -2524,6 +2551,43 @@ mod tests {
         assert_eq!(elastic_section_modulus(1.0e-6, 0.0), 0.0);
         assert_eq!(elastic_section_modulus(1.0e-6, -0.05), 0.0);
         assert_eq!(elastic_section_modulus(f64::NAN, 0.05), 0.0);
+    }
+
+    #[test]
+    fn beam_transverse_shear_stress_is_jourawski() {
+        // Rectangular section b×h, transverse shear V: at the neutral axis Q = b·h²/8,
+        // I = b·h³/12, so τ_max = 1.5·V/A (the classic 3/2 factor over the average V/A).
+        let (b, h) = (0.05_f64, 0.10_f64);
+        let q = b * h * h / 8.0;
+        let i = b * h.powi(3) / 12.0;
+        let v = 10000.0;
+        let tau = beam_transverse_shear_stress(v, q, i, b);
+        let area = b * h;
+        assert!((tau - 1.5 * v / area).abs() <= 1e-9 * tau, "τ_max = 1.5·V/A");
+        assert!(tau > v / area, "peak exceeds the average shear V/A");
+
+        // Linear in V and Q; inverse in I and b.
+        assert!(
+            (beam_transverse_shear_stress(2.0 * v, q, i, b) - 2.0 * tau).abs() <= 1e-9 * (2.0 * tau),
+            "∝ V"
+        );
+        assert!(
+            (beam_transverse_shear_stress(v, 3.0 * q, i, b) - 3.0 * tau).abs() <= 1e-9 * (3.0 * tau),
+            "∝ Q"
+        );
+        assert!(
+            (beam_transverse_shear_stress(v, q, 2.0 * i, b) - 0.5 * tau).abs() <= 1e-9 * (0.5 * tau),
+            "∝ 1/I"
+        );
+        assert!(
+            (beam_transverse_shear_stress(v, q, i, 2.0 * b) - 0.5 * tau).abs() <= 1e-9 * (0.5 * tau),
+            "∝ 1/b"
+        );
+
+        // 0-sentinel for non-physical input.
+        assert_eq!(beam_transverse_shear_stress(v, q, 0.0, b), 0.0);
+        assert_eq!(beam_transverse_shear_stress(v, q, i, 0.0), 0.0);
+        assert_eq!(beam_transverse_shear_stress(f64::NAN, q, i, b), 0.0);
     }
 
     #[test]
