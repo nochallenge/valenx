@@ -398,6 +398,26 @@ impl FlowSolution {
         sum / n as f64
     }
 
+    /// The **minimum static pressure** `min p_ij` (Pa) over the `nx·ny` cells — the
+    /// suction-peak value, the lowest pressure anywhere in the field (where cavitation first
+    /// onsets and the strongest suction load acts). It is the lower companion to the
+    /// gauge-independent [`FlowSolution::pressure_range`] (`Δp = max − min`) and bounds the
+    /// area-averaged [`FlowSolution::mean_pressure`] from below (`min ≤ ⟨p⟩`). Returns `0`
+    /// for an empty grid.
+    pub fn min_pressure(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 {
+            return 0.0;
+        }
+        let mut lo = f64::INFINITY;
+        for j in 0..ny {
+            for i in 0..nx {
+                lo = lo.min(self.pressure.at(i, j));
+            }
+        }
+        lo
+    }
+
     /// The **total (stagnation) pressure range** `Δp₀ = p₀_max − p₀_min` (Pa) over
     /// the field, where `p₀ = p + ½ρ|u|²` is the total pressure (static plus the
     /// dynamic head). For an ideal inviscid flow Bernoulli's theorem keeps `p₀`
@@ -3534,6 +3554,78 @@ mod tests {
             converged: true,
         };
         assert_eq!(calm.continuity_error(), 0.0);
+    }
+
+    #[test]
+    fn min_pressure_is_the_suction_peak() {
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+
+        // Uniform p = 5 → min = mean = 5, range = 0.
+        let mut p = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p.set(i, j, 5.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((uniform.min_pressure() - 5.0).abs() <= 1e-9, "uniform → min = 5");
+        assert!(
+            (uniform.min_pressure() - uniform.mean_pressure()).abs() <= 1e-9,
+            "uniform: min = mean"
+        );
+        assert!(uniform.pressure_range().abs() <= 1e-9, "uniform: range = 0");
+
+        // Linear ramp p = i → min = 0; threads pressure_range + mean_pressure.
+        let mut pr = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                pr.set(i, j, i as f64);
+            }
+        }
+        let ramp = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: pr,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((ramp.min_pressure() - 0.0).abs() <= 1e-9, "ramp → min = 0");
+
+        // min + range = max (= nx−1 for the ramp); ordering min ≤ ⟨p⟩ ≤ max.
+        let max_p = ramp.min_pressure() + ramp.pressure_range();
+        assert!((max_p - (grid.nx - 1) as f64).abs() <= 1e-9, "min + range = max = nx−1");
+        assert!(
+            ramp.min_pressure() <= ramp.mean_pressure() && ramp.mean_pressure() <= max_p,
+            "min ≤ ⟨p⟩ ≤ max"
+        );
+
+        // Negative pressures: INFINITY-init, not a 0-floor (p = i − 10 → min = −10).
+        let mut pn = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                pn.set(i, j, i as f64 - 10.0);
+            }
+        }
+        let neg = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: pn,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((neg.min_pressure() - (-10.0)).abs() <= 1e-9, "negative min = −10");
     }
 
     #[test]
