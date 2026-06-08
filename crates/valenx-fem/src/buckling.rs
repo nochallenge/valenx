@@ -162,6 +162,24 @@ pub fn critical_buckling_stress(
     euler_critical_load(e_modulus, area_moment_of_inertia, length, effective_length_factor) / area
 }
 
+/// The **radius of gyration** `r = √(I / A)` (m) of a cross-section — the distance from the
+/// bending axis at which the section's whole area could be concentrated without changing its
+/// second moment of area `second_moment_area` `I` (m⁴); `area` is the section area `A` (m²).
+/// It is the denominator of the column **slenderness ratio** `λ = K·L/r`, and the bridge
+/// from the critical *load* to the critical *stress*: since `σ_cr = π²E·I/(A·(K·L)²)`, it is
+/// equivalently `σ_cr = π²E·r²/(K·L)²` (see [`critical_buckling_stress`]). Returns `0` for
+/// non-physical input (`I` or `A` non-finite, `A` non-positive, or `I` negative).
+pub fn section_radius_of_gyration(second_moment_area: f64, area: f64) -> f64 {
+    if !second_moment_area.is_finite()
+        || second_moment_area < 0.0
+        || !area.is_finite()
+        || area <= 0.0
+    {
+        return 0.0;
+    }
+    (second_moment_area / area).sqrt()
+}
+
 /// Errors from the native buckling solver.
 #[derive(Debug, Error)]
 pub enum BucklingSolverError {
@@ -568,6 +586,38 @@ mod tests {
     /// Node id of grid point `(i, j, k)` in a `structured_box_mesh`.
     fn nid(i: usize, j: usize, k: usize, nx: usize, ny: usize) -> usize {
         i + (nx + 1) * j + (nx + 1) * (ny + 1) * k
+    }
+
+    #[test]
+    fn section_radius_of_gyration_bridges_load_and_stress() {
+        use std::f64::consts::PI;
+        // Rectangle b×h about its centroidal axis: I = b·h³/12, A = b·h, so r = h/√12.
+        let (b, h) = (0.05_f64, 0.10_f64);
+        let i = b * h.powi(3) / 12.0;
+        let a = b * h;
+        let r = section_radius_of_gyration(i, a);
+        assert!((r - h / 12.0_f64.sqrt()).abs() <= 1e-9 * r, "rectangle r = h/√12");
+
+        // Definition: r² = I/A.
+        assert!((r.powi(2) - i / a).abs() <= 1e-9 * (i / a), "r² = I/A");
+
+        // Threads critical_buckling_stress (#356): σ_cr = π²E·r²/(KL)².
+        let (e, l, k) = (200.0e9, 3.0, 1.0);
+        let sigma = critical_buckling_stress(e, i, l, k, a);
+        assert!(
+            (sigma - PI.powi(2) * e * r.powi(2) / (k * l).powi(2)).abs() <= 1e-9 * sigma,
+            "σ_cr = π²E·r²/(KL)²"
+        );
+
+        // Monotonic: increasing in I, decreasing in A.
+        assert!(section_radius_of_gyration(2.0 * i, a) > r, "↑ with I");
+        assert!(section_radius_of_gyration(i, 2.0 * a) < r, "↓ with A");
+
+        // 0-sentinel for non-physical input.
+        assert_eq!(section_radius_of_gyration(i, 0.0), 0.0);
+        assert_eq!(section_radius_of_gyration(i, -1.0), 0.0);
+        assert_eq!(section_radius_of_gyration(-1.0, a), 0.0);
+        assert_eq!(section_radius_of_gyration(f64::NAN, a), 0.0);
     }
 
     #[test]
