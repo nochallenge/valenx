@@ -92,6 +92,22 @@ pub fn conduction_distance_m(velocity_m_per_s: f64, time_s: f64) -> f64 {
     velocity_m_per_s * time_s
 }
 
+/// The **conduction velocity from a measured latency** `velocity = distance / time`
+/// (m/s) — the speed inferred when an action potential covers a known distance
+/// `distance_m` (m) in time `time_s` (s). This is exactly the clinical nerve-conduction
+/// study measurement (a latency over a known nerve segment yields the velocity), and the
+/// third permutation of the conduction kinematic triple — the inverse of both
+/// [`conduction_delay_s`] (in the velocity) and [`conduction_distance_m`]. Distinct from
+/// the diameter-based [`myelinated_conduction_velocity`]. Returns `0` for non-physical
+/// input (negative or non-finite distance, or a non-positive / non-finite time, where the
+/// velocity is undefined).
+pub fn conduction_velocity_from_latency(distance_m: f64, time_s: f64) -> f64 {
+    if !distance_m.is_finite() || !time_s.is_finite() || distance_m < 0.0 || time_s <= 0.0 {
+        return 0.0;
+    }
+    distance_m / time_s
+}
+
 /// The **conduction velocity at the myelination crossover diameter** (m/s) — the
 /// single speed at which a myelinated fibre (`v = k_m·d`) and an unmyelinated fibre
 /// (`v = k_u·√d`) conduct equally. Below it, myelination gives no velocity benefit
@@ -109,6 +125,52 @@ pub fn conduction_velocity_at_crossover(k_myel_per_um: f64, k_unmyel_per_sqrt_um
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conduction_velocity_from_latency_inverts_delay_and_distance() {
+        // Double round-trip: recover v from the latency it produces (inverts
+        // conduction_delay_s) and from the distance it covers (inverts conduction_distance_m).
+        for &(d, v, t) in &[(0.05_f64, 50.0_f64, 0.001_f64), (1.0, 120.0, 0.05), (0.3, 2.5, 0.2)] {
+            assert!(
+                (conduction_velocity_from_latency(d, conduction_delay_s(d, v)) - v).abs() <= 1e-12 * v,
+                "v = d/t inverts t = d/v"
+            );
+            assert!(
+                (conduction_velocity_from_latency(conduction_distance_m(v, t), t) - v).abs()
+                    <= 1e-12 * v,
+                "v = d/t inverts d = v·t"
+            );
+        }
+
+        // Worked: a 5 cm segment crossed in 1 ms → 50 m/s (normal myelinated NCV).
+        assert!(
+            (conduction_velocity_from_latency(0.05, 0.001) - 50.0).abs() < 1e-12,
+            "5 cm / 1 ms = 50 m/s"
+        );
+
+        // Linear in distance, inverse in time.
+        assert!(
+            (conduction_velocity_from_latency(0.10, 0.001)
+                - 2.0 * conduction_velocity_from_latency(0.05, 0.001))
+            .abs()
+                < 1e-12,
+            "linear in distance"
+        );
+        assert!(
+            (conduction_velocity_from_latency(0.05, 0.002)
+                - 0.5 * conduction_velocity_from_latency(0.05, 0.001))
+            .abs()
+                < 1e-12,
+            "inverse in time"
+        );
+
+        // Zero distance → zero velocity (valid); non-physical (time ≤ 0, negatives, NaN) → 0.
+        assert_eq!(conduction_velocity_from_latency(0.0, 0.001), 0.0);
+        assert_eq!(conduction_velocity_from_latency(0.05, 0.0), 0.0);
+        assert_eq!(conduction_velocity_from_latency(-0.05, 0.001), 0.0);
+        assert_eq!(conduction_velocity_from_latency(0.05, -0.001), 0.0);
+        assert_eq!(conduction_velocity_from_latency(f64::NAN, 0.001), 0.0);
+    }
 
     #[test]
     fn conduction_distance_inverts_the_delay() {
