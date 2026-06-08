@@ -377,6 +377,27 @@ impl FlowSolution {
         }
     }
 
+    /// The **area-averaged static pressure** `⟨p⟩ = (1/N)·Σ p_ij` (Pa) over the `N = nx·ny`
+    /// cells — the mean of the static-pressure field, the pressure analogue of
+    /// [`FlowSolution::mean_speed`]. Unlike the gauge-independent
+    /// [`FlowSolution::pressure_range`] it carries the absolute level, so it shifts
+    /// one-for-one with the (arbitrary) datum; it is the reference level the range swings
+    /// about, and the spatial mean a net-force balance integrates. Returns `0` for an empty
+    /// grid.
+    pub fn mean_pressure(&self) -> f64 {
+        let n = self.grid.nx * self.grid.ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut sum = 0.0;
+        for j in 0..self.grid.ny {
+            for i in 0..self.grid.nx {
+                sum += self.pressure.at(i, j);
+            }
+        }
+        sum / n as f64
+    }
+
     /// The **total (stagnation) pressure range** `Δp₀ = p₀_max − p₀_min` (Pa) over
     /// the field, where `p₀ = p + ½ρ|u|²` is the total pressure (static plus the
     /// dynamic head). For an ideal inviscid flow Bernoulli's theorem keeps `p₀`
@@ -3513,6 +3534,75 @@ mod tests {
             converged: true,
         };
         assert_eq!(calm.continuity_error(), 0.0);
+    }
+
+    #[test]
+    fn mean_pressure_is_the_area_average_of_the_pressure_field() {
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+
+        // Uniform pressure p = 5 → ⟨p⟩ = 5.
+        let mut p = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p.set(i, j, 5.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((uniform.mean_pressure() - 5.0).abs() <= 1e-9, "uniform → ⟨p⟩ = 5");
+
+        // Linear ramp p = i → ⟨p⟩ = (nx−1)/2 (mean of 0..nx, independent of j).
+        let mut pr = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                pr.set(i, j, i as f64);
+            }
+        }
+        let ramp = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: pr,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let expected = (grid.nx - 1) as f64 / 2.0;
+        assert!((ramp.mean_pressure() - expected).abs() <= 1e-9 * expected, "ramp → (nx−1)/2");
+
+        // Bounded by the field extremes (the ramp spans 0 .. nx−1).
+        assert!(
+            0.0 <= ramp.mean_pressure() && ramp.mean_pressure() <= (grid.nx - 1) as f64,
+            "min ≤ ⟨p⟩ ≤ max"
+        );
+
+        // Linearity: shifting the whole field by c raises the mean by exactly c.
+        let mut ps = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                ps.set(i, j, i as f64 + 10.0);
+            }
+        }
+        let shifted = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: ps,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (shifted.mean_pressure() - (ramp.mean_pressure() + 10.0)).abs() <= 1e-9,
+            "shift by c → mean + c"
+        );
     }
 
     #[test]
