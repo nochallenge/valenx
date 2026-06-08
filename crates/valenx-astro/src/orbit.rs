@@ -148,6 +148,24 @@ pub fn circular_speed(radius: f64) -> Result<f64, AstroError> {
     Ok((MU_EARTH / radius).sqrt())
 }
 
+/// The **specific angular momentum of a circular orbit** `h = √(μ·r)` (m²/s) at radius
+/// `radius` `r` (m) about Earth — the conserved angular momentum per unit mass, equal to
+/// the circular speed times the radius (`h = v_circ·r`). It is the constant in Kepler's
+/// second law: a circular orbit sweeps area at the steady rate `dA/dt = h/2`, so over one
+/// [`orbital_period`] it covers the full disc `πr²`, giving `h·T = 2π·r²`.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `radius` is non-finite or non-positive.
+pub fn circular_angular_momentum(radius: f64) -> Result<f64, AstroError> {
+    if !radius.is_finite() || radius <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "circular_angular_momentum radius must be finite and > 0",
+        ));
+    }
+    Ok((MU_EARTH * radius).sqrt())
+}
+
 /// Escape speed (m/s) at a given radius from Earth's centre — the minimum speed
 /// for an unbound (parabolic) trajectory, `v_esc = √(2·μ/r) = √2 · v_circ`. At this
 /// speed the specific orbital energy is exactly zero, so the body just reaches
@@ -694,6 +712,35 @@ mod tests {
             matches!(res, Err(AstroError::NonPhysicalState(_))),
             "parabolic singularity must be rejected, got {res:?}"
         );
+    }
+
+    #[test]
+    fn circular_angular_momentum_threads_speed_and_keplers_area_law() {
+        for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2164e7] {
+            // Threads circular_speed: h = v_circ·r.
+            let h = circular_angular_momentum(r).unwrap();
+            assert!((h - circular_speed(r).unwrap() * r).abs() <= 1e-9 * h, "h = v_circ·r");
+
+            // Threads orbital_period via Kepler's 2nd law: h·T = 2π·r² (area πr² swept per
+            // period at dA/dt = h/2).
+            let area_law = circular_angular_momentum(r).unwrap() * orbital_period(r).unwrap();
+            assert!(
+                (area_law - 2.0 * std::f64::consts::PI * r * r).abs()
+                    <= 1e-9 * (2.0 * std::f64::consts::PI * r * r),
+                "h·T = 2π·r²"
+            );
+        }
+
+        // Monotonic increasing in radius.
+        assert!(
+            circular_angular_momentum(4.2164e7).unwrap()
+                > circular_angular_momentum(R_EARTH).unwrap()
+        );
+
+        // Err on non-physical radius.
+        assert!(circular_angular_momentum(0.0).is_err());
+        assert!(circular_angular_momentum(-1.0).is_err());
+        assert!(circular_angular_momentum(f64::NAN).is_err());
     }
 
     #[test]
