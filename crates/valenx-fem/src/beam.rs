@@ -725,6 +725,21 @@ pub fn rectangular_second_moment_of_area(width: f64, height: f64) -> f64 {
     width * height.powi(3) / 12.0
 }
 
+/// The **plastic section modulus of a rectangular cross-section** `Z = b·h²/4` (m³), for a
+/// section of `width` `b` (m) and `height` `h` (m) — the combined first moment of the two
+/// half-areas about the equal-area (plastic neutral) axis, the section property for
+/// fully-plastic limit bending (`M_plastic = σ_y·Z`). It is `1.5×` the rectangular *elastic*
+/// section modulus ([`elastic_section_modulus`] of [`rectangular_second_moment_of_area`],
+/// `S = b·h²/6`) — the rectangle's shape factor `Z/S = 1.5`, the reserve between first yield
+/// and a full plastic hinge. Returns `0` for non-physical input (`b` or `h` non-positive or
+/// non-finite).
+pub fn rectangular_plastic_section_modulus(width: f64, height: f64) -> f64 {
+    if !width.is_finite() || width <= 0.0 || !height.is_finite() || height <= 0.0 {
+        return 0.0;
+    }
+    width * height * height / 4.0
+}
+
 /// The **second moment of area of a solid circular cross-section** about a centroidal
 /// diameter `I = π·d⁴/64` (m⁴), for a round bar of diameter `diameter` `d` (m) — the
 /// shaft/rod companion to [`rectangular_second_moment_of_area`], the `I` that feeds
@@ -2731,6 +2746,45 @@ mod tests {
         assert_eq!(rectangular_second_moment_of_area(0.1, 0.0), 0.0);
         assert_eq!(rectangular_second_moment_of_area(f64::NAN, 0.2), 0.0);
         assert_eq!(rectangular_second_moment_of_area(0.1, -0.2), 0.0);
+    }
+
+    #[test]
+    fn rectangular_plastic_section_modulus_is_bh2_over_4() {
+        // (a) WORKED: b=0.1, h=0.2 → Z = b·h²/4 = 0.001 m³.
+        let z = rectangular_plastic_section_modulus(0.1, 0.2);
+        assert!((z - 0.1 * 0.2_f64 * 0.2 / 4.0).abs() <= 1e-9 * z, "Z = b·h²/4");
+
+        // (b) THREAD elastic_section_modulus + rectangular_second_moment_of_area (#415)
+        // (non-tautological): the rectangular elastic modulus is S = I/(h/2) = b·h²/6, and the
+        // plastic modulus is exactly 1.5·S — the rectangle's shape factor Z/S = 1.5.
+        let (b, h) = (0.1_f64, 0.2_f64);
+        let s = elastic_section_modulus(rectangular_second_moment_of_area(b, h), h / 2.0);
+        assert!(
+            (rectangular_plastic_section_modulus(b, h) - 1.5 * s).abs()
+                <= 1e-9 * rectangular_plastic_section_modulus(b, h),
+            "Z = 1.5·S"
+        );
+        assert!(
+            (rectangular_plastic_section_modulus(b, h) / s - 1.5).abs() <= 1e-9,
+            "shape factor Z/S = 1.5"
+        );
+
+        // (c) SCALING: linear in width, quadratic in height.
+        let base = rectangular_plastic_section_modulus(0.1, 0.2);
+        assert!(
+            (rectangular_plastic_section_modulus(0.2, 0.2) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in width"
+        );
+        assert!(
+            (rectangular_plastic_section_modulus(0.1, 0.4) - 4.0 * base).abs() <= 1e-9 * 4.0 * base,
+            "quadratic in height"
+        );
+
+        // (d) GUARD: non-positive or non-finite → 0.
+        assert_eq!(rectangular_plastic_section_modulus(0.0, 0.2), 0.0);
+        assert_eq!(rectangular_plastic_section_modulus(0.1, 0.0), 0.0);
+        assert_eq!(rectangular_plastic_section_modulus(f64::NAN, 0.2), 0.0);
+        assert_eq!(rectangular_plastic_section_modulus(0.1, -0.2), 0.0);
     }
 
     #[test]
