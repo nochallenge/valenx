@@ -112,6 +112,19 @@ pub fn reference_flat_plate_cf(re_l: f64) -> f64 {
     0.074 * re_l.powf(-0.2)
 }
 
+/// The **turbulent flat-plate boundary-layer thickness ratio** `δ/x = 0.37·Re_x⁻¹ᐟ⁵`
+/// (dimensionless) at local length Reynolds number `re_x` `Re_x = U·x/ν` — the
+/// one-seventh-power-law estimate of how thick a turbulent boundary layer grows over a
+/// smooth flat plate. It is the turbulent companion to the laminar
+/// [`blasius_boundary_layer_thickness_ratio`] (`5.0·Re_x⁻¹ᐟ²`): it shares the `Re⁻¹ᐟ⁵`
+/// decay of the turbulent skin friction, so `δ/x = 5·`[`reference_flat_plate_cf`] (since
+/// `0.37 / 0.074 = 5`). The turbulent layer thickens far faster downstream than the
+/// laminar one.
+pub fn turbulent_boundary_layer_thickness_ratio(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    0.37 * re_x.powf(-0.2)
+}
+
 /// The laminar (Blasius) flat-plate skin-friction drag coefficient at a
 /// length Reynolds number `re_l` — `C_F = 1.328·Re_L⁻¹ᐟ²`.
 pub fn blasius_flat_plate_cf(re_l: f64) -> f64 {
@@ -634,6 +647,46 @@ mod tests {
             "near-wall-model sphere Cd {} should be a plausible \
              sphere drag",
             after.cd
+        );
+    }
+
+    #[test]
+    fn turbulent_boundary_layer_thickness_ratio_scales_with_turbulent_cf() {
+        // Worked: δ/x = 0.37·Re⁻⁰·² ; at Re = 1e7, δ/x = 0.37/(1e7)^0.2.
+        let expected = 0.37 * (1.0e7_f64).powf(-0.2);
+        assert!(
+            (turbulent_boundary_layer_thickness_ratio(1.0e7) - expected).abs() <= 1e-12 * expected,
+            "δ/x = 0.37·Re⁻¹ᐟ⁵"
+        );
+
+        // Threads reference_flat_plate_cf: δ/x = 5·C_F (0.37/0.074 = 5), Re cancels.
+        for &re in &[1.0e6, 5.0e6, 1.0e7] {
+            assert!(
+                (turbulent_boundary_layer_thickness_ratio(re) - 5.0 * reference_flat_plate_cf(re))
+                    .abs()
+                    <= 1e-12 * turbulent_boundary_layer_thickness_ratio(re),
+                "δ/x = 5·C_F at Re={re}"
+            );
+        }
+
+        // Re⁻⁰·² scaling: a 10⁵× larger Re gives a 10× thinner layer.
+        assert!(
+            (turbulent_boundary_layer_thickness_ratio(1.0e2)
+                - 10.0 * turbulent_boundary_layer_thickness_ratio(1.0e7))
+            .abs()
+                / turbulent_boundary_layer_thickness_ratio(1.0e2)
+                < 1e-9,
+            "Re⁻¹ᐟ⁵ scaling"
+        );
+
+        // Monotonic decreasing in Re; the Re < 1 clamp.
+        assert!(
+            turbulent_boundary_layer_thickness_ratio(1.0e5)
+                > turbulent_boundary_layer_thickness_ratio(1.0e7)
+        );
+        assert!(
+            (turbulent_boundary_layer_thickness_ratio(0.5) - 0.37).abs() < 1e-12,
+            "clamped to Re=1"
         );
     }
 
