@@ -264,6 +264,21 @@ pub fn isentropic_stagnation_pressure_ratio(mach: f64, gamma: f64) -> f64 {
     temperature_ratio.powf(gamma / (gamma - 1.0))
 }
 
+/// The **Mach number from the isentropic stagnation pressure ratio**
+/// `M = √(2·((p₀/p)^((γ−1)/γ) − 1)/(γ−1))` — the inverse of
+/// [`isentropic_stagnation_pressure_ratio`], the subsonic pitot-static (Rayleigh-pitot)
+/// airspeed reduction that recovers the flight Mach number from a measured total-to-static
+/// pressure ratio `p0_over_p` `p₀/p` at heat-capacity ratio `gamma` `γ` — the most common
+/// compressible airspeed measurement. Returns the at-rest sentinel `0.0` (the inverse of
+/// the ratio's `1.0` no-rise identity) for non-physical input: non-finite `p₀/p` or `γ`,
+/// `p₀/p < 1`, or `γ ≤ 1`.
+pub fn mach_from_stagnation_pressure_ratio(p0_over_p: f64, gamma: f64) -> f64 {
+    if !p0_over_p.is_finite() || !gamma.is_finite() || p0_over_p < 1.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (2.0 * (p0_over_p.powf((gamma - 1.0) / gamma) - 1.0) / (gamma - 1.0)).sqrt()
+}
+
 /// The **isentropic stagnation density ratio** `ρ₀/ρ = (1 + ((γ−1)/2)·M²)^(1/(γ−1))`
 /// at Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the total-to-
 /// static *density* relation for an adiabatic, reversible (isentropic) deceleration
@@ -1530,6 +1545,53 @@ mod tests {
         assert_eq!(mach_from_stagnation_temperature_ratio(0.5, 1.4), 0.0); // T0/T < 1
         assert_eq!(mach_from_stagnation_temperature_ratio(1.8, 1.0), 0.0); // γ ≤ 1
         assert_eq!(mach_from_stagnation_temperature_ratio(f64::NAN, 1.4), 0.0);
+    }
+
+    #[test]
+    fn mach_from_stagnation_pressure_ratio_inverts_the_ratio() {
+        // (a) ROUND-TRIP threading isentropic_stagnation_pressure_ratio (both directions).
+        for m in [0.5_f64, 1.0, 2.0, 5.0] {
+            let r = isentropic_stagnation_pressure_ratio(m, 1.4);
+            assert!(
+                (mach_from_stagnation_pressure_ratio(r, 1.4) - m).abs() <= 1e-9 * m.max(1e-12),
+                "M(p0/p(M)) = M at M={m}"
+            );
+        }
+        for p in [1.2_f64, 2.0, 10.0] {
+            let mm = mach_from_stagnation_pressure_ratio(p, 1.4);
+            assert!(
+                (isentropic_stagnation_pressure_ratio(mm, 1.4) - p).abs() <= 1e-9 * p,
+                "p0/p(M(p0/p)) = p0/p at p0/p={p}"
+            );
+        }
+
+        // (b) WORKED: at M = 1, γ = 1.4 the critical pressure ratio is p0/p = 1.2^3.5 → M = 1.
+        assert!(
+            (mach_from_stagnation_pressure_ratio((1.2_f64).powf(3.5), 1.4) - 1.0).abs() <= 1e-9,
+            "M = 1 at the critical p0/p = 1.2^3.5"
+        );
+
+        // (c) CONSISTENCY with the temperature-ratio inverse: for the same Mach, the
+        // pressure-ratio and temperature-ratio reductions return the same Mach.
+        for m in [0.5_f64, 2.0, 4.0] {
+            let pr = isentropic_stagnation_pressure_ratio(m, 1.4);
+            let tr = isentropic_stagnation_temperature_ratio(m, 1.4);
+            assert!(
+                (mach_from_stagnation_pressure_ratio(pr, 1.4)
+                    - mach_from_stagnation_temperature_ratio(tr, 1.4))
+                .abs()
+                    <= 1e-9 * m,
+                "pressure and temperature reductions agree at M={m}"
+            );
+        }
+
+        // (d) AT REST: p0/p = 1 → M = 0.
+        assert_eq!(mach_from_stagnation_pressure_ratio(1.0, 1.4), 0.0);
+
+        // (e) GUARD: non-physical → the 0.0 at-rest sentinel.
+        assert_eq!(mach_from_stagnation_pressure_ratio(0.5, 1.4), 0.0); // p0/p < 1
+        assert_eq!(mach_from_stagnation_pressure_ratio(1.8929, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(mach_from_stagnation_pressure_ratio(f64::NAN, 1.4), 0.0);
     }
 
     #[test]
