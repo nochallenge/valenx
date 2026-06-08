@@ -184,6 +184,25 @@ pub fn escape_speed(radius: f64) -> Result<f64, AstroError> {
     Ok((2.0 * MU_EARTH / radius).sqrt())
 }
 
+/// The **specific gravitational potential** `Φ = −μ / r` (J/kg) at radius `radius` `r` (m)
+/// from Earth's centre — the gravitational potential energy per unit mass, the depth of the
+/// gravity well. It is negative and climbs toward `0` as `r → ∞`. It is the potential half
+/// of the energy decomposition: the [`specific_orbital_energy_from_state`] is just the
+/// kinetic term plus this, `ε = ½v² + Φ`; and escape is climbing out of it, so the
+/// [`escape_speed`] satisfies `v_esc = √(−2Φ)` (zero total energy at the rim).
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `radius` is non-finite or non-positive.
+pub fn gravitational_potential(radius: f64) -> Result<f64, AstroError> {
+    if !radius.is_finite() || radius <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "gravitational_potential radius must be finite and > 0",
+        ));
+    }
+    Ok(-MU_EARTH / radius)
+}
+
 /// The **Keplerian orbital period** `T = 2π·√(a³/μ)` (s) of an orbit with semi-major
 /// axis `semi_major_axis` `a` (m) about Earth — Kepler's third law, the time to
 /// complete one revolution. For a circular orbit (`a = r`) it is equivalently
@@ -654,6 +673,43 @@ mod tests {
         assert!(orbital_period(0.0).is_err());
         assert!(orbital_period(-1.0).is_err());
         assert!(orbital_period(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn gravitational_potential_is_the_well_depth() {
+        for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2164e7] {
+            let phi = gravitational_potential(r).unwrap();
+
+            // Threads specific_orbital_energy_from_state: ε = ½v² + Φ.
+            let v = 5000.0;
+            assert!(
+                (specific_orbital_energy_from_state(v, r).unwrap() - (0.5 * v * v + phi)).abs()
+                    <= 1e-9 * (0.5 * v * v + phi).abs(),
+                "ε = ½v² + Φ"
+            );
+
+            // Threads escape_speed: v_esc = √(−2Φ).
+            assert!(
+                (escape_speed(r).unwrap() - (-2.0 * phi).sqrt()).abs()
+                    <= 1e-9 * escape_speed(r).unwrap(),
+                "v_esc = √(−2Φ)"
+            );
+
+            // Worked closed form Φ = −μ/r, and it is negative (a potential well).
+            assert!((phi - (-MU_EARTH / r)).abs() <= 1e-9 * phi.abs(), "Φ = −μ/r");
+            assert!(phi < 0.0, "potential well is negative");
+        }
+
+        // Monotonic: deeper (more negative) closer in, climbing toward 0 with r.
+        assert!(
+            gravitational_potential(R_EARTH).unwrap() < gravitational_potential(4.2164e7).unwrap(),
+            "deeper well closer to Earth"
+        );
+
+        // Err on non-physical radius.
+        assert!(gravitational_potential(0.0).is_err());
+        assert!(gravitational_potential(-1.0).is_err());
+        assert!(gravitational_potential(f64::NAN).is_err());
     }
 
     #[test]
