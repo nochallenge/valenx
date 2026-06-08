@@ -579,6 +579,22 @@ impl FlowSolution {
         self.max_speed() * lx / kinematic_viscosity
     }
 
+    /// The **flow-through (residence) time** `τ = Lₓ / U` (s) — the streamwise domain
+    /// length `Lₓ = nx·dx` divided by the peak speed `U` ([`FlowSolution::max_speed`]), the
+    /// convective time scale over which the flow crosses the domain. A simulation is
+    /// typically advanced (and time-averaged) over several flow-through times to reach a
+    /// statistically stationary state, so it sets the natural convergence / averaging
+    /// window — distinct from the per-step numerical [`FlowSolution::convective_cfl_number`].
+    /// Returns `0` for a quiescent field (`U ≤ 0`), where the residence time is unbounded.
+    pub fn flow_through_time(&self) -> f64 {
+        let u = self.max_speed();
+        if u <= 0.0 {
+            return 0.0;
+        }
+        let lx = (self.grid.nx as f64) * self.grid.dx();
+        lx / u
+    }
+
     /// Peak vorticity magnitude `|∂v/∂x − ∂u/∂y|` (1/s) over the interior cells,
     /// from central differences of the cell-centred velocity — the strongest
     /// local rotation in the flow (the lid-driven cavity's central vortex, a
@@ -2249,6 +2265,80 @@ mod tests {
         // A driven flow has a positive mean that cannot exceed the peak.
         assert!(mean > 0.0, "driven flow should have a positive mean speed");
         assert!(mean <= peak + 1e-9, "mean {mean} cannot exceed peak {peak}");
+    }
+
+    #[test]
+    fn flow_through_time_is_the_convective_residence_time() {
+        // Grid 5×4 over 5×8 → Lₓ = nx·dx = 5·1 = 5; uniform u = 2 → max_speed = 2.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 2.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // Worked: τ = Lₓ/U = 5/2 = 2.5 s.
+        assert!((sol.flow_through_time() - 2.5).abs() <= 1e-9 * 2.5, "τ = Lₓ/U = 2.5");
+
+        // Threads max_speed: τ·U = Lₓ.
+        let lx = grid.nx as f64 * grid.dx();
+        assert!(
+            (sol.flow_through_time() * sol.max_speed() - lx).abs() <= 1e-9 * lx,
+            "τ·U = Lₓ"
+        );
+
+        // Threads domain_reynolds_number: τ = Re_L·ν / U² (since Re_L·ν = U·Lₓ).
+        assert!(
+            (sol.flow_through_time()
+                - sol.domain_reynolds_number(0.01) * 0.01 / (sol.max_speed() * sol.max_speed()))
+            .abs()
+                <= 1e-9 * sol.flow_through_time(),
+            "τ = Re_L·ν/U²"
+        );
+
+        // Inverse in U: a faster field gives half the flow-through time.
+        let mut u4 = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u4.set(fi, j, 4.0);
+            }
+        }
+        let fast = FlowSolution {
+            grid,
+            u: u4,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (fast.flow_through_time() - 0.5 * sol.flow_through_time()).abs()
+                <= 1e-9 * sol.flow_through_time(),
+            "inverse in U"
+        );
+
+        // 0 sentinel for a quiescent (all-zero velocity) field.
+        let quiescent = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(quiescent.flow_through_time(), 0.0, "quiescent → 0");
     }
 
     #[test]
