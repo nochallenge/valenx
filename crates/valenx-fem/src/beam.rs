@@ -530,6 +530,19 @@ pub fn axial_strain_energy(force: f64, length: f64, youngs_modulus: f64, area: f
     force * force * length / (2.0 * youngs_modulus * area)
 }
 
+/// The **axial normal stress** `σ = F / A` (Pa) in a prismatic bar of cross-section area
+/// `area` `A` (m²) under an axial force `force` `F` (N) — positive in tension, negative in
+/// compression. It is the axial member of the beam stress family alongside the bending
+/// [`bending_stress`] (`σ = M·y/I`) and the [`torsional_shear_stress`] (`τ = T·r/J`), and
+/// the Hooke's-law conjugate of the [`beam_axial_extension`] (`σ = E·δ/L`). Returns `0` for
+/// non-physical input (`F` or `A` non-finite, or `A` non-positive).
+pub fn axial_stress(force: f64, area: f64) -> f64 {
+    if !force.is_finite() || !area.is_finite() || area <= 0.0 {
+        return 0.0;
+    }
+    force / area
+}
+
 /// The **moment–curvature relation** `κ = M/(E·I)` (1/m) — the local bending curvature
 /// produced in a beam section by a bending moment `moment` `M` (N·m), for Young's
 /// modulus `youngs_modulus` `E` (Pa) and second moment of area `second_moment_area`
@@ -2603,6 +2616,43 @@ mod tests {
         assert_eq!(beam_curvature(f64::NAN, 200.0e9, 1.0e-6), 0.0);
         assert_eq!(beam_curvature(2000.0, 0.0, 1.0e-6), 0.0);
         assert_eq!(beam_curvature(2000.0, 200.0e9, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn axial_stress_is_force_over_area() {
+        // Threads beam_axial_extension via Hooke's law σ = E·δ/L (E and L cancel, since
+        // δ = F·L/E·A).
+        let (l, e) = (2.0, 200.0e9);
+        for &(f, a) in &[(10000.0_f64, 1.0e-4_f64), (-5000.0, 3.0e-4), (25000.0, 5.0e-5)] {
+            let from_strain = e * beam_axial_extension(f, l, e, a) / l;
+            assert!(
+                (axial_stress(f, a) - from_strain).abs() <= 1e-12 * from_strain.abs(),
+                "σ = E·δ/L = F/A"
+            );
+        }
+
+        // Worked: σ = F/A = 1e4 / 1e-4 = 100 MPa.
+        assert!((axial_stress(10000.0, 1.0e-4) - 1.0e8).abs() <= 1e-12 * 1.0e8, "F/A = 100 MPa");
+
+        // Sign-preserving (tension +, compression −), linear in F, inverse in A.
+        assert_eq!(
+            axial_stress(-10000.0, 1.0e-4),
+            -axial_stress(10000.0, 1.0e-4),
+            "compression is negative"
+        );
+        assert!(
+            (axial_stress(20000.0, 1.0e-4) - 2.0 * axial_stress(10000.0, 1.0e-4)).abs() < 1e-3,
+            "linear in F"
+        );
+        assert!(
+            (axial_stress(10000.0, 2.0e-4) - 0.5 * axial_stress(10000.0, 1.0e-4)).abs() < 1e-3,
+            "inverse in A"
+        );
+
+        // 0 sentinel for non-physical input.
+        assert_eq!(axial_stress(10000.0, 0.0), 0.0);
+        assert_eq!(axial_stress(10000.0, -1.0e-4), 0.0);
+        assert_eq!(axial_stress(f64::NAN, 1.0e-4), 0.0);
     }
 
     #[test]
