@@ -71,7 +71,9 @@ pub use chord_conductance::{
 pub use conduction::{
     conduction_delay_s, conduction_distance_m, conduction_velocity_at_crossover,
     conduction_velocity_from_latency, myelinated_conduction_velocity,
-    myelination_crossover_diameter, unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
+    myelinated_fiber_diameter_um, myelination_crossover_diameter,
+    unmyelinated_conduction_velocity, unmyelinated_fiber_diameter_um,
+    HURSH_FACTOR_M_PER_S_PER_UM,
 };
 pub use current_distance::{activation_radius, fit_constant, threshold_current};
 pub use donnan::{donnan_osmotic_pressure_pa, donnan_potential_mv, donnan_ratio};
