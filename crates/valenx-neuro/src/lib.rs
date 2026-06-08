@@ -106,7 +106,8 @@ pub use safety::{
 };
 pub use steering::ContactArray;
 pub use strength_duration::{
-    chronaxie, lapicque_threshold, minimum_stimulating_charge, rheobase, threshold_amplitude,
+    chronaxie, chronaxie_from_strength_duration, lapicque_threshold,
+    minimum_stimulating_charge, rheobase, threshold_amplitude,
     weiss_threshold_charge, weiss_threshold_current,
 };
 pub use synapse::{

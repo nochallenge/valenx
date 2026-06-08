@@ -109,6 +109,25 @@ pub fn minimum_stimulating_charge(rheobase: f64, chronaxie_ms: f64) -> f64 {
     rheobase * chronaxie_ms
 }
 
+/// The **chronaxie recovered from a single strength–duration data point** (ms) — the
+/// inverse of the Weiss curve [`weiss_threshold_current`] `I = I_rh·(1 + chronaxie/w)`,
+/// solved for the chronaxie: `chronaxie = w·(I/I_rh − 1)`, from a measured
+/// `threshold_current` `I` at pulse width `width_ms` `w` and the `rheobase` `I_rh`. This is
+/// the standard way to estimate chronaxie experimentally: measure the rheobase (the
+/// long-pulse threshold) and one threshold at a known short width, and this returns the
+/// chronaxie without tracing the whole curve. `None` for a non-positive width or rheobase.
+pub fn chronaxie_from_strength_duration(
+    rheobase: f64,
+    threshold_current: f64,
+    width_ms: f64,
+) -> Option<f64> {
+    if width_ms > 0.0 && rheobase > 0.0 {
+        Some(width_ms * (threshold_current / rheobase - 1.0))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,5 +248,42 @@ mod tests {
         // The model's own rheobase()·chronaxie() gives a finite positive Q_min.
         let q_model = minimum_stimulating_charge(rheobase(), chronaxie());
         assert!(q_model > 0.0 && q_model.is_finite(), "model Q_min plausible: {q_model}");
+    }
+
+    #[test]
+    fn chronaxie_from_strength_duration_inverts_the_weiss_curve() {
+        // (a) WORKED = THE DEFINITION OF CHRONAXIE: at width = chronaxie the threshold
+        // current is exactly 2×rheobase, so recovering chronaxie from (I_rh, 2·I_rh, t_chr)
+        // returns t_chr. I_rh = 10, t_chr = 0.5: 0.5·(20/10 − 1) = 0.5.
+        assert!(
+            (chronaxie_from_strength_duration(10.0, 20.0, 0.5).unwrap() - 0.5).abs() <= 1e-9,
+            "at width = chronaxie, I = 2·rheobase ⟹ recovers chronaxie"
+        );
+
+        // (b) ROUND-TRIP threading weiss_threshold_current (both directions).
+        for &(rheo, tchr, w) in &[(8.0_f64, 0.3_f64, 0.7_f64), (12.0, 0.6, 0.2)] {
+            let i = weiss_threshold_current(rheo, tchr, w).unwrap();
+            assert!(
+                (chronaxie_from_strength_duration(rheo, i, w).unwrap() - tchr).abs() <= 1e-9 * tchr,
+                "chronaxie(I(t_chr)) = t_chr"
+            );
+            assert!(
+                (weiss_threshold_current(
+                    rheo,
+                    chronaxie_from_strength_duration(rheo, i, w).unwrap(),
+                    w,
+                )
+                .unwrap()
+                    - i)
+                .abs()
+                    <= 1e-9 * i,
+                "I(chronaxie(I)) = I"
+            );
+        }
+
+        // (c) GUARD: non-positive width or rheobase → None.
+        assert_eq!(chronaxie_from_strength_duration(10.0, 20.0, 0.0), None);
+        assert_eq!(chronaxie_from_strength_duration(0.0, 20.0, 0.5), None);
+        assert_eq!(chronaxie_from_strength_duration(10.0, 20.0, -0.5), None);
     }
 }
