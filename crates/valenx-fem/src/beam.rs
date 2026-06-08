@@ -559,6 +559,25 @@ pub fn axial_rigidity(youngs_modulus: f64, area: f64) -> f64 {
     youngs_modulus * area
 }
 
+/// The **torsional rigidity** `GJ = G·J` (N·m²) — the product of the shear modulus
+/// `shear_modulus` `G` (Pa) and the polar moment of inertia (or torsion constant)
+/// `polar_moment_of_inertia` `J` (m⁴). It is the constant of proportionality between torque
+/// and twist-rate (`T = GJ·dφ/dz`) and the torsional member of the rigidity trio with the
+/// [`axial_rigidity`] (`EA`) and the [`flexural_rigidity`] (`EI`): the stiffness in the
+/// [`beam_angle_of_twist`] (`φ = TL/GJ`) and the [`torsional_strain_energy`] (`U = T²L/2GJ`).
+/// A stiffer or fatter shaft twists less under the same torque. Returns `0` for non-physical
+/// input (`G` or `J` non-positive or non-finite).
+pub fn torsional_rigidity(shear_modulus: f64, polar_moment_of_inertia: f64) -> f64 {
+    if !shear_modulus.is_finite()
+        || shear_modulus <= 0.0
+        || !polar_moment_of_inertia.is_finite()
+        || polar_moment_of_inertia <= 0.0
+    {
+        return 0.0;
+    }
+    shear_modulus * polar_moment_of_inertia
+}
+
 /// The **axial normal stress** `σ = F / A` (Pa) in a prismatic bar of cross-section area
 /// `area` `A` (m²) under an axial force `force` `F` (N) — positive in tension, negative in
 /// compression. It is the axial member of the beam stress family alongside the bending
@@ -2896,6 +2915,48 @@ mod tests {
         assert_eq!(axial_rigidity(200.0e9, 0.0), 0.0);
         assert_eq!(axial_rigidity(f64::NAN, 1.0e-4), 0.0);
         assert_eq!(axial_rigidity(200.0e9, -1.0e-4), 0.0);
+    }
+
+    #[test]
+    fn torsional_rigidity_is_the_torsional_stiffness() {
+        // (a) WORKED: GJ = G·J = 80e9·2e-8 = 1600 N·m².
+        assert!(
+            (torsional_rigidity(80.0e9, 2.0e-8) - 1600.0).abs() <= 1e-9 * 1600.0,
+            "GJ = G·J = 1600 N·m²"
+        );
+
+        // (b) THREAD beam_angle_of_twist (non-tautological): GJ = T·L/φ.
+        let (t, l, g, j) = (100.0_f64, 2.0_f64, 80.0e9_f64, 2.0e-8_f64);
+        assert!(
+            (torsional_rigidity(g, j) - t * l / beam_angle_of_twist(t, l, g, j)).abs()
+                <= 1e-9 * torsional_rigidity(g, j),
+            "GJ = T·L/φ"
+        );
+
+        // (c) THREAD torsional_strain_energy (non-tautological): GJ = T²·L/(2·U).
+        assert!(
+            (torsional_rigidity(g, j) - t * t * l / (2.0 * torsional_strain_energy(t, l, g, j)))
+                .abs()
+                <= 1e-9 * torsional_rigidity(g, j),
+            "GJ = T²·L/(2U)"
+        );
+
+        // (d) LINEARITY: linear in both G and J.
+        let base = torsional_rigidity(80.0e9, 2.0e-8);
+        assert!(
+            (torsional_rigidity(2.0 * 80.0e9, 2.0e-8) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in G"
+        );
+        assert!(
+            (torsional_rigidity(80.0e9, 4.0e-8) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in J"
+        );
+
+        // (e) GUARD: non-positive G or J, or non-finite → 0 sentinel.
+        assert_eq!(torsional_rigidity(0.0, 2.0e-8), 0.0);
+        assert_eq!(torsional_rigidity(80.0e9, 0.0), 0.0);
+        assert_eq!(torsional_rigidity(f64::NAN, 2.0e-8), 0.0);
+        assert_eq!(torsional_rigidity(80.0e9, -2.0e-8), 0.0);
     }
 
     #[test]
