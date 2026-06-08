@@ -848,6 +848,18 @@ impl FlowSolution {
         self.mean_kinetic_energy_density(density) * area
     }
 
+    /// The **peak dynamic pressure** `q = ½·ρ·U_max²` (Pa) — half the density `density`
+    /// `ρ` (kg/m³) times the square of the peak speed `U_max` ([`FlowSolution::max_speed`]).
+    /// It is the reference pressure aerodynamic loads are normalised against — lift and
+    /// drag scale as `q·S·C`, and the pressure coefficient is `Cp = (p − p∞)/q` — and it is
+    /// the kinetic-energy density evaluated at the fastest point. It therefore bounds the
+    /// area-averaged [`FlowSolution::mean_kinetic_energy_density`] from above (equal only
+    /// when the flow is uniform), since `U_max² ≥ ⟨|u|²⟩`.
+    pub fn dynamic_pressure(&self, density: f64) -> f64 {
+        let u_max = self.max_speed();
+        0.5 * density * u_max * u_max
+    }
+
     /// The mean wall-normal velocity gradient `⟨|∂u/∂y|⟩` at the bottom wall
     /// (1/s) — estimated one-sidedly from the no-slip wall (`u = 0`) to the first
     /// cell centre, `2·u_cell(i, 0)/dy`, averaged over the streamwise cells.
@@ -3907,6 +3919,95 @@ mod tests {
             (sol.total_kinetic_energy(2.0 * rho) - 2.0 * sol.total_kinetic_energy(rho)).abs()
                 <= 1e-9 * sol.total_kinetic_energy(rho),
             "linear in ρ"
+        );
+    }
+
+    #[test]
+    fn dynamic_pressure_is_the_peak_half_rho_u_squared() {
+        // Uniform field u = 3, ρ = 1.225 → q = ½ρU² = 0.5·1.225·9 = 5.5125 Pa.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0);
+            }
+        }
+        let uniform = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let rho = 1.225;
+        assert!(
+            (uniform.dynamic_pressure(rho) - 5.5125).abs() <= 1e-9 * 5.5125,
+            "q = ½ρU² = 5.5125"
+        );
+
+        // Threads max_speed: q = ½ρ·U_max².
+        assert!(
+            (uniform.dynamic_pressure(rho) - 0.5 * rho * uniform.max_speed() * uniform.max_speed())
+                .abs()
+                <= 1e-12 * uniform.dynamic_pressure(rho),
+            "q = ½ρ·U_max²"
+        );
+
+        // For a uniform field the peak dynamic pressure equals the mean KE density.
+        assert!(
+            (uniform.dynamic_pressure(rho) - uniform.mean_kinetic_energy_density(rho)).abs()
+                <= 1e-9 * uniform.dynamic_pressure(rho),
+            "uniform → q = ⟨KE⟩"
+        );
+
+        // Linear in density; a 2× faster field gives 4× the q.
+        assert!(
+            (uniform.dynamic_pressure(2.0 * rho) - 2.0 * uniform.dynamic_pressure(rho)).abs()
+                <= 1e-12 * uniform.dynamic_pressure(rho),
+            "linear in ρ"
+        );
+        let mut u6 = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u6.set(fi, j, 6.0);
+            }
+        }
+        let fast = FlowSolution {
+            grid,
+            u: u6,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            (fast.dynamic_pressure(rho) - 4.0 * uniform.dynamic_pressure(rho)).abs()
+                <= 1e-9 * fast.dynamic_pressure(rho),
+            "quadratic in U"
+        );
+
+        // A NON-uniform field (streamwise gradient): q strictly exceeds the mean KE.
+        let mut ug = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                ug.set(fi, j, fi as f64);
+            }
+        }
+        let varied = FlowSolution {
+            grid,
+            u: ug,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(
+            varied.dynamic_pressure(rho) > varied.mean_kinetic_energy_density(rho),
+            "non-uniform → q > ⟨KE⟩ (U_max² > ⟨u²⟩)"
         );
     }
 
