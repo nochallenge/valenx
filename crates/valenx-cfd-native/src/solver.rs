@@ -806,6 +806,17 @@ impl FlowSolution {
         sum / n as f64
     }
 
+    /// The **total kinetic energy** of the flow `∫ ½ρ|u|² dA = ⟨KE density⟩ · A` (J per
+    /// unit depth in 2-D) — the extensive companion to the area-averaged
+    /// [`FlowSolution::mean_kinetic_energy_density`], obtained by multiplying it by the
+    /// domain area `A = Lx·Ly`. With density `density` `ρ` (kg/m³) it is the energy budget
+    /// that decays under viscous dissipation; equivalently `½·ρ·u_rms²·A`. Returns `0` for
+    /// an empty grid.
+    pub fn total_kinetic_energy(&self, density: f64) -> f64 {
+        let area = (self.grid.nx as f64) * self.grid.dx() * (self.grid.ny as f64) * self.grid.dy();
+        self.mean_kinetic_energy_density(density) * area
+    }
+
     /// The mean wall-normal velocity gradient `⟨|∂u/∂y|⟩` at the bottom wall
     /// (1/s) — estimated one-sidedly from the no-slip wall (`u = 0`) to the first
     /// cell centre, `2·u_cell(i, 0)/dy`, averaged over the streamwise cells.
@@ -3652,6 +3663,69 @@ mod tests {
             let mean_ke = sol.mean_kinetic_energy_density(rho);
             assert!((from_rms - mean_ke).abs() <= 1e-9 * mean_ke, "½ρ·u_rms² = ⟨KE⟩");
         }
+    }
+
+    #[test]
+    fn total_kinetic_energy_is_the_extensive_energy() {
+        // Grid 5×4 over 5×8 → domain area = 5·8 = 40; uniform u = 3; ρ = 1.225.
+        let grid = Grid::new(5, 4, 5.0, 8.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 3.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let rho = 1.225;
+        let area = 40.0;
+
+        // Worked: total KE = ½ρU²·A = 0.5·1.225·9·40 = 220.5 J.
+        assert!(
+            (sol.total_kinetic_energy(rho) - 0.5 * rho * 9.0 * area).abs() <= 1e-9 * 220.5,
+            "½ρU²·A = 220.5"
+        );
+
+        // Threads mean_kinetic_energy_density: total = mean·area.
+        assert!(
+            (sol.total_kinetic_energy(rho) - sol.mean_kinetic_energy_density(rho) * area).abs()
+                <= 1e-12 * sol.total_kinetic_energy(rho),
+            "total = ⟨KE⟩·A"
+        );
+
+        // Threads rms_speed (#310): total = ½ρ·u_rms²·A.
+        assert!(
+            (sol.total_kinetic_energy(rho) - 0.5 * rho * sol.rms_speed().powi(2) * area).abs()
+                <= 1e-9 * sol.total_kinetic_energy(rho),
+            "total = ½ρ·u_rms²·A"
+        );
+
+        // Cell-sum cross-check: Σ per-cell KE density · cell area (a different path).
+        let mut s = 0.0;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                s += sol.kinetic_energy_density_at_cell(i, j, rho);
+            }
+        }
+        let from_cells = s * grid.dx() * grid.dy();
+        assert!(
+            (sol.total_kinetic_energy(rho) - from_cells).abs() <= 1e-9 * sol.total_kinetic_energy(rho),
+            "Σ KE_cell·cell_area = total"
+        );
+
+        // Linear in density.
+        assert!(
+            (sol.total_kinetic_energy(2.0 * rho) - 2.0 * sol.total_kinetic_energy(rho)).abs()
+                <= 1e-9 * sol.total_kinetic_energy(rho),
+            "linear in ρ"
+        );
     }
 
     #[test]
