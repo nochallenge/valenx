@@ -224,6 +224,20 @@ pub fn isentropic_stagnation_temperature_ratio(mach: f64, gamma: f64) -> f64 {
     1.0 + 0.5 * (gamma - 1.0) * mach * mach
 }
 
+/// The **Mach number from the isentropic stagnation temperature ratio**
+/// `M = √(2·(T₀/T − 1)/(γ−1))` — the inverse of
+/// [`isentropic_stagnation_temperature_ratio`], recovering the flight Mach number from a
+/// measured total-to-static temperature ratio `t0_over_t` `T₀/T` at heat-capacity ratio
+/// `gamma` `γ` (the total-temperature / Rayleigh-pitot probe reduction). Returns the
+/// at-rest sentinel `0.0` (the inverse of the ratio's `1.0` no-rise identity) for
+/// non-physical input: non-finite `T₀/T` or `γ`, `T₀/T < 1`, or `γ ≤ 1`.
+pub fn mach_from_stagnation_temperature_ratio(t0_over_t: f64, gamma: f64) -> f64 {
+    if !t0_over_t.is_finite() || !gamma.is_finite() || t0_over_t < 1.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    (2.0 * (t0_over_t - 1.0) / (gamma - 1.0)).sqrt()
+}
+
 /// The **isentropic stagnation pressure ratio** `p₀/p = (1 + ((γ−1)/2)·M²)^(γ/(γ−1))`
 /// at Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the exact
 /// compressible total-to-static pressure relation for an adiabatic, reversible
@@ -1483,6 +1497,39 @@ mod tests {
         assert_eq!(isentropic_stagnation_temperature_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_temperature_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_temperature_ratio(2.0, f64::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn mach_from_stagnation_temperature_ratio_inverts_the_ratio() {
+        // (a) ROUND-TRIP threading isentropic_stagnation_temperature_ratio (both directions).
+        for m in [0.5_f64, 1.0, 2.0, 5.0] {
+            let r = isentropic_stagnation_temperature_ratio(m, 1.4);
+            assert!(
+                (mach_from_stagnation_temperature_ratio(r, 1.4) - m).abs() <= 1e-9 * m.max(1e-12),
+                "M(T0/T(M)) = M at M={m}"
+            );
+        }
+        for t in [1.2_f64, 2.0, 6.0] {
+            let mm = mach_from_stagnation_temperature_ratio(t, 1.4);
+            assert!(
+                (isentropic_stagnation_temperature_ratio(mm, 1.4) - t).abs() <= 1e-9 * t,
+                "T0/T(M(T0/T)) = T0/T at T0/T={t}"
+            );
+        }
+
+        // (b) WORKED: T0/T = 1.8, γ = 1.4 → M = √(2·0.8/0.4) = √4 = 2.0.
+        assert!(
+            (mach_from_stagnation_temperature_ratio(1.8, 1.4) - 2.0).abs() <= 1e-9 * 2.0,
+            "M = 2 at T0/T = 1.8"
+        );
+
+        // (c) AT REST: T0/T = 1 → M = 0 (no heating, no flow).
+        assert_eq!(mach_from_stagnation_temperature_ratio(1.0, 1.4), 0.0);
+
+        // (d) GUARD: non-physical → the 0.0 at-rest sentinel.
+        assert_eq!(mach_from_stagnation_temperature_ratio(0.5, 1.4), 0.0); // T0/T < 1
+        assert_eq!(mach_from_stagnation_temperature_ratio(1.8, 1.0), 0.0); // γ ≤ 1
+        assert_eq!(mach_from_stagnation_temperature_ratio(f64::NAN, 1.4), 0.0);
     }
 
     #[test]
