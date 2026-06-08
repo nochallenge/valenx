@@ -498,6 +498,35 @@ pub fn semi_latus_rectum_from_elements(
     Ok(semi_major_axis * (1.0 - eccentricity * eccentricity))
 }
 
+/// The **specific orbital angular momentum from its orbital elements**
+/// `h = √(μ·a·(1 − e²)) = √(μ·p)` (m²/s) — the conserved angular momentum per unit mass of
+/// the two-body orbit (twice the areal velocity, Kepler's second law), where `μ` is the
+/// Earth gravitational parameter, `semi_major_axis` `a` (m) is the orbit size, and
+/// `eccentricity` `e` (`0 ≤ e < 1` for a bound ellipse) its shape. Equivalently
+/// `h = √(μ·p)` with `p` the [`semi_latus_rectum_from_elements`]; at the apsides it is
+/// `h = r·v` (position and velocity are perpendicular there), and for a circle (`e = 0`)
+/// it reduces to the [`circular_angular_momentum`] `√(μ·a)`.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `a` is non-finite or non-positive, or `e`
+/// is non-finite or outside the bound-ellipse range `0 ≤ e < 1`.
+pub fn specific_angular_momentum_from_elements(
+    semi_major_axis: f64,
+    eccentricity: f64,
+) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+        || !eccentricity.is_finite()
+        || !(0.0..1.0).contains(&eccentricity)
+    {
+        return Err(AstroError::NonPhysicalState(
+            "specific_angular_momentum_from_elements requires semi_major_axis > 0 and 0 <= eccentricity < 1",
+        ));
+    }
+    Ok((MU_EARTH * semi_major_axis * (1.0 - eccentricity * eccentricity)).sqrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -591,6 +620,48 @@ mod tests {
         assert!(semi_latus_rectum_from_elements(7.0e6, 1.0).is_err()); // e ≥ 1
         assert!(semi_latus_rectum_from_elements(7.0e6, -0.1).is_err()); // e < 0
         assert!(semi_latus_rectum_from_elements(f64::NAN, 0.1).is_err());
+    }
+
+    #[test]
+    fn specific_angular_momentum_from_elements_is_sqrt_mu_p() {
+        // (a) WORKED: h = √(μ·a·(1−e²)). a = 7e6, e = 0.1.
+        let h = specific_angular_momentum_from_elements(7.0e6, 0.1).unwrap();
+        let expected = (MU_EARTH * 7.0e6 * (1.0 - 0.01)).sqrt();
+        assert!((h - expected).abs() <= 1e-9 * h, "h = √(μ·a(1−e²))");
+
+        // (b) CROSS-CHECK threading semi_latus_rectum_from_elements (#384): h² = μ·p.
+        for &(a, e) in &[(7.0e6_f64, 0.1_f64), (4.2e7, 0.0), (1.0e7, 0.3)] {
+            let h = specific_angular_momentum_from_elements(a, e).unwrap();
+            let p = semi_latus_rectum_from_elements(a, e).unwrap();
+            assert!((h * h - MU_EARTH * p).abs() <= 1e-9 * (MU_EARTH * p), "h² = μ·p");
+        }
+
+        // (c) CIRCULAR cross-check threading circular_angular_momentum (#348): at e = 0,
+        // h = √(μ·a) = circular_angular_momentum(a).
+        for &a in &[7.0e6_f64, 4.2e7, 2.0e7] {
+            assert!(
+                (specific_angular_momentum_from_elements(a, 0.0).unwrap()
+                    - circular_angular_momentum(a).unwrap())
+                .abs()
+                    <= 1e-9 * circular_angular_momentum(a).unwrap(),
+                "h(a, 0) = circular_angular_momentum(a)"
+            );
+        }
+
+        // (d) PERIAPSIS cross-check threading orbital_speed: h = r_p · v_p (position and
+        // velocity are perpendicular at the apsis), with r_p = a(1−e).
+        let (a, e) = (1.0e7_f64, 0.3_f64);
+        let r_p = a * (1.0 - e);
+        let h = specific_angular_momentum_from_elements(a, e).unwrap();
+        assert!(
+            (h - r_p * orbital_speed(r_p, a).unwrap()).abs() <= 1e-9 * h,
+            "h = r_p · v_p at periapsis"
+        );
+
+        // (e) Err on non-physical input.
+        assert!(specific_angular_momentum_from_elements(-1.0, 0.1).is_err());
+        assert!(specific_angular_momentum_from_elements(7.0e6, 1.0).is_err());
+        assert!(specific_angular_momentum_from_elements(f64::NAN, 0.1).is_err());
     }
 
     #[test]
