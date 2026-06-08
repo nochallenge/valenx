@@ -1543,6 +1543,27 @@ impl FlowSolution {
         worst
     }
 
+    /// The **area-averaged divergence** `⟨∇·u⟩ = (1/N)·Σ ∇·u` (1/s) over all `nx·ny` cells —
+    /// the mean continuity residual. For an incompressible flow `∇·u = 0` pointwise, so this
+    /// is `≈ 0` for a well-converged solution and grows as the discrete continuity constraint
+    /// is violated: it is the signed-average companion to the peak
+    /// [`FlowSolution::max_divergence`], summing the per-cell
+    /// [`FlowSolution::divergence_at_cell`]. Returns `0` for an empty grid.
+    pub fn mean_divergence(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        let n = nx * ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut sum = 0.0;
+        for j in 0..ny {
+            for i in 0..nx {
+                sum += self.divergence_at_cell(i, j);
+            }
+        }
+        sum / n as f64
+    }
+
     /// The **vorticity (shear-layer) thickness** `δ_ω = (u_max − u_min)/max|∂u/∂y|`
     /// (m) — the canonical mixing-layer length scale: the streamwise-velocity span
     /// across the flow divided by the steepest wall-normal velocity gradient. Where
@@ -5761,6 +5782,70 @@ mod tests {
             (contracting.max_divergence() - a).abs() < 1e-9,
             "|∇·u| is sign-blind"
         );
+    }
+
+    #[test]
+    fn mean_divergence_is_the_area_averaged_continuity_residual() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+
+        // (a) SOLENOIDAL: a pure horizontal shear u(y) = γ·y, v = 0 is divergence-free
+        // (∂u/∂x = 0 along each row, ∂v/∂y = 0), so the mean residual is 0.
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * grid.dy();
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(shear.mean_divergence().abs() < 1e-9, "solenoidal → ⟨∇·u⟩ = 0");
+
+        // (b) UNIFORM EXPANSION: u(x) = c·x, v = 0 → ∂u/∂x = c in every cell, so ⟨∇·u⟩ = c;
+        // and (c) for this CONSTANT-divergence field the mean equals the peak max_divergence
+        // (threaded, non-tautological).
+        let c = 0.3_f64;
+        let mut ue = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                ue.set(i, j, c * (i as f64) * grid.dx());
+            }
+        }
+        let expanding = FlowSolution {
+            grid,
+            u: ue,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((expanding.mean_divergence() - c).abs() <= 1e-9 * c, "⟨∇·u⟩ = c");
+        assert!(
+            (expanding.mean_divergence() - expanding.max_divergence()).abs()
+                <= 1e-9 * expanding.max_divergence(),
+            "constant divergence: mean = peak"
+        );
+
+        // (d) ZERO-FLOW: a quiescent field has zero divergence.
+        let zero = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(zero.mean_divergence(), 0.0);
     }
 
     #[test]
