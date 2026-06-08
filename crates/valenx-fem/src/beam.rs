@@ -479,6 +479,21 @@ pub fn polar_section_modulus(polar_moment: f64, outer_radius: f64) -> f64 {
     polar_moment / outer_radius
 }
 
+/// The **torsional moment (torque) capacity** `T = τ·Z_p` (N·m) — the torque a shaft
+/// carries when its outer surface reaches the shear stress `shear_stress` `τ` (Pa),
+/// given its [`polar_section_modulus`] `polar_modulus` `Z_p` (m³). It is the inverse of
+/// the torsion formula `τ_max = T/Z_p` ([`torsional_shear_stress`] at the outer radius):
+/// feeding the *allowable* shear stress gives the section's allowable torque, and feeding
+/// the *yield* shear stress gives the torque at first yield. The torsion analogue of the
+/// bending [`bending_moment_capacity`]. Linear in both the stress and the polar modulus.
+/// Returns `0` for non-physical input (non-finite, or a non-positive polar modulus).
+pub fn torsional_moment_capacity(shear_stress: f64, polar_modulus: f64) -> f64 {
+    if !shear_stress.is_finite() || !polar_modulus.is_finite() || polar_modulus <= 0.0 {
+        return 0.0;
+    }
+    shear_stress * polar_modulus
+}
+
 /// The analytic **axial extension** `δ = F·L/(E·A)` (m) of a prismatic bar in
 /// pure tension or compression — a member of length `length` `L` (m), Young's
 /// modulus `youngs_modulus` `E` (Pa) and cross-section area `area` `A` (m²) under
@@ -2955,6 +2970,58 @@ mod tests {
         assert_eq!(torsional_shear_stress(f64::NAN, 0.05, 1.0e-6), 0.0);
         assert_eq!(torsional_shear_stress(1000.0, 0.05, 0.0), 0.0);
         assert_eq!(torsional_shear_stress(1000.0, 0.05, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn torsional_moment_capacity_inverts_the_torsion_formula() {
+        // (a) WORKED: T = τ·Z_p = 5.0e7·2.0e-5 = 1000 N·m.
+        assert!(
+            (torsional_moment_capacity(5.0e7, 2.0e-5) - 1000.0).abs() <= 1e-9 * 1000.0,
+            "T = τ·Z_p = 1000 N·m"
+        );
+
+        // (b) ROUND-TRIP threading torsional_shear_stress + polar_section_modulus
+        // (non-tautological): at the outer radius τ = T·r/J = T/Z_p, so τ·Z_p = T.
+        for &(t, r, j) in &[(1000.0_f64, 0.05_f64, 1.0e-6_f64), (450.0, 0.03, 4.2e-7)] {
+            let zp = polar_section_modulus(j, r);
+            let tau = torsional_shear_stress(t, r, j);
+            assert!(
+                (torsional_moment_capacity(tau, zp) - t).abs() <= 1e-9 * t,
+                "τ·Z_p recovers T for (T,r,J)=({t},{r},{j})"
+            );
+        }
+
+        // (c) FIRST-YIELD round-trip threading all three: a shaft's yield torque
+        // T_y = τ_y·Z_p maps back to exactly τ_y at the outer surface.
+        let (ty, r, j) = (120.0e6_f64, 0.05_f64, 1.0e-6_f64);
+        let zp = polar_section_modulus(j, r);
+        let ty_torque = torsional_moment_capacity(ty, zp);
+        assert!(
+            (torsional_shear_stress(ty_torque, r, j) - ty).abs() <= 1e-9 * ty,
+            "T_y = τ_y·Z_p maps back to τ_y"
+        );
+
+        // (d) LINEARITY + SIGN: linear in stress and polar modulus; a negative shear
+        // stress yields a negative (reversed) torque.
+        let base = torsional_moment_capacity(5.0e7, 2.0e-5);
+        assert!(
+            (torsional_moment_capacity(2.0 * 5.0e7, 2.0e-5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in shear stress"
+        );
+        assert!(
+            (torsional_moment_capacity(5.0e7, 4.0e-5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in polar modulus"
+        );
+        assert!(
+            torsional_moment_capacity(-5.0e7, 2.0e-5) < 0.0,
+            "negative shear stress → negative torque"
+        );
+
+        // (e) GUARD: non-positive polar modulus or non-finite input → 0 sentinel.
+        assert_eq!(torsional_moment_capacity(5.0e7, 0.0), 0.0);
+        assert_eq!(torsional_moment_capacity(5.0e7, -1.0e-5), 0.0);
+        assert_eq!(torsional_moment_capacity(f64::NAN, 2.0e-5), 0.0);
+        assert_eq!(torsional_moment_capacity(5.0e7, f64::NAN), 0.0);
     }
 
     #[test]
