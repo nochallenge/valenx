@@ -137,6 +137,18 @@ pub fn turbulent_local_cf(re_x: f64) -> f64 {
     0.0592 * re_x.powf(-0.2)
 }
 
+/// The **turbulent momentum-thickness ratio** `θ/x = (7/72)·(δ/x) = 0.37·(7/72)·Re_x⁻¹ᐟ⁵`
+/// (dimensionless) at local length Reynolds number `re_x` `Re_x = U·x/ν` — the
+/// momentum-deficit thickness of the one-seventh-power-law turbulent boundary layer, the
+/// turbulent companion to the laminar [`blasius_momentum_thickness_ratio`]. For the
+/// `u/U = (y/δ)¹ᐟ⁷` profile the momentum thickness is `θ = 7δ/72`, so it is a fixed
+/// `7/72 ≈ 0.097` fraction of the full [`turbulent_boundary_layer_thickness_ratio`]. It is
+/// the thickness that sets the trailing-edge drag `D = ρU²θ`.
+pub fn turbulent_momentum_thickness_ratio(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    0.37 * (7.0 / 72.0) * re_x.powf(-0.2)
+}
+
 /// The laminar (Blasius) flat-plate skin-friction drag coefficient at a
 /// length Reynolds number `re_l` — `C_F = 1.328·Re_L⁻¹ᐟ²`.
 pub fn blasius_flat_plate_cf(re_l: f64) -> f64 {
@@ -659,6 +671,47 @@ mod tests {
             "near-wall-model sphere Cd {} should be a plausible \
              sphere drag",
             after.cd
+        );
+    }
+
+    #[test]
+    fn turbulent_momentum_thickness_ratio_is_seven_seventysecondths_of_delta() {
+        // Worked: θ/x = 0.37·(7/72)·Re⁻⁰·².
+        let expected = 0.37 * (7.0 / 72.0) * (1.0e7_f64).powf(-0.2);
+        assert!(
+            (turbulent_momentum_thickness_ratio(1.0e7) - expected).abs() <= 1e-12 * expected,
+            "θ/x = 0.37·(7/72)·Re⁻¹ᐟ⁵"
+        );
+
+        for &re in &[1.0e6, 5.0e6, 1.0e7] {
+            // Threads turbulent_boundary_layer_thickness_ratio (#343): θ = (7/72)·δ.
+            assert!(
+                (turbulent_momentum_thickness_ratio(re)
+                    - (7.0 / 72.0) * turbulent_boundary_layer_thickness_ratio(re))
+                .abs()
+                    <= 1e-12 * turbulent_momentum_thickness_ratio(re),
+                "θ = (7/72)·δ at Re={re}"
+            );
+            // The momentum thickness is always a fraction of the full thickness.
+            assert!(
+                turbulent_momentum_thickness_ratio(re)
+                    < turbulent_boundary_layer_thickness_ratio(re),
+                "θ < δ at Re={re}"
+            );
+        }
+
+        // Re⁻⁰·² scaling and the Re < 1 clamp.
+        assert!(
+            (turbulent_momentum_thickness_ratio(1.0e2)
+                - 10.0 * turbulent_momentum_thickness_ratio(1.0e7))
+            .abs()
+                / turbulent_momentum_thickness_ratio(1.0e2)
+                < 1e-9,
+            "Re⁻¹ᐟ⁵ scaling"
+        );
+        assert!(
+            (turbulent_momentum_thickness_ratio(0.5) - 0.37 * (7.0 / 72.0)).abs() < 1e-12,
+            "clamped to Re = 1"
         );
     }
 
