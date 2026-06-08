@@ -200,6 +200,33 @@ pub fn nmda_mg_block_half_voltage(mg_conc_mm: f64) -> f64 {
     (mg_conc_mm / 3.57).ln() / 0.062
 }
 
+/// The **NMDA Mg²⁺ block voltage** `V = ln( (f/(1−f)) · [Mg²⁺]/3.57 ) / 0.062` (mV) —
+/// the general inverse of the Jahr–Stevens block [`nmda_mg_block`]: the membrane
+/// potential at which the *unblocked* fraction reaches an arbitrary target
+/// `unblock_fraction` `B = f ∈ (0, 1)`, for extracellular magnesium `mg_conc_mm`
+/// `[Mg²⁺]` (mM). It generalises [`nmda_mg_block_half_voltage`] (the `f = 0.5` case,
+/// where `f/(1−f) = 1` collapses the formula to `ln([Mg²⁺]/3.57)/0.062`) to any
+/// unblock level — it answers "how depolarised must the cell be for the NMDA
+/// receptor to be `f`-relieved?".
+///
+/// `V` rises with both the demanded unblock fraction (more relief needs more
+/// depolarisation) and the magnesium concentration (more block to clear). As
+/// `f → 0` the channel is only fully blocked at `V → −∞`, and as `f → 1` full
+/// relief needs `V → +∞`; both limits are non-physical. Returns `NaN` for a
+/// fraction outside the open interval (`f ≤ 0` or `f ≥ 1`, or non-finite) or for
+/// non-physical magnesium (non-finite or non-positive `[Mg²⁺]`).
+pub fn nmda_mg_block_voltage(unblock_fraction: f64, mg_conc_mm: f64) -> f64 {
+    if !unblock_fraction.is_finite()
+        || unblock_fraction <= 0.0
+        || unblock_fraction >= 1.0
+        || !mg_conc_mm.is_finite()
+        || mg_conc_mm <= 0.0
+    {
+        return f64::NAN;
+    }
+    ((unblock_fraction / (1.0 - unblock_fraction)) * (mg_conc_mm / 3.57)).ln() / 0.062
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,6 +253,60 @@ mod tests {
         assert!(nmda_mg_block_half_voltage(0.0).is_nan());
         assert!(nmda_mg_block_half_voltage(-1.0).is_nan());
         assert!(nmda_mg_block_half_voltage(f64::NAN).is_nan());
+    }
+
+    #[test]
+    fn nmda_mg_block_voltage_inverts_the_block() {
+        // (a) ROUND-TRIP (non-tautological): feeding V(f) back into the forward
+        // block recovers the demanded unblock fraction, across (f, [Mg]) pairs.
+        for &(f, mg) in &[(0.2_f64, 1.0_f64), (0.5, 1.0), (0.7, 2.0), (0.9, 0.5)] {
+            let v = nmda_mg_block_voltage(f, mg);
+            assert!(
+                (nmda_mg_block(v, mg) - f).abs() < 1e-9,
+                "B(V(f)) = f at f={f}, [Mg]={mg}"
+            );
+        }
+
+        // (b) SPECIALIZATION: at f = 0.5 it collapses to the half-block voltage —
+        // cross-checks the existing nmda_mg_block_half_voltage.
+        for &mg in &[0.5_f64, 1.0, 3.57] {
+            assert!(
+                (nmda_mg_block_voltage(0.5, mg) - nmda_mg_block_half_voltage(mg)).abs() < 1e-12,
+                "V(0.5, [Mg]) = V½([Mg]) at [Mg]={mg}"
+            );
+        }
+
+        // (c) WORKED INDEPENDENT: at [Mg] = 3.57 the factor [Mg]/3.57 = 1, so
+        // V = ln(f/(1−f))/0.062. f = 0.5 → ln(1)/0.062 = 0 mV; f = e/(1+e) →
+        // f/(1−f) = e → V = ln(e)/0.062 = 1/0.062 ≈ 16.129 mV, both direct.
+        assert!((nmda_mg_block_voltage(0.5, 3.57) - 0.0).abs() < 1e-12, "V(0.5, 3.57) = 0");
+        let f_e = std::f64::consts::E / (1.0 + std::f64::consts::E);
+        let v_e = nmda_mg_block_voltage(f_e, 3.57);
+        assert!(
+            (v_e - 1.0 / 0.062).abs() / (1.0 / 0.062) < 1e-9,
+            "V(e/(1+e), 3.57) = 1/0.062 ≈ 16.129 mV, got {v_e}"
+        );
+
+        // (d) MONOTONICITY: a higher demanded unblock fraction needs more
+        // depolarisation, and so does more magnesium at the same fraction.
+        assert!(
+            nmda_mg_block_voltage(0.7, 1.0) > nmda_mg_block_voltage(0.3, 1.0),
+            "more unblock ⇒ more depolarised"
+        );
+        assert!(
+            nmda_mg_block_voltage(0.5, 2.0) > nmda_mg_block_voltage(0.5, 1.0),
+            "more [Mg²⁺] ⇒ more depolarised"
+        );
+
+        // (e) NaN guards: fraction must be strictly in (0, 1) and [Mg²⁺] > 0.
+        assert!(nmda_mg_block_voltage(0.0, 1.0).is_nan());
+        assert!(nmda_mg_block_voltage(1.0, 1.0).is_nan());
+        assert!(nmda_mg_block_voltage(-0.1, 1.0).is_nan());
+        assert!(nmda_mg_block_voltage(1.5, 1.0).is_nan());
+        assert!(nmda_mg_block_voltage(f64::NAN, 1.0).is_nan());
+        assert!(nmda_mg_block_voltage(0.5, 0.0).is_nan());
+        assert!(nmda_mg_block_voltage(0.5, -1.0).is_nan());
+        assert!(nmda_mg_block_voltage(0.5, f64::NAN).is_nan());
     }
 
     #[test]
