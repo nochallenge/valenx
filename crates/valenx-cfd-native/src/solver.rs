@@ -1564,6 +1564,28 @@ impl FlowSolution {
         sum / n as f64
     }
 
+    /// The **root-mean-square divergence** `√(⟨(∇·u)²⟩)` (1/s) over all `nx·ny` cells — the
+    /// L2 continuity residual. Unlike the signed [`FlowSolution::mean_divergence`] (whose
+    /// positive and negative cells cancel), the RMS sums squares, so it never cancels and is
+    /// the standard convergence metric for how well the discrete continuity constraint
+    /// `∇·u = 0` is satisfied. The square-summing companion to the signed mean and the peak
+    /// [`FlowSolution::max_divergence`]; `0` for an empty grid.
+    pub fn rms_divergence(&self) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        let n = nx * ny;
+        if n == 0 {
+            return 0.0;
+        }
+        let mut sum_sq = 0.0;
+        for j in 0..ny {
+            for i in 0..nx {
+                let d = self.divergence_at_cell(i, j);
+                sum_sq += d * d;
+            }
+        }
+        (sum_sq / n as f64).sqrt()
+    }
+
     /// The **vorticity (shear-layer) thickness** `δ_ω = (u_max − u_min)/max|∂u/∂y|`
     /// (m) — the canonical mixing-layer length scale: the streamwise-velocity span
     /// across the flow divided by the steepest wall-normal velocity gradient. Where
@@ -5846,6 +5868,100 @@ mod tests {
             converged: true,
         };
         assert_eq!(zero.mean_divergence(), 0.0);
+    }
+
+    #[test]
+    fn rms_divergence_is_the_l2_continuity_residual() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+
+        // (a) SOLENOIDAL: a pure shear u(y) = γ·y, v = 0 is divergence-free → rms = 0.
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * grid.dy();
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(shear.rms_divergence().abs() < 1e-9, "solenoidal → rms = 0");
+
+        // (b) UNIFORM EXPANSION: u(x) = c·x, v = 0 → ∇·u = c everywhere → rms = c; and for
+        // this CONSTANT-divergence field rms == mean == max (threads both, non-tautological).
+        let c = 0.3_f64;
+        let mut ue = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                ue.set(i, j, c * (i as f64) * grid.dx());
+            }
+        }
+        let expanding = FlowSolution {
+            grid,
+            u: ue,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((expanding.rms_divergence() - c).abs() <= 1e-9 * c, "rms = c");
+        assert!(
+            (expanding.rms_divergence() - expanding.mean_divergence()).abs() <= 1e-9 * c,
+            "constant field: rms = mean"
+        );
+        assert!(
+            (expanding.rms_divergence() - expanding.max_divergence()).abs() <= 1e-9 * c,
+            "constant field: rms = peak"
+        );
+
+        // (c) SIGN-VARYING "tent": u rises then falls in i (faces c·[0,1,2,3,2,1]) so per row
+        // ∇·u = [c,c,c,−c,−c]. The signed mean cancels to c/5 but the rms = c — the RMS catches
+        // the local violations the mean misses.
+        let mut ut = grid.u_field();
+        for j in 0..grid.ny {
+            for i in 0..=grid.nx {
+                let f = if i <= 3 { i } else { 6 - i };
+                ut.set(i, j, c * (f as f64) * grid.dx());
+            }
+        }
+        let tent = FlowSolution {
+            grid,
+            u: ut,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!((tent.rms_divergence() - c).abs() <= 1e-9 * c, "tent rms = c");
+        assert!(
+            (tent.mean_divergence() - c / 5.0).abs() <= 1e-9 * (c / 5.0),
+            "tent mean = c/5 (cancellation)"
+        );
+        assert!(
+            tent.rms_divergence() > tent.mean_divergence().abs(),
+            "rms > |mean| when divergence changes sign"
+        );
+
+        // (d) ZERO-FLOW: a quiescent field has zero divergence.
+        let zero = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(zero.rms_divergence(), 0.0);
     }
 
     #[test]
