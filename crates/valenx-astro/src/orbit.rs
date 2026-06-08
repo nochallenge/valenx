@@ -237,6 +237,27 @@ pub fn specific_orbital_energy(semi_major_axis: f64) -> Result<f64, AstroError> 
     Ok(-MU_EARTH / (2.0 * semi_major_axis))
 }
 
+/// The **specific orbital energy from a state** `ε = ½·v² − μ/r` (J/kg) — the
+/// instantaneous total energy per unit mass (kinetic plus gravitational potential) of a
+/// body moving at speed `speed` `v` (m/s) at radius `radius` `r` (m) about Earth. This is
+/// the vis-viva energy that fixes the orbit from a state vector: it is conserved along the
+/// trajectory and equal to [`specific_orbital_energy`]`(a)` `= −μ/(2a)`. Its sign
+/// classifies the orbit — `ε < 0` bound (elliptical), `ε = 0` parabolic (exactly escape
+/// speed), `ε > 0` unbound (hyperbolic).
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `speed` is non-finite, or `radius` is
+/// non-finite or non-positive.
+pub fn specific_orbital_energy_from_state(speed: f64, radius: f64) -> Result<f64, AstroError> {
+    if !speed.is_finite() || !radius.is_finite() || radius <= 0.0 {
+        return Err(AstroError::NonPhysicalState(
+            "specific_orbital_energy_from_state requires finite speed and radius > 0",
+        ));
+    }
+    Ok(0.5 * speed * speed - MU_EARTH / radius)
+}
+
 /// The **semi-major axis from the orbital period** `a = (μ·T² / (4π²))^(1/3)` (m) —
 /// Kepler's third law inverted: given an observed period `period` `T` (s) it recovers
 /// the size of the orbit about Earth. It is the inverse of [`orbital_period`] and the
@@ -383,6 +404,49 @@ mod tests {
         assert!(semi_major_axis_from_period(0.0).is_err());
         assert!(semi_major_axis_from_period(-1.0).is_err());
         assert!(semi_major_axis_from_period(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn specific_orbital_energy_from_state_is_the_vis_viva_energy() {
+        // Energy conservation: ½v² − μ/r at the vis-viva speed equals −μ/2a (the orbit's
+        // own energy), threading orbital_speed + specific_orbital_energy.
+        for &(r, a) in &[
+            (7_000_000.0_f64, 7_000_000.0_f64),
+            (6_800_000.0, 8_000_000.0),
+            (4.2164e7, 4.2164e7),
+        ] {
+            let from_state =
+                specific_orbital_energy_from_state(orbital_speed(r, a).unwrap(), r).unwrap();
+            let from_a = specific_orbital_energy(a).unwrap();
+            assert!(
+                (from_state - from_a).abs() <= 1e-9 * from_a.abs(),
+                "½v² − μ/r = −μ/2a (vis-viva invariant)"
+            );
+        }
+
+        // At escape speed the total energy is exactly zero (parabolic).
+        let e_esc =
+            specific_orbital_energy_from_state(escape_speed(R_EARTH).unwrap(), R_EARTH).unwrap();
+        assert!(e_esc.abs() < 1.0, "escape speed → ε = 0, got {e_esc}");
+
+        // Sign classifies the orbit: bound at circular speed, unbound above escape.
+        assert!(
+            specific_orbital_energy_from_state(circular_speed(R_EARTH).unwrap(), R_EARTH).unwrap()
+                < 0.0,
+            "circular orbit is bound (ε < 0)"
+        );
+        assert!(
+            specific_orbital_energy_from_state(escape_speed(R_EARTH).unwrap() * 1.5, R_EARTH)
+                .unwrap()
+                > 0.0,
+            "hyperbolic is unbound (ε > 0)"
+        );
+
+        // Err on non-physical radius or speed.
+        assert!(specific_orbital_energy_from_state(7000.0, 0.0).is_err());
+        assert!(specific_orbital_energy_from_state(7000.0, -1.0).is_err());
+        assert!(specific_orbital_energy_from_state(7000.0, f64::NAN).is_err());
+        assert!(specific_orbital_energy_from_state(f64::NAN, 7.0e6).is_err());
     }
 
     #[test]
