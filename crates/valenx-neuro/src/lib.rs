@@ -64,7 +64,7 @@ pub use cable_theory::{
 pub use chord_conductance::{chord_conductance_potential_mv, ConductanceChannel};
 pub use conduction::{
     conduction_delay_s, conduction_distance_m, conduction_velocity_at_crossover,
-    myelinated_conduction_velocity,
+    conduction_velocity_from_latency, myelinated_conduction_velocity,
     myelination_crossover_diameter, unmyelinated_conduction_velocity, HURSH_FACTOR_M_PER_S_PER_UM,
 };
 pub use current_distance::{activation_radius, fit_constant, threshold_current};
