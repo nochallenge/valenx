@@ -91,7 +91,7 @@ pub use safety::{charge_density, is_safe, max_safe_charge_per_phase, shannon_k};
 pub use steering::ContactArray;
 pub use strength_duration::{
     chronaxie, lapicque_threshold, minimum_stimulating_charge, rheobase, threshold_amplitude,
-    weiss_threshold_charge,
+    weiss_threshold_charge, weiss_threshold_current,
 };
 pub use synapse::{
     alpha_synapse_conductance, alpha_synapse_conductance_integral,

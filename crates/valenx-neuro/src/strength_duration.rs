@@ -82,6 +82,21 @@ pub fn weiss_threshold_charge(rheobase: f64, chronaxie_ms: f64, width_ms: f64) -
     }
 }
 
+/// The **Weiss strength–duration threshold current** `I_th(w) = I_rh·(1 + chronaxie/w)`
+/// (µA/cm²) at pulse width `width_ms` `w` (ms) — the current that just reaches threshold
+/// for a rectangular pulse, in the Weiss (linear-charge) model. It is the
+/// [`weiss_threshold_charge`] divided by the width (`I = Q/w`), so it falls from a `1/w`
+/// divergence at short pulses to the `rheobase` `I_rh` asymptote for long ones; at the
+/// `chronaxie` it is exactly twice the rheobase (the definition of chronaxie). `None` for
+/// a non-positive width.
+pub fn weiss_threshold_current(rheobase: f64, chronaxie_ms: f64, width_ms: f64) -> Option<f64> {
+    if width_ms > 0.0 {
+        Some(rheobase * (1.0 + chronaxie_ms / width_ms))
+    } else {
+        None
+    }
+}
+
 /// The **minimum stimulating charge** `Q_min = I_rh·chronaxie` (µA·ms/cm²) — the
 /// `w → 0` intercept of the Weiss charge–duration line [`weiss_threshold_charge`],
 /// from the `rheobase` `I_rh` and `chronaxie_ms`. It is the *charge-axis* asymptote
@@ -126,6 +141,41 @@ mod tests {
     fn rheobase_is_finite_and_positive() {
         let rh = rheobase();
         assert!(rh > 0.0 && rh.is_finite() && rh < 1.0e4, "rheobase plausible; got {rh}");
+    }
+
+    #[test]
+    fn weiss_threshold_current_completes_the_weiss_model() {
+        // Threads weiss_threshold_charge: I = Q / width (charge = current·width).
+        for &(r, c, w) in &[(1.0_f64, 0.3_f64, 0.1_f64), (2.5, 0.5, 1.0), (0.8, 0.2, 0.05)] {
+            let i = weiss_threshold_current(r, c, w).unwrap();
+            let q = weiss_threshold_charge(r, c, w).unwrap();
+            assert!((i - q / w).abs() <= 1e-12 * i, "I = Q/w");
+        }
+
+        // Chronaxie definition: at width = chronaxie the threshold is exactly 2·rheobase.
+        assert!(
+            (weiss_threshold_current(1.4, 0.3, 0.3).unwrap() - 2.0 * 1.4).abs()
+                <= 1e-12 * (2.0 * 1.4),
+            "I(chronaxie) = 2·rheobase"
+        );
+
+        // Long pulse → rheobase asymptote; threshold exceeds rheobase for finite width.
+        assert!(
+            (weiss_threshold_current(1.4, 0.3, 1.0e6).unwrap() - 1.4).abs() / 1.4 < 1e-3,
+            "long pulse → rheobase"
+        );
+        assert!(weiss_threshold_current(1.4, 0.3, 0.5).unwrap() > 1.4, "I > rheobase for finite w");
+
+        // Monotonic decreasing in width (shorter pulse needs more current).
+        assert!(
+            weiss_threshold_current(1.4, 0.3, 0.5).unwrap()
+                > weiss_threshold_current(1.4, 0.3, 1.0).unwrap(),
+            "shorter pulse → higher threshold"
+        );
+
+        // None for a non-positive width (mirrors weiss_threshold_charge).
+        assert!(weiss_threshold_current(1.4, 0.3, 0.0).is_none());
+        assert!(weiss_threshold_current(1.4, 0.3, -0.5).is_none());
     }
 
     #[test]
