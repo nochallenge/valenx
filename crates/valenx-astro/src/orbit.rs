@@ -470,6 +470,34 @@ pub fn semi_major_axis_from_apsides(
     Ok((apoapsis_radius + periapsis_radius) / 2.0)
 }
 
+/// The **semi-latus rectum of a conic from its orbital elements** `p = a·(1 − e²)`
+/// (m) — the conic parameter that sets the orbit equation `r = p / (1 + e·cosθ)` and
+/// the specific angular momentum `h = √(μ·p)`. `semi_major_axis` `a` (m) is the orbit
+/// size and `eccentricity` `e` (`0 ≤ e < 1` for a bound ellipse) its shape. It is the
+/// orbital radius at the ends of the latus rectum (true anomaly `±90°`) and lies between
+/// the apsides (`r_p ≤ p ≤ r_a`); for a circle (`e = 0`) it is just `a`, and it equals
+/// the harmonic mean of the apsis radii, `2·r_a·r_p / (r_a + r_p)`.
+///
+/// # Errors
+///
+/// Returns [`AstroError::NonPhysicalState`] if `a` is non-finite or non-positive, or `e`
+/// is non-finite or outside the bound-ellipse range `0 ≤ e < 1`.
+pub fn semi_latus_rectum_from_elements(
+    semi_major_axis: f64,
+    eccentricity: f64,
+) -> Result<f64, AstroError> {
+    if !semi_major_axis.is_finite()
+        || semi_major_axis <= 0.0
+        || !eccentricity.is_finite()
+        || !(0.0..1.0).contains(&eccentricity)
+    {
+        return Err(AstroError::NonPhysicalState(
+            "semi_latus_rectum_from_elements requires semi_major_axis > 0 and 0 <= eccentricity < 1",
+        ));
+    }
+    Ok(semi_major_axis * (1.0 - eccentricity * eccentricity))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -534,6 +562,35 @@ mod tests {
         assert!(semi_major_axis_from_apsides(7.0e6, 0.0).is_err());
         assert!(semi_major_axis_from_apsides(7.0e6, 8.0e6).is_err()); // apoapsis < periapsis
         assert!(semi_major_axis_from_apsides(f64::NAN, 7.0e6).is_err());
+    }
+
+    #[test]
+    fn semi_latus_rectum_from_elements_is_the_conic_parameter() {
+        // (a) WORKED: a = 7e6, e = 0.1 → p = 7e6·(1 − 0.01) = 6.93e6.
+        let p = semi_latus_rectum_from_elements(7.0e6, 0.1).unwrap();
+        assert!((p - 6.93e6).abs() <= 1e-9 * p, "p = a(1−e²) = 6.93e6");
+
+        // (b) CIRCLE: e = 0 → p = a.
+        let pc = semi_latus_rectum_from_elements(7.0e6, 0.0).unwrap();
+        assert!((pc - 7.0e6).abs() <= 1e-9 * 7.0e6, "circle → p = a");
+
+        // (c) HARMONIC-MEAN cross-check threading #372 + #378 (non-tautological): for
+        // apsides (r_a, r_p), p = a(1−e²) equals 2·r_a·r_p/(r_a+r_p), and (d) it lies
+        // between the apsides.
+        for &(r_a, r_p) in &[(8.0e6_f64, 7.0e6_f64), (4.2e7, 7.0e6), (1.0e7, 9.0e6)] {
+            let a = semi_major_axis_from_apsides(r_a, r_p).unwrap();
+            let e = eccentricity_from_apsides(r_a, r_p).unwrap();
+            let p = semi_latus_rectum_from_elements(a, e).unwrap();
+            let harmonic = 2.0 * r_a * r_p / (r_a + r_p);
+            assert!((p - harmonic).abs() <= 1e-9 * harmonic, "p = 2·r_a·r_p/(r_a+r_p)");
+            assert!(r_p <= p && p <= r_a, "r_p ≤ p ≤ r_a");
+        }
+
+        // (e) Err on non-physical input.
+        assert!(semi_latus_rectum_from_elements(-1.0, 0.1).is_err()); // a ≤ 0
+        assert!(semi_latus_rectum_from_elements(7.0e6, 1.0).is_err()); // e ≥ 1
+        assert!(semi_latus_rectum_from_elements(7.0e6, -0.1).is_err()); // e < 0
+        assert!(semi_latus_rectum_from_elements(f64::NAN, 0.1).is_err());
     }
 
     #[test]
