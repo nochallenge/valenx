@@ -560,6 +560,32 @@ pub fn solid_bounding_box_extents(solid: &Solid) -> Result<[f64; 3], CadError> {
     solid_bounding_box_extents_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **intermediate (middle) bounding-box extent** = the second-largest of the three
+/// sorted AABB extents (model units) of a solid, evaluated at tessellation tolerance `tol`.
+/// It is the **sieve diameter** — the dimension that decides whether a particle passes a
+/// square-mesh sieve (the most common industrial particle "size") — a purely geometric
+/// mid-extent, distinct from the volume-based [`solid_equivalent_sphere_radius_tol`] and
+/// [`solid_equivalent_cube_edge_tol`] sizes.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// bounding box cannot be computed.
+pub fn solid_bounding_box_intermediate_extent_tol(
+    solid: &Solid,
+    tol: f64,
+) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    Ok(s[1])
+}
+
+/// Intermediate (middle) AABB extent of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_intermediate_extent_tol`].
+pub fn solid_bounding_box_intermediate_extent(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_intermediate_extent_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box elongation** = intermediate extent / longest extent
 /// (dimensionless, in `(0, 1]`) of a solid — the Zingg `b/a` shape ratio, evaluated at
 /// tessellation tolerance `tol` from the sorted [`solid_bounding_box_extents_tol`]. It
@@ -1606,6 +1632,47 @@ mod tests {
                 "max/min = aspect ratio"
             );
         }
+    }
+
+    #[test]
+    fn solid_bounding_box_intermediate_extent_is_the_sorted_middle() {
+        // (a) WORKED: box(2,4,6) → sorted [2,4,6] → intermediate = 4.
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        assert!(
+            (solid_bounding_box_intermediate_extent(&bx).unwrap() - 4.0).abs() <= 1e-9 * 4.0,
+            "intermediate = 4"
+        );
+
+        // (b) THREAD solid_bounding_box_extents (independent re-sort): == sorted[1], and
+        // shortest ≤ intermediate ≤ longest.
+        let mut s = solid_bounding_box_extents(&bx).unwrap();
+        s.sort_by(|a, b| a.total_cmp(b));
+        let mid = solid_bounding_box_intermediate_extent(&bx).unwrap();
+        assert!((mid - s[1]).abs() <= 1e-9 * s[1], "= sorted middle extent");
+        assert!((s[0]..=s[2]).contains(&mid), "s0 ≤ mid ≤ s2");
+
+        // (c) PERMUTED dims: the middle is axis-order-independent — box(3,1,2) → 2.
+        let perm = box_solid(3.0, 1.0, 2.0).unwrap();
+        assert!(
+            (solid_bounding_box_intermediate_extent(&perm).unwrap() - 2.0).abs() <= 1e-9 * 2.0,
+            "permuted: intermediate = 2"
+        );
+
+        // (d) CUBE: all extents equal → intermediate = the edge.
+        let cube = box_solid(5.0, 5.0, 5.0).unwrap();
+        assert!(
+            (solid_bounding_box_intermediate_extent(&cube).unwrap() - 5.0).abs() <= 1e-9 * 5.0,
+            "cube → 5"
+        );
+
+        // (e) The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (solid_bounding_box_intermediate_extent(&bx).unwrap()
+                - solid_bounding_box_intermediate_extent_tol(&bx, 0.1).unwrap())
+            .abs()
+                < 1e-9,
+            "_tol wrapper agrees"
+        );
     }
 
     #[test]

@@ -59,6 +59,7 @@ pub use measure::{
     solid_bounding_box_extents, solid_bounding_box_extents_tol,
     solid_bounding_box_fill_ratio, solid_bounding_box_fill_ratio_tol,
     solid_bounding_box_flatness, solid_bounding_box_flatness_tol,
+    solid_bounding_box_intermediate_extent, solid_bounding_box_intermediate_extent_tol,
     solid_bounding_box_max_projection_sphericity, solid_bounding_box_max_projection_sphericity_tol,
     solid_bounding_box_surface_area, solid_bounding_box_surface_area_tol, solid_bounding_box_tol,
     solid_bounding_box_volume, solid_bounding_box_volume_tol,
