@@ -76,7 +76,8 @@ pub use ghk::{ghk_current_density, ghk_potential_mv, GhkIon};
 pub use impedance::{Cpe, ElectrodeImpedance};
 pub use ionic::{driving_force_mv, ionic_conductance, ionic_current, ionic_power_density};
 pub use lif::{
-    lif_firing_rate, lif_membrane_potential, lif_rheobase_current, lif_steady_state_potential,
+    lif_firing_rate, lif_interspike_interval, lif_membrane_potential, lif_rheobase_current,
+    lif_steady_state_potential,
     lif_time_to_first_spike,
 };
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
