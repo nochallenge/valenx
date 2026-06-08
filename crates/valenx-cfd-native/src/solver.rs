@@ -465,6 +465,22 @@ impl FlowSolution {
         }
     }
 
+    /// The **area-averaged total (stagnation) pressure** `⟨p₀⟩ = ⟨p⟩ + ½ρ⟨|u|²⟩` (Pa)
+    /// over the `nx·ny` cells — the mean of the per-cell total pressure
+    /// `p₀ = p + ½ρ|u|²` ([`FlowSolution::total_pressure_at_cell`]), equal to the static
+    /// mean [`FlowSolution::mean_pressure`] plus the mean dynamic head, which is exactly
+    /// the area-averaged [`FlowSolution::mean_kinetic_energy_density`]. Where
+    /// [`FlowSolution::mean_pressure`] tracks the field's net static level and
+    /// [`FlowSolution::total_pressure_range`] its loss *spread*, this is the mean
+    /// **mechanical-energy level**: in an ideal inviscid flow Bernoulli holds `p₀`
+    /// constant, so a fall in `⟨p₀⟩` is the signature of irreversible (viscous) loss. It
+    /// is bounded below by `⟨p⟩` (the dynamic head is non-negative), with equality only
+    /// for a fluid at rest. `density` is the fluid density (kg/m³). Returns `0` for an
+    /// empty grid.
+    pub fn mean_total_pressure(&self, density: f64) -> f64 {
+        self.mean_pressure() + self.mean_kinetic_energy_density(density)
+    }
+
     /// Area-averaged velocity magnitude over the cell grid (m/s) — the typical
     /// flow speed, as opposed to the peak that `speed_at_cell` reveals. Returns
     /// `0` for an empty grid.
@@ -4464,6 +4480,88 @@ mod tests {
             converged: true,
         };
         assert_eq!(uniform.total_pressure_range(density), 0.0, "uniform field → Δp0 = 0");
+    }
+
+    #[test]
+    fn mean_total_pressure_is_static_plus_dynamic_head() {
+        // Builder seeding BOTH a uniform velocity and a uniform pressure field.
+        let build = |nx: usize, ny: usize, lx: f64, ly: f64, uval: f64, pval: f64| {
+            let grid = Grid::new(nx, ny, lx, ly);
+            let mut u = grid.u_field();
+            for fi in 0..=grid.nx {
+                for j in 0..grid.ny {
+                    u.set(fi, j, uval);
+                }
+            }
+            let mut p = grid.pressure_field();
+            for j in 0..grid.ny {
+                for i in 0..grid.nx {
+                    p.set(i, j, pval);
+                }
+            }
+            FlowSolution {
+                grid,
+                u,
+                v: grid.v_field(),
+                pressure: p,
+                iterations: 0,
+                residual: 0.0,
+                converged: true,
+            }
+        };
+        let rho = 1.225;
+
+        // (a) WORKED UNIFORM (independent anchor): u = 3, p = 5, ρ = 1.225. Every
+        // cell has speed 3, so ⟨p0⟩ = 5 + ½·1.225·3² = 5 + 5.5125 = 10.5125 Pa,
+        // computed DIRECTLY from the worked numbers (not via the two helper fns).
+        let sol = build(5, 4, 5.0, 8.0, 3.0, 5.0);
+        let expected = 10.5125;
+        let p0 = sol.mean_total_pressure(rho);
+        assert!(
+            (p0 - expected).abs() / expected < 1e-9,
+            "⟨p0⟩ = 5 + ½·1.225·9 = {expected}, got {p0}"
+        );
+
+        // (b) DECOMPOSITION: ⟨p0⟩ == ⟨p⟩ + ⟨½ρ|u|²⟩ (the static + dynamic split).
+        assert!(
+            (sol.mean_total_pressure(rho)
+                - (sol.mean_pressure() + sol.mean_kinetic_energy_density(rho)))
+            .abs()
+                < 1e-12,
+            "decomposition into mean_pressure + mean_kinetic_energy_density"
+        );
+
+        // (c) DIRECT FIELD AVERAGE (independent path): the area-average of the
+        // per-cell total_pressure_at_cell must equal mean_total_pressure — a
+        // non-tautological cross-check through a different function family.
+        let (nx, ny) = (sol.grid.nx, sol.grid.ny);
+        let mut sum = 0.0;
+        for j in 0..ny {
+            for i in 0..nx {
+                sum += sol.total_pressure_at_cell(i, j, rho);
+            }
+        }
+        let direct = sum / (nx * ny) as f64;
+        assert!(
+            (sol.mean_total_pressure(rho) - direct).abs() < 1e-9,
+            "⟨p0⟩ = (1/N)·Σ total_pressure_at_cell = {direct}"
+        );
+
+        // (d) ZERO-VELOCITY: a quiescent field has no dynamic head ⇒ ⟨p0⟩ = ⟨p⟩.
+        let still = build(4, 3, 4.0, 3.0, 0.0, 7.0);
+        assert!(
+            (still.mean_total_pressure(rho) - still.mean_pressure()).abs() < 1e-12,
+            "u = 0 ⇒ ⟨p0⟩ = ⟨p⟩"
+        );
+
+        // (e) BOUND + MONOTONICITY: ⟨p0⟩ ≥ ⟨p⟩ always (dynamic head ≥ 0), and a
+        // faster field carries a higher ⟨p0⟩ at the same static pressure.
+        assert!(sol.mean_total_pressure(rho) >= sol.mean_pressure());
+        let fast = build(5, 4, 5.0, 8.0, 6.0, 5.0);
+        assert!(
+            fast.mean_total_pressure(rho) > sol.mean_total_pressure(rho),
+            "u = 6 field ⇒ higher ⟨p0⟩ than u = 3"
+        );
     }
 
     #[test]
