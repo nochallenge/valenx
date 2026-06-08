@@ -738,6 +738,19 @@ pub fn circular_second_moment_of_area(diameter: f64) -> f64 {
     std::f64::consts::PI * diameter.powi(4) / 64.0
 }
 
+/// The **polar second moment of area of a solid circular shaft** about its longitudinal
+/// axis `J = π·d⁴/32` (m⁴), for a round bar of diameter `diameter` `d` (m) — the **torsion
+/// constant** that feeds [`polar_section_modulus`] (`Z_p = J/(d/2)`) and
+/// [`torsional_rigidity`] (`GJ`). By the perpendicular-axis theorem it is exactly twice the
+/// bending [`circular_second_moment_of_area`] (`J = I_x + I_y = 2·I`, since `I_x = I_y` for
+/// a circle). Returns `0` for non-physical input (`d` non-positive or non-finite).
+pub fn circular_polar_second_moment_of_area(diameter: f64) -> f64 {
+    if !diameter.is_finite() || diameter <= 0.0 {
+        return 0.0;
+    }
+    std::f64::consts::PI * diameter.powi(4) / 32.0
+}
+
 /// The **elastic bending-moment capacity** `M = σ·S` (N·m) — the bending moment a
 /// section carries when its most-stressed fibre reaches the stress `stress` `σ` (Pa),
 /// given the [`elastic_section_modulus`] `section_modulus` `S` (m³). It is the inverse
@@ -2759,6 +2772,55 @@ mod tests {
         assert_eq!(circular_second_moment_of_area(0.0), 0.0);
         assert_eq!(circular_second_moment_of_area(f64::NAN), 0.0);
         assert_eq!(circular_second_moment_of_area(-0.1), 0.0);
+    }
+
+    #[test]
+    fn circular_polar_second_moment_of_area_is_pi_d4_over_32() {
+        // (a) WORKED: d = 0.1 → J = π·d⁴/32 ≈ 9.8175e-6 m⁴.
+        let j = circular_polar_second_moment_of_area(0.1);
+        assert!(
+            (j - std::f64::consts::PI * 0.1_f64.powi(4) / 32.0).abs() <= 1e-9 * j,
+            "J = π·d⁴/32"
+        );
+
+        // (b) THREAD circular_second_moment_of_area (#419) (non-tautological, perpendicular-axis
+        // theorem): J = I_x + I_y = 2·I for a circle.
+        assert!(
+            (circular_polar_second_moment_of_area(0.1) - 2.0 * circular_second_moment_of_area(0.1))
+                .abs()
+                <= 1e-9 * j,
+            "J = 2·I (perpendicular-axis theorem)"
+        );
+
+        // (c) THREAD polar_section_modulus: the polar section modulus Z_p = J/(d/2) = π·d³/16.
+        let d = 0.1_f64;
+        assert!(
+            (polar_section_modulus(circular_polar_second_moment_of_area(d), d / 2.0)
+                - std::f64::consts::PI * d.powi(3) / 16.0)
+            .abs()
+                <= 1e-9 * (std::f64::consts::PI * d.powi(3) / 16.0),
+            "Z_p = J/(d/2) = π·d³/16"
+        );
+
+        // (d) THREAD torsional_rigidity (#410): GJ of a steel shaft.
+        let gj = 80.0e9 * circular_polar_second_moment_of_area(0.1);
+        assert!(
+            (torsional_rigidity(80.0e9, circular_polar_second_moment_of_area(0.1)) - gj).abs()
+                <= 1e-6 * gj,
+            "GJ = G·J"
+        );
+
+        // (e) SCALING: quartic in diameter.
+        let base = circular_polar_second_moment_of_area(0.1);
+        assert!(
+            (circular_polar_second_moment_of_area(0.2) - 16.0 * base).abs() <= 1e-9 * 16.0 * base,
+            "quartic in diameter"
+        );
+
+        // (f) GUARD: non-positive or non-finite → 0.
+        assert_eq!(circular_polar_second_moment_of_area(0.0), 0.0);
+        assert_eq!(circular_polar_second_moment_of_area(f64::NAN), 0.0);
+        assert_eq!(circular_polar_second_moment_of_area(-0.1), 0.0);
     }
 
     #[test]
