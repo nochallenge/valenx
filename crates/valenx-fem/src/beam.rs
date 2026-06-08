@@ -434,6 +434,24 @@ pub fn torsional_shear_stress(torque: f64, radius: f64, polar_moment: f64) -> f6
     torque * radius / polar_moment
 }
 
+/// The **polar (torsional) section modulus** `Z_p = J / r` (m³) — the torsion design
+/// property that maps an applied torque to the peak surface shear stress through
+/// `τ_max = T / Z_p`, where `polar_moment` `J` (m⁴) is the polar second moment of area
+/// and `outer_radius` `r` (m) is the outer radius. It is the torsion analogue of the
+/// bending [`elastic_section_modulus`] (`S = I/c`), and the conjugate of
+/// [`torsional_shear_stress`]. Returns `0` for non-physical input (`J` or `r` non-positive
+/// or non-finite).
+pub fn polar_section_modulus(polar_moment: f64, outer_radius: f64) -> f64 {
+    if !polar_moment.is_finite()
+        || polar_moment <= 0.0
+        || !outer_radius.is_finite()
+        || outer_radius <= 0.0
+    {
+        return 0.0;
+    }
+    polar_moment / outer_radius
+}
+
 /// The analytic **axial extension** `δ = F·L/(E·A)` (m) of a prismatic bar in
 /// pure tension or compression — a member of length `length` `L` (m), Young's
 /// modulus `youngs_modulus` `E` (Pa) and cross-section area `area` `A` (m²) under
@@ -2587,6 +2605,46 @@ mod tests {
         let analytic = beam_angle_of_twist(torque, l, g, section.j);
         let rel = (sol.rotation[1][0] - analytic).abs() / analytic;
         assert!(rel < 1e-6, "twist {} vs analytic {analytic}", sol.rotation[1][0]);
+    }
+
+    #[test]
+    fn polar_section_modulus_is_the_torsion_design_property() {
+        // Worked: Z_p = J/r = 1e-6/0.05 = 2e-5 m³.
+        assert!(
+            (polar_section_modulus(1.0e-6, 0.05) - 2.0e-5).abs() <= 1e-12 * 2.0e-5,
+            "Z_p = J/r"
+        );
+
+        // Threads torsional_shear_stress: τ_max = T / Z_p (the conjugate design relation).
+        for &(tq, r, j) in &[
+            (1000.0_f64, 0.05_f64, 1.0e-6_f64),
+            (-450.0, 0.02, 4.2e-7),
+            (8200.0, 0.12, 9.0e-8),
+        ] {
+            let from_zp = tq / polar_section_modulus(j, r);
+            assert!(
+                (torsional_shear_stress(tq, r, j) - from_zp).abs() <= 1e-12 * from_zp.abs(),
+                "τ_max = T / Z_p"
+            );
+        }
+
+        // Linear in J, inverse in r.
+        assert!(
+            (polar_section_modulus(2.0e-6, 0.05) - 2.0 * polar_section_modulus(1.0e-6, 0.05)).abs()
+                < 1e-15,
+            "linear in J"
+        );
+        assert!(
+            (polar_section_modulus(1.0e-6, 0.10) - 0.5 * polar_section_modulus(1.0e-6, 0.05)).abs()
+                < 1e-15,
+            "inverse in r"
+        );
+
+        // Non-physical input → 0.
+        assert_eq!(polar_section_modulus(0.0, 0.05), 0.0);
+        assert_eq!(polar_section_modulus(1.0e-6, 0.0), 0.0);
+        assert_eq!(polar_section_modulus(-1.0e-6, 0.05), 0.0);
+        assert_eq!(polar_section_modulus(f64::NAN, 0.05), 0.0);
     }
 
     #[test]
