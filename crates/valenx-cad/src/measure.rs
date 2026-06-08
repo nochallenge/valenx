@@ -540,6 +540,36 @@ pub fn solid_bounding_box_elongation(solid: &Solid) -> Result<f64, CadError> {
     solid_bounding_box_elongation_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **axis-aligned bounding-box flatness** = shortest extent / intermediate extent
+/// (dimensionless, in `(0, 1]`) of a solid — the Zingg `c/b` shape ratio, evaluated at
+/// tessellation tolerance `tol` from the sorted [`solid_bounding_box_extents_tol`]. It is
+/// the second Zingg axis, the companion to the [`solid_bounding_box_elongation_tol`] `b/a`:
+/// low for a flat / plate-like solid (the shortest axis collapses), `1` for an equant one
+/// (all three extents comparable). Their product `flatness · elongation = c/a` is the
+/// reciprocal of the [`solid_bounding_box_aspect_ratio_tol`] (longest / shortest).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid is
+/// degenerate (a zero intermediate extent).
+pub fn solid_bounding_box_flatness_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    let (shortest, mid) = (s[0], s[1]);
+    if mid <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate (zero intermediate extent); flatness undefined".to_string(),
+        ));
+    }
+    Ok(shortest / mid)
+}
+
+/// AABB flatness of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_flatness_tol`].
+pub fn solid_bounding_box_flatness(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_flatness_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
 /// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
 /// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
@@ -1222,6 +1252,50 @@ mod tests {
         assert!(
             (solid_bounding_box_elongation(&bx).unwrap()
                 - solid_bounding_box_elongation_tol(&bx, 0.1).unwrap())
+            .abs()
+                < 1e-9,
+            "_tol wrapper agrees"
+        );
+    }
+
+    #[test]
+    fn solid_bounding_box_flatness_is_the_zingg_short_over_mid() {
+        use crate::primitives::sphere;
+
+        // Worked: box(2,4,6) → sorted extents [2,4,6], flatness = 2/4 = 0.5.
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let f = solid_bounding_box_flatness(&bx).unwrap();
+        assert!((f - 2.0 / 4.0).abs() <= 1e-9 * f, "flatness = short/mid = 2/4");
+
+        // Threads solid_bounding_box_extents (#363): shortest/intermediate of the sorted.
+        let mut s = solid_bounding_box_extents(&bx).unwrap();
+        s.sort_by(|a, b| a.total_cmp(b));
+        assert!((f - s[0] / s[1]).abs() <= 1e-9 * f, "= sorted[0]/sorted[1]");
+
+        // Range 0 < flatness ≤ 1.
+        assert!(f > 0.0 && f <= 1.0, "0 < flatness ≤ 1");
+
+        // Cross-check threading elongation (#375) + aspect_ratio: flatness·elongation
+        // = (c/b)·(b/a) = c/a = 1/aspect_ratio.
+        let elong = solid_bounding_box_elongation(&bx).unwrap();
+        let aspect = solid_bounding_box_aspect_ratio(&bx).unwrap();
+        assert!(
+            (f * elong - 1.0 / aspect).abs() <= 1e-9,
+            "flatness·elongation = 1/aspect_ratio"
+        );
+
+        // Equant: a cube and a sphere → ≈ 1.
+        let cube = box_solid(3.0, 3.0, 3.0).unwrap();
+        assert!((solid_bounding_box_flatness(&cube).unwrap() - 1.0).abs() <= 1e-9, "cube → 1");
+        assert!(
+            (solid_bounding_box_flatness(&sphere(2.0).unwrap()).unwrap() - 1.0).abs() <= 2e-2,
+            "sphere → 1"
+        );
+
+        // The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (solid_bounding_box_flatness(&bx).unwrap()
+                - solid_bounding_box_flatness_tol(&bx, 0.1).unwrap())
             .abs()
                 < 1e-9,
             "_tol wrapper agrees"
