@@ -162,6 +162,17 @@ pub fn turbulent_displacement_thickness_ratio(re_x: f64) -> f64 {
     0.37 * (1.0 / 8.0) * re_x.powf(-0.2)
 }
 
+/// The **turbulent boundary-layer shape factor** `H = δ*/θ = (1/8)/(7/72) = 9/7 ≈ 1.286` —
+/// the ratio of the [`turbulent_displacement_thickness_ratio`] to the
+/// [`turbulent_momentum_thickness_ratio`] for the one-seventh-power-law profile. Like the
+/// laminar [`blasius_shape_factor`] (`≈ 2.59`) it is Reynolds-number-independent (the two
+/// thicknesses share the same `Re⁻¹ᐟ⁵` decay), and the drop from `2.59` to `1.29` across
+/// transition reflects the fuller, more separation-resistant turbulent velocity profile —
+/// `H` is the canonical boundary-layer fullness / separation indicator.
+pub fn turbulent_shape_factor() -> f64 {
+    9.0 / 7.0
+}
+
 /// The laminar (Blasius) flat-plate skin-friction drag coefficient at a
 /// length Reynolds number `re_l` — `C_F = 1.328·Re_L⁻¹ᐟ²`.
 pub fn blasius_flat_plate_cf(re_l: f64) -> f64 {
@@ -685,6 +696,30 @@ mod tests {
              sphere drag",
             after.cd
         );
+    }
+
+    #[test]
+    fn turbulent_shape_factor_is_nine_sevenths() {
+        // Worked: H = 9/7 ≈ 1.2857.
+        assert!((turbulent_shape_factor() - 9.0 / 7.0).abs() <= 1e-12 * (9.0 / 7.0), "H = 9/7");
+
+        // Threads δ*/θ (#361 / #355): H = δ*/θ, Reynolds-independent.
+        for &re in &[1.0e6, 5.0e6, 1.0e7] {
+            let ratio =
+                turbulent_displacement_thickness_ratio(re) / turbulent_momentum_thickness_ratio(re);
+            assert!(
+                (turbulent_shape_factor() - ratio).abs() <= 1e-12 * turbulent_shape_factor(),
+                "H = δ*/θ at Re={re}"
+            );
+        }
+
+        // Transition drop: turbulent H (~1.29) is well below the laminar Blasius H (~2.59).
+        assert!(
+            turbulent_shape_factor() < blasius_shape_factor(),
+            "turbulent profile is fuller than laminar"
+        );
+        // H > 1 always (δ* > θ).
+        assert!(turbulent_shape_factor() > 1.0, "H > 1");
     }
 
     #[test]
