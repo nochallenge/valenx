@@ -156,7 +156,8 @@ pub use beam::{
     simply_supported_udl_center_deflection,
     simply_supported_udl_end_slope, simply_supported_udl_max_moment,
     simply_supported_udl_strain_energy, solve_beam_modal,
-    solve_beam_static, torsional_shear_stress, BeamConstraint, BeamElement, BeamLoad,
+    solve_beam_static, torsional_shear_stress, torsional_strain_energy, BeamConstraint,
+    BeamElement, BeamLoad,
     BeamModalSolution, BeamMode,
     BeamSection, BeamSolution, BeamSolverError,
 };
