@@ -149,6 +149,19 @@ pub fn turbulent_momentum_thickness_ratio(re_x: f64) -> f64 {
     0.37 * (7.0 / 72.0) * re_x.powf(-0.2)
 }
 
+/// The **turbulent displacement-thickness ratio** `δ*/x = (1/8)·(δ/x) = 0.37·(1/8)·Re_x⁻¹ᐟ⁵`
+/// (dimensionless) at local length Reynolds number `re_x` `Re_x = U·x/ν` — the mass-deficit
+/// thickness of the one-seventh-power-law turbulent boundary layer (the distance the wall
+/// effectively bulges out into the free stream), the turbulent companion to the laminar
+/// [`blasius_displacement_thickness_ratio`]. For the `u/U = (y/δ)¹ᐟ⁷` profile the
+/// displacement thickness is `δ* = δ/8`, completing the turbulent thickness trio with
+/// [`turbulent_boundary_layer_thickness_ratio`] and [`turbulent_momentum_thickness_ratio`];
+/// their ratio is the turbulent shape factor `H = δ*/θ = 9/7 ≈ 1.29`.
+pub fn turbulent_displacement_thickness_ratio(re_x: f64) -> f64 {
+    let re_x = re_x.max(1.0);
+    0.37 * (1.0 / 8.0) * re_x.powf(-0.2)
+}
+
 /// The laminar (Blasius) flat-plate skin-friction drag coefficient at a
 /// length Reynolds number `re_l` — `C_F = 1.328·Re_L⁻¹ᐟ²`.
 pub fn blasius_flat_plate_cf(re_l: f64) -> f64 {
@@ -671,6 +684,49 @@ mod tests {
             "near-wall-model sphere Cd {} should be a plausible \
              sphere drag",
             after.cd
+        );
+    }
+
+    #[test]
+    fn turbulent_displacement_thickness_ratio_completes_the_thickness_trio() {
+        // Worked: δ*/x = 0.37·(1/8)·Re⁻⁰·².
+        let expected = 0.37 * (1.0 / 8.0) * (1.0e7_f64).powf(-0.2);
+        assert!(
+            (turbulent_displacement_thickness_ratio(1.0e7) - expected).abs() <= 1e-12 * expected,
+            "δ*/x = 0.37·(1/8)·Re⁻¹ᐟ⁵"
+        );
+
+        for &re in &[1.0e6, 5.0e6, 1.0e7] {
+            // Threads turbulent_boundary_layer_thickness_ratio (#343): δ* = (1/8)·δ.
+            assert!(
+                (turbulent_displacement_thickness_ratio(re)
+                    - (1.0 / 8.0) * turbulent_boundary_layer_thickness_ratio(re))
+                .abs()
+                    <= 1e-12 * turbulent_displacement_thickness_ratio(re),
+                "δ* = (1/8)·δ at Re={re}"
+            );
+            // Threads turbulent_momentum_thickness_ratio (#355) via the shape factor
+            // δ*/θ = 9/7 (the turbulent H ≈ 1.29).
+            assert!(
+                (turbulent_displacement_thickness_ratio(re)
+                    - (9.0 / 7.0) * turbulent_momentum_thickness_ratio(re))
+                .abs()
+                    <= 1e-12 * turbulent_displacement_thickness_ratio(re),
+                "δ* = (9/7)·θ at Re={re}"
+            );
+            // Ordering θ < δ* < δ (the shape factor exceeds 1).
+            assert!(
+                turbulent_momentum_thickness_ratio(re) < turbulent_displacement_thickness_ratio(re)
+                    && turbulent_displacement_thickness_ratio(re)
+                        < turbulent_boundary_layer_thickness_ratio(re),
+                "θ < δ* < δ at Re={re}"
+            );
+        }
+
+        // The Re < 1 clamp.
+        assert!(
+            (turbulent_displacement_thickness_ratio(0.5) - 0.37 * (1.0 / 8.0)).abs() < 1e-12,
+            "clamped to Re = 1"
         );
     }
 
