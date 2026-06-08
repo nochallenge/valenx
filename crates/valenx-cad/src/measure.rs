@@ -629,6 +629,39 @@ pub fn solid_bounding_box_corey_shape_factor(solid: &Solid) -> Result<f64, CadEr
     solid_bounding_box_corey_shape_factor_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **Sneed–Folk maximum-projection sphericity** `ψ_p = ∛(c² / (a·b))`
+/// (dimensionless, in `(0, 1]`) of a solid, where `a ≥ b ≥ c` are the sorted AABB
+/// extents — a classic sedimentology particle-shape descriptor (the ratio of the maximum
+/// projection area of the particle to that of a sphere of equal volume), evaluated at
+/// tessellation tolerance `tol`. It is `1` for an equant cube or sphere and drops toward
+/// `0` for a blade, rod, or disc. It is the cube root of the
+/// [`solid_bounding_box_corey_shape_factor`] squared: `ψ_p = CSF^(2/3)`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid is
+/// degenerate (a zero intermediate or longest extent).
+pub fn solid_bounding_box_max_projection_sphericity_tol(
+    solid: &Solid,
+    tol: f64,
+) -> Result<f64, CadError> {
+    let mut s = solid_bounding_box_extents_tol(solid, tol)?;
+    s.sort_by(|a, b| a.total_cmp(b));
+    let (shortest, mid, longest) = (s[0], s[1], s[2]);
+    if mid <= 0.0 || longest <= 0.0 {
+        return Err(CadError::Tessellation(
+            "degenerate (zero extent); maximum projection sphericity undefined".to_string(),
+        ));
+    }
+    Ok((shortest * shortest / (mid * longest)).cbrt())
+}
+
+/// AABB maximum-projection sphericity of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_bounding_box_max_projection_sphericity_tol`].
+pub fn solid_bounding_box_max_projection_sphericity(solid: &Solid) -> Result<f64, CadError> {
+    solid_bounding_box_max_projection_sphericity_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// The **axis-aligned bounding-box aspect ratio** = longest extent / shortest extent
 /// (dimensionless, `≥ 1`) of a solid — the elongation (slenderness) of its AABB, computed
 /// at tessellation tolerance `tol` from [`solid_bounding_box_tol`]. It is `1` for a cube
@@ -1397,6 +1430,51 @@ mod tests {
         assert!(
             (solid_bounding_box_corey_shape_factor(&bx).unwrap()
                 - solid_bounding_box_corey_shape_factor_tol(&bx, 0.1).unwrap())
+            .abs()
+                < 1e-9,
+            "_tol wrapper agrees"
+        );
+    }
+
+    #[test]
+    fn solid_bounding_box_max_projection_sphericity_is_cbrt_c2_over_ab() {
+        use crate::primitives::sphere;
+
+        // (a) WORKED: box(2,4,6) → sorted [2,4,6], ψ_p = ∛(2²/(4·6)) = ∛(1/6) ≈ 0.55032.
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let psi = solid_bounding_box_max_projection_sphericity(&bx).unwrap();
+        assert!((psi - 0.5503212081).abs() <= 1e-9, "ψ_p = ∛(1/6) ≈ 0.55032");
+
+        // (b) THREAD solid_bounding_box_extents (#363): ∛(s0²/(s1·s2)) of the sorted.
+        let mut s = solid_bounding_box_extents(&bx).unwrap();
+        s.sort_by(|a, b| a.total_cmp(b));
+        assert!(
+            (psi - (s[0] * s[0] / (s[1] * s[2])).cbrt()).abs() <= 1e-9 * psi,
+            "= ∛(s0²/(s1·s2))"
+        );
+
+        // (c) CROSS-CHECK threading corey_shape_factor (#387) (non-tautological): ψ_p = CSF^(2/3).
+        let csf = solid_bounding_box_corey_shape_factor(&bx).unwrap();
+        assert!((psi - csf.powf(2.0 / 3.0)).abs() <= 1e-9 * psi, "ψ_p = CSF^(2/3)");
+
+        // (d) Range 0 < ψ_p ≤ 1; equant cube and sphere → ≈ 1.
+        assert!(psi > 0.0 && psi <= 1.0, "0 < ψ_p ≤ 1");
+        let cube = box_solid(3.0, 3.0, 3.0).unwrap();
+        assert!(
+            (solid_bounding_box_max_projection_sphericity(&cube).unwrap() - 1.0).abs() <= 1e-9,
+            "cube → 1"
+        );
+        assert!(
+            (solid_bounding_box_max_projection_sphericity(&sphere(2.0).unwrap()).unwrap() - 1.0)
+                .abs()
+                <= 3e-2,
+            "sphere → 1"
+        );
+
+        // (e) The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (solid_bounding_box_max_projection_sphericity(&bx).unwrap()
+                - solid_bounding_box_max_projection_sphericity_tol(&bx, 0.1).unwrap())
             .abs()
                 < 1e-9,
             "_tol wrapper agrees"
