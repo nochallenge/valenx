@@ -82,7 +82,8 @@ pub use lif::{
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
 pub use myelinated::MyelinatedFiber;
 pub use nernst::{
-    nernst_concentration_ratio, nernst_potential_mv, thermal_voltage_mv, ussing_flux_ratio,
+    nernst_concentration_ratio, nernst_potential_mv, nernst_slope_per_decade_mv,
+    thermal_voltage_mv, ussing_flux_ratio,
     BODY_TEMPERATURE_K,
 };
 pub use recording::{ExtracellularRecorder, Recording};
