@@ -137,6 +137,29 @@ pub fn solid_volume(solid: &Solid) -> Result<f64, CadError> {
     solid_volume_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **volume-equivalent sphere radius** `r_eq = (3·V / 4π)^(1/3)` (model units) of a
+/// solid — the radius of the sphere that has the same volume `V` (from
+/// [`solid_volume_tol`]), evaluated at tessellation tolerance `tol`. It is the standard
+/// **equivalent spherical diameter** size used to report particle / grain size from
+/// sieving, sedimentation, or laser diffraction, and it equals the actual radius for a
+/// sphere. Unlike the dimensionless [`solid_sphericity_tol`] (a shape ratio) this is a
+/// length (a size).
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// volume cannot be computed.
+pub fn solid_equivalent_sphere_radius_tol(solid: &Solid, tol: f64) -> Result<f64, CadError> {
+    let v = solid_volume_tol(solid, tol)?;
+    Ok((3.0 * v / (4.0 * std::f64::consts::PI)).cbrt())
+}
+
+/// Volume-equivalent sphere radius of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_equivalent_sphere_radius_tol`].
+pub fn solid_equivalent_sphere_radius(solid: &Solid) -> Result<f64, CadError> {
+    solid_equivalent_sphere_radius_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Total boundary surface area of a solid, in square model units.
 ///
 /// Computed as the sum of every boundary triangle's area. Like
@@ -1137,6 +1160,41 @@ mod tests {
         assert!(
             solid_bounding_box_fill_ratio(&b).unwrap() > r_sphere,
             "box fills more of its AABB than a sphere"
+        );
+    }
+
+    #[test]
+    fn solid_equivalent_sphere_radius_is_the_volume_equivalent_size() {
+        use crate::primitives::sphere;
+
+        // box(2,4,6): V = 48 → r_eq = (3·48/4π)^(1/3) = (36/π)^(1/3).
+        let b = box_solid(2.0, 4.0, 6.0).unwrap();
+        let expected = ((3.0 * 48.0) / (4.0 * std::f64::consts::PI)).cbrt();
+        assert!(
+            (solid_equivalent_sphere_radius(&b).unwrap() - expected).abs() / expected < 1e-9,
+            "r_eq = (3V/4π)^(1/3)"
+        );
+
+        // Threads solid_volume: r_eq recomputed from the measured volume (box + sphere).
+        for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
+            let from_v = (3.0 * solid_volume(&s).unwrap() / (4.0 * std::f64::consts::PI)).cbrt();
+            assert!(
+                (solid_equivalent_sphere_radius(&s).unwrap() - from_v).abs() / from_v < 1e-9,
+                "r_eq from V"
+            );
+        }
+
+        // Sphere round-trip: the equivalent-sphere radius of a sphere is its own radius.
+        assert!(
+            (solid_equivalent_sphere_radius(&sphere(2.0).unwrap()).unwrap() - 2.0).abs() < 2e-2,
+            "sphere R=2 → r_eq ≈ 2 (tessellation)"
+        );
+
+        // Monotonic in size: a bigger box has a bigger equivalent radius.
+        assert!(
+            solid_equivalent_sphere_radius(&box_solid(4.0, 4.0, 4.0).unwrap()).unwrap()
+                > solid_equivalent_sphere_radius(&box_solid(2.0, 2.0, 2.0).unwrap()).unwrap(),
+            "bigger box → bigger r_eq"
         );
     }
 
