@@ -508,6 +508,28 @@ pub fn beam_axial_extension(force: f64, length: f64, youngs_modulus: f64, area: 
     force * length / (youngs_modulus * area)
 }
 
+/// The **axial strain energy** `U = F²·L / (2·E·A)` (J) stored in a prismatic bar of
+/// length `length` `L` (m), Young's modulus `youngs_modulus` `E` (Pa) and cross-section
+/// area `area` `A` (m²) under an axial force `force` `F` (N). It is the elastic work done
+/// stretching (or compressing) the bar — equivalently the Clapeyron form `½·F·δ` with the
+/// [`beam_axial_extension`] `δ` — and the axial member of the strain-energy set
+/// (axial / torsion / bending). Being a square in `F` it is non-negative: tension and
+/// compression of equal magnitude store equal energy. Returns `0` for non-physical input
+/// (non-finite force, or a non-positive / non-finite length, modulus or area).
+pub fn axial_strain_energy(force: f64, length: f64, youngs_modulus: f64, area: f64) -> f64 {
+    if !force.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !area.is_finite()
+        || area <= 0.0
+    {
+        return 0.0;
+    }
+    force * force * length / (2.0 * youngs_modulus * area)
+}
+
 /// The **moment–curvature relation** `κ = M/(E·I)` (1/m) — the local bending curvature
 /// produced in a beam section by a bending moment `moment` `M` (N·m), for Young's
 /// modulus `youngs_modulus` `E` (Pa) and second moment of area `second_moment_area`
@@ -2581,6 +2603,49 @@ mod tests {
         assert_eq!(beam_curvature(f64::NAN, 200.0e9, 1.0e-6), 0.0);
         assert_eq!(beam_curvature(2000.0, 0.0, 1.0e-6), 0.0);
         assert_eq!(beam_curvature(2000.0, 200.0e9, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn axial_strain_energy_is_the_clapeyron_work() {
+        // Threads beam_axial_extension via Clapeyron U = ½·F·δ (exact, incl. compression).
+        for &(f, l, e, a) in &[
+            (10000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-4_f64),
+            (-5000.0, 1.5, 70.0e9, 3.0e-4),
+            (25000.0, 4.0, 200.0e9, 5.0e-5),
+        ] {
+            let from_delta = 0.5 * f * beam_axial_extension(f, l, e, a);
+            assert!(
+                (axial_strain_energy(f, l, e, a) - from_delta).abs() <= 1e-12 * from_delta.abs(),
+                "U = ½·F·δ"
+            );
+        }
+
+        // Worked: U = F²L/2EA = 10000²·2/(2·200e9·1e-4) = 5 J.
+        assert!(
+            (axial_strain_energy(10000.0, 2.0, 200.0e9, 1.0e-4) - 5.0).abs() <= 1e-12 * 5.0,
+            "U = F²L/2EA = 5 J"
+        );
+
+        // Energy is non-negative and quadratic in F (tension and compression store equal).
+        assert_eq!(
+            axial_strain_energy(-10000.0, 2.0, 200.0e9, 1.0e-4),
+            axial_strain_energy(10000.0, 2.0, 200.0e9, 1.0e-4),
+            "even in F"
+        );
+        assert!(
+            (axial_strain_energy(20000.0, 2.0, 200.0e9, 1.0e-4)
+                - 4.0 * axial_strain_energy(10000.0, 2.0, 200.0e9, 1.0e-4))
+            .abs()
+                < 1e-9,
+            "quadratic in F"
+        );
+        assert!(axial_strain_energy(10000.0, 2.0, 200.0e9, 1.0e-4) > 0.0, "non-negative");
+
+        // 0 sentinel for non-physical input.
+        assert_eq!(axial_strain_energy(10000.0, 0.0, 200.0e9, 1.0e-4), 0.0);
+        assert_eq!(axial_strain_energy(10000.0, 2.0, 0.0, 1.0e-4), 0.0);
+        assert_eq!(axial_strain_energy(10000.0, 2.0, 200.0e9, 0.0), 0.0);
+        assert_eq!(axial_strain_energy(f64::NAN, 2.0, 200.0e9, 1.0e-4), 0.0);
     }
 
     #[test]
