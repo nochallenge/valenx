@@ -510,6 +510,18 @@ pub fn circular_orbit_basics(altitude_km: f64) -> (f64, f64, f64) {
     (v_circ, v_esc, period)
 }
 
+/// The specific orbital energy (J/kg) and specific angular momentum (m²/s) of a circular
+/// orbit at altitude `altitude_km` — `ε = −μ/(2a)`
+/// ([`valenx_astro::orbit::specific_orbital_energy`]) and `h = √(μ·r)`
+/// ([`valenx_astro::orbit::circular_angular_momentum`]), with `a = r` for a circle. Returns
+/// `None` for a non-physical altitude (radius non-positive).
+pub fn circular_orbit_energy_momentum(altitude_km: f64) -> Option<(f64, f64)> {
+    let r = altitude_km_to_radius_m(altitude_km);
+    let energy = valenx_astro::orbit::specific_orbital_energy(r).ok()?;
+    let ang_mom = valenx_astro::orbit::circular_angular_momentum(r).ok()?;
+    Some((energy, ang_mom))
+}
+
 /// The prograde Δv (m/s) to escape from a circular orbit at altitude
 /// `altitude_km` — the burn from circular speed up to escape speed,
 /// `Δv = v_esc − v_circ = (√2 − 1)·v_circ ≈ 0.414·v_circ`.

@@ -485,6 +485,21 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 valenx_fem::critical_buckling_stress(e, i_sec, l, 1.0, area) / 1e6,
                                 "MPa",
                             );
+                            let g = valenx_fem::shear_modulus_from_youngs(e, s.poisson);
+                            let j_polar =
+                                valenx_fem::rectangular_polar_second_moment_of_area(s.ly, s.lz);
+                            row(
+                                ui,
+                                "flexural rigidity E·I",
+                                valenx_fem::flexural_rigidity(e, i_sec),
+                                "N·m²",
+                            );
+                            row(
+                                ui,
+                                "torsional rigidity G·J",
+                                valenx_fem::torsional_rigidity(g, j_polar),
+                                "N·m²",
+                            );
                         });
 
                     if let Some(plot) = &s.plot {

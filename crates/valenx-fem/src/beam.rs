@@ -1191,6 +1191,24 @@ pub fn simply_supported_udl_max_moment(load_per_length: f64, length: f64) -> f64
     load_per_length * length * length / 8.0
 }
 
+/// The analytic **maximum transverse shear force of a simply-supported beam under a
+/// uniformly distributed load** `V = w·L/2` (N) — the peak shear, at either support, equal
+/// to the end reaction; it governs the maximum transverse shear stress. `load_per_length`
+/// `w` is the load intensity (N/m) and `length` `L` the span (m).
+///
+/// By symmetry the total load `w·L` splits equally between the two supports, so the shear is
+/// `w·L/2` at each (decaying linearly to zero at mid-span). It is the shear companion to the
+/// mid-span moment [`simply_supported_udl_max_moment`] (`M = w·L²/8`); the two satisfy the
+/// statics relation `4·M = V·L`. Linear and sign-preserving in `w`, linear in `L`, and — a
+/// statics result — independent of `E` and `I`. Returns `0` for non-physical input (`w`
+/// non-finite, or `L` non-positive or non-finite).
+pub fn simply_supported_udl_max_shear(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * length / 2.0
+}
+
 /// The analytic **fixed-fixed (clamped–clamped) beam mid-span deflection**
 /// `δ = P·L³/(192·E·I)` (m) — the deflection at mid-span of a slender
 /// Euler–Bernoulli beam **built in at both ends** (encastré) carrying a transverse
@@ -5025,6 +5043,48 @@ mod tests {
         assert_eq!(simply_supported_udl_max_moment(f64::NAN, 4.0), 0.0);
         assert_eq!(simply_supported_udl_max_moment(1000.0, 0.0), 0.0);
         assert_eq!(simply_supported_udl_max_moment(1000.0, -1.0), 0.0);
+    }
+
+    #[test]
+    fn simply_supported_udl_max_shear_matches_statics() {
+        // Worked: w = 1 kN/m on a 4 m span → V = w·L/2 = 2000 N.
+        let v = simply_supported_udl_max_shear(1000.0, 4.0);
+        assert!((v - 2000.0).abs() < 1e-9, "V = w·L/2, got {v}");
+
+        // STRONG non-tautological threads over signed (w, L): the end shear is half the total
+        // distributed load, and ties to the mid-span moment via the statics relation 4·M = V·L
+        // (M = wL²/8, V = wL/2 → V·L = wL²/2 = 4·M).
+        for &(w, l) in &[(1000.0_f64, 4.0_f64), (-650.0, 2.5), (8200.0, 1.2)] {
+            let shear = simply_supported_udl_max_shear(w, l);
+            assert!((shear - w * l / 2.0).abs() <= 1e-12 * (w * l).abs(), "V = w·L/2 (½ total load)");
+            let moment = simply_supported_udl_max_moment(w, l);
+            assert!(
+                (shear * l - 4.0 * moment).abs() <= 1e-9 * (shear * l).abs(),
+                "4·M = V·L (moment–shear statics)",
+            );
+        }
+
+        // Linear in w and L; sign follows the load.
+        assert!(
+            (simply_supported_udl_max_shear(2000.0, 4.0)
+                - 2.0 * simply_supported_udl_max_shear(1000.0, 4.0))
+            .abs()
+                < 1e-9,
+            "linear in w"
+        );
+        assert!(
+            (simply_supported_udl_max_shear(1000.0, 8.0)
+                - 2.0 * simply_supported_udl_max_shear(1000.0, 4.0))
+            .abs()
+                < 1e-9,
+            "linear in L"
+        );
+        assert!(simply_supported_udl_max_shear(-1000.0, 4.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_udl_max_shear(f64::NAN, 4.0), 0.0);
+        assert_eq!(simply_supported_udl_max_shear(1000.0, 0.0), 0.0);
+        assert_eq!(simply_supported_udl_max_shear(1000.0, -1.0), 0.0);
     }
 
     #[test]

@@ -767,6 +767,7 @@ fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 });
             let (v_circ, v_esc, period) = model::circular_orbit_basics(form.basics_altitude_km);
             let escape_dv = model::escape_delta_v_from_circular(form.basics_altitude_km);
+            let energy_momentum = model::circular_orbit_energy_momentum(form.basics_altitude_km);
             egui::Grid::new("astro_basics_out")
                 .num_columns(2)
                 .spacing([8.0, 3.0])
@@ -775,6 +776,10 @@ fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     kv(ui, "escape speed", model::format_delta_v(v_esc));
                     kv(ui, "escape \u{0394}v", model::format_delta_v(escape_dv));
                     kv(ui, "orbital period", model::format_duration(period));
+                    if let Some((energy, ang_mom)) = energy_momentum {
+                        kv(ui, "specific energy", format!("{:.3} MJ/kg", energy / 1e6));
+                        kv(ui, "ang. momentum", format!("{:.0} km\u{00B2}/s", ang_mom / 1e6));
+                    }
                 });
         });
 }
