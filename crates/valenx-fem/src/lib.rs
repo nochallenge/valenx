@@ -148,7 +148,7 @@ pub use beam::{
     beam_curvature, beam_transverse_shear_stress,
     bending_moment_capacity,
     bending_stress, bulk_modulus,
-    cantilever_end_moment_tip_deflection,
+    cantilever_end_moment_tip_deflection, cantilever_end_moment_tip_slope,
     cantilever_point_load_root_moment,
     cantilever_point_load_strain_energy, cantilever_tip_deflection, cantilever_tip_slope,
     cantilever_udl_root_moment, cantilever_udl_strain_energy, cantilever_udl_tip_deflection,
