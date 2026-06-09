@@ -828,6 +828,11 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         "semi-major axis",
                         format!("{:.1} km", orbit.semi_major_axis_m / 1000.0),
                     );
+                    kv(
+                        ui,
+                        "semi-latus rectum",
+                        format!("{:.1} km", orbit.semi_latus_rectum_m / 1000.0),
+                    );
                     kv(ui, "perigee speed", model::format_delta_v(orbit.perigee_speed_ms));
                     kv(ui, "apogee speed", model::format_delta_v(orbit.apogee_speed_ms));
                     kv(ui, "orbital period", model::format_duration(orbit.period_s));

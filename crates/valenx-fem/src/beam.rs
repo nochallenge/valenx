@@ -239,6 +239,24 @@ pub fn cantilever_point_load_root_moment(load: f64, length: f64) -> f64 {
     load * length
 }
 
+/// The analytic **maximum transverse shear force of a cantilever under a tip point load**
+/// `V = P` (N) — the shear is constant along the span (by vertical statics the fixed-end
+/// reaction equals the applied tip load), so the peak (and everywhere) shear is the load
+/// itself. `load` `P` is the tip force (N) and `length` `L` the span (m).
+///
+/// It is the shear companion to the root bending moment
+/// [`cantilever_point_load_root_moment`] (`M = P·L`); the two satisfy the statics relation
+/// `M = V·L`. Linear and sign-preserving in `P`, independent of `L`, and — a statics result
+/// — independent of `E` and `I`. The `length` argument is kept for API symmetry and is used
+/// only to reject non-physical geometry. Returns `0` for non-physical input (`P` non-finite,
+/// or `L` non-positive or non-finite).
+pub fn cantilever_point_load_max_shear(load: f64, length: f64) -> f64 {
+    if !load.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load
+}
+
 /// The analytic **maximum bending moment at the fixed root of a cantilever under a
 /// uniformly distributed load** `M = w·L²/2` (N·m) — the peak moment, at the built-in
 /// (encastré) end, which sets the maximum bending stress and governs the strength
@@ -3153,6 +3171,45 @@ mod tests {
         assert_eq!(cantilever_point_load_root_moment(f64::NAN, 2.0), 0.0);
         assert_eq!(cantilever_point_load_root_moment(1000.0, 0.0), 0.0);
         assert_eq!(cantilever_point_load_root_moment(1000.0, -1.0), 0.0);
+    }
+
+    #[test]
+    fn cantilever_point_load_max_shear_matches_statics() {
+        // Worked: P = 1 kN at the tip of a 2 m cantilever → V = P = 1000 N.
+        let v = cantilever_point_load_max_shear(1000.0, 2.0);
+        assert!((v - 1000.0).abs() < 1e-9, "V = P, got {v}");
+
+        // STRONG non-tautological thread over signed (P, L): the constant shear equals the
+        // applied load, and ties to the root moment via the statics relation M = V·L
+        // (M = P·L, V = P → V·L = P·L = M).
+        for &(p, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 1.2)] {
+            let shear = cantilever_point_load_max_shear(p, l);
+            assert!((shear - p).abs() <= 1e-12 * p.abs(), "V = P");
+            let moment = cantilever_point_load_root_moment(p, l);
+            assert!((moment - shear * l).abs() <= 1e-9 * moment.abs(), "M = V·L");
+        }
+
+        // Linear in P; independent of L (shear is constant along the span).
+        assert!(
+            (cantilever_point_load_max_shear(2000.0, 2.0)
+                - 2.0 * cantilever_point_load_max_shear(1000.0, 2.0))
+            .abs()
+                < 1e-9,
+            "linear in P"
+        );
+        assert!(
+            (cantilever_point_load_max_shear(1000.0, 4.0)
+                - cantilever_point_load_max_shear(1000.0, 2.0))
+            .abs()
+                < 1e-9,
+            "independent of L",
+        );
+        assert!(cantilever_point_load_max_shear(-1000.0, 2.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(cantilever_point_load_max_shear(f64::NAN, 2.0), 0.0);
+        assert_eq!(cantilever_point_load_max_shear(1000.0, 0.0), 0.0);
+        assert_eq!(cantilever_point_load_max_shear(1000.0, -1.0), 0.0);
     }
 
     #[test]
