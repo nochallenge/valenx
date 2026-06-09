@@ -965,6 +965,31 @@ impl FlowSolution {
             .sum()
     }
 
+    /// The **energy thickness** `δ_E = ∫₀^Ly (u/u_ref)(1 − (u/u_ref)²) dy` (m) at the
+    /// outlet cross-section (`x = lx`) — the height of an inviscid stream of edge speed
+    /// `u_ref` whose *kinetic-energy* flux equals the energy deficit the viscous boundary
+    /// layer carries. It is the third of the boundary-layer integral thicknesses,
+    /// completing the family with the mass-deficit [`FlowSolution::displacement_thickness`]
+    /// `δ*` and the momentum-deficit [`FlowSolution::momentum_thickness`] `θ`; their ratio
+    /// `δ_E/θ` is the energy shape factor `H*` (≈ 1.5 for a uniform-defect or linear
+    /// profile, ≈ 1.7 for a laminar Blasius layer). Since `δ_E − θ = ∫(u/u_ref)²(1 −
+    /// u/u_ref) dy ≥ 0` for a profile bounded by `u_ref`, always `δ_E ≥ θ`. Plug flow
+    /// (uniform `u = u_ref`) carries no deficit and gives `0`. Returns `0` for a
+    /// non-finite or non-positive `u_ref` or an empty grid.
+    pub fn energy_thickness(&self, u_ref: f64) -> f64 {
+        let (nx, ny) = (self.grid.nx, self.grid.ny);
+        if nx == 0 || ny == 0 || !u_ref.is_finite() || u_ref <= 0.0 {
+            return 0.0;
+        }
+        let dy = self.grid.dy();
+        (0..ny)
+            .map(|j| {
+                let r = self.u.at(nx, j) / u_ref;
+                r * (1.0 - r * r) * dy
+            })
+            .sum()
+    }
+
     /// The boundary-layer **shape factor** `H = δ*/θ` (dimensionless) — the ratio of
     /// the [`FlowSolution::displacement_thickness`] to the
     /// [`FlowSolution::momentum_thickness`] at the outlet, evaluated against edge
@@ -4905,6 +4930,64 @@ mod tests {
         assert_eq!(sol.momentum_thickness(0.0), 0.0); // u_ref = 0
         assert_eq!(sol.momentum_thickness(-1.0), 0.0); // u_ref < 0
         assert_eq!(sol.momentum_thickness(f64::NAN), 0.0); // non-finite
+    }
+
+    #[test]
+    fn energy_thickness_completes_the_integral_thickness_family() {
+        // EXACT anchor: a uniform half-speed profile u = U/2 over a 4×8 channel of height
+        // Ly = 3, referenced to u_ref = U. The energy integrand (u/U)(1−(u/U)²) =
+        // ½·(1−¼) = 0.375 is CONSTANT, so the midpoint sum is exact: δ_E = 0.375·Ly.
+        let (u_full, ly) = (2.0_f64, 3.0_f64);
+        let grid = Grid::new(4, 8, 4.0, ly);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 0.5 * u_full);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) WORKED EXACT: δ_E = 0.375·Ly = 1.125.
+        let de = sol.energy_thickness(u_full);
+        assert!((de - 0.375 * ly).abs() < 1e-12, "δ_E = 0.375·Ly = 1.125, got {de}");
+
+        // (b) THREAD momentum_thickness (non-tautological): for this profile the energy
+        // shape factor δ_E/θ = 0.375/0.25 = 1.5.
+        assert!(
+            (de - 1.5 * sol.momentum_thickness(u_full)).abs() < 1e-12,
+            "δ_E = 1.5·θ for the half-speed profile"
+        );
+
+        // (c) PLUG FLOW → 0: a uniform u = U carries no kinetic-energy deficit.
+        let mut plug_u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                plug_u.set(i, j, u_full);
+            }
+        }
+        let plug = FlowSolution {
+            grid,
+            u: plug_u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(plug.energy_thickness(u_full).abs() < 1e-12, "plug flow → δ_E = 0");
+
+        // (d) A non-physical reference speed is undefined → 0.
+        assert_eq!(sol.energy_thickness(0.0), 0.0); // u_ref = 0
+        assert_eq!(sol.energy_thickness(-1.0), 0.0); // u_ref < 0
+        assert_eq!(sol.energy_thickness(f64::NAN), 0.0); // non-finite
     }
 
     #[test]
