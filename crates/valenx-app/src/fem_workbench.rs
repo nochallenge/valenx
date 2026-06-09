@@ -352,6 +352,42 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 valenx_fem::two_span_continuous_beam_udl_middle_reaction(w, l),
                                 "N",
                             );
+                            ui.add_space(3.0);
+                            let e = s.youngs_gpa * 1e9;
+                            let i_sec = s.ly * s.lz.powi(3) / 12.0;
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "deflection (solid rect. section I = ly·lz³/12 = {i_sec:.4e} m⁴)"
+                                ))
+                                .small()
+                                .strong(),
+                            );
+                            row(
+                                ui,
+                                "cantilever tip δ = PL³/3EI",
+                                valenx_fem::cantilever_tip_deflection(p, l, e, i_sec) * 1000.0,
+                                "mm",
+                            );
+                            row(
+                                ui,
+                                "cantilever UDL tip δ = wL⁴/8EI",
+                                valenx_fem::cantilever_udl_tip_deflection(w, l, e, i_sec) * 1000.0,
+                                "mm",
+                            );
+                            row(
+                                ui,
+                                "simply-supported centre δ = PL³/48EI",
+                                valenx_fem::simply_supported_center_deflection(p, l, e, i_sec)
+                                    * 1000.0,
+                                "mm",
+                            );
+                            row(
+                                ui,
+                                "simply-supported UDL centre δ = 5wL⁴/384EI",
+                                valenx_fem::simply_supported_udl_center_deflection(w, l, e, i_sec)
+                                    * 1000.0,
+                                "mm",
+                            );
                         });
 
                     ui.add_space(6.0);

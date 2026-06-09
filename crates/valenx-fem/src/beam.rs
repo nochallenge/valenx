@@ -1217,6 +1217,39 @@ pub fn fixed_fixed_udl_end_moment(load_per_length: f64, length: f64) -> f64 {
     load_per_length * length * length / 12.0
 }
 
+/// The analytic **strain energy of a fixed–fixed (clamped–clamped) beam under a central
+/// point load** `U = P²·L³/(384·E·I)` (J) — the elastic bending energy stored in a slender
+/// Euler–Bernoulli beam built in at both ends carrying a transverse point force `load` `P`
+/// (N) at mid-span, with span `length` `L` (m), Young's modulus `youngs_modulus` `E` (Pa),
+/// and section second moment of area `second_moment_area` `I` (m⁴).
+///
+/// By Clapeyron's theorem `U = ½·P·δ` with the centre deflection
+/// [`fixed_fixed_center_deflection`] `δ = P·L³/(192EI)`. It completes the point-load
+/// strain-energy set: clamping both ends stores **1/64** the energy of a cantilever
+/// [`cantilever_point_load_strain_energy`] (`P²L³/6EI`) and **1/4** of a simply-supported
+/// beam [`simply_supported_point_load_strain_energy`] (`P²L³/96EI`) under the same central
+/// load. The energy grows with the square of the load (sign-independent), the cube of the
+/// span, and falls inversely with the flexural rigidity `E·I`. Returns `0` for non-physical
+/// input (`P` non-finite, or `E`, `I`, or `L` non-positive or non-finite).
+pub fn fixed_fixed_point_load_strain_energy(
+    load: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !load.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    load * load * length.powi(3) / (384.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **prop reaction of a propped cantilever under a uniformly distributed
 /// load** `R_B = 3·w·L/8` (N) — the vertical reaction at the *propped* (simple-support)
 /// end of a propped cantilever (fixed at one end, simply supported at the other) carrying
@@ -1336,6 +1369,42 @@ pub fn three_span_continuous_beam_udl_interior_moment(load_per_length: f64, span
         return 0.0;
     }
     load_per_length * span_length * span_length / 10.0
+}
+
+/// The **end-support reaction of a three-span continuous beam under a uniformly distributed
+/// load** `R_A = R_D = 2·w·L/5` (N) — the reaction at each of the two end simple supports
+/// `A` and `D` of a beam on four simple supports `A`–`B`–`C`–`D` with three equal spans
+/// `span_length` `L` (m), each carrying a uniform load `load_per_length` `w` (N/m).
+///
+/// From end-span statics with the interior moment `M_B = −wL²/10`
+/// ([`three_span_continuous_beam_udl_interior_moment`]): `R_A = wL/2 − wL/10 = 2wL/5`. With
+/// the interior [`three_span_continuous_beam_udl_interior_reaction`] `R_int = 11wL/10` the
+/// four reactions balance the total load `2·R_A + 2·R_int = 3wL`. Pure statics: independent
+/// of `E` and `I`, linear in `w` and `L`. Returns `0` for non-physical input (`w` non-finite,
+/// or `L` non-positive or non-finite).
+pub fn three_span_continuous_beam_udl_end_reaction(load_per_length: f64, span_length: f64) -> f64 {
+    if !load_per_length.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    2.0 * load_per_length * span_length / 5.0
+}
+
+/// The **interior-support reaction of a three-span continuous beam under a uniformly
+/// distributed load** `R_B = R_C = 11·w·L/10` (N) — the reaction at each of the two interior
+/// simple supports `B` and `C` of a beam on four simple supports `A`–`B`–`C`–`D` with three
+/// equal spans `span_length` `L` (m), each carrying a uniform load `load_per_length` `w`
+/// (N/m).
+///
+/// The interior supports carry the heaviest share. By global vertical equilibrium with the
+/// end reactions [`three_span_continuous_beam_udl_end_reaction`] `R_A = 2wL/5`, the four
+/// reactions sum to the total load `2·R_A + 2·R_B = 3wL`, giving `R_B = 11wL/10`. Pure
+/// statics: independent of `E` and `I`, linear in `w` and `L`. Returns `0` for non-physical
+/// input (`w` non-finite, or `L` non-positive or non-finite).
+pub fn three_span_continuous_beam_udl_interior_reaction(load_per_length: f64, span_length: f64) -> f64 {
+    if !load_per_length.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    11.0 * load_per_length * span_length / 10.0
 }
 
 /// The **middle-support moment of a two-span continuous beam under a central point load in
@@ -3178,6 +3247,51 @@ mod tests {
         assert_eq!(simply_supported_point_load_strain_energy(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_point_load_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite P
         assert_eq!(simply_supported_point_load_strain_energy(p, l, f64::INFINITY, i), 0.0); // non-finite E
+    }
+
+    #[test]
+    fn fixed_fixed_point_load_strain_energy_completes_the_set() {
+        // Worked: P = 1 kN, L = 4 m, E = 200 GPa, I = 1e-6 m⁴ →
+        // U = P²L³/(384EI) = 1e6·64/(384·2e5) = 0.8333… J.
+        let (p, l, e, i) = (1000.0_f64, 4.0_f64, 200.0e9_f64, 1.0e-6_f64);
+        let u = fixed_fixed_point_load_strain_energy(p, l, e, i);
+        assert!((u - 64.0e6 / 7.68e7).abs() <= 1e-9 * u, "U = P²L³/384EI");
+
+        // STRONG non-tautological threads: (i) Clapeyron U = ½·P·δ with the centre-deflection
+        // fn; (ii) ratio identities — 1/64 of the cantilever and 1/4 of the simply-supported
+        // strain energy under the same central load.
+        assert!(
+            (u - 0.5 * p * fixed_fixed_center_deflection(p, l, e, i)).abs() <= 1e-9 * u,
+            "U = ½·P·δ (Clapeyron, threads centre deflection)",
+        );
+        assert!(
+            (u - cantilever_point_load_strain_energy(p, l, e, i) / 64.0).abs() <= 1e-9 * u,
+            "fixed-fixed = 1/64 × cantilever",
+        );
+        assert!(
+            (u - simply_supported_point_load_strain_energy(p, l, e, i) / 4.0).abs() <= 1e-9 * u,
+            "fixed-fixed = 1/4 × simply-supported",
+        );
+
+        // Scaling: ∝ P², ∝ L³; sign-independent.
+        assert!(
+            (fixed_fixed_point_load_strain_energy(2.0 * p, l, e, i) - 4.0 * u).abs() <= 1e-9 * u,
+            "∝ P²",
+        );
+        assert!(
+            (fixed_fixed_point_load_strain_energy(p, 2.0 * l, e, i) - 8.0 * u).abs() <= 1e-9 * u,
+            "∝ L³",
+        );
+        assert!(
+            (fixed_fixed_point_load_strain_energy(-p, l, e, i) - u).abs() <= 1e-12 * u,
+            "sign-independent",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(fixed_fixed_point_load_strain_energy(p, l, 0.0, i), 0.0);
+        assert_eq!(fixed_fixed_point_load_strain_energy(p, l, e, -1.0e-6), 0.0);
+        assert_eq!(fixed_fixed_point_load_strain_energy(p, -1.0, e, i), 0.0);
+        assert_eq!(fixed_fixed_point_load_strain_energy(f64::NAN, l, e, i), 0.0);
     }
 
     #[test]
@@ -5175,6 +5289,54 @@ mod tests {
         assert_eq!(three_span_continuous_beam_udl_interior_moment(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(three_span_continuous_beam_udl_interior_moment(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(three_span_continuous_beam_udl_interior_moment(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn three_span_continuous_beam_udl_reactions_balance() {
+        // WORKED (w = 1 kN/m, L = 2 m): R_end = 2wL/5 = 800 N, R_int = 11wL/10 = 2200 N.
+        assert!(
+            (three_span_continuous_beam_udl_end_reaction(1000.0, 2.0) - 800.0).abs()
+                <= 1e-12 * 800.0,
+            "R_end = 2wL/5 = 800 N",
+        );
+        assert!(
+            (three_span_continuous_beam_udl_interior_reaction(1000.0, 2.0) - 2200.0).abs()
+                <= 1e-12 * 2200.0,
+            "R_int = 11wL/10 = 2200 N",
+        );
+
+        // STRONG non-tautological vertical-equilibrium thread over signed (w, L): the four
+        // reactions (2 end + 2 interior) carry the whole 3wL load.
+        for &(w, l) in &[(1200.0_f64, 3.5_f64), (8200.0, 0.8), (-450.0, 2.0)] {
+            let r_end = three_span_continuous_beam_udl_end_reaction(w, l);
+            let r_int = three_span_continuous_beam_udl_interior_reaction(w, l);
+            assert!(
+                (2.0 * r_end + 2.0 * r_int - 3.0 * w * l).abs() <= 1e-9 * (3.0 * w * l).abs(),
+                "2·R_end + 2·R_int = 3wL (vertical equilibrium)",
+            );
+        }
+
+        // Linear in w and L.
+        let base = three_span_continuous_beam_udl_end_reaction(1000.0, 2.0);
+        assert!(
+            (three_span_continuous_beam_udl_end_reaction(2000.0, 2.0) - 2.0 * base).abs()
+                < 1e-9 * base,
+            "linear in w",
+        );
+        assert!(
+            (three_span_continuous_beam_udl_end_reaction(1000.0, 4.0) - 2.0 * base).abs()
+                < 1e-9 * base,
+            "linear in L",
+        );
+        assert!(
+            three_span_continuous_beam_udl_interior_reaction(-1000.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(three_span_continuous_beam_udl_end_reaction(f64::NAN, 2.0), 0.0);
+        assert_eq!(three_span_continuous_beam_udl_interior_reaction(1000.0, 0.0), 0.0);
+        assert_eq!(three_span_continuous_beam_udl_end_reaction(1000.0, -2.0), 0.0);
     }
 
     #[test]
