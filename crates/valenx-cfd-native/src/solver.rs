@@ -1758,6 +1758,23 @@ impl FlowSolution {
         self.rms_speed().powi(2) / eps
     }
 
+    /// The **Taylor-to-Kolmogorov scale ratio** `λ/η` (dimensionless) — the ratio of the
+    /// intermediate [`FlowSolution::taylor_microscale`] `λ` to the dissipative
+    /// [`FlowSolution::kolmogorov_length_scale`] `η`, a measure of the *width of the
+    /// inertial subrange*: the larger the separation between the energy-carrying and
+    /// dissipative scales, the broader the range of eddies over which the turbulent cascade
+    /// operates. It grows with Reynolds number (for a fixed flow, `∝ 1/√ν`), and in
+    /// isotropic turbulence satisfies `λ/η = 15^(1/4)·√(Re_λ)` with the Taylor-microscale
+    /// Reynolds number [`FlowSolution::taylor_reynolds_number`]. Returns `0` when there is
+    /// no dissipation (a strainless or quiescent flow, where both scales vanish).
+    pub fn taylor_to_kolmogorov_ratio(&self, kinematic_viscosity: f64) -> f64 {
+        let eta = self.kolmogorov_length_scale(kinematic_viscosity);
+        if eta <= 0.0 {
+            return 0.0;
+        }
+        self.taylor_microscale(kinematic_viscosity) / eta
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -4471,6 +4488,81 @@ mod tests {
             converged: true,
         };
         assert_eq!(rotation.taylor_microscale(0.1), 0.0);
+    }
+
+    #[test]
+    fn taylor_to_kolmogorov_ratio_is_the_inertial_range_width() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Pure shear u(y) = γy → ε = ν·γ²; λ = u_rms·√15/γ (ν-independent) and η =
+        // (ν³/ε)^(1/4) = √(ν/γ), so λ/η = u_rms·√(15/(γν)) ∝ 1/√ν.
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) THREAD delegation: λ/η = taylor_microscale / kolmogorov_length_scale.
+        let nu = 0.1_f64;
+        let r = shear.taylor_to_kolmogorov_ratio(nu);
+        assert!(
+            (r - shear.taylor_microscale(nu) / shear.kolmogorov_length_scale(nu)).abs() <= 1e-9 * r,
+            "λ/η = λ ÷ η"
+        );
+
+        // (b) IDENTITY (non-tautological, threads taylor_reynolds_number): in isotropic
+        // turbulence λ/η = 15^(1/4)·√(Re_λ).
+        let rhs = 15.0_f64.powf(0.25) * shear.taylor_reynolds_number(nu).sqrt();
+        assert!((r - rhs).abs() <= 1e-9 * r, "λ/η = 15^(1/4)·√Re_λ");
+
+        // (c) 1/√ν SCALING: the shear velocity field is fixed, so λ/η ∝ 1/√ν — quartering
+        // ν doubles the ratio.
+        assert!(
+            (shear.taylor_to_kolmogorov_ratio(0.025) - 2.0 * shear.taylor_to_kolmogorov_ratio(0.1))
+                .abs()
+                <= 1e-9 * shear.taylor_to_kolmogorov_ratio(0.025),
+            "λ/η ∝ 1/√ν"
+        );
+
+        // (d) NO DISSIPATION → 0: a solid-body rotation strains nothing (η = 0).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(rotation.taylor_to_kolmogorov_ratio(0.1), 0.0);
     }
 
     #[test]
