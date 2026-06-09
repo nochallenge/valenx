@@ -159,6 +159,7 @@ pub use beam::{
     fixed_fixed_udl_end_moment, flexural_rigidity, hollow_circular_polar_second_moment_of_area,
     hollow_circular_second_moment_of_area,
     lames_first_parameter,
+    p_wave_modulus,
     polar_section_modulus,
     rectangular_plastic_section_modulus, rectangular_polar_second_moment_of_area,
     rectangular_second_moment_of_area, shear_modulus_from_youngs,
