@@ -399,6 +399,16 @@ impl Tree {
         depth.into_iter().max().unwrap_or(0)
     }
 
+    /// `true` if the tree is **binary** (bifurcating) — every internal node has
+    /// exactly two children. Leaves and a single-node tree are vacuously binary.
+    /// Cannot be inferred from the leaf/internal counts alone (a 4-leaf star and a
+    /// caterpillar tree can share counts yet differ in this property).
+    pub fn is_binary(&self) -> bool {
+        self.nodes
+            .iter()
+            .all(|n| n.is_leaf() || n.children.len() == 2)
+    }
+
     /// Descendant leaf ids of `id` (just `[id]` if `id` is itself a
     /// leaf).
     pub fn descendant_leaves(&self, id: NodeId) -> Vec<NodeId> {
@@ -516,6 +526,20 @@ mod tests {
         // Non-tautological bounds: a cherry consumes 2 leaves and is itself internal.
         assert!(t.cherry_count() <= t.leaf_count() / 2);
         assert!(t.cherry_count() <= t.internal_count());
+    }
+
+    #[test]
+    fn is_binary_detects_bifurcation() {
+        // sample tree ((A,B),C): every internal node has two children → binary.
+        let t = sample_tree();
+        assert!(t.is_binary());
+        // For a rooted binary tree, internal_count == leaf_count − 1 (non-tautological thread).
+        assert_eq!(t.internal_count(), t.leaf_count() - 1);
+        // A 4-leaf star (root with four children) is NOT binary.
+        let labels: Vec<String> = ["w", "x", "y", "z"].iter().map(|s| s.to_string()).collect();
+        assert!(!Tree::star(&labels, 1.0).unwrap().is_binary());
+        // A single leaf is vacuously binary (no internal nodes).
+        assert!(Tree::leaf("X").is_binary());
     }
 
     #[test]

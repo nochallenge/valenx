@@ -27,6 +27,27 @@ pub fn at_content(seq: &Seq) -> Result<f64> {
     Ok(1.0 - gc_content(seq)?)
 }
 
+/// Count of **purine** bases — adenine + guanine — in a nucleotide sequence.
+/// Returns an error for a protein. A distinct grouping from GC (purines span both the
+/// GC and AT pairs); for an unambiguous ACGT/ACGU sequence
+/// `purine_count + pyrimidine_count == len`. Ambiguity codes are not counted.
+pub fn purine_count(seq: &Seq) -> Result<usize> {
+    if seq.kind() == SeqKind::Protein {
+        return Err(BioseqError::invalid("kind", "purine count needs a nucleotide sequence"));
+    }
+    Ok(seq.count(b'A') + seq.count(b'G'))
+}
+
+/// Count of **pyrimidine** bases — cytosine + thymine (DNA) or uracil (RNA) — in a
+/// nucleotide sequence. Returns an error for a protein; ambiguity codes are not
+/// counted. The complement grouping to [`purine_count`].
+pub fn pyrimidine_count(seq: &Seq) -> Result<usize> {
+    if seq.kind() == SeqKind::Protein {
+        return Err(BioseqError::invalid("kind", "pyrimidine count needs a nucleotide sequence"));
+    }
+    Ok(seq.count(b'C') + seq.count(b'T') + seq.count(b'U'))
+}
+
 /// `(gc_count, at_count)` over A/C/G/T(U) plus the two-base ambiguity
 /// codes `S` (→GC) and `W` (→AT).
 fn gc_at_counts(bytes: &[u8]) -> (usize, usize) {
@@ -219,6 +240,27 @@ mod tests {
     fn at_content_complements_gc() {
         let s = Seq::new(SeqKind::Dna, "ATGC").unwrap();
         assert!((at_content(&s).unwrap() - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn purine_pyrimidine_counts() {
+        // ATGC: purines A,G = 2; pyrimidines T,C = 2.
+        let dna = Seq::new(SeqKind::Dna, "ATGC").unwrap();
+        assert_eq!(purine_count(&dna).unwrap(), 2);
+        assert_eq!(pyrimidine_count(&dna).unwrap(), 2);
+        assert_eq!(purine_count(&Seq::new(SeqKind::Dna, "AAGG").unwrap()).unwrap(), 4);
+        assert_eq!(pyrimidine_count(&Seq::new(SeqKind::Dna, "CCTT").unwrap()).unwrap(), 4);
+        // RNA: U is a pyrimidine.
+        let rna = Seq::new(SeqKind::Rna, "AUGC").unwrap();
+        assert_eq!(purine_count(&rna).unwrap(), 2);
+        assert_eq!(pyrimidine_count(&rna).unwrap(), 2);
+        // Non-tautological partition over an unambiguous sequence: purine + pyrimidine = len.
+        let s = Seq::new(SeqKind::Dna, "ATGCATGCAT").unwrap();
+        assert_eq!(purine_count(&s).unwrap() + pyrimidine_count(&s).unwrap(), s.len());
+        // Proteins are rejected (A, G are also amino-acid codes).
+        let prot = Seq::new(SeqKind::Protein, "MAGK").unwrap();
+        assert!(purine_count(&prot).is_err());
+        assert!(pyrimidine_count(&prot).is_err());
     }
 
     #[test]

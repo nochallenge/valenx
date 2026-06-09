@@ -224,6 +224,16 @@ fn run_descriptors(p: &mut CheminfPanel) {
     p.error = None;
     match MoleculeReport::from_smiles(p.smiles_a.trim()) {
         Ok(r) => {
+                // The report struct doesn't carry these two — recompute from the molecule.
+                let (heteroatoms, aromatic_atoms) =
+                    valenx_cheminf::mol_from_smiles(p.smiles_a.trim())
+                        .map(|m| {
+                            (
+                                valenx_cheminf::descriptors::heteroatom_count(&m),
+                                valenx_cheminf::descriptors::aromatic_atom_count(&m),
+                            )
+                        })
+                        .unwrap_or((0, 0));
                 p.result = format!(
                     "canonical SMILES : {}\nformula          : {}\n\
                      average MW       : {:.3} g/mol\nmonoisotopic     : {:.4} u\n\
@@ -231,7 +241,8 @@ fn run_descriptors(p: &mut CheminfPanel) {
                      -- descriptors --\nCrippen logP     : {:.3}\n\
                      TPSA             : {:.2} Å²\nH-bond donors    : {}\n\
                      H-bond acceptors : {}\nrotatable bonds  : {}\n\
-                     rings (SSSR)     : {}  ({} aromatic)\nfraction Csp³    : {:.3}\n\n\
+                     rings (SSSR)     : {}  ({} aromatic)\nheteroatoms      : {}\n\
+                     aromatic atoms   : {}\nfraction Csp³    : {:.3}\n\n\
                      -- drug-likeness --\nLipinski violations : {} / 4\n\
                      Veber             : {}\nQED score          : {:.3}\n\
                      verdict            : {}",
@@ -248,6 +259,8 @@ fn run_descriptors(p: &mut CheminfPanel) {
                     r.rotatable_bonds,
                     r.ring_count,
                     r.aromatic_rings,
+                    heteroatoms,
+                    aromatic_atoms,
                     r.fraction_csp3,
                     r.lipinski.violations,
                     if r.veber.passes { "pass" } else { "fail" },

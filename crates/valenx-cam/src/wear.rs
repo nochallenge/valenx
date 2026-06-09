@@ -54,6 +54,23 @@ pub fn cutting_speed_m_per_min(diameter_mm: f64, rpm: f64) -> f64 {
     std::f64::consts::PI * (diameter_mm / 1000.0) * rpm
 }
 
+/// Feed per tooth (chip load) `f_z = v_f / (n · z)` (mm/tooth) — the advance of the
+/// workpiece per cutting edge, the key parameter for chatter-free milling: too low rubs
+/// and work-hardens, too high overloads the edge. `feed_mm_per_min` is the table feed
+/// `v_f`, `rpm` the spindle speed `n`, and `teeth` the number of flutes `z`. Returns `0`
+/// for non-physical input (non-finite, or `rpm` / `teeth` non-positive).
+pub fn feed_per_tooth(feed_mm_per_min: f64, rpm: f64, teeth: f64) -> f64 {
+    if !feed_mm_per_min.is_finite()
+        || !rpm.is_finite()
+        || rpm <= 0.0
+        || !teeth.is_finite()
+        || teeth <= 0.0
+    {
+        return 0.0;
+    }
+    feed_mm_per_min / (rpm * teeth)
+}
+
 /// Operation summary needed for the wear model.
 #[derive(Clone, Copy, Debug)]
 pub struct OpRunSpec {
@@ -140,6 +157,22 @@ mod tests {
         // 10mm @ 10000 rpm = pi * 0.01 * 10000 = ~314 m/min.
         let v = cutting_speed_m_per_min(10.0, 10000.0);
         assert!((v - 314.159).abs() < 0.1);
+    }
+
+    #[test]
+    fn feed_per_tooth_basic() {
+        // v_f = 800 mm/min, n = 10000 rpm, z = 4 flutes → f_z = 800/(10000·4) = 0.02 mm/tooth.
+        let fz = feed_per_tooth(800.0, 10000.0, 4.0);
+        assert!((fz - 0.02).abs() < 1e-12, "f_z = v_f/(n·z), got {fz}");
+        // Non-tautological thread: the table feed reconstructs from f_z (v_f = f_z·n·z).
+        assert!((fz * 10000.0 * 4.0 - 800.0).abs() < 1e-9, "v_f = f_z·n·z");
+        // Inversely proportional to flute count and to rpm.
+        assert!((feed_per_tooth(800.0, 10000.0, 2.0) - 2.0 * fz).abs() < 1e-12, "∝ 1/z");
+        assert!((feed_per_tooth(800.0, 5000.0, 4.0) - 2.0 * fz).abs() < 1e-12, "∝ 1/n");
+        // Non-physical input → 0.
+        assert_eq!(feed_per_tooth(800.0, 0.0, 4.0), 0.0);
+        assert_eq!(feed_per_tooth(800.0, 10000.0, 0.0), 0.0);
+        assert_eq!(feed_per_tooth(f64::NAN, 10000.0, 4.0), 0.0);
     }
 
     #[test]
