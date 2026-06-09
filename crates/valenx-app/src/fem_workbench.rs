@@ -427,6 +427,66 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             ui.label(egui::RichText::new("M = K + 4G/3 = λ + 2G").weak().small());
                         });
 
+                    ui.add_space(6.0);
+                    egui::CollapsingHeader::new("Section & buckling")
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            // Reactive: from the solid box section (ly × lz), length Lx, and E.
+                            let e = s.youngs_gpa * 1e9;
+                            let area = s.ly * s.lz;
+                            let i_sec = valenx_fem::rectangular_second_moment_of_area(s.ly, s.lz);
+                            let l = s.lx;
+                            let c = s.lz / 2.0;
+                            let r_gyr = valenx_fem::section_radius_of_gyration(i_sec, area);
+                            ui.label(
+                                egui::RichText::new(
+                                    "solid rect. section ly×lz, length Lx, pinned ends (K=1)",
+                                )
+                                .weak()
+                                .small(),
+                            );
+                            let row = |ui: &mut egui::Ui, label: &str, val: f64, unit: &str| {
+                                ui.label(
+                                    egui::RichText::new(format!("  {label}: {val:.4} {unit}"))
+                                        .monospace()
+                                        .small(),
+                                );
+                            };
+                            row(ui, "area A", area, "m²");
+                            row(ui, "second moment I = ly·lz³/12", i_sec, "m⁴");
+                            row(
+                                ui,
+                                "polar second moment J",
+                                valenx_fem::rectangular_polar_second_moment_of_area(s.ly, s.lz),
+                                "m⁴",
+                            );
+                            row(
+                                ui,
+                                "elastic section modulus Z = I/c",
+                                valenx_fem::elastic_section_modulus(i_sec, c),
+                                "m³",
+                            );
+                            row(ui, "radius of gyration r = √(I/A)", r_gyr, "m");
+                            row(
+                                ui,
+                                "Euler critical load P_cr",
+                                valenx_fem::euler_critical_load(e, i_sec, l, 1.0) / 1e3,
+                                "kN",
+                            );
+                            row(
+                                ui,
+                                "slenderness λ = KL/r",
+                                valenx_fem::slenderness_ratio(l, 1.0, r_gyr),
+                                "—",
+                            );
+                            row(
+                                ui,
+                                "critical buckling stress σ_cr",
+                                valenx_fem::critical_buckling_stress(e, i_sec, l, 1.0, area) / 1e6,
+                                "MPa",
+                            );
+                        });
+
                     if let Some(plot) = &s.plot {
                         ui.add_space(4.0);
                         match plot {

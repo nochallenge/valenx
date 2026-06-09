@@ -991,6 +991,37 @@ pub fn hollow_circular_polar_second_moment_of_area(
     std::f64::consts::PI * (outer_diameter.powi(4) - inner_diameter.powi(4)) / 32.0
 }
 
+/// The **second moment of area of a hollow rectangular (box) cross-section** about its
+/// centroidal bending axis `I = (b·h³ − bᵢ·hᵢ³)/12` (m⁴), for outer width `width` `b` (m),
+/// outer height `height` `h` (m), inner width `inner_width` `bᵢ` (m) and inner height
+/// `inner_height` `hᵢ` (m). The box tube is the canonical stiffness-to-weight section — the
+/// removed core carries little bending stress — and is the rectangular companion to
+/// [`hollow_circular_second_moment_of_area`]. The bending axis is normal to `height`, so the
+/// depth enters cubed. Returns `0` for non-physical input (outer dimensions non-positive or
+/// non-finite, inner dimensions negative or non-finite, or the inner bore not strictly inside
+/// the outer envelope).
+pub fn hollow_rectangular_second_moment_of_area(
+    width: f64,
+    height: f64,
+    inner_width: f64,
+    inner_height: f64,
+) -> f64 {
+    if !width.is_finite()
+        || width <= 0.0
+        || !height.is_finite()
+        || height <= 0.0
+        || !inner_width.is_finite()
+        || inner_width < 0.0
+        || !inner_height.is_finite()
+        || inner_height < 0.0
+        || inner_width >= width
+        || inner_height >= height
+    {
+        return 0.0;
+    }
+    (width * height.powi(3) - inner_width * inner_height.powi(3)) / 12.0
+}
+
 /// The **plastic section modulus of a solid circular section** `Z = d³/6` (m³), for a round
 /// bar of diameter `diameter` `d` (m) — the section property for fully-plastic limit bending
 /// of a shaft (`M_plastic = σ_y·Z`), the circular companion to
@@ -3800,6 +3831,48 @@ mod tests {
         assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, 0.2), 0.0); // d > D
         assert_eq!(hollow_circular_polar_second_moment_of_area(f64::NAN, 0.05), 0.0);
         assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, -0.01), 0.0);
+    }
+
+    #[test]
+    fn hollow_rectangular_second_moment_of_area_is_outer_minus_inner() {
+        // WORKED: 2×2 outer, 1×1 inner → I = (2·2³ − 1·1³)/12 = (16 − 1)/12 = 1.25 m⁴.
+        assert!(
+            (hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 1.0) - 1.25).abs() < 1e-12,
+            "I = (bh³ − bᵢhᵢ³)/12 = 1.25",
+        );
+
+        // STRONG non-tautological thread: the box is the solid outer minus the solid inner,
+        // threading the existing rectangular_second_moment_of_area.
+        for &(b, h, bi, hi) in &[(0.1_f64, 0.2_f64, 0.06, 0.12), (3.0, 1.0, 2.0, 0.5)] {
+            let hollow = hollow_rectangular_second_moment_of_area(b, h, bi, hi);
+            let outer = rectangular_second_moment_of_area(b, h);
+            let inner = rectangular_second_moment_of_area(bi, hi);
+            assert!(
+                (hollow - (outer - inner)).abs() <= 1e-12 * outer,
+                "hollow = I_outer − I_inner",
+            );
+        }
+
+        // A larger bore removes more material → smaller I.
+        assert!(
+            hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.5, 1.5)
+                < hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 1.0),
+            "larger bore → smaller I",
+        );
+        // Cubic in outer depth: doubling h (with proportional bore) scales I by 8.
+        let base = hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 1.0);
+        assert!(
+            (hollow_rectangular_second_moment_of_area(2.0, 4.0, 1.0, 2.0) - 8.0 * base).abs()
+                <= 1e-9 * (8.0 * base),
+            "∝ h³ (with proportional bore)",
+        );
+
+        // Guards: non-physical / bore-not-inside → 0.
+        assert_eq!(hollow_rectangular_second_moment_of_area(0.0, 2.0, 1.0, 1.0), 0.0);
+        assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 2.0, 1.0), 0.0); // bᵢ ≥ b
+        assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 2.0), 0.0); // hᵢ ≥ h
+        assert_eq!(hollow_rectangular_second_moment_of_area(f64::NAN, 2.0, 1.0, 1.0), 0.0);
+        assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, -0.1), 0.0);
     }
 
     #[test]

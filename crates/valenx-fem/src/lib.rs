@@ -160,7 +160,7 @@ pub use beam::{
     fixed_fixed_point_load_end_moment, fixed_fixed_point_load_strain_energy,
     fixed_fixed_udl_center_deflection,
     fixed_fixed_udl_end_moment, flexural_rigidity, hollow_circular_polar_second_moment_of_area,
-    hollow_circular_second_moment_of_area,
+    hollow_circular_second_moment_of_area, hollow_rectangular_second_moment_of_area,
     lames_first_parameter,
     p_wave_modulus,
     polar_section_modulus,
