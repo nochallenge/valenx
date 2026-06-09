@@ -1163,6 +1163,27 @@ pub fn propped_cantilever_udl_fixed_end_moment(load_per_length: f64, length: f64
     load_per_length * length * length / 8.0
 }
 
+/// The analytic **maximum sagging (span) moment of a propped cantilever under a
+/// uniformly distributed load** `M_sag = 9·w·L²/128` (N·m) — the largest *positive*
+/// (sagging) bending moment in the span of a propped cantilever (fixed at one end,
+/// simply supported at the other) under a uniform load `load_per_length` `w` (N/m) over
+/// span `length` `L` (m). It occurs at the point of zero shear, `x = 5L/8` from the fixed
+/// end (`= 3L/8` from the prop). Together with the fixed-end hogging moment
+/// [`propped_cantilever_udl_fixed_end_moment`] `M_A = wL²/8 = 16wL²/128` it defines the
+/// full bending-moment envelope: the clamp (`|M_A| = 16wL²/128`) governs strength, while
+/// this span peak (`9wL²/128`) is the maximum sagging value the bottom fibre sees. By
+/// statics from the prop end it is `M_sag = R_B·(3L/8) − w·(3L/8)²/2` with the prop
+/// reaction [`propped_cantilever_udl_prop_reaction`] `R_B = 3wL/8`. Quadratic in `L`,
+/// linear and sign-preserving in `w`, and — being pure statics — independent of `E` and
+/// `I`. Returns `0` for non-physical input (`w` non-finite, or `L` non-positive or
+/// non-finite).
+pub fn propped_cantilever_udl_max_sagging_moment(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    9.0 * load_per_length * length * length / 128.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -4420,6 +4441,45 @@ mod tests {
         assert_eq!(propped_cantilever_udl_fixed_end_moment(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(propped_cantilever_udl_fixed_end_moment(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(propped_cantilever_udl_fixed_end_moment(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn propped_cantilever_udl_max_sagging_moment_matches_statics() {
+        // (a) WORKED: w = 1 kN/m UDL on a 2 m propped cantilever → M_sag = 9·w·L²/128 =
+        // 9·1000·4/128 = 281.25 N·m.
+        assert!(
+            (propped_cantilever_udl_max_sagging_moment(1000.0, 2.0) - 281.25).abs() <= 1e-9 * 281.25,
+            "M_sag = 9wL²/128 = 281.25 N·m"
+        );
+
+        // (b) STATICS THREAD (non-tautological): the max sagging moment is at the zero-
+        // shear section, 3L/8 from the prop; moments there from the prop end give
+        // M_sag = R_B·(3L/8) − w·(3L/8)²/2, threading the prop reaction R_B = 3wL/8.
+        for &(w, l) in &[(1000.0_f64, 2.0_f64), (8200.0, 0.8), (450.0, 3.5)] {
+            let a = 3.0 * l / 8.0;
+            let m = propped_cantilever_udl_max_sagging_moment(w, l);
+            let stat = propped_cantilever_udl_prop_reaction(w, l) * a - w * a * a / 2.0;
+            assert!((m - stat).abs() <= 1e-9 * m.abs().max(1.0), "M_sag = R_B·(3L/8) − w·(3L/8)²/2");
+        }
+
+        // (c) SCALING: quadratic in L, linear and sign-preserving in w.
+        let base = propped_cantilever_udl_max_sagging_moment(1000.0, 2.0);
+        assert!(
+            (propped_cantilever_udl_max_sagging_moment(1000.0, 4.0) - 4.0 * base).abs()
+                <= 1e-9 * 4.0 * base,
+            "quadratic in L"
+        );
+        assert!(
+            (propped_cantilever_udl_max_sagging_moment(2000.0, 2.0) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
+            "linear in w"
+        );
+        assert!(propped_cantilever_udl_max_sagging_moment(-1000.0, 2.0) < 0.0, "sign follows load");
+
+        // (d) Non-physical input → 0.
+        assert_eq!(propped_cantilever_udl_max_sagging_moment(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, -2.0), 0.0); // L < 0
     }
 
     #[test]
