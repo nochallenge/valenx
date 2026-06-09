@@ -602,6 +602,10 @@ pub struct EllipticalOrbit {
     /// orbit (Kepler's 2nd law: the areal sweep rate is `h/2`). Equals the
     /// product `r·v` at both apsides.
     pub specific_angular_momentum_m2_s: f64,
+    /// Semi-latus rectum `p = a·(1−e²)` (m) — the conic parameter in the orbit
+    /// equation `r = p/(1 + e·cosθ)`; the orbital radius at ±90° true anomaly, and
+    /// the harmonic mean of the apsis radii.
+    pub semi_latus_rectum_m: f64,
 }
 
 /// Summarize the elliptical Earth orbit with the two given altitudes (km),
@@ -623,6 +627,8 @@ pub fn elliptical_orbit(altitude_a_km: f64, altitude_b_km: f64) -> EllipticalOrb
     let apogee_speed_ms = (mu * (2.0 / r_apo - 1.0 / a)).sqrt();
     let specific_energy_j_per_kg = -mu / (2.0 * a);
     let specific_angular_momentum_m2_s = (mu * a * (1.0 - eccentricity * eccentricity)).sqrt();
+    let semi_latus_rectum_m =
+        valenx_astro::orbit::semi_latus_rectum_from_elements(a, eccentricity).unwrap_or(0.0);
     EllipticalOrbit {
         semi_major_axis_m: a,
         eccentricity,
@@ -631,6 +637,7 @@ pub fn elliptical_orbit(altitude_a_km: f64, altitude_b_km: f64) -> EllipticalOrb
         apogee_speed_ms,
         specific_energy_j_per_kg,
         specific_angular_momentum_m2_s,
+        semi_latus_rectum_m,
     }
 }
 
