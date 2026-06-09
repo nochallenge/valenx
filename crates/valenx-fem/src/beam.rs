@@ -1319,6 +1319,32 @@ pub fn two_span_continuous_beam_udl_outer_reaction(load_per_length: f64, span_le
     3.0 * load_per_length * span_length / 8.0
 }
 
+/// The **middle-support moment of a two-span continuous beam under a central point load in
+/// one span** `M_B = 3PL/32` (N·m) — the bending moment over the central support `B` of a
+/// beam on three simple supports `A`–`B`–`C` with two equal spans `span_length` `L` (m)
+/// when a single transverse point force `point_load` `P` (N) acts at the **mid-span of one
+/// span** (the other span unloaded).
+///
+/// It is the point-load companion to the distributed-load
+/// [`two_span_continuous_beam_udl_middle_moment`] `wL²/8`, from the same three-moment
+/// (Clapeyron) theorem: the loaded span's free bending-moment triangle (area `PL²/8`,
+/// centroid `L/2` from the end support) gives `2·M_B·(2L) = −6·(PL²/8)(L/2)/L`, i.e.
+/// `M_B = 3PL/32`. Equivalently it is **half** the propped-cantilever clamping moment
+/// [`propped_cantilever_central_load_fixed_end_moment`] `3PL/16` — the *unloaded* equal-
+/// stiffness adjacent span provides finite (not rigid) rotational restraint at `B`, halving
+/// the fully-fixed value. Being pure statics it is independent of `E` and `I`, linear and
+/// sign-preserving in `P`, and linear in `L`. Returns `0` for non-physical input (`P`
+/// non-finite, or `L` non-positive or non-finite).
+pub fn two_span_continuous_beam_central_point_load_middle_moment(
+    point_load: f64,
+    span_length: f64,
+) -> f64 {
+    if !point_load.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    3.0 * point_load * span_length / 32.0
+}
+
 /// The analytic **fixed-end (clamp) reaction of a propped cantilever under a uniformly
 /// distributed load** `R_A = 5·w·L/8` (N) — the vertical support reaction at the *fixed*
 /// (clamped) end of a propped cantilever (fixed at one end, simply supported at the other)
@@ -5016,6 +5042,64 @@ mod tests {
         assert_eq!(two_span_continuous_beam_udl_outer_reaction(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(two_span_continuous_beam_udl_outer_reaction(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(two_span_continuous_beam_udl_outer_reaction(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn two_span_continuous_beam_central_point_load_middle_moment_matches_clapeyron() {
+        // WORKED: P = 32 kN at the mid-span of one span of a two-span continuous beam,
+        // equal spans L = 2 m → the middle-support moment is M_B = 3PL/32 = 6 kN·m.
+        assert!(
+            (two_span_continuous_beam_central_point_load_middle_moment(32.0, 2.0) - 6.0).abs()
+                <= 1e-9 * 6.0,
+            "M_B = 3PL/32 = 6 kN·m",
+        );
+
+        // STRONG non-tautological DUAL thread over three signed (P, L): (i) it is HALF the
+        // propped-cantilever clamping moment (#466), the unloaded equal span halving the
+        // restraint; (ii) an independent three-moment-theorem recompute from the loaded
+        // span's free-BM triangle (area PL²/8, centroid L/2).
+        for &(p, l) in &[(7.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
+            let m = two_span_continuous_beam_central_point_load_middle_moment(p, l);
+            assert!(
+                (m - 0.5 * propped_cantilever_central_load_fixed_end_moment(p, l)).abs()
+                    <= 1e-9 * m.abs(),
+                "M_B = ½ · propped-cantilever clamping moment",
+            );
+            let a1 = p * l * l / 8.0; // free-BM triangle area of the loaded span
+            let xbar = l / 2.0; // its centroid from the end support
+            let mb3 = -6.0 * a1 * xbar / (l * 2.0 * (l + l)); // three-moment theorem (signed)
+            assert!(
+                (m + mb3).abs() <= 1e-9 * m.abs(),
+                "M_B magnitude must equal the three-moment-theorem result",
+            );
+        }
+
+        // Linear in both P and L.
+        let base = two_span_continuous_beam_central_point_load_middle_moment(10.0, 2.0);
+        assert!(
+            (two_span_continuous_beam_central_point_load_middle_moment(20.0, 2.0) - 2.0 * base)
+                .abs()
+                < 1e-9 * base,
+            "linear in P",
+        );
+        assert!(
+            (two_span_continuous_beam_central_point_load_middle_moment(10.0, 4.0) - 2.0 * base)
+                .abs()
+                < 1e-9 * base,
+            "linear in L",
+        );
+        assert!(
+            two_span_continuous_beam_central_point_load_middle_moment(-10.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(
+            two_span_continuous_beam_central_point_load_middle_moment(f64::NAN, 2.0),
+            0.0
+        ); // P NaN
+        assert_eq!(two_span_continuous_beam_central_point_load_middle_moment(32.0, 0.0), 0.0); // L = 0
+        assert_eq!(two_span_continuous_beam_central_point_load_middle_moment(32.0, -2.0), 0.0); // L < 0
     }
 
     #[test]
