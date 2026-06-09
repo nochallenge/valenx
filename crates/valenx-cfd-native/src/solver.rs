@@ -1793,6 +1793,23 @@ impl FlowSolution {
         self.integral_length_scale(kinematic_viscosity) / eta
     }
 
+    /// The **integral-to-Taylor scale ratio** `L/λ` (dimensionless) — the ratio of the
+    /// energy-containing [`FlowSolution::integral_length_scale`] `L` to the intermediate
+    /// [`FlowSolution::taylor_microscale`] `λ`. It completes the length-scale-ratio trio
+    /// with `λ/η` ([`FlowSolution::taylor_to_kolmogorov_ratio`]) and `L/η`
+    /// ([`FlowSolution::integral_to_kolmogorov_ratio`]). It grows *linearly* with Reynolds
+    /// number (for a fixed flow, `∝ 1/ν`), and in isotropic turbulence is exactly
+    /// `L/λ = Re_λ / 15` with the Taylor-microscale Reynolds number
+    /// [`FlowSolution::taylor_reynolds_number`]. Returns `0` when there is no dissipation
+    /// (a strainless or quiescent flow, where both scales vanish).
+    pub fn integral_to_taylor_ratio(&self, kinematic_viscosity: f64) -> f64 {
+        let lambda = self.taylor_microscale(kinematic_viscosity);
+        if lambda <= 0.0 {
+            return 0.0;
+        }
+        self.integral_length_scale(kinematic_viscosity) / lambda
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -4658,6 +4675,81 @@ mod tests {
             converged: true,
         };
         assert_eq!(rotation.integral_to_kolmogorov_ratio(0.1), 0.0);
+    }
+
+    #[test]
+    fn integral_to_taylor_ratio_completes_the_scale_ratio_trio() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Pure shear u(y) = γy → ε = ν·γ²; L = u_rms³/ε, λ = u_rms·√(15ν/ε), so L/λ ∝ 1/ν
+        // and L/λ = Re_λ/15 exactly.
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) THREAD delegation: L/λ = integral_length_scale / taylor_microscale.
+        let nu = 0.1_f64;
+        let r = shear.integral_to_taylor_ratio(nu);
+        assert!(
+            (r - shear.integral_length_scale(nu) / shear.taylor_microscale(nu)).abs() <= 1e-9 * r,
+            "L/λ = L ÷ λ"
+        );
+
+        // (b) IDENTITY (non-tautological, threads taylor_reynolds_number): in isotropic
+        // turbulence L/λ = Re_λ / 15 exactly.
+        let rhs = shear.taylor_reynolds_number(nu) / 15.0;
+        assert!((r - rhs).abs() <= 1e-9 * r, "L/λ = Re_λ/15");
+
+        // (c) 1/ν SCALING: the shear velocity field is fixed, so L/λ ∝ 1/ν — halving ν
+        // doubles the ratio.
+        assert!(
+            (shear.integral_to_taylor_ratio(0.05) - 2.0 * shear.integral_to_taylor_ratio(0.1))
+                .abs()
+                <= 1e-9 * shear.integral_to_taylor_ratio(0.05),
+            "L/λ ∝ 1/ν"
+        );
+
+        // (d) NO DISSIPATION → 0: a solid-body rotation strains nothing (λ = 0).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(rotation.integral_to_taylor_ratio(0.1), 0.0);
     }
 
     #[test]
