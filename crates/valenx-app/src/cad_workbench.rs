@@ -1544,10 +1544,27 @@ fn rebuild_tree(s: &CadWorkbenchState) -> Result<(Vec<Vec<valenx_cad::Solid>>, S
         .and_then(mesh_mean_vertex_valence)
         .map(|v| format!(" · mean valence {v:.2}"))
         .unwrap_or_default();
-    let status = format!(
+    // B-rep shape descriptors of the final body (best-effort; blank if unavailable):
+    // volume-equivalent sphere radius, the two Zingg bounding-box shape ratios, and the
+    // rotation-invariant inertia anisotropy I_max/I_min.
+    let shape_str = model
+        .bodies
+        .last()
+        .map(|body| {
+            let r_eq = valenx_cad::solid_equivalent_sphere_radius(body).unwrap_or(0.0);
+            let elong = valenx_cad::solid_bounding_box_elongation(body).unwrap_or(0.0);
+            let flat = valenx_cad::solid_bounding_box_flatness(body).unwrap_or(0.0);
+            let i_aniso = valenx_cad::solid_inertia_anisotropy(body).unwrap_or(0.0);
+            format!(
+                " · r_eq {r_eq:.4} u · elongation {elong:.3} · flatness {flat:.3} · I_aniso {i_aniso:.3}"
+            )
+        })
+        .unwrap_or_default();
+    let mut status = format!(
         "{nbodies} bodies · {faces} faces{brep_str} · {volume:.4} u³ · {mass:.4} mass · {area:.4} u²{sv_str}{bbox_str}{fill_str}{sphericity_str}{meshvol_str}{mesharea_str}{centroid_str}{gyration_str}{moments_str}{watertight_str}{open_str}{hole_str}{nonmanifold_str}{euler_str}{defect_str}{shells_str}{encl_str}{diam_str}{mean_edge_str}{wire_str}{quality_str}{min_tri_area_str}{max_tri_area_str}{aspect_str}{sharp_str}{crease_str}{valence_str}{mean_valence_str} · {} steps",
         s.steps.len()
     );
+    status.push_str(&shape_str);
     Ok((model.snapshots, status))
 }
 

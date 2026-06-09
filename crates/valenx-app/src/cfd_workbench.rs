@@ -508,6 +508,13 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         "\nflow regime: Re_L {re_domain:.1}  \u{00B7}  Re_h {re_cell:.2}  \u{00B7}  \
          \u{03C4}_res {tau_residence:.4} s  \u{00B7}  \u{1E41}_out {m_out:.4} kg/s"
     ));
+    // Shear-layer & energy-dissipation diagnostics (any case).
+    let delta_omega = sol.vorticity_thickness();
+    let eps = sol.mean_dissipation_rate(s.viscosity);
+    s.result.push_str(&format!(
+        "\nshear & dissipation: \u{03B4}_\u{03C9} {delta_omega:.5} m  \u{00B7}  \
+         \u{03B5} {eps:.3e} m\u{00B2}/s\u{00B3}"
+    ));
     if matches!(s.case, CfdCase::ChannelFlow) {
         let u_ref = sol.bulk_velocity();
         if u_ref > 0.0 {

@@ -260,6 +260,24 @@ pub fn cantilever_udl_root_moment(load_per_length: f64, length: f64) -> f64 {
     load_per_length * length * length / 2.0
 }
 
+/// The analytic **maximum transverse shear force at the fixed root of a cantilever under a
+/// uniformly distributed load** `V = w·L` (N) — the peak shear, carried at the built-in
+/// (encastré) end, equal to the total distributed load on the span; it sets the maximum
+/// transverse shear stress and governs the shear design of the member. `load_per_length`
+/// `w` is the load intensity (N/m) and `length` `L` the span (m).
+///
+/// The shear decreases linearly from `w·L` at the root to zero at the free tip. It is the
+/// shear companion to the root bending moment [`cantilever_udl_root_moment`]
+/// (`M = w·L²/2 = V·L/2`). Linear and sign-preserving in `w`, linear in `L`, and — a statics
+/// result — independent of `E` and `I`. Returns `0` for non-physical input (`w` non-finite,
+/// or `L` non-positive or non-finite).
+pub fn cantilever_udl_max_shear(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * length
+}
+
 /// The analytic **strain energy of a tip-loaded cantilever**
 /// `U = P²·L³/(6·E·I)` (J) — the elastic energy stored in bending when a slender
 /// Euler–Bernoulli cantilever of span `length` `L` (m), Young's modulus
@@ -1020,6 +1038,41 @@ pub fn hollow_rectangular_second_moment_of_area(
         return 0.0;
     }
     (width * height.powi(3) - inner_width * inner_height.powi(3)) / 12.0
+}
+
+/// The **polar second moment of area of a hollow rectangular (box) cross-section**
+/// `J = (b·h·(b²+h²) − bᵢ·hᵢ·(bᵢ²+hᵢ²))/12` (m⁴) — the torsion-relevant polar moment of a
+/// box tube, equal to `Ix + Iy` (the sum of the bending second moments about both centroidal
+/// axes), for outer width `width` `b` (m), outer height `height` `h` (m), inner width
+/// `inner_width` `bᵢ` (m) and inner height `inner_height` `hᵢ` (m). It is the polar companion
+/// to [`hollow_rectangular_second_moment_of_area`] (bending) and to
+/// [`hollow_circular_polar_second_moment_of_area`] (round tube), and equals `J_outer − J_inner`
+/// where `J_rect` is [`rectangular_polar_second_moment_of_area`]. For a square box (`b = h`,
+/// `bᵢ = hᵢ`) it is exactly twice the bending second moment (`Ix = Iy`). Returns `0` for
+/// non-physical input (outer dimensions non-positive or non-finite, inner dimensions negative
+/// or non-finite, or the inner bore not strictly inside the outer envelope).
+pub fn hollow_rectangular_polar_second_moment_of_area(
+    width: f64,
+    height: f64,
+    inner_width: f64,
+    inner_height: f64,
+) -> f64 {
+    if !width.is_finite()
+        || width <= 0.0
+        || !height.is_finite()
+        || height <= 0.0
+        || !inner_width.is_finite()
+        || inner_width < 0.0
+        || !inner_height.is_finite()
+        || inner_height < 0.0
+        || inner_width >= width
+        || inner_height >= height
+    {
+        return 0.0;
+    }
+    (width * height * (width * width + height * height)
+        - inner_width * inner_height * (inner_width * inner_width + inner_height * inner_height))
+        / 12.0
 }
 
 /// The **plastic section modulus of a solid circular section** `Z = d³/6` (m³), for a round
@@ -2992,6 +3045,42 @@ mod tests {
     }
 
     #[test]
+    fn cantilever_udl_max_shear_matches_statics() {
+        // Worked: w = 1 kN/m on a 2 m cantilever → V_root = w·L = 2000 N.
+        let v = cantilever_udl_max_shear(1000.0, 2.0);
+        assert!((v - 2000.0).abs() < 1e-9, "V_root = w·L, got {v}");
+
+        // STRONG non-tautological threads over signed (w, L): the root shear equals the total
+        // distributed load, and the root moment is the shear acting at the load centroid L/2.
+        for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 1.2)] {
+            let shear = cantilever_udl_max_shear(w, l);
+            assert!((shear - w * l).abs() <= 1e-12 * (w * l).abs(), "V = total load w·L");
+            let moment = cantilever_udl_root_moment(w, l);
+            assert!((moment - shear * l / 2.0).abs() <= 1e-9 * moment.abs(), "M_root = V·L/2");
+        }
+
+        // Linear in w and L; sign follows the load.
+        assert!(
+            (cantilever_udl_max_shear(2000.0, 2.0) - 2.0 * cantilever_udl_max_shear(1000.0, 2.0))
+                .abs()
+                < 1e-9,
+            "linear in w"
+        );
+        assert!(
+            (cantilever_udl_max_shear(1000.0, 4.0) - 2.0 * cantilever_udl_max_shear(1000.0, 2.0))
+                .abs()
+                < 1e-9,
+            "linear in L"
+        );
+        assert!(cantilever_udl_max_shear(-1000.0, 2.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(cantilever_udl_max_shear(f64::NAN, 2.0), 0.0);
+        assert_eq!(cantilever_udl_max_shear(1000.0, 0.0), 0.0);
+        assert_eq!(cantilever_udl_max_shear(1000.0, -1.0), 0.0);
+    }
+
+    #[test]
     fn cantilever_point_load_root_moment_matches_statics() {
         // Worked: P = 1 kN at the tip of a 2 m cantilever → M_root = P·L = 2000 N·m.
         let m = cantilever_point_load_root_moment(1000.0, 2.0);
@@ -3873,6 +3962,42 @@ mod tests {
         assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 2.0), 0.0); // hᵢ ≥ h
         assert_eq!(hollow_rectangular_second_moment_of_area(f64::NAN, 2.0, 1.0, 1.0), 0.0);
         assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, -0.1), 0.0);
+    }
+
+    #[test]
+    fn hollow_rectangular_polar_second_moment_of_area_is_outer_minus_inner() {
+        // WORKED: 2×2 outer, 1×1 bore → J = (b·h·(b²+h²) − bᵢ·hᵢ·(bᵢ²+hᵢ²))/12
+        //         = (2·2·8 − 1·1·2)/12 = (32 − 2)/12 = 2.5 m⁴.
+        assert!(
+            (hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, 1.0) - 2.5).abs() < 1e-12,
+            "J = 2.5",
+        );
+
+        // STRONG non-tautological thread: J_hollow = J_outer − J_inner via the solid polar fn.
+        for &(b, h, bi, hi) in &[(0.1_f64, 0.2_f64, 0.06, 0.12), (3.0, 1.0, 2.0, 0.5)] {
+            let hollow = hollow_rectangular_polar_second_moment_of_area(b, h, bi, hi);
+            let outer = rectangular_polar_second_moment_of_area(b, h);
+            let inner = rectangular_polar_second_moment_of_area(bi, hi);
+            assert!(
+                (hollow - (outer - inner)).abs() <= 1e-12 * outer,
+                "J = J_outer − J_inner",
+            );
+        }
+
+        // For a SQUARE box (b=h, bᵢ=hᵢ) the polar J = Ix + Iy = 2·(bending I).
+        let j_square = hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, 1.0);
+        let i_square = hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 1.0);
+        assert!(
+            (j_square - 2.0 * i_square).abs() <= 1e-12 * j_square,
+            "square box: J = 2·I",
+        );
+
+        // Guards: non-physical / bore-not-inside → 0.
+        assert_eq!(hollow_rectangular_polar_second_moment_of_area(0.0, 2.0, 1.0, 1.0), 0.0);
+        assert_eq!(hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 2.0, 1.0), 0.0); // bᵢ ≥ b
+        assert_eq!(hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, 2.0), 0.0); // hᵢ ≥ h
+        assert_eq!(hollow_rectangular_polar_second_moment_of_area(f64::NAN, 2.0, 1.0, 1.0), 0.0);
+        assert_eq!(hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, -0.1), 0.0);
     }
 
     #[test]
