@@ -1066,6 +1066,33 @@ impl FlowSolution {
         u_ref * self.momentum_thickness(u_ref) / kinematic_viscosity
     }
 
+    /// The **displacement-thickness Reynolds number** `Re_δ* = u_ref·δ* / ν`
+    /// (dimensionless) — the Reynolds number formed on the boundary-layer
+    /// [`FlowSolution::displacement_thickness`] `δ*` and the edge speed `u_ref`, with
+    /// kinematic viscosity `kinematic_viscosity` `ν` (m²/s). It is the parameter
+    /// **linear-stability** theory is built on — a Blasius layer first becomes unstable to
+    /// Tollmien–Schlichting waves at the critical `Re_δ* ≈ 520` — and so complements the
+    /// transition-correlation [`FlowSolution::momentum_thickness_reynolds_number`] `Re_θ`
+    /// (which uses the momentum thickness). The two are tied by the boundary-layer
+    /// [`FlowSolution::shape_factor`] `H = δ*/θ`: `Re_δ* = H·Re_θ`. `u_ref` is the same
+    /// edge / free-stream reference speed the thickness integrals use. Returns `0` for
+    /// non-positive or non-finite `u_ref` or viscosity, or whenever the displacement
+    /// thickness vanishes (plug flow).
+    pub fn displacement_thickness_reynolds_number(
+        &self,
+        u_ref: f64,
+        kinematic_viscosity: f64,
+    ) -> f64 {
+        if !u_ref.is_finite()
+            || u_ref <= 0.0
+            || !kinematic_viscosity.is_finite()
+            || kinematic_viscosity <= 0.0
+        {
+            return 0.0;
+        }
+        u_ref * self.displacement_thickness(u_ref) / kinematic_viscosity
+    }
+
     /// Area-averaged kinetic-energy density `⟨½ρ|u|²⟩` (J/m³ = Pa) over the cell
     /// grid — the mean specific kinetic energy of the flow, in the same units as
     /// (and directly comparable to) the freestream dynamic pressure `½ρU²`.
@@ -5635,6 +5662,63 @@ mod tests {
         assert_eq!(sol.momentum_thickness_reynolds_number(u_full, f64::NAN), 0.0);
         assert_eq!(sol.momentum_thickness_reynolds_number(0.0, nu), 0.0);
         assert_eq!(sol.momentum_thickness_reynolds_number(f64::NAN, nu), 0.0);
+    }
+
+    #[test]
+    fn displacement_thickness_reynolds_number_is_the_stability_parameter() {
+        // EXACT anchor: a uniform half-speed profile u = U/2 over a 4×8 channel of height
+        // Ly = 3, referenced to u_ref = U. The displacement integrand (1 − u/U) = ½ is
+        // constant, so δ* = Ly/2 = 1.5 exactly; θ = Ly/4 = 0.75 → H = δ*/θ = 2.
+        let (u_full, ly) = (2.0_f64, 3.0_f64);
+        let grid = Grid::new(4, 8, 4.0, ly);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 0.5 * u_full);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let nu = 0.1_f64;
+        let re_dstar = sol.displacement_thickness_reynolds_number(u_full, nu);
+        // (a) WORKED (exact, analytic δ* = Ly/2): Re_δ* = u_ref·δ*/ν = 2·1.5/0.1 = 30; and
+        // delegation against the field's own displacement thickness.
+        assert!(
+            (re_dstar - u_full * (ly / 2.0) / nu).abs() <= 1e-9 * re_dstar,
+            "Re_δ* = u_ref·(Ly/2)/ν = 30"
+        );
+        assert!(
+            (re_dstar - u_full * sol.displacement_thickness(u_full) / nu).abs() <= 1e-9 * re_dstar,
+            "Re_δ* = u_ref·δ*/ν"
+        );
+        // (b) NON-TAUTOLOGICAL shape-factor cross-thread Re_δ* = H·Re_θ (= δ*/θ · Re_θ),
+        // threading BOTH the momentum-thickness Reynolds number AND the shape factor.
+        assert!(
+            (re_dstar
+                - sol.momentum_thickness_reynolds_number(u_full, nu) * sol.shape_factor(u_full))
+            .abs()
+                <= 1e-9 * re_dstar,
+            "Re_δ* = H·Re_θ"
+        );
+        // (c) 1/ν SCALING: halve ν → double Re_δ*.
+        assert!(
+            (sol.displacement_thickness_reynolds_number(u_full, nu / 2.0) - 2.0 * re_dstar).abs()
+                <= 1e-9 * 2.0 * re_dstar,
+            "Re_δ* ∝ 1/ν"
+        );
+        // (d) GUARDS: non-physical viscosity or reference speed → 0.
+        assert_eq!(sol.displacement_thickness_reynolds_number(u_full, 0.0), 0.0);
+        assert_eq!(sol.displacement_thickness_reynolds_number(u_full, -1.0), 0.0);
+        assert_eq!(sol.displacement_thickness_reynolds_number(u_full, f64::NAN), 0.0);
+        assert_eq!(sol.displacement_thickness_reynolds_number(0.0, nu), 0.0);
+        assert_eq!(sol.displacement_thickness_reynolds_number(f64::NAN, nu), 0.0);
     }
 
     #[test]
