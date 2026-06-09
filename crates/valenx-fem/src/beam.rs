@@ -1171,6 +1171,24 @@ pub fn simply_supported_point_load_max_moment(load: f64, length: f64) -> f64 {
     load * length / 4.0
 }
 
+/// The analytic **maximum transverse shear force of a simply-supported beam under a
+/// central point load** `V = P/2` (N) — the peak shear, at either support, equal to the
+/// end reaction; it governs the maximum transverse shear stress. `load` `P` is the point
+/// force (N) and `length` `L` the span (m).
+///
+/// By symmetry the central load `P` splits equally between the two supports, so the shear is
+/// `P/2` at each (constant in magnitude along the span). It is the shear companion to the
+/// mid-span moment [`simply_supported_point_load_max_moment`] (`M = P·L/4`); the two satisfy
+/// the statics relation `2·M = V·L`. Linear and sign-preserving in `P`, independent of `L`,
+/// and — a statics result — independent of `E` and `I`. Returns `0` for non-physical input
+/// (`P` non-finite, or `L` non-positive or non-finite).
+pub fn simply_supported_point_load_max_shear(load: f64, length: f64) -> f64 {
+    if !load.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load / 2.0
+}
+
 /// The analytic **maximum bending moment of a simply-supported beam under a
 /// uniformly distributed load** `M = w·L²/8` (N·m) — the peak moment, at mid-span,
 /// which sets the maximum bending stress and so governs the strength design of the
@@ -5128,6 +5146,48 @@ mod tests {
         assert_eq!(simply_supported_point_load_max_moment(f64::NAN, 4.0), 0.0);
         assert_eq!(simply_supported_point_load_max_moment(1000.0, 0.0), 0.0);
         assert_eq!(simply_supported_point_load_max_moment(1000.0, -1.0), 0.0);
+    }
+
+    #[test]
+    fn simply_supported_point_load_max_shear_matches_statics() {
+        // Worked: P = 1 kN central load on a 4 m span → V = P/2 = 500 N.
+        let v = simply_supported_point_load_max_shear(1000.0, 4.0);
+        assert!((v - 500.0).abs() < 1e-9, "V = P/2, got {v}");
+
+        // STRONG non-tautological threads over signed (P, L): the end shear is half the load,
+        // and ties to the mid-span moment via the statics relation 2·M = V·L
+        // (M = PL/4, V = P/2 → V·L = PL/2 = 2·M).
+        for &(p, l) in &[(1000.0_f64, 4.0_f64), (-650.0, 2.5), (8200.0, 1.2)] {
+            let shear = simply_supported_point_load_max_shear(p, l);
+            assert!((shear - p / 2.0).abs() <= 1e-12 * p.abs(), "V = P/2 (½ the load)");
+            let moment = simply_supported_point_load_max_moment(p, l);
+            assert!(
+                (shear * l - 2.0 * moment).abs() <= 1e-9 * (shear * l).abs(),
+                "2·M = V·L (moment–shear statics)",
+            );
+        }
+
+        // Linear and sign-preserving in P; independent of L (end shear of a central load).
+        assert!(
+            (simply_supported_point_load_max_shear(2000.0, 4.0)
+                - 2.0 * simply_supported_point_load_max_shear(1000.0, 4.0))
+            .abs()
+                < 1e-9,
+            "linear in P"
+        );
+        assert!(
+            (simply_supported_point_load_max_shear(1000.0, 8.0)
+                - simply_supported_point_load_max_shear(1000.0, 4.0))
+            .abs()
+                < 1e-9,
+            "independent of L",
+        );
+        assert!(simply_supported_point_load_max_shear(-1000.0, 4.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(simply_supported_point_load_max_shear(f64::NAN, 4.0), 0.0);
+        assert_eq!(simply_supported_point_load_max_shear(1000.0, 0.0), 0.0);
+        assert_eq!(simply_supported_point_load_max_shear(1000.0, -1.0), 0.0);
     }
 
     #[test]
