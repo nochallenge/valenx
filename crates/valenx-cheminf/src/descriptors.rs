@@ -268,6 +268,16 @@ pub fn aromatic_atom_count(mol: &Molecule) -> usize {
     mol.atoms.iter().filter(|a| a.aromatic).count()
 }
 
+/// Number of bonds whose **both** endpoint atoms are aromatic — the bond-level
+/// companion to [`aromatic_atom_count`] (atoms) and [`aromatic_ring_count`] (rings),
+/// e.g. 6 for benzene, 11 for naphthalene, 0 for cyclohexane.
+pub fn aromatic_bond_count(mol: &Molecule) -> usize {
+    mol.bonds
+        .iter()
+        .filter(|b| mol.atoms[b.a].aromatic && mol.atoms[b.b].aromatic)
+        .count()
+}
+
 /// Heavy (non-hydrogen) atom count.
 pub fn heavy_atom_count(mol: &Molecule) -> usize {
     mol.heavy_atom_count()
@@ -503,5 +513,17 @@ mod tests {
         // pure hydrocarbons: no heteroatoms.
         assert_eq!(heteroatom_count(&mol_from_smiles("c1ccccc1").unwrap()), 0);
         assert_eq!(heteroatom_count(&mol_from_smiles("CCCCCC").unwrap()), 0);
+    }
+
+    #[test]
+    fn aromatic_bond_count_exact() {
+        // benzene: 6 aromatic ring bonds; naphthalene: 11 (two fused rings share 1); pyridine: 6.
+        assert_eq!(aromatic_bond_count(&mol_from_smiles("c1ccccc1").unwrap()), 6);
+        assert_eq!(aromatic_bond_count(&mol_from_smiles("c1ccc2ccccc2c1").unwrap()), 11);
+        assert_eq!(aromatic_bond_count(&mol_from_smiles("c1ccncc1").unwrap()), 6);
+        // chlorobenzene still has 6 aromatic ring bonds (the C–Cl bond is not aromatic).
+        assert_eq!(aromatic_bond_count(&mol_from_smiles("Clc1ccccc1").unwrap()), 6);
+        // no aromatic atoms → no aromatic bonds.
+        assert_eq!(aromatic_bond_count(&mol_from_smiles("C1CCCCC1").unwrap()), 0);
     }
 }
