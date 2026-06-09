@@ -734,6 +734,18 @@ pub fn lrfd_factored_load(dead_load: f64, live_load: f64) -> f64 {
     1.2 * dead_load + 1.6 * live_load
 }
 
+/// ASD load combination per ASCE 7 §2.4 basic combination 1: `D + L`, combining a dead
+/// (permanent) load `dead_load` with a live (transient) load `live_load` into the
+/// allowable-stress-design service demand. Unfactored (unity factors), so the result is
+/// always ≤ the LRFD [`lrfd_factored_load`] for the same non-negative inputs. Returns `0`
+/// for non-finite input; the sign of each load is preserved.
+pub fn asd_load_combination(dead_load: f64, live_load: f64) -> f64 {
+    if !dead_load.is_finite() || !live_load.is_finite() {
+        return 0.0;
+    }
+    dead_load + live_load
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -983,5 +995,19 @@ mod tests {
         assert!((lrfd_factored_load(-5.0, 3.0) - (-1.2)).abs() < 1e-9);
         assert_eq!(lrfd_factored_load(f64::NAN, 5.0), 0.0);
         assert_eq!(lrfd_factored_load(10.0, f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn asd_load_combination_basic() {
+        // ASCE 7 §2.4 ASD basic combo: D + L (unity factors).
+        assert!((asd_load_combination(10.0, 5.0) - 15.0).abs() < 1e-9);
+        assert!((asd_load_combination(10.0, 0.0) - 10.0).abs() < 1e-9); // dead only
+        assert!((asd_load_combination(0.0, 5.0) - 5.0).abs() < 1e-9); // live only
+        // Non-tautological: ASD < LRFD for the same non-negative inputs (15 < 20).
+        assert!(asd_load_combination(10.0, 5.0) < lrfd_factored_load(10.0, 5.0));
+        // Sign preserved (uplift); non-finite → 0.
+        assert!((asd_load_combination(-5.0, 3.0) - (-2.0)).abs() < 1e-9);
+        assert_eq!(asd_load_combination(f64::NAN, 5.0), 0.0);
+        assert_eq!(asd_load_combination(10.0, f64::INFINITY), 0.0);
     }
 }

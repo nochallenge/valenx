@@ -208,6 +208,22 @@ pub struct IgesGeometry {
     pub skipped_types: std::collections::BTreeMap<u32, usize>,
 }
 
+impl IgesGeometry {
+    /// Total number of parsed entities — the sum across every recognised entity collection
+    /// (lines, points, composite curves, boundaries, manifold solids, attribute tables) plus
+    /// the accumulated counts of recognised-but-skipped types. A single model-size diagnostic,
+    /// distinct from any one collection's length.
+    pub fn total_entity_count(&self) -> usize {
+        self.lines.len()
+            + self.points.len()
+            + self.composite_curves.len()
+            + self.boundaries.len()
+            + self.manifold_solids.len()
+            + self.attribute_tables.len()
+            + self.skipped_types.values().sum::<usize>()
+    }
+}
+
 /// Read an IGES file from `path` and return a wireframe-only
 /// [`Solid::Mesh`] containing the line + point entities as a
 /// non-manifold soup of degenerate triangles.
@@ -1359,6 +1375,28 @@ mod tests {
         assert_eq!(parsed.attribute_tables.len(), 1);
         // No skipped types — every entity is supported.
         assert!(parsed.skipped_types.is_empty(), "got: {:?}", parsed.skipped_types);
+    }
+
+    #[test]
+    fn total_entity_count_aggregates_all_collections() {
+        // Two real entities (1 line + 1 point), the rest empty via Default.
+        let mut geom = IgesGeometry {
+            lines: vec![IgesLine {
+                start: [0.0, 0.0, 0.0],
+                end: [1.0, 1.0, 1.0],
+            }],
+            points: vec![IgesPoint {
+                pos: [2.0, 3.0, 4.0],
+            }],
+            ..Default::default()
+        };
+        assert_eq!(geom.total_entity_count(), 2);
+        // Empty geometry → 0.
+        assert_eq!(IgesGeometry::default().total_entity_count(), 0);
+        // Skipped-type counts are included in the aggregate: 2 entities + (2 + 3) skipped = 7.
+        geom.skipped_types.insert(124, 2);
+        geom.skipped_types.insert(100, 3);
+        assert_eq!(geom.total_entity_count(), 7);
     }
 
     #[test]

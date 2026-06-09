@@ -76,7 +76,7 @@ pub use predictor::{
     EffectCategory, EffectPrediction, MockPredictor, VariantContext, VariantEffectPredictor,
 };
 pub use report::{consensus, PredictionFailure, VariantReport};
-pub use variant::{parse, AminoAcid, Nucleotide, Variant};
+pub use variant::{parse, transition_transversion_ratio, AminoAcid, Nucleotide, Variant};
 
 /// Crate-wide result alias.
 pub type Result<T> = std::result::Result<T, VariantError>;
