@@ -745,6 +745,23 @@ impl FlowSolution {
         self.max_speed() * lx / kinematic_viscosity
     }
 
+    /// The **bulk (channel) Reynolds number** `Re_b = U_bulk·H / ν` (dimensionless) — the
+    /// mean through-flow speed `U_bulk` ([`FlowSolution::bulk_velocity`]) times the channel
+    /// height `H = ly`, divided by the kinematic viscosity `kinematic_viscosity` `ν` (m²/s).
+    /// It is the canonical **internal-flow** Reynolds number — the figure quoted for pipe
+    /// and channel flow (laminar below `Re ≈ 2300` in a pipe; the bulk Reynolds number
+    /// behind channel-DNS reference cases). Unlike the
+    /// [`FlowSolution::domain_reynolds_number`] (peak speed × streamwise length `Lₓ`, the
+    /// external flat-plate classifier) it is built on the *bulk* speed and the *cross-stream*
+    /// height — the scales that govern duct flow. Returns `0` for non-physical viscosity
+    /// (`ν ≤ 0` or non-finite).
+    pub fn bulk_reynolds_number(&self, kinematic_viscosity: f64) -> f64 {
+        if !kinematic_viscosity.is_finite() || kinematic_viscosity <= 0.0 {
+            return 0.0;
+        }
+        self.bulk_velocity() * self.grid.ly / kinematic_viscosity
+    }
+
     /// The **flow-through (residence) time** `τ = Lₓ / U` (s) — the streamwise domain
     /// length `Lₓ = nx·dx` divided by the peak speed `U` ([`FlowSolution::max_speed`]), the
     /// convective time scale over which the flow crosses the domain. A simulation is
@@ -3021,6 +3038,63 @@ mod tests {
             converged: true,
         };
         assert_eq!(quiescent.flow_through_time(), 0.0, "quiescent → 0");
+    }
+
+    #[test]
+    fn bulk_reynolds_number_is_the_internal_flow_classifier() {
+        // Grid 6×3 over 6×3 → Lₓ = 6, H = ly = 3; uniform u = 2 → bulk_velocity = 2 and
+        // max_speed = 2.
+        let grid = Grid::new(6, 3, 6.0, 3.0);
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, 2.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let nu = 0.5_f64;
+        let reb = sol.bulk_reynolds_number(nu);
+        // Worked: Re_b = U·H/ν = 2·3/0.5 = 12, and delegation against bulk_velocity·ly/ν.
+        assert!((reb - 12.0).abs() <= 1e-9 * 12.0, "Re_b = U_bulk·H/ν = 12");
+        assert!(
+            (reb - sol.bulk_velocity() * sol.grid.ly / nu).abs() <= 1e-9 * reb,
+            "Re_b = U_bulk·H/ν"
+        );
+        // NON-TAUTOLOGICAL thread vs the EXISTING domain Reynolds number: for uniform flow
+        // U_max = U_bulk, so the two Reynolds numbers differ only by their length scale —
+        // Re_b·Lₓ = Re_L·H (the domain aspect ratio).
+        let lx = (sol.grid.nx as f64) * sol.grid.dx();
+        assert!(
+            (reb * lx - sol.domain_reynolds_number(nu) * sol.grid.ly).abs() <= 1e-9 * reb * lx,
+            "Re_b·Lₓ = Re_L·H for uniform flow"
+        );
+        // Inversely proportional to ν: doubling ν halves Re_b.
+        assert!(
+            (sol.bulk_reynolds_number(2.0 * nu) - 0.5 * reb).abs() <= 1e-9 * reb,
+            "Re_b ∝ 1/ν"
+        );
+        // Guards: non-physical viscosity → 0.
+        assert_eq!(sol.bulk_reynolds_number(0.0), 0.0);
+        assert_eq!(sol.bulk_reynolds_number(-1.0), 0.0);
+        // A quiescent field (U_bulk = 0) → Re_b = 0.
+        let quiescent = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(quiescent.bulk_reynolds_number(nu), 0.0, "no flow → Re_b = 0");
     }
 
     #[test]
