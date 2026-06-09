@@ -215,6 +215,23 @@ pub fn shannon_entropy(seq: &Seq) -> f64 {
     h
 }
 
+/// Hamming distance — the number of positions at which two **equal-length** sequences
+/// differ. A foundational position-exact pairwise metric (works on any [`SeqKind`]).
+/// Returns an error if the two sequences have different lengths.
+pub fn hamming_distance(a: &Seq, b: &Seq) -> Result<usize> {
+    if a.len() != b.len() {
+        return Err(BioseqError::invalid(
+            "sequences",
+            format!("lengths must match: {} vs {}", a.len(), b.len()),
+        ));
+    }
+    Ok(a.as_bytes()
+        .iter()
+        .zip(b.as_bytes().iter())
+        .filter(|(x, y)| x != y)
+        .count())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,6 +285,41 @@ mod tests {
         let p = Seq::new(SeqKind::Protein, "MKVL").unwrap();
         assert!(gc_content(&p).is_err());
         assert!(gc_skew(&p).is_err());
+    }
+
+    #[test]
+    fn hamming_distance_counts_differing_positions() {
+        let a = Seq::new(SeqKind::Dna, "ACGT").unwrap();
+        // one mismatch (position 1: C vs G).
+        assert_eq!(
+            hamming_distance(&a, &Seq::new(SeqKind::Dna, "AGGT").unwrap()).unwrap(),
+            1
+        );
+        // all four positions differ.
+        assert_eq!(
+            hamming_distance(
+                &Seq::new(SeqKind::Dna, "AAAA").unwrap(),
+                &Seq::new(SeqKind::Dna, "TTTT").unwrap()
+            )
+            .unwrap(),
+            4
+        );
+        // identical → 0.
+        assert_eq!(hamming_distance(&a, &a).unwrap(), 0);
+        // works on protein (any SeqKind).
+        let p1 = Seq::new(SeqKind::Protein, "MVKL").unwrap();
+        let p2 = Seq::new(SeqKind::Protein, "MVQL").unwrap();
+        assert_eq!(hamming_distance(&p1, &p2).unwrap(), 1);
+        // unequal length → error.
+        assert!(hamming_distance(&a, &Seq::new(SeqKind::Dna, "AC").unwrap()).is_err());
+        // non-tautological triangle inequality: d(x,z) ≤ d(x,y) + d(y,z).
+        let x = Seq::new(SeqKind::Dna, "ACGT").unwrap();
+        let y = Seq::new(SeqKind::Dna, "AGGT").unwrap();
+        let z = Seq::new(SeqKind::Dna, "AGGA").unwrap();
+        let dxz = hamming_distance(&x, &z).unwrap();
+        let dxy = hamming_distance(&x, &y).unwrap();
+        let dyz = hamming_distance(&y, &z).unwrap();
+        assert!(dxz <= dxy + dyz, "triangle inequality");
     }
 
     #[test]
