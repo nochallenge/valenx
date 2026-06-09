@@ -399,6 +399,20 @@ impl Tree {
         depth.into_iter().max().unwrap_or(0)
     }
 
+    /// **Sackin index** — the sum of every leaf's depth (in edges from the root). A
+    /// tree-balance statistic: lower is more balanced. Distinct from
+    /// [`max_depth`](Self::max_depth) (which is the *maximum* leaf depth, not the *sum*);
+    /// a star tree gives `sackin = leaf_count` (all leaves at depth 1).
+    pub fn sackin_index(&self) -> usize {
+        let mut depth = vec![0usize; self.nodes.len()];
+        for &id in &self.preorder() {
+            if let Some(p) = self.nodes[id].parent {
+                depth[id] = depth[p] + 1;
+            }
+        }
+        self.leaves().iter().map(|&leaf_id| depth[leaf_id]).sum()
+    }
+
     /// `true` if the tree is **binary** (bifurcating) — every internal node has
     /// exactly two children. Leaves and a single-node tree are vacuously binary.
     /// Cannot be inferred from the leaf/internal counts alone (a 4-leaf star and a
@@ -540,6 +554,22 @@ mod tests {
         assert!(!Tree::star(&labels, 1.0).unwrap().is_binary());
         // A single leaf is vacuously binary (no internal nodes).
         assert!(Tree::leaf("X").is_binary());
+    }
+
+    #[test]
+    fn sackin_index_sums_leaf_depths() {
+        // sample tree ((A,B),C): leaves A,B at depth 2 and C at depth 1 → Sackin = 5.
+        let t = sample_tree();
+        assert_eq!(t.sackin_index(), 5);
+        // Distinct from max_depth (the MAX leaf depth, here 2) — Sackin is the SUM.
+        assert_eq!(t.max_depth(), 2);
+        // A 4-leaf star has every leaf at depth 1 → Sackin = leaf_count.
+        let labels: Vec<String> = ["w", "x", "y", "z"].iter().map(|s| s.to_string()).collect();
+        let star = Tree::star(&labels, 1.0).unwrap();
+        assert_eq!(star.sackin_index(), star.leaf_count());
+        // Non-tautological: a non-trivial tree's Sackin ≥ leaf_count; a lone leaf is 0.
+        assert!(t.sackin_index() >= t.leaf_count());
+        assert_eq!(Tree::leaf("X").sackin_index(), 0);
     }
 
     #[test]

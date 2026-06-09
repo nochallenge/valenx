@@ -71,6 +71,29 @@ pub fn feed_per_tooth(feed_mm_per_min: f64, rpm: f64, teeth: f64) -> f64 {
     feed_mm_per_min / (rpm * teeth)
 }
 
+/// Material removal rate (MRR) `a_p · a_e · v_f` (mm³/min) — the volumetric cutting
+/// productivity of a milling pass: axial depth of cut `axial_depth_mm` (`a_p`), radial
+/// width of cut `radial_width_mm` (`a_e`), and table feed `feed_mm_per_min` (`v_f`). It
+/// sets operation runtime and (with the specific cutting energy) the spindle power. Three
+/// independent inputs — distinct from the cutting speed and the feed per tooth. Returns
+/// `0` for non-physical input (non-finite, or any dimension non-positive).
+pub fn material_removal_rate(
+    axial_depth_mm: f64,
+    radial_width_mm: f64,
+    feed_mm_per_min: f64,
+) -> f64 {
+    if !axial_depth_mm.is_finite()
+        || axial_depth_mm <= 0.0
+        || !radial_width_mm.is_finite()
+        || radial_width_mm <= 0.0
+        || !feed_mm_per_min.is_finite()
+        || feed_mm_per_min <= 0.0
+    {
+        return 0.0;
+    }
+    axial_depth_mm * radial_width_mm * feed_mm_per_min
+}
+
 /// Operation summary needed for the wear model.
 #[derive(Clone, Copy, Debug)]
 pub struct OpRunSpec {
@@ -173,6 +196,23 @@ mod tests {
         assert_eq!(feed_per_tooth(800.0, 0.0, 4.0), 0.0);
         assert_eq!(feed_per_tooth(800.0, 10000.0, 0.0), 0.0);
         assert_eq!(feed_per_tooth(f64::NAN, 10000.0, 4.0), 0.0);
+    }
+
+    #[test]
+    fn material_removal_rate_basic() {
+        // MRR = a_p·a_e·v_f: 2 mm × 10 mm × 300 mm/min = 6000 mm³/min.
+        let mrr = material_removal_rate(2.0, 10.0, 300.0);
+        assert!((mrr - 6000.0).abs() < 1e-9, "MRR = a_p·a_e·v_f, got {mrr}");
+        // Linear in each independent input.
+        assert!((material_removal_rate(4.0, 10.0, 300.0) - 2.0 * mrr).abs() < 1e-9, "∝ a_p");
+        assert!((material_removal_rate(2.0, 20.0, 300.0) - 2.0 * mrr).abs() < 1e-9, "∝ a_e");
+        assert!((material_removal_rate(2.0, 10.0, 600.0) - 2.0 * mrr).abs() < 1e-9, "∝ v_f");
+        // Non-tautological thread: MRR / v_f = a_p·a_e (the cut cross-section).
+        assert!((mrr / 300.0 - 2.0 * 10.0).abs() < 1e-9, "MRR/v_f = a_p·a_e");
+        // Non-physical input → 0.
+        assert_eq!(material_removal_rate(0.0, 10.0, 300.0), 0.0);
+        assert_eq!(material_removal_rate(-2.0, 10.0, 300.0), 0.0);
+        assert_eq!(material_removal_rate(f64::NAN, 10.0, 300.0), 0.0);
     }
 
     #[test]
