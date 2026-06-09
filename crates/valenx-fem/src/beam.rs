@@ -1355,6 +1355,23 @@ pub fn fixed_fixed_udl_end_moment(load_per_length: f64, length: f64) -> f64 {
     load_per_length * length * length / 12.0
 }
 
+/// The analytic **maximum sagging (mid-span) moment of a fixed–fixed (clamped–clamped) beam
+/// under a uniformly distributed load** `M_sag = w·L²/24` (N·m) — the largest *positive*
+/// (sagging) bending moment, at mid-span, for a beam built in at both ends carrying a uniform
+/// load `load_per_length` `w` (N/m) over span `length` `L` (m). It is exactly **half** the
+/// magnitude of the fixed-end hogging moment [`fixed_fixed_udl_end_moment`]
+/// (`M_end = w·L²/12 = 2·M_sag`): the symmetric clamped–clamped moment diagram swings from
+/// `−wL²/12` at each support up through `+wL²/24` at mid-span, with the clamps strength-
+/// critical and this span peak the maximum sagging value. Quadratic in `L`, linear and
+/// sign-preserving in `w`, and — pure statics — independent of `E` and `I`. Returns `0` for
+/// non-physical input (`w` non-finite, or `L` non-positive or non-finite).
+pub fn fixed_fixed_udl_max_sagging_moment(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * length * length / 24.0
+}
+
 /// The analytic **strain energy of a fixed–fixed (clamped–clamped) beam under a central
 /// point load** `U = P²·L³/(384·E·I)` (J) — the elastic bending energy stored in a slender
 /// Euler–Bernoulli beam built in at both ends carrying a transverse point force `load` `P`
@@ -5356,6 +5373,43 @@ mod tests {
         assert_eq!(fixed_fixed_udl_end_moment(f64::NAN, 4.0), 0.0); // w NaN
         assert_eq!(fixed_fixed_udl_end_moment(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(fixed_fixed_udl_end_moment(1000.0, -1.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn fixed_fixed_udl_max_sagging_moment_is_half_the_end_moment() {
+        // Worked: w = 1 kN/m on a 2 m clamped–clamped beam → M_sag = w·L²/24 = 4000/24 N·m.
+        let m_sag = fixed_fixed_udl_max_sagging_moment(1000.0, 2.0);
+        assert!((m_sag - 4000.0 / 24.0).abs() < 1e-9, "M_sag = w·L²/24, got {m_sag}");
+
+        // STRONG non-tautological thread over signed (w, L): the mid-span sagging moment is
+        // exactly half the magnitude of the fixed-end hogging moment (wL²/24 = ½·wL²/12).
+        for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 1.2)] {
+            let sag = fixed_fixed_udl_max_sagging_moment(w, l);
+            let end = fixed_fixed_udl_end_moment(w, l);
+            assert!((sag - end / 2.0).abs() <= 1e-12 * end.abs(), "M_sag = M_end/2");
+        }
+
+        // Quadratic in L; linear and sign-preserving in w.
+        assert!(
+            (fixed_fixed_udl_max_sagging_moment(1000.0, 4.0)
+                - 4.0 * fixed_fixed_udl_max_sagging_moment(1000.0, 2.0))
+            .abs()
+                < 1e-9,
+            "quadratic in L"
+        );
+        assert!(
+            (fixed_fixed_udl_max_sagging_moment(2000.0, 2.0)
+                - 2.0 * fixed_fixed_udl_max_sagging_moment(1000.0, 2.0))
+            .abs()
+                < 1e-9,
+            "linear in w"
+        );
+        assert!(fixed_fixed_udl_max_sagging_moment(-1000.0, 2.0) < 0.0, "sign follows the load");
+
+        // Non-physical input → 0.
+        assert_eq!(fixed_fixed_udl_max_sagging_moment(f64::NAN, 2.0), 0.0);
+        assert_eq!(fixed_fixed_udl_max_sagging_moment(1000.0, 0.0), 0.0);
+        assert_eq!(fixed_fixed_udl_max_sagging_moment(1000.0, -1.0), 0.0);
     }
 
     #[test]

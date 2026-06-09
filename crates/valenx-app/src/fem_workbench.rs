@@ -508,6 +508,14 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 valenx_fem::bending_stress(tip_moment, c, i_sec) / 1e6,
                                 "MPa",
                             );
+                            let q_na = s.ly * s.lz * s.lz / 8.0;
+                            row(
+                                ui,
+                                "cantilever max shear stress τ = VQ/Ib",
+                                valenx_fem::beam_transverse_shear_stress(s.force_n, q_na, i_sec, s.ly)
+                                    / 1e6,
+                                "MPa",
+                            );
                         });
 
                     if let Some(plot) = &s.plot {

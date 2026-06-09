@@ -261,6 +261,13 @@ pub fn aromatic_ring_count(mol: &Molecule) -> usize {
         .count()
 }
 
+/// Number of atoms flagged aromatic by Hückel (4n+2) perception — the atom-level
+/// companion to [`aromatic_ring_count`] (e.g. 6 for benzene, 10 for naphthalene,
+/// 0 for cyclohexane).
+pub fn aromatic_atom_count(mol: &Molecule) -> usize {
+    mol.atoms.iter().filter(|a| a.aromatic).count()
+}
+
 /// Heavy (non-hydrogen) atom count.
 pub fn heavy_atom_count(mol: &Molecule) -> usize {
     mol.heavy_atom_count()
@@ -454,6 +461,19 @@ mod tests {
         let naph = mol_from_smiles("c1ccc2ccccc2c1").unwrap();
         assert_eq!(ring_count(&naph), 2);
         assert_eq!(aromatic_ring_count(&naph), 2);
+    }
+
+    #[test]
+    fn aromatic_atom_counts() {
+        // benzene: all 6 ring carbons aromatic.
+        assert_eq!(aromatic_atom_count(&mol_from_smiles("c1ccccc1").unwrap()), 6);
+        // naphthalene: two fused aromatic rings → 10 aromatic carbons.
+        assert_eq!(aromatic_atom_count(&mol_from_smiles("c1ccc2ccccc2c1").unwrap()), 10);
+        // pyridine: 5 C + 1 N in the aromatic ring → 6.
+        assert_eq!(aromatic_atom_count(&mol_from_smiles("c1ccncc1").unwrap()), 6);
+        // cyclohexane (aliphatic) and ethanol: no aromatic atoms.
+        assert_eq!(aromatic_atom_count(&mol_from_smiles("C1CCCCC1").unwrap()), 0);
+        assert_eq!(aromatic_atom_count(&mol_from_smiles("CCO").unwrap()), 0);
     }
 
     #[test]

@@ -299,6 +299,10 @@ pub struct WindTunnelForm {
     pub temperature_k: f64,
     /// Apply the Prandtl-Glauert compressibility correction.
     pub apply_compressibility: bool,
+    /// Wing aspect ratio AR = span²/area (dimensionless) — for induced drag.
+    pub aspect_ratio: f64,
+    /// Oswald span-efficiency factor `e` (0 < e ≤ 1) — for induced drag.
+    pub span_efficiency: f64,
 
     // --- 3. Ground & wheels -----------------------------------------
     /// `true` for a moving ground (road) carried at the free-stream
@@ -359,6 +363,8 @@ impl Default for WindTunnelForm {
             turbulence_intensity: 0.02,
             temperature_k: 288.0,
             apply_compressibility: false,
+            aspect_ratio: 6.0,
+            span_efficiency: 0.95,
             moving_ground: true,
             rotating_wheels: false,
             wheel_radius: 0.33,

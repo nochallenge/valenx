@@ -316,6 +316,26 @@ pub fn draw_wind_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         "Air temperature (K). Sea-level standard = 288.15 K (15 °C).",
                     );
                     ui.end_row();
+
+                    ui.label("Aspect ratio  AR").on_hover_text(
+                        "Wing aspect ratio span²/area — for induced drag. Typical wings 5–12.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.aspect_ratio)
+                            .speed(0.1)
+                            .range(0.5..=25.0),
+                    );
+                    ui.end_row();
+
+                    ui.label("Span efficiency  e").on_hover_text(
+                        "Oswald span-efficiency factor e (0 < e ≤ 1), typically 0.8–1.0.",
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut form.span_efficiency)
+                            .speed(0.01)
+                            .range(0.3..=1.0),
+                    );
+                    ui.end_row();
                 });
 
             ui.checkbox(
@@ -768,7 +788,12 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
             // --- Steady single-point results ------------------------
             if let Some(report) = app.aero.last_report.as_ref() {
-                draw_steady_results(ui, report);
+                let c_di = valenx_aero::report::induced_drag_coefficient(
+                    report.cl,
+                    app.aero.form.aspect_ratio,
+                    app.aero.form.span_efficiency,
+                );
+                draw_steady_results(ui, report, c_di);
             }
 
             // --- Angle-of-attack polar results ----------------------
@@ -779,7 +804,7 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
 }
 
 /// Render the headline result cards + drag breakdown for a steady run.
-fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
+fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport, c_di: f64) {
     // Four prominent coefficient cards — the headline numbers.
     let drag_tint = egui::Color32::from_rgb(235, 150, 90);
     let lift_tint = egui::Color32::from_rgb(120, 190, 235);
@@ -814,6 +839,12 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport) {
             "Glide angle",
             &format!("{:.1}\u{00B0}", report.glide_angle_rad().to_degrees()),
             neutral,
+        );
+        result_card(
+            ui,
+            "Induced  Cdi",
+            &model::format_coefficient(c_di),
+            egui::Color32::from_rgb(180, 120, 180),
         );
     });
 
