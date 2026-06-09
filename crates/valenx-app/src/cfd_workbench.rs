@@ -470,6 +470,38 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         100.0 * sol.reverse_flow_fraction(),
         sol.stream_function_range(),
     );
+
+    // ── Wall, boundary-layer & flow-rate diagnostics (FlowSolution methods) ──
+    // s.viscosity is the kinematic viscosity ν; the dynamic viscosity is μ = ρ·ν.
+    let mu = s.density * s.viscosity;
+    let re_bulk = sol.bulk_reynolds_number(s.viscosity);
+    let tau_w_method = sol.bottom_wall_shear_stress(mu);
+    let c_f = sol.skin_friction_coefficient(mu, s.density);
+    let eu = sol.euler_number(s.density);
+    let u_tau = sol.friction_velocity(s.viscosity);
+    let m_in = sol.inlet_mass_flow_rate(s.density);
+    s.result.push_str(&format!(
+        "\nwall & flow: \u{03C4}_w {tau_w_method:.4e} Pa (method)  \u{00B7}  C_f {c_f:.6}  \u{00B7}  \
+         u_\u{03C4} {u_tau:.5} m/s  \u{00B7}  Eu {eu:.4}  \u{00B7}  Re_bulk {re_bulk:.1}  \u{00B7}  \
+         \u{1E41}_in {m_in:.4} kg/s"
+    ));
+    if matches!(s.case, CfdCase::ChannelFlow) {
+        let u_ref = sol.bulk_velocity();
+        if u_ref > 0.0 {
+            let ds = sol.displacement_thickness(u_ref);
+            let th = sol.momentum_thickness(u_ref);
+            let de = sol.energy_thickness(u_ref);
+            let h = sol.shape_factor(u_ref);
+            let hs = sol.energy_shape_factor(u_ref);
+            let re_theta = sol.momentum_thickness_reynolds_number(u_ref, s.viscosity);
+            let re_dstar = sol.displacement_thickness_reynolds_number(u_ref, s.viscosity);
+            s.result.push_str(&format!(
+                "\nboundary layer: \u{03B4}* {ds:.5} m  \u{00B7}  \u{03B8} {th:.5} m  \u{00B7}  \
+                 \u{03B4}_E {de:.5} m  \u{00B7}  H {h:.3}  \u{00B7}  H* {hs:.3}  \u{00B7}  \
+                 Re_\u{03B8} {re_theta:.0}  \u{00B7}  Re_\u{03B4}* {re_dstar:.0}"
+            ));
+        }
+    }
 }
 
 #[cfg(test)]

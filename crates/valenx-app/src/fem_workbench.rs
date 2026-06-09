@@ -244,6 +244,116 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             ui.colored_label(col, txt);
                         }
                     }
+
+                    ui.add_space(6.0);
+                    egui::CollapsingHeader::new("Closed-form beam reference")
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            // Reactive: recomputed every frame from the tip-load and length
+                            // inputs (P = tip load N, L = box length Lx m). Independent of the
+                            // FEA solve — a textbook cross-check for the current load/span.
+                            let p = s.force_n;
+                            let l = s.lx;
+                            let w = if l > 0.0 { p / l } else { 0.0 };
+                            ui.label(
+                                egui::RichText::new(
+                                    "P = tip load (N), L = box length Lx (m); w = P/L (N/m)",
+                                )
+                                .weak()
+                                .small(),
+                            );
+                            let row = |ui: &mut egui::Ui, label: &str, val: f64, unit: &str| {
+                                ui.label(
+                                    egui::RichText::new(format!("  {label}: {val:.4} {unit}"))
+                                        .monospace()
+                                        .small(),
+                                );
+                            };
+                            ui.label(egui::RichText::new("point load P").small().strong());
+                            row(
+                                ui,
+                                "cantilever root moment P·L",
+                                valenx_fem::cantilever_point_load_root_moment(p, l),
+                                "N·m",
+                            );
+                            row(
+                                ui,
+                                "propped-cantilever prop reaction 5P/16",
+                                valenx_fem::propped_cantilever_central_load_prop_reaction(p, l),
+                                "N",
+                            );
+                            row(
+                                ui,
+                                "propped-cantilever fixed reaction 11P/16",
+                                valenx_fem::propped_cantilever_central_load_fixed_end_reaction(p, l),
+                                "N",
+                            );
+                            row(
+                                ui,
+                                "propped-cantilever clamp moment 3PL/16",
+                                valenx_fem::propped_cantilever_central_load_fixed_end_moment(p, l),
+                                "N·m",
+                            );
+                            row(
+                                ui,
+                                "two-span centre moment 3PL/32",
+                                valenx_fem::two_span_continuous_beam_central_point_load_middle_moment(
+                                    p, l,
+                                ),
+                                "N·m",
+                            );
+                            row(
+                                ui,
+                                "two-span centre reaction 11P/16",
+                                valenx_fem::two_span_continuous_beam_central_point_load_middle_reaction(
+                                    p, l,
+                                ),
+                                "N",
+                            );
+                            row(
+                                ui,
+                                "two-span loaded-span reaction 13P/32",
+                                valenx_fem::two_span_continuous_beam_central_point_load_loaded_span_outer_reaction(
+                                    p, l,
+                                ),
+                                "N",
+                            );
+                            row(
+                                ui,
+                                "two-span unloaded-span reaction −3P/32",
+                                valenx_fem::two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction(
+                                    p, l,
+                                ),
+                                "N",
+                            );
+                            ui.add_space(3.0);
+                            ui.label(egui::RichText::new("equivalent UDL w = P/L").small().strong());
+                            row(
+                                ui,
+                                "propped-cantilever prop reaction 3wL/8",
+                                valenx_fem::propped_cantilever_udl_prop_reaction(w, l),
+                                "N",
+                            );
+                            row(
+                                ui,
+                                "propped-cantilever clamp moment wL²/8",
+                                valenx_fem::propped_cantilever_udl_fixed_end_moment(w, l),
+                                "N·m",
+                            );
+                            row(
+                                ui,
+                                "two-span centre moment wL²/8",
+                                valenx_fem::two_span_continuous_beam_udl_middle_moment(w, l),
+                                "N·m",
+                            );
+                            row(
+                                ui,
+                                "two-span centre reaction 5wL/4",
+                                valenx_fem::two_span_continuous_beam_udl_middle_reaction(w, l),
+                                "N",
+                            );
+                        });
+
                     if let Some(plot) = &s.plot {
                         ui.add_space(4.0);
                         match plot {

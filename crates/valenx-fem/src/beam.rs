@@ -1345,6 +1345,75 @@ pub fn two_span_continuous_beam_central_point_load_middle_moment(
     3.0 * point_load * span_length / 32.0
 }
 
+/// The **loaded-span outer reaction of a two-span continuous beam under a central point
+/// load in one span** `R_A = 13P/32` (N) — the reaction at the end simple support `A` of
+/// the *loaded* span (`A`–`B`) of a beam on three simple supports `A`–`B`–`C` (two equal
+/// spans `span_length` `L`), carrying a point force `point_load` `P` (N) at the mid-span
+/// of span `A`–`B` (span `B`–`C` unloaded).
+///
+/// Derived from the centre moment
+/// [`two_span_continuous_beam_central_point_load_middle_moment`] `M_B = 3PL/32` (hogging)
+/// by span statics (`R_A·L = P·L/2 − M_B ⇒ R_A = 13P/32`). With the centre
+/// [`two_span_continuous_beam_central_point_load_middle_reaction`] `R_B = 11P/16` and the
+/// unloaded-span [`two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction`]
+/// `R_C = −3P/32` it satisfies vertical equilibrium `R_A + R_B + R_C = P`. Pure statics:
+/// independent of `E`, `I`, and `L`; linear and sign-preserving in `P`. Returns `0` for
+/// non-physical input (`P` non-finite, or `L` non-positive or non-finite).
+pub fn two_span_continuous_beam_central_point_load_loaded_span_outer_reaction(
+    point_load: f64,
+    span_length: f64,
+) -> f64 {
+    if !point_load.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    13.0 * point_load / 32.0
+}
+
+/// The **centre-support reaction of a two-span continuous beam under a central point load
+/// in one span** `R_B = 11P/16` (N) — the reaction at the middle support `B` of a beam on
+/// three simple supports `A`–`B`–`C` (two equal spans `span_length` `L`), with a point
+/// force `point_load` `P` (N) at the mid-span of one span.
+///
+/// It is the dual of the centre moment
+/// [`two_span_continuous_beam_central_point_load_middle_moment`] `M_B = 3PL/32`, and the
+/// largest of the three reactions (`11/16 ≈ 69%` of `P`): the middle support collects the
+/// inner shears of both spans. With the loaded-span `R_A = 13P/32` and the unloaded-span
+/// `R_C = −3P/32` it satisfies `R_A + R_B + R_C = P`. Pure statics: independent of `E`,
+/// `I`, and `L`; linear and sign-preserving in `P`. Returns `0` for non-physical input
+/// (`P` non-finite, or `L` non-positive or non-finite).
+pub fn two_span_continuous_beam_central_point_load_middle_reaction(
+    point_load: f64,
+    span_length: f64,
+) -> f64 {
+    if !point_load.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    11.0 * point_load / 16.0
+}
+
+/// The **unloaded-span outer reaction of a two-span continuous beam under a central point
+/// load in one span** `R_C = −3P/32` (N) — the reaction at the end simple support `C` of
+/// the *unloaded* span (`B`–`C`) of a beam on three simple supports `A`–`B`–`C` (two equal
+/// spans `span_length` `L`), with a point force `point_load` `P` (N) at the mid-span of the
+/// other span (`A`–`B`).
+///
+/// The **negative sign is uplift**: the hogging moment at `B` lifts the far support, so for
+/// a downward load the unloaded end pulls *up* (a classic continuous-beam result, and why
+/// the far support of a propped span can need hold-down). It is the smallest of the three
+/// reactions. With the loaded-span `R_A = 13P/32` and the centre `R_B = 11P/16` it satisfies
+/// `R_A + R_B + R_C = P`. Pure statics: independent of `E`, `I`, and `L`; magnitude linear
+/// in `P` (so it reverses sign with the load). Returns `0` for non-physical input (`P`
+/// non-finite, or `L` non-positive or non-finite).
+pub fn two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction(
+    point_load: f64,
+    span_length: f64,
+) -> f64 {
+    if !point_load.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    -3.0 * point_load / 32.0
+}
+
 /// The analytic **fixed-end (clamp) reaction of a propped cantilever under a uniformly
 /// distributed load** `R_A = 5·w·L/8` (N) — the vertical support reaction at the *fixed*
 /// (clamped) end of a propped cantilever (fixed at one end, simply supported at the other)
@@ -5100,6 +5169,78 @@ mod tests {
         ); // P NaN
         assert_eq!(two_span_continuous_beam_central_point_load_middle_moment(32.0, 0.0), 0.0); // L = 0
         assert_eq!(two_span_continuous_beam_central_point_load_middle_moment(32.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn two_span_continuous_beam_central_point_load_reactions_balance() {
+        // WORKED (P = 32 kN, L = 2 m): R_A = 13P/32 = 13, R_B = 11P/16 = 22,
+        // R_C = −3P/32 = −3 kN — summing to 32 kN = P.
+        assert!(
+            (two_span_continuous_beam_central_point_load_loaded_span_outer_reaction(32.0, 2.0)
+                - 13.0)
+                .abs()
+                < 1e-12,
+            "R_A = 13P/32 = 13",
+        );
+        assert!(
+            (two_span_continuous_beam_central_point_load_middle_reaction(32.0, 2.0) - 22.0).abs()
+                < 1e-12,
+            "R_B = 11P/16 = 22",
+        );
+        assert!(
+            (two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction(32.0, 2.0)
+                + 3.0)
+                .abs()
+                < 1e-12,
+            "R_C = −3P/32 = −3",
+        );
+
+        // STRONG non-tautological DUAL thread over signed (P, L): (i) vertical equilibrium
+        // R_A + R_B + R_C = P; (ii) loaded-span statics R_A·L − P·L/2 = −M_B recovers the
+        // centre hogging moment (#473), threading the existing moment fn.
+        for &(p, l) in &[(7.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
+            let ra = two_span_continuous_beam_central_point_load_loaded_span_outer_reaction(p, l);
+            let rb = two_span_continuous_beam_central_point_load_middle_reaction(p, l);
+            let rc = two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction(p, l);
+            assert!(
+                (ra + rb + rc - p).abs() <= 1e-9 * p.abs(),
+                "R_A + R_B + R_C = P (vertical equilibrium)",
+            );
+            let m_from_statics = ra * l - p * (l / 2.0);
+            let m_b = -two_span_continuous_beam_central_point_load_middle_moment(p, l);
+            assert!(
+                (m_from_statics - m_b).abs() <= 1e-9 * m_b.abs(),
+                "R_A·L − P·L/2 = −M_B (hogging) — threads the centre moment",
+            );
+        }
+
+        // Linear in P (these reactions are L-independent); R_C reverses sign with the load.
+        let base_rb = two_span_continuous_beam_central_point_load_middle_reaction(10.0, 2.0);
+        assert!(
+            (two_span_continuous_beam_central_point_load_middle_reaction(20.0, 2.0) - 2.0 * base_rb)
+                .abs()
+                < 1e-12,
+            "R_B linear in P",
+        );
+        assert!(
+            two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction(-10.0, 2.0)
+                > 0.0,
+            "R_C reverses sign with the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(
+            two_span_continuous_beam_central_point_load_middle_reaction(f64::NAN, 2.0),
+            0.0
+        );
+        assert_eq!(
+            two_span_continuous_beam_central_point_load_loaded_span_outer_reaction(32.0, 0.0),
+            0.0
+        );
+        assert_eq!(
+            two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction(32.0, -2.0),
+            0.0
+        );
     }
 
     #[test]
