@@ -485,6 +485,29 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          u_\u{03C4} {u_tau:.5} m/s  \u{00B7}  Eu {eu:.4}  \u{00B7}  Re_bulk {re_bulk:.1}  \u{00B7}  \
          \u{1E41}_in {m_in:.4} kg/s"
     ));
+
+    // Field statistics (any case): speed min/CoV, pressure mean/rms, vorticity mean/rms.
+    let min_speed = sol.min_speed();
+    let cov_speed = sol.speed_coefficient_of_variation();
+    let mean_press = sol.mean_pressure();
+    let rms_press = sol.rms_pressure();
+    let mean_vort = sol.mean_vorticity();
+    let rms_vort = sol.rms_vorticity();
+    s.result.push_str(&format!(
+        "\nfield stats: |u|_min {min_speed:.5} m/s  \u{00B7}  speed CoV {cov_speed:.4}  \u{00B7}  \
+         p_mean {mean_press:.4e} Pa  \u{00B7}  p_rms {rms_press:.4e} Pa  \u{00B7}  \
+         \u{03C9}_mean {mean_vort:.4} 1/s  \u{00B7}  \u{03C9}_rms {rms_vort:.4} 1/s"
+    ));
+
+    // Flow regime & throughput (any case): domain/cell Reynolds, residence time, outlet mass.
+    let re_domain = sol.domain_reynolds_number(s.viscosity);
+    let re_cell = sol.cell_reynolds_number(s.viscosity);
+    let tau_residence = sol.flow_through_time();
+    let m_out = sol.outlet_mass_flow_rate(s.density);
+    s.result.push_str(&format!(
+        "\nflow regime: Re_L {re_domain:.1}  \u{00B7}  Re_h {re_cell:.2}  \u{00B7}  \
+         \u{03C4}_res {tau_residence:.4} s  \u{00B7}  \u{1E41}_out {m_out:.4} kg/s"
+    ));
     if matches!(s.case, CfdCase::ChannelFlow) {
         let u_ref = sol.bulk_velocity();
         if u_ref > 0.0 {
