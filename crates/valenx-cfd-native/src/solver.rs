@@ -1636,6 +1636,25 @@ impl FlowSolution {
         self.rms_speed() * (15.0 * kinematic_viscosity / eps).sqrt()
     }
 
+    /// The **Taylor-microscale Reynolds number** `Re_λ = u'·λ / ν` (dimensionless) — the
+    /// Reynolds number formed on the rms velocity `u'` ([`FlowSolution::rms_speed`]) and
+    /// the [`FlowSolution::taylor_microscale`] `λ`, with kinematic viscosity
+    /// `kinematic_viscosity` `ν` (m²/s). It is the standard *intensity* measure of
+    /// turbulence — a large `Re_λ` means a wide separation between the energy-containing
+    /// and dissipative scales (vigorous, multi-scale turbulence), a small `Re_λ` a flow
+    /// the viscosity keeps close to laminar. Distinct from the geometry-based
+    /// [`FlowSolution::domain_reynolds_number`] (built on the domain length and peak
+    /// speed): this one is built on the *internal* turbulence scales. Like the Taylor
+    /// microscale it is the isotropic estimate (research-grade). Returns `0` for
+    /// non-positive or non-finite viscosity, or when there is no dissipation (a strainless
+    /// or quiescent flow, where `λ = 0`).
+    pub fn taylor_reynolds_number(&self, kinematic_viscosity: f64) -> f64 {
+        if !kinematic_viscosity.is_finite() || kinematic_viscosity <= 0.0 {
+            return 0.0;
+        }
+        self.rms_speed() * self.taylor_microscale(kinematic_viscosity) / kinematic_viscosity
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -4349,6 +4368,82 @@ mod tests {
             converged: true,
         };
         assert_eq!(rotation.taylor_microscale(0.1), 0.0);
+    }
+
+    #[test]
+    fn taylor_reynolds_number_is_the_turbulence_intensity() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Pure shear u(y) = γy: ε = ν·γ², λ = u_rms·√15/γ, so Re_λ = u'·λ/ν =
+        // u_rms²·√15/(γ·ν).
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) WORKED + THREAD rms_speed (non-tautological — uses rms_speed², not the
+        // taylor_microscale path): Re_λ = u_rms²·√15/(γ·ν).
+        let re = shear.taylor_reynolds_number(0.1);
+        assert!(
+            (re - shear.rms_speed().powi(2) * 15.0_f64.sqrt() / (gamma * 0.1)).abs() <= 1e-9 * re,
+            "Re_λ = u_rms²·√15/(γν) for a pure shear"
+        );
+
+        // (b) DEFINING IDENTITY (thread rms_speed + mean_dissipation_rate): Re_λ² =
+        // 15·u'⁴/(ν·ε).
+        let nu = 0.1_f64;
+        let re = shear.taylor_reynolds_number(nu);
+        let rhs = 15.0 * shear.rms_speed().powi(4) / (nu * shear.mean_dissipation_rate(nu));
+        assert!((re * re - rhs).abs() <= 1e-9 * rhs, "Re_λ² = 15·u'⁴/(νε)");
+
+        // (c) 1/ν SCALING: the shear velocity field is fixed, so Re_λ ∝ 1/ν — halving ν
+        // doubles Re_λ.
+        assert!(
+            (shear.taylor_reynolds_number(0.05) - 2.0 * shear.taylor_reynolds_number(0.1)).abs()
+                <= 1e-9 * shear.taylor_reynolds_number(0.05),
+            "Re_λ ∝ 1/ν"
+        );
+
+        // (d) NO DISSIPATION → 0: a solid-body rotation strains nothing (λ = 0).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(rotation.taylor_reynolds_number(0.1), 0.0);
     }
 
     #[test]
