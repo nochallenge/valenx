@@ -273,6 +273,15 @@ pub fn heavy_atom_count(mol: &Molecule) -> usize {
     mol.heavy_atom_count()
 }
 
+/// Heteroatom count — atoms that are neither carbon nor hydrogen (atomic number
+/// outside {1, 6}), e.g. 1 for ethanol (O), 2 for acetic acid (2 O), 0 for benzene.
+pub fn heteroatom_count(mol: &Molecule) -> usize {
+    mol.atoms
+        .iter()
+        .filter(|a| a.atomic_number != 1 && a.atomic_number != 6)
+        .count()
+}
+
 /// Fraction of carbons that are `sp³` (Csp3) — a flatness / 3D-shape
 /// descriptor (`Fsp3`).
 pub fn fraction_csp3(mol: &Molecule) -> f64 {
@@ -482,5 +491,17 @@ mod tests {
         assert!((fraction_csp3(&mol_from_smiles("CCCCCC").unwrap()) - 1.0).abs() < 1e-9);
         // benzene: all aromatic, no sp3
         assert_eq!(fraction_csp3(&mol_from_smiles("c1ccccc1").unwrap()), 0.0);
+    }
+
+    #[test]
+    fn heteroatom_count_exact() {
+        // ethanol: 1 O; acetic acid: 2 O; aniline: 1 N; chlorobenzene: 1 Cl.
+        assert_eq!(heteroatom_count(&mol_from_smiles("CCO").unwrap()), 1);
+        assert_eq!(heteroatom_count(&mol_from_smiles("CC(=O)O").unwrap()), 2);
+        assert_eq!(heteroatom_count(&mol_from_smiles("Nc1ccccc1").unwrap()), 1);
+        assert_eq!(heteroatom_count(&mol_from_smiles("Clc1ccccc1").unwrap()), 1);
+        // pure hydrocarbons: no heteroatoms.
+        assert_eq!(heteroatom_count(&mol_from_smiles("c1ccccc1").unwrap()), 0);
+        assert_eq!(heteroatom_count(&mol_from_smiles("CCCCCC").unwrap()), 0);
     }
 }
