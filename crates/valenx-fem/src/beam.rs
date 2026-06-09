@@ -1339,6 +1339,28 @@ pub fn propped_cantilever_central_load_fixed_end_reaction(point_load: f64, lengt
     11.0 * point_load / 16.0
 }
 
+/// The **clamping moment at the fixed end of a propped cantilever under a central
+/// point load** `M_A = 3PL/16` (N·m) — the bending moment the built-in support must
+/// resist on a beam of span `length` `L` (m) clamped at one end and simply supported at
+/// the other, carrying a transverse point force `point_load` `P` (N) at mid-span. It is
+/// the strength-governing quantity of the case (the largest bending moment along the
+/// beam).
+///
+/// It completes the propped-cantilever central-load case alongside the reaction pair
+/// [`propped_cantilever_central_load_prop_reaction`] `R_B = 5P/16` and
+/// [`propped_cantilever_central_load_fixed_end_reaction`] `R_A = 11P/16`. By moment
+/// equilibrium of the whole beam about the fixed end,
+/// `M_A = P·(L/2) − R_B·L = PL/2 − 5PL/16 = 3PL/16`. Unlike the reactions it is
+/// **linear in `L`** (a moment, not a force). Being pure statics it is independent of
+/// `E` and `I`, and sign-preserving in `P`. Returns `0` for non-physical input (`P`
+/// non-finite, or `L` non-positive or non-finite).
+pub fn propped_cantilever_central_load_fixed_end_moment(point_load: f64, length: f64) -> f64 {
+    if !point_load.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    3.0 * point_load * length / 16.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -4903,6 +4925,48 @@ mod tests {
         assert_eq!(propped_cantilever_central_load_fixed_end_reaction(8.0, 0.0), 0.0); // L = 0
         assert_eq!(propped_cantilever_central_load_fixed_end_reaction(8.0, -2.0), 0.0); // L < 0
         assert_eq!(propped_cantilever_central_load_fixed_end_reaction(f64::NAN, 2.0), 0.0); // P NaN
+    }
+
+    #[test]
+    fn propped_cantilever_central_load_fixed_end_moment_completes_the_case() {
+        // Worked point: P = 16 kN central load on a 2 m beam → the clamping moment is
+        // M_A = 3PL/16 = 3·16·2/16 = 6 kN·m.
+        assert!(
+            (propped_cantilever_central_load_fixed_end_moment(16.0, 2.0) - 6.0).abs() < 1e-12,
+            "M_A = 3PL/16 = 6 for P = 16, L = 2",
+        );
+
+        // STRONG non-tautological statics thread through the EXISTING prop reaction
+        // (#462): moment equilibrium of the whole beam about the fixed end requires
+        // M_A = P·(L/2) − R_B·L.
+        for &(p, l) in &[(7.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
+            let ma = propped_cantilever_central_load_fixed_end_moment(p, l);
+            let statics = p * (l / 2.0) - propped_cantilever_central_load_prop_reaction(p, l) * l;
+            assert!(
+                (ma - statics).abs() <= 1e-9 * ma.abs(),
+                "M_A must equal P·(L/2) − R_B·L; got {ma} vs {statics}",
+            );
+        }
+
+        // Linear in P and (unlike the reactions) linear in L.
+        let base = propped_cantilever_central_load_fixed_end_moment(10.0, 2.0);
+        assert!(
+            (propped_cantilever_central_load_fixed_end_moment(20.0, 2.0) - 2.0 * base).abs() < 1e-12,
+            "doubling P doubles M_A",
+        );
+        assert!(
+            (propped_cantilever_central_load_fixed_end_moment(10.0, 4.0) - 2.0 * base).abs() < 1e-12,
+            "doubling L doubles M_A",
+        );
+        assert!(
+            propped_cantilever_central_load_fixed_end_moment(-10.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(propped_cantilever_central_load_fixed_end_moment(8.0, 0.0), 0.0); // L = 0
+        assert_eq!(propped_cantilever_central_load_fixed_end_moment(8.0, -2.0), 0.0); // L < 0
+        assert_eq!(propped_cantilever_central_load_fixed_end_moment(f64::NAN, 2.0), 0.0); // P NaN
     }
 
     #[test]
