@@ -1295,6 +1295,30 @@ pub fn propped_cantilever_udl_max_sagging_moment(load_per_length: f64, length: f
     9.0 * load_per_length * length * length / 128.0
 }
 
+/// The reaction at the **propped (simple) support of a propped cantilever under a
+/// central point load** `R_B = 5P/16` (N) — the redundant support reaction for a beam
+/// of span `length` `L` (m) that is built-in (clamped) at one end and simply supported
+/// at the other, carrying a transverse point force `point_load` `P` (N) at mid-span
+/// (`a = L/2`).
+///
+/// It is the point-load companion to the distributed-load
+/// [`propped_cantilever_udl_prop_reaction`] `R_B = 3wL/8`. The beam is statically
+/// indeterminate to the first degree; releasing the prop leaves a cantilever, and the
+/// compatibility condition that the prop deflection vanish (`δ_B = 0`) gives the general
+/// redundant reaction `R_B = P·a²(3L − a)/(2L³)`, which at the mid-span case `a = L/2`
+/// collapses to the clean rational `R_B = 5P/16`. The fixed end then carries the
+/// complement `R_A = 11P/16` and a clamping moment `M_A = 3PL/16`. Being pure statics
+/// once the redundant is found, it is independent of `E` and `I`; it is linear and
+/// sign-preserving in `P`, and — for the central case — independent of `L` (the `length`
+/// argument is validated only by the physicality guard). Returns `0` for non-physical
+/// input (`P` non-finite, or `L` non-positive or non-finite).
+pub fn propped_cantilever_central_load_prop_reaction(point_load: f64, length: f64) -> f64 {
+    if !point_load.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    5.0 * point_load / 16.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -4781,6 +4805,46 @@ mod tests {
         assert_eq!(propped_cantilever_udl_fixed_end_reaction(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(propped_cantilever_udl_fixed_end_reaction(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(propped_cantilever_udl_fixed_end_reaction(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn propped_cantilever_central_load_prop_reaction_matches_compatibility() {
+        // Worked point: P = 16 kN central load on a propped cantilever → the prop
+        // (simple-support) reaction is R_B = 5P/16 = 5 kN, independent of span.
+        assert!(
+            (propped_cantilever_central_load_prop_reaction(16.0, 3.0) - 5.0).abs() < 1e-12,
+            "R_B = 5P/16 = 5 for P = 16",
+        );
+
+        // STRONG non-tautological thread: derive 5/16 independently from the general
+        // first-degree-redundant reaction R_B = P·a²(3L − a)/(2L³) (force method: prop
+        // released → cantilever, compatibility δ_B = 0) evaluated at the mid-span case
+        // a = L/2. The closed form must agree with the 5P/16 the function returns.
+        for &(p, l) in &[(7.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
+            let a = l / 2.0;
+            let rb = p * a * a * (3.0 * l - a) / (2.0 * l * l * l);
+            let got = propped_cantilever_central_load_prop_reaction(p, l);
+            assert!(
+                (got - rb).abs() <= 1e-9 * rb.abs(),
+                "R_B must equal P·a²(3L−a)/(2L³)|a=L/2; got {got}, want {rb}",
+            );
+        }
+
+        // Linear and sign-preserving in P; independent of L for the central case.
+        let base = propped_cantilever_central_load_prop_reaction(10.0, 2.0);
+        assert!(
+            (propped_cantilever_central_load_prop_reaction(20.0, 2.0) - 2.0 * base).abs() < 1e-12,
+            "doubling P doubles R_B",
+        );
+        assert!(
+            propped_cantilever_central_load_prop_reaction(-10.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(propped_cantilever_central_load_prop_reaction(8.0, 0.0), 0.0); // L = 0
+        assert_eq!(propped_cantilever_central_load_prop_reaction(8.0, -2.0), 0.0); // L < 0
+        assert_eq!(propped_cantilever_central_load_prop_reaction(f64::NAN, 2.0), 0.0); // P NaN
     }
 
     #[test]
