@@ -261,6 +261,13 @@ impl Tree {
         self.nodes.iter().filter(|n| n.is_leaf()).count()
     }
 
+    /// Number of internal (non-leaf) nodes — the complement of
+    /// [`leaf_count`](Self::leaf_count); together they sum to
+    /// [`node_count`](Self::node_count).
+    pub fn internal_count(&self) -> usize {
+        self.nodes.iter().filter(|n| n.is_internal()).count()
+    }
+
     /// Sorted list of leaf labels. Unlabelled leaves are skipped.
     pub fn leaf_labels(&self) -> Vec<String> {
         let mut v: Vec<String> = self
@@ -478,6 +485,15 @@ mod tests {
         assert!(t.validate().is_ok());
         assert_eq!(t.leaf_count(), 3);
         assert_eq!(t.node_count(), 5);
+    }
+
+    #[test]
+    fn internal_count_complements_leaf_count() {
+        let t = sample_tree();
+        // The sample tree has 5 nodes and 3 leaves → 2 internal nodes.
+        assert_eq!(t.internal_count(), 2);
+        // Non-tautological invariant: every node is exactly one of leaf or internal.
+        assert_eq!(t.leaf_count() + t.internal_count(), t.node_count());
     }
 
     #[test]
