@@ -1586,6 +1586,20 @@ impl FlowSolution {
         (kinematic_viscosity.powi(3) / eps).powf(0.25)
     }
 
+    /// The **Kolmogorov time scale** `τ_η = (ν/ε)^(1/2)` (s) — the turnover time (lifetime) of
+    /// the smallest dissipative eddies, set by the kinematic viscosity `kinematic_viscosity`
+    /// `ν` (m²/s) and the mean dissipation rate `ε` ([`FlowSolution::mean_dissipation_rate`]).
+    /// It is the temporal companion to the [`FlowSolution::kolmogorov_length_scale`] `η`: the
+    /// two satisfy the unit Kolmogorov-scale Reynolds number `η²/(τ_η·ν) = 1` by construction.
+    /// Returns `0` when there is no dissipation (`ε ≤ 0`), where the scale is undefined.
+    pub fn kolmogorov_time_scale(&self, kinematic_viscosity: f64) -> f64 {
+        let eps = self.mean_dissipation_rate(kinematic_viscosity);
+        if eps <= 0.0 {
+            return 0.0;
+        }
+        (kinematic_viscosity / eps).sqrt()
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -4076,6 +4090,73 @@ mod tests {
             converged: true,
         };
         assert_eq!(rotation.kolmogorov_length_scale(0.1), 0.0);
+    }
+
+    #[test]
+    fn kolmogorov_time_scale_is_nu_over_eps_root() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Pure shear u(y) = γy: |S| = γ uniformly, so ε = ν·γ² and τ_η = (ν/ε)^(1/2) = 1/γ.
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) WORKED (closed form, ν-independent): for a shear ε = ν·γ² so τ_η = 1/γ = 0.5,
+        // the same at any viscosity.
+        assert!((shear.kolmogorov_time_scale(0.1) - 1.0 / 2.0).abs() <= 1e-9, "τ_η = 1/γ = 0.5");
+        assert!(
+            (shear.kolmogorov_time_scale(0.4) - shear.kolmogorov_time_scale(0.1)).abs() <= 1e-9,
+            "τ_η is ν-independent for a fixed-strain shear"
+        );
+
+        // (b) THREAD kolmogorov_length_scale (#434) (non-tautological): the Kolmogorov-scale
+        // Reynolds number η²/(τ_η·ν) is exactly 1 by construction.
+        let nu = 0.1_f64;
+        let eta = shear.kolmogorov_length_scale(nu);
+        let tau = shear.kolmogorov_time_scale(nu);
+        assert!((eta * eta / (tau * nu) - 1.0).abs() <= 1e-9, "η²/(τ_η·ν) = 1");
+
+        // (c) NO DISSIPATION → 0 sentinel: a solid-body rotation strains nothing (ε = 0).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(rotation.kolmogorov_time_scale(0.1), 0.0);
     }
 
     #[test]
