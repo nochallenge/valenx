@@ -268,6 +268,18 @@ impl Tree {
         self.nodes.iter().filter(|n| n.is_internal()).count()
     }
 
+    /// Number of **cherries** — internal nodes whose children are exactly two leaves
+    /// (a pair of sibling tips). A tree-balance statistic, bounded above by
+    /// `leaf_count / 2`.
+    pub fn cherry_count(&self) -> usize {
+        self.nodes
+            .iter()
+            .filter(|n| {
+                n.children.len() == 2 && n.children.iter().all(|&c| self.nodes[c].is_leaf())
+            })
+            .count()
+    }
+
     /// Sorted list of leaf labels. Unlabelled leaves are skipped.
     pub fn leaf_labels(&self) -> Vec<String> {
         let mut v: Vec<String> = self
@@ -494,6 +506,16 @@ mod tests {
         assert_eq!(t.internal_count(), 2);
         // Non-tautological invariant: every node is exactly one of leaf or internal.
         assert_eq!(t.leaf_count() + t.internal_count(), t.node_count());
+    }
+
+    #[test]
+    fn cherry_count_on_sample_tree() {
+        // sample tree ((A,B),C): node 1 (children A,B) is the only cherry.
+        let t = sample_tree();
+        assert_eq!(t.cherry_count(), 1);
+        // Non-tautological bounds: a cherry consumes 2 leaves and is itself internal.
+        assert!(t.cherry_count() <= t.leaf_count() / 2);
+        assert!(t.cherry_count() <= t.internal_count());
     }
 
     #[test]
