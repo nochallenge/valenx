@@ -35,6 +35,14 @@ pub struct NeuroWorkbenchState {
     cd_i0_ua: f64,
     /// Current–distance constant k (µA/µm²): `I_th = I₀ + k·r²`.
     cd_k_ua_per_um2: f64,
+    /// Cable theory: fiber diameter (µm).
+    fiber_diameter_um: f64,
+    /// Cable theory: specific membrane resistance R_m (Ω·cm²).
+    r_m_ohm_cm2: f64,
+    /// Cable theory: axial resistivity R_i (Ω·cm).
+    r_i_ohm_cm: f64,
+    /// Cable theory: specific membrane capacitance C_m (µF/cm²).
+    c_m_uf_cm2: f64,
     results: Option<NeuroResults>,
     error: Option<String>,
 }
@@ -52,6 +60,10 @@ impl Default for NeuroWorkbenchState {
             k_limit: 1.85,
             cd_i0_ua: 2.0,
             cd_k_ua_per_um2: 0.001,
+            fiber_diameter_um: 1.0,
+            r_m_ohm_cm2: 10000.0,
+            r_i_ohm_cm: 100.0,
+            c_m_uf_cm2: 1.0,
             results: None,
             error: None,
         }
@@ -304,6 +316,51 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             )
                         };
                         ui.colored_label(col, txt);
+                    }
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("Cable theory (passive fiber)").strong());
+                    ui.horizontal(|ui| {
+                        ui.label("fiber diameter (µm)");
+                        ui.add(egui::DragValue::new(&mut s.fiber_diameter_um).speed(0.1));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("R_m (Ω·cm²)");
+                        ui.add(egui::DragValue::new(&mut s.r_m_ohm_cm2).speed(100.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("R_i (Ω·cm)");
+                        ui.add(egui::DragValue::new(&mut s.r_i_ohm_cm).speed(1.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("C_m (µF/cm²)");
+                        ui.add(egui::DragValue::new(&mut s.c_m_uf_cm2).speed(0.05));
+                    });
+                    {
+                        // µm → cm for the diameter; µF/cm² → F/cm² for the capacitance.
+                        let d_cm = s.fiber_diameter_um * 1.0e-4;
+                        let lambda_cm =
+                            valenx_neuro::length_constant_cm(d_cm, s.r_m_ohm_cm2, s.r_i_ohm_cm);
+                        let tau_s =
+                            valenx_neuro::time_constant_s(s.r_m_ohm_cm2, s.c_m_uf_cm2 * 1.0e-6);
+                        let f_c = valenx_neuro::membrane_cutoff_frequency(tau_s);
+                        let r_inf = valenx_neuro::semi_infinite_input_resistance(
+                            d_cm,
+                            s.r_m_ohm_cm2,
+                            s.r_i_ohm_cm,
+                        );
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "space constant λ {:.4} cm ({:.0} µm)\nmembrane τ {:.2} ms · cutoff f_c {:.1} Hz · R_∞ {:.1} MΩ",
+                                lambda_cm,
+                                lambda_cm * 1.0e4,
+                                tau_s * 1000.0,
+                                f_c,
+                                r_inf / 1.0e6,
+                            ))
+                            .monospace()
+                            .small(),
+                        );
                     }
 
                     ui.separator();

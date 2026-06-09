@@ -500,6 +500,14 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 valenx_fem::torsional_rigidity(g, j_polar),
                                 "N·m²",
                             );
+                            let tip_moment =
+                                valenx_fem::cantilever_point_load_root_moment(s.force_n, l);
+                            row(
+                                ui,
+                                "cantilever root bending stress σ = M·c/I",
+                                valenx_fem::bending_stress(tip_moment, c, i_sec) / 1e6,
+                                "MPa",
+                            );
                         });
 
                     if let Some(plot) = &s.plot {
