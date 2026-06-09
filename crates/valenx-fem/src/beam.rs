@@ -691,6 +691,26 @@ pub fn lames_first_parameter(youngs_modulus: f64, poisson_ratio: f64) -> f64 {
     youngs_modulus * poisson_ratio / ((1.0 + poisson_ratio) * (1.0 - 2.0 * poisson_ratio))
 }
 
+/// The **shear modulus** (modulus of rigidity) `G = E / (2(1+ν))` (Pa) — the second of
+/// the two Lamé constants (`μ`), relating a shear stress to the shear strain it produces.
+/// `youngs_modulus` `E` (Pa) and `poisson_ratio` `ν` are the engineering constants. With
+/// the [`bulk_modulus`] `K` and the [`lames_first_parameter`] `λ` it completes the
+/// isotropic elastic-constant set: `λ = K − 2G/3`, and Young's modulus is recovered as
+/// `E = 9KG / (3K + G)`. (A closed-form public companion to the crate's private
+/// material-based shear-modulus helper.) Returns `0` for non-physical input (`E`
+/// non-positive or non-finite, or `ν` outside the physical range `(−1, 0.5)`).
+pub fn shear_modulus_from_youngs(youngs_modulus: f64, poisson_ratio: f64) -> f64 {
+    if !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !poisson_ratio.is_finite()
+        || poisson_ratio <= -1.0
+        || poisson_ratio >= 0.5
+    {
+        return 0.0;
+    }
+    youngs_modulus / (2.0 * (1.0 + poisson_ratio))
+}
+
 /// The **bending (flexure) stress** `σ = M·y/I` (Pa) — the longitudinal normal stress
 /// a bending moment `moment` `M` (N·m) induces at distance `distance_from_neutral_axis`
 /// `y` (m) from the neutral axis in a section of second moment of area
@@ -3456,6 +3476,42 @@ mod tests {
         assert_eq!(lames_first_parameter(200.0e9, 0.5), 0.0);
         assert_eq!(lames_first_parameter(200.0e9, -1.0), 0.0);
         assert_eq!(lames_first_parameter(200.0e9, f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn shear_modulus_from_youngs_completes_the_elastic_constant_set() {
+        // (a) WORKED: E=200e9, ν=0.3 → G = E/(2(1+ν)) = 200e9/2.6 ≈ 7.6923e10.
+        let g = shear_modulus_from_youngs(200.0e9, 0.3);
+        assert!((g - 200.0e9 / 2.6).abs() <= 1e-9 * g, "G = E/(2(1+ν))");
+
+        // (b) LAMÉ IDENTITY (thread bulk_modulus + lames_first_parameter, non-tautological):
+        // K = λ + (2/3)G, so G = 1.5·(K − λ).
+        for &(e, nu) in &[(200.0e9_f64, 0.3_f64), (70.0e9, 0.33)] {
+            let g = shear_modulus_from_youngs(e, nu);
+            assert!(
+                (g - 1.5 * (bulk_modulus(e, nu) - lames_first_parameter(e, nu))).abs() <= 1e-9 * g,
+                "G = 1.5(K − λ)"
+            );
+        }
+
+        // (c) INTERCONVERSION (thread bulk_modulus): E = 9KG/(3K+G) recovers Young's modulus.
+        let (e, nu) = (200.0e9_f64, 0.3_f64);
+        let g = shear_modulus_from_youngs(e, nu);
+        let k = bulk_modulus(e, nu);
+        assert!((9.0 * k * g / (3.0 * k + g) - e).abs() <= 1e-9 * e, "E = 9KG/(3K+G)");
+
+        // (d) ν=0 → G=E/2: no lateral coupling.
+        assert!(
+            (shear_modulus_from_youngs(200.0e9, 0.0) - 100.0e9).abs() <= 1e-9 * 100.0e9,
+            "G(ν=0) = E/2"
+        );
+
+        // (e) GUARD: non-physical input → 0 sentinel.
+        assert_eq!(shear_modulus_from_youngs(0.0, 0.3), 0.0);
+        assert_eq!(shear_modulus_from_youngs(f64::NAN, 0.3), 0.0);
+        assert_eq!(shear_modulus_from_youngs(200.0e9, 0.5), 0.0);
+        assert_eq!(shear_modulus_from_youngs(200.0e9, -1.0), 0.0);
+        assert_eq!(shear_modulus_from_youngs(200.0e9, f64::NAN), 0.0);
     }
 
     #[test]
