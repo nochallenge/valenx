@@ -1091,6 +1091,31 @@ impl FlowSolution {
         0.5 * density * u_max * u_max
     }
 
+    /// The **Euler number** `Eu = Δp / (ρ·U²)` (dimensionless) — the field's static
+    /// pressure variation [`FlowSolution::pressure_range`] `Δp = p_max − p_min`
+    /// normalised by the dynamic head `ρ·U_max²` (twice the peak
+    /// [`FlowSolution::dynamic_pressure`] `q = ½ρU²`). It measures how large the
+    /// pressure forces are relative to the inertial ones: the global, single-scalar
+    /// companion to the *local* per-cell pressure coefficient
+    /// [`FlowSolution::pressure_coefficient_at_cell`], and the natural figure of merit
+    /// for internal (duct / pump / cavity) flow where the pressure *drop* — not a
+    /// free-stream reference — is what matters.
+    ///
+    /// `Eu = pressure_range / (2·dynamic_pressure)`. Independent of the pressure datum
+    /// (it uses the gauge-independent range), it scales as `1/ρ` and as `1/U²`. Returns
+    /// `0` for a non-positive or non-finite density, or when the dynamic head vanishes
+    /// (a quiescent field, `U_max = 0`).
+    pub fn euler_number(&self, density: f64) -> f64 {
+        if !density.is_finite() || density <= 0.0 {
+            return 0.0;
+        }
+        let q = self.dynamic_pressure(density);
+        if q <= 0.0 {
+            return 0.0;
+        }
+        self.pressure_range() / (2.0 * q)
+    }
+
     /// The mean wall-normal velocity gradient `⟨|∂u/∂y|⟩` at the bottom wall
     /// (1/s) — estimated one-sidedly from the no-slip wall (`u = 0`) to the first
     /// cell centre, `2·u_cell(i, 0)/dy`, averaged over the streamwise cells.
@@ -6546,6 +6571,76 @@ mod tests {
             varied.dynamic_pressure(rho) > varied.mean_kinetic_energy_density(rho),
             "non-uniform → q > ⟨KE⟩ (U_max² > ⟨u²⟩)"
         );
+    }
+
+    #[test]
+    fn euler_number_normalises_the_pressure_variation() {
+        // A 4×4 grid with a uniform velocity u = 2 (so U_max = 2) and a linear pressure
+        // ramp p = i (so the pressure range Δp = nx − 1 = 3). With ρ = 1.25 the Euler
+        // number is Eu = Δp/(ρU²) = 3/(1.25·4) = 0.6.
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let u_speed = 2.0_f64;
+        let mut u = grid.u_field();
+        for fi in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(fi, j, u_speed);
+            }
+        }
+        let mut p = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p.set(i, j, i as f64);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: p,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let rho = 1.25_f64;
+        let eu = sol.euler_number(rho);
+        // Worked value Eu = 0.6, and delegation Eu = Δp/(2q).
+        assert!((eu - 0.6).abs() < 1e-9, "Eu = Δp/(ρU²) = 0.6, got {eu}");
+        assert!(
+            (eu - sol.pressure_range() / (2.0 * sol.dynamic_pressure(rho))).abs() <= 1e-9 * eu,
+            "Eu = pressure_range/(2·dynamic_pressure)"
+        );
+        // NON-TAUTOLOGICAL thread through the independent max_speed: Eu = Δp/(ρ·U_max²).
+        let umax = sol.max_speed();
+        assert!(
+            (eu - sol.pressure_range() / (rho * umax * umax)).abs() <= 1e-9 * eu,
+            "Eu = Δp/(ρU_max²)"
+        );
+        // Scales as 1/ρ: doubling the density halves Eu.
+        assert!(
+            (sol.euler_number(2.0 * rho) - 0.5 * eu).abs() <= 1e-9 * eu,
+            "Eu ∝ 1/ρ"
+        );
+        // Guards: non-physical density → 0.
+        assert_eq!(sol.euler_number(0.0), 0.0);
+        assert_eq!(sol.euler_number(-1.0), 0.0);
+        // A quiescent field (U_max = 0 ⇒ q = 0) → 0, even though a pressure range exists.
+        let mut p_still = grid.pressure_field();
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                p_still.set(i, j, i as f64);
+            }
+        }
+        let still = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: p_still,
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert!(still.pressure_range() > 0.0, "still field retains a pressure range");
+        assert_eq!(still.euler_number(rho), 0.0, "U_max = 0 ⇒ q = 0 ⇒ Eu = 0");
     }
 
     #[test]
