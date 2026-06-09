@@ -536,6 +536,17 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
                  \u{00B7}  \u{03B7} {eta:.4e} m  \u{00B7}  \u{03C4}_\u{03B7} {tau_eta:.4e} s  \
                  \u{00B7}  L {integral_l:.4e} m  \u{00B7}  T {integral_t:.4e} s"
             ));
+            // Scale ratios (dimensionless) + Kolmogorov velocity.
+            let lambda_eta = sol.taylor_to_kolmogorov_ratio(s.viscosity);
+            let l_lambda = sol.integral_to_taylor_ratio(s.viscosity);
+            let l_eta = sol.integral_to_kolmogorov_ratio(s.viscosity);
+            let t_tau = sol.integral_to_kolmogorov_time_ratio(s.viscosity);
+            let u_eta = sol.kolmogorov_velocity_scale(s.viscosity);
+            s.result.push_str(&format!(
+                "\nscale ratios: \u{03BB}/\u{03B7} {lambda_eta:.2}  \u{00B7}  L/\u{03BB} {l_lambda:.2}  \
+                 \u{00B7}  L/\u{03B7} {l_eta:.2}  \u{00B7}  T/\u{03C4}_\u{03B7} {t_tau:.2}  \
+                 \u{00B7}  u_\u{03B7} {u_eta:.4e} m/s"
+            ));
         }
     }
 }
