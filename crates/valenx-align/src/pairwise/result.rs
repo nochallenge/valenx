@@ -213,6 +213,13 @@ impl AlignStats {
     pub fn mismatch_count(&self) -> usize {
         self.aligned_length().saturating_sub(self.identities)
     }
+
+    /// Number of gap-extension columns — gaps beyond the opening of each gap run
+    /// (`gaps − gap_opens`). With affine gap penalties the total gap cost is
+    /// `gap_opens·open + gap_extensions·extend`. Equals 0 when every gap is a single column.
+    pub fn gap_extensions(&self) -> usize {
+        self.gaps.saturating_sub(self.gap_opens)
+    }
 }
 
 /// A pairwise alignment result.
@@ -485,6 +492,16 @@ mod tests {
         assert_eq!(s.mismatch_count(), 1);
         // partition invariant: identities + mismatches = aligned length.
         assert_eq!(s.identities + s.mismatch_count(), s.aligned_length());
+    }
+
+    #[test]
+    fn gap_extensions_metric() {
+        // Fixture "ACGTA-" vs "ACGTTC": 1 gap column in 1 gap run → 0 extensions.
+        let a = Alignment::new(b"ACGTA-".to_vec(), b"ACGTTC".to_vec(), 0, (0, 5), (0, 6)).unwrap();
+        let s = a.stats(&SubstitutionMatrix::identity(1, -1));
+        assert_eq!(s.gap_extensions(), 0);
+        // Non-tautological identity: gap_extensions + gap_opens == gaps.
+        assert_eq!(s.gap_extensions() + s.gap_opens, s.gaps);
     }
 
     #[test]

@@ -247,6 +247,16 @@ fn is_amide_bond(mol: &Molecule, a: usize, c: usize) -> bool {
     false
 }
 
+/// Number of explicit double bonds (`BondOrder::Double`, e.g. C=C, C=O). Aromatic ring
+/// bonds are `BondOrder::Aromatic` (not Double) so they are NOT counted: benzene = 0,
+/// ethylene = 1, CO₂ = 2.
+pub fn double_bond_count(mol: &Molecule) -> usize {
+    mol.bonds
+        .iter()
+        .filter(|b| b.order == BondOrder::Double)
+        .count()
+}
+
 /// Number of SSSR rings.
 pub fn ring_count(mol: &Molecule) -> usize {
     sssr(mol).ring_count()
@@ -432,6 +442,17 @@ mod tests {
         // benzene: ring bonds are not rotatable
         let m = mol_from_smiles("c1ccccc1").unwrap();
         assert_eq!(rotatable_bonds(&m), 0);
+    }
+
+    #[test]
+    fn double_bond_counts() {
+        // ethylene C=C: 1 double; CO₂ O=C=O: 2; acetic acid CC(=O)O: 1.
+        assert_eq!(double_bond_count(&mol_from_smiles("C=C").unwrap()), 1);
+        assert_eq!(double_bond_count(&mol_from_smiles("O=C=O").unwrap()), 2);
+        assert_eq!(double_bond_count(&mol_from_smiles("CC(=O)O").unwrap()), 1);
+        // ethane: none; benzene: aromatic bonds are NOT Double → 0.
+        assert_eq!(double_bond_count(&mol_from_smiles("CC").unwrap()), 0);
+        assert_eq!(double_bond_count(&mol_from_smiles("c1ccccc1").unwrap()), 0);
     }
 
     #[test]

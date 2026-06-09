@@ -33,6 +33,23 @@ pub fn speed_of_sound(temperature_k: f64) -> f64 {
     (gamma * r * temperature_k.max(1.0)).sqrt()
 }
 
+/// The air density from the ideal-gas law `ρ = P / (R·T)` (kg·m⁻³) at absolute pressure
+/// `pressure_pa` (Pa) and temperature `temperature_k` (K), with `R = 287 J·kg⁻¹·K⁻¹` (the
+/// specific gas constant for air, as in [`speed_of_sound`]). At sea-level standard
+/// conditions (101325 Pa, 288 K) this gives `ρ ≈ 1.225 kg·m⁻³`. Returns `0` for non-physical
+/// input (`P` or `T` non-finite or non-positive).
+pub fn ideal_gas_density(pressure_pa: f64, temperature_k: f64) -> f64 {
+    if !pressure_pa.is_finite()
+        || pressure_pa <= 0.0
+        || !temperature_k.is_finite()
+        || temperature_k <= 0.0
+    {
+        return 0.0;
+    }
+    let r = 287.0;
+    pressure_pa / (r * temperature_k)
+}
+
 /// The free-stream Mach number for a given speed and speed of sound.
 pub fn mach_number(speed: f64, speed_of_sound: f64) -> f64 {
     if speed_of_sound <= 0.0 {
@@ -180,6 +197,20 @@ mod tests {
         // a ≈ 340 m/s at 288 K.
         let a = speed_of_sound(288.0);
         assert!((a - 340.0).abs() < 5.0, "speed of sound {a} should be ~340");
+    }
+
+    #[test]
+    fn ideal_gas_density_at_sea_level() {
+        // 101325 Pa, 288 K → ρ ≈ 1.225 kg/m³.
+        let rho = ideal_gas_density(101325.0, 288.0);
+        assert!((rho - 1.225).abs() < 1e-2, "sea-level density {rho} ≈ 1.225");
+        // ρ ∝ P (double P → double ρ); ρ ∝ 1/T (halve T → double ρ).
+        assert!((ideal_gas_density(202650.0, 288.0) / rho - 2.0).abs() < 1e-9, "ρ ∝ P");
+        assert!((ideal_gas_density(101325.0, 144.0) / rho - 2.0).abs() < 1e-9, "ρ ∝ 1/T");
+        // Non-physical input → 0.
+        assert_eq!(ideal_gas_density(0.0, 288.0), 0.0);
+        assert_eq!(ideal_gas_density(101325.0, 0.0), 0.0);
+        assert_eq!(ideal_gas_density(f64::NAN, 288.0), 0.0);
     }
 
     #[test]
