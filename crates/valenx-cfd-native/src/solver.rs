@@ -1155,6 +1155,26 @@ impl FlowSolution {
         (kinematic_viscosity * self.bottom_wall_shear_rate()).sqrt()
     }
 
+    /// The **wall shear stress** `τ_w = μ · ⟨|∂u/∂y|⟩_wall` (Pa) at the bottom wall —
+    /// the dynamic viscosity `dynamic_viscosity` `μ` (Pa·s) times the bottom-wall shear
+    /// rate [`FlowSolution::bottom_wall_shear_rate`] `∂u/∂y` (1/s). This is the
+    /// *dimensional* skin-friction traction the wall exerts on the flow (force per unit
+    /// wall area) — the quantity the streamwise pressure drop must overcome to push
+    /// fluid through a channel.
+    ///
+    /// It is distinct from the shear *rate* (1/s) it is built on, and is the
+    /// stress-domain partner of the [`FlowSolution::friction_velocity`] `u_τ`: since
+    /// `u_τ = √(ν · ∂u/∂y)` with `ν = μ/ρ`, the two satisfy `τ_w = ρ · u_τ²` exactly.
+    /// Non-dimensionalising `τ_w` by the dynamic pressure `½ρU²` gives the
+    /// skin-friction coefficient `C_f`. Returns `0` for a non-positive or non-finite
+    /// viscosity, or an empty grid / zero wall shear.
+    pub fn bottom_wall_shear_stress(&self, dynamic_viscosity: f64) -> f64 {
+        if !dynamic_viscosity.is_finite() || dynamic_viscosity <= 0.0 {
+            return 0.0;
+        }
+        dynamic_viscosity * self.bottom_wall_shear_rate()
+    }
+
     /// The mean wall-tangential velocity gradient `⟨|∂v/∂x|⟩` at the **left** wall
     /// (`x = 0`) (1/s) — the one-sided estimate `2·v_cell(0, j)/dx` from the no-slip
     /// wall to the first cell centre, averaged over the wall-normal (vertical)
@@ -6786,6 +6806,68 @@ mod tests {
             converged: true,
         };
         assert_eq!(still.friction_velocity(nu), 0.0, "no wall shear → u_τ = 0");
+    }
+
+    #[test]
+    fn bottom_wall_shear_stress_is_the_dimensional_wall_traction() {
+        // A 4×4 unit grid with a linear shear u(y) = γ·y, γ = 3 → bottom-wall shear
+        // rate = γ (per the bottom_wall_shear_rate test).
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let gamma = 3.0_f64;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5);
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        // τ_w = μ·(∂u/∂y)_wall = μ·γ — the worked value for the imposed shear γ.
+        let mu = 2.0_f64;
+        let tau = sol.bottom_wall_shear_stress(mu);
+        assert!((tau - mu * gamma).abs() < 1e-9, "τ_w = μγ, got {tau}");
+        // Delegation: τ_w is exactly μ times the field's own wall shear rate.
+        assert!(
+            (tau - mu * sol.bottom_wall_shear_rate()).abs() <= 1e-9 * tau,
+            "τ_w = μ·(wall shear rate)"
+        );
+        // NON-TAUTOLOGICAL thread through friction_velocity: τ_w = ρ·u_τ² with ν = μ/ρ,
+        // since u_τ = √(ν·rate) ⇒ ρ·u_τ² = ρ·(μ/ρ)·rate = μ·rate = τ_w. This routes the
+        // stress through the sqrt-and-square of the independent u_τ path.
+        let rho = 1.25_f64;
+        let nu = mu / rho;
+        assert!(
+            (tau - rho * sol.friction_velocity(nu).powi(2)).abs() <= 1e-9 * tau,
+            "τ_w = ρ·u_τ²"
+        );
+        // Linear in μ: doubling the viscosity doubles the stress.
+        assert!(
+            (sol.bottom_wall_shear_stress(4.0) - 2.0 * sol.bottom_wall_shear_stress(2.0)).abs()
+                <= 1e-9 * sol.bottom_wall_shear_stress(4.0),
+            "τ_w ∝ μ"
+        );
+        // Non-physical viscosity → 0.
+        assert_eq!(sol.bottom_wall_shear_stress(0.0), 0.0);
+        assert_eq!(sol.bottom_wall_shear_stress(-1.0), 0.0);
+        // A quiescent field (no wall shear) → τ_w = 0.
+        let still = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(still.bottom_wall_shear_stress(mu), 0.0, "no wall shear → τ_w = 0");
     }
 
     #[test]
