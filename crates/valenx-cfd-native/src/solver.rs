@@ -1775,6 +1775,24 @@ impl FlowSolution {
         self.taylor_microscale(kinematic_viscosity) / eta
     }
 
+    /// The **integral-to-Kolmogorov scale ratio** `L/η` (dimensionless) — the ratio of the
+    /// energy-containing [`FlowSolution::integral_length_scale`] `L` to the dissipative
+    /// [`FlowSolution::kolmogorov_length_scale`] `η`, the *total* span of the turbulent
+    /// cascade from the largest eddies to the smallest. It is the companion to the
+    /// [`FlowSolution::taylor_to_kolmogorov_ratio`] `λ/η` and the widest of the
+    /// scale-separation measures: it grows strongly with Reynolds number (for a fixed flow,
+    /// `∝ 1/ν^(3/2)`), and in isotropic turbulence satisfies `L/η = Re_λ^(3/2) / 15^(3/4)`
+    /// with the Taylor-microscale Reynolds number [`FlowSolution::taylor_reynolds_number`].
+    /// Returns `0` when there is no dissipation (a strainless or quiescent flow, where both
+    /// scales vanish).
+    pub fn integral_to_kolmogorov_ratio(&self, kinematic_viscosity: f64) -> f64 {
+        let eta = self.kolmogorov_length_scale(kinematic_viscosity);
+        if eta <= 0.0 {
+            return 0.0;
+        }
+        self.integral_length_scale(kinematic_viscosity) / eta
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -4563,6 +4581,83 @@ mod tests {
             converged: true,
         };
         assert_eq!(rotation.taylor_to_kolmogorov_ratio(0.1), 0.0);
+    }
+
+    #[test]
+    fn integral_to_kolmogorov_ratio_is_the_total_cascade_span() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Pure shear u(y) = γy → ε = ν·γ²; L = u_rms³/ε, η = (ν³/ε)^(1/4), so L/η ∝
+        // 1/ν^(3/2) and L/η = Re_λ^(3/2)/15^(3/4).
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) THREAD delegation: L/η = integral_length_scale / kolmogorov_length_scale.
+        let nu = 0.1_f64;
+        let r = shear.integral_to_kolmogorov_ratio(nu);
+        assert!(
+            (r - shear.integral_length_scale(nu) / shear.kolmogorov_length_scale(nu)).abs()
+                <= 1e-9 * r,
+            "L/η = L ÷ η"
+        );
+
+        // (b) IDENTITY (non-tautological, threads taylor_reynolds_number): in isotropic
+        // turbulence L/η = Re_λ^(3/2) / 15^(3/4).
+        let rhs = shear.taylor_reynolds_number(nu).powf(1.5) / 15.0_f64.powf(0.75);
+        assert!((r - rhs).abs() <= 1e-9 * r, "L/η = Re_λ^(3/2)/15^(3/4)");
+
+        // (c) 1/ν^(3/2) SCALING: the shear velocity field is fixed, so L/η ∝ ν^(−3/2) —
+        // quartering ν multiplies the ratio by 8 (4^(3/2)).
+        assert!(
+            (shear.integral_to_kolmogorov_ratio(0.025)
+                - 8.0 * shear.integral_to_kolmogorov_ratio(0.1))
+            .abs()
+                <= 1e-9 * shear.integral_to_kolmogorov_ratio(0.025),
+            "L/η ∝ 1/ν^(3/2)"
+        );
+
+        // (d) NO DISSIPATION → 0: a solid-body rotation strains nothing (η = 0).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(rotation.integral_to_kolmogorov_ratio(0.1), 0.0);
     }
 
     #[test]
