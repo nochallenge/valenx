@@ -1257,6 +1257,27 @@ pub fn propped_cantilever_udl_fixed_end_moment(load_per_length: f64, length: f64
     load_per_length * length * length / 8.0
 }
 
+/// The **middle-support hogging moment of a two-span continuous beam under a uniformly
+/// distributed load** `M_B = w·L²/8` (N·m) — the bending moment over the central support
+/// `B` of a beam on three simple supports `A`–`B`–`C` with two equal spans `span_length`
+/// `L` (m) each carrying a uniform load `load_per_length` `w` (N/m). It is the classic
+/// **three-moment-theorem (Clapeyron)** result and the strength-governing moment of the
+/// arrangement.
+///
+/// By symmetry the centre support acts as a fixed (clamped) end for each span, so every
+/// span is itself a **propped cantilever** under UDL — hence `M_B` is numerically equal to
+/// the [`propped_cantilever_udl_fixed_end_moment`] `w·L²/8`, a different configuration
+/// reaching the same value through the symmetry of the continuous beam. Being pure statics
+/// it is independent of `E` and `I`, linear and sign-preserving in `w`, and quadratic in
+/// `L`. Returns `0` for non-physical input (`w` non-finite, or `L` non-positive or
+/// non-finite).
+pub fn two_span_continuous_beam_udl_middle_moment(load_per_length: f64, span_length: f64) -> f64 {
+    if !load_per_length.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * span_length * span_length / 8.0
+}
+
 /// The analytic **fixed-end (clamp) reaction of a propped cantilever under a uniformly
 /// distributed load** `R_A = 5·w·L/8` (N) — the vertical support reaction at the *fixed*
 /// (clamped) end of a propped cantilever (fixed at one end, simply supported at the other)
@@ -4810,6 +4831,50 @@ mod tests {
         assert_eq!(propped_cantilever_udl_max_sagging_moment(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn two_span_continuous_beam_udl_middle_moment_matches_the_three_moment_theorem() {
+        // WORKED: w = 1 kN/m UDL over both spans of a two-span continuous beam with
+        // equal spans L = 2 m → the middle-support moment is M_B = wL²/8 = 500 N·m.
+        assert!(
+            (two_span_continuous_beam_udl_middle_moment(1000.0, 2.0) - 500.0).abs() <= 1e-9 * 500.0,
+            "M_B = wL²/8 = 500 N·m",
+        );
+
+        // STRONG non-tautological CROSS-CONFIGURATION thread: by symmetry each span of the
+        // two-span beam behaves as a propped cantilever fixed at the centre support, so M_B
+        // equals the existing propped-cantilever fixed-end moment w·L²/8 — same value,
+        // different structure, reached independently.
+        for &(w, l) in &[(1200.0_f64, 3.5_f64), (8200.0, 0.8), (-450.0, 2.0)] {
+            let m_b = two_span_continuous_beam_udl_middle_moment(w, l);
+            assert!(
+                (m_b - propped_cantilever_udl_fixed_end_moment(w, l)).abs() <= 1e-9 * m_b.abs(),
+                "M_B must equal the propped-cantilever fixed-end moment by symmetry",
+            );
+        }
+
+        // Linear in w, quadratic in L.
+        let base = two_span_continuous_beam_udl_middle_moment(1000.0, 2.0);
+        assert!(
+            (two_span_continuous_beam_udl_middle_moment(2000.0, 2.0) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
+            "linear in w",
+        );
+        assert!(
+            (two_span_continuous_beam_udl_middle_moment(1000.0, 4.0) - 4.0 * base).abs()
+                <= 1e-9 * 4.0 * base,
+            "quadratic in L",
+        );
+        assert!(
+            two_span_continuous_beam_udl_middle_moment(-1000.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(two_span_continuous_beam_udl_middle_moment(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(two_span_continuous_beam_udl_middle_moment(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(two_span_continuous_beam_udl_middle_moment(1000.0, -2.0), 0.0); // L < 0
     }
 
     #[test]
