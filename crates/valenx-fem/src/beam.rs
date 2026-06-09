@@ -188,6 +188,38 @@ pub fn cantilever_end_moment_tip_slope(
     end_moment * length / (youngs_modulus * second_moment_area)
 }
 
+/// The analytic **strain energy of a cantilever under a pure end moment**
+/// `U = M₀²·L / (2·E·I)` (J) — the elastic bending energy stored in a cantilever of span
+/// `length` `L` (m) loaded only by a couple `end_moment` `M₀` (N·m) at its free end, for
+/// Young's modulus `youngs_modulus` `E` (Pa) and section second moment of area
+/// `second_moment_area` `I` (m⁴). A pure end couple is carried as a *constant* bending
+/// moment `M₀`, so the energy integral `U = ∫M²/(2EI) dx` collapses to `M₀²L/(2EI)`. It is
+/// the moment-loaded member of the cantilever energy-method family alongside the point-load
+/// [`cantilever_point_load_strain_energy`] and UDL [`cantilever_udl_strain_energy`] cases,
+/// and follows from **Clapeyron's theorem** `U = ½·M₀·θ` with the tip slope
+/// [`cantilever_end_moment_tip_slope`] `θ = M₀L/EI`. The energy grows with the *square* of
+/// the moment (so it is sign-independent), *linearly* with the span, and falls inversely
+/// with the flexural rigidity `E·I`. Returns `0` for non-physical input (`M₀` non-finite,
+/// or `E`, `I`, or `L` non-positive or non-finite).
+pub fn cantilever_end_moment_strain_energy(
+    end_moment: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !end_moment.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    end_moment * end_moment * length / (2.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **maximum bending moment at the fixed root of a tip-loaded
 /// cantilever** `M = P·L` (N·m) — the peak moment, at the built-in (encastré) end,
 /// which sets the maximum bending stress and so governs the strength design of the
@@ -2759,6 +2791,54 @@ mod tests {
         assert_eq!(cantilever_end_moment_tip_slope(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0);
         assert_eq!(cantilever_end_moment_tip_slope(1000.0, 2.0, 0.0, 1.0e-6), 0.0);
         assert_eq!(cantilever_end_moment_tip_slope(1000.0, 2.0, 200.0e9, 0.0), 0.0);
+    }
+
+    #[test]
+    fn cantilever_end_moment_strain_energy_matches_clapeyron() {
+        // (a) WORKED: M₀ = 1 kN·m at the free end of a 2 m steel cantilever (E = 200 GPa,
+        // I = 1e-6 m⁴) → U = M₀²·L/(2EI) = 1000²·2/(2·200e9·1e-6) = 5.0 J.
+        assert!(
+            (cantilever_end_moment_strain_energy(1000.0, 2.0, 200.0e9, 1.0e-6) - 5.0).abs()
+                <= 1e-9 * 5.0,
+            "U = M₀²L/(2EI) = 5.0 J"
+        );
+
+        // (b) CLAPEYRON THREAD (non-tautological): the work a single static load does is
+        // half the load times the conjugate displacement, U = ½·M₀·θ with the tip slope.
+        for &(m, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-820.0, 3.5, 70.0e9, 4.2e-7),
+        ] {
+            let u = cantilever_end_moment_strain_energy(m, l, e, i);
+            assert!(
+                (u - 0.5 * m * cantilever_end_moment_tip_slope(m, l, e, i)).abs() <= 1e-9 * u,
+                "U = ½·M₀·θ"
+            );
+        }
+
+        // (c) SCALING: quadratic and sign-independent in M₀ (the M² term), linear in L.
+        let base = cantilever_end_moment_strain_energy(1000.0, 2.0, 200.0e9, 1.0e-6);
+        assert!(
+            (cantilever_end_moment_strain_energy(2000.0, 2.0, 200.0e9, 1.0e-6) - 4.0 * base).abs()
+                <= 1e-9 * 4.0 * base,
+            "quadratic in M₀"
+        );
+        assert!(
+            (cantilever_end_moment_strain_energy(-1000.0, 2.0, 200.0e9, 1.0e-6) - base).abs()
+                <= 1e-9 * base,
+            "sign-independent (M²)"
+        );
+        assert!(
+            (cantilever_end_moment_strain_energy(1000.0, 4.0, 200.0e9, 1.0e-6) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
+            "linear in L"
+        );
+
+        // (d) GUARD: non-physical input → 0.
+        assert_eq!(cantilever_end_moment_strain_energy(f64::NAN, 2.0, 200.0e9, 1.0e-6), 0.0);
+        assert_eq!(cantilever_end_moment_strain_energy(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0);
+        assert_eq!(cantilever_end_moment_strain_energy(1000.0, 2.0, 0.0, 1.0e-6), 0.0);
+        assert_eq!(cantilever_end_moment_strain_energy(1000.0, 2.0, 200.0e9, 0.0), 0.0);
     }
 
     #[test]
