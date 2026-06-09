@@ -500,6 +500,19 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
                  \u{03B4}_E {de:.5} m  \u{00B7}  H {h:.3}  \u{00B7}  H* {hs:.3}  \u{00B7}  \
                  Re_\u{03B8} {re_theta:.0}  \u{00B7}  Re_\u{03B4}* {re_dstar:.0}"
             ));
+            // Turbulence cascade scales (kinematic ν): Taylor microscale + Re_λ, Kolmogorov
+            // length/time, integral length/time. Diagnostic for the resolved field.
+            let lambda = sol.taylor_microscale(s.viscosity);
+            let re_lambda = sol.taylor_reynolds_number(s.viscosity);
+            let eta = sol.kolmogorov_length_scale(s.viscosity);
+            let tau_eta = sol.kolmogorov_time_scale(s.viscosity);
+            let integral_l = sol.integral_length_scale(s.viscosity);
+            let integral_t = sol.integral_time_scale(s.viscosity);
+            s.result.push_str(&format!(
+                "\nturbulence scales: \u{03BB} {lambda:.4e} m  \u{00B7}  Re_\u{03BB} {re_lambda:.1}  \
+                 \u{00B7}  \u{03B7} {eta:.4e} m  \u{00B7}  \u{03C4}_\u{03B7} {tau_eta:.4e} s  \
+                 \u{00B7}  L {integral_l:.4e} m  \u{00B7}  T {integral_t:.4e} s"
+            ));
         }
     }
 }
