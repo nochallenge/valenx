@@ -1319,6 +1319,26 @@ pub fn propped_cantilever_central_load_prop_reaction(point_load: f64, length: f6
     5.0 * point_load / 16.0
 }
 
+/// The reaction at the **clamped (fixed) end of a propped cantilever under a central
+/// point load** `R_A = 11P/16` (N) — the support reaction at the built-in end of a beam
+/// of span `length` `L` (m) that is clamped at one end and simply supported at the
+/// other, carrying a transverse point force `point_load` `P` (N) at mid-span.
+///
+/// It is the complement of the prop reaction
+/// [`propped_cantilever_central_load_prop_reaction`] `R_B = 5P/16`: vertical equilibrium
+/// of the whole beam requires `R_A + R_B = P`, so `R_A = P − 5P/16 = 11P/16`. The fixed
+/// end carries the larger share of the load (and additionally resists the clamping
+/// moment `M_A = 3PL/16`). Being pure statics it is independent of `E` and `I`, linear
+/// and sign-preserving in `P`, and — for the central case — independent of `L` (the
+/// `length` argument is validated only by the physicality guard). Returns `0` for
+/// non-physical input (`P` non-finite, or `L` non-positive or non-finite).
+pub fn propped_cantilever_central_load_fixed_end_reaction(point_load: f64, length: f64) -> f64 {
+    if !point_load.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    11.0 * point_load / 16.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -4845,6 +4865,44 @@ mod tests {
         assert_eq!(propped_cantilever_central_load_prop_reaction(8.0, 0.0), 0.0); // L = 0
         assert_eq!(propped_cantilever_central_load_prop_reaction(8.0, -2.0), 0.0); // L < 0
         assert_eq!(propped_cantilever_central_load_prop_reaction(f64::NAN, 2.0), 0.0); // P NaN
+    }
+
+    #[test]
+    fn propped_cantilever_central_load_fixed_end_reaction_completes_the_reaction_pair() {
+        // Worked point: P = 16 kN central load → the clamped-end reaction is
+        // R_A = 11P/16 = 11 kN, independent of span.
+        assert!(
+            (propped_cantilever_central_load_fixed_end_reaction(16.0, 3.0) - 11.0).abs() < 1e-12,
+            "R_A = 11P/16 = 11 for P = 16",
+        );
+
+        // STRONG non-tautological thread through the EXISTING prop reaction (#462):
+        // vertical equilibrium of the whole beam requires R_A + R_B = P.
+        for &(p, l) in &[(7.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
+            let ra = propped_cantilever_central_load_fixed_end_reaction(p, l);
+            let rb = propped_cantilever_central_load_prop_reaction(p, l);
+            assert!(
+                (ra + rb - p).abs() <= 1e-9 * p.abs(),
+                "R_A + R_B must equal P; got {ra} + {rb} vs {p}",
+            );
+        }
+
+        // Linear and sign-preserving in P; independent of L for the central case.
+        let base = propped_cantilever_central_load_fixed_end_reaction(10.0, 2.0);
+        assert!(
+            (propped_cantilever_central_load_fixed_end_reaction(20.0, 2.0) - 2.0 * base).abs()
+                < 1e-12,
+            "doubling P doubles R_A",
+        );
+        assert!(
+            propped_cantilever_central_load_fixed_end_reaction(-10.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(propped_cantilever_central_load_fixed_end_reaction(8.0, 0.0), 0.0); // L = 0
+        assert_eq!(propped_cantilever_central_load_fixed_end_reaction(8.0, -2.0), 0.0); // L < 0
+        assert_eq!(propped_cantilever_central_load_fixed_end_reaction(f64::NAN, 2.0), 0.0); // P NaN
     }
 
     #[test]

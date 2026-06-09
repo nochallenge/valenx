@@ -163,6 +163,7 @@ pub use beam::{
     lames_first_parameter,
     p_wave_modulus,
     polar_section_modulus,
+    propped_cantilever_central_load_fixed_end_reaction,
     propped_cantilever_central_load_prop_reaction,
     propped_cantilever_udl_fixed_end_moment, propped_cantilever_udl_fixed_end_reaction,
     propped_cantilever_udl_max_sagging_moment, propped_cantilever_udl_prop_reaction,
