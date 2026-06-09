@@ -723,6 +723,17 @@ fn apply_loads(
     }
 }
 
+/// LRFD factored load combination per ASCE 7 §2.3 strength design: `1.2·D + 1.6·L`,
+/// combining a dead (permanent) load `dead_load` with a live (transient) load `live_load`
+/// into the ultimate-strength design demand. Units pass through unchanged (N or Pa) and the
+/// sign of each load is preserved (uplift / negative permitted). Returns `0` for non-finite input.
+pub fn lrfd_factored_load(dead_load: f64, live_load: f64) -> f64 {
+    if !dead_load.is_finite() || !live_load.is_finite() {
+        return 0.0;
+    }
+    1.2 * dead_load + 1.6 * live_load
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -958,5 +969,19 @@ mod tests {
         // Iz = h·w³/12 = 0.3·0.008/12 = 2.0e-4
         assert!((s.iz - 0.3 * 0.008 / 12.0).abs() < 1e-12);
         assert!(s.j > 0.0);
+    }
+
+    #[test]
+    fn lrfd_factored_load_basic() {
+        // ASCE 7 §2.3 basic strength combo: 1.2·D + 1.6·L.
+        assert!((lrfd_factored_load(10.0, 5.0) - 20.0).abs() < 1e-9); // 12 + 8
+        assert!((lrfd_factored_load(10.0, 0.0) - 12.0).abs() < 1e-9); // dead only
+        assert!((lrfd_factored_load(0.0, 5.0) - 8.0).abs() < 1e-9); // live only
+        // Factors are NOT swapped: 1.2·10 + 1.6·5 = 20 ≠ 1.6·10 + 1.2·5 = 22.
+        assert!((lrfd_factored_load(10.0, 5.0) - (1.6 * 10.0 + 1.2 * 5.0)).abs() > 1.0);
+        // Sign preserved (uplift); non-finite → 0.
+        assert!((lrfd_factored_load(-5.0, 3.0) - (-1.2)).abs() < 1e-9);
+        assert_eq!(lrfd_factored_load(f64::NAN, 5.0), 0.0);
+        assert_eq!(lrfd_factored_load(10.0, f64::INFINITY), 0.0);
     }
 }

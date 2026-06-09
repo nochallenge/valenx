@@ -319,6 +319,21 @@ impl Drawing {
         self.revision_blocks.push(blk);
         id
     }
+
+    /// Total number of annotation objects on this drawing — the sum of dimensions,
+    /// dim-chains, balloons, leaders, weld symbols, surface-finish callouts, GD&T frames,
+    /// and datum features. A drawing-complexity / annotation-density diagnostic, distinct
+    /// from the view, BOM, and revision-block counts.
+    pub fn annotation_count(&self) -> usize {
+        self.dimensions.len()
+            + self.dim_chains.len()
+            + self.balloons.len()
+            + self.leaders.len()
+            + self.welds.len()
+            + self.surface_finishes.len()
+            + self.gdt.len()
+            + self.datums.len()
+    }
 }
 
 /// Map an integer to the next detail-view letter (`0 → "A"`, `25 →
@@ -537,5 +552,26 @@ mod tests {
         d.add_revision_block(blk);
         assert_eq!(d.revision_blocks.len(), 1);
         assert_eq!(d.revision_blocks[0].entries[0].rev, "A");
+    }
+
+    #[test]
+    fn annotation_count_sums_annotations() {
+        let mut d = Drawing::new(Sheet::a4_landscape("X", "Y", "Z"));
+        assert_eq!(d.annotation_count(), 0);
+        d.add_dimension(Dimension::Linear {
+            from: [0.0, 0.0],
+            to: [10.0, 0.0],
+            offset: 5.0,
+            value: 10.0,
+        });
+        d.add_dimension(Dimension::Linear {
+            from: [0.0, 0.0],
+            to: [0.0, 20.0],
+            offset: 5.0,
+            value: 20.0,
+        });
+        // Two dimensions and no other annotation type → 2.
+        assert_eq!(d.annotation_count(), 2);
+        assert_eq!(d.annotation_count(), d.dimensions.len());
     }
 }
