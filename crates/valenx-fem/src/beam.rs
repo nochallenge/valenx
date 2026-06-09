@@ -787,6 +787,29 @@ pub fn hollow_circular_second_moment_of_area(outer_diameter: f64, inner_diameter
     std::f64::consts::PI * (outer_diameter.powi(4) - inner_diameter.powi(4)) / 64.0
 }
 
+/// The **polar second moment of area of a hollow circular shaft** about its longitudinal axis
+/// `J = π·(D⁴ − d⁴)/32` (m⁴), for outer diameter `outer_diameter` `D` (m) and inner bore
+/// `inner_diameter` `d` (m). For a *circular* tube this polar second moment **is** the
+/// St-Venant torsion constant — the torsional stiffness of drive-shaft tubing, which (like the
+/// solid shaft) is exactly twice the bending [`hollow_circular_second_moment_of_area`] by the
+/// perpendicular-axis theorem, and the annulus = the outer disc's polar moment minus the
+/// inner's. Returns `0` for non-physical input (`D` non-positive or non-finite, or the bore
+/// `d` negative, non-finite, or not strictly inside the outer diameter).
+pub fn hollow_circular_polar_second_moment_of_area(
+    outer_diameter: f64,
+    inner_diameter: f64,
+) -> f64 {
+    if !outer_diameter.is_finite()
+        || outer_diameter <= 0.0
+        || !inner_diameter.is_finite()
+        || inner_diameter < 0.0
+        || inner_diameter >= outer_diameter
+    {
+        return 0.0;
+    }
+    std::f64::consts::PI * (outer_diameter.powi(4) - inner_diameter.powi(4)) / 32.0
+}
+
 /// The **plastic section modulus of a solid circular section** `Z = d³/6` (m³), for a round
 /// bar of diameter `diameter` `d` (m) — the section property for fully-plastic limit bending
 /// of a shaft (`M_plastic = σ_y·Z`), the circular companion to
@@ -2961,6 +2984,54 @@ mod tests {
         assert_eq!(hollow_circular_second_moment_of_area(0.1, 0.2), 0.0); // d > D
         assert_eq!(hollow_circular_second_moment_of_area(f64::NAN, 0.05), 0.0);
         assert_eq!(hollow_circular_second_moment_of_area(0.1, -0.01), 0.0);
+    }
+
+    #[test]
+    fn hollow_circular_polar_second_moment_of_area_is_pi_d4_minus_d4_over_32() {
+        // (a) WORKED: D=0.1, d=0.05 → J = π(D⁴−d⁴)/32 ≈ 9.2038e-6 m⁴.
+        let j = hollow_circular_polar_second_moment_of_area(0.1, 0.05);
+        assert!(
+            (j - std::f64::consts::PI * (0.1_f64.powi(4) - 0.05_f64.powi(4)) / 32.0).abs()
+                <= 1e-9 * j,
+            "J = π(D⁴−d⁴)/32"
+        );
+
+        // (b) THREAD hollow_circular_second_moment_of_area (#435) (non-tautological,
+        // perpendicular-axis theorem): J = 2·I_hollow.
+        assert!(
+            (hollow_circular_polar_second_moment_of_area(0.1, 0.05)
+                - 2.0 * hollow_circular_second_moment_of_area(0.1, 0.05))
+            .abs()
+                <= 1e-9 * hollow_circular_polar_second_moment_of_area(0.1, 0.05),
+            "J = 2·I_hollow"
+        );
+
+        // (c) THREAD circular_polar_second_moment_of_area (#423) (non-tautological, annulus):
+        // J = J(D) − J(d).
+        assert!(
+            (hollow_circular_polar_second_moment_of_area(0.1, 0.05)
+                - (circular_polar_second_moment_of_area(0.1)
+                    - circular_polar_second_moment_of_area(0.05)))
+            .abs()
+                <= 1e-9 * hollow_circular_polar_second_moment_of_area(0.1, 0.05),
+            "J = J(D) − J(d)"
+        );
+
+        // (d) SOLID LIMIT: a zero bore is a solid shaft.
+        assert!(
+            (hollow_circular_polar_second_moment_of_area(0.1, 0.0)
+                - circular_polar_second_moment_of_area(0.1))
+            .abs()
+                <= 1e-9 * circular_polar_second_moment_of_area(0.1),
+            "zero bore → solid shaft"
+        );
+
+        // (e) GUARD: non-physical input → 0.
+        assert_eq!(hollow_circular_polar_second_moment_of_area(0.0, 0.0), 0.0);
+        assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, 0.1), 0.0); // d ≥ D
+        assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, 0.2), 0.0); // d > D
+        assert_eq!(hollow_circular_polar_second_moment_of_area(f64::NAN, 0.05), 0.0);
+        assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, -0.01), 0.0);
     }
 
     #[test]
