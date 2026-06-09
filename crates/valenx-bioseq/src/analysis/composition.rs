@@ -232,6 +232,27 @@ pub fn hamming_distance(a: &Seq, b: &Seq) -> Result<usize> {
         .count())
 }
 
+/// N50 — the assembly-contiguity statistic over a multiset of contig/fragment `lengths`:
+/// sort descending, accumulate, and return the length at which the running total first
+/// reaches at least half the grand total. Higher N50 = longer contiguity. Returns `0` for
+/// an empty input. A set-level statistic, so it takes a length slice (not a [`Seq`]).
+pub fn n50(lengths: &[usize]) -> usize {
+    let total: usize = lengths.iter().sum();
+    if total == 0 {
+        return 0;
+    }
+    let mut sorted = lengths.to_vec();
+    sorted.sort_unstable_by(|a, b| b.cmp(a));
+    let mut cumulative = 0usize;
+    for &len in &sorted {
+        cumulative += len;
+        if 2 * cumulative >= total {
+            return len;
+        }
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,6 +341,21 @@ mod tests {
         let dxy = hamming_distance(&x, &y).unwrap();
         let dyz = hamming_distance(&y, &z).unwrap();
         assert!(dxz <= dxy + dyz, "triangle inequality");
+    }
+
+    #[test]
+    fn n50_worked_examples() {
+        // [2,3,4,5,6]: total 20, half 10, sorted desc [6,5,4,3,2], cumsum 6,11(≥10) → 5.
+        assert_eq!(n50(&[2, 3, 4, 5, 6]), 5);
+        assert_eq!(n50(&[10]), 10);
+        assert_eq!(n50(&[5, 5]), 5);
+        assert_eq!(n50(&[100, 1, 1]), 100);
+        assert_eq!(n50(&[]), 0);
+        // Input order doesn't matter (the algorithm sorts).
+        assert_eq!(n50(&[3, 1, 4, 1, 5, 9, 2, 6]), n50(&[9, 6, 5, 4, 3, 2, 1, 1]));
+        // Non-tautological: N50 is one of the input lengths for non-empty input.
+        let input = [7, 3, 15, 8];
+        assert!(input.contains(&n50(&input)));
     }
 
     #[test]
