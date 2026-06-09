@@ -711,6 +711,28 @@ pub fn shear_modulus_from_youngs(youngs_modulus: f64, poisson_ratio: f64) -> f64
     youngs_modulus / (2.0 * (1.0 + poisson_ratio))
 }
 
+/// The **P-wave (longitudinal / constrained) modulus** `M = E(1−ν) / ((1+ν)(1−2ν))` (Pa)
+/// — the uniaxial-strain stiffness: the stress needed to compress a material along one
+/// axis while it is *constrained* from straining laterally (an oedometer / 1-D
+/// consolidation test). It also sets the compressional (primary) wave speed
+/// `v_p = √(M/ρ)`. `youngs_modulus` `E` (Pa) and `poisson_ratio` `ν` are the engineering
+/// constants. It is the capstone of the isotropic elastic-constant family, tying it all
+/// together: `M = K + 4G/3 = λ + 2G`, where `K` is the [`bulk_modulus`], `G` the
+/// [`shear_modulus_from_youngs`], and `λ` the [`lames_first_parameter`]. At `ν = 0` it
+/// reduces to `E` (no lateral constraint). Returns `0` for non-physical input (`E`
+/// non-positive or non-finite, or `ν` outside the physical range `(−1, 0.5)`).
+pub fn p_wave_modulus(youngs_modulus: f64, poisson_ratio: f64) -> f64 {
+    if !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !poisson_ratio.is_finite()
+        || poisson_ratio <= -1.0
+        || poisson_ratio >= 0.5
+    {
+        return 0.0;
+    }
+    youngs_modulus * (1.0 - poisson_ratio) / ((1.0 + poisson_ratio) * (1.0 - 2.0 * poisson_ratio))
+}
+
 /// The **bending (flexure) stress** `σ = M·y/I` (Pa) — the longitudinal normal stress
 /// a bending moment `moment` `M` (N·m) induces at distance `distance_from_neutral_axis`
 /// `y` (m) from the neutral axis in a section of second moment of area
@@ -3512,6 +3534,46 @@ mod tests {
         assert_eq!(shear_modulus_from_youngs(200.0e9, 0.5), 0.0);
         assert_eq!(shear_modulus_from_youngs(200.0e9, -1.0), 0.0);
         assert_eq!(shear_modulus_from_youngs(200.0e9, f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn p_wave_modulus_is_the_capstone_of_the_elastic_constants() {
+        // (a) WORKED: E=200e9, ν=0.3 → M = E(1−ν)/((1+ν)(1−2ν)) = 140e9/0.52 ≈ 2.6923e11.
+        let m = p_wave_modulus(200.0e9, 0.3);
+        assert!((m - 200.0e9 * 0.7 / (1.3 * 0.4)).abs() <= 1e-9 * m, "M = E(1−ν)/((1+ν)(1−2ν))");
+
+        // (b) IDENTITY M = K + 4G/3 (thread bulk_modulus + shear_modulus_from_youngs, exact).
+        for &(e, nu) in &[(200.0e9_f64, 0.3_f64), (70.0e9, 0.33)] {
+            let m = p_wave_modulus(e, nu);
+            assert!(
+                (m - (bulk_modulus(e, nu) + 4.0 / 3.0 * shear_modulus_from_youngs(e, nu))).abs()
+                    <= 1e-9 * m,
+                "M = K + 4G/3"
+            );
+        }
+
+        // (c) IDENTITY M = λ + 2G (thread lames_first_parameter + shear, exact — ties all
+        // the constants together).
+        let (e, nu) = (70.0e9_f64, 0.33_f64);
+        let m = p_wave_modulus(e, nu);
+        assert!(
+            (m - (lames_first_parameter(e, nu) + 2.0 * shear_modulus_from_youngs(e, nu))).abs()
+                <= 1e-9 * m,
+            "M = λ + 2G"
+        );
+
+        // (d) ν=0 → M=E: no lateral constraint.
+        assert!(
+            (p_wave_modulus(200.0e9, 0.0) - 200.0e9).abs() <= 1e-9 * 200.0e9,
+            "M(ν=0) = E"
+        );
+
+        // (e) GUARD: non-physical input → 0 sentinel.
+        assert_eq!(p_wave_modulus(0.0, 0.3), 0.0);
+        assert_eq!(p_wave_modulus(f64::NAN, 0.3), 0.0);
+        assert_eq!(p_wave_modulus(200.0e9, 0.5), 0.0);
+        assert_eq!(p_wave_modulus(200.0e9, -1.0), 0.0);
+        assert_eq!(p_wave_modulus(200.0e9, f64::NAN), 0.0);
     }
 
     #[test]
