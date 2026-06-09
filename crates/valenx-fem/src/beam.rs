@@ -1141,6 +1141,28 @@ pub fn propped_cantilever_udl_prop_reaction(load_per_length: f64, length: f64) -
     3.0 * load_per_length * length / 8.0
 }
 
+/// The analytic **fixed-end (clamp) moment of a propped cantilever under a uniformly
+/// distributed load** `M_A = w·L²/8` (N·m) — the hogging bending moment that develops at
+/// the *fixed* (clamped) end of a propped cantilever (fixed at one end, simply supported
+/// at the other) carrying a uniform load `load_per_length` `w` (N/m) over span `length`
+/// `L` (m). It is the design-critical peak moment of the case. By statics it is the
+/// complement of the [`propped_cantilever_udl_prop_reaction`] `R_B = 3wL/8`: taking
+/// moments about the fixed end, `M_A = w·L²/2 − R_B·L = wL²/2 − 3wL²/8 = wL²/8`.
+///
+/// Note this evaluates to `w·L²/8`, numerically the same as the simply-supported midspan
+/// moment [`simply_supported_udl_max_moment`] — a genuine coincidence; the two are
+/// physically distinct (this is the *hogging* moment at the *clamp* of a propped
+/// cantilever, not the *sagging* midspan moment of a pinned–pinned beam). Quadratic in
+/// `L`, linear and sign-preserving in `w`, and — being pure statics — independent of `E`
+/// and `I`. Returns `0` for non-physical input (`w` non-finite, or `L` non-positive or
+/// non-finite).
+pub fn propped_cantilever_udl_fixed_end_moment(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * length * length / 8.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -4361,6 +4383,43 @@ mod tests {
         assert_eq!(propped_cantilever_udl_prop_reaction(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(propped_cantilever_udl_prop_reaction(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(propped_cantilever_udl_prop_reaction(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn propped_cantilever_udl_fixed_end_moment_matches_equilibrium() {
+        // (a) WORKED: w = 1 kN/m UDL on a 2 m propped cantilever → M_A = w·L²/8 =
+        // 1000·4/8 = 500 N·m.
+        assert!(
+            (propped_cantilever_udl_fixed_end_moment(1000.0, 2.0) - 500.0).abs() <= 1e-9 * 500.0,
+            "M_A = wL²/8 = 500 N·m"
+        );
+
+        // (b) MOMENT-EQUILIBRIUM THREAD (non-tautological): moments about the fixed end
+        // give M_A = w·L²/2 − R_B·L, threading the prop reaction R_B = 3wL/8.
+        for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
+            let m = propped_cantilever_udl_fixed_end_moment(w, l);
+            let equil = w * l * l / 2.0 - propped_cantilever_udl_prop_reaction(w, l) * l;
+            assert!((m - equil).abs() <= 1e-9 * m.abs().max(1.0), "M_A = wL²/2 − R_B·L");
+        }
+
+        // (c) SCALING: quadratic in L, linear and sign-preserving in w.
+        let base = propped_cantilever_udl_fixed_end_moment(1000.0, 2.0);
+        assert!(
+            (propped_cantilever_udl_fixed_end_moment(1000.0, 4.0) - 4.0 * base).abs()
+                <= 1e-9 * 4.0 * base,
+            "quadratic in L"
+        );
+        assert!(
+            (propped_cantilever_udl_fixed_end_moment(2000.0, 2.0) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
+            "linear in w"
+        );
+        assert!(propped_cantilever_udl_fixed_end_moment(-1000.0, 2.0) < 0.0, "sign follows load");
+
+        // (d) Non-physical input → 0.
+        assert_eq!(propped_cantilever_udl_fixed_end_moment(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(propped_cantilever_udl_fixed_end_moment(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(propped_cantilever_udl_fixed_end_moment(1000.0, -2.0), 0.0); // L < 0
     }
 
     #[test]
