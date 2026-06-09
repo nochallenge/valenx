@@ -646,6 +646,29 @@ pub fn flexural_rigidity(youngs_modulus: f64, second_moment_area: f64) -> f64 {
     youngs_modulus * second_moment_area
 }
 
+/// The **bulk modulus** `K = E / (3(1−2ν))` (Pa) — the volumetric (compressive)
+/// stiffness of an isotropic elastic material: the ratio of a uniform hydrostatic
+/// pressure to the fractional volume change `−p / (ΔV/V)` it produces. It is the third
+/// of the standard isotropic elastic moduli alongside Young's modulus `youngs_modulus`
+/// `E` (Pa) and the shear modulus `G` (the private companion the beam solver uses), and
+/// the one that governs how a material resists a change of *volume* rather than of
+/// shape. `poisson_ratio` `ν` is the dimensionless lateral-contraction ratio. The bulk
+/// modulus rises without bound as `ν → 0.5` (an incompressible material) and reduces to
+/// `E/3` at `ν = 0`; the relation inverts as `E = 3·K·(1−2ν)`. Returns `0` for
+/// non-physical input (`E` non-positive or non-finite, or `ν` outside the physical
+/// range `(−1, 0.5)`).
+pub fn bulk_modulus(youngs_modulus: f64, poisson_ratio: f64) -> f64 {
+    if !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !poisson_ratio.is_finite()
+        || poisson_ratio <= -1.0
+        || poisson_ratio >= 0.5
+    {
+        return 0.0;
+    }
+    youngs_modulus / (3.0 * (1.0 - 2.0 * poisson_ratio))
+}
+
 /// The **bending (flexure) stress** `σ = M·y/I` (Pa) — the longitudinal normal stress
 /// a bending moment `moment` `M` (N·m) induces at distance `distance_from_neutral_axis`
 /// `y` (m) from the neutral axis in a section of second moment of area
@@ -3342,6 +3365,43 @@ mod tests {
         assert_eq!(flexural_rigidity(200.0e9, 0.0), 0.0);
         assert_eq!(flexural_rigidity(f64::NAN, 1.0e-6), 0.0);
         assert_eq!(flexural_rigidity(200.0e9, -1.0e-6), 0.0);
+    }
+
+    #[test]
+    fn bulk_modulus_is_the_volumetric_stiffness() {
+        // (a) WORKED (exact): ν=0.25 → 1−2ν=0.5, K = E/(3·0.5) = E/1.5; E=3e9 → 2e9.
+        assert!(
+            (bulk_modulus(3.0e9, 0.25) - 2.0e9).abs() <= 1e-9 * 2.0e9,
+            "K = E/(3(1−2ν)) = 2 GPa"
+        );
+
+        // (b) INVERSE round-trip (non-tautological): E = 3·K·(1−2ν) recovers Young's modulus.
+        for &(e, nu) in &[(200.0e9_f64, 0.3_f64), (70.0e9, 0.33), (110.0e9, 0.21)] {
+            let k = bulk_modulus(e, nu);
+            assert!(
+                (3.0 * k * (1.0 - 2.0 * nu) - e).abs() <= 1e-9 * e,
+                "E = 3K(1−2ν)"
+            );
+        }
+
+        // (c) ν=0 limit: no lateral coupling → K = E/3.
+        assert!(
+            (bulk_modulus(200.0e9, 0.0) - 200.0e9 / 3.0).abs() <= 1e-9 * (200.0e9 / 3.0),
+            "K(ν=0) = E/3"
+        );
+
+        // (d) INCOMPRESSIBLE trend: K → ∞ as ν → 0.5.
+        assert!(
+            bulk_modulus(200.0e9, 0.49) > 10.0 * bulk_modulus(200.0e9, 0.0),
+            "K grows without bound toward ν=0.5"
+        );
+
+        // (e) GUARD: non-physical input → 0 sentinel.
+        assert_eq!(bulk_modulus(0.0, 0.3), 0.0);
+        assert_eq!(bulk_modulus(f64::NAN, 0.3), 0.0);
+        assert_eq!(bulk_modulus(200.0e9, 0.5), 0.0);
+        assert_eq!(bulk_modulus(200.0e9, -1.0), 0.0);
+        assert_eq!(bulk_modulus(200.0e9, f64::NAN), 0.0);
     }
 
     #[test]
