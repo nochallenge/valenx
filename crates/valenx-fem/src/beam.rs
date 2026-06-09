@@ -1123,6 +1123,24 @@ pub fn fixed_fixed_udl_end_moment(load_per_length: f64, length: f64) -> f64 {
     load_per_length * length * length / 12.0
 }
 
+/// The analytic **prop reaction of a propped cantilever under a uniformly distributed
+/// load** `R_B = 3·w·L/8` (N) — the vertical reaction at the *propped* (simple-support)
+/// end of a propped cantilever (fixed at one end, simply supported at the other) carrying
+/// a uniform load `load_per_length` `w` (N/m) over span `length` `L` (m). This is the
+/// classic statically-indeterminate beam released by the **force (compatibility) method**:
+/// removing the prop leaves a cantilever that deflects `w·L⁴/8EI` at the tip
+/// ([`cantilever_udl_tip_deflection`]); the prop supplies exactly the upward point force
+/// that pushes the tip back to zero ([`cantilever_tip_deflection`] `R·L³/3EI`), giving
+/// `R_B = 3wL/8`. The remaining `5wL/8` goes to the fixed end. Being a pure statics result
+/// it is linear and sign-preserving in `w`, linear in `L`, and independent of `E` and `I`.
+/// Returns `0` for non-physical input (`w` non-finite, or `L` non-positive or non-finite).
+pub fn propped_cantilever_udl_prop_reaction(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    3.0 * load_per_length * length / 8.0
+}
+
 /// The analytic **strain energy of a simply-supported beam under a central point
 /// load** `U = P²·L³/(96·E·I)` (J) — the elastic energy stored in bending when a
 /// slender Euler–Bernoulli beam of span `length` `L` (m), Young's modulus
@@ -4300,6 +4318,49 @@ mod tests {
         assert_eq!(fixed_fixed_udl_end_moment(f64::NAN, 4.0), 0.0); // w NaN
         assert_eq!(fixed_fixed_udl_end_moment(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(fixed_fixed_udl_end_moment(1000.0, -1.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn propped_cantilever_udl_prop_reaction_matches_compatibility() {
+        // (a) WORKED: w = 1 kN/m UDL on a 2 m propped cantilever → R_B = 3·w·L/8 =
+        // 3·1000·2/8 = 750 N.
+        assert!(
+            (propped_cantilever_udl_prop_reaction(1000.0, 2.0) - 750.0).abs() <= 1e-9 * 750.0,
+            "R_B = 3wL/8 = 750 N"
+        );
+
+        // (b) COMPATIBILITY THREAD (non-tautological, force method): the prop reaction is
+        // exactly the tip point-force that cancels the cantilever's UDL tip deflection, so
+        // cantilever_tip_deflection(R, L, E, I) == cantilever_udl_tip_deflection(w, L, E, I).
+        for &(w, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 70.0e9, 4.2e-7),
+            (8200.0, 0.8, 120.0e9, 9.0e-8),
+        ] {
+            let r = propped_cantilever_udl_prop_reaction(w, l);
+            let udl = cantilever_udl_tip_deflection(w, l, e, i);
+            assert!(
+                (cantilever_tip_deflection(r, l, e, i) - udl).abs() <= 1e-9 * udl.abs(),
+                "prop reaction zeroes the cantilever tip deflection"
+            );
+        }
+
+        // (c) LINEARITY: linear and sign-preserving in w, linear in L.
+        let base = propped_cantilever_udl_prop_reaction(1000.0, 2.0);
+        assert!(
+            (propped_cantilever_udl_prop_reaction(2000.0, 2.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in w"
+        );
+        assert!(
+            (propped_cantilever_udl_prop_reaction(1000.0, 4.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "linear in L"
+        );
+        assert!(propped_cantilever_udl_prop_reaction(-1000.0, 2.0) < 0.0, "sign follows the load");
+
+        // (d) Non-physical input → 0.
+        assert_eq!(propped_cantilever_udl_prop_reaction(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(propped_cantilever_udl_prop_reaction(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(propped_cantilever_udl_prop_reaction(1000.0, -2.0), 0.0); // L < 0
     }
 
     #[test]
