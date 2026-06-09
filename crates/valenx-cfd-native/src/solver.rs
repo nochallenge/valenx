@@ -984,6 +984,28 @@ impl FlowSolution {
         self.displacement_thickness(u_ref) / theta
     }
 
+    /// The **momentum-thickness Reynolds number** `Re_θ = u_ref·θ / ν` (dimensionless) —
+    /// the Reynolds number formed on the boundary-layer [`FlowSolution::momentum_thickness`]
+    /// `θ` and the edge speed `u_ref`, with kinematic viscosity `kinematic_viscosity` `ν`
+    /// (m²/s). It is the standard *transition* parameter of a boundary layer: a flat-plate
+    /// layer trips from laminar to turbulent near `Re_θ ≈ 350–400` and is fully turbulent
+    /// by `~ 1000`, so it is the single number that decides a station's regime. `u_ref` is
+    /// the same edge / free-stream reference speed the thickness integrals use (the
+    /// [`FlowSolution::bulk_velocity`] or a known inlet speed). Distinct from the
+    /// geometry-based [`FlowSolution::domain_reynolds_number`] — this is built on the
+    /// boundary layer's own momentum thickness. Returns `0` for non-positive or non-finite
+    /// `u_ref` or viscosity, or whenever the momentum thickness vanishes (plug flow).
+    pub fn momentum_thickness_reynolds_number(&self, u_ref: f64, kinematic_viscosity: f64) -> f64 {
+        if !u_ref.is_finite()
+            || u_ref <= 0.0
+            || !kinematic_viscosity.is_finite()
+            || kinematic_viscosity <= 0.0
+        {
+            return 0.0;
+        }
+        u_ref * self.momentum_thickness(u_ref) / kinematic_viscosity
+    }
+
     /// Area-averaged kinetic-energy density `⟨½ρ|u|²⟩` (J/m³ = Pa) over the cell
     /// grid — the mean specific kinetic energy of the flow, in the same units as
     /// (and directly comparable to) the freestream dynamic pressure `½ρU²`.
@@ -4883,6 +4905,60 @@ mod tests {
         assert_eq!(sol.momentum_thickness(0.0), 0.0); // u_ref = 0
         assert_eq!(sol.momentum_thickness(-1.0), 0.0); // u_ref < 0
         assert_eq!(sol.momentum_thickness(f64::NAN), 0.0); // non-finite
+    }
+
+    #[test]
+    fn momentum_thickness_reynolds_number_is_the_transition_parameter() {
+        // EXACT anchor: a uniform half-speed profile u = U/2 over a 4×8 channel of height
+        // Ly = 3, referenced to u_ref = U. The integrand (u/U)(1−u/U) = ¼ is constant, so
+        // θ = Ly/4 = 0.75 exactly (no discretisation error).
+        let (u_full, ly) = (2.0_f64, 3.0_f64);
+        let grid = Grid::new(4, 8, 4.0, ly);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 0.5 * u_full);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) WORKED (exact, analytic θ = Ly/4, independent of the impl): Re_θ =
+        // u_ref·θ/ν = 2·0.75/0.1 = 15.
+        let nu = 0.1_f64;
+        let re_theta = sol.momentum_thickness_reynolds_number(u_full, nu);
+        assert!(
+            (re_theta - u_full * (ly / 4.0) / nu).abs() <= 1e-9 * re_theta,
+            "Re_θ = u_ref·(Ly/4)/ν = 15"
+        );
+
+        // (b) THREAD momentum_thickness (delegation consistency): Re_θ = u_ref·θ/ν.
+        assert!(
+            (re_theta - u_full * sol.momentum_thickness(u_full) / nu).abs() <= 1e-9 * re_theta,
+            "Re_θ = u_ref·θ/ν"
+        );
+
+        // (c) 1/ν SCALING (θ and u_ref fixed, ν only in the denominator): halve ν →
+        // double Re_θ. (Note Re_θ is NOT ∝ u_ref, since θ itself depends on u_ref.)
+        assert!(
+            (sol.momentum_thickness_reynolds_number(u_full, nu / 2.0) - 2.0 * re_theta).abs()
+                <= 1e-9 * 2.0 * re_theta,
+            "Re_θ ∝ 1/ν"
+        );
+
+        // (d) GUARDS: non-physical viscosity or reference speed → 0.
+        assert_eq!(sol.momentum_thickness_reynolds_number(u_full, 0.0), 0.0);
+        assert_eq!(sol.momentum_thickness_reynolds_number(u_full, -1.0), 0.0);
+        assert_eq!(sol.momentum_thickness_reynolds_number(u_full, f64::NAN), 0.0);
+        assert_eq!(sol.momentum_thickness_reynolds_number(0.0, nu), 0.0);
+        assert_eq!(sol.momentum_thickness_reynolds_number(f64::NAN, nu), 0.0);
     }
 
     #[test]
