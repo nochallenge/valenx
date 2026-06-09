@@ -1009,6 +1009,24 @@ impl FlowSolution {
         self.displacement_thickness(u_ref) / theta
     }
 
+    /// The **energy shape factor** `H* = δ_E/θ` (dimensionless) — the ratio of the
+    /// boundary-layer [`FlowSolution::energy_thickness`] `δ_E` to the
+    /// [`FlowSolution::momentum_thickness`] `θ` at the outlet, against edge speed `u_ref`.
+    /// It is the *kinetic-energy* analog of the mass/momentum [`FlowSolution::shape_factor`]
+    /// `H = δ*/θ`, and the quantity advanced by boundary-layer integral methods (e.g. Head's
+    /// entrainment closure). It measures how full the profile is in an energy sense: `H* ≈
+    /// 1.5` for a uniform-defect or linear profile, rising toward `≈ 1.6–1.7` for a laminar
+    /// Blasius layer. Because `δ_E ≥ θ` always (`δ_E − θ = ∫(u/u_ref)²(1 − u/u_ref) dy ≥ 0`),
+    /// `H* ≥ 1`. Returns `0` when the momentum thickness is `0` (plug flow, or a non-finite
+    /// / non-positive `u_ref` or empty grid, where both thicknesses vanish).
+    pub fn energy_shape_factor(&self, u_ref: f64) -> f64 {
+        let theta = self.momentum_thickness(u_ref);
+        if theta.abs() < 1e-12 {
+            return 0.0;
+        }
+        self.energy_thickness(u_ref) / theta
+    }
+
     /// The **momentum-thickness Reynolds number** `Re_θ = u_ref·θ / ν` (dimensionless) —
     /// the Reynolds number formed on the boundary-layer [`FlowSolution::momentum_thickness`]
     /// `θ` and the edge speed `u_ref`, with kinematic viscosity `kinematic_viscosity` `ν`
@@ -4988,6 +5006,63 @@ mod tests {
         assert_eq!(sol.energy_thickness(0.0), 0.0); // u_ref = 0
         assert_eq!(sol.energy_thickness(-1.0), 0.0); // u_ref < 0
         assert_eq!(sol.energy_thickness(f64::NAN), 0.0); // non-finite
+    }
+
+    #[test]
+    fn energy_shape_factor_is_the_energy_analog_of_the_shape_factor() {
+        // EXACT anchor: a uniform half-speed profile u = U/2 over a 4×8 channel of height
+        // Ly = 3, referenced to u_ref = U. Both integrands are constant, so δ_E = 0.375·Ly
+        // and θ = 0.25·Ly exactly → H* = δ_E/θ = 1.5.
+        let (u_full, ly) = (2.0_f64, 3.0_f64);
+        let grid = Grid::new(4, 8, 4.0, ly);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 0.5 * u_full);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) WORKED EXACT: H* = δ_E/θ = 0.375/0.25 = 1.5.
+        let hstar = sol.energy_shape_factor(u_full);
+        assert!((hstar - 1.5).abs() < 1e-12, "H* = 1.5, got {hstar}");
+
+        // (b) THREAD energy_thickness + momentum_thickness (delegation consistency).
+        assert!(
+            (hstar - sol.energy_thickness(u_full) / sol.momentum_thickness(u_full)).abs() < 1e-12,
+            "H* = δ_E/θ"
+        );
+
+        // (c) BOUND: H* ≥ 1 always, since δ_E ≥ θ (δ_E − θ = ∫(u/U)²(1−u/U) dy ≥ 0).
+        assert!(hstar >= 1.0, "H* ≥ 1, got {hstar}");
+
+        // (d) PLUG FLOW → 0 (θ = 0): a uniform u = U has no momentum deficit.
+        let mut plug_u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                plug_u.set(i, j, u_full);
+            }
+        }
+        let plug = FlowSolution {
+            grid,
+            u: plug_u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(plug.energy_shape_factor(u_full), 0.0); // plug flow → θ = 0 → 0
+        assert_eq!(sol.energy_shape_factor(0.0), 0.0); // u_ref = 0
+        assert_eq!(sol.energy_shape_factor(f64::NAN), 0.0); // non-finite
     }
 
     #[test]
