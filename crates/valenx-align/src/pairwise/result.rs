@@ -200,6 +200,19 @@ impl AlignStats {
             self.gaps as f64 / self.columns as f64
         }
     }
+
+    /// Number of aligned (non-gap) columns — the alignment length after removing gap
+    /// columns (`columns − gaps`).
+    pub fn aligned_length(&self) -> usize {
+        self.columns.saturating_sub(self.gaps)
+    }
+
+    /// Number of aligned (non-gap) columns whose residues differ — the complement of the
+    /// identities within the aligned region, so `identities + mismatch_count ==
+    /// aligned_length`.
+    pub fn mismatch_count(&self) -> usize {
+        self.aligned_length().saturating_sub(self.identities)
+    }
 }
 
 /// A pairwise alignment result.
@@ -459,6 +472,19 @@ mod tests {
         // 4 identical of 5 aligned columns
         assert!((s.percent_identity() - 0.8).abs() < 1e-9);
         assert!((a.percent_identity() - 0.8).abs() < 1e-9);
+    }
+
+    #[test]
+    fn aligned_length_and_mismatch_count() {
+        // "ACGTA-" vs "ACGTTC": 6 columns, 4 identities, 1 mismatch (col 4), 1 gap (col 5).
+        let a = Alignment::new(b"ACGTA-".to_vec(), b"ACGTTC".to_vec(), 0, (0, 5), (0, 6)).unwrap();
+        let s = a.stats(&SubstitutionMatrix::identity(1, -1));
+        // aligned_length = columns − gaps = 6 − 1 = 5.
+        assert_eq!(s.aligned_length(), 5);
+        // mismatch_count = aligned − identities = 5 − 4 = 1.
+        assert_eq!(s.mismatch_count(), 1);
+        // partition invariant: identities + mismatches = aligned length.
+        assert_eq!(s.identities + s.mismatch_count(), s.aligned_length());
     }
 
     #[test]

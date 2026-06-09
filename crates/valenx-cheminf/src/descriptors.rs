@@ -292,6 +292,16 @@ pub fn heteroatom_count(mol: &Molecule) -> usize {
         .count()
 }
 
+/// Halogen atom count — atoms that are F, Cl, Br or I (atomic number ∈ {9, 17, 35, 53});
+/// a distinct subset of [`heteroatom_count`]. E.g. 1 for chlorobenzene, 3 for chloroform,
+/// 4 for CF₄, 0 for benzene.
+pub fn halogen_count(mol: &Molecule) -> usize {
+    mol.atoms
+        .iter()
+        .filter(|a| matches!(a.atomic_number, 9 | 17 | 35 | 53))
+        .count()
+}
+
 /// Fraction of carbons that are `sp³` (Csp3) — a flatness / 3D-shape
 /// descriptor (`Fsp3`).
 pub fn fraction_csp3(mol: &Molecule) -> f64 {
@@ -525,5 +535,15 @@ mod tests {
         assert_eq!(aromatic_bond_count(&mol_from_smiles("Clc1ccccc1").unwrap()), 6);
         // no aromatic atoms → no aromatic bonds.
         assert_eq!(aromatic_bond_count(&mol_from_smiles("C1CCCCC1").unwrap()), 0);
+    }
+
+    #[test]
+    fn halogen_count_exact() {
+        // chlorobenzene 1 Cl; chloroform 3 Cl; CF₄ 4 F; benzene + ethanol 0.
+        assert_eq!(halogen_count(&mol_from_smiles("Clc1ccccc1").unwrap()), 1);
+        assert_eq!(halogen_count(&mol_from_smiles("C(Cl)(Cl)Cl").unwrap()), 3);
+        assert_eq!(halogen_count(&mol_from_smiles("FC(F)(F)F").unwrap()), 4);
+        assert_eq!(halogen_count(&mol_from_smiles("c1ccccc1").unwrap()), 0);
+        assert_eq!(halogen_count(&mol_from_smiles("CCO").unwrap()), 0);
     }
 }
