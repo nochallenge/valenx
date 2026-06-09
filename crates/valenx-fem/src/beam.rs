@@ -669,6 +669,28 @@ pub fn bulk_modulus(youngs_modulus: f64, poisson_ratio: f64) -> f64 {
     youngs_modulus / (3.0 * (1.0 - 2.0 * poisson_ratio))
 }
 
+/// The **Lamé first parameter** `λ = E·ν / ((1+ν)(1−2ν))` (Pa) — the first of the two
+/// Lamé constants that parameterise the isotropic linear-elastic stiffness tensor,
+/// `σ = λ·tr(ε)·I + 2μ·ε`, in which the second Lamé parameter `μ` is the shear modulus
+/// `G` (the private companion the beam solver uses). `youngs_modulus` `E` (Pa) and
+/// `poisson_ratio` `ν` are the engineering constants; `λ` is the coefficient that couples
+/// the volumetric strain `tr(ε)` into the normal stresses. It connects to the
+/// [`bulk_modulus`] `K` by `λ = K − 2G/3 = 3·K·ν/(1+ν)`. Returns `0` for non-physical
+/// input (`E` non-positive or non-finite, or `ν` outside the physical range `(−1, 0.5)`);
+/// note `λ` is also *validly* `0` at `ν = 0` and *negative* for an auxetic material
+/// (`ν < 0`).
+pub fn lames_first_parameter(youngs_modulus: f64, poisson_ratio: f64) -> f64 {
+    if !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !poisson_ratio.is_finite()
+        || poisson_ratio <= -1.0
+        || poisson_ratio >= 0.5
+    {
+        return 0.0;
+    }
+    youngs_modulus * poisson_ratio / ((1.0 + poisson_ratio) * (1.0 - 2.0 * poisson_ratio))
+}
+
 /// The **bending (flexure) stress** `σ = M·y/I` (Pa) — the longitudinal normal stress
 /// a bending moment `moment` `M` (N·m) induces at distance `distance_from_neutral_axis`
 /// `y` (m) from the neutral axis in a section of second moment of area
@@ -3402,6 +3424,38 @@ mod tests {
         assert_eq!(bulk_modulus(200.0e9, 0.5), 0.0);
         assert_eq!(bulk_modulus(200.0e9, -1.0), 0.0);
         assert_eq!(bulk_modulus(200.0e9, f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn lames_first_parameter_couples_volumetric_strain() {
+        // (a) WORKED: E=200e9, ν=0.3 → λ = E·ν/((1+ν)(1−2ν)) = 60e9/0.52 ≈ 1.153846e11.
+        let lam = lames_first_parameter(200.0e9, 0.3);
+        assert!(
+            (lam - 200.0e9 * 0.3 / (1.3 * 0.4)).abs() <= 1e-9 * lam,
+            "λ = Eν/((1+ν)(1−2ν))"
+        );
+
+        // (b) THREAD bulk_modulus (non-tautological): λ = 3·K·ν/(1+ν).
+        for &(e, nu) in &[(200.0e9_f64, 0.3_f64), (70.0e9, 0.33)] {
+            let lam = lames_first_parameter(e, nu);
+            assert!(
+                (lam - 3.0 * bulk_modulus(e, nu) * nu / (1.0 + nu)).abs() <= 1e-9 * lam,
+                "λ = 3Kν/(1+ν)"
+            );
+        }
+
+        // (c) ν=0 → λ=0 (a valid zero, not a sentinel): no volumetric coupling.
+        assert_eq!(lames_first_parameter(200.0e9, 0.0), 0.0);
+
+        // (d) AUXETIC ν<0 → λ<0: a negative Poisson's ratio flips the coupling sign.
+        assert!(lames_first_parameter(200.0e9, -0.2) < 0.0);
+
+        // (e) GUARD: non-physical input → 0 sentinel.
+        assert_eq!(lames_first_parameter(0.0, 0.3), 0.0);
+        assert_eq!(lames_first_parameter(f64::NAN, 0.3), 0.0);
+        assert_eq!(lames_first_parameter(200.0e9, 0.5), 0.0);
+        assert_eq!(lames_first_parameter(200.0e9, -1.0), 0.0);
+        assert_eq!(lames_first_parameter(200.0e9, f64::NAN), 0.0);
     }
 
     #[test]
