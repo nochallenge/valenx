@@ -304,6 +304,34 @@ fn parse_coding(body: &str, input: &str) -> Result<Variant, VariantError> {
     Ok(Variant::CodingSub { pos, wt, mt })
 }
 
+/// Transition/transversion (Ti/Tv) ratio over a slice of variants. A **transition** is a
+/// purine↔purine (A↔G) or pyrimidine↔pyrimidine (C↔T) single-base substitution; a
+/// **transversion** is a purine↔pyrimidine substitution. Only [`Variant::CodingSub`] with
+/// differing bases are counted (protein and silent substitutions are skipped). Returns the
+/// ratio Ti/Tv, or `0.0` when there are no transversions (otherwise the ratio is undefined).
+pub fn transition_transversion_ratio(variants: &[Variant]) -> f64 {
+    let mut transitions = 0u32;
+    let mut transversions = 0u32;
+    for variant in variants {
+        if let Variant::CodingSub { wt, mt, .. } = variant {
+            if wt == mt {
+                continue;
+            }
+            let is_purine = |n: &Nucleotide| matches!(n.as_char(), 'A' | 'G');
+            if is_purine(wt) == is_purine(mt) {
+                transitions += 1;
+            } else {
+                transversions += 1;
+            }
+        }
+    }
+    if transversions == 0 {
+        0.0
+    } else {
+        f64::from(transitions) / f64::from(transversions)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,5 +535,34 @@ mod tests {
             Err(VariantError::Parse { input, .. }) => assert_eq!(input, "p.B100A"),
             other => panic!("expected Parse error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn transition_transversion_ratio_classifies_snvs() {
+        // 2 transitions (A>G, C>T) : 1 transversion (A>C) = 2.0.
+        let v = [
+            parse("c.1A>G").unwrap(),
+            parse("c.2C>T").unwrap(),
+            parse("c.3A>C").unwrap(),
+        ];
+        assert!((transition_transversion_ratio(&v) - 2.0).abs() < 1e-9);
+        // No transversions → 0.0 sentinel (ratio undefined).
+        let ti_only = [parse("c.1A>G").unwrap(), parse("c.2C>T").unwrap()];
+        assert_eq!(transition_transversion_ratio(&ti_only), 0.0);
+        // Empty → 0.0; a protein substitution is ignored (no coding SNV present).
+        assert_eq!(transition_transversion_ratio(&[]), 0.0);
+        assert_eq!(
+            transition_transversion_ratio(&[parse("p.R273H").unwrap()]),
+            0.0
+        );
+        // Mixed batch: A>G, A>T, C>T, G>C, G>A = 3 Ti : 2 Tv = 1.5.
+        let mixed = [
+            parse("c.1A>G").unwrap(),
+            parse("c.2A>T").unwrap(),
+            parse("c.3C>T").unwrap(),
+            parse("c.4G>C").unwrap(),
+            parse("c.5G>A").unwrap(),
+        ];
+        assert!((transition_transversion_ratio(&mixed) - 1.5).abs() < 1e-9);
     }
 }
