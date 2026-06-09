@@ -1163,6 +1163,23 @@ pub fn propped_cantilever_udl_fixed_end_moment(load_per_length: f64, length: f64
     load_per_length * length * length / 8.0
 }
 
+/// The analytic **fixed-end (clamp) reaction of a propped cantilever under a uniformly
+/// distributed load** `R_A = 5·w·L/8` (N) — the vertical support reaction at the *fixed*
+/// (clamped) end of a propped cantilever (fixed at one end, simply supported at the other)
+/// carrying a uniform load `load_per_length` `w` (N/m) over span `length` `L` (m). With the
+/// [`propped_cantilever_udl_prop_reaction`] `R_B = 3wL/8` it carries the whole applied
+/// load — `R_A + R_B = w·L` (vertical equilibrium) — the clamp taking the larger `5/8`
+/// share because it also resists the [`propped_cantilever_udl_fixed_end_moment`]. Being a
+/// pure statics result it is linear and sign-preserving in `w`, linear in `L`, and
+/// independent of `E` and `I`. Returns `0` for non-physical input (`w` non-finite, or `L`
+/// non-positive or non-finite).
+pub fn propped_cantilever_udl_fixed_end_reaction(load_per_length: f64, length: f64) -> f64 {
+    if !load_per_length.is_finite() || !length.is_finite() || length <= 0.0 {
+        return 0.0;
+    }
+    5.0 * load_per_length * length / 8.0
+}
+
 /// The analytic **maximum sagging (span) moment of a propped cantilever under a
 /// uniformly distributed load** `M_sag = 9·w·L²/128` (N·m) — the largest *positive*
 /// (sagging) bending moment in the span of a propped cantilever (fixed at one end,
@@ -4480,6 +4497,43 @@ mod tests {
         assert_eq!(propped_cantilever_udl_max_sagging_moment(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn propped_cantilever_udl_fixed_end_reaction_completes_the_reaction_pair() {
+        // (a) WORKED: w = 1 kN/m UDL on a 2 m propped cantilever → R_A = 5·w·L/8 =
+        // 5·1000·2/8 = 1250 N.
+        assert!(
+            (propped_cantilever_udl_fixed_end_reaction(1000.0, 2.0) - 1250.0).abs() <= 1e-9 * 1250.0,
+            "R_A = 5wL/8 = 1250 N"
+        );
+
+        // (b) VERTICAL-EQUILIBRIUM THREAD (non-tautological): the two reactions carry the
+        // whole UDL, R_A + R_B = w·L, threading the prop reaction R_B = 3wL/8.
+        for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
+            let ra = propped_cantilever_udl_fixed_end_reaction(w, l);
+            let rb = propped_cantilever_udl_prop_reaction(w, l);
+            assert!((ra + rb - w * l).abs() <= 1e-9 * (w * l).abs().max(1.0), "R_A + R_B = wL");
+        }
+
+        // (c) SCALING: linear and sign-preserving in w, linear in L.
+        let base = propped_cantilever_udl_fixed_end_reaction(1000.0, 2.0);
+        assert!(
+            (propped_cantilever_udl_fixed_end_reaction(2000.0, 2.0) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
+            "linear in w"
+        );
+        assert!(
+            (propped_cantilever_udl_fixed_end_reaction(1000.0, 4.0) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
+            "linear in L"
+        );
+        assert!(propped_cantilever_udl_fixed_end_reaction(-1000.0, 2.0) < 0.0, "sign follows load");
+
+        // (d) Non-physical input → 0.
+        assert_eq!(propped_cantilever_udl_fixed_end_reaction(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(propped_cantilever_udl_fixed_end_reaction(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(propped_cantilever_udl_fixed_end_reaction(1000.0, -2.0), 0.0); // L < 0
     }
 
     #[test]
