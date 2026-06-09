@@ -1175,6 +1175,33 @@ impl FlowSolution {
         dynamic_viscosity * self.bottom_wall_shear_rate()
     }
 
+    /// The **skin-friction coefficient** `C_f = τ_w / (½ρU²)` (dimensionless) at the
+    /// bottom wall — the wall shear stress [`FlowSolution::bottom_wall_shear_stress`]
+    /// `τ_w` normalised by the dynamic pressure `½ρU²` built from the density `density`
+    /// `ρ` (kg/m³) and the reference speed `U` (the bulk through-flow
+    /// [`FlowSolution::bulk_velocity`]). It is the dimensionless headline of the
+    /// wall-friction family: where `τ_w` (Pa) and `u_τ` (m/s) carry units, `C_f`
+    /// collapses the wall drag onto the universal scale every boundary-layer
+    /// skin-friction correlation (`C_f = 0.664/√Re_x` laminar, the `1/7`-power law
+    /// turbulent) is plotted on.
+    ///
+    /// Equivalently `C_f = 2·(u_τ/U)²` through the friction velocity
+    /// [`FlowSolution::friction_velocity`] (since `τ_w = ρ·u_τ²`). Returns `0` for a
+    /// non-positive or non-finite density, or when the reference dynamic pressure
+    /// vanishes (a quiescent field, `U = 0`); the viscosity guard is inherited from
+    /// `bottom_wall_shear_stress`.
+    pub fn skin_friction_coefficient(&self, dynamic_viscosity: f64, density: f64) -> f64 {
+        if !density.is_finite() || density <= 0.0 {
+            return 0.0;
+        }
+        let u_ref = self.bulk_velocity();
+        let dyn_pressure = 0.5 * density * u_ref * u_ref;
+        if dyn_pressure <= 0.0 {
+            return 0.0;
+        }
+        self.bottom_wall_shear_stress(dynamic_viscosity) / dyn_pressure
+    }
+
     /// The mean wall-tangential velocity gradient `⟨|∂v/∂x|⟩` at the **left** wall
     /// (`x = 0`) (1/s) — the one-sided estimate `2·v_cell(0, j)/dx` from the no-slip
     /// wall to the first cell centre, averaged over the wall-normal (vertical)
@@ -6868,6 +6895,69 @@ mod tests {
             converged: true,
         };
         assert_eq!(still.bottom_wall_shear_stress(mu), 0.0, "no wall shear → τ_w = 0");
+    }
+
+    #[test]
+    fn skin_friction_coefficient_normalises_the_wall_drag() {
+        // A 4×4 unit grid with a linear shear u(y) = γ·y, γ = 3 → bottom-wall shear
+        // rate = γ and a non-zero bulk velocity, so C_f is well-defined.
+        let grid = Grid::new(4, 4, 4.0, 4.0);
+        let gamma = 3.0_f64;
+        let mut u = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5);
+            for i in 0..=grid.nx {
+                u.set(i, j, val);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let mu = 2.0_f64;
+        let rho = 1.25_f64;
+        let u_ref = sol.bulk_velocity();
+        assert!(u_ref > 0.0, "builder must have non-zero bulk velocity");
+        let cf = sol.skin_friction_coefficient(mu, rho);
+        // Delegation: C_f = τ_w / (½ρU²), against the field's own τ_w and U.
+        assert!(
+            (cf - sol.bottom_wall_shear_stress(mu) / (0.5 * rho * u_ref * u_ref)).abs() <= 1e-9 * cf,
+            "C_f = τ_w/(½ρU²)"
+        );
+        // NON-TAUTOLOGICAL thread C_f = 2·(u_τ/U)² through the independent
+        // friction_velocity (τ_w = ρ·u_τ² ⇒ C_f = ρu_τ²/(½ρU²) = 2u_τ²/U²).
+        let nu = mu / rho;
+        assert!(
+            (cf - 2.0 * sol.friction_velocity(nu).powi(2) / (u_ref * u_ref)).abs() <= 1e-9 * cf,
+            "C_f = 2(u_τ/U)²"
+        );
+        // Linear in μ at fixed ρ and field: doubling μ doubles C_f.
+        assert!(
+            (sol.skin_friction_coefficient(4.0, rho)
+                - 2.0 * sol.skin_friction_coefficient(2.0, rho))
+            .abs()
+                <= 1e-9 * sol.skin_friction_coefficient(4.0, rho),
+            "C_f ∝ μ"
+        );
+        // Guards: non-physical density → 0.
+        assert_eq!(sol.skin_friction_coefficient(mu, 0.0), 0.0);
+        assert_eq!(sol.skin_friction_coefficient(mu, -1.0), 0.0);
+        // A quiescent field (U = 0 ⇒ no dynamic pressure) → C_f = 0.
+        let still = FlowSolution {
+            grid,
+            u: grid.u_field(),
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(still.skin_friction_coefficient(mu, rho), 0.0, "no flow → C_f = 0");
     }
 
     #[test]
