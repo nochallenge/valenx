@@ -126,6 +126,37 @@ pub fn cantilever_tip_deflection(
     load * length.powi(3) / (3.0 * youngs_modulus * second_moment_area)
 }
 
+/// The analytic **free-end deflection of a cantilever under a pure end moment**
+/// `δ = M₀·L² / (2·E·I)` (m) — the tip deflection of a cantilever of span `length` `L`
+/// (m) loaded only by a couple `end_moment` `M₀` (N·m) applied at its free end, for
+/// Young's modulus `youngs_modulus` `E` (Pa) and section second moment of area
+/// `second_moment_area` `I` (m⁴). A pure end couple is carried as a *constant* bending
+/// moment `M₀` along the whole span, so the curvature `κ = M₀/(EI)` ([`beam_curvature`])
+/// is uniform and the beam bows into a circular arc; the small-deflection tip rise is
+/// `κ·L²/2`. It is the moment-loaded companion to the force-loaded
+/// [`cantilever_tip_deflection`] (`P·L³/3EI`): the deflection grows *linearly* with the
+/// moment (and follows its sign), with the *square* of the span, and falls inversely with
+/// the flexural rigidity `E·I`. Returns `0` for non-physical input (`M₀` non-finite, or
+/// `E`, `I`, or `L` non-positive or non-finite).
+pub fn cantilever_end_moment_tip_deflection(
+    end_moment: f64,
+    length: f64,
+    youngs_modulus: f64,
+    second_moment_area: f64,
+) -> f64 {
+    if !end_moment.is_finite()
+        || !length.is_finite()
+        || length <= 0.0
+        || !youngs_modulus.is_finite()
+        || youngs_modulus <= 0.0
+        || !second_moment_area.is_finite()
+        || second_moment_area <= 0.0
+    {
+        return 0.0;
+    }
+    end_moment * length * length / (2.0 * youngs_modulus * second_moment_area)
+}
+
 /// The analytic **maximum bending moment at the fixed root of a tip-loaded
 /// cantilever** `M = P·L` (N·m) — the peak moment, at the built-in (encastré) end,
 /// which sets the maximum bending stress and so governs the strength design of the
@@ -2592,6 +2623,53 @@ mod tests {
         assert_eq!(cantilever_point_load_root_moment(f64::NAN, 2.0), 0.0);
         assert_eq!(cantilever_point_load_root_moment(1000.0, 0.0), 0.0);
         assert_eq!(cantilever_point_load_root_moment(1000.0, -1.0), 0.0);
+    }
+
+    #[test]
+    fn cantilever_end_moment_tip_deflection_matches_constant_curvature() {
+        // (a) WORKED: M₀ = 1 kN·m at the free end of a 2 m steel cantilever (E = 200 GPa,
+        // I = 1e-6 m⁴) → δ = M₀·L²/(2EI) = 1000·4/(2·200e9·1e-6) = 0.01 m.
+        assert!(
+            (cantilever_end_moment_tip_deflection(1000.0, 2.0, 200.0e9, 1.0e-6) - 0.01).abs()
+                <= 1e-9 * 0.01,
+            "δ = M₀L²/(2EI) = 0.01 m"
+        );
+
+        // (b) THREAD beam_curvature (non-tautological): a pure end couple gives a constant
+        // curvature κ = M₀/(EI), so δ = κ·L²/2.
+        for &(m, l, e, i) in &[
+            (1000.0_f64, 2.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (-820.0, 3.5, 70.0e9, 4.2e-7),
+        ] {
+            let d = cantilever_end_moment_tip_deflection(m, l, e, i);
+            assert!(
+                (d - beam_curvature(m, e, i) * l * l / 2.0).abs() <= 1e-9 * d.abs().max(1e-300),
+                "δ = κ·L²/2"
+            );
+        }
+
+        // (c) SCALING: linear and sign-preserving in M₀, quadratic in L.
+        let base = cantilever_end_moment_tip_deflection(1000.0, 2.0, 200.0e9, 1.0e-6);
+        assert!(
+            (cantilever_end_moment_tip_deflection(2000.0, 2.0, 200.0e9, 1.0e-6) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
+            "linear in M₀"
+        );
+        assert!(
+            (cantilever_end_moment_tip_deflection(1000.0, 4.0, 200.0e9, 1.0e-6) - 4.0 * base).abs()
+                <= 1e-9 * 4.0 * base,
+            "quadratic in L"
+        );
+        assert!(
+            cantilever_end_moment_tip_deflection(-1000.0, 2.0, 200.0e9, 1.0e-6) < 0.0,
+            "sign follows the moment"
+        );
+
+        // (d) GUARD: non-physical input → 0.
+        assert_eq!(cantilever_end_moment_tip_deflection(f64::NAN, 2.0, 200.0e9, 1.0e-6), 0.0);
+        assert_eq!(cantilever_end_moment_tip_deflection(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0);
+        assert_eq!(cantilever_end_moment_tip_deflection(1000.0, 2.0, 0.0, 1.0e-6), 0.0);
+        assert_eq!(cantilever_end_moment_tip_deflection(1000.0, 2.0, 200.0e9, 0.0), 0.0);
     }
 
     #[test]
