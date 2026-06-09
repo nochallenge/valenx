@@ -1278,6 +1278,27 @@ pub fn two_span_continuous_beam_udl_middle_moment(load_per_length: f64, span_len
     load_per_length * span_length * span_length / 8.0
 }
 
+/// The **middle-support reaction of a two-span continuous beam under a uniformly
+/// distributed load** `R_B = 5·w·L/4` (N) — the vertical reaction at the central support
+/// `B` of a beam on three simple supports `A`–`B`–`C` with two equal spans `span_length`
+/// `L` (m) each carrying a uniform load `load_per_length` `w` (N/m). It is the
+/// heaviest-loaded support of the arrangement.
+///
+/// By the same symmetry that fixes the [`two_span_continuous_beam_udl_middle_moment`], each
+/// span behaves as a propped cantilever clamped at `B`, so the centre support collects the
+/// fixed-end reaction of *both* spans: `R_B = 2 · 5wL/8 = 5wL/4`, exactly twice the
+/// [`propped_cantilever_udl_fixed_end_reaction`]. With the two outer reactions
+/// `R_A = R_C = 3wL/8` (each the [`propped_cantilever_udl_prop_reaction`]) it balances the
+/// total load `R_A + R_B + R_C = 2wL`. Being pure statics it is independent of `E` and `I`,
+/// and linear in both `w` and `L`. Returns `0` for non-physical input (`w` non-finite, or
+/// `L` non-positive or non-finite).
+pub fn two_span_continuous_beam_udl_middle_reaction(load_per_length: f64, span_length: f64) -> f64 {
+    if !load_per_length.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    5.0 * load_per_length * span_length / 4.0
+}
+
 /// The analytic **fixed-end (clamp) reaction of a propped cantilever under a uniformly
 /// distributed load** `R_A = 5·w·L/8` (N) — the vertical support reaction at the *fixed*
 /// (clamped) end of a propped cantilever (fixed at one end, simply supported at the other)
@@ -4875,6 +4896,56 @@ mod tests {
         assert_eq!(two_span_continuous_beam_udl_middle_moment(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(two_span_continuous_beam_udl_middle_moment(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(two_span_continuous_beam_udl_middle_moment(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn two_span_continuous_beam_udl_middle_reaction_collects_both_spans() {
+        // WORKED: w = 1 kN/m UDL over both spans, equal spans L = 2 m → the middle-support
+        // reaction is R_B = 5wL/4 = 2500 N.
+        assert!(
+            (two_span_continuous_beam_udl_middle_reaction(1000.0, 2.0) - 2500.0).abs()
+                <= 1e-9 * 2500.0,
+            "R_B = 5wL/4 = 2500 N",
+        );
+
+        // STRONG non-tautological symmetry thread: the centre support collects the fixed-end
+        // reaction of BOTH propped-cantilever spans, R_B = 2 · (5wL/8); and global
+        // equilibrium R_A + R_B + R_C = 2wL with the outer reactions = the prop reaction.
+        for &(w, l) in &[(1200.0_f64, 3.5_f64), (8200.0, 0.8), (-450.0, 2.0)] {
+            let r_b = two_span_continuous_beam_udl_middle_reaction(w, l);
+            assert!(
+                (r_b - 2.0 * propped_cantilever_udl_fixed_end_reaction(w, l)).abs()
+                    <= 1e-9 * r_b.abs(),
+                "R_B must equal twice the propped-cantilever fixed-end reaction",
+            );
+            let r_outer = propped_cantilever_udl_prop_reaction(w, l);
+            assert!(
+                (2.0 * r_outer + r_b - 2.0 * w * l).abs() <= 1e-9 * (2.0 * w * l).abs(),
+                "R_A + R_B + R_C = total load 2wL",
+            );
+        }
+
+        // Linear in both w and L.
+        let base = two_span_continuous_beam_udl_middle_reaction(1000.0, 2.0);
+        assert!(
+            (two_span_continuous_beam_udl_middle_reaction(2000.0, 2.0) - 2.0 * base).abs()
+                < 1e-9 * base,
+            "linear in w",
+        );
+        assert!(
+            (two_span_continuous_beam_udl_middle_reaction(1000.0, 4.0) - 2.0 * base).abs()
+                < 1e-9 * base,
+            "linear in L",
+        );
+        assert!(
+            two_span_continuous_beam_udl_middle_reaction(-1000.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(two_span_continuous_beam_udl_middle_reaction(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(two_span_continuous_beam_udl_middle_reaction(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(two_span_continuous_beam_udl_middle_reaction(1000.0, -2.0), 0.0); // L < 0
     }
 
     #[test]
