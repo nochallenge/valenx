@@ -1319,6 +1319,25 @@ pub fn two_span_continuous_beam_udl_outer_reaction(load_per_length: f64, span_le
     3.0 * load_per_length * span_length / 8.0
 }
 
+/// The **interior-support moment of a three-span continuous beam under a uniformly
+/// distributed load** `M = w·L²/10` (N·m) — the bending moment over each of the two interior
+/// supports of a beam on four simple supports `A`–`B`–`C`–`D` with three equal spans
+/// `span_length` `L` (m), each carrying a uniform load `load_per_length` `w` (N/m).
+///
+/// By the three-moment (Clapeyron) theorem with `M_A = M_D = 0` and symmetry `M_B = M_C`,
+/// the support equation `4·M_B·L + M_C·L = −w·L³/2` (free-BM area `wL³/12` per span) gives
+/// `5·M_B·L = −wL³/2`, hence `M_B = −wL²/10`. The magnitude `wL²/10` is **smaller** than the
+/// two-span [`two_span_continuous_beam_udl_middle_moment`] `wL²/8` (ratio 8:10), since the
+/// extra span shares the load. Pure statics: independent of `E` and `I`, linear in `w`,
+/// quadratic in `L`. Returns `0` for non-physical input (`w` non-finite, or `L` non-positive
+/// or non-finite).
+pub fn three_span_continuous_beam_udl_interior_moment(load_per_length: f64, span_length: f64) -> f64 {
+    if !load_per_length.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
+        return 0.0;
+    }
+    load_per_length * span_length * span_length / 10.0
+}
+
 /// The **middle-support moment of a two-span continuous beam under a central point load in
 /// one span** `M_B = 3PL/32` (N·m) — the bending moment over the central support `B` of a
 /// beam on three simple supports `A`–`B`–`C` with two equal spans `span_length` `L` (m)
@@ -5111,6 +5130,51 @@ mod tests {
         assert_eq!(two_span_continuous_beam_udl_outer_reaction(f64::NAN, 2.0), 0.0); // w NaN
         assert_eq!(two_span_continuous_beam_udl_outer_reaction(1000.0, 0.0), 0.0); // L = 0
         assert_eq!(two_span_continuous_beam_udl_outer_reaction(1000.0, -2.0), 0.0); // L < 0
+    }
+
+    #[test]
+    fn three_span_continuous_beam_udl_interior_moment_matches_clapeyron() {
+        // WORKED: w = 1 kN/m UDL over all three spans, equal spans L = 2 m → each interior
+        // support moment is M = wL²/10 = 400 N·m.
+        assert!(
+            (three_span_continuous_beam_udl_interior_moment(1000.0, 2.0) - 400.0).abs()
+                <= 1e-12 * 400.0,
+            "M = wL²/10 = 400 N·m",
+        );
+
+        // STRONG non-tautological CROSS-CONFIGURATION thread: the three-span interior moment
+        // is EXACTLY 0.8× the two-span middle moment (wL²/10 vs wL²/8 = ratio 8/10), the extra
+        // span sharing the load — threads the existing two-span fn.
+        for &(w, l) in &[(1200.0_f64, 3.5_f64), (8200.0, 0.8), (-450.0, 2.0)] {
+            let m3 = three_span_continuous_beam_udl_interior_moment(w, l);
+            let m2 = two_span_continuous_beam_udl_middle_moment(w, l);
+            assert!(
+                (m3 - 0.8 * m2).abs() <= 1e-9 * m3.abs(),
+                "three-span M = 0.8 × two-span M",
+            );
+        }
+
+        // Linear in w, quadratic in L.
+        let base = three_span_continuous_beam_udl_interior_moment(1000.0, 2.0);
+        assert!(
+            (three_span_continuous_beam_udl_interior_moment(2000.0, 2.0) - 2.0 * base).abs()
+                < 1e-9 * base,
+            "linear in w",
+        );
+        assert!(
+            (three_span_continuous_beam_udl_interior_moment(1000.0, 4.0) - 4.0 * base).abs()
+                < 1e-9 * base,
+            "quadratic in L",
+        );
+        assert!(
+            three_span_continuous_beam_udl_interior_moment(-1000.0, 2.0) < 0.0,
+            "sign follows the load",
+        );
+
+        // Guards: non-physical input → 0.
+        assert_eq!(three_span_continuous_beam_udl_interior_moment(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(three_span_continuous_beam_udl_interior_moment(1000.0, 0.0), 0.0); // L = 0
+        assert_eq!(three_span_continuous_beam_udl_interior_moment(1000.0, -2.0), 0.0); // L < 0
     }
 
     #[test]

@@ -177,6 +177,7 @@ pub use beam::{
     simply_supported_udl_strain_energy, solve_beam_modal,
     solve_beam_static, torsional_moment_capacity, torsional_rigidity, torsional_shear_stress,
     torsional_strain_energy,
+    three_span_continuous_beam_udl_interior_moment,
     two_span_continuous_beam_central_point_load_loaded_span_outer_reaction,
     two_span_continuous_beam_central_point_load_middle_moment,
     two_span_continuous_beam_central_point_load_middle_reaction,
