@@ -161,7 +161,7 @@ pub use beam::{
     lames_first_parameter,
     polar_section_modulus,
     rectangular_plastic_section_modulus, rectangular_polar_second_moment_of_area,
-    rectangular_second_moment_of_area,
+    rectangular_second_moment_of_area, shear_modulus_from_youngs,
     simply_supported_center_deflection, simply_supported_end_slope,
     simply_supported_point_load_max_moment, simply_supported_point_load_strain_energy,
     simply_supported_udl_center_deflection,
