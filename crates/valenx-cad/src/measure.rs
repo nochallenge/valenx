@@ -225,6 +225,32 @@ pub fn solid_equivalent_sphere_diameter(solid: &Solid) -> Result<f64, CadError> 
     solid_equivalent_sphere_diameter_tol(solid, DEFAULT_MEASURE_TOLERANCE)
 }
 
+/// The **surface-equivalent sphere diameter** `d_s = √(A/π)` (model units) of a solid — the
+/// diameter of a sphere with the *same boundary surface area* `A` ([`solid_area_tol`]) as the
+/// solid. It is the surface-based companion to the volume-based
+/// [`solid_equivalent_sphere_diameter_tol`] (`d_v = (6V/π)^(1/3)`): for a sphere the two
+/// coincide, and for any other shape `d_s ≥ d_v` (more surface per unit volume), their ratio
+/// fixing the Wadell [`solid_sphericity_tol`] `ψ = (d_v/d_s)²`. Evaluated at tessellation
+/// tolerance `tol`.
+///
+/// # Errors
+///
+/// [`CadError::Tessellation`] if `tol` is not finite and strictly positive, or the solid
+/// surface area cannot be computed.
+pub fn solid_surface_equivalent_sphere_diameter_tol(
+    solid: &Solid,
+    tol: f64,
+) -> Result<f64, CadError> {
+    let area = solid_area_tol(solid, tol)?;
+    Ok((area / std::f64::consts::PI).sqrt())
+}
+
+/// Surface-equivalent sphere diameter of a solid at [`DEFAULT_MEASURE_TOLERANCE`]. See
+/// [`solid_surface_equivalent_sphere_diameter_tol`].
+pub fn solid_surface_equivalent_sphere_diameter(solid: &Solid) -> Result<f64, CadError> {
+    solid_surface_equivalent_sphere_diameter_tol(solid, DEFAULT_MEASURE_TOLERANCE)
+}
+
 /// Total boundary surface area of a solid, in square model units.
 ///
 /// Computed as the sum of every boundary triangle's area. Like
@@ -2237,6 +2263,42 @@ mod tests {
                 - solid_equivalent_sphere_diameter_tol(&b, 0.1).unwrap())
             .abs()
                 < 1e-9,
+            "_tol wrapper agrees"
+        );
+    }
+
+    #[test]
+    fn solid_surface_equivalent_sphere_diameter_is_sqrt_area_over_pi() {
+        use crate::primitives::sphere;
+        use std::f64::consts::PI;
+
+        // (a) SPHERE: a sphere of radius R has A = 4πR², so its surface-equivalent diameter is
+        // its own diameter 2R; sphere(2) → 4.
+        assert!(
+            (solid_surface_equivalent_sphere_diameter(&sphere(2.0).unwrap()).unwrap() - 4.0).abs()
+                <= 3e-2 * 4.0,
+            "sphere → d_s = 2R = 4"
+        );
+
+        // (b) THREAD solid_area: d_s = √(A/π).
+        let bx = box_solid(2.0, 4.0, 6.0).unwrap();
+        let a = solid_area(&bx).unwrap();
+        let ds = solid_surface_equivalent_sphere_diameter(&bx).unwrap();
+        assert!((ds - (a / PI).sqrt()).abs() <= 1e-9 * ds, "d_s = √(A/π)");
+
+        // (c) THREAD solid_sphericity + solid_equivalent_sphere_diameter (non-tautological): the
+        // Wadell identity ψ = (d_v/d_s)².
+        let dv = solid_equivalent_sphere_diameter(&bx).unwrap();
+        let psi = solid_sphericity(&bx).unwrap();
+        assert!((psi - (dv / ds).powi(2)).abs() <= 1e-9 * psi, "ψ = (d_v/d_s)²");
+
+        // (d) A non-sphere has more surface per unit volume, so d_s ≥ d_v.
+        assert!(ds >= dv, "d_s ≥ d_v: {ds} vs {dv}");
+
+        // (e) The _tol wrapper agrees with the default (box exact at any tol).
+        assert!(
+            (ds - solid_surface_equivalent_sphere_diameter_tol(&bx, 0.1).unwrap()).abs()
+                <= 1e-9 * ds,
             "_tol wrapper agrees"
         );
     }
