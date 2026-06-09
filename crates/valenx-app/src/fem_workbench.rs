@@ -354,6 +354,43 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             );
                         });
 
+                    ui.add_space(6.0);
+                    egui::CollapsingHeader::new("Isotropic elastic constants")
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            // Reactive: recomputed every frame from Young's modulus E (GPa) and
+                            // Poisson's ratio ν. K (bulk), G (shear), λ (Lamé first), M (P-wave).
+                            let e = s.youngs_gpa * 1e9;
+                            let nu = s.poisson;
+                            ui.label(
+                                egui::RichText::new(
+                                    "E = Young's modulus (GPa), ν = Poisson's ratio; K, G, λ, M in GPa",
+                                )
+                                .weak()
+                                .small(),
+                            );
+                            let row = |ui: &mut egui::Ui, label: &str, val: f64| {
+                                ui.label(
+                                    egui::RichText::new(format!("  {label}: {val:.4} GPa"))
+                                        .monospace()
+                                        .small(),
+                                );
+                            };
+                            row(ui, "bulk modulus K", valenx_fem::bulk_modulus(e, nu) / 1e9);
+                            row(
+                                ui,
+                                "shear modulus G",
+                                valenx_fem::shear_modulus_from_youngs(e, nu) / 1e9,
+                            );
+                            row(
+                                ui,
+                                "Lamé first parameter λ",
+                                valenx_fem::lames_first_parameter(e, nu) / 1e9,
+                            );
+                            row(ui, "P-wave modulus M", valenx_fem::p_wave_modulus(e, nu) / 1e9);
+                            ui.label(egui::RichText::new("M = K + 4G/3 = λ + 2G").weak().small());
+                        });
+
                     if let Some(plot) = &s.plot {
                         ui.add_space(4.0);
                         match plot {
