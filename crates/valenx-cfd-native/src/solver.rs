@@ -1600,6 +1600,22 @@ impl FlowSolution {
         (kinematic_viscosity / eps).sqrt()
     }
 
+    /// The **Kolmogorov velocity scale** `u_η = (ν·ε)^(1/4)` (m/s) — the characteristic
+    /// velocity of the smallest dissipative eddies, set by the kinematic viscosity
+    /// `kinematic_viscosity` `ν` (m²/s) and the mean dissipation rate `ε`
+    /// ([`FlowSolution::mean_dissipation_rate`]). It completes the Kolmogorov microscale triad
+    /// with the [`FlowSolution::kolmogorov_length_scale`] `η` and
+    /// [`FlowSolution::kolmogorov_time_scale`] `τ_η`: the three are self-consistent
+    /// (`u_η = η/τ_η`) and define the unit Kolmogorov-scale Reynolds number `u_η·η/ν = 1`.
+    /// Returns `0` when there is no dissipation (`ε ≤ 0`).
+    pub fn kolmogorov_velocity_scale(&self, kinematic_viscosity: f64) -> f64 {
+        let eps = self.mean_dissipation_rate(kinematic_viscosity);
+        if eps <= 0.0 {
+            return 0.0;
+        }
+        (kinematic_viscosity * eps).powf(0.25)
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -4157,6 +4173,84 @@ mod tests {
             converged: true,
         };
         assert_eq!(rotation.kolmogorov_time_scale(0.1), 0.0);
+    }
+
+    #[test]
+    fn kolmogorov_velocity_scale_completes_the_microscale_triad() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Pure shear u(y) = γy: |S| = γ uniformly, so ε = ν·γ² and u_η = (ν·ε)^(1/4) = √(ν·γ).
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) WORKED (closed form): for a shear u_η = √(ν·γ); with ν = 0.1, √(0.1·2) = √0.2 ≈
+        // 0.447214.
+        assert!(
+            (shear.kolmogorov_velocity_scale(0.1) - (0.1_f64 * 2.0).sqrt()).abs() <= 1e-9,
+            "u_η = √(ν·γ) for a shear"
+        );
+
+        // (b) THREAD kolmogorov_length_scale (#434) + kolmogorov_time_scale (#437)
+        // (non-tautological): the three scales are self-consistent — u_η = η/τ_η.
+        let nu = 0.1_f64;
+        assert!(
+            (shear.kolmogorov_velocity_scale(nu)
+                - shear.kolmogorov_length_scale(nu) / shear.kolmogorov_time_scale(nu))
+            .abs()
+                <= 1e-9 * shear.kolmogorov_velocity_scale(nu),
+            "u_η = η/τ_η"
+        );
+
+        // (c) UNIT REYNOLDS: by construction the Kolmogorov-scale Reynolds number u_η·η/ν = 1.
+        assert!(
+            (shear.kolmogorov_velocity_scale(nu) * shear.kolmogorov_length_scale(nu) / nu - 1.0)
+                .abs()
+                <= 1e-9,
+            "u_η·η/ν = 1"
+        );
+
+        // (d) NO DISSIPATION → 0 sentinel: a solid-body rotation strains nothing (ε = 0).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(rotation.kolmogorov_velocity_scale(0.1), 0.0);
     }
 
     #[test]
