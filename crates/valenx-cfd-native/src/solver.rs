@@ -1616,6 +1616,26 @@ impl FlowSolution {
         (kinematic_viscosity * eps).powf(0.25)
     }
 
+    /// The **Taylor microscale** `λ = u'·√(15ν/ε)` (m) — the intermediate turbulence
+    /// length lying between the energy-containing integral scale and the dissipative
+    /// [`FlowSolution::kolmogorov_length_scale`] `η`. It is the length over which the
+    /// velocity field stays correlated to the strain that dissipates it, defined (for
+    /// isotropic turbulence) by `ε = 15·ν·u'²/λ²`. Here `u'` is the rms velocity
+    /// ([`FlowSolution::rms_speed`]), `ε` the mean dissipation rate
+    /// ([`FlowSolution::mean_dissipation_rate`]), and `kinematic_viscosity` `ν` (m²/s).
+    /// This is the standard *isotropic estimate* — a research-grade diagnostic, not a
+    /// resolved two-point correlation; unlike the Kolmogorov scales it carries the
+    /// large-eddy velocity `u'`, so it is not a purely viscous scale. Returns `0` when
+    /// there is no dissipation (`ε ≤ 0` — a strainless or quiescent flow), where the
+    /// scale is undefined.
+    pub fn taylor_microscale(&self, kinematic_viscosity: f64) -> f64 {
+        let eps = self.mean_dissipation_rate(kinematic_viscosity);
+        if eps <= 0.0 {
+            return 0.0;
+        }
+        self.rms_speed() * (15.0 * kinematic_viscosity / eps).sqrt()
+    }
+
     /// The peak **local mass-continuity residual** `max |∇·u|` (1/s) — the
     /// largest pointwise velocity divergence `∂u/∂x + ∂v/∂y` over the cells,
     /// formed straight from the MAC face velocities the way the projection step
@@ -4251,6 +4271,84 @@ mod tests {
             converged: true,
         };
         assert_eq!(rotation.kolmogorov_velocity_scale(0.1), 0.0);
+    }
+
+    #[test]
+    fn taylor_microscale_is_the_intermediate_turbulence_length() {
+        let grid = Grid::new(5, 5, 5.0, 5.0); // dx = dy = 1
+        let (dx, dy) = (grid.dx(), grid.dy());
+
+        // Pure shear u(y) = γy: |S| = γ uniformly, so ε = ν·γ², and the Taylor
+        // microscale λ = u'·√(15ν/ε) = u_rms·√15/γ (independent of ν).
+        let gamma = 2.0_f64;
+        let mut us = grid.u_field();
+        for j in 0..grid.ny {
+            let val = gamma * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                us.set(i, j, val);
+            }
+        }
+        let shear = FlowSolution {
+            grid,
+            u: us,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+
+        // (a) WORKED + THREAD rms_speed: for the shear ε = νγ², so λ = u_rms·√15/γ.
+        let s = shear.taylor_microscale(0.1);
+        assert!(
+            (s - shear.rms_speed() * 15.0_f64.sqrt() / gamma).abs() <= 1e-9 * s,
+            "λ = u_rms·√15/γ for a pure shear"
+        );
+
+        // (b) ν-INVARIANCE (non-obvious): ε ∝ ν for a pure shear, so the ν cancels and
+        // λ is identical at very different viscosities.
+        assert!(
+            (shear.taylor_microscale(0.1) - shear.taylor_microscale(0.9)).abs()
+                <= 1e-9 * shear.taylor_microscale(0.1),
+            "λ independent of ν for a pure shear"
+        );
+
+        // (c) DEFINING IDENTITY (non-tautological round-trip): ε = 15ν·u'²/λ², i.e.
+        // λ²·ε = 15ν·u_rms².
+        let nu = 0.1_f64;
+        let lam = shear.taylor_microscale(nu);
+        let rhs = 15.0 * nu * shear.rms_speed().powi(2);
+        assert!(
+            (lam * lam * shear.mean_dissipation_rate(nu) - rhs).abs() <= 1e-9 * rhs,
+            "λ²·ε = 15ν·u'²"
+        );
+
+        // (d) NO DISSIPATION → 0 sentinel: a solid-body rotation strains nothing (ε = 0).
+        let omega = 2.0_f64;
+        let mut ur = grid.u_field();
+        for j in 0..grid.ny {
+            let val = -omega * (j as f64 + 0.5) * dy;
+            for i in 0..=grid.nx {
+                ur.set(i, j, val);
+            }
+        }
+        let mut vr = grid.v_field();
+        for i in 0..grid.nx {
+            let val = omega * (i as f64 + 0.5) * dx;
+            for j in 0..=grid.ny {
+                vr.set(i, j, val);
+            }
+        }
+        let rotation = FlowSolution {
+            grid,
+            u: ur,
+            v: vr,
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        assert_eq!(rotation.taylor_microscale(0.1), 0.0);
     }
 
     #[test]
