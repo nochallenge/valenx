@@ -43,6 +43,12 @@ pub struct NeuroWorkbenchState {
     r_i_ohm_cm: f64,
     /// Cable theory: specific membrane capacitance C_m (µF/cm²).
     c_m_uf_cm2: f64,
+    /// Conduction: Hursh factor for myelinated velocity (m/s per µm).
+    k_myel_m_per_s_per_um: f64,
+    /// Conduction: cable scaling for unmyelinated velocity (m/s per √µm).
+    k_unmyel_m_per_s_per_sqrt_um: f64,
+    /// Conduction: propagation distance for the latency readout (m).
+    conduction_distance_m: f64,
     results: Option<NeuroResults>,
     error: Option<String>,
 }
@@ -64,6 +70,9 @@ impl Default for NeuroWorkbenchState {
             r_m_ohm_cm2: 10000.0,
             r_i_ohm_cm: 100.0,
             c_m_uf_cm2: 1.0,
+            k_myel_m_per_s_per_um: valenx_neuro::HURSH_FACTOR_M_PER_S_PER_UM,
+            k_unmyel_m_per_s_per_sqrt_um: 2.0,
+            conduction_distance_m: 0.05,
             results: None,
             error: None,
         }
@@ -357,6 +366,50 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 tau_s * 1000.0,
                                 f_c,
                                 r_inf / 1.0e6,
+                            ))
+                            .monospace()
+                            .small(),
+                        );
+                    }
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("Conduction (diameter-driven)").strong());
+                    ui.horizontal(|ui| {
+                        ui.label("k_myelinated (m/s per µm)");
+                        ui.add(egui::DragValue::new(&mut s.k_myel_m_per_s_per_um).speed(0.1));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("k_unmyelinated (m/s per √µm)");
+                        ui.add(
+                            egui::DragValue::new(&mut s.k_unmyel_m_per_s_per_sqrt_um).speed(0.05),
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("distance for latency (m)");
+                        ui.add(egui::DragValue::new(&mut s.conduction_distance_m).speed(0.005));
+                    });
+                    {
+                        // fiber_diameter_um (cable-theory input above) is already in µm — exactly
+                        // what the velocity fns expect; the distance is already in m.
+                        let d_um = s.fiber_diameter_um;
+                        let v_myel =
+                            valenx_neuro::myelinated_conduction_velocity(d_um, s.k_myel_m_per_s_per_um);
+                        let v_unmyel = valenx_neuro::unmyelinated_conduction_velocity(
+                            d_um,
+                            s.k_unmyel_m_per_s_per_sqrt_um,
+                        );
+                        let d_star = valenx_neuro::myelination_crossover_diameter(
+                            s.k_myel_m_per_s_per_um,
+                            s.k_unmyel_m_per_s_per_sqrt_um,
+                        );
+                        let delay_myel_ms =
+                            valenx_neuro::conduction_delay_s(s.conduction_distance_m, v_myel) * 1000.0;
+                        let delay_unmyel_ms =
+                            valenx_neuro::conduction_delay_s(s.conduction_distance_m, v_unmyel)
+                                * 1000.0;
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "myelinated {v_myel:.1} m/s · delay {delay_myel_ms:.2} ms\nunmyelinated {v_unmyel:.2} m/s · delay {delay_unmyel_ms:.2} ms\ncrossover diameter d* {d_star:.2} µm"
                             ))
                             .monospace()
                             .small(),
