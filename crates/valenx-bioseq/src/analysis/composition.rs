@@ -253,6 +253,29 @@ pub fn n50(lengths: &[usize]) -> usize {
     0
 }
 
+/// L50 — the assembly-fragmentation companion to [`n50`]: the number of the longest
+/// contigs needed for their cumulative length to reach at least half the grand total.
+/// N50 is the *length* at that point; L50 is the *count* (1-indexed). Returns `0` for an
+/// empty input. A count, not a transform of N50 — e.g. n50([5,5]) = 5 but l50([5,5]) = 1.
+pub fn l50(lengths: &[usize]) -> usize {
+    let total: usize = lengths.iter().sum();
+    if total == 0 {
+        return 0;
+    }
+    let mut sorted = lengths.to_vec();
+    sorted.sort_unstable_by(|a, b| b.cmp(a));
+    let mut cumulative = 0usize;
+    let mut count = 0usize;
+    for &len in &sorted {
+        count += 1;
+        cumulative += len;
+        if 2 * cumulative >= total {
+            return count;
+        }
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,6 +379,22 @@ mod tests {
         // Non-tautological: N50 is one of the input lengths for non-empty input.
         let input = [7, 3, 15, 8];
         assert!(input.contains(&n50(&input)));
+    }
+
+    #[test]
+    fn l50_worked_examples() {
+        // [2,3,4,5,6]: sorted [6,5,4,3,2], cum 6 (1 contig, <10), 11 (2 contigs, ≥10) → 2.
+        assert_eq!(l50(&[2, 3, 4, 5, 6]), 2);
+        assert_eq!(l50(&[10]), 1);
+        // n50([5,5]) = 5 but l50([5,5]) = 1 — distinct quantities (length vs count).
+        assert_eq!(l50(&[5, 5]), 1);
+        assert_eq!(l50(&[100, 1, 1]), 1);
+        assert_eq!(l50(&[]), 0);
+        // Non-tautological tie: the L50-th largest contig equals N50.
+        let input = [2, 3, 4, 5, 6];
+        let mut sorted = input.to_vec();
+        sorted.sort_unstable_by(|a, b| b.cmp(a));
+        assert_eq!(sorted[l50(&input) - 1], n50(&input));
     }
 
     #[test]

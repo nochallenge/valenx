@@ -257,6 +257,15 @@ pub fn double_bond_count(mol: &Molecule) -> usize {
         .count()
 }
 
+/// Number of explicit triple bonds (`BondOrder::Triple`, e.g. C#C, C#N). Aromatic ring
+/// bonds are `BondOrder::Aromatic` (not Triple) so they are NOT counted.
+pub fn triple_bond_count(mol: &Molecule) -> usize {
+    mol.bonds
+        .iter()
+        .filter(|b| b.order == BondOrder::Triple)
+        .count()
+}
+
 /// Number of SSSR rings.
 pub fn ring_count(mol: &Molecule) -> usize {
     sssr(mol).ring_count()
@@ -453,6 +462,18 @@ mod tests {
         // ethane: none; benzene: aromatic bonds are NOT Double → 0.
         assert_eq!(double_bond_count(&mol_from_smiles("CC").unwrap()), 0);
         assert_eq!(double_bond_count(&mol_from_smiles("c1ccccc1").unwrap()), 0);
+    }
+
+    #[test]
+    fn triple_bond_counts() {
+        // acetylene C#C: 1 triple; N₂ N#N: 1; HCN C#N: 1.
+        assert_eq!(triple_bond_count(&mol_from_smiles("C#C").unwrap()), 1);
+        assert_eq!(triple_bond_count(&mol_from_smiles("N#N").unwrap()), 1);
+        assert_eq!(triple_bond_count(&mol_from_smiles("C#N").unwrap()), 1);
+        // ethane (single), ethylene (double), benzene (aromatic) → 0 triples.
+        assert_eq!(triple_bond_count(&mol_from_smiles("CC").unwrap()), 0);
+        assert_eq!(triple_bond_count(&mol_from_smiles("C=C").unwrap()), 0);
+        assert_eq!(triple_bond_count(&mol_from_smiles("c1ccccc1").unwrap()), 0);
     }
 
     #[test]

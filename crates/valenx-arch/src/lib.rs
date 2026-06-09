@@ -101,9 +101,9 @@ pub use slab::SlabParams;
 pub use space::SpaceParams;
 pub use stair::StairParams;
 pub use structural::{
-    export_structural_model, StructuralElement, StructuralLoad, StructuralMaterial,
-    StructuralMember, StructuralModel, StructuralModelOptions, StructuralNode, StructuralSection,
-    StructuralSupport, SupportKind,
+    export_structural_model, lrfd_factored_load, StructuralElement, StructuralLoad,
+    StructuralMaterial, StructuralMember, StructuralModel, StructuralModelOptions, StructuralNode,
+    StructuralSection, StructuralSupport, SupportKind,
 };
 pub use wall::WallParams;
 pub use window::{WindowParams, WindowStyle};
