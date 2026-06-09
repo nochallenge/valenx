@@ -909,6 +909,32 @@ impl FlowSolution {
             .sum()
     }
 
+    /// The **inlet mass flow rate** `ṁ = ρ·Q` (kg/s per unit depth) through the inlet
+    /// (`x = 0`) face — the fluid density `density` `ρ` (kg/m³) times the volumetric flow
+    /// rate [`FlowSolution::inlet_flow_rate`] `Q` (m²/s in 2-D). It carries the *mass*
+    /// dimension where `inlet_flow_rate` carries volume; for an incompressible solution it
+    /// should match [`FlowSolution::outlet_mass_flow_rate`] — the mass-form continuity check,
+    /// distinct from the volume-based [`FlowSolution::continuity_error`]. Returns `0` for a
+    /// non-positive or non-finite density.
+    pub fn inlet_mass_flow_rate(&self, density: f64) -> f64 {
+        if !density.is_finite() || density <= 0.0 {
+            return 0.0;
+        }
+        density * self.inlet_flow_rate()
+    }
+
+    /// The **outlet mass flow rate** `ṁ = ρ·Q` (kg/s per unit depth) through the outlet
+    /// (`x = lx`) face — the density `density` `ρ` times [`FlowSolution::outlet_flow_rate`].
+    /// The mass-form companion to [`FlowSolution::inlet_mass_flow_rate`]; their difference is
+    /// the global mass-conservation residual. Returns `0` for a non-positive or non-finite
+    /// density.
+    pub fn outlet_mass_flow_rate(&self, density: f64) -> f64 {
+        if !density.is_finite() || density <= 0.0 {
+            return 0.0;
+        }
+        density * self.outlet_flow_rate()
+    }
+
     /// Relative mass-continuity error `|Q_out − Q_in| / |Q_in|` between the
     /// outlet and inlet volumetric flow rates — a global check that the
     /// incompressible solver conserves mass across the domain (a well-converged
@@ -7006,6 +7032,50 @@ mod tests {
         assert!((sol.bulk_velocity() - 2.0).abs() < 1e-12, "U_bulk {}", sol.bulk_velocity());
         // By definition U_bulk · H = Q_in.
         assert!((sol.bulk_velocity() * grid.ly - sol.inlet_flow_rate()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn inlet_mass_flow_rate_is_density_times_volumetric_flow() {
+        // Uniform plug flow u = 2 over a 4×3 grid of height 1 → Q_in = U·H = 2 (m²/s).
+        let grid = Grid::new(4, 3, 4.0, 1.0);
+        let mut u = grid.u_field();
+        for i in 0..=grid.nx {
+            for j in 0..grid.ny {
+                u.set(i, j, 2.0);
+            }
+        }
+        let sol = FlowSolution {
+            grid,
+            u,
+            v: grid.v_field(),
+            pressure: grid.pressure_field(),
+            iterations: 0,
+            residual: 0.0,
+            converged: true,
+        };
+        let rho = 1.25_f64;
+        let q_in = sol.inlet_flow_rate();
+        // Delegation: ṁ = ρ·Q.
+        assert!(
+            (sol.inlet_mass_flow_rate(rho) - rho * q_in).abs() <= 1e-12 * (rho * q_in),
+            "ṁ_in = ρ·Q_in"
+        );
+        // NON-TAUTOLOGICAL continuity thread: plug flow is divergence-free, so the inlet and
+        // outlet mass flows (independent face integrations at x=0 vs x=lx) match.
+        assert!(
+            (sol.inlet_mass_flow_rate(rho) - sol.outlet_mass_flow_rate(rho)).abs() <= 1e-12,
+            "plug flow ⇒ ṁ_in = ṁ_out (continuity)"
+        );
+        // Linear in density: doubling ρ doubles ṁ.
+        assert!(
+            (sol.inlet_mass_flow_rate(2.0 * rho) - 2.0 * sol.inlet_mass_flow_rate(rho)).abs()
+                <= 1e-12 * (2.0 * rho * q_in),
+            "ṁ ∝ ρ"
+        );
+        // Guards: non-physical density → 0.
+        assert_eq!(sol.inlet_mass_flow_rate(0.0), 0.0);
+        assert_eq!(sol.inlet_mass_flow_rate(-1.0), 0.0);
+        assert_eq!(sol.outlet_mass_flow_rate(f64::NAN), 0.0);
     }
 
     #[test]
