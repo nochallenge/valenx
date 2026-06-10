@@ -492,6 +492,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Frames Workbench — structural
+                    // cross-section properties (valenx-frames). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_frames_workbench, "Frames")
+                        .on_hover_text(
+                            "Show / hide the right-side Frames Workbench — structural \
+                             cross-section properties: the area and perimeter of an I-beam, \
+                             channel, angle, rectangular / round HSS, or T-beam profile, \
+                             computed in-process by valenx-frames.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -1111,6 +1125,10 @@ impl eframe::App for ValenxApp {
         // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
         // valenx-fasteners. A no-op unless toggled on via View → Fasteners.
         crate::fasteners_workbench::draw_fasteners_workbench(self, ctx);
+
+        // Frames Workbench (right) — structural cross-section properties on
+        // valenx-frames. A no-op unless toggled on via View → Frames.
+        crate::frames_workbench::draw_frames_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
