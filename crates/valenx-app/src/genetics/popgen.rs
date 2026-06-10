@@ -135,9 +135,10 @@ impl PopgenPanel {
 fn summarize(gm: &GenotypeMatrix) -> (String, Vec<usize>) {
     let mut out = String::new();
     out.push_str(&format!(
-        "samples      : {}\nsegregating  : {} sites\n",
+        "samples      : {}\nsites        : {} total\nsegregating  : {} sites\n",
         gm.n_samples(),
         gm.n_sites(),
+        gm.segregating_sites(),
     ));
     let fmt = |label: &str, r: valenx_popgen::Result<f64>| match r {
         Ok(v) => format!("{label:<13}: {v:.5}\n"),
