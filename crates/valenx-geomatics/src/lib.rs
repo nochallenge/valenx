@@ -26,6 +26,9 @@ pub mod coord;
 pub mod dem;
 pub mod error;
 
-pub use coord::{cross_track_distance, haversine_distance, initial_bearing, Hemisphere, LatLon, Utm};
+pub use coord::{
+    along_track_distance, cross_track_distance, haversine_distance, initial_bearing, Hemisphere,
+    LatLon, Utm,
+};
 pub use dem::Dem;
 pub use error::{ErrorCategory, GeomaticsError};
