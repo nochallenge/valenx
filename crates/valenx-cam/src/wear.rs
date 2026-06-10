@@ -94,6 +94,22 @@ pub fn material_removal_rate(
     axial_depth_mm * radial_width_mm * feed_mm_per_min
 }
 
+/// Theoretical surface roughness estimate for single-point turning: `Ra ≈ feed² / (32·r)`
+/// (mm), the classical arithmetic-average-roughness approximation from the feed per revolution
+/// `feed_per_rev` and the tool nose radius `nose_radius`. Finer feeds and larger nose radii give
+/// smoother finishes. An idealised geometric estimate (ignores built-up edge, vibration, and
+/// material effects). Returns `0.0` for non-finite input, negative feed, or non-positive radius.
+pub fn surface_roughness_theoretical(feed_per_rev: f64, nose_radius: f64) -> f64 {
+    if !feed_per_rev.is_finite()
+        || feed_per_rev < 0.0
+        || !nose_radius.is_finite()
+        || nose_radius <= 0.0
+    {
+        return 0.0;
+    }
+    (feed_per_rev * feed_per_rev) / (32.0 * nose_radius)
+}
+
 /// Operation summary needed for the wear model.
 #[derive(Clone, Copy, Debug)]
 pub struct OpRunSpec {
@@ -213,6 +229,20 @@ mod tests {
         assert_eq!(material_removal_rate(0.0, 10.0, 300.0), 0.0);
         assert_eq!(material_removal_rate(-2.0, 10.0, 300.0), 0.0);
         assert_eq!(material_removal_rate(f64::NAN, 10.0, 300.0), 0.0);
+    }
+
+    #[test]
+    fn surface_roughness_theoretical_basic() {
+        // Ra ≈ f²/(32·r): (0.2, 0.8) → 0.04/25.6 = 0.0015625 mm.
+        let ra = surface_roughness_theoretical(0.2, 0.8);
+        assert!((ra - 0.0015625).abs() < 1e-9, "Ra = f²/(32·r), got {ra}");
+        // ∝ feed² (half the feed → quarter the roughness); ∝ 1/nose_radius.
+        assert!((surface_roughness_theoretical(0.1, 0.8) - ra / 4.0).abs() < 1e-9, "∝ f²");
+        assert!((surface_roughness_theoretical(0.2, 1.6) - ra / 2.0).abs() < 1e-9, "∝ 1/r");
+        // Non-physical input → 0.
+        assert_eq!(surface_roughness_theoretical(-0.1, 0.8), 0.0);
+        assert_eq!(surface_roughness_theoretical(0.2, 0.0), 0.0);
+        assert_eq!(surface_roughness_theoretical(f64::NAN, 0.8), 0.0);
     }
 
     #[test]

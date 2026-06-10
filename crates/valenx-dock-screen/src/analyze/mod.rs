@@ -37,7 +37,7 @@ pub use admet::{admet_filter, AdmetFilter, AdmetVerdict};
 pub use covalent::{covalent_dock, CovalentParams, CovalentResult};
 pub use fingerprint::{interaction_fingerprint, InteractionFingerprint, InteractionKind};
 pub use io::{read_docking_result, write_docking_result, DockingResultTable};
-pub use metrics::{ligand_efficiency, lipophilic_efficiency};
+pub use metrics::{binding_efficiency_index, ligand_efficiency, lipophilic_efficiency};
 pub use pharmacophore::{pharmacophore_screen, PharmacophoreQuery};
 pub use pocket::{detect_pockets, Pocket};
 pub use redock_bench::{
