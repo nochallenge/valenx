@@ -101,6 +101,25 @@ impl Polyline {
             closed: true,
         })
     }
+
+    /// Total length of the polyline — the sum of consecutive segment lengths,
+    /// plus the closing edge (last → first) when [`closed`](Self::closed) is set.
+    /// Fewer than two vertices yields `0.0`. A length, distinct from a polygon area.
+    pub fn length(&self) -> f64 {
+        let n = self.vertices.len();
+        if n < 2 {
+            return 0.0;
+        }
+        let mut total: f64 = self
+            .vertices
+            .windows(2)
+            .map(|w| (w[1] - w[0]).norm())
+            .sum();
+        if self.closed {
+            total += (self.vertices[0] - self.vertices[n - 1]).norm();
+        }
+        total
+    }
 }
 
 /// Round-4 DoS hardening: upper bound on the side count of a regular
@@ -241,6 +260,36 @@ mod tests {
         // First vertex sits at (r, 0, 0).
         assert!((p.vertices[0].x - 1.0).abs() < 1e-12);
         assert!(p.vertices[0].y.abs() < 1e-12);
+    }
+
+    #[test]
+    fn length_sums_segments_and_closing_edge() {
+        // Closed 4×3 rectangle → perimeter 2·(4+3) = 14.
+        let r = Polyline::rectangle_xy(4.0, 3.0);
+        assert!((r.length() - 14.0).abs() < 1e-12);
+        // Open 3-then-4 path (no closing edge) → 3 + 4 = 7.
+        let verts = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+            Vector3::new(3.0, 4.0, 0.0),
+        ];
+        let open = Polyline {
+            vertices: verts.clone(),
+            closed: false,
+        };
+        assert!((open.length() - 7.0).abs() < 1e-12);
+        // The same vertices closed add the 3-4-5 closing edge → 7 + 5 = 12.
+        let closed = Polyline {
+            vertices: verts,
+            closed: true,
+        };
+        assert!((closed.length() - 12.0).abs() < 1e-12);
+        // Fewer than two vertices → 0.
+        let single = Polyline {
+            vertices: vec![Vector3::zeros()],
+            closed: false,
+        };
+        assert_eq!(single.length(), 0.0);
     }
 
     #[test]
