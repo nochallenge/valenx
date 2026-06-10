@@ -122,6 +122,26 @@ impl Profile {
             0.0
         }
     }
+
+    /// Exact outer-boundary perimeter (mm) of the idealized (sharp-cornered, no-fillet) profile —
+    /// the sum of the outer outline's edge lengths; for [`ChsRound`](Profile::ChsRound) it is the
+    /// circle perimeter `π·d` (not a polygon approximation). The wall-thickness terms cancel in the
+    /// open profiles, so this depends only on the outer dimensions. Non-finite/degenerate → `0.0`.
+    pub fn cross_section_perimeter_mm(self) -> f64 {
+        let perimeter = match self {
+            Self::IBeam { h, b, tw, .. } => 2.0 * (2.0 * b + h - tw),
+            Self::CChannel { h, b, tw } => 2.0 * (2.0 * b + h - tw),
+            Self::LAngle { h, b, .. } => 2.0 * (b + h),
+            Self::RhsRect { h, b, .. } => 2.0 * (b + h),
+            Self::ChsRound { d, .. } => std::f64::consts::PI * d,
+            Self::TBeam { h, b, .. } => 2.0 * (b + h),
+        };
+        if perimeter.is_finite() && perimeter > 0.0 {
+            perimeter
+        } else {
+            0.0
+        }
+    }
 }
 
 impl Default for Profile {
@@ -294,6 +314,48 @@ mod tests {
         assert_eq!(
             Profile::RhsRect { h: 100.0, b: 100.0, t: 60.0 }.cross_section_area_mm2(),
             10000.0
+        );
+    }
+
+    #[test]
+    fn cross_section_perimeter_exact_per_variant() {
+        // I-beam {200,100,5.6,8.5}: 2·(2·100+200−5.6) = 788.8 (tf cancels).
+        assert!(
+            (Profile::IBeam { h: 200.0, b: 100.0, tw: 5.6, tf: 8.5 }.cross_section_perimeter_mm()
+                - 788.8)
+                .abs()
+                < 1e-9
+        );
+        // C-channel {200,100,5.6}: 2·(2·100+200−5.6) = 788.8.
+        assert!(
+            (Profile::CChannel { h: 200.0, b: 100.0, tw: 5.6 }.cross_section_perimeter_mm() - 788.8)
+                .abs()
+                < 1e-9
+        );
+        // L-angle {100,80,5}: 2·(80+100) = 360; RHS rect {100,50,5}: 2·(50+100) = 300.
+        assert!(
+            (Profile::LAngle { h: 100.0, b: 80.0, t: 5.0 }.cross_section_perimeter_mm() - 360.0)
+                .abs()
+                < 1e-9
+        );
+        assert!(
+            (Profile::RhsRect { h: 100.0, b: 50.0, t: 5.0 }.cross_section_perimeter_mm() - 300.0)
+                .abs()
+                < 1e-9
+        );
+        // CHS round {100,4}: the exact circle perimeter π·d ≈ 314.16 (not the 24-gon).
+        assert!(
+            (Profile::ChsRound { d: 100.0, t: 4.0 }.cross_section_perimeter_mm()
+                - std::f64::consts::PI * 100.0)
+                .abs()
+                < 1e-9
+        );
+        // T-beam {200,100,8,12}: 2·(100+200) = 600.
+        assert!(
+            (Profile::TBeam { h: 200.0, b: 100.0, tw: 8.0, tf: 12.0 }.cross_section_perimeter_mm()
+                - 600.0)
+                .abs()
+                < 1e-9
         );
     }
 }
