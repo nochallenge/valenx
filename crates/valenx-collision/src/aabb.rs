@@ -72,6 +72,18 @@ impl Aabb {
         let dz = (self.max.z - self.min.z).max(0.0);
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
+
+    /// Inradius — the radius of the largest sphere that fits inside the box, i.e.
+    /// half the smallest extent: `min(dx, dy, dz) / 2`, each extent clamped to `≥ 0`.
+    /// Distinct from [`diagonal`](Self::diagonal): the inradius bounds the box from
+    /// the inside (smallest extent), the half-diagonal from the outside. Returns
+    /// `0.0` for an inverted, empty, or flat box.
+    pub fn inradius(&self) -> f64 {
+        let dx = (self.max.x - self.min.x).max(0.0);
+        let dy = (self.max.y - self.min.y).max(0.0);
+        let dz = (self.max.z - self.min.z).max(0.0);
+        dx.min(dy).min(dz) / 2.0
+    }
 }
 
 /// Fast overlap test — returns `true` when the two boxes share any
@@ -232,5 +244,34 @@ mod tests {
             max: Vector3::new(5.0, 5.0, 5.0),
         };
         assert_eq!(inv.diagonal(), 0.0);
+    }
+
+    #[test]
+    fn inradius_of_box() {
+        // 10×20×30 box → smallest extent 10 → inradius 5.
+        let a = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(10.0, 20.0, 30.0),
+        };
+        assert!((a.inradius() - 5.0).abs() < 1e-12);
+        // Unit cube → 0.5, and the inradius never exceeds the half-diagonal.
+        let cube = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(1.0, 1.0, 1.0),
+        };
+        assert!((cube.inradius() - 0.5).abs() < 1e-12);
+        assert!(cube.inradius() <= cube.diagonal() * 0.5 + 1e-12);
+        // Flat (zero-thickness) box → 0.
+        let flat = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(10.0, 10.0, 0.0),
+        };
+        assert_eq!(flat.inradius(), 0.0);
+        // Inverted → 0.
+        let inv = Aabb {
+            min: Vector3::new(10.0, 10.0, 10.0),
+            max: Vector3::new(5.0, 5.0, 5.0),
+        };
+        assert_eq!(inv.inradius(), 0.0);
     }
 }
