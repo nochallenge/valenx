@@ -757,6 +757,18 @@ pub fn dead_only_factored(dead_load: f64) -> f64 {
     1.4 * dead_load
 }
 
+/// Span-to-depth ratio `span / depth` — a serviceability proportioning heuristic for
+/// deflection control in beams and slabs (typical code limits are L/d ≲ 20–25 for simply
+/// supported members). A geometry ratio, distinct from the Euler slenderness L/r (which uses
+/// the radius of gyration, not the section depth). Returns `0.0` for non-finite input or a
+/// non-positive depth.
+pub fn span_to_depth_ratio(span: f64, depth: f64) -> f64 {
+    if !span.is_finite() || !depth.is_finite() || depth <= 0.0 {
+        return 0.0;
+    }
+    span / depth
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1033,5 +1045,21 @@ mod tests {
         assert!((dead_only_factored(-5.0) - (-7.0)).abs() < 1e-9);
         assert_eq!(dead_only_factored(f64::NAN), 0.0);
         assert_eq!(dead_only_factored(f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn span_to_depth_ratio_basic() {
+        // 6 m span / 0.5 m depth = 12.0; same ratio from (7.2, 0.6).
+        assert!((span_to_depth_ratio(6.0, 0.5) - 12.0).abs() < 1e-9);
+        assert!((span_to_depth_ratio(7.2, 0.6) - 12.0).abs() < 1e-9);
+        // Non-tautological: doubling span doubles the ratio.
+        assert!(
+            (span_to_depth_ratio(12.0, 0.5) - 2.0 * span_to_depth_ratio(6.0, 0.5)).abs() < 1e-9
+        );
+        // Guards: non-positive depth or non-finite → 0.
+        assert_eq!(span_to_depth_ratio(5.0, 0.0), 0.0);
+        assert_eq!(span_to_depth_ratio(5.0, -0.1), 0.0);
+        assert_eq!(span_to_depth_ratio(f64::NAN, 0.5), 0.0);
+        assert_eq!(span_to_depth_ratio(5.0, f64::INFINITY), 0.0);
     }
 }

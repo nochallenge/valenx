@@ -22,6 +22,7 @@
 //! - [`tree_stats`] — windowed site/branch π, divergence, segregating
 //!   sites over a [`crate::coalescent::TreeSequence`].
 
+pub mod concordance;
 pub mod diversity;
 pub mod fst;
 pub mod ld;
@@ -29,6 +30,7 @@ pub mod selection_scan;
 pub mod sfs;
 pub mod tree_stats;
 
+pub use concordance::genotype_concordance;
 pub use diversity::{
     fay_wu_h, fu_li_d, nucleotide_diversity, pairwise_differences, tajimas_d,
     wattersons_theta,

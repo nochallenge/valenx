@@ -25,6 +25,25 @@ pub fn polyline_length(vertices: &[[f64; 2]]) -> f64 {
         .sum()
 }
 
+/// Enclosed area of a polygon via the shoelace formula, `½·|Σ (xᵢ·yᵢ₊₁ − xᵢ₊₁·yᵢ)|` with
+/// cyclic closure (the last vertex wraps to the first). Always non-negative (orientation-
+/// independent). Returns `0.0` for fewer than three vertices or if any coordinate is non-finite.
+pub fn polygon_area(vertices: &[[f64; 2]]) -> f64 {
+    if vertices.len() < 3 || !vertices.iter().all(|v| v[0].is_finite() && v[1].is_finite()) {
+        return 0.0;
+    }
+    let n = vertices.len();
+    let sum: f64 = vertices
+        .iter()
+        .enumerate()
+        .map(|(i, &[xi, yi])| {
+            let [xj, yj] = vertices[(i + 1) % n];
+            xi * yj - xj * yi
+        })
+        .sum();
+    sum.abs() / 2.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -48,5 +67,25 @@ mod tests {
             (polyline_length(&[[0.0, 0.0], [1.0, 0.0], [f64::NAN, 1.0], [1.0, 1.0]]) - 1.0).abs()
                 < 1e-9
         );
+    }
+
+    #[test]
+    fn polygon_area_worked() {
+        // Unit square → 1.0; 2×3 rectangle → 6.0; right triangle (0,0),(3,0),(0,4) → 6.0.
+        assert!(
+            (polygon_area(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]) - 1.0).abs() < 1e-9
+        );
+        assert!(
+            (polygon_area(&[[0.0, 0.0], [2.0, 0.0], [2.0, 3.0], [0.0, 3.0]]) - 6.0).abs() < 1e-9
+        );
+        assert!((polygon_area(&[[0.0, 0.0], [3.0, 0.0], [0.0, 4.0]]) - 6.0).abs() < 1e-9);
+        // Orientation-independent: reversing the winding gives the same positive area.
+        let ccw = polygon_area(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]);
+        let cw = polygon_area(&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0]]);
+        assert!((ccw - cw).abs() < 1e-9 && ccw > 0.0);
+        // Collinear → 0.0; <3 verts → 0.0; non-finite → 0.0.
+        assert_eq!(polygon_area(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), 0.0);
+        assert_eq!(polygon_area(&[[0.0, 0.0], [1.0, 0.0]]), 0.0);
+        assert_eq!(polygon_area(&[[0.0, 0.0], [f64::NAN, 0.0], [0.0, 1.0]]), 0.0);
     }
 }
