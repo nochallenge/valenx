@@ -11,7 +11,13 @@
 
 use eframe::egui;
 
-use valenx_springs::{spring_index, stiffness_n_per_mm, wahl_factor, SpringKind, SpringSpec};
+use nalgebra::Vector3;
+
+use valenx_springs::{
+    compression_centerline, extension_centerline, spring_index, stiffness_n_per_mm,
+    torsion_centerline, wahl_factor, SpringKind, SpringSpec,
+};
+use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
 
@@ -137,8 +143,85 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Design").strong());
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
+
+                    // Live 3-D wireframe of the spring's centreline.
+                    if let Some(pts) = preview_centerline(s) {
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("Centerline preview (isometric)").strong());
+                        draw_centerline_preview(ui, &pts);
+                    }
                 });
         });
+}
+
+/// Build a [`SpringSpec`] from the current form and return the selected
+/// spring's 3-D centreline polyline — best-effort, `None` for an invalid
+/// spec. Drives the live isometric preview.
+fn preview_centerline(s: &SpringsWorkbenchState) -> Option<Vec<Vector3<f64>>> {
+    if !(s.wire_diameter_mm.is_finite()
+        && s.wire_diameter_mm > 0.0
+        && s.mean_coil_diameter_mm.is_finite()
+        && s.mean_coil_diameter_mm > s.wire_diameter_mm
+        && s.free_length_mm.is_finite()
+        && s.free_length_mm > 0.0
+        && s.n_active_coils.is_finite()
+        && s.n_active_coils > 0.0)
+    {
+        return None;
+    }
+    let spec = SpringSpec {
+        kind: s.kind,
+        wire_diameter_mm: s.wire_diameter_mm,
+        mean_coil_diameter_mm: s.mean_coil_diameter_mm,
+        free_length_mm: s.free_length_mm,
+        n_active_coils: s.n_active_coils,
+        shear_modulus_mpa: s.shear_modulus_mpa,
+        ..SpringSpec::default_compression()
+    };
+    let pts = match s.kind {
+        SpringKind::Compression => compression_centerline(&spec),
+        SpringKind::Extension => extension_centerline(&spec),
+        SpringKind::Torsion => torsion_centerline(&spec),
+    };
+    pts.ok().filter(|v| v.len() >= 2)
+}
+
+/// Draw a centreline polyline as an isometric wireframe in a fixed-height
+/// canvas, with the camera auto-framed to the geometry's bounds.
+fn draw_centerline_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
+    let (response, painter) =
+        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let rect = response.rect;
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for p in pts {
+        for k in 0..3 {
+            let v = p[k] as f32;
+            min[k] = min[k].min(v);
+            max[k] = max[k].max(v);
+        }
+    }
+
+    let mut cam = OrbitCamera::default();
+    cam.set_view(ViewDirection::Iso);
+    cam.frame_bounds(min, max);
+
+    let (w, h) = (rect.width(), rect.height());
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    for pair in pts.windows(2) {
+        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
+        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        if let (Some(a), Some(b)) = (a, b) {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.min.x + a.x, rect.min.y + a.y),
+                    egui::pos2(rect.min.x + b.x, rect.min.y + b.y),
+                ],
+                stroke,
+            );
+        }
+    }
 }
 
 /// Build a [`SpringSpec`] from the form, validate it, and format the
@@ -278,6 +361,27 @@ mod tests {
             run_springs(&mut s);
             assert!(s.error.is_some());
         }
+    }
+
+    #[test]
+    fn preview_centerline_for_default_is_a_polyline() {
+        let s = SpringsWorkbenchState::default();
+        let pts = preview_centerline(&s).expect("default spec yields a centerline");
+        assert!(pts.len() >= 2);
+        // The compression helix has a non-zero axial (z) span.
+        let zmax = pts.iter().map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+        let zmin = pts.iter().map(|p| p.z).fold(f64::INFINITY, f64::min);
+        assert!(zmax - zmin > 0.0);
+    }
+
+    #[test]
+    fn preview_centerline_none_for_invalid_spec() {
+        // mean coil ≤ wire → the spec is invalid → no preview.
+        let s = SpringsWorkbenchState {
+            mean_coil_diameter_mm: 0.5,
+            ..Default::default()
+        };
+        assert!(preview_centerline(&s).is_none());
     }
 }
 
