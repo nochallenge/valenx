@@ -55,6 +55,7 @@ mod coverage_ui_tests;
 pub mod reactdyn_workbench;
 pub mod springs_workbench;
 pub mod gears_workbench;
+pub mod geomatics_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -417,6 +418,15 @@ pub struct ValenxApp {
     /// Form + result state for the Gears Workbench — native involute-gear
     /// design wrapping `valenx-gears`. See [`crate::gears_workbench`].
     pub(crate) gears: crate::gears_workbench::GearsWorkbenchState,
+
+    /// Whether the right-side Geomatics Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_geomatics_workbench: bool,
+    /// Form + result state for the Geomatics Workbench — native geodesic
+    /// calculations wrapping `valenx-geomatics`. See
+    /// [`crate::geomatics_workbench`].
+    pub(crate) geomatics: crate::geomatics_workbench::GeomaticsWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
@@ -822,6 +832,11 @@ impl ValenxApp {
     /// Make the right-side Gears Workbench SidePanel visible.
     pub fn enable_gears_workbench(&mut self) {
         self.show_gears_workbench = true;
+    }
+
+    /// Make the right-side Geomatics Workbench SidePanel visible.
+    pub fn enable_geomatics_workbench(&mut self) {
+        self.show_geomatics_workbench = true;
     }
 
     /// Make the right-side Astro / Launch workbench SidePanel visible.

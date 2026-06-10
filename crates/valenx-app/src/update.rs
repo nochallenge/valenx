@@ -408,6 +408,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Geomatics Workbench — native
+                    // geodesic calculations (valenx-geomatics). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_geomatics_workbench, "Geomatics")
+                        .on_hover_text(
+                            "Show / hide the right-side Geomatics Workbench — native geodesic \
+                             calculations: great-circle (haversine) + rhumb-line distance, initial \
+                             and final bearings, and cross-track / along-track offsets, computed \
+                             in-process by valenx-geomatics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -1002,6 +1016,10 @@ impl eframe::App for ValenxApp {
         // Gears Workbench (right) — native involute-gear design on
         // valenx-gears. A no-op unless toggled on via View → Gears.
         crate::gears_workbench::draw_gears_workbench(self, ctx);
+
+        // Geomatics Workbench (right) — native geodesic calculations on
+        // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
+        crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.

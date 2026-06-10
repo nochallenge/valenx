@@ -6484,6 +6484,7 @@ dependencies = [
  "valenx-genediting",
  "valenx-genomics",
  "valenx-geo",
+ "valenx-geomatics",
  "valenx-hvac",
  "valenx-i18n",
  "valenx-icons",
