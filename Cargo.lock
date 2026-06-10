@@ -6498,6 +6498,7 @@ dependencies = [
  "valenx-optimize",
  "valenx-pathtrace",
  "valenx-phylo",
+ "valenx-piping",
  "valenx-popgen",
  "valenx-qchem",
  "valenx-rbac",
