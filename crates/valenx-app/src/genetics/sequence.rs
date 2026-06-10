@@ -7,7 +7,7 @@
 
 use eframe::egui;
 
-use valenx_bioseq::analysis::composition::{gc_content, residue_counts, shannon_entropy};
+use valenx_bioseq::analysis::composition::{gc_content, gc_skew, residue_counts, shannon_entropy};
 use valenx_bioseq::analysis::weight::{molecular_weight_nucleic, molecular_weight_protein};
 use valenx_bioseq::cloning::digest_map::{digest_to_gel, restriction_map};
 use valenx_bioseq::cloning::restriction::{enzyme_by_name, Enzyme};
@@ -386,6 +386,10 @@ fn run_analyze(p: &mut SequencePanel) {
                 match gc_content(&s) {
                     Ok(gc) => out.push_str(&format!("GC content  : {:.2} %\n", gc * 100.0)),
                     Err(e) => out.push_str(&format!("GC content  : (n/a — {e})\n")),
+                }
+                match gc_skew(&s) {
+                    Ok(sk) => out.push_str(&format!("GC skew     : {sk:.4}\n")),
+                    Err(e) => out.push_str(&format!("GC skew     : (n/a — {e})\n")),
                 }
                 match molecular_weight_nucleic(&s) {
                     Ok(mw) => out.push_str(&format!("MW (nucleic): {mw:.2} Da\n")),
