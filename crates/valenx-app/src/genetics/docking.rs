@@ -338,9 +338,10 @@ fn run_dock(p: &mut DockingPanel) {
             out.push_str("-- pose clusters (best first) --\n");
             for (i, cluster) in report.clusters.iter().take(20).enumerate() {
                 out.push_str(&format!(
-                    "  #{:<3} score {:>9.3} kcal/mol · {} member(s)\n",
+                    "  #{:<3} score {:>9.3} kcal/mol · mean {:>9.3} kcal/mol · {} member(s)\n",
                     i + 1,
                     cluster.best_score,
+                    cluster.mean_score(),
                     cluster.members.len(),
                 ));
             }

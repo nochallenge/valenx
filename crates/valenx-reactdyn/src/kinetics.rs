@@ -23,6 +23,17 @@ pub fn arrhenius_half_life_1st_order(a: f64, ea_j_per_mol: f64, temp_k: f64) -> 
     std::f64::consts::LN_2 / k
 }
 
+/// Thermodynamic equilibrium constant `K = exp(−ΔG°/(R·T))` from the standard Gibbs free-energy
+/// change `delta_g_j_per_mol` (J/mol) and absolute temperature `temp_k` (K) — the rearrangement of
+/// `ΔG° = −R·T·ln K`. Distinct from [`arrhenius_rate`] (a kinetic rate constant). Returns `0.0` for
+/// a non-positive or non-finite temperature, or non-finite ΔG.
+pub fn equilibrium_constant(delta_g_j_per_mol: f64, temp_k: f64) -> f64 {
+    if !delta_g_j_per_mol.is_finite() || !temp_k.is_finite() || temp_k <= 0.0 {
+        return 0.0;
+    }
+    (-delta_g_j_per_mol / (GAS_CONSTANT_J_PER_MOL_K * temp_k)).exp()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -55,5 +66,26 @@ mod tests {
         );
         // Guard: invalid T → 0 (no panic, no division by zero).
         assert_eq!(arrhenius_half_life_1st_order(1e13, 50_000.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn equilibrium_constant_from_gibbs_energy() {
+        // ΔG = 0 → K = 1.
+        assert!((equilibrium_constant(0.0, 298.15) - 1.0).abs() < 1e-12);
+        // ΔG = −10000 J/mol @ 300 K → K ≈ 55.08 (exergonic, K > 1).
+        let expected = (10_000.0_f64 / (8.314_462_618 * 300.0)).exp();
+        assert!((equilibrium_constant(-10_000.0, 300.0) - expected).abs() < 1e-2 * expected);
+        assert!(equilibrium_constant(-10_000.0, 300.0) > 1.0);
+        assert!(equilibrium_constant(10_000.0, 300.0) < 1.0);
+        // Inverse: K(ΔG)·K(−ΔG) = 1.
+        assert!(
+            (equilibrium_constant(-15_000.0, 298.15) * equilibrium_constant(15_000.0, 298.15)
+                - 1.0)
+                .abs()
+                < 1e-12
+        );
+        // Guard: T ≤ 0 / non-finite → 0.
+        assert_eq!(equilibrium_constant(-10_000.0, 0.0), 0.0);
+        assert_eq!(equilibrium_constant(f64::NAN, 300.0), 0.0);
     }
 }
