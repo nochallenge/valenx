@@ -59,6 +59,7 @@ pub mod geomatics_workbench;
 pub mod piping_workbench;
 pub mod collision_workbench;
 pub mod sheetmetal_workbench;
+pub mod fields_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -456,6 +457,15 @@ pub struct ValenxApp {
     /// allowance / deduction wrapping `valenx-sheet-metal`. See
     /// [`crate::sheetmetal_workbench`].
     pub(crate) sheetmetal: crate::sheetmetal_workbench::SheetmetalWorkbenchState,
+
+    /// Whether the right-side Field Statistics Workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_fields_workbench: bool,
+    /// Form + result state for the Field Statistics Workbench — descriptive
+    /// statistics over a pasted number list, via `valenx-fields`. See
+    /// [`crate::fields_workbench`].
+    pub(crate) fields: crate::fields_workbench::FieldsWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
@@ -881,6 +891,11 @@ impl ValenxApp {
     /// Make the right-side Sheet Metal Workbench SidePanel visible.
     pub fn enable_sheetmetal_workbench(&mut self) {
         self.show_sheetmetal_workbench = true;
+    }
+
+    /// Make the right-side Field Statistics Workbench SidePanel visible.
+    pub fn enable_fields_workbench(&mut self) {
+        self.show_fields_workbench = true;
     }
 
     /// Make the right-side Astro / Launch workbench SidePanel visible.
