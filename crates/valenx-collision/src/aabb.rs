@@ -63,6 +63,15 @@ impl Aabb {
         let dz = (self.max.z - self.min.z).max(0.0);
         2.0 * (dx * dy + dy * dz + dz * dx)
     }
+
+    /// Space-diagonal length of the box — `√(dx²+dy²+dz²)` with each extent clamped to `≥ 0`.
+    /// Returns `0.0` for an inverted or empty box (any axis where `max < min`).
+    pub fn diagonal(&self) -> f64 {
+        let dx = (self.max.x - self.min.x).max(0.0);
+        let dy = (self.max.y - self.min.y).max(0.0);
+        let dz = (self.max.z - self.min.z).max(0.0);
+        (dx * dx + dy * dy + dz * dz).sqrt()
+    }
 }
 
 /// Fast overlap test — returns `true` when the two boxes share any
@@ -195,5 +204,33 @@ mod tests {
             max: Vector3::new(10.0, 10.0, 0.0),
         };
         assert!((flat.surface_area() - 200.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn diagonal_of_box() {
+        // 10×20×30 → √1400.
+        let a = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(10.0, 20.0, 30.0),
+        };
+        assert!((a.diagonal() - 1400.0_f64.sqrt()).abs() < 1e-9);
+        // Unit cube → √3.
+        let unit = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(1.0, 1.0, 1.0),
+        };
+        assert!((unit.diagonal() - 3.0_f64.sqrt()).abs() < 1e-12);
+        // Pythagorean 3×4×0 → exactly 5.
+        let pyth = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(3.0, 4.0, 0.0),
+        };
+        assert!((pyth.diagonal() - 5.0).abs() < 1e-12);
+        // Inverted → 0.
+        let inv = Aabb {
+            min: Vector3::new(10.0, 10.0, 10.0),
+            max: Vector3::new(5.0, 5.0, 5.0),
+        };
+        assert_eq!(inv.diagonal(), 0.0);
     }
 }

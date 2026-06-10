@@ -264,11 +264,12 @@ fn run_build(p: &mut PhylogeneticsPanel) {
             Ok(t) => {
                 p.newick = write_newick(&t);
                 p.result = format!(
-                    "{:?} tree · {} leaves · {} nodes · {} cherries · sackin {}\n\nCladogram:\n{}\n\nNewick:\n{}",
+                    "{:?} tree · {} leaves · {} nodes · {} cherries · depth {} · sackin {}\n\nCladogram:\n{}\n\nNewick:\n{}",
                     p.method,
                     t.leaf_count(),
                     t.node_count(),
                     t.cherry_count(),
+                    t.max_depth(),
                     t.sackin_index(),
                     render_ascii(&t, 56),
                     p.newick,
@@ -328,10 +329,11 @@ fn run_newick(p: &mut PhylogeneticsPanel) {
     match read_newick(&p.newick) {
         Ok(t) => {
             p.result = format!(
-                "parsed · {} leaves · {} nodes · {} cherries · sackin {}\nleaves: {}\n\nCladogram:\n{}",
+                "parsed · {} leaves · {} nodes · {} cherries · depth {} · sackin {}\nleaves: {}\n\nCladogram:\n{}",
                 t.leaf_count(),
                 t.node_count(),
                 t.cherry_count(),
+                t.max_depth(),
                 t.sackin_index(),
                 t.leaf_labels().join(", "),
                 render_ascii(&t, 56),
