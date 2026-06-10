@@ -6508,6 +6508,7 @@ dependencies = [
  "valenx-sketch",
  "valenx-solvespace-3d",
  "valenx-spreadsheet",
+ "valenx-springs",
  "valenx-step-iges",
  "valenx-structpredict",
  "valenx-surface",

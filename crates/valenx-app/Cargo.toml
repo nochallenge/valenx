@@ -99,6 +99,9 @@ valenx-cfd-native    = { path = "../valenx-cfd-native" }
 # surfaced by the Reaction Dynamics workbench (src/reactdyn_workbench.rs).
 # Depends on valenx-qchem for the single-point energies its forces use.
 valenx-reactdyn      = { path = "../valenx-reactdyn" }
+# Native helical-spring design — surfaced by the Springs workbench
+# (src/springs_workbench.rs).
+valenx-springs       = { path = "../valenx-springs" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem

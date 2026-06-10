@@ -53,6 +53,7 @@ pub mod neuro_workbench;
 #[cfg(test)]
 mod coverage_ui_tests;
 pub mod reactdyn_workbench;
+pub mod springs_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -399,6 +400,14 @@ pub struct ValenxApp {
     /// ab-initio MD (AIMD) wrapping `valenx-reactdyn`. See
     /// [`crate::reactdyn_workbench`].
     pub(crate) reactdyn: crate::reactdyn_workbench::ReactdynWorkbenchState,
+
+    /// Whether the right-side Springs Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_springs_workbench: bool,
+    /// Form + result state for the Springs Workbench — native helical-spring
+    /// design wrapping `valenx-springs`. See [`crate::springs_workbench`].
+    pub(crate) springs: crate::springs_workbench::SpringsWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
@@ -794,6 +803,11 @@ impl ValenxApp {
     /// Make the right-side Reaction Dynamics workbench SidePanel visible.
     pub fn enable_reactdyn_workbench(&mut self) {
         self.show_reactdyn_workbench = true;
+    }
+
+    /// Make the right-side Springs Workbench SidePanel visible.
+    pub fn enable_springs_workbench(&mut self) {
+        self.show_springs_workbench = true;
     }
 
     /// Make the right-side Astro / Launch workbench SidePanel visible.
