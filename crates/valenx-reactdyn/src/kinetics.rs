@@ -34,6 +34,18 @@ pub fn equilibrium_constant(delta_g_j_per_mol: f64, temp_k: f64) -> f64 {
     (-delta_g_j_per_mol / (GAS_CONSTANT_J_PER_MOL_K * temp_k)).exp()
 }
 
+/// Standard Gibbs free-energy change `ΔG° = −R·T·ln K` (J/mol) recovered from a thermodynamic
+/// equilibrium constant `k_eq` and absolute temperature `temp_k` (K) — the inverse of
+/// [`equilibrium_constant`], for the common case where `K` is measured/known and `ΔG°` is wanted
+/// (e.g. thermodynamic feasibility bounds in flux-balance analysis). Returns `0.0` for a
+/// non-positive or non-finite `k_eq` (where `ln K` is undefined) or temperature.
+pub fn gibbs_free_energy_from_equilibrium_constant(k_eq: f64, temp_k: f64) -> f64 {
+    if !k_eq.is_finite() || k_eq <= 0.0 || !temp_k.is_finite() || temp_k <= 0.0 {
+        return 0.0;
+    }
+    -GAS_CONSTANT_J_PER_MOL_K * temp_k * k_eq.ln()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +99,29 @@ mod tests {
         // Guard: T ≤ 0 / non-finite → 0.
         assert_eq!(equilibrium_constant(-10_000.0, 0.0), 0.0);
         assert_eq!(equilibrium_constant(f64::NAN, 300.0), 0.0);
+    }
+
+    #[test]
+    fn gibbs_from_keq_inverts_equilibrium_constant() {
+        // Round-trip ΔG → K → ΔG recovers the original.
+        let dg = -12_345.0;
+        let t = 310.0;
+        let k = equilibrium_constant(dg, t);
+        let back = gibbs_free_energy_from_equilibrium_constant(k, t);
+        assert!((back - dg).abs() < 1e-9 * dg.abs());
+        // K = 1 ⇒ ΔG° = 0; K > 1 (exergonic) ⇒ ΔG° < 0; K < 1 ⇒ ΔG° > 0.
+        assert!(gibbs_free_energy_from_equilibrium_constant(1.0, 298.15).abs() < 1e-9);
+        assert!(gibbs_free_energy_from_equilibrium_constant(50.0, 298.15) < 0.0);
+        assert!(gibbs_free_energy_from_equilibrium_constant(0.02, 298.15) > 0.0);
+        // Worked: K=10, T=298.15 → ΔG = −R·T·ln10 ≈ −5708 J/mol.
+        let expected = -8.314_462_618 * 298.15 * 10.0_f64.ln();
+        assert!(
+            (gibbs_free_energy_from_equilibrium_constant(10.0, 298.15) - expected).abs() < 1e-6
+        );
+        // Guard: non-positive K / T, or non-finite → 0 (no panic, no ln of ≤ 0).
+        assert_eq!(gibbs_free_energy_from_equilibrium_constant(0.0, 298.15), 0.0);
+        assert_eq!(gibbs_free_energy_from_equilibrium_constant(-1.0, 298.15), 0.0);
+        assert_eq!(gibbs_free_energy_from_equilibrium_constant(10.0, 0.0), 0.0);
+        assert_eq!(gibbs_free_energy_from_equilibrium_constant(f64::NAN, 298.15), 0.0);
     }
 }
