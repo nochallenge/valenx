@@ -235,6 +235,22 @@ mod tests {
     }
 
     #[test]
+    fn helix_length_matches_developed_arc() {
+        let spec = SpringSpec::default_compression();
+        // n=8, D=10, p=30/8=3.75 → ℓ = 8·√((π·10)² + 3.75²) = 8·√(986.96+14.06) ≈ 253.11 mm.
+        let expected =
+            8.0 * ((std::f64::consts::PI * 10.0).powi(2) + (30.0_f64 / 8.0).powi(2)).sqrt();
+        assert!((spec.helix_length_mm() - expected).abs() < 1e-9);
+        assert!((spec.helix_length_mm() - 253.111).abs() < 0.01);
+        // The coiled wire is far longer than the straight free length.
+        assert!(spec.helix_length_mm() > spec.free_length_mm);
+        // Non-positive active coils → 0 (guard, no panic, no division).
+        let mut degen = SpringSpec::default_compression();
+        degen.n_active_coils = 0.0;
+        assert_eq!(degen.helix_length_mm(), 0.0);
+    }
+
+    #[test]
     fn extension_adds_two_hooks() {
         let spec = SpringSpec::default_compression();
         let pts_c = compression_centerline(&spec).unwrap();
