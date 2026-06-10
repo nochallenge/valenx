@@ -129,6 +129,49 @@ pub fn mechanism_mobility(a: &Assembly) -> isize {
     6 * (n - j - 1) + dof_sum
 }
 
+/// Number of independent kinematic loops — the cyclomatic number of the
+/// part-joint graph, `L = j − n + c`, where `n` is the part count, `j` the
+/// joint count, and `c` the number of connected components. Always `≥ 0`: a
+/// tree/forest assembly has `L = 0` and each closed chain adds one (a pair of
+/// joints between the same two parts counts as one loop). A pure graph-topology
+/// count, distinct from [`mechanism_mobility`] (which weights joints by DOF and
+/// may be negative).
+pub fn kinematic_loop_count(a: &Assembly) -> usize {
+    let n = a.parts.len();
+    if n == 0 {
+        return 0;
+    }
+    // Part ids are stable and need NOT equal vector positions (`delete_part`
+    // removes by position, leaving the id space sparse), so map id → dense
+    // index before the union–find rather than indexing by the raw part id.
+    let index: std::collections::HashMap<usize, usize> =
+        a.parts.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
+    fn find(parent: &mut [usize], mut x: usize) -> usize {
+        while parent[x] != x {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        x
+    }
+    let mut parent: Vec<usize> = (0..n).collect();
+    let mut edges = 0usize;
+    for joint in &a.joints {
+        let (pa, pb) = joint.kind.parts();
+        if let (Some(&ia), Some(&ib)) = (index.get(&pa), index.get(&pb)) {
+            edges += 1;
+            let ra = find(&mut parent, ia);
+            let rb = find(&mut parent, ib);
+            if ra != rb {
+                parent[ra] = rb;
+            }
+        }
+    }
+    let components = (0..n).filter(|&i| find(&mut parent, i) == i).count();
+    // L = (valid edges) − n + c; saturating guards the forest case where
+    // edges + c == n exactly (and any joint referencing a missing part).
+    (edges + components).saturating_sub(n)
+}
+
 /// Build part_b's transform for a Revolute joint at angle `theta`.
 ///
 /// At θ=0 b coincides with a (`b_pose = a_pose`). For θ ≠ 0, b's pose
@@ -250,6 +293,99 @@ mod tests {
 
     fn unit_cube(name: &str) -> Part {
         Part::new(0, name, valenx_cad::box_solid(1.0, 1.0, 1.0).unwrap())
+    }
+
+    #[test]
+    fn loop_count_open_chain_is_zero() {
+        // 3 revolute joints, 4 parts, connected (tree) → L = 3 − 4 + 1 = 0.
+        let mut a = Assembly::new();
+        let mut prev = a.add_part(unit_cube("base"));
+        for _ in 0..3 {
+            let link = a.add_part(unit_cube("link"));
+            a.add_joint(Joint::new(
+                0,
+                JointKind::Revolute {
+                    part_a: prev,
+                    part_b: link,
+                    axis_origin: Vector3::zeros(),
+                    axis_dir: Vector3::z(),
+                },
+            ));
+            prev = link;
+        }
+        assert_eq!(kinematic_loop_count(&a), 0);
+    }
+
+    #[test]
+    fn loop_count_closed_quad_double_and_disconnected() {
+        // 4-revolute loop (4 parts, 4 joints, connected) → L = 4 − 4 + 1 = 1.
+        let mut quad = Assembly::new();
+        let p0 = quad.add_part(unit_cube("p0"));
+        let p1 = quad.add_part(unit_cube("p1"));
+        let p2 = quad.add_part(unit_cube("p2"));
+        let p3 = quad.add_part(unit_cube("p3"));
+        for (pa, pb) in [(p0, p1), (p1, p2), (p2, p3), (p3, p0)] {
+            quad.add_joint(Joint::new(
+                0,
+                JointKind::Revolute {
+                    part_a: pa,
+                    part_b: pb,
+                    axis_origin: Vector3::zeros(),
+                    axis_dir: Vector3::z(),
+                },
+            ));
+        }
+        assert_eq!(kinematic_loop_count(&quad), 1);
+
+        // Two isolated parts, no joints (c = 2) → L = 0 − 2 + 2 = 0.
+        let mut iso = Assembly::new();
+        iso.add_part(unit_cube("a"));
+        iso.add_part(unit_cube("b"));
+        assert_eq!(kinematic_loop_count(&iso), 0);
+
+        // Two joints between the SAME pair of parts (a 2-gon) → L = 2 − 2 + 1 = 1.
+        let mut dbl = Assembly::new();
+        let q0 = dbl.add_part(unit_cube("q0"));
+        let q1 = dbl.add_part(unit_cube("q1"));
+        for _ in 0..2 {
+            dbl.add_joint(Joint::new(
+                0,
+                JointKind::Revolute {
+                    part_a: q0,
+                    part_b: q1,
+                    axis_origin: Vector3::zeros(),
+                    axis_dir: Vector3::z(),
+                },
+            ));
+        }
+        assert_eq!(kinematic_loop_count(&dbl), 1);
+    }
+
+    #[test]
+    fn loop_count_correct_after_deleting_a_middle_part() {
+        // 4-bar loop p0-p1-p2-p3-p0 (L=1). Deleting p2 also drops its two joints,
+        // leaving the open chain p1-p0-p3 (3 parts, 2 joints) → L = 2 − 3 + 1 = 0.
+        // Exercises the id ≠ vector-index path: delete_part shifts later positions,
+        // so the surviving joints reference ids that are no longer their indices.
+        let mut a = Assembly::new();
+        let p0 = a.add_part(unit_cube("p0"));
+        let p1 = a.add_part(unit_cube("p1"));
+        let p2 = a.add_part(unit_cube("p2"));
+        let p3 = a.add_part(unit_cube("p3"));
+        for (pa, pb) in [(p0, p1), (p1, p2), (p2, p3), (p3, p0)] {
+            a.add_joint(Joint::new(
+                0,
+                JointKind::Revolute {
+                    part_a: pa,
+                    part_b: pb,
+                    axis_origin: Vector3::zeros(),
+                    axis_dir: Vector3::z(),
+                },
+            ));
+        }
+        assert_eq!(kinematic_loop_count(&a), 1);
+        a.delete_part(p2).unwrap();
+        assert_eq!(kinematic_loop_count(&a), 0);
     }
 
     /// Spatial Grübler–Kutzbach: an OPEN serial chain of `k` single-DOF joints
