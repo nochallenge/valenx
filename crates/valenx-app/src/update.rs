@@ -450,6 +450,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Sheet Metal Workbench — native bend
+                    // allowance / deduction (valenx-sheet-metal). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_sheetmetal_workbench, "Sheet Metal")
+                        .on_hover_text(
+                            "Show / hide the right-side Sheet Metal Workbench — native bend \
+                             allowance and bend deduction (neutral-axis arc, flat-blank \
+                             correction) from thickness, inside radius, angle, and k-factor, \
+                             computed in-process by valenx-sheet-metal.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -1056,6 +1070,10 @@ impl eframe::App for ValenxApp {
         // Collision Workbench (right) — native AABB geometry + overlap tests
         // on valenx-collision. A no-op unless toggled on via View → Collision.
         crate::collision_workbench::draw_collision_workbench(self, ctx);
+
+        // Sheet Metal Workbench (right) — native bend allowance / deduction
+        // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.
+        crate::sheetmetal_workbench::draw_sheetmetal_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
