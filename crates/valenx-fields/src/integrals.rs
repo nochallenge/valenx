@@ -54,6 +54,39 @@ pub fn field_std_dev(field: &Field) -> f64 {
     field_variance(field).sqrt()
 }
 
+/// Population skewness — the third standardized moment `(1/n)·Σ((xᵢ−μ)/σ)³` (Fisher–Pearson),
+/// measuring asymmetry: `0` symmetric, `>0` right-tailed, `<0` left-tailed. Uses the population σ
+/// (÷n, matching [`field_variance`]). A genuinely higher moment, not derivable from the variance.
+/// Returns `0.0` for a constant (zero-variance) or sub-2-point field.
+pub fn field_skewness(field: &Field) -> f64 {
+    let n = field.data.len();
+    let var = field_variance(field);
+    if n < 2 || var <= 0.0 {
+        return 0.0;
+    }
+    let mean = field_mean(field);
+    let sigma = var.sqrt();
+    let sum_cubed: f64 = field.data.iter().map(|v| ((v - mean) / sigma).powi(3)).sum();
+    sum_cubed / n as f64
+}
+
+/// Population excess kurtosis — the fourth standardized moment minus 3, `(1/n)·Σ((xᵢ−μ)/σ)⁴ − 3`,
+/// measuring tailedness vs a normal distribution: `0` mesokurtic (normal), `>0` leptokurtic
+/// (heavy-tailed), `<0` platykurtic (light-tailed). Uses the population σ (÷n, matching
+/// [`field_variance`]); distinct from the skewness and the variance. Returns `0.0` for a constant
+/// (zero-variance) or sub-2-point field.
+pub fn field_excess_kurtosis(field: &Field) -> f64 {
+    let n = field.data.len();
+    let var = field_variance(field);
+    if n < 2 || var <= 0.0 {
+        return 0.0;
+    }
+    let mean = field_mean(field);
+    let sigma = var.sqrt();
+    let sum_quartic: f64 = field.data.iter().map(|v| ((v - mean) / sigma).powi(4)).sum();
+    sum_quartic / n as f64 - 3.0
+}
+
 /// L1 norm: sum of absolute values. Useful for scaled residual
 /// magnitudes and total mass-flux balance checks.
 pub fn field_l1_norm(field: &Field) -> f64 {
@@ -219,6 +252,21 @@ mod tests {
     fn field_std_dev_is_sqrt_variance() {
         let f = scalar("v", vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         assert!((field_std_dev(&f) - 2.0_f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn field_skewness_and_excess_kurtosis() {
+        // Symmetric [1,2,3,4,5] (σ²=2): skewness 0; excess kurtosis = 8.5/5 − 3 = −1.3.
+        let sym = scalar("v", vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert!(field_skewness(&sym).abs() < 1e-12);
+        assert!((field_excess_kurtosis(&sym) - (-1.3)).abs() < 1e-12);
+        // Right-skewed [1,1,1,1,6] (mean 2, σ=2): skewness = 7.5/5 = 1.5 (> 0).
+        let right = scalar("r", vec![1.0, 1.0, 1.0, 1.0, 6.0]);
+        assert!((field_skewness(&right) - 1.5).abs() < 1e-12);
+        // Constant (zero-variance) field → both 0 (guard, no division by σ=0).
+        let constant = scalar("c", vec![2.0, 2.0, 2.0]);
+        assert_eq!(field_skewness(&constant), 0.0);
+        assert_eq!(field_excess_kurtosis(&constant), 0.0);
     }
 
     #[test]

@@ -352,6 +352,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
 
     let max_speed = sol.max_speed();
     let mean_speed = sol.mean_speed();
+    let rms_speed = sol.rms_speed();
     let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
     let regime = flow_regime(re, s.case);
     let q = dynamic_pressure(s.density, s.speed);
@@ -431,7 +432,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
          Reynolds   : {:.1}  ({})\n\
          iterations : {} {}\n\
          residual   : {:.3e}\n\
-         max |u|    : {:.5} m/s  (mean {:.5}){peak_speed_loc}\n\
+         max |u|    : {:.5} m/s  (mean {:.5}, rms {:.5}){peak_speed_loc}\n\
          dynamic q  : {:.4} Pa  (½ρU²; mean KE {:.4}; \u{03A6}_visc {:.3e} W/m)\n\
          cell Re    : {:.2}  (U·Δx/ν; ≳2 ⇒ convection under-resolved)\n\
          pressure Δp: {:.4e} Pa  (p_max−p_min){suction_loc}{stagnation_loc}  \u{00B7}  total \u{0394}p\u{2080} {dp0:.3e} Pa  (Bernoulli loss)\n\
@@ -454,6 +455,7 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
         sol.residual,
         max_speed,
         mean_speed,
+        rms_speed,
         q,
         sol.mean_kinetic_energy_density(s.density),
         sol.viscous_dissipation(s.density * s.viscosity),
