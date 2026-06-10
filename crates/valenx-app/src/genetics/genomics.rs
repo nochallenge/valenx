@@ -13,6 +13,7 @@ use valenx_genomics::format::sam::SamFile;
 use valenx_genomics::format::vcf::VcfFile;
 use valenx_genomics::simulate::illumina::{simulate_reads, IlluminaProfile};
 use valenx_genomics::variant::call::{call_variants, CallParams};
+use valenx_genomics::variant::stats::vcf_stats;
 
 use super::common;
 use crate::ValenxApp;
@@ -255,13 +256,16 @@ fn run_summary(p: &mut GenomicsPanel) {
                         .iter()
                         .filter(|r| r.reference.len() == 1 && r.alt.iter().all(|a| a.len() == 1))
                         .count();
+                    let stats = vcf_stats(&vcf);
                     let mut out = format!(
-                        "VCF {} · {} samples · {} records\n  SNV-like      : {}\n  indel-like    : {}\n\n",
+                        "VCF {} · {} samples · {} records\n  SNV-like      : {}\n  indel-like    : {}\n  transitions   : {}\n  transversions : {}\n\n",
                         vcf.header.fileformat,
                         vcf.header.samples.len(),
                         vcf.records.len(),
                         snvs,
                         vcf.records.len() - snvs,
+                        stats.transitions,
+                        stats.transversions,
                     );
                     for r in vcf.records.iter().take(40) {
                         out.push_str(&format!(
