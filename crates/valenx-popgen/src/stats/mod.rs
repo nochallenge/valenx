@@ -32,8 +32,8 @@ pub mod tree_stats;
 
 pub use concordance::genotype_concordance;
 pub use diversity::{
-    fay_wu_h, fu_li_d, nucleotide_diversity, pairwise_differences, tajimas_d,
-    wattersons_theta,
+    expected_heterozygosity, fay_wu_h, fu_li_d, nucleotide_diversity, pairwise_differences,
+    tajimas_d, wattersons_theta,
 };
 pub use fst::{fst_hudson, fst_weir_cockerham};
 pub use ld::{ld_d, ld_d_prime, ld_matrix, ld_pair, ld_r_squared, LdStats};

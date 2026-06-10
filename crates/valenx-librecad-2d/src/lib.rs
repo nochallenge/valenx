@@ -30,7 +30,7 @@ pub mod persist;
 
 pub use drawing::{Block, Drawing2D, Entity2D, Layer};
 pub use error::{ErrorCategory, LibreCadError};
-pub use geometry::{polygon_area, polyline_length};
+pub use geometry::{bounding_box_diagonal_2d, polygon_area, polyline_length};
 pub use panel::LibreCadPanelState;
 pub use persist::{from_ron_str, to_ron_string, PanelFile, VERSION};
 

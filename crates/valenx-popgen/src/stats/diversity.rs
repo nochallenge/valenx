@@ -222,6 +222,26 @@ pub fn fay_wu_h(matrix: &GenotypeMatrix) -> Result<f64> {
     Ok(pi - theta_h)
 }
 
+/// Expected heterozygosity (gene diversity) `He` — the mean over sites of `2·p·(1−p)`, where
+/// `p` is the derived-allele frequency at each site. Measures the diversity expected under
+/// random mating from allele frequencies alone; distinct from nucleotide diversity π (the mean
+/// pairwise difference per site). Returns `0.0` when there are no sites.
+///
+/// # Errors
+/// Propagates [`PopgenError`] if a site's allele frequency cannot be computed.
+pub fn expected_heterozygosity(matrix: &GenotypeMatrix) -> Result<f64> {
+    let sites = matrix.n_sites();
+    if sites == 0 {
+        return Ok(0.0);
+    }
+    let mut sum = 0.0;
+    for col in 0..sites {
+        let p = matrix.frequency(col)?;
+        sum += 2.0 * p * (1.0 - p);
+    }
+    Ok(sum / sites as f64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +351,18 @@ mod tests {
         assert!(fu_li_d(&m).is_err());
         // pi and theta only need n >= 2.
         assert!(nucleotide_diversity(&m).is_ok());
+    }
+
+    #[test]
+    fn expected_heterozygosity_from_allele_frequencies() {
+        // 2 samples, 1 site, p = 0.5 → He = 2·0.5·0.5 = 0.5.
+        let m = matrix(vec![vec![1], vec![0]]);
+        assert!((expected_heterozygosity(&m).unwrap() - 0.5).abs() < 1e-12);
+        // monomorphic site (all ancestral) → He = 0.
+        let m0 = matrix(vec![vec![0], vec![0], vec![0]]);
+        assert_eq!(expected_heterozygosity(&m0).unwrap(), 0.0);
+        // 4 samples, 2 sites: site0 p=0.5 → 0.5, site1 p=0.75 → 0.375; mean = 0.4375.
+        let m2 = matrix(vec![vec![1, 1], vec![1, 1], vec![0, 1], vec![0, 0]]);
+        assert!((expected_heterozygosity(&m2).unwrap() - 0.4375).abs() < 1e-12);
     }
 }

@@ -13,7 +13,7 @@ use valenx_popgen::coalescent::kingman::{coalescent, PopHistory};
 use valenx_popgen::forward::wright_fisher::{SimulationConfig, WrightFisher};
 use valenx_popgen::infer::GenotypeMatrix;
 use valenx_popgen::stats::diversity::{
-    fu_li_d, nucleotide_diversity, tajimas_d, wattersons_theta,
+    expected_heterozygosity, fu_li_d, nucleotide_diversity, tajimas_d, wattersons_theta,
 };
 use valenx_popgen::stats::fst::fst_hudson;
 use valenx_popgen::stats::sfs::site_frequency_spectrum;
@@ -146,6 +146,7 @@ fn summarize(gm: &GenotypeMatrix) -> (String, Vec<usize>) {
     out.push_str(&fmt("Watterson θ", wattersons_theta(gm)));
     out.push_str(&fmt("Tajima's D", tajimas_d(gm)));
     out.push_str(&fmt("Fu & Li's D", fu_li_d(gm)));
+    out.push_str(&fmt("He (gene div)", expected_heterozygosity(gm)));
 
     // Hudson's Fst between the first and second halves of the sample.
     let rows = gm.rows();

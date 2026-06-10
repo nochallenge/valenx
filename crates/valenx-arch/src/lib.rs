@@ -102,9 +102,9 @@ pub use space::SpaceParams;
 pub use stair::StairParams;
 pub use structural::{
     asd_load_combination, dead_only_factored, export_structural_model, lrfd_factored_load,
-    span_to_depth_ratio, StructuralElement, StructuralLoad, StructuralMaterial, StructuralMember,
-    StructuralModel, StructuralModelOptions, StructuralNode, StructuralSection, StructuralSupport,
-    SupportKind,
+    span_to_depth_ratio, tributary_load, StructuralElement, StructuralLoad, StructuralMaterial,
+    StructuralMember, StructuralModel, StructuralModelOptions, StructuralNode, StructuralSection,
+    StructuralSupport, SupportKind,
 };
 pub use wall::WallParams;
 pub use window::{WindowParams, WindowStyle};
