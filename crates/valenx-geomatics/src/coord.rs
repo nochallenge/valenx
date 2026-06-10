@@ -285,6 +285,15 @@ pub fn along_track_distance(p: LatLon, path_start: LatLon, path_end: LatLon) -> 
     arg.clamp(-1.0, 1.0).acos() * EARTH_RADIUS_M
 }
 
+/// Final bearing (the arrival/back azimuth) at `b` when travelling the great circle from `a`, in
+/// degrees clockwise from north and normalised to `[0, 360)`. Computed as
+/// `(initial_bearing(b, a) + 180) mod 360`. Distinct from [`initial_bearing`] (the departure
+/// heading): on a sphere the arrival heading differs from the departure heading by ≠ 180° in
+/// general because the meridians converge (they coincide only on the equator or a meridian).
+pub fn final_bearing(a: LatLon, b: LatLon) -> f64 {
+    (initial_bearing(b, a) + 180.0) % 360.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -485,5 +494,37 @@ mod tests {
         assert!(along_track_distance(start, start, end).abs() < 1.0);
         // Degenerate path → 0.0.
         assert_eq!(along_track_distance(off, start, start), 0.0);
+    }
+
+    #[test]
+    fn final_bearing_is_arrival_heading() {
+        let origin = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        // Meridian (0,0)→(10,0): arrive heading due north → 0°.
+        let north = LatLon {
+            latitude_deg: 10.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        assert!(final_bearing(origin, north).abs() < 1e-9);
+        // Equator (0,0)→(0,10): arrive heading due east → 90°.
+        let east = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 10.0,
+            elevation_m: 0.0,
+        };
+        assert!((final_bearing(origin, east) - 90.0).abs() < 1e-6);
+        // Diagonal: arrival heading differs from the departure heading (meridian convergence).
+        let diag = LatLon {
+            latitude_deg: 10.0,
+            longitude_deg: 10.0,
+            elevation_m: 0.0,
+        };
+        let f = final_bearing(origin, diag);
+        assert!((0.0..360.0).contains(&f));
+        assert!((f - initial_bearing(origin, diag)).abs() > 0.1);
     }
 }
