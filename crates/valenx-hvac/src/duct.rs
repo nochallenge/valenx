@@ -41,6 +41,23 @@ impl CrossSection {
             CrossSection::Rect { w, h } => w * h,
         }
     }
+
+    /// ASHRAE/Huebscher equal-friction equivalent round diameter
+    /// `Dₑ = 1.30·(w·h)^0.625 / (w+h)^0.25` for a rectangular duct — the round duct with the same
+    /// friction loss and airflow. Distinct from [`hydraulic_diameter_mm`](Self::hydraulic_diameter_mm)
+    /// (`4A/P`). A round section returns its own diameter; a non-positive or non-finite rectangle
+    /// returns `0.0`.
+    pub fn equivalent_round_diameter_mm(self) -> f64 {
+        match self {
+            CrossSection::Round { d } => d,
+            CrossSection::Rect { w, h } => {
+                if !w.is_finite() || !h.is_finite() || w <= 0.0 || h <= 0.0 {
+                    return 0.0;
+                }
+                1.30 * (w * h).powf(0.625) / (w + h).powf(0.25)
+            }
+        }
+    }
 }
 
 /// A length of ducting following a polyline path with optional
@@ -143,5 +160,23 @@ mod tests {
         );
         let err = to_solid(&d).unwrap_err();
         assert!(matches!(err, HvacError::BadParameter { .. }));
+    }
+
+    #[test]
+    fn equivalent_round_diameter_ashrae_huebscher() {
+        // Rect 400×200 → 1.30·(80000)^0.625/(600)^0.25 ≈ 304.7 mm; larger than D_h (266.67 mm).
+        let rect = CrossSection::Rect { w: 400.0, h: 200.0 };
+        assert!((rect.equivalent_round_diameter_mm() - 304.7).abs() < 0.6);
+        assert!(rect.equivalent_round_diameter_mm() > rect.hydraulic_diameter_mm());
+        // A round section returns its own diameter.
+        assert_eq!(
+            CrossSection::Round { d: 250.0 }.equivalent_round_diameter_mm(),
+            250.0
+        );
+        // Guard: non-positive rectangle → 0.
+        assert_eq!(
+            CrossSection::Rect { w: -1.0, h: 200.0 }.equivalent_round_diameter_mm(),
+            0.0
+        );
     }
 }

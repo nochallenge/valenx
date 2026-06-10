@@ -29,7 +29,7 @@ pub mod units;
 pub use engine::{AimdEngine, Controls, Frame, ReactionEngine, System, Thermostat, Trajectory};
 pub use error::{ReactDynError, Result};
 pub use forces::Method;
-pub use kinetics::{arrhenius_half_life_1st_order, arrhenius_rate};
+pub use kinetics::{arrhenius_half_life_1st_order, arrhenius_rate, equilibrium_constant};
 pub use mm::{classical_forces, Particle};
 pub use qmmm::{Embedding, MmAtom, QmMmEngine, QmMmSystem};
 pub use reactive::{morse_param, reactive_energy_forces, MorseParam, ReactiveEngine, ReactiveSystem};
