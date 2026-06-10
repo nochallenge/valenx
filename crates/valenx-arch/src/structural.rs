@@ -769,6 +769,16 @@ pub fn span_to_depth_ratio(span: f64, depth: f64) -> f64 {
     span / depth
 }
 
+/// Tributary load `P = pressure · area` — the total force (N) a member carries from a uniform
+/// area pressure (Pa) acting over its tributary area (m²). A load-takedown product, distinct
+/// from the factored load combinations. Returns `0` for non-finite or negative input.
+pub fn tributary_load(pressure: f64, area: f64) -> f64 {
+    if !pressure.is_finite() || pressure < 0.0 || !area.is_finite() || area < 0.0 {
+        return 0.0;
+    }
+    pressure * area
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1061,5 +1071,18 @@ mod tests {
         assert_eq!(span_to_depth_ratio(5.0, -0.1), 0.0);
         assert_eq!(span_to_depth_ratio(f64::NAN, 0.5), 0.0);
         assert_eq!(span_to_depth_ratio(5.0, f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn tributary_load_basic() {
+        // 2.5 kPa over 12 m² = 30 kN (2500 Pa · 12 m² = 30000 N).
+        assert!((tributary_load(2500.0, 12.0) - 30_000.0).abs() < 1e-9);
+        // Non-tautological: doubling the area doubles the load.
+        assert!((tributary_load(2500.0, 24.0) - 2.0 * tributary_load(2500.0, 12.0)).abs() < 1e-9);
+        // Guards: negative or non-finite → 0.
+        assert_eq!(tributary_load(-2500.0, 12.0), 0.0);
+        assert_eq!(tributary_load(2500.0, -12.0), 0.0);
+        assert_eq!(tributary_load(f64::NAN, 12.0), 0.0);
+        assert_eq!(tributary_load(2500.0, f64::INFINITY), 0.0);
     }
 }
