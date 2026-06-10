@@ -28,4 +28,4 @@ pub mod spec;
 pub use error::{ErrorCategory, GearsError};
 pub use profile::{full_profile, involute_point, tooth_profile};
 pub use solid::{to_solid, to_solid_bevel, to_solid_helical, to_solid_spur, to_solid_worm};
-pub use spec::{circular_pitch_mm, GearKind, GearSpec};
+pub use spec::{circular_pitch_mm, gear_ratio, GearKind, GearSpec};
