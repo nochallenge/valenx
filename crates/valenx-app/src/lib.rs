@@ -54,6 +54,7 @@ pub mod neuro_workbench;
 mod coverage_ui_tests;
 pub mod reactdyn_workbench;
 pub mod springs_workbench;
+pub mod gears_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -408,6 +409,14 @@ pub struct ValenxApp {
     /// Form + result state for the Springs Workbench — native helical-spring
     /// design wrapping `valenx-springs`. See [`crate::springs_workbench`].
     pub(crate) springs: crate::springs_workbench::SpringsWorkbenchState,
+
+    /// Whether the right-side Gears Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_gears_workbench: bool,
+    /// Form + result state for the Gears Workbench — native involute-gear
+    /// design wrapping `valenx-gears`. See [`crate::gears_workbench`].
+    pub(crate) gears: crate::gears_workbench::GearsWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
@@ -808,6 +817,11 @@ impl ValenxApp {
     /// Make the right-side Springs Workbench SidePanel visible.
     pub fn enable_springs_workbench(&mut self) {
         self.show_springs_workbench = true;
+    }
+
+    /// Make the right-side Gears Workbench SidePanel visible.
+    pub fn enable_gears_workbench(&mut self) {
+        self.show_gears_workbench = true;
     }
 
     /// Make the right-side Astro / Launch workbench SidePanel visible.
