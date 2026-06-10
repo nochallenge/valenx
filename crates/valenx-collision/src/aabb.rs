@@ -45,6 +45,15 @@ impl Aabb {
     pub fn is_valid(&self) -> bool {
         self.min.x <= self.max.x && self.min.y <= self.max.y && self.min.z <= self.max.z
     }
+
+    /// Volume of the box — the product of the per-axis extents, each clamped to `≥ 0`. Returns
+    /// `0.0` for an inverted or empty box (any axis where `max < min`).
+    pub fn volume(&self) -> f64 {
+        let dx = (self.max.x - self.min.x).max(0.0);
+        let dy = (self.max.y - self.min.y).max(0.0);
+        let dz = (self.max.z - self.min.z).max(0.0);
+        dx * dy * dz
+    }
 }
 
 /// Fast overlap test — returns `true` when the two boxes share any
@@ -121,5 +130,33 @@ mod tests {
             max: Vector3::new(2.0, 1.0, 1.0),
         };
         assert!(intersect(&a, &b));
+    }
+
+    #[test]
+    fn volume_of_box() {
+        // 10×20×30 box → 6000.
+        let a = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(10.0, 20.0, 30.0),
+        };
+        assert!((a.volume() - 6000.0).abs() < 1e-9);
+        // Unit cube → 1.
+        let unit = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(1.0, 1.0, 1.0),
+        };
+        assert!((unit.volume() - 1.0).abs() < 1e-12);
+        // Inverted box → 0.
+        let inv = Aabb {
+            min: Vector3::new(10.0, 10.0, 10.0),
+            max: Vector3::new(5.0, 5.0, 5.0),
+        };
+        assert_eq!(inv.volume(), 0.0);
+        // Flat (zero-height) box → 0.
+        let flat = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(10.0, 10.0, 0.0),
+        };
+        assert_eq!(flat.volume(), 0.0);
     }
 }

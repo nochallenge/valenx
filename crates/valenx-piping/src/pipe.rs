@@ -112,6 +112,15 @@ impl PipeSection {
         let id = self.inner_diameter_mm()?;
         Ok(std::f64::consts::PI * (od * od - id * id) / 4.0)
     }
+
+    /// Wetted perimeter (mm) — the bore circumference `P = π·ID`, the length of the cross-section
+    /// in contact with a full-flowing fluid (feeds the hydraulic radius and Reynolds number).
+    ///
+    /// # Errors
+    /// Propagates any [`inner_diameter_mm`](Self::inner_diameter_mm) error.
+    pub fn wetted_perimeter_mm(&self) -> Result<f64, PipingError> {
+        Ok(std::f64::consts::PI * self.inner_diameter_mm()?)
+    }
 }
 
 /// Convert a [`PipeSection`] to a [`Solid`].
@@ -228,5 +237,32 @@ mod tests {
             Material::Pvc,
         );
         assert!(bad.metal_cross_section_mm2().is_err());
+    }
+
+    #[test]
+    fn wetted_perimeter_is_pi_times_id() {
+        // NPS 2 Sch40 ID = 52.5018 mm → P = π·ID ≈ 164.94 mm.
+        let s = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(0.0, 0.0, 100.0),
+            "2",
+            Schedule::Sch40,
+            Material::CarbonSteel,
+        );
+        let p = s.wetted_perimeter_mm().unwrap();
+        let id = s.inner_diameter_mm().unwrap();
+        assert!((p - std::f64::consts::PI * id).abs() < 1e-9);
+        assert!((p - 164.94).abs() < 0.01);
+        // P / ID = π (non-tautological ratio).
+        assert!((p / id - std::f64::consts::PI).abs() < 1e-9);
+        // Unknown NPS → error.
+        let bad = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(1.0, 0.0, 0.0),
+            "99",
+            Schedule::Sch40,
+            Material::Pvc,
+        );
+        assert!(bad.wetted_perimeter_mm().is_err());
     }
 }

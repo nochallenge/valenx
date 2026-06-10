@@ -193,6 +193,16 @@ pub fn rebar_cross_section_area_mm2(diameter_mm: f64) -> f64 {
     std::f64::consts::PI * r * r
 }
 
+/// Longitudinal reinforcement ratio `ρ = As / Ag` (ACI 318) — total steel area over the gross
+/// concrete section area. Returns `0.0` if either argument is non-finite or the gross area is
+/// non-positive.
+pub fn reinforcement_ratio(steel_area_mm2: f64, gross_area_mm2: f64) -> f64 {
+    if !steel_area_mm2.is_finite() || !gross_area_mm2.is_finite() || gross_area_mm2 <= 0.0 {
+        return 0.0;
+    }
+    steel_area_mm2 / gross_area_mm2
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,5 +261,19 @@ mod tests {
         assert_eq!(rebar_cross_section_area_mm2(0.0), 0.0);
         assert_eq!(rebar_cross_section_area_mm2(-5.0), 0.0);
         assert_eq!(rebar_cross_section_area_mm2(f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn reinforcement_ratio_is_steel_over_gross() {
+        // Canonical: 2000 mm² steel in a 100000 mm² section → ρ = 0.02.
+        assert!((reinforcement_ratio(2000.0, 100000.0) - 0.02).abs() < 1e-12);
+        // Compose with the bar-area fn: 4·Ø16 bars in a 300×300 column.
+        let steel = 4.0 * rebar_cross_section_area_mm2(16.0);
+        let rho = reinforcement_ratio(steel, 300.0 * 300.0);
+        assert!((rho - 0.008936).abs() < 1e-5);
+        // Guards: gross ≤ 0 / non-finite → 0.
+        assert_eq!(reinforcement_ratio(2000.0, 0.0), 0.0);
+        assert_eq!(reinforcement_ratio(2000.0, -1.0), 0.0);
+        assert_eq!(reinforcement_ratio(f64::NAN, 100000.0), 0.0);
     }
 }

@@ -9,6 +9,7 @@ use eframe::egui;
 
 use valenx_bioseq::analysis::composition::{gc_content, gc_skew, residue_counts, shannon_entropy};
 use valenx_bioseq::analysis::weight::{molecular_weight_nucleic, molecular_weight_protein};
+use valenx_bioseq::analysis::tm::tm_wallace;
 use valenx_bioseq::cloning::digest_map::{digest_to_gel, restriction_map};
 use valenx_bioseq::cloning::restriction::{enzyme_by_name, Enzyme};
 use valenx_bioseq::ops::orf::{find_orfs, OrfOptions};
@@ -394,6 +395,10 @@ fn run_analyze(p: &mut SequencePanel) {
                 match molecular_weight_nucleic(&s) {
                     Ok(mw) => out.push_str(&format!("MW (nucleic): {mw:.2} Da\n")),
                     Err(e) => out.push_str(&format!("MW (nucleic): (n/a — {e})\n")),
+                }
+                match tm_wallace(&s) {
+                    Ok(tm) => out.push_str(&format!("Tm (Wallace): {tm:.1} °C\n")),
+                    Err(e) => out.push_str(&format!("Tm (Wallace): (n/a — {e})\n")),
                 }
             } else {
                 match molecular_weight_protein(&s) {
