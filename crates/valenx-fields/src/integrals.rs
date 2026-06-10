@@ -76,6 +76,17 @@ pub fn field_rms(field: &Field) -> f64 {
     (sum_sq / field.data.len() as f64).sqrt()
 }
 
+/// Coefficient of variation `CV = std_dev / mean` — the dimensionless relative dispersion,
+/// composing [`field_std_dev`] and [`field_mean`] (population variance, ÷n). Returns `0.0` for an
+/// empty, constant, or zero-mean field (the ratio is undefined when the mean is 0).
+pub fn field_coefficient_of_variation(field: &Field) -> f64 {
+    let m = field_mean(field);
+    if !m.is_finite() || m == 0.0 {
+        return 0.0;
+    }
+    field_std_dev(field) / m
+}
+
 /// L-infinity norm: max absolute value. Pairs with
 /// [`crate::stress::field_max_per_node`] when the user wants the
 /// magnitude (not the signed value) of the worst cell.
@@ -226,6 +237,21 @@ mod tests {
         // Constant field → the constant; empty → 0.
         assert_eq!(field_rms(&scalar("c", vec![5.0, 5.0, 5.0])), 5.0);
         assert_eq!(field_rms(&scalar("e", vec![])), 0.0);
+    }
+
+    #[test]
+    fn field_coefficient_of_variation_is_std_over_mean() {
+        // [2,4,6] → mean 4, pop-var 2.6667, std 1.63299 → CV ≈ 0.40825.
+        let f = scalar("v", vec![2.0, 4.0, 6.0]);
+        assert!((field_coefficient_of_variation(&f) - 0.408_248_290_463_863_4).abs() < 1e-9);
+        // Cross-check CV = std_dev / mean.
+        assert!(
+            (field_coefficient_of_variation(&f) - field_std_dev(&f) / field_mean(&f)).abs() < 1e-12
+        );
+        // Constant → 0; zero-mean → 0 (guard); empty → 0.
+        assert_eq!(field_coefficient_of_variation(&scalar("c", vec![5.0, 5.0, 5.0])), 0.0);
+        assert_eq!(field_coefficient_of_variation(&scalar("z", vec![-1.0, 1.0])), 0.0);
+        assert_eq!(field_coefficient_of_variation(&scalar("e", vec![])), 0.0);
     }
 
     #[test]
