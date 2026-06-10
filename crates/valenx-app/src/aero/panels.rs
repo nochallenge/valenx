@@ -370,6 +370,19 @@ pub fn draw_wind_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         format!("{} (on {:.2} m)", model::format_reynolds(re), length),
                     );
                 });
+
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new("Gas-law check").strong());
+            let rho_ideal =
+                valenx_aero::compressible::ideal_gas_density(101_325.0, form.temperature_k);
+            derived(
+                ui,
+                format!(
+                    "ideal-gas density at {:.0} K and sea-level 101.325 kPa is {rho_ideal:.4} kg/m³ \
+                     (set air density: {:.4} kg/m³)",
+                    form.temperature_k, form.air_density,
+                ),
+            );
         });
 }
 
