@@ -30,5 +30,5 @@ pub use error::{ErrorCategory, SpringsError};
 pub use spec::{EndTreatment, SpringKind, SpringSpec};
 pub use springs::{
     compression_centerline, extension_centerline, spring_index, stiffness_n_per_mm, to_solid,
-    torsion_centerline,
+    torsion_centerline, wahl_factor,
 };
