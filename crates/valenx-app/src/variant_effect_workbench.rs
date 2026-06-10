@@ -1,9 +1,10 @@
 //! Variant-effect workbench — HGVS variant parsing on `valenx-variant-effect`.
 //!
-//! A right-side panel that parses an HGVS-style substitution string (protein
-//! `p.R273H` / `p.Arg273His`, or coding `c.817C>T`) into a structured
-//! [`Variant`] and reports the parsed components — or a clear parse error.
-//! The entry point to the variant-effect orchestration crate. Headless-testable.
+//! A right-side panel that parses HGVS-style substitution strings (protein
+//! `p.R273H` / `p.Arg273His`, or coding `c.817C>T`) into structured
+//! [`Variant`]s. Accepts a **batch** — one variant per line — and reports
+//! each line's parsed components or a clear parse error, with an OK/error
+//! tally. Headless-testable.
 
 use eframe::egui;
 
@@ -13,13 +14,18 @@ use crate::ValenxApp;
 
 /// Persistent state for the variant-effect workbench.
 pub struct VariantEffectWorkbenchState {
+    /// One HGVS variant per line.
     input: String,
-    parsed: Option<Result<Variant, String>>,
+    /// Per-line parse results (the trimmed line + its parse), built on "Parse".
+    results: Option<Vec<(String, Result<Variant, String>)>>,
 }
 
 impl Default for VariantEffectWorkbenchState {
     fn default() -> Self {
-        Self { input: "p.R273H".to_string(), parsed: None }
+        Self {
+            input: "p.R273H\np.Arg249Ser\nc.817C>T".to_string(),
+            results: None,
+        }
     }
 }
 
@@ -27,12 +33,29 @@ impl Default for VariantEffectWorkbenchState {
 fn describe(v: &Variant) -> String {
     match v {
         Variant::ProteinSub { wt, pos, mt } => {
-            format!("protein substitution {}{}{} — residue {pos}", wt.as_char(), pos, mt.as_char())
+            format!(
+                "protein substitution {}{}{} — residue {pos}",
+                wt.as_char(),
+                pos,
+                mt.as_char()
+            )
         }
         Variant::CodingSub { pos, wt, mt } => {
             format!("coding substitution c.{pos}{}>{}", wt.as_char(), mt.as_char())
         }
     }
+}
+
+/// Parse a batch of variants — one per line, blank lines skipped — into a
+/// `(line, result)` list. Extracted from the draw closure so it is
+/// unit-testable.
+fn parse_batch(input: &str) -> Vec<(String, Result<Variant, String>)> {
+    input
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(|l| (l.to_string(), parse(l).map_err(|e| e.to_string())))
+        .collect()
 }
 
 /// Draw the variant-effect workbench (a no-op unless toggled on via
@@ -54,33 +77,54 @@ pub fn draw_variant_effect_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             );
             ui.separator();
             let s = &mut app.variant_effect;
-            ui.horizontal(|ui| {
-                ui.label("variant");
-                ui.add(
-                    egui::TextEdit::singleline(&mut s.input)
-                        .desired_width(160.0)
-                        .hint_text("p.R273H or c.817C>T"),
-                );
-            });
-            if ui.button("▶ Parse").clicked() {
-                let r = parse(&s.input).map_err(|e| e.to_string());
-                s.parsed = Some(r);
+            ui.label(egui::RichText::new("Variants (one per line)").strong());
+            ui.add(
+                egui::TextEdit::multiline(&mut s.input)
+                    .desired_rows(4)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("p.R273H\np.Arg249Ser\nc.817C>T")
+                    .font(egui::TextStyle::Monospace),
+            );
+            if ui.button("\u{25B6} Parse").clicked() {
+                s.results = Some(parse_batch(&s.input));
             }
             ui.label(
                 egui::RichText::new("Examples:  p.R273H · p.Arg273His · c.817C>T")
                     .weak()
                     .small(),
             );
-            if let Some(res) = &s.parsed {
+            if let Some(results) = &s.results {
                 ui.separator();
-                match res {
-                    Ok(v) => {
-                        ui.colored_label(egui::Color32::from_rgb(80, 220, 120), describe(v));
-                    }
-                    Err(e) => {
-                        ui.colored_label(egui::Color32::from_rgb(220, 120, 80), format!("parse error: {e}"));
-                    }
-                }
+                let ok = results.iter().filter(|(_, r)| r.is_ok()).count();
+                let err = results.len() - ok;
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} variant(s) · {ok} parsed · {err} error(s)",
+                        results.len()
+                    ))
+                    .strong(),
+                );
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(220.0)
+                    .show(ui, |ui| {
+                        for (line, res) in results {
+                            match res {
+                                Ok(v) => {
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(80, 220, 120),
+                                        format!("{line}  \u{2192}  {}", describe(v)),
+                                    );
+                                }
+                                Err(e) => {
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(220, 120, 80),
+                                        format!("{line}  \u{2192}  parse error: {e}"),
+                                    );
+                                }
+                            }
+                        }
+                    });
             }
         });
 }
@@ -105,5 +149,52 @@ mod tests {
     #[test]
     fn rejects_garbage() {
         assert!(parse("not a variant").is_err());
+    }
+
+    #[test]
+    fn parse_batch_splits_lines_and_tallies() {
+        // Four lines (one blank skipped → 3 entries): 2 valid, 1 garbage.
+        let out = parse_batch("p.R273H\n\nc.817C>T\nnot a variant");
+        assert_eq!(out.len(), 3);
+        assert!(out[0].1.is_ok());
+        assert!(out[1].1.is_ok());
+        assert!(out[2].1.is_err());
+        // The line text is preserved (trimmed).
+        assert_eq!(out[0].0, "p.R273H");
+    }
+
+    #[test]
+    fn parse_batch_default_is_all_valid() {
+        let out = parse_batch(&VariantEffectWorkbenchState::default().input);
+        assert_eq!(out.len(), 3);
+        assert!(out.iter().all(|(_, r)| r.is_ok()));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+
+    fn draw_workbench(app: &mut ValenxApp) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_variant_effect_workbench(app, ctx);
+        });
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_variant_effect_workbench);
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn workbench_draws_batch_results_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_variant_effect_workbench = true;
+        app.variant_effect.results = Some(parse_batch("p.R273H\nnot a variant"));
+        draw_workbench(&mut app);
     }
 }
