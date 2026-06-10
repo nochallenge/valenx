@@ -61,6 +61,7 @@ pub mod collision_workbench;
 pub mod sheetmetal_workbench;
 pub mod fields_workbench;
 pub mod fasteners_workbench;
+pub mod frames_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -476,6 +477,15 @@ pub struct ValenxApp {
     /// dimensions wrapping `valenx-fasteners`. See
     /// [`crate::fasteners_workbench`].
     pub(crate) fasteners: crate::fasteners_workbench::FastenersWorkbenchState,
+
+    /// Whether the right-side Frames Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_frames_workbench: bool,
+    /// Form + result state for the Frames Workbench — structural
+    /// cross-section properties wrapping `valenx-frames`. See
+    /// [`crate::frames_workbench`].
+    pub(crate) frames: crate::frames_workbench::FramesWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
@@ -911,6 +921,11 @@ impl ValenxApp {
     /// Make the right-side Fasteners Workbench SidePanel visible.
     pub fn enable_fasteners_workbench(&mut self) {
         self.show_fasteners_workbench = true;
+    }
+
+    /// Make the right-side Frames Workbench SidePanel visible.
+    pub fn enable_frames_workbench(&mut self) {
+        self.show_frames_workbench = true;
     }
 
     /// Make the right-side Astro / Launch workbench SidePanel visible.
