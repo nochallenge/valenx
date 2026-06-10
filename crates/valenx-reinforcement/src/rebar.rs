@@ -182,6 +182,17 @@ impl Default for Rebar {
     }
 }
 
+/// Cross-sectional area of a circular reinforcing bar in mm², `A = π·d²/4` for nominal diameter
+/// `diameter_mm`. Feeds reinforcement ratios (ρ = As/Ag) and steel-area takedowns. Returns `0.0`
+/// for a non-positive or non-finite diameter.
+pub fn rebar_cross_section_area_mm2(diameter_mm: f64) -> f64 {
+    if !diameter_mm.is_finite() || diameter_mm <= 0.0 {
+        return 0.0;
+    }
+    let r = diameter_mm * 0.5;
+    std::f64::consts::PI * r * r
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,5 +235,21 @@ mod tests {
             turns: 5.0,
         };
         assert!(s.to_polyline().len() > 40);
+    }
+
+    #[test]
+    fn rebar_cross_section_area_is_pi_r_squared() {
+        // Ø16 → π·8² ≈ 201.06 mm²; Ø20 → π·10² ≈ 314.16 mm².
+        assert!((rebar_cross_section_area_mm2(16.0) - 201.062).abs() < 0.01);
+        assert!((rebar_cross_section_area_mm2(20.0) - 314.159).abs() < 0.01);
+        // Quadruples when the diameter doubles.
+        assert!(
+            (rebar_cross_section_area_mm2(20.0) - 4.0 * rebar_cross_section_area_mm2(10.0)).abs()
+                < 1e-9
+        );
+        // Guards: non-positive / non-finite → 0.
+        assert_eq!(rebar_cross_section_area_mm2(0.0), 0.0);
+        assert_eq!(rebar_cross_section_area_mm2(-5.0), 0.0);
+        assert_eq!(rebar_cross_section_area_mm2(f64::NAN), 0.0);
     }
 }

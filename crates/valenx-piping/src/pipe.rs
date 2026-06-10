@@ -99,6 +99,19 @@ impl PipeSection {
         let id = self.inner_diameter_mm()?;
         Ok(std::f64::consts::PI * id * id / 4.0)
     }
+
+    /// Cross-sectional area of the pipe **wall** (the metal annulus) in mm², `A = π·(OD²−ID²)/4`.
+    /// Distinct from [`flow_area_mm2`](Self::flow_area_mm2) (the bore); the two partition the full
+    /// OD circle (`metal + flow = π·OD²/4`). Used for weight, stress, and thermal-mass estimates.
+    ///
+    /// # Errors
+    /// Propagates any [`outer_diameter_mm`](Self::outer_diameter_mm) or
+    /// [`inner_diameter_mm`](Self::inner_diameter_mm) error.
+    pub fn metal_cross_section_mm2(&self) -> Result<f64, PipingError> {
+        let od = self.outer_diameter_mm()?;
+        let id = self.inner_diameter_mm()?;
+        Ok(std::f64::consts::PI * (od * od - id * id) / 4.0)
+    }
 }
 
 /// Convert a [`PipeSection`] to a [`Solid`].
@@ -187,5 +200,33 @@ mod tests {
         );
         assert!(bad.inner_diameter_mm().is_err());
         assert!(bad.flow_area_mm2().is_err());
+    }
+
+    #[test]
+    fn metal_cross_section_partitions_the_od_circle() {
+        // NPS 2 Sch40 → π/4·(60.325²−52.5018²) ≈ 693.18 mm².
+        let s = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(0.0, 0.0, 100.0),
+            "2",
+            Schedule::Sch40,
+            Material::CarbonSteel,
+        );
+        assert!((s.metal_cross_section_mm2().unwrap() - 693.18).abs() < 0.1);
+        // Invariant: metal + flow = the full OD circle π·OD²/4.
+        let od = s.outer_diameter_mm().unwrap();
+        let full = std::f64::consts::PI * od * od / 4.0;
+        assert!(
+            (s.metal_cross_section_mm2().unwrap() + s.flow_area_mm2().unwrap() - full).abs() < 1e-6
+        );
+        // Unknown NPS → error.
+        let bad = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(1.0, 0.0, 0.0),
+            "99",
+            Schedule::Sch40,
+            Material::Pvc,
+        );
+        assert!(bad.metal_cross_section_mm2().is_err());
     }
 }
