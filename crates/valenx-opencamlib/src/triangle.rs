@@ -57,6 +57,12 @@ impl Triangle {
         }
         Some(l1 * a.z + l2 * b.z + l3 * c.z)
     }
+
+    /// Triangle area `½·‖(v₁−v₀)×(v₂−v₀)‖` — half the magnitude of the non-unit
+    /// [`normal`](Self::normal). A degenerate (collinear) triangle returns `0.0`.
+    pub fn area(&self) -> f64 {
+        self.normal().norm() * 0.5
+    }
 }
 
 /// Convert a [`valenx_mesh::Mesh`] of Tri3 elements into a flat
@@ -75,4 +81,34 @@ pub fn from_valenx_mesh(m: &valenx_mesh::Mesh) -> Vec<Triangle> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn area_via_cross_product_magnitude() {
+        // Legs 3 and 4 at a right angle in the XY plane → area = ½·3·4 = 6.
+        let t = Triangle::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+            Vector3::new(0.0, 4.0, 0.0),
+        );
+        assert!((t.area() - 6.0).abs() < 1e-12);
+        // Same legs in the YZ plane (out of the XY plane) → same area.
+        let yz = Triangle::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(0.0, 3.0, 0.0),
+            Vector3::new(0.0, 0.0, 4.0),
+        );
+        assert!((yz.area() - 6.0).abs() < 1e-12);
+        // Collinear (degenerate) triangle → 0.
+        let flat = Triangle::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(2.0, 0.0, 0.0),
+        );
+        assert_eq!(flat.area(), 0.0);
+    }
 }

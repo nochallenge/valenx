@@ -258,12 +258,14 @@ fn run_summary(p: &mut GenomicsPanel) {
                         .count();
                     let stats = vcf_stats(&vcf);
                     let mut out = format!(
-                        "VCF {} · {} samples · {} records\n  SNV-like      : {}\n  indel-like    : {}\n  transitions   : {}\n  transversions : {}\n\n",
+                        "VCF {} · {} samples · {} records\n  SNV-like      : {}\n  indel-like    : {}\n  multiallelic  : {}\n  passing       : {}\n  transitions   : {}\n  transversions : {}\n\n",
                         vcf.header.fileformat,
                         vcf.header.samples.len(),
                         vcf.records.len(),
                         snvs,
                         vcf.records.len() - snvs,
+                        stats.multiallelic,
+                        stats.passing,
                         stats.transitions,
                         stats.transversions,
                     );
