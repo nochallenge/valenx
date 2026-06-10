@@ -146,6 +146,25 @@ pub fn field_min_max(field: &Field) -> Option<(f64, f64)> {
     Some((min, max))
 }
 
+/// Median — the middle order statistic of the field's `data` (the 50th percentile). Robust to
+/// outliers, unlike [`field_mean`]; an order statistic (not a moment) and not a transform of any
+/// shipped stat. For odd `n` the middle sorted element; for even `n` the mean of the two middle
+/// elements (the standard convention). Sorts with `total_cmp` so NaNs order deterministically
+/// rather than poisoning the comparison. Returns `0.0` for an empty field.
+pub fn field_median(field: &Field) -> f64 {
+    let n = field.data.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let mut v = field.data.clone();
+    v.sort_by(f64::total_cmp);
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
+}
+
 /// Peak-to-peak span `max − min` — the scalar width of the data range. Distinct from
 /// [`field_min_max`] (which returns the (min, max) pair) and [`field_std_dev`] (spread about the
 /// mean). Returns `0.0` for an empty field.
@@ -267,6 +286,21 @@ mod tests {
         let constant = scalar("c", vec![2.0, 2.0, 2.0]);
         assert_eq!(field_skewness(&constant), 0.0);
         assert_eq!(field_excess_kurtosis(&constant), 0.0);
+    }
+
+    #[test]
+    fn field_median_is_the_middle_order_statistic() {
+        // Odd n, unsorted → the middle sorted element.
+        assert_eq!(field_median(&scalar("o", vec![5.0, 1.0, 3.0, 2.0, 4.0])), 3.0);
+        // Even n → the mean of the two middles: [1,2,3,4] → (2+3)/2 = 2.5.
+        assert_eq!(field_median(&scalar("e", vec![4.0, 1.0, 3.0, 2.0])), 2.5);
+        // Single element → itself; empty → 0.
+        assert_eq!(field_median(&scalar("s", vec![7.0])), 7.0);
+        assert_eq!(field_median(&scalar("z", vec![])), 0.0);
+        // Robust to an outlier: median 3, vs the outlier-pulled mean (= 22).
+        let skewed = scalar("k", vec![1.0, 2.0, 3.0, 4.0, 100.0]);
+        assert_eq!(field_median(&skewed), 3.0);
+        assert!(field_mean(&skewed) > 20.0);
     }
 
     #[test]

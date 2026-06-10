@@ -911,6 +911,11 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport, c_di
             );
             kv(
                 ui,
+                "critical Cp*",
+                format!("{:.3}", report.critical_pressure_coefficient()),
+            );
+            kv(
+                ui,
                 "convergence",
                 if report.converged {
                     format!("converged · {} iters", report.iterations)

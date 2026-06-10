@@ -201,6 +201,23 @@ pub fn prandtl_meyer_angle(mach: f64, gamma: f64) -> f64 {
     k * (s / k).atan() - s.atan()
 }
 
+/// The **critical pressure coefficient** `Cp* = (2/(γ·M²))·{[(2+(γ−1)·M²)/(γ+1)]^(γ/(γ−1)) − 1}`
+/// at Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` (von Kármán) — the surface pressure
+/// coefficient at which the local flow first reaches sonic speed (M = 1). A surface point with
+/// `Cp ≤ Cp*` has gone transonic (shock onset); this is the critical-Mach / drag-divergence
+/// threshold. Distinct from the linearised [`prandtl_glauert_factor`] and the isentropic ratios. It
+/// is a suction (negative), more negative at lower freestream Mach (≈ −2.13 at M = 0.5, γ = 1.4) and
+/// → 0 as M → 1. Returns `0` for `M ≤ 0`, `M ≥ 1`, `γ ≤ 1`, or non-finite input — the
+/// subsonic-critical concept does not apply there.
+pub fn critical_pressure_coefficient(mach: f64, gamma: f64) -> f64 {
+    if !mach.is_finite() || !gamma.is_finite() || mach <= 0.0 || mach >= 1.0 || gamma <= 1.0 {
+        return 0.0;
+    }
+    let ratio = (2.0 + (gamma - 1.0) * mach * mach) / (gamma + 1.0);
+    let bracket = ratio.powf(gamma / (gamma - 1.0)) - 1.0;
+    2.0 / (gamma * mach * mach) * bracket
+}
+
 /// The **isentropic stagnation temperature ratio** `T₀/T = 1 + ((γ−1)/2)·M²` at
 /// Mach number `mach` `M` and heat-capacity ratio `gamma` `γ` — the total-to-
 /// static temperature relation that follows directly from adiabatic energy
@@ -978,6 +995,13 @@ impl AeroReport {
         prandtl_glauert_factor(self.mach_number)
     }
 
+    /// The critical pressure coefficient at this run's Mach number (air, `γ = 1.4`) — the surface
+    /// `Cp` at which the local flow first reaches sonic speed (the drag-divergence onset). See the
+    /// free [`critical_pressure_coefficient`].
+    pub fn critical_pressure_coefficient(&self) -> f64 {
+        critical_pressure_coefficient(self.mach_number, 1.4)
+    }
+
     /// Render the report as a plain-text block — the form a CLI prints
     /// or an LLM relays.
     pub fn to_text(&self) -> String {
@@ -1390,6 +1414,23 @@ mod tests {
         assert_eq!(prandtl_meyer_angle(2.0, 1.0), 0.0); // γ ≤ 1
         assert_eq!(prandtl_meyer_angle(f64::NAN, g), 0.0);
         assert_eq!(prandtl_meyer_angle(2.0, f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn critical_pressure_coefficient_matches_von_karman_table() {
+        // M=0.5, γ=1.4 → Cp* = (2/0.35)·(0.875^3.5 − 1) ≈ −2.1335 (standard table).
+        assert!((critical_pressure_coefficient(0.5, 1.4) - (-2.1335)).abs() < 1e-3);
+        // M=0.8, γ=1.4 → ≈ −0.4344.
+        assert!((critical_pressure_coefficient(0.8, 1.4) - (-0.4344)).abs() < 1e-3);
+        // A suction (negative) for valid subsonic M, more negative at lower freestream Mach.
+        assert!(critical_pressure_coefficient(0.3, 1.4) < 0.0);
+        assert!(critical_pressure_coefficient(0.5, 1.4) < critical_pressure_coefficient(0.8, 1.4));
+        // Guards: M≤0, M≥1, γ≤1, non-finite → 0.
+        assert_eq!(critical_pressure_coefficient(0.0, 1.4), 0.0);
+        assert_eq!(critical_pressure_coefficient(1.0, 1.4), 0.0);
+        assert_eq!(critical_pressure_coefficient(1.5, 1.4), 0.0);
+        assert_eq!(critical_pressure_coefficient(0.5, 1.0), 0.0);
+        assert_eq!(critical_pressure_coefficient(f64::NAN, 1.4), 0.0);
     }
 
     #[test]
