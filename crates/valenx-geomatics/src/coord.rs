@@ -208,6 +208,20 @@ pub fn utm_zone_for_longitude(lon_deg: f64) -> u32 {
     z.clamp(1, 60) as u32
 }
 
+/// Great-circle distance (m) between two WGS84 points via the haversine formula,
+/// `d = 2R·asin(√(sin²(Δφ/2) + cosφ₁·cosφ₂·sin²(Δλ/2)))`, with `R = 6_371_008.8 m` (the WGS84
+/// mean radius). Elevation is ignored. This is the shortest surface path on a sphere; for short
+/// spans (<100 km) it is within ~0.1 % of the true ellipsoidal geodesic. Identical points → `0.0`.
+pub fn haversine_distance(a: LatLon, b: LatLon) -> f64 {
+    const EARTH_RADIUS_M: f64 = 6_371_008.8;
+    let lat1 = a.latitude_deg.to_radians();
+    let lat2 = b.latitude_deg.to_radians();
+    let dlat = (b.latitude_deg - a.latitude_deg).to_radians();
+    let dlon = (b.longitude_deg - a.longitude_deg).to_radians();
+    let h = (dlat * 0.5).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon * 0.5).sin().powi(2);
+    2.0 * EARTH_RADIUS_M * h.sqrt().asin()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,5 +298,39 @@ mod tests {
             wgs84_to_utm(p),
             Err(GeomaticsError::BadParameter { .. })
         ));
+    }
+
+    #[test]
+    fn haversine_great_circle_distance() {
+        let london = LatLon {
+            latitude_deg: 51.5074,
+            longitude_deg: -0.1278,
+            elevation_m: 0.0,
+        };
+        let paris = LatLon {
+            latitude_deg: 48.8566,
+            longitude_deg: 2.3522,
+            elevation_m: 0.0,
+        };
+        // London–Paris ≈ 343.6 km.
+        assert!((haversine_distance(london, paris) - 343_600.0).abs() < 1500.0);
+        // Symmetric.
+        assert!(
+            (haversine_distance(london, paris) - haversine_distance(paris, london)).abs() < 1e-6
+        );
+        // Identical point → 0.
+        assert_eq!(haversine_distance(london, london), 0.0);
+        // Antipodal points → half the circumference πR.
+        let p0 = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        let p180 = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 180.0,
+            elevation_m: 0.0,
+        };
+        assert!((haversine_distance(p0, p180) - std::f64::consts::PI * 6_371_008.8).abs() < 1.0);
     }
 }

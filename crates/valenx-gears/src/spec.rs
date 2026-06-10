@@ -84,3 +84,30 @@ impl Default for GearSpec {
         Self::standard_spur(20)
     }
 }
+
+/// Circular pitch `p = π·m` (mm) — the arc length between corresponding points on adjacent
+/// teeth, measured along the pitch circle, for a gear of module `module_mm`. Returns `0.0` for
+/// a non-positive or non-finite module.
+pub fn circular_pitch_mm(module_mm: f64) -> f64 {
+    if !module_mm.is_finite() || module_mm <= 0.0 {
+        return 0.0;
+    }
+    module_mm * std::f64::consts::PI
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn circular_pitch_is_pi_times_module() {
+        // p = π·m: module 2 → 2π ≈ 6.283185.
+        assert!((circular_pitch_mm(2.0) - 2.0 * std::f64::consts::PI).abs() < 1e-12);
+        // Linear in module.
+        assert!((circular_pitch_mm(4.0) - 2.0 * circular_pitch_mm(2.0)).abs() < 1e-12);
+        // Guards: non-positive or non-finite → 0.
+        assert_eq!(circular_pitch_mm(0.0), 0.0);
+        assert_eq!(circular_pitch_mm(-1.5), 0.0);
+        assert_eq!(circular_pitch_mm(f64::NAN), 0.0);
+    }
+}
