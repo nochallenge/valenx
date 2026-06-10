@@ -54,6 +54,15 @@ impl Aabb {
         let dz = (self.max.z - self.min.z).max(0.0);
         dx * dy * dz
     }
+
+    /// Surface area of the box — `2·(dx·dy + dy·dz + dz·dx)` with each extent clamped to `≥ 0`.
+    /// Returns `0.0` for an inverted or empty box (any axis where `max < min`).
+    pub fn surface_area(&self) -> f64 {
+        let dx = (self.max.x - self.min.x).max(0.0);
+        let dy = (self.max.y - self.min.y).max(0.0);
+        let dz = (self.max.z - self.min.z).max(0.0);
+        2.0 * (dx * dy + dy * dz + dz * dx)
+    }
 }
 
 /// Fast overlap test — returns `true` when the two boxes share any
@@ -158,5 +167,33 @@ mod tests {
             max: Vector3::new(10.0, 10.0, 0.0),
         };
         assert_eq!(flat.volume(), 0.0);
+    }
+
+    #[test]
+    fn surface_area_of_box() {
+        // 10×20×30 → 2·(200+600+300) = 2200.
+        let a = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(10.0, 20.0, 30.0),
+        };
+        assert!((a.surface_area() - 2200.0).abs() < 1e-9);
+        // Unit cube → 6.
+        let unit = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(1.0, 1.0, 1.0),
+        };
+        assert!((unit.surface_area() - 6.0).abs() < 1e-12);
+        // Inverted → 0.
+        let inv = Aabb {
+            min: Vector3::new(10.0, 10.0, 10.0),
+            max: Vector3::new(5.0, 5.0, 5.0),
+        };
+        assert_eq!(inv.surface_area(), 0.0);
+        // Flat plate 10×10×0 → 2·100 = 200 (two faces).
+        let flat = Aabb {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(10.0, 10.0, 0.0),
+        };
+        assert!((flat.surface_area() - 200.0).abs() < 1e-9);
     }
 }

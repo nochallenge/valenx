@@ -36,6 +36,15 @@ impl Bend {
         let r_neutral = self.inside_radius + k_factor * thickness;
         r_neutral * self.angle_rad.abs()
     }
+
+    /// Bend deduction — the flat-pattern length removed at the bend, `BD = 2·OSSB − BA`, where the
+    /// outside setback `OSSB = (inside_radius + thickness)·|tan(angle/2)|` and `BA` is the
+    /// [`bend_allowance`](Self::bend_allowance). Used to size flat blanks; may be negative for
+    /// shallow bends.
+    pub fn bend_deduction(&self, thickness: f64, k_factor: f64) -> f64 {
+        let ossb = (self.inside_radius + thickness) * (self.angle_rad / 2.0).tan().abs();
+        2.0 * ossb - self.bend_allowance(thickness, k_factor)
+    }
 }
 
 /// A flange: extend one outline edge by `length` at `angle_rad`.
@@ -72,5 +81,16 @@ mod tests {
         let ba = b.bend_allowance(1.0, 0.44);
         // 90° arc of neutral-axis radius 1.44 → 1.44 * π/2.
         assert!((ba - 1.44 * std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn bend_deduction_90deg() {
+        // 90° bend, r=5, t=2, K=0.44: OSSB=(5+2)·tan(45°)=7, BA=5.88·π/2≈9.2363, BD≈4.7637.
+        let b = Bend::new([0.0, 0.0], [1.0, 0.0], std::f64::consts::FRAC_PI_2, 5.0);
+        let bd = b.bend_deduction(2.0, 0.44);
+        assert!((bd - 4.7637).abs() < 1e-3);
+        // BD = 2·OSSB − BA (composes the shipped bend_allowance).
+        let ossb = 7.0 * std::f64::consts::FRAC_PI_4.tan();
+        assert!((bd - (2.0 * ossb - b.bend_allowance(2.0, 0.44))).abs() < 1e-9);
     }
 }

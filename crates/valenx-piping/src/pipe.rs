@@ -121,6 +121,16 @@ impl PipeSection {
     pub fn wetted_perimeter_mm(&self) -> Result<f64, PipingError> {
         Ok(std::f64::consts::PI * self.inner_diameter_mm()?)
     }
+
+    /// External lateral surface area (mm²) — the outer cylindrical wrap `A = π·OD·length`, for
+    /// insulation, coating, and convective heat-loss estimates. Distinct from the cross-section
+    /// areas (a slice) and the wetted perimeter (a length).
+    ///
+    /// # Errors
+    /// Propagates any [`outer_diameter_mm`](Self::outer_diameter_mm) error.
+    pub fn external_surface_area_mm2(&self) -> Result<f64, PipingError> {
+        Ok(std::f64::consts::PI * self.outer_diameter_mm()? * self.length_mm())
+    }
 }
 
 /// Convert a [`PipeSection`] to a [`Solid`].
@@ -264,5 +274,29 @@ mod tests {
             Material::Pvc,
         );
         assert!(bad.wetted_perimeter_mm().is_err());
+    }
+
+    #[test]
+    fn external_surface_area_is_pi_od_length() {
+        // NPS 2 Sch40 OD = 60.325 mm, length 100 mm → π·60.325·100 ≈ 18952.0 mm².
+        let s = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(0.0, 0.0, 100.0),
+            "2",
+            Schedule::Sch40,
+            Material::CarbonSteel,
+        );
+        let a = s.external_surface_area_mm2().unwrap();
+        assert!((a - std::f64::consts::PI * s.outer_diameter_mm().unwrap() * s.length_mm()).abs() < 1e-9);
+        assert!((a - 18952.0).abs() < 0.5);
+        // Unknown NPS → error.
+        let bad = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(1.0, 0.0, 0.0),
+            "99",
+            Schedule::Sch40,
+            Material::Pvc,
+        );
+        assert!(bad.external_surface_area_mm2().is_err());
     }
 }
