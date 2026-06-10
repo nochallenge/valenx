@@ -10,8 +10,10 @@
 //! readout.
 
 use eframe::egui;
+use nalgebra::Vector3;
 
-use valenx_frames::Profile;
+use valenx_frames::{cross_section_polygon, Profile};
+use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
 
@@ -155,8 +157,117 @@ pub fn draw_frames_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Section").strong());
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
+
+                    // Live cross-section outline (face-on).
+                    if let Some(pts) = preview_polygon(s) {
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("Cross-section preview").strong());
+                        draw_section_preview(ui, &pts);
+                    }
                 });
         });
+}
+
+/// Build the active [`Profile`] from the form and return its closed
+/// cross-section outline as an XY polyline (z = 0), best-effort `None`
+/// for an invalid spec. Drives the live face-on section preview and
+/// re-validates the active family's dimensions like [`run_frames`].
+fn preview_polygon(s: &FramesWorkbenchState) -> Option<Vec<Vector3<f64>>> {
+    // Validate only the dimensions the active family uses — the same
+    // preconditions as `run_frames`.
+    let dims: &[f64] = match s.kind {
+        ProfileKind::IBeam | ProfileKind::TBeam => &[s.h, s.b, s.tw, s.tf],
+        ProfileKind::CChannel => &[s.h, s.b, s.tw],
+        ProfileKind::LAngle | ProfileKind::RhsRect => &[s.h, s.b, s.t],
+        ProfileKind::ChsRound => &[s.d, s.t],
+    };
+    if !dims.iter().all(|v| v.is_finite() && *v > 0.0) {
+        return None;
+    }
+
+    let profile = match s.kind {
+        ProfileKind::IBeam => Profile::IBeam {
+            h: s.h,
+            b: s.b,
+            tw: s.tw,
+            tf: s.tf,
+        },
+        ProfileKind::CChannel => Profile::CChannel {
+            h: s.h,
+            b: s.b,
+            tw: s.tw,
+        },
+        ProfileKind::LAngle => Profile::LAngle {
+            h: s.h,
+            b: s.b,
+            t: s.t,
+        },
+        ProfileKind::RhsRect => Profile::RhsRect {
+            h: s.h,
+            b: s.b,
+            t: s.t,
+        },
+        ProfileKind::ChsRound => Profile::ChsRound { d: s.d, t: s.t },
+        ProfileKind::TBeam => Profile::TBeam {
+            h: s.h,
+            b: s.b,
+            tw: s.tw,
+            tf: s.tf,
+        },
+    };
+
+    // `cross_section_polygon` returns a non-closed CCW outline; lift it
+    // into the z = 0 plane and push the first vertex to close the loop.
+    let outline = cross_section_polygon(profile);
+    if outline.len() < 2 {
+        return None;
+    }
+    let mut pts: Vec<Vector3<f64>> = outline
+        .iter()
+        .map(|p| Vector3::new(p[0], p[1], 0.0))
+        .collect();
+    let first = pts[0];
+    pts.push(first);
+    Some(pts)
+}
+
+/// Draw a closed XY polyline as a face-on (front-view, looking down −Z)
+/// wireframe in a fixed-height canvas, the camera auto-framed to the
+/// section's bounds.
+fn draw_section_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
+    let (response, painter) =
+        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let rect = response.rect;
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for p in pts {
+        for k in 0..3 {
+            let v = p[k] as f32;
+            min[k] = min[k].min(v);
+            max[k] = max[k].max(v);
+        }
+    }
+
+    let mut cam = OrbitCamera::default();
+    cam.set_view(ViewDirection::Front);
+    cam.frame_bounds(min, max);
+
+    let (w, h) = (rect.width(), rect.height());
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    for pair in pts.windows(2) {
+        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
+        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        if let (Some(a), Some(b)) = (a, b) {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.min.x + a.x, rect.min.y + a.y),
+                    egui::pos2(rect.min.x + b.x, rect.min.y + b.y),
+                ],
+                stroke,
+            );
+        }
+    }
 }
 
 /// Build the selected [`Profile`] variant from the form, compute the
@@ -290,6 +401,61 @@ mod tests {
         run_frames(&mut s);
         assert!(s.error.is_some());
         assert!(s.result.is_empty());
+    }
+
+    #[test]
+    fn preview_polygon_default_ibeam_is_closed_and_spans_h_by_b() {
+        let s = FramesWorkbenchState::default();
+        let pts = preview_polygon(&s).expect("default IPE 200 yields a section outline");
+        // 12 I-beam vertices + the duplicated first vertex closing the loop.
+        assert_eq!(pts.len(), 13);
+        assert_eq!(pts.first(), pts.last());
+        // Planar XY profile (z = 0) spanning b wide × h tall.
+        assert!(pts.iter().all(|p| p.z == 0.0));
+        let (mut xmin, mut xmax, mut ymin, mut ymax) =
+            (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        for p in &pts {
+            xmin = xmin.min(p.x);
+            xmax = xmax.max(p.x);
+            ymin = ymin.min(p.y);
+            ymax = ymax.max(p.y);
+        }
+        assert!((xmax - xmin - s.b).abs() < 1e-9); // width  ≈ flange width b
+        assert!((ymax - ymin - s.h).abs() < 1e-9); // height ≈ overall height h
+    }
+
+    #[test]
+    fn preview_polygon_vertex_count_per_family() {
+        // (family, expected closed-loop length = backend polygon verts + 1).
+        for (kind, n) in [
+            (ProfileKind::IBeam, 13),
+            (ProfileKind::CChannel, 9),
+            (ProfileKind::LAngle, 7),
+            (ProfileKind::RhsRect, 5),
+            (ProfileKind::ChsRound, 25),
+            (ProfileKind::TBeam, 9),
+        ] {
+            let s = FramesWorkbenchState {
+                kind,
+                ..Default::default()
+            };
+            let pts = preview_polygon(&s)
+                .unwrap_or_else(|| panic!("{kind:?} with default dims should preview"));
+            assert_eq!(pts.len(), n, "{kind:?} closed-loop vertex count");
+            assert_eq!(pts.first(), pts.last(), "{kind:?} loop is closed");
+            assert!(pts.iter().all(|p| p.z == 0.0), "{kind:?} is planar (z = 0)");
+        }
+    }
+
+    #[test]
+    fn preview_polygon_none_for_invalid_active_dim() {
+        // Zero height on the default I-beam → no preview (an inactive
+        // family's dim being zero would still preview).
+        let s = FramesWorkbenchState {
+            h: 0.0,
+            ..Default::default()
+        };
+        assert!(preview_polygon(&s).is_none());
     }
 }
 
