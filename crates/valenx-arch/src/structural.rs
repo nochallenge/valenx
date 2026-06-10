@@ -746,6 +746,17 @@ pub fn asd_load_combination(dead_load: f64, live_load: f64) -> f64 {
     dead_load + live_load
 }
 
+/// Dead-load-only strength combination per ASCE 7 §2.3 combination 1: `1.4·D`, the governing
+/// factored demand when live load is negligible. The dead-load factor (1.4) exceeds the LRFD
+/// dead-term factor (1.2), so this case can govern for dead-dominated members. Units pass
+/// through unchanged; the sign is preserved. Returns `0` for non-finite input.
+pub fn dead_only_factored(dead_load: f64) -> f64 {
+    if !dead_load.is_finite() {
+        return 0.0;
+    }
+    1.4 * dead_load
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1009,5 +1020,18 @@ mod tests {
         assert!((asd_load_combination(-5.0, 3.0) - (-2.0)).abs() < 1e-9);
         assert_eq!(asd_load_combination(f64::NAN, 5.0), 0.0);
         assert_eq!(asd_load_combination(10.0, f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn dead_only_factored_basic() {
+        // ASCE 7 §2.3 combination 1: 1.4·D.
+        assert!((dead_only_factored(10.0) - 14.0).abs() < 1e-9);
+        assert!(dead_only_factored(0.0).abs() < 1e-9);
+        // Non-tautological: 1.4·D exceeds the LRFD dead term (1.2·D, i.e. lrfd with zero live).
+        assert!(dead_only_factored(10.0) > lrfd_factored_load(10.0, 0.0));
+        // Sign preserved (uplift); non-finite → 0.
+        assert!((dead_only_factored(-5.0) - (-7.0)).abs() < 1e-9);
+        assert_eq!(dead_only_factored(f64::NAN), 0.0);
+        assert_eq!(dead_only_factored(f64::INFINITY), 0.0);
     }
 }
