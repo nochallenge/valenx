@@ -233,6 +233,7 @@ fn run_descriptors(p: &mut CheminfPanel) {
                     single_bonds,
                     double_bonds,
                     triple_bonds,
+                    stereocenters,
                 ) = valenx_cheminf::mol_from_smiles(p.smiles_a.trim())
                     .map(|m| {
                         (
@@ -243,9 +244,10 @@ fn run_descriptors(p: &mut CheminfPanel) {
                             valenx_cheminf::descriptors::single_bond_count(&m),
                             valenx_cheminf::descriptors::double_bond_count(&m),
                             valenx_cheminf::descriptors::triple_bond_count(&m),
+                            valenx_cheminf::perceive::stereo::stereocenter_count(&m),
                         )
                     })
-                    .unwrap_or((0, 0, 0, 0, 0, 0, 0));
+                    .unwrap_or((0, 0, 0, 0, 0, 0, 0, 0));
                 p.result = format!(
                     "canonical SMILES : {}\nformula          : {}\n\
                      average MW       : {:.3} g/mol\nmonoisotopic     : {:.4} u\n\
@@ -256,7 +258,7 @@ fn run_descriptors(p: &mut CheminfPanel) {
                      rings (SSSR)     : {}  ({} aromatic)\nheteroatoms      : {}\n\
                      aromatic atoms   : {}\naromatic bonds   : {}\nfraction Csp³    : {:.3}\n\
                      halogens         : {}\nsingle bonds     : {}\ndouble bonds     : {}\n\
-                     triple bonds     : {}\n\n\
+                     triple bonds     : {}\nstereocenters    : {}\n\n\
                      -- drug-likeness --\nLipinski violations : {} / 4\n\
                      Veber             : {}\nQED score          : {:.3}\n\
                      verdict            : {}",
@@ -281,6 +283,7 @@ fn run_descriptors(p: &mut CheminfPanel) {
                     single_bonds,
                     double_bonds,
                     triple_bonds,
+                    stereocenters,
                     r.lipinski.violations,
                     if r.veber.passes { "pass" } else { "fail" },
                     r.qed,
