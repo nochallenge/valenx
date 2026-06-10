@@ -24,6 +24,19 @@ pub fn lipophilic_efficiency(potency_pic50: f64, logp: f64) -> f64 {
     potency_pic50 - logp
 }
 
+/// Binding efficiency index (BEI) — the binding potency per unit molecular mass:
+/// `BEI = −binding_score / (molecular_weight / 1000)` (kcal·mol⁻¹ per kDa). As with
+/// [`ligand_efficiency`], the docking score is negative for favourable binding, so the negation
+/// makes BEI positive and larger for stronger binders. Distinct from `ligand_efficiency` (per
+/// heavy atom) and `lipophilic_efficiency` (potency − logP). Returns `0.0` when the molecular
+/// weight is non-positive or either input is non-finite.
+pub fn binding_efficiency_index(binding_score: f64, molecular_weight: f64) -> f64 {
+    if molecular_weight <= 0.0 || !binding_score.is_finite() || !molecular_weight.is_finite() {
+        return 0.0;
+    }
+    -binding_score / (molecular_weight / 1000.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +73,24 @@ mod tests {
         // Guards: non-finite inputs → 0.0.
         assert_eq!(lipophilic_efficiency(f64::NAN, 3.0), 0.0);
         assert_eq!(lipophilic_efficiency(8.0, f64::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn binding_efficiency_index_basic() {
+        // BEI = −score/(MW/1000). (−9, 300) → 9/0.3 = 30; (−6, 200) → 6/0.2 = 30.
+        assert!((binding_efficiency_index(-9.0, 300.0) - 30.0).abs() < 1e-9);
+        assert!((binding_efficiency_index(-6.0, 200.0) - 30.0).abs() < 1e-9);
+        // A favourable (negative) score → positive BEI.
+        assert!(binding_efficiency_index(-8.0, 250.0) > 0.0);
+        // At a fixed score, doubling MW halves BEI.
+        assert!(
+            (binding_efficiency_index(-10.0, 200.0) - 2.0 * binding_efficiency_index(-10.0, 400.0))
+                .abs()
+                < 1e-9
+        );
+        // Guards: non-positive MW or non-finite → 0.
+        assert_eq!(binding_efficiency_index(-9.0, 0.0), 0.0);
+        assert_eq!(binding_efficiency_index(f64::NAN, 300.0), 0.0);
+        assert_eq!(binding_efficiency_index(-9.0, f64::INFINITY), 0.0);
     }
 }
