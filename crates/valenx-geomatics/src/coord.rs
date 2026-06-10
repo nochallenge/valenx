@@ -260,6 +260,31 @@ pub fn cross_track_distance(p: LatLon, path_start: LatLon, path_end: LatLon) -> 
     arg.clamp(-1.0, 1.0).asin() * EARTH_RADIUS_M
 }
 
+/// Along-track distance (m) — the distance from `path_start` to the foot of the perpendicular
+/// dropped from `p` onto the great-circle path `path_start` → `path_end`: the parallel projection
+/// of `p` along the path, complementing [`cross_track_distance`] (the perpendicular offset).
+/// `d_at = acos(cos(d₁₃/R)/cos(d_xt/R))·R`, with d₁₃ = [`haversine_distance`]`(path_start, p)`,
+/// d_xt = [`cross_track_distance`]`(p, path_start, path_end)`, R = 6_371_008.8 m. Returns `0.0` for
+/// a degenerate path (`path_start == path_end`) or non-finite input.
+pub fn along_track_distance(p: LatLon, path_start: LatLon, path_end: LatLon) -> f64 {
+    const EARTH_RADIUS_M: f64 = 6_371_008.8;
+    let degenerate = path_start.latitude_deg == path_end.latitude_deg
+        && path_start.longitude_deg == path_end.longitude_deg;
+    let all_finite = p.latitude_deg.is_finite()
+        && p.longitude_deg.is_finite()
+        && path_start.latitude_deg.is_finite()
+        && path_start.longitude_deg.is_finite()
+        && path_end.latitude_deg.is_finite()
+        && path_end.longitude_deg.is_finite();
+    if degenerate || !all_finite {
+        return 0.0;
+    }
+    let d13 = haversine_distance(path_start, p);
+    let d_xt = cross_track_distance(p, path_start, path_end);
+    let arg = (d13 / EARTH_RADIUS_M).cos() / (d_xt / EARTH_RADIUS_M).cos();
+    arg.clamp(-1.0, 1.0).acos() * EARTH_RADIUS_M
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,5 +459,31 @@ mod tests {
         assert!(cross_track_distance(on, start, end).abs() < 1.0);
         // Degenerate path (start == end) → 0.0.
         assert_eq!(cross_track_distance(off, start, start), 0.0);
+    }
+
+    #[test]
+    fn along_track_distance_parallel_projection() {
+        // Equator path (0,0)→(0,10); point (1,5)'s foot of perpendicular ≈ (0,5).
+        let start = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        let end = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 10.0,
+            elevation_m: 0.0,
+        };
+        let off = LatLon {
+            latitude_deg: 1.0,
+            longitude_deg: 5.0,
+            elevation_m: 0.0,
+        };
+        // Along-track ≈ haversine to (0,5) ≈ 5° longitude at the equator ≈ 555_975 m.
+        assert!((along_track_distance(off, start, end) - 555_975.0).abs() < 500.0);
+        // A point at path_start → 0.
+        assert!(along_track_distance(start, start, end).abs() < 1.0);
+        // Degenerate path → 0.0.
+        assert_eq!(along_track_distance(off, start, start), 0.0);
     }
 }
