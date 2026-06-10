@@ -105,6 +105,9 @@ valenx-springs       = { path = "../valenx-springs" }
 # Native involute-gear design — surfaced by the Gears workbench
 # (src/gears_workbench.rs).
 valenx-gears         = { path = "../valenx-gears" }
+# Native geodesic / surveying calculations — surfaced by the Geomatics
+# workbench (src/geomatics_workbench.rs).
+valenx-geomatics     = { path = "../valenx-geomatics" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
