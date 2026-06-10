@@ -12,6 +12,7 @@ use eframe::egui;
 use nalgebra::Vector3;
 
 use valenx_piping::{Material, PipeSection, PipingError, Schedule};
+use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
 
@@ -126,8 +127,112 @@ pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Section").strong());
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
+
+                    // Live cross-section annulus (OD cyan · ID orange, face-on).
+                    if let Some(edges) = preview_rings(s) {
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new("Cross-section preview (OD \u{00B7} ID)").strong(),
+                        );
+                        draw_rings_preview(ui, &edges);
+                    }
                 });
         });
+}
+
+/// `n`-segment closed circle of the given `radius` in the XY plane (z = 0),
+/// returned as `n + 1` points with the last equal to the first (so a
+/// `windows(2)` walk draws a closed ring with no floating-point gap at θ=2π).
+fn circle(radius: f64, n: usize) -> Vec<Vector3<f64>> {
+    let n = n.max(1);
+    let mut pts: Vec<Vector3<f64>> = (0..n)
+        .map(|i| {
+            let th = (i as f64 / n as f64) * std::f64::consts::TAU;
+            Vector3::new(radius * th.cos(), radius * th.sin(), 0.0)
+        })
+        .collect();
+    let first = pts[0];
+    pts.push(first);
+    pts
+}
+
+/// Build the cross-section preview — the OD ring (cyan), plus the bore/ID
+/// ring (orange) when a wall thickness is tabulated, as coloured XY segments.
+/// `None` only when the NPS has no tabulated OD (unknown size). The rings
+/// depend only on NPS + schedule, so this queries a unit-length section (the
+/// form's length feeds only the external-surface readout, not the section).
+fn preview_rings(s: &PipingWorkbenchState) -> Option<Vec<([Vector3<f64>; 2], egui::Color32)>> {
+    let section = PipeSection::new(
+        Vector3::zeros(),
+        Vector3::new(1.0, 0.0, 0.0),
+        s.nominal_size.clone(),
+        s.schedule,
+        s.material,
+    );
+    let od = section.outer_diameter_mm().ok()?;
+    if !(od.is_finite() && od > 0.0) {
+        return None;
+    }
+    let cyan = egui::Color32::from_rgb(120, 200, 255);
+    let orange = egui::Color32::from_rgb(255, 180, 90);
+    let mut edges: Vec<([Vector3<f64>; 2], egui::Color32)> = Vec::new();
+    for w in circle(od / 2.0, 64).windows(2) {
+        edges.push(([w[0], w[1]], cyan));
+    }
+    // The bore ring is optional: several NPS/schedule pairs in the dropdown
+    // have a tabulated OD but no wall thickness, so the ID is unavailable.
+    // Draw the OD ring regardless rather than discarding a valid section.
+    let id = section
+        .inner_diameter_mm()
+        .ok()
+        .filter(|&v| v.is_finite() && v > 0.0);
+    if let Some(id) = id {
+        for w in circle(id / 2.0, 64).windows(2) {
+            edges.push(([w[0], w[1]], orange));
+        }
+    }
+    Some(edges)
+}
+
+/// Draw coloured XY ring segments as a face-on (front-view, looking down −Z)
+/// wireframe in a fixed-height canvas, the camera auto-framed to the rings.
+/// A segment is painted only when both endpoints project in front of the
+/// camera, so the render path never panics.
+fn draw_rings_preview(ui: &mut egui::Ui, edges: &[([Vector3<f64>; 2], egui::Color32)]) {
+    let (response, painter) =
+        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let rect = response.rect;
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for (edge, _) in edges {
+        for p in edge {
+            for k in 0..3 {
+                let v = p[k] as f32;
+                min[k] = min[k].min(v);
+                max[k] = max[k].max(v);
+            }
+        }
+    }
+
+    let mut cam = OrbitCamera::default();
+    cam.set_view(ViewDirection::Front);
+    cam.frame_bounds(min, max);
+
+    let (w, h) = (rect.width(), rect.height());
+    for (edge, color) in edges {
+        let a = project_point(&cam, w, h, [edge[0].x as f32, edge[0].y as f32, edge[0].z as f32]);
+        let b = project_point(&cam, w, h, [edge[1].x as f32, edge[1].y as f32, edge[1].z as f32]);
+        if let (Some(a), Some(b)) = (a, b) {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.min.x + a.x, rect.min.y + a.y),
+                    egui::pos2(rect.min.x + b.x, rect.min.y + b.y),
+                ],
+                egui::Stroke::new(1.5, *color),
+            );
+        }
+    }
 }
 
 /// Build a [`PipeSection`] from the form, run the section calculations,
@@ -246,6 +351,88 @@ mod tests {
         run_piping(&mut s2);
         assert!(s2.error.is_some());
         assert!(s2.result.is_empty());
+    }
+
+    #[test]
+    fn circle_is_closed_and_on_radius() {
+        let pts = circle(5.0, 64);
+        assert_eq!(pts.len(), 65); // 64 segments → 65 points
+        assert_eq!(pts.first(), pts.last()); // closed exactly (last == first)
+        // Every vertex lies on the circle of the given radius, in the z=0 plane.
+        assert!(pts
+            .iter()
+            .all(|p| ((p.x * p.x + p.y * p.y).sqrt() - 5.0).abs() < 1e-9));
+        assert!(pts.iter().all(|p| p.z == 0.0));
+    }
+
+    #[test]
+    fn preview_rings_default_has_od_and_id_rings() {
+        let s = PipingWorkbenchState::default();
+        let edges = preview_rings(&s).expect("NPS 2 Sch40 has a tabulated section");
+        let cyan = egui::Color32::from_rgb(120, 200, 255);
+        let orange = egui::Color32::from_rgb(255, 180, 90);
+        // Both rings present, 64 segments each, all planar (z = 0).
+        assert_eq!(edges.iter().filter(|(_, c)| *c == cyan).count(), 64);
+        assert_eq!(edges.iter().filter(|(_, c)| *c == orange).count(), 64);
+        assert!(edges.iter().all(|(e, _)| e[0].z == 0.0 && e[1].z == 0.0));
+        // Cyan ring radius = backend OD/2, orange = ID/2, and ID < OD.
+        let section = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(1.0, 0.0, 0.0),
+            "2",
+            Schedule::Sch40,
+            Material::CarbonSteel,
+        );
+        let od = section.outer_diameter_mm().unwrap();
+        let id = section.inner_diameter_mm().unwrap();
+        let ring_radius = |want: egui::Color32| {
+            edges
+                .iter()
+                .filter(|(_, c)| *c == want)
+                .flat_map(|(e, _)| [e[0], e[1]])
+                .map(|p| (p.x * p.x + p.y * p.y).sqrt())
+                .fold(0.0_f64, f64::max)
+        };
+        assert!((ring_radius(cyan) - od / 2.0).abs() < 1e-6);
+        assert!((ring_radius(orange) - id / 2.0).abs() < 1e-6);
+        assert!(id < od);
+    }
+
+    #[test]
+    fn preview_rings_none_for_unknown_nps() {
+        let s = PipingWorkbenchState {
+            nominal_size: "999".to_string(),
+            ..Default::default()
+        };
+        assert!(preview_rings(&s).is_none());
+    }
+
+    #[test]
+    fn preview_rings_draws_od_only_when_wall_untabulated() {
+        // NPS 5 has a tabulated OD but no Sch40 wall, so the backend can give
+        // an OD but not an ID. The preview must still render the OD ring
+        // (cyan) rather than discarding the whole section.
+        let s = PipingWorkbenchState {
+            nominal_size: "5".to_string(),
+            schedule: Schedule::Sch40,
+            ..Default::default()
+        };
+        // Confirm the precondition this test depends on: OD ok, ID err.
+        let section = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(1.0, 0.0, 0.0),
+            "5",
+            Schedule::Sch40,
+            Material::CarbonSteel,
+        );
+        assert!(section.outer_diameter_mm().is_ok());
+        assert!(section.inner_diameter_mm().is_err());
+
+        let edges = preview_rings(&s).expect("OD ring renders even without an ID");
+        let cyan = egui::Color32::from_rgb(120, 200, 255);
+        let orange = egui::Color32::from_rgb(255, 180, 90);
+        assert_eq!(edges.iter().filter(|(_, c)| *c == cyan).count(), 64);
+        assert_eq!(edges.iter().filter(|(_, c)| *c == orange).count(), 0);
     }
 }
 
