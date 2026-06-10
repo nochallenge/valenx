@@ -211,6 +211,17 @@ pub fn spring_index(spec: &SpringSpec) -> f64 {
     spec.mean_coil_diameter_mm / spec.wire_diameter_mm
 }
 
+/// Wahl stress-correction factor `K_w = (4C − 1)/(4C − 4) + 0.615/C` for a helical spring of
+/// index `C = D/d` (see [`spring_index`]). It corrects the shear stress for coil curvature and
+/// direct shear; K_w decreases toward 1 as C grows. Returns `0.0` for `C ≤ 1` (the 4C−4
+/// denominator vanishes at C = 1) or non-finite input.
+pub fn wahl_factor(c: f64) -> f64 {
+    if !c.is_finite() || c <= 1.0 {
+        return 0.0;
+    }
+    (4.0 * c - 1.0) / (4.0 * c - 4.0) + 0.615 / c
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -287,5 +298,20 @@ mod tests {
         let mut bad = SpringSpec::default_compression();
         bad.wire_diameter_mm = 0.0;
         assert_eq!(spring_index(&bad), 0.0);
+    }
+
+    #[test]
+    fn wahl_factor_corrects_for_curvature() {
+        // C = 10 → K_w = 39/36 + 0.0615 ≈ 1.144833.
+        assert!((wahl_factor(10.0) - 1.144_833_333).abs() < 1e-5);
+        // C = 6 → 23/20 + 0.1025 = 1.2525.
+        assert!((wahl_factor(6.0) - 1.2525).abs() < 1e-9);
+        // K_w decreases toward 1 as C grows.
+        assert!(wahl_factor(6.0) > wahl_factor(12.0));
+        assert!(wahl_factor(12.0) > 1.0);
+        // Guards: C ≤ 1 (denominator vanishes) or non-finite → 0.
+        assert_eq!(wahl_factor(1.0), 0.0);
+        assert_eq!(wahl_factor(0.5), 0.0);
+        assert_eq!(wahl_factor(f64::NAN), 0.0);
     }
 }

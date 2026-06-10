@@ -242,6 +242,26 @@ pub fn expected_heterozygosity(matrix: &GenotypeMatrix) -> Result<f64> {
     Ok(sum / sites as f64)
 }
 
+/// Mean minor-allele frequency (MAF) — the mean over sites of `min(p, 1−p)`, where `p` is the
+/// derived-allele frequency at each site. Measures the mean burden of the rarer allele; distinct
+/// from expected heterozygosity (which uses the product 2·p·(1−p)) and from π. Returns `0.0`
+/// when there are no sites.
+///
+/// # Errors
+/// Propagates [`PopgenError`] if a site's allele frequency cannot be computed.
+pub fn minor_allele_frequency(matrix: &GenotypeMatrix) -> Result<f64> {
+    let sites = matrix.n_sites();
+    if sites == 0 {
+        return Ok(0.0);
+    }
+    let mut sum = 0.0;
+    for col in 0..sites {
+        let p = matrix.frequency(col)?;
+        sum += p.min(1.0 - p);
+    }
+    Ok(sum / sites as f64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,5 +384,20 @@ mod tests {
         // 4 samples, 2 sites: site0 p=0.5 → 0.5, site1 p=0.75 → 0.375; mean = 0.4375.
         let m2 = matrix(vec![vec![1, 1], vec![1, 1], vec![0, 1], vec![0, 0]]);
         assert!((expected_heterozygosity(&m2).unwrap() - 0.4375).abs() < 1e-12);
+    }
+
+    #[test]
+    fn minor_allele_frequency_is_mean_of_min() {
+        // 2 samples, 1 site, p = 0.5 → min(0.5, 0.5) = 0.5.
+        let m = matrix(vec![vec![1], vec![0]]);
+        assert!((minor_allele_frequency(&m).unwrap() - 0.5).abs() < 1e-12);
+        // 4 samples, 2 sites both p = 0.75 → min(0.75, 0.25) = 0.25.
+        let m2 = matrix(vec![vec![1, 1], vec![1, 1], vec![1, 1], vec![0, 0]]);
+        assert!((minor_allele_frequency(&m2).unwrap() - 0.25).abs() < 1e-12);
+        // Distinct from He: for p = 0.75, He = 0.375 but MAF = 0.25.
+        assert!(
+            (minor_allele_frequency(&m2).unwrap() - expected_heterozygosity(&m2).unwrap()).abs()
+                > 0.1
+        );
     }
 }

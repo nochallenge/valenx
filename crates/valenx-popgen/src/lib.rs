@@ -102,7 +102,8 @@ pub use infer::{abc_reject, AbcConfig, AbcPosterior, GenotypeMatrix, Prior};
 pub use io::{read_ms, write_ms, write_newick_genealogy, write_vcf};
 pub use stats::{
     branch_diversity, branch_divergence, equal_windows, expected_heterozygosity, fst_hudson,
-    fst_weir_cockerham, genotype_concordance, nucleotide_diversity, site_frequency_spectrum,
+    fst_weir_cockerham, genotype_concordance, minor_allele_frequency, nucleotide_diversity,
+    site_frequency_spectrum,
     tajimas_d, wattersons_theta, windowed_branch_diversity,
     windowed_segregating_sites, windowed_site_divergence,
     windowed_site_diversity, WindowedStats,

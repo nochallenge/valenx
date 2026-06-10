@@ -26,6 +26,6 @@ pub mod coord;
 pub mod dem;
 pub mod error;
 
-pub use coord::{LatLon, Utm, Hemisphere};
+pub use coord::{haversine_distance, Hemisphere, LatLon, Utm};
 pub use dem::Dem;
 pub use error::{ErrorCategory, GeomaticsError};
