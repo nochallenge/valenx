@@ -382,6 +382,19 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Springs Workbench — native
+                    // helical-spring design (valenx-springs). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_springs_workbench, "Springs")
+                        .on_hover_text(
+                            "Show / hide the right-side Springs Workbench — native helical-spring \
+                             design: spring index, axial stiffness, Wahl factor, the diameters, \
+                             pitch, and developed wire length, computed in-process by valenx-springs.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -968,6 +981,10 @@ impl eframe::App for ValenxApp {
         // Dynamics. Mounted before the CentralPanel so egui docks it to
         // the right alongside the other workbenches.
         crate::reactdyn_workbench::draw_reactdyn_workbench(self, ctx);
+
+        // Springs Workbench (right) — native helical-spring design on
+        // valenx-springs. A no-op unless toggled on via View → Springs.
+        crate::springs_workbench::draw_springs_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
