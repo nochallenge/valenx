@@ -57,6 +57,7 @@ pub mod springs_workbench;
 pub mod gears_workbench;
 pub mod geomatics_workbench;
 pub mod piping_workbench;
+pub mod collision_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -436,6 +437,15 @@ pub struct ValenxApp {
     /// Form + result state for the Piping Workbench — native pipe-section
     /// sizing wrapping `valenx-piping`. See [`crate::piping_workbench`].
     pub(crate) piping: crate::piping_workbench::PipingWorkbenchState,
+
+    /// Whether the right-side Collision Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_collision_workbench: bool,
+    /// Form + result state for the Collision Workbench — native AABB
+    /// geometry + overlap tests wrapping `valenx-collision`. See
+    /// [`crate::collision_workbench`].
+    pub(crate) collision: crate::collision_workbench::CollisionWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
@@ -851,6 +861,11 @@ impl ValenxApp {
     /// Make the right-side Piping Workbench SidePanel visible.
     pub fn enable_piping_workbench(&mut self) {
         self.show_piping_workbench = true;
+    }
+
+    /// Make the right-side Collision Workbench SidePanel visible.
+    pub fn enable_collision_workbench(&mut self) {
+        self.show_collision_workbench = true;
     }
 
     /// Make the right-side Astro / Launch workbench SidePanel visible.

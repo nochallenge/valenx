@@ -6468,6 +6468,7 @@ dependencies = [
  "valenx-cam",
  "valenx-cfd-native",
  "valenx-cheminf",
+ "valenx-collision",
  "valenx-core",
  "valenx-crash-reporter",
  "valenx-design-tokens",

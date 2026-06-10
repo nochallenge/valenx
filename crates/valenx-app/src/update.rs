@@ -436,6 +436,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Collision Workbench — native AABB
+                    // geometry + overlap tests (valenx-collision). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_collision_workbench, "Collision")
+                        .on_hover_text(
+                            "Show / hide the right-side Collision Workbench — native AABB \
+                             geometry: per-box volume / surface / diagonal / inradius, plus the \
+                             pairwise overlap test and L2 separation, computed in-process by \
+                             valenx-collision.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -1038,6 +1052,10 @@ impl eframe::App for ValenxApp {
         // Piping Workbench (right) — native pipe-section sizing on
         // valenx-piping. A no-op unless toggled on via View → Piping.
         crate::piping_workbench::draw_piping_workbench(self, ctx);
+
+        // Collision Workbench (right) — native AABB geometry + overlap tests
+        // on valenx-collision. A no-op unless toggled on via View → Collision.
+        crate::collision_workbench::draw_collision_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
