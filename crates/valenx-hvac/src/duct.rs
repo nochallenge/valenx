@@ -58,6 +58,22 @@ impl CrossSection {
             }
         }
     }
+
+    /// Aspect ratio of the cross-section (dimensionless) — `max(w, h) / min(w, h)` for a rectangle
+    /// (≥ 1, orientation-independent), `1.0` for a round section. Distinct from the diameters
+    /// (a ratio, not a length). A non-positive or non-finite rectangle returns `0.0`.
+    pub fn aspect_ratio(self) -> f64 {
+        match self {
+            CrossSection::Round { .. } => 1.0,
+            CrossSection::Rect { w, h } => {
+                if !w.is_finite() || !h.is_finite() || w <= 0.0 || h <= 0.0 {
+                    return 0.0;
+                }
+                let (lo, hi) = if w <= h { (w, h) } else { (h, w) };
+                hi / lo
+            }
+        }
+    }
 }
 
 /// A length of ducting following a polyline path with optional
@@ -178,5 +194,16 @@ mod tests {
             CrossSection::Rect { w: -1.0, h: 200.0 }.equivalent_round_diameter_mm(),
             0.0
         );
+    }
+
+    #[test]
+    fn aspect_ratio_is_orientation_independent() {
+        // 400×200 and 200×400 both → 2.0 (max/min); square → 1; round → 1.
+        assert!((CrossSection::Rect { w: 400.0, h: 200.0 }.aspect_ratio() - 2.0).abs() < 1e-9);
+        assert!((CrossSection::Rect { w: 200.0, h: 400.0 }.aspect_ratio() - 2.0).abs() < 1e-9);
+        assert!((CrossSection::Rect { w: 300.0, h: 300.0 }.aspect_ratio() - 1.0).abs() < 1e-9);
+        assert_eq!(CrossSection::Round { d: 250.0 }.aspect_ratio(), 1.0);
+        // Guard: non-positive rectangle → 0.
+        assert_eq!(CrossSection::Rect { w: -1.0, h: 200.0 }.aspect_ratio(), 0.0);
     }
 }

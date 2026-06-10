@@ -62,6 +62,15 @@ impl BoltSpec {
     pub fn head_height_mm(&self) -> f64 {
         0.7 * self.thread.nominal_diameter
     }
+
+    /// ISO 898-1 tensile stress area (mm²) — the effective thread cross-section at the stress
+    /// diameter, `Aₛ = (π/4)·(d − 0.9382·P)²`, for nominal diameter `d` and pitch `P` (mm). Feeds
+    /// the bolt tensile capacity. M6×1.0 → ≈ 20.1 mm².
+    pub fn tensile_stress_area_mm2(&self) -> f64 {
+        let d = self.thread.nominal_diameter;
+        let p = self.thread.pitch;
+        std::f64::consts::PI / 4.0 * (d - 0.9382 * p).powi(2)
+    }
 }
 
 /// Standard ISO 4017 hex bolt table (M3 through M30 with a common
@@ -297,5 +306,18 @@ mod tests {
             to_solid(&m6),
             Err(FastenerError::BadParameter { .. })
         ));
+    }
+
+    #[test]
+    fn tensile_stress_area_m6() {
+        // M6×1.0: (π/4)·(6 − 0.9382)² = (π/4)·5.0618² ≈ 20.12 mm² (ISO 898-1).
+        let m6 = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M6")
+            .unwrap();
+        let a_s = m6.tensile_stress_area_mm2();
+        assert!((a_s - 20.12).abs() < 0.05);
+        // Strictly less than the major-diameter circular area (root < nominal).
+        assert!(a_s < std::f64::consts::PI / 4.0 * 6.0_f64.powi(2));
     }
 }

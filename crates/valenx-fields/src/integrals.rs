@@ -113,6 +113,16 @@ pub fn field_min_max(field: &Field) -> Option<(f64, f64)> {
     Some((min, max))
 }
 
+/// Peak-to-peak span `max − min` — the scalar width of the data range. Distinct from
+/// [`field_min_max`] (which returns the (min, max) pair) and [`field_std_dev`] (spread about the
+/// mean). Returns `0.0` for an empty field.
+pub fn field_peak_to_peak(field: &Field) -> f64 {
+    match field_min_max(field) {
+        Some((min, max)) => max - min,
+        None => 0.0,
+    }
+}
+
 /// Weighted mean over a scalar field. `weights` must be the same
 /// length as `field.data`; mismatches return `None`. Use case:
 /// volume-weighted average pressure across non-uniform cells.
@@ -267,6 +277,16 @@ mod tests {
             field_min_max(&scalar("a", vec![3.0, 1.0, 2.0])),
             Some((1.0, 3.0))
         );
+    }
+
+    #[test]
+    fn field_peak_to_peak_is_max_minus_min() {
+        assert_eq!(field_peak_to_peak(&scalar("r", vec![1.0, 5.0, 3.0])), 4.0);
+        assert_eq!(field_peak_to_peak(&scalar("neg", vec![-3.0, 2.0])), 5.0);
+        // Constant → 0; single → 0; empty → 0.
+        assert_eq!(field_peak_to_peak(&scalar("c", vec![5.0, 5.0, 5.0])), 0.0);
+        assert_eq!(field_peak_to_peak(&scalar("s", vec![42.0])), 0.0);
+        assert_eq!(field_peak_to_peak(&scalar("e", vec![])), 0.0);
     }
 
     #[test]
