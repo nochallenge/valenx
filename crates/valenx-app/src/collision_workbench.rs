@@ -13,6 +13,7 @@ use eframe::egui;
 use nalgebra::Vector3;
 
 use valenx_collision::{distance, intersect, Aabb};
+use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
 
@@ -94,6 +95,15 @@ pub fn draw_collision_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Geometry").strong());
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
+
+                    // Live AABB wireframes (box A cyan · box B orange, iso).
+                    if let Some(edges) = preview_boxes(s) {
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new("Box preview (A cyan \u{00B7} B orange)").strong(),
+                        );
+                        draw_boxes_preview(ui, &edges);
+                    }
                 });
         });
 }
@@ -113,6 +123,100 @@ fn corner_rows(ui: &mut egui::Ui, label: &str, min: &mut [f64; 3], max: &mut [f6
             ui.add(egui::DragValue::new(v).speed(0.5));
         }
     });
+}
+
+/// The 12 edges of an axis-aligned box, each as a pair of corner points.
+/// Pure geometry over the eight corners — no validation, never panics
+/// (a degenerate `min == max` box yields 12 zero-length edges).
+fn box_edges(min: [f64; 3], max: [f64; 3]) -> Vec<[Vector3<f64>; 2]> {
+    // Corner `i` takes `max` on axis `k` when bit `k` of `i` is set.
+    let corner = |i: usize| {
+        Vector3::new(
+            if (i & 1) == 0 { min[0] } else { max[0] },
+            if (i & 2) == 0 { min[1] } else { max[1] },
+            if (i & 4) == 0 { min[2] } else { max[2] },
+        )
+    };
+    // Each edge joins two corners differing in exactly one axis bit:
+    // four x-aligned, then four y-aligned, then four z-aligned.
+    const EDGES: [(usize, usize); 12] = [
+        (0, 1),
+        (2, 3),
+        (4, 5),
+        (6, 7),
+        (0, 2),
+        (1, 3),
+        (4, 6),
+        (5, 7),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ];
+    EDGES.iter().map(|&(a, b)| [corner(a), corner(b)]).collect()
+}
+
+/// Build the coloured edge list for both AABBs (box A cyan, box B orange),
+/// best-effort `None` for non-finite coordinates (the same precondition as
+/// [`run_collision`]). Drives the live iso wireframe preview.
+fn preview_boxes(s: &CollisionWorkbenchState) -> Option<Vec<([Vector3<f64>; 2], egui::Color32)>> {
+    let all_finite = s
+        .a_min
+        .iter()
+        .chain(s.a_max.iter())
+        .chain(s.b_min.iter())
+        .chain(s.b_max.iter())
+        .all(|v| v.is_finite());
+    if !all_finite {
+        return None;
+    }
+    let cyan = egui::Color32::from_rgb(120, 200, 255);
+    let orange = egui::Color32::from_rgb(255, 180, 90);
+    let mut edges: Vec<([Vector3<f64>; 2], egui::Color32)> = Vec::with_capacity(24);
+    edges.extend(box_edges(s.a_min, s.a_max).into_iter().map(|e| (e, cyan)));
+    edges.extend(box_edges(s.b_min, s.b_max).into_iter().map(|e| (e, orange)));
+    Some(edges)
+}
+
+/// Draw a set of coloured 3-D edges as an iso-view wireframe in a
+/// fixed-height canvas, the camera auto-framed to all endpoints. A segment
+/// is painted only when both endpoints project in front of the camera, so
+/// the render path never panics.
+fn draw_boxes_preview(ui: &mut egui::Ui, edges: &[([Vector3<f64>; 2], egui::Color32)]) {
+    let (response, painter) =
+        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let rect = response.rect;
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for (edge, _) in edges {
+        for p in edge {
+            for k in 0..3 {
+                let v = p[k] as f32;
+                min[k] = min[k].min(v);
+                max[k] = max[k].max(v);
+            }
+        }
+    }
+
+    let mut cam = OrbitCamera::default();
+    cam.set_view(ViewDirection::Iso);
+    cam.frame_bounds(min, max);
+
+    let (w, h) = (rect.width(), rect.height());
+    for (edge, color) in edges {
+        let a = project_point(&cam, w, h, [edge[0].x as f32, edge[0].y as f32, edge[0].z as f32]);
+        let b = project_point(&cam, w, h, [edge[1].x as f32, edge[1].y as f32, edge[1].z as f32]);
+        if let (Some(a), Some(b)) = (a, b) {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.min.x + a.x, rect.min.y + a.y),
+                    egui::pos2(rect.min.x + b.x, rect.min.y + b.y),
+                ],
+                egui::Stroke::new(1.5, *color),
+            );
+        }
+    }
 }
 
 /// Build the two [`Aabb`]s from the form, compute their geometry + the
@@ -229,6 +333,55 @@ mod tests {
         run_collision(&mut s);
         assert!(s.error.is_some());
         assert!(s.result.is_empty());
+    }
+
+    #[test]
+    fn box_edges_unit_cube_has_twelve_unit_edges() {
+        let edges = box_edges([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        assert_eq!(edges.len(), 12);
+        // Every edge of the unit cube spans exactly one unit.
+        for [p, q] in &edges {
+            assert!(((q - p).norm() - 1.0).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn box_edges_degenerate_is_twelve_zero_length_edges() {
+        // min == max → all eight corners coincide; no panic, 12 zero edges.
+        let edges = box_edges([2.0, 2.0, 2.0], [2.0, 2.0, 2.0]);
+        assert_eq!(edges.len(), 12);
+        assert!(edges.iter().all(|[p, q]| (q - p).norm() == 0.0));
+    }
+
+    #[test]
+    fn preview_boxes_default_has_two_coloured_boxes() {
+        let s = CollisionWorkbenchState::default();
+        let edges = preview_boxes(&s).expect("finite default boxes preview");
+        // 12 edges per box × 2 boxes.
+        assert_eq!(edges.len(), 24);
+        let cyan = egui::Color32::from_rgb(120, 200, 255);
+        let orange = egui::Color32::from_rgb(255, 180, 90);
+        assert_eq!(edges.iter().filter(|(_, c)| *c == cyan).count(), 12);
+        assert_eq!(edges.iter().filter(|(_, c)| *c == orange).count(), 12);
+        // The combined wireframe spans both boxes: A.x ∈ [0,10], B.x ∈ [20,30].
+        let (mut xmin, mut xmax) = (f64::INFINITY, f64::NEG_INFINITY);
+        for ([p, q], _) in &edges {
+            for v in [p.x, q.x] {
+                xmin = xmin.min(v);
+                xmax = xmax.max(v);
+            }
+        }
+        assert!(xmin.abs() < 1e-9);
+        assert!((xmax - 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn preview_boxes_none_for_non_finite() {
+        let s = CollisionWorkbenchState {
+            a_max: [f64::NAN, 20.0, 30.0],
+            ..Default::default()
+        };
+        assert!(preview_boxes(&s).is_none());
     }
 }
 
