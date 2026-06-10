@@ -100,6 +100,22 @@ impl SpringSpec {
         }
         self.free_length_mm / self.n_active_coils
     }
+
+    /// Developed wire length of the active coils (mm) — the arc length of the
+    /// helical centerline, `ℓ = n·√((π·D)² + p²)`, where `n` is the active-coil
+    /// count, `D` the mean coil diameter, and `p` the per-coil [`pitch`](Self::pitch_mm)
+    /// (one turn unrolls to a right triangle with base `π·D` and height `p`). A
+    /// geometric length, distinct from the diameters and the mechanical scalars;
+    /// the primary input to wire mass / cost. Returns `0.0` for a non-positive or
+    /// non-finite active-coil count.
+    pub fn helix_length_mm(&self) -> f64 {
+        if !self.n_active_coils.is_finite() || self.n_active_coils <= 0.0 {
+            return 0.0;
+        }
+        let circumference = std::f64::consts::PI * self.mean_coil_diameter_mm;
+        let p = self.pitch_mm();
+        self.n_active_coils * (circumference * circumference + p * p).sqrt()
+    }
 }
 
 impl Default for SpringSpec {
