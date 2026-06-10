@@ -66,6 +66,16 @@ pub fn field_l2_norm(field: &Field) -> f64 {
     field.data.iter().map(|v| v * v).sum::<f64>().sqrt()
 }
 
+/// Root-mean-square: `√(Σxᵢ²/n)`. Distinct from [`field_std_dev`] (deviation about the mean) and
+/// from [`field_l2_norm`] (no `/n`); `rms = l2_norm/√n`. Returns `0.0` for an empty field.
+pub fn field_rms(field: &Field) -> f64 {
+    if field.data.is_empty() {
+        return 0.0;
+    }
+    let sum_sq: f64 = field.data.iter().map(|v| v * v).sum();
+    (sum_sq / field.data.len() as f64).sqrt()
+}
+
 /// L-infinity norm: max absolute value. Pairs with
 /// [`crate::stress::field_max_per_node`] when the user wants the
 /// magnitude (not the signed value) of the worst cell.
@@ -204,6 +214,18 @@ mod tests {
         // [3, 4] -> sqrt(9+16) = 5
         assert!((field_l2_norm(&scalar("v", vec![3.0, 4.0])) - 5.0).abs() < 1e-12);
         assert_eq!(field_l2_norm(&scalar("e", vec![])), 0.0);
+    }
+
+    #[test]
+    fn field_rms_is_l2_norm_over_sqrt_n() {
+        // [3, 4] → √((9+16)/2) = √12.5 ≈ 3.53553.
+        let f = scalar("v", vec![3.0, 4.0]);
+        assert!((field_rms(&f) - 12.5_f64.sqrt()).abs() < 1e-12);
+        // rms = l2_norm / √n (non-tautological cross-check).
+        assert!((field_rms(&f) - field_l2_norm(&f) / 2.0_f64.sqrt()).abs() < 1e-12);
+        // Constant field → the constant; empty → 0.
+        assert_eq!(field_rms(&scalar("c", vec![5.0, 5.0, 5.0])), 5.0);
+        assert_eq!(field_rms(&scalar("e", vec![])), 0.0);
     }
 
     #[test]

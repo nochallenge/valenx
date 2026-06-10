@@ -294,6 +294,33 @@ pub fn final_bearing(a: LatLon, b: LatLon) -> f64 {
     (initial_bearing(b, a) + 180.0) % 360.0
 }
 
+/// Rhumb-line (loxodrome) distance (m) between two WGS84 points — the length of the path of
+/// constant bearing, via the Mercator loxodrome `d = √(Δφ² + q²·Δλ²)·R`, R = 6_371_008.8 m.
+/// Distinct from [`haversine_distance`] (the great circle): the rhumb line is never shorter, and
+/// is equal only along a meridian or the equator. Returns `0.0` for identical or non-finite points.
+pub fn rhumb_distance(a: LatLon, b: LatLon) -> f64 {
+    use std::f64::consts::PI;
+    const EARTH_RADIUS_M: f64 = 6_371_008.8;
+    let finite = a.latitude_deg.is_finite()
+        && a.longitude_deg.is_finite()
+        && b.latitude_deg.is_finite()
+        && b.longitude_deg.is_finite();
+    if !finite || (a.latitude_deg == b.latitude_deg && a.longitude_deg == b.longitude_deg) {
+        return 0.0;
+    }
+    let lat1 = a.latitude_deg.to_radians();
+    let lat2 = b.latitude_deg.to_radians();
+    let dlat = lat2 - lat1;
+    let mut dlon = (b.longitude_deg - a.longitude_deg).to_radians();
+    if dlon.abs() > PI {
+        dlon -= dlon.signum() * 2.0 * PI;
+    }
+    // Mercator stretched-latitude difference; for an E–W course (Δψ → 0) fall back to cos φ₁.
+    let dpsi = ((lat2 / 2.0 + PI / 4.0).tan() / (lat1 / 2.0 + PI / 4.0).tan()).ln();
+    let q = if dpsi.abs() > 1e-12 { dlat / dpsi } else { lat1.cos() };
+    (dlat * dlat + q * q * dlon * dlon).sqrt() * EARTH_RADIUS_M
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -526,5 +553,43 @@ mod tests {
         let f = final_bearing(origin, diag);
         assert!((0.0..360.0).contains(&f));
         assert!((f - initial_bearing(origin, diag)).abs() > 0.1);
+    }
+
+    #[test]
+    fn rhumb_distance_loxodrome() {
+        let origin = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        // Equator (0,0)→(0,10): rhumb = great-circle = 10° of longitude ≈ 1_111_949 m.
+        let east = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 10.0,
+            elevation_m: 0.0,
+        };
+        assert!((rhumb_distance(origin, east) - 1_111_949.0).abs() < 100.0);
+        // Meridian (0,0)→(10,0): rhumb = great-circle ≈ 1_111_949 m.
+        let north = LatLon {
+            latitude_deg: 10.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        assert!((rhumb_distance(origin, north) - 1_111_949.0).abs() < 100.0);
+        // Symmetric; identical → 0.
+        assert!((rhumb_distance(origin, north) - rhumb_distance(north, origin)).abs() < 1e-6);
+        assert_eq!(rhumb_distance(origin, origin), 0.0);
+        // The rhumb line is never shorter than the great circle (a mid-latitude diagonal).
+        let a = LatLon {
+            latitude_deg: 45.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        let b = LatLon {
+            latitude_deg: 50.0,
+            longitude_deg: 30.0,
+            elevation_m: 0.0,
+        };
+        assert!(rhumb_distance(a, b) >= haversine_distance(a, b) - 1.0);
     }
 }
