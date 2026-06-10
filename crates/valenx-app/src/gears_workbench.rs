@@ -10,7 +10,10 @@
 
 use eframe::egui;
 
-use valenx_gears::{circular_pitch_mm, gear_ratio, GearKind, GearSpec};
+use nalgebra::Vector3;
+
+use valenx_gears::{circular_pitch_mm, full_profile, gear_ratio, GearKind, GearSpec};
+use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
 
@@ -143,8 +146,92 @@ pub fn draw_gears_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Design").strong());
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
+
+                    // Live 2-D tooth-profile outline (face-on).
+                    if let Some(pts) = preview_profile(s) {
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("Tooth profile preview").strong());
+                        draw_profile_preview(ui, &pts);
+                    }
                 });
         });
+}
+
+/// Build the [`GearSpec`] from the form and return the full gear outline as
+/// a closed XY polyline (z = 0), best-effort `None` for an invalid spec.
+/// Drives the live face-on tooth-profile preview.
+fn preview_profile(s: &GearsWorkbenchState) -> Option<Vec<Vector3<f64>>> {
+    if !(s.module_mm.is_finite() && s.module_mm > 0.0)
+        || s.teeth == 0
+        || !(s.pressure_angle_deg.is_finite()
+            && s.pressure_angle_deg > 0.0
+            && s.pressure_angle_deg < 90.0)
+        || !(s.helix_angle_deg.is_finite()
+            && s.helix_angle_deg >= 0.0
+            && s.helix_angle_deg < 90.0)
+        || !(s.face_width_mm.is_finite() && s.face_width_mm > 0.0)
+    {
+        return None;
+    }
+    let spec = GearSpec {
+        kind: s.kind,
+        module_mm: s.module_mm,
+        teeth: s.teeth,
+        pressure_angle_deg: s.pressure_angle_deg,
+        helix_angle_deg: s.helix_angle_deg,
+        face_width_mm: s.face_width_mm,
+    };
+    let outline = full_profile(&spec).ok()?;
+    if outline.len() < 2 {
+        return None;
+    }
+    // Lift the 2-D (x, y) outline into z = 0 and close the loop.
+    let mut pts: Vec<Vector3<f64>> = outline
+        .iter()
+        .map(|p| Vector3::new(p[0], p[1], 0.0))
+        .collect();
+    let first = pts[0];
+    pts.push(first);
+    Some(pts)
+}
+
+/// Draw a closed XY polyline as a face-on (front-view, looking down −Z)
+/// wireframe in a fixed-height canvas, the camera auto-framed to the
+/// geometry's bounds.
+fn draw_profile_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
+    let (response, painter) =
+        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let rect = response.rect;
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for p in pts {
+        for k in 0..3 {
+            let v = p[k] as f32;
+            min[k] = min[k].min(v);
+            max[k] = max[k].max(v);
+        }
+    }
+
+    let mut cam = OrbitCamera::default();
+    cam.set_view(ViewDirection::Front);
+    cam.frame_bounds(min, max);
+
+    let (w, h) = (rect.width(), rect.height());
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    for pair in pts.windows(2) {
+        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
+        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        if let (Some(a), Some(b)) = (a, b) {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.min.x + a.x, rect.min.y + a.y),
+                    egui::pos2(rect.min.x + b.x, rect.min.y + b.y),
+                ],
+                stroke,
+            );
+        }
+    }
 }
 
 /// Build a [`GearSpec`] from the form, validate it, and format the
@@ -227,6 +314,31 @@ fn run_gears(s: &mut GearsWorkbenchState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_profile_for_default_is_a_closed_outline() {
+        let s = GearsWorkbenchState::default();
+        let pts = preview_profile(&s).expect("default spec yields a profile");
+        assert!(pts.len() >= 4);
+        // Closed loop: last point == first.
+        assert_eq!(pts.first(), pts.last());
+        // Non-zero radial extent + a planar XY profile (z = 0).
+        let rmax = pts
+            .iter()
+            .map(|p| (p.x * p.x + p.y * p.y).sqrt())
+            .fold(0.0_f64, f64::max);
+        assert!(rmax > 0.0);
+        assert!(pts.iter().all(|p| p.z == 0.0));
+    }
+
+    #[test]
+    fn preview_profile_none_for_invalid_spec() {
+        let s = GearsWorkbenchState {
+            teeth: 0,
+            ..Default::default()
+        };
+        assert!(preview_profile(&s).is_none());
+    }
 
     #[test]
     fn default_state_is_idle() {
