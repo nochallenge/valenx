@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use valenx_cad::primitives::cylinder;
 use valenx_cad::Solid;
 
-use crate::dims::{nominal_to_od_in, Schedule};
+use crate::dims::{nominal_to_od_in, wall_thickness_in, Schedule};
 use crate::error::PipingError;
 
 /// Material the pipe is fabricated from. Affects roughness +
@@ -68,6 +68,36 @@ impl PipeSection {
     /// Section length in millimetres.
     pub fn length_mm(&self) -> f64 {
         (self.end - self.start).norm()
+    }
+
+    /// Inner (bore) diameter in millimetres: `ID = OD − 2·wall_thickness`, from the NPS outer
+    /// diameter and the schedule wall thickness.
+    ///
+    /// # Errors
+    /// [`PipingError::UnknownNps`] if the NPS is unknown, or [`PipingError::BadParameter`] if the
+    /// (NPS, schedule) pair has no tabulated wall thickness.
+    pub fn inner_diameter_mm(&self) -> Result<f64, PipingError> {
+        let od = self.outer_diameter_mm()?;
+        let wall_in = wall_thickness_in(&self.nominal_size, self.schedule).ok_or_else(|| {
+            PipingError::BadParameter {
+                name: "schedule",
+                reason: format!(
+                    "no wall thickness for NPS {} schedule {:?}",
+                    self.nominal_size, self.schedule
+                ),
+            }
+        })?;
+        Ok(od - 2.0 * wall_in * 25.4)
+    }
+
+    /// Cross-sectional flow area in mm², `A = π·(ID/2)²`, from the bore
+    /// [`inner_diameter_mm`](Self::inner_diameter_mm).
+    ///
+    /// # Errors
+    /// Propagates any [`inner_diameter_mm`](Self::inner_diameter_mm) error.
+    pub fn flow_area_mm2(&self) -> Result<f64, PipingError> {
+        let id = self.inner_diameter_mm()?;
+        Ok(std::f64::consts::PI * id * id / 4.0)
     }
 }
 
@@ -131,5 +161,31 @@ mod tests {
         );
         let err = to_solid(&s).unwrap_err();
         assert!(matches!(err, PipingError::BadParameter { .. }));
+    }
+
+    #[test]
+    fn inner_diameter_and_flow_area() {
+        // NPS 2 Sch40: OD = 2.375", wall = 0.154" → ID = (2.375 − 0.308)·25.4 = 52.5018 mm.
+        let s = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(0.0, 0.0, 100.0),
+            "2",
+            Schedule::Sch40,
+            Material::CarbonSteel,
+        );
+        let id = s.inner_diameter_mm().unwrap();
+        assert!((id - (2.375 - 2.0 * 0.154) * 25.4).abs() < 1e-6);
+        // Flow area A = π·(ID/2)² ≈ 2165 mm².
+        assert!((s.flow_area_mm2().unwrap() - 2164.97).abs() < 1.0);
+        // Unknown NPS → error, propagated through both.
+        let bad = PipeSection::new(
+            Vector3::zeros(),
+            Vector3::new(1.0, 0.0, 0.0),
+            "99",
+            Schedule::Sch40,
+            Material::Pvc,
+        );
+        assert!(bad.inner_diameter_mm().is_err());
+        assert!(bad.flow_area_mm2().is_err());
     }
 }

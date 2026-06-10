@@ -222,6 +222,19 @@ pub fn haversine_distance(a: LatLon, b: LatLon) -> f64 {
     2.0 * EARTH_RADIUS_M * h.sqrt().asin()
 }
 
+/// Initial great-circle bearing (forward azimuth) from `a` to `b`, in degrees clockwise from
+/// north and normalised to `[0, 360)`:
+/// `θ = atan2(sinΔλ·cosφ₂, cosφ₁·sinφ₂ − sinφ₁·cosφ₂·cosΔλ)`. Distinct from
+/// [`haversine_distance`] (a distance, not a heading). Identical points → `0.0`.
+pub fn initial_bearing(a: LatLon, b: LatLon) -> f64 {
+    let lat1 = a.latitude_deg.to_radians();
+    let lat2 = b.latitude_deg.to_radians();
+    let dlon = (b.longitude_deg - a.longitude_deg).to_radians();
+    let y = dlon.sin() * lat2.cos();
+    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
+    (y.atan2(x).to_degrees() + 360.0) % 360.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,5 +345,38 @@ mod tests {
             elevation_m: 0.0,
         };
         assert!((haversine_distance(p0, p180) - std::f64::consts::PI * 6_371_008.8).abs() < 1.0);
+    }
+
+    #[test]
+    fn initial_bearing_forward_azimuth() {
+        let origin = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        // Due east along the equator → 90°; due west → 270°.
+        let east = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 90.0,
+            elevation_m: 0.0,
+        };
+        let west = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: -90.0,
+            elevation_m: 0.0,
+        };
+        assert!((initial_bearing(origin, east) - 90.0).abs() < 1e-6);
+        assert!((initial_bearing(origin, west) - 270.0).abs() < 1e-6);
+        // Along a meridian the forward/back bearings are exactly 0° (north) and 180° (south).
+        let up = LatLon {
+            latitude_deg: 10.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        assert!(initial_bearing(origin, up).abs() < 1e-9);
+        assert!((initial_bearing(up, origin) - 180.0).abs() < 1e-9);
+        // Identical points → 0.0 (no NaN); result always in [0, 360).
+        assert_eq!(initial_bearing(origin, origin), 0.0);
+        assert!((0.0..360.0).contains(&initial_bearing(origin, east)));
     }
 }

@@ -95,6 +95,16 @@ pub fn circular_pitch_mm(module_mm: f64) -> f64 {
     module_mm * std::f64::consts::PI
 }
 
+/// Gear ratio `N_driven / N_driver` — the dimensionless speed-reduction (equivalently
+/// torque-multiplication) factor of a meshing gear pair. A ratio > 1 reduces speed and
+/// multiplies torque; < 1 is an overdrive. Returns `0.0` when `driver_teeth` is 0.
+pub fn gear_ratio(driven_teeth: u32, driver_teeth: u32) -> f64 {
+    if driver_teeth == 0 {
+        return 0.0;
+    }
+    driven_teeth as f64 / driver_teeth as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,5 +119,17 @@ mod tests {
         assert_eq!(circular_pitch_mm(0.0), 0.0);
         assert_eq!(circular_pitch_mm(-1.5), 0.0);
         assert_eq!(circular_pitch_mm(f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn gear_ratio_is_driven_over_driver() {
+        // 40:10 → 4:1 reduction; 10:40 → 0.25 overdrive; 20:20 → 1.0.
+        assert!((gear_ratio(40, 10) - 4.0).abs() < 1e-12);
+        assert!((gear_ratio(10, 40) - 0.25).abs() < 1e-12);
+        assert!((gear_ratio(20, 20) - 1.0).abs() < 1e-12);
+        // Reciprocal: ratio(a,b)·ratio(b,a) = 1 for nonzero.
+        assert!((gear_ratio(40, 10) * gear_ratio(10, 40) - 1.0).abs() < 1e-12);
+        // Guard: zero driver teeth → 0.0.
+        assert_eq!(gear_ratio(50, 0), 0.0);
     }
 }

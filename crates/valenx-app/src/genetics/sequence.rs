@@ -8,7 +8,7 @@
 use eframe::egui;
 
 use valenx_bioseq::analysis::composition::{gc_content, residue_counts, shannon_entropy};
-use valenx_bioseq::analysis::weight::molecular_weight_nucleic;
+use valenx_bioseq::analysis::weight::{molecular_weight_nucleic, molecular_weight_protein};
 use valenx_bioseq::cloning::digest_map::{digest_to_gel, restriction_map};
 use valenx_bioseq::cloning::restriction::{enzyme_by_name, Enzyme};
 use valenx_bioseq::ops::orf::{find_orfs, OrfOptions};
@@ -390,6 +390,11 @@ fn run_analyze(p: &mut SequencePanel) {
                 match molecular_weight_nucleic(&s) {
                     Ok(mw) => out.push_str(&format!("MW (nucleic): {mw:.2} Da\n")),
                     Err(e) => out.push_str(&format!("MW (nucleic): (n/a — {e})\n")),
+                }
+            } else {
+                match molecular_weight_protein(&s) {
+                    Ok(mw) => out.push_str(&format!("MW (protein): {mw:.2} Da\n")),
+                    Err(e) => out.push_str(&format!("MW (protein): (n/a — {e})\n")),
                 }
             }
             out.push_str(&format!("Shannon H   : {:.4} bits\n", shannon_entropy(&s)));
