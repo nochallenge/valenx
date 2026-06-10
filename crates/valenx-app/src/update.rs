@@ -464,6 +464,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Field Statistics Workbench — descriptive
+                    // statistics over a pasted number list (valenx-fields). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_fields_workbench, "Field Statistics")
+                        .on_hover_text(
+                            "Show / hide the right-side Field Statistics Workbench — descriptive \
+                             statistics (mean, median, variance, std dev, rms, skewness, excess \
+                             kurtosis, coefficient of variation, min/max) over a pasted list of \
+                             numbers, computed in-process by valenx-fields.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -1074,6 +1088,11 @@ impl eframe::App for ValenxApp {
         // Sheet Metal Workbench (right) — native bend allowance / deduction
         // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.
         crate::sheetmetal_workbench::draw_sheetmetal_workbench(self, ctx);
+
+        // Field Statistics Workbench (right) — descriptive statistics over a
+        // pasted number list on valenx-fields. A no-op unless toggled on via
+        // View → Field Statistics.
+        crate::fields_workbench::draw_fields_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
