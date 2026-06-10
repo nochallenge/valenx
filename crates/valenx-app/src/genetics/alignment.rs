@@ -261,7 +261,7 @@ fn run_pairwise(p: &mut AlignmentPanel) {
             let stats = aln.stats(&scheme.matrix);
             p.result = format!(
                 "score        : {}\ncolumns      : {}\naligned      : {}\nmismatch     : {}\n\
-                 identity     : {:.1} %\nsimilarity   : {:.1} %\n\
+                 identity     : {:.1} %\nsimilarity   : {:.1} %\ngap fraction : {:.1} %\n\
                  gaps         : {} ({} opens, {} extensions)\n\n{}",
                 aln.score,
                 stats.columns,
@@ -269,6 +269,7 @@ fn run_pairwise(p: &mut AlignmentPanel) {
                 stats.mismatch_count(),
                 stats.percent_identity() * 100.0,
                 stats.percent_similarity() * 100.0,
+                stats.percent_gaps() * 100.0,
                 stats.gaps,
                 stats.gap_opens,
                 stats.gap_extensions(),
