@@ -117,6 +117,9 @@ valenx-collision     = { path = "../valenx-collision" }
 # Native sheet-metal bend allowance / deduction — surfaced by the Sheet
 # Metal workbench (src/sheetmetal_workbench.rs).
 valenx-sheet-metal   = { path = "../valenx-sheet-metal" }
+# Native ISO 4017 hex-bolt dimensions — surfaced by the Fasteners
+# workbench (src/fasteners_workbench.rs).
+valenx-fasteners     = { path = "../valenx-fasteners" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
