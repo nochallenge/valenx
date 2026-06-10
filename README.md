@@ -70,6 +70,19 @@ Rust solvers ship inside the app and work out of the box:
   post-processing, technical drafting (DXF / SVG / PDF), assemblies with
   interference detection, architectural / structural modelling (IFC4, Eurocode),
   surface modelling (NURBS fitting + blends), and JT / STEP-AP242 / IGES interop.
+- **Engineering design workbenches** — a growing set of native parametric design
+  calculators, each a right-side panel (View menu) with a form → compute → readout
+  and, where the geometry suits it, a live wireframe preview: helical **springs**
+  (spring index, axial stiffness, Wahl factor, developed wire length + a 3-D helix
+  preview), involute **gears** (pitch / base / addendum / dedendum diameters, mesh
+  ratio + a tooth-profile preview), **piping** (NPS bore, flow + metal area, wetted +
+  external surface), structural **frames** (section area + perimeter), **sheet-metal**
+  bends (bend allowance / deduction), **fasteners** (ISO 4017 bolt dimensions),
+  **collision** (AABB volume / surface / overlap), **geodesics** (haversine + rhumb
+  distance, bearings, cross-track), and **field statistics** — all closed-form and
+  computed in-process (`valenx-springs`, `valenx-gears`, `valenx-frames`, …). These
+  are research-grade design readouts, not a commercial parametric-modelling
+  replacement (the roadmap targets FreeCAD-class parity, not Fusion 360 / SolidWorks).
 - **Reaction dynamics & graphics** — a **reaction-dynamics / AIMD** simulator
   (velocity-Verlet on quantum-chemistry forces) and a physically-based **path
   tracer** (light-tree importance sampling, bidirectional path tracing,
