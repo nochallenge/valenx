@@ -63,6 +63,14 @@ impl Triangle {
     pub fn area(&self) -> f64 {
         self.normal().norm() * 0.5
     }
+
+    /// Triangle perimeter — the sum of the three edge lengths
+    /// `‖v₁−v₀‖ + ‖v₂−v₁‖ + ‖v₀−v₂‖`. A length, distinct from [`area`](Self::area).
+    pub fn perimeter(&self) -> f64 {
+        (self.v[1] - self.v[0]).norm()
+            + (self.v[2] - self.v[1]).norm()
+            + (self.v[0] - self.v[2]).norm()
+    }
 }
 
 /// Convert a [`valenx_mesh::Mesh`] of Tri3 elements into a flat
@@ -110,5 +118,30 @@ mod tests {
             Vector3::new(2.0, 0.0, 0.0),
         );
         assert_eq!(flat.area(), 0.0);
+    }
+
+    #[test]
+    fn perimeter_sums_the_three_edges() {
+        // 3-4-5 right triangle → perimeter 3 + 5 + 4 = 12.
+        let t = Triangle::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+            Vector3::new(0.0, 4.0, 0.0),
+        );
+        assert!((t.perimeter() - 12.0).abs() < 1e-12);
+        // Equilateral side 2 → perimeter 6; each edge < the perimeter.
+        let eq = Triangle::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(2.0, 0.0, 0.0),
+            Vector3::new(1.0, 3.0_f64.sqrt(), 0.0),
+        );
+        assert!((eq.perimeter() - 6.0).abs() < 1e-10);
+        // Collinear (0,0,0)/(1,0,0)/(2,0,0) → edges 1 + 1 + 2 = 4.
+        let flat = Triangle::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(2.0, 0.0, 0.0),
+        );
+        assert!((flat.perimeter() - 4.0).abs() < 1e-12);
     }
 }
