@@ -44,6 +44,27 @@ pub fn polygon_area(vertices: &[[f64; 2]]) -> f64 {
     sum.abs() / 2.0
 }
 
+/// Diagonal of the axis-aligned bounding box over the vertices,
+/// `√((xmax−xmin)² + (ymax−ymin)²)`. Translation-invariant; distinct from polyline_length
+/// (perimeter) and polygon_area. Returns `0.0` for fewer than two vertices or if any coordinate
+/// is non-finite.
+pub fn bounding_box_diagonal_2d(vertices: &[[f64; 2]]) -> f64 {
+    if vertices.len() < 2 || !vertices.iter().all(|v| v[0].is_finite() && v[1].is_finite()) {
+        return 0.0;
+    }
+    let (mut xmin, mut ymin) = (vertices[0][0], vertices[0][1]);
+    let (mut xmax, mut ymax) = (xmin, ymin);
+    for &[x, y] in vertices {
+        xmin = xmin.min(x);
+        ymin = ymin.min(y);
+        xmax = xmax.max(x);
+        ymax = ymax.max(y);
+    }
+    let dx = xmax - xmin;
+    let dy = ymax - ymin;
+    (dx * dx + dy * dy).sqrt()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +108,29 @@ mod tests {
         assert_eq!(polygon_area(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), 0.0);
         assert_eq!(polygon_area(&[[0.0, 0.0], [1.0, 0.0]]), 0.0);
         assert_eq!(polygon_area(&[[0.0, 0.0], [f64::NAN, 0.0], [0.0, 1.0]]), 0.0);
+    }
+
+    #[test]
+    fn bounding_box_diagonal_2d_worked() {
+        // Extent (3,4) → diagonal 5.0.
+        assert!((bounding_box_diagonal_2d(&[[0.0, 0.0], [3.0, 4.0]]) - 5.0).abs() < 1e-9);
+        assert!(
+            (bounding_box_diagonal_2d(&[[0.0, 0.0], [3.0, 0.0], [0.0, 4.0]]) - 5.0).abs() < 1e-9
+        );
+        // Translation-invariant: shifting all vertices leaves the diagonal unchanged.
+        assert!(
+            (bounding_box_diagonal_2d(&[[10.0, 20.0], [13.0, 24.0]])
+                - bounding_box_diagonal_2d(&[[0.0, 0.0], [3.0, 4.0]]))
+            .abs()
+                < 1e-9
+        );
+        // Collinear horizontal extent 10 → 10.0.
+        assert!(
+            (bounding_box_diagonal_2d(&[[0.0, 0.0], [5.0, 0.0], [10.0, 0.0]]) - 10.0).abs() < 1e-9
+        );
+        // <2 verts → 0.0; empty → 0.0; non-finite → 0.0.
+        assert_eq!(bounding_box_diagonal_2d(&[[5.0, 5.0]]), 0.0);
+        assert_eq!(bounding_box_diagonal_2d(&[]), 0.0);
+        assert_eq!(bounding_box_diagonal_2d(&[[f64::NAN, 0.0], [1.0, 1.0]]), 0.0);
     }
 }

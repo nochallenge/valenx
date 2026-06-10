@@ -201,6 +201,16 @@ pub fn stiffness_n_per_mm(spec: &SpringSpec) -> f64 {
     g * d.powi(4) / (8.0 * big_d.powi(3) * n)
 }
 
+/// Spring index `C = D / d` (ISO 26909) — the ratio of mean coil diameter to wire diameter, a
+/// dimensionless measure of coil curvature (typically 4–12). It feeds the Wahl stress-correction
+/// factor and buckling checks. Returns `0.0` for a non-positive or non-finite wire diameter.
+pub fn spring_index(spec: &SpringSpec) -> f64 {
+    if !spec.wire_diameter_mm.is_finite() || spec.wire_diameter_mm <= 0.0 {
+        return 0.0;
+    }
+    spec.mean_coil_diameter_mm / spec.wire_diameter_mm
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,5 +270,22 @@ mod tests {
             compression_centerline(&spec),
             Err(SpringsError::Degenerate(_))
         ));
+    }
+
+    #[test]
+    fn spring_index_is_ratio_of_diameters() {
+        // default_compression: D = 10, d = 1 → C = 10.
+        let spec = SpringSpec::default_compression();
+        assert!((spring_index(&spec) - 10.0).abs() < 1e-9);
+        // C scales linearly with D and inversely with d.
+        let mut s2 = SpringSpec::default_compression();
+        s2.mean_coil_diameter_mm = 20.0;
+        assert!((spring_index(&s2) - 20.0).abs() < 1e-9);
+        s2.wire_diameter_mm = 2.0;
+        assert!((spring_index(&s2) - 10.0).abs() < 1e-9); // 20 / 2
+        // Guard: non-positive wire diameter → 0.0.
+        let mut bad = SpringSpec::default_compression();
+        bad.wire_diameter_mm = 0.0;
+        assert_eq!(spring_index(&bad), 0.0);
     }
 }
