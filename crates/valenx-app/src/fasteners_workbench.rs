@@ -9,8 +9,10 @@
 //! a monospace readout.
 
 use eframe::egui;
+use nalgebra::Vector3;
 
 use valenx_fasteners::bolt::iso4017_hex_table;
+use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
 
@@ -90,8 +92,85 @@ pub fn draw_fasteners_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Dimensions").strong());
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
+
+                    // Live hex-head outline (across-flats, face-on).
+                    if let Some(pts) = preview_hex(s) {
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("Hex-head preview").strong());
+                        draw_hex_preview(ui, &pts);
+                    }
                 });
         });
+}
+
+/// A regular hexagon with the given width **across flats** (the distance
+/// between opposite parallel flats), centred at the origin in the XY plane.
+/// The circumradius is `af / √3`; six vertices at 60° steps are returned
+/// closed (7 points, last == first) so a `windows(2)` walk draws the outline.
+fn hexagon(across_flats: f64) -> Vec<Vector3<f64>> {
+    let r = across_flats / 3.0_f64.sqrt();
+    let mut pts: Vec<Vector3<f64>> = (0..6)
+        .map(|i| {
+            let th = (i as f64) * std::f64::consts::FRAC_PI_3; // 0°, 60°, … 300°
+            Vector3::new(r * th.cos(), r * th.sin(), 0.0)
+        })
+        .collect();
+    let first = pts[0];
+    pts.push(first);
+    pts
+}
+
+/// Build the hex-head outline for the live preview from the selected bolt's
+/// width across flats, best-effort `None` when the nominal size is not in the
+/// ISO 4017 table (or has a non-positive across-flats).
+fn preview_hex(s: &FastenersWorkbenchState) -> Option<Vec<Vector3<f64>>> {
+    let table = iso4017_hex_table();
+    let spec = table.iter().find(|b| b.nominal == s.nominal)?;
+    let af = spec.width_across_flats_mm();
+    if !(af.is_finite() && af > 0.0) {
+        return None;
+    }
+    Some(hexagon(af))
+}
+
+/// Draw a closed XY polyline as a face-on (front-view, looking down −Z)
+/// wireframe in a fixed-height canvas, the camera auto-framed to the
+/// outline. A segment is painted only when both endpoints project in front
+/// of the camera, so the render path never panics.
+fn draw_hex_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
+    let (response, painter) =
+        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let rect = response.rect;
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for p in pts {
+        for k in 0..3 {
+            let v = p[k] as f32;
+            min[k] = min[k].min(v);
+            max[k] = max[k].max(v);
+        }
+    }
+
+    let mut cam = OrbitCamera::default();
+    cam.set_view(ViewDirection::Front);
+    cam.frame_bounds(min, max);
+
+    let (w, h) = (rect.width(), rect.height());
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    for pair in pts.windows(2) {
+        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
+        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        if let (Some(a), Some(b)) = (a, b) {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.min.x + a.x, rect.min.y + a.y),
+                    egui::pos2(rect.min.x + b.x, rect.min.y + b.y),
+                ],
+                stroke,
+            );
+        }
+    }
 }
 
 /// Look up the selected bolt in the ISO 4017 table and format its
@@ -162,6 +241,54 @@ mod tests {
         run_fasteners(&mut s);
         assert!(s.error.is_some());
         assert!(s.result.is_empty());
+    }
+
+    #[test]
+    fn hexagon_has_six_vertices_and_correct_across_flats() {
+        let pts = hexagon(10.0);
+        assert_eq!(pts.len(), 7); // 6 vertices + closing duplicate
+        assert_eq!(pts.first(), pts.last());
+        assert!(pts.iter().all(|p| p.z == 0.0));
+        // All six vertices share the circumradius R = AF/√3.
+        let r = 10.0 / 3.0_f64.sqrt();
+        assert!(pts
+            .iter()
+            .all(|p| ((p.x * p.x + p.y * p.y).sqrt() - r).abs() < 1e-9));
+        // The six unique vertices are pairwise distinct.
+        let verts = &pts[..6];
+        for (i, a) in verts.iter().enumerate() {
+            for b in &verts[i + 1..] {
+                assert!((a - b).norm() > 1e-6);
+            }
+        }
+        // Width across flats = 2 × apothem (centre → edge-midpoint distance).
+        let mid = (pts[0] + pts[1]) * 0.5;
+        let af = 2.0 * (mid.x * mid.x + mid.y * mid.y).sqrt();
+        assert!((af - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn preview_hex_default_m6_matches_table_across_flats() {
+        let s = FastenersWorkbenchState::default(); // M6
+        let pts = preview_hex(&s).expect("M6 is in the ISO 4017 table");
+        assert_eq!(pts.len(), 7);
+        let af = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M6")
+            .expect("M6")
+            .width_across_flats_mm();
+        let mid = (pts[0] + pts[1]) * 0.5;
+        let measured_af = 2.0 * (mid.x * mid.x + mid.y * mid.y).sqrt();
+        assert!((measured_af - af).abs() < 1e-9);
+    }
+
+    #[test]
+    fn preview_hex_none_for_unknown_size() {
+        let s = FastenersWorkbenchState {
+            nominal: "M999".to_string(),
+            ..Default::default()
+        };
+        assert!(preview_hex(&s).is_none());
     }
 }
 
