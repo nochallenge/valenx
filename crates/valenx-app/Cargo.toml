@@ -102,6 +102,9 @@ valenx-reactdyn      = { path = "../valenx-reactdyn" }
 # Native helical-spring design — surfaced by the Springs workbench
 # (src/springs_workbench.rs).
 valenx-springs       = { path = "../valenx-springs" }
+# Native involute-gear design — surfaced by the Gears workbench
+# (src/gears_workbench.rs).
+valenx-gears         = { path = "../valenx-gears" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem

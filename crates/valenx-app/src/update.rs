@@ -395,6 +395,19 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Gears Workbench — native
+                    // involute-gear design (valenx-gears). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_gears_workbench, "Gears")
+                        .on_hover_text(
+                            "Show / hide the right-side Gears Workbench — native involute-gear \
+                             design: circular pitch, the pitch / base / addendum / dedendum \
+                             diameters, and the meshing gear ratio, computed in-process by valenx-gears.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -985,6 +998,10 @@ impl eframe::App for ValenxApp {
         // Springs Workbench (right) — native helical-spring design on
         // valenx-springs. A no-op unless toggled on via View → Springs.
         crate::springs_workbench::draw_springs_workbench(self, ctx);
+
+        // Gears Workbench (right) — native involute-gear design on
+        // valenx-gears. A no-op unless toggled on via View → Gears.
+        crate::gears_workbench::draw_gears_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
