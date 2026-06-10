@@ -10,8 +10,10 @@
 //! (the flat-blank correction), as a monospace readout.
 
 use eframe::egui;
+use nalgebra::Vector3;
 
 use valenx_sheet_metal::Bend;
+use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
 
@@ -111,8 +113,133 @@ pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new("Bend").strong());
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
+
+                    // Live bent-sheet side profile (face-on).
+                    if let Some(pts) = preview_bend(s) {
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("Bend profile preview").strong());
+                        draw_bend_preview(ui, &pts);
+                    }
                 });
         });
+}
+
+/// The closed cross-section outline of a sheet of `thickness` bent through
+/// `bend_angle_deg` at the given `inside_radius`, with straight flanges of
+/// length `flange`. The bend centre is the origin: the inner surface is the
+/// arc at `inside_radius`, the outer surface the concentric arc at
+/// `inside_radius + thickness`, joined by straight tangent flanges and end
+/// caps. Returned closed (last == first) in the XY plane (z = 0).
+fn bend_profile(
+    thickness: f64,
+    inside_radius: f64,
+    bend_angle_deg: f64,
+    flange: f64,
+) -> Vec<Vector3<f64>> {
+    let theta = bend_angle_deg.to_radians();
+    let half = theta / 2.0;
+    let r_i = inside_radius;
+    let r_o = inside_radius + thickness;
+    const ARC_STEPS: usize = 24;
+
+    // Radial unit vector at parameter ψ, measured from the +Y bisector.
+    let radial = |psi: f64| Vector3::new(psi.sin(), psi.cos(), 0.0);
+    // Outward flange directions at the ±half tangent points (⟂ to the radius).
+    let dir_left = Vector3::new(-half.cos(), -half.sin(), 0.0);
+    let dir_right = Vector3::new(half.cos(), -half.sin(), 0.0);
+
+    let inner_l = radial(-half) * r_i;
+    let inner_r = radial(half) * r_i;
+    let outer_l = radial(-half) * r_o;
+    let outer_r = radial(half) * r_o;
+
+    let mut pts: Vec<Vector3<f64>> = Vec::new();
+    // Left flange inner edge → inner arc (−half → +half) → right flange inner edge.
+    pts.push(inner_l + dir_left * flange);
+    pts.push(inner_l);
+    for i in 1..ARC_STEPS {
+        let psi = -half + (i as f64 / ARC_STEPS as f64) * theta;
+        pts.push(radial(psi) * r_i);
+    }
+    pts.push(inner_r);
+    pts.push(inner_r + dir_right * flange);
+    // End cap across the thickness at the right flange tip.
+    pts.push(outer_r + dir_right * flange);
+    // Right flange outer edge → outer arc (+half → −half) → left flange outer edge.
+    pts.push(outer_r);
+    for i in 1..ARC_STEPS {
+        let psi = half - (i as f64 / ARC_STEPS as f64) * theta;
+        pts.push(radial(psi) * r_o);
+    }
+    pts.push(outer_l);
+    pts.push(outer_l + dir_left * flange);
+    // Close: end cap across the thickness at the left flange tip.
+    let first = pts[0];
+    pts.push(first);
+    pts
+}
+
+/// Build the bent-sheet side profile for the live preview, best-effort `None`
+/// when the form dimensions are invalid (the same preconditions as
+/// [`run_sheetmetal`], minus the k-factor which only affects the scalars).
+fn preview_bend(s: &SheetmetalWorkbenchState) -> Option<Vec<Vector3<f64>>> {
+    if !(s.thickness_mm.is_finite() && s.thickness_mm > 0.0) {
+        return None;
+    }
+    if !(s.inside_radius_mm.is_finite() && s.inside_radius_mm >= 0.0) {
+        return None;
+    }
+    if !(s.bend_angle_deg.is_finite() && s.bend_angle_deg > 0.0 && s.bend_angle_deg <= 180.0) {
+        return None;
+    }
+    // A flange length proportional to the bend so the profile is well framed.
+    let flange = 3.0 * (s.inside_radius_mm + s.thickness_mm);
+    Some(bend_profile(
+        s.thickness_mm,
+        s.inside_radius_mm,
+        s.bend_angle_deg,
+        flange,
+    ))
+}
+
+/// Draw a closed XY polyline as a face-on (front-view, eye on +Z looking
+/// along −Z) wireframe in a fixed-height canvas, the camera auto-framed to
+/// the profile. A segment is painted only when both endpoints project in
+/// front of the camera, so the render path never panics.
+fn draw_bend_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
+    let (response, painter) =
+        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let rect = response.rect;
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for p in pts {
+        for k in 0..3 {
+            let v = p[k] as f32;
+            min[k] = min[k].min(v);
+            max[k] = max[k].max(v);
+        }
+    }
+
+    let mut cam = OrbitCamera::default();
+    cam.set_view(ViewDirection::Front);
+    cam.frame_bounds(min, max);
+
+    let (w, h) = (rect.width(), rect.height());
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    for pair in pts.windows(2) {
+        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
+        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        if let (Some(a), Some(b)) = (a, b) {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.min.x + a.x, rect.min.y + a.y),
+                    egui::pos2(rect.min.x + b.x, rect.min.y + b.y),
+                ],
+                stroke,
+            );
+        }
+    }
 }
 
 /// Build a [`Bend`] from the form, compute the bend allowance / deduction,
@@ -218,6 +345,57 @@ mod tests {
             run_sheetmetal(&mut s);
             assert!(s.error.is_some());
             assert!(s.result.is_empty());
+        }
+    }
+
+    #[test]
+    fn bend_profile_is_closed_with_correct_radii_and_angle() {
+        let (t, ri, ang) = (1.0, 1.0, 90.0);
+        let pts = bend_profile(t, ri, ang, 6.0);
+        assert!(pts.len() > 8);
+        assert_eq!(pts.first(), pts.last()); // closed outline
+        assert!(pts.iter().all(|p| p.z == 0.0)); // planar (z = 0)
+        let dist = |p: &Vector3<f64>| (p.x * p.x + p.y * p.y).sqrt();
+        // The inner surface hugs the inside radius: the closest points to the
+        // bend centre (origin) sit at r_i.
+        let dmin = pts.iter().map(dist).fold(f64::INFINITY, f64::min);
+        assert!((dmin - ri).abs() < 1e-9);
+        // The outer surface sits at r_i + t — at least one point is there.
+        let r_o = ri + t;
+        assert!(pts.iter().any(|p| (dist(p) - r_o).abs() < 1e-9));
+        // The inner arc subtends the bend angle about the centre.
+        let arc_psi: Vec<f64> = pts
+            .iter()
+            .filter(|&p| (dist(p) - ri).abs() < 1e-9)
+            .map(|p| p.x.atan2(p.y))
+            .collect();
+        let amin = arc_psi.iter().cloned().fold(f64::INFINITY, f64::min);
+        let amax = arc_psi.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        assert!((amax - amin - ang.to_radians()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn preview_bend_some_for_default_none_for_invalid() {
+        let s = SheetmetalWorkbenchState::default();
+        let pts = preview_bend(&s).expect("default 90° bend previews");
+        assert_eq!(pts.first(), pts.last());
+        assert!(pts.len() > 8);
+        assert!(pts.iter().all(|p| p.z == 0.0));
+        for bad in [
+            SheetmetalWorkbenchState {
+                thickness_mm: 0.0,
+                ..Default::default()
+            },
+            SheetmetalWorkbenchState {
+                bend_angle_deg: 0.0,
+                ..Default::default()
+            },
+            SheetmetalWorkbenchState {
+                bend_angle_deg: 200.0,
+                ..Default::default()
+            },
+        ] {
+            assert!(preview_bend(&bad).is_none());
         }
     }
 }
