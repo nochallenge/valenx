@@ -32,6 +32,8 @@ enum Tool {
     Restriction,
     Primers,
     Pcr,
+    /// Multi-sequence FASTA batch stats.
+    Batch,
 }
 
 /// Form + result state for the Sequence panel.
@@ -55,6 +57,8 @@ pub struct SequencePanel {
     /// PCR primers.
     pcr_fwd: String,
     pcr_rev: String,
+    /// Multi-sequence FASTA input for the Batch stats tool.
+    batch_text: String,
     /// Last error (if any).
     error: Option<String>,
     /// Rendered result text.
@@ -99,6 +103,8 @@ impl Default for SequencePanel {
             primer_target_tm: 60.0,
             pcr_fwd: "ATGGCATTAGCCGGTAAATCG".to_string(),
             pcr_rev: "TTAAAGCTTGGATCCGAGCTC".to_string(),
+            batch_text: ">insert\nATGGCATTAGCCGGTAAATCG\n>gc_rich\nGGGGCCCCGGGGCCCC"
+                .to_string(),
             error: None,
             result: String::new(),
             history: crate::undo::History::new(),
@@ -200,6 +206,7 @@ pub fn run_primary_shortcut(app: &mut crate::ValenxApp) {
         Tool::Restriction => run_restriction(p),
         Tool::Primers => run_primers(p),
         Tool::Pcr => run_pcr(p),
+        Tool::Batch => run_batch(p),
     }
 }
 
@@ -349,6 +356,7 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         ui.selectable_value(&mut p.tool, Tool::Restriction, "Restriction");
         ui.selectable_value(&mut p.tool, Tool::Primers, "Primer design");
         ui.selectable_value(&mut p.tool, Tool::Pcr, "in-silico PCR");
+        ui.selectable_value(&mut p.tool, Tool::Batch, "Batch stats");
     });
     ui.add_space(4.0);
 
@@ -359,6 +367,7 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         Tool::Restriction => draw_restriction(p, ui),
         Tool::Primers => draw_primers(p, ui),
         Tool::Pcr => draw_pcr(p, ui),
+        Tool::Batch => draw_batch(p, ui),
     }
 
     common::error_line(ui, &p.error);
@@ -415,6 +424,91 @@ fn run_analyze(p: &mut SequencePanel) {
             p.result = out;
         }
         Err(e) => p.error = Some(e),
+    }
+}
+
+/// Compute per-sequence stats for a FASTA batch. Extracted for the headless
+/// UI tests. Each record is cleaned + validated against the selected
+/// alphabet; invalid / empty records become labelled error rows.
+fn run_batch(p: &mut SequencePanel) {
+    p.error = None;
+    let records = common::parse_fasta(&p.batch_text);
+    if records.is_empty() {
+        p.error = Some("no sequences — paste FASTA (one >name record per sequence)".into());
+        return;
+    }
+    let mut out = String::new();
+    let mut ok = 0usize;
+    let mut err = 0usize;
+    for (i, (label, body)) in records.iter().enumerate() {
+        let name = if label.is_empty() {
+            format!("seq {}", i + 1)
+        } else {
+            label.clone()
+        };
+        let cleaned = common::clean_sequence(body);
+        if cleaned.is_empty() {
+            err += 1;
+            out.push_str(&format!("{name:<18} (empty / no valid residues)\n"));
+            continue;
+        }
+        match Seq::new(p.kind, cleaned.as_bytes()) {
+            Ok(s) => {
+                ok += 1;
+                let is_na = s.kind() != SeqKind::Protein;
+                let gc = if is_na {
+                    gc_content(&s)
+                        .map(|g| format!("{:.1}%", g * 100.0))
+                        .unwrap_or_else(|_| "n/a".to_string())
+                } else {
+                    "n/a".to_string()
+                };
+                let tm = if is_na {
+                    tm_wallace(&s)
+                        .map(|t| format!("{t:.1}"))
+                        .unwrap_or_else(|_| "n/a".to_string())
+                } else {
+                    "n/a".to_string()
+                };
+                let mw = match s.kind() {
+                    SeqKind::Protein => molecular_weight_protein(&s),
+                    _ => molecular_weight_nucleic(&s),
+                }
+                .map(|m| format!("{m:.0}"))
+                .unwrap_or_else(|_| "n/a".to_string());
+                out.push_str(&format!(
+                    "{name:<18} len {:>6}  GC {:>6}  Tm {:>5}  MW {:>9}\n",
+                    s.len(),
+                    gc,
+                    tm,
+                    mw
+                ));
+            }
+            Err(e) => {
+                err += 1;
+                out.push_str(&format!("{name:<18} error: {e}\n"));
+            }
+        }
+    }
+    p.result = format!(
+        "{} sequence(s) · {ok} parsed · {err} error(s)\n\n{out}",
+        records.len()
+    );
+}
+
+fn draw_batch(p: &mut SequencePanel, ui: &mut egui::Ui) {
+    ui.label(
+        "Paste FASTA — one >name record per sequence — for a per-sequence stats table \
+         (length, GC%, Tm, MW), using the alphabet selected above.",
+    );
+    ui.add(
+        egui::TextEdit::multiline(&mut p.batch_text)
+            .desired_rows(5)
+            .desired_width(f32::INFINITY)
+            .font(egui::TextStyle::Monospace),
+    );
+    if common::run_button(ui, "Analyze batch") {
+        run_batch(p);
     }
 }
 
@@ -768,6 +862,33 @@ mod headless_ui_tests {
     }
 
     #[test]
+    fn batch_tallies_and_computes_gc_per_record() {
+        let mut p = SequencePanel::default();
+        p.kind = SeqKind::Dna;
+        p.batch_text = ">gc100\nGGGGCCCC\n>bad\n!!!".to_string();
+        run_batch(&mut p);
+        assert!(p.error.is_none());
+        // gc100 is all G/C → GC 100.0%; the "bad" record has no valid
+        // residues → an error row. Tally: 1 parsed, 1 error.
+        assert!(p.result.contains("gc100"));
+        assert!(p.result.contains("100.0%"));
+        assert!(p.result.contains("bad"));
+        assert!(p.result.contains("1 parsed · 1 error"));
+        // Recompute GC via the backend to confirm the worked value.
+        let s = Seq::new(SeqKind::Dna, b"GGGGCCCC").expect("seq");
+        assert!((gc_content(&s).expect("gc") - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn batch_rejects_empty_input() {
+        let mut p = SequencePanel::default();
+        p.batch_text = "   \n  ".to_string();
+        run_batch(&mut p);
+        assert!(p.error.is_some());
+        assert!(p.result.is_empty());
+    }
+
+    #[test]
     fn draws_every_tool_without_panic() {
         // Fresh / valid-populated state: draw the panel with each
         // sub-tool selected. The draw fn must never panic.
@@ -778,6 +899,7 @@ mod headless_ui_tests {
             Tool::Restriction,
             Tool::Primers,
             Tool::Pcr,
+            Tool::Batch,
         ] {
             let mut app = app_with_panel();
             app.genetics.sequence.tool = tool;
