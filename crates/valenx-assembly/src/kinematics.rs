@@ -105,6 +105,30 @@ pub fn apply_all_joints(a: &mut Assembly) -> Result<(), AssemblyError> {
     Ok(())
 }
 
+/// Kinematic mobility (degrees of freedom) of the mechanism via the **spatial**
+/// Grübler–Kutzbach criterion `M = 6·(n − j − 1) + Σfᵢ`, where `n` is the part
+/// count, `j` the joint count, and `fᵢ` the freedom of joint `i` (Fixed 0,
+/// Revolute/Prismatic 1, Cylindrical 2, Spherical/Planar 3). Parts are spatial
+/// rigid bodies — 6 DOF each, see [`PartTransform`]. The result is signed: a
+/// negative value flags an over-constrained (statically indeterminate) topology.
+/// A topological property, distinct from the solver's per-configuration
+/// constraint residual.
+pub fn mechanism_mobility(a: &Assembly) -> isize {
+    let n = a.parts.len() as isize;
+    let j = a.joints.len() as isize;
+    let dof_sum: isize = a
+        .joints
+        .iter()
+        .map(|joint| match &joint.kind {
+            JointKind::Fixed { .. } => 0,
+            JointKind::Revolute { .. } | JointKind::Prismatic { .. } => 1,
+            JointKind::Cylindrical { .. } => 2,
+            JointKind::Spherical { .. } | JointKind::Planar { .. } => 3,
+        })
+        .sum();
+    6 * (n - j - 1) + dof_sum
+}
+
 /// Build part_b's transform for a Revolute joint at angle `theta`.
 ///
 /// At θ=0 b coincides with a (`b_pose = a_pose`). For θ ≠ 0, b's pose
@@ -226,6 +250,73 @@ mod tests {
 
     fn unit_cube(name: &str) -> Part {
         Part::new(0, name, valenx_cad::box_solid(1.0, 1.0, 1.0).unwrap())
+    }
+
+    /// Spatial Grübler–Kutzbach: an OPEN serial chain of `k` single-DOF joints
+    /// (`k+1` parts) has mobility exactly `k`.
+    #[test]
+    fn mobility_open_revolute_chain() {
+        // 3 revolute joints → 4 parts → M = 6·(4−3−1) + 3 = 3.
+        let mut a = Assembly::new();
+        let mut base = unit_cube("base");
+        base.fixed = true;
+        let mut prev = a.add_part(base);
+        for _ in 0..3 {
+            let link = a.add_part(unit_cube("link"));
+            a.add_joint(Joint::new(
+                0,
+                JointKind::Revolute {
+                    part_a: prev,
+                    part_b: link,
+                    axis_origin: Vector3::zeros(),
+                    axis_dir: Vector3::z(),
+                },
+            ));
+            prev = link;
+        }
+        assert_eq!(mechanism_mobility(&a), 3);
+    }
+
+    #[test]
+    fn mobility_solo_part_overconstrained_loop_and_spherical() {
+        // A lone part (no joints) → M = 6·(1−0−1) = 0.
+        let mut solo = Assembly::new();
+        solo.add_part(unit_cube("only"));
+        assert_eq!(mechanism_mobility(&solo), 0);
+
+        // Spatial 4-revolute loop (4 parts, 4 joints) → M = 6·(4−4−1)+4 = −2
+        // (the classic over-constrained spatial 4-bar).
+        let mut quad = Assembly::new();
+        let p0 = quad.add_part(unit_cube("p0"));
+        let p1 = quad.add_part(unit_cube("p1"));
+        let p2 = quad.add_part(unit_cube("p2"));
+        let p3 = quad.add_part(unit_cube("p3"));
+        for (pa, pb) in [(p0, p1), (p1, p2), (p2, p3), (p3, p0)] {
+            quad.add_joint(Joint::new(
+                0,
+                JointKind::Revolute {
+                    part_a: pa,
+                    part_b: pb,
+                    axis_origin: Vector3::zeros(),
+                    axis_dir: Vector3::z(),
+                },
+            ));
+        }
+        assert_eq!(mechanism_mobility(&quad), -2);
+
+        // A single spherical joint (2 parts, f=3) → M = 6·0 + 3 = 3.
+        let mut sph = Assembly::new();
+        let s0 = sph.add_part(unit_cube("s0"));
+        let s1 = sph.add_part(unit_cube("s1"));
+        sph.add_joint(Joint::new(
+            0,
+            JointKind::Spherical {
+                part_a: s0,
+                part_b: s1,
+                point: Vector3::zeros(),
+            },
+        ));
+        assert_eq!(mechanism_mobility(&sph), 3);
     }
 
     /// Task 24 — Revolute around Z-axis. Part a is fixed at origin.
