@@ -225,19 +225,27 @@ fn run_descriptors(p: &mut CheminfPanel) {
     match MoleculeReport::from_smiles(p.smiles_a.trim()) {
         Ok(r) => {
                 // The report struct doesn't carry these — recompute from the molecule.
-                let (heteroatoms, aromatic_atoms, halogens, single_bonds, double_bonds, triple_bonds) =
-                    valenx_cheminf::mol_from_smiles(p.smiles_a.trim())
-                        .map(|m| {
-                            (
-                                valenx_cheminf::descriptors::heteroatom_count(&m),
-                                valenx_cheminf::descriptors::aromatic_atom_count(&m),
-                                valenx_cheminf::descriptors::halogen_count(&m),
-                                valenx_cheminf::descriptors::single_bond_count(&m),
-                                valenx_cheminf::descriptors::double_bond_count(&m),
-                                valenx_cheminf::descriptors::triple_bond_count(&m),
-                            )
-                        })
-                        .unwrap_or((0, 0, 0, 0, 0, 0));
+                let (
+                    heteroatoms,
+                    aromatic_atoms,
+                    aromatic_bonds,
+                    halogens,
+                    single_bonds,
+                    double_bonds,
+                    triple_bonds,
+                ) = valenx_cheminf::mol_from_smiles(p.smiles_a.trim())
+                    .map(|m| {
+                        (
+                            valenx_cheminf::descriptors::heteroatom_count(&m),
+                            valenx_cheminf::descriptors::aromatic_atom_count(&m),
+                            valenx_cheminf::descriptors::aromatic_bond_count(&m),
+                            valenx_cheminf::descriptors::halogen_count(&m),
+                            valenx_cheminf::descriptors::single_bond_count(&m),
+                            valenx_cheminf::descriptors::double_bond_count(&m),
+                            valenx_cheminf::descriptors::triple_bond_count(&m),
+                        )
+                    })
+                    .unwrap_or((0, 0, 0, 0, 0, 0, 0));
                 p.result = format!(
                     "canonical SMILES : {}\nformula          : {}\n\
                      average MW       : {:.3} g/mol\nmonoisotopic     : {:.4} u\n\
@@ -246,7 +254,7 @@ fn run_descriptors(p: &mut CheminfPanel) {
                      TPSA             : {:.2} Å²\nH-bond donors    : {}\n\
                      H-bond acceptors : {}\nrotatable bonds  : {}\n\
                      rings (SSSR)     : {}  ({} aromatic)\nheteroatoms      : {}\n\
-                     aromatic atoms   : {}\nfraction Csp³    : {:.3}\n\
+                     aromatic atoms   : {}\naromatic bonds   : {}\nfraction Csp³    : {:.3}\n\
                      halogens         : {}\nsingle bonds     : {}\ndouble bonds     : {}\n\
                      triple bonds     : {}\n\n\
                      -- drug-likeness --\nLipinski violations : {} / 4\n\
@@ -267,6 +275,7 @@ fn run_descriptors(p: &mut CheminfPanel) {
                     r.aromatic_rings,
                     heteroatoms,
                     aromatic_atoms,
+                    aromatic_bonds,
                     r.fraction_csp3,
                     halogens,
                     single_bonds,

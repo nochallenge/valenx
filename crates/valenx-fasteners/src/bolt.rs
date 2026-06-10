@@ -71,6 +71,15 @@ impl BoltSpec {
         let p = self.thread.pitch;
         std::f64::consts::PI / 4.0 * (d - 0.9382 * p).powi(2)
     }
+
+    /// ISO 261 pitch (effective) diameter (mm) — `d₂ = d − 0.6495·P` (the `0.6495 = 3√3/8`
+    /// 60°-thread constant), the diameter where thread thickness equals groove width. Distinct
+    /// from the major (nominal) diameter and the tensile-stress area. M6×1.0 → ≈ 5.351 mm.
+    pub fn pitch_diameter_mm(&self) -> f64 {
+        let d = self.thread.nominal_diameter;
+        let p = self.thread.pitch;
+        d - 0.6495 * p
+    }
 }
 
 /// Standard ISO 4017 hex bolt table (M3 through M30 with a common
@@ -319,5 +328,22 @@ mod tests {
         assert!((a_s - 20.12).abs() < 0.05);
         // Strictly less than the major-diameter circular area (root < nominal).
         assert!(a_s < std::f64::consts::PI / 4.0 * 6.0_f64.powi(2));
+    }
+
+    #[test]
+    fn pitch_diameter_m6_and_m8() {
+        // M6×1.0: 6 − 0.6495·1 = 5.3505 mm; M8×1.25: 8 − 0.6495·1.25 = 7.188125 mm.
+        let m6 = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M6")
+            .unwrap();
+        assert!((m6.pitch_diameter_mm() - 5.3505).abs() < 1e-4);
+        let m8 = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M8")
+            .unwrap();
+        assert!((m8.pitch_diameter_mm() - 7.188125).abs() < 1e-4);
+        // The pitch diameter is strictly less than the nominal (major) diameter.
+        assert!(m6.pitch_diameter_mm() < m6.thread.nominal_diameter);
     }
 }
