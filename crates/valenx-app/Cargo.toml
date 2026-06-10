@@ -114,6 +114,9 @@ valenx-piping        = { path = "../valenx-piping" }
 # Native AABB geometry + collision tests — surfaced by the Collision
 # workbench (src/collision_workbench.rs).
 valenx-collision     = { path = "../valenx-collision" }
+# Native sheet-metal bend allowance / deduction — surfaced by the Sheet
+# Metal workbench (src/sheetmetal_workbench.rs).
+valenx-sheet-metal   = { path = "../valenx-sheet-metal" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
