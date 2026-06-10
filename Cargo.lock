@@ -6476,6 +6476,7 @@ dependencies = [
  "valenx-dock-screen",
  "valenx-draft",
  "valenx-export",
+ "valenx-fasteners",
  "valenx-feature-tree",
  "valenx-fem",
  "valenx-fields",
