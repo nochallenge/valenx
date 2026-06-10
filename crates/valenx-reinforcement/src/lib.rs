@@ -28,4 +28,4 @@ pub mod rebar;
 
 pub use cage::{generate_beam, generate_column, generate_slab, to_mesh, RebarCage};
 pub use error::{ErrorCategory, ReinforcementError};
-pub use rebar::{Rebar, RebarGrade, RebarShape};
+pub use rebar::{rebar_cross_section_area_mm2, Rebar, RebarGrade, RebarShape};

@@ -235,6 +235,31 @@ pub fn initial_bearing(a: LatLon, b: LatLon) -> f64 {
     (y.atan2(x).to_degrees() + 360.0) % 360.0
 }
 
+/// Cross-track distance (m) — the signed perpendicular offset of point `p` from the great-circle
+/// path `path_start` → `path_end`: `d_xt = asin(sin(d₁₃/R)·sin(θ₁₃−θ₁₂))·R`, where d₁₃ =
+/// [`haversine_distance`]`(path_start, p)`, θ₁₃/θ₁₂ are the [`initial_bearing`]s from `path_start`
+/// to `p` and to `path_end`, and R = 6_371_008.8 m. Positive = right of the path, negative = left.
+/// Returns `0.0` for a degenerate path (`path_start == path_end`) or non-finite input.
+pub fn cross_track_distance(p: LatLon, path_start: LatLon, path_end: LatLon) -> f64 {
+    const EARTH_RADIUS_M: f64 = 6_371_008.8;
+    let degenerate = path_start.latitude_deg == path_end.latitude_deg
+        && path_start.longitude_deg == path_end.longitude_deg;
+    let all_finite = p.latitude_deg.is_finite()
+        && p.longitude_deg.is_finite()
+        && path_start.latitude_deg.is_finite()
+        && path_start.longitude_deg.is_finite()
+        && path_end.latitude_deg.is_finite()
+        && path_end.longitude_deg.is_finite();
+    if degenerate || !all_finite {
+        return 0.0;
+    }
+    let d13 = haversine_distance(path_start, p);
+    let theta13 = initial_bearing(path_start, p).to_radians();
+    let theta12 = initial_bearing(path_start, path_end).to_radians();
+    let arg = (d13 / EARTH_RADIUS_M).sin() * (theta13 - theta12).sin();
+    arg.clamp(-1.0, 1.0).asin() * EARTH_RADIUS_M
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,5 +403,36 @@ mod tests {
         // Identical points → 0.0 (no NaN); result always in [0, 360).
         assert_eq!(initial_bearing(origin, origin), 0.0);
         assert!((0.0..360.0).contains(&initial_bearing(origin, east)));
+    }
+
+    #[test]
+    fn cross_track_distance_perpendicular_offset() {
+        // Equator path (0,0)→(0,10); point (1,5) lies ~1° of latitude north of it.
+        let start = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            elevation_m: 0.0,
+        };
+        let end = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 10.0,
+            elevation_m: 0.0,
+        };
+        let off = LatLon {
+            latitude_deg: 1.0,
+            longitude_deg: 5.0,
+            elevation_m: 0.0,
+        };
+        // ~1° of latitude in metres ≈ 111_195 m.
+        assert!((cross_track_distance(off, start, end).abs() - 111_195.0).abs() < 200.0);
+        // A point on the path → ~0.
+        let on = LatLon {
+            latitude_deg: 0.0,
+            longitude_deg: 5.0,
+            elevation_m: 0.0,
+        };
+        assert!(cross_track_distance(on, start, end).abs() < 1.0);
+        // Degenerate path (start == end) → 0.0.
+        assert_eq!(cross_track_distance(off, start, start), 0.0);
     }
 }
