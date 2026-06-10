@@ -422,6 +422,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Piping Workbench — native
+                    // pipe-section sizing (valenx-piping). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_piping_workbench, "Piping")
+                        .on_hover_text(
+                            "Show / hide the right-side Piping Workbench — native pipe-section \
+                             sizing: NPS outer / inner diameters, flow + metal cross-section areas, \
+                             wetted perimeter, and external surface area, computed in-process by \
+                             valenx-piping.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -1020,6 +1034,10 @@ impl eframe::App for ValenxApp {
         // Geomatics Workbench (right) — native geodesic calculations on
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
         crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
+
+        // Piping Workbench (right) — native pipe-section sizing on
+        // valenx-piping. A no-op unless toggled on via View → Piping.
+        crate::piping_workbench::draw_piping_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.

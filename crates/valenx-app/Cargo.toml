@@ -108,6 +108,9 @@ valenx-gears         = { path = "../valenx-gears" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
+# Native pipe-section sizing — surfaced by the Piping workbench
+# (src/piping_workbench.rs).
+valenx-piping        = { path = "../valenx-piping" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
