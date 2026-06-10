@@ -222,6 +222,42 @@ impl IgesGeometry {
             + self.attribute_tables.len()
             + self.skipped_types.values().sum::<usize>()
     }
+
+    /// Euclidean diagonal of the axis-aligned bounding box over all coordinate-bearing
+    /// entities (Type-110 lines' endpoints + Type-116 points). Composite curves, boundaries,
+    /// manifold solids and attribute tables hold only DE-index references (no coordinates) and
+    /// are excluded. Returns `0.0` for a model with no coordinate points (empty or topology-only)
+    /// or when every point is coincident.
+    pub fn bounding_box_diagonal(&self) -> f64 {
+        let coords = self
+            .lines
+            .iter()
+            .flat_map(|l| [l.start, l.end])
+            .chain(self.points.iter().map(|p| p.pos));
+        let mut bounds: Option<([f64; 3], [f64; 3])> = None;
+        for c in coords {
+            match &mut bounds {
+                None => bounds = Some((c, c)),
+                Some((min, max)) => {
+                    min[0] = min[0].min(c[0]);
+                    min[1] = min[1].min(c[1]);
+                    min[2] = min[2].min(c[2]);
+                    max[0] = max[0].max(c[0]);
+                    max[1] = max[1].max(c[1]);
+                    max[2] = max[2].max(c[2]);
+                }
+            }
+        }
+        match bounds {
+            None => 0.0,
+            Some((min, max)) => {
+                let dx = max[0] - min[0];
+                let dy = max[1] - min[1];
+                let dz = max[2] - min[2];
+                (dx * dx + dy * dy + dz * dz).sqrt()
+            }
+        }
+    }
 }
 
 /// Read an IGES file from `path` and return a wireframe-only
@@ -1397,6 +1433,41 @@ mod tests {
         geom.skipped_types.insert(124, 2);
         geom.skipped_types.insert(100, 3);
         assert_eq!(geom.total_entity_count(), 7);
+    }
+
+    #[test]
+    fn bounding_box_diagonal_computes_extent() {
+        // Two points [0,0,0] + [3,4,0]: extent (3,4,0) → diagonal √(9+16) = 5.0.
+        let geom = IgesGeometry {
+            points: vec![
+                IgesPoint {
+                    pos: [0.0, 0.0, 0.0],
+                },
+                IgesPoint {
+                    pos: [3.0, 4.0, 0.0],
+                },
+            ],
+            ..Default::default()
+        };
+        assert!((geom.bounding_box_diagonal() - 5.0).abs() < 1e-9);
+        // One line [0,0,0]→[1,2,2]: extent (1,2,2) → diagonal √(1+4+4) = 3.0.
+        let geom = IgesGeometry {
+            lines: vec![IgesLine {
+                start: [0.0, 0.0, 0.0],
+                end: [1.0, 2.0, 2.0],
+            }],
+            ..Default::default()
+        };
+        assert!((geom.bounding_box_diagonal() - 3.0).abs() < 1e-9);
+        // Empty (topology-only) → 0.0; a single coincident point → 0.0 extent.
+        assert_eq!(IgesGeometry::default().bounding_box_diagonal(), 0.0);
+        let coincident = IgesGeometry {
+            points: vec![IgesPoint {
+                pos: [5.0, 5.0, 5.0],
+            }],
+            ..Default::default()
+        };
+        assert_eq!(coincident.bounding_box_diagonal(), 0.0);
     }
 
     #[test]
