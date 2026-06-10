@@ -111,6 +111,9 @@ valenx-geomatics     = { path = "../valenx-geomatics" }
 # Native pipe-section sizing — surfaced by the Piping workbench
 # (src/piping_workbench.rs).
 valenx-piping        = { path = "../valenx-piping" }
+# Native AABB geometry + collision tests — surfaced by the Collision
+# workbench (src/collision_workbench.rs).
+valenx-collision     = { path = "../valenx-collision" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
