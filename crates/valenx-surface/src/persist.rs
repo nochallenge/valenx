@@ -65,8 +65,41 @@ impl SurfaceFile {
     }
 
     /// Parse from a RON string.
+    ///
+    /// Re-validates every deserialized curve/surface through the checked
+    /// `NurbsCurve::new`/`NurbsSurface::new` constructors. serde builds
+    /// `NurbsCurve`/`NurbsSurface` field-by-field (public fields + derived
+    /// `Deserialize`), bypassing those constructors, so a crafted/corrupt
+    /// file could otherwise carry a degenerate NURBS (e.g. a degree-3 curve
+    /// with an empty knot vector) that panics every public
+    /// `evaluate`/`parameter_range`/`u_range`/`tessellate` indexing it.
+    /// Mirrors `SketchFile::from_ron`, which validates on load.
     pub fn from_ron(s: &str) -> Result<Self, SurfaceError> {
-        ron::from_str(s).map_err(|e| SurfaceError::Ron(e.to_string()))
+        let file: SurfaceFile = ron::from_str(s).map_err(|e| SurfaceError::Ron(e.to_string()))?;
+        // Validate each element via its checked constructor; a degenerate
+        // one returns `SurfaceError` (BadDegree / BadKnotVector). The
+        // rebuilt values are identical to the originals (the constructor
+        // copies fields verbatim), so we only need the validation side
+        // effect and keep `file` as-is.
+        for c in &file.curves {
+            NurbsCurve::new(
+                c.degree,
+                c.knots.clone(),
+                c.control_points.clone(),
+                c.weights.clone(),
+            )?;
+        }
+        for s in &file.surfaces {
+            NurbsSurface::new(
+                s.u_degree,
+                s.v_degree,
+                s.u_knots.clone(),
+                s.v_knots.clone(),
+                s.control_points.clone(),
+                s.weights.clone(),
+            )?;
+        }
+        Ok(file)
     }
 
     /// Read from a file.
@@ -178,5 +211,25 @@ mod tests {
         let parsed = SurfaceFile::read_from(&tmp).unwrap();
         assert_eq!(parsed.curves.len(), 1);
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn from_ron_rejects_degenerate_curve() {
+        // serde builds a `NurbsCurve` field-by-field, bypassing the
+        // validating `NurbsCurve::new`. A crafted file with a degree-3
+        // curve and an empty knot vector must be rejected on load -- not
+        // deserialized into a value that panics every public
+        // `evaluate`/`parameter_range`/`tessellate` that indexes it.
+        let ron = r#"(version: 2, curves: [(degree: 3, knots: [], control_points: [], weights: [])], surfaces: [])"#;
+        assert!(SurfaceFile::from_ron(ron).is_err());
+    }
+
+    #[test]
+    fn from_ron_rejects_degenerate_surface() {
+        // Same guard on the surface path: degree 3 with empty knot vectors
+        // and an empty control-point grid is degenerate and must be
+        // rejected, not loaded into a panic-on-`evaluate` value.
+        let ron = r#"(version: 2, curves: [], surfaces: [(u_degree: 3, v_degree: 3, u_knots: [], v_knots: [], control_points: [], weights: [])])"#;
+        assert!(SurfaceFile::from_ron(ron).is_err());
     }
 }
