@@ -69,9 +69,21 @@ fn collect_tris(m: &Mesh) -> Vec<[Vector3<f64>; 3]> {
             continue;
         }
         for chunk in block.connectivity.chunks(3) {
-            let a = m.nodes[chunk[0] as usize];
-            let b = m.nodes[chunk[1] as usize];
-            let c = m.nodes[chunk[2] as usize];
+            // Defensive: skip a malformed block rather than panic. A final
+            // short chunk (connectivity length not a multiple of 3) or a
+            // connectivity entry past `nodes` is dropped — matching the
+            // out-of-range-connectivity guards used across every other Tri3
+            // consumer in valenx-mesh.
+            if chunk.len() < 3 {
+                continue;
+            }
+            let (Some(&a), Some(&b), Some(&c)) = (
+                m.nodes.get(chunk[0] as usize),
+                m.nodes.get(chunk[1] as usize),
+                m.nodes.get(chunk[2] as usize),
+            ) else {
+                continue;
+            };
             out.push([a, b, c]);
         }
     }
@@ -170,6 +182,36 @@ mod tests {
             Vector3::new(5.0, 1.0, 0.0),
         );
         assert!(collide(&a, &b).is_none());
+    }
+
+    #[test]
+    fn collide_skips_malformed_connectivity_without_panicking() {
+        // Mesh / ElementBlock expose public Vecs with no enforced invariant.
+        // A block whose connectivity is not a multiple of 3, or references a
+        // node past `nodes`, must be skipped — not panic `collect_tris`.
+        let valid = single_tri(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+        );
+
+        // (a) Connectivity length not a multiple of 3 (would panic chunk[2]).
+        let mut short = Mesh::new("short");
+        short.nodes.push(Vector3::new(0.0, 0.0, 0.0));
+        short.nodes.push(Vector3::new(1.0, 0.0, 0.0));
+        let mut blk = ElementBlock::new(ElementType::Tri3);
+        blk.connectivity.extend_from_slice(&[0, 1]);
+        short.element_blocks.push(blk);
+        assert!(collide(&short, &valid).is_none());
+
+        // (b) Connectivity index past `nodes` (would panic nodes[7]).
+        let mut oob = single_tri(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+        );
+        oob.element_blocks[0].connectivity = vec![0, 1, 7];
+        assert!(collide(&oob, &valid).is_none());
     }
 
     #[test]
