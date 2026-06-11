@@ -15,6 +15,7 @@
 //! consumes, keeping per-adapter dep weight small.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod alignment;
 pub mod alphabet;
