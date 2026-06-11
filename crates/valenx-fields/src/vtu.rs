@@ -1184,6 +1184,81 @@ mod tests {
 </VTKFile>"#
     }
 
+    /// Deterministic xorshift64 PRNG — reproducible, no external rng dep.
+    fn xorshift64(state: &mut u64) -> u64 {
+        let mut x = *state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        *state = x;
+        x
+    }
+
+    /// Robustness: neither VTU parser may EVER panic on adversarial input —
+    /// each may only return `Ok` or a typed `ParseError`. This drives
+    /// `parse_ascii` (XML text) and `parse_appended_raw` (XML + an
+    /// attacker-controlled binary tail addressed by `offset=` headers) with
+    /// truncations, single-byte corruptions, random buffers, and burst
+    /// corruptions of a valid appended file; a panic in any path would fail
+    /// the test via propagation. In-place/truncating mutations never grow the
+    /// `NumberOfPoints` digit field, and `read_appended_block`'s checked_add +
+    /// `block_end > raw.len()` guards bound every offset, so no large alloc.
+    #[test]
+    fn vtu_parsers_never_panic_on_adversarial_input() {
+        let text = one_tet_with_pressure();
+        let valid_ascii = text.as_bytes();
+        let valid_raw = synth_appended_tet();
+
+        // 1. Every truncated prefix of the valid ASCII XML. (parse_ascii's
+        //    contract is &str, so a corrupt byte is healed to U+FFFD by
+        //    from_utf8_lossy — which never matches an ASCII structural token,
+        //    so the parser still sees the truncation/corruption structurally.)
+        for k in 0..=valid_ascii.len() {
+            let _ = parse_ascii(&String::from_utf8_lossy(&valid_ascii[..k]));
+        }
+        // 2. Every truncated prefix of the valid appended-raw buffer
+        //    (exercises the CountMismatch / block_end > raw.len() guards).
+        for k in 0..=valid_raw.len() {
+            let _ = parse_appended_raw(&valid_raw[..k]);
+        }
+        // 3. Single-byte corruption at every position of each fixture.
+        for i in 0..valid_ascii.len() {
+            let mut m = valid_ascii.to_vec();
+            m[i] ^= 0xFF;
+            let _ = parse_ascii(&String::from_utf8_lossy(&m));
+        }
+        for i in 0..valid_raw.len() {
+            let mut m = valid_raw.clone();
+            m[i] ^= 0xFF;
+            let _ = parse_appended_raw(&m);
+        }
+        // 4. Deterministic pseudo-random buffers through both parsers.
+        //    Shallow by design: a random buffer ~never spells the XML literals
+        //    both parsers require, so this exercises the format-detection /
+        //    UTF-8 boundary guards, not the binary decoders — phases 2/3/5
+        //    carry the real decoder coverage.
+        let mut state: u64 = 0xD1B5_4A32_D192_ED03; // fixed seed
+        for _ in 0..2000 {
+            let len = (xorshift64(&mut state) % 512) as usize;
+            let buf: Vec<u8> = (0..len).map(|_| (xorshift64(&mut state) & 0xFF) as u8).collect();
+            let _ = parse_appended_raw(&buf);
+            let _ = parse_ascii(&String::from_utf8_lossy(&buf));
+        }
+        // 5. Burst corruption of the valid appended buffer: the XML mostly
+        //    survives a few byte changes, so the parser proceeds into
+        //    read_appended_block with hostile offset/size headers — reaching
+        //    the binary decoders, not bailing at the XML.
+        for _ in 0..2000 {
+            let mut m = valid_raw.clone();
+            let flips = 1 + xorshift64(&mut state) % 6;
+            for _ in 0..flips {
+                let pos = (xorshift64(&mut state) as usize) % m.len();
+                m[pos] = (xorshift64(&mut state) & 0xFF) as u8;
+            }
+            let _ = parse_appended_raw(&m);
+        }
+    }
+
     #[test]
     fn parses_one_tet_with_scalar_and_vector_fields() {
         let data = parse_ascii(one_tet_with_pressure()).expect("parse");
