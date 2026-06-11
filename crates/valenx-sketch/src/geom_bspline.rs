@@ -143,9 +143,18 @@ impl BSpline2 {
             }
         }
         if seeds.is_empty() {
-            // Degenerate flat scan — seed the global-min sample.
+            // Degenerate flat scan — seed the global-min sample. Use
+            // `total_cmp` (not `partial_cmp().unwrap()`): if the query
+            // target or a control point has gone non-finite — e.g. the LM
+            // solver drove a point's vars to NaN on a divergent step — every
+            // `d2` is NaN and `partial_cmp` returns `None`, which would
+            // panic the unwrap and abort the whole solve. `total_cmp` is a
+            // total order over all f64 (NaN included), so `min_by` never sees
+            // `None`: the fallback always yields a finite in-range seed and
+            // the solver sees a NaN *residual* (reported as non-convergence)
+            // instead of a crash.
             let best = (0..=n_samples)
-                .min_by(|&a, &b| d2[a].partial_cmp(&d2[b]).unwrap())
+                .min_by(|&a, &b| d2[a].total_cmp(&d2[b]))
                 .unwrap_or(0);
             seeds.push(sample_u(best));
         }
@@ -479,5 +488,39 @@ mod tests {
         // The curve is the x-axis segment [0,3]; target way past x=3.
         let u = curve.closest_param(&s.vars, [100.0, 0.0]);
         assert!((u - 1.0).abs() < 1e-6, "expected u≈1, got {u}");
+    }
+
+    #[test]
+    fn closest_param_is_panic_free_on_non_finite_input() {
+        // Regression: the LM solver can drive a sketch point's vars to NaN
+        // on a divergent step. That NaN flows into `closest_param` — the
+        // point-on-B-spline residual/jacobian call it once per iteration
+        // with the point's coords as the target. An all-NaN coarse scan
+        // left `seeds` empty, and the fallback `min_by(partial_cmp().unwrap())`
+        // panicked on the first NaN comparison, aborting the whole solve.
+        // It must instead degrade to a finite in-range parameter so the
+        // solver merely sees a NaN *residual* (reported as non-convergence).
+        let mut s = Sketch::new();
+        let curve = cubic_bezier(&mut s, [[0.0, 0.0], [1.0, 2.0], [3.0, 2.0], [4.0, 0.0]]);
+        let (u_min, u_max) = curve.parameter_range();
+
+        // (a) NaN query target — the exact production path (a point driven
+        // to NaN is read back as the target). Every `d2` is NaN → `seeds`
+        // empty → the fixed fallback runs.
+        let u = curve.closest_param(&s.vars, [f64::NAN, f64::NAN]);
+        assert!(
+            u.is_finite() && (u_min..=u_max).contains(&u),
+            "NaN target must yield a finite in-range param, got {u}"
+        );
+
+        // (b) NaN driven into a control-point var — the curve itself goes
+        // non-finite, so every sample (and thus every `d2`) is NaN too.
+        let mut vars = s.vars.clone();
+        vars[curve.control_points[0].x_var] = f64::NAN;
+        let u = curve.closest_param(&vars, [2.0, 1.5]);
+        assert!(
+            u.is_finite() && (u_min..=u_max).contains(&u),
+            "NaN control point must yield a finite in-range param, got {u}"
+        );
     }
 }
