@@ -11,7 +11,12 @@ use eframe::egui;
 
 use valenx_pathtrace::{render, vec3, PtCamera, PtMaterial, RenderParams, SceneBuilder};
 
+use crate::background::{BackgroundJob, JobState};
 use crate::ValenxApp;
+
+/// The path-trace worker's output: `(width, height, RGB8 pixels)` on success,
+/// or a display-string error.
+type RenderOutput = Result<(usize, usize, Vec<u8>), String>;
 
 /// Persistent state for the render workbench.
 pub struct RenderWorkbenchState {
@@ -22,6 +27,9 @@ pub struct RenderWorkbenchState {
     texture: Option<egui::TextureHandle>,
     status: String,
     error: Option<String>,
+    /// A render running on a worker thread. While `Some`, the form is frozen
+    /// and a spinner shows; `poll_render` uploads the texture when it finishes.
+    job: Option<BackgroundJob<RenderOutput>>,
 }
 
 impl Default for RenderWorkbenchState {
@@ -34,6 +42,7 @@ impl Default for RenderWorkbenchState {
             texture: None,
             status: String::new(),
             error: None,
+            job: None,
         }
     }
 }
@@ -50,7 +59,7 @@ fn render_demo(
     spp: u32,
     max_depth: u32,
     exposure: f32,
-) -> Result<(usize, usize, Vec<u8>), String> {
+) -> RenderOutput {
     let res = resolution.clamp(48, 512);
     let camera = PtCamera::look_at(
         vec3(0.0, 1.0, 3.6),
@@ -90,11 +99,42 @@ fn render_demo(
     Ok((ldr.width as usize, ldr.height as usize, ldr.pixels))
 }
 
+/// Move a finished background render into the panel: build the egui texture on
+/// the UI thread (the worker only produced raw pixels), or surface the error.
+fn poll_render(s: &mut RenderWorkbenchState, ctx: &egui::Context) {
+    match s.job.as_mut().map(BackgroundJob::poll) {
+        Some(JobState::Done(result)) => {
+            s.job = None;
+            match result {
+                Ok((w, h, pixels)) => {
+                    let mut rgba = Vec::with_capacity(w * h * 4);
+                    for px in pixels.chunks_exact(3) {
+                        rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
+                    }
+                    let color = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
+                    let tex = ctx.load_texture("pathtrace_render", color, egui::TextureOptions::LINEAR);
+                    s.texture = Some(tex);
+                    s.status = format!("rendered {w}×{h} @ {} spp", s.spp);
+                }
+                Err(e) => {
+                    s.error = Some(format!("render failed: {e}"));
+                }
+            }
+        }
+        Some(JobState::Failed) => {
+            s.job = None;
+            s.error = Some("the render thread stopped unexpectedly".into());
+        }
+        Some(JobState::Pending) | None => {}
+    }
+}
+
 /// Draw the render workbench (a no-op unless toggled on via View → Render).
 pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_render_workbench {
         return;
     }
+    poll_render(&mut app.render, ctx);
     let mut do_render = false;
     egui::SidePanel::right("valenx_render_workbench")
         .resizable(true)
@@ -109,6 +149,15 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             );
             ui.separator();
             let s = &mut app.render;
+            let running = s.job.is_some();
+            if running {
+                ctx.request_repaint();
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label("rendering…");
+                });
+                ui.disable();
+            }
             egui::Grid::new("render_params").num_columns(2).show(ui, |ui| {
                 ui.label("resolution");
                 ui.add(egui::DragValue::new(&mut s.resolution).speed(4.0).range(48..=512));
@@ -151,23 +200,15 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         // Clear stale per-run state up front (house style — cf. cfd_workbench),
         // so a failed render can't leave the previous success line showing next
         // to the error. The last-good texture is deliberately retained.
-        app.render.status.clear();
-        app.render.error = None;
-        match render_demo(app.render.resolution, app.render.spp, app.render.max_depth, app.render.exposure) {
-            Ok((w, h, pixels)) => {
-                let mut rgba = Vec::with_capacity(w * h * 4);
-                for px in pixels.chunks_exact(3) {
-                    rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
-                }
-                let color = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
-                let tex = ctx.load_texture("pathtrace_render", color, egui::TextureOptions::LINEAR);
-                app.render.texture = Some(tex);
-                app.render.status = format!("rendered {w}×{h} @ {} spp", app.render.spp);
-            }
-            Err(e) => {
-                app.render.error = Some(format!("render failed: {e}"));
-            }
-        }
+        let s = &mut app.render;
+        s.status.clear();
+        s.error = None;
+        let (res, spp, max_depth, exposure) = (s.resolution, s.spp, s.max_depth, s.exposure);
+        // Render on a worker thread; poll_render uploads the texture when it
+        // finishes, so the path tracer no longer freezes the UI.
+        s.job = Some(BackgroundJob::spawn(move || {
+            render_demo(res, spp, max_depth, exposure)
+        }));
     }
 }
 
@@ -182,5 +223,28 @@ mod tests {
         let (w, h, pixels) = render_demo(64, 4, 4, 1.0).expect("64² render is well under the pixel cap");
         assert_eq!(pixels.len(), w * h * 3, "RGB8 buffer of the right size");
         assert!(pixels.iter().any(|&p| p > 0), "the scene is lit (non-black pixels)");
+    }
+
+    #[test]
+    fn background_render_delivers_pixels() {
+        // Exercise the reactive path: render_demo runs on a worker thread and
+        // the result is polled — the panel no longer blocks the UI thread.
+        let mut job = BackgroundJob::spawn(|| render_demo(64, 4, 4, 1.0));
+        let mut out = None;
+        for _ in 0..2000 {
+            match job.poll() {
+                JobState::Pending => std::thread::sleep(std::time::Duration::from_millis(1)),
+                JobState::Done(r) => {
+                    out = Some(r);
+                    break;
+                }
+                JobState::Failed => panic!("render worker should not fail"),
+            }
+        }
+        let (w, h, pixels) = out
+            .expect("render delivered within the poll budget")
+            .expect("64² render is well under the pixel cap");
+        assert_eq!(pixels.len(), w * h * 3);
+        assert!(pixels.iter().any(|&p| p > 0), "the scene is lit");
     }
 }
