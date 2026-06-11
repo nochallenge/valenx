@@ -56,8 +56,35 @@ pub fn profile_solid(spec: &ThreadSpecPro, length: f64) -> Result<Solid, Threads
             reason: format!("must be > 0, got {length}"),
         });
     }
+    // Pitch must be finite and positive: a zero/negative/NaN pitch makes
+    // `length / pitch` non-finite, and `(+inf).ceil() as u32` saturates to
+    // u32::MAX -- `helix_polyline` would then request a ~u32::MAX * 32
+    // element (multi-terabyte) allocation and abort. `ThreadSpecPro` is
+    // `Deserialize` with no field validation, so a garbled saved spec can
+    // carry `pitch = 0`.
+    if !spec.pitch.is_finite() || spec.pitch <= 0.0 {
+        return Err(ThreadsProError::BadParameter {
+            name: "pitch",
+            reason: format!("must be finite and > 0, got {}", spec.pitch),
+        });
+    }
     let samples_per_turn: u32 = 32;
-    let n_turns = ((length / spec.pitch).ceil() as u32).max(1);
+    // Reject an absurd turn count *before* the `as u32` cast: a tiny but
+    // positive pitch would otherwise still drive `n_turns` to billions and
+    // OOM. A real thread is far under this cap (the longest standard
+    // fastener is well under 1000 mm at >= 0.2 mm pitch -- a few thousand
+    // turns).
+    const MAX_TURNS: f64 = 100_000.0;
+    let turns = (length / spec.pitch).ceil();
+    if turns > MAX_TURNS {
+        return Err(ThreadsProError::BadParameter {
+            name: "pitch",
+            reason: format!(
+                "length/pitch = {turns} turns exceeds the {MAX_TURNS} cap (pitch too small for this length)"
+            ),
+        });
+    }
+    let n_turns = (turns as u32).max(1);
     let helix = helix_polyline(spec, n_turns, samples_per_turn)?;
 
     let r_major = spec.major_diameter() / 2.0;
@@ -176,5 +203,34 @@ mod tests {
         let spec = ThreadSpecPro::new(ThreadStandardPro::IsoMetric, "M8", 8.0, 1.25);
         let err = profile_solid(&spec, 0.0).unwrap_err();
         assert!(matches!(err, ThreadsProError::BadParameter { .. }));
+    }
+
+    #[test]
+    fn profile_solid_rejects_zero_pitch() {
+        // A zero pitch makes length/pitch non-finite; pre-fix the
+        // `(+inf).ceil() as u32` saturated to u32::MAX and the helix
+        // requested a multi-terabyte allocation (abort). It must be a
+        // clean BadParameter instead. `ThreadSpecPro` is `Deserialize`
+        // with no field validation, so a garbled saved spec can carry
+        // pitch = 0.
+        let spec = ThreadSpecPro::new(ThreadStandardPro::IsoMetric, "M8", 8.0, 0.0);
+        let err = profile_solid(&spec, 10.0).unwrap_err();
+        assert!(
+            matches!(&err, ThreadsProError::BadParameter { name, .. } if *name == "pitch"),
+            "expected a pitch BadParameter, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn profile_solid_rejects_pitch_too_small_for_length() {
+        // A tiny but positive pitch would drive n_turns to billions and
+        // OOM the same way; the turn-count cap must reject it before the
+        // `as u32` cast.
+        let spec = ThreadSpecPro::new(ThreadStandardPro::IsoMetric, "M8", 8.0, 1e-9);
+        let err = profile_solid(&spec, 10.0).unwrap_err();
+        assert!(
+            matches!(&err, ThreadsProError::BadParameter { name, .. } if *name == "pitch"),
+            "expected a pitch BadParameter, got {err:?}"
+        );
     }
 }
