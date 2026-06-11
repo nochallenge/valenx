@@ -416,8 +416,13 @@ fn point_in_polygon(x: f64, y: f64, polygon: &[Vector3<f64>]) -> bool {
         let yi = polygon[i].y;
         let xj = polygon[j].x;
         let yj = polygon[j].y;
+        // The parity test guarantees the edge straddles `y`, so `yj != yi` and
+        // the division is safe — no zero-denominator guard is needed. (The old
+        // `.max(MIN_POSITIVE).copysign(yj - yi)` silently replaced a *downward*
+        // edge's `dy` with ≈-2e-308, blowing up the x-intersection and
+        // misclassifying every non-axis-aligned pocket.)
         let intersect = ((yi > y) != (yj > y))
-            && (x < (xj - xi) * (y - yi) / (yj - yi).max(f64::MIN_POSITIVE).copysign(yj - yi) + xi);
+            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
         if intersect {
             inside = !inside;
         }
@@ -490,6 +495,30 @@ mod tests {
     use super::*;
     use crate::tool::ToolKind;
     use valenx_mesh::element::{ElementBlock, ElementType};
+
+    #[test]
+    fn point_in_polygon_handles_sloped_edges() {
+        // Triangle (0,0)-(4,0)-(2,4): the left edge goes UP, the right edge
+        // goes DOWN — both sloped. The old broken div-by-zero guard replaced a
+        // downward edge's dy with ~-2e-308, misclassifying points near the
+        // sloped right edge (every non-axis-aligned pocket hit this).
+        let tri = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(4.0, 0.0, 0.0),
+            Vector3::new(2.0, 4.0, 0.0),
+        ];
+        // At y=1 inside is 0.5 < x < 3.5; at y=3 inside is 1.5 < x < 2.5.
+        assert!(point_in_polygon(2.0, 1.0, &tri), "centre is inside");
+        assert!(point_in_polygon(2.0, 3.0, &tri), "upper-centre is inside");
+        assert!(
+            !point_in_polygon(0.5, 3.0, &tri),
+            "left of the left edge is outside"
+        );
+        assert!(
+            !point_in_polygon(3.5, 3.0, &tri),
+            "right of the downward edge is outside"
+        );
+    }
 
     fn cube(size: f64) -> Mesh {
         let s = size * 0.5;
