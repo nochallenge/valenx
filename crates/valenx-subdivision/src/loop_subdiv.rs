@@ -30,6 +30,8 @@ pub fn subdivide(mesh: &SubdivMesh, iter: u32) -> Result<SubdivMesh, SubdivError
             )));
         }
     }
+    // Reject faces that index past `vertices` before the scheme indexes them.
+    mesh.validate()?;
     let mut m = mesh.clone();
     for _ in 0..iter {
         m = one_iter(&m);

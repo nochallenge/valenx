@@ -18,6 +18,11 @@ use crate::mesh::SubdivMesh;
 
 /// Apply `iter` rounds of crease-aware Catmull-Clark.
 pub fn subdivide(creased: &CreasedMesh, iter: u32) -> SubdivMesh {
+    // Guard against a malformed base mesh (a face index past `vertices`); this
+    // entry is infallible, so return the base mesh unchanged rather than panic.
+    if creased.mesh.validate().is_err() {
+        return creased.mesh.clone();
+    }
     let mut cur = creased.clone();
     for _ in 0..iter {
         cur = one_iter(&cur);

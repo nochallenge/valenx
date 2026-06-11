@@ -22,6 +22,13 @@ use crate::mesh::SubdivMesh;
 
 /// Apply `iter` rounds of Catmull-Clark subdivision.
 pub fn subdivide(mesh: &SubdivMesh, iter: u32) -> SubdivMesh {
+    // A malformed mesh (a face index past `vertices`, possible since SubdivMesh
+    // has public fields) would index out of bounds in `one_iter`. This entry is
+    // infallible by signature, so return the input unchanged rather than panic;
+    // callers wanting a hard error can pre-check with `SubdivMesh::validate`.
+    if mesh.validate().is_err() {
+        return mesh.clone();
+    }
     let mut m = mesh.clone();
     for _ in 0..iter {
         m = one_iter(&m);
