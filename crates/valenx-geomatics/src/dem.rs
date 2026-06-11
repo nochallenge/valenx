@@ -158,6 +158,19 @@ pub fn from_xyz_ascii(text: &str) -> Result<Dem, GeomaticsError> {
             "non-positive grid spacing inferred: {grid_size_m}"
         )));
     }
+    // `Dem` carries a single spacing for both axes (square cells, v1). A
+    // regular but ANISOTROPIC grid (dy != dx) would be stored with the
+    // X-derived spacing and then silently misplace every row in Y, so reject
+    // it rather than return wrong coordinates.
+    if nx >= 2 && ny >= 2 {
+        let dy = rows[nx].1 - rows[0].1;
+        if (dy - grid_size_m).abs() > 1e-6 * grid_size_m {
+            return Err(GeomaticsError::IrregularGrid(format!(
+                "non-square grid: x spacing {grid_size_m} != y spacing {dy} \
+                 (only square cells are supported)"
+            )));
+        }
+    }
     let mut data = Vec::with_capacity(rows.len());
     for r in &rows {
         data.push(r.2 as f32);
@@ -254,6 +267,18 @@ mod tests {
     #[test]
     fn parse_xyz_irregular_errors() {
         let text = "0 0 10\n1 0 20\n0 1 30\n"; // 3 samples → can't reshape
+        assert!(matches!(
+            from_xyz_ascii(text),
+            Err(GeomaticsError::IrregularGrid(_))
+        ));
+    }
+
+    #[test]
+    fn parse_xyz_rejects_non_square_grid() {
+        // A valid regular grid but with dx = 10, dy = 5. `Dem` is square-cells
+        // only; accepting it would store grid_size_m = 10 and misplace every
+        // row in Y. Must fail loud, not silently return wrong coordinates.
+        let text = "0 0 10\n10 0 20\n0 5 30\n10 5 40\n";
         assert!(matches!(
             from_xyz_ascii(text),
             Err(GeomaticsError::IrregularGrid(_))
