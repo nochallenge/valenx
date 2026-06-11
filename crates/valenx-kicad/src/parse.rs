@@ -27,7 +27,7 @@ pub fn import_kicad_pcb(path: impl AsRef<Path>) -> Result<KicadBoard, KicadError
 /// drills + footprints).
 pub fn from_str(text: &str) -> Result<KicadBoard, KicadError> {
     let tokens = tokenize(text);
-    let (root, _) = parse_sexpr(&tokens, 0)?;
+    let (root, _) = parse_sexpr(&tokens, 0, 0)?;
     let Sexpr::List(top) = &root else {
         return Err(KicadError::Parse(
             "root must be a list".into(),
@@ -62,7 +62,7 @@ pub fn from_str(text: &str) -> Result<KicadBoard, KicadError> {
 fn parse_general(items: &[Sexpr], board: &mut KicadBoard) {
     for it in items {
         if let Sexpr::List(inner) = it {
-            if name_of(&inner[0]) == "thickness" {
+            if name_of_first(inner) == "thickness" {
                 if let Some(Sexpr::Atom(s)) = inner.get(1) {
                     if let Ok(v) = s.parse::<f64>() {
                         board.thickness_mm = v;
@@ -80,7 +80,7 @@ fn parse_gr_line(items: &[Sexpr], board: &mut KicadBoard) {
     let mut end: Option<[f64; 2]> = None;
     for it in items.iter().skip(1) {
         if let Sexpr::List(inner) = it {
-            match name_of(&inner[0]) {
+            match name_of_first(inner) {
                 "start" => start = parse_xy(inner),
                 "end" => end = parse_xy(inner),
                 "layer" => {
@@ -110,7 +110,7 @@ fn parse_via_as_drill(items: &[Sexpr], board: &mut KicadBoard) {
     let mut drill = 0.6;
     for it in items.iter().skip(1) {
         if let Sexpr::List(inner) = it {
-            match name_of(&inner[0]) {
+            match name_of_first(inner) {
                 "at" => {
                     if let Some(xy) = parse_xy(inner) {
                         pos = Vector3::new(xy[0], xy[1], 0.0);
@@ -144,7 +144,7 @@ fn parse_footprint(items: &[Sexpr], board: &mut KicadBoard) {
     let mut model_3d_path: Option<String> = None;
     for it in items.iter().skip(2) {
         if let Sexpr::List(inner) = it {
-            match name_of(&inner[0]) {
+            match name_of_first(inner) {
                 "at" => {
                     if let Some(xy) = parse_xy(inner) {
                         at = Vector3::new(xy[0], xy[1], 0.0);
@@ -210,6 +210,12 @@ fn name_of(s: &Sexpr) -> &str {
     }
 }
 
+/// The head-symbol name of a list's first element, or `""` if the list is
+/// empty. Used so a malformed empty `()` can't panic `inner[0]`.
+fn name_of_first(items: &[Sexpr]) -> &str {
+    items.first().map(name_of).unwrap_or("")
+}
+
 fn tokenize(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -249,7 +255,13 @@ fn tokenize(text: &str) -> Vec<String> {
     out
 }
 
-fn parse_sexpr(tokens: &[String], idx: usize) -> Result<(Sexpr, usize), KicadError> {
+fn parse_sexpr(tokens: &[String], idx: usize, depth: usize) -> Result<(Sexpr, usize), KicadError> {
+    // Bound recursion: a deeply nested `(((…` would otherwise overflow the
+    // stack (the 1 GiB file cap allows millions of nesting levels).
+    const MAX_DEPTH: usize = 512;
+    if depth > MAX_DEPTH {
+        return Err(KicadError::Parse("s-expression nested too deeply".into()));
+    }
     if idx >= tokens.len() {
         return Err(KicadError::Parse("unexpected EOF".into()));
     }
@@ -258,7 +270,7 @@ fn parse_sexpr(tokens: &[String], idx: usize) -> Result<(Sexpr, usize), KicadErr
         let mut items = Vec::new();
         let mut i = idx + 1;
         while i < tokens.len() && tokens[i] != ")" {
-            let (inner, next) = parse_sexpr(tokens, i)?;
+            let (inner, next) = parse_sexpr(tokens, i, depth + 1)?;
             items.push(inner);
             i = next;
         }
@@ -293,6 +305,21 @@ mod tests {
         assert_eq!(board.components.len(), 1);
         assert_eq!(board.components[0].ref_designator, "R1");
         assert!(board.components[0].rotation_deg == 90.0);
+    }
+
+    #[test]
+    fn empty_section_list_does_not_panic() {
+        // A malformed empty `()` inside a section must be skipped, not panic
+        // `inner[0]`. (Previously `name_of(&inner[0])` indexed an empty Vec.)
+        assert!(from_str("(kicad_pcb (general ()))").is_ok());
+        assert!(from_str("(kicad_pcb (gr_line ()))").is_ok());
+    }
+
+    #[test]
+    fn deeply_nested_input_errors_not_stack_overflow() {
+        // A pathologically nested s-expression must hit the depth cap and
+        // return an error rather than overflow the stack.
+        assert!(from_str(&"(".repeat(5000)).is_err());
     }
 
     #[test]
