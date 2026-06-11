@@ -27,6 +27,9 @@ pub mod coulomb;
 pub mod lj;
 pub mod neighbor;
 pub mod pme;
+pub mod scaled14;
+
+pub use scaled14::ScaledPairs14;
 
 use std::collections::HashSet;
 

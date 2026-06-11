@@ -43,6 +43,7 @@ use crate::integrate::Integrator;
 use crate::nonbonded::coulomb::{Coulomb, CoulombMethod};
 use crate::nonbonded::lj::LennardJones;
 use crate::nonbonded::neighbor::NeighborList;
+use crate::nonbonded::{ExclusionSet, ScaledPairs14};
 use crate::analysis::reporters::{state_report, ObservableLog, StateReport};
 use crate::system::System;
 
@@ -155,12 +156,28 @@ impl Simulation {
             && system.cell.max_cutoff() > cutoff
             && system.len() >= 2
         {
-            let lj = LennardJones::from_system(&system, &force_field, cutoff)?;
+            // 1-4 pairs (the end atoms of each proper dihedral) take a
+            // *scaled* nonbonded interaction in AMBER/OPLS force fields:
+            // exclude them from the ordinary cut-off LJ/Coulomb sum and
+            // re-add them through ScaledPairs14 at lj_14/coulomb_14 strength.
+            // (Without this they were counted at full strength, distorting
+            // torsional energetics.)
+            let mut exclusions = ExclusionSet::from_topology(&system.topology);
+            for &(a, b) in &system.topology.one_four_pairs() {
+                exclusions.insert(a, b);
+            }
+            let lj = LennardJones::from_system(&system, &force_field, cutoff)?
+                .with_exclusions(exclusions.clone());
             let coulomb = Coulomb::from_system(
                 &system,
                 cutoff,
                 CoulombMethod::conductor_reaction_field(),
-            )?;
+            )?
+            .with_exclusions(exclusions);
+            let scaled14 = ScaledPairs14::from_system(&system, &force_field)?;
+            if !scaled14.is_empty() {
+                bonded.push(Box::new(scaled14));
+            }
             Some(NonbondedTerms {
                 lj: Some(lj),
                 coulomb: Some(coulomb),
@@ -413,6 +430,65 @@ mod tests {
     use crate::pbc::SimBox;
     use crate::system::{Atom, Topology};
     use nalgebra::Vector3;
+
+    #[test]
+    fn full_simulation_applies_scaled_one_four_not_full() {
+        use crate::forcefield::{AngleParam, DihedralParam};
+        use crate::units::COULOMB;
+        // A periodic 0-1-2-3 chain whose every atom pair is 1-2 / 1-3 / 1-4.
+        // With zero-force-constant bonded params the bonded energy is 0, every
+        // 1-2/1-3 pair is excluded from the cut-off/RF nonbonded sum, and the
+        // 1-4 (0,3) pair is excluded there too and re-added once, *scaled*. So
+        // the whole potential energy must equal the scaled 1-4 value — an
+        // end-to-end proof (through Simulation::new's exclusion wiring + the
+        // neighbour list) that 1-4 is not double-counted at full strength.
+        let mut top = Topology::new();
+        for _ in 0..4 {
+            top.push_atom(Atom::new("CT", 12.0, 0.2).unwrap());
+        }
+        top.add_bond(0, 1).unwrap();
+        top.add_bond(1, 2).unwrap();
+        top.add_bond(2, 3).unwrap();
+        top.add_angle(0, 1, 2).unwrap();
+        top.add_angle(1, 2, 3).unwrap();
+        top.add_dihedral(0, 1, 2, 3).unwrap();
+        let pos = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(0.15, 0.0, 0.0),
+            Vector3::new(0.30, 0.10, 0.0),
+            Vector3::new(0.45, 0.10, 0.0),
+        ];
+        let sys = System::new(top, pos)
+            .unwrap()
+            .with_cell(SimBox::cubic(5.0).unwrap());
+
+        let mut ff = ForceField::new(CombiningRule::LorentzBerthelot);
+        ff.set_lj("CT", LjParam::new(0.35, 0.3).unwrap());
+        ff.lj_14_scale = 0.5;
+        ff.coulomb_14_scale = 0.5;
+        // Zero-k bonded params: present (so validate_against passes) but
+        // contributing no energy at any geometry.
+        for _ in 0..3 {
+            ff.push_bond(BondParam::new(0.15, 0.0).unwrap());
+        }
+        for _ in 0..2 {
+            ff.push_angle(AngleParam::new(2.0, 0.0).unwrap());
+        }
+        ff.push_dihedral(DihedralParam::periodic(0.0, 1, 0.0).unwrap());
+
+        let mut sim = Simulation::new(sys, ff).unwrap();
+        let pe = sim.potential_energy().unwrap();
+
+        let r = 0.45_f64.hypot(0.10); // |pos[0] - pos[3]|
+        let lj = crate::nonbonded::lj::pair_energy(0.35, 0.3, r);
+        let coul = COULOMB * 0.2 * 0.2 / r;
+        let expected = 0.5 * (lj + coul);
+        assert!(
+            (pe - expected).abs() < 1e-9,
+            "potential energy should be the scaled 1-4 only ({expected}), got {pe} — \
+             a larger value means the 1-4 pair leaked into the full-strength sum"
+        );
+    }
 
     /// A small periodic argon-like system.
     fn argon_box(n_per_side: usize) -> (System, ForceField) {
