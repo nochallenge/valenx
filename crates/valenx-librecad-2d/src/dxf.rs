@@ -214,6 +214,7 @@ fn read_entity(
     let mut a = [0.0_f64; 2];
     let mut b = [0.0_f64; 2];
     let mut centre = [0.0_f64; 2];
+    let mut text_pos = [0.0_f64; 2];
     let mut radius = 0.0_f64;
     let mut start_angle = 0.0_f64;
     let mut end_angle = 0.0_f64;
@@ -249,6 +250,10 @@ fn read_entity(
             }
             11 => b[0] = val.parse().unwrap_or(0.0),
             21 => b[1] = val.parse().unwrap_or(0.0),
+            // 13/23 carry a DIMENSION's text midpoint (`text_pos`); kept
+            // distinct from a's 10/20 so the second point can't clobber it.
+            13 => text_pos[0] = val.parse().unwrap_or(0.0),
+            23 => text_pos[1] = val.parse().unwrap_or(0.0),
             40 => {
                 radius = val.parse().unwrap_or(0.0);
                 height = radius;
@@ -326,7 +331,7 @@ fn read_entity(
             layer,
             a,
             b,
-            text_pos: centre,
+            text_pos,
             text,
         }),
         "INSERT" => Some(Entity2D::Insert {
@@ -479,8 +484,8 @@ fn serialise_entity(s: &mut String, e: &Entity2D) {
             push_pair_f(s, 20, a[1]);
             push_pair_f(s, 11, b[0]);
             push_pair_f(s, 21, b[1]);
-            push_pair_f(s, 10, text_pos[0]);
-            push_pair_f(s, 20, text_pos[1]);
+            push_pair_f(s, 13, text_pos[0]);
+            push_pair_f(s, 23, text_pos[1]);
             push_pair(s, 1, text);
         }
         Entity2D::Insert {

@@ -140,6 +140,34 @@ mod tests {
     }
 
     #[test]
+    fn dxf_round_trip_preserves_dimension_points() {
+        // Regression: the serialiser wrote `text_pos` on group codes 10/20 —
+        // the same codes the parser reads into definition point `a` — so on
+        // reload the second 10/20 clobbered `a`. `text_pos` now uses 13/23.
+        let mut d = Drawing2D::new();
+        d.entities.push(Entity2D::Dimension {
+            layer: "0".into(),
+            a: [1.0, 2.0],
+            b: [3.0, 4.0],
+            text_pos: [9.0, 8.0],
+            text: "5.0".into(),
+        });
+        let s = dxf::serialise(&d);
+        let d2 = dxf::parse(&s).expect("parse ok");
+        match &d2.entities[0] {
+            Entity2D::Dimension {
+                a, b, text_pos, text, ..
+            } => {
+                assert_eq!(*a, [1.0, 2.0], "definition point a must survive reload");
+                assert_eq!(*b, [3.0, 4.0]);
+                assert_eq!(*text_pos, [9.0, 8.0], "text midpoint must round-trip");
+                assert_eq!(text, "5.0");
+            }
+            other => panic!("expected Dimension, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn dxf_round_trip_preserves_polyline_vertices() {
         let mut d = Drawing2D::new();
         d.entities.push(Entity2D::Polyline {
