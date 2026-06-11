@@ -474,8 +474,9 @@ pub fn backward_facing_step_reattachment(
         iterations = outer + 1;
         apply_step_bcs(&mut u, &mut v);
         // u-momentum sweep.
-        let dx_diff = nu * dy / dx;
-        let dy_diff = nu * dx / dy;
+        // Dynamic-viscosity diffusion μ = ρν (matches the ρuA convective flux).
+        let dx_diff = rho * nu * dy / dx;
+        let dy_diff = rho * nu * dx / dy;
         for _sweep in 0..2 {
             for j in 0..ny {
                 for i in 1..nx {
@@ -493,7 +494,7 @@ pub fn backward_facing_step_reattachment(
                     let su = 0.0;
                     let mut an = 0.0;
                     let mut as_ = 0.0;
-                    let dwall = nu * dx / (0.5 * dy);
+                    let dwall = rho * nu * dx / (0.5 * dy);
                     if j == ny - 1 {
                         a_p += dwall;
                     } else {
@@ -543,7 +544,7 @@ pub fn backward_facing_step_reattachment(
                     let sv = 0.0;
                     let mut ae = 0.0;
                     let mut aw = 0.0;
-                    let dwall = nu * dy / (0.5 * dx);
+                    let dwall = rho * nu * dy / (0.5 * dx);
                     if i == nx - 1 {
                         a_p += dwall;
                     } else {

@@ -421,8 +421,10 @@ fn solve_u_momentum(
     let ny = grid.ny;
     let dx = grid.dx();
     let dy = grid.dy();
-    let dx_diff = nu * dy / dx;
-    let dy_diff = nu * dx / dy;
+    // Dynamic-viscosity diffusion conductance μ = ρν (matches the ρuA
+    // convective flux and ρV/Δt unsteady term); kinematic ν dropped the ρ.
+    let dx_diff = rho * nu * dy / dx;
+    let dy_diff = rho * nu * dx / dy;
     // The unsteady-term coefficient a_t = ρ·V/Δt (the u-CV volume is
     // dx·dy per unit depth).
     let a_t = rho * dx * dy / dt;
@@ -446,7 +448,7 @@ fn solve_u_momentum(
                 let mut su = a_t * u_old.at(i, j);
                 let mut an = 0.0;
                 let mut as_ = 0.0;
-                let dwall = nu * dx / (0.5 * dy);
+                let dwall = rho * nu * dx / (0.5 * dy);
                 if j == ny - 1 {
                     let wall_u = match bcs.north {
                         SideBc::Wall { u, .. } | SideBc::Inlet { u, .. } => u,
@@ -513,8 +515,10 @@ fn solve_v_momentum(
     let ny = grid.ny;
     let dx = grid.dx();
     let dy = grid.dy();
-    let dx_diff = nu * dy / dx;
-    let dy_diff = nu * dx / dy;
+    // Dynamic-viscosity diffusion conductance μ = ρν (matches the ρuA
+    // convective flux and ρV/Δt unsteady term); kinematic ν dropped the ρ.
+    let dx_diff = rho * nu * dy / dx;
+    let dy_diff = rho * nu * dx / dy;
     let a_t = rho * dx * dy / dt;
 
     for _sweep in 0..2 {
@@ -533,7 +537,7 @@ fn solve_v_momentum(
                 let mut sv = a_t * v_old.at(i, j);
                 let mut ae = 0.0;
                 let mut aw = 0.0;
-                let dwall = nu * dy / (0.5 * dx);
+                let dwall = rho * nu * dy / (0.5 * dx);
                 if i == nx - 1 {
                     let wall_v = match bcs.east {
                         SideBc::Wall { v, .. } | SideBc::Inlet { v, .. } => v,
