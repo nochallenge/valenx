@@ -93,4 +93,38 @@ mod tests {
         let ossb = 7.0 * std::f64::consts::FRAC_PI_4.tan();
         assert!((bd - (2.0 * ossb - b.bend_allowance(2.0, 0.44))).abs() < 1e-9);
     }
+
+    #[test]
+    fn bend_allowance_and_deduction_invariants() {
+        let b = Bend::new([0.0, 0.0], [1.0, 0.0], std::f64::consts::FRAC_PI_2, 3.0);
+        let (t, k) = (2.0, 0.4);
+        let ba = b.bend_allowance(t, k);
+
+        // Linear in the bend angle: BA = r_neutral·|θ|, so doubling θ doubles
+        // BA. A single-angle point test can't distinguish linear from, e.g.,
+        // sin θ or θ².
+        let mut b2 = b.clone();
+        b2.angle_rad *= 2.0;
+        assert!((b2.bend_allowance(t, k) - 2.0 * ba).abs() < 1e-9);
+
+        // Sign symmetry: BA and BD use |angle| / |tan(angle/2)|, so a negative
+        // (downward) bend develops the same lengths. The existing +90°-only
+        // tests cannot verify this — it would catch a dropped `.abs()`.
+        let mut bneg = b.clone();
+        bneg.angle_rad = -b.angle_rad;
+        assert!((bneg.bend_allowance(t, k) - ba).abs() < 1e-12);
+        assert!((bneg.bend_deduction(t, k) - b.bend_deduction(t, k)).abs() < 1e-12);
+
+        // k = 0 puts the neutral axis at the inside surface, so BA = r_i·|θ| —
+        // independent of thickness.
+        let ba_k0_t2 = b.bend_allowance(2.0, 0.0);
+        let ba_k0_t9 = b.bend_allowance(9.0, 0.0);
+        assert!((ba_k0_t2 - ba_k0_t9).abs() < 1e-12);
+        assert!((ba_k0_t2 - b.inside_radius * b.angle_rad).abs() < 1e-12);
+
+        // A zero-angle "bend" develops nothing: BA = 0 and BD = 0 (OSSB = 0).
+        let flat = Bend::new([0.0, 0.0], [1.0, 0.0], 0.0, 3.0);
+        assert_eq!(flat.bend_allowance(t, k), 0.0);
+        assert_eq!(flat.bend_deduction(t, k), 0.0);
+    }
 }
