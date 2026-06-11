@@ -19,6 +19,7 @@
 //! software.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod activating;
 pub mod aniso_field;
