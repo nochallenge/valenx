@@ -135,6 +135,18 @@ fn parse_nodes(
         line: header.0 + 1,
         reason: "numNodes not an integer".into(),
     })?;
+    // Bound the file-declared node count so a crafted header can't drive a
+    // multi-gigabyte allocation (`vec![None; total_nodes+1]` / `reserve` /
+    // per-block `with_capacity` / the tag-keyed `resize`) before any node line
+    // is read. A `.msh` within the byte cap realistically stays far under this;
+    // matches the count caps the sibling mesh readers apply.
+    const MAX_MSH_NODES: usize = 10_000_000;
+    if total_nodes > MAX_MSH_NODES {
+        return Err(MshError::Malformed {
+            line: header.0 + 1,
+            reason: format!("numNodes {total_nodes} exceeds the {MAX_MSH_NODES} cap"),
+        });
+    }
 
     // Pre-populate the nodes vector with zero placeholders and a
     // parallel tag→index map so Elements can rewrite connectivity.
@@ -167,6 +179,12 @@ fn parse_nodes(
             line: block_header_line_no + 1,
             reason: "numNodesInBlock not an integer".into(),
         })?;
+        if n_in_block > MAX_MSH_NODES {
+            return Err(MshError::Malformed {
+                line: block_header_line_no + 1,
+                reason: format!("numNodesInBlock {n_in_block} exceeds the {MAX_MSH_NODES} cap"),
+            });
+        }
 
         // First the tags (one per line), then the coordinates (one
         // per line). Parametric coordinates follow the xyz when
@@ -215,9 +233,14 @@ fn parse_nodes(
                 .push(Vector3::new(coords[0], coords[1], coords[2]));
             if tag < dense_map.len() {
                 dense_map[tag] = Some(idx);
-            } else {
+            } else if tag <= MAX_MSH_NODES {
                 dense_map.resize(tag + 1, None);
                 dense_map[tag] = Some(idx);
+            } else {
+                return Err(MshError::Malformed {
+                    line: line_no_zero + 1,
+                    reason: format!("node tag {tag} exceeds the {MAX_MSH_NODES} cap"),
+                });
             }
         }
     }
@@ -497,6 +520,22 @@ $EndElements
         match parse_str(text, "x") {
             Err(MshError::UnsupportedVersion { version }) => assert_eq!(version, "2.2"),
             other => panic!("expected UnsupportedVersion, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_absurd_node_count_without_oom() {
+        // A $Nodes header claiming ~10^18 nodes must be rejected, not drive a
+        // `vec![None; 10^18]` allocation that aborts the process. The body is
+        // tiny — the over-allocation would otherwise happen before any node is
+        // read. Reachable from the app's `.msh` file-open path.
+        let text = "$MeshFormat\n4.1 0 8\n$EndMeshFormat\n\
+$Nodes\n\
+1 999999999999999999 1 1\n\
+$EndNodes\n";
+        match parse_str(text, "x") {
+            Err(MshError::Malformed { .. }) => {}
+            other => panic!("expected Malformed, got {other:?}"),
         }
     }
 
