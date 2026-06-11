@@ -395,4 +395,153 @@ impl Sketch3D {
             None => Err(Solve3DError::UnknownEntity(id)),
         }
     }
+
+    /// Like [`Self::expect_point`] but for an arbitrary entity kind:
+    /// `id` must resolve in range and satisfy `ok`, else `UnknownEntity`
+    /// / `KindMismatch`.
+    fn expect_kind(
+        &self,
+        id: EntityId,
+        expected: &'static str,
+        ok: impl Fn(&Entity3D) -> bool,
+    ) -> Result<(), Solve3DError> {
+        match self.entities.get(id.0) {
+            Some(e) if ok(e) => Ok(()),
+            Some(_) => Err(Solve3DError::KindMismatch { id, expected }),
+            None => Err(Solve3DError::UnknownEntity(id)),
+        }
+    }
+
+    /// Check that every entity- and variable-index reference resolves in
+    /// range and to the kind the solver's accessors will demand.
+    ///
+    /// The `add_*` builders enforce this at construction (via
+    /// [`Self::expect_point`]), but serde deserialisation builds a
+    /// `Sketch3D` field-by-field, bypassing them. A sketch loaded from a
+    /// crafted/corrupt `.ron` could otherwise drive the residual
+    /// accessors (`point_xyz`/`line_endpoints`/`circle_data`/…), which
+    /// raw-index `entities[id.0]` / `vars[var]` and `panic!` on a wrong
+    /// kind, into a crash on the first re-solve.
+    /// [`crate::persist::from_ron_str`] calls this on load.
+    pub fn validate(&self) -> Result<(), Solve3DError> {
+        let n_vars = self.vars.len();
+        let var = |v: usize| -> Result<(), Solve3DError> {
+            if v < n_vars {
+                Ok(())
+            } else {
+                Err(Solve3DError::BadParameter {
+                    name: "var",
+                    reason: format!("variable index {v} out of range (have {n_vars})"),
+                })
+            }
+        };
+        // Entities: every variable index in range; every entity->entity
+        // reference resolves to a `Point3` (all of them are point refs).
+        // Validating the table first lets the constraint pass below trust
+        // that a referenced `Line3`/`Circle3`/… has sound sub-references.
+        for e in &self.entities {
+            match e {
+                Entity3D::Point3(p) => {
+                    var(p.x_var)?;
+                    var(p.y_var)?;
+                    var(p.z_var)?;
+                }
+                Entity3D::Line3(l) => {
+                    self.expect_point(l.a)?;
+                    self.expect_point(l.b)?;
+                }
+                Entity3D::Plane3(p) => {
+                    self.expect_point(p.origin)?;
+                    var(p.nx_var)?;
+                    var(p.ny_var)?;
+                    var(p.nz_var)?;
+                }
+                Entity3D::Workplane(w) => {
+                    self.expect_point(w.origin)?;
+                    var(w.nx_var)?;
+                    var(w.ny_var)?;
+                    var(w.nz_var)?;
+                }
+                Entity3D::Circle3(c) => {
+                    self.expect_point(c.center)?;
+                    var(c.radius_var)?;
+                    var(c.nx_var)?;
+                    var(c.ny_var)?;
+                    var(c.nz_var)?;
+                }
+                Entity3D::Arc3(a) => {
+                    self.expect_point(a.center)?;
+                    self.expect_point(a.start)?;
+                    self.expect_point(a.end)?;
+                    var(a.radius_var)?;
+                    var(a.nx_var)?;
+                    var(a.ny_var)?;
+                    var(a.nz_var)?;
+                }
+                Entity3D::Spline3(sp) => {
+                    self.expect_point(sp.p0)?;
+                    self.expect_point(sp.p1)?;
+                    self.expect_point(sp.p2)?;
+                    self.expect_point(sp.p3)?;
+                }
+            }
+        }
+        // Constraints: every directly-referenced entity resolves in range
+        // and to the kind its residual accessor demands (a referenced
+        // `Line3`/`Circle3`/`Arc3`'s own point sub-refs were checked above).
+        for c in &self.constraints {
+            match c {
+                Constraint3D::Coincident3 { a, b }
+                | Constraint3D::SamePoint { a, b }
+                | Constraint3D::PointDistance3 { a, b, .. } => {
+                    self.expect_point(*a)?;
+                    self.expect_point(*b)?;
+                }
+                Constraint3D::LineLength3 { line, .. } => {
+                    self.expect_kind(*line, "Line3", |e| matches!(e, Entity3D::Line3(_)))?;
+                }
+                Constraint3D::LineAngle3 { a, b, .. }
+                | Constraint3D::LineParallel3 { a, b }
+                | Constraint3D::LinePerpendicular3 { a, b } => {
+                    self.expect_kind(*a, "Line3", |e| matches!(e, Entity3D::Line3(_)))?;
+                    self.expect_kind(*b, "Line3", |e| matches!(e, Entity3D::Line3(_)))?;
+                }
+                Constraint3D::PointInPlane { point, plane } => {
+                    self.expect_point(*point)?;
+                    self.expect_kind(*plane, "Plane3", |e| matches!(e, Entity3D::Plane3(_)))?;
+                }
+                Constraint3D::OnPlane { point, workplane } => {
+                    self.expect_point(*point)?;
+                    self.expect_kind(*workplane, "Workplane", |e| {
+                        matches!(e, Entity3D::Workplane(_))
+                    })?;
+                }
+                Constraint3D::OnLine { point, line } => {
+                    self.expect_point(*point)?;
+                    self.expect_kind(*line, "Line3", |e| matches!(e, Entity3D::Line3(_)))?;
+                }
+                Constraint3D::PlaneFixed { plane, .. } => {
+                    self.expect_kind(*plane, "Plane3 or Workplane", |e| {
+                        matches!(e, Entity3D::Plane3(_) | Entity3D::Workplane(_))
+                    })?;
+                }
+                Constraint3D::CircleRadius { circle, .. } => {
+                    self.expect_kind(*circle, "Circle3", |e| matches!(e, Entity3D::Circle3(_)))?;
+                }
+                Constraint3D::PointOnCircle { point, circle } => {
+                    self.expect_point(*point)?;
+                    self.expect_kind(*circle, "Circle3", |e| matches!(e, Entity3D::Circle3(_)))?;
+                }
+                Constraint3D::EqualRadius { a, b } => {
+                    self.expect_kind(*a, "Circle3", |e| matches!(e, Entity3D::Circle3(_)))?;
+                    self.expect_kind(*b, "Circle3", |e| matches!(e, Entity3D::Circle3(_)))?;
+                }
+                Constraint3D::ArcRadius { arc, .. }
+                | Constraint3D::ArcEndpointsOnArc { arc } => {
+                    self.expect_kind(*arc, "Arc3", |e| matches!(e, Entity3D::Arc3(_)))?;
+                }
+            }
+        }
+        Ok(())
+    }
 }

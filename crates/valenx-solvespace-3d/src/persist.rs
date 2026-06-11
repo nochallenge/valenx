@@ -44,6 +44,11 @@ pub fn from_ron_str(s: &str) -> Result<PanelFile, Solve3DError> {
             reason: format!("unsupported {} expected {VERSION}", f.version),
         });
     }
+    // serde builds the sketch field-by-field, bypassing the `add_*`
+    // builders' reference checks. Validate every entity/constraint
+    // reference now so a crafted/corrupt file can't panic the solver's
+    // raw-indexing accessors on the re-solve that follows a load.
+    f.sketch.validate()?;
     Ok(f)
 }
 
@@ -121,6 +126,90 @@ mod tests {
         assert_eq!(f.sketch.constraints.len(), 1);
         assert_eq!(f.sketch.entities.len(), 2);
         assert_eq!(f.sketch.vars.len(), 6);
+    }
+
+    #[test]
+    fn from_ron_rejects_constraint_with_out_of_range_entity() {
+        // serde builds the sketch field-by-field, bypassing the `add_*`
+        // reference checks. A constraint referencing entities that don't
+        // exist loaded fine pre-fix, then panicked the solver's
+        // `entities[id.0]` accessor on re-solve. It must be rejected now.
+        let mut s = Sketch3D::new();
+        s.constraints.push(Constraint3D::Coincident3 {
+            a: crate::entity::EntityId(0),
+            b: crate::entity::EntityId(1),
+        });
+        let txt = to_ron_string(&s).unwrap();
+        assert!(
+            from_ron_str(&txt).is_err(),
+            "out-of-range constraint ref must be rejected on load"
+        );
+    }
+
+    #[test]
+    fn from_ron_rejects_entity_with_out_of_range_var() {
+        // A `Point3` whose variable indices exceed the (empty) `vars`
+        // vector is structurally corrupt; `validate` rejects it on load.
+        // (Were a constraint to reference this point, `Point3::read`'s
+        // `vars[x_var]` would then panic on solve.)
+        let mut s = Sketch3D::new();
+        s.entities.push(crate::entity::Entity3D::Point3(crate::entity::Point3 {
+            x_var: 0,
+            y_var: 1,
+            z_var: 2,
+        }));
+        let txt = to_ron_string(&s).unwrap();
+        assert!(
+            from_ron_str(&txt).is_err(),
+            "out-of-range variable index must be rejected on load"
+        );
+    }
+
+    #[test]
+    fn from_ron_round_trips_valid_mixed_constraints() {
+        // The too-strict direction: a VALID sketch exercising the
+        // discrimination-sensitive constraints (PointInPlane -> Plane3,
+        // OnPlane -> Workplane, PlaneFixed -> Plane3-or-Workplane,
+        // CircleRadius -> Circle3, ArcRadius -> Arc3) must still load --
+        // guards against `validate` demanding the wrong kind and rejecting
+        // a legitimate file.
+        let mut s = Sketch3D::new();
+        let o = s.add_point(0.0, 0.0, 0.0);
+        let p = s.add_point(0.0, 0.0, 1.0);
+        let plane = s.add_plane(o, 0.0, 0.0, 1.0).unwrap();
+        let wp = s.add_workplane(o, 0.0, 0.0, 1.0).unwrap();
+        let center = s.add_point(1.0, 0.0, 0.0);
+        let circle = s.add_circle(center, 0.5, 0.0, 0.0, 1.0).unwrap();
+        let astart = s.add_point(1.5, 0.0, 0.0);
+        let aend = s.add_point(1.0, 0.5, 0.0);
+        let arc = s.add_arc(center, 0.5, 0.0, 0.0, 1.0, astart, aend).unwrap();
+        s.add_constraint(Constraint3D::PointInPlane { point: p, plane });
+        s.add_constraint(Constraint3D::OnPlane { point: p, workplane: wp });
+        s.lock_plane(plane).unwrap(); // adds a PlaneFixed constraint
+        s.add_constraint(Constraint3D::CircleRadius { circle, target: 0.5 });
+        s.add_constraint(Constraint3D::ArcRadius { arc, target: 0.5 });
+        let txt = to_ron_string(&s).unwrap();
+        let f = from_ron_str(&txt).expect("a valid mixed-constraint sketch must load");
+        assert!(f.sketch.validate().is_ok());
+    }
+
+    #[test]
+    fn from_ron_rejects_wrong_kind_constraint_ref() {
+        // A constraint that wants a Line but is handed a Point: the
+        // accessor's `other => panic!()` arm fires pre-fix. `validate`
+        // catches the kind mismatch on load.
+        let mut s = Sketch3D::new();
+        let _p = s.add_point(0.0, 0.0, 0.0);
+        // LineLength3 references entity 0, which is a Point3, not a Line3.
+        s.constraints.push(Constraint3D::LineLength3 {
+            line: crate::entity::EntityId(0),
+            target: 1.0,
+        });
+        let txt = to_ron_string(&s).unwrap();
+        assert!(
+            from_ron_str(&txt).is_err(),
+            "wrong-kind constraint ref must be rejected on load"
+        );
     }
 
     #[test]
