@@ -13,7 +13,7 @@ type ArgList = (Vec<Ast>, Vec<(String, Ast)>);
 /// blocks. The interpreter folds the list into a single expression by
 /// implicit unioning of the resulting solids.
 pub fn parse(tokens: &[Token]) -> Result<Vec<Ast>, OpenScadError> {
-    let mut p = Parser { toks: tokens, i: 0 };
+    let mut p = Parser { toks: tokens, i: 0, depth: 0 };
     let mut out = Vec::new();
     while p.peek().is_some() {
         let stmt = p.parse_statement()?;
@@ -22,9 +22,16 @@ pub fn parse(tokens: &[Token]) -> Result<Vec<Ast>, OpenScadError> {
     Ok(out)
 }
 
+/// Cap the parser's recursion depth so a pathologically nested source
+/// (deeply nested `(`/`[` expressions or `{}` blocks) returns an error
+/// instead of overflowing the stack.
+const MAX_PARSE_DEPTH: usize = 200;
+
 struct Parser<'a> {
     toks: &'a [Token],
     i: usize,
+    /// Current recursion depth, bounded by `MAX_PARSE_DEPTH`.
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -56,6 +63,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> Result<Ast, OpenScadError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(OpenScadError::Parse {
+                reason: format!("statement nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"),
+            });
+        }
+        self.depth += 1;
+        let r = self.parse_statement_impl();
+        self.depth -= 1;
+        r
+    }
+
+    fn parse_statement_impl(&mut self) -> Result<Ast, OpenScadError> {
         // `ident = expr ;` is an assignment.
         if let (Some(Token::Ident(name)), Some(Token::Eq)) = (self.toks.get(self.i), self.toks.get(self.i + 1)) {
             let name = name.clone();
@@ -192,6 +211,18 @@ impl<'a> Parser<'a> {
     /// Expression parser — Pratt-style with two precedence levels:
     /// `+ -` (low) then `* /` (high).
     fn parse_expr(&mut self) -> Result<Ast, OpenScadError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(OpenScadError::Parse {
+                reason: format!("expression nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"),
+            });
+        }
+        self.depth += 1;
+        let r = self.parse_expr_impl();
+        self.depth -= 1;
+        r
+    }
+
+    fn parse_expr_impl(&mut self) -> Result<Ast, OpenScadError> {
         let mut lhs = self.parse_mul()?;
         while let Some(t) = self.peek() {
             let op = match t {
@@ -284,6 +315,15 @@ mod tests {
         } else {
             panic!("expected call");
         }
+    }
+
+    #[test]
+    fn deeply_nested_expression_errors_not_stack_overflow() {
+        // ~300 nested parens exceeds MAX_PARSE_DEPTH; the parser must return an
+        // error rather than overflow the stack on a malicious .scad source.
+        let src = format!("x={}1{};", "(".repeat(300), ")".repeat(300));
+        let toks = lex(&src).expect("lex");
+        assert!(parse(&toks).is_err());
     }
 
     #[test]
