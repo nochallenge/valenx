@@ -242,7 +242,7 @@ fn prim_to_string(p: &Primitive) -> String {
 pub fn parse_mged(text: &str) -> Result<CsgNode, BrlCadError> {
     let tokens = tokenise(text)?;
     let mut iter = tokens.into_iter().peekable();
-    let node = parse_node(&mut iter)?;
+    let node = parse_node(&mut iter, 0)?;
     if iter.next().is_some() {
         return Err(BrlCadError::Parse {
             line: 0,
@@ -289,7 +289,21 @@ fn tokenise(text: &str) -> Result<Vec<String>, BrlCadError> {
 
 fn parse_node(
     iter: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
+    depth: usize,
 ) -> Result<CsgNode, BrlCadError> {
+    // Bound recursion so a pathologically deep expression (e.g. thousands
+    // of nested `(union ...`) is rejected with a parse error instead of
+    // overflowing the stack and aborting the process. `parse_mged` /
+    // `BrlCadPanelState::evaluate` feed caller-controlled free-form text
+    // here. Mirrors the parser depth caps elsewhere in the workspace
+    // (openscad=200, kicad=512, spreadsheet=100).
+    const MAX_DEPTH: usize = 256;
+    if depth > MAX_DEPTH {
+        return Err(BrlCadError::Parse {
+            line: 0,
+            message: format!("CSG expression nesting exceeds {MAX_DEPTH} levels"),
+        });
+    }
     let tok = iter.next().ok_or(BrlCadError::Parse {
         line: 0,
         message: "unexpected end of input".into(),
@@ -339,18 +353,18 @@ fn parse_node(
             CsgNode::Primitive(Primitive::HalfSpace { nx, ny, nz, d })
         }
         "union" => {
-            let a = parse_node(iter)?;
-            let b = parse_node(iter)?;
+            let a = parse_node(iter, depth + 1)?;
+            let b = parse_node(iter, depth + 1)?;
             CsgNode::Union(Box::new(a), Box::new(b))
         }
         "intersection" => {
-            let a = parse_node(iter)?;
-            let b = parse_node(iter)?;
+            let a = parse_node(iter, depth + 1)?;
+            let b = parse_node(iter, depth + 1)?;
             CsgNode::Intersection(Box::new(a), Box::new(b))
         }
         "difference" => {
-            let a = parse_node(iter)?;
-            let b = parse_node(iter)?;
+            let a = parse_node(iter, depth + 1)?;
+            let b = parse_node(iter, depth + 1)?;
             CsgNode::Difference(Box::new(a), Box::new(b))
         }
         "transform" => {
@@ -376,7 +390,7 @@ fn parse_node(
             for (i, v) in vals.iter().enumerate() {
                 m[i / 4][i % 4] = *v;
             }
-            let a = parse_node(iter)?;
+            let a = parse_node(iter, depth + 1)?;
             CsgNode::Transform(Box::new(a), m)
         }
         other => {

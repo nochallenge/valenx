@@ -100,6 +100,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_pathologically_deep_nesting() {
+        // A deeply-nested expression must be rejected by the depth cap,
+        // not recurse until the stack overflows and aborts the process.
+        // 300 openers exceeds the 256-level cap, so the parser bails with
+        // a nesting error while descending the first-child chain (before
+        // it even needs the leaves). Pre-fix this returned an incidental
+        // "end of input" error only because 300 frames happen not to
+        // overflow; a genuinely hostile input (tens of thousands deep)
+        // would abort the process.
+        let deep = "(union ".repeat(300);
+        let err = parse_mged(&deep).unwrap_err();
+        assert!(
+            matches!(&err, BrlCadError::Parse { message, .. } if message.contains("nesting")),
+            "expected a nesting-depth error, got {err:?}"
+        );
+    }
+
+    #[test]
     fn write_mged_matches_pretty() {
         let t = sample_tree();
         assert_eq!(write_mged(&t), to_pretty_string(&t));
