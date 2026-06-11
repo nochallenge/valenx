@@ -42,7 +42,11 @@ impl ParamHistPanelState {
             let max_dep_layer = e
                 .dependencies
                 .iter()
-                .map(|d| layer[*d] + 1)
+                // `.get` (not `layer[*d]`) so a dangling dependency index — from
+                // a corrupt/hand-edited project or direct construction — can't
+                // panic out of bounds.
+                .filter_map(|d| layer.get(*d))
+                .map(|l| l + 1)
                 .max()
                 .unwrap_or(0);
             layer[i] = max_dep_layer;

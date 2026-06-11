@@ -68,6 +68,27 @@ mod tests {
     }
 
     #[test]
+    fn topological_sort_handles_duplicate_dependency() {
+        // A duplicate dependency previously made in_deg double-count, so the
+        // node never reached in-degree 0 → a false Cycle for an acyclic graph.
+        let mut h = History::new();
+        h.push(HistEntry::new("a", vec![])).unwrap();
+        h.push(HistEntry::new("b", vec![0, 0])).unwrap(); // dep 0 listed twice
+        let order =
+            topological_sort(&h.entries).expect("acyclic graph must not report a cycle");
+        assert_eq!(order.len(), 2);
+    }
+
+    #[test]
+    fn relayout_tolerates_dangling_dependency() {
+        // A dangling dependency index (from a corrupt project / direct
+        // construction) must not panic relayout's `layer[*d]`.
+        let mut s = crate::panel::ParamHistPanelState::new();
+        s.history.entries = vec![HistEntry::new("x", vec![99])]; // dep 99 out of range
+        s.relayout(); // must not panic
+    }
+
+    #[test]
     fn dirty_set_propagates_downstream() {
         let h = build_simple();
         let d = dirty_set(&h.entries, 0);
