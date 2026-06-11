@@ -307,6 +307,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn degenerate_triangle_does_not_panic() {
+        use valenx_mesh::element::{ElementBlock, ElementType};
+        // A normal triangle [0,1,2] and a DEGENERATE triangle [0,1,1] (repeated
+        // vertex) sharing edge (0,1). The degenerate triangle has no third
+        // distinct vertex; `is_convex` must return `None` (the edge is skipped)
+        // rather than panic on `.expect`.
+        let mut m = Mesh::new("degen");
+        m.nodes.push(Vector3::new(0.0, 0.0, 0.0));
+        m.nodes.push(Vector3::new(1.0, 0.0, 0.0));
+        m.nodes.push(Vector3::new(0.0, 1.0, 0.0));
+        let mut blk = ElementBlock::new(ElementType::Tri3);
+        blk.connectivity.extend_from_slice(&[0, 1, 2, 0, 1, 1]);
+        m.element_blocks.push(blk);
+        // Must return rather than panic; the degenerate edge is simply skipped.
+        let _ = apply_fillet(&m, 0.1, std::f64::consts::FRAC_PI_4);
+    }
+
     /// Bounding box of all node positions in a mesh.
     fn bounding_box(m: &Mesh) -> (Vector3<f64>, Vector3<f64>) {
         let mut lo = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
