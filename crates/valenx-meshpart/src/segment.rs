@@ -51,6 +51,7 @@ pub fn segment_by_normal(
     if tri_count == 0 {
         return Err(MeshPartError::Empty("triangles"));
     }
+    crate::check_connectivity(block, mesh.nodes.len())?;
     // Pre-compute per-triangle face normals.
     let mut normals: Vec<Vector3<f64>> = Vec::with_capacity(tri_count);
     for tri in block.connectivity.chunks_exact(3) {
@@ -122,6 +123,18 @@ mod tests {
         assert!(matches!(
             segment_by_normal(&m, -1.0),
             Err(MeshPartError::BadParameter { name: "angle_threshold_deg", .. })
+        ));
+    }
+
+    #[test]
+    fn out_of_range_connectivity_errors_not_panics() {
+        // A connectivity index past `nodes` must be rejected, not panic
+        // `mesh.nodes[idx]` (Mesh exposes public, unvalidated fields).
+        let mut m = cube_top_and_bottom();
+        m.element_blocks[0].connectivity = vec![0, 1, 99]; // 99 >= 8 nodes
+        assert!(matches!(
+            segment_by_normal(&m, 5.0),
+            Err(MeshPartError::BadParameter { name: "connectivity", .. })
         ));
     }
 }

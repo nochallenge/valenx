@@ -53,6 +53,7 @@ pub fn split_mesh_by_planes(mesh: &Mesh, planes: &[Plane]) -> Result<Vec<Mesh>, 
     if block.count() == 0 {
         return Err(MeshPartError::Empty("triangles"));
     }
+    crate::check_connectivity(block, mesh.nodes.len())?;
 
     let mut groups: std::collections::BTreeMap<u32, ElementBlock> = std::collections::BTreeMap::new();
     for tri in block.connectivity.chunks_exact(3) {
