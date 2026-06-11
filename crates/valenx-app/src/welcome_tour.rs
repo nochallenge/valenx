@@ -62,7 +62,7 @@ The right-hand side of the window has four workbenches:
   Ctrl+1 — Mesh Toolbox (CAD: Part, Draft, TechDraw, Assembly,
            Surface, CAM, Architecture, Sketcher, Part Design …).
 
-  Ctrl+2 — Genetics workbench (14 panels covering sequence editing,
+  Ctrl+2 — Genetics workbench (15 panels covering sequence editing,
            alignment, phylogenetics, RNA structure, MD,
            cheminformatics, docking, gene editing …).
 
