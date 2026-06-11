@@ -142,6 +142,15 @@ pub fn slerp(n0: Vector3<f64>, n1: Vector3<f64>, t: f64, axis: Vector3<f64>) -> 
         return n0p;
     }
     let sin_omega = omega.sin();
+    if sin_omega.abs() < 1e-9 {
+        // omega ≈ π: the projected normals are antiparallel, the slerp
+        // direction is ambiguous, and dividing by sin_omega ≈ 0 would produce a
+        // garbage (huge / zero) strip vertex. Fall back to a normalized linear
+        // blend, which stays a unit vector.
+        return (n0p * (1.0 - t) + n1p * t)
+            .try_normalize(1e-12)
+            .unwrap_or(n0p);
+    }
     let a = ((1.0 - t) * omega).sin() / sin_omega;
     let b = (t * omega).sin() / sin_omega;
     n0p * a + n1p * b
@@ -160,6 +169,24 @@ mod tests {
         let b = slerp(n0, n1, 1.0, axis);
         assert!((a - n0).norm() < 1e-9);
         assert!((b - n1).norm() < 1e-9);
+    }
+
+    #[test]
+    fn slerp_antiparallel_stays_unit_not_nan() {
+        // n0 and n1 antiparallel in the plane ⟂ axis (omega ≈ π) previously
+        // divided by sin(π) ≈ 0, yielding a garbage (huge / zero) vector. The
+        // result must stay a finite unit vector at every t.
+        let axis = Vector3::z();
+        let n0 = Vector3::x();
+        let n1 = -Vector3::x(); // antiparallel to n0 in the XY plane
+        for &t in &[0.0, 0.25, 0.5, 0.75, 1.0] {
+            let r = slerp(n0, n1, t, axis);
+            let norm = r.norm();
+            assert!(
+                norm.is_finite() && (norm - 1.0).abs() < 1e-6,
+                "slerp must stay unit at t={t}, got norm {norm}"
+            );
+        }
     }
 
     #[test]
