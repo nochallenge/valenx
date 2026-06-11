@@ -75,6 +75,24 @@ mod tests {
     }
 
     #[test]
+    fn catmull_clark_skips_malformed_mesh_without_panic() {
+        // A face index past `vertices` (SubdivMesh has public fields). The
+        // infallible Catmull-Clark entry must return rather than panic.
+        let mut m = SubdivMesh::unit_cube();
+        m.faces.push(vec![0, 1, 99]); // 99 is past the 8 cube vertices
+        let _ = catmull_clark::subdivide(&m, 1);
+    }
+
+    #[test]
+    fn loop_rejects_out_of_range_index() {
+        // Loop returns Result, so a face index past `vertices` is a clean error.
+        let mut m = SubdivMesh::tetrahedron();
+        m.faces.push(vec![0, 1, 99]); // arity 3 passes the arity check; index OOB
+        let r = loop_subdiv::subdivide(&m, 1);
+        assert!(matches!(r, Err(SubdivError::IndexOutOfRange { .. })));
+    }
+
+    #[test]
     fn crease_round_trip() {
         let m = SubdivMesh::unit_cube();
         let c = set_crease(&m, &[(0, 1), (1, 2)], 2.0).expect("ok");
