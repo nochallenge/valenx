@@ -75,6 +75,33 @@ mod tests {
     }
 
     #[test]
+    fn bevel_face_less_edge_stays_finite() {
+        // An edge whose endpoints belong to no face leaves both endpoint
+        // vertex normals at zero; pre-fix the unguarded `.normalize()` of
+        // the zero interpolant produced NaN vertices that poison the mesh.
+        // The bevel must instead emit finite positions (no offset where
+        // the normal is undefined).
+        let mut m = Mesh::unit_cube();
+        m.faces.clear(); // all 8 vertices now belong to no face
+        let (v0, v1) = (m.vertices[0], m.vertices[1]);
+        let base = m.vertices.len(); // bevel rows are appended after the originals
+        let r = bevel::edges(&m, &[(0, 1)], 0.1, 3).unwrap();
+        for v in &r.vertices {
+            assert!(
+                v.x.is_finite() && v.y.is_finite() && v.z.is_finite(),
+                "bevel emitted a non-finite vertex {v:?}"
+            );
+        }
+        // With the degenerate (zero) normal the fallback is no offset, so
+        // every bevel-row vertex lies exactly on the edge -- its ends
+        // coincide with the edge endpoints. This pins the on-edge fallback
+        // semantics against drift (e.g. a future change to a nonzero
+        // fallback would push these off the edge).
+        assert!((r.vertices[base] - v0).norm() < 1e-12, "bevel row should start on the edge");
+        assert!((r.vertices[base + 3] - v1).norm() < 1e-12, "bevel row should end on the edge");
+    }
+
+    #[test]
     fn inset_top_face_doubles_face_count_minus_one() {
         let m = Mesh::unit_cube();
         let r = inset::faces(&m, &[1], 0.1).unwrap();
