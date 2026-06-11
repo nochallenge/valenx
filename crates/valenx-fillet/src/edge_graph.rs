@@ -153,11 +153,14 @@ impl EdgeGraph {
         let va = mesh.nodes[key.0];
         // Opposite vertex of tri 1 (the one not on the shared edge).
         let t1 = &self.triangles[tris[1]];
-        let q2_idx =
-            t1.v.iter()
-                .copied()
-                .find(|&v| v != key.0 && v != key.1)
-                .expect("manifold triangle has 3 distinct vertices");
+        // A degenerate triangle (a repeated vertex index, common in bad
+        // CAD/STL exports) has no third distinct vertex; treat the edge as
+        // non-fillable (`None`) rather than panic.
+        let q2_idx = t1
+            .v
+            .iter()
+            .copied()
+            .find(|&v| v != key.0 && v != key.1)?;
         let q2 = mesh.nodes[q2_idx];
         Some(n1.dot(&(q2 - va)) < 0.0)
     }
