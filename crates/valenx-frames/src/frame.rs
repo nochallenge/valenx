@@ -64,6 +64,13 @@ impl Frame {
         let tol2 = tol * tol;
         let mut endpoints: Vec<(usize, usize, Vector3<f64>)> = Vec::new();
         for (mi, m) in self.members.iter().enumerate() {
+            // A member needs at least two path points to have distinct
+            // endpoints; skip degenerate (empty / single-point) members so
+            // `path.len() - 1` can't underflow and `path[0]` can't panic.
+            // (Mirrors the `path.len() < 2` guard in `Member::to_solid`.)
+            if m.path.len() < 2 {
+                continue;
+            }
             let last = m.path.len() - 1;
             endpoints.push((mi, 0, m.path[0]));
             endpoints.push((mi, last, *m.path.last().unwrap()));
@@ -149,6 +156,32 @@ mod tests {
             Profile::default_ipe200(),
         ));
         f.auto_joints(1.0);
+        assert_eq!(f.joints.len(), 1);
+        assert_eq!(f.joints[0].connected.len(), 2);
+    }
+
+    #[test]
+    fn auto_joints_skips_degenerate_members_without_panicking() {
+        // A member with an empty path (built directly — `push_member` does
+        // not validate) must not panic `auto_joints` on `path.len() - 1`.
+        // The two real members still form their joint.
+        let mut f = Frame::new();
+        f.push_member(Member::straight(
+            Vector3::zeros(),
+            Vector3::new(1000.0, 0.0, 0.0),
+            Profile::default_ipe200(),
+        ));
+        f.push_member(Member {
+            path: vec![],
+            profile: Profile::default_ipe200(),
+            orientation_angle_deg: 0.0,
+        });
+        f.push_member(Member::straight(
+            Vector3::new(1000.0, 0.0, 0.0),
+            Vector3::new(1000.0, 1000.0, 0.0),
+            Profile::default_ipe200(),
+        ));
+        f.auto_joints(1.0); // must not panic on the empty-path member
         assert_eq!(f.joints.len(), 1);
         assert_eq!(f.joints[0].connected.len(), 2);
     }
