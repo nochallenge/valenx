@@ -2506,10 +2506,15 @@ fn solve_u_momentum(
                                 + nut_cell(i - 1, j - 1)
                                 + nut_cell(i, j - 1));
                 }
-                let d_e = nu_e * dy / dx;
-                let d_w = nu_w * dy / dx;
-                let d_n = nu_n * dx / dy;
-                let d_s = nu_s * dx / dy;
+                // Diffusion conductances use the DYNAMIC viscosity μ = ρν so
+                // they share units with the convective mass flux F = ρuA and the
+                // pressure force Δp·A (all [kg/s] · velocity → [N]). Using the
+                // kinematic ν here under-weighted diffusion by ρ, so the solver
+                // ran at ρ× the intended Reynolds number for any ρ ≠ 1.
+                let d_e = rho * nu_e * dy / dx;
+                let d_w = rho * nu_w * dy / dx;
+                let d_n = rho * nu_n * dx / dy;
+                let d_s = rho * nu_s * dx / dy;
 
                 let ae = hybrid_coeff(d_e, fe, -1.0);
                 let aw = hybrid_coeff(d_w, fw, 1.0);
@@ -2524,7 +2529,7 @@ fn solve_u_momentum(
                         SideBc::Wall { u, .. } | SideBc::Inlet { u, .. } => u,
                         SideBc::Outlet => u.at(i, j),
                     };
-                    let dwall_n = nu_n * dx / (0.5 * dy);
+                    let dwall_n = rho * nu_n * dx / (0.5 * dy);
                     a_p += dwall_n;
                     su += dwall_n * wall_u;
                 } else {
@@ -2537,7 +2542,7 @@ fn solve_u_momentum(
                         SideBc::Wall { u, .. } | SideBc::Inlet { u, .. } => u,
                         SideBc::Outlet => u.at(i, j),
                     };
-                    let dwall_s = nu_s * dx / (0.5 * dy);
+                    let dwall_s = rho * nu_s * dx / (0.5 * dy);
                     a_p += dwall_s;
                     su += dwall_s * wall_u;
                 } else {
@@ -2623,10 +2628,12 @@ fn solve_v_momentum(
                                 + nut_cell(i - 1, j - 1)
                                 + nut_cell(i - 1, j));
                 }
-                let d_n = nu_n * dx / dy;
-                let d_s = nu_s * dx / dy;
-                let d_e = nu_e * dy / dx;
-                let d_w = nu_w * dy / dx;
+                // Dynamic-viscosity diffusion conductance (μ = ρν) — see the
+                // u-momentum note; kinematic ν here dropped the ρ factor.
+                let d_n = rho * nu_n * dx / dy;
+                let d_s = rho * nu_s * dx / dy;
+                let d_e = rho * nu_e * dy / dx;
+                let d_w = rho * nu_w * dy / dx;
 
                 let an = hybrid_coeff(d_n, fn_, -1.0);
                 let as_ = hybrid_coeff(d_s, fs, 1.0);
@@ -2641,7 +2648,7 @@ fn solve_v_momentum(
                         SideBc::Wall { v, .. } | SideBc::Inlet { v, .. } => v,
                         SideBc::Outlet => v.at(i, j),
                     };
-                    let dwall_e = nu_e * dy / (0.5 * dx);
+                    let dwall_e = rho * nu_e * dy / (0.5 * dx);
                     a_p += dwall_e;
                     sv += dwall_e * wall_v;
                 } else {
@@ -2654,7 +2661,7 @@ fn solve_v_momentum(
                         SideBc::Wall { v, .. } | SideBc::Inlet { v, .. } => v,
                         SideBc::Outlet => v.at(i, j),
                     };
-                    let dwall_w = nu_w * dy / (0.5 * dx);
+                    let dwall_w = rho * nu_w * dy / (0.5 * dx);
                     a_p += dwall_w;
                     sv += dwall_w * wall_v;
                 } else {
@@ -2902,6 +2909,40 @@ mod tests {
         assert!(
             u_near_floor < -0.01,
             "fluid near the floor should return upstream, u = {u_near_floor}"
+        );
+    }
+
+    #[test]
+    fn lid_driven_cavity_velocity_is_density_independent() {
+        // Incompressible flow at fixed kinematic viscosity ν depends only on
+        // the Reynolds number Re = U·L/ν — dividing the momentum equation by ρ
+        // removes density from the *velocity* field entirely (only the pressure
+        // scales with ρ). So the same cavity solved at ρ = 1 and ρ = 1000 must
+        // produce the same velocities. Regression for a dropped ρ factor in the
+        // diffusion conductance, which made the solver run at ρ× the intended
+        // Reynolds number (~100% velocity error at ρ = 1000).
+        let grid = Grid::new(24, 24, 1.0, 1.0);
+        let bcs = Boundaries::lid_driven_cavity(1.0);
+        let controls = SimpleControls {
+            max_iterations: 2000,
+            tolerance: 1e-6,
+            ..SimpleControls::default()
+        };
+        let light = solve_simple(&grid, &Fluid::new(1.0, 0.02), &bcs, &controls);
+        let heavy = solve_simple(&grid, &Fluid::new(1000.0, 0.02), &bcs, &controls);
+
+        let mut max_diff = 0.0_f64;
+        for j in 0..grid.ny {
+            for i in 0..grid.nx {
+                let d = (light.speed_at_cell(i, j) - heavy.speed_at_cell(i, j)).abs();
+                max_diff = max_diff.max(d);
+            }
+        }
+        // The two fields are physically identical; allow only solver round-off.
+        // (Pre-fix this difference was ~0.7 — a factor ~10 in the peak velocity.)
+        assert!(
+            max_diff < 1e-4,
+            "cavity velocity must be density-independent; max |Δspeed| = {max_diff}"
         );
     }
 
