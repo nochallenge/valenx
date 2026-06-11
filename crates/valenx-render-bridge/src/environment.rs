@@ -827,8 +827,16 @@ fn decode_scanline(
         ];
         *bi += 4;
         if q[0] == 1 && q[1] == 1 && q[2] == 1 {
-            // Old-style RLE repeat.
-            let run = (q[3] as usize) << shift;
+            // Old-style RLE repeat. `shift` grows by 8 per consecutive
+            // escape; a crafted run of zero-length escapes (`1 1 1 0`,
+            // which never advances `x`) would drive it to 64 and make
+            // the bare `<< shift` panic in debug builds ("attempt to
+            // shift left with overflow"). `checked_shl` yields the same
+            // benign `run = 0` the release build already produces, so a
+            // hostile scanline errors out instead of panicking. Real
+            // files never reach this: a valid run is bounded by the
+            // scanline width (<= 0x7fff), needing at most two escapes.
+            let run = (q[3] as usize).checked_shl(shift).unwrap_or(0);
             let prev = if x > 0 { out[x - 1] } else { [0u8; 4] };
             for _ in 0..run {
                 if x >= width {
@@ -837,7 +845,10 @@ fn decode_scanline(
                 out[x] = prev;
                 x += 1;
             }
-            shift += 8;
+            // `saturating_add` so a hostile all-escape stream can't wrap
+            // `shift` (a u32) either — together with the `checked_shl`
+            // above this makes the escape branch panic-free on any input.
+            shift = shift.saturating_add(8);
         } else {
             out[x] = q;
             x += 1;
@@ -1064,6 +1075,29 @@ mod tests {
             !msg.contains("exceed the maximum"),
             "a dimension at the cap must be accepted, got: {msg}"
         );
+    }
+
+    #[test]
+    fn radiance_hdr_old_rle_shift_does_not_overflow() {
+        // Regression: the old-style RLE escape `1 1 1 n` repeats the
+        // previous pixel `n << shift` times and bumps `shift` by 8 after
+        // every consecutive escape. A crafted run of zero-length escapes
+        // (`01 01 01 00`) never advances `x`, so the width guard never
+        // fires and `shift` climbs 8, 16, 24 … 64. Pre-fix the 9th escape
+        // evaluated `0usize << 64`, panicking in debug builds with
+        // "attempt to shift left with overflow". The decoder must instead
+        // fail gracefully (truncated row) without panicking.
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"#?RADIANCE\n");
+        bytes.extend_from_slice(b"FORMAT=32-bit_rle_rgbe\n\n");
+        bytes.extend_from_slice(b"-Y 1 +X 4\n"); // width 4 (< 8) → old-style scanline
+        // Twelve zero-length escapes drive `shift` well past usize::BITS
+        // (and past 32 on a 32-bit target) without ever filling the row.
+        for _ in 0..12 {
+            bytes.extend_from_slice(&[1, 1, 1, 0]);
+        }
+        // Must return an error (the 4-pixel row is never filled), not panic.
+        assert!(EnvironmentMap::from_radiance_hdr(&bytes).is_err());
     }
 
     #[test]
