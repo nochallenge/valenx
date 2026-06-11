@@ -143,6 +143,17 @@ fn validate(params: &HelicalBoreParams, tool: &Tool) -> Result<(), CamError> {
     if !(params.depth > 0.0) {
         return Err(mk(format!("depth must be > 0 (got {})", params.depth)));
     }
+    // Bound the revolution count so a tiny (but > 0) pitch can't make the
+    // inline `n_steps` saturate and hang the spiral-emit loop. Matches the
+    // pocketing ops' MAX_N_PASSES = 10_000 cap.
+    const MAX_REVS: f64 = 10_000.0;
+    let revs = params.depth / params.pitch;
+    if !revs.is_finite() || revs > MAX_REVS {
+        return Err(mk(format!(
+            "pitch {} too small: depth/pitch = {revs} exceeds the {MAX_REVS} revolution cap",
+            params.pitch
+        )));
+    }
     if !(params.feed_mm_per_min > 0.0) {
         return Err(mk(format!(
             "feed must be > 0 (got {})",
@@ -183,6 +194,20 @@ mod tests {
         let tool = Tool::new(1, "EM6", ToolKind::EndMill, 6.0, 25.0, 2, "carbide").unwrap();
         let bad = HelicalBoreParams {
             bore_radius: 1.0,
+            ..Default::default()
+        };
+        assert!(validate(&bad, &tool).is_err());
+    }
+
+    #[test]
+    fn rejects_tiny_pitch_revolution_blowup() {
+        // A tiny but positive pitch passes the `> 0` check; depth/pitch would
+        // otherwise produce an astronomical n_steps and hang the emit loop.
+        let tool = Tool::new(1, "EM6", ToolKind::EndMill, 6.0, 25.0, 2, "carbide").unwrap();
+        let bad = HelicalBoreParams {
+            bore_radius: 10.0,
+            pitch: 1e-9,
+            depth: 10.0,
             ..Default::default()
         };
         assert!(validate(&bad, &tool).is_err());
