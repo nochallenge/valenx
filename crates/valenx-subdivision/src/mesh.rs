@@ -33,6 +33,28 @@ impl SubdivMesh {
         self.faces.len()
     }
 
+    /// Check that every face references only in-range vertex indices.
+    ///
+    /// `SubdivMesh` exposes public fields, so a caller (or a corrupt import)
+    /// can build a face indexing past `vertices`; the subdivision schemes would
+    /// then index out of bounds. Returns
+    /// [`crate::error::SubdivError::IndexOutOfRange`] for the first offender.
+    pub fn validate(&self) -> Result<(), crate::error::SubdivError> {
+        let limit = self.vertices.len();
+        for face in &self.faces {
+            for &v in face {
+                if v >= limit {
+                    return Err(crate::error::SubdivError::IndexOutOfRange {
+                        kind: "vertex",
+                        idx: v,
+                        limit,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Unit-cube polygon mesh — six quads. Useful starting point
     /// for tests; the truck-modeling kernel is not pulled in just
     /// for this.
