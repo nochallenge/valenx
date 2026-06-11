@@ -82,7 +82,23 @@ pub fn edges(
         for k in 0..=segments {
             let t = k as f64 / segments as f64;
             let p = a * (1.0 - t) + b * t;
-            let n = (na * (1.0 - t) + nb * t).normalize();
+            // Guard the normalize: an edge endpoint that belongs to no
+            // face (vcount == 0) keeps a zero vertex normal. Guarding the
+            // *interpolated* normal `raw` (rather than na/nb individually)
+            // also covers the mid-edge case where na and nb cancel -- a
+            // saddle edge with antiparallel endpoint normals makes `raw`
+            // near-zero even when both endpoints are unit. `Vector3::
+            // normalize` of a zero vector is NaN, which would poison the
+            // emitted vertex; fall back to no offset (the on-edge point)
+            // -- the same `> 1e-12` guard used for the per-vertex normals
+            // above and in inset/solidify.
+            let raw = na * (1.0 - t) + nb * t;
+            let l = raw.norm();
+            let n = if l > 1e-12 {
+                raw / l
+            } else {
+                Vector3::zeros()
+            };
             out.vertices.push(p + n * distance);
         }
     }
