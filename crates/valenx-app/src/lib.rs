@@ -37,6 +37,7 @@
 
 pub mod aero;
 pub mod aero_workbench;
+pub(crate) mod background;
 pub mod fem_workbench;
 pub mod cad_workbench;
 pub mod cfd_workbench;

@@ -15,8 +15,9 @@
 use eframe::egui;
 use egui_plot::{Line, Plot, PlotPoints, VLine};
 
-use valenx_cfd_native::{solve_simple, Boundaries, Fluid, Grid, SimpleControls};
+use valenx_cfd_native::{solve_simple, Boundaries, FlowSolution, Fluid, Grid, SimpleControls};
 
+use crate::background::{BackgroundJob, JobState};
 use crate::ValenxApp;
 
 /// Which canonical flow case the workbench solves.
@@ -66,6 +67,9 @@ pub struct CfdWorkbenchState {
     /// Bulk (mean-throughflow) velocity drawn as a reference line on the channel
     /// profile plot (⅔ of the Poiseuille peak); `None` for the lid-driven cavity.
     bulk_velocity: Option<f64>,
+    /// A running background solve, polled each frame. While `Some`, the form is
+    /// frozen and a spinner shows until the worker delivers its solution.
+    job: Option<BackgroundJob<FlowSolution>>,
 }
 
 impl Default for CfdWorkbenchState {
@@ -86,6 +90,7 @@ impl Default for CfdWorkbenchState {
             profile: None,
             analytic_profile: None,
             bulk_velocity: None,
+            job: None,
         }
     }
 }
@@ -143,6 +148,7 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_cfd_workbench {
         return;
     }
+    poll_cfd(&mut app.cfd);
     egui::SidePanel::right("valenx_cfd_workbench")
         .resizable(true)
         .default_width(360.0)
@@ -156,9 +162,20 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             );
             ui.separator();
             let s = &mut app.cfd;
+            let running = s.job.is_some();
+            if running {
+                ctx.request_repaint();
+            }
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    if running {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label("solving…");
+                        });
+                        ui.disable();
+                    }
                     ui.label(egui::RichText::new("Case").strong());
                     ui.horizontal(|ui| {
                         ui.radio_value(&mut s.case, CfdCase::LidDrivenCavity, "Lid-driven cavity")
@@ -234,7 +251,7 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.add(egui::DragValue::new(&mut s.max_iterations).speed(5.0));
                     });
                     ui.label(
-                        egui::RichText::new("Solve runs synchronously — a finer grid or more iterations takes longer.")
+                        egui::RichText::new("Runs on a background thread — the UI stays responsive; a finer grid or more iterations takes longer.")
                             .weak()
                             .small(),
                     );
@@ -244,7 +261,17 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         .button(egui::RichText::new("▶ Solve flow").strong())
                         .clicked()
                     {
-                        run_cfd(s);
+                        s.error = None;
+                        s.profile = None;
+                        s.analytic_profile = None;
+                        s.bulk_velocity = None;
+                        s.result.clear();
+                        match validate_inputs(s) {
+                            Ok(inp) => {
+                                s.job = Some(BackgroundJob::spawn(move || solve(inp)));
+                            }
+                            Err(e) => s.error = Some(e),
+                        }
                     }
 
                     if let Some(e) = &s.error {
@@ -295,10 +322,6 @@ fn cell_reynolds(speed: f64, cell_size: f64, viscosity: f64) -> f64 {
     speed.abs() * cell_size / viscosity
 }
 
-/// Build the grid + BCs and run the SIMPLE solver. Extracted from the
-/// draw closure so it is unit-testable, and it validates every input
-/// before calling [`Grid::new`] (which *panics* on a bad grid) — so a
-/// bad input surfaces as an error, never a crash.
 /// The analytic fully-developed plane-Poiseuille velocity profile for a channel
 /// of height `height` driven at bulk speed `inlet_speed`, sampled at the same
 /// `ny` cell centres as the CFD profile: `u(y) = 1.5·U·(1 − ((y − h/2)/(h/2))²)`
@@ -315,41 +338,102 @@ fn poiseuille_profile(inlet_speed: f64, height: f64, ny: usize) -> Vec<[f64; 2]>
         .collect()
 }
 
+/// An owned snapshot of the solver inputs, moved into the worker thread.
+#[derive(Clone, Copy)]
+struct CfdInputs {
+    nx: usize,
+    ny: usize,
+    lx: f64,
+    ly: f64,
+    density: f64,
+    viscosity: f64,
+    speed: f64,
+    max_iterations: usize,
+    case: CfdCase,
+}
+
+/// Validate the form and snapshot the inputs. Every guard protects a
+/// `valenx-cfd-native` precondition — e.g. [`Grid::new`] *panics* on a zero
+/// axis — so a bad input surfaces as an error string, never a crash.
+fn validate_inputs(s: &CfdWorkbenchState) -> Result<CfdInputs, String> {
+    if s.nx == 0 || s.ny == 0 {
+        return Err("grid must have at least one cell per axis".into());
+    }
+    if !(s.lx > 0.0 && s.ly > 0.0 && s.lx.is_finite() && s.ly.is_finite()) {
+        return Err("domain dimensions must be positive and finite".into());
+    }
+    if !(s.viscosity > 0.0 && s.viscosity.is_finite()) {
+        return Err("kinematic viscosity must be positive".into());
+    }
+    if !(s.density > 0.0 && s.density.is_finite()) {
+        return Err("density must be positive".into());
+    }
+    Ok(CfdInputs {
+        nx: s.nx,
+        ny: s.ny,
+        lx: s.lx,
+        ly: s.ly,
+        density: s.density,
+        viscosity: s.viscosity,
+        speed: s.speed,
+        max_iterations: s.max_iterations,
+        case: s.case,
+    })
+}
+
+/// Build the grid + BCs from validated inputs and run the SIMPLE solver. This
+/// is the heavy step — the UI runs it on a worker thread (see
+/// [`draw_cfd_workbench`]) so the window stays responsive while it solves.
+fn solve(inp: CfdInputs) -> FlowSolution {
+    let grid = Grid::new(inp.nx, inp.ny, inp.lx, inp.ly);
+    let fluid = Fluid::new(inp.density, inp.viscosity);
+    let bcs = match inp.case {
+        CfdCase::LidDrivenCavity => Boundaries::lid_driven_cavity(inp.speed),
+        CfdCase::ChannelFlow => Boundaries::channel_flow(inp.speed),
+    };
+    let controls = SimpleControls {
+        max_iterations: inp.max_iterations,
+        ..Default::default()
+    };
+    solve_simple(&grid, &fluid, &bcs, &controls)
+}
+
+/// Move a finished background solve into the panel state (or surface a worker
+/// crash). Called once per frame at the top of [`draw_cfd_workbench`].
+fn poll_cfd(s: &mut CfdWorkbenchState) {
+    match s.job.as_mut().map(BackgroundJob::poll) {
+        Some(JobState::Done(sol)) => {
+            s.job = None;
+            apply_solution(s, &sol);
+        }
+        Some(JobState::Failed) => {
+            s.job = None;
+            s.error = Some("the CFD solver thread stopped unexpectedly".into());
+        }
+        Some(JobState::Pending) | None => {}
+    }
+}
+
+/// Synchronous validate → solve → apply. Kept for the headless tests; the UI
+/// instead spawns [`solve`] on a worker thread and calls [`apply_solution`]
+/// when the result arrives. Because the form is frozen while a solve runs,
+/// `apply_solution` reads the inputs straight off `s` and they match `sol`.
+#[cfg(test)]
 fn run_cfd(s: &mut CfdWorkbenchState) {
     s.error = None;
     s.profile = None;
     s.analytic_profile = None;
     s.bulk_velocity = None;
-    if s.nx == 0 || s.ny == 0 {
-        s.error = Some("grid must have at least one cell per axis".into());
-        return;
+    match validate_inputs(s) {
+        Ok(inp) => apply_solution(s, &solve(inp)),
+        Err(e) => s.error = Some(e),
     }
-    if !(s.lx > 0.0 && s.ly > 0.0 && s.lx.is_finite() && s.ly.is_finite()) {
-        s.error = Some("domain dimensions must be positive and finite".into());
-        return;
-    }
-    if !(s.viscosity > 0.0 && s.viscosity.is_finite()) {
-        s.error = Some("kinematic viscosity must be positive".into());
-        return;
-    }
-    if !(s.density > 0.0 && s.density.is_finite()) {
-        s.error = Some("density must be positive".into());
-        return;
-    }
+}
 
-    let grid = Grid::new(s.nx, s.ny, s.lx, s.ly);
-    let fluid = Fluid::new(s.density, s.viscosity);
-    let bcs = match s.case {
-        CfdCase::LidDrivenCavity => Boundaries::lid_driven_cavity(s.speed),
-        CfdCase::ChannelFlow => Boundaries::channel_flow(s.speed),
-    };
-    let controls = SimpleControls {
-        max_iterations: s.max_iterations,
-        ..Default::default()
-    };
-
-    let sol = solve_simple(&grid, &fluid, &bcs, &controls);
-
+/// Populate the panel readout (result string, centreline profile, analytic
+/// overlay, bulk-velocity reference) from a finished [`FlowSolution`]. Reads
+/// the inputs off `s`, which the frozen form keeps consistent with `sol`.
+fn apply_solution(s: &mut CfdWorkbenchState, sol: &FlowSolution) {
     let max_speed = sol.max_speed();
     let mean_speed = sol.mean_speed();
     let rms_speed = sol.rms_speed();
@@ -563,6 +647,36 @@ fn run_cfd(s: &mut CfdWorkbenchState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn background_solve_populates_the_readout() {
+        // Exercise the reactive path the UI actually uses: spawn `solve` on a
+        // worker thread, then poll until `poll_cfd` applies the result. The
+        // readout must come out the same as a synchronous run.
+        let mut s = CfdWorkbenchState {
+            nx: 16,
+            ny: 16,
+            max_iterations: 100,
+            ..Default::default()
+        };
+        let inp = validate_inputs(&s).expect("default inputs are valid");
+        s.job = Some(BackgroundJob::spawn(move || solve(inp)));
+        // Bounded so the test can never hang on a stuck worker.
+        for _ in 0..2000 {
+            poll_cfd(&mut s);
+            if s.job.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(s.job.is_none(), "the background solve should finish within the poll budget");
+        assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
+        assert!(s.result.contains("max |u|"), "readout populated: {}", s.result);
+        assert!(
+            s.profile.as_ref().is_some_and(|p| p.len() == 16),
+            "centreline profile sampled"
+        );
+    }
 
     #[test]
     fn lid_driven_cavity_solves() {
