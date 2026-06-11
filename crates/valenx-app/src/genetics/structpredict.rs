@@ -164,9 +164,9 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             common::seq_input(ui, "sp_seq", "sequence", &mut p.sequence, 4);
             ui.horizontal(|ui| {
                 ui.label("centroid moves");
-                ui.add(egui::DragValue::new(&mut p.centroid_moves).speed(10.0));
+                ui.add(egui::DragValue::new(&mut p.centroid_moves).speed(10.0).range(1..=20_000));
                 ui.label("repack moves");
-                ui.add(egui::DragValue::new(&mut p.repack_moves).speed(5.0));
+                ui.add(egui::DragValue::new(&mut p.repack_moves).speed(5.0).range(1..=5_000));
             });
             ui.horizontal(|ui| {
                 ui.label("seed");
@@ -213,7 +213,7 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 ui.label("chain");
                 ui.add(egui::TextEdit::singleline(&mut p.chain).desired_width(40.0));
                 ui.label("design moves");
-                ui.add(egui::DragValue::new(&mut p.design_moves).speed(10.0));
+                ui.add(egui::DragValue::new(&mut p.design_moves).speed(10.0).range(1..=10_000));
                 ui.label("seed");
                 ui.add(egui::DragValue::new(&mut p.seed).speed(1.0));
             });
