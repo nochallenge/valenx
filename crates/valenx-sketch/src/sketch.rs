@@ -437,6 +437,39 @@ impl Sketch {
                     check(idx, "end_angle_var", a.end_angle_var)?;
                 }
                 Entity::BSpline(b) => {
+                    // Structural invariants. A corrupt/hand-edited document can
+                    // violate these, and curve evaluation indexes `knots[n_cp]`
+                    // / `weights[cp_idx]` and computes `span - degree` without
+                    // re-checking (see geom_bspline), so a malformed curve must
+                    // be rejected here rather than panic during replay.
+                    let n_cp = b.control_points.len();
+                    let bad =
+                        |reason: String| crate::SketchError::CorruptBSpline { entity: idx, reason };
+                    if b.degree < 1 {
+                        return Err(bad(format!("degree {} must be >= 1", b.degree)));
+                    }
+                    if n_cp < b.degree + 1 {
+                        return Err(bad(format!(
+                            "needs at least degree+1 = {} control points, has {n_cp}",
+                            b.degree + 1
+                        )));
+                    }
+                    if b.weights.len() != n_cp {
+                        return Err(bad(format!(
+                            "weights length {} != control-point count {n_cp}",
+                            b.weights.len()
+                        )));
+                    }
+                    let expected_knots = n_cp + b.degree + 1;
+                    if b.knots.len() != expected_knots {
+                        return Err(bad(format!(
+                            "knot length {} != control_points + degree + 1 = {expected_knots}",
+                            b.knots.len()
+                        )));
+                    }
+                    if b.knots.windows(2).any(|w| w[1] < w[0]) {
+                        return Err(bad("knot vector must be non-decreasing".to_string()));
+                    }
                     for cp in &b.control_points {
                         check_point(idx, "control_point.x_var", "control_point.y_var", cp)?;
                     }
@@ -747,6 +780,55 @@ mod tests {
             ..Sketch::default()
         };
         assert!(s.validate().is_err());
+    }
+
+    #[test]
+    fn validate_rejects_bspline_with_mismatched_knot_vector() {
+        use crate::geom_bspline::BSpline2;
+        // Valid control-point handles, but a degree-3 / 4-CP curve needs 8
+        // knots and here has none — the kind of corruption a hand-edited or
+        // version-skewed document carries. Pre-fix, evaluation indexed
+        // `knots[4]` on an empty vec and panicked during replay.
+        let s = Sketch {
+            vars: vec![0.0, 0.0, 1.0, 1.0, 2.0, 1.0, 3.0, 0.0],
+            entities: vec![Entity::BSpline(BSpline2 {
+                degree: 3,
+                knots: vec![],
+                control_points: vec![
+                    Point2 { x_var: 0, y_var: 1 },
+                    Point2 { x_var: 2, y_var: 3 },
+                    Point2 { x_var: 4, y_var: 5 },
+                    Point2 { x_var: 6, y_var: 7 },
+                ],
+                weights: vec![1.0; 4],
+            })],
+            ..Sketch::default()
+        };
+        match s.validate() {
+            Err(crate::SketchError::CorruptBSpline { reason, .. }) => {
+                assert!(reason.contains("knot"), "reason names the knot mismatch: {reason}");
+            }
+            other => panic!("expected CorruptBSpline, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_bspline_with_zero_degree() {
+        use crate::geom_bspline::BSpline2;
+        let s = Sketch {
+            vars: vec![0.0, 0.0],
+            entities: vec![Entity::BSpline(BSpline2 {
+                degree: 0,
+                knots: vec![0.0, 1.0],
+                control_points: vec![Point2 { x_var: 0, y_var: 1 }],
+                weights: vec![1.0],
+            })],
+            ..Sketch::default()
+        };
+        assert!(matches!(
+            s.validate(),
+            Err(crate::SketchError::CorruptBSpline { .. })
+        ));
     }
 
     #[test]
