@@ -180,7 +180,7 @@ pub fn dispatch(app: &mut ValenxApp, kind: &CommandKind) {
 /// flooding the user with thousands of lines on a busy machine.
 pub const AUDIT_TAIL_DEFAULT_N: usize = 50;
 
-const COMMANDS: [Command; 40] = [
+const COMMANDS: [Command; 65] = [
     Command {
         id: CommandId("file.new-project"),
         label: "File: New project…",
@@ -413,6 +413,161 @@ const COMMANDS: [Command; 40] = [
             // deltas, even when they previously hid the panel.
             app.show_mesh_toolbox = true;
         },
+    },
+    // Right-side workbench visibility toggles. One entry per panel in
+    // the View menu, so the palette honours its "fuzzy-search every
+    // action" promise — typing a workbench name (Ctrl+P → "gears")
+    // surfaces its toggle. Each flips the same `show_*` flag the menu
+    // checkbox drives; the primary four also carry their Ctrl+N hint.
+    Command {
+        id: CommandId("view.toggle-genetics"),
+        label: "View: Toggle Genetics Workbench",
+        shortcut: Some("Ctrl+2"),
+        invoke: |app| app.show_genetics_workbench = !app.show_genetics_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-aero"),
+        label: "View: Toggle Aerodynamics / Wind Tunnel",
+        shortcut: Some("Ctrl+3"),
+        invoke: |app| app.show_aero_workbench = !app.show_aero_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-astro"),
+        label: "View: Toggle Astro / Launch",
+        shortcut: Some("Ctrl+4"),
+        invoke: |app| app.show_astro_workbench = !app.show_astro_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-fem"),
+        label: "View: Toggle FEM Workbench",
+        shortcut: None,
+        invoke: |app| app.show_fem_workbench = !app.show_fem_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-cfd"),
+        label: "View: Toggle CFD Workbench",
+        shortcut: None,
+        invoke: |app| app.show_cfd_workbench = !app.show_cfd_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-reactdyn"),
+        label: "View: Toggle Reaction Dynamics",
+        shortcut: None,
+        invoke: |app| app.show_reactdyn_workbench = !app.show_reactdyn_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-springs"),
+        label: "View: Toggle Springs",
+        shortcut: None,
+        invoke: |app| app.show_springs_workbench = !app.show_springs_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-gears"),
+        label: "View: Toggle Gears",
+        shortcut: None,
+        invoke: |app| app.show_gears_workbench = !app.show_gears_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-geomatics"),
+        label: "View: Toggle Geomatics",
+        shortcut: None,
+        invoke: |app| app.show_geomatics_workbench = !app.show_geomatics_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-piping"),
+        label: "View: Toggle Piping",
+        shortcut: None,
+        invoke: |app| app.show_piping_workbench = !app.show_piping_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-collision"),
+        label: "View: Toggle Collision",
+        shortcut: None,
+        invoke: |app| app.show_collision_workbench = !app.show_collision_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-sheetmetal"),
+        label: "View: Toggle Sheet Metal",
+        shortcut: None,
+        invoke: |app| app.show_sheetmetal_workbench = !app.show_sheetmetal_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-fields"),
+        label: "View: Toggle Field Statistics",
+        shortcut: None,
+        invoke: |app| app.show_fields_workbench = !app.show_fields_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-fasteners"),
+        label: "View: Toggle Fasteners",
+        shortcut: None,
+        invoke: |app| app.show_fasteners_workbench = !app.show_fasteners_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-frames"),
+        label: "View: Toggle Frames",
+        shortcut: None,
+        invoke: |app| app.show_frames_workbench = !app.show_frames_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-neuro"),
+        label: "View: Toggle Neural Interface",
+        shortcut: None,
+        invoke: |app| app.show_neuro_workbench = !app.show_neuro_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-cad"),
+        label: "View: Toggle Parametric CAD",
+        shortcut: None,
+        invoke: |app| app.show_cad_workbench = !app.show_cad_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-draft2d"),
+        label: "View: Toggle 2D Drafting",
+        shortcut: None,
+        invoke: |app| app.show_draft2d_workbench = !app.show_draft2d_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-reinforcement"),
+        label: "View: Toggle Reinforcement",
+        shortcut: None,
+        invoke: |app| app.show_reinforcement_workbench = !app.show_reinforcement_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-render"),
+        label: "View: Toggle Path-Traced Render",
+        shortcut: None,
+        invoke: |app| app.show_render_workbench = !app.show_render_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-hvac"),
+        label: "View: Toggle HVAC",
+        shortcut: None,
+        invoke: |app| app.show_hvac_workbench = !app.show_hvac_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-reverse"),
+        label: "View: Toggle Reverse Engineering",
+        shortcut: None,
+        invoke: |app| app.show_reverse_workbench = !app.show_reverse_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-interior"),
+        label: "View: Toggle Interior Design",
+        shortcut: None,
+        invoke: |app| app.show_interior_workbench = !app.show_interior_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-animate"),
+        label: "View: Toggle Animation",
+        shortcut: None,
+        invoke: |app| app.show_animate_workbench = !app.show_animate_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-variant-effect"),
+        label: "View: Toggle Variant Effect",
+        shortcut: None,
+        invoke: |app| app.show_variant_effect_workbench = !app.show_variant_effect_workbench,
     },
     Command {
         id: CommandId("file.save-mesh-stl"),
@@ -751,6 +906,83 @@ mod tests {
     fn every_command_has_non_empty_label() {
         for cmd in all_commands() {
             assert!(!cmd.label.is_empty(), "empty label on {:?}", cmd.id);
+        }
+    }
+
+    #[test]
+    fn workbench_toggle_commands_each_flip_a_distinct_flag() {
+        // The palette advertises "fuzzy-search every action", so it carries
+        // one toggle per right-side workbench (mirroring the View menu).
+        // Each `view.toggle-*` command must flip exactly ONE workbench
+        // flag, and no two may share a flag — this catches a copy-paste
+        // error pointing a command at the wrong panel (which the unique-id
+        // test cannot see, since the ids stay unique) and locks the
+        // coverage count against future drift.
+        fn flags(a: &ValenxApp) -> Vec<bool> {
+            vec![
+                a.show_mesh_toolbox,
+                a.show_genetics_workbench,
+                a.show_aero_workbench,
+                a.show_astro_workbench,
+                a.show_fem_workbench,
+                a.show_cfd_workbench,
+                a.show_reactdyn_workbench,
+                a.show_springs_workbench,
+                a.show_gears_workbench,
+                a.show_geomatics_workbench,
+                a.show_piping_workbench,
+                a.show_collision_workbench,
+                a.show_sheetmetal_workbench,
+                a.show_fields_workbench,
+                a.show_fasteners_workbench,
+                a.show_frames_workbench,
+                a.show_neuro_workbench,
+                a.show_cad_workbench,
+                a.show_draft2d_workbench,
+                a.show_reinforcement_workbench,
+                a.show_render_workbench,
+                a.show_hvac_workbench,
+                a.show_reverse_workbench,
+                a.show_interior_workbench,
+                a.show_animate_workbench,
+                a.show_variant_effect_workbench,
+            ]
+        }
+
+        // The 25 new entries. Exclude two pre-existing `view.toggle-*`
+        // commands that aren't workbench flag-flips: `mesh-toolbox` (runs
+        // through a method) and `shading` (toggles render mode, not a panel).
+        let toggles: Vec<&Command> = static_commands()
+            .iter()
+            .filter(|c| {
+                c.id.0.starts_with("view.toggle-")
+                    && c.id.0 != "view.toggle-mesh-toolbox"
+                    && c.id.0 != "view.toggle-shading"
+            })
+            .collect();
+        assert_eq!(toggles.len(), 25, "expected 25 workbench-toggle commands");
+
+        // One app, all flags start false; each command flips its own flag
+        // false→true exactly once. A wrong-flag closure surfaces as a
+        // duplicate `touched` index.
+        let mut app = ValenxApp::default();
+        let mut touched = std::collections::HashSet::new();
+        for cmd in &toggles {
+            let before = flags(&app);
+            (cmd.invoke)(&mut app);
+            let after = flags(&app);
+            let changed: Vec<usize> = (0..before.len()).filter(|&i| before[i] != after[i]).collect();
+            assert_eq!(
+                changed.len(),
+                1,
+                "command `{}` should flip exactly one workbench flag, flipped {changed:?}",
+                cmd.id.0
+            );
+            assert!(
+                touched.insert(changed[0]),
+                "command `{}` flips a flag already owned by another command",
+                cmd.id.0
+            );
         }
     }
 
