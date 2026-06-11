@@ -855,6 +855,81 @@ mod tests {
         buf
     }
 
+    /// Deterministic xorshift64 PRNG — reproducible, no external rng dep.
+    fn xorshift64(state: &mut u64) -> u64 {
+        let mut x = *state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        *state = x;
+        x
+    }
+
+    /// Robustness: `parse_binary` must NEVER panic on arbitrary input — it
+    /// may only return `Ok` or a typed `Err`. This feeds truncations,
+    /// single-byte corruptions, and deterministic pseudo-random buffers; if
+    /// any input panicked, the test would fail via panic propagation. The
+    /// DoS caps + `read_exact_bytes` length-gating keep every iteration
+    /// small and fast (counts can't drive a large allocation).
+    #[test]
+    fn parse_binary_never_panics_on_adversarial_input() {
+        let valid = synthesize_tet_with_scalar();
+
+        // 1. Every truncated prefix of a valid file.
+        for k in 0..=valid.len() {
+            let _ = parse_binary(&valid[..k]);
+        }
+
+        // 2. Single-byte corruption (bit-flip and NUL) at every position.
+        for i in 0..valid.len() {
+            let mut flipped = valid.clone();
+            flipped[i] ^= 0xFF;
+            let _ = parse_binary(&flipped);
+            let mut nulled = valid.clone();
+            nulled[i] = 0;
+            let _ = parse_binary(&nulled);
+        }
+
+        // 3. Deterministic pseudo-random buffers of assorted small sizes.
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15; // fixed seed
+        for _ in 0..2000 {
+            let len = (xorshift64(&mut state) % 256) as usize;
+            let buf: Vec<u8> = (0..len)
+                .map(|_| (xorshift64(&mut state) & 0xFF) as u8)
+                .collect();
+            let _ = parse_binary(&buf);
+        }
+
+        // 4. Structured fuzz that genuinely reaches the binary section
+        //    decoders: a valid header followed by a POINTS (and sometimes a
+        //    POINT_DATA SCALARS) section whose declared count, type token, and
+        //    randomized — possibly truncated — binary body are all random. So
+        //    read_points_block / read_typed_block / read_exact_bytes get driven
+        //    with arbitrary bytes, not bailed at the header. Counts stay tiny
+        //    (0..=8) so nothing allocates large. Independent fixed seed.
+        let mut state2: u64 = 0x2545_F491_4F6C_DD1D;
+        let types = ["float", "double", "int", "short", "char", "wobble"];
+        for _ in 0..3000 {
+            let mut buf: Vec<u8> =
+                b"# vtk DataFile Version 3.0\nt\nBINARY\nDATASET UNSTRUCTURED_GRID\n".to_vec();
+            let n = xorshift64(&mut state2) % 9;
+            let pt = types[(xorshift64(&mut state2) % types.len() as u64) as usize];
+            buf.extend_from_slice(format!("POINTS {n} {pt}\n").as_bytes());
+            let body = (xorshift64(&mut state2) % 80) as usize;
+            buf.extend((0..body).map(|_| (xorshift64(&mut state2) & 0xFF) as u8));
+            if xorshift64(&mut state2) & 1 == 0 {
+                let m = xorshift64(&mut state2) % 9;
+                let st = types[(xorshift64(&mut state2) % types.len() as u64) as usize];
+                buf.extend_from_slice(
+                    format!("POINT_DATA {m}\nSCALARS s {st} 1\nLOOKUP_TABLE default\n").as_bytes(),
+                );
+                let sb = (xorshift64(&mut state2) % 80) as usize;
+                buf.extend((0..sb).map(|_| (xorshift64(&mut state2) & 0xFF) as u8));
+            }
+            let _ = parse_binary(&buf);
+        }
+    }
+
     #[test]
     fn parse_binary_handles_a_minimal_tet_with_scalars() {
         let bytes = synthesize_tet_with_scalar();
