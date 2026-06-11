@@ -131,18 +131,12 @@ dialog.settings.residual-scale-label = Y-axis scale:
 dialog.settings.residual-scale.log10 = log₁₀
 dialog.settings.residual-scale.linear = linear
 dialog.settings.reprobe-on-close = Re-probe adapters when this window closes
-dialog.settings.crash-report-opt-in = Upload crash reports to the maintainers
-dialog.settings.crash-report-explainer = Reports stay on disk regardless. With this off, the next launch asks before sending. With this on, the next launch sends automatically. Reports are sanitised — usernames, paths, UUIDs, and SHA-256 hashes are redacted before write.
+dialog.settings.crash-report-opt-in = Opt in to crash-report upload (not yet active)
+dialog.settings.crash-report-explainer = Crash reports are always written locally and sanitised — usernames, paths, UUIDs, and SHA-256 hashes are redacted before write. They are never transmitted: automatic upload to the maintainers is not yet implemented, so this preference has no effect today. Use "Open crashes folder" to inspect or delete reports.
 dialog.settings.crash-report-open-folder = Open crashes folder…
-dialog.settings.crash-report-folder-tooltip = Reveals { $path } in your file browser. Inspect or delete reports manually before sending.
+dialog.settings.crash-report-folder-tooltip = Reveals { $path } in your file browser. Inspect or delete reports manually.
 dialog.settings.reset-defaults = Reset to defaults
 dialog.settings.persistence-note = Settings persist to <state_dir>/settings.json on close.
-
-dialog.crash-report.title = A previous run crashed
-dialog.crash-report.body = Valenx detected one or more unsent crash reports. Send them to the maintainers?
-dialog.crash-report.send = Send
-dialog.crash-report.discard = Discard
-dialog.crash-report.privacy-link = What's in a crash report?
 
 # ---------------------------------------------------------------
 # Command palette
