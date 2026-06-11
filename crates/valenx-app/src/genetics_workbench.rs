@@ -1,12 +1,12 @@
 //! The right-side **Genetics Workbench** panel.
 //!
-//! Valenx ships thirteen native computational-biology library crates
+//! Valenx ships fifteen native computational-biology library crates
 //! (`valenx-bioseq`, `valenx-align`, `valenx-phylo`, `valenx-popgen`,
-//! `valenx-rnastruct`, `valenx-md`, `valenx-cheminf`,
+//! `valenx-rnastruct`, `valenx-rnadesign`, `valenx-md`, `valenx-cheminf`,
 //! `valenx-biostruct`, `valenx-qchem`, `valenx-genomics`,
-//! `valenx-sysbio`, `valenx-dock-screen`, `valenx-genediting`) — but
-//! before this module they were libraries + MCP APIs only, with no
-//! desktop UI.
+//! `valenx-sysbio`, `valenx-dock-screen`, `valenx-genediting`,
+//! `valenx-structpredict`) — but before this module they were libraries
+//! + MCP APIs only, with no desktop UI.
 //!
 //! This module surfaces them as polished egui panels, mirroring the CAD
 //! side's [`crate::mesh_toolbox`] idiom: a resizable right-hand
@@ -15,10 +15,10 @@
 //! palette + input forms + a Run action that calls the crate's real
 //! API + a results area.
 //!
-//! A fourteenth panel — **RNA Designer** — surfaces `valenx-rnadesign`
-//! (the unified synthetic-RNA design workflow) as a
-//! guided start-to-finish wizard; unlike the other panels it has six
-//! Back/Next steps rather than a single tool palette.
+//! The **RNA Designer** panel surfaces `valenx-rnadesign` (the unified
+//! synthetic-RNA design workflow) as a guided start-to-finish wizard;
+//! unlike the other panels it steps through several Back/Next stages
+//! rather than a single tool palette.
 //!
 //! The workbench owns one [`GeneticsWorkbenchState`] (a field on
 //! [`ValenxApp`]). Each panel owns a small sub-state struct in the
