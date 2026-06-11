@@ -46,12 +46,16 @@ pub enum PdbqtRecord {
     EndRoot,
     /// `BRANCH parent_serial child_serial` — start of a rotatable subtree.
     Branch {
+        /// Serial number of the parent (proximal) atom of the rotatable bond.
         parent_serial: i32,
+        /// Serial number of the child (distal) atom of the rotatable bond.
         child_serial: i32,
     },
     /// `ENDBRANCH parent_serial child_serial`.
     EndBranch {
+        /// Serial number of the parent atom (matches the opening `BRANCH`).
         parent_serial: i32,
+        /// Serial number of the child atom (matches the opening `BRANCH`).
         child_serial: i32,
     },
     /// `TORSDOF n` — declared torsional degrees of freedom.
