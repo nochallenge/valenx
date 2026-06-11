@@ -348,12 +348,17 @@ pub fn continuous_collision_check(
     out
 }
 
-/// Test the flute cylinder (centred at `centre`, radius `r`, length
-/// `len` extending downward in -Z) for overlap with `part`.
+/// Test the flute cylinder for overlap with `part`. The cutter "centre"
+/// is the flute **tip** (the convention shared with
+/// [`cone_segment_aabb_overlap`]), so the flute extends **up** from
+/// `centre.z` to `centre.z + len`.
 fn cylinder_aabb_overlap(centre: Vector3<f64>, r: f64, len: f64, part: &SetupPart) -> bool {
-    // Flute extends from `centre.z` down to `centre.z - len`.
-    let tool_z_max = centre.z;
-    let tool_z_min = centre.z - len;
+    // The flute spans from the tip at `centre.z` up to `centre.z + len`.
+    // (It previously extended *down* to `centre.z - len` — the opposite of the
+    // holder's tip-based convention — which left a flute-length blind band
+    // directly above the flute where holder collisions were missed.)
+    let tool_z_min = centre.z;
+    let tool_z_max = centre.z + len;
     if tool_z_max < part.min.z || tool_z_min > part.max.z {
         return false;
     }
@@ -365,17 +370,13 @@ fn cylinder_aabb_overlap(centre: Vector3<f64>, r: f64, len: f64, part: &SetupPar
     (dx * dx + dy * dy) <= r * r
 }
 
-/// Test one holder segment against a setup part. The holder
-/// segment's z-range is *above the flute tip* — i.e. the bottom of
-/// the segment sits at `centre.z + (flute_len + seg.z_lower)`
-/// because the tool tip is at `centre.z - flute_len` and the flute
-/// tip is at `centre.z - 0`... wait that's wrong.
+/// Test one holder segment against a setup part.
 ///
-/// **Convention**: in this module, the cutter "centre" is the
-/// **bottom tip** of the flute (i.e. the lowest point of the cutter
-/// outline). The flute spans from `centre.z` (tip, the lower face)
-/// up to `centre.z + flute_len`. The holder begins at `centre.z +
-/// flute_len + seg.z_lower_mm` and extends upward.
+/// **Convention** (shared with [`cylinder_aabb_overlap`]): the cutter
+/// "centre" is the **bottom tip** of the flute (the lowest point of the
+/// cutter outline). The flute spans from `centre.z` (tip) up to
+/// `centre.z + flute_len`; the holder segment begins at
+/// `centre.z + flute_len + seg.z_lower_mm` and extends upward.
 fn cone_segment_aabb_overlap(
     centre: Vector3<f64>,
     flute_len: f64,
@@ -434,16 +435,17 @@ mod tests {
         // whose midpoint sweeps right through it. This is the
         // textbook v1-cylinder-vs-AABB miss case.
         let mut tp = Toolpath::new();
-        // Start at (0, 0, 5) — flute tip at z=5, flute extends down
-        // to z=-20.
+        // Start at (0, 0, 5) — flute tip at z=5, flute extends up to z=30
+        // (em6 flute length 25).
         tp.push(Move::new(MoveKind::Rapid, p(0.0, 0.0, 5.0), 0.0));
         // End at (40, 0, 5).
         tp.push(Move::new(MoveKind::Rapid, p(40.0, 0.0, 5.0), 0.0));
-        // Fixture AABB sits in the middle of the X span.
+        // Fixture AABB sits in the middle of the X span, within the flute's
+        // z-range [5, 30].
         let mut setup = CollisionSetup::new();
         setup.push_fixture(
-            p(15.0, -10.0, 0.0),
-            p(25.0, 10.0, 4.0),
+            p(15.0, -10.0, 6.0),
+            p(25.0, 10.0, 10.0),
             "clamp",
         );
         let hits = continuous_collision_check(
@@ -548,11 +550,11 @@ mod tests {
         tp.push(Move::new(MoveKind::Rapid, p(-1.0, 0.0, 5.0), 0.0));
         tp.push(Move::new(MoveKind::Rapid, p(11.0, 0.0, 5.0), 0.0));
         let mut setup = CollisionSetup::new();
-        // Fixture sits at x=5 with radius 0.5 — the endpoints sit
-        // outside, but the path slices through the middle.
+        // Fixture sits at x=5 within the flute's z-range [5, 30] — the
+        // endpoints sit outside in X, but the path slices through the middle.
         setup.push_fixture(
-            p(4.5, -5.0, 0.0),
-            p(5.5, 5.0, 4.0),
+            p(4.5, -5.0, 6.0),
+            p(5.5, 5.0, 10.0),
             "tab",
         );
         let hits = continuous_collision_check(
