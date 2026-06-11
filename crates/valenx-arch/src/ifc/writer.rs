@@ -103,7 +103,11 @@ fn encode_ifc_guid(bytes: &[u8; 16]) -> String {
             let from_lo = lo >> (64 + shift);
             ((from_hi | from_lo) & 0x3F) as u8
         } else {
-            ((lo >> (-shift - 8)) & 0x3F) as u8
+            // Chunk entirely in lo: its LSB sits at bit (64 + shift) of the
+            // 128-bit value, so shift `lo` right by `64 + shift` (the same
+            // amount the straddle branch uses for its `from_lo` term). The old
+            // `-shift - 8` only coincided at shift == -36, mis-packing the rest.
+            ((lo >> (64 + shift)) & 0x3F) as u8
         };
         out[idx] = IFC_ALPHABET[val as usize];
         idx += 1;
@@ -1639,6 +1643,26 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn ifc_guid_packs_big_endian_6_bit_chunks() {
+        // Independently pack the 128-bit big-endian value as 2 + 21×6 bits and
+        // compare. (The old `lo >> (-shift - 8)` else-branch mis-packed every
+        // chunk from output index 12 on — the existing length/alphabet test
+        // never exercised the bit layout.)
+        let bytes: [u8; 16] = [
+            0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x0f, 0xed, 0xcb, 0xa9, 0x87, 0x65,
+            0x43, 0x21,
+        ];
+        let v = u128::from_be_bytes(bytes);
+        let mut expected = String::with_capacity(22);
+        expected.push(IFC_ALPHABET[((v >> 126) & 0x3) as usize] as char);
+        for k in 1..22u32 {
+            let shift = 126 - 6 * k; // LSB of this 6-bit chunk in the 128-bit value
+            expected.push(IFC_ALPHABET[((v >> shift) & 0x3F) as usize] as char);
+        }
+        assert_eq!(encode_ifc_guid(&bytes), expected);
     }
 
     /// Round-14 M4 RED→GREEN: `ifc_str` must sanitise newlines and
