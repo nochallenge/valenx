@@ -151,15 +151,20 @@ pub fn to_svg(s: &Schematic) -> String {
         }
         out.push_str("\"/>\n");
         if !w.label.is_empty() {
-            // Label at the midpoint of the first segment.
-            let a = w.polyline[0];
-            let b = w.polyline[1];
-            let mx = (a[0] + b[0]) * 0.5;
-            let my = (a[1] + b[1]) * 0.5 - 4.0;
-            out.push_str(&format!(
-                "  <text class=\"label\" x=\"{mx:.2}\" y=\"{my:.2}\">{}</text>\n",
-                escape_xml(&w.label)
-            ));
+            // Label at the midpoint of the first segment. `Wire::new`
+            // rejects polylines with < 2 vertices, but a `Wire` loaded
+            // from RON (which deserialises field-by-field, bypassing the
+            // constructor) can carry a shorter polyline -- guard the index
+            // so a hostile/corrupt schematic renders without the label
+            // rather than panicking on `polyline[1]`.
+            if let (Some(a), Some(b)) = (w.polyline.first(), w.polyline.get(1)) {
+                let mx = (a[0] + b[0]) * 0.5;
+                let my = (a[1] + b[1]) * 0.5 - 4.0;
+                out.push_str(&format!(
+                    "  <text class=\"label\" x=\"{mx:.2}\" y=\"{my:.2}\">{}</text>\n",
+                    escape_xml(&w.label)
+                ));
+            }
         }
     }
 
@@ -225,5 +230,25 @@ mod tests {
         assert!(svg.contains("class=\"wire\""));
         assert!(svg.contains(">SIG<"));
         assert!(svg.contains("viewBox="));
+    }
+
+    #[test]
+    fn to_svg_tolerates_degenerate_wire_from_deserialize() {
+        // A `Wire` loaded from RON bypasses `Wire::new`'s >= 2 vertex
+        // check (serde builds it field-by-field), so a hostile/corrupt
+        // schematic can hold a 1-vertex (or empty) polyline with a label.
+        // Rendering must not panic on `polyline[1]`; the labelled segment
+        // is simply skipped.
+        let s = Schematic {
+            symbols: vec![],
+            wires: vec![Wire {
+                polyline: vec![[0.0, 0.0]], // < 2 vertices, panicked pre-fix
+                label: "NET".into(),
+            }],
+        };
+        let svg = to_svg(&s); // must not panic
+        assert!(svg.starts_with("<svg"));
+        // The degenerate wire renders without its label midpoint.
+        assert!(!svg.contains(">NET<"));
     }
 }
