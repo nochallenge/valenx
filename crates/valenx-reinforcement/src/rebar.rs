@@ -129,6 +129,12 @@ impl RebarShape {
             }
             Self::Spiral { radius, pitch, turns } => {
                 let total = (*turns) * 16.0;
+                // A spiral with no (or negative) turns has no geometry; bail
+                // before the loop so `t = i / total` can't divide by zero and
+                // emit NaN vertices.
+                if total <= 0.0 {
+                    return Vec::new();
+                }
                 let n = total.ceil() as usize + 1;
                 let mut pts = Vec::with_capacity(n);
                 for i in 0..n {
@@ -245,6 +251,31 @@ mod tests {
             turns: 5.0,
         };
         assert!(s.to_polyline().len() > 40);
+    }
+
+    #[test]
+    fn spiral_with_zero_turns_is_empty_not_nan() {
+        // turns = 0 previously made `t = i / (turns*16)` compute 0/0 = NaN,
+        // emitting (NaN, NaN, NaN) vertices. It must yield no geometry.
+        let zero = RebarShape::Spiral {
+            radius: 0.3,
+            pitch: 0.1,
+            turns: 0.0,
+        };
+        assert!(
+            zero.to_polyline().is_empty(),
+            "a 0-turn spiral has no geometry"
+        );
+        // A normal spiral's vertices are all finite (no NaN leaks).
+        let good = RebarShape::Spiral {
+            radius: 0.3,
+            pitch: 0.1,
+            turns: 3.0,
+        };
+        assert!(good
+            .to_polyline()
+            .iter()
+            .all(|p| p.iter().all(|c| c.is_finite())));
     }
 
     #[test]
