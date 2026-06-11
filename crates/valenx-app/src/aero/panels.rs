@@ -412,10 +412,12 @@ pub fn draw_ground_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
             ui.add_space(4.0);
             ui.add_enabled_ui(form.moving_ground, |ui| {
-                ui.checkbox(&mut form.rotating_wheels, "Rotating wheels (automotive)")
+                ui.checkbox(&mut form.rotating_wheels, "Show rolling-wheel speed (reference)")
                     .on_hover_text(
-                        "Spins the wheel region's solid cells at the rolling \
-                         angular speed ω = V/R.",
+                        "Reports the wheel's rolling angular speed ω = V/R for the \
+                         test velocity. Reference only — the native solver does not \
+                         yet apply a rotating-wall boundary, so this does not change \
+                         the simulation.",
                     );
                 ui.add_enabled_ui(form.rotating_wheels, |ui| {
                     egui::Grid::new("aero_wheel_grid")
@@ -438,7 +440,7 @@ pub fn draw_ground_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 derived(
                     ui,
                     format!(
-                        "Rolling wheel speed: ω = {:.1} rad/s",
+                        "Rolling-wheel reference: ω = {:.1} rad/s  (V/R — not applied to the solve)",
                         form.wheel_omega()
                     ),
                 );
