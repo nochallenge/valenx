@@ -290,6 +290,39 @@ mod tests {
     }
 
     #[test]
+    fn stiffness_follows_the_scaling_laws() {
+        // k = G·d⁴ / (8·D³·n_active). Verify each exponent via a controlled
+        // ratio — the single point-value test above uses d = 1, where d^4 ==
+        // d^3 == 1, so it is BLIND to the wire-diameter exponent; a
+        // `powi(4)→powi(3)` regression would pass it but fail here.
+        let k0 = stiffness_n_per_mm(&SpringSpec::default_compression());
+
+        let mut d2 = SpringSpec::default_compression();
+        d2.wire_diameter_mm *= 2.0; // d⁴ → 2⁴ = 16×
+        assert!((stiffness_n_per_mm(&d2) / k0 - 16.0).abs() < 1e-9);
+
+        let mut big_d2 = SpringSpec::default_compression();
+        big_d2.mean_coil_diameter_mm *= 2.0; // D³ → 1/2³ = 1/8
+        assert!((stiffness_n_per_mm(&big_d2) / k0 - 0.125).abs() < 1e-9);
+
+        let mut n2 = SpringSpec::default_compression();
+        n2.n_active_coils *= 2.0; // 1/n → 1/2
+        assert!((stiffness_n_per_mm(&n2) / k0 - 0.5).abs() < 1e-9);
+
+        let mut g3 = SpringSpec::default_compression();
+        g3.shear_modulus_mpa *= 3.0; // linear in G
+        assert!((stiffness_n_per_mm(&g3) / k0 - 3.0).abs() < 1e-9);
+
+        // Degenerate guard: n_active = 0 falls back to the 1e-6 floor, so k
+        // stays finite (no division-by-zero) and far exceeds the base — never
+        // NaN or infinite.
+        let mut degen = SpringSpec::default_compression();
+        degen.n_active_coils = 0.0;
+        let kd = stiffness_n_per_mm(&degen);
+        assert!(kd.is_finite() && kd > k0);
+    }
+
+    #[test]
     fn rejects_wire_bigger_than_coil() {
         let mut spec = SpringSpec::default_compression();
         spec.wire_diameter_mm = 12.0;
