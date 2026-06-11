@@ -89,6 +89,7 @@
 //!   variants — it is not an exhaustive sequence optimiser.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod base_edit;
 pub mod crispr;

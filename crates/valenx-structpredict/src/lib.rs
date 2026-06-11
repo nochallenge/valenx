@@ -109,6 +109,7 @@
 //!   neural network.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod aa;
 pub mod abinitio;

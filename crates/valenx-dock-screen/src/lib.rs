@@ -83,6 +83,7 @@
 //! receptor atom without bond-formation chemistry.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod adapters;
 pub mod analyze;

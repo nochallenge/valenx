@@ -105,6 +105,7 @@
 //!   progression), not a full kinetic folding simulation.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod aptamer;
 pub mod constraints;
