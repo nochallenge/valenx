@@ -266,6 +266,18 @@ pub fn build_pileup(
                 "QUAL length disagrees with SEQ during pileup",
             ));
         }
+        // The CIGAR's query-consuming length must equal SEQ, or the Match arm
+        // below would index `seq` / `qual` out of bounds. `SamFile::parse`
+        // enforces this through `SamRecord::validate`, but the public
+        // `build_pileup` / `call_haplotype_variants` entry points also accept
+        // caller-built records that never went through it.
+        let qlen = rec.cigar.query_len();
+        if qlen != seq.len() {
+            return Err(GenomicsError::invalid_record(
+                "sam",
+                format!("CIGAR query length {qlen} != SEQ length {}", seq.len()),
+            ));
+        }
 
         let mut ref_pos = rec.pos; // 1-based current reference position
         let mut read_pos = 0usize; // 0-based current read offset
@@ -529,6 +541,23 @@ mod tests {
             GenomicsError::InvalidRecord { kind, reason } => {
                 assert_eq!(kind, "sam");
                 assert!(reason.contains("pileup cap"), "msg: {reason}");
+            }
+            other => panic!("expected InvalidRecord, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_pileup_rejects_cigar_longer_than_seq() {
+        // A hand-built record whose CIGAR consumes more query bases (10M)
+        // than SEQ provides (4) must be rejected, not panic on `seq[4]`.
+        // `SamFile::parse` catches this via `validate()`, but `build_pileup`
+        // is a public entry point that accepts caller-built records directly.
+        let rec = mapped("r1", 1, "10M", "ACGT", "IIII");
+        let err = build_pileup(&[rec], &Reference::new(), 0).unwrap_err();
+        match err {
+            GenomicsError::InvalidRecord { kind, reason } => {
+                assert_eq!(kind, "sam");
+                assert!(reason.contains("CIGAR query length"), "msg: {reason}");
             }
             other => panic!("expected InvalidRecord, got {other:?}"),
         }
