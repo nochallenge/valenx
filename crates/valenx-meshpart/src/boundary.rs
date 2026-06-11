@@ -37,6 +37,16 @@ pub fn extract_boundary_loop(
         .iter()
         .find(|b| b.element_type == ElementType::Tri3)
         .ok_or(MeshPartError::Empty("Tri3 block"))?;
+    crate::check_connectivity(block, mesh.nodes.len())?;
+    let tri_count = block.count();
+    for &ti in &group.triangle_indices {
+        if ti as usize >= tri_count {
+            return Err(MeshPartError::BadParameter {
+                name: "triangle_indices",
+                reason: format!("triangle index {ti} >= triangle count {tri_count}"),
+            });
+        }
+    }
 
     // Count each (a,b) directed edge across the group.
     let mut edge_count: HashMap<(u32, u32), i32> = HashMap::new();

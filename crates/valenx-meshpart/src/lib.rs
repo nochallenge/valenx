@@ -46,3 +46,27 @@ pub use merge::merge_meshes;
 pub use segment::{segment_by_normal, TriangleGroup};
 pub use split::split_mesh_by_planes;
 pub use triangulate::triangulate_polygon;
+
+use valenx_mesh::element::ElementBlock;
+
+/// Validate that every Tri3 connectivity entry indexes an existing node.
+///
+/// `valenx_mesh::Mesh` exposes public `nodes`/`element_blocks` and enforces no
+/// in-bounds invariant, so a corrupt or hand-built mesh can carry a
+/// connectivity index past `nodes`. The mesh-part algorithms index
+/// `mesh.nodes[conn[..]]` directly, so they call this first to fail with a
+/// typed error rather than panic out of bounds.
+pub(crate) fn check_connectivity(
+    block: &ElementBlock,
+    n_nodes: usize,
+) -> Result<(), MeshPartError> {
+    for &idx in &block.connectivity {
+        if idx as usize >= n_nodes {
+            return Err(MeshPartError::BadParameter {
+                name: "connectivity",
+                reason: format!("node index {idx} >= node count {n_nodes}"),
+            });
+        }
+    }
+    Ok(())
+}
