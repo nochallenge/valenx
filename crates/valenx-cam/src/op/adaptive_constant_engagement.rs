@@ -70,6 +70,13 @@ use crate::stock::Stock;
 use crate::tool::Tool;
 use crate::toolpath::{Move, MoveKind, Toolpath};
 
+/// Hard cap on the number of cells in the engagement [`StockGrid`].
+/// 100 M bool cells is ~100 MiB — far above any real engagement preview
+/// and far below an OOM. Without it, a small (but positive)
+/// `cell_size_mm` against a large pocket span would request billions of
+/// cells and OOM-abort. Mirrors [`crate::voxel::MAX_VOXEL_CELLS`].
+const MAX_ENGAGEMENT_GRID_CELLS: u64 = 100_000_000;
+
 /// Parameters for constant-engagement adaptive clearing.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AdaptiveConstantEngagementParams {
@@ -205,6 +212,25 @@ pub fn generate(
         // Inscribe a grid covering the polygon AABB + a small
         // tool-radius margin so the cutter can sit on the boundary.
         let (xy_min, xy_max) = polygon_aabb(&polygon, tool.radius_mm() * 1.5);
+        // Guard the grid allocation BEFORE building it: a small (but
+        // positive) `cell_size_mm` against a large pocket span would make
+        // `StockGrid::new` request billions of cells and OOM-abort. `as
+        // u64` saturates a huge ratio and `saturating_mul` can't wrap, so
+        // the check is overflow-safe.
+        let span = xy_max - xy_min;
+        let cells = ((span.x / cell_size).ceil().max(1.0) as u64)
+            .saturating_mul((span.y / cell_size).ceil().max(1.0) as u64);
+        if cells > MAX_ENGAGEMENT_GRID_CELLS {
+            return Err(CamError::BadOperation {
+                name: "adaptive_constant_engagement".into(),
+                reason: format!(
+                    "engagement grid would need {cells} cells (> {MAX_ENGAGEMENT_GRID_CELLS} \
+                     cap); cell_size_mm ({cell_size}) is too small for the \
+                     {:.1}x{:.1} mm pocket span",
+                    span.x, span.y
+                ),
+            });
+        }
         let mut grid = StockGrid::new(xy_min, xy_max, cell_size);
         // Mark cells *outside* the polygon as non-solid (the
         // polygon's interior is the only material the cutter cares
@@ -487,6 +513,25 @@ fn validate(
     if !(tool.diameter_mm > 0.0) {
         return Err(mk("tool diameter must be > 0".into()));
     }
+    // Bound the count-driven fields: `helical_segments` drives a
+    // `1..=n` loop in `emit_rollover` (each iteration pushes a Move), and
+    // `engagement_samples` drives per-query ray casting. An absurd
+    // deserialized/UI value would otherwise hang or grow the toolpath
+    // without bound. The defaults are 16 / 64; these caps are generous.
+    const MAX_HELICAL_SEGMENTS: usize = 10_000;
+    if params.helical_segments > MAX_HELICAL_SEGMENTS {
+        return Err(mk(format!(
+            "helical_segments must be <= {MAX_HELICAL_SEGMENTS} (got {})",
+            params.helical_segments
+        )));
+    }
+    const MAX_ENGAGEMENT_SAMPLES: usize = 100_000;
+    if params.engagement_samples > MAX_ENGAGEMENT_SAMPLES {
+        return Err(mk(format!(
+            "engagement_samples must be <= {MAX_ENGAGEMENT_SAMPLES} (got {})",
+            params.engagement_samples
+        )));
+    }
     Ok(())
 }
 
@@ -555,6 +600,40 @@ mod tests {
         .unwrap();
         let tool = Tool::new(1, "EM4", ToolKind::EndMill, 4.0, 25.0, 2, "carbide").unwrap();
         (stock, mesh, tool)
+    }
+
+    #[test]
+    fn generate_rejects_tiny_cell_size_no_oom() {
+        // A small positive cell_size_mm against the 40 mm pocket would
+        // request ~10^21 grid cells and OOM-abort pre-fix; it must be a
+        // clean error instead.
+        let (stock, mesh, tool) = square_pocket_setup();
+        let params = AdaptiveConstantEngagementParams {
+            step_down: 4.0,
+            depth: 4.0,
+            cell_size_mm: 1e-9,
+            ..Default::default()
+        };
+        let r = generate(&stock, &mesh, &params, &tool);
+        assert!(
+            matches!(r, Err(CamError::BadOperation { .. })),
+            "tiny cell_size_mm must be rejected, not OOM"
+        );
+    }
+
+    #[test]
+    fn generate_rejects_huge_helical_segments() {
+        // usize::MAX helical_segments would make `emit_rollover` loop
+        // ~2^64 times; `validate` must reject it up front.
+        let (stock, mesh, tool) = square_pocket_setup();
+        let params = AdaptiveConstantEngagementParams {
+            step_down: 4.0,
+            depth: 4.0,
+            helical_segments: usize::MAX,
+            ..Default::default()
+        };
+        let r = generate(&stock, &mesh, &params, &tool);
+        assert!(matches!(r, Err(CamError::BadOperation { .. })));
     }
 
     #[test]
