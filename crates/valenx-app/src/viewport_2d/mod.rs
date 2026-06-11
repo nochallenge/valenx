@@ -35,6 +35,7 @@ pub mod layout;
 
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Vec2};
 use valenx_bioseq::{
+    cloning::restriction,
     record::{SeqFeature, SeqRecord},
     seq::{Seq, Topology},
     Location, SeqKind, Span, Strand,
@@ -78,10 +79,15 @@ pub struct Viewport2dState {
     pub needs_fit: bool,
     /// Draw individual base letters when very zoomed in (< 0.1 bp/px).
     pub show_bases: bool,
-    /// Overlay vertical tick marks at restriction-enzyme cut sites.
-    /// (Not yet connected to a live restriction map; reserved for the
-    /// follow-up wiring pass.)
+    /// Overlay vertical tick marks at single (unique-cutter) restriction sites
+    /// on the linear track — every enzyme that cuts the sequence exactly once.
+    /// Computed via valenx-bioseq's restriction digest and cached per sequence
+    /// in `restriction_cache`.
     pub show_restriction_sites: bool,
+    /// Cached single-cutter map for the current sequence (see
+    /// [`refresh_restriction_cache`]). Recomputed only when the sequence
+    /// changes, since the digest is O(sequence × enzyme-database).
+    restriction_cache: Option<RestrictionCache>,
 }
 
 impl Default for Viewport2dState {
@@ -93,6 +99,7 @@ impl Default for Viewport2dState {
             needs_fit: true,
             show_bases: true,
             show_restriction_sites: false,
+            restriction_cache: None,
         }
     }
 }
@@ -100,6 +107,65 @@ impl Default for Viewport2dState {
 // ─────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Restriction-site overlay (single cutters)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Cached single-cutter restriction map for one sequence.
+///
+/// The digest is O(sequence × enzyme-database), so it is computed once per
+/// sequence and reused every frame until the sequence content changes.
+#[derive(Debug, Clone, Default)]
+struct RestrictionCache {
+    /// Fingerprint of the sequence the cuts were computed for.
+    key: u64,
+    /// `(top-strand cut position, enzyme name)` for every enzyme that cuts the
+    /// sequence exactly once, sorted by cut position.
+    cuts: Vec<(usize, &'static str)>,
+}
+
+/// A cheap content fingerprint, used to detect when the displayed sequence
+/// changed and the cut map needs recomputing.
+fn sequence_fingerprint(seq: &Seq) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    seq.as_bytes().hash(&mut h);
+    seq.is_circular().hash(&mut h);
+    h.finish()
+}
+
+/// Single (unique) restriction cutters: every prototype enzyme that cuts `seq`
+/// exactly once, as `(top-strand cut bp, enzyme name)` sorted by position.
+/// These are the cloning-relevant sites; restricting the overlay to single
+/// cutters keeps it readable — a frequent cutter would paint a forest of ticks.
+/// A non-DNA sequence (digestion is DNA-only) yields an empty map.
+fn unique_cutters(seq: &Seq) -> Vec<(usize, &'static str)> {
+    let mut out: Vec<(usize, &'static str)> = restriction::prototypes()
+        .into_iter()
+        .filter_map(|e| match restriction::digest(seq, e) {
+            Ok(cuts) if cuts.len() == 1 => Some((cuts[0].top_cut_pos, e.name)),
+            _ => None,
+        })
+        .collect();
+    out.sort_by_key(|&(pos, _)| pos);
+    out
+}
+
+/// Refresh [`Viewport2dState::restriction_cache`] if the sequence changed since
+/// the last digest. A no-op while the overlay is toggled off.
+fn refresh_restriction_cache(state: &mut Viewport2dState, seq: &Seq) {
+    if !state.show_restriction_sites {
+        return;
+    }
+    let key = sequence_fingerprint(seq);
+    if state.restriction_cache.as_ref().is_none_or(|c| c.key != key) {
+        state.restriction_cache = Some(RestrictionCache {
+            key,
+            cuts: unique_cutters(seq),
+        });
+    }
+}
 
 /// Render the 2D DNA viewport into `ui`'s available space.
 ///
@@ -109,6 +175,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut Viewport2dState, seq: Option<&SeqReco
     let demo = demo_record();
     let record = seq.unwrap_or(&demo);
     let seq_len = record.seq.len();
+
+    // Recompute the single-cutter map only when the sequence content changes.
+    refresh_restriction_cache(state, &record.seq);
 
     let track_w = ui.available_width().max(1.0);
 
@@ -168,12 +237,15 @@ pub fn show(ui: &mut egui::Ui, state: &mut Viewport2dState, seq: Option<&SeqReco
 /// Build a compact demo plasmid (pDEMO, 1 500 bp) with representative
 /// features so the viewport is not blank on first open.
 pub fn demo_record() -> SeqRecord {
-    let seq = Seq::with_topology(
-        SeqKind::Dna,
-        b"ATGCATGCATGC".repeat(125), // 1 500 bp, valid IUPAC DNA
-        Topology::Circular,
-    )
-    .expect("demo sequence is valid");
+    // A short multiple-cloning-site of common single cutters up front — EcoRI,
+    // BamHI, HindIII, SalI, PstI, SacI, KpnI, XbaI — so the "Cut sites" overlay
+    // has something to show on first open, padded with a neutral ATGC repeat to
+    // a round 1 500 bp. The MCS occupies bp 0..48; every annotated feature below
+    // starts at bp >= 50, so their positions are unaffected.
+    let mut dna: Vec<u8> = b"GAATTCGGATCCAAGCTTGTCGACCTGCAGGAGCTCGGTACCTCTAGA".to_vec();
+    dna.extend_from_slice(&b"ATGCATGCATGC".repeat(121)); // 48 + 1 452 = 1 500 bp
+    let seq = Seq::with_topology(SeqKind::Dna, dna, Topology::Circular)
+        .expect("demo sequence is valid");
 
     let mut rec = SeqRecord::new("pDEMO", seq);
     rec.description = "Demo plasmid shown when no sequence is loaded".to_string();
@@ -231,7 +303,7 @@ fn draw_toolbar(ui: &mut egui::Ui, state: &mut Viewport2dState, record: &SeqReco
         ui.checkbox(&mut state.show_bases, "Bases")
             .on_hover_text("Show individual base letters when zoomed in past 10 px/base.");
         ui.checkbox(&mut state.show_restriction_sites, "Cut sites")
-            .on_hover_text("Overlay restriction-enzyme cut-site tick marks (stub — wiring to valenx-bioseq digest pending).");
+            .on_hover_text("Overlay single (unique-cutter) restriction sites — every enzyme that cuts exactly once — ticked and labelled on the linear track (valenx-bioseq digest, cached per sequence).");
 
         if ui
             .small_button("⊞ Fit")
@@ -361,6 +433,39 @@ fn draw_linear_track(
                     FontId::proportional(9.5),
                     Color32::from_rgb(r, g, b),
                 );
+            }
+        }
+    }
+
+    // --- Restriction-enzyme single-cutter sites --------------------------
+    if state.show_restriction_sites {
+        if let Some(cache) = &state.restriction_cache {
+            let cut_color = Color32::from_rgb(236, 120, 222);
+            let band_top = rect.min.y + RULER_H;
+            let mut last_label_x = f32::NEG_INFINITY;
+            for &(pos, name) in &cache.cuts {
+                if pos > seq_len {
+                    continue;
+                }
+                let x = bp_x(pos as f32);
+                if x < rect.left() || x > rect.right() {
+                    continue;
+                }
+                painter.line_segment(
+                    [Pos2::new(x, band_top), Pos2::new(x, backbone_y)],
+                    Stroke::new(1.0, cut_color),
+                );
+                // Throttle labels so densely-spaced cutters don't overprint.
+                if x - last_label_x >= 26.0 {
+                    painter.text(
+                        Pos2::new(x, band_top + 1.0),
+                        Align2::CENTER_TOP,
+                        name,
+                        FontId::monospace(8.0),
+                        cut_color,
+                    );
+                    last_label_x = x;
+                }
             }
         }
     }
@@ -634,5 +739,113 @@ fn base_letter_color(base: u8) -> Color32 {
         b'G' => Color32::from_rgb(80, 80, 220),
         b'C' => Color32::from_rgb(220, 180, 40),
         _ => Color32::from_gray(140),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique_cutters_finds_single_cut_sites() {
+        // One EcoRI site (GAATTC) and one BamHI site (GGATCC), each unique.
+        let seq = Seq::new(SeqKind::Dna, "AAAGAATTCAAAGGATCCAAA").unwrap();
+        let cuts = unique_cutters(&seq);
+        let names: Vec<&str> = cuts.iter().map(|&(_, n)| n).collect();
+        assert!(names.contains(&"EcoRI"), "EcoRI is a single cutter here: {names:?}");
+        assert!(names.contains(&"BamHI"), "BamHI is a single cutter here: {names:?}");
+        assert!(cuts.windows(2).all(|w| w[0].0 <= w[1].0), "sorted by cut position");
+    }
+
+    #[test]
+    fn unique_cutters_excludes_enzymes_that_cut_twice() {
+        // Two EcoRI sites -> EcoRI is no longer a *single* cutter.
+        let seq = Seq::new(SeqKind::Dna, "GAATTCAAAAGAATTC").unwrap();
+        let names: Vec<&str> = unique_cutters(&seq).iter().map(|&(_, n)| n).collect();
+        assert!(!names.contains(&"EcoRI"), "EcoRI cuts twice -> not unique: {names:?}");
+    }
+
+    #[test]
+    fn unique_cutters_empty_for_non_dna() {
+        // Restriction digestion is DNA-only; an RNA sequence yields no cuts.
+        let seq = Seq::new(SeqKind::Rna, "GAAUUCAAA").unwrap();
+        assert!(unique_cutters(&seq).is_empty());
+    }
+
+    #[test]
+    fn fingerprint_distinguishes_content_and_is_stable() {
+        let a = Seq::new(SeqKind::Dna, "GAATTCAAAA").unwrap();
+        let b = Seq::new(SeqKind::Dna, "GAATTCAAAC").unwrap();
+        assert_ne!(sequence_fingerprint(&a), sequence_fingerprint(&b));
+        let a2 = Seq::new(SeqKind::Dna, "GAATTCAAAA").unwrap();
+        assert_eq!(sequence_fingerprint(&a), sequence_fingerprint(&a2));
+    }
+
+    #[test]
+    fn refresh_builds_cache_only_when_enabled() {
+        let seq = Seq::new(SeqKind::Dna, "AAAGAATTCAAA").unwrap();
+
+        // Off -> no cache built.
+        let mut off = Viewport2dState::default();
+        refresh_restriction_cache(&mut off, &seq);
+        assert!(off.restriction_cache.is_none(), "no cache while the overlay is off");
+
+        // On -> cache built with the EcoRI single cutter; key stable on re-run.
+        let mut on = Viewport2dState {
+            show_restriction_sites: true,
+            ..Default::default()
+        };
+        refresh_restriction_cache(&mut on, &seq);
+        let cache = on.restriction_cache.as_ref().expect("cache built when enabled");
+        assert!(cache.cuts.iter().any(|&(_, n)| n == "EcoRI"));
+        let key = cache.key;
+        refresh_restriction_cache(&mut on, &seq);
+        assert_eq!(
+            on.restriction_cache.as_ref().unwrap().key,
+            key,
+            "the same sequence keeps the cache key (no needless recompute)"
+        );
+    }
+
+    #[test]
+    fn demo_plasmid_has_single_cutters_to_show() {
+        // The demo's leading MCS makes the "Cut sites" overlay non-empty on
+        // first open (the old pure-repeat demo had no single cutters at all).
+        let rec = demo_record();
+        assert_eq!(rec.seq.len(), 1500, "demo stays a round 1500 bp");
+        let names: Vec<&str> = unique_cutters(&rec.seq).iter().map(|&(_, n)| n).collect();
+        for enz in ["EcoRI", "BamHI", "HindIII", "SalI", "PstI", "SacI", "KpnI", "XbaI"] {
+            assert!(
+                names.contains(&enz),
+                "demo MCS should expose {enz} as a single cutter; got {names:?}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod headless_ui_tests {
+    use super::*;
+
+    /// Draw the 2D viewport once in a headless egui frame with the
+    /// restriction-site overlay enabled — the cut-map compute and tick render
+    /// must mount without panicking, and the cache must be populated.
+    #[test]
+    fn restriction_overlay_renders_without_panic() {
+        let mut state = Viewport2dState {
+            show_restriction_sites: true,
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                // No live record -> the demo plasmid drives the overlay.
+                show(ui, &mut state, None);
+            });
+        });
+        assert!(
+            state.restriction_cache.is_some(),
+            "enabling the overlay must build the cut-site cache during draw"
+        );
     }
 }
