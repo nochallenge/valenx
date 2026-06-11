@@ -267,7 +267,7 @@ impl eframe::App for ValenxApp {
                     ui.label(egui::RichText::new("Workbenches").weak().small())
                         .on_hover_text(
                             "Right-side tool panels: Mesh Toolbox (CAD), Genetics \
-                             (14 native computational-biology panels), Aerodynamics \
+                             (15 native computational-biology panels), Aerodynamics \
                              (wind tunnel), and Astro (launch). Toggle whichever you're \
                              working in.",
                         );
@@ -292,12 +292,12 @@ impl eframe::App for ValenxApp {
                     if ui
                         .checkbox(&mut self.show_genetics_workbench, "Genetics Workbench")
                         .on_hover_text(
-                            "Show / hide the right-side Genetics Workbench — 14 native \
+                            "Show / hide the right-side Genetics Workbench — 15 native \
                              computational-biology panels (sequence, alignment, \
                              phylogenetics, population genetics, RNA structure, RNA \
                              design, molecular dynamics, cheminformatics, macromolecular \
                              structure, quantum chemistry, genomics, systems biology, \
-                             docking, gene editing).",
+                             docking, gene editing, structure prediction).",
                         )
                         .changed()
                     {
@@ -933,12 +933,13 @@ impl eframe::App for ValenxApp {
                     if ui
                         .selectable_label(self.show_genetics_workbench, "Genetics")
                         .on_hover_text(
-                            "Show / hide the Genetics Workbench — 14 native \
+                            "Show / hide the Genetics Workbench — 15 native \
                              computational-biology panels (sequence, alignment, \
                              phylogenetics, population genetics, RNA structure & \
                              design, molecular dynamics, cheminformatics, \
                              macromolecular structure, quantum chemistry, genomics, \
-                             systems biology, docking, gene editing).",
+                             systems biology, docking, gene editing, structure \
+                             prediction).",
                         )
                         .clicked()
                     {

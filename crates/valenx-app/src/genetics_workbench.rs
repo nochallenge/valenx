@@ -31,7 +31,7 @@ use eframe::egui;
 use crate::genetics;
 use crate::ValenxApp;
 
-/// Which of the fourteen bio-crate panels the workbench is showing.
+/// Which of the fifteen bio-crate panels the workbench is showing.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum GeneticsPanel {
     /// `valenx-bioseq` — sequence editing, translation, ORFs, cloning.
@@ -131,7 +131,7 @@ impl GeneticsPanel {
     }
 }
 
-/// All fourteen panels' form + result state, plus the active-panel
+/// All fifteen panels' form + result state, plus the active-panel
 /// selector. One instance lives on the `ValenxApp` (the private
 /// `genetics` field), exactly as the CAD-side `MeshToolboxState` does.
 #[derive(Default)]
@@ -177,7 +177,7 @@ pub fn draw_genetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.heading("Genetics Workbench");
             });
             ui.label(
-                egui::RichText::new("14 native computational-biology toolkits")
+                egui::RichText::new("15 native computational-biology toolkits")
                     .weak()
                     .small(),
             );
@@ -185,7 +185,7 @@ pub fn draw_genetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
             // --- Panel selector --------------------------------------
             // A combo box for compact switching plus a wrapped grid of
-            // selectable chips so the 14 panels are all one click away
+            // selectable chips so the 15 panels are all one click away
             // — the same "tool palette" feel as the CAD workbenches.
             //
             // Each chip carries a hover tooltip sourced from
@@ -309,7 +309,7 @@ mod tests {
 /// Headless egui UI-logic tests for the Genetics Workbench host panel.
 ///
 /// These mount the whole right-side workbench panel in a windowless
-/// [`egui::Context`] and switch through every one of the 14 panels —
+/// [`egui::Context`] and switch through every one of the 15 panels —
 /// the workbench-level draw never opens a window and never reaches
 /// `rfd::FileDialog`.
 #[cfg(test)]

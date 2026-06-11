@@ -1,4 +1,4 @@
-//! The fourteen Genetics-workbench panels.
+//! The fifteen Genetics-workbench panels.
 //!
 //! One module per Round-6 computational-biology crate. Each module
 //! exposes a `*Panel` state struct (a field on

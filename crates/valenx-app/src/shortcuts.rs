@@ -161,7 +161,7 @@ impl ShortcutAction {
                 "Switch to the Mesh Toolbox (Part / Draft / Assembly / CAM / etc.)."
             }
             ShortcutAction::ShowGeneticsWorkbench => {
-                "Switch to the Genetics workbench (14 computational-biology panels)."
+                "Switch to the Genetics workbench (15 computational-biology panels)."
             }
             ShortcutAction::ShowAeroWorkbench => {
                 "Switch to the Wind Tunnel workbench (3-D external-aero CFD)."
