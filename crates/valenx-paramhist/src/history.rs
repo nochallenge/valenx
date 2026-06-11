@@ -165,18 +165,19 @@ impl History {
 /// list. Returns the order if acyclic; otherwise [`ParamHistError::Cycle`].
 pub fn topological_sort(entries: &[HistEntry]) -> Result<Vec<usize>, ParamHistError> {
     let n = entries.len();
+    // In-degree = number of DISTINCT dependencies. Counting duplicates would
+    // never let the relax step below — which decrements once per dependency
+    // node (via `contains`) — drive the in-degree to zero, so a node with a
+    // repeated dependency would stall and the function would falsely report a
+    // cycle for an acyclic graph.
     let mut in_deg = vec![0usize; n];
-    for e in entries {
-        in_deg[entries
-            .iter()
-            .position(|x| std::ptr::eq(x, e))
-            .unwrap_or(0)] = e.dependencies.len();
-    }
-    // Rebuild in_deg via positional iteration (the trick above can't
-    // be trusted because we don't know the dependents list direction;
-    // here we treat dependencies as "edges from dep -> dependent").
     for (i, e) in entries.iter().enumerate() {
-        in_deg[i] = e.dependencies.len();
+        in_deg[i] = e
+            .dependencies
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<usize>>()
+            .len();
     }
     let mut q: VecDeque<usize> = in_deg
         .iter()
