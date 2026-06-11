@@ -167,9 +167,14 @@ fn continuous_collision_catches_grazing_rapid_fixture_v1_misses() {
     tp.push(Move::new(MoveKind::Rapid, Vector3::new(-20.0, 0.0, 5.0), 0.0));
     tp.push(Move::new(MoveKind::Rapid, Vector3::new(20.0, 0.0, 5.0), 0.0));
     let mut setup = CollisionSetup::new();
+    // The clamp post must span the tool's z = 5 so the flute -- which
+    // extends UP from the tool tip, `[tip_z, tip_z + flute_len]`, per the
+    // #579 convention fix -- grazes it as the rapid sweeps through. (A
+    // post topping out at z = 3, below the tip, sits entirely under the
+    // flute and is never touched.)
     setup.push_fixture(
         Vector3::new(-2.5, -10.0, 0.0),
-        Vector3::new(2.5, 10.0, 3.0),
+        Vector3::new(2.5, 10.0, 10.0),
         "clamp_post",
     );
     let hits = continuous_collision_check(
