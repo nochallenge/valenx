@@ -76,6 +76,7 @@
 //! assignment rather than searching for one.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod analysis;
 pub mod error;
