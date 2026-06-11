@@ -1435,9 +1435,14 @@ pub struct PartDesignPanelState {
     /// Auto-replay every change. Defaults to true.
     pub auto_replay: bool,
     /// "A change happened" flag set by add/delete/suppress handlers.
-    /// Cleared after a successful replay so the next idle frame is
-    /// cheap.
+    /// Cleared after a replay so the next idle frame is cheap. Only
+    /// auto-fires a replay while `auto_replay` is on; with it off the
+    /// tree stays dirty until "Replay now" (or re-enabling auto-replay)
+    /// re-evaluates it.
     pub pending_replay: bool,
+    /// "Replay now" was pressed — forces one replay regardless of
+    /// `auto_replay`.
+    pub force_replay: bool,
     /// Pad params (used by the "Add Pad" button — v1: edit before
     /// clicking Add, modal popup deferred to Phase 2.5).
     pub pad_sketch_index: usize,
@@ -1623,6 +1628,7 @@ impl Default for PartDesignPanelState {
             last_replay_error: None,
             auto_replay: true,
             pending_replay: false,
+            force_replay: false,
             pad_sketch_index: 0,
             pad_depth: 10.0,
             pad_direction_positive: true,
@@ -6495,7 +6501,7 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.checkbox(&mut s.auto_replay, "Auto-replay on changes");
         if ui.button("Replay now").clicked() {
-            s.pending_replay = true;
+            s.force_replay = true;
         }
     });
 
@@ -6523,16 +6529,18 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // handlers (auto-mode) and by the "Replay now" button (manual),
     // and cleared here after one replay.
     //
-    // Note: `auto_replay = false` does NOT gate the replay here — it
-    // gates whether add/delete/suppress handlers SET the flag in the
-    // first place. (Phase 2.5 will plumb that distinction through; v1
-    // always sets the flag and trusts the user to toggle auto_replay
-    // off if they don't want live updates.)
+    // `auto_replay` gates the auto path: add/delete/suppress handlers set
+    // `pending_replay` to mark the tree dirty, but it only fires a replay
+    // while `auto_replay` is on. With auto-replay off the tree stays dirty
+    // (cheap — no per-frame re-evaluation) until the user presses "Replay
+    // now" (`force_replay`) or re-enables auto-replay, at which point the
+    // pending change re-evaluates.
     let mut do_replay = false;
-    if s.pending_replay {
+    if s.force_replay || (s.pending_replay && s.auto_replay) {
         do_replay = true;
         s.pending_replay = false;
     }
+    s.force_replay = false;
 
     // Release the &mut part_design borrow before reaching for &mut app.
     let _ = s;
