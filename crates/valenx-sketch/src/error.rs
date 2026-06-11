@@ -52,6 +52,21 @@ pub enum SketchError {
         len: usize,
     },
 
+    /// A loaded/deserialized B-spline whose structural fields are
+    /// inconsistent — e.g. `knots.len() != control_points.len() + degree + 1`,
+    /// a `weights` vector of the wrong length, `degree == 0`, too few control
+    /// points, or non-monotone knots (corrupt, hand-edited, or version-skewed
+    /// `.valenx`). Caught by [`crate::Sketch::validate`] at load so curve
+    /// evaluation can never index `knots[n_cp]` / `weights[cp_idx]` or underflow
+    /// `span - degree` during replay.
+    #[error("entity {entity} is a structurally invalid B-spline: {reason}")]
+    CorruptBSpline {
+        /// 0-based index of the offending entity in `Sketch::entities`.
+        entity: usize,
+        /// Human-readable description of the structural violation.
+        reason: String,
+    },
+
     /// IO error wrapping std::io.
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
@@ -73,6 +88,7 @@ impl SketchError {
             SketchError::SolverDiverged { .. } => "sketch.solver_diverged",
             SketchError::SolverInconsistent { .. } => "sketch.solver_inconsistent",
             SketchError::CorruptHandle { .. } => "sketch.corrupt_handle",
+            SketchError::CorruptBSpline { .. } => "sketch.corrupt_bspline",
             SketchError::Io(_) => "sketch.io",
             SketchError::Ron(_) => "sketch.ron",
         }
@@ -117,6 +133,13 @@ mod tests {
                     len: 4,
                 },
                 "sketch.corrupt_handle",
+            ),
+            (
+                SketchError::CorruptBSpline {
+                    entity: 2,
+                    reason: "knot length 0 != control_points + degree + 1 = 8".into(),
+                },
+                "sketch.corrupt_bspline",
             ),
         ];
         for (err, expected) in cases {
