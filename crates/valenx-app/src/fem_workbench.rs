@@ -146,12 +146,15 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.add(egui::DragValue::new(&mut s.lz).speed(0.01));
                     });
                     ui.horizontal(|ui| {
+                        // Clamp the mesh resolution: node count grows as
+                        // (nx+1)(ny+1)(nz+1) and the solve as its cube, so an
+                        // unbounded drag could hang the app for minutes / OOM.
                         ui.label("nx");
-                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.2));
+                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.2).range(1..=40));
                         ui.label("ny");
-                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.2));
+                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.2).range(1..=20));
                         ui.label("nz");
-                        ui.add(egui::DragValue::new(&mut s.nz).speed(0.2));
+                        ui.add(egui::DragValue::new(&mut s.nz).speed(0.2).range(1..=20));
                     });
 
                     ui.add_space(4.0);
