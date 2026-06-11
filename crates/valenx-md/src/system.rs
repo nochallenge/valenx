@@ -307,6 +307,24 @@ impl Topology {
         set.into_iter().collect()
     }
 
+    /// The **1-4 pairs** — the two end atoms `(i, l)` of every proper
+    /// dihedral that are not already 1-2 or 1-3 neighbours. In AMBER/OPLS
+    /// force fields these take a *scaled* nonbonded interaction (see
+    /// [`crate::nonbonded::ScaledPairs14`]), not the full one. Returned as
+    /// sorted, deduplicated `(min, max)` pairs.
+    pub fn one_four_pairs(&self) -> Vec<(usize, usize)> {
+        let excluded: std::collections::BTreeSet<(usize, usize)> =
+            self.nonbonded_exclusions().into_iter().collect();
+        let mut set = std::collections::BTreeSet::new();
+        for d in &self.dihedrals {
+            let (a, b) = (d.i.min(d.l), d.i.max(d.l));
+            if a != b && !excluded.contains(&(a, b)) {
+                set.insert((a, b));
+            }
+        }
+        set.into_iter().collect()
+    }
+
     fn check_index(&self, what: &'static str, idx: usize) -> Result<()> {
         if idx >= self.atoms.len() {
             Err(MdError::invalid(
