@@ -21,6 +21,7 @@ pub struct RenderWorkbenchState {
     exposure: f32,
     texture: Option<egui::TextureHandle>,
     status: String,
+    error: Option<String>,
 }
 
 impl Default for RenderWorkbenchState {
@@ -32,12 +33,24 @@ impl Default for RenderWorkbenchState {
             exposure: 1.0,
             texture: None,
             status: String::new(),
+            error: None,
         }
     }
 }
 
 /// Render a Cornell-box scene and return `(width, height, RGB8 pixels)`.
-fn render_demo(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> (usize, usize, Vec<u8>) {
+///
+/// Returns the `valenx-pathtrace` framebuffer error as a display string
+/// rather than panicking: the only failure is `FramebufferError::TooLarge`,
+/// which the `48..=512` resolution clamp keeps unreachable today — but a
+/// fallible call must never `expect`/panic on the user-clickable render
+/// path, so the error is surfaced in the panel instead.
+fn render_demo(
+    resolution: u32,
+    spp: u32,
+    max_depth: u32,
+    exposure: f32,
+) -> Result<(usize, usize, Vec<u8>), String> {
     let res = resolution.clamp(48, 512);
     let camera = PtCamera::look_at(
         vec3(0.0, 1.0, 3.6),
@@ -73,8 +86,8 @@ fn render_demo(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> (usi
         seed: 0x5eed,
         exposure,
     };
-    let ldr = render(&scene, &params).expect("render succeeds").to_ldr(exposure);
-    (ldr.width as usize, ldr.height as usize, ldr.pixels)
+    let ldr = render(&scene, &params).map_err(|e| e.to_string())?.to_ldr(exposure);
+    Ok((ldr.width as usize, ldr.height as usize, ldr.pixels))
 }
 
 /// Draw the render workbench (a no-op unless toggled on via View → Render).
@@ -116,6 +129,9 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             if !s.status.is_empty() {
                 ui.label(egui::RichText::new(&s.status).small().weak());
             }
+            if let Some(err) = &s.error {
+                ui.colored_label(egui::Color32::from_rgb(220, 90, 90), err);
+            }
             if let Some(tex) = &s.texture {
                 ui.add_space(4.0);
                 ui.add(
@@ -132,16 +148,26 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         });
 
     if do_render {
-        let (w, h, pixels) =
-            render_demo(app.render.resolution, app.render.spp, app.render.max_depth, app.render.exposure);
-        let mut rgba = Vec::with_capacity(w * h * 4);
-        for px in pixels.chunks_exact(3) {
-            rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
+        // Clear stale per-run state up front (house style — cf. cfd_workbench),
+        // so a failed render can't leave the previous success line showing next
+        // to the error. The last-good texture is deliberately retained.
+        app.render.status.clear();
+        app.render.error = None;
+        match render_demo(app.render.resolution, app.render.spp, app.render.max_depth, app.render.exposure) {
+            Ok((w, h, pixels)) => {
+                let mut rgba = Vec::with_capacity(w * h * 4);
+                for px in pixels.chunks_exact(3) {
+                    rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
+                }
+                let color = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
+                let tex = ctx.load_texture("pathtrace_render", color, egui::TextureOptions::LINEAR);
+                app.render.texture = Some(tex);
+                app.render.status = format!("rendered {w}×{h} @ {} spp", app.render.spp);
+            }
+            Err(e) => {
+                app.render.error = Some(format!("render failed: {e}"));
+            }
         }
-        let color = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
-        let tex = ctx.load_texture("pathtrace_render", color, egui::TextureOptions::LINEAR);
-        app.render.texture = Some(tex);
-        app.render.status = format!("rendered {w}×{h} @ {} spp", app.render.spp);
     }
 }
 
@@ -153,7 +179,7 @@ mod tests {
     fn renders_a_lit_image() {
         // Small + cheap: the scene must produce a correctly-sized RGB buffer
         // with some non-black pixels (the emissive light illuminates it).
-        let (w, h, pixels) = render_demo(64, 4, 4, 1.0);
+        let (w, h, pixels) = render_demo(64, 4, 4, 1.0).expect("64² render is well under the pixel cap");
         assert_eq!(pixels.len(), w * h * 3, "RGB8 buffer of the right size");
         assert!(pixels.iter().any(|&p| p > 0), "the scene is lit (non-black pixels)");
     }
