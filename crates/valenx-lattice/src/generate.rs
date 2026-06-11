@@ -244,6 +244,21 @@ fn on_curve(
             reason: "need >= 2".into(),
         });
     }
+    // A `NurbsCurve` from a deserialized `LatticeFile` bypasses the
+    // validating `NurbsCurve::new` (public fields + derived `Deserialize`),
+    // so its knot vector / control points may violate the NURBS invariant
+    // and panic in the `knots[..]` reads and `evaluate`/`derivative` below.
+    // Re-validate through the checked constructor before using it.
+    let curve = valenx_surface::NurbsCurve::new(
+        curve.degree,
+        curve.knots.clone(),
+        curve.control_points.clone(),
+        curve.weights.clone(),
+    )
+    .map_err(|e| LatticeError::BadParameter {
+        name: "curve",
+        reason: format!("invalid NURBS curve: {e}"),
+    })?;
     let u_min = curve.knots[curve.degree];
     let u_max = curve.knots[curve.knots.len() - 1 - curve.degree];
     let capacity = checked_placement_count(&[n_samples])?;
@@ -273,6 +288,21 @@ fn on_surface(
             reason: "need >= 2".into(),
         });
     }
+    // Same deserialize-bypass guard as `on_curve`: re-validate the surface
+    // through the checked constructor so a degenerate `.ron`-loaded
+    // `NurbsSurface` can't panic the knot reads / `evaluate` below.
+    let surface = valenx_surface::NurbsSurface::new(
+        surface.u_degree,
+        surface.v_degree,
+        surface.u_knots.clone(),
+        surface.v_knots.clone(),
+        surface.control_points.clone(),
+        surface.weights.clone(),
+    )
+    .map_err(|e| LatticeError::BadParameter {
+        name: "surface",
+        reason: format!("invalid NURBS surface: {e}"),
+    })?;
     let u_min = surface.u_knots[surface.u_degree];
     let u_max = surface.u_knots[surface.u_knots.len() - 1 - surface.u_degree];
     let v_min = surface.v_knots[surface.v_degree];
@@ -290,7 +320,7 @@ fn on_surface(
             let v = v_min + tv * (v_max - v_min);
             // Orient each instance so its +Z follows the surface
             // normal at the sample (u, v).
-            let normal = surface_normal(surface, u, v, (u_min, u_max), (v_min, v_max));
+            let normal = surface_normal(&surface, u, v, (u_min, u_max), (v_min, v_max));
             out.push(Placement {
                 position: surface.evaluate(u, v),
                 orientation: orient_z_to(normal),
@@ -562,6 +592,37 @@ mod tests {
             r.err(),
             Some(LatticeError::TooManyPlacements { .. })
         ));
+    }
+
+    #[test]
+    fn on_curve_rejects_degenerate_deserialized_curve() {
+        // A `NurbsCurve` built field-by-field (as serde does when loading a
+        // `.ron` LatticeFile) can violate the NURBS invariant -- here degree
+        // 3 with an empty knot vector. `on_curve` must reject it via the
+        // checked constructor, not panic on `knots[degree]`.
+        let curve = valenx_surface::NurbsCurve {
+            degree: 3,
+            knots: vec![],
+            control_points: vec![],
+            weights: vec![],
+        };
+        let r = on_curve(&curve, 4);
+        assert!(matches!(r, Err(LatticeError::BadParameter { .. })));
+    }
+
+    #[test]
+    fn on_surface_rejects_degenerate_deserialized_surface() {
+        // Same deserialize-bypass guard on the surface path.
+        let surface = valenx_surface::NurbsSurface {
+            u_degree: 3,
+            v_degree: 3,
+            u_knots: vec![],
+            v_knots: vec![],
+            control_points: vec![],
+            weights: vec![],
+        };
+        let r = on_surface(&surface, 4, 4);
+        assert!(matches!(r, Err(LatticeError::BadParameter { .. })));
     }
 
     #[test]
