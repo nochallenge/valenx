@@ -265,6 +265,16 @@ pub fn read_text(text: &str) -> Result<Trajectory> {
     if natoms == 0 {
         return Err(MdError::parse("trajectory-text", "natoms is zero"));
     }
+    // Bound the header-declared atom count so a crafted header can't drive a
+    // gigabyte `Vec::with_capacity(natoms)` per frame (or inside
+    // `Trajectory::new`) before any coordinate is read. Mirrors `read_binary`.
+    const MAX_TEXT_ATOMS: usize = 25_000_000;
+    if natoms > MAX_TEXT_ATOMS {
+        return Err(MdError::parse(
+            "trajectory-text",
+            format!("natoms {natoms} exceeds the {MAX_TEXT_ATOMS} cap"),
+        ));
+    }
     let mut traj = Trajectory::new(natoms, if dt > 0.0 { dt } else { 1.0 })?;
 
     let mut current: Vec<Vector3<f64>> = Vec::new();
@@ -347,6 +357,15 @@ mod tests {
             read_binary(&buf).is_err(),
             "overflowing header counts must be rejected, not crash"
         );
+    }
+
+    #[test]
+    fn read_text_rejects_absurd_natoms() {
+        // A header claiming ~10^18 atoms must be rejected, not drive a
+        // `Vec::with_capacity(10^18)` (per frame / in Trajectory::new) that
+        // aborts the process.
+        let text = "# natoms=999999999999999999 dt=0.001\nFRAME 0\n";
+        assert!(read_text(text).is_err());
     }
 
     fn sample_trajectory() -> Trajectory {
