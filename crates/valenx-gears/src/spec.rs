@@ -132,4 +132,40 @@ mod tests {
         // Guard: zero driver teeth → 0.0.
         assert_eq!(gear_ratio(50, 0), 0.0);
     }
+
+    #[test]
+    fn diameters_follow_standard_gear_relations() {
+        // module = 2 (NOT the default 1): with module 1, `module·teeth`,
+        // `2·module`, and `2.5·module` collapse to teeth, 2, 2.5 — so a
+        // regression dropping the module factor would pass any module-1 test.
+        let mut g = GearSpec::standard_spur(20);
+        g.module_mm = 2.0;
+        let pitch = g.pitch_diameter_mm();
+        assert!((pitch - 40.0).abs() < 1e-12); // module·teeth = 2·20
+
+        // Base circle = pitch·cos(pressure_angle); 20° here.
+        let base = g.base_diameter_mm();
+        assert!((base - 40.0 * 20.0_f64.to_radians().cos()).abs() < 1e-12);
+
+        // Addendum diameter − pitch = 2·module; pitch − dedendum = 2.5·module.
+        assert!((g.addendum_diameter_mm() - pitch - 2.0 * g.module_mm).abs() < 1e-12);
+        assert!((pitch - g.dedendum_diameter_mm() - 2.5 * g.module_mm).abs() < 1e-12);
+
+        // Standard diameter ordering: dedendum < base < pitch < addendum.
+        assert!(g.dedendum_diameter_mm() < base);
+        assert!(base < pitch);
+        assert!(pitch < g.addendum_diameter_mm());
+
+        // Pitch is linear in BOTH teeth and module (reconstruct, not clone).
+        let mut g_teeth = GearSpec::standard_spur(40);
+        g_teeth.module_mm = 2.0; // teeth doubled → pitch doubles
+        assert!((g_teeth.pitch_diameter_mm() - 2.0 * pitch).abs() < 1e-12);
+        let mut g_mod = GearSpec::standard_spur(20);
+        g_mod.module_mm = 4.0; // module doubled → pitch doubles
+        assert!((g_mod.pitch_diameter_mm() - 2.0 * pitch).abs() < 1e-12);
+
+        // Dedendum clamps to 0 for a tiny gear where pitch < 2.5·module
+        // (1 tooth, module 1 → pitch 1 < 2.5 → the `.max(0.0)` engages).
+        assert_eq!(GearSpec::standard_spur(1).dedendum_diameter_mm(), 0.0);
+    }
 }
