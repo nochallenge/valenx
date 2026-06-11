@@ -375,6 +375,59 @@ mod tests {
         coll
     }
 
+    /// Deterministic xorshift64 PRNG — reproducible, no external rng dep.
+    fn xorshift64(state: &mut u64) -> u64 {
+        let mut x = *state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        *state = x;
+        x
+    }
+
+    /// Robustness: `parse_pvd` must NEVER panic on adversarial input — only
+    /// return `Ok` or a typed `PvdError`. Feeds truncations, single-byte
+    /// corruptions, random buffers, and burst-corruptions of a valid PVD; a
+    /// panic in any would fail the test via propagation. parse_pvd terminates
+    /// for all inputs (the DataSet cursor advances >= 9 bytes per match) and
+    /// has no count-driven allocation, so every iteration is small and fast.
+    #[test]
+    fn parse_pvd_never_panics_on_adversarial_input() {
+        let valid = sample_collection().to_xml();
+        let bytes = valid.as_bytes();
+
+        // 1. Every truncated prefix of a valid PVD manifest.
+        for k in 0..=bytes.len() {
+            let _ = parse_pvd(&String::from_utf8_lossy(&bytes[..k]));
+        }
+        // 2. Single-byte corruption at every position.
+        for i in 0..bytes.len() {
+            let mut m = bytes.to_vec();
+            m[i] ^= 0xFF;
+            let _ = parse_pvd(&String::from_utf8_lossy(&m));
+        }
+        // 3. Deterministic pseudo-random buffers (mostly the MissingRoot guard).
+        let mut state: u64 = 0x6A09_E667_F3BC_C908; // fixed seed
+        for _ in 0..2000 {
+            let len = (xorshift64(&mut state) % 256) as usize;
+            let buf: Vec<u8> = (0..len).map(|_| (xorshift64(&mut state) & 0xFF) as u8).collect();
+            let _ = parse_pvd(&String::from_utf8_lossy(&buf));
+        }
+        // 4. Burst corruption of the valid manifest: the <VTKFile…Collection>
+        //    structure survives a few byte changes, so the parser proceeds
+        //    into the DataSet attribute loop (timestep/file/part parsing) with
+        //    hostile values — the deep-coverage phase.
+        for _ in 0..2000 {
+            let mut m = bytes.to_vec();
+            let flips = 1 + xorshift64(&mut state) % 6;
+            for _ in 0..flips {
+                let pos = (xorshift64(&mut state) as usize) % m.len();
+                m[pos] = (xorshift64(&mut state) & 0xFF) as u8;
+            }
+            let _ = parse_pvd(&String::from_utf8_lossy(&m));
+        }
+    }
+
     #[test]
     fn to_xml_emits_well_formed_pvd_root() {
         let xml = sample_collection().to_xml();
