@@ -178,7 +178,20 @@ impl Animation {
                 reason: "must be > start_t".into(),
             });
         }
-        let count = ((end_t - start_t) * fps as f64).ceil() as usize;
+        let span_frames = (end_t - start_t) * fps as f64;
+        // Bound the frame count so a huge span/fps can't allocate gigabytes or
+        // hang the sample loop (~4.6 h at 60 fps; mirrors valenx-optimize's
+        // size caps). A non-finite product (e.g. end_t = f64::MAX) is rejected too.
+        const MAX_FRAMES: f64 = 1_000_000.0;
+        if !span_frames.is_finite() || span_frames > MAX_FRAMES {
+            return Err(AnimateError::BadParameter {
+                name: "end_t",
+                reason: format!(
+                    "(end_t - start_t) * fps = {span_frames} exceeds the {MAX_FRAMES} frame cap"
+                ),
+            });
+        }
+        let count = span_frames.ceil() as usize;
         let mut out = Vec::with_capacity(count + 1);
         for i in 0..=count {
             let t = start_t + (i as f64) / (fps as f64);
@@ -254,6 +267,18 @@ mod tests {
         a.push(Keyframe::at(0.0).with_joint(0, 0.0)).unwrap();
         a.push(Keyframe::at(1.0).with_joint(0, 1.0)).unwrap();
         assert!(a.frames(0.0, 1.0, 0).is_err());
+    }
+
+    #[test]
+    fn frames_rejects_huge_span_not_oom() {
+        // span × fps = 10^10 would otherwise allocate ~240 GB and hang the
+        // sample loop; it must be rejected.
+        let mut a = Animation::new();
+        a.push(Keyframe::at(0.0).with_joint(0, 0.0)).unwrap();
+        a.push(Keyframe::at(1.0).with_joint(0, 1.0)).unwrap();
+        assert!(a.frames(0.0, 1e7, 1000).is_err(), "huge span must be rejected");
+        // A non-finite product (end_t = f64::MAX) is rejected too.
+        assert!(a.frames(0.0, f64::MAX, 1000).is_err());
     }
 
     #[test]
