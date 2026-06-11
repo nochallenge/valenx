@@ -173,17 +173,39 @@ pub fn read_binary(bytes: &[u8]) -> Result<Trajectory> {
     if natoms == 0 {
         return Err(MdError::parse("dcd", "header declares zero atoms"));
     }
-    let mut traj = Trajectory::new(natoms, if dt > 0.0 { dt } else { 1.0 })?;
-
-    let floats_per_frame = natoms * 3;
-    let frame_bytes = floats_per_frame * 4;
-    let expected = 28 + nframes * frame_bytes;
+    // Reject absurd header counts and size the body with CHECKED arithmetic
+    // BEFORE allocating. A crafted header (e.g. natoms = nframes = 2^31) would
+    // otherwise overflow `expected`, wrapping it back under the file length so
+    // the `bytes.len() < expected` guard passes, then allocate gigabytes via
+    // `vec![0f32; natoms]` and index out of bounds. (Mirrors the caps the
+    // sibling valenx-bio DCD reader applies.)
+    const MAX_DCD_ATOMS: usize = 25_000_000;
+    const MAX_DCD_FRAMES: usize = 10_000_000;
+    if natoms > MAX_DCD_ATOMS {
+        return Err(MdError::parse(
+            "dcd",
+            format!("header declares {natoms} atoms (max {MAX_DCD_ATOMS})"),
+        ));
+    }
+    if nframes > MAX_DCD_FRAMES {
+        return Err(MdError::parse(
+            "dcd",
+            format!("header declares {nframes} frames (max {MAX_DCD_FRAMES})"),
+        ));
+    }
+    let expected = natoms
+        .checked_mul(3)
+        .and_then(|f| f.checked_mul(4))
+        .and_then(|fb| nframes.checked_mul(fb))
+        .and_then(|body| body.checked_add(28))
+        .ok_or_else(|| MdError::parse("dcd", "frame dimensions overflow the address space"))?;
     if bytes.len() < expected {
         return Err(MdError::parse(
             "dcd",
             format!("body is {} bytes, expected {expected}", bytes.len()),
         ));
     }
+    let mut traj = Trajectory::new(natoms, if dt > 0.0 { dt } else { 1.0 })?;
     let mut offset = 28;
     for _ in 0..nframes {
         let mut xs = vec![0f32; natoms];
@@ -307,6 +329,25 @@ fn header_value<'a>(header: &'a str, key: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_binary_rejects_overflowing_header_counts() {
+        // A crafted header with natoms = nframes = 2^31 overflows the body-size
+        // arithmetic (28 + nframes*natoms*12 wraps to 28), so a 28-byte file
+        // would otherwise pass the length guard and then allocate gigabytes /
+        // index out of bounds. It must be rejected, not panic / OOM.
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"VLXMDTRJ");
+        buf.extend_from_slice(&1u32.to_le_bytes()); // version
+        buf.extend_from_slice(&0x8000_0000u32.to_le_bytes()); // natoms = 2^31
+        buf.extend_from_slice(&0x8000_0000u32.to_le_bytes()); // nframes = 2^31
+        buf.extend_from_slice(&1.0f64.to_le_bytes()); // dt
+        assert_eq!(buf.len(), 28);
+        assert!(
+            read_binary(&buf).is_err(),
+            "overflowing header counts must be rejected, not crash"
+        );
+    }
 
     fn sample_trajectory() -> Trajectory {
         let mut traj = Trajectory::new(3, 0.002).unwrap();
