@@ -54,6 +54,7 @@
 //! forward strand single-end only.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 // Surface future `&str` byte-offset slicing in clippy review — this
 // crate parses untrusted text alignment formats (PHYLIP/Clustal/etc.),
 // where non-char-boundary slices panic. WARN (not deny): most existing

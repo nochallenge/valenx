@@ -69,6 +69,7 @@
 //!   codon or amino-acid models).
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 // Surface future `&str` byte-offset slicing in clippy review — this
 // crate parses untrusted text, where non-char-boundary slices panic.
 // WARN (not deny): most existing slices are safe ASCII; this only flags

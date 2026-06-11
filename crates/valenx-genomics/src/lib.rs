@@ -66,6 +66,7 @@
 //! v1s, not SPAdes / hifiasm at scale.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod assembly;
 pub mod crispr;

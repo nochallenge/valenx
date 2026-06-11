@@ -86,6 +86,7 @@
 //!   (Cα–Cα distance jump) rather than `SEQRES` gap parsing.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod analyze;
 pub mod assembly;

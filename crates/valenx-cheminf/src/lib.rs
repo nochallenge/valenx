@@ -67,6 +67,7 @@
 //!   InChI-style canonical-tautomer scoring rubric.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 // Surface future `&str` byte-offset slicing in clippy review — this
 // crate parses untrusted text (SMILES/InChI/MOL), where
 // non-char-boundary slices panic. WARN (not deny): most existing slices

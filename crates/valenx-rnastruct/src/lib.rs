@@ -94,6 +94,7 @@
 //!   2-D layout omits the force-directed overlap-removal pass.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod compare;
 pub mod design;
