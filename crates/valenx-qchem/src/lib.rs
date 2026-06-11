@@ -62,6 +62,7 @@
 //! analytic gradients or dispersion correction.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod basis;
 pub mod dft;

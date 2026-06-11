@@ -15,6 +15,7 @@
 //! plug in behind the same `ReactionEngine` trait later.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod engine;
 pub mod error;
