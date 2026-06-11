@@ -81,6 +81,24 @@ pub fn read_params(workdir: &Path) -> Result<NativeViennaParams, AdapterError> {
         .map_err(|e| AdapterError::Other(anyhow::anyhow!("parse {}: {e}", path.display())))
 }
 
+/// The requested options a `NativeViennaParams` carries that the native Zuker
+/// MFE folder cannot honor: it uses the 37 °C Turner-2004 parameters, always
+/// allows G-U wobble pairs, and computes only the MFE structure. Empty when the
+/// params are within the native folder's capabilities.
+fn unsupported_native_options(params: &NativeViennaParams) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if (params.temperature - 37.0).abs() > 1e-6 {
+        out.push("temperature other than 37 C");
+    }
+    if !params.allow_gu {
+        out.push("disabling G-U wobble pairs (--noGU)");
+    }
+    if params.partition_function {
+        out.push("the partition function / base-pair probabilities (-p)");
+    }
+    out
+}
+
 /// Runs the native Zuker MFE folder over every sequence in the input
 /// file, writing ViennaRNA-compatible output to `out_path`.
 pub fn run_native(
@@ -99,6 +117,23 @@ pub fn run_native(
         return Err(AdapterError::InvalidCase {
             case_path: std::path::PathBuf::from(&params.input_path),
             reason: "input file contains no sequences".to_string(),
+        });
+    }
+
+    // The native folder can't honor a temperature, --noGU, or partition-function
+    // request; rather than silently return a 37 C / GU-allowed / MFE-only result
+    // that disagrees with those options (the subprocess path passes -T / --noGU /
+    // -p), reject them up front — mirroring how the BLAST/HMMER native paths gate
+    // unsupported input.
+    let unsupported = unsupported_native_options(&params);
+    if !unsupported.is_empty() {
+        return Err(AdapterError::InvalidCase {
+            case_path: std::path::PathBuf::from(&params.input_path),
+            reason: format!(
+                "native RNA folding does not support {}. Install the RNAfold \
+                 binary to use these options.",
+                unsupported.join(", ")
+            ),
         });
     }
 
@@ -332,5 +367,25 @@ mod tests {
         assert_eq!(round.temperature, params.temperature);
         assert_eq!(round.allow_gu, params.allow_gu);
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn native_gates_options_it_cannot_honor() {
+        let make = |temperature: f64, partition_function: bool, allow_gu: bool| {
+            NativeViennaParams {
+                input_path: "/tmp/rna.fa".to_string(),
+                output_name: "fold.out".to_string(),
+                temperature,
+                partition_function,
+                allow_gu,
+            }
+        };
+        // The native default (37 C, GU allowed, MFE only) is fully supported.
+        assert!(unsupported_native_options(&make(37.0, false, true)).is_empty());
+        // Each non-default option is reported as unsupported, so run_native
+        // returns a clear error instead of a silently-wrong fold.
+        assert!(!unsupported_native_options(&make(65.0, false, true)).is_empty());
+        assert!(!unsupported_native_options(&make(37.0, false, false)).is_empty());
+        assert!(!unsupported_native_options(&make(37.0, true, true)).is_empty());
     }
 }
