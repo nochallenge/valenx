@@ -38,19 +38,25 @@ use crate::trajectory::Trajectory;
 /// Errors surfaced by [`read`].
 #[derive(Debug, Error)]
 pub enum DcdError {
+    /// An underlying I/O error from the reader (short read, seek failure, …).
     #[error("dcd I/O error: {0}")]
     Io(#[from] io::Error),
     /// The 4-byte magic at offset 4 of the header record was not the
     /// expected ASCII `"CORD"`.
     #[error("dcd header magic mismatch: found {found:?}, expected {expected:?}")]
     Magic {
+        /// The 4 magic bytes actually found at offset 4 of the header.
         found: [u8; 4],
+        /// The magic the DCD format requires here (ASCII `"CORD"`).
         expected: &'static str,
     },
     /// The reader hit EOF before consuming a full record. `offset` is
     /// the byte offset where the read attempt started.
     #[error("dcd input truncated at byte offset {offset}")]
-    Truncated { offset: u64 },
+    Truncated {
+        /// Byte offset where the failed read attempt started.
+        offset: u64,
+    },
     /// A per-frame coordinate record carried a different atom count
     /// than the file's declared `natom`.
     #[error(
@@ -58,8 +64,11 @@ pub enum DcdError {
          carries {found}"
     )]
     InconsistentAtomCount {
+        /// Atom count declared by the file header (`natom`).
         first: usize,
+        /// Index of the frame whose atom count disagreed.
         frame: usize,
+        /// Atom count actually carried by that frame's record.
         found: usize,
     },
     /// A length read from the DCD header / record prefix exceeded the
@@ -69,8 +78,11 @@ pub enum DcdError {
     /// allocation before any real data has been read.
     #[error("dcd input too large: {what} = {got}, max = {max}")]
     TooLarge {
+        /// Which header/record quantity exceeded the cap (e.g. `"nframes"`).
         what: &'static str,
+        /// The value the input declared.
         got: u64,
+        /// The adapter's hard cap for that quantity.
         max: u64,
     },
 }

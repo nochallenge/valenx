@@ -29,13 +29,16 @@ pub struct Vcf {
     /// Sample IDs parsed from the `#CHROM` line. Empty when no
     /// per-sample columns are present.
     pub samples: Vec<String>,
+    /// The variant data rows (one per data line below the `#CHROM` header).
     pub records: Vec<VcfRecord>,
 }
 
 /// One VCF data row.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VcfRecord {
+    /// Chromosome / contig name (the VCF `CHROM` column).
     pub chrom: String,
+    /// 1-based reference position of the variant (the VCF `POS` column).
     pub pos: u64,
     /// Variant ID. `None` when the file had `"."`.
     pub id: Option<String>,
