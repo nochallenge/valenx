@@ -330,6 +330,34 @@ mod tests {
     }
 
     #[test]
+    fn root_minor_diameter_m6_iso724() {
+        // ISO 724 minor (root) diameter d₃ = d − 1.2269·P. For M6×1.0:
+        //   d₃ = 6 − 1.2269·1.0 = 4.7731 mm.
+        // The exposed `ThreadSpec::minor_diameter()` (= d − 2·depth with
+        // depth = 0.61343·P, i.e. d − 1.22686·P) realises this; pin it to the
+        // published closed form. The 1.22686 vs 1.2269 constant differ by
+        // 6e-5·P → use tol 1e-3 mm (covers the rounding, still far tighter
+        // than the ~1.23 mm the root sits below the nominal).
+        let m6 = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M6")
+            .unwrap();
+        let d3 = m6.thread.minor_diameter();
+        let expected = 6.0 - 1.2269 * 1.0; // ISO 724 → 4.7731 mm
+        assert!(
+            (d3 - expected).abs() < 1e-3,
+            "minor dia {d3} mm vs ISO 724 {expected} mm"
+        );
+        assert!(
+            (d3 - 4.7731).abs() < 1e-3,
+            "minor dia {d3} mm, expected 4.7731"
+        );
+        // Ordering sanity: root < pitch < major (nominal).
+        assert!(d3 < m6.pitch_diameter_mm());
+        assert!(m6.pitch_diameter_mm() < m6.thread.nominal_diameter);
+    }
+
+    #[test]
     fn pitch_diameter_m6_and_m8() {
         // M6×1.0: 6 − 0.6495·1 = 5.3505 mm; M8×1.25: 8 − 0.6495·1.25 = 7.188125 mm.
         let m6 = iso4017_hex_table()

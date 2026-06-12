@@ -191,6 +191,44 @@ mod tests {
     }
 
     #[test]
+    fn michaelis_menten_limits_and_quarter_points() {
+        // GROUND TRUTH for v = Vmax·S/(Km + S). The half-saturation
+        // point v(Km)=Vmax/2 is checked in the test above; this pins the
+        // two defining ASYMPTOTIC limits plus an exact interior value the
+        // closed form must reproduce:
+        //   • S → 0   ⇒ v → 0   (exact 0 at S=0: Vmax·0/(Km+0))
+        //   • S → ∞   ⇒ v → Vmax
+        //   • S = 3·Km ⇒ v = Vmax·3Km/(4Km) = ¾·Vmax  (exact)
+        let vmax = 10.0_f64;
+        let km = 2.0_f64;
+        let law = RateLaw::MichaelisMenten {
+            vmax,
+            km,
+            substrate: 0,
+        };
+        // Zero-substrate limit is algebraically exact ⇒ tol 1e-12.
+        assert!(
+            law.rate(&[0.0]).abs() < 1e-12,
+            "v(0) = {} ≠ 0",
+            law.rate(&[0.0])
+        );
+        // Saturating limit: at S = 1e12, v = Vmax·(1 − Km/(Km+S)) differs
+        // from Vmax by Vmax·Km/(Km+S) ≈ 2e-11 — comfortably under 1e-9.
+        let v_inf = law.rate(&[1.0e12]);
+        assert!(
+            (v_inf - vmax).abs() < 1e-9,
+            "v(1e12) = {v_inf} ≠ Vmax = {vmax} within 1e-9"
+        );
+        // Three-quarter-saturation exact value at S = 3·Km.
+        let v_three_km = law.rate(&[3.0 * km]);
+        assert!(
+            (v_three_km - 0.75 * vmax).abs() < 1e-12,
+            "v(3·Km) = {v_three_km} ≠ ¾·Vmax = {}",
+            0.75 * vmax
+        );
+    }
+
+    #[test]
     fn hill_activation_and_repression_are_complementary() {
         let act = RateLaw::Hill {
             vmax: 1.0,
