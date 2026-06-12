@@ -234,4 +234,34 @@ mod tests {
         let amb = Seq::new(SeqKind::Dna, "ACGTN").unwrap();
         assert!(tm_nearest_neighbor_default(&amb).is_err());
     }
+
+    #[test]
+    fn nn_tm_matches_hand_computed_santalucia_composition() {
+        // GROUND TRUTH: the composed SantaLucia-1998 melting temperature for
+        // the self-complementary EcoRI site GAATTC, hand-computed from the
+        // published NN parameters (pinned per-stack in thermo.rs) plus
+        // initiation + symmetry + the Tm equation. The other NN-Tm tests are
+        // qualitative (range / GC>AT / longer / salt-direction); this is the
+        // only one pinning the full composition (ΔH/ΔS sum → salt-corrected
+        // denominator → Tm) to an absolute value.
+        //   GAATTC windows GA,AA,AT,TT,TC → ΣNN = (−39.4 kcal, −109.2 cal/K);
+        //   init G+C = (0.2, −5.6); self-comp symmetry ΔS −1.4
+        //   → ΔH = −39.2 kcal/mol, ΔS = −116.2 cal/(mol·K).
+        //   At [Na⁺] = 1 M the salt term 0.368·(N−1)·ln(1) = 0; self-comp x=1,
+        //   C_T = 1e-4 M, R = 1.987:
+        //   Tm = ΔH·1000 / (ΔS + R·ln(C_T)) − 273.15
+        //      = −39200 / (−116.2 + 1.987·ln(1e-4)) − 273.15 = 18.30 °C.
+        let s = Seq::new(SeqKind::Dna, "GAATTC").unwrap();
+        let params = NnParams {
+            strand_conc: 1e-4,
+            na_conc: 1.0,
+            mg_conc: 0.0,
+            dntp_conc: 0.0,
+        };
+        let tm = tm_nearest_neighbor(&s, params).unwrap();
+        assert!(
+            (tm - 18.30).abs() < 0.1,
+            "GAATTC composed Tm {tm} °C != 18.30 (hand SantaLucia)"
+        );
+    }
 }
