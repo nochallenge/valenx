@@ -311,6 +311,42 @@ mod tests {
     }
 
     #[test]
+    fn two_taxon_jc69_likelihood_matches_the_analytic_closed_form() {
+        // GROUND TRUTH. For a rooted two-taxon tree under JC69, reversibility
+        // (detailed balance) plus the Chapman–Kolmogorov identity collapse the
+        // root sum over the two branches t1, t2 to a single branch d = t1 + t2:
+        //   L_col = Σ_s π_s · P(t1)[s][x] · P(t2)[s][y] = π_x · P(d)[x][y]
+        //         = (1/4) · P(d)[x][y].
+        // With the JC69 closed form (P_ii = 1/4 + 3/4·e^(−4d/3),
+        // P_ij = 1/4 − 1/4·e^(−4d/3)) each column contributes
+        //   identical bases   → (1/4)(1/4 + 3/4·e^(−4d/3))
+        //   differing bases   → (1/4)(1/4 − 1/4·e^(−4d/3))
+        // and lnL = Σ_cols ln(L_col). This pins the *absolute* likelihood —
+        // exercising the pruning recursion, the root π-weighting, and the
+        // per-column log-sum together — which the finiteness/ordering tests
+        // above do not. The closed form is computed independently of the
+        // engine's P-matrix, so it is a genuine external check.
+        let tree = read_newick("(A:0.05,B:0.05);").unwrap();
+        let d = 0.05_f64 + 0.05; // total branch length between the two taxa
+                                 // 8 identical columns (ACGTACGT) + 2 differing (A≠T, C≠G).
+        let aln = vec![row("A", "ACGTACGTAC"), row("B", "ACGTACGTTG")];
+        let (n_same, n_diff) = (8.0_f64, 2.0_f64);
+
+        let ll = log_likelihood(&tree, &SubstModel::Jc69, &aln).unwrap();
+
+        let e = (-4.0 / 3.0 * d).exp();
+        let p_same = 0.25 * (0.25 + 0.75 * e);
+        let p_diff = 0.25 * (0.25 - 0.25 * e);
+        let expected = n_same * p_same.ln() + n_diff * p_diff.ln();
+        assert!(
+            (ll - expected).abs() < 1e-9,
+            "2-taxon JC69 lnL {ll} != analytic closed form {expected}"
+        );
+        // Sanity-pin the literal closed-form value (≈ −21.5836) for this setup.
+        assert!((ll - (-21.5836)).abs() < 1e-3, "lnL {ll} not ≈ −21.5836");
+    }
+
+    #[test]
     fn rejects_a_missing_leaf_row() {
         let tree = read_newick("((A,B),C);").unwrap();
         let aln = vec![row("A", "ACGT"), row("B", "ACGT")]; // C missing
