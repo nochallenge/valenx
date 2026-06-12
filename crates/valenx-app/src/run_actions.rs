@@ -625,9 +625,9 @@ impl ValenxApp {
                                     let target = handle.workdir.join("results.json");
                                     match serde_json::to_string_pretty(&*results) {
                                         Ok(json) => {
-                                            if let Err(e) =
-                                                valenx_core::io_caps::atomic_write_str(&target, &json)
-                                            {
+                                            if let Err(e) = valenx_core::io_caps::atomic_write_str(
+                                                &target, &json,
+                                            ) {
                                                 self.log.push(
                                                     LogLevel::Warn,
                                                     format!("persist {}: {e}", target.display()),

@@ -134,9 +134,7 @@ pub fn c1_prime(residue: &Residue) -> Option<Point3<f64>> {
 /// Centroid of a nucleotide's base-ring atoms — a stable proxy for
 /// the base position when `C1'` is missing.
 pub fn base_ring_centroid(residue: &Residue) -> Option<Point3<f64>> {
-    const RING: &[&str] = &[
-        "N1", "C2", "N3", "C4", "C5", "C6", "N7", "C8", "N9",
-    ];
+    const RING: &[&str] = &["N1", "C2", "N3", "C4", "C5", "C6", "N7", "C8", "N9"];
     let mut acc = nalgebra::Vector3::zeros();
     let mut n = 0;
     for name in RING {
@@ -194,9 +192,7 @@ pub fn detect_base_pairs(model: &Model) -> Vec<BasePair> {
                 continue;
             }
             // Skip directly-bonded sequence neighbours in one chain.
-            if nucs[i].chain == nucs[j].chain
-                && nucs[i].residue.abs_diff(nucs[j].residue) <= 1
-            {
+            if nucs[i].chain == nucs[j].chain && nucs[i].residue.abs_diff(nucs[j].residue) <= 1 {
                 continue;
             }
             let d = (nucs[i].c1 - nucs[j].c1).norm();
@@ -240,17 +236,32 @@ mod tests {
         let mut r = Residue::new("DA", seq);
         r.atoms.push(Atom::new("C1'", "C", c1));
         // N1 acceptor and N6 donor on the WC edge, offset toward +x.
-        r.atoms
-            .push(Atom::new("N1", "N", c1 + nalgebra::Vector3::new(4.5, 0.0, 0.0)));
-        r.atoms
-            .push(Atom::new("N6", "N", c1 + nalgebra::Vector3::new(4.5, 2.8, 0.0)));
+        r.atoms.push(Atom::new(
+            "N1",
+            "N",
+            c1 + nalgebra::Vector3::new(4.5, 0.0, 0.0),
+        ));
+        r.atoms.push(Atom::new(
+            "N6",
+            "N",
+            c1 + nalgebra::Vector3::new(4.5, 2.8, 0.0),
+        ));
         // a couple of ring atoms so the centroid fallback works too.
-        r.atoms
-            .push(Atom::new("C2", "C", c1 + nalgebra::Vector3::new(3.5, -1.0, 0.0)));
-        r.atoms
-            .push(Atom::new("C4", "C", c1 + nalgebra::Vector3::new(3.0, 1.0, 0.0)));
-        r.atoms
-            .push(Atom::new("C5", "C", c1 + nalgebra::Vector3::new(3.8, 1.5, 0.0)));
+        r.atoms.push(Atom::new(
+            "C2",
+            "C",
+            c1 + nalgebra::Vector3::new(3.5, -1.0, 0.0),
+        ));
+        r.atoms.push(Atom::new(
+            "C4",
+            "C",
+            c1 + nalgebra::Vector3::new(3.0, 1.0, 0.0),
+        ));
+        r.atoms.push(Atom::new(
+            "C5",
+            "C",
+            c1 + nalgebra::Vector3::new(3.8, 1.5, 0.0),
+        ));
         r
     }
 
@@ -261,16 +272,31 @@ mod tests {
         // Place N3 ~2.9 A from adenine N1, O4 ~2.9 A from adenine N6.
         // Adenine N1 is at x=4.5; thymine C1' will be at x=10, so its
         // edge atoms point toward -x.
-        r.atoms
-            .push(Atom::new("N3", "N", c1 - nalgebra::Vector3::new(4.6, 0.0, 0.0)));
-        r.atoms
-            .push(Atom::new("O4", "O", c1 - nalgebra::Vector3::new(4.6, -2.8, 0.0)));
-        r.atoms
-            .push(Atom::new("O2", "O", c1 - nalgebra::Vector3::new(4.6, 2.0, 0.0)));
-        r.atoms
-            .push(Atom::new("C2", "C", c1 - nalgebra::Vector3::new(3.5, 1.0, 0.0)));
-        r.atoms
-            .push(Atom::new("C4", "C", c1 - nalgebra::Vector3::new(3.5, -1.0, 0.0)));
+        r.atoms.push(Atom::new(
+            "N3",
+            "N",
+            c1 - nalgebra::Vector3::new(4.6, 0.0, 0.0),
+        ));
+        r.atoms.push(Atom::new(
+            "O4",
+            "O",
+            c1 - nalgebra::Vector3::new(4.6, -2.8, 0.0),
+        ));
+        r.atoms.push(Atom::new(
+            "O2",
+            "O",
+            c1 - nalgebra::Vector3::new(4.6, 2.0, 0.0),
+        ));
+        r.atoms.push(Atom::new(
+            "C2",
+            "C",
+            c1 - nalgebra::Vector3::new(3.5, 1.0, 0.0),
+        ));
+        r.atoms.push(Atom::new(
+            "C4",
+            "C",
+            c1 - nalgebra::Vector3::new(3.5, -1.0, 0.0),
+        ));
         r
     }
 

@@ -39,9 +39,18 @@ pub struct LebedevPoint {
 /// `w`.
 fn add_a1(out: &mut Vec<LebedevPoint>, w: f64) {
     for &s in &[1.0, -1.0] {
-        out.push(LebedevPoint { dir: [s, 0.0, 0.0], weight: w });
-        out.push(LebedevPoint { dir: [0.0, s, 0.0], weight: w });
-        out.push(LebedevPoint { dir: [0.0, 0.0, s], weight: w });
+        out.push(LebedevPoint {
+            dir: [s, 0.0, 0.0],
+            weight: w,
+        });
+        out.push(LebedevPoint {
+            dir: [0.0, s, 0.0],
+            weight: w,
+        });
+        out.push(LebedevPoint {
+            dir: [0.0, 0.0, s],
+            weight: w,
+        });
     }
 }
 
@@ -51,9 +60,18 @@ fn add_a2(out: &mut Vec<LebedevPoint>, w: f64) {
     let c = std::f64::consts::FRAC_1_SQRT_2;
     for &sx in &[1.0, -1.0] {
         for &sy in &[1.0, -1.0] {
-            out.push(LebedevPoint { dir: [sx * c, sy * c, 0.0], weight: w });
-            out.push(LebedevPoint { dir: [sx * c, 0.0, sy * c], weight: w });
-            out.push(LebedevPoint { dir: [0.0, sx * c, sy * c], weight: w });
+            out.push(LebedevPoint {
+                dir: [sx * c, sy * c, 0.0],
+                weight: w,
+            });
+            out.push(LebedevPoint {
+                dir: [sx * c, 0.0, sy * c],
+                weight: w,
+            });
+            out.push(LebedevPoint {
+                dir: [0.0, sx * c, sy * c],
+                weight: w,
+            });
         }
     }
 }
@@ -107,12 +125,30 @@ fn add_ck(out: &mut Vec<LebedevPoint>, p: f64, w: f64) {
     // 24 points: (p, q, 0) and (q, p, 0) with the zero on each axis.
     for &sp in &[1.0, -1.0] {
         for &sq in &[1.0, -1.0] {
-            out.push(LebedevPoint { dir: [sp * p, sq * q, 0.0], weight: w });
-            out.push(LebedevPoint { dir: [sp * q, sq * p, 0.0], weight: w });
-            out.push(LebedevPoint { dir: [sp * p, 0.0, sq * q], weight: w });
-            out.push(LebedevPoint { dir: [sp * q, 0.0, sq * p], weight: w });
-            out.push(LebedevPoint { dir: [0.0, sp * p, sq * q], weight: w });
-            out.push(LebedevPoint { dir: [0.0, sp * q, sq * p], weight: w });
+            out.push(LebedevPoint {
+                dir: [sp * p, sq * q, 0.0],
+                weight: w,
+            });
+            out.push(LebedevPoint {
+                dir: [sp * q, sq * p, 0.0],
+                weight: w,
+            });
+            out.push(LebedevPoint {
+                dir: [sp * p, 0.0, sq * q],
+                weight: w,
+            });
+            out.push(LebedevPoint {
+                dir: [sp * q, 0.0, sq * p],
+                weight: w,
+            });
+            out.push(LebedevPoint {
+                dir: [0.0, sp * p, sq * q],
+                weight: w,
+            });
+            out.push(LebedevPoint {
+                dir: [0.0, sp * q, sq * p],
+                weight: w,
+            });
         }
     }
 }
@@ -175,9 +211,7 @@ mod tests {
     fn all_points_are_unit_vectors() {
         for grid in [lebedev_6(), lebedev_26(), lebedev_50(), lebedev_110()] {
             for p in &grid {
-                let r2 = p.dir[0] * p.dir[0]
-                    + p.dir[1] * p.dir[1]
-                    + p.dir[2] * p.dir[2];
+                let r2 = p.dir[0] * p.dir[0] + p.dir[1] * p.dir[1] + p.dir[2] * p.dir[2];
                 assert!((r2 - 1.0).abs() < 1.0e-12, "|dir|² = {r2}");
             }
         }
@@ -211,9 +245,7 @@ mod tests {
         };
         assert!((avg(&|d| d[0] * d[0]) - 1.0 / 3.0).abs() < 1.0e-12);
         assert!((avg(&|d| d[0].powi(4)) - 1.0 / 5.0).abs() < 1.0e-12);
-        assert!(
-            (avg(&|d| d[0] * d[0] * d[1] * d[1]) - 1.0 / 15.0).abs() < 1.0e-12
-        );
+        assert!((avg(&|d| d[0] * d[0] * d[1] * d[1]) - 1.0 / 15.0).abs() < 1.0e-12);
         // An odd polynomial integrates to zero by symmetry.
         assert!(avg(&|d| d[0].powi(3)).abs() < 1.0e-12);
     }
@@ -230,10 +262,7 @@ mod tests {
         assert!((avg(&|d| d[0].powi(8)) - 1.0 / 9.0).abs() < 1.0e-10);
         // Mixed degree-8 monomial: ⟨x⁴y⁴⟩ = 9/(7·9·11·... ) — use the
         // closed form 3·3/(945) = 1/105.
-        assert!(
-            (avg(&|d| d[0].powi(4) * d[1].powi(4)) - 1.0 / 105.0).abs()
-                < 1.0e-10
-        );
+        assert!((avg(&|d| d[0].powi(4) * d[1].powi(4)) - 1.0 / 105.0).abs() < 1.0e-10);
     }
 
     /// The 110-point grid is exact through degree 17 — it must

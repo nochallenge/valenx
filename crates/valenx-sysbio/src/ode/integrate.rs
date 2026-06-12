@@ -397,9 +397,8 @@ impl Bdf {
                 }
                 // Solve  jg · delta = -g.
                 let neg_g: Vec<f64> = g.iter().map(|x| -x).collect();
-                let delta = solve_linear(&jg, &neg_g).ok_or_else(|| {
-                    SysbioError::not_converged("bdf", "singular Newton Jacobian")
-                })?;
+                let delta = solve_linear(&jg, &neg_g)
+                    .ok_or_else(|| SysbioError::not_converged("bdf", "singular Newton Jacobian"))?;
                 // Damped update — half-step if the full step grows G.
                 let mut lambda = 1.0;
                 for _ in 0..8 {
@@ -484,7 +483,10 @@ mod tests {
         let traj = integrate_rk4(&sys, &[10.0], 0.0, 2.0, 0.01, 10).unwrap();
         let final_a = traj.final_state().unwrap()[0];
         let expect = 10.0 * (-2.0_f64).exp();
-        assert!((final_a - expect).abs() < 1e-4, "got {final_a}, want {expect}");
+        assert!(
+            (final_a - expect).abs() < 1e-4,
+            "got {final_a}, want {expect}"
+        );
     }
 
     #[test]
@@ -493,7 +495,10 @@ mod tests {
         let traj = Rk45::default().integrate(&sys, &[4.0], 0.0, 5.0).unwrap();
         let final_a = traj.final_state().unwrap()[0];
         let expect = 4.0 * (-2.5_f64).exp();
-        assert!((final_a - expect).abs() < 1e-5, "got {final_a}, want {expect}");
+        assert!(
+            (final_a - expect).abs() < 1e-5,
+            "got {final_a}, want {expect}"
+        );
     }
 
     #[test]
@@ -507,7 +512,10 @@ mod tests {
         .unwrap();
         let final_a = traj.final_state().unwrap()[0];
         let expect = 10.0 * (-2.0_f64).exp();
-        assert!((final_a - expect).abs() < 1e-2, "got {final_a}, want {expect}");
+        assert!(
+            (final_a - expect).abs() < 1e-2,
+            "got {final_a}, want {expect}"
+        );
     }
 
     #[test]

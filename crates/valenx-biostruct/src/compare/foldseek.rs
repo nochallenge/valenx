@@ -193,10 +193,7 @@ pub fn descriptor_identity(a: &StructuralDescriptor, b: &StructuralDescriptor) -
 /// This is the FoldSeek-class "fast pre-filter" — cheap, ungapped,
 /// and a usable upper-bound screen before a full structural
 /// alignment.
-pub fn best_ungapped_similarity(
-    a: &StructuralDescriptor,
-    b: &StructuralDescriptor,
-) -> f64 {
+pub fn best_ungapped_similarity(a: &StructuralDescriptor, b: &StructuralDescriptor) -> f64 {
     let (short, long) = if a.len() <= b.len() {
         (a.letters.as_bytes(), b.letters.as_bytes())
     } else {
@@ -241,11 +238,7 @@ mod tests {
         // A near-straight, slightly zig-zag extended strand.
         let mut c = Chain::new("B");
         for i in 0..n {
-            let ca = Point3::new(
-                i as f64 * 3.5,
-                if i % 2 == 0 { 0.0 } else { 0.6 },
-                0.0,
-            );
+            let ca = Point3::new(i as f64 * 3.5, if i % 2 == 0 { 0.0 } else { 0.6 }, 0.0);
             let mut r = Residue::new("VAL", i as i32 + 1);
             r.atoms.push(Atom::new("CA", "C", ca));
             c.residues.push(r);

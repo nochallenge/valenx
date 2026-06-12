@@ -93,9 +93,7 @@ impl AdapterRegistry {
     /// probing ~150 external tools (a PATH search + a version-spawn each),
     /// sequentially on the main thread, blocked the first frame for seconds
     /// — tens of seconds on a cold filesystem cache.
-    pub fn spawn_probe_all(
-        &self,
-    ) -> std::sync::mpsc::Receiver<(&'static str, AdapterStatus)> {
+    pub fn spawn_probe_all(&self) -> std::sync::mpsc::Receiver<(&'static str, AdapterStatus)> {
         let adapters: Vec<(&'static str, Arc<dyn Adapter>)> = self
             .by_id
             .iter()
@@ -252,7 +250,10 @@ mod tests {
         let r = AdapterRegistry::new();
         let rx = r.spawn_probe_all();
         // recv() blocks only until the (empty) probe thread finishes.
-        assert!(rx.recv().is_err(), "empty probe should disconnect, not yield a result");
+        assert!(
+            rx.recv().is_err(),
+            "empty probe should disconnect, not yield a result"
+        );
     }
 
     #[test]

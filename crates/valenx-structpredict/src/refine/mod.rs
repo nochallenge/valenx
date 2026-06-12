@@ -31,4 +31,4 @@ pub use minimize::{relax_model, RelaxResult};
 pub use quality::{assess_quality, QualityReport};
 pub use ramachandran::{refine_ramachandran, RamachandranRefinement};
 pub use repack::{repack_sidechains, RepackResult};
-pub use superpose::{gdt_ts, model_vs_reference, ca_rmsd_superposed, SuperposeReport};
+pub use superpose::{ca_rmsd_superposed, gdt_ts, model_vs_reference, SuperposeReport};

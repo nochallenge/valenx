@@ -59,10 +59,7 @@ impl PopHistory {
         match self {
             PopHistory::Constant(n) => {
                 if *n <= 0.0 {
-                    return Err(PopgenError::invalid(
-                        "effective_size",
-                        "must be positive",
-                    ));
+                    return Err(PopgenError::invalid("effective_size", "must be positive"));
                 }
             }
             PopHistory::Piecewise(segs) => {
@@ -95,10 +92,7 @@ impl PopHistory {
 /// history is invalid; [`PopgenError::Model`] if tree assembly fails.
 pub fn coalescent(labels: &[String], pop: &PopHistory, seed: u64) -> Result<Tree> {
     if labels.len() < 2 {
-        return Err(PopgenError::invalid(
-            "labels",
-            "need at least two lineages",
-        ));
+        return Err(PopgenError::invalid("labels", "need at least two lineages"));
     }
     pop.validate()?;
     let mut rng = Rng::new(seed);
@@ -232,11 +226,7 @@ pub fn structured_coalescent(
         ));
     }
     if labels.len() != total {
-        return Err(PopgenError::dimension(
-            total,
-            labels.len(),
-            "tip labels",
-        ));
+        return Err(PopgenError::dimension(total, labels.len(), "tip labels"));
     }
     let mut rng = Rng::new(seed);
 
@@ -292,14 +282,11 @@ pub fn structured_coalescent(
         if rng.uniform() * total_hazard < coal_hazard {
             // A coalescence: pick the deme proportional to its hazard.
             let deme = pick_coalescing_deme(&active, deme_sizes, &mut rng);
-            let in_deme: Vec<usize> = (0..active.len())
-                .filter(|&i| active[i].2 == deme)
-                .collect();
+            let in_deme: Vec<usize> = (0..active.len()).filter(|&i| active[i].2 == deme).collect();
             let a = in_deme[rng.below(in_deme.len())];
             let mut b_idx = rng.below(in_deme.len() - 1);
             // pick a distinct second lineage in the deme
-            let in_deme_minus: Vec<usize> =
-                in_deme.iter().copied().filter(|&i| i != a).collect();
+            let in_deme_minus: Vec<usize> = in_deme.iter().copied().filter(|&i| i != a).collect();
             b_idx %= in_deme_minus.len();
             let b = in_deme_minus[b_idx];
 
@@ -390,10 +377,8 @@ mod tests {
 
     #[test]
     fn larger_ne_gives_a_deeper_tree() {
-        let small =
-            coalescent(&labels(20), &PopHistory::Constant(100.0), 1).unwrap();
-        let large =
-            coalescent(&labels(20), &PopHistory::Constant(10_000.0), 1).unwrap();
+        let small = coalescent(&labels(20), &PopHistory::Constant(100.0), 1).unwrap();
+        let large = coalescent(&labels(20), &PopHistory::Constant(10_000.0), 1).unwrap();
         assert!(tree_height(&large) > tree_height(&small));
     }
 
@@ -405,8 +390,7 @@ mod tests {
         let mut acc = 0.0;
         let reps = 300;
         for seed in 0..reps {
-            let t = coalescent(&labels(n_lineages), &PopHistory::Constant(ne), seed)
-                .unwrap();
+            let t = coalescent(&labels(n_lineages), &PopHistory::Constant(ne), seed).unwrap();
             acc += tree_height(&t);
         }
         let mean = acc / reps as f64;
@@ -430,21 +414,12 @@ mod tests {
     fn coalescent_rejects_bad_input() {
         assert!(coalescent(&labels(1), &PopHistory::Constant(1.0), 1).is_err());
         assert!(coalescent(&labels(4), &PopHistory::Constant(-1.0), 1).is_err());
-        assert!(
-            coalescent(&labels(4), &PopHistory::Piecewise(vec![]), 1).is_err()
-        );
+        assert!(coalescent(&labels(4), &PopHistory::Piecewise(vec![]), 1).is_err());
     }
 
     #[test]
     fn structured_coalescent_builds_a_tree() {
-        let t = structured_coalescent(
-            &labels(8),
-            &[4, 4],
-            &[1000.0, 1000.0],
-            0.001,
-            42,
-        )
-        .unwrap();
+        let t = structured_coalescent(&labels(8), &[4, 4], &[1000.0, 1000.0], 0.001, 42).unwrap();
         assert_eq!(t.leaf_count(), 8);
         assert!(t.validate().is_ok());
     }
@@ -452,13 +427,7 @@ mod tests {
     #[test]
     fn isolated_demes_cannot_coalesce() {
         // Two demes, lineages in both, zero migration -> failure.
-        let r = structured_coalescent(
-            &labels(4),
-            &[2, 2],
-            &[1000.0, 1000.0],
-            0.0,
-            1,
-        );
+        let r = structured_coalescent(&labels(4), &[2, 2], &[1000.0, 1000.0], 0.0, 1);
         assert!(r.is_err());
     }
 

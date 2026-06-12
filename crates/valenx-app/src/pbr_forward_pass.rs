@@ -51,8 +51,7 @@ use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};
 
 use valenx_render_bridge::wgsl_pbr::{
-    PbrFrameUniform, PbrLightUniform, PbrMaterialUniform, ShL2Uniform, MAX_LIGHTS,
-    PBR_FORWARD_WGSL,
+    PbrFrameUniform, PbrLightUniform, PbrMaterialUniform, ShL2Uniform, MAX_LIGHTS, PBR_FORWARD_WGSL,
 };
 use valenx_render_bridge::{IrradianceVolume, Material};
 
@@ -207,23 +206,21 @@ impl PbrForwardPass {
             },
             count: None,
         };
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("valenx.pbr_forward.bind_group_layout"),
-                entries: &[
-                    uniform_entry(0),
-                    uniform_entry(1),
-                    uniform_entry(2),
-                    uniform_entry(3),
-                ],
-            });
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("valenx.pbr_forward.bind_group_layout"),
+            entries: &[
+                uniform_entry(0),
+                uniform_entry(1),
+                uniform_entry(2),
+                uniform_entry(3),
+            ],
+        });
 
-        let pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("valenx.pbr_forward.pipeline_layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("valenx.pbr_forward.pipeline_layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("valenx.pbr_forward.pipeline"),
@@ -367,8 +364,7 @@ impl PbrForwardPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: self.target_format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -484,11 +480,11 @@ impl PbrForwardPass {
 
         let os = self.offscreen.as_ref()?;
 
-        let mut encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("valenx.pbr_forward.encoder"),
-                });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("valenx.pbr_forward.encoder"),
+            });
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("valenx.pbr_forward.pass"),
@@ -505,16 +501,14 @@ impl PbrForwardPass {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: Some(
-                    wgpu::RenderPassDepthStencilAttachment {
-                        view: &os.depth_view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    },
-                ),
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &os.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
@@ -621,10 +615,8 @@ mod tests {
         assert_eq!(one.lights[MAX_LIGHTS - 1].color_intensity, [0.0; 4]);
         // More lights than slots — only the first MAX_LIGHTS are kept,
         // no panic.
-        let many = vec![
-            PbrLightUniform::directional([0.0, -1.0, 0.0], [1.0; 3], 1.0);
-            MAX_LIGHTS + 5
-        ];
+        let many =
+            vec![PbrLightUniform::directional([0.0, -1.0, 0.0], [1.0; 3], 1.0); MAX_LIGHTS + 5];
         let arr = LightArray::from_slice(&many);
         assert_eq!(arr.lights.len(), MAX_LIGHTS);
     }
@@ -652,13 +644,7 @@ mod tests {
     /// when the query lands on a probe.
     #[test]
     fn gi_probe_at_reads_back_a_probe() {
-        let mut vol = IrradianceVolume::new(
-            [0.0; 3],
-            [1.0; 3],
-            (2, 2, 2),
-            ShOrder::L2,
-        )
-        .unwrap();
+        let mut vol = IrradianceVolume::new([0.0; 3], [1.0; 3], (2, 2, 2), ShOrder::L2).unwrap();
         // Bake a directional-ish scene so the probes are non-trivial.
         vol.bake(64, |_o, d| [d[0].max(0.0), 0.2, 0.4]);
         // A query at the (0,0,0) corner should return that probe.

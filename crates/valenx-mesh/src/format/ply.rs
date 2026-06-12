@@ -239,8 +239,7 @@ fn parse_header(bytes: &[u8]) -> Result<(PlyFormat, Vec<ElementSpec>, usize), Pl
         }
         i += 1;
     }
-    let body_start =
-        header_end.ok_or_else(|| PlyError::Malformed("missing end_header".into()))?;
+    let body_start = header_end.ok_or_else(|| PlyError::Malformed("missing end_header".into()))?;
     let header_text = std::str::from_utf8(&bytes[..body_start])
         .map_err(|_| PlyError::Malformed("PLY header is not valid UTF-8".into()))?;
 
@@ -267,11 +266,7 @@ fn parse_header(bytes: &[u8]) -> Result<(PlyFormat, Vec<ElementSpec>, usize), Pl
                 "ascii" => PlyFormat::Ascii,
                 "binary_little_endian" => PlyFormat::BinaryLe,
                 "binary_big_endian" => PlyFormat::BinaryBe,
-                other => {
-                    return Err(PlyError::Malformed(format!(
-                        "unknown PLY format {other:?}"
-                    )))
-                }
+                other => return Err(PlyError::Malformed(format!("unknown PLY format {other:?}"))),
             });
         } else if let Some(rest) = line.strip_prefix("element ") {
             let mut iter = rest.split_whitespace();
@@ -310,9 +305,8 @@ fn parse_header(bytes: &[u8]) -> Result<(PlyFormat, Vec<ElementSpec>, usize), Pl
             } else {
                 // property <type> <name>
                 let name = iter.next().unwrap_or("").to_string();
-                let value_type = ScalarType::parse(first).ok_or_else(|| {
-                    PlyError::Malformed(format!("bad property type: {first:?}"))
-                })?;
+                let value_type = ScalarType::parse(first)
+                    .ok_or_else(|| PlyError::Malformed(format!("bad property type: {first:?}")))?;
                 elem.properties.push(PropertySpec {
                     name,
                     value_type,
@@ -446,9 +440,7 @@ fn read_ascii_body(id: String, elements: &[ElementSpec], body: &str) -> Result<M
                                 idxs.push(signed as u32);
                             }
                             Err(_) => {
-                                return Err(PlyError::Malformed(format!(
-                                    "bad index: {raw:?}"
-                                )));
+                                return Err(PlyError::Malformed(format!("bad index: {raw:?}")));
                             }
                         }
                     }
@@ -652,11 +644,8 @@ fn read_binary_body(
             }
 
             if let Some((ix, iy, iz)) = xyz {
-                mesh.nodes.push(Vector3::new(
-                    scalars[ix],
-                    scalars[iy],
-                    scalars[iz],
-                ));
+                mesh.nodes
+                    .push(Vector3::new(scalars[ix], scalars[iy], scalars[iz]));
             }
             if let Some(vi) = vi_index {
                 let idxs = &lists[vi];
@@ -1003,7 +992,13 @@ end_header
 ";
         let err = read_str("oversize".into(), ply).unwrap_err();
         assert!(
-            matches!(err, PlyError::ListTooLarge { count: 5_000_000, max: MAX_PLY_LIST_LEN }),
+            matches!(
+                err,
+                PlyError::ListTooLarge {
+                    count: 5_000_000,
+                    max: MAX_PLY_LIST_LEN
+                }
+            ),
             "expected ListTooLarge, got {err:?}"
         );
     }
@@ -1083,7 +1078,8 @@ end_header
 0 0 1
 3 0 1 -1
 ";
-        let err = read_str("neg-idx".into(), ply).expect_err("negative face index must be rejected");
+        let err =
+            read_str("neg-idx".into(), ply).expect_err("negative face index must be rejected");
         match err {
             PlyError::InvalidIndex { value } => {
                 assert_eq!(value, -1.0);

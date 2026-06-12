@@ -92,9 +92,7 @@ impl ParamTarget {
                 _ => Err(mismatch("mass-action")),
             },
             ParamTarget::Vmax { reaction } => match rxn(*reaction)? {
-                RateLaw::MichaelisMenten { vmax, .. } | RateLaw::Hill { vmax, .. } => {
-                    Ok(*vmax)
-                }
+                RateLaw::MichaelisMenten { vmax, .. } | RateLaw::Hill { vmax, .. } => Ok(*vmax),
                 _ => Err(mismatch("MM/Hill")),
             },
             ParamTarget::Km { reaction } => match rxn(*reaction)? {
@@ -143,8 +141,7 @@ impl ParamTarget {
                 _ => return Err(mismatch("MM/Hill")),
             },
             ParamTarget::Km { reaction } => {
-                if let RateLaw::MichaelisMenten { km, .. } = rate_law_mut(&mut m, *reaction)?
-                {
+                if let RateLaw::MichaelisMenten { km, .. } = rate_law_mut(&mut m, *reaction)? {
                     *km = value;
                 } else {
                     return Err(mismatch("Michaelis-Menten"));
@@ -178,9 +175,10 @@ impl ParamTarget {
                 m.parameters[idx].value = value;
             }
             ParamTarget::InitialAmount { species } => {
-                let s = m.species.get_mut(*species).ok_or_else(|| {
-                    SysbioError::invalid("species", "species index out of range")
-                })?;
+                let s = m
+                    .species
+                    .get_mut(*species)
+                    .ok_or_else(|| SysbioError::invalid("species", "species index out of range"))?;
                 s.initial = value;
             }
         }

@@ -29,6 +29,7 @@
 //! periodic system, velocity-Verlet at 1 fs, no thermostat. The
 //! builder methods then customise it.
 
+use crate::analysis::reporters::{state_report, ObservableLog, StateReport};
 use crate::bonded::angle::HarmonicAngles;
 use crate::bonded::bond::HarmonicBonds;
 use crate::bonded::dihedral::ProperDihedrals;
@@ -44,7 +45,6 @@ use crate::nonbonded::coulomb::{Coulomb, CoulombMethod};
 use crate::nonbonded::lj::LennardJones;
 use crate::nonbonded::neighbor::NeighborList;
 use crate::nonbonded::{ExclusionSet, ScaledPairs14};
-use crate::analysis::reporters::{state_report, ObservableLog, StateReport};
 use crate::system::System;
 
 /// Which nonbonded interactions a simulation evaluates pairwise
@@ -168,12 +168,9 @@ impl Simulation {
             }
             let lj = LennardJones::from_system(&system, &force_field, cutoff)?
                 .with_exclusions(exclusions.clone());
-            let coulomb = Coulomb::from_system(
-                &system,
-                cutoff,
-                CoulombMethod::conductor_reaction_field(),
-            )?
-            .with_exclusions(exclusions);
+            let coulomb =
+                Coulomb::from_system(&system, cutoff, CoulombMethod::conductor_reaction_field())?
+                    .with_exclusions(exclusions);
             let scaled14 = ScaledPairs14::from_system(&system, &force_field)?;
             if !scaled14.is_empty() {
                 bonded.push(Box::new(scaled14));
@@ -342,9 +339,7 @@ impl Simulation {
         let bonded = &self.bonded;
         let nonbonded = self.nonbonded.as_ref();
         let neighbor_list = self.neighbor_list.as_ref();
-        let mut force_fn = |s: &System| {
-            Self::sum_forces(s, bonded, nonbonded, neighbor_list)
-        };
+        let mut force_fn = |s: &System| Self::sum_forces(s, bonded, nonbonded, neighbor_list);
         let ef = self.integrator.step(&mut self.system, &mut force_fn)?;
 
         // Apply constraints (SHAKE positions + RATTLE velocities).
@@ -362,9 +357,7 @@ impl Simulation {
 
         // Barostat (needs the current virial pressure).
         if let Some(barostat) = &mut self.barostat {
-            if let Some(pressure) =
-                crate::analysis::reporters::pressure_bar(&self.system, &ef)
-            {
+            if let Some(pressure) = crate::analysis::reporters::pressure_bar(&self.system, &ef) {
                 barostat.apply(&mut self.system, pressure, dt)?;
                 // The box changed: force a neighbour-list rebuild.
                 self.neighbor_list = None;
@@ -544,7 +537,10 @@ mod tests {
         sim.run(200).unwrap();
         let e_std = sim.log.total_energy_std();
         let e_mean = sim.log.mean_total_energy().abs().max(1.0);
-        assert!(e_std < 0.2 * e_mean, "energy drift std {e_std} / mean {e_mean}");
+        assert!(
+            e_std < 0.2 * e_mean,
+            "energy drift std {e_std} / mean {e_mean}"
+        );
     }
 
     #[test]
@@ -590,11 +586,7 @@ mod tests {
         top.push_atom(Atom::new("A", 12.0, 0.0).unwrap());
         top.push_atom(Atom::new("B", 12.0, 0.0).unwrap());
         top.add_bond(0, 1).unwrap();
-        let sys = System::new(
-            top,
-            vec![Vector3::zeros(), Vector3::new(0.18, 0.0, 0.0)],
-        )
-        .unwrap();
+        let sys = System::new(top, vec![Vector3::zeros(), Vector3::new(0.18, 0.0, 0.0)]).unwrap();
         let mut ff = ForceField::new(CombiningRule::LorentzBerthelot);
         ff.set_lj("A", LjParam::new(0.3, 0.5).unwrap());
         ff.set_lj("B", LjParam::new(0.3, 0.5).unwrap());

@@ -31,8 +31,8 @@ use crate::system::{Atom, System, Topology};
 /// malformed coordinate line.
 pub fn read_xyz(text: &str) -> Result<System> {
     let mut lines = text.lines();
-    let (topology, positions) = read_one_frame(&mut lines)?
-        .ok_or_else(|| MdError::parse("xyz", "file is empty"))?;
+    let (topology, positions) =
+        read_one_frame(&mut lines)?.ok_or_else(|| MdError::parse("xyz", "file is empty"))?;
     System::new(topology, positions)
 }
 

@@ -98,7 +98,11 @@ impl ExtracellularRecorder {
             max_abs_current_sum = max_abs_current_sum.max(isum.abs());
             eap_uv.push(phi / (4.0 * PI * self.sigma_e_s_m) * 1.0e6); // V → µV
         }
-        Recording { eap_uv, dt_ms: dt, max_abs_current_sum }
+        Recording {
+            eap_uv,
+            dt_ms: dt,
+            max_abs_current_sum,
+        }
     }
 }
 
@@ -120,7 +124,10 @@ impl Recording {
     }
     /// Most positive EAP sample (µV).
     pub fn max_uv(&self) -> f64 {
-        self.eap_uv.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+        self.eap_uv
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max)
     }
     /// Peak-to-peak amplitude (µV).
     pub fn peak_to_peak_uv(&self) -> f64 {
@@ -156,8 +163,14 @@ mod tests {
         // dominant deflection is negative — the textbook EAP shape.
         let rec = squid_recorder().record(200, Vector3::new(10.0e-3, 1.0e-3, 0.0));
         let (lo, hi) = (rec.min_uv(), rec.max_uv());
-        assert!(lo < 0.0 && hi > 0.0, "EAP must be biphasic: min={lo:.1} max={hi:.1} µV");
-        assert!(lo.abs() > hi, "negative (sink) phase dominates: |{lo:.1}| vs {hi:.1} µV");
+        assert!(
+            lo < 0.0 && hi > 0.0,
+            "EAP must be biphasic: min={lo:.1} max={hi:.1} µV"
+        );
+        assert!(
+            lo.abs() > hi,
+            "negative (sink) phase dominates: |{lo:.1}| vs {hi:.1} µV"
+        );
     }
 
     #[test]

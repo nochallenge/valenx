@@ -265,10 +265,7 @@ fn place_loop(
 
     for (idx, e) in elems.iter().enumerate() {
         let ang = ang_5 + step * (idx as f64 + 1.0);
-        let pt = Point::new(
-            centre.x + radius * ang.cos(),
-            centre.y + radius * ang.sin(),
-        );
+        let pt = Point::new(centre.x + radius * ang.cos(), centre.y + radius * ang.sin());
         match e {
             Elem::Unpaired(b) => {
                 points[*b] = pt;
@@ -361,7 +358,10 @@ mod tests {
         let s = Structure::from_dot_bracket("((((....))((....))))").unwrap();
         let l = layout(&s);
         for p in &l.points {
-            assert!(p.x.is_finite() && p.y.is_finite(), "NaN in multiloop layout");
+            assert!(
+                p.x.is_finite() && p.y.is_finite(),
+                "NaN in multiloop layout"
+            );
         }
     }
 

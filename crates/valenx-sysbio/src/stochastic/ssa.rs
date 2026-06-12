@@ -129,12 +129,7 @@ impl StochasticModel {
     /// fires with probability `a_j/a0`; (4) update counts. Stops at
     /// `t_end` or when every propensity is zero (the system is
     /// absorbed). `max_steps` bounds the run.
-    pub fn gillespie(
-        &self,
-        t_end: f64,
-        seed: u64,
-        max_steps: usize,
-    ) -> Result<StochasticTrace> {
+    pub fn gillespie(&self, t_end: f64, seed: u64, max_steps: usize) -> Result<StochasticTrace> {
         if t_end <= 0.0 {
             return Err(SysbioError::invalid("t_end", "t_end must be positive"));
         }
@@ -342,11 +337,7 @@ impl StochasticModel {
             .map(|s| s.iter().map(|&(i, _)| i).collect())
             .collect();
         // Species read by each reaction's propensity.
-        let read: Vec<Vec<usize>> = self
-            .rate_laws
-            .iter()
-            .map(|l| l.dependencies())
-            .collect();
+        let read: Vec<Vec<usize>> = self.rate_laws.iter().map(|l| l.dependencies()).collect();
         let mut graph = vec![Vec::new(); nr];
         for (j, gj) in graph.iter_mut().enumerate() {
             for (k, rk) in read.iter().enumerate() {

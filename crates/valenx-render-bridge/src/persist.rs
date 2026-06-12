@@ -125,8 +125,7 @@ mod tests {
     #[test]
     fn read_from_missing_path_is_an_io_error() {
         // The `read_from` -> `std::fs::read_to_string` error branch.
-        let missing = std::env::temp_dir()
-            .join("valenx-definitely-not-a-real-renderfile-xyz.ron");
+        let missing = std::env::temp_dir().join("valenx-definitely-not-a-real-renderfile-xyz.ron");
         let err = RenderFile::read_from(&missing).unwrap_err();
         assert_eq!(err.code(), "render.io", "a missing file is an IO error");
     }

@@ -121,14 +121,22 @@ mod tests {
     fn earth_sphere_of_influence_is_about_924000_km() {
         let r = sphere_of_influence_radius(AU_M, M_EARTH, M_SUN);
         // The textbook value is ≈ 0.924 million km.
-        assert!((r - 9.24e8).abs() < 2.0e7, "Earth SOI {r} m (~{:.0} km)", r / 1e3);
+        assert!(
+            (r - 9.24e8).abs() < 2.0e7,
+            "Earth SOI {r} m (~{:.0} km)",
+            r / 1e3
+        );
     }
 
     #[test]
     fn earth_hill_sphere_is_about_1_5_million_km() {
         let r = hill_sphere_radius(AU_M, M_EARTH, M_SUN);
         // The textbook value is ≈ 1.5 million km.
-        assert!((r - 1.496e9).abs() < 3.0e7, "Earth Hill radius {r} m (~{:.0} km)", r / 1e3);
+        assert!(
+            (r - 1.496e9).abs() < 3.0e7,
+            "Earth Hill radius {r} m (~{:.0} km)",
+            r / 1e3
+        );
     }
 
     #[test]
@@ -158,7 +166,10 @@ mod tests {
         let g = 6.674_30e-11;
         let by_mass = hill_sphere_radius(AU_M, M_EARTH, M_SUN);
         let by_mu = hill_sphere_radius(AU_M, g * M_EARTH, g * M_SUN);
-        assert!((by_mass - by_mu).abs() < 1e-3, "only the ratio enters: {by_mass} vs {by_mu}");
+        assert!(
+            (by_mass - by_mu).abs() < 1e-3,
+            "only the ratio enters: {by_mass} vs {by_mu}"
+        );
     }
 
     #[test]
@@ -176,22 +187,41 @@ mod tests {
         let rho = 3000.0_f64;
         let rigid = roche_limit_rigid(r, rho, rho);
         let fluid = roche_limit_fluid(r, rho, rho);
-        assert!((rigid - 2.0_f64.cbrt()).abs() < 1e-9, "rigid equal-density {rigid}");
+        assert!(
+            (rigid - 2.0_f64.cbrt()).abs() < 1e-9,
+            "rigid equal-density {rigid}"
+        );
         assert!((fluid - 2.44).abs() < 1e-9, "fluid equal-density {fluid}");
         // A fluid (deformable) body is disrupted farther out than a rigid one.
-        assert!(fluid > rigid, "fluid Roche {fluid} should exceed rigid {rigid}");
+        assert!(
+            fluid > rigid,
+            "fluid Roche {fluid} should exceed rigid {rigid}"
+        );
 
         // Both scale linearly with the primary radius.
-        assert!((roche_limit_rigid(2.0, rho, rho) - 2.0 * rigid).abs() < 1e-9, "rigid ∝ R_M");
-        assert!((roche_limit_fluid(2.0, rho, rho) - 2.0 * fluid).abs() < 1e-9, "fluid ∝ R_M");
+        assert!(
+            (roche_limit_rigid(2.0, rho, rho) - 2.0 * rigid).abs() < 1e-9,
+            "rigid ∝ R_M"
+        );
+        assert!(
+            (roche_limit_fluid(2.0, rho, rho) - 2.0 * fluid).abs() < 1e-9,
+            "fluid ∝ R_M"
+        );
 
         // A denser satellite has a SMALLER Roche limit (∝ ρ_m^(−1/3)): 8× density → ½.
         let denser = roche_limit_rigid(r, rho, 8.0 * rho);
-        assert!((denser - rigid / 2.0).abs() < 1e-9, "8× satellite density halves it");
+        assert!(
+            (denser - rigid / 2.0).abs() < 1e-9,
+            "8× satellite density halves it"
+        );
 
         // Reference: the Moon's fluid Roche limit about Earth is ≈ 18,400 km.
         let moon = roche_limit_fluid(6.371e6, 5514.0, 3344.0);
-        assert!((moon - 1.84e7).abs() < 6e5, "lunar fluid Roche ≈ 18,400 km, got {:.0} km", moon / 1e3);
+        assert!(
+            (moon - 1.84e7).abs() < 6e5,
+            "lunar fluid Roche ≈ 18,400 km, got {:.0} km",
+            moon / 1e3
+        );
 
         // Non-physical inputs → 0.
         assert_eq!(roche_limit_rigid(-1.0, rho, rho), 0.0);

@@ -142,8 +142,13 @@ impl UiStep {
                 height: self.height.clone(),
             },
         };
-        let mut step =
-            Step::placed(self.op, feature, self.x.clone(), self.y.clone(), self.z.clone());
+        let mut step = Step::placed(
+            self.op,
+            feature,
+            self.x.clone(),
+            self.y.clone(),
+            self.z.clone(),
+        );
         step.rotate_deg = [self.rx.clone(), self.ry.clone(), self.rz.clone()];
         step
     }
@@ -254,20 +259,32 @@ fn run_cad(s: &CadWorkbenchState) -> CadResults {
         Ok(r) => {
             let mut sk = Sketch3D::new();
             let c = sk.add_point(0.0, 0.0, 0.0);
-            let circle = sk.add_circle(c, 1.0, 0.0, 0.0, 1.0).expect("centre is a point");
+            let circle = sk
+                .add_circle(c, 1.0, 0.0, 0.0, 1.0)
+                .expect("centre is a point");
             sk.add_constraint(Constraint3D::CircleRadius { circle, target: r });
             match sk.solve() {
                 Ok(rep) => {
                     let solved = sk.circle_radius(circle);
-                    (Some(solved), format!("{:?} — circle radius = {solved:.4}", rep.status))
+                    (
+                        Some(solved),
+                        format!("{:?} — circle radius = {solved:.4}", rep.status),
+                    )
                 }
                 Err(e) => (None, format!("solve error: {e}")),
             }
         }
-        Err(e) => (None, format!("radius parameter '{}': {e}", s.radius_param.trim())),
+        Err(e) => (
+            None,
+            format!("radius parameter '{}': {e}", s.radius_param.trim()),
+        ),
     };
 
-    CadResults { resolved, solved_radius, status }
+    CadResults {
+        resolved,
+        solved_radius,
+        status,
+    }
 }
 
 /// Build a solver-crate [`FeatureTimeline`] from the UI steps.
@@ -307,13 +324,20 @@ fn ui_step_from(step: &Step) -> Result<UiStep, String> {
             us.kind = FeatureKind::Sphere;
             us.radius = radius.clone();
         }
-        Feature::Cone { base_radius, top_radius, height } => {
+        Feature::Cone {
+            base_radius,
+            top_radius,
+            height,
+        } => {
             us.kind = FeatureKind::Cone;
             us.radius = base_radius.clone();
             us.top_radius = top_radius.clone();
             us.height = height.clone();
         }
-        Feature::Torus { major_radius, minor_radius } => {
+        Feature::Torus {
+            major_radius,
+            minor_radius,
+        } => {
             us.kind = FeatureKind::Torus;
             us.major = major_radius.clone();
             us.minor = minor_radius.clone();
@@ -630,12 +654,9 @@ fn mesh_radius_of_gyration(mesh: &valenx_mesh::Mesh) -> Option<f64> {
             first[0] += v * (a.x + b.x + c.x) / 4.0;
             first[1] += v * (a.y + b.y + c.y) / 4.0;
             first[2] += v * (a.z + b.z + c.z) / 4.0;
-            second[0] +=
-                v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + (a.x + b.x + c.x).powi(2));
-            second[1] +=
-                v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + (a.y + b.y + c.y).powi(2));
-            second[2] +=
-                v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + (a.z + b.z + c.z).powi(2));
+            second[0] += v / 20.0 * (a.x * a.x + b.x * b.x + c.x * c.x + (a.x + b.x + c.x).powi(2));
+            second[1] += v / 20.0 * (a.y * a.y + b.y * b.y + c.y * c.y + (a.y + b.y + c.y).powi(2));
+            second[2] += v / 20.0 * (a.z * a.z + b.z * b.z + c.z * c.z + (a.z + b.z + c.z).powi(2));
         }
     }
     if total_vol.abs() < 1e-12 {
@@ -1917,9 +1938,8 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         // Durable small-state save → crash-safe
                                         // atomic write (sidecar + fsync + rename),
                                         // per the no-raw-fs-write guard.
-                                        let res = valenx_core::io_caps::atomic_write_str(
-                                            &path, &txt,
-                                        );
+                                        let res =
+                                            valenx_core::io_caps::atomic_write_str(&path, &txt);
                                         s.tree_status = Some(match res {
                                             Ok(()) => Ok(format!("saved {}", path.display())),
                                             Err(e) => Err(format!("save failed: {e}")),
@@ -2011,10 +2031,9 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     }
                     if let Some(res) = &s.tree_status {
                         match res {
-                            Ok(status) => ui.colored_label(
-                                egui::Color32::from_rgb(80, 220, 120),
-                                status,
-                            ),
+                            Ok(status) => {
+                                ui.colored_label(egui::Color32::from_rgb(80, 220, 120), status)
+                            }
                             Err(e) => ui.colored_label(
                                 egui::Color32::from_rgb(220, 120, 80),
                                 format!("rebuild failed: {e}"),
@@ -2029,14 +2048,17 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     if n > 1 {
                         ui.add_space(2.0);
                         ui.label(egui::RichText::new("History").strong());
-                        let resp = ui
-                            .add(egui::Slider::new(&mut s.scrub, 1..=n).integer().text("step"));
+                        let resp = ui.add(
+                            egui::Slider::new(&mut s.scrub, 1..=n)
+                                .integer()
+                                .text("step"),
+                        );
                         if resp.changed() {
                             let scrub = s.scrub;
-                            let mesh =
-                                s.history.as_ref().and_then(|h| {
-                                    tessellate_step(h, scrub, &s.body_visible).ok()
-                                });
+                            let mesh = s
+                                .history
+                                .as_ref()
+                                .and_then(|h| tessellate_step(h, scrub, &s.body_visible).ok());
                             if let Some(mesh) = mesh {
                                 s.rebuilt_mesh = Some(mesh);
                                 s.push_rebuild = true;
@@ -2124,7 +2146,10 @@ mod tests {
         let solved = r.solved_radius.expect("sketch solved");
         assert!((solved - 5.0).abs() < 1e-4, "radius = {solved}");
         let radius = r.resolved.iter().find(|(n, _)| n == "radius").unwrap();
-        assert_eq!(radius.1.as_ref().ok().map(|v| (v * 1e4).round() / 1e4), Some(5.0));
+        assert_eq!(
+            radius.1.as_ref().ok().map(|v| (v * 1e4).round() / 1e4),
+            Some(5.0)
+        );
     }
 
     #[test]
@@ -2139,7 +2164,11 @@ mod tests {
         };
         let r = run_cad(&s);
         assert!(r.solved_radius.is_none());
-        assert!(r.status.to_lowercase().contains("cyclic"), "status: {}", r.status);
+        assert!(
+            r.status.to_lowercase().contains("cyclic"),
+            "status: {}",
+            r.status
+        );
     }
 
     #[test]
@@ -2193,9 +2222,15 @@ mod tests {
         };
         let (history, status) = rebuild_tree(&s).expect("box rebuilds");
         let v = total_volume(history.last().expect("one snapshot"));
-        assert!((v - 24.0).abs() < 1e-6, "2×3×4 box volume should be 24, got {v}");
+        assert!(
+            (v - 24.0).abs() < 1e-6,
+            "2×3×4 box volume should be 24, got {v}"
+        );
         // The status line surfaces the volume in cubic model units.
-        assert!(status.contains("u³"), "status should report volume: {status}");
+        assert!(
+            status.contains("u³"),
+            "status should report volume: {status}"
+        );
 
         // The default tree punches a cylinder through a unit (size = 1) box:
         // the cut removes material, so the result has positive volume strictly
@@ -2223,7 +2258,10 @@ mod tests {
         };
         let (history, status) = rebuild_tree(&s).expect("box rebuilds");
         let a = total_area(history.last().expect("one snapshot"));
-        assert!((a - 52.0).abs() < 1e-6, "2×3×4 box area should be 52, got {a}");
+        assert!(
+            (a - 52.0).abs() < 1e-6,
+            "2×3×4 box area should be 52, got {a}"
+        );
         // The status line surfaces the area in square model units.
         assert!(status.contains("u²"), "status should report area: {status}");
     }
@@ -2246,12 +2284,21 @@ mod tests {
         assert!((dims[1] - 3.0).abs() < 1e-4, "dy {}", dims[1]);
         assert!((dims[2] - 4.0).abs() < 1e-4, "dz {}", dims[2]);
         // The status line surfaces the bounding box.
-        assert!(status.contains("bbox"), "status should report bbox: {status}");
+        assert!(
+            status.contains("bbox"),
+            "status should report bbox: {status}"
+        );
         // A box fills its bounding box exactly — fill fraction ≈ 1.0.
         let vol = total_volume(history.last().expect("snapshot"));
         let fill = fill_fraction(vol, dims).expect("fill");
-        assert!((fill - 1.0).abs() < 1e-3, "box should fill its bbox: {fill}");
-        assert!(status.contains("fill"), "status should report fill: {status}");
+        assert!(
+            (fill - 1.0).abs() < 1e-3,
+            "box should fill its bbox: {fill}"
+        );
+        assert!(
+            status.contains("fill"),
+            "status should report fill: {status}"
+        );
     }
 
     #[test]
@@ -2348,7 +2395,11 @@ mod tests {
         let c = mesh_centroid(&mesh).expect("closed mesh has a centroid");
         assert!(c[0].abs() < 1e-9, "cx {}", c[0]);
         assert!(c[1].abs() < 1e-9, "cy {}", c[1]);
-        assert!((c[2] - 1.0).abs() < 1e-9, "cz {} (should be h/4 = 1.0)", c[2]);
+        assert!(
+            (c[2] - 1.0).abs() < 1e-9,
+            "cz {} (should be h/4 = 1.0)",
+            c[2]
+        );
         // An empty mesh has no centroid.
         assert!(mesh_centroid(&valenx_mesh::Mesh::new("empty")).is_none());
     }
@@ -2423,19 +2474,28 @@ mod tests {
             tri.swap(1, 2);
         }
         let v_rev = mesh_volume(&mesh).expect("reversed box");
-        assert!((v_rev - 6.0).abs() < 1e-9, "winding-independent magnitude: {v_rev}");
+        assert!(
+            (v_rev - 6.0).abs() < 1e-9,
+            "winding-independent magnitude: {v_rev}"
+        );
         // Translation invariance: a closed surface's signed volume ignores position.
         for n in mesh.nodes.iter_mut() {
             *n += Vector3::new(10.0, -5.0, 7.0);
         }
         let v_shift = mesh_volume(&mesh).expect("translated box");
-        assert!((v_shift - 6.0).abs() < 1e-9, "translation-invariant: {v_shift}");
+        assert!(
+            (v_shift - 6.0).abs() < 1e-9,
+            "translation-invariant: {v_shift}"
+        );
         // Cubic scaling: doubling every coordinate scales the volume by 2³ = 8.
         for n in mesh.nodes.iter_mut() {
             *n *= 2.0;
         }
         let v_scaled = mesh_volume(&mesh).expect("scaled box");
-        assert!((v_scaled - 48.0).abs() < 1e-9, "V ∝ length³: 6·8 = 48, got {v_scaled}");
+        assert!(
+            (v_scaled - 48.0).abs() < 1e-9,
+            "V ∝ length³: 6·8 = 48, got {v_scaled}"
+        );
         // An empty / triangle-free mesh has no enclosed volume.
         assert!(mesh_volume(&valenx_mesh::Mesh::new("empty")).is_none());
     }
@@ -2476,9 +2536,18 @@ mod tests {
 
         let [i1, i2, i3] = mesh_principal_moments(&make(Vector3::zeros())).expect("closed box");
         let m = lx * ly * lz; // unit-density "mass" = volume = 6
-        assert!((i1 - m / 12.0 * (ly * ly + lz * lz)).abs() < 1e-9, "I1 {i1}"); // 6.5
-        assert!((i2 - m / 12.0 * (lx * lx + lz * lz)).abs() < 1e-9, "I2 {i2}"); // 5.0
-        assert!((i3 - m / 12.0 * (lx * lx + ly * ly)).abs() < 1e-9, "I3 {i3}"); // 2.5
+        assert!(
+            (i1 - m / 12.0 * (ly * ly + lz * lz)).abs() < 1e-9,
+            "I1 {i1}"
+        ); // 6.5
+        assert!(
+            (i2 - m / 12.0 * (lx * lx + lz * lz)).abs() < 1e-9,
+            "I2 {i2}"
+        ); // 5.0
+        assert!(
+            (i3 - m / 12.0 * (lx * lx + ly * ly)).abs() < 1e-9,
+            "I3 {i3}"
+        ); // 2.5
 
         // Principal moments are centroid-relative, so translating the box leaves
         // them unchanged — this validates the parallel-axis shift.
@@ -2563,7 +2632,10 @@ mod tests {
         block.connectivity = connectivity;
         mesh.element_blocks.push(block);
         let ar = mesh_max_aspect_ratio(&mesh).expect("box has triangles");
-        assert!((ar - 10.0_f64.sqrt()).abs() < 1e-9, "box max aspect ratio = √10, got {ar}");
+        assert!(
+            (ar - 10.0_f64.sqrt()).abs() < 1e-9,
+            "box max aspect ratio = √10, got {ar}"
+        );
 
         // A single equilateral triangle is the ideal: AR = 1 exactly.
         let mut eq = valenx_mesh::Mesh::new("equilateral");
@@ -2575,7 +2647,10 @@ mod tests {
         let mut eb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         eb.connectivity = vec![0, 1, 2];
         eq.element_blocks.push(eb);
-        assert!((mesh_max_aspect_ratio(&eq).unwrap() - 1.0).abs() < 1e-9, "equilateral → 1");
+        assert!(
+            (mesh_max_aspect_ratio(&eq).unwrap() - 1.0).abs() < 1e-9,
+            "equilateral → 1"
+        );
 
         // A 3-4-5 right triangle → longest/shortest = 5/3.
         let mut r345 = valenx_mesh::Mesh::new("3-4-5");
@@ -2587,10 +2662,16 @@ mod tests {
         let mut rb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         rb.connectivity = vec![0, 1, 2];
         r345.element_blocks.push(rb);
-        assert!((mesh_max_aspect_ratio(&r345).unwrap() - 5.0 / 3.0).abs() < 1e-9, "3-4-5 → 5/3");
+        assert!(
+            (mesh_max_aspect_ratio(&r345).unwrap() - 5.0 / 3.0).abs() < 1e-9,
+            "3-4-5 → 5/3"
+        );
 
         // No triangles → None.
-        assert_eq!(mesh_max_aspect_ratio(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_max_aspect_ratio(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2620,7 +2701,10 @@ mod tests {
         block.connectivity = connectivity;
         mesh.element_blocks.push(block);
         let theta = mesh_max_dihedral_angle(&mesh).expect("box has interior edges");
-        assert!((theta - FRAC_PI_2).abs() < 1e-9, "box sharpest fold = π/2, got {theta}");
+        assert!(
+            (theta - FRAC_PI_2).abs() < 1e-9,
+            "box sharpest fold = π/2, got {theta}"
+        );
 
         // Two coplanar triangles sharing an edge: the surface is flat → 0 fold.
         let mut flat = valenx_mesh::Mesh::new("flat");
@@ -2655,7 +2739,10 @@ mod tests {
         );
 
         // No interior manifold edge → None.
-        assert_eq!(mesh_max_dihedral_angle(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_max_dihedral_angle(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2671,7 +2758,10 @@ mod tests {
         let mut tb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         tb.connectivity = vec![0, 1, 2];
         tri.element_blocks.push(tb);
-        assert!((mesh_mean_edge_length(&tri).unwrap() - 4.0).abs() < 1e-9, "3-4-5 mean edge = 4");
+        assert!(
+            (mesh_mean_edge_length(&tri).unwrap() - 4.0).abs() < 1e-9,
+            "3-4-5 mean edge = 4"
+        );
 
         // The 1×2×3 box: 18 distinct edges — 12 cube (4×1 + 4×2 + 4×3 = 24) and 6
         // face diagonals (2√5 + 2√10 + 2√13) — so the mean is
@@ -2698,10 +2788,16 @@ mod tests {
         let expected =
             (24.0 + 2.0 * 5.0_f64.sqrt() + 2.0 * 10.0_f64.sqrt() + 2.0 * 13.0_f64.sqrt()) / 18.0;
         let mean = mesh_mean_edge_length(&mesh).expect("box has edges");
-        assert!((mean - expected).abs() < 1e-9, "box mean edge ≈ 2.334, got {mean}");
+        assert!(
+            (mean - expected).abs() < 1e-9,
+            "box mean edge ≈ 2.334, got {mean}"
+        );
 
         // No edges → None.
-        assert_eq!(mesh_mean_edge_length(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_mean_edge_length(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2717,7 +2813,10 @@ mod tests {
         let mut tb = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         tb.connectivity = vec![0, 1, 2];
         tri.element_blocks.push(tb);
-        assert!((mesh_total_edge_length(&tri).unwrap() - 12.0).abs() < 1e-9, "3-4-5 wireframe = 12");
+        assert!(
+            (mesh_total_edge_length(&tri).unwrap() - 12.0).abs() < 1e-9,
+            "3-4-5 wireframe = 12"
+        );
 
         // The canonical 1×2×3 box: 18 distinct edges — 12 cuboid (4×1 + 4×2 + 4×3 =
         // 24) and 6 face diagonals (2√5 + 2√10 + 2√13) → total ≈ 42.008.
@@ -2741,13 +2840,22 @@ mod tests {
         mesh.element_blocks.push(block);
         let expected = 24.0 + 2.0 * 5.0_f64.sqrt() + 2.0 * 10.0_f64.sqrt() + 2.0 * 13.0_f64.sqrt();
         let total = mesh_total_edge_length(&mesh).expect("box has edges");
-        assert!((total - expected).abs() < 1e-9, "box wireframe ≈ 42.008, got {total}");
+        assert!(
+            (total - expected).abs() < 1e-9,
+            "box wireframe ≈ 42.008, got {total}"
+        );
         // STRONG cross-check: total = mean × edge_count, threading mesh_mean_edge_length
         // (the box has 18 distinct edges, counted independently here).
         let mean = mesh_mean_edge_length(&mesh).expect("box has edges");
-        assert!((total - mean * 18.0).abs() < 1e-9, "total = mean × 18 distinct edges");
+        assert!(
+            (total - mean * 18.0).abs() < 1e-9,
+            "total = mean × 18 distinct edges"
+        );
         // No edges → None.
-        assert_eq!(mesh_total_edge_length(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_total_edge_length(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2778,7 +2886,11 @@ mod tests {
         // In this triangulation the two diagonal "pole" corners (vertices 0 and 6)
         // each touch 6 of the other 7 corners; the remaining six corners have
         // valence 4. So the maximum vertex valence is 6 — a hand-derived fact.
-        assert_eq!(mesh_max_vertex_valence(&mesh), Some(6), "box max valence = 6");
+        assert_eq!(
+            mesh_max_vertex_valence(&mesh),
+            Some(6),
+            "box max valence = 6"
+        );
 
         // STRONG non-tautological cross-check via the HANDSHAKING LEMMA: build the
         // distinct-edge set independently (the global edge-dedup path, as in
@@ -2795,7 +2907,11 @@ mod tests {
         }
         let sum_deg: usize = nbr.values().map(HashSet::len).sum();
         assert_eq!(edges.len(), 18, "box has 18 distinct edges");
-        assert_eq!(sum_deg, 2 * edges.len(), "handshaking lemma: Σdeg = 2E = 36");
+        assert_eq!(
+            sum_deg,
+            2 * edges.len(),
+            "handshaking lemma: Σdeg = 2E = 36"
+        );
         // Mean valence = 2E/V = 36/8 = 4.5 (the average matches; the max exceeds it).
         assert!(
             (sum_deg as f64 / mesh.nodes.len() as f64 - 4.5).abs() < 1e-12,
@@ -2803,7 +2919,10 @@ mod tests {
         );
 
         // No Tri3 faces → None.
-        assert_eq!(mesh_max_vertex_valence(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_max_vertex_valence(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2833,7 +2952,10 @@ mod tests {
 
         // Mean valence = 2E/V = 2·18/8 = 4.5 exactly.
         let mean = mesh_mean_vertex_valence(&mesh).expect("box has vertices");
-        assert!((mean - 4.5).abs() < 1e-12, "box mean valence = 4.5, got {mean}");
+        assert!(
+            (mean - 4.5).abs() < 1e-12,
+            "box mean valence = 4.5, got {mean}"
+        );
         // NON-TAUTOLOGICAL handshaking-lemma cross-check: independently count the
         // distinct edges and vertices; the mean degree is 2·|edges|/|V|. (The helper
         // sums per-vertex degrees; this uses the global edge set — different paths.)
@@ -2846,7 +2968,11 @@ mod tests {
                 verts.insert(j);
             }
         }
-        assert_eq!((edges.len(), verts.len()), (18, 8), "box has 18 edges, 8 vertices");
+        assert_eq!(
+            (edges.len(), verts.len()),
+            (18, 8),
+            "box has 18 edges, 8 vertices"
+        );
         assert!(
             (mean - 2.0 * edges.len() as f64 / verts.len() as f64).abs() < 1e-12,
             "mean = 2E/V"
@@ -2855,7 +2981,10 @@ mod tests {
         let max = mesh_max_vertex_valence(&mesh).expect("box has vertices") as f64;
         assert!(mean <= max, "mean {mean} ≤ max {max}");
         // No Tri3 faces → None.
-        assert_eq!(mesh_mean_vertex_valence(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_mean_vertex_valence(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2885,7 +3014,10 @@ mod tests {
 
         // The smallest facet is one of the 1×2-face half-triangles, area 1.0.
         let min = mesh_min_triangle_area(&mesh).expect("box has facets");
-        assert!((min - 1.0).abs() < 1e-9, "box min facet area = 1.0, got {min}");
+        assert!(
+            (min - 1.0).abs() < 1e-9,
+            "box min facet area = 1.0, got {min}"
+        );
 
         // NON-TAUTOLOGICAL cross-checks: independently recompute all 12 facet areas;
         // the returned min must be ≤ every one, AND the areas must SUM to the box's
@@ -2900,12 +3032,21 @@ mod tests {
                 0.5 * (b - a).cross(&(c - a)).norm()
             })
             .collect();
-        assert!(areas.iter().all(|&a| min <= a + 1e-12), "min ≤ every facet area");
+        assert!(
+            areas.iter().all(|&a| min <= a + 1e-12),
+            "min ≤ every facet area"
+        );
         let total: f64 = areas.iter().sum();
-        assert!((total - 22.0).abs() < 1e-9, "Σ facet areas = box surface area 22, got {total}");
+        assert!(
+            (total - 22.0).abs() < 1e-9,
+            "Σ facet areas = box surface area 22, got {total}"
+        );
 
         // No Tri3 faces → None.
-        assert_eq!(mesh_min_triangle_area(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_min_triangle_area(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2934,7 +3075,10 @@ mod tests {
 
         // The largest facet is one of the 2×3-face half-triangles, area 3.0.
         let max = mesh_max_triangle_area(&mesh).expect("box has facets");
-        assert!((max - 3.0).abs() < 1e-9, "box max facet area = 3.0, got {max}");
+        assert!(
+            (max - 3.0).abs() < 1e-9,
+            "box max facet area = 3.0, got {max}"
+        );
 
         // NON-TAUTOLOGICAL cross-checks: independently recompute all 12 facet areas;
         // the returned max must be ≥ every one, it brackets the min #207 (3 ≥ 1), and
@@ -2948,14 +3092,26 @@ mod tests {
                 0.5 * (b - a).cross(&(c - a)).norm()
             })
             .collect();
-        assert!(areas.iter().all(|&a| max >= a - 1e-12), "max ≥ every facet area");
+        assert!(
+            areas.iter().all(|&a| max >= a - 1e-12),
+            "max ≥ every facet area"
+        );
         let min = mesh_min_triangle_area(&mesh).expect("box has facets");
-        assert!(max >= min && (min - 1.0).abs() < 1e-9, "extremes bracket: min 1 ≤ max 3");
+        assert!(
+            max >= min && (min - 1.0).abs() < 1e-9,
+            "extremes bracket: min 1 ≤ max 3"
+        );
         let total: f64 = areas.iter().sum();
-        assert!((total - 22.0).abs() < 1e-9, "Σ facet areas = 22, got {total}");
+        assert!(
+            (total - 22.0).abs() < 1e-9,
+            "Σ facet areas = 22, got {total}"
+        );
 
         // No Tri3 faces → None.
-        assert_eq!(mesh_max_triangle_area(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_max_triangle_area(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -2984,7 +3140,10 @@ mod tests {
 
         // The 1×2×3 box has surface area 2(1·2 + 1·3 + 2·3) = 22 exactly.
         let area = mesh_surface_area(&mesh).expect("box has facets");
-        assert!((area - 22.0).abs() < 1e-9, "box surface area = 22, got {area}");
+        assert!(
+            (area - 22.0).abs() < 1e-9,
+            "box surface area = 22, got {area}"
+        );
 
         // STRONG non-tautological cross-checks: independently re-sum all 12 facet
         // areas == the returned total; it is bracketed by n·min #207 ≤ area ≤ n·max
@@ -2999,11 +3158,17 @@ mod tests {
             })
             .collect();
         let resum: f64 = areas.iter().sum();
-        assert!((area - resum).abs() < 1e-12, "area == Σ facet areas: {area} vs {resum}");
+        assert!(
+            (area - resum).abs() < 1e-12,
+            "area == Σ facet areas: {area} vs {resum}"
+        );
         let n = areas.len() as f64;
         let min = mesh_min_triangle_area(&mesh).expect("box has facets");
         let max = mesh_max_triangle_area(&mesh).expect("box has facets");
-        assert!(n * min <= area + 1e-12 && area <= n * max + 1e-12, "n·min ≤ area ≤ n·max");
+        assert!(
+            n * min <= area + 1e-12 && area <= n * max + 1e-12,
+            "n·min ≤ area ≤ n·max"
+        );
         assert!(area >= max, "a single facet cannot exceed the total");
 
         // No Tri3 faces → None.
@@ -3033,12 +3198,22 @@ mod tests {
         let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         block.connectivity = closed.clone();
         mesh.element_blocks.push(block);
-        assert_eq!(mesh_open_edge_count(&mesh), 0, "a closed box has no open edges");
+        assert_eq!(
+            mesh_open_edge_count(&mesh),
+            0,
+            "a closed box has no open edges"
+        );
 
         // Drop one triangle → its 3 edges fall from multiplicity 2 to 1.
         let mut open = mesh.clone();
-        open.element_blocks[0].connectivity.truncate(closed.len() - 3);
-        assert_eq!(mesh_open_edge_count(&open), 3, "a box missing one triangle has 3 open edges");
+        open.element_blocks[0]
+            .connectivity
+            .truncate(closed.len() - 3);
+        assert_eq!(
+            mesh_open_edge_count(&open),
+            3,
+            "a box missing one triangle has 3 open edges"
+        );
 
         // A lone triangle: all three edges are boundary.
         let mut tri = valenx_mesh::Mesh::new("tri");
@@ -3051,12 +3226,20 @@ mod tests {
         let mut tblock = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         tblock.connectivity = vec![0, 1, 2];
         tri.element_blocks.push(tblock);
-        assert_eq!(mesh_open_edge_count(&tri), 3, "a lone triangle has a 3-edge boundary");
+        assert_eq!(
+            mesh_open_edge_count(&tri),
+            3,
+            "a lone triangle has a 3-edge boundary"
+        );
 
         // Two coplanar triangles sharing edge 1–2: 5 edges, the shared one closed → 4 open.
         let mut sheet = tri.clone();
         sheet.element_blocks[0].connectivity = vec![0, 1, 2, 1, 3, 2];
-        assert_eq!(mesh_open_edge_count(&sheet), 4, "a 2-triangle sheet has a 4-edge boundary");
+        assert_eq!(
+            mesh_open_edge_count(&sheet),
+            4,
+            "a 2-triangle sheet has a 4-edge boundary"
+        );
 
         // An empty mesh has no edges.
         assert_eq!(mesh_open_edge_count(&valenx_mesh::Mesh::new("empty")), 0);
@@ -3085,7 +3268,11 @@ mod tests {
             3, 1, 2, 6, 1, 6, 5,
         ];
         mesh.element_blocks.push(block);
-        assert_eq!(mesh_nonmanifold_edge_count(&mesh), 0, "a clean box is 2-manifold");
+        assert_eq!(
+            mesh_nonmanifold_edge_count(&mesh),
+            0,
+            "a clean box is 2-manifold"
+        );
 
         // A "fan" of three triangles all sharing the edge 0–1 (a T-junction): edge
         // 0–1 has multiplicity 3 → exactly one non-manifold edge; the other six edges
@@ -3101,13 +3288,20 @@ mod tests {
         let mut fblock = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         fblock.connectivity = vec![0, 1, 2, 0, 1, 3, 0, 1, 4];
         fan.element_blocks.push(fblock);
-        assert_eq!(mesh_nonmanifold_edge_count(&fan), 1, "edge 0–1 is shared by 3 triangles");
+        assert_eq!(
+            mesh_nonmanifold_edge_count(&fan),
+            1,
+            "edge 0–1 is shared by 3 triangles"
+        );
         // A genuinely different defect than a hole: the over-shared edge is invisible
         // to the open-edge (under-shared) count, yet both break watertightness.
         assert!(mesh_open_edge_count(&fan) > 0 && !mesh_is_watertight(&fan));
 
         // An empty mesh reports zero.
-        assert_eq!(mesh_nonmanifold_edge_count(&valenx_mesh::Mesh::new("empty")), 0);
+        assert_eq!(
+            mesh_nonmanifold_edge_count(&valenx_mesh::Mesh::new("empty")),
+            0
+        );
     }
 
     #[test]
@@ -3137,12 +3331,20 @@ mod tests {
             m
         };
         // The closed (watertight) box has no holes.
-        assert_eq!(mesh_boundary_loop_count(&make(closed.clone())), 0, "closed box → 0 holes");
+        assert_eq!(
+            mesh_boundary_loop_count(&make(closed.clone())),
+            0,
+            "closed box → 0 holes"
+        );
 
         // Drop the last triangle → one triangular gap (3 open edges, but ONE loop).
         let mut one = closed.clone();
         one.truncate(closed.len() - 3);
-        assert_eq!(mesh_boundary_loop_count(&make(one)), 1, "one missing triangle → 1 hole");
+        assert_eq!(
+            mesh_boundary_loop_count(&make(one)),
+            1,
+            "one missing triangle → 1 hole"
+        );
 
         // Omit two vertex-disjoint triangles — T0=[0,2,1] (verts {0,1,2}) and
         // T3=[4,6,7] (verts {4,6,7}) — leaving two separate triangular holes.
@@ -3151,10 +3353,17 @@ mod tests {
             0, 3, 2, 4, 5, 6, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6,
             5,
         ];
-        assert_eq!(mesh_boundary_loop_count(&make(two)), 2, "two disjoint gaps → 2 holes");
+        assert_eq!(
+            mesh_boundary_loop_count(&make(two)),
+            2,
+            "two disjoint gaps → 2 holes"
+        );
 
         // An empty mesh has no boundary loops.
-        assert_eq!(mesh_boundary_loop_count(&valenx_mesh::Mesh::new("empty")), 0);
+        assert_eq!(
+            mesh_boundary_loop_count(&valenx_mesh::Mesh::new("empty")),
+            0
+        );
     }
 
     #[test]
@@ -3197,21 +3406,35 @@ mod tests {
         open.element_blocks[0]
             .connectivity
             .truncate(closed.len() - 3);
-        assert_eq!(mesh_euler_characteristic(&open), Some(1), "box minus a face: χ = 1");
+        assert_eq!(
+            mesh_euler_characteristic(&open),
+            Some(1),
+            "box minus a face: χ = 1"
+        );
 
         // Two disjoint boxes → χ is additive over components: 2 + 2 = 4.
         let mut two = mesh.clone();
         let n = two.nodes.len() as u32;
-        let shifted: Vec<Vector3<f64>> =
-            mesh.nodes.iter().map(|p| *p + Vector3::new(10.0, 0.0, 0.0)).collect();
+        let shifted: Vec<Vector3<f64>> = mesh
+            .nodes
+            .iter()
+            .map(|p| *p + Vector3::new(10.0, 0.0, 0.0))
+            .collect();
         two.nodes.extend(shifted);
         let mut block2 = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         block2.connectivity = closed.iter().map(|&i| i + n).collect();
         two.element_blocks.push(block2);
-        assert_eq!(mesh_euler_characteristic(&two), Some(4), "two disjoint boxes: χ = 4");
+        assert_eq!(
+            mesh_euler_characteristic(&two),
+            Some(4),
+            "two disjoint boxes: χ = 4"
+        );
 
         // An empty mesh has no Euler characteristic.
-        assert_eq!(mesh_euler_characteristic(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_euler_characteristic(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -3260,7 +3483,11 @@ mod tests {
             valenx_cad::box_solid(1.0, 2.0, 3.0).unwrap(),
             valenx_cad::box_solid(2.0, 2.0, 2.0).unwrap(),
         ];
-        assert_eq!(brep_euler_characteristic(&two), 4, "χ is additive over bodies");
+        assert_eq!(
+            brep_euler_characteristic(&two),
+            4,
+            "χ is additive over bodies"
+        );
 
         // No bodies → 0.
         assert_eq!(brep_euler_characteristic(&[]), 0);
@@ -3292,21 +3519,36 @@ mod tests {
         mesh.element_blocks.push(block);
 
         let defect = mesh_total_angle_defect(&mesh).expect("box has triangles");
-        assert!((defect - 4.0 * PI).abs() < 1e-9, "box ∑defect = 4π, got {defect}");
+        assert!(
+            (defect - 4.0 * PI).abs() < 1e-9,
+            "box ∑defect = 4π, got {defect}"
+        );
         // STRONG cross-check (Gauss–Bonnet): ∑defect == 2π·χ, threading the
         // combinatorial mesh_euler_characteristic (geometric vs topological paths).
         let chi = mesh_euler_characteristic(&mesh).expect("box has triangles");
-        assert!((defect - 2.0 * PI * chi as f64).abs() < 1e-9, "Gauss–Bonnet ∑defect = 2πχ");
+        assert!(
+            (defect - 2.0 * PI * chi as f64).abs() < 1e-9,
+            "Gauss–Bonnet ∑defect = 2πχ"
+        );
         // STRONG count identity: ∑defect == 2π·V − π·F (V=8 distinct verts, F=12).
-        assert!((defect - (2.0 * PI * 8.0 - PI * 12.0)).abs() < 1e-9, "∑defect = 2πV − πF");
+        assert!(
+            (defect - (2.0 * PI * 8.0 - PI * 12.0)).abs() < 1e-9,
+            "∑defect = 2πV − πF"
+        );
         // Scale-invariant — built from angles, so a ×10 zoom leaves it unchanged.
         for n in mesh.nodes.iter_mut() {
             *n *= 10.0;
         }
         let scaled = mesh_total_angle_defect(&mesh).expect("scaled box");
-        assert!((scaled - 4.0 * PI).abs() < 1e-9, "angle defect is scale-invariant: {scaled}");
+        assert!(
+            (scaled - 4.0 * PI).abs() < 1e-9,
+            "angle defect is scale-invariant: {scaled}"
+        );
         // No triangles → None.
-        assert_eq!(mesh_total_angle_defect(&valenx_mesh::Mesh::new("empty")), None);
+        assert_eq!(
+            mesh_total_angle_defect(&valenx_mesh::Mesh::new("empty")),
+            None
+        );
     }
 
     #[test]
@@ -3326,8 +3568,8 @@ mod tests {
             Vector3::new(0.0, ly, lz),
         ];
         let closed: Vec<u32> = vec![
-            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0,
-            7, 3, 1, 2, 6, 1, 6, 5,
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
         ];
         let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         block.connectivity = closed.clone();
@@ -3337,13 +3579,20 @@ mod tests {
         // Two disjoint boxes (a second block on fresh node indices) → two shells.
         let mut two = mesh.clone();
         let n = two.nodes.len() as u32;
-        let shifted: Vec<Vector3<f64>> =
-            mesh.nodes.iter().map(|p| *p + Vector3::new(10.0, 0.0, 0.0)).collect();
+        let shifted: Vec<Vector3<f64>> = mesh
+            .nodes
+            .iter()
+            .map(|p| *p + Vector3::new(10.0, 0.0, 0.0))
+            .collect();
         two.nodes.extend(shifted);
         let mut block2 = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
         block2.connectivity = closed.iter().map(|&i| i + n).collect();
         two.element_blocks.push(block2);
-        assert_eq!(mesh_shell_count(&two), 2, "two disjoint boxes are two shells");
+        assert_eq!(
+            mesh_shell_count(&two),
+            2,
+            "two disjoint boxes are two shells"
+        );
 
         // An empty mesh has no shells.
         assert_eq!(mesh_shell_count(&valenx_mesh::Mesh::new("empty")), 0);
@@ -3484,7 +3733,10 @@ mod tests {
             Vector3::new(0.0, ly, lz),
         ];
         let d = mesh_diameter(&box_mesh).expect("box has vertices");
-        assert!((d - 14.0_f64.sqrt()).abs() < 1e-12, "box diameter √14, got {d}");
+        assert!(
+            (d - 14.0_f64.sqrt()).abs() < 1e-12,
+            "box diameter √14, got {d}"
+        );
 
         // A non-axis-aligned flat triangle: the diameter is the longest side (the
         // base, 6), strictly less than the bbox diagonal √(6²+4²)=√52≈7.21 —
@@ -3496,7 +3748,10 @@ mod tests {
             Vector3::new(6.0, 0.0, 0.0),
         ];
         let dt = mesh_diameter(&tri).expect("triangle has vertices");
-        assert!((dt - 6.0).abs() < 1e-12, "triangle diameter = base 6, got {dt}");
+        assert!(
+            (dt - 6.0).abs() < 1e-12,
+            "triangle diameter = base 6, got {dt}"
+        );
         assert!(
             dt < bbox_diagonal([6.0, 4.0, 0.0]) - 1e-9,
             "diameter is strictly below the bbox diagonal"
@@ -3577,8 +3832,14 @@ mod tests {
         };
         let (_history, status) = rebuild_tree(&s).expect("box rebuilds");
         // mass = density × volume = 2.5 × 24 = 60.
-        assert!(status.contains("mass"), "status should report mass: {status}");
-        assert!(status.contains("60.0000 mass"), "mass = 2.5×24 = 60: {status}");
+        assert!(
+            status.contains("mass"),
+            "status should report mass: {status}"
+        );
+        assert!(
+            status.contains("60.0000 mass"),
+            "mass = 2.5×24 = 60: {status}"
+        );
     }
 
     #[test]
@@ -3617,14 +3878,21 @@ mod tests {
     fn feature_tree_builds_new_primitives_standalone() {
         // Each new UI primitive, as a lone New step, rebuilds to a real body —
         // exercises to_step → rebuild for sphere / cone / torus.
-        for mut step in [UiStep::new_sphere(), UiStep::new_cone(), UiStep::new_torus()] {
+        for mut step in [
+            UiStep::new_sphere(),
+            UiStep::new_cone(),
+            UiStep::new_torus(),
+        ] {
             step.op = Op::New;
             let s = CadWorkbenchState {
                 steps: vec![step],
                 ..CadWorkbenchState::default()
             };
             let (history, _) = rebuild_tree(&s).expect("primitive rebuilds");
-            assert!(history.last().unwrap()[0].faces() > 0, "primitive has faces");
+            assert!(
+                history.last().unwrap()[0].faces() > 0,
+                "primitive has faces"
+            );
         }
     }
 
@@ -3700,7 +3968,11 @@ mod tests {
             ..CadWorkbenchState::default()
         };
         let (history, status) = rebuild_tree(&s).expect("two bodies rebuild");
-        assert_eq!(history.last().unwrap().len(), 2, "final step has two bodies");
+        assert_eq!(
+            history.last().unwrap().len(),
+            2,
+            "final step has two bodies"
+        );
         assert!(status.contains("2 bodies"), "status: {status}");
         // Both bodies concatenate into one non-empty display mesh.
         let mesh = tessellate_step(&history, history.len(), &[]).expect("merge");
@@ -3737,7 +4009,10 @@ mod tests {
             std::env::temp_dir().join(format!("valenx_cad_export_{}.stl", std::process::id()));
         export_stl(&history, history.len(), &path).expect("export");
         let len = std::fs::metadata(&path).expect("stl file exists").len();
-        assert!(len > 84, "binary STL = 80B header + 4B count + triangles ({len} B)");
+        assert!(
+            len > 84,
+            "binary STL = 80B header + 4B count + triangles ({len} B)"
+        );
         let _ = std::fs::remove_file(&path);
     }
 }

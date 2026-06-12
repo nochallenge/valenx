@@ -91,9 +91,7 @@ impl SelectionModel {
     /// `true` if this model assigns fitness `1.0` to every genome pair.
     pub fn is_neutral(&self) -> bool {
         match self {
-            SelectionModel::Additive(c) | SelectionModel::Multiplicative(c) => {
-                c.is_neutral()
-            }
+            SelectionModel::Additive(c) | SelectionModel::Multiplicative(c) => c.is_neutral(),
             SelectionModel::Epistatic {
                 coefficients,
                 epsilon,
@@ -187,9 +185,7 @@ impl SelectionModel {
             Ok(())
         };
         match self {
-            SelectionModel::Additive(c) | SelectionModel::Multiplicative(c) => {
-                check(c)
-            }
+            SelectionModel::Additive(c) | SelectionModel::Multiplicative(c) => check(c),
             SelectionModel::Epistatic { coefficients, .. } => check(coefficients),
         }
     }

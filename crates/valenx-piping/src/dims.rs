@@ -122,6 +122,9 @@ mod tests {
 
     #[test]
     fn schedule_custom_passes_through() {
-        assert_eq!(wall_thickness_in("anything", Schedule::Custom(0.5)), Some(0.5));
+        assert_eq!(
+            wall_thickness_in("anything", Schedule::Custom(0.5)),
+            Some(0.5)
+        );
     }
 }

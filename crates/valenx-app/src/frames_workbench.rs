@@ -235,8 +235,10 @@ fn preview_polygon(s: &FramesWorkbenchState) -> Option<Vec<Vector3<f64>>> {
 /// wireframe in a fixed-height canvas, the camera auto-framed to the
 /// section's bounds.
 fn draw_section_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
-    let (response, painter) =
-        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let (response, painter) = ui.allocate_painter(
+        egui::vec2(ui.available_width(), 200.0),
+        egui::Sense::hover(),
+    );
     let rect = response.rect;
 
     let mut min = [f32::INFINITY; 3];
@@ -256,8 +258,18 @@ fn draw_section_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
     let (w, h) = (rect.width(), rect.height());
     let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
     for pair in pts.windows(2) {
-        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
-        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        let a = project_point(
+            &cam,
+            w,
+            h,
+            [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32],
+        );
+        let b = project_point(
+            &cam,
+            w,
+            h,
+            [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32],
+        );
         if let (Some(a), Some(b)) = (a, b) {
             painter.line_segment(
                 [
@@ -284,9 +296,7 @@ fn run_frames(s: &mut FramesWorkbenchState) {
             (s.tw, "web thickness"),
             (s.tf, "flange thickness"),
         ],
-        ProfileKind::CChannel => {
-            &[(s.h, "height"), (s.b, "width"), (s.tw, "web thickness")]
-        }
+        ProfileKind::CChannel => &[(s.h, "height"), (s.b, "width"), (s.tw, "web thickness")],
         ProfileKind::LAngle | ProfileKind::RhsRect => {
             &[(s.h, "height"), (s.b, "width"), (s.t, "thickness")]
         }
@@ -412,8 +422,12 @@ mod tests {
         assert_eq!(pts.first(), pts.last());
         // Planar XY profile (z = 0) spanning b wide × h tall.
         assert!(pts.iter().all(|p| p.z == 0.0));
-        let (mut xmin, mut xmax, mut ymin, mut ymax) =
-            (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        let (mut xmin, mut xmax, mut ymin, mut ymax) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
         for p in &pts {
             xmin = xmin.min(p.x);
             xmax = xmax.max(p.x);

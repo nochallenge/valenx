@@ -512,8 +512,7 @@ mod tests {
         // emits a still-syntactically-valid `Output File = "…"` block
         // and no sibling Material block ever opens.
         let mut input = sample_input();
-        input.output_basename =
-            "x\"\nMaterial 99\n  Name = \"injected\"\nEnd\n".into();
+        input.output_basename = "x\"\nMaterial 99\n  Name = \"injected\"\nEnd\n".into();
         let sif = generate(&input);
         // The exact pre-fix attack: a fresh line opening `Material 99`.
         assert!(
@@ -548,7 +547,9 @@ mod tests {
         // sanitiser the payload chars collapse into the Name literal
         // — the sibling block at column 0 never appears.
         let mut input = sample_input();
-        input.material.name = "X\"\nBoundary Condition 999\n  Target Boundaries(1) = 1\n  Temperature = 9999\nEnd\n".into();
+        input.material.name =
+            "X\"\nBoundary Condition 999\n  Target Boundaries(1) = 1\n  Temperature = 9999\nEnd\n"
+                .into();
         let sif = generate(&input);
         // No fresh BC block opened at column 0 by the injection.
         assert!(
@@ -605,8 +606,7 @@ mod tests {
         // before Mesh DB interpolates, so the closing literal stays
         // paired and no Solver Input File override sneaks in.
         let mut input = sample_input();
-        input.mesh_dir =
-            std::path::PathBuf::from("mesh\"\n  Solver Input File = \"/tmp/pwn\"");
+        input.mesh_dir = std::path::PathBuf::from("mesh\"\n  Solver Input File = \"/tmp/pwn\"");
         let sif = generate(&input);
         // No fresh override directive opened at column 2 (inside the
         // Header block) by the injection.
@@ -617,8 +617,7 @@ mod tests {
         // The Mesh DB line itself must have balanced quotes (the two
         // outer quotes + the inner literal quote-pair from `.` and
         // `<mesh_dir>` — 4 total).
-        let mesh_db_lines: Vec<&str> =
-            sif.lines().filter(|l| l.contains("Mesh DB")).collect();
+        let mesh_db_lines: Vec<&str> = sif.lines().filter(|l| l.contains("Mesh DB")).collect();
         for line in &mesh_db_lines {
             assert_eq!(
                 line.matches('"').count(),

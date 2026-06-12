@@ -57,9 +57,7 @@ impl Su2Input {
             &toml_path,
             valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize,
         )
-        .map_err(|e| {
-            AdapterError::Other(anyhow::anyhow!("read {}: {e}", toml_path.display()))
-        })?;
+        .map_err(|e| AdapterError::Other(anyhow::anyhow!("read {}: {e}", toml_path.display())))?;
         let parsed: CaseToml = toml::from_str(&text).map_err(|e| {
             AdapterError::Other(anyhow::anyhow!("parse {}: {e}", toml_path.display()))
         })?;

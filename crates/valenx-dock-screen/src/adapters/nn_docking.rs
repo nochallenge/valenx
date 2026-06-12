@@ -62,9 +62,7 @@ impl NnDockingTool {
     /// An install hint surfaced when the tool is missing.
     fn install_hint(self) -> &'static str {
         match self {
-            NnDockingTool::DiffDock => {
-                "install DiffDock from github.com/gcorso/DiffDock"
-            }
+            NnDockingTool::DiffDock => "install DiffDock from github.com/gcorso/DiffDock",
             NnDockingTool::Gnina => {
                 "install GNINA from github.com/gnina/gnina (a CNN-scored AutoDock fork)"
             }

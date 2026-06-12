@@ -17,12 +17,12 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufWriter, Read, Write};
-use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt as _;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt as _;
+use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Round-27 STRUCTURAL: process-monotonic counter appended to the
 /// sidecar `<basename>.tmp.<pid>.<counter>` name so two concurrent
@@ -489,8 +489,7 @@ pub fn read_capped_to_string(path: &Path, cap: usize) -> Result<String, std::io:
     std::fs::File::open(path)?
         .take(cap as u64)
         .read_to_end(&mut buf)?;
-    String::from_utf8(buf)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    String::from_utf8(buf).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
 
 /// Read an entire file to a `Vec<u8>`, refusing to allocate more than
@@ -1116,8 +1115,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let target = dir.join("contended.bin");
         const N: usize = 10;
-        let payloads: Vec<Vec<u8>> =
-            (0..N).map(|i| format!("payload-{i}").into_bytes()).collect();
+        let payloads: Vec<Vec<u8>> = (0..N)
+            .map(|i| format!("payload-{i}").into_bytes())
+            .collect();
         let barrier = Arc::new(Barrier::new(N));
         let mut handles = Vec::with_capacity(N);
         for payload in payloads.clone() {
@@ -1249,9 +1249,8 @@ mod tests {
         // will try to create_new — open(2) with O_NOFOLLOW must
         // refuse it.
         symlink(&bait, &sidecar).unwrap();
-        let err = atomic_write_bytes(&target, b"payload").expect_err(
-            "atomic_write_bytes must refuse a symlinked sidecar via O_NOFOLLOW",
-        );
+        let err = atomic_write_bytes(&target, b"payload")
+            .expect_err("atomic_write_bytes must refuse a symlinked sidecar via O_NOFOLLOW");
         // O_NOFOLLOW returns ELOOP on Linux; on macOS it's EMLINK.
         // Either way the kernel surfaces an `Err`; we don't pin the
         // specific kind because POSIX permits a few variations.
@@ -1306,11 +1305,7 @@ mod tests {
             std::fs::read_dir(&dir)
                 .unwrap()
                 .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.file_name()
-                        .to_string_lossy()
-                        .contains(".tmp.")
-                })
+                .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
                 .count()
         };
 

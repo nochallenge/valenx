@@ -58,8 +58,7 @@ impl XcContribution {
         XcContribution {
             energy_density: self.energy_density + other.energy_density,
             potential: self.potential + other.potential,
-            gradient_potential: self.gradient_potential
-                + other.gradient_potential,
+            gradient_potential: self.gradient_potential + other.gradient_potential,
         }
     }
 
@@ -68,8 +67,7 @@ impl XcContribution {
         XcContribution {
             energy_density: self.energy_density - other.energy_density,
             potential: self.potential - other.potential,
-            gradient_potential: self.gradient_potential
-                - other.gradient_potential,
+            gradient_potential: self.gradient_potential - other.gradient_potential,
         }
     }
 
@@ -104,9 +102,7 @@ impl Functional {
     /// `"b3lyp"` / `"b3-lyp"`.
     pub fn from_name(name: &str) -> Option<Functional> {
         match name.trim().to_ascii_lowercase().as_str() {
-            "lda" | "svwn" | "svwn5" | "slater" | "s-vwn" => {
-                Some(Functional::Lda)
-            }
+            "lda" | "svwn" | "svwn5" | "slater" | "s-vwn" => Some(Functional::Lda),
             "pbe" | "pbepbe" => Some(Functional::Pbe),
             "b3lyp" | "b3-lyp" | "becke3lyp" => Some(Functional::B3lyp),
             _ => None,
@@ -197,10 +193,7 @@ mod tests {
         assert!(Functional::B3lyp.needs_gradient());
         assert_eq!(Functional::Lda.exact_exchange_fraction(), 0.0);
         assert_eq!(Functional::Pbe.exact_exchange_fraction(), 0.0);
-        assert!(
-            (Functional::B3lyp.exact_exchange_fraction() - 0.20).abs()
-                < 1.0e-12
-        );
+        assert!((Functional::B3lyp.exact_exchange_fraction() - 0.20).abs() < 1.0e-12);
     }
 
     /// Dispatch through `evaluate` matches calling the functional

@@ -83,8 +83,7 @@ impl BerendsenBarostat {
     /// pressure and step. Clamped to `[0.98, 1.02]` per step — the
     /// standard guard against a runaway rescale.
     pub fn mu(&self, pressure: f64, dt: f64) -> f64 {
-        let factor =
-            1.0 - (self.compressibility * dt / self.tau) * (self.target - pressure);
+        let factor = 1.0 - (self.compressibility * dt / self.tau) * (self.target - pressure);
         factor.clamp(0.94, 1.06).cbrt()
     }
 }
@@ -98,20 +97,12 @@ impl Barostat for BerendsenBarostat {
         self.target
     }
 
-    fn apply(
-        &mut self,
-        system: &mut System,
-        instantaneous_pressure: f64,
-        dt: f64,
-    ) -> Result<()> {
+    fn apply(&mut self, system: &mut System, instantaneous_pressure: f64, dt: f64) -> Result<()> {
         if !(dt.is_finite() && dt > 0.0) {
             return Err(MdError::invalid("dt", "must be finite and positive"));
         }
         if !system.cell.is_periodic() {
-            return Err(MdError::invalid(
-                "cell",
-                "a barostat needs a periodic box",
-            ));
+            return Err(MdError::invalid("cell", "a barostat needs a periodic box"));
         }
         let mu = self.mu(instantaneous_pressure, dt);
         rescale_system(system, mu)
@@ -180,20 +171,12 @@ impl Barostat for ParrinelloRahman {
         self.target
     }
 
-    fn apply(
-        &mut self,
-        system: &mut System,
-        instantaneous_pressure: f64,
-        dt: f64,
-    ) -> Result<()> {
+    fn apply(&mut self, system: &mut System, instantaneous_pressure: f64, dt: f64) -> Result<()> {
         if !(dt.is_finite() && dt > 0.0) {
             return Err(MdError::invalid("dt", "must be finite and positive"));
         }
         if !system.cell.is_periodic() {
-            return Err(MdError::invalid(
-                "cell",
-                "a barostat needs a periodic box",
-            ));
+            return Err(MdError::invalid("cell", "a barostat needs a periodic box"));
         }
         // Second-order box dynamics: the box "acceleration" is the
         // pressure imbalance divided by the barostat mass; the
@@ -312,8 +295,7 @@ mod tests {
         // expanding so the pressure relaxes toward the target.
         let mut sys = boxed_system(4.0);
         let v0 = sys.cell.volume();
-        let mut baro =
-            ParrinelloRahman::new(1.0, 1.0, WATER_COMPRESSIBILITY).unwrap();
+        let mut baro = ParrinelloRahman::new(1.0, 1.0, WATER_COMPRESSIBILITY).unwrap();
         for _ in 0..500 {
             baro.apply(&mut sys, 1000.0, 0.002).unwrap();
         }
@@ -324,8 +306,7 @@ mod tests {
     #[test]
     fn parrinello_rahman_box_velocity_evolves() {
         let mut sys = boxed_system(4.0);
-        let mut baro =
-            ParrinelloRahman::new(1.0, 1.0, WATER_COMPRESSIBILITY).unwrap();
+        let mut baro = ParrinelloRahman::new(1.0, 1.0, WATER_COMPRESSIBILITY).unwrap();
         assert_eq!(baro.box_velocity(), 0.0);
         baro.apply(&mut sys, 3000.0, 0.002).unwrap();
         assert!(baro.box_velocity() != 0.0);

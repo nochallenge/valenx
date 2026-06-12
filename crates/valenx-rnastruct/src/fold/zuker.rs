@@ -113,10 +113,7 @@ pub fn mfe_d2(seq: &RnaSeq) -> Result<MfeResult> {
 ///   match the sequence length.
 /// - [`RnaStructError::Structure`] if a forced pair could not be
 ///   honored (the hard constraints are contradictory / infeasible).
-pub fn mfe_constrained(
-    seq: &RnaSeq,
-    constraints: &FoldConstraints,
-) -> Result<MfeResult> {
+pub fn mfe_constrained(seq: &RnaSeq, constraints: &FoldConstraints) -> Result<MfeResult> {
     let codes = seq.codes();
     let n = codes.len();
     if constraints.len() != n {
@@ -218,8 +215,16 @@ pub(crate) fn fill(codes: &[u8], cons: &FoldConstraints) -> ZukerTables {
                             continue;
                         }
                         let il = energy::internal_loop_energy(
-                            codes[i], codes[j], codes[k], codes[l], left, right,
-                            codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                            codes[i],
+                            codes[j],
+                            codes[k],
+                            codes[l],
+                            left,
+                            right,
+                            codes[i + 1],
+                            codes[j - 1],
+                            codes[k - 1],
+                            codes[l + 1],
                         );
                         vij = vij.min(il + inner);
                     }
@@ -277,16 +282,14 @@ pub(crate) fn fill(codes: &[u8], cons: &FoldConstraints) -> ZukerTables {
             if cons.unpaired_allowed(i) {
                 let rest = t.wm2[t.idx(i + 1, j)];
                 if rest < INF / 2.0 {
-                    wm2ij =
-                        wm2ij.min(rest + multiloop::PER_UNPAIRED + cons.soft_unpaired(i));
+                    wm2ij = wm2ij.min(rest + multiloop::PER_UNPAIRED + cons.soft_unpaired(i));
                 }
             }
             // j unpaired.
             if cons.unpaired_allowed(j) {
                 let rest = t.wm2[t.idx(i, j - 1)];
                 if rest < INF / 2.0 {
-                    wm2ij =
-                        wm2ij.min(rest + multiloop::PER_UNPAIRED + cons.soft_unpaired(j));
+                    wm2ij = wm2ij.min(rest + multiloop::PER_UNPAIRED + cons.soft_unpaired(j));
                 }
             }
             // split: >= 1 branch (wm) on the left, >= 1 branch (wm) on
@@ -415,7 +418,10 @@ pub(crate) fn traceback(
 
                 // hairpin?
                 let loop_bases = &codes[(i + 1)..j];
-                if feq(target, energy::hairpin_energy(codes[i], codes[j], loop_bases)) {
+                if feq(
+                    target,
+                    energy::hairpin_energy(codes[i], codes[j], loop_bases),
+                ) {
                     continue;
                 }
                 // internal / bulge / stack?
@@ -437,8 +443,16 @@ pub(crate) fn traceback(
                             continue;
                         }
                         let il = energy::internal_loop_energy(
-                            codes[i], codes[j], codes[k], codes[l], left, right,
-                            codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                            codes[i],
+                            codes[j],
+                            codes[k],
+                            codes[l],
+                            left,
+                            right,
+                            codes[i + 1],
+                            codes[j - 1],
+                            codes[k - 1],
+                            codes[l + 1],
                         );
                         if feq(target, il + inner) {
                             stack.push(Job::V(k, l));
@@ -573,7 +587,11 @@ mod tests {
         let seq = RnaSeq::parse("GGGGGAAAACCCCC").unwrap();
         let r = mfe(&seq).unwrap();
         assert!(r.structure.n_pairs() >= 3, "expected a stem, got {r:?}");
-        assert!(r.energy < 0.0, "stable hairpin should have E<0: {}", r.energy);
+        assert!(
+            r.energy < 0.0,
+            "stable hairpin should have E<0: {}",
+            r.energy
+        );
         assert!(r.structure.is_nested());
     }
 

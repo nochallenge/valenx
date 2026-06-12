@@ -57,10 +57,7 @@ impl Selection {
     pub fn parse(query: &str) -> Result<Selection> {
         let tokens = lex(query);
         if tokens.is_empty() {
-            return Err(BiostructError::invalid_selection(
-                query,
-                "empty selection",
-            ));
+            return Err(BiostructError::invalid_selection(query, "empty selection"));
         }
         let mut parser = Parser {
             tokens: &tokens,
@@ -171,9 +168,7 @@ fn test_pred(p: &Pred, atom: &Atom, residue: &Residue, chain_id: &str) -> bool {
             .any(|(lo, hi)| residue.seq_num >= *lo && residue.seq_num <= *hi),
         Pred::Resn(names) => names.iter().any(|n| n.eq_ignore_ascii_case(&residue.name)),
         Pred::Name(names) => names.iter().any(|n| n.eq_ignore_ascii_case(&atom.name)),
-        Pred::Element(syms) => {
-            syms.iter().any(|s| s.eq_ignore_ascii_case(&atom.element))
-        }
+        Pred::Element(syms) => syms.iter().any(|s| s.eq_ignore_ascii_case(&atom.element)),
         Pred::Hetatm => residue.hetatm,
         Pred::Protein => residue.kind() == ResidueKind::AminoAcid,
         Pred::Nucleic => {
@@ -181,8 +176,7 @@ fn test_pred(p: &Pred, atom: &Atom, residue: &Residue, chain_id: &str) -> bool {
         }
         Pred::Water => residue.kind() == ResidueKind::Water,
         Pred::Backbone => {
-            residue.kind() == ResidueKind::AminoAcid
-                && BACKBONE.contains(&atom.name.as_str())
+            residue.kind() == ResidueKind::AminoAcid && BACKBONE.contains(&atom.name.as_str())
         }
         Pred::Sidechain => {
             residue.kind() == ResidueKind::AminoAcid

@@ -159,7 +159,7 @@ mod validation {
 
     fn helium() -> MolecularGeometry {
         MolecularGeometry::new(vec![
-            Atom::from_symbol_angstrom("He", [0.0, 0.0, 0.0]).unwrap(),
+            Atom::from_symbol_angstrom("He", [0.0, 0.0, 0.0]).unwrap()
         ])
     }
 
@@ -244,9 +244,7 @@ mod validation {
                 .sqrt();
             let rho = (-2.0 * r).exp() / pi;
             n += gp.weight * rho;
-            e_x += gp.weight
-                * rho
-                * functional::lda::slater_exchange(rho).energy_density;
+            e_x += gp.weight * rho * functional::lda::slater_exchange(rho).energy_density;
         }
         // The density itself integrates to 1 electron.
         assert!((n - 1.0).abs() < 1.0e-5, "∫ρ = {n}, expected 1");
@@ -449,10 +447,7 @@ mod validation {
             let diff = (Functional::Pbe.evaluate(rho, g).energy_density
                 - pbe_uniform.energy_density)
                 .abs();
-            assert!(
-                diff <= prev,
-                "PBE not converging to LDA: {diff} > {prev}"
-            );
+            assert!(diff <= prev, "PBE not converging to LDA: {diff} > {prev}");
             prev = diff;
         }
         assert!(prev < 1.0e-4, "residual at small gradient = {prev}");
@@ -538,9 +533,7 @@ mod validation {
             let w = gp.weight;
             let phi = &gd.phi[pi];
             let dphi = &gd.dphi[pi];
-            let gga_vec = if grad_norm > 1.0e-10
-                && xc.gradient_potential != 0.0
-            {
+            let gga_vec = if grad_norm > 1.0e-10 && xc.gradient_potential != 0.0 {
                 let f = xc.gradient_potential / grad_norm;
                 let gr = gd.grad[pi];
                 [f * gr[0], f * gr[1], f * gr[2]]
@@ -550,12 +543,9 @@ mod validation {
             for mu in 0..n {
                 for nu in 0..n {
                     let mut c = xc.potential * phi[mu] * phi[nu];
-                    c += gga_vec[0]
-                        * (phi[mu] * dphi[nu][0] + phi[nu] * dphi[mu][0]);
-                    c += gga_vec[1]
-                        * (phi[mu] * dphi[nu][1] + phi[nu] * dphi[mu][1]);
-                    c += gga_vec[2]
-                        * (phi[mu] * dphi[nu][2] + phi[nu] * dphi[mu][2]);
+                    c += gga_vec[0] * (phi[mu] * dphi[nu][0] + phi[nu] * dphi[mu][0]);
+                    c += gga_vec[1] * (phi[mu] * dphi[nu][1] + phi[nu] * dphi[mu][1]);
+                    c += gga_vec[2] * (phi[mu] * dphi[nu][2] + phi[nu] * dphi[mu][2]);
                     v_xc[(mu, nu)] += w * c;
                 }
             }

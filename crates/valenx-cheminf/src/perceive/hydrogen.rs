@@ -159,7 +159,10 @@ mod tests {
         // ethanol C2H6O → 6 explicit H nodes
         assert_eq!(expanded.atoms.iter().filter(|a| a.is_hydrogen()).count(), 6);
         assert_eq!(expanded.atom_count(), heavy + 6);
-        assert!(expanded.atoms.iter().all(|a| a.implicit_h == 0 || a.is_hydrogen()));
+        assert!(expanded
+            .atoms
+            .iter()
+            .all(|a| a.implicit_h == 0 || a.is_hydrogen()));
 
         let collapsed = remove_explicit_hydrogens(&expanded);
         assert_eq!(collapsed.heavy_atom_count(), heavy);

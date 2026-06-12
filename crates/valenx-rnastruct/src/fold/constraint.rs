@@ -163,9 +163,7 @@ impl FoldConstraints {
         if i >= self.n || j >= self.n {
             return false;
         }
-        if self.base[i] == BaseConstraint::Unpaired
-            || self.base[j] == BaseConstraint::Unpaired
-        {
+        if self.base[i] == BaseConstraint::Unpaired || self.base[j] == BaseConstraint::Unpaired {
             return false;
         }
         let key = if i < j { (i, j) } else { (j, i) };

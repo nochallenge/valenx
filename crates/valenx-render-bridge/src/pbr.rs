@@ -373,11 +373,7 @@ pub fn compute_brdf_lut(size: usize, samples: usize) -> BrdfLut {
 fn integrate_brdf_cell(n_dot_v: f32, roughness: f32, samples: usize) -> (f32, f32) {
     // Place the view in the X-Z plane at the requested n·v (the normal
     // is +Z).
-    let v = [
-        (1.0 - n_dot_v * n_dot_v).max(0.0).sqrt(),
-        0.0,
-        n_dot_v,
-    ];
+    let v = [(1.0 - n_dot_v * n_dot_v).max(0.0).sqrt(), 0.0, n_dot_v];
     let alpha = roughness * roughness;
     // IBL geometry remap: k = roughness²/2 (the Karis split-sum IBL
     // remap — distinct from the direct-lighting (r+1)²/8 remap, which
@@ -393,8 +389,7 @@ fn integrate_brdf_cell(n_dot_v: f32, roughness: f32, samples: usize) -> (f32, f3
         let (u1, u2) = hammersley_2d(s, samples);
         // GGX importance-sampled half-vector about +Z.
         let phi = std::f32::consts::TAU * u1;
-        let cos_theta =
-            (((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2)).max(0.0)).sqrt();
+        let cos_theta = (((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2)).max(0.0)).sqrt();
         let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
         let h = [sin_theta * phi.cos(), sin_theta * phi.sin(), cos_theta];
         // l = reflect(-v, h) = 2·(v·h)·h − v.
@@ -509,11 +504,7 @@ pub fn specular_ibl(
 /// 3. `Lo = (kd·albedo/π + specular) · radiance · (n·l)`.
 ///
 /// A light below the horizon (`n·l ≤ 0`) contributes nothing.
-pub fn brdf_direct(
-    surface: &SurfacePoint,
-    material: &Material,
-    light: &IncidentLight,
-) -> [f32; 3] {
+pub fn brdf_direct(surface: &SurfacePoint, material: &Material, light: &IncidentLight) -> [f32; 3] {
     let n = match normalize3(surface.normal) {
         Some(v) => v,
         None => return [0.0; 3],
@@ -755,11 +746,7 @@ pub fn incident_light(light: &crate::Light, point: [f32; 3]) -> Option<IncidentL
             let dir = normalize3(to_light)?;
             // Cone falloff: angle between the spot axis and the
             // direction *from* the spot toward the point.
-            let axis = normalize3([
-                direction.x as f32,
-                direction.y as f32,
-                direction.z as f32,
-            ])?;
+            let axis = normalize3([direction.x as f32, direction.y as f32, direction.z as f32])?;
             // From the spot toward the point = −dir.
             let cos_angle = dot3(axis, neg3(dir));
             let cos_inner = (*inner_angle_rad as f32).cos();
@@ -1227,10 +1214,16 @@ mod tests {
             assert!((0.0..=1.0).contains(&c), "display colour {c} out of [0,1]");
         }
         // A mid linear value gamma-encodes brighter than itself.
-        let mid = ShadedColor { rgb: [1.0, 1.0, 1.0] };
+        let mid = ShadedColor {
+            rgb: [1.0, 1.0, 1.0],
+        };
         let d = mid.to_display_srgb();
         // 1.0 linear → Reinhard 0.5 → sRGB ≈ 0.735.
-        assert!(d[0] > 0.5, "sRGB-encoded mid-tone should be lifted: {}", d[0]);
+        assert!(
+            d[0] > 0.5,
+            "sRGB-encoded mid-tone should be lifted: {}",
+            d[0]
+        );
     }
 
     #[test]

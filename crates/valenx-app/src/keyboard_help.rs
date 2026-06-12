@@ -43,17 +43,9 @@ pub fn render_cheatsheet(ctx: &egui::Context, open: &mut bool) {
                     ui.end_row();
 
                     for a in ShortcutAction::ALL {
-                        ui.label(
-                            egui::RichText::new(a.binding())
-                                .monospace()
-                                .strong(),
-                        );
+                        ui.label(egui::RichText::new(a.binding()).monospace().strong());
                         ui.label(a.label());
-                        ui.label(
-                            egui::RichText::new(a.description())
-                                .weak()
-                                .small(),
-                        );
+                        ui.label(egui::RichText::new(a.description()).weak().small());
                         ui.end_row();
                     }
                 });
@@ -61,11 +53,9 @@ pub fn render_cheatsheet(ctx: &egui::Context, open: &mut bool) {
             ui.add_space(8.0);
             ui.separator();
             ui.label(
-                egui::RichText::new(
-                    "F1 opens contextual help for whichever panel is in focus.",
-                )
-                .weak()
-                .small(),
+                egui::RichText::new("F1 opens contextual help for whichever panel is in focus.")
+                    .weak()
+                    .small(),
             );
         });
 }

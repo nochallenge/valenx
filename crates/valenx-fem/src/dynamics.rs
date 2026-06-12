@@ -223,9 +223,7 @@ impl DynamicsSolution {
         }
         self.frames
             .iter()
-            .filter_map(|f| {
-                f.displacement.get(node).map(|d| (f.time, d[axis]))
-            })
+            .filter_map(|f| f.displacement.get(node).map(|d| (f.time, d[axis])))
             .collect()
     }
 
@@ -420,10 +418,7 @@ pub fn solve_transient_dynamics(
     }
 
     // --- initial acceleration: M·a₀ = f − C·v₀ − K·u₀ ---
-    let m_chol = m
-        .clone()
-        .cholesky()
-        .ok_or(NativeSolverError::SolveFailed)?;
+    let m_chol = m.clone().cholesky().ok_or(NativeSolverError::SolveFailed)?;
     let rhs0 = &f - &c * &vel - &k * &u;
     let mut acc = m_chol.solve(&rhs0);
 
@@ -448,8 +443,7 @@ pub fn solve_transient_dynamics(
     // parameters), so a sparse Cholesky is exact and fast. Convert the
     // dense K_eff to CSC.
     let k_eff_csc = dense_to_csc(&k_eff);
-    let k_eff_chol = CscCholesky::factor(&k_eff_csc)
-        .map_err(|_| NativeSolverError::SolveFailed)?;
+    let k_eff_chol = CscCholesky::factor(&k_eff_csc).map_err(|_| NativeSolverError::SolveFailed)?;
 
     let mut frames = Vec::with_capacity(controls.n_steps);
     let mut time = 0.0;
@@ -467,8 +461,7 @@ pub fn solve_transient_dynamics(
 
         // --- recover acceleration and velocity (Newmark relations) ---
         // a_{n+1} = a0·(u_{n+1}−u_n) − a2·v_n − a3·a_n.
-        let acc_next =
-            (&u_next - &u) * a0 - &vel * a2 - &acc * a3;
+        let acc_next = (&u_next - &u) * a0 - &vel * a2 - &acc * a3;
         // v_{n+1} = v_n + a6·a_n + a7·a_{n+1}.
         let vel_next = &vel + &acc * a6 + &acc_next * a7;
 
@@ -633,13 +626,7 @@ mod tests {
         // --- the first mode shape + frequency from the modal solver ---
         // Seeding the transient run with mode 1 makes its free
         // vibration a single pure mode; ω₁ gives the analytic period.
-        let modal = crate::modal_solver::solve_modal(
-            &mesh,
-            &mat,
-            &constraints,
-            1,
-        )
-        .unwrap();
+        let modal = crate::modal_solver::solve_modal(&mesh, &mat, &constraints, 1).unwrap();
         let omega = modal.modes[0].angular_frequency;
         assert!(omega > 0.0, "fundamental ω must be positive");
         let analytic_period = 2.0 * std::f64::consts::PI / omega;
@@ -760,10 +747,7 @@ mod tests {
         }
         // Release from the (scaled) first mode shape — a single-mode
         // initial condition, as in the natural-period test.
-        let modal = crate::modal_solver::solve_modal(
-            &mesh, &mat, &constraints, 1,
-        )
-        .unwrap();
+        let modal = crate::modal_solver::solve_modal(&mesh, &mat, &constraints, 1).unwrap();
         let mode1 = &modal.modes[0];
         let amp_scale = 1.0e-3 / mode1.max_amplitude().max(1e-30);
         let initial: Vec<NodalInitialState> = (0..mesh.nodes.len())
@@ -790,8 +774,7 @@ mod tests {
                 }
             }
         }
-        let period =
-            2.0 * std::f64::consts::PI / modal.modes[0].angular_frequency;
+        let period = 2.0 * std::f64::consts::PI / modal.modes[0].angular_frequency;
         let dt = period / 80.0;
         let n_steps = (6.0 * 80.0) as usize;
 

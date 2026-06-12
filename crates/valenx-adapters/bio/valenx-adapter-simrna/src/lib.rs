@@ -144,10 +144,7 @@ impl Adapter for SimRnaAdapter {
         let source_config = if input.config.is_absolute() {
             input.config.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.config,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.config)?
         };
         if !source_config.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -163,10 +160,7 @@ impl Adapter for SimRnaAdapter {
         let source_sequence = if input.sequence.is_absolute() {
             input.sequence.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.sequence,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.sequence)?
         };
         if !source_sequence.is_file() {
             return Err(AdapterError::InvalidCase {

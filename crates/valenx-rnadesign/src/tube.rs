@@ -694,14 +694,11 @@ pub fn design_tube(
             Ok(e) => e,
             Err(_) => continue,
         };
-        let trial_eq = match solve_tube_equilibrium(
-            &trial_strands,
-            &trial_energies,
-            params.temperature_k,
-        ) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
+        let trial_eq =
+            match solve_tube_equilibrium(&trial_strands, &trial_energies, params.temperature_k) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
         let trial_dist = target_distribution.distance(&trial_eq);
         if trial_dist <= best_dist {
             strands = trial_strands;
@@ -841,12 +838,9 @@ mod tests {
         let d = design_tube(&strands, &target, TubeDesignParams::default()).unwrap();
         // The final equilibrium should have a heterodimer fraction
         // higher than the initial (un-designed) one.
-        let initial_eq = solve_tube_equilibrium(
-            &strands,
-            &fold_all_complexes(&strands).unwrap(),
-            T37_KELVIN,
-        )
-        .unwrap();
+        let initial_eq =
+            solve_tube_equilibrium(&strands, &fold_all_complexes(&strands).unwrap(), T37_KELVIN)
+                .unwrap();
         let initial_ab = initial_eq.fraction_of(ComplexKind::Heterodimer(0, 1));
         let final_ab = d.equilibrium.fraction_of(ComplexKind::Heterodimer(0, 1));
         assert!(

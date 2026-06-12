@@ -36,4 +36,6 @@ pub use kinetics::{
 };
 pub use mm::{classical_forces, Particle};
 pub use qmmm::{Embedding, MmAtom, QmMmEngine, QmMmSystem};
-pub use reactive::{morse_param, reactive_energy_forces, MorseParam, ReactiveEngine, ReactiveSystem};
+pub use reactive::{
+    morse_param, reactive_energy_forces, MorseParam, ReactiveEngine, ReactiveSystem,
+};

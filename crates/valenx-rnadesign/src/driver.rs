@@ -143,10 +143,7 @@ pub fn design_rna_seeded(
     ));
 
     // --- Optimize stage ----------------------------------------------
-    let design = session
-        .design()
-        .expect("design stage completed")
-        .clone();
+    let design = session.design().expect("design stage completed").clone();
     let opt_params = OptimizeParams {
         seed: seed.wrapping_add(0x0_9714),
         ..OptimizeParams::default()
@@ -176,12 +173,7 @@ pub fn design_rna_seeded(
     ));
     debug_assert_eq!(session.stage(), WorkflowStage::Export);
 
-    let text_report = export_design_report(
-        &optimized,
-        &validation,
-        &synthesis,
-        goal.kind_name(),
-    );
+    let text_report = export_design_report(&optimized, &validation, &synthesis, goal.kind_name());
 
     notes.push(
         "Reminder: this report is an in-silico prediction — a strong validated candidate, \
@@ -201,11 +193,7 @@ pub fn design_rna_seeded(
 
 /// Runs the Design stage — dispatches on the goal shape to the right
 /// designer.
-fn run_design(
-    goal: &DesignGoal,
-    constraints: &DesignConstraints,
-    seed: u64,
-) -> Result<RnaDesign> {
+fn run_design(goal: &DesignGoal, constraints: &DesignConstraints, seed: u64) -> Result<RnaDesign> {
     match goal {
         DesignGoal::Structural { target, .. } => {
             let params = StructuralDesignParams {
@@ -420,12 +408,10 @@ impl RnaDesignResponse {
 /// (the LLM) always receives a well-formed, serialisable answer.
 pub fn handle_request(req: &RnaDesignRequest) -> RnaDesignResponse {
     match req {
-        RnaDesignRequest::Design { goal, constraints } => {
-            match design_rna(goal, constraints) {
-                Ok(report) => RnaDesignResponse::Design(Box::new(report)),
-                Err(e) => error_response(&e),
-            }
-        }
+        RnaDesignRequest::Design { goal, constraints } => match design_rna(goal, constraints) {
+            Ok(report) => RnaDesignResponse::Design(Box::new(report)),
+            Err(e) => error_response(&e),
+        },
         RnaDesignRequest::DesignBatch {
             goal,
             constraints,
@@ -486,8 +472,12 @@ pub fn design_riboswitch_workflow(
     // Validate + export.
     let validation = validate_design(&optimized, constraints)?;
     let synthesis = plan_synthesis(&optimized, constraints, Promoter::T7)?;
-    let text_report =
-        export_design_report(&optimized, &validation, &synthesis, "riboswitch (two-state)");
+    let text_report = export_design_report(
+        &optimized,
+        &validation,
+        &synthesis,
+        "riboswitch (two-state)",
+    );
 
     let notes = vec![
         "Riboswitch workflow: two-state design, optimised, validated, synthesis-planned."
@@ -496,8 +486,7 @@ pub fn design_riboswitch_workflow(
             "Free-state base-pair distance {}, bound-state energy gap {:.2} kcal/mol.",
             rs.free_state_distance, rs.energy_gap,
         ),
-        "In-silico prediction — the ligand is not modelled; lab-validate the switch."
-            .to_string(),
+        "In-silico prediction — the ligand is not modelled; lab-validate the switch.".to_string(),
     ];
 
     Ok(RnaDesignReport {
@@ -524,8 +513,7 @@ mod tests {
 
     #[test]
     fn design_rna_structural_end_to_end() {
-        let goal =
-            DesignGoal::structural("((((((....))))))", StructuralClass::Hairpin).unwrap();
+        let goal = DesignGoal::structural("((((((....))))))", StructuralClass::Hairpin).unwrap();
         let report = design_rna(&goal, &DesignConstraints::default()).unwrap();
         assert_eq!(report.design.len(), 16);
         assert!(!report.text_report.is_empty());

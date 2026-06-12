@@ -217,8 +217,7 @@ impl GeneNetwork {
                 reversible: false,
             });
             // Synthesis reaction(s).
-            let regs: Vec<&RegEdge> =
-                self.edges.iter().filter(|e| e.target == g).collect();
+            let regs: Vec<&RegEdge> = self.edges.iter().filter(|e| e.target == g).collect();
             if regs.is_empty() {
                 m.add_reaction(Reaction {
                     id: format!("{}_synth", gene.id),

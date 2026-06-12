@@ -144,75 +144,59 @@ pub use assembly::{
 };
 pub use beam::{
     axial_force_capacity, axial_rigidity, axial_strain_energy, axial_stress, beam_angle_of_twist,
-    beam_axial_extension,
-    beam_curvature, beam_transverse_shear_stress,
-    bending_moment_capacity,
-    bending_stress, bulk_modulus,
-    cantilever_end_moment_strain_energy, cantilever_end_moment_tip_deflection,
-    cantilever_end_moment_tip_slope,
+    beam_axial_extension, beam_curvature, beam_transverse_shear_stress, bending_moment_capacity,
+    bending_stress, bulk_modulus, cantilever_end_moment_strain_energy,
+    cantilever_end_moment_tip_deflection, cantilever_end_moment_tip_slope,
     cantilever_point_load_max_shear, cantilever_point_load_root_moment,
     cantilever_point_load_strain_energy, cantilever_tip_deflection, cantilever_tip_slope,
     cantilever_udl_max_shear, cantilever_udl_root_moment, cantilever_udl_strain_energy,
-    cantilever_udl_tip_deflection,
-    cantilever_udl_tip_slope, circular_plastic_section_modulus,
-    circular_polar_second_moment_of_area,
-    circular_second_moment_of_area, elastic_section_modulus,
+    cantilever_udl_tip_deflection, cantilever_udl_tip_slope, circular_plastic_section_modulus,
+    circular_polar_second_moment_of_area, circular_second_moment_of_area, elastic_section_modulus,
     euler_bernoulli_beam_frequency, fixed_fixed_center_deflection,
     fixed_fixed_point_load_end_moment, fixed_fixed_point_load_strain_energy,
-    fixed_fixed_udl_center_deflection,
-    fixed_fixed_udl_end_moment, fixed_fixed_udl_max_sagging_moment, flexural_rigidity,
-    hollow_circular_polar_second_moment_of_area,
-    hollow_circular_second_moment_of_area, hollow_rectangular_polar_second_moment_of_area,
-    hollow_rectangular_second_moment_of_area,
-    lames_first_parameter,
-    p_wave_modulus,
-    polar_section_modulus,
+    fixed_fixed_udl_center_deflection, fixed_fixed_udl_end_moment,
+    fixed_fixed_udl_max_sagging_moment, flexural_rigidity,
+    hollow_circular_polar_second_moment_of_area, hollow_circular_second_moment_of_area,
+    hollow_rectangular_polar_second_moment_of_area, hollow_rectangular_second_moment_of_area,
+    lames_first_parameter, p_wave_modulus, polar_section_modulus,
     propped_cantilever_central_load_fixed_end_moment,
     propped_cantilever_central_load_fixed_end_reaction,
-    propped_cantilever_central_load_prop_reaction,
-    propped_cantilever_udl_fixed_end_moment, propped_cantilever_udl_fixed_end_reaction,
-    propped_cantilever_udl_max_sagging_moment, propped_cantilever_udl_prop_reaction,
-    rectangular_plastic_section_modulus, rectangular_polar_second_moment_of_area,
-    rectangular_second_moment_of_area, shear_modulus_from_youngs,
-    simply_supported_center_deflection, simply_supported_end_slope,
+    propped_cantilever_central_load_prop_reaction, propped_cantilever_udl_fixed_end_moment,
+    propped_cantilever_udl_fixed_end_reaction, propped_cantilever_udl_max_sagging_moment,
+    propped_cantilever_udl_prop_reaction, rectangular_plastic_section_modulus,
+    rectangular_polar_second_moment_of_area, rectangular_second_moment_of_area,
+    shear_modulus_from_youngs, simply_supported_center_deflection, simply_supported_end_slope,
     simply_supported_point_load_max_moment, simply_supported_point_load_max_shear,
-    simply_supported_point_load_strain_energy,
-    simply_supported_udl_center_deflection,
+    simply_supported_point_load_strain_energy, simply_supported_udl_center_deflection,
     simply_supported_udl_end_slope, simply_supported_udl_max_moment,
     simply_supported_udl_max_shear, simply_supported_udl_strain_energy, solve_beam_modal,
-    solve_beam_static, torsional_moment_capacity, torsional_rigidity, torsional_shear_stress,
-    torsional_strain_energy,
-    three_span_continuous_beam_udl_end_reaction,
+    solve_beam_static, three_span_continuous_beam_udl_end_reaction,
     three_span_continuous_beam_udl_interior_moment,
-    three_span_continuous_beam_udl_interior_reaction,
+    three_span_continuous_beam_udl_interior_reaction, torsional_moment_capacity,
+    torsional_rigidity, torsional_shear_stress, torsional_strain_energy,
     two_span_continuous_beam_central_point_load_loaded_span_outer_reaction,
     two_span_continuous_beam_central_point_load_middle_moment,
     two_span_continuous_beam_central_point_load_middle_reaction,
     two_span_continuous_beam_central_point_load_unloaded_span_outer_reaction,
-    two_span_continuous_beam_udl_middle_moment,
-    two_span_continuous_beam_udl_middle_reaction,
-    two_span_continuous_beam_udl_outer_reaction, BeamConstraint,
-    BeamElement, BeamLoad,
-    BeamModalSolution, BeamMode,
-    BeamSection, BeamSolution, BeamSolverError,
+    two_span_continuous_beam_udl_middle_moment, two_span_continuous_beam_udl_middle_reaction,
+    two_span_continuous_beam_udl_outer_reaction, BeamConstraint, BeamElement, BeamLoad,
+    BeamModalSolution, BeamMode, BeamSection, BeamSolution, BeamSolverError,
 };
 pub use buckling::{
-    critical_buckling_stress, euler_critical_load, section_radius_of_gyration,
-    slenderness_ratio, solve_buckling, BucklingMode, BucklingSolution, BucklingSolverError,
+    critical_buckling_stress, euler_critical_load, section_radius_of_gyration, slenderness_ratio,
+    solve_buckling, BucklingMode, BucklingSolution, BucklingSolverError,
 };
 pub use constraints::FemConstraint;
-pub use contact::{
-    solve_contact, ContactControls, ContactPlane, ContactSolution,
-};
+pub use contact::{solve_contact, ContactControls, ContactPlane, ContactSolution};
 pub use dynamics::{
     solve_transient_dynamics, DynamicsControls, DynamicsSolution, NewmarkParameters,
     NodalInitialState,
 };
 pub use elements::{Hex8, SolidElement, Tet10, Tet4};
 pub use loads::FemLoad;
-pub use meshgen::{structured_hex_mesh, structured_tet10_mesh};
 pub use material::{material_library, FemMaterial, PlasticProperties};
 pub use mesh_params::{ElementOrder, FemMeshParams};
+pub use meshgen::{structured_hex_mesh, structured_tet10_mesh};
 pub use modal_solver::{
     solve_modal, solve_modal_mixed, ModalSolution, ModalSolverError, VibrationMode,
 };

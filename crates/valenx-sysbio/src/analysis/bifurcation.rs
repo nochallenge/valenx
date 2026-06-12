@@ -75,10 +75,7 @@ impl BifurcationDiagram {
     pub fn bifurcation_values(&self) -> Vec<f64> {
         let mut out = Vec::new();
         for w in self.points.windows(2) {
-            if w[0].converged
-                && w[1].converged
-                && w[0].stability != w[1].stability
-            {
+            if w[0].converged && w[1].converged && w[0].stability != w[1].stability {
                 // Midpoint of the bracketing interval.
                 out.push(0.5 * (w[0].param_value + w[1].param_value));
             }

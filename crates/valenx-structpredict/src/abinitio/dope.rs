@@ -108,52 +108,31 @@ pub enum DopePair {
 /// zero by the 15 Å cutoff.
 const CACA_TABLE: [f64; N_BINS] = [
     // 0-1 Å: catastrophic overlap.
-    20.0, 15.0,
-    // 1-2 Å: still overlapping — hard wall.
-    10.0, 6.0,
-    // 2-3 Å: steep repulsive ascent (van der Waals exclusion).
-    3.5, 1.8,
-    // 3-3.5 Å: above repulsive shell, still unfavoured.
-    0.5,
-    // 3.5-4 Å: starts becoming favourable.
-    -0.1,
-    // 4-5.5 Å: attractive well — Cα–Cα contact range.
-    -0.5, -1.0, -1.4, -1.2,
-    // 5.5-7 Å: well bottom widens to the contact-pair range.
-    -0.8, -0.5, -0.3,
-    // 7-8.5 Å: still slightly attractive (packed-core neighbour).
-    -0.15, -0.05, -0.02,
-    // 8.5-12 Å: long-range residual (medium-resolution structure).
-    0.01, 0.02, 0.03, 0.02, 0.01, 0.00, 0.00,
-    // 12-15 Å: decay to zero.
+    20.0, 15.0, // 1-2 Å: still overlapping — hard wall.
+    10.0, 6.0, // 2-3 Å: steep repulsive ascent (van der Waals exclusion).
+    3.5, 1.8,  // 3-3.5 Å: above repulsive shell, still unfavoured.
+    0.5,  // 3.5-4 Å: starts becoming favourable.
+    -0.1, // 4-5.5 Å: attractive well — Cα–Cα contact range.
+    -0.5, -1.0, -1.4, -1.2, // 5.5-7 Å: well bottom widens to the contact-pair range.
+    -0.8, -0.5, -0.3, // 7-8.5 Å: still slightly attractive (packed-core neighbour).
+    -0.15, -0.05, -0.02, // 8.5-12 Å: long-range residual (medium-resolution structure).
+    0.01, 0.02, 0.03, 0.02, 0.01, 0.00, 0.00, // 12-15 Å: decay to zero.
     0.00, 0.00, 0.00, 0.00, 0.00,
 ];
 
 const CBCB_TABLE: [f64; N_BINS] = [
     // Side-chain heavy atoms can pack tighter than backbone Cα, so the
     // well is deeper and shifted slightly inward.
-    22.0, 16.0, 10.0, 5.0,
-    1.8, 0.4, -0.4, -1.0,
-    -1.5, -1.7, -1.5, -1.0,
-    -0.6, -0.3, -0.15, -0.05,
-    0.00, 0.01, 0.02, 0.01,
-    0.00, 0.00, 0.00, 0.00,
-    0.00, 0.00, 0.00, 0.00,
-    0.00, 0.00,
+    22.0, 16.0, 10.0, 5.0, 1.8, 0.4, -0.4, -1.0, -1.5, -1.7, -1.5, -1.0, -0.6, -0.3, -0.15, -0.05,
+    0.00, 0.01, 0.02, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00,
 ];
 
 const HYDROPHOBIC_CACA_TABLE: [f64; N_BINS] = [
     // The hydrophobic-collapse term: deeper attractive well, shifted
     // closer, and a slightly less steep repulsive wall (hydrophobic
     // side chains pack closer than the residue average).
-    18.0, 13.0, 7.0, 3.5,
-    1.0, -0.4, -1.0, -1.8,
-    -2.0, -1.7, -1.2, -0.7,
-    -0.3, -0.1, 0.00, 0.01,
-    0.02, 0.01, 0.00, 0.00,
-    0.00, 0.00, 0.00, 0.00,
-    0.00, 0.00, 0.00, 0.00,
-    0.00, 0.00,
+    18.0, 13.0, 7.0, 3.5, 1.0, -0.4, -1.0, -1.8, -2.0, -1.7, -1.2, -0.7, -0.3, -0.1, 0.00, 0.01,
+    0.02, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00,
 ];
 
 /// Returns the published DOPE table for a pair type.
@@ -297,9 +276,7 @@ pub fn dope_score(model: &ProteinModel, weights: DopeWeights) -> Result<DopeScor
         }
     }
 
-    let total = weights.ca_ca * ca_ca
-        + weights.cb_cb * cb_cb
-        + weights.hydrophobic * hydrophobic;
+    let total = weights.ca_ca * ca_ca + weights.cb_cb * cb_cb + weights.hydrophobic * hydrophobic;
     Ok(DopeScore {
         ca_ca,
         cb_cb,
@@ -353,8 +330,7 @@ mod tests {
         // The hydrophobic table is more attractive at the contact
         // minimum than the general Cα-Cα table at the same distance.
         assert!(
-            dope_energy(DopePair::HydrophobicCaCa, 4.5)
-                < dope_energy(DopePair::CaCa, 4.5),
+            dope_energy(DopePair::HydrophobicCaCa, 4.5) < dope_energy(DopePair::CaCa, 4.5),
             "hydrophobic well is deeper than general Cα-Cα"
         );
     }
@@ -367,10 +343,7 @@ mod tests {
             let d = (k as f64) * 0.1;
             for &p in &[DopePair::CaCa, DopePair::CbCb, DopePair::HydrophobicCaCa] {
                 let e = dope_energy(p, d);
-                assert!(
-                    e.is_finite(),
-                    "DOPE({p:?}, d={d}) = {e} must be finite"
-                );
+                assert!(e.is_finite(), "DOPE({p:?}, d={d}) = {e} must be finite");
             }
         }
     }

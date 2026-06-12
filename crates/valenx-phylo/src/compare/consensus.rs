@@ -46,7 +46,10 @@ pub fn consensus_tree(trees: &[Tree], kind: ConsensusKind) -> Result<Tree> {
     labels.dedup();
     let n = labels.len();
     if n < 2 {
-        return Err(PhyloError::invalid("trees", "trees need at least two leaves"));
+        return Err(PhyloError::invalid(
+            "trees",
+            "trees need at least two leaves",
+        ));
     }
     let index: HashMap<String, usize> = labels
         .iter()
@@ -109,8 +112,7 @@ fn tree_bipartitions(
     index: &HashMap<String, usize>,
     n: usize,
 ) -> Result<Vec<Vec<usize>>> {
-    let mut seen: std::collections::HashSet<Vec<usize>> =
-        std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<Vec<usize>> = std::collections::HashSet::new();
     for id in 0..tree.node_count() {
         let node = tree.node(id);
         if node.is_leaf() || node.parent.is_none() {
@@ -123,9 +125,11 @@ fn tree_bipartitions(
                 .label
                 .as_deref()
                 .ok_or_else(|| PhyloError::invalid("tree", "leaf without a label"))?;
-            side.push(*index.get(label).ok_or_else(|| {
-                PhyloError::invalid("tree", "leaf not in the shared set")
-            })?);
+            side.push(
+                *index
+                    .get(label)
+                    .ok_or_else(|| PhyloError::invalid("tree", "leaf not in the shared set"))?,
+            );
         }
         side.sort_unstable();
         side.dedup();
@@ -188,8 +192,7 @@ fn build_consensus(labels: &[String], clades: &[(Vec<usize>, f64)]) -> Result<Tr
         // are inserted largest-first and the kept set is compatible
         // for strict/majority consensus). Their parent is the LCA of
         // their cluster nodes.
-        let members_clusters: Vec<NodeId> =
-            members.iter().map(|&m| cluster_node[m]).collect();
+        let members_clusters: Vec<NodeId> = members.iter().map(|&m| cluster_node[m]).collect();
         // Find their common parent.
         for &c in &members_clusters {
             let par = tree.node(c).parent;
@@ -331,4 +334,3 @@ mod tests {
         assert!(consensus_tree(&[t1, t2], ConsensusKind::Strict).is_err());
     }
 }
-

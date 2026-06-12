@@ -205,13 +205,9 @@ pub(crate) fn spr_neighbours(tree: &Tree) -> Vec<Tree> {
         }
         // Candidate regraft edges = every node except the pruned
         // subtree, its parent, and its grandparent path.
-        let subtree: std::collections::HashSet<NodeId> =
-            tree.descendant_set(prune);
+        let subtree: std::collections::HashSet<NodeId> = tree.descendant_set(prune);
         for regraft in 0..tree.node_count() {
-            if regraft == root
-                || subtree.contains(&regraft)
-                || regraft == parent
-            {
+            if regraft == root || subtree.contains(&regraft) || regraft == parent {
                 continue;
             }
             // Skip the trivial no-op (regraft onto a current sibling
@@ -234,11 +230,7 @@ fn spr_move(tree: &Tree, prune: NodeId, regraft: NodeId) -> Option<Tree> {
     let parent = t.node(prune).parent?;
     let grandparent = t.node(parent).parent?;
     // The pruned subtree's sibling under `parent`.
-    let sibling = *t
-        .node(parent)
-        .children
-        .iter()
-        .find(|&&c| c != prune)?;
+    let sibling = *t.node(parent).children.iter().find(|&&c| c != prune)?;
 
     // --- Suppress `parent`: connect `sibling` directly to
     // `grandparent`, summing the two branch lengths.
@@ -296,10 +288,7 @@ fn is_ancestor(tree: &Tree, anc: NodeId, desc: NodeId) -> bool {
 
 impl Tree {
     /// Set of `id` plus all of its descendants.
-    pub(crate) fn descendant_set(
-        &self,
-        id: NodeId,
-    ) -> std::collections::HashSet<NodeId> {
+    pub(crate) fn descendant_set(&self, id: NodeId) -> std::collections::HashSet<NodeId> {
         let mut set = std::collections::HashSet::new();
         let mut stack = vec![id];
         while let Some(x) = stack.pop() {
@@ -411,10 +400,7 @@ mod tests {
     fn search_finds_the_parsimonious_topology() {
         // Data favours ((A,B),(C,D)): A,B share state 0; C,D share 1
         // across many columns.
-        let labels: Vec<String> = ["A", "B", "C", "D"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let labels: Vec<String> = ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
         // Start from the WRONG topology ((A,C),(B,D)).
         let start = read_newick("((A,C),(B,D));").unwrap();
         let aln = vec![

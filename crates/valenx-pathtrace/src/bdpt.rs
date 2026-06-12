@@ -324,11 +324,7 @@ fn trace_camera_subpath(
 /// point on it, samples an initial direction cosine-weighted about
 /// the emitter normal, and propagates the subpath with diffuse
 /// bounces — the mirror of the camera subpath.
-fn trace_light_subpath(
-    scene: &Scene,
-    max_depth: u32,
-    rng: &mut Rng,
-) -> Vec<PathVertex> {
+fn trace_light_subpath(scene: &Scene, max_depth: u32, rng: &mut Rng) -> Vec<PathVertex> {
     let mut subpath = Vec::with_capacity(max_depth as usize + 1);
     if scene.emitters.is_empty() {
         return subpath;
@@ -544,10 +540,12 @@ fn connect_vertices(
     // Shadow test.
     let shadow_origin = offset_origin(camera_v.position, camera_v.geo_normal, dir);
     let shadow = Ray::new(shadow_origin, dir);
-    if scene
-        .bvh
-        .occluded(&scene.triangles, &shadow, RAY_EPSILON, dist - 2.0 * RAY_EPSILON)
-    {
+    if scene.bvh.occluded(
+        &scene.triangles,
+        &shadow,
+        RAY_EPSILON,
+        dist - 2.0 * RAY_EPSILON,
+    ) {
         return Vec3::ZERO;
     }
 
@@ -614,10 +612,7 @@ fn offset_origin(position: Vec3, geo_normal: Vec3, direction: Vec3) -> Vec3 {
 /// resolution would allocate a framebuffer larger than the
 /// `MAX_FRAMEBUFFER_PIXELS` cap. Round-10 sister fix to the round-9
 /// `tracer::render` migration.
-pub fn render_bdpt(
-    scene: &Scene,
-    params: &BdptParams,
-) -> Result<HdrFramebuffer, FramebufferError> {
+pub fn render_bdpt(scene: &Scene, params: &BdptParams) -> Result<HdrFramebuffer, FramebufferError> {
     let w = scene.camera.width;
     let h = scene.camera.height;
     let mut fb = HdrFramebuffer::try_new(w, h)?;
@@ -641,13 +636,7 @@ pub fn render_bdpt(
 }
 
 /// Generate one BDPT path sample for pixel `(x, y)`.
-fn sample_pixel_bdpt(
-    scene: &Scene,
-    params: &BdptParams,
-    x: u32,
-    y: u32,
-    rng: &mut Rng,
-) -> Vec3 {
+fn sample_pixel_bdpt(scene: &Scene, params: &BdptParams, x: u32, y: u32, rng: &mut Rng) -> Vec3 {
     let cam = &scene.camera;
     let jx = rng.next_f32();
     let jy = rng.next_f32();
@@ -687,7 +676,11 @@ fn sample_pixel_bdpt(
             let strategies = (i + 1) as f32;
             let pdf_this = 1.0f32;
             let pdf_others = (strategies - 1.0).max(0.0);
-            let w = if i == 0 { 1.0 } else { power_heuristic(pdf_this, pdf_others) };
+            let w = if i == 0 {
+                1.0
+            } else {
+                power_heuristic(pdf_this, pdf_others)
+            };
             radiance = radiance.add(v.throughput.mul(mat.emission).scale(w));
         }
     }
@@ -702,7 +695,14 @@ fn sample_pixel_bdpt(
                 // Capped by the user's max_depth.
                 continue;
             }
-            let c = connect_vertices(scene, &scene.materials, &camera_subpath, &light_subpath, s, t);
+            let c = connect_vertices(
+                scene,
+                &scene.materials,
+                &camera_subpath,
+                &light_subpath,
+                s,
+                t,
+            );
             radiance = radiance.add(c);
         }
     }

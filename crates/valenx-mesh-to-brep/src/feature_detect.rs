@@ -445,9 +445,15 @@ fn fit_circle_kasa(points: &[(f64, f64)]) -> Option<(f64, f64, f64, f64)> {
     }
     // Normal-equation matrix M·[a b c]ᵀ = rhs.
     let m = nalgebra::Matrix3::new(
-        2.0 * sxx, 2.0 * sxy, sx, //
-        2.0 * sxy, 2.0 * syy, sy, //
-        2.0 * sx, 2.0 * sy, n,
+        2.0 * sxx,
+        2.0 * sxy,
+        sx, //
+        2.0 * sxy,
+        2.0 * syy,
+        sy, //
+        2.0 * sx,
+        2.0 * sy,
+        n,
     );
     let rhs = Vector3::new(sxz, syz, sz);
     let sol = m.try_inverse()? * rhs;

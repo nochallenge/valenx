@@ -435,10 +435,7 @@ fn coarsenable(nx: usize, ny: usize, nz: usize) -> bool {
 /// imbalance and so does not sum to zero) would make that singular
 /// coarse system inconsistent — the coarse solve would then drift
 /// without bound and blow the V-cycle up.
-fn coarsen_stencil(
-    fine: &PoissonStencil,
-    anchor: Option<(usize, usize, usize)>,
-) -> PoissonStencil {
+fn coarsen_stencil(fine: &PoissonStencil, anchor: Option<(usize, usize, usize)>) -> PoissonStencil {
     let (cnx, cny, cnz) = (fine.nx / 2, fine.ny / 2, fine.nz / 2);
     let mut c = PoissonStencil::zeros(cnx, cny, cnz);
     for ck in 0..cnz {
@@ -511,9 +508,7 @@ fn coarsen_stencil(
 
 /// The coarse-grid image of a Dirichlet-anchor cell index under one
 /// 2:1 coarsening step.
-fn coarsen_anchor(
-    anchor: Option<(usize, usize, usize)>,
-) -> Option<(usize, usize, usize)> {
+fn coarsen_anchor(anchor: Option<(usize, usize, usize)>) -> Option<(usize, usize, usize)> {
     anchor.map(|(i, j, k)| (i / 2, j / 2, k / 2))
 }
 
@@ -626,8 +621,7 @@ fn v_cycle(
                 let r = stencil.neighbour_sum(sol, i, j, k) - ap * sol.at(i, j, k);
                 // (A·d)[cell] = ap·d − Σ off·d_nb.
                 let ad = ap * fine_corr.data[idx]
-                    - (stencil.neighbour_sum(&fine_corr, i, j, k)
-                        - stencil.b.at(i, j, k));
+                    - (stencil.neighbour_sum(&fine_corr, i, j, k) - stencil.b.at(i, j, k));
                 r_dot_ad += r * ad;
                 ad_dot_ad += ad * ad;
             }
@@ -732,12 +726,7 @@ mod tests {
                     let y = (j as f64 + 0.5) * h;
                     let z = (k as f64 + 0.5) * h;
                     let pi = std::f64::consts::PI;
-                    target.set(
-                        i,
-                        j,
-                        k,
-                        (pi * x).cos() * (pi * y).cos() * (pi * z).cos(),
-                    );
+                    target.set(i, j, k, (pi * x).cos() * (pi * y).cos() * (pi * z).cos());
                 }
             }
         }
@@ -791,7 +780,11 @@ mod tests {
         let (s, target) = make_known_problem(n);
         let mut sol = Field3::zeros(n, n, n);
         let res = solve_sor(&s, &mut sol, 1.6, 1e-9, 8000, true);
-        assert!(res.converged, "SOR should converge, residual {}", res.residual);
+        assert!(
+            res.converged,
+            "SOR should converge, residual {}",
+            res.residual
+        );
         let mut max_err = 0.0f64;
         for idx in 0..sol.data.len() {
             max_err = max_err.max((sol.data[idx] - target.data[idx]).abs());
@@ -825,7 +818,10 @@ mod tests {
         for idx in 0..sol.data.len() {
             max_err = max_err.max((sol.data[idx] - target.data[idx]).abs());
         }
-        assert!(max_err < 5e-3, "multigrid solution error {max_err} too large");
+        assert!(
+            max_err < 5e-3,
+            "multigrid solution error {max_err} too large"
+        );
     }
 
     #[test]

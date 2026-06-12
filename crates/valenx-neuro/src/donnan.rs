@@ -97,7 +97,10 @@ mod tests {
         let t = BODY_TEMPERATURE_K;
 
         // No trapped charge → no osmotic imbalance.
-        assert!(donnan_osmotic_pressure_pa(t, 150.0, 0.0).abs() < 1e-9, "A=0 → Δπ=0");
+        assert!(
+            donnan_osmotic_pressure_pa(t, 150.0, 0.0).abs() < 1e-9,
+            "A=0 → Δπ=0"
+        );
 
         // STRONG cross-check threading donnan_ratio: van 't Hoff Δπ = R·T·(Σc_in − Σc_out)
         // with internal solute r·c + c/r + A and external 2c. This direct
@@ -107,13 +110,17 @@ mod tests {
             let r = donnan_ratio(c, a);
             let by_count = GAS_CONSTANT * t * (r * c + c / r + a - 2.0 * c);
             let pi = donnan_osmotic_pressure_pa(t, c, a);
-            assert!((pi - by_count).abs() / by_count < 1e-9, "Δπ = RT·ΔΣc at c={c}, A={a}");
+            assert!(
+                (pi - by_count).abs() / by_count < 1e-9,
+                "Δπ = RT·ΔΣc at c={c}, A={a}"
+            );
             assert!(pi > 0.0, "trapped charge draws water in (Δπ > 0)");
         }
 
         // Monotonic increasing in the trapped charge.
         assert!(
-            donnan_osmotic_pressure_pa(t, 120.0, 40.0) < donnan_osmotic_pressure_pa(t, 120.0, 120.0),
+            donnan_osmotic_pressure_pa(t, 120.0, 40.0)
+                < donnan_osmotic_pressure_pa(t, 120.0, 120.0),
             "Δπ grows with A"
         );
 
@@ -138,7 +145,10 @@ mod tests {
         let r = donnan_ratio(c, a);
         let expected = (a + (a * a + 4.0 * c * c).sqrt()) / (2.0 * c);
         assert!((r - expected).abs() < 1e-12);
-        assert!(r > 1.0, "trapped anion concentrates cations inside: r = {r}");
+        assert!(
+            r > 1.0,
+            "trapped anion concentrates cations inside: r = {r}"
+        );
 
         // The interior is electronegative (V < 0) — the Donnan potential.
         let v = donnan_potential_mv(BODY_TEMPERATURE_K, c, a);
@@ -152,7 +162,10 @@ mod tests {
         let cat_i = r * c;
         let an_i = c / r;
         assert!((cat_i * an_i - c * c).abs() < 1e-6, "Donnan product = c²");
-        assert!((cat_i - an_i - a).abs() < 1e-6, "electroneutrality [cat]_i = [an]_i + A");
+        assert!(
+            (cat_i - an_i - a).abs() < 1e-6,
+            "electroneutrality [cat]_i = [an]_i + A"
+        );
     }
 
     #[test]
@@ -161,7 +174,10 @@ mod tests {
         let r0 = donnan_ratio(c, 0.0);
         let r1 = donnan_ratio(c, 40.0);
         let r2 = donnan_ratio(c, 120.0);
-        assert!(r0 < r1 && r1 < r2, "r should grow with A: {r0} < {r1} < {r2}");
+        assert!(
+            r0 < r1 && r1 < r2,
+            "r should grow with A: {r0} < {r1} < {r2}"
+        );
         assert!((r0 - 1.0).abs() < 1e-12);
     }
 

@@ -82,7 +82,9 @@ mod tests {
         let back = LatticeFile::from_ron(&ron).unwrap();
         assert_eq!(back.version, 1);
         match back.lattice {
-            Lattice::Grid { rows, cols, levels, .. } => {
+            Lattice::Grid {
+                rows, cols, levels, ..
+            } => {
                 assert_eq!((rows, cols, levels), (3, 4, 1));
             }
             _ => panic!("wrong variant"),

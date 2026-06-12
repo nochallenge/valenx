@@ -48,8 +48,8 @@ use valenx_mesh::Mesh;
 
 use crate::error::OcctSurfaceError;
 use crate::sweep_support::{
-    arc_length_param, cross, dot, norm, normalize, perp_basis, rotate_frame,
-    sample_polyline_at, sub, vertex_tangents, Vec3,
+    arc_length_param, cross, dot, norm, normalize, perp_basis, rotate_frame, sample_polyline_at,
+    sub, vertex_tangents, Vec3,
 };
 
 /// Pipe-shell sweep with an optional auxiliary spine.
@@ -255,9 +255,7 @@ fn sweep_mesh(profile_local: &[(f64, f64)], stations: &[Station]) -> Mesh {
 /// produces a cross-section centred on the spine, instead of riding
 /// the spine by its first vertex (which offset the whole swept tube
 /// by the vertex-0-to-centroid vector).
-fn project_profile_to_local(
-    profile: &[[f64; 3]],
-) -> Result<Vec<(f64, f64)>, OcctSurfaceError> {
+fn project_profile_to_local(profile: &[[f64; 3]]) -> Result<Vec<(f64, f64)>, OcctSurfaceError> {
     let origin = profile[0];
     let e0 = sub(profile[1], origin);
     if norm(e0) < 1e-12 {
@@ -290,7 +288,11 @@ fn project_profile_to_local(
     let centroid = profile.iter().fold([0.0; 3], |acc, p| {
         [acc[0] + p[0], acc[1] + p[1], acc[2] + p[2]]
     });
-    let centroid = [centroid[0] / n_pts, centroid[1] / n_pts, centroid[2] / n_pts];
+    let centroid = [
+        centroid[0] / n_pts,
+        centroid[1] / n_pts,
+        centroid[2] / n_pts,
+    ];
     let local: Vec<(f64, f64)> = profile
         .iter()
         .map(|p| {
@@ -351,13 +353,8 @@ mod tests {
     fn pipe_shell_rejects_collinear_profile() {
         // Three collinear points define no plane.
         let line = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
-        let err = sweep_api_pipe_shell(
-            &line,
-            &[[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-            None,
-            false,
-        )
-        .unwrap_err();
+        let err = sweep_api_pipe_shell(&line, &[[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]], None, false)
+            .unwrap_err();
         assert_eq!(err.code(), "occt_surface.bad_input");
     }
 
@@ -382,8 +379,7 @@ mod tests {
         let spine = vec![[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 2.0]];
         // Aux spine: parallel to the primary, offset +X by 5.
         let aux = vec![[5.0, 0.0, 0.0], [5.0, 0.0, 1.0], [5.0, 0.0, 2.0]];
-        let solid =
-            sweep_api_pipe_shell(&square(), &spine, Some(&aux), false).unwrap();
+        let solid = sweep_api_pipe_shell(&square(), &spine, Some(&aux), false).unwrap();
         let Solid::Mesh(m) = &solid else {
             panic!("expected mesh solid");
         };

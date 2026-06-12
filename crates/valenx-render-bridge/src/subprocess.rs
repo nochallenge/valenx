@@ -125,11 +125,7 @@ pub fn emit_luxcore_scn(job: &RenderJob, geometry_dir: &Path) -> Result<String, 
                 "scene.materials.{lux_id}.kt = {:.4} {:.4} {:.4}",
                 mat.diffuse_color[0], mat.diffuse_color[1], mat.diffuse_color[2]
             );
-            let _ = writeln!(
-                s,
-                "scene.materials.{lux_id}.interiorior = {:.4}",
-                mat.ior
-            );
+            let _ = writeln!(s, "scene.materials.{lux_id}.interiorior = {:.4}", mat.ior);
         } else {
             // Everything else → matte (Lambertian) diffuse.
             let _ = writeln!(s, "scene.materials.{lux_id}.type = matte");
@@ -158,18 +154,18 @@ pub fn emit_luxcore_scn(job: &RenderJob, geometry_dir: &Path) -> Result<String, 
             "scene.objects.{obj_id}.material = {}",
             sanitize(&m.material_id)
         );
-        let _ = writeln!(
-            s,
-            "scene.objects.{obj_id}.ply = {}",
-            ply_path.display()
-        );
+        let _ = writeln!(s, "scene.objects.{obj_id}.ply = {}", ply_path.display());
     }
 
     // --- Environment / sky. LuxCore needs at least one light. ---
     if let Some(env) = &job.environment {
         let _ = writeln!(s, "scene.lights.env.type = infinite");
         let _ = writeln!(s, "scene.lights.env.file = {}", env.hdr_path.display());
-        let _ = writeln!(s, "scene.lights.env.gain = {0:.4} {0:.4} {0:.4}", env.intensity);
+        let _ = writeln!(
+            s,
+            "scene.lights.env.gain = {0:.4} {0:.4} {0:.4}",
+            env.intensity
+        );
     } else {
         // A neutral constant-colour sky so the scene is not black.
         let _ = writeln!(s, "scene.lights.sky.type = constantinfinite");
@@ -193,7 +189,10 @@ pub fn emit_luxcore_cfg(job: &RenderJob, scn_path: &Path) -> Result<String, Rend
     use std::fmt::Write;
     job.validate()?;
     let mut s = String::new();
-    let _ = writeln!(s, "# LuxCoreRender config — emitted by valenx-render-bridge");
+    let _ = writeln!(
+        s,
+        "# LuxCoreRender config — emitted by valenx-render-bridge"
+    );
     let _ = writeln!(s, "scene.file = {}", scn_path.display());
     let _ = writeln!(s, "renderengine.type = PATHCPU");
     let cam = &job.camera;
@@ -201,15 +200,8 @@ pub fn emit_luxcore_cfg(job: &RenderJob, scn_path: &Path) -> Result<String, Rend
     let _ = writeln!(s, "film.height = {}", cam.image_height);
     // Halt after a fixed sample budget so the render terminates.
     let _ = writeln!(s, "batch.haltspp = 128");
-    let _ = writeln!(
-        s,
-        "film.outputs.0.type = RGBA_IMAGEPIPELINE"
-    );
-    let _ = writeln!(
-        s,
-        "film.outputs.0.filename = {}",
-        job.output_path.display()
-    );
+    let _ = writeln!(s, "film.outputs.0.type = RGBA_IMAGEPIPELINE");
+    let _ = writeln!(s, "film.outputs.0.filename = {}", job.output_path.display());
     Ok(s)
 }
 
@@ -417,7 +409,13 @@ fn sanitize(name: &str) -> String {
         return "unnamed".to_string();
     }
     name.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -489,8 +487,7 @@ mod tests {
 
     #[test]
     fn luxcore_scn_has_camera_materials_objects() {
-        let scn =
-            emit_luxcore_scn(&job(RenderEngine::LuxRender), &PathBuf::from("/tmp")).unwrap();
+        let scn = emit_luxcore_scn(&job(RenderEngine::LuxRender), &PathBuf::from("/tmp")).unwrap();
         assert!(scn.contains("scene.camera.lookat.orig"));
         assert!(scn.contains("scene.camera.fieldofview"));
         // The matte material block.

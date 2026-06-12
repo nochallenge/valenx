@@ -28,7 +28,9 @@ pub fn count_kmers(seq: &Seq, k: usize) -> Result<BTreeMap<String, usize>> {
     }
     let mut map: BTreeMap<String, usize> = BTreeMap::new();
     for w in bytes.windows(k) {
-        let key = std::str::from_utf8(w).expect("residues are ASCII").to_string();
+        let key = std::str::from_utf8(w)
+            .expect("residues are ASCII")
+            .to_string();
         *map.entry(key).or_insert(0) += 1;
     }
     Ok(map)

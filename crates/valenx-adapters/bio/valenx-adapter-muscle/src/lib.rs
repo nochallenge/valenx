@@ -132,10 +132,7 @@ impl Adapter for MuscleAdapter {
         let source_input = if input.input.is_absolute() {
             input.input.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input)?
         };
         if !source_input.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -200,7 +197,9 @@ impl Adapter for MuscleAdapter {
 
     fn run(&self, job: &PreparedJob, ctx: &mut RunContext) -> Result<RunReport, AdapterError> {
         // Native Rust path: progressive + iterative MSA, no subprocess.
-        if job.native_command.first().map(|s| s.as_os_str()) == Some(native::NATIVE_SENTINEL.as_ref()) {
+        if job.native_command.first().map(|s| s.as_os_str())
+            == Some(native::NATIVE_SENTINEL.as_ref())
+        {
             return native::run_native(&job.workdir, ctx);
         }
 

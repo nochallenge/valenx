@@ -459,7 +459,8 @@ pub fn solid_centroid_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], CadError>
         let p = positions[tri[0].pos];
         let q = positions[tri[1].pos];
         let r = positions[tri[2].pos];
-        let v = p.x * (q.y * r.z - q.z * r.y) + p.y * (q.z * r.x - q.x * r.z)
+        let v = p.x * (q.y * r.z - q.z * r.y)
+            + p.y * (q.z * r.x - q.x * r.z)
             + p.z * (q.x * r.y - q.y * r.x);
         vol6 += v;
         mx += v * (p.x + q.x + r.x);
@@ -471,7 +472,8 @@ pub fn solid_centroid_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], CadError>
             let p = positions[tri[0].pos];
             let q = positions[tri[1].pos];
             let r = positions[tri[2].pos];
-            let v = p.x * (q.y * r.z - q.z * r.y) + p.y * (q.z * r.x - q.x * r.z)
+            let v = p.x * (q.y * r.z - q.z * r.y)
+                + p.y * (q.z * r.x - q.x * r.z)
                 + p.z * (q.x * r.y - q.y * r.x);
             vol6 += v;
             mx += v * (p.x + q.x + r.x);
@@ -976,7 +978,8 @@ pub fn solid_radius_of_gyration_tol(solid: &Solid, tol: f64) -> Result<f64, CadE
         let a = positions[tri[0].pos];
         let b = positions[tri[1].pos];
         let c = positions[tri[2].pos];
-        let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+        let v = (a.x * (b.y * c.z - b.z * c.y)
+            + a.y * (b.z * c.x - b.x * c.z)
             + a.z * (b.x * c.y - b.y * c.x))
             / 6.0;
         vol += v;
@@ -992,7 +995,8 @@ pub fn solid_radius_of_gyration_tol(solid: &Solid, tol: f64) -> Result<f64, CadE
             let a = positions[tri[0].pos];
             let b = positions[tri[1].pos];
             let c = positions[tri[2].pos];
-            let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+            let v = (a.x * (b.y * c.z - b.z * c.y)
+                + a.y * (b.z * c.x - b.x * c.z)
                 + a.z * (b.x * c.y - b.y * c.x))
                 / 6.0;
             vol += v;
@@ -1083,7 +1087,8 @@ pub fn solid_principal_moments_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], 
         let b = positions[tri[1].pos];
         let c = positions[tri[2].pos];
         let (sx, sy, sz) = (a.x + b.x + c.x, a.y + b.y + c.y, a.z + b.z + c.z);
-        let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+        let v = (a.x * (b.y * c.z - b.z * c.y)
+            + a.y * (b.z * c.x - b.x * c.z)
             + a.z * (b.x * c.y - b.y * c.x))
             / 6.0;
         vol += v;
@@ -1103,7 +1108,8 @@ pub fn solid_principal_moments_tol(solid: &Solid, tol: f64) -> Result<[f64; 3], 
             let b = positions[tri[1].pos];
             let c = positions[tri[2].pos];
             let (sx, sy, sz) = (a.x + b.x + c.x, a.y + b.y + c.y, a.z + b.z + c.z);
-            let v = (a.x * (b.y * c.z - b.z * c.y) + a.y * (b.z * c.x - b.x * c.z)
+            let v = (a.x * (b.y * c.z - b.z * c.y)
+                + a.y * (b.z * c.x - b.x * c.z)
                 + a.z * (b.x * c.y - b.y * c.x))
                 / 6.0;
             vol += v;
@@ -1285,9 +1291,7 @@ fn weld_triangles(
                     if let Some(cands) = buckets.get(&nb) {
                         for &ci in cands {
                             let q = &deduped[ci];
-                            let d = (p.x - q.x).powi(2)
-                                + (p.y - q.y).powi(2)
-                                + (p.z - q.z).powi(2);
+                            let d = (p.x - q.x).powi(2) + (p.y - q.y).powi(2) + (p.z - q.z).powi(2);
                             if d <= tol_sq {
                                 found = Some(ci);
                                 break 'outer;
@@ -1519,7 +1523,10 @@ mod tests {
 
         // box(2,4,6): V_bbox = 2·4·6 = 48, and a box fills its AABB so = solid_volume.
         let b = box_solid(2.0, 4.0, 6.0).unwrap();
-        assert!((solid_bounding_box_volume(&b).unwrap() - 48.0).abs() < 1e-9, "box V_bbox = 48");
+        assert!(
+            (solid_bounding_box_volume(&b).unwrap() - 48.0).abs() < 1e-9,
+            "box V_bbox = 48"
+        );
         assert!(
             (solid_bounding_box_volume(&b).unwrap() - solid_volume(&b).unwrap()).abs() < 1e-9,
             "box fills its AABB"
@@ -1563,7 +1570,10 @@ mod tests {
         // Worked: box(2,4,6) → sorted extents [2,4,6], elongation = 4/6 ≈ 0.6667.
         let bx = box_solid(2.0, 4.0, 6.0).unwrap();
         let e = solid_bounding_box_elongation(&bx).unwrap();
-        assert!((e - 4.0 / 6.0).abs() <= 1e-9 * e, "elongation = mid/longest = 4/6");
+        assert!(
+            (e - 4.0 / 6.0).abs() <= 1e-9 * e,
+            "elongation = mid/longest = 4/6"
+        );
 
         // Threads solid_bounding_box_extents (#363): mid/longest of the sorted extents.
         let mut s = solid_bounding_box_extents(&bx).unwrap();
@@ -1575,7 +1585,10 @@ mod tests {
 
         // Equant: a cube and a sphere → ≈ 1 (all extents comparable).
         let cube = box_solid(3.0, 3.0, 3.0).unwrap();
-        assert!((solid_bounding_box_elongation(&cube).unwrap() - 1.0).abs() <= 1e-9, "cube → 1");
+        assert!(
+            (solid_bounding_box_elongation(&cube).unwrap() - 1.0).abs() <= 1e-9,
+            "cube → 1"
+        );
         assert!(
             (solid_bounding_box_elongation(&sphere(2.0).unwrap()).unwrap() - 1.0).abs() <= 2e-2,
             "sphere → 1"
@@ -1598,7 +1611,10 @@ mod tests {
         // Worked: box(2,4,6) → sorted extents [2,4,6], flatness = 2/4 = 0.5.
         let bx = box_solid(2.0, 4.0, 6.0).unwrap();
         let f = solid_bounding_box_flatness(&bx).unwrap();
-        assert!((f - 2.0 / 4.0).abs() <= 1e-9 * f, "flatness = short/mid = 2/4");
+        assert!(
+            (f - 2.0 / 4.0).abs() <= 1e-9 * f,
+            "flatness = short/mid = 2/4"
+        );
 
         // Threads solid_bounding_box_extents (#363): shortest/intermediate of the sorted.
         let mut s = solid_bounding_box_extents(&bx).unwrap();
@@ -1619,7 +1635,10 @@ mod tests {
 
         // Equant: a cube and a sphere → ≈ 1.
         let cube = box_solid(3.0, 3.0, 3.0).unwrap();
-        assert!((solid_bounding_box_flatness(&cube).unwrap() - 1.0).abs() <= 1e-9, "cube → 1");
+        assert!(
+            (solid_bounding_box_flatness(&cube).unwrap() - 1.0).abs() <= 1e-9,
+            "cube → 1"
+        );
         assert!(
             (solid_bounding_box_flatness(&sphere(2.0).unwrap()).unwrap() - 1.0).abs() <= 2e-2,
             "sphere → 1"
@@ -1647,12 +1666,18 @@ mod tests {
         // Threads solid_bounding_box_extents (#363): c/√(a·b) of the sorted extents.
         let mut s = solid_bounding_box_extents(&bx).unwrap();
         s.sort_by(|a, b| a.total_cmp(b));
-        assert!((csf - s[0] / (s[1] * s[2]).sqrt()).abs() <= 1e-9 * csf, "= s0/√(s1·s2)");
+        assert!(
+            (csf - s[0] / (s[1] * s[2]).sqrt()).abs() <= 1e-9 * csf,
+            "= s0/√(s1·s2)"
+        );
 
         // Cross-check threading flatness (#381) + elongation (#375): CSF = flatness·√elongation.
         let f = solid_bounding_box_flatness(&bx).unwrap();
         let e = solid_bounding_box_elongation(&bx).unwrap();
-        assert!((csf - f * e.sqrt()).abs() <= 1e-9 * csf, "CSF = flatness·√elongation");
+        assert!(
+            (csf - f * e.sqrt()).abs() <= 1e-9 * csf,
+            "CSF = flatness·√elongation"
+        );
 
         // Range 0 < CSF ≤ 1; equant cube and sphere → ≈ 1.
         assert!(csf > 0.0 && csf <= 1.0, "0 < CSF ≤ 1");
@@ -1696,7 +1721,10 @@ mod tests {
 
         // (c) CROSS-CHECK threading corey_shape_factor (#387) (non-tautological): ψ_p = CSF^(2/3).
         let csf = solid_bounding_box_corey_shape_factor(&bx).unwrap();
-        assert!((psi - csf.powf(2.0 / 3.0)).abs() <= 1e-9 * psi, "ψ_p = CSF^(2/3)");
+        assert!(
+            (psi - csf.powf(2.0 / 3.0)).abs() <= 1e-9 * psi,
+            "ψ_p = CSF^(2/3)"
+        );
 
         // (d) Range 0 < ψ_p ≤ 1; equant cube and sphere → ≈ 1.
         assert!(psi > 0.0 && psi <= 1.0, "0 < ψ_p ≤ 1");
@@ -1738,7 +1766,8 @@ mod tests {
         let b = solid_bounding_box_intermediate_extent(&bx).unwrap();
         let c = solid_bounding_box_shortest_extent(&bx).unwrap();
         assert!(
-            (solid_bounding_box_intercept_sphericity(&bx).unwrap() - (b * c / (a * a)).cbrt()).abs()
+            (solid_bounding_box_intercept_sphericity(&bx).unwrap() - (b * c / (a * a)).cbrt())
+                .abs()
                 <= 1e-9,
             "ψ_i = ∛(b·c/a²)"
         );
@@ -1776,7 +1805,10 @@ mod tests {
 
         // box(2,4,6): longest/shortest = 6/2 = 3.
         let b = box_solid(2.0, 4.0, 6.0).unwrap();
-        assert!((solid_bounding_box_aspect_ratio(&b).unwrap() - 3.0).abs() < 1e-9, "box 2×4×6 → 3");
+        assert!(
+            (solid_bounding_box_aspect_ratio(&b).unwrap() - 3.0).abs() < 1e-9,
+            "box 2×4×6 → 3"
+        );
 
         // Threads solid_bounding_box: longest extent over shortest.
         let (mn, mx) = solid_bounding_box(&b).unwrap();
@@ -1800,7 +1832,10 @@ mod tests {
         );
 
         // The aspect ratio is always ≥ 1 (long over short).
-        assert!(solid_bounding_box_aspect_ratio(&b).unwrap() >= 1.0, "ratio ≥ 1");
+        assert!(
+            solid_bounding_box_aspect_ratio(&b).unwrap() >= 1.0,
+            "ratio ≥ 1"
+        );
     }
 
     #[test]
@@ -1812,7 +1847,10 @@ mod tests {
             let (mn, mx) = solid_bounding_box(&s).unwrap();
             let c = solid_bounding_box_center(&s).unwrap();
             for k in 0..3 {
-                assert!((c[k] - (mn[k] + mx[k]) * 0.5).abs() < 1e-9, "c = (min+max)/2");
+                assert!(
+                    (c[k] - (mn[k] + mx[k]) * 0.5).abs() < 1e-9,
+                    "c = (min+max)/2"
+                );
             }
         }
 
@@ -1822,13 +1860,19 @@ mod tests {
         let cb = solid_bounding_box_center(&b).unwrap();
         let gb = solid_centroid(&b).unwrap();
         for k in 0..3 {
-            assert!((cb[k] - gb[k]).abs() < 1e-9, "box: bbox center = mass centroid");
+            assert!(
+                (cb[k] - gb[k]).abs() < 1e-9,
+                "box: bbox center = mass centroid"
+            );
         }
         let sph = sphere(2.0).unwrap();
         let cs = solid_bounding_box_center(&sph).unwrap();
         let gs = solid_centroid(&sph).unwrap();
         for k in 0..3 {
-            assert!((cs[k] - gs[k]).abs() < 2e-2, "sphere: bbox center ≈ mass centroid");
+            assert!(
+                (cs[k] - gs[k]).abs() < 2e-2,
+                "sphere: bbox center ≈ mass centroid"
+            );
         }
     }
 
@@ -1937,10 +1981,19 @@ mod tests {
         s.sort_by(|a, b| a.total_cmp(b));
         let longest = solid_bounding_box_longest_extent(&bx).unwrap();
         let shortest = solid_bounding_box_shortest_extent(&bx).unwrap();
-        assert!((longest - s[2]).abs() <= 1e-9 * s[2], "longest = sorted max");
-        assert!((shortest - s[0]).abs() <= 1e-9 * s[0], "shortest = sorted min");
+        assert!(
+            (longest - s[2]).abs() <= 1e-9 * s[2],
+            "longest = sorted max"
+        );
+        assert!(
+            (shortest - s[0]).abs() <= 1e-9 * s[0],
+            "shortest = sorted min"
+        );
         let mid = solid_bounding_box_intermediate_extent(&bx).unwrap();
-        assert!((shortest..=longest).contains(&mid), "shortest ≤ mid ≤ longest");
+        assert!(
+            (shortest..=longest).contains(&mid),
+            "shortest ≤ mid ≤ longest"
+        );
 
         // (c) THREAD solid_bounding_box_aspect_ratio (non-tautological): longest/shortest is
         // exactly the aspect ratio.
@@ -1987,7 +2040,8 @@ mod tests {
         for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
             let (mn, mx) = solid_bounding_box(&s).unwrap();
             let expected =
-                ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt();
+                ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2))
+                    .sqrt();
             assert!(
                 (solid_bounding_box_diagonal(&s).unwrap() - expected).abs() / expected < 1e-9,
                 "d = √(Σ extent²)"
@@ -2010,7 +2064,10 @@ mod tests {
         );
 
         // The space diagonal exceeds the largest single extent.
-        assert!(solid_bounding_box_diagonal(&b).unwrap() > 6.0, "diagonal > z-extent");
+        assert!(
+            solid_bounding_box_diagonal(&b).unwrap() > 6.0,
+            "diagonal > z-extent"
+        );
     }
 
     #[test]
@@ -2026,7 +2083,10 @@ mod tests {
 
         // Worked sphere (Cauchy): the mean chord of a sphere of radius r is exactly 4r/3.
         let sph = solid_mean_chord_length(&sphere(2.0).unwrap()).unwrap();
-        assert!((sph - 4.0 * 2.0 / 3.0).abs() <= 2e-2 * (4.0 * 2.0 / 3.0), "sphere → 4r/3 = 8/3");
+        assert!(
+            (sph - 4.0 * 2.0 / 3.0).abs() <= 2e-2 * (4.0 * 2.0 / 3.0),
+            "sphere → 4r/3 = 8/3"
+        );
 
         // Worked box(2,4,6): V=48, A=88 → ⟨ℓ⟩ = 192/88 ≈ 2.1818 (flat-faced, exact at any
         // tolerance — also exercises the _tol wrapper directly).
@@ -2126,7 +2186,10 @@ mod tests {
 
         // A box fills its AABB exactly: V = 48, bbox = 2·4·6 = 48 → ratio 1.
         let b = box_solid(2.0, 4.0, 6.0).unwrap();
-        assert!((solid_bounding_box_fill_ratio(&b).unwrap() - 1.0).abs() < 1e-9, "box fills its AABB");
+        assert!(
+            (solid_bounding_box_fill_ratio(&b).unwrap() - 1.0).abs() < 1e-9,
+            "box fills its AABB"
+        );
 
         // Threads solid_volume + solid_bounding_box: ratio = V / (extent product).
         for s in [box_solid(2.0, 4.0, 6.0).unwrap(), sphere(2.0).unwrap()] {
@@ -2219,7 +2282,10 @@ mod tests {
         // (d) SPHERE: V = (4/3)π·R³ → s = ((4/3)π)^(1/3)·R ≈ 3.224 for R = 2 (tessellation).
         let s_sphere = solid_equivalent_cube_edge(&sphere(2.0).unwrap()).unwrap();
         let expected = ((4.0 / 3.0) * std::f64::consts::PI).cbrt() * 2.0;
-        assert!((s_sphere - expected).abs() / expected < 3e-2, "sphere → s ≈ 3.224");
+        assert!(
+            (s_sphere - expected).abs() / expected < 3e-2,
+            "sphere → s ≈ 3.224"
+        );
 
         // (e) The _tol wrapper agrees with the default (box exact at any tol).
         assert!(
@@ -2290,7 +2356,10 @@ mod tests {
         // Wadell identity ψ = (d_v/d_s)².
         let dv = solid_equivalent_sphere_diameter(&bx).unwrap();
         let psi = solid_sphericity(&bx).unwrap();
-        assert!((psi - (dv / ds).powi(2)).abs() <= 1e-9 * psi, "ψ = (d_v/d_s)²");
+        assert!(
+            (psi - (dv / ds).powi(2)).abs() <= 1e-9 * psi,
+            "ψ = (d_v/d_s)²"
+        );
 
         // (d) A non-sphere has more surface per unit volume, so d_s ≥ d_v.
         assert!(ds >= dv, "d_s ≥ d_v: {ds} vs {dv}");
@@ -2353,7 +2422,10 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let psi_cube = solid_sphericity(&cube).unwrap();
         let expect_cube = PI.cbrt() * 6.0_f64.powf(2.0 / 3.0) / 6.0;
-        assert!((psi_cube - expect_cube).abs() / expect_cube < 1e-9, "cube Ψ = {psi_cube}");
+        assert!(
+            (psi_cube - expect_cube).abs() / expect_cube < 1e-9,
+            "cube Ψ = {psi_cube}"
+        );
 
         // Threads solid_volume + solid_area: Ψ = π^(1/3)·(6V)^(2/3)/A.
         for s in [box_solid(1.0, 2.0, 4.0).unwrap(), sphere(2.0).unwrap()] {
@@ -2365,15 +2437,24 @@ mod tests {
 
         // The sphere maximises sphericity → Ψ ≈ 1.
         let psi_sphere = solid_sphericity(&sphere(2.0).unwrap()).unwrap();
-        assert!((psi_sphere - 1.0).abs() < 1e-2, "sphere Ψ ≈ 1, got {psi_sphere}");
+        assert!(
+            (psi_sphere - 1.0).abs() < 1e-2,
+            "sphere Ψ ≈ 1, got {psi_sphere}"
+        );
 
         // Dimensionless ⇒ scale-invariant: a 1-cube and a 3-cube share Ψ.
         let psi_big = solid_sphericity(&box_solid(3.0, 3.0, 3.0).unwrap()).unwrap();
-        assert!((psi_cube - psi_big).abs() / psi_cube < 1e-9, "Ψ is scale-invariant");
+        assert!(
+            (psi_cube - psi_big).abs() / psi_cube < 1e-9,
+            "Ψ is scale-invariant"
+        );
 
         // A non-cube box is less sphere-like than the cube, and still below 1.
         let psi_slab = solid_sphericity(&box_solid(1.0, 2.0, 4.0).unwrap()).unwrap();
-        assert!(psi_slab < psi_cube && psi_slab < 1.0, "slab less spherical: {psi_slab}");
+        assert!(
+            psi_slab < psi_cube && psi_slab < 1.0,
+            "slab less spherical: {psi_slab}"
+        );
     }
 
     #[test]
@@ -2414,7 +2495,10 @@ mod tests {
             cylinder(1.0, 2.0).unwrap(),
             sphere(1.0).unwrap(),
         ] {
-            assert_eq!(solid_genus(&s), euler_characteristic(&s).map(|c| (2 - c) / 2));
+            assert_eq!(
+                solid_genus(&s),
+                euler_characteristic(&s).map(|c| (2 - c) / 2)
+            );
             assert_eq!(solid_genus(&s), Some(0), "simply-connected → genus 0");
         }
         // A torus has one through-hole → genus 1 (χ = 0).
@@ -2443,7 +2527,10 @@ mod tests {
 
         // (b) TORUS (genus 1, χ = 0) → 0: a handle subtracts 4π.
         let t = torus(2.0, 0.5).unwrap();
-        assert!(solid_total_gaussian_curvature(&t).unwrap().abs() < 1e-9, "torus → 0");
+        assert!(
+            solid_total_gaussian_curvature(&t).unwrap().abs() < 1e-9,
+            "torus → 0"
+        );
 
         // (c) THREAD euler_characteristic + solid_genus (non-tautological): total = 2π·χ =
         // 2π·(2 − 2g).
@@ -2468,8 +2555,14 @@ mod tests {
         // radii of gyration are [√(208/48), √(160/48), √(80/48)] = [2.0817, 1.8257, 1.2910].
         let bx = box_solid(2.0, 4.0, 6.0).unwrap();
         let k = solid_principal_radii_of_gyration(&bx).unwrap();
-        assert!((k[0] - (208.0_f64 / 48.0).sqrt()).abs() <= 1e-9, "k₁ = √(208/48)");
-        assert!((k[2] - (80.0_f64 / 48.0).sqrt()).abs() <= 1e-9, "k₃ = √(80/48)");
+        assert!(
+            (k[0] - (208.0_f64 / 48.0).sqrt()).abs() <= 1e-9,
+            "k₁ = √(208/48)"
+        );
+        assert!(
+            (k[2] - (80.0_f64 / 48.0).sqrt()).abs() <= 1e-9,
+            "k₃ = √(80/48)"
+        );
 
         // (b) THREAD solid_radius_of_gyration (non-tautological): the overall radius is
         // √((k₁²+k₂²+k₃²)/2) (since k_overall² = trace/2V and kᵢ² = Iᵢ/V).
@@ -2488,10 +2581,16 @@ mod tests {
 
         // (d) SPHERE (isotropic): all three radii equal.
         let ks = solid_principal_radii_of_gyration(&sphere(2.0).unwrap()).unwrap();
-        assert!((ks[0] - ks[2]).abs() <= 3e-2 * ks[0], "sphere radii equal: {ks:?}");
+        assert!(
+            (ks[0] - ks[2]).abs() <= 3e-2 * ks[0],
+            "sphere radii equal: {ks:?}"
+        );
 
         // (e) Sorted descending, positive, and the _tol wrapper agrees with the default.
-        assert!(k[0] >= k[1] && k[1] >= k[2] && k[2] > 0.0, "k₁ ≥ k₂ ≥ k₃ > 0: {k:?}");
+        assert!(
+            k[0] >= k[1] && k[1] >= k[2] && k[2] > 0.0,
+            "k₁ ≥ k₂ ≥ k₃ > 0: {k:?}"
+        );
         let kt = solid_principal_radii_of_gyration_tol(&bx, 0.1).unwrap();
         for (a, b) in k.iter().zip(kt.iter()) {
             assert!((a - b).abs() <= 1e-9 * a, "_tol wrapper agrees");
@@ -2530,7 +2629,10 @@ mod tests {
         );
 
         // Always ≥ 1.
-        assert!(solid_inertia_anisotropy(&b).unwrap() >= 1.0, "anisotropy ≥ 1");
+        assert!(
+            solid_inertia_anisotropy(&b).unwrap() >= 1.0,
+            "anisotropy ≥ 1"
+        );
     }
 
     #[test]
@@ -2543,7 +2645,10 @@ mod tests {
         let i = solid_principal_moments(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
         let expect = [208.0, 160.0, 80.0];
         for (got, want) in i.iter().zip(expect.iter()) {
-            assert!((got - want).abs() / want < 1e-9, "principal moments {i:?} vs {expect:?}");
+            assert!(
+                (got - want).abs() / want < 1e-9,
+                "principal moments {i:?} vs {expect:?}"
+            );
         }
         // Sorted descending.
         assert!(i[0] >= i[1] && i[1] >= i[2], "I₁ ≥ I₂ ≥ I₃");
@@ -2554,11 +2659,17 @@ mod tests {
         let v = solid_volume(&b).unwrap();
         let k_from_inertia = ((i[0] + i[1] + i[2]) / (2.0 * v)).sqrt();
         let k = solid_radius_of_gyration(&b).unwrap();
-        assert!((k_from_inertia - k).abs() / k < 1e-9, "√(ΣI/2V) = radius of gyration");
+        assert!(
+            (k_from_inertia - k).abs() / k < 1e-9,
+            "√(ΣI/2V) = radius of gyration"
+        );
 
         // A sphere is isotropic: the three principal moments are equal.
         let s = solid_principal_moments(&sphere(2.0).unwrap()).unwrap();
-        assert!((s[0] - s[2]).abs() / s[0] < 1e-3, "sphere principal moments equal: {s:?}");
+        assert!(
+            (s[0] - s[2]).abs() / s[0] < 1e-3,
+            "sphere principal moments equal: {s:?}"
+        );
     }
 
     #[test]
@@ -2570,7 +2681,10 @@ mod tests {
         // [√15, √(20/3), √(5/3)] = [3.8730, 2.5820, 1.2910], ratio 3:2:1 (the box extents halved).
         let bx = box_solid(2.0, 4.0, 6.0).unwrap();
         let e = solid_equivalent_ellipsoid_semi_axes(&bx).unwrap();
-        assert!((e[0] / e[2] - 3.0).abs() <= 1e-9 * 3.0, "longest:shortest = 3");
+        assert!(
+            (e[0] / e[2] - 3.0).abs() <= 1e-9 * 3.0,
+            "longest:shortest = 3"
+        );
         assert!((e[1] / e[2] - 2.0).abs() <= 1e-9 * 2.0, "mid:shortest = 2");
         assert!(
             (e[0] - 15.0_f64.sqrt()).abs() <= 1e-9 * e[0],
@@ -2586,7 +2700,10 @@ mod tests {
         }
 
         // (c) Sorted descending and strictly positive.
-        assert!(e[0] >= e[1] && e[1] >= e[2] && e[2] > 0.0, "p ≥ q ≥ r > 0: {e:?}");
+        assert!(
+            e[0] >= e[1] && e[1] >= e[2] && e[2] > 0.0,
+            "p ≥ q ≥ r > 0: {e:?}"
+        );
 
         // (d) The _tol wrapper agrees with the default on the box (exact at any tol).
         let et = solid_equivalent_ellipsoid_semi_axes_tol(&bx, 0.1).unwrap();
@@ -2655,13 +2772,19 @@ mod tests {
         // independent of the divergence-theorem integral the impl uses).
         let k = solid_radius_of_gyration(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
         let expect = ((2.0_f64 * 2.0 + 4.0 * 4.0 + 6.0 * 6.0) / 12.0).sqrt();
-        assert!((k - expect).abs() / expect < 1e-9, "box k = √(56/12) = {expect}, got {k}");
+        assert!(
+            (k - expect).abs() / expect < 1e-9,
+            "box k = √(56/12) = {expect}, got {k}"
+        );
 
         // A solid sphere of radius R has k = √(3/5)·R about its centre.
         let r = 2.0;
         let ks = solid_radius_of_gyration(&sphere(r).unwrap()).unwrap();
         let expect_s = (3.0_f64 / 5.0).sqrt() * r;
-        assert!((ks - expect_s).abs() / expect_s < 1e-3, "sphere k = √(3/5)·R = {expect_s}, got {ks}");
+        assert!(
+            (ks - expect_s).abs() / expect_s < 1e-3,
+            "sphere k = √(3/5)·R = {expect_s}, got {ks}"
+        );
 
         // k is a length: scaling the box ×2 scales k ×2.
         let k1 = solid_radius_of_gyration(&box_solid(1.0, 1.0, 1.0).unwrap()).unwrap();
@@ -2675,19 +2798,35 @@ mod tests {
         let (min, max) = solid_bounding_box(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
         let (emin, emax) = ([0.0, 0.0, 0.0], [2.0, 4.0, 6.0]);
         for k in 0..3 {
-            assert!((min[k] - emin[k]).abs() < 1e-9, "min[{k}] = {} != {}", min[k], emin[k]);
-            assert!((max[k] - emax[k]).abs() < 1e-9, "max[{k}] = {} != {}", max[k], emax[k]);
+            assert!(
+                (min[k] - emin[k]).abs() < 1e-9,
+                "min[{k}] = {} != {}",
+                min[k],
+                emin[k]
+            );
+            assert!(
+                (max[k] - emax[k]).abs() < 1e-9,
+                "max[{k}] = {} != {}",
+                max[k],
+                emax[k]
+            );
         }
         // Its centre is the box centroid (threads solid_centroid, #261).
         let c = solid_centroid(&box_solid(2.0, 4.0, 6.0).unwrap()).unwrap();
         for k in 0..3 {
-            assert!(((min[k] + max[k]) / 2.0 - c[k]).abs() < 1e-9, "bbox centre = centroid at {k}");
+            assert!(
+                ((min[k] + max[k]) / 2.0 - c[k]).abs() < 1e-9,
+                "bbox centre = centroid at {k}"
+            );
         }
 
         // A cylinder (base disk on the origin in X-Y, axis +Z): z-extent is exactly [0,h].
         let h = 5.0;
         let (cmin, cmax) = solid_bounding_box(&cylinder(1.5, h).unwrap()).unwrap();
-        assert!(cmin[2].abs() < 1e-9 && (cmax[2] - h).abs() < 1e-9, "cylinder z ∈ [0, h]");
+        assert!(
+            cmin[2].abs() < 1e-9 && (cmax[2] - h).abs() < 1e-9,
+            "cylinder z ∈ [0, h]"
+        );
         // The bounding box must contain the solid's centroid; min ≤ max on every axis.
         let cc = solid_centroid(&cylinder(1.5, h).unwrap()).unwrap();
         for k in 0..3 {
@@ -2713,8 +2852,15 @@ mod tests {
         // axis along +Z, so the centroid sits on the axis at half height.
         let h = 5.0;
         let cc = solid_centroid(&cylinder(1.5, h).unwrap()).unwrap();
-        assert!(cc[0].abs() < 1e-6 && cc[1].abs() < 1e-6, "cylinder off-axis: {cc:?}");
-        assert!((cc[2] - h / 2.0).abs() < 1e-6, "cylinder cz {} != h/2", cc[2]);
+        assert!(
+            cc[0].abs() < 1e-6 && cc[1].abs() < 1e-6,
+            "cylinder off-axis: {cc:?}"
+        );
+        assert!(
+            (cc[2] - h / 2.0).abs() < 1e-6,
+            "cylinder cz {} != h/2",
+            cc[2]
+        );
 
         // An origin-centred sphere is centroid-symmetric about the origin (a looser
         // bound than the box/cylinder: the revolved-semicircle tessellation is not
@@ -2806,5 +2952,3 @@ mod tests {
         );
     }
 }
-
-

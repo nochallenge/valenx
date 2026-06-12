@@ -540,7 +540,10 @@ mod tests {
             .iter()
             .take(m.element_blocks[0].connectivity.len() / 3 * 3)
             .any(|n| n.z.abs() > 1e-3);
-        assert!(any_nonzero_z, "expected at least one kept node off the xy plane");
+        assert!(
+            any_nonzero_z,
+            "expected at least one kept node off the xy plane"
+        );
     }
 
     #[test]
@@ -551,8 +554,7 @@ mod tests {
         let s = warped_surface();
         let c = circular_trim_curve(0.25);
         let inside = by_curve_in_uv(&s, &c, TrimSide::Inside, uv_params_for(16, 16, 48)).unwrap();
-        let outside =
-            by_curve_in_uv(&s, &c, TrimSide::Outside, uv_params_for(16, 16, 48)).unwrap();
+        let outside = by_curve_in_uv(&s, &c, TrimSide::Outside, uv_params_for(16, 16, 48)).unwrap();
         let n_inside = inside.element_blocks[0].connectivity.len() / 3;
         let n_outside = outside.element_blocks[0].connectivity.len() / 3;
         let total = 2 * (16 - 1) * (16 - 1);

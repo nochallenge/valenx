@@ -38,7 +38,9 @@ use std::time::Duration;
 use semver::Version;
 
 use valenx_core::{
-    adapter_helpers::{detect_tool_version_semver, find_on_path, live_provenance, validate_output_dir},
+    adapter_helpers::{
+        detect_tool_version_semver, find_on_path, live_provenance, validate_output_dir,
+    },
     error::RunPhase,
     subprocess, Adapter, AdapterError, AdapterInfo, Capabilities, Case, LicenseMode, Physics,
     PreparedJob, ProbeReport, RunContext, RunReport, VersionRange,
@@ -164,10 +166,7 @@ impl Adapter for CwltoolAdapter {
         let source_workflow = if input.workflow.is_absolute() {
             input.workflow.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.workflow,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.workflow)?
         };
         if !source_workflow.is_file() {
             return Err(AdapterError::InvalidCase {

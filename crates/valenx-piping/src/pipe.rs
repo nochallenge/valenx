@@ -287,7 +287,10 @@ mod tests {
             Material::CarbonSteel,
         );
         let a = s.external_surface_area_mm2().unwrap();
-        assert!((a - std::f64::consts::PI * s.outer_diameter_mm().unwrap() * s.length_mm()).abs() < 1e-9);
+        assert!(
+            (a - std::f64::consts::PI * s.outer_diameter_mm().unwrap() * s.length_mm()).abs()
+                < 1e-9
+        );
         assert!((a - 18952.0).abs() < 0.5);
         // Unknown NPS → error.
         let bad = PipeSection::new(

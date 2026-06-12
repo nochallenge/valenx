@@ -19,7 +19,9 @@
 
 use valenx_qchem::element::Element;
 
-use crate::engine::{berendsen_rescale, init_velocities, Controls, Frame, System, Thermostat, Trajectory};
+use crate::engine::{
+    berendsen_rescale, init_velocities, Controls, Frame, System, Thermostat, Trajectory,
+};
 use crate::error::{ReactDynError, Result};
 use crate::forces::{numerical_forces, single_point_energy, single_point_energy_embedded, Method};
 use crate::integrator::{kinetic_energy, velocity_verlet_step};
@@ -158,14 +160,24 @@ fn qmmm_total_energy(
     let mm_pos = &all[n_qm..];
     match sys.embedding {
         Embedding::Mechanical => {
-            let e_qm = single_point_energy(&sys.qm_elements, qm_pos, sys.qm_charge, sys.qm_mult, method, basis)?;
+            let e_qm = single_point_energy(
+                &sys.qm_elements,
+                qm_pos,
+                sys.qm_charge,
+                sys.qm_mult,
+                method,
+                basis,
+            )?;
             let (qm_p, mm_p) = build_particles(qm_pos, mm_pos, sys, true);
             let (e_cl, _, _) = classical_forces(&qm_p, &mm_p);
             Ok(e_qm + e_cl)
         }
         Embedding::Electrostatic => {
-            let ext: Vec<(f64, [f64; 3])> =
-                mm_pos.iter().zip(&sys.mm).map(|(p, m)| (m.charge, *p)).collect();
+            let ext: Vec<(f64, [f64; 3])> = mm_pos
+                .iter()
+                .zip(&sys.mm)
+                .map(|(p, m)| (m.charge, *p))
+                .collect();
             let e_qm = single_point_energy_embedded(
                 &sys.qm_elements,
                 qm_pos,
@@ -356,7 +368,11 @@ impl QmMmEngine {
 
         for step in 0..controls.n_steps {
             forces = velocity_verlet_step(&mut pos, &mut vel, &forces, &masses, dt, force_fn)?;
-            if let Thermostat::Berendsen { target_kelvin, tau_fs } = controls.thermostat {
+            if let Thermostat::Berendsen {
+                target_kelvin,
+                tau_fs,
+            } = controls.thermostat
+            {
                 berendsen_rescale(&mut vel, &masses, target_kelvin, controls.dt_fs, tau_fs);
             }
             let pe = qmmm_total_energy(sys, &pos, method, basis)?;
@@ -393,8 +409,22 @@ mod tests {
             qm_mult: 1,
             qm_classical: vec![(0.0, 2.0, 0.005), (0.0, 2.0, 0.005)],
             mm: vec![
-                MmAtom { element: h(), pos_bohr: [5.0, 0.0, 0.0], charge: mm_charge, sigma_bohr: 3.0, epsilon_hartree: 0.001, mass_amu: 20.0 },
-                MmAtom { element: h(), pos_bohr: [-5.0, 0.0, 0.7], charge: -mm_charge, sigma_bohr: 3.0, epsilon_hartree: 0.001, mass_amu: 20.0 },
+                MmAtom {
+                    element: h(),
+                    pos_bohr: [5.0, 0.0, 0.0],
+                    charge: mm_charge,
+                    sigma_bohr: 3.0,
+                    epsilon_hartree: 0.001,
+                    mass_amu: 20.0,
+                },
+                MmAtom {
+                    element: h(),
+                    pos_bohr: [-5.0, 0.0, 0.7],
+                    charge: -mm_charge,
+                    sigma_bohr: 3.0,
+                    epsilon_hartree: 0.001,
+                    mass_amu: 20.0,
+                },
             ],
             embedding,
         }
@@ -415,7 +445,9 @@ mod tests {
     #[test]
     fn mechanical_runs_and_builds_combined_system() {
         let sys = h2_with_mm(Embedding::Mechanical, 0.0);
-        let traj = QmMmEngine.run(&sys, &controls(6), &mut |_| {}).expect("run");
+        let traj = QmMmEngine
+            .run(&sys, &controls(6), &mut |_| {})
+            .expect("run");
         assert_eq!(traj.frames.len(), 7);
         assert_eq!(traj.system.n_atoms(), 4);
     }
@@ -425,7 +457,11 @@ mod tests {
         let sys = h2_with_mm(Embedding::Mechanical, 0.0);
         let traj = QmMmEngine.run(&sys, &controls(10), &mut |_| {}).unwrap();
         let e0 = traj.frames[0].total_hartree();
-        let drift = traj.frames.iter().map(|f| (f.total_hartree() - e0).abs()).fold(0.0_f64, f64::max);
+        let drift = traj
+            .frames
+            .iter()
+            .map(|f| (f.total_hartree() - e0).abs())
+            .fold(0.0_f64, f64::max);
         assert!(drift < 1e-2, "mechanical NVE drift too large: {drift} Ha");
     }
 
@@ -433,19 +469,34 @@ mod tests {
     fn electrostatic_runs_and_conserves_energy() {
         // Charged MM atoms so the embedding electrostatics matter.
         let sys = h2_with_mm(Embedding::Electrostatic, 0.4);
-        let traj = QmMmEngine.run(&sys, &controls(6), &mut |_| {}).expect("electrostatic run");
+        let traj = QmMmEngine
+            .run(&sys, &controls(6), &mut |_| {})
+            .expect("electrostatic run");
         assert_eq!(traj.system.n_atoms(), 4);
         let e0 = traj.frames[0].total_hartree();
-        let drift = traj.frames.iter().map(|f| (f.total_hartree() - e0).abs()).fold(0.0_f64, f64::max);
+        let drift = traj
+            .frames
+            .iter()
+            .map(|f| (f.total_hartree() - e0).abs())
+            .fold(0.0_f64, f64::max);
         // FD-of-total-energy forces are the true gradient → energy conserves.
-        assert!(drift < 2e-2, "electrostatic NVE drift too large: {drift} Ha");
+        assert!(
+            drift < 2e-2,
+            "electrostatic NVE drift too large: {drift} Ha"
+        );
     }
 
     #[test]
     fn electrostatic_rejects_non_rhf() {
         let sys = h2_with_mm(Embedding::Electrostatic, 0.4);
-        let c = Controls { method: Method::Uhf, ..controls(4) };
-        assert!(matches!(QmMmEngine.run(&sys, &c, &mut |_| {}), Err(ReactDynError::Invalid { .. })));
+        let c = Controls {
+            method: Method::Uhf,
+            ..controls(4)
+        };
+        assert!(matches!(
+            QmMmEngine.run(&sys, &c, &mut |_| {}),
+            Err(ReactDynError::Invalid { .. })
+        ));
     }
 
     #[test]

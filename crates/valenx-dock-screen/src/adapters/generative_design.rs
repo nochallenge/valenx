@@ -138,9 +138,7 @@ pub struct GenerativeDesignResult {
 /// when present, or [`DockScreenError::ToolNotAvailable`] when absent.
 ///
 /// **No neural network is run here, and none is reimplemented.**
-pub fn run_generative_design(
-    request: &GenerativeDesignRequest,
-) -> Result<GenerativeDesignResult> {
+pub fn run_generative_design(request: &GenerativeDesignRequest) -> Result<GenerativeDesignResult> {
     let status = find_executable(request.tool.binary_candidates());
     let program = match status {
         ToolStatus::Available { path } => path,
@@ -260,11 +258,8 @@ mod tests {
 
     #[test]
     fn build_args_embeds_paths_and_counts() {
-        let req = GenerativeDesignRequest::new(
-            GenerativeTool::ProteinMpnn,
-            "backbone.pdb",
-            "designs",
-        );
+        let req =
+            GenerativeDesignRequest::new(GenerativeTool::ProteinMpnn, "backbone.pdb", "designs");
         let args = build_args(&req);
         assert!(args.iter().any(|a| a.contains("backbone.pdb")));
         assert!(args.iter().any(|a| a.contains("designs")));

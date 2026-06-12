@@ -115,11 +115,7 @@ pub fn mea_with_gamma(pf: &PartitionFunction, gamma: f64) -> Result<MeaResult> {
             if span > MIN_HAIRPIN {
                 let p = pf.pair_probability(i, j);
                 if p > 0.0 {
-                    let inner = if i + 2 <= j {
-                        m[at(i + 1, j - 1)]
-                    } else {
-                        0.0
-                    };
+                    let inner = if i + 2 <= j { m[at(i + 1, j - 1)] } else { 0.0 };
                     best = best.max(inner + 2.0 * gamma * p);
                 }
             }
@@ -153,11 +149,7 @@ pub fn mea_with_gamma(pf: &PartitionFunction, gamma: f64) -> Result<MeaResult> {
         }
         if j - i > MIN_HAIRPIN {
             let p = pf.pair_probability(i, j);
-            let inner = if i + 2 <= j {
-                m[at(i + 1, j - 1)]
-            } else {
-                0.0
-            };
+            let inner = if i + 2 <= j { m[at(i + 1, j - 1)] } else { 0.0 };
             if p > 0.0 && feq(here, inner + 2.0 * gamma * p) {
                 partner[i] = Some(j);
                 partner[j] = Some(i);

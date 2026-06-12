@@ -1,7 +1,7 @@
 //! Curve operations — pure functions returning new
 //! [`valenx_surface::NurbsCurve`] (or polylines).
 
-use nalgebra::{Vector3, UnitVector3};
+use nalgebra::{UnitVector3, Vector3};
 use serde::{Deserialize, Serialize};
 
 use valenx_surface::NurbsCurve;
@@ -165,10 +165,7 @@ pub fn extend(curve: &NurbsCurve, length: f64, end: ExtendEnd) -> Result<NurbsCu
 /// `tolerance` RMS error. v1 picks `degree=3`, `n_cps =
 /// min(points.len(), 32)` and reports if the RMS error exceeds
 /// `tolerance` via `Degenerate` (the curve is still returned).
-pub fn approximate(
-    points: &[Vector3<f64>],
-    tolerance: f64,
-) -> Result<NurbsCurve, CurvesError> {
+pub fn approximate(points: &[Vector3<f64>], tolerance: f64) -> Result<NurbsCurve, CurvesError> {
     if points.len() < 2 {
         return Err(CurvesError::Degenerate(
             "need at least 2 points to approximate".into(),

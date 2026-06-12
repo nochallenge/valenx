@@ -18,11 +18,11 @@
 //! `intersection`), which never panic and never return a silently-invalid
 //! solid — a failed boolean surfaces here as [`TimelineError::Cad`].
 
+use serde::{Deserialize, Serialize};
 use valenx_cad::{
     box_solid, cone, cylinder, difference, intersection, prism, sphere, torus, union, CadError,
     Solid,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::parameters::{ParamError, ParameterTable};
 
@@ -230,9 +230,8 @@ impl FeatureTimeline {
         for step in &self.steps {
             // 1. Build the feature's primitive solid.
             let solid = match &step.feature {
-                Feature::Box { dx, dy, dz } => {
-                    box_solid(resolve(dx)?, resolve(dy)?, resolve(dz)?).map_err(TimelineError::Cad)?
-                }
+                Feature::Box { dx, dy, dz } => box_solid(resolve(dx)?, resolve(dy)?, resolve(dz)?)
+                    .map_err(TimelineError::Cad)?,
                 Feature::Cylinder { radius, height } => {
                     cylinder(resolve(radius)?, resolve(height)?).map_err(TimelineError::Cad)?
                 }
@@ -242,14 +241,21 @@ impl FeatureTimeline {
                 Feature::Sphere { radius } => {
                     sphere(resolve(radius)?).map_err(TimelineError::Cad)?
                 }
-                Feature::Cone { base_radius, top_radius, height } => {
-                    cone(resolve(base_radius)?, resolve(top_radius)?, resolve(height)?)
-                        .map_err(TimelineError::Cad)?
-                }
-                Feature::Torus { major_radius, minor_radius } => {
-                    torus(resolve(major_radius)?, resolve(minor_radius)?)
-                        .map_err(TimelineError::Cad)?
-                }
+                Feature::Cone {
+                    base_radius,
+                    top_radius,
+                    height,
+                } => cone(
+                    resolve(base_radius)?,
+                    resolve(top_radius)?,
+                    resolve(height)?,
+                )
+                .map_err(TimelineError::Cad)?,
+                Feature::Torus {
+                    major_radius,
+                    minor_radius,
+                } => torus(resolve(major_radius)?, resolve(minor_radius)?)
+                    .map_err(TimelineError::Cad)?,
             };
 
             // 2a. Orient it: rotate about the feature's own origin (degrees →
@@ -308,7 +314,10 @@ impl FeatureTimeline {
         if finished.is_empty() {
             return Err(TimelineError::EmptyTimeline);
         }
-        Ok(RebuiltModel { bodies: finished, snapshots })
+        Ok(RebuiltModel {
+            bodies: finished,
+            snapshots,
+        })
     }
 }
 
@@ -325,7 +334,11 @@ mod tests {
     }
 
     fn unit_box() -> Feature {
-        Feature::Box { dx: "size".into(), dy: "size".into(), dz: "size".into() }
+        Feature::Box {
+            dx: "size".into(),
+            dy: "size".into(),
+            dz: "size".into(),
+        }
     }
 
     /// The cut/join tests reuse `valenx-cad`'s proven "punched cube" boolean
@@ -333,7 +346,10 @@ mod tests {
     /// base sits at (0.5, 0.5, -0.5), so it straddles the box through its top
     /// and bottom faces — a known-good shapeops input.
     fn through_pin() -> Feature {
-        Feature::Cylinder { radius: "hole_r".into(), height: "hole_h".into() }
+        Feature::Cylinder {
+            radius: "hole_r".into(),
+            height: "hole_h".into(),
+        }
     }
 
     #[test]
@@ -394,7 +410,10 @@ mod tests {
         let mut tl = FeatureTimeline::new();
         tl.push(Step::at_origin(
             Op::New,
-            Feature::Cylinder { radius: "missing".into(), height: "1".into() },
+            Feature::Cylinder {
+                radius: "missing".into(),
+                height: "1".into(),
+            },
         ));
         assert!(matches!(
             tl.rebuild(&ParameterTable::new()),
@@ -424,8 +443,15 @@ mod tests {
         p.set("r", "0.5");
         let cases = [
             Feature::Sphere { radius: "r".into() },
-            Feature::Cone { base_radius: "r".into(), top_radius: "0".into(), height: "1".into() },
-            Feature::Torus { major_radius: "1".into(), minor_radius: "r".into() },
+            Feature::Cone {
+                base_radius: "r".into(),
+                top_radius: "0".into(),
+                height: "1".into(),
+            },
+            Feature::Torus {
+                major_radius: "1".into(),
+                minor_radius: "r".into(),
+            },
         ];
         for feat in cases {
             let mut tl = FeatureTimeline::new();
@@ -442,7 +468,11 @@ mod tests {
         // A rotated box is still a box (6 faces) — the rotation path runs cleanly.
         let mut step = Step::at_origin(
             Op::New,
-            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+            Feature::Box {
+                dx: "1".into(),
+                dy: "1".into(),
+                dz: "1".into(),
+            },
         );
         step.rotate_deg = ["ang".into(), "0".into(), "0".into()];
         let mut tl = FeatureTimeline::new();
@@ -453,7 +483,11 @@ mod tests {
         // A broken rotation expression surfaces as a Param error, not a panic.
         let mut bad = Step::at_origin(
             Op::New,
-            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+            Feature::Box {
+                dx: "1".into(),
+                dy: "1".into(),
+                dz: "1".into(),
+            },
         );
         bad.rotate_deg = ["1 +".into(), "0".into(), "0".into()];
         let mut tl2 = FeatureTimeline::new();
@@ -475,7 +509,10 @@ mod tests {
             },
         ));
         let m = tl.rebuild(&ParameterTable::new()).expect("extrude builds");
-        assert!(m.bodies[0].faces() >= 5, "an extruded quad is a box-like solid");
+        assert!(
+            m.bodies[0].faces() >= 5,
+            "an extruded quad is a box-like solid"
+        );
     }
 
     #[test]
@@ -483,17 +520,27 @@ mod tests {
         let mut tl = FeatureTimeline::new();
         tl.push(Step::at_origin(
             Op::New,
-            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+            Feature::Box {
+                dx: "1".into(),
+                dy: "1".into(),
+                dz: "1".into(),
+            },
         ));
         // A second New starts a separate body instead of replacing the first.
         tl.push(Step::placed(
             Op::New,
-            Feature::Box { dx: "1".into(), dy: "1".into(), dz: "1".into() },
+            Feature::Box {
+                dx: "1".into(),
+                dy: "1".into(),
+                dz: "1".into(),
+            },
             "3",
             "0",
             "0",
         ));
-        let m = tl.rebuild(&ParameterTable::new()).expect("two bodies build");
+        let m = tl
+            .rebuild(&ParameterTable::new())
+            .expect("two bodies build");
         assert_eq!(m.bodies.len(), 2, "a second New keeps a separate body");
         assert_eq!(m.snapshots[0].len(), 1, "one body after the first step");
         assert_eq!(

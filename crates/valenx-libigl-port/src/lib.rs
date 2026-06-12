@@ -110,7 +110,10 @@ mod tests {
         let m = unit_quad_mesh();
         assert!(matches!(
             biharmonic(&m, &[]),
-            Err(LibiglError::BadParameter { name: "handles", .. })
+            Err(LibiglError::BadParameter {
+                name: "handles",
+                ..
+            })
         ));
     }
 
@@ -127,7 +130,10 @@ mod tests {
         let m = unit_quad_mesh();
         assert!(matches!(
             heat_geodesics(&m, 99),
-            Err(LibiglError::BadParameter { name: "source_vertex", .. })
+            Err(LibiglError::BadParameter {
+                name: "source_vertex",
+                ..
+            })
         ));
     }
 

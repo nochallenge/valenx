@@ -34,12 +34,9 @@ pub mod prior;
 pub mod proposal;
 
 pub use chain::{run_chain, AcceptanceCounts, ChainConfig, ChainResult, ChainSample};
-pub use diagnostics::{
-    effective_sample_size, gelman_rubin, ParameterDiagnostics,
-};
+pub use diagnostics::{effective_sample_size, gelman_rubin, ParameterDiagnostics};
 pub use posterior::{
-    clade_posterior_table, clade_probability, summarise_posterior, CladePosterior,
-    PosteriorSummary,
+    clade_posterior_table, clade_probability, summarise_posterior, CladePosterior, PosteriorSummary,
 };
 pub use prior::Prior;
 pub use proposal::{ChainState, ProposalKind, ProposalSet};

@@ -88,12 +88,7 @@ pub fn parse_reaction_smiles(input: &str) -> Result<Reaction> {
 
 /// Write a [`Reaction`] back to a reaction-SMILES string.
 pub fn write_reaction_smiles(rxn: &Reaction) -> String {
-    let join = |set: &[Molecule]| {
-        set.iter()
-            .map(write_smiles)
-            .collect::<Vec<_>>()
-            .join(".")
-    };
+    let join = |set: &[Molecule]| set.iter().map(write_smiles).collect::<Vec<_>>().join(".");
     format!(
         "{}>{}>{}",
         join(&rxn.reactants),

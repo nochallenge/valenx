@@ -33,7 +33,12 @@ pub struct ReverseWorkbenchState {
 
 impl Default for ReverseWorkbenchState {
     fn default() -> Self {
-        Self { shape: Shape::Sphere, density: 24, k: 8, status: String::new() }
+        Self {
+            shape: Shape::Sphere,
+            density: 24,
+            k: 8,
+            status: String::new(),
+        }
     }
 }
 
@@ -126,14 +131,20 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.selectable_value(&mut s.shape, Shape::Sphere, "Sphere");
                 ui.selectable_value(&mut s.shape, Shape::Torus, "Torus");
             });
-            egui::Grid::new("reverse_params").num_columns(2).show(ui, |ui| {
-                ui.label("cloud density");
-                ui.add(egui::DragValue::new(&mut s.density).speed(0.5).range(6..=64));
-                ui.end_row();
-                ui.label("k neighbours");
-                ui.add(egui::DragValue::new(&mut s.k).speed(0.2).range(4..=20));
-                ui.end_row();
-            });
+            egui::Grid::new("reverse_params")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    ui.label("cloud density");
+                    ui.add(
+                        egui::DragValue::new(&mut s.density)
+                            .speed(0.5)
+                            .range(6..=64),
+                    );
+                    ui.end_row();
+                    ui.label("k neighbours");
+                    ui.add(egui::DragValue::new(&mut s.k).speed(0.2).range(4..=20));
+                    ui.end_row();
+                });
             ui.separator();
             if ui.button("▶ Reconstruct → 3D viewport").clicked() {
                 reconstruct = true;
@@ -180,6 +191,9 @@ mod tests {
         let mesh = run_reverse(&ReverseWorkbenchState::default()).expect("triangulate");
         assert!(!mesh.nodes.is_empty(), "mesh has nodes");
         let soup = mesh_to_triangle_soup(&mesh);
-        assert!(!soup.triangles.is_empty(), "reconstruction yields triangles");
+        assert!(
+            !soup.triangles.is_empty(),
+            "reconstruction yields triangles"
+        );
     }
 }

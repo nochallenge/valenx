@@ -112,10 +112,7 @@ pub fn assess_quality(model: &ProteinModel) -> Result<QualityReport> {
             }
         }
         if counted > 0 {
-            (
-                fav as f64 / counted as f64,
-                out as f64 / counted as f64,
-            )
+            (fav as f64 / counted as f64, out as f64 / counted as f64)
         } else {
             (1.0, 0.0)
         }
@@ -165,9 +162,7 @@ pub fn assess_quality(model: &ProteinModel) -> Result<QualityReport> {
     // A clash-score → [0,1] term: 1 at zero clashes, decaying.
     let clash_term = (1.0 - clash_score / 60.0).clamp(0.0, 1.0);
     let overall = 100.0
-        * (0.35 * clash_term + 0.35 * favored + 0.30 * packing
-            - 0.0 * outliers)
-            .clamp(0.0, 1.0);
+        * (0.35 * clash_term + 0.35 * favored + 0.30 * packing - 0.0 * outliers).clamp(0.0, 1.0);
 
     Ok(QualityReport {
         clash_score,

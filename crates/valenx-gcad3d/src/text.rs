@@ -173,11 +173,7 @@ pub struct StrokeText {
 ///   strictly positive and finite.
 /// - [`Gcad3dError::UnsupportedChar`] for a character outside
 ///   A-Z / 0-9 / space.
-pub fn extrude_strokes(
-    text: &str,
-    font_size: f64,
-    depth: f64,
-) -> Result<StrokeText, Gcad3dError> {
+pub fn extrude_strokes(text: &str, font_size: f64, depth: f64) -> Result<StrokeText, Gcad3dError> {
     if !font_size.is_finite() || font_size <= 0.0 {
         return Err(Gcad3dError::BadParameter {
             name: "font_size",
@@ -208,9 +204,7 @@ pub fn extrude_strokes(
         for stroke in norm {
             let placed: Vec<Vector3<f64>> = stroke
                 .iter()
-                .map(|&(x, y)| {
-                    Vector3::new(cursor_x + x * font_size, y * font_size, 0.0)
-                })
+                .map(|&(x, y)| Vector3::new(cursor_x + x * font_size, y * font_size, 0.0))
                 .collect();
             g.strokes.push(placed);
         }
@@ -305,12 +299,7 @@ fn stroke_glyph(ch: char) -> Result<Vec<Vec<(f64, f64)>>, Gcad3dError> {
             (1.0, 1.0),
             (1.0, 0.0),
         ]],
-        'N' => vec![vec![
-            (0.0, 0.0),
-            (0.0, 1.0),
-            (1.0, 0.0),
-            (1.0, 1.0),
-        ]],
+        'N' => vec![vec![(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]],
         'O' => vec![arc(0.5, 0.5, 0.5, 0.0, 2.0 * PI, 24)],
         'P' => {
             let mut s = vec![vec![(0.0, 0.0), (0.0, 1.0), (0.55, 1.0)]];
@@ -335,10 +324,7 @@ fn stroke_glyph(ch: char) -> Result<Vec<Vec<(f64, f64)>>, Gcad3dError> {
             s.extend(arc(0.5, 0.28, 0.28, PI * 0.9, PI * -0.55, 12));
             vec![s]
         }
-        'T' => vec![
-            vec![(0.0, 1.0), (1.0, 1.0)],
-            vec![(0.5, 1.0), (0.5, 0.0)],
-        ],
+        'T' => vec![vec![(0.0, 1.0), (1.0, 1.0)], vec![(0.5, 1.0), (0.5, 0.0)]],
         'U' => {
             // The bottom is a semicircle of radius 0.5 joining the two
             // verticals; its centre must sit at y=0.5 so the arc dips
@@ -359,20 +345,12 @@ fn stroke_glyph(ch: char) -> Result<Vec<Vec<(f64, f64)>>, Gcad3dError> {
             (0.75, 0.0),
             (1.0, 1.0),
         ]],
-        'X' => vec![
-            vec![(0.0, 0.0), (1.0, 1.0)],
-            vec![(0.0, 1.0), (1.0, 0.0)],
-        ],
+        'X' => vec![vec![(0.0, 0.0), (1.0, 1.0)], vec![(0.0, 1.0), (1.0, 0.0)]],
         'Y' => vec![
             vec![(0.0, 1.0), (0.5, 0.5), (1.0, 1.0)],
             vec![(0.5, 0.5), (0.5, 0.0)],
         ],
-        'Z' => vec![vec![
-            (0.0, 1.0),
-            (1.0, 1.0),
-            (0.0, 0.0),
-            (1.0, 0.0),
-        ]],
+        'Z' => vec![vec![(0.0, 1.0), (1.0, 1.0), (0.0, 0.0), (1.0, 0.0)]],
         '0' => {
             let mut s = vec![arc(0.5, 0.5, 0.5, 0.0, 2.0 * PI, 24)];
             s.push(vec![(0.2, 0.2), (0.8, 0.8)]);
@@ -395,9 +373,7 @@ fn stroke_glyph(ch: char) -> Result<Vec<Vec<(f64, f64)>>, Gcad3dError> {
             s.extend(arc(0.5, 0.26, 0.26, PI * 0.5, PI * -1.1, 10));
             vec![s]
         }
-        '4' => vec![
-            vec![(0.75, 0.0), (0.75, 1.0), (0.0, 0.3), (1.0, 0.3)],
-        ],
+        '4' => vec![vec![(0.75, 0.0), (0.75, 1.0), (0.0, 0.3), (1.0, 0.3)]],
         '5' => {
             let mut s = vec![vec![(0.85, 1.0), (0.1, 1.0), (0.1, 0.55), (0.55, 0.6)]];
             s[0].extend(arc(0.5, 0.32, 0.32, PI * 0.4, PI * -1.1, 12));

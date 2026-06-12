@@ -67,40 +67,40 @@ pub mod sweep_support;
 
 // Phase 70-79
 pub mod algo_section;
-pub mod pipe_shell;
-pub mod offset_surface;
+pub mod approx_curve_fit;
+pub mod approx_surface_fit;
 pub mod builder_sewing;
 pub mod chfi3d_corner_blends;
 pub mod geom_fill_bsurf_filling;
 pub mod geom_fill_section_law;
-pub mod approx_surface_fit;
-pub mod approx_curve_fit;
+pub mod offset_surface;
+pub mod pipe_shell;
 pub mod prim_api_cylinder;
 
 // Phase 80-89
-pub mod prim_api_cone;
-pub mod prim_api_sphere;
-pub mod prim_api_torus;
 pub mod prim_api_box;
+pub mod prim_api_cone;
+pub mod prim_api_half_space;
 pub mod prim_api_prism;
 pub mod prim_api_revol;
+pub mod prim_api_sphere;
+pub mod prim_api_torus;
 pub mod prim_api_wedge;
-pub mod prim_api_half_space;
 pub mod sweep_api_pipe;
 pub mod sweep_api_pipe_shell;
 
 // Phase 90-100
-pub mod sweep_api_thru_sections;
-pub mod sweep_api_evolved;
-pub mod offset_api_make_offset;
-pub mod offset_api_draft_angle;
-pub mod offset_api_filling;
-pub mod cut_api_section;
 pub mod cut_api_cut_with_warp;
+pub mod cut_api_section;
+pub mod feat_make_draft;
+pub mod feat_make_pipe;
 pub mod feat_make_prism;
 pub mod feat_make_revol;
-pub mod feat_make_pipe;
-pub mod feat_make_draft;
+pub mod offset_api_draft_angle;
+pub mod offset_api_filling;
+pub mod offset_api_make_offset;
+pub mod sweep_api_evolved;
+pub mod sweep_api_thru_sections;
 
 pub use error::{ErrorCategory, OcctSurfaceError};
 

@@ -352,8 +352,7 @@ impl IrradianceVolume {
         for dz in 0..2 {
             for dy in 0..2 {
                 for dx in 0..2 {
-                    let probe = &self.probes
-                        [self.probe_index(x0 + dx, y0 + dy, z0 + dz)];
+                    let probe = &self.probes[self.probe_index(x0 + dx, y0 + dy, z0 + dz)];
                     let irr = probe.irradiance(normal);
                     // Trilinear weight of this corner.
                     let wx = if dx == 0 { 1.0 - fx } else { fx };
@@ -504,13 +503,9 @@ mod tests {
     /// the cosine-convolved irradiance is direction-independent.
     #[test]
     fn uniform_scene_gives_uniform_irradiance() {
-        let mut vol = IrradianceVolume::new(
-            [-1.0, -1.0, -1.0],
-            [1.0, 1.0, 1.0],
-            (2, 2, 2),
-            ShOrder::L2,
-        )
-        .unwrap();
+        let mut vol =
+            IrradianceVolume::new([-1.0, -1.0, -1.0], [1.0, 1.0, 1.0], (2, 2, 2), ShOrder::L2)
+                .unwrap();
         // A scene that radiates a constant 0.5 from every direction.
         vol.bake(256, |_origin, _dir| [0.5, 0.5, 0.5]);
         // Every probe, every normal → the same irradiance ≈ 0.5
@@ -540,13 +535,9 @@ mod tests {
     /// red-dominated.
     #[test]
     fn probe_picks_up_colour_bleed_from_a_wall() {
-        let mut vol = IrradianceVolume::new(
-            [-1.0, -1.0, -1.0],
-            [1.0, 1.0, 1.0],
-            (2, 2, 2),
-            ShOrder::L2,
-        )
-        .unwrap();
+        let mut vol =
+            IrradianceVolume::new([-1.0, -1.0, -1.0], [1.0, 1.0, 1.0], (2, 2, 2), ShOrder::L2)
+                .unwrap();
         // A "red wall" on the +X side: rays heading +X see red, all
         // others see black — a colour-bleed scene.
         vol.bake(512, |_origin, dir| {
@@ -578,13 +569,9 @@ mod tests {
     /// the 8 corners.
     #[test]
     fn sample_irradiance_trilinearly_blends_probes() {
-        let mut vol = IrradianceVolume::new(
-            [0.0, 0.0, 0.0],
-            [2.0, 2.0, 2.0],
-            (2, 2, 2),
-            ShOrder::L1,
-        )
-        .unwrap();
+        let mut vol =
+            IrradianceVolume::new([0.0, 0.0, 0.0], [2.0, 2.0, 2.0], (2, 2, 2), ShOrder::L1)
+                .unwrap();
         // Hand-set the 8 probes: corner (0,0,0) bright, the rest dark.
         // A constant-band-only probe (band 0 coefficient) so
         // irradiance is direction-independent and easy to predict.
@@ -639,13 +626,9 @@ mod tests {
     /// than returning black or panicking.
     #[test]
     fn out_of_box_query_clamps_to_the_boundary() {
-        let mut vol = IrradianceVolume::new(
-            [0.0, 0.0, 0.0],
-            [1.0, 1.0, 1.0],
-            (2, 2, 2),
-            ShOrder::L1,
-        )
-        .unwrap();
+        let mut vol =
+            IrradianceVolume::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], (2, 2, 2), ShOrder::L1)
+                .unwrap();
         vol.bake(64, |_o, _d| [0.3, 0.3, 0.3]);
         // A point far outside the box.
         let outside = vol.sample_irradiance([100.0, 100.0, 100.0], [0.0, 1.0, 0.0]);
@@ -659,29 +642,11 @@ mod tests {
     #[test]
     fn new_rejects_bad_parameters() {
         // A 1×2×2 grid cannot trilinearly blend.
-        assert!(IrradianceVolume::new(
-            [0.0; 3],
-            [1.0; 3],
-            (1, 2, 2),
-            ShOrder::L1
-        )
-        .is_err());
+        assert!(IrradianceVolume::new([0.0; 3], [1.0; 3], (1, 2, 2), ShOrder::L1).is_err());
         // An inverted box.
-        assert!(IrradianceVolume::new(
-            [0.0; 3],
-            [-1.0, 1.0, 1.0],
-            (2, 2, 2),
-            ShOrder::L1
-        )
-        .is_err());
+        assert!(IrradianceVolume::new([0.0; 3], [-1.0, 1.0, 1.0], (2, 2, 2), ShOrder::L1).is_err());
         // A valid call.
-        assert!(IrradianceVolume::new(
-            [0.0; 3],
-            [1.0; 3],
-            (3, 3, 3),
-            ShOrder::L2
-        )
-        .is_ok());
+        assert!(IrradianceVolume::new([0.0; 3], [1.0; 3], (3, 3, 3), ShOrder::L2).is_ok());
     }
 
     /// The Fibonacci-sphere points are unit length and spread over the
@@ -712,13 +677,8 @@ mod tests {
     /// corners and spaces the interior evenly.
     #[test]
     fn probe_positions_span_the_box() {
-        let vol = IrradianceVolume::new(
-            [-2.0, 0.0, 1.0],
-            [2.0, 4.0, 5.0],
-            (3, 3, 3),
-            ShOrder::L1,
-        )
-        .unwrap();
+        let vol = IrradianceVolume::new([-2.0, 0.0, 1.0], [2.0, 4.0, 5.0], (3, 3, 3), ShOrder::L1)
+            .unwrap();
         // The (0,0,0) probe sits at min.
         let p000 = vol.probe_position(0, 0, 0);
         assert_eq!(p000, [-2.0, 0.0, 1.0]);
@@ -735,13 +695,7 @@ mod tests {
     #[test]
     fn bake_is_deterministic() {
         let make = || {
-            let mut v = IrradianceVolume::new(
-                [0.0; 3],
-                [1.0; 3],
-                (2, 2, 2),
-                ShOrder::L2,
-            )
-            .unwrap();
+            let mut v = IrradianceVolume::new([0.0; 3], [1.0; 3], (2, 2, 2), ShOrder::L2).unwrap();
             v.bake(128, |o, d| {
                 // A position- and direction-dependent radiance.
                 [o[0] + d[1].abs(), 0.5, d[2].abs()]

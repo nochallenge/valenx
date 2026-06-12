@@ -28,9 +28,7 @@
 
 use crate::error::{GenomicsError, Result};
 use crate::format::pileup::PileupColumn;
-use crate::variant::genotype::{
-    default_priors, genotype_site, AlleleObs, Genotype, GenotypeCall,
-};
+use crate::variant::genotype::{default_priors, genotype_site, AlleleObs, Genotype, GenotypeCall};
 use std::collections::HashMap;
 
 /// The kind of a called variant.

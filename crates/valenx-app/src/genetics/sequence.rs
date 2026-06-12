@@ -8,8 +8,8 @@
 use eframe::egui;
 
 use valenx_bioseq::analysis::composition::{gc_content, gc_skew, residue_counts, shannon_entropy};
-use valenx_bioseq::analysis::weight::{molecular_weight_nucleic, molecular_weight_protein};
 use valenx_bioseq::analysis::tm::tm_wallace;
+use valenx_bioseq::analysis::weight::{molecular_weight_nucleic, molecular_weight_protein};
 use valenx_bioseq::cloning::digest_map::{digest_to_gel, restriction_map};
 use valenx_bioseq::cloning::restriction::{enzyme_by_name, Enzyme};
 use valenx_bioseq::ops::orf::{find_orfs, OrfOptions};
@@ -80,10 +80,9 @@ impl Default for SequencePanel {
         // candidate landed in the MCS and failed the self-dimer /
         // hairpin ΔG screen (no candidate satisfies the constraints).
         SequencePanel {
-            seq_text:
-                "ATGGCATTAGCCGGTAAATCGGATCCGAATTCAAGCTTGGTACCGAGCTCGGATCCAAGCTTTAA\
+            seq_text: "ATGGCATTAGCCGGTAAATCGGATCCGAATTCAAGCTTGGTACCGAGCTCGGATCCAAGCTTTAA\
                  GTACGATCAACGTCAATGACGTTAACGCATCAAGAC"
-                    .to_string(),
+                .to_string(),
             kind: SeqKind::Dna,
             tool: Tool::Analyze,
             code_id: 1,
@@ -103,8 +102,7 @@ impl Default for SequencePanel {
             primer_target_tm: 60.0,
             pcr_fwd: "ATGGCATTAGCCGGTAAATCG".to_string(),
             pcr_rev: "TTAAAGCTTGGATCCGAGCTC".to_string(),
-            batch_text: ">insert\nATGGCATTAGCCGGTAAATCG\n>gc_rich\nGGGGCCCCGGGGCCCC"
-                .to_string(),
+            batch_text: ">insert\nATGGCATTAGCCGGTAAATCG\n>gc_rich\nGGGGCCCCGGGGCCCC".to_string(),
             error: None,
             result: String::new(),
             history: crate::undo::History::new(),
@@ -178,8 +176,7 @@ impl SequencePanel {
             if let Ok(code) = GeneticCode::by_id(self.code_id) {
                 if let Ok(orfs) = find_orfs(&seq, &code, OrfOptions::default()) {
                     for (i, orf) in orfs.iter().enumerate() {
-                        let span =
-                            Span::with_strand(orf.span.start, orf.span.end, orf.strand);
+                        let span = Span::with_strand(orf.span.start, orf.span.end, orf.strand);
                         features.push(
                             SeqFeature::new("CDS", Location::Single(span))
                                 .with_qualifier("label", format!("ORF {}", i + 1)),
@@ -253,25 +250,32 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
     common::section(ui, "Sequence input");
     ui.horizontal(|ui| {
-        ui.label("Kind:")
-            .on_hover_text("Pick the sequence alphabet — affects validation + which tools are valid.");
+        ui.label("Kind:").on_hover_text(
+            "Pick the sequence alphabet — affects validation + which tools are valid.",
+        );
         ui.radio_value(&mut p.kind, SeqKind::Dna, "DNA")
             .on_hover_text("A / C / G / T over the four DNA bases.");
         ui.radio_value(&mut p.kind, SeqKind::Rna, "RNA")
             .on_hover_text("A / C / G / U over the four RNA bases.");
         ui.radio_value(&mut p.kind, SeqKind::Protein, "Protein")
-            .on_hover_text("Amino-acid sequence in IUPAC single-letter code (ACDEFGHIKLMNPQRSTVWY).");
+            .on_hover_text(
+                "Amino-acid sequence in IUPAC single-letter code (ACDEFGHIKLMNPQRSTVWY).",
+            );
     });
-    common::seq_input(ui, "seq_panel_input", "Residues (FASTA or bare):", &mut p.seq_text, 4);
+    common::seq_input(
+        ui,
+        "seq_panel_input",
+        "Residues (FASTA or bare):",
+        &mut p.seq_text,
+        4,
+    );
     ui.horizontal(|ui| {
         let cleaned = common::clean_sequence(&p.seq_text);
         ui.label(format!("length: {} nt/aa", cleaned.len()))
             .on_hover_text("Cleaned residue count (FASTA headers + whitespace + digits stripped).");
         if ui
             .small_button("Load FASTA…")
-            .on_hover_text(
-                "Read a FASTA file from disk. Multi-record files load the first record.",
-            )
+            .on_hover_text("Read a FASTA file from disk. Multi-record files load the first record.")
             .clicked()
         {
             if let Some(path) = rfd::FileDialog::new()
@@ -533,7 +537,10 @@ fn run_translate(p: &mut SequencePanel) {
     p.error = None;
     match (parse_seq(p), GeneticCode::by_id(p.code_id)) {
         (Ok(s), Ok(code)) if s.kind() != SeqKind::Protein => {
-            let opts = TranslateOptions { to_stop: false, start_as_met: true };
+            let opts = TranslateOptions {
+                to_stop: false,
+                start_as_met: true,
+            };
             match translate(&s, &code, opts) {
                 Ok(prot) => {
                     p.result = format!(
@@ -547,9 +554,7 @@ fn run_translate(p: &mut SequencePanel) {
                 Err(e) => p.error = Some(e.to_string()),
             }
         }
-        (Ok(_), Ok(_)) => {
-            p.error = Some("translation needs a nucleotide sequence".into())
-        }
+        (Ok(_), Ok(_)) => p.error = Some("translation needs a nucleotide sequence".into()),
         (Err(e), _) => p.error = Some(e),
         (_, Err(e)) => p.error = Some(e.to_string()),
     }
@@ -597,9 +602,7 @@ fn run_orf(p: &mut SequencePanel) {
                 Err(e) => p.error = Some(e.to_string()),
             }
         }
-        (Ok(_), Ok(_)) => {
-            p.error = Some("ORF finding needs a nucleotide sequence".into())
-        }
+        (Ok(_), Ok(_)) => p.error = Some("ORF finding needs a nucleotide sequence".into()),
         (Err(e), _) => p.error = Some(e),
         (_, Err(e)) => p.error = Some(e.to_string()),
     }
@@ -626,56 +629,56 @@ fn run_restriction(p: &mut SequencePanel) {
     p.error = None;
     match parse_seq(p) {
         Ok(s) if s.kind() == SeqKind::Dna => {
-                let names: Vec<String> = p
-                    .enzymes
-                    .split(',')
-                    .map(|n| n.trim().to_string())
-                    .filter(|n| !n.is_empty())
-                    .collect();
-                let mut enzymes: Vec<&Enzyme> = Vec::new();
-                let mut unknown: Vec<String> = Vec::new();
-                for n in &names {
-                    match enzyme_by_name(n) {
-                        Some(e) => enzymes.push(e),
-                        None => unknown.push(n.clone()),
-                    }
-                }
-                if enzymes.is_empty() {
-                    p.error = Some(format!("no known enzymes ({} unrecognised)", unknown.len()));
-                    return;
-                }
-                match (restriction_map(&s, &enzymes), digest_to_gel(&s, &enzymes)) {
-                    (Ok(map), Ok(gel)) => {
-                        let mut out = String::new();
-                        if !unknown.is_empty() {
-                            out.push_str(&format!("(unrecognised: {})\n", unknown.join(", ")));
-                        }
-                        out.push_str(&format!("{} cut sites:\n", map.cut_sites.len()));
-                        for c in map.cut_sites.iter().take(40) {
-                            out.push_str(&format!(
-                                "  {:<10} site@{:<6} cut@{}\n",
-                                c.enzyme, c.site_start, c.top_cut_pos,
-                            ));
-                        }
-                        out.push_str(&format!(
-                            "\nVirtual gel — {} fragments, {} distinct bands:\n",
-                            gel.band_sizes.len(),
-                            gel.distinct_bands(),
-                        ));
-                        let mut bands = gel.band_sizes.clone();
-                        bands.sort_unstable_by(|a, b| b.cmp(a));
-                        for bp in &bands {
-                            let bar = "#".repeat((*bp as f64).log10().max(0.0) as usize * 4 + 1);
-                            out.push_str(&format!("  {bp:>7} bp  {bar}\n"));
-                        }
-                        p.result = out;
-                    }
-                    (Err(e), _) | (_, Err(e)) => p.error = Some(e.to_string()),
+            let names: Vec<String> = p
+                .enzymes
+                .split(',')
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty())
+                .collect();
+            let mut enzymes: Vec<&Enzyme> = Vec::new();
+            let mut unknown: Vec<String> = Vec::new();
+            for n in &names {
+                match enzyme_by_name(n) {
+                    Some(e) => enzymes.push(e),
+                    None => unknown.push(n.clone()),
                 }
             }
-            Ok(_) => p.error = Some("restriction digest needs a DNA sequence".into()),
-            Err(e) => p.error = Some(e),
+            if enzymes.is_empty() {
+                p.error = Some(format!("no known enzymes ({} unrecognised)", unknown.len()));
+                return;
+            }
+            match (restriction_map(&s, &enzymes), digest_to_gel(&s, &enzymes)) {
+                (Ok(map), Ok(gel)) => {
+                    let mut out = String::new();
+                    if !unknown.is_empty() {
+                        out.push_str(&format!("(unrecognised: {})\n", unknown.join(", ")));
+                    }
+                    out.push_str(&format!("{} cut sites:\n", map.cut_sites.len()));
+                    for c in map.cut_sites.iter().take(40) {
+                        out.push_str(&format!(
+                            "  {:<10} site@{:<6} cut@{}\n",
+                            c.enzyme, c.site_start, c.top_cut_pos,
+                        ));
+                    }
+                    out.push_str(&format!(
+                        "\nVirtual gel — {} fragments, {} distinct bands:\n",
+                        gel.band_sizes.len(),
+                        gel.distinct_bands(),
+                    ));
+                    let mut bands = gel.band_sizes.clone();
+                    bands.sort_unstable_by(|a, b| b.cmp(a));
+                    for bp in &bands {
+                        let bar = "#".repeat((*bp as f64).log10().max(0.0) as usize * 4 + 1);
+                        out.push_str(&format!("  {bp:>7} bp  {bar}\n"));
+                    }
+                    p.result = out;
+                }
+                (Err(e), _) | (_, Err(e)) => p.error = Some(e.to_string()),
+            }
         }
+        Ok(_) => p.error = Some("restriction digest needs a DNA sequence".into()),
+        Err(e) => p.error = Some(e),
+    }
 }
 
 fn draw_primers(p: &mut SequencePanel, ui: &mut egui::Ui) {
@@ -686,7 +689,11 @@ fn draw_primers(p: &mut SequencePanel, ui: &mut egui::Ui) {
     });
     ui.horizontal(|ui| {
         ui.label("Target Tm (°C):");
-        ui.add(egui::DragValue::new(&mut p.primer_target_tm).range(40.0..=80.0).speed(0.5));
+        ui.add(
+            egui::DragValue::new(&mut p.primer_target_tm)
+                .range(40.0..=80.0)
+                .speed(0.5),
+        );
     });
     if common::run_button(ui, "Design primer pair") {
         run_primers(p);
@@ -714,13 +721,21 @@ fn run_primers(p: &mut SequencePanel) {
                         pair.forward.binding_end,
                         pair.forward.tm,
                         pair.forward.gc * 100.0,
-                        if pair.forward.is_clean() { "  clean" } else { "  ⚠ dimer/hairpin" },
+                        if pair.forward.is_clean() {
+                            "  clean"
+                        } else {
+                            "  ⚠ dimer/hairpin"
+                        },
                         pair.reverse.seq.as_str(),
                         pair.reverse.binding_start,
                         pair.reverse.binding_end,
                         pair.reverse.tm,
                         pair.reverse.gc * 100.0,
-                        if pair.reverse.is_clean() { "  clean" } else { "  ⚠ dimer/hairpin" },
+                        if pair.reverse.is_clean() {
+                            "  clean"
+                        } else {
+                            "  ⚠ dimer/hairpin"
+                        },
                         pair.amplicon_size(),
                         pair.tm_difference(),
                     );
@@ -767,33 +782,35 @@ fn run_pcr(p: &mut SequencePanel) {
         (Ok(tpl), _, _) if tpl.kind() != SeqKind::Dna => {
             p.error = Some("in-silico PCR needs a DNA template".into())
         }
-        (Ok(tpl), Ok(f), Ok(r)) => {
-            match simulate_pcr(&tpl, &f, &r, PcrOptions::default()) {
-                Ok(amplicons) => {
-                    let mut out = format!("{} amplicon(s):\n", amplicons.len());
-                    for (i, a) in amplicons.iter().enumerate() {
-                        out.push_str(&format!(
-                            "#{:<3} {:>5}..{:<5}  {} bp{}\n",
-                            i + 1,
-                            a.start,
-                            a.end,
-                            a.size,
-                            if a.wraps_origin { "  (wraps origin)" } else { "" },
-                        ));
-                    }
-                    if let Some(first) = amplicons.first() {
-                        let prod = first.product.as_str();
-                        let preview: String = prod.chars().take(120).collect();
-                        out.push_str(&format!("\nFirst product (preview):\n{preview}"));
-                        if prod.len() > 120 {
-                            out.push_str(" …");
-                        }
-                    }
-                    p.result = out;
+        (Ok(tpl), Ok(f), Ok(r)) => match simulate_pcr(&tpl, &f, &r, PcrOptions::default()) {
+            Ok(amplicons) => {
+                let mut out = format!("{} amplicon(s):\n", amplicons.len());
+                for (i, a) in amplicons.iter().enumerate() {
+                    out.push_str(&format!(
+                        "#{:<3} {:>5}..{:<5}  {} bp{}\n",
+                        i + 1,
+                        a.start,
+                        a.end,
+                        a.size,
+                        if a.wraps_origin {
+                            "  (wraps origin)"
+                        } else {
+                            ""
+                        },
+                    ));
                 }
-                Err(e) => p.error = Some(e.to_string()),
+                if let Some(first) = amplicons.first() {
+                    let prod = first.product.as_str();
+                    let preview: String = prod.chars().take(120).collect();
+                    out.push_str(&format!("\nFirst product (preview):\n{preview}"));
+                    if prod.len() > 120 {
+                        out.push_str(" …");
+                    }
+                }
+                p.result = out;
             }
-        }
+            Err(e) => p.error = Some(e.to_string()),
+        },
     }
 }
 
@@ -971,7 +988,6 @@ mod headless_ui_tests {
         assert!(p.result.contains("Amplicon size"));
     }
 
-
     #[test]
     fn run_pcr_amplifies_the_template() {
         let mut p = SequencePanel::default();
@@ -1002,7 +1018,10 @@ mod headless_ui_tests {
         assert!(p.error.is_some(), "restriction should error on empty input");
         let mut p = blank();
         run_primers(&mut p);
-        assert!(p.error.is_some(), "primer design should error on empty input");
+        assert!(
+            p.error.is_some(),
+            "primer design should error on empty input"
+        );
         let mut p = blank();
         run_pcr(&mut p);
         assert!(p.error.is_some(), "PCR should error on empty input");

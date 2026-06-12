@@ -130,12 +130,12 @@ impl VinaAdapter {
             &receptor_path,
             valenx_core::io_caps::MAX_PDBQT_FILE_BYTES,
         )
-            .map_err(|e| AdapterError::Other(anyhow::anyhow!("read receptor: {e}")))?;
+        .map_err(|e| AdapterError::Other(anyhow::anyhow!("read receptor: {e}")))?;
         let ligand_text = valenx_core::io_caps::read_capped_to_string(
             &ligand_path,
             valenx_core::io_caps::MAX_PDBQT_FILE_BYTES,
         )
-            .map_err(|e| AdapterError::Other(anyhow::anyhow!("read ligand: {e}")))?;
+        .map_err(|e| AdapterError::Other(anyhow::anyhow!("read ligand: {e}")))?;
 
         let cfg = valenx_dock::DockConfig {
             center: nalgebra::Vector3::new(input.center[0], input.center[1], input.center[2]),

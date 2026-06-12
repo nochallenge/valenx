@@ -144,8 +144,7 @@ pub fn interface_energy(result: &CofoldResult, a: &RnaSeq, b: &RnaSeq) -> Result
     // A structure of only intramolecular pairs is still nested if the
     // full structure was; evaluate it.
     let intra_struct = Structure::from_pairs(composite.len(), &intra)?;
-    let intra_energy = structure_energy(&composite, &intra_struct)
-        .unwrap_or(result.total_energy);
+    let intra_energy = structure_energy(&composite, &intra_struct).unwrap_or(result.total_energy);
     Ok(result.total_energy - intra_energy)
 }
 
@@ -183,10 +182,12 @@ mod tests {
     fn empty_strand_rejected() {
         let a = RnaSeq::parse("ACGU").unwrap();
         let b = RnaSeq::parse("ACGU").unwrap();
-        let empty = RnaSeq::parse("A").unwrap().concat(&RnaSeq::parse("A").unwrap());
+        let empty = RnaSeq::parse("A")
+            .unwrap()
+            .concat(&RnaSeq::parse("A").unwrap());
         let _ = empty; // just exercising concat
-        // we cannot build a truly empty RnaSeq, so test the guard via
-        // a different path is unnecessary; both strands here are fine
+                       // we cannot build a truly empty RnaSeq, so test the guard via
+                       // a different path is unnecessary; both strands here are fine
         assert!(cofold(&a, &b).is_ok());
     }
 

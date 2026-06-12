@@ -78,10 +78,7 @@ impl EnergyForce {
     /// The largest force magnitude over all atoms (kJ/(mol·nm)). Zero
     /// for an empty system. Used as a minimiser convergence gauge.
     pub fn max_force(&self) -> f64 {
-        self.forces
-            .iter()
-            .map(|f| f.norm())
-            .fold(0.0, f64::max)
+        self.forces.iter().map(|f| f.norm()).fold(0.0, f64::max)
     }
 
     /// The root-mean-square force over all atoms.

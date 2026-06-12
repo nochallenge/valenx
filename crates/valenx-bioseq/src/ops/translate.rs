@@ -381,7 +381,11 @@ pub fn translate(seq: &Seq, code: &GeneticCode, opts: TranslateOptions) -> Resul
         }
         protein.push(aa);
     }
-    Ok(Seq::new_unchecked(SeqKind::Protein, protein, Topology::Linear))
+    Ok(Seq::new_unchecked(
+        SeqKind::Protein,
+        protein,
+        Topology::Linear,
+    ))
 }
 
 /// Translates with default options (full read-through, no
@@ -407,10 +411,7 @@ pub struct FrameTranslation {
 /// three reverse frames (the reverse complement at offsets 0/1/2).
 ///
 /// Returns [`BioseqError::Invalid`] for a protein input.
-pub fn six_frame_translation(
-    seq: &Seq,
-    code: &GeneticCode,
-) -> Result<Vec<FrameTranslation>> {
+pub fn six_frame_translation(seq: &Seq, code: &GeneticCode) -> Result<Vec<FrameTranslation>> {
     if seq.kind() == SeqKind::Protein {
         return Err(BioseqError::invalid(
             "kind",
@@ -600,7 +601,12 @@ mod tests {
         // CTN -> Thr (the four leucine CTN codons become T in yeast mito).
         let c = GeneticCode::by_id(3).unwrap();
         for codon in [b"CTT", b"CTC", b"CTA", b"CTG"] {
-            assert_eq!(c.translate_codon(codon), b'T', "{}", std::str::from_utf8(codon).unwrap());
+            assert_eq!(
+                c.translate_codon(codon),
+                b'T',
+                "{}",
+                std::str::from_utf8(codon).unwrap()
+            );
         }
         assert_eq!(c.translate_codon(b"TGA"), b'W'); // UGA -> Trp
         assert_eq!(c.translate_codon(b"ATA"), b'M'); // AUA -> Met

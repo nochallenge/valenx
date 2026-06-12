@@ -88,10 +88,7 @@ pub fn fold_linear(seq: &RnaSeq) -> Result<LinearFoldResult> {
 ///
 /// # Errors
 /// As [`fold_linear`].
-pub fn fold_linear_with_beam(
-    seq: &RnaSeq,
-    beam_size: usize,
-) -> Result<LinearFoldResult> {
+pub fn fold_linear_with_beam(seq: &RnaSeq, beam_size: usize) -> Result<LinearFoldResult> {
     let beam = beam_size.max(1);
     let codes = seq.codes();
     let n = codes.len();
@@ -290,10 +287,7 @@ impl<'a> BeamFold<'a> {
                 break;
             }
             // snapshot the inner beam to avoid borrowing self twice.
-            let inner: Vec<(usize, f64)> = self.p[l]
-                .iter()
-                .map(|(&k, s)| (k, s.energy))
-                .collect();
+            let inner: Vec<(usize, f64)> = self.p[l].iter().map(|(&k, s)| (k, s.energy)).collect();
             for (k, inner_e) in inner {
                 if inner_e >= INF / 2.0 {
                     continue;
@@ -393,10 +387,8 @@ impl<'a> BeamFold<'a> {
         // Split: M[i][k] then the last branch P[k+1][j]. Iterate over
         // the P beam ending at j (start = k+1) and join with the M beam
         // ending at k.
-        let p_starts: Vec<(usize, f64)> = self.p[j]
-            .iter()
-            .map(|(&kp1, s)| (kp1, s.energy))
-            .collect();
+        let p_starts: Vec<(usize, f64)> =
+            self.p[j].iter().map(|(&kp1, s)| (kp1, s.energy)).collect();
         for (kp1, p_e) in p_starts {
             if kp1 == 0 {
                 continue; // no room for a left fragment
@@ -413,11 +405,7 @@ impl<'a> BeamFold<'a> {
         // j unpaired: extend an M2 ending at j-1.
         if j > 0 {
             for (&i, s) in &self.m2[j - 1] {
-                relax(
-                    i,
-                    s.energy + multiloop::PER_UNPAIRED,
-                    M2From::UnpairedRight,
-                );
+                relax(i, s.energy + multiloop::PER_UNPAIRED, M2From::UnpairedRight);
             }
         }
 
@@ -521,9 +509,7 @@ impl<'a> BeamFold<'a> {
                             stack.push(Job::M(i, k));
                             stack.push(Job::P(k + 1, j));
                         }
-                        M2From::UnpairedRight => {
-                            stack.push(Job::M2(i, j - 1))
-                        }
+                        M2From::UnpairedRight => stack.push(Job::M2(i, j - 1)),
                     }
                 }
             }
@@ -561,12 +547,9 @@ fn prune<T: Copy>(beam_map: &mut HashMap<usize, State<T>>, beam: usize) -> bool 
     if beam_map.len() <= beam {
         return false;
     }
-    let mut entries: Vec<(usize, f64)> =
-        beam_map.iter().map(|(&i, s)| (i, s.energy)).collect();
+    let mut entries: Vec<(usize, f64)> = beam_map.iter().map(|(&i, s)| (i, s.energy)).collect();
     // Keep the `beam` lowest-energy entries.
-    entries.sort_by(|a, b| {
-        a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    entries.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     let keep: std::collections::HashSet<usize> =
         entries.iter().take(beam).map(|&(i, _)| i).collect();
     beam_map.retain(|i, _| keep.contains(i));
@@ -592,7 +575,11 @@ mod tests {
         let seq = RnaSeq::parse("GGGGGAAAACCCCC").unwrap();
         let r = fold_linear(&seq).unwrap();
         assert!(r.structure.n_pairs() >= 3, "expected a stem: {r:?}");
-        assert!(r.energy < 0.0, "stable hairpin should have E<0: {}", r.energy);
+        assert!(
+            r.energy < 0.0,
+            "stable hairpin should have E<0: {}",
+            r.energy
+        );
         assert!(r.structure.is_nested());
     }
 
@@ -655,10 +642,7 @@ mod tests {
     fn narrow_beam_still_folds_and_is_an_upper_bound() {
         // A narrow beam is approximate: its energy can be no lower than
         // the exact MFE (it explores a subset of structures).
-        let seq = RnaSeq::parse(
-            "GGGGGCCCCCAAAGGGGGCCCCCAAAGGGGGCCCCCAAAGGGGG",
-        )
-        .unwrap();
+        let seq = RnaSeq::parse("GGGGGCCCCCAAAGGGGGCCCCCAAAGGGGGCCCCCAAAGGGGG").unwrap();
         let exact = mfe(&seq).unwrap();
         let narrow = fold_linear_with_beam(&seq, 2).unwrap();
         assert!(narrow.structure.is_nested());
@@ -692,7 +676,11 @@ mod tests {
         let r = fold_linear(&seq).unwrap();
         assert_eq!(r.structure.len(), seq.len());
         assert!(r.structure.is_nested());
-        assert!(r.energy < 0.0, "a long structured RNA should fold: {}", r.energy);
+        assert!(
+            r.energy < 0.0,
+            "a long structured RNA should fold: {}",
+            r.energy
+        );
         let re = structure_energy(&seq, &r.structure).unwrap();
         assert!((re - r.energy).abs() < 1e-3);
     }

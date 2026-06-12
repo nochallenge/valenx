@@ -206,7 +206,9 @@ pub fn upgma(dm: &DistanceMatrix) -> Result<GuideTree> {
         }
 
         // Rebuild the cluster list and distance matrix without bi, bj.
-        let keep: Vec<usize> = (0..clusters.len()).filter(|&k| k != bi && k != bj).collect();
+        let keep: Vec<usize> = (0..clusters.len())
+            .filter(|&k| k != bi && k != bj)
+            .collect();
         let mut next_clusters: Vec<(usize, usize)> = keep.iter().map(|&k| clusters[k]).collect();
         let mut next_dist: Vec<Vec<f64>> = vec![vec![0.0; keep.len() + 1]; keep.len() + 1];
         for (a, &ka) in keep.iter().enumerate() {
@@ -264,9 +266,7 @@ pub fn neighbor_joining(dm: &DistanceMatrix) -> Result<GuideTree> {
     while clusters.len() > 2 {
         let r = clusters.len();
         // Net divergence of each cluster.
-        let div: Vec<f64> = (0..r)
-            .map(|i| (0..r).map(|j| dist[i][j]).sum())
-            .collect();
+        let div: Vec<f64> = (0..r).map(|i| (0..r).map(|j| dist[i][j]).sum()).collect();
 
         // Q-criterion: minimise (r-2)*d(i,j) - div[i] - div[j].
         let (mut bi, mut bj, mut best) = (0usize, 1usize, f64::INFINITY);
@@ -379,7 +379,13 @@ mod tests {
 
     #[test]
     fn neighbor_joining_builds_tree() {
-        let seqs: &[&[u8]] = &[b"ACGTACGT", b"ACGTACGA", b"TTTTTTTT", b"TTTTTTTA", b"GGGGGGGG"];
+        let seqs: &[&[u8]] = &[
+            b"ACGTACGT",
+            b"ACGTACGA",
+            b"TTTTTTTT",
+            b"TTTTTTTA",
+            b"GGGGGGGG",
+        ];
         let dm = distance_matrix(seqs, &dna_scheme()).unwrap();
         let tree = neighbor_joining(&dm).unwrap();
         assert_eq!(tree.leaf_count(), 5);

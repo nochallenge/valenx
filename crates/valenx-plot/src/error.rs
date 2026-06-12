@@ -74,7 +74,10 @@ mod tests {
     #[test]
     fn codes_and_cats() {
         assert_eq!(PlotError::Empty.code(), "plot.empty");
-        assert_eq!(PlotError::PngDeferred.category(), ErrorCategory::NotImplemented);
+        assert_eq!(
+            PlotError::PngDeferred.category(),
+            ErrorCategory::NotImplemented
+        );
         assert_eq!(
             PlotError::BadParameter {
                 name: "width",

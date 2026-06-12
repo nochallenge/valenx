@@ -669,9 +669,16 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        assert!(s.job.is_none(), "the background solve should finish within the poll budget");
+        assert!(
+            s.job.is_none(),
+            "the background solve should finish within the poll budget"
+        );
         assert!(s.error.is_none(), "unexpected error: {:?}", s.error);
-        assert!(s.result.contains("max |u|"), "readout populated: {}", s.result);
+        assert!(
+            s.result.contains("max |u|"),
+            "readout populated: {}",
+            s.result
+        );
         assert!(
             s.profile.as_ref().is_some_and(|p| p.len() == 16),
             "centreline profile sampled"
@@ -692,20 +699,43 @@ mod tests {
         assert!(s.result.contains("max |u|"));
         // The recirculating cavity has rotation everywhere → the enstrophy
         // readout is surfaced alongside the circulation.
-        assert!(s.result.contains("enstrophy"), "enstrophy in result: {}", s.result);
+        assert!(
+            s.result.contains("enstrophy"),
+            "enstrophy in result: {}",
+            s.result
+        );
         // The cavity's primary vortex is rotation-dominated → the Q-criterion
         // readout is surfaced on the peak-vorticity line.
-        assert!(s.result.contains("Q_max"), "Q-criterion in result: {}", s.result);
+        assert!(
+            s.result.contains("Q_max"),
+            "Q-criterion in result: {}",
+            s.result
+        );
         // The sheared cavity flow also deforms → the peak strain-rate readout is
         // surfaced alongside (the strain companion to peak vorticity).
-        assert!(s.result.contains("S_max"), "strain rate in result: {}", s.result);
+        assert!(
+            s.result.contains("S_max"),
+            "strain rate in result: {}",
+            s.result
+        );
         // The sheared cavity flow dissipates energy → the viscous-dissipation
         // readout is surfaced on the energy line.
-        assert!(s.result.contains("\u{03A6}_visc"), "dissipation in result: {}", s.result);
+        assert!(
+            s.result.contains("\u{03A6}_visc"),
+            "dissipation in result: {}",
+            s.result
+        );
         // The vorticity field is non-uniform → the palinstrophy readout (the
         // gradient-of-vorticity diagnostic) is surfaced on the cascade line.
-        assert!(s.result.contains("palin"), "palinstrophy in result: {}", s.result);
-        assert!(s.profile.as_ref().is_some_and(|p| p.len() == 16), "centreline profile sampled");
+        assert!(
+            s.result.contains("palin"),
+            "palinstrophy in result: {}",
+            s.result
+        );
+        assert!(
+            s.profile.as_ref().is_some_and(|p| p.len() == 16),
+            "centreline profile sampled"
+        );
     }
 
     #[test]
@@ -728,7 +758,10 @@ mod tests {
         assert_eq!(prof.len(), 16);
         let max_u = prof.iter().map(|p| p[0]).fold(0.0_f64, f64::max);
         // Centreline speed ≈ 1.5× the inlet (bulk) speed.
-        assert!((max_u - 1.5).abs() < 0.02, "centreline ~1.5× inlet: {max_u}");
+        assert!(
+            (max_u - 1.5).abs() < 0.02,
+            "centreline ~1.5× inlet: {max_u}"
+        );
         // Symmetric about the centre, non-negative, slower at the walls.
         assert!((prof[0][0] - prof[15][0]).abs() < 1e-9, "symmetric");
         assert!(prof[0][0] < max_u);
@@ -746,7 +779,9 @@ mod tests {
         };
         run_cfd(&mut chan);
         assert!(
-            chan.analytic_profile.as_ref().is_some_and(|p| p.len() == chan.ny),
+            chan.analytic_profile
+                .as_ref()
+                .is_some_and(|p| p.len() == chan.ny),
             "channel flow should carry the analytic Poiseuille overlay"
         );
         // The lid-driven cavity has no 1-D analytic profile.
@@ -755,7 +790,10 @@ mod tests {
             ..Default::default()
         };
         run_cfd(&mut cav);
-        assert!(cav.analytic_profile.is_none(), "cavity has no analytic overlay");
+        assert!(
+            cav.analytic_profile.is_none(),
+            "cavity has no analytic overlay"
+        );
     }
 
     #[test]
@@ -782,12 +820,27 @@ mod tests {
     #[test]
     fn flow_regime_classifies_by_reynolds() {
         // Channel/pipe thresholds: laminar < 2300, transitional < 4000, then turbulent.
-        assert_eq!(flow_regime(100.0, CfdCase::ChannelFlow), FlowRegime::Laminar);
-        assert_eq!(flow_regime(3000.0, CfdCase::ChannelFlow), FlowRegime::Transitional);
-        assert_eq!(flow_regime(5000.0, CfdCase::ChannelFlow), FlowRegime::Turbulent);
+        assert_eq!(
+            flow_regime(100.0, CfdCase::ChannelFlow),
+            FlowRegime::Laminar
+        );
+        assert_eq!(
+            flow_regime(3000.0, CfdCase::ChannelFlow),
+            FlowRegime::Transitional
+        );
+        assert_eq!(
+            flow_regime(5000.0, CfdCase::ChannelFlow),
+            FlowRegime::Turbulent
+        );
         // The lid-driven cavity stays laminar to much higher Re.
-        assert_eq!(flow_regime(3000.0, CfdCase::LidDrivenCavity), FlowRegime::Laminar);
-        assert_eq!(flow_regime(9000.0, CfdCase::LidDrivenCavity), FlowRegime::Transitional);
+        assert_eq!(
+            flow_regime(3000.0, CfdCase::LidDrivenCavity),
+            FlowRegime::Laminar
+        );
+        assert_eq!(
+            flow_regime(9000.0, CfdCase::LidDrivenCavity),
+            FlowRegime::Transitional
+        );
         // The default cavity (Re = 100) reports "laminar" in the solve result.
         let mut s = CfdWorkbenchState {
             nx: 12,
@@ -796,20 +849,20 @@ mod tests {
             ..Default::default()
         };
         run_cfd(&mut s);
-        assert!(s.result.contains("laminar"), "regime in result: {}", s.result);
+        assert!(
+            s.result.contains("laminar"),
+            "regime in result: {}",
+            s.result
+        );
     }
 
     #[test]
     fn dynamic_pressure_is_half_rho_u_squared() {
         assert!((dynamic_pressure(1.0, 10.0) - 50.0).abs() < 1e-12);
         // Quadratic in speed: doubling U quadruples q.
-        assert!(
-            (dynamic_pressure(1.2, 20.0) - 4.0 * dynamic_pressure(1.2, 10.0)).abs() < 1e-9
-        );
+        assert!((dynamic_pressure(1.2, 20.0) - 4.0 * dynamic_pressure(1.2, 10.0)).abs() < 1e-9);
         // Linear in density.
-        assert!(
-            (dynamic_pressure(2.0, 10.0) - 2.0 * dynamic_pressure(1.0, 10.0)).abs() < 1e-9
-        );
+        assert!((dynamic_pressure(2.0, 10.0) - 2.0 * dynamic_pressure(1.0, 10.0)).abs() < 1e-9);
     }
 
     #[test]

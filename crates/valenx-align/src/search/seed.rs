@@ -276,7 +276,11 @@ mod tests {
         assert!(!hsps.is_empty(), "should find the embedded core");
         let top = &hsps[0];
         assert_eq!(top.seq_id, 0);
-        assert!(top.score >= 16, "10 matches * 2 expected, got {}", top.score);
+        assert!(
+            top.score >= 16,
+            "10 matches * 2 expected, got {}",
+            top.score
+        );
     }
 
     #[test]

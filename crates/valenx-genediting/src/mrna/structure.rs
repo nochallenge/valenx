@@ -190,11 +190,7 @@ pub fn minimize_start_structure(
     // Codon 0 is the start codon — never touch it. Scan codons 1..=k.
     let scan_end = (1 + codons_to_scan).min(n_codons);
     for ci in 1..scan_end {
-        let orig: [u8; 3] = [
-            cds_rna[ci * 3],
-            cds_rna[ci * 3 + 1],
-            cds_rna[ci * 3 + 2],
-        ];
+        let orig: [u8; 3] = [cds_rna[ci * 3], cds_rna[ci * 3 + 1], cds_rna[ci * 3 + 2]];
         let aa = code.translate_codon(&reverse_transcribe(&orig));
         for syn in synonymous_codons(aa, &code) {
             let syn_rna = transcribe(&syn);

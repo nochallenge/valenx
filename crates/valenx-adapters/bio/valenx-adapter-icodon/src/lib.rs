@@ -232,8 +232,8 @@ impl Adapter for IcodonAdapter {
         // setting `rscript = "/usr/bin/curl"` is rejected here as
         // InvalidCase (programmer-typed-a-bad-binary) rather than
         // executed silently as arbitrary code.
-        let validated = validate_rscript_binary(&input.rscript).map_err(|e| {
-            AdapterError::InvalidCase {
+        let validated =
+            validate_rscript_binary(&input.rscript).map_err(|e| AdapterError::InvalidCase {
                 case_path: case.path.join("case.toml"),
                 reason: format!(
                     "Rscript interpreter rejected ('{}'). See \
@@ -241,8 +241,7 @@ impl Adapter for IcodonAdapter {
                      allow-list. Error: {e}",
                     input.rscript
                 ),
-            }
-        })?;
+            })?;
         // Resolve the validated Rscript binary. Bare `Rscript` walks
         // PATH; absolute / relative allow-listed paths the user pinned
         // are honored verbatim if they exist, with a final PATH

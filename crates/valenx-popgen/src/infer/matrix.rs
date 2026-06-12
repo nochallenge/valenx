@@ -145,8 +145,11 @@ impl GenotypeMatrix {
     /// Returns a copy retaining only the listed site columns, in the
     /// given order. Out-of-range indices are skipped.
     pub fn select_sites(&self, cols: &[usize]) -> GenotypeMatrix {
-        let cols: Vec<usize> =
-            cols.iter().copied().filter(|&c| c < self.n_sites()).collect();
+        let cols: Vec<usize> = cols
+            .iter()
+            .copied()
+            .filter(|&c| c < self.n_sites())
+            .collect();
         let rows: Vec<Vec<u8>> = self
             .rows
             .iter()
@@ -194,12 +197,7 @@ mod tests {
         // 4 haplotypes, 3 sites. Site 0 derived count 2, site 1
         // monomorphic (0), site 2 derived count 4 (monomorphic).
         GenotypeMatrix::from_rows(
-            vec![
-                vec![1, 0, 1],
-                vec![1, 0, 1],
-                vec![0, 0, 1],
-                vec![0, 0, 1],
-            ],
+            vec![vec![1, 0, 1], vec![1, 0, 1], vec![0, 0, 1], vec![0, 0, 1]],
             vec![10.0, 20.0, 30.0],
         )
         .unwrap()
@@ -220,11 +218,7 @@ mod tests {
 
     #[test]
     fn rejects_ragged_and_nonbiallelic() {
-        assert!(GenotypeMatrix::from_rows(
-            vec![vec![0, 1], vec![0]],
-            vec![1.0, 2.0]
-        )
-        .is_err());
+        assert!(GenotypeMatrix::from_rows(vec![vec![0, 1], vec![0]], vec![1.0, 2.0]).is_err());
         assert!(GenotypeMatrix::from_rows(vec![vec![0, 2]], vec![1.0, 2.0]).is_err());
         assert!(GenotypeMatrix::from_rows(vec![vec![0, 1]], vec![1.0]).is_err());
     }

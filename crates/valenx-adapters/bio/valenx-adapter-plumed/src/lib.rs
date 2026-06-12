@@ -141,10 +141,7 @@ impl Adapter for PlumedAdapter {
         let source_dat = if input.plumed_dat.is_absolute() {
             input.plumed_dat.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.plumed_dat,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.plumed_dat)?
         };
         if !source_dat.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -162,10 +159,7 @@ impl Adapter for PlumedAdapter {
         let source_traj = if input.trajectory.is_absolute() {
             input.trajectory.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.trajectory,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.trajectory)?
         };
         if !source_traj.is_file() {
             return Err(AdapterError::InvalidCase {

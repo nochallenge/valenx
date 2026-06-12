@@ -114,12 +114,11 @@ pub use error::{ErrorCategory, Result, RnaStructError};
 pub use rna::RnaSeq;
 pub use structure::{BasePair, Structure};
 
-pub use fold::constraint::FoldConstraints;
 pub use fold::coaxial::{best_coaxial, HelixEnd};
+pub use fold::constraint::FoldConstraints;
 pub use fold::eval::{coaxial_correction, structure_energy, structure_energy_d2};
 pub use fold::linear::{
-    fold_linear, fold_linear_exact, fold_linear_with_beam, LinearFoldResult,
-    DEFAULT_BEAM_SIZE,
+    fold_linear, fold_linear_exact, fold_linear_with_beam, LinearFoldResult, DEFAULT_BEAM_SIZE,
 };
 pub use fold::nussinov::{fold as nussinov_fold, NussinovResult};
 pub use fold::shape::fold_with_shape;
@@ -127,12 +126,11 @@ pub use fold::zuker::{mfe, mfe_constrained, mfe_d2, MfeResult};
 
 pub use ensemble::centroid::{centroid, mea, MeaResult};
 pub use ensemble::kinetics::{
-    fold_kinetics, simulate_trajectory, KineticEnsemble, KineticParams, RateModel,
-    Trajectory, TrajectoryStep,
+    fold_kinetics, simulate_trajectory, KineticEnsemble, KineticParams, RateModel, Trajectory,
+    TrajectoryStep,
 };
 pub use ensemble::linear_partition::{
-    linear_partition, linear_partition_exact, linear_partition_with_beam,
-    LinearPartitionResult,
+    linear_partition, linear_partition_exact, linear_partition_with_beam, LinearPartitionResult,
 };
 pub use ensemble::melting::{melting_curve, MeltingCurve};
 pub use ensemble::partition::{partition_function, PartitionFunction};
@@ -142,8 +140,8 @@ pub use ensemble::suboptimal::{suboptimal, SuboptStructure};
 pub use interaction::accessibility::{accessibility, AccessibilityProfile};
 pub use interaction::cofold::{cofold, CofoldResult};
 pub use interaction::intarna::{
-    predict_intarna, predict_intarna_with, InterPair, IntaRnaInteraction,
-    IntaRnaParams, DEFAULT_MAX_LEN, DEFAULT_SEED_MIN, IL_MAX,
+    predict_intarna, predict_intarna_with, IntaRnaInteraction, IntaRnaParams, InterPair,
+    DEFAULT_MAX_LEN, DEFAULT_SEED_MIN, IL_MAX,
 };
 pub use interaction::interaction::{predict_interaction, Interaction};
 
@@ -151,8 +149,8 @@ pub use compare::align::{align_structures, StructureAlignment};
 pub use compare::consensus::{consensus_structure, ConsensusResult};
 pub use compare::distance::{base_pair_distance, tree_edit_distance};
 pub use compare::pknots_rg::{
-    fold_pknots_rg, fold_pknots_rg_with, PknotsRgParams, PknotsRgResult,
-    PseudoknotClass, KISSING_HAIRPIN_PENALTY,
+    fold_pknots_rg, fold_pknots_rg_with, PknotsRgParams, PknotsRgResult, PseudoknotClass,
+    KISSING_HAIRPIN_PENALTY,
 };
 pub use compare::pseudoknot::{fold_pseudoknot, PseudoknotResult};
 

@@ -67,44 +67,44 @@
 pub mod error;
 
 // STEP family (Phases 101-108)
-pub mod step_ap203_writer;
-pub mod step_ap203_reader;
-pub mod step_ap214_writer;
-pub mod step_ap214_reader;
-pub mod step_ap242_full_writer;
-pub mod step_ap242_full_reader;
 pub mod step_ap203_assembly_writer;
+pub mod step_ap203_reader;
+pub mod step_ap203_writer;
+pub mod step_ap214_reader;
+pub mod step_ap214_writer;
+pub mod step_ap242_full_reader;
+pub mod step_ap242_full_writer;
 pub mod step_color_attributes_writer;
 
 // IGES family (Phases 109-113)
-pub mod iges_5_3_writer;
 pub mod iges_5_3_reader;
-pub mod iges_trimmed_surface_writer;
-pub mod iges_trimmed_surface_reader;
+pub mod iges_5_3_writer;
 pub mod iges_color_attributes;
+pub mod iges_trimmed_surface_reader;
+pub mod iges_trimmed_surface_writer;
 
 // Proprietary BREP (Phases 114-119)
-pub mod acis_sat_writer;
 pub mod acis_sat_reader;
-pub mod parasolid_xt_writer;
-pub mod parasolid_xt_reader;
-pub mod jt_writer;
+pub mod acis_sat_writer;
 pub mod jt_reader;
+pub mod jt_writer;
+pub mod parasolid_xt_reader;
+pub mod parasolid_xt_writer;
 
 // Mesh formats (Phases 120-127)
-pub mod obj_writer_extended;
-pub mod obj_reader_extended;
-pub mod ply_writer_extended;
-pub mod ply_reader_extended;
-pub mod stl_writer_extended;
-pub mod stl_reader_extended;
-pub mod gltf2_writer;
 pub mod gltf2_reader;
+pub mod gltf2_writer;
+pub mod obj_reader_extended;
+pub mod obj_writer_extended;
+pub mod ply_reader_extended;
+pub mod ply_writer_extended;
+pub mod stl_reader_extended;
+pub mod stl_writer_extended;
 
 // Misc exchange (Phases 128-130)
+pub mod collada_writer;
 pub mod vrml_writer;
 pub mod x3d_writer;
-pub mod collada_writer;
 
 pub use error::{ErrorCategory, OcctExchangeError};
 

@@ -166,18 +166,12 @@ impl Adapter for AutoDock4Adapter {
         let resolved_gpf = if input.gpf.is_absolute() {
             input.gpf.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.gpf,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.gpf)?
         };
         let resolved_dpf = if input.dpf.is_absolute() {
             input.dpf.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.dpf,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.dpf)?
         };
         if !resolved_gpf.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -128,11 +128,12 @@ impl Adapter for WgsimAdapter {
             ("[bio.wgsim].output2", &input.output2),
         ] {
             if let Some(s) = value.to_str() {
-                valenx_core::adapter_helpers::validate_output_basename(s, field)
-                    .map_err(|e| AdapterError::InvalidCase {
+                valenx_core::adapter_helpers::validate_output_basename(s, field).map_err(|e| {
+                    AdapterError::InvalidCase {
                         case_path: case.path.join("case.toml"),
                         reason: format!("{e}"),
-                    })?;
+                    }
+                })?;
             } else {
                 return Err(AdapterError::InvalidCase {
                     case_path: case.path.join("case.toml"),
@@ -160,10 +161,7 @@ impl Adapter for WgsimAdapter {
         let source_reference = if input.reference.is_absolute() {
             input.reference.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.reference,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.reference)?
         };
         if !source_reference.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -386,9 +384,7 @@ error_rate    = 0.01
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = WgsimAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = WgsimAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("[bio.wgsim].output1"),

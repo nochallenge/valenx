@@ -247,12 +247,8 @@ pub fn draw_genetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         match active {
                             GeneticsPanel::Sequence => genetics::sequence::draw(app, ui),
                             GeneticsPanel::Alignment => genetics::alignment::draw(app, ui),
-                            GeneticsPanel::Phylogenetics => {
-                                genetics::phylogenetics::draw(app, ui)
-                            }
-                            GeneticsPanel::PopulationGenetics => {
-                                genetics::popgen::draw(app, ui)
-                            }
+                            GeneticsPanel::Phylogenetics => genetics::phylogenetics::draw(app, ui),
+                            GeneticsPanel::PopulationGenetics => genetics::popgen::draw(app, ui),
                             GeneticsPanel::RnaStructure => genetics::rnastruct::draw(app, ui),
                             GeneticsPanel::RnaDesigner => genetics::rna_designer::draw(app, ui),
                             GeneticsPanel::MolecularDynamics => genetics::md::draw(app, ui),
@@ -302,7 +298,10 @@ mod tests {
     #[test]
     fn default_panel_is_sequence() {
         assert_eq!(GeneticsPanel::default(), GeneticsPanel::Sequence);
-        assert_eq!(GeneticsWorkbenchState::default().active, GeneticsPanel::Sequence);
+        assert_eq!(
+            GeneticsWorkbenchState::default().active,
+            GeneticsPanel::Sequence
+        );
     }
 }
 

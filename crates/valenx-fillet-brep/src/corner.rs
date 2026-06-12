@@ -29,7 +29,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use truck_modeling::{Edge as TruckEdge, InnerSpace, Point3, Solid as TruckSolid, Vector3, VertexID};
+use truck_modeling::{
+    Edge as TruckEdge, InnerSpace, Point3, Solid as TruckSolid, Vector3, VertexID,
+};
 
 /// True if `vertex_id` is a meeting point of 3+ edges drawn from the
 /// `filleted_edges` list — i.e. a corner the per-edge fillets leave
@@ -323,7 +325,10 @@ mod tests {
                     );
                 }
                 for d in [ce.dir0, ce.dir1, ce.dir2] {
-                    assert!((d.magnitude() - 1.0).abs() < 1e-9, "directions must be unit");
+                    assert!(
+                        (d.magnitude() - 1.0).abs() < 1e-9,
+                        "directions must be unit"
+                    );
                 }
             }
             CornerClass::Unsupported => panic!("cube corner should be orthogonal-convex"),

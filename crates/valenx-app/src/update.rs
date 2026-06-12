@@ -149,7 +149,8 @@ impl eframe::App for ValenxApp {
                 let info = i.viewport();
                 (
                     info.outer_rect.map(|r| [r.min.x.round(), r.min.y.round()]),
-                    info.inner_rect.map(|r| [r.width().round(), r.height().round()]),
+                    info.inner_rect
+                        .map(|r| [r.width().round(), r.height().round()]),
                 )
             });
             let mut dirty = false;
@@ -1194,9 +1195,7 @@ impl eframe::App for ValenxApp {
         // the regular viewport render path. Driven purely by app
         // state — no menu / toggle — so the page exists strictly as
         // an empty-state for the central panel.
-        let show_landing = self.project.is_none()
-            && self.stl.is_none()
-            && self.mesh.is_none();
+        let show_landing = self.project.is_none() && self.stl.is_none() && self.mesh.is_none();
         egui::CentralPanel::default().show(ctx, |ui| {
             if show_landing {
                 // CARGO_PKG_REPOSITORY inherits from
@@ -1561,9 +1560,7 @@ impl eframe::App for ValenxApp {
                     // Settings → New projects, so analysis projects stay
                     // empty unless the user asked for geometry to model.
                     if self.settings.starter_cube_in_new_projects {
-                        self.apply_create_primitive(
-                            crate::mesh_toolbox::CadPrimitiveKind::Box,
-                        );
+                        self.apply_create_primitive(crate::mesh_toolbox::CadPrimitiveKind::Box);
                     }
                 }
             }
@@ -1692,10 +1689,7 @@ impl eframe::App for ValenxApp {
         // it the same way so closing the window doesn't leak a
         // worker thread that's deep in valenx-rnadesign.
         self.genetics.rna_designer.cancel_run();
-        if self.run_handle.is_some()
-            || self.sweep_handle.is_some()
-            || self.aero.run.is_some()
-        {
+        if self.run_handle.is_some() || self.sweep_handle.is_some() || self.aero.run.is_some() {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
     }
@@ -2189,9 +2183,7 @@ impl ValenxApp {
                         for (_id, entry) in self.registry.iter() {
                             let info = entry.adapter.info();
                             if !show_non_oss
-                                && !valenx_core::adapter_helpers::is_oss_license(
-                                    info.tool_license,
-                                )
+                                && !valenx_core::adapter_helpers::is_oss_license(info.tool_license)
                             {
                                 hidden += 1;
                                 continue;

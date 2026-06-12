@@ -154,8 +154,7 @@ pub fn born_radii(atoms: &[GbAtom], params: &GbParams) -> Result<Vec<f64>> {
             if r < 1e-9 {
                 continue;
             }
-            let rho_j =
-                ((atoms[j].radius - params.dielectric_offset) * params.hct_scale).max(1e-3);
+            let rho_j = ((atoms[j].radius - params.dielectric_offset) * params.hct_scale).max(1e-3);
             inv_born -= hct_descreen(r, rho_i, rho_j);
         }
         // Clamp: the Born radius cannot be smaller than the intrinsic
@@ -291,9 +290,7 @@ mod tests {
             (0.0, 0.0, 0.35),
             (0.0, 0.0, -0.35),
         ] {
-            crowded.push(
-                GbAtom::new(Vector3::new(dx, dy, dz), 0.0, r).unwrap(),
-            );
+            crowded.push(GbAtom::new(Vector3::new(dx, dy, dz), 0.0, r).unwrap());
         }
         let radii_crowded = born_radii(&crowded, &GbParams::default()).unwrap();
 

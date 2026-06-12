@@ -284,7 +284,10 @@ fn has_test_attr(attrs: &[syn::Attribute]) -> bool {
                     .clone()
                     .into_iter()
                     .any(|tt| matches!(tt, proc_macro2::TokenTree::Ident(ref id) if id == "test"))
-                    || list.tokens.to_string().split(|c: char| !c.is_alphanumeric() && c != '_')
+                    || list
+                        .tokens
+                        .to_string()
+                        .split(|c: char| !c.is_alphanumeric() && c != '_')
                         .any(|w| w == "test");
             }
         }
@@ -419,7 +422,11 @@ impl<'ast, 'a> Visit<'ast> for WriteVisitor<'a> {
     fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
         if let syn::Expr::Path(p) = &*node.func {
             if let Some(label) = raw_write_call_label(&p.path) {
-                let line = p.path.segments.last().map_or(0, |s| s.ident.span().start().line);
+                let line = p
+                    .path
+                    .segments
+                    .last()
+                    .map_or(0, |s| s.ident.span().start().line);
                 self.push_flag(line, label);
             }
         }

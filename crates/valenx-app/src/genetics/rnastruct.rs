@@ -73,8 +73,12 @@ impl RnaStructPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// Keyboard-shortcut entry: run the active folding tool.
@@ -87,11 +91,20 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     let p = &mut app.genetics.rnastruct;
 
     common::section(ui, "Sequence");
-    common::seq_input(ui, "rna_seq_input", "RNA (or DNA — auto-transcribed):", &mut p.seq_text, 4);
+    common::seq_input(
+        ui,
+        "rna_seq_input",
+        "RNA (or DNA — auto-transcribed):",
+        &mut p.seq_text,
+        4,
+    );
     ui.label(
-        egui::RichText::new(format!("length: {}", common::clean_sequence(&p.seq_text).len()))
-            .weak()
-            .small(),
+        egui::RichText::new(format!(
+            "length: {}",
+            common::clean_sequence(&p.seq_text).len()
+        ))
+        .weak()
+        .small(),
     );
     ui.separator();
 
@@ -142,62 +155,62 @@ fn run_fold(p: &mut RnaStructPanel) {
     }
     match RnaSeq::parse(cleaned.as_bytes()) {
         Ok(rna) => match p.tool {
-                Tool::Zuker => match mfe(&rna) {
-                    Ok(res) => {
-                        let db = res.structure.to_dot_bracket();
-                        p.result = format!(
-                            "Zuker minimum-free-energy fold\n\
+            Tool::Zuker => match mfe(&rna) {
+                Ok(res) => {
+                    let db = res.structure.to_dot_bracket();
+                    p.result = format!(
+                        "Zuker minimum-free-energy fold\n\
                              MFE          : {:.2} kcal/mol\n\
                              base pairs   : {}\n\n\
                              {}\n{}",
-                            res.energy,
-                            res.structure.pairs().len(),
-                            rna.as_str(),
-                            db,
-                        );
-                    }
-                    Err(e) => p.error = Some(e.to_string()),
-                },
-                Tool::Nussinov => match nussinov_fold(&rna) {
-                    Ok(res) => {
-                        let db = res.structure.to_dot_bracket();
-                        p.result = format!(
-                            "Nussinov maximum-base-pairing fold\n\
+                        res.energy,
+                        res.structure.pairs().len(),
+                        rna.as_str(),
+                        db,
+                    );
+                }
+                Err(e) => p.error = Some(e.to_string()),
+            },
+            Tool::Nussinov => match nussinov_fold(&rna) {
+                Ok(res) => {
+                    let db = res.structure.to_dot_bracket();
+                    p.result = format!(
+                        "Nussinov maximum-base-pairing fold\n\
                              base pairs   : {}\n\n{}\n{}",
-                            res.structure.pairs().len(),
-                            rna.as_str(),
-                            db,
-                        );
-                    }
-                    Err(e) => p.error = Some(e.to_string()),
-                },
-                Tool::Partition => match partition_function(&rna) {
-                    Ok(pf) => {
-                        let mut sig = pf.significant_pairs(p.bpp_threshold);
-                        sig.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-                        let mut out = format!(
-                            "McCaskill partition function\n\
+                        res.structure.pairs().len(),
+                        rna.as_str(),
+                        db,
+                    );
+                }
+                Err(e) => p.error = Some(e.to_string()),
+            },
+            Tool::Partition => match partition_function(&rna) {
+                Ok(pf) => {
+                    let mut sig = pf.significant_pairs(p.bpp_threshold);
+                    sig.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+                    let mut out = format!(
+                        "McCaskill partition function\n\
                              ensemble ΔG  : {:.3} kcal/mol\n\
                              {} base pairs with p ≥ {:.2}:\n",
-                            pf.ensemble_free_energy(),
-                            sig.len(),
-                            p.bpp_threshold,
-                        );
-                        for (i, j, prob) in sig.iter().take(40) {
-                            let bar = "#".repeat((prob * 20.0).round() as usize);
-                            out.push_str(&format!(
-                                "  {:>3}-{:<3}  p={:.3}  {}\n",
-                                i + 1,
-                                j + 1,
-                                prob,
-                                bar,
-                            ));
-                        }
-                        p.result = out;
+                        pf.ensemble_free_energy(),
+                        sig.len(),
+                        p.bpp_threshold,
+                    );
+                    for (i, j, prob) in sig.iter().take(40) {
+                        let bar = "#".repeat((prob * 20.0).round() as usize);
+                        out.push_str(&format!(
+                            "  {:>3}-{:<3}  p={:.3}  {}\n",
+                            i + 1,
+                            j + 1,
+                            prob,
+                            bar,
+                        ));
                     }
-                    Err(e) => p.error = Some(e.to_string()),
-                },
+                    p.result = out;
+                }
+                Err(e) => p.error = Some(e.to_string()),
             },
+        },
         Err(e) => p.error = Some(e.to_string()),
     }
 }

@@ -183,9 +183,7 @@ impl PairHmm {
                 let idx = i * w + j;
                 if i > 0 && j > 0 {
                     let prev = (i - 1) * w + j - 1;
-                    let best = vm[prev]
-                        .max(vx[prev] - 0.0)
-                        .max(vy[prev]);
+                    let best = vm[prev].max(vx[prev] - 0.0).max(vy[prev]);
                     let from = (vm[prev] + trans_mm)
                         .max(vx[prev] + trans_gm)
                         .max(vy[prev] + trans_gm);

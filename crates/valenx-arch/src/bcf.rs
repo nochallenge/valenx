@@ -146,8 +146,11 @@ impl Bcf {
             std::fs::create_dir_all(&topic_dir).map_err(|e| {
                 ArchError::BcfWriteFailed(format!("mkdir {}: {e}", topic_dir.display()))
             })?;
-            valenx_core::io_caps::atomic_write_str(&topic_dir.join("markup.bcf"), &markup_for(issue))
-                .map_err(|e| ArchError::BcfWriteFailed(format!("write markup.bcf: {e}")))?;
+            valenx_core::io_caps::atomic_write_str(
+                &topic_dir.join("markup.bcf"),
+                &markup_for(issue),
+            )
+            .map_err(|e| ArchError::BcfWriteFailed(format!("write markup.bcf: {e}")))?;
             if let Some(vp) = issue.viewpoints.first() {
                 valenx_core::io_caps::atomic_write_str(
                     &topic_dir.join("viewpoint.bcfv"),

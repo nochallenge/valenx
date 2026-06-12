@@ -360,12 +360,7 @@ pub fn solve_steady_thermal(
             continue;
         };
         // Element temperature vector (one DOF per node).
-        let t_elem = nalgebra::Vector4::new(
-            t[nodes[0]],
-            t[nodes[1]],
-            t[nodes[2]],
-            t[nodes[3]],
-        );
+        let t_elem = nalgebra::Vector4::new(t[nodes[0]], t[nodes[1]], t[nodes[2]], t[nodes[3]]);
         // ∇T = G·Tₑ  (3×1);  q = −k·∇T.
         let grad_t = g * t_elem;
         let flux = grad_t * (-conductivity);
@@ -666,7 +661,10 @@ mod tests {
 
         let sol = solve_steady_thermal(&mesh, k, &fixed, &loads).unwrap();
         // The hot face must end up above the cold boundary.
-        let hot_t = face.iter().map(|&n| sol.temperature[n]).fold(f64::MIN, f64::max);
+        let hot_t = face
+            .iter()
+            .map(|&n| sol.temperature[n])
+            .fold(f64::MIN, f64::max);
         assert!(
             hot_t > t_cold,
             "heated face {hot_t} should be hotter than the cold boundary {t_cold}"

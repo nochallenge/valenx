@@ -163,11 +163,7 @@ impl CoarseDna {
     /// [`MdError::Parse`] on a bad base character;
     /// [`MdError::DimensionMismatch`] if the sequence length and the
     /// position count differ.
-    pub fn from_strand(
-        sequence: &str,
-        positions: &[Vector3<f64>],
-        strand: usize,
-    ) -> Result<Self> {
+    pub fn from_strand(sequence: &str, positions: &[Vector3<f64>], strand: usize) -> Result<Self> {
         let bases: Vec<Base> = sequence
             .chars()
             .filter(|c| !c.is_whitespace())
@@ -238,24 +234,15 @@ impl CoarseDna {
                     // FENE backbone spring.
                     backbone += fene_energy(r, p.backbone_r0, p.backbone_k, p.backbone_delta);
                     // Consecutive bases also stack.
-                    stacking -= gaussian_well(
-                        r,
-                        p.stacking_strength,
-                        p.stacking_r0,
-                        p.stacking_range,
-                    );
+                    stacking -=
+                        gaussian_well(r, p.stacking_strength, p.stacking_r0, p.stacking_range);
                 } else {
                     // Excluded volume for every non-bonded pair.
                     excluded += excluded_volume(r, p.excluded_sigma, p.excluded_epsilon);
                     // Hydrogen bonding only between complementary
                     // bases on *different* strands.
                     if !same_strand && bi.base.pairs_with(bj.base) {
-                        hbond -= gaussian_well(
-                            r,
-                            p.hbond_strength,
-                            p.hbond_r0,
-                            p.hbond_range,
-                        );
+                        hbond -= gaussian_well(r, p.hbond_strength, p.hbond_r0, p.hbond_range);
                     }
                 }
             }
@@ -429,8 +416,7 @@ mod tests {
         // Two beads from different strands placed almost on top of
         // each other.
         let strand_a = CoarseDna::from_strand("A", &[Vector3::zeros()], 0).unwrap();
-        let strand_b =
-            CoarseDna::from_strand("A", &[Vector3::new(0.05, 0.0, 0.0)], 1).unwrap();
+        let strand_b = CoarseDna::from_strand("A", &[Vector3::new(0.05, 0.0, 0.0)], 1).unwrap();
         let mut system = strand_a;
         system.add_strand(&strand_b);
         assert!(system.energy_breakdown().excluded > 0.0);

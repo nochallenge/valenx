@@ -37,12 +37,13 @@ pub fn split_mesh_by_planes(mesh: &Mesh, planes: &[Plane]) -> Result<Vec<Mesh>, 
     }
     let mut norms = Vec::with_capacity(planes.len());
     for (i, p) in planes.iter().enumerate() {
-        let n = p.normal.try_normalize(1e-12).ok_or_else(|| {
-            MeshPartError::BadParameter {
+        let n = p
+            .normal
+            .try_normalize(1e-12)
+            .ok_or_else(|| MeshPartError::BadParameter {
                 name: "planes[i].normal",
                 reason: format!("zero-length at index {i}"),
-            }
-        })?;
+            })?;
         norms.push((p.point, n));
     }
     let block = mesh
@@ -55,7 +56,8 @@ pub fn split_mesh_by_planes(mesh: &Mesh, planes: &[Plane]) -> Result<Vec<Mesh>, 
     }
     crate::check_connectivity(block, mesh.nodes.len())?;
 
-    let mut groups: std::collections::BTreeMap<u32, ElementBlock> = std::collections::BTreeMap::new();
+    let mut groups: std::collections::BTreeMap<u32, ElementBlock> =
+        std::collections::BTreeMap::new();
     for tri in block.connectivity.chunks_exact(3) {
         let centroid = (mesh.nodes[tri[0] as usize]
             + mesh.nodes[tri[1] as usize]

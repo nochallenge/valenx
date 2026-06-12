@@ -61,10 +61,7 @@ pub struct ConsensusEntry {
 ///
 /// Returns [`DockScreenError::Invalid`] if `scores` is empty, has an
 /// empty function row, or has ragged rows.
-pub fn consensus_rank(
-    scores: &[Vec<f64>],
-    method: ConsensusMethod,
-) -> Result<Vec<ConsensusEntry>> {
+pub fn consensus_rank(scores: &[Vec<f64>], method: ConsensusMethod) -> Result<Vec<ConsensusEntry>> {
     if scores.is_empty() {
         return Err(DockScreenError::invalid(
             "scores",
@@ -113,12 +110,8 @@ pub fn consensus_rank(
             let per = &ranks[l];
             let value = match method {
                 ConsensusMethod::RankSum => per.iter().sum::<usize>() as f64,
-                ConsensusMethod::RankMean => {
-                    per.iter().sum::<usize>() as f64 / n_functions as f64
-                }
-                ConsensusMethod::BestRank => {
-                    per.iter().copied().min().unwrap_or(0) as f64
-                }
+                ConsensusMethod::RankMean => per.iter().sum::<usize>() as f64 / n_functions as f64,
+                ConsensusMethod::BestRank => per.iter().copied().min().unwrap_or(0) as f64,
             };
             ConsensusEntry {
                 ligand_index: l,
@@ -170,14 +163,13 @@ mod tests {
         // Function A loves ligand 0; function B loves ligand 1.
         // Ligand 2 is mediocre for both. RankSum: 0→0+2=2, 1→2+0=2,
         // 2→1+1=2 — a three-way tie broken by index.
-        let scores = vec![
-            vec![-9.0, -3.0, -5.0],
-            vec![-3.0, -9.0, -5.0],
-        ];
+        let scores = vec![vec![-9.0, -3.0, -5.0], vec![-3.0, -9.0, -5.0]];
         let ranked = consensus_rank(&scores, ConsensusMethod::RankSum).unwrap();
         assert_eq!(ranked.len(), 3);
         // All three have the same rank sum.
-        assert!(ranked.iter().all(|e| (e.consensus_value - 2.0).abs() < 1e-9));
+        assert!(ranked
+            .iter()
+            .all(|e| (e.consensus_value - 2.0).abs() < 1e-9));
         // Deterministic tie-break by ligand index.
         assert_eq!(ranked[0].ligand_index, 0);
     }
@@ -186,10 +178,7 @@ mod tests {
     fn best_rank_surfaces_a_polarising_compound() {
         // Ligand 0 is the favourite of function A (rank 0) but the
         // worst for function B. BestRank gives it consensus 0.
-        let scores = vec![
-            vec![-9.0, -5.0, -4.0],
-            vec![-3.0, -8.0, -9.0],
-        ];
+        let scores = vec![vec![-9.0, -5.0, -4.0], vec![-3.0, -8.0, -9.0]];
         let ranked = consensus_rank(&scores, ConsensusMethod::BestRank).unwrap();
         // Ligand 0 has best rank 0 (from function A).
         let l0 = ranked.iter().find(|e| e.ligand_index == 0).unwrap();
@@ -198,10 +187,7 @@ mod tests {
 
     #[test]
     fn rank_mean_orders_identically_to_rank_sum() {
-        let scores = vec![
-            vec![-5.0, -9.0, -3.0],
-            vec![-6.0, -8.0, -4.0],
-        ];
+        let scores = vec![vec![-5.0, -9.0, -3.0], vec![-6.0, -8.0, -4.0]];
         let by_sum = consensus_rank(&scores, ConsensusMethod::RankSum).unwrap();
         let by_mean = consensus_rank(&scores, ConsensusMethod::RankMean).unwrap();
         let sum_order: Vec<usize> = by_sum.iter().map(|e| e.ligand_index).collect();

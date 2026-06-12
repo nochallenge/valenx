@@ -278,36 +278,19 @@ pub fn trace_forward(
         //    (`||q - pred|| > projection_tolerance * 10`), meaning
         //    the predictor wanted to step *past* the boundary and
         //    the clamp absorbed the excess.
-        let on_edge = on_param_boundary(
-            new_sample.uv_a,
-            u_a_min,
-            u_a_max,
-            v_a_min,
-            v_a_max,
-        ) || on_param_boundary(
-            new_sample.uv_b,
-            u_b_min,
-            u_b_max,
-            v_b_min,
-            v_b_max,
-        );
+        let on_edge = on_param_boundary(new_sample.uv_a, u_a_min, u_a_max, v_a_min, v_a_max)
+            || on_param_boundary(new_sample.uv_b, u_b_min, u_b_max, v_b_min, v_b_max);
         // Residual: how far the corrected position is from where the
         // predictor wanted to land. If the clamp absorbed real
         // movement, this is non-zero.
         let want_pred = last.xyz + step * t;
         let absorbed = (new_sample.xyz - want_pred).norm();
-        let absorbed_large = absorbed > params.projection_tolerance * 100.0
-            || absorbed > 0.1 * step;
+        let absorbed_large =
+            absorbed > params.projection_tolerance * 100.0 || absorbed > 0.1 * step;
         if on_edge && absorbed_large {
             // Project the last step onto the boundary by chord
             // bisection between last and new_sample.
-            let boundary_sample = boundary_bisect(
-                s_a,
-                s_b,
-                last.clone(),
-                new_sample,
-                params,
-            );
+            let boundary_sample = boundary_bisect(s_a, s_b, last.clone(), new_sample, params);
             samples.push(boundary_sample);
             termination = TraceEnd::Boundary;
             break;
@@ -332,7 +315,10 @@ pub fn trace_forward(
         samples.push(new_sample);
     }
 
-    Trace { samples, termination }
+    Trace {
+        samples,
+        termination,
+    }
 }
 
 /// Bidirectional trace from a seed.
@@ -405,13 +391,9 @@ pub fn march_all_components(
         if trace.samples.len() < 2 {
             continue;
         }
-        let polyline_xyz: Vec<Vector3<f64>> =
-            trace.samples.iter().map(|s| s.xyz).collect();
+        let polyline_xyz: Vec<Vector3<f64>> = trace.samples.iter().map(|s| s.xyz).collect();
         let curve = fit_polyline(&polyline_xyz);
-        out.push(MarchedCurve {
-            trace,
-            curve,
-        });
+        out.push(MarchedCurve { trace, curve });
     }
     out
 }
@@ -460,13 +442,7 @@ fn inside(uv: Vector2<f64>, u_min: f64, u_max: f64, v_min: f64, v_max: f64) -> b
 
 /// True if `uv` lies **on** the parameter-range boundary (within a
 /// small epsilon scaled to the range — `(u_max - u_min) * 1e-6`).
-fn on_param_boundary(
-    uv: Vector2<f64>,
-    u_min: f64,
-    u_max: f64,
-    v_min: f64,
-    v_max: f64,
-) -> bool {
+fn on_param_boundary(uv: Vector2<f64>, u_min: f64, u_max: f64, v_min: f64, v_max: f64) -> bool {
     let u_eps = (u_max - u_min).max(1.0) * 1.0e-6;
     let v_eps = (v_max - v_min).max(1.0) * 1.0e-6;
     (uv.x - u_min).abs() < u_eps
@@ -475,18 +451,19 @@ fn on_param_boundary(
         || (v_max - uv.y).abs() < v_eps
 }
 
-fn average_xyz(s_a: &NurbsSurface, uv_a: Vector2<f64>, s_b: &NurbsSurface, uv_b: Vector2<f64>) -> Vector3<f64> {
+fn average_xyz(
+    s_a: &NurbsSurface,
+    uv_a: Vector2<f64>,
+    s_b: &NurbsSurface,
+    uv_b: Vector2<f64>,
+) -> Vector3<f64> {
     0.5 * (s_a.evaluate(uv_a.x, uv_a.y) + s_b.evaluate(uv_b.x, uv_b.y))
 }
 
 /// Coarse grid search returning `(uv, distance)` of the nearest grid
 /// node to `p`. `nodes` is the per-axis sample count (so the grid is
 /// `nodes × nodes`).
-fn grid_search_closest(
-    s: &NurbsSurface,
-    p: Vector3<f64>,
-    nodes: usize,
-) -> (Vector2<f64>, f64) {
+fn grid_search_closest(s: &NurbsSurface, p: Vector3<f64>, nodes: usize) -> (Vector2<f64>, f64) {
     let (u_min, u_max) = s.u_range();
     let (v_min, v_max) = s.v_range();
     let mut best_uv = Vector2::new(0.5 * (u_min + u_max), 0.5 * (v_min + v_max));
@@ -665,7 +642,9 @@ pub fn marching_ssi(
         loop_tolerance: tolerance.max(1.0e-4),
         ..MarchParams::default()
     };
-    Ok(marched_curves_to_nurbs(march_all_components(s_a, s_b, 24, &params)))
+    Ok(marched_curves_to_nurbs(march_all_components(
+        s_a, s_b, 24, &params,
+    )))
 }
 
 #[cfg(test)]
@@ -730,7 +709,11 @@ mod tests {
         let params = MarchParams::default();
         let (seed_a, seed_b) = refine_seed(&s_a, &s_b, seed, &params).expect("seed");
         let trace = trace_bidirectional(&s_a, &s_b, seed_a, seed_b, &params);
-        assert!(trace.samples.len() >= 8, "got {} samples", trace.samples.len());
+        assert!(
+            trace.samples.len() >= 8,
+            "got {} samples",
+            trace.samples.len()
+        );
         // Every sample lies on the analytic line y = 0.5, z = 0.
         for s in &trace.samples {
             assert!((s.xyz.y - 0.5).abs() < 1.0e-6, "y = {}", s.xyz.y);
@@ -854,7 +837,11 @@ mod tests {
                 "sample {i} y={} not on analytic line",
                 p.y
             );
-            assert!(p.z.abs() < 5.0e-3, "sample {i} z={} not on analytic line", p.z);
+            assert!(
+                p.z.abs() < 5.0e-3,
+                "sample {i} z={} not on analytic line",
+                p.z
+            );
         }
         // x range should cover the analytic [0, 1] within
         // 2 × chord_tolerance.

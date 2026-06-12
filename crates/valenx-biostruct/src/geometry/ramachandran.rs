@@ -77,9 +77,7 @@ pub fn classify(phi: f64, psi: f64) -> RamachandranRegion {
         return RamachandranRegion::AlphaHelix;
     }
     // Beta-sheet basin: a high-psi band, wrapping past +/-180.
-    if (-180.0..=-40.0).contains(&phi)
-        && (psi >= 90.0 || psi <= -150.0)
-    {
+    if (-180.0..=-40.0).contains(&phi) && (psi >= 90.0 || psi <= -150.0) {
         return RamachandranRegion::BetaSheet;
     }
     // Left-handed alpha.
@@ -192,7 +190,10 @@ mod tests {
     #[test]
     fn angle_wrapping() {
         // 200 deg wraps to -160, still inside the helix phi band.
-        assert_eq!(classify(-160.0 + 360.0, -50.0), RamachandranRegion::AlphaHelix);
+        assert_eq!(
+            classify(-160.0 + 360.0, -50.0),
+            RamachandranRegion::AlphaHelix
+        );
     }
 
     #[test]
@@ -224,11 +225,7 @@ mod tests {
                 r.atoms.push(Atom::new(
                     *name,
                     "C",
-                    Point3::new(
-                        radius * t.cos(),
-                        radius * t.sin(),
-                        base + k as f64 * 0.5,
-                    ),
+                    Point3::new(radius * t.cos(), radius * t.sin(), base + k as f64 * 0.5),
                 ));
             }
             chain.residues.push(r);

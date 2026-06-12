@@ -21,7 +21,9 @@
 use crate::error::OcctVizError;
 
 /// Line stroke pattern mirror of OCCT's `Aspect_TypeOfLine`.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum LineStyle {
     /// Continuous line (default).

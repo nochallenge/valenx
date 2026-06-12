@@ -132,8 +132,7 @@ fn coarse_ss(trace: &[Point3<f64>]) -> Vec<SsCode> {
         // Helical pattern: d13 ~ 5.45, d14 ~ 5.18, d15 ~ 6.37 A.
         let helix_score = (d13 - 5.45).powi(2) + (d14 - 5.18).powi(2) + (d15 - 6.37).powi(2);
         // Strand pattern: d13 ~ 6.1, d14 ~ 10.4, d15 ~ 13.0 A.
-        let strand_score =
-            (d13 - 6.1).powi(2) + (d14 - 10.4).powi(2) + (d15 - 13.0).powi(2);
+        let strand_score = (d13 - 6.1).powi(2) + (d14 - 10.4).powi(2) + (d15 - 13.0).powi(2);
         let coil_score = 1.5; // ambient fit
         if helix_score < strand_score && helix_score < coil_score {
             out[i] = SsCode::Helix;
@@ -265,8 +264,7 @@ fn tm_score_matrix(
 type RefinedAlignment = (Vec<(usize, usize)>, RigidTransform, f64, f64);
 /// As [`RefinedAlignment`] but tagged with the seeding strategy that
 /// produced it — used by [`try_seeds`].
-type RefinedSeededAlignment =
-    (Vec<(usize, usize)>, RigidTransform, f64, f64, TmSeedKind);
+type RefinedSeededAlignment = (Vec<(usize, usize)>, RigidTransform, f64, f64, TmSeedKind);
 
 /// Refine an alignment by iterative TM-score DP, returning the refined
 /// matched pairs, transform, RMSD, and final TM-score (normalised by
@@ -676,7 +674,11 @@ mod tests {
             "expected most of the shorter chain aligned, got {}",
             aln.aligned_length
         );
-        assert!(aln.tm_score > 0.5, "tm should be high for nested helices: {}", aln.tm_score);
+        assert!(
+            aln.tm_score > 0.5,
+            "tm should be high for nested helices: {}",
+            aln.tm_score
+        );
     }
 
     /// Sequence-independence demonstration: the same helix coordinates
@@ -713,7 +715,8 @@ mod tests {
         assert!(
             tm.tm_score >= v1.tm_score - 1e-9,
             "TM-align tm {} should be >= v1 tm {}",
-            tm.tm_score, v1.tm_score
+            tm.tm_score,
+            v1.tm_score
         );
     }
 
@@ -722,7 +725,11 @@ mod tests {
         let cas = helix_cas(25);
         let chain = chain_from_cas("A", &cas);
         let aln = align_chains_ce(&chain, &chain).unwrap();
-        assert!(aln.aligned_length >= 15, "ce aligned {}", aln.aligned_length);
+        assert!(
+            aln.aligned_length >= 15,
+            "ce aligned {}",
+            aln.aligned_length
+        );
         assert!(aln.tm_score > 0.9, "ce tm {}", aln.tm_score);
     }
 
@@ -733,7 +740,10 @@ mod tests {
         // Interior residues of a near-ideal helix should classify as
         // helix.
         let helix_count = ss.iter().filter(|s| **s == SsCode::Helix).count();
-        assert!(helix_count >= 10, "helix classification count: {helix_count}");
+        assert!(
+            helix_count >= 10,
+            "helix classification count: {helix_count}"
+        );
     }
 
     #[test]

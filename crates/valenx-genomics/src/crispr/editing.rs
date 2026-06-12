@@ -150,11 +150,7 @@ impl EditOutcomeReport {
 /// insertions (gap in the reference), deletions (gap in the read) and
 /// substitutions, and — when a quantification window is set — only
 /// counts an indel column that falls inside the window.
-fn classify_aligned(
-    ref_row: &[u8],
-    read_row: &[u8],
-    params: &EditAnalysisParams,
-) -> ReadOutcome {
+fn classify_aligned(ref_row: &[u8], read_row: &[u8], params: &EditAnalysisParams) -> ReadOutcome {
     let mut inserted = 0usize;
     let mut deleted = 0usize;
     let mut substitutions = 0usize;
@@ -162,9 +158,8 @@ fn classify_aligned(
 
     let window_lo = params.cut_site.saturating_sub(params.window);
     let window_hi = params.cut_site.saturating_add(params.window);
-    let in_window = |p: usize| -> bool {
-        params.window == usize::MAX || (p >= window_lo && p <= window_hi)
-    };
+    let in_window =
+        |p: usize| -> bool { params.window == usize::MAX || (p >= window_lo && p <= window_hi) };
 
     for (&r, &q) in ref_row.iter().zip(read_row) {
         match (r, q) {

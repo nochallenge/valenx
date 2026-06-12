@@ -269,9 +269,7 @@ pub fn solve_steady(
             model,
             tunnel.wind.inlet_tke().max(1e-6),
             match model {
-                TurbulenceModel::KEpsilon => {
-                    tunnel.wind.inlet_epsilon(length_scale).max(1e-8)
-                }
+                TurbulenceModel::KEpsilon => tunnel.wind.inlet_epsilon(length_scale).max(1e-8),
                 _ => tunnel.wind.inlet_omega(length_scale).max(1e-3),
             },
             rho,
@@ -311,18 +309,54 @@ pub fn solve_steady(
 
         // --- (1) momentum predictor ---
         solve_momentum_u(
-            &mut u, &v, &w, &p, &mut apu, &grid, rho, mu_lam, &turb, &solid,
-            &tunnel.body, &tunnel.bc, free, relax_u,
+            &mut u,
+            &v,
+            &w,
+            &p,
+            &mut apu,
+            &grid,
+            rho,
+            mu_lam,
+            &turb,
+            &solid,
+            &tunnel.body,
+            &tunnel.bc,
+            free,
+            relax_u,
             controls.near_wall_model,
         );
         solve_momentum_v(
-            &u, &mut v, &w, &p, &mut apv, &grid, rho, mu_lam, &turb, &solid,
-            &tunnel.body, &tunnel.bc, free, relax_u,
+            &u,
+            &mut v,
+            &w,
+            &p,
+            &mut apv,
+            &grid,
+            rho,
+            mu_lam,
+            &turb,
+            &solid,
+            &tunnel.body,
+            &tunnel.bc,
+            free,
+            relax_u,
             controls.near_wall_model,
         );
         solve_momentum_w(
-            &u, &v, &mut w, &p, &mut apw, &grid, rho, mu_lam, &turb, &solid,
-            &tunnel.body, &tunnel.bc, free, relax_u,
+            &u,
+            &v,
+            &mut w,
+            &p,
+            &mut apw,
+            &grid,
+            rho,
+            mu_lam,
+            &turb,
+            &solid,
+            &tunnel.body,
+            &tunnel.bc,
+            free,
+            relax_u,
             controls.near_wall_model,
         );
         apply_boundary_velocities(&mut u, &mut v, &mut w, &grid, &tunnel.bc, free);
@@ -331,8 +365,18 @@ pub fn solve_steady(
         // --- (2) pressure-correction Poisson equation ---
         let mut stencil = PoissonStencil::zeros(grid.nx, grid.ny, grid.nz);
         let mass_imbalance = assemble_pressure_correction(
-            &mut stencil, &u, &v, &w, &apu, &apv, &apw, &grid, rho, &solid,
-            &tunnel.body, &tunnel.bc,
+            &mut stencil,
+            &u,
+            &v,
+            &w,
+            &apu,
+            &apv,
+            &apw,
+            &grid,
+            rho,
+            &solid,
+            &tunnel.body,
+            &tunnel.bc,
         );
 
         // --- (3) solve for p' ---
@@ -356,7 +400,15 @@ pub fn solve_steady(
         // --- (4) correct pressure + velocity ---
         correct_pressure(&mut p, &pcorr, &solid, relax_p);
         correct_velocity(
-            &mut u, &mut v, &mut w, &pcorr, &apu, &apv, &apw, &grid, &solid,
+            &mut u,
+            &mut v,
+            &mut w,
+            &pcorr,
+            &apu,
+            &apv,
+            &apw,
+            &grid,
+            &solid,
             &tunnel.body,
         );
         apply_boundary_velocities(&mut u, &mut v, &mut w, &grid, &tunnel.bc, free);
@@ -375,8 +427,17 @@ pub fn solve_steady(
                 None
             };
             advance_turbulence(
-                &mut turb, &uc, &vc, &wc, &wall_d, &solid, &grid, rho, mu_lam,
-                controls.relax_turb * 1e-2, wall,
+                &mut turb,
+                &uc,
+                &vc,
+                &wc,
+                &wall_d,
+                &solid,
+                &grid,
+                rho,
+                mu_lam,
+                controls.relax_turb * 1e-2,
+                wall,
             );
         }
 
@@ -555,8 +616,7 @@ fn small_cell_floor_ap(
     if body.method != WallMethod::CutCell {
         return ap;
     }
-    let border_cut = body.tag(ai, aj, ak) == CellTag::Cut
-        || body.tag(bi, bj, bk) == CellTag::Cut;
+    let border_cut = body.tag(ai, aj, ak) == CellTag::Cut || body.tag(bi, bj, bk) == CellTag::Cut;
     if !border_cut {
         return ap;
     }
@@ -584,8 +644,7 @@ fn cut_wall_distance(body: &ImmersedBody, i: usize, j: usize, k: usize) -> f64 {
     // normal — the wall points from solid into fluid, so a fluid cell
     // centre sits a positive distance out.
     let d = (centre - cut.centroid).dot(&cut.normal).abs();
-    let cell = (grid.dx() * grid.dx() + grid.dy() * grid.dy() + grid.dz() * grid.dz())
-        .sqrt()
+    let cell = (grid.dx() * grid.dx() + grid.dy() * grid.dy() + grid.dz() * grid.dz()).sqrt()
         / 3.0_f64.sqrt();
     // Floor at 25 % of a cell, cap at one cell — the centroid-based
     // distance is the BL sampling height, kept in a sane band. The
@@ -673,9 +732,7 @@ fn cut_wall_drag(
         // viscosity inside `wall_effective_viscosity`.
         let y = cut_wall_distance(body, i, j, k);
         let nu = (mu_lam / rho).max(1e-12);
-        let mu_w = crate::wallmodel::wall_effective_viscosity(
-            rho, u_tan_cell, y, nu, mu_lam,
-        );
+        let mu_w = crate::wallmodel::wall_effective_viscosity(rho, u_tan_cell, y, nu, mu_lam);
         mu_w * area_tan / y.max(1e-9)
     } else {
         // Legacy crude-linear-gradient wall drag — molecular + eddy
@@ -683,10 +740,7 @@ fn cut_wall_drag(
         // model treatment, kept verbatim for the before/after compare.
         let grid = body.grid;
         let d = 0.5
-            * (grid.dx() * grid.dx()
-                + grid.dy() * grid.dy()
-                + grid.dz() * grid.dz())
-            .sqrt()
+            * (grid.dx() * grid.dx() + grid.dy() * grid.dy() + grid.dz() * grid.dz()).sqrt()
             / 3.0_f64.sqrt();
         mu_eff * area_tan / d.max(1e-9)
     };
@@ -798,17 +852,13 @@ fn solve_momentum_u(
                     let ap_e = face_aperture(body, i, j, k, 1);
                     let ap_w = face_aperture(body, i - 1, j, k, 0);
                     let ap_n = 0.5
-                        * (face_aperture(body, i - 1, j, k, 3)
-                            + face_aperture(body, i, j, k, 3));
+                        * (face_aperture(body, i - 1, j, k, 3) + face_aperture(body, i, j, k, 3));
                     let ap_s = 0.5
-                        * (face_aperture(body, i - 1, j, k, 2)
-                            + face_aperture(body, i, j, k, 2));
+                        * (face_aperture(body, i - 1, j, k, 2) + face_aperture(body, i, j, k, 2));
                     let ap_t = 0.5
-                        * (face_aperture(body, i - 1, j, k, 5)
-                            + face_aperture(body, i, j, k, 5));
+                        * (face_aperture(body, i - 1, j, k, 5) + face_aperture(body, i, j, k, 5));
                     let ap_b = 0.5
-                        * (face_aperture(body, i - 1, j, k, 4)
-                            + face_aperture(body, i, j, k, 4));
+                        * (face_aperture(body, i - 1, j, k, 4) + face_aperture(body, i, j, k, 4));
 
                     let ae = ap_e * hybrid_coeff(dx_diff, fe, -1.0);
                     let aw = ap_w * hybrid_coeff(dx_diff, fw, 1.0);
@@ -819,13 +869,35 @@ fn solve_momentum_u(
 
                     // y faces.
                     handle_tangential(
-                        j, ny, dy_diff, fn_, fs, bc.y_min, bc.y_max, free.x, &mut a_p,
-                        &mut su, &mut an, &mut as_, nu * dx * dz,
+                        j,
+                        ny,
+                        dy_diff,
+                        fn_,
+                        fs,
+                        bc.y_min,
+                        bc.y_max,
+                        free.x,
+                        &mut a_p,
+                        &mut su,
+                        &mut an,
+                        &mut as_,
+                        nu * dx * dz,
                     );
                     // z faces.
                     handle_tangential(
-                        k, nz, dz_diff, ft, fb, bc.z_min, bc.z_max, free.x, &mut a_p,
-                        &mut su, &mut at, &mut ab, nu * dx * dy,
+                        k,
+                        nz,
+                        dz_diff,
+                        ft,
+                        fb,
+                        bc.z_min,
+                        bc.z_max,
+                        free.x,
+                        &mut a_p,
+                        &mut su,
+                        &mut at,
+                        &mut ab,
+                        nu * dx * dy,
                     );
 
                     // Throttle the interior tangential coefficients by
@@ -857,16 +929,12 @@ fn solve_momentum_u(
                     // toward the (zero) no-slip wall velocity, the
                     // momentum sink reconstructed from the near-wall
                     // model's law-of-the-wall profile.
-                    let mu_e = mu_lam
-                        + 0.5 * (turb.mu_t.at(i - 1, j, k) + turb.mu_t.at(i, j, k));
+                    let mu_e = mu_lam + 0.5 * (turb.mu_t.at(i - 1, j, k) + turb.mu_t.at(i, j, k));
                     let ut_wm = cut_cell_tangential_speed(body, u, v, w, i - 1, j, k);
-                    a_p += cut_wall_drag(
-                        body, i - 1, j, k, 0, mu_lam, rho, ut_wm, mu_e, wall_model,
-                    );
+                    a_p +=
+                        cut_wall_drag(body, i - 1, j, k, 0, mu_lam, rho, ut_wm, mu_e, wall_model);
                     let ut_we = cut_cell_tangential_speed(body, u, v, w, i, j, k);
-                    a_p += cut_wall_drag(
-                        body, i, j, k, 0, mu_lam, rho, ut_we, mu_e, wall_model,
-                    );
+                    a_p += cut_wall_drag(body, i, j, k, 0, mu_lam, rho, ut_we, mu_e, wall_model);
 
                     if a_p.abs() < 1e-30 {
                         continue;
@@ -898,7 +966,9 @@ fn solve_momentum_u(
                     let u_old = u.at(i, j, k);
                     u.set(i, j, k, u_old + relax * (u_new - u_old));
                     apu.set(
-                        i, j, k,
+                        i,
+                        j,
+                        k,
                         small_cell_floor_ap(body, i - 1, j, k, i, j, k, a_p / relax, dx_diff),
                     );
                 }
@@ -961,17 +1031,13 @@ fn solve_momentum_v(
                     let ap_n = face_aperture(body, i, j, k, 3);
                     let ap_s = face_aperture(body, i, j - 1, k, 2);
                     let ap_e = 0.5
-                        * (face_aperture(body, i, j - 1, k, 1)
-                            + face_aperture(body, i, j, k, 1));
+                        * (face_aperture(body, i, j - 1, k, 1) + face_aperture(body, i, j, k, 1));
                     let ap_w = 0.5
-                        * (face_aperture(body, i, j - 1, k, 0)
-                            + face_aperture(body, i, j, k, 0));
+                        * (face_aperture(body, i, j - 1, k, 0) + face_aperture(body, i, j, k, 0));
                     let ap_t = 0.5
-                        * (face_aperture(body, i, j - 1, k, 5)
-                            + face_aperture(body, i, j, k, 5));
+                        * (face_aperture(body, i, j - 1, k, 5) + face_aperture(body, i, j, k, 5));
                     let ap_b = 0.5
-                        * (face_aperture(body, i, j - 1, k, 4)
-                            + face_aperture(body, i, j, k, 4));
+                        * (face_aperture(body, i, j - 1, k, 4) + face_aperture(body, i, j, k, 4));
 
                     let an = ap_n * hybrid_coeff(dy_diff, fn_, -1.0);
                     let as_ = ap_s * hybrid_coeff(dy_diff, fs, 1.0);
@@ -981,12 +1047,34 @@ fn solve_momentum_v(
                     let (mut ae, mut aw, mut at, mut ab) = (0.0, 0.0, 0.0, 0.0);
 
                     handle_tangential(
-                        i, nx, dx_diff, fe, fw, bc.x_min, bc.x_max, free.y, &mut a_p,
-                        &mut sv, &mut ae, &mut aw, nu * dy * dz,
+                        i,
+                        nx,
+                        dx_diff,
+                        fe,
+                        fw,
+                        bc.x_min,
+                        bc.x_max,
+                        free.y,
+                        &mut a_p,
+                        &mut sv,
+                        &mut ae,
+                        &mut aw,
+                        nu * dy * dz,
                     );
                     handle_tangential(
-                        k, nz, dz_diff, ft, fb, bc.z_min, bc.z_max, free.y, &mut a_p,
-                        &mut sv, &mut at, &mut ab, nu * dx * dy,
+                        k,
+                        nz,
+                        dz_diff,
+                        ft,
+                        fb,
+                        bc.z_min,
+                        bc.z_max,
+                        free.y,
+                        &mut a_p,
+                        &mut sv,
+                        &mut at,
+                        &mut ab,
+                        nu * dx * dy,
                     );
 
                     if i + 1 < nx {
@@ -1010,16 +1098,12 @@ fn solve_momentum_v(
                         a_p += ab;
                     }
 
-                    let mu_e = mu_lam
-                        + 0.5 * (turb.mu_t.at(i, j - 1, k) + turb.mu_t.at(i, j, k));
+                    let mu_e = mu_lam + 0.5 * (turb.mu_t.at(i, j - 1, k) + turb.mu_t.at(i, j, k));
                     let ut_ws = cut_cell_tangential_speed(body, u, v, w, i, j - 1, k);
-                    a_p += cut_wall_drag(
-                        body, i, j - 1, k, 1, mu_lam, rho, ut_ws, mu_e, wall_model,
-                    );
+                    a_p +=
+                        cut_wall_drag(body, i, j - 1, k, 1, mu_lam, rho, ut_ws, mu_e, wall_model);
                     let ut_wn = cut_cell_tangential_speed(body, u, v, w, i, j, k);
-                    a_p += cut_wall_drag(
-                        body, i, j, k, 1, mu_lam, rho, ut_wn, mu_e, wall_model,
-                    );
+                    a_p += cut_wall_drag(body, i, j, k, 1, mu_lam, rho, ut_wn, mu_e, wall_model);
 
                     if a_p.abs() < 1e-30 {
                         continue;
@@ -1045,7 +1129,9 @@ fn solve_momentum_v(
                     let v_old = v.at(i, j, k);
                     v.set(i, j, k, v_old + relax * (v_new - v_old));
                     apv.set(
-                        i, j, k,
+                        i,
+                        j,
+                        k,
                         small_cell_floor_ap(body, i, j - 1, k, i, j, k, a_p / relax, dy_diff),
                     );
                 }
@@ -1108,17 +1194,13 @@ fn solve_momentum_w(
                     let ap_t = face_aperture(body, i, j, k, 5);
                     let ap_b = face_aperture(body, i, j, k - 1, 4);
                     let ap_e = 0.5
-                        * (face_aperture(body, i, j, k - 1, 1)
-                            + face_aperture(body, i, j, k, 1));
+                        * (face_aperture(body, i, j, k - 1, 1) + face_aperture(body, i, j, k, 1));
                     let ap_w = 0.5
-                        * (face_aperture(body, i, j, k - 1, 0)
-                            + face_aperture(body, i, j, k, 0));
+                        * (face_aperture(body, i, j, k - 1, 0) + face_aperture(body, i, j, k, 0));
                     let ap_n = 0.5
-                        * (face_aperture(body, i, j, k - 1, 3)
-                            + face_aperture(body, i, j, k, 3));
+                        * (face_aperture(body, i, j, k - 1, 3) + face_aperture(body, i, j, k, 3));
                     let ap_s = 0.5
-                        * (face_aperture(body, i, j, k - 1, 2)
-                            + face_aperture(body, i, j, k, 2));
+                        * (face_aperture(body, i, j, k - 1, 2) + face_aperture(body, i, j, k, 2));
 
                     let at = ap_t * hybrid_coeff(dz_diff, ft, -1.0);
                     let ab = ap_b * hybrid_coeff(dz_diff, fb, 1.0);
@@ -1128,12 +1210,34 @@ fn solve_momentum_w(
                     let (mut ae, mut aw, mut an, mut as_) = (0.0, 0.0, 0.0, 0.0);
 
                     handle_tangential(
-                        i, nx, dx_diff, fe, fw, bc.x_min, bc.x_max, free.z, &mut a_p,
-                        &mut sw, &mut ae, &mut aw, nu * dy * dz,
+                        i,
+                        nx,
+                        dx_diff,
+                        fe,
+                        fw,
+                        bc.x_min,
+                        bc.x_max,
+                        free.z,
+                        &mut a_p,
+                        &mut sw,
+                        &mut ae,
+                        &mut aw,
+                        nu * dy * dz,
                     );
                     handle_tangential(
-                        j, ny, dy_diff, fn_, fs, bc.y_min, bc.y_max, free.z, &mut a_p,
-                        &mut sw, &mut an, &mut as_, nu * dx * dz,
+                        j,
+                        ny,
+                        dy_diff,
+                        fn_,
+                        fs,
+                        bc.y_min,
+                        bc.y_max,
+                        free.z,
+                        &mut a_p,
+                        &mut sw,
+                        &mut an,
+                        &mut as_,
+                        nu * dx * dz,
                     );
 
                     if i + 1 < nx {
@@ -1157,16 +1261,12 @@ fn solve_momentum_w(
                         a_p += as_;
                     }
 
-                    let mu_e = mu_lam
-                        + 0.5 * (turb.mu_t.at(i, j, k - 1) + turb.mu_t.at(i, j, k));
+                    let mu_e = mu_lam + 0.5 * (turb.mu_t.at(i, j, k - 1) + turb.mu_t.at(i, j, k));
                     let ut_wb = cut_cell_tangential_speed(body, u, v, w, i, j, k - 1);
-                    a_p += cut_wall_drag(
-                        body, i, j, k - 1, 2, mu_lam, rho, ut_wb, mu_e, wall_model,
-                    );
+                    a_p +=
+                        cut_wall_drag(body, i, j, k - 1, 2, mu_lam, rho, ut_wb, mu_e, wall_model);
                     let ut_wt = cut_cell_tangential_speed(body, u, v, w, i, j, k);
-                    a_p += cut_wall_drag(
-                        body, i, j, k, 2, mu_lam, rho, ut_wt, mu_e, wall_model,
-                    );
+                    a_p += cut_wall_drag(body, i, j, k, 2, mu_lam, rho, ut_wt, mu_e, wall_model);
 
                     if a_p.abs() < 1e-30 {
                         continue;
@@ -1192,7 +1292,9 @@ fn solve_momentum_w(
                     let w_old = w.at(i, j, k);
                     w.set(i, j, k, w_old + relax * (w_new - w_old));
                     apw.set(
-                        i, j, k,
+                        i,
+                        j,
+                        k,
                         small_cell_floor_ap(body, i, j, k - 1, i, j, k, a_p / relax, dz_diff),
                     );
                 }
@@ -1684,10 +1786,7 @@ mod tests {
     fn flow_blocks_inside_a_solid_body() {
         // Inside the body the velocity must be the (zero) body velocity
         // — the immersed boundary forcing.
-        let body = box_body(
-            Vector3::new(-1.0, -1.0, -1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        );
+        let body = box_body(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0));
         let wind = Wind::straight(15.0).unwrap();
         let tunnel = WindTunnel::build(&body, wind).unwrap();
         let controls = SolverControls {
@@ -1802,4 +1901,3 @@ mod tests {
         assert!(flow.turbulence.mean_eddy_viscosity().is_finite());
     }
 }
-

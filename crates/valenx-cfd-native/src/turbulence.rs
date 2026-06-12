@@ -424,8 +424,7 @@ pub fn strain_rate_squared(u: &Field, v: &Field, grid: &Grid) -> Field {
             let span_x = if i + 1 < nx && i > 0 { 2.0 } else { 1.0 } * dx;
             let dvdx = (v_e - v_w) / span_x.max(1e-30);
 
-            let s_sq =
-                2.0 * dudx * dudx + 2.0 * dvdy * dvdy + (dudy + dvdx).powi(2);
+            let s_sq = 2.0 * dudx * dudx + 2.0 * dvdy * dvdy + (dudy + dvdx).powi(2);
             s2.set(i, j, s_sq);
         }
     }
@@ -553,8 +552,7 @@ pub fn advance_k_epsilon(
                     continue;
                 }
                 let k_new = (nb + su) / a_p;
-                let updated =
-                    turb.k.at(i, j) + relax * (k_new - turb.k.at(i, j));
+                let updated = turb.k.at(i, j) + relax * (k_new - turb.k.at(i, j));
                 turb.k.set(i, j, updated.max(k_floor));
             }
         }
@@ -610,8 +608,7 @@ pub fn advance_k_epsilon(
                     continue;
                 }
                 let eps_new = (nb + su) / a_p;
-                let updated = turb.epsilon.at(i, j)
-                    + relax * (eps_new - turb.epsilon.at(i, j));
+                let updated = turb.epsilon.at(i, j) + relax * (eps_new - turb.epsilon.at(i, j));
                 turb.epsilon.set(i, j, updated.max(eps_floor));
             }
         }
@@ -627,8 +624,7 @@ pub fn advance_k_epsilon(
         // k_P = u_τ² / √C_μ  (equilibrium wall-cell kinetic energy).
         let k_wall = (u_tau * u_tau / model.c_mu.sqrt()).max(k_floor);
         // ε_P = u_τ³ / (κ·y_P).
-        let eps_wall =
-            (u_tau.powi(3) / (wall.kappa * y_p.max(1e-30))).max(eps_floor);
+        let eps_wall = (u_tau.powi(3) / (wall.kappa * y_p.max(1e-30))).max(eps_floor);
         turb.k.set(i, j, k_wall);
         turb.epsilon.set(i, j, eps_wall);
     };
@@ -819,14 +815,7 @@ pub fn solve_turbulent_channel(
         let v_field = column.v_field(); // all zero — no wall-normal flow
         for _ke in 0..3 {
             advance_k_epsilon(
-                &mut turb,
-                &u_field,
-                &v_field,
-                &column,
-                rho,
-                nu_mol,
-                model,
-                wall,
+                &mut turb, &u_field, &v_field, &column, rho, nu_mol, model, wall,
                 true, // south wall
                 true, // north wall
                 0.6,
@@ -914,15 +903,13 @@ impl SstModel {
             sigma_omega: 0.5,
             beta: 0.075,
             // γ₁ = β₁/β* − σ_ω1·κ²/√β*.
-            gamma: 0.075 / beta_star
-                - 0.5 * kappa * kappa / beta_star.sqrt(),
+            gamma: 0.075 / beta_star - 0.5 * kappa * kappa / beta_star.sqrt(),
         };
         let set2 = SstSet {
             sigma_k: 1.0,
             sigma_omega: 0.856,
             beta: 0.0828,
-            gamma: 0.0828 / beta_star
-                - 0.856 * kappa * kappa / beta_star.sqrt(),
+            gamma: 0.0828 / beta_star - 0.856 * kappa * kappa / beta_star.sqrt(),
         };
         SstModel {
             beta_star,
@@ -941,8 +928,7 @@ impl SstModel {
         let g = 1.0 - f1;
         SstSet {
             sigma_k: f1 * self.set1.sigma_k + g * self.set2.sigma_k,
-            sigma_omega: f1 * self.set1.sigma_omega
-                + g * self.set2.sigma_omega,
+            sigma_omega: f1 * self.set1.sigma_omega + g * self.set2.sigma_omega,
             beta: f1 * self.set1.beta + g * self.set2.beta,
             gamma: f1 * self.set1.gamma + g * self.set2.gamma,
         }
@@ -986,8 +972,7 @@ pub fn f1_blend(
     let omega = omega.max(1e-12);
     let k = k.max(0.0);
     // Positive cross-diffusion CD_kω.
-    let cd_pos = (2.0 * rho * sigma_omega2 * grad_k_dot_grad_omega / omega)
-        .max(1.0e-10);
+    let cd_pos = (2.0 * rho * sigma_omega2 * grad_k_dot_grad_omega / omega).max(1.0e-10);
     let term1 = k.sqrt() / (beta_star * omega * d);
     let term2 = 500.0 * nu_mol / (d * d * omega);
     let arg_lo = term1.max(term2);
@@ -1011,13 +996,7 @@ pub fn f1_blend(
 /// `F₂ → 0` in the free stream (the limiter falls back to the
 /// standard `ρ·k/ω`).
 #[inline]
-pub fn f2_blend(
-    nu_mol: f64,
-    k: f64,
-    omega: f64,
-    wall_distance: f64,
-    beta_star: f64,
-) -> f64 {
+pub fn f2_blend(nu_mol: f64, k: f64, omega: f64, wall_distance: f64, beta_star: f64) -> f64 {
     let d = wall_distance.max(1e-12);
     let omega = omega.max(1e-12);
     let k = k.max(0.0);
@@ -1062,18 +1041,12 @@ impl SstField {
     ///
     /// (the standard k-ω inlet relation, equivalent to the k-ε
     /// `ε = C_μ^{3/4}·k^{3/2}/ℓ` via `ω = ε/(C_μ·k)`).
-    pub fn initialise(
-        grid: &Grid,
-        u_ref: f64,
-        intensity: f64,
-        model: &SstModel,
-    ) -> SstField {
+    pub fn initialise(grid: &Grid, u_ref: f64, intensity: f64, model: &SstModel) -> SstField {
         let u_ref = u_ref.abs().max(1e-6);
         let intensity = intensity.max(1e-4);
         let k0 = 1.5 * (intensity * u_ref).powi(2);
         let length_scale = (0.07 * grid.ly).max(1e-6);
-        let omega0 = k0.sqrt()
-            / (model.beta_star.powf(0.25) * length_scale).max(1e-30);
+        let omega0 = k0.sqrt() / (model.beta_star.powf(0.25) * length_scale).max(1e-30);
         let nu_t0 = k0 / omega0.max(1e-30);
         SstField {
             k: Field::filled(grid.nx, grid.ny, k0),
@@ -1106,13 +1079,7 @@ impl SstField {
             for i in 0..self.k.width {
                 let k = self.k.at(i, j).max(0.0);
                 let om = self.omega.at(i, j).max(1e-12);
-                let f2 = f2_blend(
-                    nu_mol,
-                    k,
-                    om,
-                    wall_distance.at(i, j),
-                    model.beta_star,
-                );
+                let f2 = f2_blend(nu_mol, k, om, wall_distance.at(i, j), model.beta_star);
                 let s = s_mag.at(i, j).max(0.0);
                 let denom = (model.a1 * om).max(s * f2).max(1e-30);
                 let nu_t = (model.a1 * k / denom).clamp(0.0, cap);
@@ -1148,10 +1115,7 @@ pub fn strain_rate_magnitude(u: &Field, v: &Field, grid: &Grid) -> Field {
 /// SST's blending functions `F₁` and `F₂` need this field; for a
 /// generic rectangular domain it is closed form, so a small standalone
 /// helper is the cheapest way to produce it.
-pub fn wall_distance_field(
-    grid: &Grid,
-    walls: WallMask,
-) -> Field {
+pub fn wall_distance_field(grid: &Grid, walls: WallMask) -> Field {
     let dx = grid.dx();
     let dy = grid.dy();
     let mut field = Field::zeros(grid.nx, grid.ny);
@@ -1351,8 +1315,7 @@ pub fn advance_k_omega_sst(
                 let om_p = omega_snapshot.at(i, j).max(omega_floor);
                 // Production limiter min(P_k, 10·β*·ρ·k·ω) — the
                 // standard SST stagnation-point cap.
-                let p_lim = (production.at(i, j))
-                    .min(10.0 * model.beta_star * rho * k_p * om_p);
+                let p_lim = (production.at(i, j)).min(10.0 * model.beta_star * rho * k_p * om_p);
                 let su = p_lim * vol;
                 // Sink β*·ρ·k·ω linearised as (β*·ρ·ω)·k on the
                 // diagonal (Patankar positive-coefficient rule).
@@ -1362,8 +1325,7 @@ pub fn advance_k_omega_sst(
                     continue;
                 }
                 let k_new = (nb + su) / a_p;
-                let updated =
-                    state.k.at(i, j) + relax * (k_new - state.k.at(i, j));
+                let updated = state.k.at(i, j) + relax * (k_new - state.k.at(i, j));
                 state.k.set(i, j, updated.max(k_floor));
             }
         }
@@ -1428,12 +1390,7 @@ pub fn advance_k_omega_sst(
                 let dwdx = central_difference_x(&state.omega, i, j, dx);
                 let dwdy = central_difference_y(&state.omega, i, j, dy);
                 let grad_dot = dkdx * dwdx + dkdy * dwdy;
-                let cd = 2.0
-                    * (1.0 - f1_p)
-                    * rho
-                    * model.set2.sigma_omega
-                    * grad_dot
-                    / om_p;
+                let cd = 2.0 * (1.0 - f1_p) * rho * model.set2.sigma_omega * grad_dot / om_p;
                 let mut su = su_prod;
                 let mut sp_extra = sp_sink;
                 if cd >= 0.0 {
@@ -1452,8 +1409,7 @@ pub fn advance_k_omega_sst(
                 }
                 let _ = k_p;
                 let om_new = (nb + su) / a_p;
-                let updated = state.omega.at(i, j)
-                    + relax * (om_new - state.omega.at(i, j));
+                let updated = state.omega.at(i, j) + relax * (om_new - state.omega.at(i, j));
                 state.omega.set(i, j, updated.max(omega_floor));
             }
         }
@@ -1475,8 +1431,7 @@ pub fn advance_k_omega_sst(
         // Use the maximum of the two, which is the well-conditioned
         // blended boundary value SST uses.
         let omega_visc = 6.0 * nu_mol / (beta1 * y_first * y_first).max(1e-30);
-        let omega_log = u_tau / (model.beta_star.sqrt() * wall.kappa * y_first)
-            .max(1e-30);
+        let omega_log = u_tau / (model.beta_star.sqrt() * wall.kappa * y_first).max(1e-30);
         let omega_wall = omega_visc.max(omega_log).max(omega_floor);
         state.k.set(i, j, k_wall);
         state.omega.set(i, j, omega_wall);
@@ -1749,18 +1704,14 @@ mod tests {
         let v = Field::zeros(grid.nx, grid.ny + 1);
         for _ in 0..20 {
             advance_k_epsilon(
-                &mut turb, &u, &v, &grid, 1.0, 1e-5, &model, &wall, true,
-                true, 0.6,
+                &mut turb, &u, &v, &grid, 1.0, 1e-5, &model, &wall, true, true, 0.6,
             );
         }
         for &k in &turb.k.data {
             assert!(k > 0.0 && k.is_finite(), "k must stay positive: {k}");
         }
         for &eps in &turb.epsilon.data {
-            assert!(
-                eps > 0.0 && eps.is_finite(),
-                "ε must stay positive: {eps}"
-            );
+            assert!(eps > 0.0 && eps.is_finite(), "ε must stay positive: {eps}");
         }
         for &nu_t in &turb.nu_t.data {
             assert!(nu_t >= 0.0 && nu_t.is_finite(), "ν_t must be finite ≥ 0");
@@ -1791,8 +1742,7 @@ mod tests {
         let v = Field::zeros(grid.nx, grid.ny + 1);
         for _ in 0..40 {
             advance_k_epsilon(
-                &mut turb, &u, &v, &grid, 1.0, 1e-5, &model, &wall, false,
-                false, 0.6,
+                &mut turb, &u, &v, &grid, 1.0, 1e-5, &model, &wall, false, false, 0.6,
             );
         }
         assert!(
@@ -1811,9 +1761,7 @@ mod tests {
         let fluid = Fluid::new(1.0, 0.01);
         let model = KEpsilonModel::standard();
         let wall = WallFunction::standard();
-        let profile = solve_turbulent_channel(
-            &grid, &fluid, &model, &wall, -1.0, false, 1,
-        );
+        let profile = solve_turbulent_channel(&grid, &fluid, &model, &wall, -1.0, false, 1);
         // The flatness of a parabola is exactly 2/3.
         let flat = profile.flatness();
         assert!(
@@ -1852,12 +1800,8 @@ mod tests {
         let model = KEpsilonModel::standard();
         let wall = WallFunction::standard();
 
-        let laminar = solve_turbulent_channel(
-            &grid, &fluid, &model, &wall, -1.0, false, 1,
-        );
-        let turbulent = solve_turbulent_channel(
-            &grid, &fluid, &model, &wall, -1.0, true, 80,
-        );
+        let laminar = solve_turbulent_channel(&grid, &fluid, &model, &wall, -1.0, false, 1);
+        let turbulent = solve_turbulent_channel(&grid, &fluid, &model, &wall, -1.0, true, 80);
 
         let lam_flat = laminar.flatness();
         let turb_flat = turbulent.flatness();
@@ -1884,9 +1828,7 @@ mod tests {
         let fluid = Fluid::new(1.0, 1e-4);
         let model = KEpsilonModel::standard();
         let wall = WallFunction::standard();
-        let profile = solve_turbulent_channel(
-            &grid, &fluid, &model, &wall, -1.0, true, 80,
-        );
+        let profile = solve_turbulent_channel(&grid, &fluid, &model, &wall, -1.0, true, 80);
         // Every eddy viscosity is finite and non-negative.
         for &nt in &profile.nu_t {
             assert!(nt >= 0.0 && nt.is_finite(), "ν_t must be finite ≥ 0");
@@ -1923,19 +1865,17 @@ mod tests {
         assert!((b2.beta - m.set2.beta).abs() < 1e-12);
         // Halfway blends as an average.
         let bh = m.blend(0.5);
-        assert!(
-            (bh.beta - 0.5 * (m.set1.beta + m.set2.beta)).abs() < 1e-12
-        );
+        assert!((bh.beta - 0.5 * (m.set1.beta + m.set2.beta)).abs() < 1e-12);
     }
 
     #[test]
     fn sst_gamma_uses_the_menter_relation() {
         // γ_i = β_i / β* − σ_ω_i · κ² / √β* (Menter 1994).
         let m = SstModel::standard();
-        let g1 = m.set1.beta / m.beta_star
-            - m.set1.sigma_omega * m.kappa * m.kappa / m.beta_star.sqrt();
-        let g2 = m.set2.beta / m.beta_star
-            - m.set2.sigma_omega * m.kappa * m.kappa / m.beta_star.sqrt();
+        let g1 =
+            m.set1.beta / m.beta_star - m.set1.sigma_omega * m.kappa * m.kappa / m.beta_star.sqrt();
+        let g2 =
+            m.set2.beta / m.beta_star - m.set2.sigma_omega * m.kappa * m.kappa / m.beta_star.sqrt();
         assert!((m.set1.gamma - g1).abs() < 1e-12);
         assert!((m.set2.gamma - g2).abs() < 1e-12);
     }
@@ -1950,11 +1890,23 @@ mod tests {
         let k = 0.01;
         let omega = 100.0;
         let near = f1_blend(
-            rho, nu, k, omega, 1e-6, 1e-6, m.set2.sigma_omega,
+            rho,
+            nu,
+            k,
+            omega,
+            1e-6,
+            1e-6,
+            m.set2.sigma_omega,
             m.beta_star,
         );
         let far = f1_blend(
-            rho, nu, k, omega, 1e-6, 10.0, m.set2.sigma_omega,
+            rho,
+            nu,
+            k,
+            omega,
+            1e-6,
+            10.0,
+            m.set2.sigma_omega,
             m.beta_star,
         );
         assert!(near > 0.9, "near-wall F₁ {near} should be ≈ 1");
@@ -2004,9 +1956,7 @@ mod tests {
         let s2 = strain_rate_squared(&u, &v, &grid);
         let s = strain_rate_magnitude(&u, &v, &grid);
         for idx in 0..s.data.len() {
-            assert!(
-                (s.data[idx] - s2.data[idx].max(0.0).sqrt()).abs() < 1e-12
-            );
+            assert!((s.data[idx] - s2.data[idx].max(0.0).sqrt()).abs() < 1e-12);
         }
     }
 
@@ -2024,7 +1974,7 @@ mod tests {
         let big_s = Field::filled(grid.nx, grid.ny, 100.0);
         let small_s = Field::filled(grid.nx, grid.ny, 0.001);
         let wd = Field::filled(grid.nx, grid.ny, 1e-6); // F₂ ≈ 1
-        // Limiter-active branch: a₁·ω = 0.31, S·F₂ ≈ 100 → ν_t = 0.31·k/100.
+                                                        // Limiter-active branch: a₁·ω = 0.31, S·F₂ ≈ 100 → ν_t = 0.31·k/100.
         state.update_eddy_viscosity(&m, &big_s, &wd, 1e-6);
         let expected_lim = 0.31 * 0.04 / 100.0;
         assert!(
@@ -2064,8 +2014,7 @@ mod tests {
         let v = Field::zeros(grid.nx, grid.ny + 1);
         for _ in 0..20 {
             advance_k_omega_sst(
-                &mut state, &u, &v, &grid, 1.0, 1e-5, &m, &w, &wd,
-                true, true, 0.6,
+                &mut state, &u, &v, &grid, 1.0, 1e-5, &m, &w, &wd, true, true, 0.6,
             );
         }
         for &k in &state.k.data {
@@ -2091,12 +2040,8 @@ mod tests {
         let fluid = Fluid::new(1.0, 1e-4);
         let m = SstModel::standard();
         let w = WallFunction::standard();
-        let laminar = solve_turbulent_channel_sst(
-            &grid, &fluid, &m, &w, -1.0, false, 1,
-        );
-        let turbulent = solve_turbulent_channel_sst(
-            &grid, &fluid, &m, &w, -1.0, true, 200,
-        );
+        let laminar = solve_turbulent_channel_sst(&grid, &fluid, &m, &w, -1.0, false, 1);
+        let turbulent = solve_turbulent_channel_sst(&grid, &fluid, &m, &w, -1.0, true, 200);
         let lam_flat = laminar.flatness();
         let turb_flat = turbulent.flatness();
         assert!(
@@ -2125,9 +2070,7 @@ mod tests {
         let fluid = Fluid::new(1.0, 1e-4);
         let m = SstModel::standard();
         let w = WallFunction::standard();
-        let p = solve_turbulent_channel_sst(
-            &grid, &fluid, &m, &w, -1.0, true, 200,
-        );
+        let p = solve_turbulent_channel_sst(&grid, &fluid, &m, &w, -1.0, true, 200);
         for &nt in &p.nu_t {
             assert!(nt >= 0.0 && nt.is_finite());
         }

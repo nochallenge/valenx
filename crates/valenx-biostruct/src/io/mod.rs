@@ -81,7 +81,8 @@ mod tests {
 
     #[test]
     fn read_structure_dispatches() {
-        let pdb = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00           C\nEND\n";
+        let pdb =
+            "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00           C\nEND\n";
         let s = read_structure(pdb, "x").unwrap();
         assert_eq!(s.atom_count(), 1);
     }

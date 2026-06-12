@@ -98,7 +98,13 @@ mod tests {
             left_heavy < balanced && balanced < right_heavy,
             "focus steers left→right as current shifts: {left_heavy:.4} < {balanced:.4} < {right_heavy:.4}"
         );
-        assert!(left_heavy < 0.0 && right_heavy > 0.0, "the heavier side sets the focus sign");
-        assert!(balanced.abs() < 1.0e-3, "symmetric drive focuses near centre: {balanced}");
+        assert!(
+            left_heavy < 0.0 && right_heavy > 0.0,
+            "the heavier side sets the focus sign"
+        );
+        assert!(
+            balanced.abs() < 1.0e-3,
+            "symmetric drive focuses near centre: {balanced}"
+        );
     }
 }

@@ -192,10 +192,7 @@ impl<'a> FlexPoseObjective<'a> {
 
     /// Apply χ angles, returning the world-space positions of the
     /// flexible-sidechain atoms.
-    pub fn apply_chi(
-        &self,
-        chi_angles: &[f64],
-    ) -> Vec<(Vector3<f64>, Ad4AtomType)> {
+    pub fn apply_chi(&self, chi_angles: &[f64]) -> Vec<(Vector3<f64>, Ad4AtomType)> {
         let mut moved: Vec<(Vector3<f64>, Ad4AtomType)> = Vec::new();
         for (ci, chi) in self.chi_rotations.iter().enumerate() {
             let angle = chi_angles.get(ci).copied().unwrap_or(0.0);
@@ -287,8 +284,7 @@ impl<'a> FlexPoseObjective<'a> {
         let sidechain_energy = if sidechain.atoms.is_empty() {
             0.0
         } else {
-            vina_score_complex(&sidechain, &lig_for_sc, self.ligand.n_torsions())
-                .intermolecular()
+            vina_score_complex(&sidechain, &lig_for_sc, self.ligand.n_torsions()).intermolecular()
         };
 
         // 3. Soft intra-receptor clash penalty (Vina-class repulsion
@@ -457,10 +453,7 @@ pub fn induced_fit_dock(
         return Err(DockScreenError::invalid_ligand("ligand has no atoms"));
     }
     if n_restarts == 0 {
-        return Err(DockScreenError::invalid(
-            "n_restarts",
-            "must be ≥ 1",
-        ));
+        return Err(DockScreenError::invalid("n_restarts", "must be ≥ 1"));
     }
     // Sanity-check the chi rotations.
     for (i, c) in chi_rotations.iter().enumerate() {
@@ -494,8 +487,7 @@ pub fn induced_fit_dock(
         ));
     }
     let ligand_types: Vec<Ad4AtomType> = ligand.atoms.iter().map(|a| a.ad4_type).collect();
-    let rigid_maps =
-        AffinityMapSet::precompute(&rigid_core, &ligand_types, grid, MapKind::Vina)?;
+    let rigid_maps = AffinityMapSet::precompute(&rigid_core, &ligand_types, grid, MapKind::Vina)?;
 
     // 2. Multi-start refinement.
     let obj = FlexPoseObjective::new(ligand, &rigid_maps, receptor, chi_rotations);
@@ -527,20 +519,19 @@ pub fn induced_fit_dock(
             Vector3::x()
         };
         let angle = rng.gen_range(-std::f64::consts::PI..std::f64::consts::PI);
-        start.pose.orientation =
-            UnitQuaternion::from_axis_angle(&Unit::new_unchecked(axis), angle);
+        start.pose.orientation = UnitQuaternion::from_axis_angle(&Unit::new_unchecked(axis), angle);
         for ci in 0..n_chi {
             start.chi_angles[ci] = rng.gen_range(-std::f64::consts::PI..std::f64::consts::PI);
         }
-        let run_seed = seed
-            .wrapping_add((r as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let run_seed = seed.wrapping_add((r as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
         let (refined, score) = induced_fit_solis_wets(&obj, &start, &params, run_seed);
         if score < best_score {
             best_score = score;
             best_state = Some(refined);
         }
     }
-    let state = best_state.ok_or_else(|| DockScreenError::invalid("restarts", "no successful refinement"))?;
+    let state = best_state
+        .ok_or_else(|| DockScreenError::invalid("restarts", "no successful refinement"))?;
 
     // 3. Reconstruct the final receptor (rigid core + moved sidechains).
     let mut final_atoms = rigid_core.atoms.clone();
@@ -701,9 +692,8 @@ TORSDOF 0
             atoms: vec![r.atoms[0].clone(), r.atoms[1].clone()],
         };
         let grid = GridBox::with_spacing([2.0, 0.0, 0.0], [12.0; 3], 0.5).unwrap();
-        let maps =
-            AffinityMapSet::precompute(&rigid_core, &[Ad4AtomType::C], &grid, MapKind::Vina)
-                .unwrap();
+        let maps = AffinityMapSet::precompute(&rigid_core, &[Ad4AtomType::C], &grid, MapKind::Vina)
+            .unwrap();
         let lig = one_carbon_ligand();
         let obj = FlexPoseObjective::new(&lig, &maps, &r, vec![chi]);
 
@@ -738,9 +728,8 @@ TORSDOF 0
             atoms: vec![r.atoms[0].clone(), r.atoms[1].clone()],
         };
         let grid = GridBox::with_spacing([2.0, 0.0, 0.0], [12.0; 3], 0.5).unwrap();
-        let maps =
-            AffinityMapSet::precompute(&rigid_core, &[Ad4AtomType::C], &grid, MapKind::Vina)
-                .unwrap();
+        let maps = AffinityMapSet::precompute(&rigid_core, &[Ad4AtomType::C], &grid, MapKind::Vina)
+            .unwrap();
         let lig = one_carbon_ligand();
         let obj = FlexPoseObjective::new(&lig, &maps, &r, vec![chi]);
 
@@ -749,7 +738,8 @@ TORSDOF 0
         start.pose.translation = Vector3::new(5.0, 1.0, 0.0);
         start.chi_angles[0] = 0.0;
         let before = obj.score(&start);
-        let (after_state, after) = induced_fit_solis_wets(&obj, &start, &SolisWetsParams::default(), 4);
+        let (after_state, after) =
+            induced_fit_solis_wets(&obj, &start, &SolisWetsParams::default(), 4);
         assert!(
             after <= before,
             "SW must not worsen, before={before} after={after}"
@@ -789,16 +779,7 @@ TORSDOF 0
         let lig = one_carbon_ligand();
         let grid = GridBox::cubic([0.0; 3], 10.0).unwrap();
         // Empty receptor.
-        assert!(induced_fit_dock(
-            &Receptor::default(),
-            &lig,
-            &grid,
-            vec![],
-            1,
-            1,
-            false
-        )
-        .is_err());
+        assert!(induced_fit_dock(&Receptor::default(), &lig, &grid, vec![], 1, 1, false).is_err());
         // n_restarts = 0.
         assert!(induced_fit_dock(&r, &lig, &grid, vec![], 0, 1, false).is_err());
         // Out-of-range chi atom.

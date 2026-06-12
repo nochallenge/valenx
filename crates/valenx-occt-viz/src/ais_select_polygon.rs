@@ -84,8 +84,7 @@ fn point_in_polygon(px: f32, py: f32, poly: &[[f32; 2]]) -> bool {
         let (xi, yi) = (poly[i][0], poly[i][1]);
         let (xj, yj) = (poly[j][0], poly[j][1]);
         // Does the horizontal ray from (px, py) cross edge i-j?
-        let crosses = (yi > py) != (yj > py)
-            && px < (xj - xi) * (py - yi) / (yj - yi) + xi;
+        let crosses = (yi > py) != (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi;
         if crosses {
             inside = !inside;
         }
@@ -128,11 +127,8 @@ mod tests {
     #[test]
     fn rejects_non_finite_vertex() {
         let mut ctx = ais_interactive_context().unwrap();
-        let err = ais_select_polygon(
-            &mut ctx,
-            &[[0.0, 0.0], [10.0, 0.0], [f32::NAN, 10.0]],
-        )
-        .unwrap_err();
+        let err =
+            ais_select_polygon(&mut ctx, &[[0.0, 0.0], [10.0, 0.0], [f32::NAN, 10.0]]).unwrap_err();
         assert_eq!(err.code(), "occt_viz.bad_input");
     }
 

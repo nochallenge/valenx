@@ -127,7 +127,10 @@ fn draw_plan(
 ) {
     let c = rect.center();
     let to_screen = |x: f64, y: f64| -> egui::Pos2 {
-        egui::pos2(c.x + (x as f32 - pan.x) * scale, c.y - (y as f32 - pan.y) * scale)
+        egui::pos2(
+            c.x + (x as f32 - pan.x) * scale,
+            c.y - (y as f32 - pan.y) * scale,
+        )
     };
     let wall = egui::Stroke::new(2.0, egui::Color32::from_rgb(180, 190, 210));
     for room in &scene.rooms {
@@ -137,7 +140,10 @@ fn draw_plan(
         }
         if poly.len() > 2 {
             let last = poly[poly.len() - 1];
-            painter.line_segment([to_screen(last.x, last.y), to_screen(poly[0].x, poly[0].y)], wall);
+            painter.line_segment(
+                [to_screen(last.x, last.y), to_screen(poly[0].x, poly[0].y)],
+                wall,
+            );
         }
     }
     for p in &scene.placements {
@@ -148,7 +154,11 @@ fn draw_plan(
             egui::vec2(size.x as f32 * scale, size.y as f32 * scale),
         );
         painter.rect_filled(r, 2.0, egui::Color32::from_rgb(70, 110, 90));
-        painter.rect_stroke(r, 2.0, egui::Stroke::new(1.0, egui::Color32::from_gray(200)));
+        painter.rect_stroke(
+            r,
+            2.0,
+            egui::Stroke::new(1.0, egui::Color32::from_gray(200)),
+        );
         painter.text(
             centre,
             egui::Align2::CENTER_CENTER,
@@ -175,7 +185,9 @@ mod tests {
         let mut scene = demo_scene();
         let before = scene.placements.len();
         scene.select(Furniture::Chair);
-        scene.click_to_place(Vector3::new(2.0, 2.0, 0.0), "room").expect("place");
+        scene
+            .click_to_place(Vector3::new(2.0, 2.0, 0.0), "room")
+            .expect("place");
         assert_eq!(scene.placements.len(), before + 1);
     }
 }

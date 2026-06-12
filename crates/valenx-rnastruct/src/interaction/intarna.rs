@@ -183,10 +183,7 @@ impl IntaRnaInteraction {
 /// [`RnaStructError::Sequence`] if either strand is empty;
 /// [`RnaStructError::Invalid`] if no duplex of at least the seed
 /// length can be formed.
-pub fn predict_intarna(
-    query: &RnaSeq,
-    target: &RnaSeq,
-) -> Result<IntaRnaInteraction> {
+pub fn predict_intarna(query: &RnaSeq, target: &RnaSeq) -> Result<IntaRnaInteraction> {
     predict_intarna_with(query, target, IntaRnaParams::default())
 }
 
@@ -205,10 +202,7 @@ pub fn predict_intarna_with(
         ));
     }
     if params.seed_min == 0 {
-        return Err(RnaStructError::invalid(
-            "seed_min",
-            "must be at least 1",
-        ));
+        return Err(RnaStructError::invalid("seed_min", "must be at least 1"));
     }
 
     let q = query.codes();
@@ -305,9 +299,7 @@ pub fn predict_intarna_with(
                 q_after,
                 t_before,
                 params.il_max,
-                max_len
-                    .saturating_sub(seed)
-                    .saturating_sub(pre.len()),
+                max_len.saturating_sub(seed).saturating_sub(pre.len()),
             );
             hybrid += post_e;
 
@@ -323,10 +315,8 @@ pub fn predict_intarna_with(
             let q_hi = all_pairs.iter().map(|p| p.query).max().unwrap();
             let t_lo = all_pairs.iter().map(|p| p.target).min().unwrap();
             let t_hi = all_pairs.iter().map(|p| p.target).max().unwrap();
-            let q_open =
-                window_opening(&q_acc, q_lo, q_hi - q_lo + 1).unwrap_or(0.0);
-            let t_open =
-                window_opening(&t_acc, t_lo, t_hi - t_lo + 1).unwrap_or(0.0);
+            let q_open = window_opening(&q_acc, q_lo, q_hi - q_lo + 1).unwrap_or(0.0);
+            let t_open = window_opening(&t_acc, t_lo, t_hi - t_lo + 1).unwrap_or(0.0);
 
             let total = hybrid + q_open + t_open;
             if best
@@ -352,9 +342,7 @@ pub fn predict_intarna_with(
     best.ok_or_else(|| {
         RnaStructError::invalid(
             "interaction",
-            format!(
-                "no intermolecular duplex of at least {seed} consecutive seed pairs exists"
-            ),
+            format!("no intermolecular duplex of at least {seed} consecutive seed pairs exists"),
         )
     })
 }
@@ -362,11 +350,7 @@ pub fn predict_intarna_with(
 /// Computes the duplex stacking energy of a chain of intermolecular
 /// pairs sorted by query position (antiparallel: target index
 /// decreasing).
-fn duplex_stack_energy(
-    q: &[u8],
-    tg: &[u8],
-    pairs: &[InterPair],
-) -> f64 {
+fn duplex_stack_energy(q: &[u8], tg: &[u8], pairs: &[InterPair]) -> f64 {
     if pairs.is_empty() {
         return 0.0;
     }
@@ -384,9 +368,7 @@ fn duplex_stack_energy(
         let it = tg[inner.target];
         match (q_gap, t_gap) {
             (0, 0) => {
-                if let (Some(p), Some(qx)) =
-                    (pair_index(oq, ot), pair_index(it, iq))
-                {
+                if let (Some(p), Some(qx)) = (pair_index(oq, ot), pair_index(it, iq)) {
                     e += STACK[p][qx];
                 }
             }
@@ -397,12 +379,10 @@ fn duplex_stack_energy(
                 // from adjacent positions).
                 let mm_outer_5 = q.get(outer.query + 1).copied().unwrap_or(0);
                 let mm_outer_3 = tg.get(outer.target.saturating_sub(1)).copied().unwrap_or(0);
-                let mm_inner_5 =
-                    q.get(inner.query.saturating_sub(1)).copied().unwrap_or(0);
+                let mm_inner_5 = q.get(inner.query.saturating_sub(1)).copied().unwrap_or(0);
                 let mm_inner_3 = tg.get(inner.target + 1).copied().unwrap_or(0);
                 e += energy::internal_loop_energy(
-                    oq, ot, iq, it, lg, rg, mm_outer_5, mm_outer_3, mm_inner_5,
-                    mm_inner_3,
+                    oq, ot, iq, it, lg, rg, mm_outer_5, mm_outer_3, mm_inner_5, mm_inner_3,
                 );
             }
         }
@@ -464,35 +444,27 @@ fn extend_5prime(
                 let rg = ti - prev_t - 1;
                 let pair_e = match (lg, rg) {
                     (0, 0) => {
-                        if let (Some(p), Some(qx)) = (
-                            pair_index(q[qi], tg[ti]),
-                            pair_index(tg[prev_t], q[prev_q]),
-                        ) {
+                        if let (Some(p), Some(qx)) =
+                            (pair_index(q[qi], tg[ti]), pair_index(tg[prev_t], q[prev_q]))
+                        {
                             STACK[p][qx]
                         } else {
                             energy::FORBIDDEN
                         }
                     }
                     _ => {
-                        let mm_outer_5 = q
-                            .get(qi + 1)
-                            .copied()
-                            .unwrap_or(0);
-                        let mm_outer_3 =
-                            tg.get(ti.saturating_sub(1)).copied().unwrap_or(0);
-                        let mm_inner_5 =
-                            q.get(prev_q.saturating_sub(1)).copied().unwrap_or(0);
+                        let mm_outer_5 = q.get(qi + 1).copied().unwrap_or(0);
+                        let mm_outer_3 = tg.get(ti.saturating_sub(1)).copied().unwrap_or(0);
+                        let mm_inner_5 = q.get(prev_q.saturating_sub(1)).copied().unwrap_or(0);
                         let mm_inner_3 = tg.get(prev_t + 1).copied().unwrap_or(0);
                         energy::internal_loop_energy(
-                            q[qi], tg[ti], q[prev_q], tg[prev_t], lg, rg,
-                            mm_outer_5, mm_outer_3, mm_inner_5, mm_inner_3,
+                            q[qi], tg[ti], q[prev_q], tg[prev_t], lg, rg, mm_outer_5, mm_outer_3,
+                            mm_inner_5, mm_inner_3,
                         )
                     }
                 };
                 // Only accept if pair_e strictly improves the total.
-                if pair_e < -1e-6
-                    && best_step.map(|(_, _, e)| pair_e < e).unwrap_or(true)
-                {
+                if pair_e < -1e-6 && best_step.map(|(_, _, e)| pair_e < e).unwrap_or(true) {
                     best_step = Some((qi, ti, pair_e));
                 }
             }
@@ -550,26 +522,18 @@ fn extend_3prime(
                 let rg = prev_t - ti - 1;
                 let pair_e = match (lg, rg) {
                     (0, 0) => {
-                        if let (Some(p), Some(qx)) = (
-                            pair_index(q[prev_q], tg[prev_t]),
-                            pair_index(tg[ti], q[qi]),
-                        ) {
+                        if let (Some(p), Some(qx)) =
+                            (pair_index(q[prev_q], tg[prev_t]), pair_index(tg[ti], q[qi]))
+                        {
                             STACK[p][qx]
                         } else {
                             energy::FORBIDDEN
                         }
                     }
                     _ => {
-                        let mm_outer_5 = q
-                            .get(prev_q + 1)
-                            .copied()
-                            .unwrap_or(0);
-                        let mm_outer_3 = tg
-                            .get(prev_t.saturating_sub(1))
-                            .copied()
-                            .unwrap_or(0);
-                        let mm_inner_5 =
-                            q.get(qi.saturating_sub(1)).copied().unwrap_or(0);
+                        let mm_outer_5 = q.get(prev_q + 1).copied().unwrap_or(0);
+                        let mm_outer_3 = tg.get(prev_t.saturating_sub(1)).copied().unwrap_or(0);
+                        let mm_inner_5 = q.get(qi.saturating_sub(1)).copied().unwrap_or(0);
                         let mm_inner_3 = tg.get(ti + 1).copied().unwrap_or(0);
                         // For the first 3'-extension step, the outer
                         // pair is (prev_q, prev_t) — the seed's 3' end
@@ -578,14 +542,12 @@ fn extend_3prime(
                         // *step* from prev to (qi, ti).
                         let _ = step;
                         energy::internal_loop_energy(
-                            q[prev_q], tg[prev_t], q[qi], tg[ti], lg, rg,
-                            mm_outer_5, mm_outer_3, mm_inner_5, mm_inner_3,
+                            q[prev_q], tg[prev_t], q[qi], tg[ti], lg, rg, mm_outer_5, mm_outer_3,
+                            mm_inner_5, mm_inner_3,
                         )
                     }
                 };
-                if pair_e < -1e-6
-                    && best_step.map(|(_, _, e)| pair_e < e).unwrap_or(true)
-                {
+                if pair_e < -1e-6 && best_step.map(|(_, _, e)| pair_e < e).unwrap_or(true) {
                     best_step = Some((qi, ti, pair_e));
                 }
             }
@@ -611,11 +573,7 @@ fn extend_3prime(
 
 /// Window-opening cost from an accessibility profile, or `None` if
 /// the profile is absent.
-fn window_opening(
-    profile: &Option<AccessibilityProfile>,
-    start: usize,
-    len: usize,
-) -> Option<f64> {
+fn window_opening(profile: &Option<AccessibilityProfile>, start: usize, len: usize) -> Option<f64> {
     profile.as_ref().and_then(|p| p.opening_energy(start, len))
 }
 
@@ -663,8 +621,7 @@ mod tests {
         // both are valid candidates depending on hybrid energy.
         let query = RnaSeq::parse("GGGGG").unwrap();
         // Target: structured (15 nt hairpin) + linker + free CCCCC.
-        let target =
-            RnaSeq::parse("GGGGGAAAACCCCCAAACCCCC").unwrap();
+        let target = RnaSeq::parse("GGGGGAAAACCCCCAAACCCCC").unwrap();
         let with_acc = predict_intarna_with(
             &query,
             &target,
@@ -702,12 +659,8 @@ mod tests {
         // query = GGGGG; target = (buried CCCCC inside GC stem) +
         // junction + (free CCCCC).
         let query = RnaSeq::parse("GGGGG").unwrap();
-        let target = RnaSeq::parse(
-            "GGGGGGGGCCCCCCCCAAAAAAAAAACCCCC",
-        )
-        .unwrap();
-        let with_acc =
-            predict_intarna_with(&query, &target, IntaRnaParams::default()).unwrap();
+        let target = RnaSeq::parse("GGGGGGGGCCCCCCCCAAAAAAAAAACCCCC").unwrap();
+        let with_acc = predict_intarna_with(&query, &target, IntaRnaParams::default()).unwrap();
         // The free CCCCC starts at position 26 (length 31, last 5).
         // The buried CCCCC is at position 8..13. The free one should be
         // picked.
@@ -720,12 +673,8 @@ mod tests {
         // opening cost, must be at most as bad as the blind optimum
         // re-scored with opening cost.
         let query = RnaSeq::parse("GGGGG").unwrap();
-        let target = RnaSeq::parse(
-            "GGGGGGGGCCCCCCCCAAAAAAAAAACCCCC",
-        )
-        .unwrap();
-        let with_acc =
-            predict_intarna_with(&query, &target, IntaRnaParams::default()).unwrap();
+        let target = RnaSeq::parse("GGGGGGGGCCCCCCCCAAAAAAAAAACCCCC").unwrap();
+        let with_acc = predict_intarna_with(&query, &target, IntaRnaParams::default()).unwrap();
         let blind = predict_intarna_with(
             &query,
             &target,
@@ -740,10 +689,7 @@ mod tests {
         let q_acc = accessibility(&query).unwrap();
         let t_acc = accessibility(&target).unwrap();
         let blind_q_open = q_acc
-            .opening_energy(
-                blind.query_start,
-                blind.query_end - blind.query_start + 1,
-            )
+            .opening_energy(blind.query_start, blind.query_end - blind.query_start + 1)
             .unwrap_or(0.0);
         let blind_t_open = t_acc
             .opening_energy(
@@ -811,10 +757,7 @@ mod tests {
         // Pair: the query 5'-GGAUUUGAGCG-3' pairs the target's
         // 3'-CCUAAACUCGC-5' = 5'-CGCUCAAAUCC-3' region.
         let query = RnaSeq::parse("GGAUUUGAGCG").unwrap();
-        let target = RnaSeq::parse(
-            "AUGCUGAAUAAACGCUCAAAUCCAUUGCAUCG",
-        )
-        .unwrap();
+        let target = RnaSeq::parse("AUGCUGAAUAAACGCUCAAAUCCAUUGCAUCG").unwrap();
         let it = predict_intarna(&query, &target).unwrap();
         assert!(it.n_pairs() >= DEFAULT_SEED_MIN);
         assert!(it.is_favourable());

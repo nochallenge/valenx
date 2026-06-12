@@ -102,10 +102,7 @@ impl Adapter for CodeAsterAdapter {
         let input = CodeAsterInput::from_case_dir(&case.path)?;
         fs::create_dir_all(workdir)?;
 
-        let export_source = valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.export,
-        )?;
+        let export_source = valenx_core::adapter_helpers::confined_join(&case.path, &input.export)?;
         if !export_source.is_file() {
             return Err(AdapterError::Other(anyhow::anyhow!(
                 "export not found at {} (resolve relative to case dir)",

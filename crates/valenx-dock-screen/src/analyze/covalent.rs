@@ -148,10 +148,7 @@ pub fn covalent_dock(
     // The search box is centred on the reactive receptor atom — that
     // is where the ligand must end up.
     let reactive = receptor.atoms[params.receptor_atom].position;
-    let grid = GridBox::cubic(
-        [reactive.x, reactive.y, reactive.z],
-        box_edge.max(6.0),
-    )?;
+    let grid = GridBox::cubic([reactive.x, reactive.y, reactive.z], box_edge.max(6.0))?;
 
     // Build the affinity maps and a base objective.
     let ligand_types: Vec<Ad4AtomType> = ligand.atoms.iter().map(|a| a.ad4_type).collect();
@@ -177,13 +174,7 @@ pub fn covalent_dock(
             run_seed,
         )?;
         // Re-rank the run's best pose by the full constrained energy.
-        let total = constrained_score(
-            &base_objective,
-            ligand,
-            &docked.best_pose,
-            reactive,
-            params,
-        );
+        let total = constrained_score(&base_objective, ligand, &docked.best_pose, reactive, params);
         if best.as_ref().map(|(_, s)| total < *s).unwrap_or(true) {
             best = Some((docked.best_pose, total));
         }

@@ -67,12 +67,8 @@ pub fn fold_with_shape_params(
             ),
         ));
     }
-    let cons = FoldConstraints::from_shape_with(
-        seq.len(),
-        reactivities,
-        params.slope,
-        params.intercept,
-    )?;
+    let cons =
+        FoldConstraints::from_shape_with(seq.len(), reactivities, params.slope, params.intercept)?;
     mfe_constrained(seq, &cons)
 }
 

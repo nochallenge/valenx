@@ -79,7 +79,11 @@ impl StockGrid {
     /// Allocate a grid covering `[min, max]` at the requested cell
     /// size. Every cell starts solid (the full stock outline is
     /// material).
-    pub fn new(min: nalgebra::Vector2<f64>, max: nalgebra::Vector2<f64>, cell_size_mm: f64) -> Self {
+    pub fn new(
+        min: nalgebra::Vector2<f64>,
+        max: nalgebra::Vector2<f64>,
+        cell_size_mm: f64,
+    ) -> Self {
         let span = max - min;
         let n_x = (span.x / cell_size_mm).ceil().max(1.0) as usize;
         let n_y = (span.y / cell_size_mm).ceil().max(1.0) as usize;
@@ -350,6 +354,9 @@ mod tests {
         // straight cut along virgin material on each side). Some
         // engagement, well above 0.
         let mid = report[10].engagement_rad;
-        assert!(mid > 1.0, "mid-walk engagement should be substantial, got {mid}");
+        assert!(
+            mid > 1.0,
+            "mid-walk engagement should be substantial, got {mid}"
+        );
     }
 }

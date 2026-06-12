@@ -126,9 +126,7 @@ pub fn to_solid(spec: &SpringSpec) -> Result<Solid, SpringsError> {
         SpringKind::Torsion => torsion_centerline(spec)?,
     };
     if centreline.len() < 2 {
-        return Err(SpringsError::Degenerate(
-            "centreline has < 2 points".into(),
-        ));
+        return Err(SpringsError::Degenerate("centreline has < 2 points".into()));
     }
 
     // 12-sided wire cross-section.
@@ -169,16 +167,12 @@ pub fn to_solid(spec: &SpringSpec) -> Result<Solid, SpringsError> {
         let b = ring_base[w + 1];
         for k in 0..n {
             let j = (k + 1) % n;
-            block.connectivity.extend_from_slice(&[
-                a + k as u32,
-                a + j as u32,
-                b + j as u32,
-            ]);
-            block.connectivity.extend_from_slice(&[
-                a + k as u32,
-                b + j as u32,
-                b + k as u32,
-            ]);
+            block
+                .connectivity
+                .extend_from_slice(&[a + k as u32, a + j as u32, b + j as u32]);
+            block
+                .connectivity
+                .extend_from_slice(&[a + k as u32, b + j as u32, b + k as u32]);
         }
     }
     mesh.element_blocks.push(block);
@@ -343,7 +337,7 @@ mod tests {
         assert!((spring_index(&s2) - 20.0).abs() < 1e-9);
         s2.wire_diameter_mm = 2.0;
         assert!((spring_index(&s2) - 10.0).abs() < 1e-9); // 20 / 2
-        // Guard: non-positive wire diameter → 0.0.
+                                                          // Guard: non-positive wire diameter → 0.0.
         let mut bad = SpringSpec::default_compression();
         bad.wire_diameter_mm = 0.0;
         assert_eq!(spring_index(&bad), 0.0);

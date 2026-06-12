@@ -55,10 +55,7 @@ pub fn feat_make_revol(
     }
     let dir_len = (axis_dir[0].powi(2) + axis_dir[1].powi(2) + axis_dir[2].powi(2)).sqrt();
     if dir_len < f64::EPSILON {
-        return Err(OcctSurfaceError::bad_input(
-            "axis_dir",
-            "must be non-zero",
-        ));
+        return Err(OcctSurfaceError::bad_input("axis_dir", "must be non-zero"));
     }
     if !angle_rad.is_finite() || angle_rad.abs() < f64::EPSILON {
         return Err(OcctSurfaceError::bad_input(
@@ -68,12 +65,8 @@ pub fn feat_make_revol(
     }
 
     // Build the solid of revolution (already world-placed), then fuse.
-    let revol = crate::prim_api_revol::prim_api_revol(
-        profile_xy,
-        axis_origin,
-        axis_dir,
-        angle_rad,
-    )?;
+    let revol =
+        crate::prim_api_revol::prim_api_revol(profile_xy, axis_origin, axis_dir, angle_rad)?;
     feature_combine(base, &revol, fuse)
 }
 

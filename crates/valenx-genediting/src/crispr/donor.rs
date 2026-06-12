@@ -163,7 +163,12 @@ fn other_bases(from: u8) -> [u8; 3] {
 /// Tries to find a synonymous (silent) substitution at reference index
 /// `ref_pos` given a coding `phase`. Returns the substituting base if
 /// some codon-mate change keeps the amino acid, else `None`.
-fn synonymous_sub(reference: &[u8], ref_pos: usize, phase: usize, code: &GeneticCode) -> Option<u8> {
+fn synonymous_sub(
+    reference: &[u8],
+    ref_pos: usize,
+    phase: usize,
+    code: &GeneticCode,
+) -> Option<u8> {
     if ref_pos < phase {
         return None;
     }
@@ -217,10 +222,7 @@ pub fn design_hdr_donor(req: &HdrDonorRequest) -> Result<DonorTemplate> {
         ));
     }
     if !req.pam.is_empty() && !is_acgt(&req.pam) {
-        return Err(GeneditingError::invalid_target(
-            "locus",
-            "PAM must be ACGT",
-        ));
+        return Err(GeneditingError::invalid_target("locus", "PAM must be ACGT"));
     }
     if !req.insert.is_empty() && !is_acgt(&req.insert) {
         return Err(GeneditingError::invalid_target(
@@ -236,7 +238,10 @@ pub fn design_hdr_donor(req: &HdrDonorRequest) -> Result<DonorTemplate> {
     }
     if let Some(p) = req.coding_phase {
         if p > 2 {
-            return Err(GeneditingError::invalid("coding_phase", "must be 0, 1 or 2"));
+            return Err(GeneditingError::invalid(
+                "coding_phase",
+                "must be 0, 1 or 2",
+            ));
         }
     }
     let (left_len, right_len) = req.arms.lengths();
@@ -279,8 +284,14 @@ pub fn design_hdr_donor(req: &HdrDonorRequest) -> Result<DonorTemplate> {
     if let Some((ps, pe)) = pam_span {
         if pe <= edited_ref.len() {
             for pos in ps..pe {
-                if try_blocking_mutation(&mut edited_ref, pos, true, req.coding_phase, &code, &mut muts)
-                {
+                if try_blocking_mutation(
+                    &mut edited_ref,
+                    pos,
+                    true,
+                    req.coding_phase,
+                    &code,
+                    &mut muts,
+                ) {
                     break; // one PAM hit is enough
                 }
             }
@@ -299,8 +310,14 @@ pub fn design_hdr_donor(req: &HdrDonorRequest) -> Result<DonorTemplate> {
             (proto_start..proto_end).take(10).collect()
         };
         for pos in seed_positions {
-            if try_blocking_mutation(&mut edited_ref, pos, false, req.coding_phase, &code, &mut muts)
-            {
+            if try_blocking_mutation(
+                &mut edited_ref,
+                pos,
+                false,
+                req.coding_phase,
+                &code,
+                &mut muts,
+            ) {
                 break;
             }
         }
@@ -460,16 +477,16 @@ mod tests {
         let to = sub.unwrap();
         let mut codon = *refseq;
         codon[2] = to;
-        assert_eq!(
-            code.translate_codon(&codon),
-            code.translate_codon(refseq)
-        );
+        assert_eq!(code.translate_codon(&codon), code.translate_codon(refseq));
     }
 
     #[test]
     fn asymmetric_arms_have_independent_lengths() {
         let mut req = base_request();
-        req.arms = ArmLayout::Asymmetric { left: 20, right: 10 };
+        req.arms = ArmLayout::Asymmetric {
+            left: 20,
+            right: 10,
+        };
         let d = design_hdr_donor(&req).unwrap();
         assert_eq!(d.left_arm.len(), 20);
         assert_eq!(d.right_arm.len(), 10);

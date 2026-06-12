@@ -251,7 +251,8 @@ impl Sketch3D {
         self.expect_point(p2)?;
         self.expect_point(p3)?;
         let id = EntityId(self.entities.len());
-        self.entities.push(Entity3D::Spline3(Spline3 { p0, p1, p2, p3 }));
+        self.entities
+            .push(Entity3D::Spline3(Spline3 { p0, p1, p2, p3 }));
         Ok(id)
     }
 
@@ -349,7 +350,10 @@ impl Sketch3D {
         match &self.entities[id.0] {
             Entity3D::Plane3(_) => self.plane_data(id),
             Entity3D::Workplane(_) => self.workplane_data(id),
-            other => panic!("expected Plane3 or Workplane at {id:?}, got {}", other.kind()),
+            other => panic!(
+                "expected Plane3 or Workplane at {id:?}, got {}",
+                other.kind()
+            ),
         }
     }
 
@@ -536,8 +540,7 @@ impl Sketch3D {
                     self.expect_kind(*a, "Circle3", |e| matches!(e, Entity3D::Circle3(_)))?;
                     self.expect_kind(*b, "Circle3", |e| matches!(e, Entity3D::Circle3(_)))?;
                 }
-                Constraint3D::ArcRadius { arc, .. }
-                | Constraint3D::ArcEndpointsOnArc { arc } => {
+                Constraint3D::ArcRadius { arc, .. } | Constraint3D::ArcEndpointsOnArc { arc } => {
                     self.expect_kind(*arc, "Arc3", |e| matches!(e, Entity3D::Arc3(_)))?;
                 }
             }

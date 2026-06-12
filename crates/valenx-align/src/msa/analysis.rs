@@ -274,9 +274,16 @@ mod tests {
         // Run many times; the result must never vary.
         let first = consensus(&m, opts);
         for _ in 0..64 {
-            assert_eq!(consensus(&m, opts), first, "consensus must be deterministic");
+            assert_eq!(
+                consensus(&m, opts),
+                first,
+                "consensus must be deterministic"
+            );
         }
-        assert_eq!(first, b"A", "tie must resolve to the alphabetically-first residue");
+        assert_eq!(
+            first, b"A",
+            "tie must resolve to the alphabetically-first residue"
+        );
 
         // A two-way tie that clears the default 0.5 threshold: C vs A,
         // depth 2 -> each 0.5. Must pick 'A' (lower byte), every run.

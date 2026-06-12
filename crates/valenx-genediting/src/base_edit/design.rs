@@ -34,7 +34,7 @@ use crate::base_edit::editor::{base_editor, BaseEditor, BaseEditorClass, BaseEdi
 use crate::error::{GeneditingError, Result};
 use crate::sequtil::is_acgt;
 use serde::{Deserialize, Serialize};
-use valenx_genomics::crispr::guide::{scan_guides, Guide, GuideStrand, PamSpec, PamSide};
+use valenx_genomics::crispr::guide::{scan_guides, Guide, GuideStrand, PamSide, PamSpec};
 
 /// 1-based protospacer position (counted from the PAM-distal 5′ end) of
 /// a base at forward-strand index `ref_idx`, for a guide found at

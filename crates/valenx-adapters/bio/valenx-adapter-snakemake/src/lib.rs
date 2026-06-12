@@ -124,10 +124,7 @@ impl Adapter for SnakemakeAdapter {
         let source_snakefile = if input.snakefile.is_absolute() {
             input.snakefile.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.snakefile,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.snakefile)?
         };
         if !source_snakefile.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -147,9 +144,9 @@ impl Adapter for SnakemakeAdapter {
         // case bundle gets a sandbox-rejection error even on hosts
         // where Snakemake isn't installed.
         let resolved_config_file = match &input.config_file {
-            Some(config) => {
-                Some(valenx_core::adapter_helpers::confined_join(&case.path, config)?)
-            }
+            Some(config) => Some(valenx_core::adapter_helpers::confined_join(
+                &case.path, config,
+            )?),
             None => None,
         };
 
@@ -396,7 +393,10 @@ cores       = 1
             .unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("absolute") || msg.contains("escape") || msg.contains("`..`") || msg.contains("traversal"),
+            msg.contains("absolute")
+                || msg.contains("escape")
+                || msg.contains("`..`")
+                || msg.contains("traversal"),
             "expected confined_join rejection on config_file, got: {msg}"
         );
         let _ = std::fs::remove_dir_all(&d);

@@ -80,9 +80,7 @@ mod tests {
     fn fit_collinear_points_returns_zero_error() {
         // Five collinear points along the X axis — a degree-1 line
         // fits them exactly.
-        let points: Vec<Vector3<f64>> = (0..5)
-            .map(|i| Vector3::new(i as f64, 0.0, 0.0))
-            .collect();
+        let points: Vec<Vector3<f64>> = (0..5).map(|i| Vector3::new(i as f64, 0.0, 0.0)).collect();
         let result = approx_curve_fit(&points, 1, 2, 1e-9)
             .expect("collinear points fit a line at machine precision");
         assert!(result.rms_error < 1e-9);
@@ -90,9 +88,7 @@ mod tests {
 
     #[test]
     fn fit_rejects_bad_tolerance() {
-        let points: Vec<Vector3<f64>> = (0..3)
-            .map(|i| Vector3::new(i as f64, 0.0, 0.0))
-            .collect();
+        let points: Vec<Vector3<f64>> = (0..3).map(|i| Vector3::new(i as f64, 0.0, 0.0)).collect();
         let err = approx_curve_fit(&points, 1, 2, 0.0).unwrap_err();
         assert_eq!(err.code(), "occt_surface.bad_input");
     }

@@ -471,7 +471,14 @@ mod tests {
         let mut blk = RevisionBlock::new([10.0, 70.0]);
         blk.add_entry(RevisionEntry::new("A", "2026-05-23", "init", "GH", ""));
         d.add_revision_block(blk);
-        d.add_detail_view(DetailView::new(0, [10.0, 5.0], 4.0, [250.0, 150.0], 2.0, "A"));
+        d.add_detail_view(DetailView::new(
+            0,
+            [10.0, 5.0],
+            4.0,
+            [250.0, 150.0],
+            2.0,
+            "A",
+        ));
         let s = render(&d);
         for layer in ["BOM", "REVISION", "DETAIL"] {
             assert!(s.contains(layer), "missing layer `{layer}` in DXF");

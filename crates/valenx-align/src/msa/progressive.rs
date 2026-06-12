@@ -60,7 +60,9 @@ impl Msa {
 
     /// Row `i` as a `&str`.
     pub fn row_str(&self, i: usize) -> Option<&str> {
-        self.rows.get(i).map(|r| std::str::from_utf8(r).unwrap_or("<non-utf8>"))
+        self.rows
+            .get(i)
+            .map(|r| std::str::from_utf8(r).unwrap_or("<non-utf8>"))
     }
 
     /// The sum-of-pairs score: the total pairwise score over every
@@ -116,11 +118,7 @@ pub fn align(seqs: &[&[u8]], scheme: &ScoringScheme) -> Result<Msa> {
 
 /// Progressive MSA using a *caller-supplied* guide tree — used by the
 /// iterative-refinement pass, which re-aligns sub-trees.
-pub fn align_along_tree(
-    seqs: &[&[u8]],
-    tree: &GuideTree,
-    scheme: &ScoringScheme,
-) -> Result<Msa> {
+pub fn align_along_tree(seqs: &[&[u8]], tree: &GuideTree, scheme: &ScoringScheme) -> Result<Msa> {
     let root = tree
         .root()
         .ok_or_else(|| AlignError::invalid("tree", "empty guide tree"))?;

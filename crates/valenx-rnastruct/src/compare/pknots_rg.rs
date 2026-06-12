@@ -170,10 +170,7 @@ pub fn fold_pknots_rg(seq: &RnaSeq) -> Result<PknotsRgResult> {
 ///
 /// # Errors
 /// Propagates folding errors from the nested sub-folds.
-pub fn fold_pknots_rg_with(
-    seq: &RnaSeq,
-    params: PknotsRgParams,
-) -> Result<PknotsRgResult> {
+pub fn fold_pknots_rg_with(seq: &RnaSeq, params: PknotsRgParams) -> Result<PknotsRgResult> {
     let codes = seq.codes();
     let n = codes.len();
 
@@ -253,10 +250,14 @@ pub fn fold_pknots_rg_with(
                             // Nested fold of the surrounding regions.
                             let gaps_e = fold_h_type_gaps(
                                 seq,
-                                a1, a1 + l1,
-                                b1, b1 + l2,
-                                a2, a2 + l1,
-                                b2, b2 + l2,
+                                a1,
+                                a1 + l1,
+                                b1,
+                                b1 + l2,
+                                a2,
+                                a2 + l1,
+                                b2,
+                                b2 + l2,
                             )?;
 
                             let total = s1_e + s2_e + gaps_e + h_pen;
@@ -365,9 +366,7 @@ fn search_kissing_hairpin(
                                 // reserve.
                                 let s2_max_in_l1 = g1.saturating_sub(MIN_STEM);
                                 let s2_max_in_l3 = g3.saturating_sub(MIN_STEM);
-                                let l2_cap = MAX_STEM
-                                    .min(s2_max_in_l1)
-                                    .min(s2_max_in_l3);
+                                let l2_cap = MAX_STEM.min(s2_max_in_l1).min(s2_max_in_l3);
 
                                 for l2 in MIN_STEM..=l2_cap {
                                     // S2L: the first l2 unpaired bases of L1
@@ -409,31 +408,20 @@ fn search_kissing_hairpin(
                                     // Fold the surrounding regions
                                     // nested.
                                     let gaps_e = fold_kissing_gaps(
-                                        seq,
-                                        s1l, s1l_end,
-                                        s2l_end, s1r,
-                                        s1r_end, s3l,
-                                        s3l_end, s2r,
-                                        s3r, s3r_end,
+                                        seq, s1l, s1l_end, s2l_end, s1r, s1r_end, s3l, s3l_end,
+                                        s2r, s3r, s3r_end,
                                     )?;
 
-                                    let total = s1_e
-                                        + s2_e
-                                        + s3_e
-                                        + gaps_e
-                                        + kh_pen;
+                                    let total = s1_e + s2_e + s3_e + gaps_e + kh_pen;
                                     if total < best.energy - 1e-6 {
                                         let mut pairs = s1_pairs.clone();
                                         pairs.extend_from_slice(&s2_pairs);
                                         pairs.extend_from_slice(&s3_pairs);
-                                        if let Ok(st) =
-                                            Structure::from_pairs(n, &pairs)
-                                        {
+                                        if let Ok(st) = Structure::from_pairs(n, &pairs) {
                                             best = PknotsRgResult {
                                                 structure: st,
                                                 energy: total,
-                                                class:
-                                                    PseudoknotClass::KissingHairpin,
+                                                class: PseudoknotClass::KissingHairpin,
                                             };
                                         }
                                     }
@@ -540,11 +528,11 @@ fn fold_kissing_gaps(
 ) -> Result<f64> {
     let mut total = 0.0;
     let regions = [
-        (0, s1l),                 // exterior left
+        (0, s1l),                   // exterior left
         (l1_tip_start, l1_tip_end), // hairpin-1 loop tip (between S2L and S1R)
-        (s1r_end, s3l),           // junction between H1 and H3
-        (s3l_end, l3_tip_end),    // hairpin-3 loop tip (between S3L and S2R)
-        (s3r_end, seq.len()),     // exterior right
+        (s1r_end, s3l),             // junction between H1 and H3
+        (s3l_end, l3_tip_end),      // hairpin-3 loop tip (between S3L and S2R)
+        (s3r_end, seq.len()),       // exterior right
     ];
     for (lo, hi) in regions {
         total += nested_fold_energy(seq, lo, hi)?;
@@ -645,8 +633,7 @@ mod tests {
                     sum_stems += STACK[p][q];
                 }
             }
-            sum_stems +=
-                energy::terminal_penalty(codes[stem_pairs[0].i], codes[stem_pairs[0].j]);
+            sum_stems += energy::terminal_penalty(codes[stem_pairs[0].i], codes[stem_pairs[0].j]);
             sum_stems += energy::terminal_penalty(
                 codes[stem_pairs[len - 1].i],
                 codes[stem_pairs[len - 1].j],
@@ -656,10 +643,7 @@ mod tests {
         // r.energy = sum_stems + PSEUDOKNOT_PENALTY + gap_e.
         // Recover gap_e and bound-check.
         let gap_e = r.energy - sum_stems - PSEUDOKNOT_PENALTY;
-        assert!(
-            gap_e.is_finite(),
-            "gap energy {gap_e} should be finite"
-        );
+        assert!(gap_e.is_finite(), "gap energy {gap_e} should be finite");
         // For a 22-nt sequence with two 4-bp stems the gaps are short
         // and gap_e should be in a reasonable band.
         assert!(
@@ -706,10 +690,7 @@ mod tests {
         //   S3L = GGGGG (22..27)
         //   L3 = AAAACCCCC (27..36; tip = AAAA, S2R = last 5 = CCCCC)
         //   S3R = CCCCC (36..41)
-        let seq = RnaSeq::parse(
-            "GGGGGGGGGGAAAACCCCCAAAGGGGGAAAACCCCCCCCCC",
-        )
-        .unwrap();
+        let seq = RnaSeq::parse("GGGGGGGGGGAAAACCCCCAAAGGGGGAAAACCCCCCCCCC").unwrap();
         let r = fold_pknots_rg(&seq).unwrap();
         assert_eq!(r.structure.len(), seq.len());
         assert!(r.energy.is_finite());
@@ -745,10 +726,7 @@ mod tests {
         assert_eq!(r.structure.len(), seq.len());
         // Every pair should be canonical against the sequence.
         for bp in r.structure.pairs() {
-            assert!(energy::can_pair_codes(
-                seq.codes()[bp.i],
-                seq.codes()[bp.j]
-            ));
+            assert!(energy::can_pair_codes(seq.codes()[bp.i], seq.codes()[bp.j]));
         }
     }
 
@@ -758,10 +736,7 @@ mod tests {
         // by using stable GC stems and short loops, then assert the
         // result has a pseudoknot.
         // S1 = GGGGG..CCCCC (5-bp), S2 = GGGGG..CCCCC (5-bp), crossing
-        let seq = RnaSeq::parse(
-            "GGGGGAAGGGGGAAAACCCCCAAACCCCC",
-        )
-        .unwrap();
+        let seq = RnaSeq::parse("GGGGGAAGGGGGAAAACCCCCAAACCCCC").unwrap();
         let r = fold_pknots_rg(&seq).unwrap();
         // Whatever it returns must be a valid structure of the right
         // length, and the energy is finite.
@@ -841,10 +816,7 @@ mod tests {
                     sum_stems += STACK[p][q];
                 }
             }
-            sum_stems += energy::terminal_penalty(
-                codes[stem_pairs[0].i],
-                codes[stem_pairs[0].j],
-            );
+            sum_stems += energy::terminal_penalty(codes[stem_pairs[0].i], codes[stem_pairs[0].j]);
             sum_stems += energy::terminal_penalty(
                 codes[stem_pairs[len - 1].i],
                 codes[stem_pairs[len - 1].j],

@@ -114,11 +114,7 @@ use crate::linsolve::{poisson_residual, solve_sor, PoissonCoeffs};
 /// sweep's neighbour values, not the freshest — so the V-cycle's
 /// smoothing analysis applies cleanly to it. It is the textbook
 /// multigrid smoother on a cell-centred grid.
-pub fn weighted_jacobi_sweep(
-    coeffs: &PoissonCoeffs,
-    solution: &mut Field,
-    omega: f64,
-) {
+pub fn weighted_jacobi_sweep(coeffs: &PoissonCoeffs, solution: &mut Field, omega: f64) {
     let nx = coeffs.nx;
     let ny = coeffs.ny;
     debug_assert_eq!(
@@ -157,10 +153,7 @@ pub fn weighted_jacobi_sweep(
 ///
 /// Returned as a [`Field`] so it can be restricted to the next coarse
 /// level. The L2 norm of this field is the [`poisson_residual`].
-pub fn poisson_residual_field(
-    coeffs: &PoissonCoeffs,
-    solution: &Field,
-) -> Field {
+pub fn poisson_residual_field(coeffs: &PoissonCoeffs, solution: &Field) -> Field {
     let nx = coeffs.nx;
     let ny = coeffs.ny;
     let mut r = Field::zeros(nx, ny);
@@ -251,14 +244,22 @@ pub fn prolong_bilinear(coarse: &Field, fine: &mut Field) {
             //   i even → left  half of parent → neighbour is ic-1
             //   i odd  → right half of parent → neighbour is ic+1
             let (ic_n, w_e) = if i % 2 == 0 {
-                if ic > 0 { (ic - 1, 0.25) } else { (ic, 0.25) }
+                if ic > 0 {
+                    (ic - 1, 0.25)
+                } else {
+                    (ic, 0.25)
+                }
             } else if ic + 1 < nx_c {
                 (ic + 1, 0.25)
             } else {
                 (ic, 0.25)
             };
             let (jc_n, w_n) = if j % 2 == 0 {
-                if jc > 0 { (jc - 1, 0.25) } else { (jc, 0.25) }
+                if jc > 0 {
+                    (jc - 1, 0.25)
+                } else {
+                    (jc, 0.25)
+                }
             } else if jc + 1 < ny_c {
                 (jc + 1, 0.25)
             } else {
@@ -319,33 +320,26 @@ pub fn coarsen_coefficients(fine: &PoissonCoeffs) -> PoissonCoeffs {
             // the block. (Fine aW is zero for a cell on the fine west
             // boundary, which naturally inherits to the coarse cell.)
             if ic > 0 {
-                let aw_avg =
-                    0.5 * (fine.aw.at(i0, j0) + fine.aw.at(i0, j0 + 1));
+                let aw_avg = 0.5 * (fine.aw.at(i0, j0) + fine.aw.at(i0, j0 + 1));
                 c.aw.set(ic, jc, aw_avg * scale);
             }
             // East face.
             if ic + 1 < nx_c {
-                let ae_avg = 0.5
-                    * (fine.ae.at(i0 + 1, j0) + fine.ae.at(i0 + 1, j0 + 1));
+                let ae_avg = 0.5 * (fine.ae.at(i0 + 1, j0) + fine.ae.at(i0 + 1, j0 + 1));
                 c.ae.set(ic, jc, ae_avg * scale);
             }
             // South face — the two fine cells in the bottom row.
             if jc > 0 {
-                let as_avg =
-                    0.5 * (fine.as_.at(i0, j0) + fine.as_.at(i0 + 1, j0));
+                let as_avg = 0.5 * (fine.as_.at(i0, j0) + fine.as_.at(i0 + 1, j0));
                 c.as_.set(ic, jc, as_avg * scale);
             }
             // North face.
             if jc + 1 < ny_c {
-                let an_avg = 0.5
-                    * (fine.an.at(i0, j0 + 1) + fine.an.at(i0 + 1, j0 + 1));
+                let an_avg = 0.5 * (fine.an.at(i0, j0 + 1) + fine.an.at(i0 + 1, j0 + 1));
                 c.an.set(ic, jc, an_avg * scale);
             }
             // ap = sum of in-domain neighbour coefficients.
-            let ap = c.ae.at(ic, jc)
-                + c.aw.at(ic, jc)
-                + c.an.at(ic, jc)
-                + c.as_.at(ic, jc);
+            let ap = c.ae.at(ic, jc) + c.aw.at(ic, jc) + c.an.at(ic, jc) + c.as_.at(ic, jc);
             c.ap.set(ic, jc, ap);
         }
     }
@@ -420,25 +414,16 @@ pub struct MultigridResult {
 /// [`MultigridControls::min_axis`] on either axis; the bottom level
 /// is then "solved" by a long batch of smoother sweeps (cheap because
 /// the grid is tiny).
-pub fn v_cycle(
-    coeffs: &PoissonCoeffs,
-    solution: &mut Field,
-    controls: &MultigridControls,
-) {
+pub fn v_cycle(coeffs: &PoissonCoeffs, solution: &mut Field, controls: &MultigridControls) {
     let nx = coeffs.nx;
     let ny = coeffs.ny;
     // --- coarsest level: a longer smoothing batch as the floor solve.
-    if nx / 2 < controls.min_axis
-        || ny / 2 < controls.min_axis
-        || nx < 2
-        || ny < 2
-    {
+    if nx / 2 < controls.min_axis || ny / 2 < controls.min_axis || nx < 2 || ny < 2 {
         for _ in 0..controls.coarse_sweeps.max(1) {
             weighted_jacobi_sweep(coeffs, solution, controls.jacobi_omega);
         }
         if controls.pin_mean {
-            let mean: f64 =
-                solution.data.iter().sum::<f64>() / solution.data.len() as f64;
+            let mean: f64 = solution.data.iter().sum::<f64>() / solution.data.len() as f64;
             for v in solution.data.iter_mut() {
                 *v -= mean;
             }
@@ -485,8 +470,7 @@ pub fn solve_multigrid(
         cycles = cyc + 1;
         v_cycle(coeffs, solution, controls);
         if controls.pin_mean {
-            let mean: f64 =
-                solution.data.iter().sum::<f64>() / solution.data.len() as f64;
+            let mean: f64 = solution.data.iter().sum::<f64>() / solution.data.len() as f64;
             for v in solution.data.iter_mut() {
                 *v -= mean;
             }
@@ -619,13 +603,11 @@ mod tests {
                 target.set(
                     i,
                     j,
-                    (std::f64::consts::PI * x).cos()
-                        * (std::f64::consts::PI * y).cos(),
+                    (std::f64::consts::PI * x).cos() * (std::f64::consts::PI * y).cos(),
                 );
             }
         }
-        let mean: f64 =
-            target.data.iter().sum::<f64>() / target.data.len() as f64;
+        let mean: f64 = target.data.iter().sum::<f64>() / target.data.len() as f64;
         for v in target.data.iter_mut() {
             *v -= mean;
         }
@@ -827,8 +809,11 @@ mod tests {
         // 32² / 64² / 128² grids. (Plain SOR would show ~4× degradation
         // every doubling.)
         let max_r = reductions.iter().copied().fold(0.0_f64, f64::max);
-        let min_r =
-            reductions.iter().copied().fold(f64::INFINITY, f64::min).max(1e-30);
+        let min_r = reductions
+            .iter()
+            .copied()
+            .fold(f64::INFINITY, f64::min)
+            .max(1e-30);
         assert!(
             max_r / min_r < 2.5,
             "reduction factors {reductions:?} are not grid-independent"

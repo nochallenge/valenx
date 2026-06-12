@@ -55,7 +55,10 @@ impl Andersen {
     /// a non-positive collision frequency.
     pub fn new(target: f64, nu: f64, seed: u64) -> Result<Self> {
         if !(target.is_finite() && target >= 0.0) {
-            return Err(MdError::invalid("target", "must be finite and non-negative"));
+            return Err(MdError::invalid(
+                "target",
+                "must be finite and non-negative",
+            ));
         }
         if !(nu.is_finite() && nu > 0.0) {
             return Err(MdError::invalid("nu", "must be finite and positive"));
@@ -132,7 +135,10 @@ impl VelocityRescale {
     /// a non-positive `tau`.
     pub fn new(target: f64, tau: f64, seed: u64) -> Result<Self> {
         if !(target.is_finite() && target >= 0.0) {
-            return Err(MdError::invalid("target", "must be finite and non-negative"));
+            return Err(MdError::invalid(
+                "target",
+                "must be finite and non-negative",
+            ));
         }
         if !(tau.is_finite() && tau > 0.0) {
             return Err(MdError::invalid("tau", "must be finite and positive"));

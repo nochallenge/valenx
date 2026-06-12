@@ -356,7 +356,13 @@ mod tests {
         let attack = "first\nG0 Z-99";
         let out_open = CommentStyle::Open(';').wrap(attack);
         let out_prefix = CommentStyle::Prefix("//").wrap(attack);
-        assert!(!out_open.contains('\n'), "; comment leaked newline: {out_open}");
-        assert!(!out_prefix.contains('\n'), "// comment leaked newline: {out_prefix}");
+        assert!(
+            !out_open.contains('\n'),
+            "; comment leaked newline: {out_open}"
+        );
+        assert!(
+            !out_prefix.contains('\n'),
+            "// comment leaked newline: {out_prefix}"
+        );
     }
 }

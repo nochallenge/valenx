@@ -194,12 +194,7 @@ impl SubstModel {
 
         // Symmetrise: Q' = Π^{1/2} Q Π^{-1/2} is symmetric for a
         // reversible model and shares Q's eigenvalues.
-        let sqrt_pi = Vector4::new(
-            pi[0].sqrt(),
-            pi[1].sqrt(),
-            pi[2].sqrt(),
-            pi[3].sqrt(),
-        );
+        let sqrt_pi = Vector4::new(pi[0].sqrt(), pi[1].sqrt(), pi[2].sqrt(), pi[3].sqrt());
         let inv_sqrt_pi = Vector4::new(
             1.0 / sqrt_pi[0],
             1.0 / sqrt_pi[1],
@@ -275,9 +270,7 @@ impl TransitionMatrix {
             for j in 0..4 {
                 let mut acc = 0.0;
                 for k in 0..4 {
-                    acc += self.eigenvectors[(i, k)]
-                        * exp_lambda[k]
-                        * self.eigenvectors[(j, k)];
+                    acc += self.eigenvectors[(i, k)] * exp_lambda[k] * self.eigenvectors[(j, k)];
                 }
                 sym[(i, j)] = acc;
             }

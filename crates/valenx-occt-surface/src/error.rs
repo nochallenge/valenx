@@ -93,8 +93,9 @@ impl OcctSurfaceError {
     pub fn category(&self) -> ErrorCategory {
         match self {
             OcctSurfaceError::BadInput { .. } => ErrorCategory::Input,
-            OcctSurfaceError::NotYetImplemented { .. }
-            | OcctSurfaceError::TruckLimit(_) => ErrorCategory::Capability,
+            OcctSurfaceError::NotYetImplemented { .. } | OcctSurfaceError::TruckLimit(_) => {
+                ErrorCategory::Capability
+            }
             OcctSurfaceError::Io(_) => ErrorCategory::Io,
         }
     }

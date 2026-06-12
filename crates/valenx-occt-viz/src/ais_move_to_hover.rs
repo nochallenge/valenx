@@ -242,11 +242,7 @@ mod tests {
     /// A triangle facing the camera, centred on the axis.
     fn axis_triangle() -> Pickable {
         Pickable::Mesh {
-            triangles: vec![
-                [-1.0, -1.0, 0.0],
-                [1.0, -1.0, 0.0],
-                [0.0, 1.0, 0.0],
-            ],
+            triangles: vec![[-1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 1.0, 0.0]],
         }
     }
 

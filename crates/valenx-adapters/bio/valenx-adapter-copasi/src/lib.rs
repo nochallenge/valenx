@@ -136,10 +136,7 @@ impl Adapter for CopasiAdapter {
         let source_model = if input.model.is_absolute() {
             input.model.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.model,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.model)?
         };
         if !source_model.is_file() {
             return Err(AdapterError::InvalidCase {

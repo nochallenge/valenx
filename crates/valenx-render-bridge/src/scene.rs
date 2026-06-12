@@ -72,9 +72,7 @@ impl EnvironmentRef {
     /// saw the magic bytes. The cap is 256 MiB (generous for an
     /// 8K equirectangular RGBE map; refuses the
     /// `cat /dev/zero > big.hdr` DoS).
-    pub fn load(
-        &self,
-    ) -> Result<crate::environment::EnvironmentMap, crate::error::RenderError> {
+    pub fn load(&self) -> Result<crate::environment::EnvironmentMap, crate::error::RenderError> {
         let bytes = valenx_core::io_caps::read_capped_to_bytes(
             &self.hdr_path,
             valenx_core::io_caps::MAX_HDR_FILE_BYTES,
@@ -175,7 +173,10 @@ impl RenderJob {
             if !self.materials.contains_key(&m.material_id) {
                 return Err(crate::error::RenderError::BadParameter {
                     name: "material_id",
-                    reason: format!("mesh `{}` references missing material `{}`", m.name, m.material_id),
+                    reason: format!(
+                        "mesh `{}` references missing material `{}`",
+                        m.name, m.material_id
+                    ),
                 });
             }
         }

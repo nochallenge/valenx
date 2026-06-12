@@ -93,7 +93,11 @@ impl OdeSystem {
 
     /// Apply the model's assignment rules to a state vector in place.
     /// Returns the (cycle-checked) rule execution order.
-    pub fn project_assignments(&mut self, y: &mut [f64], t: f64) -> crate::error::Result<Vec<usize>> {
+    pub fn project_assignments(
+        &mut self,
+        y: &mut [f64],
+        t: f64,
+    ) -> crate::error::Result<Vec<usize>> {
         let mut p = std::mem::take(&mut self.params);
         let res = self.rules.apply_assignments(y, &mut p, t);
         self.params = p;

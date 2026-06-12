@@ -183,10 +183,7 @@ pub(crate) fn ln_gamma(x: f64) -> f64 {
         for (i, &c) in C.iter().enumerate().skip(1) {
             a += c / (x + i as f64);
         }
-        0.5 * (2.0 * std::f64::consts::PI).ln()
-            + (x + 0.5) * t.ln()
-            - t
-            + a.ln()
+        0.5 * (2.0 * std::f64::consts::PI).ln() + (x + 0.5) * t.ln() - t + a.ln()
     }
 }
 
@@ -236,10 +233,7 @@ mod tests {
             for k in [2, 4, 8] {
                 let g = DiscreteGamma::new(alpha, k).unwrap();
                 let mean: f64 = g.rates().iter().sum::<f64>() / k as f64;
-                assert!(
-                    (mean - 1.0).abs() < 1e-9,
-                    "alpha={alpha} k={k} mean={mean}"
-                );
+                assert!((mean - 1.0).abs() < 1e-9, "alpha={alpha} k={k} mean={mean}");
             }
         }
     }

@@ -76,11 +76,7 @@ pub fn fitch_parsimony(
     }
     for (name, row) in alignment {
         if row.len() != width {
-            return Err(PhyloError::dimension(
-                width,
-                row.len(),
-                "alignment rows",
-            ));
+            return Err(PhyloError::dimension(width, row.len(), "alignment rows"));
         }
         let _ = name;
     }
@@ -99,9 +95,7 @@ pub fn fitch_parsimony(
             .iter()
             .find(|(name, _)| name == label)
             .map(|(_, row)| row)
-            .ok_or_else(|| {
-                PhyloError::invalid("alignment", format!("no row for leaf `{label}`"))
-            })
+            .ok_or_else(|| PhyloError::invalid("alignment", format!("no row for leaf `{label}`")))
     };
 
     let post = tree.postorder();

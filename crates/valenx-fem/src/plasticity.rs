@@ -123,9 +123,8 @@ use valenx_mesh::Mesh;
 
 use crate::material::{FemMaterial, PlasticProperties};
 use crate::native_solver::{
-    add_diagonal, elasticity_matrix, ensure_finite3, strain_displacement, tet_block,
-    tet_volume, von_mises_from_voigt, NativeSolverError, NodalConstraint,
-    NodalForce,
+    add_diagonal, elasticity_matrix, ensure_finite3, strain_displacement, tet_block, tet_volume,
+    von_mises_from_voigt, NativeSolverError, NodalConstraint, NodalForce,
 };
 
 /// Controls for the incremental Newton-Raphson plasticity solve.
@@ -259,10 +258,8 @@ pub fn deviator(v: &[f64; 6]) -> [f64; 6] {
 #[inline]
 fn von_mises_of_deviator(s: &[f64; 6]) -> f64 {
     // s:s = sxx²+syy²+szz² + 2(sxy²+syz²+szx²)  (Voigt double-count).
-    let ss = s[0] * s[0]
-        + s[1] * s[1]
-        + s[2] * s[2]
-        + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
+    let ss =
+        s[0] * s[0] + s[1] * s[1] + s[2] * s[2] + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
     (1.5 * ss).sqrt()
 }
 
@@ -422,8 +419,7 @@ pub fn consistent_tangent(
         );
         // Central difference: column `col` of ∂σ/∂Δε.
         for row in 0..6 {
-            d_ep[(row, col)] =
-                (rr_p.stress[row] - rr_m.stress[row]) / (2.0 * eps_mag);
+            d_ep[(row, col)] = (rr_p.stress[row] - rr_m.stress[row]) / (2.0 * eps_mag);
         }
     }
     // Symmetrise — J2 associative plasticity has a symmetric
@@ -530,8 +526,7 @@ pub fn solve_plastic(
             mesh.nodes[nodes[2]],
             mesh.nodes[nodes[3]],
         ];
-        let b = strain_displacement(&coords)
-            .ok_or(NativeSolverError::DegenerateElement(e))?;
+        let b = strain_displacement(&coords).ok_or(NativeSolverError::DegenerateElement(e))?;
         let vol = tet_volume(&coords).abs();
         if vol < 1.0e-18 {
             return Err(NativeSolverError::DegenerateElement(e));
@@ -596,8 +591,7 @@ pub fn solve_plastic(
     // Running displacement field + the committed plastic state of every
     // element (one stress point per constant-strain tet).
     let mut u = DVector::<f64>::zeros(n_dof);
-    let mut committed: Vec<PlasticState> =
-        vec![PlasticState::default(); n_elem];
+    let mut committed: Vec<PlasticState> = vec![PlasticState::default(); n_elem];
 
     let load_steps = controls.load_steps.max(1);
     let mut total_iterations = 0;
@@ -622,8 +616,7 @@ pub fn solve_plastic(
             let mut f_int = DVector::<f64>::zeros(n_dof);
             let mut coo = CooMatrix::<f64>::new(n_dof, n_dof);
             let mut max_diag = 0.0_f64;
-            let mut iter_state: Vec<PlasticState> =
-                vec![PlasticState::default(); n_elem];
+            let mut iter_state: Vec<PlasticState> = vec![PlasticState::default(); n_elem];
 
             for e in 0..n_elem {
                 let nodes = elem_nodes[e];
@@ -663,14 +656,8 @@ pub fn solve_plastic(
                     );
                 }
                 // Consistent tangent for this element.
-                let d_ep = consistent_tangent(
-                    &rr,
-                    &start.stress,
-                    &dstrain,
-                    &d_elastic,
-                    g,
-                    &plastic,
-                );
+                let d_ep =
+                    consistent_tangent(&rr, &start.stress, &dstrain, &d_elastic, g, &plastic);
                 // Record the trial state for a possible commit.
                 let mut new_strain = start.strain;
                 for k in 0..6 {
@@ -767,8 +754,7 @@ pub fn solve_plastic(
             let k_t = add_diagonal(&k_t, &penalty_diag);
 
             // Solve the tangent system K_T·Δu = −r.
-            let chol = CscCholesky::factor(&k_t)
-                .map_err(|_| NativeSolverError::SolveFailed)?;
+            let chol = CscCholesky::factor(&k_t).map_err(|_| NativeSolverError::SolveFailed)?;
             let rhs = -&residual;
             let delta: DMatrix<f64> = chol.solve(&rhs);
             let delta = delta.column(0);
@@ -959,8 +945,7 @@ mod tests {
         let trial_mean = (trial[0] + trial[1] + trial[2]) / 3.0;
         let updated_mean = (rr.stress[0] + rr.stress[1] + rr.stress[2]) / 3.0;
         assert!(
-            (trial_mean - updated_mean).abs() / trial_mean.abs().max(1.0)
-                < 1e-9,
+            (trial_mean - updated_mean).abs() / trial_mean.abs().max(1.0) < 1e-9,
             "plastic return must not change the hydrostatic stress"
         );
     }
@@ -975,13 +960,11 @@ mod tests {
         let plastic = mat.plasticity.unwrap();
         let dstrain = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
         let rr = radial_return(&[0.0; 6], 0.0, &dstrain, &d, g, &plastic);
-        let d_ep =
-            consistent_tangent(&rr, &[0.0; 6], &dstrain, &d, g, &plastic);
+        let d_ep = consistent_tangent(&rr, &[0.0; 6], &dstrain, &d, g, &plastic);
         for i in 0..6 {
             for j in 0..6 {
                 assert!(
-                    (d_ep[(i, j)] - d[(i, j)]).abs()
-                        < 1e-3 * d[(i, i)].abs().max(1.0),
+                    (d_ep[(i, j)] - d[(i, j)]).abs() < 1e-3 * d[(i, i)].abs().max(1.0),
                     "elastic-point tangent must equal D"
                 );
             }
@@ -998,14 +981,12 @@ mod tests {
         let plastic = mat.plasticity.unwrap();
         let dstrain = [5e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
         let rr = radial_return(&[0.0; 6], 0.0, &dstrain, &d, g, &plastic);
-        let d_ep =
-            consistent_tangent(&rr, &[0.0; 6], &dstrain, &d, g, &plastic);
+        let d_ep = consistent_tangent(&rr, &[0.0; 6], &dstrain, &d, g, &plastic);
         // Symmetric.
         for i in 0..6 {
             for j in 0..6 {
                 assert!(
-                    (d_ep[(i, j)] - d_ep[(j, i)]).abs()
-                        < 1e-3 * d_ep[(i, i)].abs().max(1.0),
+                    (d_ep[(i, j)] - d_ep[(j, i)]).abs() < 1e-3 * d_ep[(i, i)].abs().max(1.0),
                     "consistent tangent must be symmetric"
                 );
             }
@@ -1058,14 +1039,8 @@ mod tests {
             }
         }
 
-        let sol = solve_plastic(
-            &mesh,
-            &mat,
-            &constraints,
-            &[],
-            &PlasticControls::default(),
-        )
-        .unwrap();
+        let sol =
+            solve_plastic(&mesh, &mat, &constraints, &[], &PlasticControls::default()).unwrap();
         assert!(sol.converged, "elastic-range solve should converge");
         // No point has yielded.
         assert!(
@@ -1166,8 +1141,7 @@ mod tests {
         // The element stress sits on the hardened yield surface.
         let vm = von_mises_from_voigt(&sol_plastic.element_state[0].stress);
         let plastic = mat.plasticity.unwrap();
-        let sigma_y = plastic
-            .yield_stress_at(sol_plastic.element_state[0].eq_plastic_strain);
+        let sigma_y = plastic.yield_stress_at(sol_plastic.element_state[0].eq_plastic_strain);
         assert!(
             (vm - sigma_y).abs() / sigma_y < 1e-3,
             "plastic stress {vm} must lie on the hardened yield surface {sigma_y}"
@@ -1365,14 +1339,7 @@ mod tests {
     fn rejects_an_unconstrained_model() {
         let mesh = structured_box_mesh(1.0, 1.0, 1.0, 1, 1, 1).expect("valid box params");
         let mat = plastic_material(200e9, 250e6, 1e9);
-        let err = solve_plastic(
-            &mesh,
-            &mat,
-            &[],
-            &[],
-            &PlasticControls::default(),
-        )
-        .unwrap_err();
+        let err = solve_plastic(&mesh, &mat, &[], &[], &PlasticControls::default()).unwrap_err();
         assert!(matches!(err, NativeSolverError::Unconstrained));
     }
 
@@ -1388,14 +1355,8 @@ mod tests {
             NodalConstraint::fixed(nid(0, 0, 1, 4, 1)),
             NodalConstraint::fixed(nid(0, 1, 1, 4, 1)),
         ];
-        let sol = solve_plastic(
-            &mesh,
-            &mat,
-            &constraints,
-            &[],
-            &PlasticControls::default(),
-        )
-        .unwrap();
+        let sol =
+            solve_plastic(&mesh, &mat, &constraints, &[], &PlasticControls::default()).unwrap();
         assert!(sol.max_displacement() < 1e-9, "no load → no displacement");
         assert!(!sol.has_yielded(), "no load → no plastic strain");
     }
@@ -1417,10 +1378,16 @@ mod tests {
                 fixed: [Some(f64::NAN), None, None],
             },
         ];
-        let err = solve_plastic(&mesh, &mat, &constraints, &[], &PlasticControls::default())
-            .unwrap_err();
+        let err =
+            solve_plastic(&mesh, &mat, &constraints, &[], &PlasticControls::default()).unwrap_err();
         assert!(
-            matches!(err, NativeSolverError::InvalidLoad { kind: "prescribed displacement", .. }),
+            matches!(
+                err,
+                NativeSolverError::InvalidLoad {
+                    kind: "prescribed displacement",
+                    ..
+                }
+            ),
             "expected InvalidLoad(prescribed displacement), got {err:?}"
         );
     }
@@ -1436,8 +1403,8 @@ mod tests {
                 fixed: [None, Some(f64::NEG_INFINITY), None],
             },
         ];
-        let err = solve_plastic(&mesh, &mat, &constraints, &[], &PlasticControls::default())
-            .unwrap_err();
+        let err =
+            solve_plastic(&mesh, &mat, &constraints, &[], &PlasticControls::default()).unwrap_err();
         assert!(matches!(err, NativeSolverError::InvalidLoad { .. }));
     }
 
@@ -1462,7 +1429,9 @@ mod tests {
         let sol = solve_plastic(&mesh, &mat, &constraints, &[], &PlasticControls::default())
             .expect("finite prescribed displacement must still solve");
         assert!(
-            sol.displacement.iter().all(|d| d.iter().all(|c| c.is_finite())),
+            sol.displacement
+                .iter()
+                .all(|d| d.iter().all(|c| c.is_finite())),
             "a finite prescribed displacement must give a finite solution"
         );
     }

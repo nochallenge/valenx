@@ -23,7 +23,11 @@ pub fn genotype_concordance(a: &GenotypeMatrix, b: &GenotypeMatrix) -> Result<f6
         ));
     }
     if a.n_sites() != b.n_sites() {
-        return Err(PopgenError::dimension(a.n_sites(), b.n_sites(), "site count"));
+        return Err(PopgenError::dimension(
+            a.n_sites(),
+            b.n_sites(),
+            "site count",
+        ));
     }
     let total = a.n_samples() * a.n_sites();
     if total == 0 {
@@ -45,11 +49,9 @@ mod tests {
     #[test]
     fn genotype_concordance_fraction_of_matching_calls() {
         // Identical 2×3 matrices → perfect concordance 1.0.
-        let m = GenotypeMatrix::from_rows(
-            vec![vec![0, 1, 0], vec![1, 0, 1]],
-            vec![10.0, 20.0, 30.0],
-        )
-        .unwrap();
+        let m =
+            GenotypeMatrix::from_rows(vec![vec![0, 1, 0], vec![1, 0, 1]], vec![10.0, 20.0, 30.0])
+                .unwrap();
         assert!((genotype_concordance(&m, &m).unwrap() - 1.0).abs() < 1e-12);
         // One mismatch out of 4 calls → 3/4 = 0.75.
         let a = GenotypeMatrix::from_rows(vec![vec![0, 1], vec![1, 0]], vec![10.0, 20.0]).unwrap();

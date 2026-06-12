@@ -146,19 +146,15 @@ impl Adapter for BadreadAdapter {
         // a basename — Badread writes a single FASTQ file, not a
         // directory tree.
         if let Some(s) = input.output.to_str() {
-            valenx_core::adapter_helpers::validate_output_basename(
-                s,
-                "[bio.badread].output",
-            )
-            .map_err(|e| AdapterError::InvalidCase {
-                case_path: case.path.join("case.toml"),
-                reason: format!("{e}"),
-            })?;
+            valenx_core::adapter_helpers::validate_output_basename(s, "[bio.badread].output")
+                .map_err(|e| AdapterError::InvalidCase {
+                    case_path: case.path.join("case.toml"),
+                    reason: format!("{e}"),
+                })?;
         } else {
             return Err(AdapterError::InvalidCase {
                 case_path: case.path.join("case.toml"),
-                reason: "[bio.badread].output: non-UTF-8 path rejected"
-                    .into(),
+                reason: "[bio.badread].output: non-UTF-8 path rejected".into(),
             });
         }
 
@@ -181,10 +177,7 @@ impl Adapter for BadreadAdapter {
         let source_reference = if input.reference.is_absolute() {
             input.reference.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.reference,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.reference)?
         };
         if !source_reference.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -351,7 +344,11 @@ impl Adapter for BadreadAdapter {
                     stderr_tail.push(line);
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(status) = kill_guard.inner_mut().try_wait().map_err(AdapterError::Io)? {
+                    if let Some(status) = kill_guard
+                        .inner_mut()
+                        .try_wait()
+                        .map_err(AdapterError::Io)?
+                    {
                         // Drain remaining lines so nothing's lost.
                         for line in rx.try_iter() {
                             process_stderr(&line, ctx, &mut warnings);

@@ -52,7 +52,10 @@ pub fn parse(text: &str, kind: SeqKind) -> Result<Vec<SeqRecord>> {
             if cur_header.is_none() {
                 return Err(BioseqError::parse(
                     "fasta",
-                    format!("sequence data before first '>' header (line {})", lineno + 1),
+                    format!(
+                        "sequence data before first '>' header (line {})",
+                        lineno + 1
+                    ),
                 ));
             }
             cur_seq.push_str(line.trim());

@@ -281,8 +281,7 @@ pub fn score_complex(
                 continue;
             }
             let r = r2.sqrt();
-            let (vdw, hb, elec, desolv) =
-                pair_terms(lt, ra.ad4_type, q_l, ra.partial_charge, r);
+            let (vdw, hb, elec, desolv) = pair_terms(lt, ra.ad4_type, q_l, ra.partial_charge, r);
             terms.vdw += weights::VDW * vdw;
             terms.hbond += weights::HBOND * hb;
             terms.electrostatic += weights::ELEC * elec;
@@ -329,7 +328,11 @@ mod tests {
         let receptor = carbon_receptor();
         let ligand = vec![(Vector3::new(0.6, 0.0, 0.0), Ad4AtomType::C, 0.0)];
         let t = score_complex(&receptor, &ligand, 0);
-        assert!(t.vdw > 0.0, "overlapping atoms must repel, got vdw {}", t.vdw);
+        assert!(
+            t.vdw > 0.0,
+            "overlapping atoms must repel, got vdw {}",
+            t.vdw
+        );
     }
 
     #[test]

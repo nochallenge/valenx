@@ -91,8 +91,7 @@ pub fn hwe_chi_square(counts: GenotypeCounts) -> Result<HweResult> {
             d * d / exp
         }
     };
-    let chi2 =
-        term(counts.aa, exp_aa) + term(counts.ab, exp_ab) + term(counts.bb, exp_bb);
+    let chi2 = term(counts.aa, exp_aa) + term(counts.ab, exp_ab) + term(counts.bb, exp_bb);
     Ok(HweResult {
         statistic: chi2,
         p_value: chi_square_sf_1df(chi2),
@@ -133,11 +132,9 @@ pub fn hwe_exact(counts: GenotypeCounts) -> Result<HweResult> {
         let common_hom = (n_common - het) / 2;
         // log multinomial weight: it suffices to compare relative
         // weights, so use ln of the standard HWE configuration count.
-        let log_w = ln_factorial(n)
-            - ln_factorial(rare_hom)
-            - ln_factorial(het)
-            - ln_factorial(common_hom)
-            + het as f64 * std::f64::consts::LN_2;
+        let log_w =
+            ln_factorial(n) - ln_factorial(rare_hom) - ln_factorial(het) - ln_factorial(common_hom)
+                + het as f64 * std::f64::consts::LN_2;
         probs.push((het, log_w));
         het += 2;
     }
@@ -189,8 +186,7 @@ fn erfc(x: f64) -> f64 {
     let poly = t
         * (0.254_829_592
             + t * (-0.284_496_736
-                + t * (1.421_413_741
-                    + t * (-1.453_152_027 + t * 1.061_405_429))));
+                + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
     let approx = poly * (-z * z).exp();
     if x >= 0.0 {
         approx
@@ -221,9 +217,7 @@ fn ln_gamma(x: f64) -> f64 {
     let g = 7.0;
     if x < 0.5 {
         // Reflection formula.
-        std::f64::consts::PI.ln()
-            - (std::f64::consts::PI * x).sin().abs().ln()
-            - ln_gamma(1.0 - x)
+        std::f64::consts::PI.ln() - (std::f64::consts::PI * x).sin().abs().ln() - ln_gamma(1.0 - x)
     } else {
         let x = x - 1.0;
         let mut a = C[0];
@@ -231,10 +225,7 @@ fn ln_gamma(x: f64) -> f64 {
         for (i, &c) in C.iter().enumerate().skip(1) {
             a += c / (x + i as f64);
         }
-        0.5 * (2.0 * std::f64::consts::PI).ln()
-            + (x + 0.5) * t.ln()
-            - t
-            + a.ln()
+        0.5 * (2.0 * std::f64::consts::PI).ln() + (x + 0.5) * t.ln() - t + a.ln()
     }
 }
 

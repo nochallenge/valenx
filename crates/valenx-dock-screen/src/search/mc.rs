@@ -181,7 +181,12 @@ pub fn monte_carlo_search(
 
     for i in 0..params.steps {
         let kt = params.schedule.kt_at(i);
-        let candidate = perturb(&current, &mut rng, params.translation_step, params.rotation_step);
+        let candidate = perturb(
+            &current,
+            &mut rng,
+            params.translation_step,
+            params.rotation_step,
+        );
         let candidate_score = objective.score(&candidate);
         let delta = candidate_score - current_score;
         let accept = delta < 0.0 || rng.gen::<f64>() < (-delta / kt).exp();
@@ -281,7 +286,9 @@ TORSDOF 0
 
     #[test]
     fn schedule_validation_catches_bad_values() {
-        assert!(McSchedule::ConstantTemperature { kt: 0.0 }.validate().is_err());
+        assert!(McSchedule::ConstantTemperature { kt: 0.0 }
+            .validate()
+            .is_err());
         assert!(McSchedule::SimulatedAnnealing {
             kt_start: 1.0,
             kt_end: 2.0, // end > start
@@ -333,10 +340,19 @@ TORSDOF 0
             schedule: McSchedule::annealing(),
             ..McParams::default()
         };
-        let result =
-            monte_carlo_from_box(&obj, Vector3::zeros(), Vector3::new(10.0, 10.0, 10.0), &params, 3)
-                .unwrap();
-        assert!(result.best_score < 0.0, "annealing best = {}", result.best_score);
+        let result = monte_carlo_from_box(
+            &obj,
+            Vector3::zeros(),
+            Vector3::new(10.0, 10.0, 10.0),
+            &params,
+            3,
+        )
+        .unwrap();
+        assert!(
+            result.best_score < 0.0,
+            "annealing best = {}",
+            result.best_score
+        );
     }
 
     #[test]

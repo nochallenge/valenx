@@ -580,7 +580,11 @@ impl Parser {
                 return None;
             }
             let a = self.parse_or()?;
-            let b = if self.eat(',') { Some(self.parse_or()?) } else { None };
+            let b = if self.eat(',') {
+                Some(self.parse_or()?)
+            } else {
+                None
+            };
             if !self.eat(')') {
                 return None;
             }
@@ -600,7 +604,8 @@ impl Parser {
         }
         let start = self.pos;
         while let Some(ch) = self.peek() {
-            if ch.is_ascii_digit() || ch == '.' || ch == 'e' || ch == 'E' || ch == '+' || ch == '-' {
+            if ch.is_ascii_digit() || ch == '.' || ch == 'e' || ch == 'E' || ch == '+' || ch == '-'
+            {
                 if ch == '+' || ch == '-' {
                     if start < self.pos {
                         let prev = self.chars[self.pos - 1];
@@ -667,10 +672,7 @@ mod tests {
 
     #[test]
     fn dependency_tracking() {
-        let e = Expr::add(
-            Expr::var(0),
-            Expr::mul(Expr::var(2), Expr::param(1)),
-        );
+        let e = Expr::add(Expr::var(0), Expr::mul(Expr::var(2), Expr::param(1)));
         let vd = e.var_deps();
         assert!(vd.contains(&0));
         assert!(vd.contains(&2));
@@ -698,17 +700,13 @@ mod tests {
         ];
         for e in cases {
             let s = e.to_string_compact();
-            let back = Expr::parse(&s)
-                .unwrap_or_else(|| panic!("could not parse `{s}`"));
+            let back = Expr::parse(&s).unwrap_or_else(|| panic!("could not parse `{s}`"));
             let y = vec![2.0, 3.0];
             let p = vec![1.0, 4.0];
             for &t in &[0.0_f64, 1.5, 7.0] {
                 let lhs = e.value(&y, &p, t);
                 let rhs = back.value(&y, &p, t);
-                assert!(
-                    (lhs - rhs).abs() < 1e-9,
-                    "{s}: {lhs} vs {rhs} at t={t}",
-                );
+                assert!((lhs - rhs).abs() < 1e-9, "{s}: {lhs} vs {rhs} at t={t}",);
             }
         }
     }

@@ -129,10 +129,7 @@ impl Adapter for Beast2Adapter {
         let source_xml = if input.xml.is_absolute() {
             input.xml.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.xml,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.xml)?
         };
         if !source_xml.is_file() {
             return Err(AdapterError::InvalidCase {

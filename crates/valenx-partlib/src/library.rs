@@ -76,7 +76,8 @@ pub fn load_index(root: impl AsRef<Path>) -> Result<PartLibrary, PartLibError> {
         path: path.display().to_string(),
         reason: e.to_string(),
     })?;
-    let file: LibraryFile = ron::de::from_str(&text).map_err(|e| PartLibError::Ron(e.to_string()))?;
+    let file: LibraryFile =
+        ron::de::from_str(&text).map_err(|e| PartLibError::Ron(e.to_string()))?;
     if file.version != VERSION {
         return Err(PartLibError::Ron(format!(
             "index version mismatch: file = {}, expected = {}",

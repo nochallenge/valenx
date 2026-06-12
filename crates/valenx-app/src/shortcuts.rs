@@ -291,7 +291,10 @@ mod tests {
         for a in ShortcutAction::ALL {
             assert!(!a.label().is_empty(), "{a:?} has an empty label");
             assert!(!a.binding().is_empty(), "{a:?} has an empty binding");
-            assert!(!a.description().is_empty(), "{a:?} has an empty description");
+            assert!(
+                !a.description().is_empty(),
+                "{a:?} has an empty description"
+            );
         }
     }
 

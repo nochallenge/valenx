@@ -120,9 +120,9 @@ fn upgrade_to_ap214(text: &str, colors: &[Ap242Color]) -> Result<String, OcctExc
     // Find the closing `ENDSEC;` of the DATA section. truck-stepio
     // writes `...ENDSEC;\nEND-ISO-10303-21;`. The colour entities go
     // just before that ENDSEC.
-    let end_iso = body.find("END-ISO-10303-21;").ok_or_else(|| {
-        OcctExchangeError::parse("step data", "no END-ISO-10303-21 terminator")
-    })?;
+    let end_iso = body
+        .find("END-ISO-10303-21;")
+        .ok_or_else(|| OcctExchangeError::parse("step data", "no END-ISO-10303-21 terminator"))?;
     // The ENDSEC that closes DATA is the last ENDSEC before END-ISO.
     let data_endsec = body[..end_iso].rfind("ENDSEC;").ok_or_else(|| {
         OcctExchangeError::parse("step data", "no ENDSEC closing the DATA section")
@@ -194,7 +194,10 @@ mod tests {
                      ENDSEC;\nEND-ISO-10303-21;\n";
         let out = upgrade_to_ap214(
             input,
-            &[color("solid", 1.0, 0.5, 0.25), color("face_2", 0.0, 0.0, 1.0)],
+            &[
+                color("solid", 1.0, 0.5, 0.25),
+                color("face_2", 0.0, 0.0, 1.0),
+            ],
         )
         .unwrap();
         assert!(out.contains("COLOUR_RGB('solid', 1.000000, 0.500000, 0.250000)"));

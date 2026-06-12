@@ -142,10 +142,7 @@ impl Adapter for FoldseekAdapter {
         let source_query = if input.query.is_absolute() {
             input.query.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.query,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.query)?
         };
         if !source_query.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -427,9 +424,7 @@ output_basename = "results"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = FoldseekAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = FoldseekAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("..") || msg.contains("stay within") || msg.contains("escape"),

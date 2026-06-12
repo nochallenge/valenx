@@ -125,8 +125,14 @@ mod tests {
             let cubic = TweenMode::Cubic.apply(t);
             let hzero = TweenMode::Hermite { m0: 0.0, m1: 0.0 }.apply(t);
             let smooth = TweenMode::EaseInOut.apply(t);
-            assert!((cubic - hzero).abs() < 1e-12, "cubic != zero-tangent hermite");
-            assert!((cubic - smooth).abs() < 1e-12, "zero-tangent hermite != smoothstep");
+            assert!(
+                (cubic - hzero).abs() < 1e-12,
+                "cubic != zero-tangent hermite"
+            );
+            assert!(
+                (cubic - smooth).abs() < 1e-12,
+                "zero-tangent hermite != smoothstep"
+            );
         }
     }
 
@@ -136,7 +142,10 @@ mod tests {
         for &(m0, m1) in &[(0.0, 0.0), (1.0, 1.0), (3.0, -2.0), (-5.0, 5.0)] {
             let h = TweenMode::Hermite { m0, m1 };
             assert!(h.apply(0.0).abs() < 1e-12, "Hermite p(0) should be 0");
-            assert!((h.apply(1.0) - 1.0).abs() < 1e-12, "Hermite p(1) should be 1");
+            assert!(
+                (h.apply(1.0) - 1.0).abs() < 1e-12,
+                "Hermite p(1) should be 1"
+            );
         }
     }
 

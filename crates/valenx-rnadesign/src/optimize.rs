@@ -422,10 +422,7 @@ const FIVE_PRIME_WINDOW: usize = 40;
 ///
 /// # Errors
 /// [`RnaDesignError::Upstream`] if the 5′-window fold fails.
-pub fn synthesizability_scan(
-    seq: &[u8],
-    max_homopolymer: usize,
-) -> Result<SynthesizabilityScan> {
+pub fn synthesizability_scan(seq: &[u8], max_homopolymer: usize) -> Result<SynthesizabilityScan> {
     let rna = transcribe_to_rna(seq);
     let mut warnings = Vec::new();
 
@@ -677,7 +674,10 @@ pub fn optimize_design(
         ));
     }
     if design.is_empty() {
-        return Err(RnaDesignError::invalid("design", "design sequence is empty"));
+        return Err(RnaDesignError::invalid(
+            "design",
+            "design sequence is empty",
+        ));
     }
 
     let mut rng = OptRng::new(params.seed);
@@ -730,8 +730,7 @@ pub fn optimize_design(
     ));
     match &design.kind {
         DesignKind::Coding => notes.push(
-            "Mutations were synonymous codon swaps — the encoded protein is unchanged."
-                .to_string(),
+            "Mutations were synonymous codon swaps — the encoded protein is unchanged.".to_string(),
         ),
         _ => notes.push(
             "Mutations kept every target base pair canonical — the design's fold is preserved."
@@ -897,7 +896,8 @@ fn objective_score(
     if weights.ensemble_defect > 0.0 {
         if let Some(target) = intended {
             if target.len() == rna.len() {
-                score += weights.ensemble_defect * normalized_ensemble_defect(&rna, target)?
+                score += weights.ensemble_defect
+                    * normalized_ensemble_defect(&rna, target)?
                     * rna.len() as f64
                     / 10.0;
             }
@@ -1118,7 +1118,10 @@ fn cds_cai(cds_rna: &[u8], host: valenx_genediting::mrna::codon::ExpressionHost)
             valenx_bioseq::cloning::codon_opt::Host::EColi
         }
     };
-    Ok(valenx_bioseq::cloning::codon_opt::codon_adaptation_index(&seq, bioseq_host)?)
+    Ok(valenx_bioseq::cloning::codon_opt::codon_adaptation_index(
+        &seq,
+        bioseq_host,
+    )?)
 }
 
 #[cfg(test)]
@@ -1245,12 +1248,8 @@ mod tests {
     #[test]
     fn optimize_a_structural_design() {
         let d = structural_design(b"AAAAAAAAAAAA", "((((....))))");
-        let result = optimize_design(
-            &d,
-            &DesignConstraints::default(),
-            OptimizeParams::default(),
-        )
-        .unwrap();
+        let result =
+            optimize_design(&d, &DesignConstraints::default(), OptimizeParams::default()).unwrap();
         assert_eq!(result.design.len(), 12);
         // The optimiser should not make the score worse.
         assert!(result.score_after <= result.score_before + 1e-6);
@@ -1260,10 +1259,10 @@ mod tests {
     #[test]
     fn optimize_is_deterministic() {
         let d = structural_design(b"AAAAAAAAAAAA", "((((....))))");
-        let a = optimize_design(&d, &DesignConstraints::default(), OptimizeParams::default())
-            .unwrap();
-        let b = optimize_design(&d, &DesignConstraints::default(), OptimizeParams::default())
-            .unwrap();
+        let a =
+            optimize_design(&d, &DesignConstraints::default(), OptimizeParams::default()).unwrap();
+        let b =
+            optimize_design(&d, &DesignConstraints::default(), OptimizeParams::default()).unwrap();
         assert_eq!(a.design.sequence, b.design.sequence);
     }
 
@@ -1282,12 +1281,8 @@ mod tests {
         // After optimisation a structural design's target pairs must
         // still be canonical on the sequence.
         let d = structural_design(b"AAAAAAAAAAAA", "((((....))))");
-        let result = optimize_design(
-            &d,
-            &DesignConstraints::default(),
-            OptimizeParams::default(),
-        )
-        .unwrap();
+        let result =
+            optimize_design(&d, &DesignConstraints::default(), OptimizeParams::default()).unwrap();
         let target = Structure::from_dot_bracket("((((....))))").unwrap();
         let rna = RnaSeq::parse(&result.design.sequence).unwrap();
         assert!(target.validate_against(rna.as_bytes(), true).is_ok());

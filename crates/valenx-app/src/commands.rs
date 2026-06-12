@@ -971,7 +971,9 @@ mod tests {
             let before = flags(&app);
             (cmd.invoke)(&mut app);
             let after = flags(&app);
-            let changed: Vec<usize> = (0..before.len()).filter(|&i| before[i] != after[i]).collect();
+            let changed: Vec<usize> = (0..before.len())
+                .filter(|&i| before[i] != after[i])
+                .collect();
             assert_eq!(
                 changed.len(),
                 1,

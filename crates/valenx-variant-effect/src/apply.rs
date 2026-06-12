@@ -139,8 +139,14 @@ mod tests {
     #[test]
     fn protein_substitution_at_first_and_last_position() {
         let wt = protein("MKRTA");
-        assert_eq!(apply(&parse("p.M1L").unwrap(), &wt).unwrap().as_str(), "LKRTA");
-        assert_eq!(apply(&parse("p.A5G").unwrap(), &wt).unwrap().as_str(), "MKRTG");
+        assert_eq!(
+            apply(&parse("p.M1L").unwrap(), &wt).unwrap().as_str(),
+            "LKRTA"
+        );
+        assert_eq!(
+            apply(&parse("p.A5G").unwrap(), &wt).unwrap().as_str(),
+            "MKRTG"
+        );
     }
 
     #[test]
@@ -149,7 +155,11 @@ mod tests {
         // Position 3 is R, not Q.
         let v = parse("p.Q3H").unwrap();
         match apply(&v, &wt) {
-            Err(VariantError::WildTypeMismatch { position, expected, found }) => {
+            Err(VariantError::WildTypeMismatch {
+                position,
+                expected,
+                found,
+            }) => {
                 assert_eq!(position, 3);
                 assert_eq!(expected, 'Q');
                 assert_eq!(found, 'R');
@@ -196,7 +206,11 @@ mod tests {
         // Position 4 is C, not G.
         let v = parse("c.4G>A").unwrap();
         match apply(&v, &wt) {
-            Err(VariantError::WildTypeMismatch { position, expected, found }) => {
+            Err(VariantError::WildTypeMismatch {
+                position,
+                expected,
+                found,
+            }) => {
                 assert_eq!(position, 4);
                 assert_eq!(expected, 'G');
                 assert_eq!(found, 'C');
@@ -211,7 +225,10 @@ mod tests {
         let v = parse("c.7C>T").unwrap();
         assert!(matches!(
             apply(&v, &wt),
-            Err(VariantError::PositionOutOfRange { position: 7, len: 6 })
+            Err(VariantError::PositionOutOfRange {
+                position: 7,
+                len: 6
+            })
         ));
     }
 
@@ -274,7 +291,11 @@ mod tests {
         // ATGCGTA is 7 bases -> 2 whole codons ATG|CGT (= Met Arg) plus a
         // leftover trailing `A` at position 7 that translation drops.
         let wt = dna("ATGCGTA");
-        assert_eq!(wt.len() % 3, 1, "reference must have a partial trailing codon");
+        assert_eq!(
+            wt.len() % 3,
+            1,
+            "reference must have a partial trailing codon"
+        );
 
         // c.7A>C mutates only that dropped 7th base.
         let mutant = apply(&parse("c.7A>C").unwrap(), &wt).unwrap();

@@ -376,12 +376,9 @@ fn emit_rollover(
     let mut prev = from;
     for i in 1..=n {
         let theta = (i as f64) * std::f64::consts::TAU / (n as f64);
-        let p = centre + nalgebra::Vector2::new(helical_radius * theta.cos(), helical_radius * theta.sin());
-        tp.push(Move::new(
-            MoveKind::Cut,
-            Vector3::new(p.x, p.y, z),
-            feed,
-        ));
+        let p = centre
+            + nalgebra::Vector2::new(helical_radius * theta.cos(), helical_radius * theta.sin());
+        tp.push(Move::new(MoveKind::Cut, Vector3::new(p.x, p.y, z), feed));
         grid.carve_segment(prev, p, tool_radius);
         prev = p;
     }
@@ -447,8 +444,7 @@ fn point_in_polygon(x: f64, y: f64, polygon: &[Vector3<f64>]) -> bool {
         // `.max(MIN_POSITIVE).copysign(yj - yi)` silently replaced a *downward*
         // edge's `dy` with ≈-2e-308, blowing up the x-intersection and
         // misclassifying every non-axis-aligned pocket.)
-        let intersect = ((yi > y) != (yj > y))
-            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
         if intersect {
             inside = !inside;
         }
@@ -472,10 +468,7 @@ fn shortest_edge(polygon: &[Vector3<f64>]) -> f64 {
     min
 }
 
-fn validate(
-    params: &AdaptiveConstantEngagementParams,
-    tool: &Tool,
-) -> Result<(), CamError> {
+fn validate(params: &AdaptiveConstantEngagementParams, tool: &Tool) -> Result<(), CamError> {
     let mk = |reason: String| CamError::BadOperation {
         name: "adaptive_constant_engagement".into(),
         reason,
@@ -493,7 +486,10 @@ fn validate(
         )));
     }
     if !(params.step_down > 0.0) {
-        return Err(mk(format!("step_down must be > 0 (got {})", params.step_down)));
+        return Err(mk(format!(
+            "step_down must be > 0 (got {})",
+            params.step_down
+        )));
     }
     if !(params.depth > 0.0) {
         return Err(mk(format!("depth must be > 0 (got {})", params.depth)));
@@ -696,10 +692,7 @@ mod tests {
         let (tp, report) = generate(&stock, &mesh, &params, &tool).unwrap();
         let dist = tp.total_distance();
         assert!(dist > 0.0, "expected non-zero path length");
-        assert!(
-            dist < 50_000.0,
-            "path length is implausibly large: {dist}",
-        );
+        assert!(dist < 50_000.0, "path length is implausibly large: {dist}",);
         // A roll-over insertion is the diagnostic the engagement
         // bound is genuinely engaged (i.e. the path is *not* just a
         // copy of the concentric path). Some are expected at the

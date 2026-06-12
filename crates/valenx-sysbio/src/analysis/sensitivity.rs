@@ -260,7 +260,11 @@ mod tests {
             steady_a,
         )
         .unwrap();
-        assert!((sens[0].derivative - 0.5).abs() < 1e-4, "{}", sens[0].derivative);
+        assert!(
+            (sens[0].derivative - 0.5).abs() < 1e-4,
+            "{}",
+            sens[0].derivative
+        );
         assert!((sens[0].scaled - 1.0).abs() < 1e-3, "{}", sens[0].scaled);
     }
 
@@ -289,8 +293,7 @@ mod tests {
             ParamTarget::MassActionK { reaction: 1 },
         ];
         let ranges = vec![(2.0, 8.0), (1.0, 4.0)];
-        let g =
-            global_sensitivity(&m, &targets, &ranges, 60, 0.1, 123, steady_a).unwrap();
+        let g = global_sensitivity(&m, &targets, &ranges, 60, 0.1, 123, steady_a).unwrap();
         assert_eq!(g.len(), 2);
         assert!(g[0].mu_star > 0.0);
         assert!(g[1].mu_star > 0.0);
@@ -302,8 +305,7 @@ mod tests {
     #[test]
     fn relative_ranges_centre_on_nominal() {
         let m = source_decay();
-        let r = relative_ranges(&m, &[ParamTarget::ConstantRate { reaction: 0 }], 0.5)
-            .unwrap();
+        let r = relative_ranges(&m, &[ParamTarget::ConstantRate { reaction: 0 }], 0.5).unwrap();
         // Nominal s = 4 -> [2, 6].
         assert!((r[0].0 - 2.0).abs() < 1e-9);
         assert!((r[0].1 - 6.0).abs() < 1e-9);
@@ -317,8 +319,6 @@ mod tests {
         // mismatched ranges length
         assert!(global_sensitivity(&m, &t, &[], 5, 0.1, 0, steady_a).is_err());
         // delta out of (0,1)
-        assert!(
-            global_sensitivity(&m, &t, &[(1.0, 2.0)], 5, 1.5, 0, steady_a).is_err()
-        );
+        assert!(global_sensitivity(&m, &t, &[(1.0, 2.0)], 5, 1.5, 0, steady_a).is_err());
     }
 }

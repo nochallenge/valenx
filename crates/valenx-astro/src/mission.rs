@@ -112,8 +112,7 @@ impl Controller {
         // finite and above the surface; use the validation-free core so
         // `command` stays infallible (matches the hot-path convention in
         // `rigidbody::propagate_unchecked`).
-        let o =
-            orbit::elements_with_mu_unchecked(position, velocity, crate::constants::MU_EARTH);
+        let o = orbit::elements_with_mu_unchecked(position, velocity, crate::constants::MU_EARTH);
         let radial_hat = safe_radial(position);
         let altitude = position.norm() - crate::constants::R_EARTH;
         let radial_speed = velocity.dot(&radial_hat);

@@ -47,8 +47,16 @@ fn demo_drawing() -> Drawing2D {
         vertices: vec![[0.0, 0.0], [60.0, 0.0], [60.0, 40.0], [0.0, 40.0]],
         closed: true,
     });
-    d.add(Entity2D::Circle { layer: "0".to_string(), centre: [30.0, 20.0], radius: 12.0 });
-    d.add(Entity2D::Line { layer: "0".to_string(), a: [0.0, 0.0], b: [60.0, 40.0] });
+    d.add(Entity2D::Circle {
+        layer: "0".to_string(),
+        centre: [30.0, 20.0],
+        radius: 12.0,
+    });
+    d.add(Entity2D::Line {
+        layer: "0".to_string(),
+        a: [0.0, 0.0],
+        b: [60.0, 40.0],
+    });
     d.add(Entity2D::Text {
         layer: "0".to_string(),
         position: [1.0, 42.0],
@@ -87,8 +95,11 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 }
                 if ui.button("Export DXF").clicked() {
                     let text = dxf::serialise(&s.drawing);
-                    s.status =
-                        format!("DXF: {} entities, {} chars", s.drawing.entities.len(), text.len());
+                    s.status = format!(
+                        "DXF: {} entities, {} chars",
+                        s.drawing.entities.len(),
+                        text.len()
+                    );
                 }
             });
             ui.horizontal(|ui| {
@@ -121,7 +132,11 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.label(format!("{} entities", s.drawing.entities.len()));
                 ui.separator();
                 ui.label("zoom");
-                ui.add(egui::DragValue::new(&mut s.scale).speed(0.2).range(0.5..=60.0));
+                ui.add(
+                    egui::DragValue::new(&mut s.scale)
+                        .speed(0.2)
+                        .range(0.5..=60.0),
+                );
             });
             if !s.status.is_empty() {
                 ui.label(egui::RichText::new(&s.status).small().weak());
@@ -154,7 +169,10 @@ fn draw_entities(
 ) {
     let c = rect.center();
     let to_screen = |p: &[f64; 2]| -> egui::Pos2 {
-        egui::pos2(c.x + (p[0] as f32 - pan.x) * scale, c.y - (p[1] as f32 - pan.y) * scale)
+        egui::pos2(
+            c.x + (p[0] as f32 - pan.x) * scale,
+            c.y - (p[1] as f32 - pan.y) * scale,
+        )
     };
     let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
     for e in &drawing.entities {
@@ -165,7 +183,13 @@ fn draw_entities(
             Entity2D::Circle { centre, radius, .. } => {
                 painter.circle_stroke(to_screen(centre), *radius as f32 * scale, stroke);
             }
-            Entity2D::Arc { centre, radius, start_angle_deg, end_angle_deg, .. } => {
+            Entity2D::Arc {
+                centre,
+                radius,
+                start_angle_deg,
+                end_angle_deg,
+                ..
+            } => {
                 let cc = to_screen(centre);
                 let r = *radius as f32 * scale;
                 let a0 = start_angle_deg.to_radians() as f32;
@@ -181,7 +205,9 @@ fn draw_entities(
                     prev = Some(p);
                 }
             }
-            Entity2D::Polyline { vertices, closed, .. } => {
+            Entity2D::Polyline {
+                vertices, closed, ..
+            } => {
                 for w in vertices.windows(2) {
                     painter.line_segment([to_screen(&w[0]), to_screen(&w[1])], stroke);
                 }
@@ -192,7 +218,12 @@ fn draw_entities(
                     );
                 }
             }
-            Entity2D::Text { position, height, text, .. } => {
+            Entity2D::Text {
+                position,
+                height,
+                text,
+                ..
+            } => {
                 painter.text(
                     to_screen(position),
                     egui::Align2::LEFT_BOTTOM,
@@ -213,7 +244,11 @@ mod tests {
     #[test]
     fn demo_drawing_has_entities() {
         let d = demo_drawing();
-        assert!(d.entities.len() >= 4, "demo has geometry: {}", d.entities.len());
+        assert!(
+            d.entities.len() >= 4,
+            "demo has geometry: {}",
+            d.entities.len()
+        );
     }
 
     #[test]
@@ -222,6 +257,10 @@ mod tests {
         let n = d.entities.len();
         let text = dxf::serialise(&d);
         let parsed = dxf::parse(&text).expect("DXF parses");
-        assert_eq!(parsed.entities.len(), n, "entity count preserved through DXF round-trip");
+        assert_eq!(
+            parsed.entities.len(),
+            n,
+            "entity count preserved through DXF round-trip"
+        );
     }
 }

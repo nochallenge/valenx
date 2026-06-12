@@ -47,7 +47,8 @@ pub fn step_title(step: u8) -> &'static str {
 /// Multiline body for the step.
 pub fn step_body(step: u8) -> &'static str {
     match step {
-        0 => "\
+        0 => {
+            "\
 Valenx is a native open-source desktop suite that unifies CAD, CFD,
 FEA, electromagnetics, chemistry, molecular dynamics, computational
 biology, and external-aerodynamics into a single Rust shell.
@@ -55,8 +56,10 @@ biology, and external-aerodynamics into a single Rust shell.
 No browser, no subscription, no vendor lock-in.
 
 This 3-step tour will orient you in under a minute.
-",
-        1 => "\
+"
+        }
+        1 => {
+            "\
 The right-hand side of the window has four workbenches:
 
   Ctrl+1 — Mesh Toolbox (CAD: Part, Draft, TechDraw, Assembly,
@@ -75,8 +78,10 @@ The right-hand side of the window has four workbenches:
 
 Each workbench is independent; egui docks them side by side when
 several are open.
-",
-        2 => "\
+"
+        }
+        2 => {
+            "\
 A handful of shortcuts unlock the rest of the UI:
 
   Ctrl+P — Command palette (fuzzy-search every action).
@@ -89,7 +94,8 @@ You can change the colour palette (Dark / Light / High-Contrast)
 and the font scale from Settings → Appearance.
 
 Have fun.
-",
+"
+        }
         _ => "",
     }
 }
@@ -99,54 +105,59 @@ Have fun.
 /// (the host saves the completed bit + drops the open flag).
 pub fn render(ctx: &egui::Context, open: &mut bool, state: &mut TourState) -> bool {
     let mut dismissed_this_frame = false;
-    egui::Window::new(format!("{} ({}/{})", step_title(state.step), state.step + 1, STEP_COUNT))
-        .open(open)
-        .collapsible(false)
-        .resizable(false)
-        .default_width(440.0)
-        .show(ctx, |ui| {
-            ui.add_space(4.0);
-            ui.label(step_body(state.step));
-            ui.add_space(8.0);
-            ui.separator();
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(state.step > 0, egui::Button::new("Back"))
-                    .on_hover_text("Previous step")
-                    .clicked()
-                {
-                    state.step = state.step.saturating_sub(1);
-                }
+    egui::Window::new(format!(
+        "{} ({}/{})",
+        step_title(state.step),
+        state.step + 1,
+        STEP_COUNT
+    ))
+    .open(open)
+    .collapsible(false)
+    .resizable(false)
+    .default_width(440.0)
+    .show(ctx, |ui| {
+        ui.add_space(4.0);
+        ui.label(step_body(state.step));
+        ui.add_space(8.0);
+        ui.separator();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(state.step > 0, egui::Button::new("Back"))
+                .on_hover_text("Previous step")
+                .clicked()
+            {
+                state.step = state.step.saturating_sub(1);
+            }
 
-                let on_last = state.step + 1 == STEP_COUNT;
-                let primary_label = if on_last { "Get started" } else { "Next" };
-                if ui
-                    .button(primary_label)
-                    .on_hover_text(if on_last {
-                        "Finish the tour and remember the choice."
-                    } else {
-                        "Continue to the next step."
-                    })
-                    .clicked()
-                {
-                    if on_last {
-                        state.finished = true;
-                        dismissed_this_frame = true;
-                    } else {
-                        state.step += 1;
-                    }
-                }
-
-                if ui
-                    .button("Skip")
-                    .on_hover_text("Dismiss the tour. Re-openable from Help → Welcome tour.")
-                    .clicked()
-                {
+            let on_last = state.step + 1 == STEP_COUNT;
+            let primary_label = if on_last { "Get started" } else { "Next" };
+            if ui
+                .button(primary_label)
+                .on_hover_text(if on_last {
+                    "Finish the tour and remember the choice."
+                } else {
+                    "Continue to the next step."
+                })
+                .clicked()
+            {
+                if on_last {
                     state.finished = true;
                     dismissed_this_frame = true;
+                } else {
+                    state.step += 1;
                 }
-            });
+            }
+
+            if ui
+                .button("Skip")
+                .on_hover_text("Dismiss the tour. Re-openable from Help → Welcome tour.")
+                .clicked()
+            {
+                state.finished = true;
+                dismissed_this_frame = true;
+            }
         });
+    });
 
     if dismissed_this_frame {
         *open = false;

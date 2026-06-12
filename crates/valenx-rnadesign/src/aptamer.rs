@@ -446,11 +446,7 @@ pub fn extract_pockets(structure: &Structure) -> Vec<Pocket> {
 /// The score of one [`Pocket`] for one [`PharmacophoreFeature`]: the
 /// number of pocket bases that present a compatible edge feature,
 /// scaled by the pocket-kind weight.
-fn pocket_feature_score(
-    seq: &[u8],
-    pocket: &Pocket,
-    feature: &PharmacophoreFeature,
-) -> f64 {
+fn pocket_feature_score(seq: &[u8], pocket: &Pocket, feature: &PharmacophoreFeature) -> f64 {
     if pocket.is_empty() {
         return 0.0;
     }
@@ -709,8 +705,7 @@ pub fn design_aptamer(
         let len = if params.length_min == params.length_max {
             params.length_min
         } else {
-            params.length_min
-                + rng.below(params.length_max - params.length_min + 1)
+            params.length_min + rng.below(params.length_max - params.length_min + 1)
         };
         let seq = random_pocket_seed(len, params.gc_min, params.gc_max, &mut rng);
         let rna = match RnaSeq::parse(&seq) {
@@ -773,9 +768,18 @@ pub fn design_aptamer(
         "The design presents {} pocket(s) — {} hairpin loop(s), {} internal-loop / bulge(s), \
          {} multi-junction(s).",
         pockets.len(),
-        pockets.iter().filter(|p| p.kind == PocketKind::HairpinLoop).count(),
-        pockets.iter().filter(|p| p.kind == PocketKind::InternalLoop).count(),
-        pockets.iter().filter(|p| p.kind == PocketKind::MultiJunction).count(),
+        pockets
+            .iter()
+            .filter(|p| p.kind == PocketKind::HairpinLoop)
+            .count(),
+        pockets
+            .iter()
+            .filter(|p| p.kind == PocketKind::InternalLoop)
+            .count(),
+        pockets
+            .iter()
+            .filter(|p| p.kind == PocketKind::MultiJunction)
+            .count(),
     ));
     notes.push(
         "Aptamer design is classical structural-complementarity scoring \
@@ -801,12 +805,7 @@ pub fn design_aptamer(
 /// roughly equal-length helix arms with a hairpin / bulge candidate in
 /// the middle. The bias is *structural* (a pocket-likely topology),
 /// the base content is randomised inside the GC band.
-fn random_pocket_seed(
-    n: usize,
-    gc_min: f64,
-    gc_max: f64,
-    rng: &mut Rng,
-) -> Vec<u8> {
+fn random_pocket_seed(n: usize, gc_min: f64, gc_max: f64, rng: &mut Rng) -> Vec<u8> {
     // Try up to a handful of times to land inside the GC band; the
     // search loop already tolerates failures.
     for _ in 0..6 {
@@ -942,16 +941,19 @@ mod tests {
         // A multiloop: ((..(((....))).....(((....)))..)) — two child
         // hairpins inside an outer pair → one multi-junction pocket
         // plus two hairpin loops.
-        let s = Structure::from_dot_bracket(
-            "((..(((....))).....(((....)))..))",
-        )
-        .unwrap();
+        let s = Structure::from_dot_bracket("((..(((....))).....(((....)))..))").unwrap();
         let p = extract_pockets(&s);
         // Two child hairpins + one multi-junction (the long unpaired
         // run between the two child stems is the multi-junction
         // pocket).
-        let hairpins = p.iter().filter(|q| q.kind == PocketKind::HairpinLoop).count();
-        let multi = p.iter().filter(|q| q.kind == PocketKind::MultiJunction).count();
+        let hairpins = p
+            .iter()
+            .filter(|q| q.kind == PocketKind::HairpinLoop)
+            .count();
+        let multi = p
+            .iter()
+            .filter(|q| q.kind == PocketKind::MultiJunction)
+            .count();
         assert!(hairpins >= 2, "expected ≥ 2 hairpin loops, got {hairpins}");
         assert!(multi >= 1, "expected ≥ 1 multi-junction, got {multi}");
     }
@@ -972,7 +974,9 @@ mod tests {
         // Build a sequence whose stem is canonical and whose loop is GGGG.
         let seq = b"CCCCCGGGGGGGGG";
         let _ = seq;
-        let seq = [b'C', b'C', b'C', b'C', b'C', b'G', b'G', b'G', b'G', b'G', b'G', b'G', b'G', b'G'];
+        let seq = [
+            b'C', b'C', b'C', b'C', b'C', b'G', b'G', b'G', b'G', b'G', b'G', b'G', b'G', b'G',
+        ];
         let pharm = Pharmacophore::new(vec![PharmacophoreFeature::new(
             FeatureKind::HBondAcceptor,
             [0.0, 0.0, 0.0],

@@ -241,9 +241,7 @@ pub trait SolidElement {
         let b = self.strain_displacement(&sh);
         let strain = &b * ue;
         let sigma = d * strain;
-        Some([
-            sigma[0], sigma[1], sigma[2], sigma[3], sigma[4], sigma[5],
-        ])
+        Some([sigma[0], sigma[1], sigma[2], sigma[3], sigma[4], sigma[5]])
     }
 
     /// The element centroid in natural coordinates — where
@@ -271,14 +269,7 @@ fn tet_orbit_abbb(which: usize, a: f64, b: f64) -> [f64; 3] {
 /// following the [`TET10_EDGES`] pairing.
 fn tet_orbit_aabb(edge: usize, a: f64, b: f64) -> [f64; 3] {
     // The six unordered pairs of {0,1,2,3}.
-    const PAIRS: [(usize, usize); 6] = [
-        (0, 1),
-        (0, 2),
-        (0, 3),
-        (1, 2),
-        (1, 3),
-        (2, 3),
-    ];
+    const PAIRS: [(usize, usize); 6] = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
     let (p, q) = PAIRS[edge];
     let mut l = [b; 4];
     l[p] = a;
@@ -537,8 +528,7 @@ pub struct Tet10 {
 
 /// Mid-side node → its two end corner indices, in standard `C3D10`
 /// edge order.
-pub const TET10_EDGES: [(usize, usize); 6] =
-    [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)];
+pub const TET10_EDGES: [(usize, usize); 6] = [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)];
 
 impl Tet10 {
     /// Build a Tet10 from its ten physical node coordinates — four
@@ -789,7 +779,12 @@ mod tests {
         // coords + the six edge-midpoint natural coords.
         let t = ref_tet10();
         let mut nat = [[0.0; 3]; 10];
-        let corners = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let corners = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ];
         nat[..4].copy_from_slice(&corners);
         for (m, &(p, q)) in TET10_EDGES.iter().enumerate() {
             for c in 0..3 {

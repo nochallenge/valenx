@@ -119,7 +119,10 @@ pub fn conduction_delay_s(distance_m: f64, velocity_m_per_s: f64) -> f64 {
 /// kinematic triple (velocity, distance, delay). Returns `0` for non-physical input
 /// (negative or non-finite velocity or time).
 pub fn conduction_distance_m(velocity_m_per_s: f64, time_s: f64) -> f64 {
-    if !velocity_m_per_s.is_finite() || !time_s.is_finite() || velocity_m_per_s < 0.0 || time_s < 0.0
+    if !velocity_m_per_s.is_finite()
+        || !time_s.is_finite()
+        || velocity_m_per_s < 0.0
+        || time_s < 0.0
     {
         return 0.0;
     }
@@ -164,9 +167,14 @@ mod tests {
     fn conduction_velocity_from_latency_inverts_delay_and_distance() {
         // Double round-trip: recover v from the latency it produces (inverts
         // conduction_delay_s) and from the distance it covers (inverts conduction_distance_m).
-        for &(d, v, t) in &[(0.05_f64, 50.0_f64, 0.001_f64), (1.0, 120.0, 0.05), (0.3, 2.5, 0.2)] {
+        for &(d, v, t) in &[
+            (0.05_f64, 50.0_f64, 0.001_f64),
+            (1.0, 120.0, 0.05),
+            (0.3, 2.5, 0.2),
+        ] {
             assert!(
-                (conduction_velocity_from_latency(d, conduction_delay_s(d, v)) - v).abs() <= 1e-12 * v,
+                (conduction_velocity_from_latency(d, conduction_delay_s(d, v)) - v).abs()
+                    <= 1e-12 * v,
                 "v = d/t inverts t = d/v"
             );
             assert!(
@@ -212,11 +220,17 @@ mod tests {
         // of conduction_delay_s).
         for &(d, v) in &[(0.05_f64, 50.0_f64), (1.0, 120.0), (0.3, 2.5)] {
             let recovered = conduction_distance_m(v, conduction_delay_s(d, v));
-            assert!((recovered - d).abs() <= 1e-12 * d, "distance = v·t inverts t = d/v");
+            assert!(
+                (recovered - d).abs() <= 1e-12 * d,
+                "distance = v·t inverts t = d/v"
+            );
         }
 
         // Worked: a 50 m/s myelinated fibre travels 5 cm in 1 ms.
-        assert!((conduction_distance_m(50.0, 0.001) - 0.05).abs() < 1e-12, "50 m/s × 1 ms = 5 cm");
+        assert!(
+            (conduction_distance_m(50.0, 0.001) - 0.05).abs() < 1e-12,
+            "50 m/s × 1 ms = 5 cm"
+        );
 
         // Linear in velocity and time.
         assert!(
@@ -241,17 +255,26 @@ mod tests {
     #[test]
     fn conduction_delay_is_distance_over_velocity() {
         // Worked point: 0.5 m at 50 m/s → 10 ms latency.
-        assert!((conduction_delay_s(0.5, 50.0) - 0.01).abs() < 1e-12, "10 ms over 0.5 m @ 50 m/s");
+        assert!(
+            (conduction_delay_s(0.5, 50.0) - 0.01).abs() < 1e-12,
+            "10 ms over 0.5 m @ 50 m/s"
+        );
 
         // Defining inverse: delay · velocity = distance.
         for &(d, v) in &[(1.0_f64, 72.0_f64), (0.3, 12.0), (2.0, 0.5)] {
-            assert!((conduction_delay_s(d, v) * v - d).abs() < 1e-12, "delay·v = distance");
+            assert!(
+                (conduction_delay_s(d, v) * v - d).abs() < 1e-12,
+                "delay·v = distance"
+            );
         }
 
         // Threads myelinated_conduction_velocity: a 12 µm fibre (Hursh v = 6·12 = 72 m/s)
         // has latency 1/v over a 1 m segment.
         let v = myelinated_conduction_velocity(12.0, HURSH_FACTOR_M_PER_S_PER_UM);
-        assert!((conduction_delay_s(1.0, v) - 1.0 / v).abs() < 1e-12, "latency = 1/v(12 µm)");
+        assert!(
+            (conduction_delay_s(1.0, v) - 1.0 / v).abs() < 1e-12,
+            "latency = 1/v(12 µm)"
+        );
 
         // Faster fibres have shorter latency.
         assert!(
@@ -269,7 +292,10 @@ mod tests {
     fn myelinated_follows_hursh_six_times_diameter() {
         // A 10 µm mammalian fibre conducts at ~60 m/s (Hursh's rule).
         let cv = myelinated_conduction_velocity(10.0, HURSH_FACTOR_M_PER_S_PER_UM);
-        assert!((cv - 60.0).abs() < 1e-9, "10 µm fibre should be ~60 m/s, got {cv}");
+        assert!(
+            (cv - 60.0).abs() < 1e-9,
+            "10 µm fibre should be ~60 m/s, got {cv}"
+        );
         // Linear in diameter: doubling d doubles the velocity.
         assert!(
             (myelinated_conduction_velocity(20.0, 6.0)
@@ -297,7 +323,10 @@ mod tests {
         // the evolutionary payoff of myelin.
         let myelinated = myelinated_conduction_velocity(10.0, HURSH_FACTOR_M_PER_S_PER_UM);
         let unmyelinated = unmyelinated_conduction_velocity(1.0, 2.0);
-        assert!(myelinated > 10.0 * unmyelinated, "{myelinated} vs {unmyelinated}");
+        assert!(
+            myelinated > 10.0 * unmyelinated,
+            "{myelinated} vs {unmyelinated}"
+        );
     }
 
     #[test]
@@ -329,7 +358,10 @@ mod tests {
     fn myelination_crossover_diameter_equalises_the_two_conduction_velocities() {
         // k_m = 6 m/s/µm (Hursh), k_u = 2 m/s/√µm → d* = (k_u/k_m)² = (1/3)² = 1/9 µm.
         let d_star = myelination_crossover_diameter(6.0, 2.0);
-        assert!((d_star - 1.0 / 9.0).abs() < 1e-12, "d* = (k_u/k_m)² = 1/9, got {d_star}");
+        assert!(
+            (d_star - 1.0 / 9.0).abs() < 1e-12,
+            "d* = (k_u/k_m)² = 1/9, got {d_star}"
+        );
         // STRONG dual cross-check: at d* the two CV laws agree exactly (threading BOTH
         // conduction-velocity functions); below d* the √d law is faster, above it the
         // linear (myelinated) law wins.
@@ -337,13 +369,18 @@ mod tests {
             let d = myelination_crossover_diameter(km, ku);
             let cv_m = myelinated_conduction_velocity(d, km);
             let cv_u = unmyelinated_conduction_velocity(d, ku);
-            assert!((cv_m - cv_u).abs() / cv_m < 1e-9, "CVs equal at d* for k_m={km}, k_u={ku}");
             assert!(
-                unmyelinated_conduction_velocity(0.5 * d, ku) > myelinated_conduction_velocity(0.5 * d, km),
+                (cv_m - cv_u).abs() / cv_m < 1e-9,
+                "CVs equal at d* for k_m={km}, k_u={ku}"
+            );
+            assert!(
+                unmyelinated_conduction_velocity(0.5 * d, ku)
+                    > myelinated_conduction_velocity(0.5 * d, km),
                 "below d*: unmyelinated faster (k_m={km}, k_u={ku})"
             );
             assert!(
-                myelinated_conduction_velocity(2.0 * d, km) > unmyelinated_conduction_velocity(2.0 * d, ku),
+                myelinated_conduction_velocity(2.0 * d, km)
+                    > unmyelinated_conduction_velocity(2.0 * d, ku),
                 "above d*: myelinated faster (k_m={km}, k_u={ku})"
             );
         }
@@ -371,7 +408,10 @@ mod tests {
                     <= 1e-9 * cv,
                 "CV(d(CV)) = CV"
             );
-            assert!((myelinated_fiber_diameter_um(cv, k) - d).abs() <= 1e-9 * d, "d(CV(d)) = d");
+            assert!(
+                (myelinated_fiber_diameter_um(cv, k) - d).abs() <= 1e-9 * d,
+                "d(CV(d)) = d"
+            );
         }
 
         // (c) WORKED + ROUND-TRIP unmyelinated: v = 2 m/s at k = 2 → d = (2/2)² = 1 µm.

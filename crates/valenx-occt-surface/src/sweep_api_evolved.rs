@@ -199,25 +199,20 @@ mod tests {
 
     #[test]
     fn evolved_rejects_short_profile() {
-        let err = sweep_api_evolved(&[(0.0, 0.0)], &[(0.0, 0.0), (5.0, 0.0)])
-            .unwrap_err();
+        let err = sweep_api_evolved(&[(0.0, 0.0)], &[(0.0, 0.0), (5.0, 0.0)]).unwrap_err();
         assert_eq!(err.code(), "occt_surface.bad_input");
     }
 
     #[test]
     fn evolved_rejects_short_spine() {
-        let err = sweep_api_evolved(&[(0.0, 0.0), (1.0, 0.0)], &[(0.0, 0.0)])
-            .unwrap_err();
+        let err = sweep_api_evolved(&[(0.0, 0.0), (1.0, 0.0)], &[(0.0, 0.0)]).unwrap_err();
         assert_eq!(err.code(), "occt_surface.bad_input");
     }
 
     #[test]
     fn evolved_rejects_non_finite() {
-        let err = sweep_api_evolved(
-            &[(0.0, 0.0), (f64::NAN, 1.0)],
-            &[(0.0, 0.0), (5.0, 0.0)],
-        )
-        .unwrap_err();
+        let err = sweep_api_evolved(&[(0.0, 0.0), (f64::NAN, 1.0)], &[(0.0, 0.0), (5.0, 0.0)])
+            .unwrap_err();
         assert_eq!(err.code(), "occt_surface.bad_input");
     }
 
@@ -239,7 +234,11 @@ mod tests {
         assert_eq!(m.total_elements(), 4);
         // q maps to Z: the surface spans z ∈ [0, 1].
         let zmin = m.nodes.iter().map(|n| n.z).fold(f64::INFINITY, f64::min);
-        let zmax = m.nodes.iter().map(|n| n.z).fold(f64::NEG_INFINITY, f64::max);
+        let zmax = m
+            .nodes
+            .iter()
+            .map(|n| n.z)
+            .fold(f64::NEG_INFINITY, f64::max);
         assert!((zmin - 0.0).abs() < 1e-9 && (zmax - 1.0).abs() < 1e-9);
     }
 

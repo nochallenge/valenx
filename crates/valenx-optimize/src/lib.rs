@@ -207,9 +207,7 @@ pub enum OptimizerError {
     /// iteration count exceeds the per-optimizer cap. Today the only
     /// site that raises this is LHS via [`MAX_LHS_SAMPLES`]; the
     /// variant is shaped to take any future optimizer's cap.
-    #[error(
-        "{optimizer}: requested {requested} samples exceeds the {cap}-sample cap"
-    )]
+    #[error("{optimizer}: requested {requested} samples exceeds the {cap}-sample cap")]
     TooManySamples {
         /// Optimizer id (e.g. `latin-hypercube`).
         optimizer: &'static str,

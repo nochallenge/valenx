@@ -73,16 +73,10 @@ impl Default for PairHmmParams {
 impl PairHmmParams {
     fn validate(&self) -> Result<()> {
         if !(self.gap_open > 0.0 && self.gap_open < 0.5) {
-            return Err(GenomicsError::invalid(
-                "gap_open",
-                "must lie in (0, 0.5)",
-            ));
+            return Err(GenomicsError::invalid("gap_open", "must lie in (0, 0.5)"));
         }
         if !(0.0..1.0).contains(&self.gap_extend) {
-            return Err(GenomicsError::invalid(
-                "gap_extend",
-                "must lie in [0, 1)",
-            ));
+            return Err(GenomicsError::invalid("gap_extend", "must lie in [0, 1)"));
         }
         Ok(())
     }
@@ -194,10 +188,7 @@ pub fn log10_p_read_given_haplotype(
             // M state.
             if j >= 1 {
                 let prev = (i - 1) * w + (j - 1);
-                let from = log10_add(
-                    log10_add(fm[prev] + tmm, fi[prev] + tim),
-                    fd[prev] + tdm,
-                );
+                let from = log10_add(log10_add(fm[prev] + tmm, fi[prev] + tim), fd[prev] + tdm);
                 fm[idx] = log10_match(rb, haplotype[j - 1], q) + from;
             }
             // I state (insertion in read).
@@ -290,8 +281,7 @@ mod tests {
         let far = b"ACGTACGTACGTACGT"; // pos 6 differs from read
         let p_near =
             log10_p_read_given_haplotype(read, &q, near, &PairHmmParams::default()).unwrap();
-        let p_far =
-            log10_p_read_given_haplotype(read, &q, far, &PairHmmParams::default()).unwrap();
+        let p_far = log10_p_read_given_haplotype(read, &q, far, &PairHmmParams::default()).unwrap();
         assert!(
             p_near > p_far,
             "near {p_near} should beat far {p_far} for a read carrying the SNV"
@@ -318,8 +308,7 @@ mod tests {
         let read = b"ACGTGGACGT";
         let hap = b"ACGTACGT";
         let q = vec![40u8; read.len()];
-        let lp =
-            log10_p_read_given_haplotype(read, &q, hap, &PairHmmParams::default()).unwrap();
+        let lp = log10_p_read_given_haplotype(read, &q, hap, &PairHmmParams::default()).unwrap();
         // We are not asserting an absolute number; just that the model
         // still returns a finite value (not LOG10_ZERO).
         assert!(lp > -50.0, "log10 P was {lp}");
@@ -330,8 +319,7 @@ mod tests {
         let read = b"ACGTCGT"; // missing the middle A
         let hap = b"ACGTACGT";
         let q = vec![40u8; read.len()];
-        let lp =
-            log10_p_read_given_haplotype(read, &q, hap, &PairHmmParams::default()).unwrap();
+        let lp = log10_p_read_given_haplotype(read, &q, hap, &PairHmmParams::default()).unwrap();
         assert!(lp.is_finite() && lp > -50.0, "lp = {lp}");
     }
 

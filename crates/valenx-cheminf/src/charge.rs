@@ -330,12 +330,12 @@ mod tests {
         // explicit `match z` arm is exercised. Each is neutral, so
         // the total Gasteiger charge must vanish.
         for (smiles, z) in [
-            ("CF", 9u8),    // fluoromethane — F arm
-            ("CCl", 17),    // chloromethane — Cl arm
-            ("CBr", 35),    // bromomethane — Br arm
-            ("CI", 53),     // iodomethane — I arm
-            ("CS", 16),     // methanethiol — S arm
-            ("CP", 15),     // methylphosphine — P arm
+            ("CF", 9u8), // fluoromethane — F arm
+            ("CCl", 17), // chloromethane — Cl arm
+            ("CBr", 35), // bromomethane — Br arm
+            ("CI", 53),  // iodomethane — I arm
+            ("CS", 16),  // methanethiol — S arm
+            ("CP", 15),  // methylphosphine — P arm
         ] {
             let m = mol_from_smiles(smiles).unwrap();
             assert!(
@@ -350,11 +350,7 @@ mod tests {
             // The halogen / heteroatom is more electronegative than
             // carbon, so it carries a non-positive partial charge.
             let q = gasteiger_charges(&m);
-            let hetero = m
-                .atoms
-                .iter()
-                .position(|a| a.atomic_number == z)
-                .unwrap();
+            let hetero = m.atoms.iter().position(|a| a.atomic_number == z).unwrap();
             assert!(
                 q[hetero] <= 1e-9,
                 "{smiles}: Z={z} should not be positive, got {}",

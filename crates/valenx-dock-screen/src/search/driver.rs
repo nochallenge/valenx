@@ -216,8 +216,7 @@ pub fn flexible_dock(
     }
     // 1. Build a rigid receptor with the flexible side-chain atoms
     //    removed — the static grid sees only the fixed core.
-    let flex_set: std::collections::BTreeSet<usize> =
-        flex_atom_indices.iter().copied().collect();
+    let flex_set: std::collections::BTreeSet<usize> = flex_atom_indices.iter().copied().collect();
     let rigid_core = Receptor {
         atoms: receptor
             .atoms
@@ -280,8 +279,7 @@ pub fn flexible_dock(
                     .collect(),
             };
             let sidechain_energy =
-                vina_score_complex(&sidechain_receptor, &ligand_for_sidechain, 0)
-                    .intermolecular();
+                vina_score_complex(&sidechain_receptor, &ligand_for_sidechain, 0).intermolecular();
             let total = top.score + sidechain_energy;
             if total < best_total {
                 best_total = total;
@@ -444,7 +442,15 @@ TORSDOF 0
         let lig = one_carbon_ligand();
         let grid = GridBox::cubic([1.0, 0.0, 0.0], 10.0).unwrap();
         // Empty receptor.
-        assert!(rigid_dock(&Receptor::default(), &lig, &grid, SearchAlgorithm::fast(), 1, 1).is_err());
+        assert!(rigid_dock(
+            &Receptor::default(),
+            &lig,
+            &grid,
+            SearchAlgorithm::fast(),
+            1,
+            1
+        )
+        .is_err());
         // Zero runs.
         assert!(rigid_dock(&r, &lig, &grid, SearchAlgorithm::fast(), 0, 1).is_err());
     }

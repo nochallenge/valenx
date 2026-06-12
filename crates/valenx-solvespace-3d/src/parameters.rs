@@ -241,7 +241,10 @@ impl Parser {
 }
 
 fn parse(expr: &str) -> Result<Ast, ParamError> {
-    let mut p = Parser { toks: tokenize(expr)?, pos: 0 };
+    let mut p = Parser {
+        toks: tokenize(expr)?,
+        pos: 0,
+    };
     let ast = p.parse_expr()?;
     if p.pos != p.toks.len() {
         return Err(ParamError::Parse("trailing tokens after expression".into()));
@@ -260,7 +263,11 @@ fn apply_fn(name: &str, x: f64) -> Result<f64, ParamError> {
     })
 }
 
-fn compute_ast(ast: &Ast, table: &ParameterTable, visiting: &mut Vec<String>) -> Result<f64, ParamError> {
+fn compute_ast(
+    ast: &Ast,
+    table: &ParameterTable,
+    visiting: &mut Vec<String>,
+) -> Result<f64, ParamError> {
     match ast {
         Ast::Num(n) => Ok(*n),
         Ast::Neg(a) => Ok(-compute_ast(a, table, visiting)?),

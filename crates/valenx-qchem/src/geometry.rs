@@ -247,9 +247,9 @@ impl MolecularGeometry {
                 continue;
             }
             let mut tok = line.split_whitespace();
-            let sym = tok.next().ok_or_else(|| {
-                QchemError::parse("xyz", format!("atom line {} is empty", i + 1))
-            })?;
+            let sym = tok
+                .next()
+                .ok_or_else(|| QchemError::parse("xyz", format!("atom line {} is empty", i + 1)))?;
             let mut coord = [0.0f64; 3];
             for (k, c) in coord.iter_mut().enumerate() {
                 let raw = tok.next().ok_or_else(|| {
@@ -470,14 +470,14 @@ mod tests {
     fn xyz_garbage_and_truncated_input_never_panics() {
         // None of these may panic — each must be a typed error.
         for bad in [
-            "",                       // empty
-            "notanumber\n",           // bad count
-            "2\n",                    // missing comment + atoms
-            "2\ncomment\n",           // declared 2, zero atoms
+            "",                        // empty
+            "notanumber\n",            // bad count
+            "2\n",                     // missing comment + atoms
+            "2\ncomment\n",            // declared 2, zero atoms
             "1\ncomment\nH 0.0 0.0\n", // atom missing a coordinate
-            "1\ncomment\nH x y z\n",  // non-numeric coordinates
-            "1\ncomment\nXx 0 0 0\n", // unknown element
-            "\n\n\n",                 // only blank lines
+            "1\ncomment\nH x y z\n",   // non-numeric coordinates
+            "1\ncomment\nXx 0 0 0\n",  // unknown element
+            "\n\n\n",                  // only blank lines
         ] {
             let r = MolecularGeometry::from_xyz_str(bad);
             assert!(r.is_err(), "input {bad:?} should be a typed error");

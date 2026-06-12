@@ -232,7 +232,14 @@ mod tests {
         g.view_indices = vec![0, 1, 2, 3];
         d.projection_groups.push(g);
         // Detail view.
-        d.detail_views.push(DetailView::new(0, [10.0, 10.0], 5.0, [200.0, 100.0], 4.0, "A"));
+        d.detail_views.push(DetailView::new(
+            0,
+            [10.0, 10.0],
+            5.0,
+            [200.0, 100.0],
+            4.0,
+            "A",
+        ));
         // BOM with extended columns.
         let mut bom = Bom::new();
         bom.add(BomItem::full("Bracket", 2, "P-001", "desc", "Steel"));

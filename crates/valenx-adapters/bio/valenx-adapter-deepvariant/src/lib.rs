@@ -142,10 +142,7 @@ impl Adapter for DeepVariantAdapter {
         let source_reference = if input.reference.is_absolute() {
             input.reference.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.reference,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.reference)?
         };
         if !source_reference.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -161,10 +158,7 @@ impl Adapter for DeepVariantAdapter {
         let source_input_bam = if input.input_bam.is_absolute() {
             input.input_bam.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input_bam,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input_bam)?
         };
         if !source_input_bam.is_file() {
             return Err(AdapterError::InvalidCase {

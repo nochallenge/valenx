@@ -72,8 +72,10 @@ impl LandingAction {
     /// resolution inside [`render`].
     pub fn default_links_resolve(repo_url: &str) -> [(&'static str, String); 3] {
         let learn_more = local_doc_or_url("README.md", repo_url);
-        let whats_new =
-            local_doc_or_url("CHANGELOG.md", &format!("{repo_url}/blob/master/CHANGELOG.md"));
+        let whats_new = local_doc_or_url(
+            "CHANGELOG.md",
+            &format!("{repo_url}/blob/master/CHANGELOG.md"),
+        );
         let docs = local_doc_or_url(
             "docs/INSTALLER.md",
             &format!("{repo_url}/blob/master/docs/INSTALLER.md"),
@@ -244,24 +246,17 @@ pub fn render(
             // binary. Resolved through `LandingAction::default_links_resolve`
             // so the unit tests exercise the same code path the render
             // does.
-            let [
-                (learn_label, learn_more),
-                (whats_label, whats_new),
-                (docs_label, docs),
-            ] = LandingAction::default_links_resolve(repo_url);
+            let [(learn_label, learn_more), (whats_label, whats_new), (docs_label, docs)] =
+                LandingAction::default_links_resolve(repo_url);
 
             if link_row(ui, learn_label).clicked() {
                 action = Some(LandingAction::OpenLink(learn_more));
             }
-            ui.label(
-                egui::RichText::new("  ·  ").color(egui::Color32::from_gray(110)),
-            );
+            ui.label(egui::RichText::new("  ·  ").color(egui::Color32::from_gray(110)));
             if link_row(ui, whats_label).clicked() {
                 action = Some(LandingAction::OpenLink(whats_new));
             }
-            ui.label(
-                egui::RichText::new("  ·  ").color(egui::Color32::from_gray(110)),
-            );
+            ui.label(egui::RichText::new("  ·  ").color(egui::Color32::from_gray(110)));
             if link_row(ui, docs_label).clicked() {
                 action = Some(LandingAction::OpenLink(docs));
             }
@@ -278,15 +273,9 @@ pub fn render(
 /// stroke) plus a centred title + hint label drawn through a child
 /// UI. Hovering brightens the fill + recolours the stroke so users
 /// get the "this is a button" affordance.
-fn action_card(
-    ui: &mut egui::Ui,
-    width: f32,
-    title: &str,
-    hint: &str,
-) -> egui::Response {
+fn action_card(ui: &mut egui::Ui, width: f32, title: &str, hint: &str) -> egui::Response {
     let height = 96.0;
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
     let (fill, stroke) = if response.hovered() {
         (
             egui::Color32::from_gray(52),

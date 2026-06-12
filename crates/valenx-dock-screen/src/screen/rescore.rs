@@ -112,8 +112,7 @@ fn born_radii(atoms: &[GbAtom]) -> Vec<f64> {
             // Still's pairwise descreening kernel (volume of j seen
             // from i, smoothed). Damped so a far neighbour barely
             // contributes.
-            let term = constants::STILL_P * rj.powi(3)
-                / (d.powi(4) + 1.0).max(1.0);
+            let term = constants::STILL_P * rj.powi(3) / (d.powi(4) + 1.0).max(1.0);
             inv -= term;
         }
         // Effective radius — never let it collapse below the intrinsic
@@ -126,8 +125,7 @@ fn born_radii(atoms: &[GbAtom]) -> Vec<f64> {
 /// The Still GB polarisation energy of a set of atoms with the given
 /// effective Born radii.
 fn gb_polarisation(atoms: &[GbAtom], radii: &[f64]) -> f64 {
-    let factor = -0.5 * constants::COULOMB_K
-        * (1.0 / constants::EPS_IN - 1.0 / constants::EPS_OUT);
+    let factor = -0.5 * constants::COULOMB_K * (1.0 / constants::EPS_IN - 1.0 / constants::EPS_OUT);
     let n = atoms.len();
     let mut energy = 0.0;
     for i in 0..n {

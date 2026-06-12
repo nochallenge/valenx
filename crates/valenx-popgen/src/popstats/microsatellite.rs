@@ -39,10 +39,7 @@ impl StepwiseMutationModel {
     /// `min >= max`.
     pub fn new(mutation_rate: f64, min_repeats: i32, max_repeats: i32) -> Result<Self> {
         if !(0.0..=1.0).contains(&mutation_rate) {
-            return Err(PopgenError::invalid(
-                "mutation_rate",
-                "must lie in [0, 1]",
-            ));
+            return Err(PopgenError::invalid("mutation_rate", "must lie in [0, 1]"));
         }
         if min_repeats >= max_repeats {
             return Err(PopgenError::invalid(

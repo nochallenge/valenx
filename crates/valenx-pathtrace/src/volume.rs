@@ -477,11 +477,7 @@ pub fn march_ray(
         // scaled by the transmittance reaching this sample and the
         // step length.
         if medium.emission.max_component() > 0.0 {
-            radiance = radiance.add(
-                throughput
-                    .mul(medium.emission)
-                    .scale(sigma_a * dt),
-            );
+            radiance = radiance.add(throughput.mul(medium.emission).scale(sigma_a * dt));
         }
 
         // (2) Single scattering: connect to every light. The
@@ -584,23 +580,13 @@ fn single_scatter_from_light(
         // inside or outside the box).
         let s1 = s1.min(dist);
         let shadow_step = (s1 - s0) / params.shadow_steps.max(1) as f32;
-        transmittance(
-            &shadow_ray,
-            s0,
-            s1,
-            medium,
-            bounds,
-            shadow_step.max(1e-4),
-        )
+        transmittance(&shadow_ray, s0, s1, medium, bounds, shadow_step.max(1e-4))
     } else {
         Vec3::ONE
     };
 
     // Light irradiance at `p`, phase-weighted, shadow-attenuated.
-    light
-        .intensity
-        .scale(phase / dist2)
-        .mul(shadow_tr)
+    light.intensity.scale(phase / dist2).mul(shadow_tr)
 }
 
 /// Render a participating medium standalone into an [`HdrFramebuffer`].
@@ -698,11 +684,13 @@ mod tests {
             // Uniform-cosine quadrature over the sphere.
             let cos = -1.0 + 2.0 * (i as f32 + 0.5) / n as f32;
             // dω = 2π · d(cosθ); d(cosθ) = 2/n.
-            acc += henyey_greenstein(cos, g) as f64
-                * (2.0 * std::f64::consts::PI)
-                * (2.0 / n as f64);
+            acc +=
+                henyey_greenstein(cos, g) as f64 * (2.0 * std::f64::consts::PI) * (2.0 / n as f64);
         }
-        assert!((acc - 1.0).abs() < 0.02, "phase integral {acc} should be ~1");
+        assert!(
+            (acc - 1.0).abs() < 0.02,
+            "phase integral {acc} should be ~1"
+        );
     }
 
     #[test]
@@ -769,8 +757,7 @@ mod tests {
         // An emissive medium adds radiance even with no external
         // light — the emission-absorption term.
         let dark = Medium::homogeneous(1.0, 0.5, 0.0);
-        let glowing = Medium::homogeneous(1.0, 0.5, 0.0)
-            .with_emission(vec3(2.0, 2.0, 2.0));
+        let glowing = Medium::homogeneous(1.0, 0.5, 0.0).with_emission(vec3(2.0, 2.0, 2.0));
         let bounds = unit_box();
         let ray = Ray::new(vec3(-5.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0));
         let params = VolumeParams {
@@ -798,11 +785,13 @@ mod tests {
     fn a_zero_density_medium_is_a_no_op() {
         // A medium with density 0 must be perfectly transparent: full
         // transmittance, zero own radiance — an exact no-op.
-        let medium = Medium::homogeneous(0.0, 5.0, 1.0)
-            .with_emission(vec3(9.0, 9.0, 9.0));
+        let medium = Medium::homogeneous(0.0, 5.0, 1.0).with_emission(vec3(9.0, 9.0, 9.0));
         let bounds = unit_box();
         let ray = Ray::new(vec3(-5.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0));
-        let lights = [VolumeLight::point(vec3(0.0, 5.0, 0.0), vec3(50.0, 50.0, 50.0))];
+        let lights = [VolumeLight::point(
+            vec3(0.0, 5.0, 0.0),
+            vec3(50.0, 50.0, 50.0),
+        )];
         let params = VolumeParams::default();
         let mut rng = Rng::new(3, 3);
         let result = march_ray(&ray, &medium, &bounds, &lights, &params, &mut rng);
@@ -819,15 +808,17 @@ mod tests {
         // Compositing over a background returns the background exactly.
         let bg = vec3(0.3, 0.6, 0.9);
         let out = result.over(bg);
-        assert!((out.sub(bg)).length() < 1e-6, "no-op medium changes nothing");
+        assert!(
+            (out.sub(bg)).length() < 1e-6,
+            "no-op medium changes nothing"
+        );
     }
 
     #[test]
     fn a_ray_missing_the_box_is_a_no_op() {
         // A ray that never enters the medium box → no radiance, full
         // transmittance.
-        let medium = Medium::homogeneous(1.0, 3.0, 0.5)
-            .with_emission(vec3(5.0, 5.0, 5.0));
+        let medium = Medium::homogeneous(1.0, 3.0, 0.5).with_emission(vec3(5.0, 5.0, 5.0));
         let bounds = unit_box();
         // A ray well above the box, travelling parallel to it.
         let ray = Ray::new(vec3(-5.0, 10.0, 0.0), vec3(1.0, 0.0, 0.0));
@@ -921,8 +912,7 @@ mod tests {
             16,
             16,
         );
-        let medium = Medium::homogeneous(1.0, 1.0, 0.0)
-            .with_emission(vec3(3.0, 3.0, 3.0));
+        let medium = Medium::homogeneous(1.0, 1.0, 0.0).with_emission(vec3(3.0, 3.0, 3.0));
         let bounds = unit_box();
         let env = EnvironmentMap::uniform([0.0, 0.0, 0.0]);
         let params = VolumeParams {

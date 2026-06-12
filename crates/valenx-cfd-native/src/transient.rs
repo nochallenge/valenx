@@ -257,20 +257,37 @@ pub fn solve_transient(
 
             // --- implicit momentum predictor with the unsteady term ---
             solve_u_momentum(
-                &mut u, &v, &p, &u_old, &mut apu, grid, rho, nu, dt, bcs,
+                &mut u,
+                &v,
+                &p,
+                &u_old,
+                &mut apu,
+                grid,
+                rho,
+                nu,
+                dt,
+                bcs,
                 controls.relax_u,
             );
             solve_v_momentum(
-                &u, &mut v, &p, &v_old, &mut apv, grid, rho, nu, dt, bcs,
+                &u,
+                &mut v,
+                &p,
+                &v_old,
+                &mut apv,
+                grid,
+                rho,
+                nu,
+                dt,
+                bcs,
                 controls.relax_u,
             );
             apply_velocity_bcs(&mut u, &mut v, bcs, nx, ny);
 
             // --- pressure-correction Poisson equation ---
             let mut coeffs = PoissonCoeffs::zeros(nx, ny);
-            let mass_imbalance = assemble_pressure_correction(
-                &mut coeffs, &u, &v, &apu, &apv, grid, rho, bcs,
-            );
+            let mass_imbalance =
+                assemble_pressure_correction(&mut coeffs, &u, &v, &apu, &apv, grid, rho, bcs);
 
             // --- solve for p' ---
             let pin_mean = !has_outlet(bcs);
@@ -290,8 +307,7 @@ pub fn solve_transient(
             apply_velocity_bcs(&mut u, &mut v, bcs, nx, ny);
 
             step_residual = mass_imbalance / mass_scale;
-            if step_residual.is_finite() && step_residual <= controls.tolerance
-            {
+            if step_residual.is_finite() && step_residual <= controls.tolerance {
                 break;
             }
             if !step_residual.is_finite() || step_residual > 1e12 {
@@ -324,9 +340,7 @@ pub fn solve_transient(
 fn reference_velocity(bcs: &Boundaries) -> f64 {
     let mag = |s: &SideBc| -> f64 {
         match s {
-            SideBc::Wall { u, v } | SideBc::Inlet { u, v } => {
-                (u * u + v * v).sqrt()
-            }
+            SideBc::Wall { u, v } | SideBc::Inlet { u, v } => (u * u + v * v).sqrt(),
             SideBc::Outlet => 0.0,
         }
     };
@@ -347,24 +361,14 @@ fn has_outlet(bcs: &Boundaries) -> bool {
 /// Stamp the prescribed boundary velocities onto the velocity fields —
 /// the transient counterpart of [`crate::solver`]'s private
 /// `apply_velocity_bcs`.
-fn apply_velocity_bcs(
-    u: &mut Field,
-    v: &mut Field,
-    bcs: &Boundaries,
-    nx: usize,
-    ny: usize,
-) {
+fn apply_velocity_bcs(u: &mut Field, v: &mut Field, bcs: &Boundaries, nx: usize, ny: usize) {
     for j in 0..ny {
         match bcs.west {
-            SideBc::Wall { u: uw, .. } | SideBc::Inlet { u: uw, .. } => {
-                u.set(0, j, uw)
-            }
+            SideBc::Wall { u: uw, .. } | SideBc::Inlet { u: uw, .. } => u.set(0, j, uw),
             SideBc::Outlet => {}
         }
         match bcs.east {
-            SideBc::Wall { u: ue, .. } | SideBc::Inlet { u: ue, .. } => {
-                u.set(nx, j, ue)
-            }
+            SideBc::Wall { u: ue, .. } | SideBc::Inlet { u: ue, .. } => u.set(nx, j, ue),
             SideBc::Outlet => {
                 let interior = u.at(nx - 1, j);
                 u.set(nx, j, interior);
@@ -373,15 +377,11 @@ fn apply_velocity_bcs(
     }
     for i in 0..nx {
         match bcs.south {
-            SideBc::Wall { v: vs, .. } | SideBc::Inlet { v: vs, .. } => {
-                v.set(i, 0, vs)
-            }
+            SideBc::Wall { v: vs, .. } | SideBc::Inlet { v: vs, .. } => v.set(i, 0, vs),
             SideBc::Outlet => {}
         }
         match bcs.north {
-            SideBc::Wall { v: vn, .. } | SideBc::Inlet { v: vn, .. } => {
-                v.set(i, ny, vn)
-            }
+            SideBc::Wall { v: vn, .. } | SideBc::Inlet { v: vn, .. } => v.set(i, ny, vn),
             SideBc::Outlet => {
                 let interior = v.at(i, ny - 1);
                 v.set(i, ny, interior);
@@ -434,8 +434,7 @@ fn solve_u_momentum(
             for i in 1..nx {
                 let fe = rho * dy * 0.5 * (u.at(i, j) + u.at(i + 1, j));
                 let fw = rho * dy * 0.5 * (u.at(i - 1, j) + u.at(i, j));
-                let fn_ =
-                    rho * dx * 0.5 * (v.at(i - 1, j + 1) + v.at(i, j + 1));
+                let fn_ = rho * dx * 0.5 * (v.at(i - 1, j + 1) + v.at(i, j + 1));
                 let fs = rho * dx * 0.5 * (v.at(i - 1, j) + v.at(i, j));
 
                 let ae = hybrid_coeff(dx_diff, fe, -1.0);
@@ -526,8 +525,7 @@ fn solve_v_momentum(
             for i in 0..nx {
                 let fn_ = rho * dx * 0.5 * (v.at(i, j) + v.at(i, j + 1));
                 let fs = rho * dx * 0.5 * (v.at(i, j - 1) + v.at(i, j));
-                let fe =
-                    rho * dy * 0.5 * (u.at(i + 1, j - 1) + u.at(i + 1, j));
+                let fe = rho * dy * 0.5 * (u.at(i + 1, j - 1) + u.at(i + 1, j));
                 let fw = rho * dy * 0.5 * (u.at(i, j - 1) + u.at(i, j));
 
                 let an = hybrid_coeff(dy_diff, fn_, -1.0);
@@ -628,8 +626,8 @@ fn assemble_pressure_correction(
                 0.0
             };
 
-            let mass_out = rho * dy * (u.at(i + 1, j) - u.at(i, j))
-                + rho * dx * (v.at(i, j + 1) - v.at(i, j));
+            let mass_out =
+                rho * dy * (u.at(i + 1, j) - u.at(i, j)) + rho * dx * (v.at(i, j + 1) - v.at(i, j));
             coeffs.ae.set(i, j, ae);
             coeffs.aw.set(i, j, aw);
             coeffs.an.set(i, j, an);

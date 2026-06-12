@@ -105,13 +105,7 @@ pub fn iterated_local_search_vina(
     }
     // Build the dock crate's own grid bundle so the search is
     // bit-identical to a native valenx-dock run.
-    let bundle = GridBundle::build(
-        receptor,
-        ligand,
-        grid.origin(),
-        grid.spacing,
-        grid.dims(),
-    );
+    let bundle = GridBundle::build(receptor, ligand, grid.origin(), grid.spacing, grid.dims());
     let (best_pose, best_score) =
         iterated_local_search(ligand, start, &bundle, params.iterations, seed);
     Ok(IlsResult {
@@ -249,14 +243,12 @@ TORSDOF 0
         let r = carbon_receptor();
         let lig = one_carbon_ligand();
         let grid = GridBox::with_spacing([0.0; 3], [14.0; 3], 0.375).unwrap();
-        let maps =
-            AffinityMapSet::precompute(&r, &[Ad4AtomType::C], &grid, MapKind::Vina).unwrap();
+        let maps = AffinityMapSet::precompute(&r, &[Ad4AtomType::C], &grid, MapKind::Vina).unwrap();
         let obj = PoseObjective::uncharged(&lig, &maps);
         let mut start = Pose::identity(0);
         start.translation = Vector3::new(6.0, 0.0, 0.0);
         let before = obj.score(&start);
-        let result =
-            iterated_local_search_objective(&obj, &start, &IlsParams::fast(), 7).unwrap();
+        let result = iterated_local_search_objective(&obj, &start, &IlsParams::fast(), 7).unwrap();
         assert!(result.best_score <= before, "ILS must not worsen the score");
     }
 
@@ -265,8 +257,7 @@ TORSDOF 0
         let r = carbon_receptor();
         let lig = one_carbon_ligand();
         let grid = GridBox::with_spacing([0.0; 3], [14.0; 3], 0.5).unwrap();
-        let maps =
-            AffinityMapSet::precompute(&r, &[Ad4AtomType::C], &grid, MapKind::Vina).unwrap();
+        let maps = AffinityMapSet::precompute(&r, &[Ad4AtomType::C], &grid, MapKind::Vina).unwrap();
         let obj = PoseObjective::uncharged(&lig, &maps);
         let params = IlsParams {
             kt: 0.0,

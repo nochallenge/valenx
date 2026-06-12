@@ -80,11 +80,7 @@ pub fn scaffold_atom_set(mol: &Molecule) -> Vec<usize> {
             if !keep[i] || in_scaffold[i] {
                 continue; // ring atoms are never pruned
             }
-            let live_degree = mol
-                .neighbors(i)
-                .iter()
-                .filter(|&&v| keep[v])
-                .count();
+            let live_degree = mol.neighbors(i).iter().filter(|&&v| keep[v]).count();
             if live_degree <= 1 {
                 keep[i] = false;
                 changed = true;

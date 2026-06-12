@@ -178,11 +178,12 @@ impl Adapter for CtffindAdapter {
             ("[bio.ctffind].output_txt", &input.output_txt),
         ] {
             if let Some(s) = value.to_str() {
-                valenx_core::adapter_helpers::validate_output_basename(s, field)
-                    .map_err(|e| AdapterError::InvalidCase {
+                valenx_core::adapter_helpers::validate_output_basename(s, field).map_err(|e| {
+                    AdapterError::InvalidCase {
                         case_path: case.path.join("case.toml"),
                         reason: format!("{e}"),
-                    })?;
+                    }
+                })?;
             } else {
                 return Err(AdapterError::InvalidCase {
                     case_path: case.path.join("case.toml"),
@@ -208,10 +209,7 @@ impl Adapter for CtffindAdapter {
         let source_micrograph = if input.micrograph.is_absolute() {
             input.micrograph.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.micrograph,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.micrograph)?
         };
         if !source_micrograph.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -262,10 +260,9 @@ impl Adapter for CtffindAdapter {
             input.cs,
             input.amplitude_contrast,
         );
-        valenx_core::io_caps::atomic_write_bytes(&params_path, params_body.as_bytes())
-            .map_err(|e| {
-                AdapterError::Other(anyhow::anyhow!("write {} body: {e}", params_path.display()))
-            })?;
+        valenx_core::io_caps::atomic_write_bytes(&params_path, params_body.as_bytes()).map_err(
+            |e| AdapterError::Other(anyhow::anyhow!("write {} body: {e}", params_path.display())),
+        )?;
 
         // Stash the params filename under a sentinel env var so
         // run() can recover it. The custom run() strips this var
@@ -441,7 +438,11 @@ impl Adapter for CtffindAdapter {
                     }
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(status) = kill_guard.inner_mut().try_wait().map_err(AdapterError::Io)? {
+                    if let Some(status) = kill_guard
+                        .inner_mut()
+                        .try_wait()
+                        .map_err(AdapterError::Io)?
+                    {
                         // Drain any remaining lines so nothing's lost.
                         for (level, line) in rx.try_iter() {
                             process_line(level, &line, ctx, &mut warnings);
@@ -730,9 +731,7 @@ amplitude_contrast = 0.07
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = CtffindAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = CtffindAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("[bio.ctffind].output_diagnostic"),

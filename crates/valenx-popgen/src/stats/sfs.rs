@@ -159,12 +159,7 @@ mod tests {
     #[test]
     fn folded_spectrum_uses_minor_allele() {
         // 4 samples; site with 3 derived copies folds to minor count 1.
-        let m = matrix(vec![
-            vec![1, 1],
-            vec![1, 0],
-            vec![1, 0],
-            vec![0, 0],
-        ]);
+        let m = matrix(vec![vec![1, 1], vec![1, 0], vec![1, 0], vec![0, 0]]);
         // Site 0: 3 derived -> minor 1. Site 1: 1 derived -> minor 1.
         let sfs = folded_spectrum(&m).unwrap();
         assert!(sfs.is_folded());
@@ -186,12 +181,7 @@ mod tests {
     fn folded_segregating_sites_excludes_monomorphic() {
         // 4 samples, 2 sites: site 0 is monomorphic (all ancestral),
         // site 1 is segregating (one derived copy -> minor 1).
-        let m = matrix(vec![
-            vec![0, 1],
-            vec![0, 0],
-            vec![0, 0],
-            vec![0, 0],
-        ]);
+        let m = matrix(vec![vec![0, 1], vec![0, 0], vec![0, 0], vec![0, 0]]);
         let sfs = folded_spectrum(&m).unwrap();
         assert!(sfs.is_folded());
         // counts[0] = monomorphic class (site 0); counts[1] = single
@@ -205,8 +195,7 @@ mod tests {
 
     #[test]
     fn empty_matrix_has_an_empty_spectrum() {
-        let m = GenotypeMatrix::from_rows(vec![vec![], vec![], vec![]], vec![])
-            .unwrap();
+        let m = GenotypeMatrix::from_rows(vec![vec![], vec![], vec![]], vec![]).unwrap();
         let sfs = site_frequency_spectrum(&m).unwrap();
         assert_eq!(sfs.segregating_sites(), 0);
     }

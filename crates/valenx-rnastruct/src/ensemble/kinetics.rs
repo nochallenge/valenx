@@ -52,8 +52,8 @@
 //! - The simulator is single-threaded; trajectories are sequenced not
 //!   parallel. The deterministic seed makes runs reproducible.
 
-use crate::error::{Result, RnaStructError};
 use crate::ensemble::rng::Rng;
+use crate::error::{Result, RnaStructError};
 use crate::fold::energy::{self, GAS_CONSTANT};
 use crate::fold::eval::structure_energy;
 use crate::fold::nussinov::MIN_HAIRPIN;
@@ -312,10 +312,7 @@ pub fn fold_kinetics(
     params: &KineticParams,
 ) -> Result<KineticEnsemble> {
     if n_trajectories == 0 {
-        return Err(RnaStructError::invalid(
-            "n_trajectories",
-            "must be >= 1",
-        ));
+        return Err(RnaStructError::invalid("n_trajectories", "must be >= 1"));
     }
     let mfe_r = mfe(seq)?;
     let mfe_struct = mfe_r.structure.clone();

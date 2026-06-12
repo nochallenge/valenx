@@ -156,8 +156,14 @@ mod tests {
         );
 
         // Monotonic (Ea > 0): a faster target needs a warmer T, a slower one a cooler T.
-        assert!(temperature_for_arrhenius_rate_ratio(2.0, ea, t_ref) > t_ref, "2× → warmer");
-        assert!(temperature_for_arrhenius_rate_ratio(0.5, ea, t_ref) < t_ref, "0.5× → cooler");
+        assert!(
+            temperature_for_arrhenius_rate_ratio(2.0, ea, t_ref) > t_ref,
+            "2× → warmer"
+        );
+        assert!(
+            temperature_for_arrhenius_rate_ratio(0.5, ea, t_ref) < t_ref,
+            "0.5× → cooler"
+        );
 
         // Worked closed form.
         let expected = 1.0 / (1.0 / t_ref - crate::nernst::GAS_CONSTANT * 2.0_f64.ln() / ea);
@@ -174,7 +180,10 @@ mod tests {
         let t = 300.0;
 
         // No temperature change → ratio 1.
-        assert!((arrhenius_rate_ratio(85_000.0, t, t) - 1.0).abs() < 1e-12, "ratio(T,T) = 1");
+        assert!(
+            (arrhenius_rate_ratio(85_000.0, t, t) - 1.0).abs() < 1e-12,
+            "ratio(T,T) = 1"
+        );
 
         // Definition: k(T)/k(T_ref) = exp(Ea/R·(1/T_ref − 1/T)).
         let ea = 85_000.0;
@@ -212,19 +221,31 @@ mod tests {
     #[test]
     fn q10_from_activation_energy_inverts_arrhenius() {
         // Eₐ = 0 ⇒ temperature-independent ⇒ Q10 = 1 exactly.
-        assert!((q10_from_activation_energy(0.0, 300.0) - 1.0).abs() < 1e-12, "Eₐ=0 → Q10=1");
+        assert!(
+            (q10_from_activation_energy(0.0, 300.0) - 1.0).abs() < 1e-12,
+            "Eₐ=0 → Q10=1"
+        );
 
         // STRONG round-trip cross-check threading arrhenius_activation_energy_from_q10
         // (#233): Q10 → Eₐ → Q10 and Eₐ → Q10 → Eₐ both recover exactly — two
         // independent closed forms (exp of the group vs ln of it).
-        for &(q10, t) in &[(3.0_f64, 279.45_f64), (2.0, 293.15), (2.5, 310.15), (1.5, 300.0)] {
+        for &(q10, t) in &[
+            (3.0_f64, 279.45_f64),
+            (2.0, 293.15),
+            (2.5, 310.15),
+            (1.5, 300.0),
+        ] {
             let ea = arrhenius_activation_energy_from_q10(q10, t);
             assert!(
                 (q10_from_activation_energy(ea, t) - q10).abs() < 1e-9,
                 "Q10→Eₐ→Q10 at q10={q10}"
             );
         }
-        for &(ea, t) in &[(74000.0_f64, 279.45_f64), (50000.0, 300.0), (100000.0, 310.0)] {
+        for &(ea, t) in &[
+            (74000.0_f64, 279.45_f64),
+            (50000.0, 300.0),
+            (100000.0, 310.0),
+        ] {
             let q10 = q10_from_activation_energy(ea, t);
             assert!(
                 (arrhenius_activation_energy_from_q10(q10, t) - ea).abs() / ea < 1e-12,
@@ -234,7 +255,10 @@ mod tests {
 
         // Physical anchor: HH gating Eₐ ≈ 74 kJ/mol at 6.3 °C ⇒ Q10 ≈ 3.
         let q10_hh = q10_from_activation_energy(74_000.0, 6.3 + 273.15);
-        assert!((q10_hh - 3.0).abs() < 0.05, "HH gating Q10 ≈ 3, got {q10_hh}");
+        assert!(
+            (q10_hh - 3.0).abs() < 0.05,
+            "HH gating Q10 ≈ 3, got {q10_hh}"
+        );
 
         // Monotonic increasing in Eₐ (a higher activation energy is more T-sensitive).
         let t = 300.0;
@@ -254,7 +278,9 @@ mod tests {
         // −10 °C divides by Q10.
         assert!((q10_scale(1.0, 3.0, -3.7, 6.3) - 1.0 / 3.0).abs() < 1e-12);
         // Linear in the reference rate.
-        assert!((q10_scale(2.0, 3.0, 16.3, 6.3) - 2.0 * q10_scale(1.0, 3.0, 16.3, 6.3)).abs() < 1e-12);
+        assert!(
+            (q10_scale(2.0, 3.0, 16.3, 6.3) - 2.0 * q10_scale(1.0, 3.0, 16.3, 6.3)).abs() < 1e-12
+        );
     }
 
     #[test]
@@ -266,7 +292,10 @@ mod tests {
             (2.0, 2.5, 40.0, 10.0),
         ] {
             let recovered = temperature_for_q10_rate(q10_scale(r0, q, t, tref), r0, q, tref);
-            assert!((recovered - t).abs() <= 1e-12 * t.abs(), "T = T_ref + 10·ln(r/r0)/ln(q10)");
+            assert!(
+                (recovered - t).abs() <= 1e-12 * t.abs(),
+                "T = T_ref + 10·ln(r/r0)/ln(q10)"
+            );
         }
 
         // Worked: rate = 2·3² = 18 at Q10 = 3 is two decades above ref → +20 °C.
@@ -289,9 +318,18 @@ mod tests {
         );
 
         // Bare closed form (like q10_scale): non-physical input is non-finite, not 0.
-        assert!(temperature_for_q10_rate(-1.0, 1.0, 2.0, 20.0).is_nan(), "ln of negative");
-        assert!(!temperature_for_q10_rate(4.0, 1.0, 1.0, 20.0).is_finite(), "q10 = 1 → /0");
-        assert!(temperature_for_q10_rate(4.0, -1.0, 2.0, 20.0).is_nan(), "negative rate_ref");
+        assert!(
+            temperature_for_q10_rate(-1.0, 1.0, 2.0, 20.0).is_nan(),
+            "ln of negative"
+        );
+        assert!(
+            !temperature_for_q10_rate(4.0, 1.0, 1.0, 20.0).is_finite(),
+            "q10 = 1 → /0"
+        );
+        assert!(
+            temperature_for_q10_rate(4.0, -1.0, 2.0, 20.0).is_nan(),
+            "negative rate_ref"
+        );
     }
 
     #[test]
@@ -300,22 +338,42 @@ mod tests {
         // then fit Q10 back from the two rates — it recovers exactly. Ties #221 to
         // q10_scale (apply ↔ fit): the impl is (k2/k1)^(10/ΔT); the check composes
         // the independent q10_scale forward map.
-        for &(q10, t_ref, t) in &[(3.0_f64, 6.3_f64, 37.0_f64), (2.0, 20.0, 30.0), (2.5, 0.0, 25.0)] {
+        for &(q10, t_ref, t) in &[
+            (3.0_f64, 6.3_f64, 37.0_f64),
+            (2.0, 20.0, 30.0),
+            (2.5, 0.0, 25.0),
+        ] {
             let k1 = 1.7; // arbitrary reference rate
             let k2 = q10_scale(k1, q10, t, t_ref);
-            assert!((q10_from_rates(k1, k2, t_ref, t) - q10).abs() < 1e-9, "round-trip Q10={q10}");
+            assert!(
+                (q10_from_rates(k1, k2, t_ref, t) - q10).abs() < 1e-9,
+                "round-trip Q10={q10}"
+            );
         }
         // A 10 °C span makes Q10 the bare rate ratio (the definition).
-        assert!((q10_from_rates(2.0, 6.0, 20.0, 30.0) - 3.0).abs() < 1e-12, "ΔT=10 → Q10 = k2/k1");
+        assert!(
+            (q10_from_rates(2.0, 6.0, 20.0, 30.0) - 3.0).abs() < 1e-12,
+            "ΔT=10 → Q10 = k2/k1"
+        );
         // Equal rates → temperature-independent → Q10 = 1.
-        assert!((q10_from_rates(4.0, 4.0, 10.0, 25.0) - 1.0).abs() < 1e-12, "equal rates → Q10 = 1");
+        assert!(
+            (q10_from_rates(4.0, 4.0, 10.0, 25.0) - 1.0).abs() < 1e-12,
+            "equal rates → Q10 = 1"
+        );
         // Faster-when-warmer → Q10 > 1; slower-when-warmer → Q10 < 1.
-        assert!(q10_from_rates(1.0, 5.0, 10.0, 30.0) > 1.0, "speeds up → Q10 > 1");
-        assert!(q10_from_rates(5.0, 1.0, 10.0, 30.0) < 1.0, "slows down → Q10 < 1");
+        assert!(
+            q10_from_rates(1.0, 5.0, 10.0, 30.0) > 1.0,
+            "speeds up → Q10 > 1"
+        );
+        assert!(
+            q10_from_rates(5.0, 1.0, 10.0, 30.0) < 1.0,
+            "slows down → Q10 < 1"
+        );
         // A property of the pair: swapping both the rate and the temperature labels
         // leaves Q10 unchanged.
         assert!(
-            (q10_from_rates(2.0, 6.0, 20.0, 30.0) - q10_from_rates(6.0, 2.0, 30.0, 20.0)).abs() < 1e-12,
+            (q10_from_rates(2.0, 6.0, 20.0, 30.0) - q10_from_rates(6.0, 2.0, 30.0, 20.0)).abs()
+                < 1e-12,
             "symmetric in the (rate, temp) labelling"
         );
     }
@@ -325,7 +383,10 @@ mod tests {
         // Hodgkin–Huxley squid kinetics (6.3 °C) corrected to body temperature
         // (37 °C) with the typical gating Q10 ≈ 3 ⇒ ~30× faster.
         let factor = q10_scale(1.0, TYPICAL_GATING_Q10, 37.0, 6.3);
-        assert!((25.0..=35.0).contains(&factor), "squid→mammal factor {factor}");
+        assert!(
+            (25.0..=35.0).contains(&factor),
+            "squid→mammal factor {factor}"
+        );
         // Warming always speeds the process up relative to the reference.
         assert!(factor > 1.0);
     }
@@ -334,16 +395,25 @@ mod tests {
     fn arrhenius_activation_energy_matches_q10_and_threads_q10_from_rates() {
         use crate::nernst::GAS_CONSTANT as R;
         // A temperature-independent process (Q10 = 1) has zero activation energy.
-        assert!(arrhenius_activation_energy_from_q10(1.0, 283.15).abs() < 1e-9, "Q10=1 → Ea=0");
+        assert!(
+            arrhenius_activation_energy_from_q10(1.0, 283.15).abs() < 1e-9,
+            "Q10=1 → Ea=0"
+        );
         // Monotone in Q10: a steeper temperature dependence ⇒ larger Ea (> 0).
         let ea2 = arrhenius_activation_energy_from_q10(2.0, 283.15);
         let ea3 = arrhenius_activation_energy_from_q10(3.0, 283.15);
-        assert!(ea3 > ea2 && ea2 > 0.0, "monotone: Ea(3)={ea3} > Ea(2)={ea2} > 0");
+        assert!(
+            ea3 > ea2 && ea2 > 0.0,
+            "monotone: Ea(3)={ea3} > Ea(2)={ea2} > 0"
+        );
         // Round-trip back to Q10 via the Arrhenius law Q10 = exp(10·Ea/(R·T·(T+10))).
         for &(q10, t_k) in &[(2.0_f64, 290.0_f64), (3.0, 279.45), (2.5, 310.15)] {
             let ea = arrhenius_activation_energy_from_q10(q10, t_k);
             let q10_back = (10.0 * ea / (R * t_k * (t_k + 10.0))).exp();
-            assert!((q10_back - q10).abs() / q10 < 1e-9, "round-trip Q10 {q10} → {q10_back}");
+            assert!(
+                (q10_back - q10).abs() / q10 < 1e-9,
+                "round-trip Q10 {q10} → {q10_back}"
+            );
         }
         // STRONG non-tautological cross-check threading the independent q10_from_rates:
         // pick an Ea, build two Arrhenius rates 10 K apart, FIT a Q10 from them with
@@ -355,10 +425,16 @@ mod tests {
             let k_hot = (-ea / (R * (t_cold_k + 10.0))).exp();
             let q10 = q10_from_rates(k_cold, k_hot, temp_cold_c, temp_cold_c + 10.0);
             let ea_back = arrhenius_activation_energy_from_q10(q10, t_cold_k);
-            assert!((ea_back - ea).abs() / ea < 1e-9, "Ea→rates→Q10→Ea: {ea} vs {ea_back}");
+            assert!(
+                (ea_back - ea).abs() / ea < 1e-9,
+                "Ea→rates→Q10→Ea: {ea} vs {ea_back}"
+            );
         }
         // Physical anchor: HH gating Q10 ≈ 3 around 6.3 °C ⇒ Ea ≈ 74 kJ/mol.
         let ea_gating = arrhenius_activation_energy_from_q10(3.0, 6.3 + 273.15);
-        assert!((60_000.0..=90_000.0).contains(&ea_gating), "gating Ea ≈ 74 kJ/mol, got {ea_gating}");
+        assert!(
+            (60_000.0..=90_000.0).contains(&ea_gating),
+            "gating Ea ≈ 74 kJ/mol, got {ea_gating}"
+        );
     }
 }

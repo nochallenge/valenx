@@ -261,8 +261,16 @@ fn equalise_spine(
         }
         // Pull / push along the outward contact normals (the
         // gradients of `d_A` and `d_B` with respect to `c`).
-        let n_a = if d_a > 1.0e-12 { d_a_vec / d_a } else { Vector3::zeros() };
-        let n_b = if d_b > 1.0e-12 { d_b_vec / d_b } else { Vector3::zeros() };
+        let n_a = if d_a > 1.0e-12 {
+            d_a_vec / d_a
+        } else {
+            Vector3::zeros()
+        };
+        let n_b = if d_b > 1.0e-12 {
+            d_b_vec / d_b
+        } else {
+            Vector3::zeros()
+        };
         // Damped step: half the deficit each.
         let delta = 0.5 * (r_a * n_a + r_b * n_b);
         c -= delta;
@@ -720,12 +728,28 @@ mod tests {
         let s_b = planar_patch(Vector3::zeros(), Vector3::new(0.0, 1.0, 0.0), 2.0);
         let seed = Vector3::new(0.0, r, r);
         let params = BlendParams::default();
-        let blend = rolling_ball_blend(&s_a, &s_b, r, seed, Some(Vector3::new(1.0, 0.0, 0.0)), &params).unwrap();
+        let blend = rolling_ball_blend(
+            &s_a,
+            &s_b,
+            r,
+            seed,
+            Some(Vector3::new(1.0, 0.0, 0.0)),
+            &params,
+        )
+        .unwrap();
 
         // Sanity on the spine itself: every center at y=r, z=r.
         for sp in &blend.spine {
-            assert!((sp.center.y - r).abs() < 1.0e-4, "spine y = {}", sp.center.y);
-            assert!((sp.center.z - r).abs() < 1.0e-4, "spine z = {}", sp.center.z);
+            assert!(
+                (sp.center.y - r).abs() < 1.0e-4,
+                "spine y = {}",
+                sp.center.y
+            );
+            assert!(
+                (sp.center.z - r).abs() < 1.0e-4,
+                "spine z = {}",
+                sp.center.z
+            );
         }
         // Spine spans a non-trivial x range.
         let xs: Vec<f64> = blend.spine.iter().map(|s| s.center.x).collect();
@@ -755,7 +779,10 @@ mod tests {
         // is *exact* for the circular cross-section, so the only
         // error is the cubic spine fit through a straight-line spine
         // (which is exact too).
-        assert!(worst < 1.0e-3 * r, "max fillet-radius error = {worst}, r = {r}");
+        assert!(
+            worst < 1.0e-3 * r,
+            "max fillet-radius error = {worst}, r = {r}"
+        );
     }
 
     #[test]
@@ -780,19 +807,35 @@ mod tests {
         let r = 0.2;
         let big_r = 1.0;
         // Plane is the patch at z = 0, normal +z.
-        let s_a = planar_patch(Vector3::new(2.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0), 4.0);
+        let s_a = planar_patch(
+            Vector3::new(2.0, 0.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            4.0,
+        );
         // Cylinder about +y axis of radius R.
         let s_b = cylinder_about_y(big_r, -2.0, 2.0);
         // Analytic spine x:
         let spine_x = (big_r * (big_r + 2.0 * r)).sqrt();
         let seed = Vector3::new(spine_x, 0.0, r);
         let params = BlendParams::default();
-        let blend = rolling_ball_blend(&s_b, &s_a, r, seed, Some(Vector3::new(0.0, 1.0, 0.0)), &params).unwrap();
+        let blend = rolling_ball_blend(
+            &s_b,
+            &s_a,
+            r,
+            seed,
+            Some(Vector3::new(0.0, 1.0, 0.0)),
+            &params,
+        )
+        .unwrap();
 
         // Sanity: every spine center has z ≈ r (above plane by r)
         // and x ≈ analytic_x (tangent to cylinder).
         for sp in &blend.spine {
-            assert!((sp.center.z - r).abs() < 1.0e-3, "spine z = {}", sp.center.z);
+            assert!(
+                (sp.center.z - r).abs() < 1.0e-3,
+                "spine z = {}",
+                sp.center.z
+            );
             // x² + z² ≈ (R + r)² since the ball is at distance R+r
             // from the cylinder axis (= y-axis).
             let d_axis = (sp.center.x * sp.center.x + sp.center.z * sp.center.z).sqrt();
@@ -850,7 +893,8 @@ mod tests {
         let s_a = planar_patch(Vector3::zeros(), Vector3::new(0.0, 0.0, 1.0), 2.0);
         let s_b = planar_patch(Vector3::zeros(), Vector3::new(0.0, 1.0, 0.0), 2.0);
         let seed = Vector3::new(0.0, 0.5, 0.5);
-        let err = rolling_ball_blend(&s_a, &s_b, 0.0, seed, None, &BlendParams::default()).unwrap_err();
+        let err =
+            rolling_ball_blend(&s_a, &s_b, 0.0, seed, None, &BlendParams::default()).unwrap_err();
         assert_eq!(err.code(), "surface.intersection_failed");
     }
 }

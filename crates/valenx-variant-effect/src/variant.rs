@@ -170,7 +170,9 @@ fn three_to_one(code: &str) -> Option<u8> {
 
 /// Splits a leading run of ASCII letters from the rest of `s`.
 fn take_letters(s: &str) -> (&str, &str) {
-    let end = s.find(|c: char| !c.is_ascii_alphabetic()).unwrap_or(s.len());
+    let end = s
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(s.len());
     s.split_at(end)
 }
 
@@ -190,7 +192,10 @@ fn parse_pos(digits: &str, input: &str) -> Result<usize, VariantError> {
         .parse()
         .map_err(|_| VariantError::parse(input, format!("position `{digits}` is not a number")))?;
     if pos == 0 {
-        return Err(VariantError::parse(input, "position must be 1-based (got 0)"));
+        return Err(VariantError::parse(
+            input,
+            "position must be 1-based (got 0)",
+        ));
     }
     Ok(pos)
 }
@@ -254,10 +259,10 @@ fn parse_protein(body: &str, input: &str) -> Result<Variant, VariantError> {
             (wt, mt)
         }
         (3, 3) => {
-            let wt = AminoAcid::from_three_letter(wt_letters)
-                .map_err(|_| bad_aa(input, wt_letters))?;
-            let mt = AminoAcid::from_three_letter(mt_letters)
-                .map_err(|_| bad_aa(input, mt_letters))?;
+            let wt =
+                AminoAcid::from_three_letter(wt_letters).map_err(|_| bad_aa(input, wt_letters))?;
+            let mt =
+                AminoAcid::from_three_letter(mt_letters).map_err(|_| bad_aa(input, mt_letters))?;
             (wt, mt)
         }
         _ => {
@@ -373,14 +378,33 @@ mod tests {
     #[test]
     fn three_letter_map_covers_all_twenty() {
         let pairs = [
-            ("Ala", 'A'), ("Arg", 'R'), ("Asn", 'N'), ("Asp", 'D'),
-            ("Cys", 'C'), ("Gln", 'Q'), ("Glu", 'E'), ("Gly", 'G'),
-            ("His", 'H'), ("Ile", 'I'), ("Leu", 'L'), ("Lys", 'K'),
-            ("Met", 'M'), ("Phe", 'F'), ("Pro", 'P'), ("Ser", 'S'),
-            ("Thr", 'T'), ("Trp", 'W'), ("Tyr", 'Y'), ("Val", 'V'),
+            ("Ala", 'A'),
+            ("Arg", 'R'),
+            ("Asn", 'N'),
+            ("Asp", 'D'),
+            ("Cys", 'C'),
+            ("Gln", 'Q'),
+            ("Glu", 'E'),
+            ("Gly", 'G'),
+            ("His", 'H'),
+            ("Ile", 'I'),
+            ("Leu", 'L'),
+            ("Lys", 'K'),
+            ("Met", 'M'),
+            ("Phe", 'F'),
+            ("Pro", 'P'),
+            ("Ser", 'S'),
+            ("Thr", 'T'),
+            ("Trp", 'W'),
+            ("Tyr", 'Y'),
+            ("Val", 'V'),
         ];
         for (three, one) in pairs {
-            assert_eq!(AminoAcid::from_three_letter(three).unwrap(), aa(one), "{three}");
+            assert_eq!(
+                AminoAcid::from_three_letter(three).unwrap(),
+                aa(one),
+                "{three}"
+            );
             // case-insensitive
             assert_eq!(
                 AminoAcid::from_three_letter(&three.to_uppercase()).unwrap(),
@@ -444,7 +468,11 @@ mod tests {
         let v = parse("p.A100A").unwrap();
         assert_eq!(
             v,
-            Variant::ProteinSub { wt: aa('A'), pos: 100, mt: aa('A') }
+            Variant::ProteinSub {
+                wt: aa('A'),
+                pos: 100,
+                mt: aa('A')
+            }
         );
     }
 
@@ -477,7 +505,11 @@ mod tests {
         let v = parse("c.817C>T").unwrap();
         assert_eq!(
             v,
-            Variant::CodingSub { pos: 817, wt: nt('C'), mt: nt('T') }
+            Variant::CodingSub {
+                pos: 817,
+                wt: nt('C'),
+                mt: nt('T')
+            }
         );
     }
 
@@ -493,11 +525,19 @@ mod tests {
         // by `010`, which is 10 decimal (it would be 8 if read as octal).
         assert_eq!(
             parse("c.007C>T").unwrap(),
-            Variant::CodingSub { pos: 7, wt: nt('C'), mt: nt('T') }
+            Variant::CodingSub {
+                pos: 7,
+                wt: nt('C'),
+                mt: nt('T')
+            }
         );
         assert_eq!(
             parse("c.010C>T").unwrap(),
-            Variant::CodingSub { pos: 10, wt: nt('C'), mt: nt('T') }
+            Variant::CodingSub {
+                pos: 10,
+                wt: nt('C'),
+                mt: nt('T')
+            }
         );
     }
 

@@ -457,10 +457,7 @@ mod tests {
     #[test]
     fn arc_segment_count_normal_sweeps_are_proportional() {
         // Half a revolution → CIRCLE_SEGMENTS/2 (24), floored at 8.
-        assert_eq!(
-            arc_segment_count(std::f64::consts::PI, CIRCLE_SEGMENTS),
-            24
-        );
+        assert_eq!(arc_segment_count(std::f64::consts::PI, CIRCLE_SEGMENTS), 24);
         // A tiny sweep still gets the floor of 8.
         assert_eq!(arc_segment_count(0.001, CIRCLE_SEGMENTS), 8);
     }

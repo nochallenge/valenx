@@ -168,10 +168,7 @@ impl Adapter for OmegaFoldAdapter {
         let resolved_fasta = if input.fasta.is_absolute() {
             input.fasta.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.fasta,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.fasta)?
         };
         if !resolved_fasta.is_file() {
             return Err(AdapterError::InvalidCase {

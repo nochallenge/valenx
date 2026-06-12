@@ -21,7 +21,9 @@ pub mod history;
 pub mod panel;
 
 pub use error::{ErrorCategory, ParamHistError};
-pub use history::{dirty_set, partial_rebuild, topological_sort, HistEntry, History, RebuildResult};
+pub use history::{
+    dirty_set, partial_rebuild, topological_sort, HistEntry, History, RebuildResult,
+};
 pub use panel::{NodeLayout, ParamHistPanelState};
 
 #[cfg(test)]
@@ -74,8 +76,7 @@ mod tests {
         let mut h = History::new();
         h.push(HistEntry::new("a", vec![])).unwrap();
         h.push(HistEntry::new("b", vec![0, 0])).unwrap(); // dep 0 listed twice
-        let order =
-            topological_sort(&h.entries).expect("acyclic graph must not report a cycle");
+        let order = topological_sort(&h.entries).expect("acyclic graph must not report a cycle");
         assert_eq!(order.len(), 2);
     }
 

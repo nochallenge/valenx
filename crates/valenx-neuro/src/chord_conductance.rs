@@ -112,7 +112,10 @@ mod tests {
 
         // Single channel: total == its g, and V_rest == its reversal.
         let one = [ConductanceChannel::new(2.0e-9, -70.0)];
-        assert!((total_chord_conductance(&one) - 2.0e-9).abs() <= 1e-9 * 2.0e-9, "single → g");
+        assert!(
+            (total_chord_conductance(&one) - 2.0e-9).abs() <= 1e-9 * 2.0e-9,
+            "single → g"
+        );
         assert!(
             (chord_conductance_potential_mv(&one) + 70.0).abs() < 1e-9,
             "single → its reversal"
@@ -127,7 +130,10 @@ mod tests {
         // Additive: the total of the union equals the sum of the parts' totals.
         let part_a = total_chord_conductance(&chs[..1]);
         let part_b = total_chord_conductance(&chs[1..]);
-        assert!((total - (part_a + part_b)).abs() <= 1e-9 * total, "additive");
+        assert!(
+            (total - (part_a + part_b)).abs() <= 1e-9 * total,
+            "additive"
+        );
     }
 
     #[test]
@@ -145,7 +151,10 @@ mod tests {
         // (b) VANISHES at the resting potential (threads chord_conductance_potential_mv):
         // the net current is exactly zero at the conductance-weighted reversal.
         let v_rest = chord_conductance_potential_mv(&chs);
-        assert!(chord_conductance_current(&chs, v_rest).abs() < 1e-15, "I(V_rest) = 0");
+        assert!(
+            chord_conductance_current(&chs, v_rest).abs() < 1e-15,
+            "I(V_rest) = 0"
+        );
 
         // (c) THREAD total_chord_conductance + potential (non-tautological): I = G·(V − V_rest).
         for &vm in &[-100.0_f64, -65.0, 0.0, 30.0] {
@@ -158,8 +167,14 @@ mod tests {
         }
 
         // (d) SIGN + LINEARITY: outward above the rest, inward below, linear in V − V_rest.
-        assert!(chord_conductance_current(&chs, v_rest + 10.0) > 0.0, "above rest → outward");
-        assert!(chord_conductance_current(&chs, v_rest - 10.0) < 0.0, "below rest → inward");
+        assert!(
+            chord_conductance_current(&chs, v_rest + 10.0) > 0.0,
+            "above rest → outward"
+        );
+        assert!(
+            chord_conductance_current(&chs, v_rest - 10.0) < 0.0,
+            "below rest → inward"
+        );
         assert!(
             (chord_conductance_current(&chs, v_rest + 20.0)
                 - 2.0 * chord_conductance_current(&chs, v_rest + 10.0))
@@ -176,7 +191,8 @@ mod tests {
             ConductanceChannel::new(-2.0e-9, -1000.0),
         ];
         assert!(
-            (chord_conductance_current(&with_dead, 0.0) - chord_conductance_current(&chs, 0.0)).abs()
+            (chord_conductance_current(&with_dead, 0.0) - chord_conductance_current(&chs, 0.0))
+                .abs()
                 <= 1e-9 * 90.0e-9,
             "dead channels ignored"
         );

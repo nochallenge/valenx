@@ -88,9 +88,7 @@ pub struct StepParameters {
 /// completes the right-handed triple.
 pub fn base_frame(residue: &Residue) -> Result<BaseFrame> {
     // Ring atoms — purines have a 9-atom fused ring, pyrimidines 6.
-    const RING: &[&str] = &[
-        "N1", "C2", "N3", "C4", "C5", "C6", "N7", "C8", "N9",
-    ];
+    const RING: &[&str] = &["N1", "C2", "N3", "C4", "C5", "C6", "N7", "C8", "N9"];
     let mut pts: Vec<Point3<f64>> = Vec::new();
     for name in RING {
         if let Some(a) = residue.primary_atom(name) {
@@ -264,8 +262,7 @@ mod tests {
         let ring = ["N1", "C2", "N3", "C4", "C5", "C6"];
         for (k, atom) in ring.iter().enumerate() {
             let theta = k as f64 * std::f64::consts::FRAC_PI_3;
-            let p = center
-                + Vector3::new(1.4 * theta.cos(), 1.4 * theta.sin(), 0.0);
+            let p = center + Vector3::new(1.4 * theta.cos(), 1.4 * theta.sin(), 0.0);
             r.atoms.push(Atom::new(*atom, "C", p));
         }
         r

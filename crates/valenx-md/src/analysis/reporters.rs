@@ -173,12 +173,9 @@ mod tests {
         let mut top = Topology::new();
         top.push_atom(Atom::new("A", 10.0, 0.0).unwrap());
         top.push_atom(Atom::new("B", 10.0, 0.0).unwrap());
-        let mut sys = System::new(
-            top,
-            vec![Vector3::zeros(), Vector3::new(0.5, 0.0, 0.0)],
-        )
-        .unwrap()
-        .with_cell(SimBox::cubic(2.0).unwrap());
+        let mut sys = System::new(top, vec![Vector3::zeros(), Vector3::new(0.5, 0.0, 0.0)])
+            .unwrap()
+            .with_cell(SimBox::cubic(2.0).unwrap());
         sys.set_velocities(vec![
             Vector3::new(1.0, 0.0, 0.0),
             Vector3::new(0.0, 1.0, 0.0),

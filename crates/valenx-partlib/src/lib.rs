@@ -31,7 +31,7 @@ pub mod panel;
 pub use entry::{PartEntry, PartKind};
 pub use error::{ErrorCategory, PartLibError};
 pub use library::{
-    fetch_remote, install_local, load_index, save_index, LibraryFile, PartLibrary,
-    INDEX_FILENAME, VERSION,
+    fetch_remote, install_local, load_index, save_index, LibraryFile, PartLibrary, INDEX_FILENAME,
+    VERSION,
 };
 pub use panel::PartLibPanelState;

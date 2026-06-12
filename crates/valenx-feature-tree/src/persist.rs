@@ -460,8 +460,7 @@ mod tests {
         features: [],
     ),
 )"#;
-        let parsed =
-            ValenxProject::from_ron(ron).expect("well-formed project must load");
+        let parsed = ValenxProject::from_ron(ron).expect("well-formed project must load");
         assert_eq!(parsed.feature_tree.sketches.len(), 1);
         assert_eq!(parsed.feature_tree.sketches[0].vars, vec![1.0, 2.0]);
     }

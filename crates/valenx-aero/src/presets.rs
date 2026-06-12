@@ -203,10 +203,7 @@ mod tests {
         // A box body, treated as a "wheel" rotating about the y axis:
         // its solid cells must get a non-zero tangential velocity, and
         // the velocity magnitude must scale with the radial distance.
-        let body = box_body(
-            Vector3::new(-1.0, -0.5, -1.0),
-            Vector3::new(1.0, 0.5, 1.0),
-        );
+        let body = box_body(Vector3::new(-1.0, -0.5, -1.0), Vector3::new(1.0, 0.5, 1.0));
         let tunnel = WindTunnel::build(&body, Wind::straight(20.0).unwrap()).unwrap();
         let axle = Vector3::new(0.0, 0.0, 0.0);
         let omega = 50.0;
@@ -236,10 +233,7 @@ mod tests {
     fn rotating_wheel_region_radius_limits_the_spin() {
         // With a tiny region radius, no solid cell qualifies — every
         // cell stays static.
-        let body = box_body(
-            Vector3::new(-1.0, -1.0, -1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        );
+        let body = box_body(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0));
         let tunnel = WindTunnel::build(&body, Wind::straight(20.0).unwrap()).unwrap();
         let motion = rotating_wheel_motion(
             &tunnel,

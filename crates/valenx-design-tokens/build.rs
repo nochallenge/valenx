@@ -50,8 +50,8 @@ fn main() {
             tokens_path.display()
         );
     }
-    let raw = String::from_utf8(buf)
-        .unwrap_or_else(|e| panic!("tokens.json is not valid UTF-8: {e}"));
+    let raw =
+        String::from_utf8(buf).unwrap_or_else(|e| panic!("tokens.json is not valid UTF-8: {e}"));
 
     let json: Value =
         serde_json::from_str(&raw).unwrap_or_else(|e| panic!("tokens.json is not valid JSON: {e}"));

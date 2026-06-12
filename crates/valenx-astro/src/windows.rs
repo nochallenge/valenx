@@ -79,7 +79,9 @@ pub fn launch_azimuth(latitude: f64, inclination: f64) -> Result<LaunchAzimuth> 
 /// negative, or `delta_inclination` is non-finite or negative.
 pub fn plane_change_delta_v(speed: f64, delta_inclination: f64) -> Result<f64> {
     if !speed.is_finite() || speed < 0.0 {
-        return Err(AstroError::InvalidParameter("speed must be finite and >= 0"));
+        return Err(AstroError::InvalidParameter(
+            "speed must be finite and >= 0",
+        ));
     }
     if !delta_inclination.is_finite() || delta_inclination < 0.0 {
         return Err(AstroError::InvalidParameter(
@@ -144,10 +146,18 @@ mod tests {
         let i = 51.6_f64.to_radians();
         let az = launch_azimuth(phi, i).expect("reachable");
         // KSC->ISS azimuth ≈ 45°.
-        assert!((az.ascending.to_degrees() - 44.975).abs() < 0.1, "β {}", az.ascending.to_degrees());
+        assert!(
+            (az.ascending.to_degrees() - 44.975).abs() < 0.1,
+            "β {}",
+            az.ascending.to_degrees()
+        );
         // Recover the inclination from the azimuth: must round-trip.
         let i_rec = (phi.cos() * az.ascending.sin()).acos();
-        assert!((i_rec - i).abs() < 1e-12, "recovered i {}", i_rec.to_degrees());
+        assert!(
+            (i_rec - i).abs() < 1e-12,
+            "recovered i {}",
+            i_rec.to_degrees()
+        );
         // The descending azimuth is π − β, reaching the same inclination.
         let i_rec2 = (phi.cos() * az.descending.sin()).acos();
         assert!((i_rec2 - i).abs() < 1e-12);
@@ -185,10 +195,12 @@ mod tests {
         let v = circular_speed_at_altitude(400_000.0).expect("ok");
         let phi = 28.5_f64.to_radians();
         // Reachable (i >= φ): no residual.
-        assert!(residual_plane_change_delta_v(phi, 51.6_f64.to_radians(), v)
-            .expect("ok")
-            .abs()
-            < 1e-12);
+        assert!(
+            residual_plane_change_delta_v(phi, 51.6_f64.to_radians(), v)
+                .expect("ok")
+                .abs()
+                < 1e-12
+        );
         // Below latitude (i = 0, equatorial from KSC): residual = φ = 28.5°.
         let dv = residual_plane_change_delta_v(phi, 0.0, v).expect("ok");
         let expected = plane_change_delta_v(v, phi).expect("ok");

@@ -52,12 +52,7 @@ fn result_card(ui: &mut egui::Ui, caption: &str, value: &str, tint: egui::Color3
             ui.vertical(|ui| {
                 ui.set_min_width(78.0);
                 ui.label(egui::RichText::new(caption).weak().small());
-                ui.label(
-                    egui::RichText::new(value)
-                        .heading()
-                        .color(tint)
-                        .strong(),
-                );
+                ui.label(egui::RichText::new(value).heading().color(tint).strong());
             });
         });
 }
@@ -102,7 +97,9 @@ pub fn draw_body_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             BodySource::CurrentCadModel,
                             BodySource::CurrentCadModel.label(),
                         )
-                        .on_hover_text("Use the CAD solid currently loaded in the app's Part workbench.");
+                        .on_hover_text(
+                            "Use the CAD solid currently loaded in the app's Part workbench.",
+                        );
                         ui.selectable_value(
                             &mut form.body_source,
                             BodySource::ImportedStl,
@@ -459,11 +456,10 @@ pub fn draw_tunnel_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
         .default_open(false)
         .show(ui, |ui| {
             let form = &mut app.aero.form;
-            ui.label("Grid resolution")
-                .on_hover_text(
-                    "Coarseness of the immersed-boundary voxel grid. Higher \
+            ui.label("Grid resolution").on_hover_text(
+                "Coarseness of the immersed-boundary voxel grid. Higher \
                      resolution = sharper wake but quadratically more memory.",
-                );
+            );
             egui::ComboBox::from_id_source("aero_resolution")
                 .selected_text(form.resolution.label())
                 .width(ui.available_width())
@@ -497,8 +493,9 @@ pub fn draw_tunnel_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     .num_columns(2)
                     .spacing([8.0, 4.0])
                     .show(ui, |ui| {
-                        ui.label("Upstream clearance")
-                            .on_hover_text("Distance from inlet to the body, in multiples of the body length.");
+                        ui.label("Upstream clearance").on_hover_text(
+                            "Distance from inlet to the body, in multiples of the body length.",
+                        );
                         ui.add(
                             egui::DragValue::new(&mut form.upstream_lengths)
                                 .speed(0.25)
@@ -507,8 +504,9 @@ pub fn draw_tunnel_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         )
                         .on_hover_text("Multiples of body length L (typical 3–5).");
                         ui.end_row();
-                        ui.label("Downstream (wake)")
-                            .on_hover_text("Length of the wake region behind the body, in multiples of L.");
+                        ui.label("Downstream (wake)").on_hover_text(
+                            "Length of the wake region behind the body, in multiples of L.",
+                        );
                         ui.add(
                             egui::DragValue::new(&mut form.downstream_lengths)
                                 .speed(0.25)
@@ -721,15 +719,25 @@ pub fn draw_run_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 // state to its prior snapshot. Recorded on Run, so
                 // Ctrl+Z reverses the parameters of the last solve.
                 let undo = ui
-                    .add_enabled(app.aero.can_undo(), egui::Button::new(valenx_icons::edit::UNDO))
+                    .add_enabled(
+                        app.aero.can_undo(),
+                        egui::Button::new(valenx_icons::edit::UNDO),
+                    )
                     .on_hover_text("Undo last form edit (Ctrl+Z)")
                     .clicked();
                 let redo = ui
-                    .add_enabled(app.aero.can_redo(), egui::Button::new(valenx_icons::edit::REDO))
+                    .add_enabled(
+                        app.aero.can_redo(),
+                        egui::Button::new(valenx_icons::edit::REDO),
+                    )
                     .on_hover_text("Redo last form edit (Ctrl+Y)")
                     .clicked();
-                if undo { app.aero.undo_edit(); }
-                if redo { app.aero.redo_edit(); }
+                if undo {
+                    app.aero.undo_edit();
+                }
+                if redo {
+                    app.aero.redo_edit();
+                }
             });
 
             // Status line.
@@ -738,11 +746,9 @@ pub fn draw_run_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
             }
             if running {
                 ui.label(
-                    egui::RichText::new(
-                        "Solving… the steady RANS solve runs in the background.",
-                    )
-                    .weak()
-                    .small(),
+                    egui::RichText::new("Solving… the steady RANS solve runs in the background.")
+                        .weak()
+                        .small(),
                 );
             }
             error_line(ui, &app.aero.error);
@@ -825,8 +831,18 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport, c_di
     let lift_tint = egui::Color32::from_rgb(120, 190, 235);
     let neutral = ui.visuals().strong_text_color();
     ui.horizontal_wrapped(|ui| {
-        result_card(ui, "Drag  Cd", &model::format_coefficient(report.cd), drag_tint);
-        result_card(ui, "Lift  Cl", &model::format_coefficient(report.cl), lift_tint);
+        result_card(
+            ui,
+            "Drag  Cd",
+            &model::format_coefficient(report.cd),
+            drag_tint,
+        );
+        result_card(
+            ui,
+            "Lift  Cl",
+            &model::format_coefficient(report.cl),
+            lift_tint,
+        );
         result_card(
             ui,
             "Side  Cs",
@@ -874,11 +890,7 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport, c_di
                 "pressure vs. friction",
                 model::format_drag_split(report.pressure_drag_fraction),
             );
-            kv(
-                ui,
-                "drag area  Cd·A",
-                format!("{:.4} m²", report.drag_area),
-            );
+            kv(ui, "drag area  Cd·A", format!("{:.4} m²", report.drag_area));
             kv(
                 ui,
                 "reference area  A",
@@ -904,7 +916,11 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport, c_di
                 "dynamic pressure  q∞",
                 model::format_pressure_pa(report.dynamic_pressure),
             );
-            kv(ui, "Reynolds number", model::format_reynolds(report.reynolds_number));
+            kv(
+                ui,
+                "Reynolds number",
+                model::format_reynolds(report.reynolds_number),
+            );
             kv(ui, "Mach number", format!("{:.3}", report.mach_number));
             kv(
                 ui,
@@ -922,7 +938,10 @@ fn draw_steady_results(ui: &mut egui::Ui, report: &valenx_aero::AeroReport, c_di
                 if report.converged {
                     format!("converged · {} iters", report.iterations)
                 } else {
-                    format!("capped · {} iters · residual {:.1e}", report.iterations, report.residual)
+                    format!(
+                        "capped · {} iters · residual {:.1e}",
+                        report.iterations, report.residual
+                    )
                 },
             );
             kv(ui, "mean wall y+", format!("{:.1}", report.y_plus_mean));
@@ -1017,7 +1036,11 @@ fn draw_polar_results(ui: &mut egui::Ui, curve: &valenx_aero::PolarCurve) {
             if let Some(a0) = curve.zero_lift_angle() {
                 kv(ui, "zero-lift α", format!("{:.1} °", model::rad_to_deg(a0)));
             }
-            kv(ui, "induced drag  k", format!("{:.4}", curve.induced_drag_factor()));
+            kv(
+                ui,
+                "induced drag  k",
+                format!("{:.4}", curve.induced_drag_factor()),
+            );
             kv(
                 ui,
                 "parasitic drag  Cd\u{2080}",
@@ -1075,11 +1098,7 @@ pub fn draw_visualization_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .width(ui.available_width())
                 .show_ui(ui, |ui| {
                     for f in FlowField::ALL {
-                        ui.selectable_value(
-                            &mut app.aero.form.flow_field,
-                            f,
-                            f.label(),
-                        );
+                        ui.selectable_value(&mut app.aero.form.flow_field, f, f.label());
                     }
                 });
 
@@ -1095,21 +1114,14 @@ pub fn draw_visualization_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .selected_text(app.aero.form.cut_axis.label())
                             .show_ui(ui, |ui| {
                                 for a in CutAxis::ALL {
-                                    ui.selectable_value(
-                                        &mut app.aero.form.cut_axis,
-                                        a,
-                                        a.label(),
-                                    );
+                                    ui.selectable_value(&mut app.aero.form.cut_axis, a, a.label());
                                 }
                             });
                         ui.end_row();
                         ui.label("Cut position");
                         ui.add(
-                            egui::Slider::new(
-                                &mut app.aero.form.cut_fraction,
-                                0.0..=1.0,
-                            )
-                            .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
+                            egui::Slider::new(&mut app.aero.form.cut_fraction, 0.0..=1.0)
+                                .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
                         );
                         ui.end_row();
                     });
@@ -1129,9 +1141,7 @@ pub fn draw_visualization_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
             {
                 push_field_to_viewport(app);
             }
-            if app.aero.last_field_overlay.is_some()
-                && ui.button("Clear field overlay").clicked()
-            {
+            if app.aero.last_field_overlay.is_some() && ui.button("Clear field overlay").clicked() {
                 clear_field_overlay(app);
             }
 
@@ -1229,10 +1239,7 @@ fn push_field_to_viewport(app: &mut ValenxApp) {
             // overlay slot the viewport prefers.
             app.apply_mesh(
                 viz.mesh,
-                std::path::PathBuf::from(format!(
-                    "<wind-tunnel>/{}",
-                    flow_field.label()
-                )),
+                std::path::PathBuf::from(format!("<wind-tunnel>/{}", flow_field.label())),
             );
             app.aero_field_overlay = Some(viz.field);
             app.aero.last_field_overlay = Some(flow_field);
@@ -1362,7 +1369,11 @@ mod tests {
         // run is spawned regardless of how long it takes.
         app.aero.form.max_iterations = 4;
         start_run(&mut app);
-        assert!(app.aero.error.is_none(), "unexpected error: {:?}", app.aero.error);
+        assert!(
+            app.aero.error.is_none(),
+            "unexpected error: {:?}",
+            app.aero.error
+        );
         assert!(app.aero.is_running());
         // Drain the background run so the test thread is joined.
         while let Some(handle) = app.aero.run.as_mut() {
@@ -1522,7 +1533,11 @@ mod headless_ui_tests {
         app.aero.form.body_source = BodySource::DemoBox;
         app.aero.form.max_iterations = 4;
         start_run(&mut app);
-        assert!(app.aero.error.is_none(), "unexpected error: {:?}", app.aero.error);
+        assert!(
+            app.aero.error.is_none(),
+            "unexpected error: {:?}",
+            app.aero.error
+        );
         assert!(app.aero.is_running(), "a run should have been spawned");
         drain_run(&mut app);
     }
@@ -1534,7 +1549,10 @@ mod headless_ui_tests {
         let mut app = ValenxApp::default();
         app.aero.form.body_source = BodySource::CurrentCadModel;
         start_run(&mut app);
-        assert!(app.aero.error.is_some(), "start_run should error without a body");
+        assert!(
+            app.aero.error.is_some(),
+            "start_run should error without a body"
+        );
         assert!(!app.aero.is_running());
     }
 
@@ -1546,7 +1564,10 @@ mod headless_ui_tests {
         app.aero.form.body_source = BodySource::DemoBox;
         app.aero.form.air_density = -1.0;
         start_run(&mut app);
-        assert!(app.aero.error.is_some(), "start_run should error on bad air");
+        assert!(
+            app.aero.error.is_some(),
+            "start_run should error on bad air"
+        );
         assert!(!app.aero.is_running());
     }
 

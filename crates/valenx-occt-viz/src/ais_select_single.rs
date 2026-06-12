@@ -91,11 +91,7 @@ mod tests {
 
     fn axis_triangle() -> Pickable {
         Pickable::Mesh {
-            triangles: vec![
-                [-1.0, -1.0, 0.0],
-                [1.0, -1.0, 0.0],
-                [0.0, 1.0, 0.0],
-            ],
+            triangles: vec![[-1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 1.0, 0.0]],
         }
     }
 

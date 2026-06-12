@@ -73,7 +73,8 @@ mod tests {
         let mut top = Topology::new();
         top.push_atom(Atom::new("A", 1.0, 0.0).unwrap());
         let mut sys = System::new(top, vec![Vector3::zeros()]).unwrap();
-        sys.set_velocities(vec![Vector3::new(1.0, 0.0, 0.0)]).unwrap();
+        sys.set_velocities(vec![Vector3::new(1.0, 0.0, 0.0)])
+            .unwrap();
 
         let mut integ = VelocityVerlet::new(0.001).unwrap();
         let mut zero_force = |s: &System| Ok(EnergyForce::zeros(s.len()));

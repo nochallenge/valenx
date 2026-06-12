@@ -71,11 +71,7 @@ pub fn pairwise_differences(matrix: &GenotypeMatrix) -> Result<f64> {
 pub fn nucleotide_diversity(matrix: &GenotypeMatrix) -> Result<f64> {
     let k = pairwise_differences(matrix)?;
     let sites = matrix.n_sites();
-    Ok(if sites == 0 {
-        0.0
-    } else {
-        k / sites as f64
-    })
+    Ok(if sites == 0 { 0.0 } else { k / sites as f64 })
 }
 
 /// Watterson's estimator of `theta`: `S / a_n`, where `S` is the number
@@ -176,9 +172,7 @@ pub fn fu_li_d(matrix: &GenotypeMatrix) -> Result<f64> {
     } else {
         2.0 * (nn * a_1 - 2.0 * (nn - 1.0)) / ((nn - 1.0) * (nn - 2.0))
     };
-    let v = 1.0
-        + (a_1 * a_1 / (a_2 + a_1 * a_1))
-            * (c - (nn + 1.0) / (nn - 1.0));
+    let v = 1.0 + (a_1 * a_1 / (a_2 + a_1 * a_1)) * (c - (nn + 1.0) / (nn - 1.0));
     let u = a_1 - 1.0 - v;
     let variance = u * s + v * s * s;
     if variance <= 0.0 {
@@ -284,12 +278,7 @@ mod tests {
     #[test]
     fn wattersons_theta_is_s_over_harmonic() {
         // 4 samples, 2 segregating sites. a_4 = 1 + 1/2 + 1/3.
-        let m = matrix(vec![
-            vec![1, 1],
-            vec![1, 0],
-            vec![0, 0],
-            vec![0, 0],
-        ]);
+        let m = matrix(vec![vec![1, 1], vec![1, 0], vec![0, 0], vec![0, 0]]);
         let theta = wattersons_theta(&m).unwrap();
         let a = 1.0 + 0.5 + 1.0 / 3.0;
         assert!((theta - 2.0 / a).abs() < 1e-12);
@@ -307,12 +296,7 @@ mod tests {
     fn tajimas_d_is_near_zero_for_a_balanced_spectrum() {
         // A spectrum with one singleton and one doubleton in n=4 is
         // roughly neutral-shaped; D should be small in magnitude.
-        let m = matrix(vec![
-            vec![1, 1],
-            vec![0, 1],
-            vec![0, 0],
-            vec![0, 0],
-        ]);
+        let m = matrix(vec![vec![1, 1], vec![0, 1], vec![0, 0], vec![0, 0]]);
         let d = tajimas_d(&m).unwrap();
         assert!(d.abs() < 3.0, "D = {d}");
     }

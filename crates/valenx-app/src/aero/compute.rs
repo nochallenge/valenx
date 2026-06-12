@@ -110,7 +110,8 @@ impl AeroRunHandle {
     /// finished. The App's `on_exit` calls this on every active run
     /// handle so closing the window doesn't orphan the worker.
     pub fn cancel(&self) {
-        self.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Drain every progress message available right now (non-blocking).
@@ -139,9 +140,11 @@ impl AeroRunHandle {
             return None;
         }
         let thread = self.thread.take()?;
-        Some(thread.join().unwrap_or_else(|_| {
-            AeroOutcome::Failed("the solver thread panicked".to_string())
-        }))
+        Some(
+            thread
+                .join()
+                .unwrap_or_else(|_| AeroOutcome::Failed("the solver thread panicked".to_string())),
+        )
     }
 }
 

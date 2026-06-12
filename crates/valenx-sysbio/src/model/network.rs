@@ -493,7 +493,10 @@ mod tests {
             },
             reversible: false,
         });
-        assert!(m2.validate().is_err(), "non-positive Hill Kd must fail validation");
+        assert!(
+            m2.validate().is_err(),
+            "non-positive Hill Kd must fail validation"
+        );
     }
 
     #[test]

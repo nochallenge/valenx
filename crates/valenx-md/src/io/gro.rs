@@ -82,9 +82,10 @@ pub fn read_gro(text: &str) -> Result<System> {
     let count_line = lines
         .next()
         .ok_or_else(|| MdError::parse("gro", "missing atom-count line"))?;
-    let count: usize = count_line.trim().parse().map_err(|_| {
-        MdError::parse("gro", format!("bad atom count `{}`", count_line.trim()))
-    })?;
+    let count: usize = count_line
+        .trim()
+        .parse()
+        .map_err(|_| MdError::parse("gro", format!("bad atom count `{}`", count_line.trim())))?;
 
     let mut topology = Topology::new();
     // Do NOT pre-size from the caller-controlled `count`: an adversarial

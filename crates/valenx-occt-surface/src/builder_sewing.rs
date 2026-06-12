@@ -101,11 +101,15 @@ mod tests {
     fn sewing_rejects_bad_tolerance() {
         let f = box_solid(1.0, 1.0, 1.0).unwrap();
         assert_eq!(
-            builder_sewing(std::slice::from_ref(&f), -0.1).unwrap_err().code(),
+            builder_sewing(std::slice::from_ref(&f), -0.1)
+                .unwrap_err()
+                .code(),
             "occt_surface.bad_input"
         );
         assert_eq!(
-            builder_sewing(std::slice::from_ref(&f), f64::INFINITY).unwrap_err().code(),
+            builder_sewing(std::slice::from_ref(&f), f64::INFINITY)
+                .unwrap_err()
+                .code(),
             "occt_surface.bad_input"
         );
     }
@@ -120,7 +124,11 @@ mod tests {
         assert!(!mesh.nodes.is_empty());
         // A cube has 8 corners — after welding, the sewn mesh's unique
         // vertex count is far below the per-triangle vertex count.
-        assert!(mesh.nodes.len() <= 24, "weld should dedup: {}", mesh.nodes.len());
+        assert!(
+            mesh.nodes.len() <= 24,
+            "weld should dedup: {}",
+            mesh.nodes.len()
+        );
     }
 
     #[test]

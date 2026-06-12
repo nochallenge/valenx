@@ -503,9 +503,18 @@ mod tests {
         d.add_projection_group(g, &small).unwrap();
         let w_before = d.views[0].bbox().unwrap().1[0] - d.views[0].bbox().unwrap().0[0];
         // Replay with the bigger solid.
-        d.regenerate_all(|fid| if fid == FeatureId(0) { Some(big.clone()) } else { None });
+        d.regenerate_all(|fid| {
+            if fid == FeatureId(0) {
+                Some(big.clone())
+            } else {
+                None
+            }
+        });
         let w_after = d.views[0].bbox().unwrap().1[0] - d.views[0].bbox().unwrap().0[0];
-        assert!(w_after > w_before * 2.0, "front view should grow ({w_before} → {w_after})");
+        assert!(
+            w_after > w_before * 2.0,
+            "front view should grow ({w_before} → {w_after})"
+        );
     }
 
     /// Phase 19 — auto-assigned detail labels: first → "A", second → "B".
@@ -513,8 +522,22 @@ mod tests {
     fn add_detail_view_auto_assigns_labels() {
         use crate::detail_view::DetailView;
         let mut d = Drawing::new(Sheet::a4_landscape("X", "Y", "Z"));
-        let id_a = d.add_detail_view(DetailView::new(0, [10.0, 10.0], 5.0, [100.0, 100.0], 2.0, ""));
-        let id_b = d.add_detail_view(DetailView::new(0, [20.0, 20.0], 5.0, [150.0, 100.0], 4.0, ""));
+        let id_a = d.add_detail_view(DetailView::new(
+            0,
+            [10.0, 10.0],
+            5.0,
+            [100.0, 100.0],
+            2.0,
+            "",
+        ));
+        let id_b = d.add_detail_view(DetailView::new(
+            0,
+            [20.0, 20.0],
+            5.0,
+            [150.0, 100.0],
+            4.0,
+            "",
+        ));
         assert_eq!(d.detail_views[id_a].label, "A");
         assert_eq!(d.detail_views[id_b].label, "B");
     }
@@ -524,7 +547,14 @@ mod tests {
     fn add_detail_view_keeps_caller_label() {
         use crate::detail_view::DetailView;
         let mut d = Drawing::new(Sheet::a4_landscape("X", "Y", "Z"));
-        let id = d.add_detail_view(DetailView::new(0, [10.0, 10.0], 5.0, [100.0, 100.0], 2.0, "Z"));
+        let id = d.add_detail_view(DetailView::new(
+            0,
+            [10.0, 10.0],
+            5.0,
+            [100.0, 100.0],
+            2.0,
+            "Z",
+        ));
         assert_eq!(d.detail_views[id].label, "Z");
     }
 

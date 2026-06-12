@@ -95,7 +95,10 @@ pub fn read_fasta(text: &str) -> Result<AlignmentIo> {
         } else if let Some(buf) = cur.as_mut() {
             buf.extend(line.bytes().filter(|b| !b.is_ascii_whitespace()));
         } else if !line.trim().is_empty() {
-            return Err(AlignError::parse("fasta", "sequence data before any `>` header"));
+            return Err(AlignError::parse(
+                "fasta",
+                "sequence data before any `>` header",
+            ));
         }
     }
     if let Some(s) = cur.take() {
@@ -136,7 +139,11 @@ pub fn read_clustal(text: &str) -> Result<AlignmentIo> {
     let header = lines
         .next()
         .ok_or_else(|| AlignError::parse("clustal", "empty input"))?;
-    if !header.trim_start().to_ascii_uppercase().starts_with("CLUSTAL") {
+    if !header
+        .trim_start()
+        .to_ascii_uppercase()
+        .starts_with("CLUSTAL")
+    {
         return Err(AlignError::parse(
             "clustal",
             "missing `CLUSTAL` header line",
@@ -363,11 +370,12 @@ fn parse_phylip_sequential(
 
 /// Interleaved PHYLIP: the first `ntax` non-blank lines carry names +
 /// the first block; subsequent blocks of `ntax` lines append residues.
-fn parse_phylip_interleaved(
-    body: &[&str],
-    ntax: usize,
-) -> Result<(Vec<String>, Vec<Vec<u8>>)> {
-    let lines: Vec<&str> = body.iter().copied().filter(|l| !l.trim().is_empty()).collect();
+fn parse_phylip_interleaved(body: &[&str], ntax: usize) -> Result<(Vec<String>, Vec<Vec<u8>>)> {
+    let lines: Vec<&str> = body
+        .iter()
+        .copied()
+        .filter(|l| !l.trim().is_empty())
+        .collect();
     if lines.len() < ntax {
         return Err(AlignError::parse("phylip", "fewer lines than taxa"));
     }
@@ -509,9 +517,13 @@ pub fn read_msf(text: &str) -> Result<AlignmentIo> {
         }
         for frag in parts {
             seqs.get_mut(&name).unwrap().extend(
-                frag.bytes()
-                    .filter(|b| !b.is_ascii_whitespace())
-                    .map(|b| if b == b'.' || b == b'~' { b'-' } else { b }),
+                frag.bytes().filter(|b| !b.is_ascii_whitespace()).map(|b| {
+                    if b == b'.' || b == b'~' {
+                        b'-'
+                    } else {
+                        b
+                    }
+                }),
             );
         }
     }
@@ -697,7 +709,11 @@ mod tests {
     fn cross_format_fasta_to_clustal() {
         // Parse FASTA, re-emit as Clustal, parse again: identical.
         let aln = sample();
-        let via_clustal = read_clustal(&write_clustal(&read_fasta(&write_fasta(&aln, 0)).unwrap(), 60)).unwrap();
+        let via_clustal = read_clustal(&write_clustal(
+            &read_fasta(&write_fasta(&aln, 0)).unwrap(),
+            60,
+        ))
+        .unwrap();
         assert_eq!(via_clustal, aln);
     }
 }

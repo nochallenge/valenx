@@ -150,12 +150,7 @@ pub fn read_binary(bytes: &[u8]) -> Result<Trajectory> {
         return Err(MdError::parse("dcd", "bad magic bytes"));
     }
     let u32_at = |off: usize| -> u32 {
-        u32::from_le_bytes([
-            bytes[off],
-            bytes[off + 1],
-            bytes[off + 2],
-            bytes[off + 3],
-        ])
+        u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
     };
     let version = u32_at(8);
     if version != 1 {
@@ -295,11 +290,9 @@ pub fn read_text(text: &str) -> Result<Trajectory> {
         } else {
             let mut fields = trimmed.split_whitespace();
             let parse = |s: Option<&str>| -> Result<f64> {
-                s.ok_or_else(|| {
-                    MdError::parse("trajectory-text", "short coordinate line")
-                })?
-                .parse::<f64>()
-                .map_err(|_| MdError::parse("trajectory-text", "bad coordinate"))
+                s.ok_or_else(|| MdError::parse("trajectory-text", "short coordinate line"))?
+                    .parse::<f64>()
+                    .map_err(|_| MdError::parse("trajectory-text", "bad coordinate"))
             };
             let x = parse(fields.next())?;
             let y = parse(fields.next())?;

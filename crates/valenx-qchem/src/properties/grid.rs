@@ -37,9 +37,7 @@ pub fn basis_function_value(f: &BasisFunction, point: [f64; 3]) -> f64 {
     for p in &f.primitives {
         radial += p.coefficient * (-p.exponent * r2).exp();
     }
-    let angular = dx.powi(f.cart.0 as i32)
-        * dy.powi(f.cart.1 as i32)
-        * dz.powi(f.cart.2 as i32);
+    let angular = dx.powi(f.cart.0 as i32) * dy.powi(f.cart.1 as i32) * dz.powi(f.cart.2 as i32);
     angular * radial
 }
 
@@ -159,7 +157,9 @@ pub fn density_grid(
     counts: [usize; 3],
     spacing: [f64; 3],
 ) -> VolumetricGrid {
-    fill_grid(origin, counts, spacing, |p| density_value(basis, density, p))
+    fill_grid(origin, counts, spacing, |p| {
+        density_value(basis, density, p)
+    })
 }
 
 #[cfg(test)]
@@ -210,13 +210,7 @@ mod tests {
         let span = 12.0;
         let h = span / n as f64;
         let origin = [-span / 2.0, -span / 2.0, -span / 2.0 + 0.7];
-        let grid = density_grid(
-            &basis,
-            &res.density,
-            origin,
-            [n, n, n],
-            [h, h, h],
-        );
+        let grid = density_grid(&basis, &res.density, origin, [n, n, n], [h, h, h]);
         let integral: f64 = grid.values.iter().sum::<f64>() * h * h * h;
         assert!(
             (integral - 2.0).abs() < 0.2,

@@ -73,9 +73,7 @@ impl GenomicInterval {
     /// falls inside `[start, end)`, with a `flank` bp tolerance on each
     /// side.
     pub fn contains_with_flank(&self, chrom: &str, pos: usize, flank: usize) -> bool {
-        self.chrom == chrom
-            && pos + flank >= self.start
-            && pos < self.end + flank
+        self.chrom == chrom && pos + flank >= self.start && pos < self.end + flank
     }
 }
 
@@ -216,11 +214,7 @@ pub fn aggregate_safety(input: &SafetyScreenInput) -> Result<SafetyReport> {
             if gene.contains_with_flank(&ot.chrom, ot.start, input.essential_gene_flank) {
                 essential_hits.push(format!(
                     "{} (off-target at {}:{}, {} mismatch(es), activity {:.2})",
-                    gene.label,
-                    ot.chrom,
-                    ot.start,
-                    ot.mismatches,
-                    ot.cfd_score,
+                    gene.label, ot.chrom, ot.start, ot.mismatches, ot.cfd_score,
                 ));
             }
         }
@@ -401,7 +395,10 @@ impl EditSafetyReport {
 /// Currently infallible (every input is accepted; an empty request
 /// returns an "everything is silent" report). The `Result` signature
 /// is reserved for future input validation.
-pub fn safety_screen(req: &EditScreenRequest, db: &ReferenceGeneDatabase) -> Result<EditSafetyReport> {
+pub fn safety_screen(
+    req: &EditScreenRequest,
+    db: &ReferenceGeneDatabase,
+) -> Result<EditSafetyReport> {
     let mut flags: Vec<SafetyFlag> = Vec::new();
     let mut essential_proximity: Vec<String> = Vec::new();
     let mut cancer_driver_off_targets: Vec<String> = Vec::new();
@@ -598,10 +595,7 @@ mod tests {
 
     #[test]
     fn perfect_on_target_is_ignored_in_tally() {
-        let input = SafetyScreenInput::new(vec![
-            perfect("chr1", 50),
-            ot("chr1", 100, 4, 0.05),
-        ]);
+        let input = SafetyScreenInput::new(vec![perfect("chr1", 50), ot("chr1", 100, 4, 0.05)]);
         let report = aggregate_safety(&input).unwrap();
         // Only the non-perfect site is counted.
         assert_eq!(report.off_target_count, 1);
@@ -769,7 +763,10 @@ mod tests {
         req.off_target_genes = vec!["POLR2A".to_string()];
         let r = safety_screen(&req, &db).unwrap();
         assert_eq!(r.grade, SafetyGrade::Fail);
-        assert!(r.flags.iter().any(|f| f.code == "off_target_essential_gene"));
+        assert!(r
+            .flags
+            .iter()
+            .any(|f| f.code == "off_target_essential_gene"));
     }
 
     #[test]

@@ -66,7 +66,11 @@ pub fn field_skewness(field: &Field) -> f64 {
     }
     let mean = field_mean(field);
     let sigma = var.sqrt();
-    let sum_cubed: f64 = field.data.iter().map(|v| ((v - mean) / sigma).powi(3)).sum();
+    let sum_cubed: f64 = field
+        .data
+        .iter()
+        .map(|v| ((v - mean) / sigma).powi(3))
+        .sum();
     sum_cubed / n as f64
 }
 
@@ -83,7 +87,11 @@ pub fn field_excess_kurtosis(field: &Field) -> f64 {
     }
     let mean = field_mean(field);
     let sigma = var.sqrt();
-    let sum_quartic: f64 = field.data.iter().map(|v| ((v - mean) / sigma).powi(4)).sum();
+    let sum_quartic: f64 = field
+        .data
+        .iter()
+        .map(|v| ((v - mean) / sigma).powi(4))
+        .sum();
     sum_quartic / n as f64 - 3.0
 }
 
@@ -291,7 +299,10 @@ mod tests {
     #[test]
     fn field_median_is_the_middle_order_statistic() {
         // Odd n, unsorted → the middle sorted element.
-        assert_eq!(field_median(&scalar("o", vec![5.0, 1.0, 3.0, 2.0, 4.0])), 3.0);
+        assert_eq!(
+            field_median(&scalar("o", vec![5.0, 1.0, 3.0, 2.0, 4.0])),
+            3.0
+        );
         // Even n → the mean of the two middles: [1,2,3,4] → (2+3)/2 = 2.5.
         assert_eq!(field_median(&scalar("e", vec![4.0, 1.0, 3.0, 2.0])), 2.5);
         // Single element → itself; empty → 0.
@@ -341,8 +352,14 @@ mod tests {
             (field_coefficient_of_variation(&f) - field_std_dev(&f) / field_mean(&f)).abs() < 1e-12
         );
         // Constant → 0; zero-mean → 0 (guard); empty → 0.
-        assert_eq!(field_coefficient_of_variation(&scalar("c", vec![5.0, 5.0, 5.0])), 0.0);
-        assert_eq!(field_coefficient_of_variation(&scalar("z", vec![-1.0, 1.0])), 0.0);
+        assert_eq!(
+            field_coefficient_of_variation(&scalar("c", vec![5.0, 5.0, 5.0])),
+            0.0
+        );
+        assert_eq!(
+            field_coefficient_of_variation(&scalar("z", vec![-1.0, 1.0])),
+            0.0
+        );
         assert_eq!(field_coefficient_of_variation(&scalar("e", vec![])), 0.0);
     }
 

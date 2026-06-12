@@ -127,10 +127,7 @@ impl Adapter for DiamondAdapter {
         let resolved_query = if input.query.is_absolute() {
             input.query.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.query,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.query)?
         };
         if !resolved_query.is_file() {
             return Err(AdapterError::InvalidCase {

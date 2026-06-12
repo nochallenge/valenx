@@ -105,12 +105,12 @@ pub struct GaParams {
 impl Default for GaParams {
     fn default() -> Self {
         GaParams {
-            population: 150,           // AutoDock 4 default GA pop is 150
-            generations: 27,           // AutoDock's historical default GA run count
-            mutation_rate: 0.02,       // AutoDock 4 default
-            crossover_rate: 0.8,       // AutoDock 4 default
+            population: 150,             // AutoDock 4 default GA pop is 150
+            generations: 27,             // AutoDock's historical default GA run count
+            mutation_rate: 0.02,         // AutoDock 4 default
+            crossover_rate: 0.8,         // AutoDock 4 default
             local_search_fraction: 0.06, // AutoDock 4 default (~6%)
-            tournament_size: 4,        // AutoDock 4 default
+            tournament_size: 4,          // AutoDock 4 default
             local_search: LocalSearchKind::SolisWets(SolisWetsParams::lamarckian()),
         }
     }
@@ -480,7 +480,8 @@ TORSDOF 0
         };
         let (lig, maps) = setup();
         let obj = PoseObjective::uncharged(&lig, &maps);
-        let res = LamarckianGa::new(bad).run(&obj, Vector3::zeros(), Vector3::new(8.0, 8.0, 8.0), 1);
+        let res =
+            LamarckianGa::new(bad).run(&obj, Vector3::zeros(), Vector3::new(8.0, 8.0, 8.0), 1);
         assert!(res.is_err());
     }
 

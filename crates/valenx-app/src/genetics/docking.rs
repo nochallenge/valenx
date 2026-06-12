@@ -88,8 +88,12 @@ impl DockingPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// A minimal valid receptor PDBQT — a few well-spaced atoms.
@@ -140,8 +144,12 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Dock a library of ligands and rank them by best-pose affinity.");
         ui.separator();
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
     });
     ui.separator();
 
@@ -220,9 +228,8 @@ fn parse_pdbqt_atoms(text: &str) -> Vec<ViewAtom> {
         if record != "ATOM" && record != "HETATM" {
             continue;
         }
-        let col = |a: usize, b: usize| -> &str {
-            line.get(a..b.min(line.len())).unwrap_or("").trim()
-        };
+        let col =
+            |a: usize, b: usize| -> &str { line.get(a..b.min(line.len())).unwrap_or("").trim() };
         let name = col(12, 16);
         let x = col(30, 38).parse::<f32>();
         let y = col(38, 46).parse::<f32>();
@@ -259,8 +266,7 @@ fn show_in_viewport(app: &mut ValenxApp) {
         atoms.extend(parse_pdbqt_atoms(&p.ligand));
     }
     if atoms.is_empty() {
-        app.genetics.docking.error =
-            Some("no ATOM records found in the PDBQT text".to_string());
+        app.genetics.docking.error = Some("no ATOM records found in the PDBQT text".to_string());
         return;
     }
     let bonds = molecule_view::detect_bonds(&atoms);
@@ -299,8 +305,9 @@ fn draw_dock(p: &mut DockingPanel, ui: &mut egui::Ui) {
             .desired_rows(5),
     );
     ui.horizontal(|ui| {
-        ui.label("Search runs:")
-            .on_hover_text("Number of independent docking restarts. More = better pose coverage but slower.");
+        ui.label("Search runs:").on_hover_text(
+            "Number of independent docking restarts. More = better pose coverage but slower.",
+        );
         ui.add(egui::DragValue::new(&mut p.n_runs).range(1..=64))
             .on_hover_text("Independent search restarts (typical 8–16).");
         ui.label("seed:")
@@ -366,8 +373,9 @@ fn draw_screen(p: &mut DockingPanel, ui: &mut egui::Ui) {
             .desired_rows(7),
     );
     ui.horizontal(|ui| {
-        ui.label("Search runs:")
-            .on_hover_text("Number of independent docking restarts. More = better pose coverage but slower.");
+        ui.label("Search runs:").on_hover_text(
+            "Number of independent docking restarts. More = better pose coverage but slower.",
+        );
         ui.add(egui::DragValue::new(&mut p.n_runs).range(1..=64))
             .on_hover_text("Independent search restarts (typical 8–16).");
         ui.label("seed:")
@@ -397,44 +405,41 @@ fn run_screen(p: &mut DockingPanel) {
         ..DockParams::fast()
     };
     match screen(&p.receptor, &library, &params) {
-            Ok(report) => {
-                let mut out = format!(
-                    "virtual screen complete\nscreened      : {}\nfailed        : {}\n\n\
+        Ok(report) => {
+            let mut out = format!(
+                "virtual screen complete\nscreened      : {}\nfailed        : {}\n\n\
                      -- ranked hits (best score first) --\n",
-                    report.n_screened,
-                    report.n_failed,
-                );
-                let mut hits = report.hits.clone();
-                hits.sort_by(|a, b| {
-                    let av = a.best_score.unwrap_or(f64::INFINITY);
-                    let bv = b.best_score.unwrap_or(f64::INFINITY);
-                    av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
-                });
-                for (i, hit) in hits.iter().enumerate() {
-                    match (&hit.best_score, &hit.failure) {
-                        (Some(s), _) => out.push_str(&format!(
-                            "  #{:<3} {:<16} {:>9.3} kcal/mol\n",
-                            i + 1,
-                            hit.name,
-                            s,
-                        )),
-                        (None, Some(f)) => out.push_str(&format!(
-                            "  #{:<3} {:<16} FAILED — {}\n",
-                            i + 1,
-                            hit.name,
-                            f,
-                        )),
-                        (None, None) => out.push_str(&format!(
-                            "  #{:<3} {:<16} (no score)\n",
-                            i + 1,
-                            hit.name,
-                        )),
+                report.n_screened, report.n_failed,
+            );
+            let mut hits = report.hits.clone();
+            hits.sort_by(|a, b| {
+                let av = a.best_score.unwrap_or(f64::INFINITY);
+                let bv = b.best_score.unwrap_or(f64::INFINITY);
+                av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            for (i, hit) in hits.iter().enumerate() {
+                match (&hit.best_score, &hit.failure) {
+                    (Some(s), _) => out.push_str(&format!(
+                        "  #{:<3} {:<16} {:>9.3} kcal/mol\n",
+                        i + 1,
+                        hit.name,
+                        s,
+                    )),
+                    (None, Some(f)) => out.push_str(&format!(
+                        "  #{:<3} {:<16} FAILED — {}\n",
+                        i + 1,
+                        hit.name,
+                        f,
+                    )),
+                    (None, None) => {
+                        out.push_str(&format!("  #{:<3} {:<16} (no score)\n", i + 1, hit.name,))
                     }
                 }
-                p.result = out;
             }
-            Err(e) => p.error = Some(e.to_string()),
+            p.result = out;
         }
+        Err(e) => p.error = Some(e.to_string()),
+    }
 }
 
 /// Split a `>name`-delimited blob into `(name, pdbqt)` library entries.
@@ -588,6 +593,9 @@ mod headless_ui_tests {
             ..DockingPanel::default()
         };
         run_dock(&mut p);
-        assert!(p.error.is_some(), "dock should error on a malformed receptor");
+        assert!(
+            p.error.is_some(),
+            "dock should error on a malformed receptor"
+        );
     }
 }

@@ -253,8 +253,9 @@ pub fn read_slurm_log_tail(
     // The +1 line of headroom covers the case where the seek lands
     // mid-line (we discard the partial first line below) plus a
     // little slack so callers asking for `n = 1` don't get nothing.
-    let mut tail_bytes =
-        (n as u64).saturating_add(1).saturating_mul(ESTIMATED_LINE_BYTES);
+    let mut tail_bytes = (n as u64)
+        .saturating_add(1)
+        .saturating_mul(ESTIMATED_LINE_BYTES);
     let mut ring: VecDeque<String> = VecDeque::with_capacity(n);
     let mut iterations: u32 = 0;
     // Round-28 H1: the doubling-walk's exit conditions all live on

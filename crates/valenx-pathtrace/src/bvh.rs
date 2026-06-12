@@ -226,8 +226,7 @@ impl Bvh {
             if left_count[i] == 0 || right_count[i] == 0 {
                 continue;
             }
-            let cost = left_area[i] * left_count[i] as f32
-                + right_area[i] * right_count[i] as f32;
+            let cost = left_area[i] * left_count[i] as f32 + right_area[i] * right_count[i] as f32;
             if cost < best_cost {
                 best_cost = cost;
                 best_split = i;
@@ -340,9 +339,7 @@ impl Bvh {
                 // Leaf — test its triangle run.
                 let start = node.payload as usize;
                 for &ti in &self.tri_indices[start..start + node.tri_count as usize] {
-                    if let Some(hit) =
-                        triangles[ti as usize].intersect(ray, t_min, t_far)
-                    {
+                    if let Some(hit) = triangles[ti as usize].intersect(ray, t_min, t_far) {
                         t_far = hit.t;
                         closest = Some(hit);
                     }
@@ -369,13 +366,7 @@ impl Bvh {
     /// Returns `true` on the first hit found (no need to find the
     /// nearest), so it is cheaper than [`Bvh::intersect`]. Used to test
     /// occlusion between a surface point and a light sample.
-    pub fn occluded(
-        &self,
-        triangles: &[Triangle],
-        ray: &Ray,
-        t_min: f32,
-        t_max: f32,
-    ) -> bool {
+    pub fn occluded(&self, triangles: &[Triangle], ray: &Ray, t_min: f32, t_max: f32) -> bool {
         if self.nodes.is_empty() {
             return false;
         }
@@ -495,12 +486,7 @@ mod tests {
                 }
                 match (bvh_hit, brute) {
                     (Some(a), Some(b)) => {
-                        assert!(
-                            (a.t - b.t).abs() < 1e-4,
-                            "BVH t {} vs brute t {}",
-                            a.t,
-                            b.t
-                        );
+                        assert!((a.t - b.t).abs() < 1e-4, "BVH t {} vs brute t {}", a.t, b.t);
                     }
                     (None, None) => {}
                     _ => panic!("BVH / brute-force disagree at ({i}, {j})"),

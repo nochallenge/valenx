@@ -63,7 +63,10 @@ impl PathogenicVariant {
     /// A short human-readable label.
     pub fn label(&self) -> String {
         match self {
-            PathogenicVariant::Substitution { ref_base, variant_base } => format!(
+            PathogenicVariant::Substitution {
+                ref_base,
+                variant_base,
+            } => format!(
                 "{}>{} pathogenic substitution",
                 *ref_base as char, *variant_base as char
             ),
@@ -195,7 +198,10 @@ fn correction_change(
     pos: usize,
 ) -> Result<DesiredChange> {
     match variant {
-        PathogenicVariant::Substitution { ref_base, variant_base } => {
+        PathogenicVariant::Substitution {
+            ref_base,
+            variant_base,
+        } => {
             let r = reference[pos].to_ascii_uppercase();
             if r != ref_base.to_ascii_uppercase() {
                 return Err(GeneditingError::invalid_target(
@@ -237,9 +243,13 @@ fn try_base_edit_correction(
     req: &VariantCorrectionRequest,
 ) -> Result<Option<VariantCorrectionPlan>> {
     let (ref_base, variant_base) = match &req.variant {
-        PathogenicVariant::Substitution { ref_base, variant_base } => {
-            (ref_base.to_ascii_uppercase(), variant_base.to_ascii_uppercase())
-        }
+        PathogenicVariant::Substitution {
+            ref_base,
+            variant_base,
+        } => (
+            ref_base.to_ascii_uppercase(),
+            variant_base.to_ascii_uppercase(),
+        ),
         _ => return Ok(None), // base editors do point transitions only
     };
     // The correction edit is variant_base -> ref_base. Pick the editor
@@ -300,7 +310,10 @@ fn try_prime_correction(req: &VariantCorrectionRequest) -> Result<PegRna> {
     // installs a PrimeEdit on it. The patient sequence is the
     // designer's "reference"; the PrimeEdit restores wild type.
     let (patient, edit_pos, prime_edit): (Vec<u8>, usize, PrimeEdit) = match &req.variant {
-        PathogenicVariant::Substitution { variant_base, ref_base } => {
+        PathogenicVariant::Substitution {
+            variant_base,
+            ref_base,
+        } => {
             let mut patient = req.reference.clone();
             patient[req.variant_pos] = variant_base.to_ascii_uppercase();
             (
@@ -319,7 +332,9 @@ fn try_prime_correction(req: &VariantCorrectionRequest) -> Result<PegRna> {
             (
                 patient,
                 req.variant_pos,
-                PrimeEdit::Deletion { len: inserted.len() },
+                PrimeEdit::Deletion {
+                    len: inserted.len(),
+                },
             )
         }
         PathogenicVariant::Deletion { deleted } => {
@@ -479,18 +494,26 @@ mod tests {
         .unwrap();
         assert_eq!(
             change,
-            DesiredChange::PointMutation { from: b'G', to: b'C' }
+            DesiredChange::PointMutation {
+                from: b'G',
+                to: b'C'
+            }
         );
     }
 
     #[test]
     fn variant_labels() {
-        assert!(PathogenicVariant::Substitution { ref_base: b'A', variant_base: b'G' }
-            .label()
-            .contains("substitution"));
-        assert!(PathogenicVariant::Insertion { inserted: b"GG".to_vec() }
-            .label()
-            .contains("insertion"));
+        assert!(PathogenicVariant::Substitution {
+            ref_base: b'A',
+            variant_base: b'G'
+        }
+        .label()
+        .contains("substitution"));
+        assert!(PathogenicVariant::Insertion {
+            inserted: b"GG".to_vec()
+        }
+        .label()
+        .contains("insertion"));
     }
 
     #[test]

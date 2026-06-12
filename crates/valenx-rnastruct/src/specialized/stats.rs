@@ -109,9 +109,7 @@ pub fn structure_stats(s: &Structure) -> StructureStats {
         if i >= j {
             continue;
         }
-        let extends_outward = i > 0
-            && j + 1 < n
-            && partner[i - 1] == Some(j + 1);
+        let extends_outward = i > 0 && j + 1 < n && partner[i - 1] == Some(j + 1);
         if !extends_outward {
             stems += 1;
         }

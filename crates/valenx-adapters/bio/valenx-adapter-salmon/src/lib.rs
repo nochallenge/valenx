@@ -478,9 +478,7 @@ libtype       = "A"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = SalmonAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = SalmonAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("..") || msg.contains("stay within") || msg.contains("escape"),
@@ -521,9 +519,7 @@ libtype       = "A"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = SalmonAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = SalmonAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("[bio.salmon].index_dir"),

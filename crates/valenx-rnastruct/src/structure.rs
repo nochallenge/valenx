@@ -197,7 +197,9 @@ impl Structure {
             )));
         }
         if i == j {
-            return Err(RnaStructError::structure("cannot pair a position with itself"));
+            return Err(RnaStructError::structure(
+                "cannot pair a position with itself",
+            ));
         }
         if self.partner[i].is_some() || self.partner[j].is_some() {
             return Err(RnaStructError::structure(format!(
@@ -252,8 +254,7 @@ impl Structure {
     /// unrecognised character.
     pub fn from_dot_bracket(db: &str) -> Result<Self> {
         // Four bracket families: (open, close).
-        const FAMILIES: [(char, char); 4] =
-            [('(', ')'), ('[', ']'), ('{', '}'), ('<', '>')];
+        const FAMILIES: [(char, char); 4] = [('(', ')'), ('[', ']'), ('{', '}'), ('<', '>')];
 
         let chars: Vec<char> = db.chars().filter(|c| !c.is_whitespace()).collect();
         let n = chars.len();
@@ -300,11 +301,7 @@ impl Structure {
             if !stack.is_empty() {
                 return Err(RnaStructError::parse(
                     "dot-bracket",
-                    format!(
-                        "{} unmatched `{}` bracket(s)",
-                        stack.len(),
-                        FAMILIES[fam].0
-                    ),
+                    format!("{} unmatched `{}` bracket(s)", stack.len(), FAMILIES[fam].0),
                 ));
             }
         }
@@ -364,11 +361,7 @@ impl Structure {
     /// # Errors
     /// [`RnaStructError::Structure`] on a length mismatch or, when
     /// `require_canonical`, a non-canonical pair.
-    pub fn validate_against(
-        &self,
-        seq: &[u8],
-        require_canonical: bool,
-    ) -> Result<()> {
+    pub fn validate_against(&self, seq: &[u8], require_canonical: bool) -> Result<()> {
         if seq.len() != self.partner.len() {
             return Err(RnaStructError::structure(format!(
                 "structure length {} does not match sequence length {}",
@@ -410,19 +403,17 @@ mod tests {
 
     #[test]
     fn from_pairs_validates() {
-        let s = Structure::from_pairs(6, &[BasePair { i: 0, j: 5 }, BasePair { i: 1, j: 4 }])
-            .unwrap();
+        let s =
+            Structure::from_pairs(6, &[BasePair { i: 0, j: 5 }, BasePair { i: 1, j: 4 }]).unwrap();
         assert_eq!(s.n_pairs(), 2);
         assert_eq!(s.partner(0), Some(5));
         assert!(s.is_paired(1));
         assert!(!s.is_paired(2));
 
         // double-pairing is rejected
-        assert!(Structure::from_pairs(
-            6,
-            &[BasePair { i: 0, j: 5 }, BasePair { i: 0, j: 3 }]
-        )
-        .is_err());
+        assert!(
+            Structure::from_pairs(6, &[BasePair { i: 0, j: 5 }, BasePair { i: 0, j: 3 }]).is_err()
+        );
         // out of range
         assert!(Structure::from_pairs(4, &[BasePair { i: 0, j: 9 }]).is_err());
     }

@@ -154,10 +154,7 @@ pub fn validate_output_basename(name: &str, field_label: &str) -> Result<(), Ada
 /// set `output_dir = "/etc/cron.d"` or `output_dir = "../../etc"` and
 /// the workdir-rooted subprocess would happily write into anywhere
 /// the user has permission for.
-pub fn validate_output_dir(
-    path: &std::path::Path,
-    field_label: &str,
-) -> Result<(), AdapterError> {
+pub fn validate_output_dir(path: &std::path::Path, field_label: &str) -> Result<(), AdapterError> {
     let display = path.display();
     let as_str = path.to_string_lossy();
     if as_str.trim().is_empty() {
@@ -287,10 +284,7 @@ pub fn validate_python_binary(spec: &str) -> Result<PathBuf, AdapterError> {
     }
     let path = std::path::Path::new(spec);
     // The "file name" we'll compare against the allow list.
-    let file_name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(spec);
+    let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or(spec);
     if !ALLOWED_PYTHON_NAMES
         .iter()
         .any(|allowed| file_name.eq_ignore_ascii_case(allowed))
@@ -328,10 +322,7 @@ pub fn validate_rscript_binary(spec: &str) -> Result<PathBuf, AdapterError> {
         )));
     }
     let path = std::path::Path::new(spec);
-    let file_name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(spec);
+    let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or(spec);
     if !ALLOWED_RSCRIPT_NAMES
         .iter()
         .any(|allowed| file_name.eq_ignore_ascii_case(allowed))
@@ -1141,10 +1132,7 @@ pub fn confined_join(
     #[cfg(not(windows))]
     {
         let bytes = user_str.as_bytes();
-        if bytes.len() >= 2
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1] == b':'
-        {
+        if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
             return Err(AdapterError::InvalidCase {
                 case_path: case_dir.join("case.toml"),
                 reason: format!(
@@ -1285,9 +1273,7 @@ pub fn validate_structured_identifier(
     {
         return Err(crate::error::AdapterError::InvalidCase {
             case_path: std::path::PathBuf::new(),
-            reason: format!(
-                "{field}: must be ASCII alphanumeric + .-_ (got {s:?})"
-            ),
+            reason: format!("{field}: must be ASCII alphanumeric + .-_ (got {s:?})"),
         });
     }
     Ok(())
@@ -1361,12 +1347,7 @@ pub fn copy_dir_recursive(
     src: &std::path::Path,
     dst: &std::path::Path,
 ) -> Result<(), AdapterError> {
-    copy_dir_recursive_with_caps(
-        src,
-        dst,
-        MAX_COPY_DIR_TOTAL_BYTES,
-        MAX_COPY_DIR_ENTRIES,
-    )
+    copy_dir_recursive_with_caps(src, dst, MAX_COPY_DIR_TOTAL_BYTES, MAX_COPY_DIR_ENTRIES)
 }
 
 /// Round-24 M3: variant of `copy_dir_recursive` exposed to the test
@@ -1383,7 +1364,10 @@ pub(crate) fn copy_dir_recursive_with_caps(
     max_total_bytes: u64,
     max_entries: usize,
 ) -> Result<(), AdapterError> {
-    let mut totals = CopyDirTotals { bytes: 0, entries: 0 };
+    let mut totals = CopyDirTotals {
+        bytes: 0,
+        entries: 0,
+    };
     copy_dir_recursive_depth(src, dst, 0, &mut totals, max_total_bytes, max_entries)
 }
 
@@ -1396,7 +1380,10 @@ fn copy_dir_recursive_with_caps(
     max_total_bytes: u64,
     max_entries: usize,
 ) -> Result<(), AdapterError> {
-    let mut totals = CopyDirTotals { bytes: 0, entries: 0 };
+    let mut totals = CopyDirTotals {
+        bytes: 0,
+        entries: 0,
+    };
     copy_dir_recursive_depth(src, dst, 0, &mut totals, max_total_bytes, max_entries)
 }
 
@@ -1425,24 +1412,28 @@ fn copy_dir_recursive_depth(
     // `symlink_metadata` does NOT traverse symlinks, so a symlinked
     // top-level entry shows up as `FileType::is_symlink()` here even
     // when the regular `metadata` would follow the link.
-    let md = std::fs::symlink_metadata(src)
-        .map_err(|e| AdapterError::Other(anyhow::anyhow!("symlink_metadata {}: {e}", src.display())))?;
+    let md = std::fs::symlink_metadata(src).map_err(|e| {
+        AdapterError::Other(anyhow::anyhow!("symlink_metadata {}: {e}", src.display()))
+    })?;
     if md.file_type().is_symlink() {
         return Err(AdapterError::Other(anyhow::anyhow!(
             "copy_dir_recursive: source path is a symlink (refusing to traverse): {}",
             src.display()
         )));
     }
-    std::fs::create_dir_all(dst)
-        .map_err(|e| AdapterError::Other(anyhow::anyhow!("create_dir_all {}: {e}", dst.display())))?;
+    std::fs::create_dir_all(dst).map_err(|e| {
+        AdapterError::Other(anyhow::anyhow!("create_dir_all {}: {e}", dst.display()))
+    })?;
     for entry in std::fs::read_dir(src)
         .map_err(|e| AdapterError::Other(anyhow::anyhow!("read_dir {}: {e}", src.display())))?
     {
-        let entry = entry.map_err(|e| AdapterError::Other(anyhow::anyhow!("read_dir entry: {e}")))?;
+        let entry =
+            entry.map_err(|e| AdapterError::Other(anyhow::anyhow!("read_dir entry: {e}")))?;
         let from = entry.path();
         let to: PathBuf = dst.join(entry.file_name());
-        let entry_md = std::fs::symlink_metadata(&from)
-            .map_err(|e| AdapterError::Other(anyhow::anyhow!("symlink_metadata {}: {e}", from.display())))?;
+        let entry_md = std::fs::symlink_metadata(&from).map_err(|e| {
+            AdapterError::Other(anyhow::anyhow!("symlink_metadata {}: {e}", from.display()))
+        })?;
         if entry_md.file_type().is_symlink() {
             return Err(AdapterError::Other(anyhow::anyhow!(
                 "copy_dir_recursive: source contains a symlink (refusing to traverse): {}",
@@ -1484,8 +1475,13 @@ fn copy_dir_recursive_depth(
                     from.display()
                 )));
             }
-            std::fs::copy(&from, &to)
-                .map_err(|e| AdapterError::Other(anyhow::anyhow!("copy {} -> {}: {e}", from.display(), to.display())))?;
+            std::fs::copy(&from, &to).map_err(|e| {
+                AdapterError::Other(anyhow::anyhow!(
+                    "copy {} -> {}: {e}",
+                    from.display(),
+                    to.display()
+                ))
+            })?;
         }
     }
     Ok(())
@@ -1735,7 +1731,11 @@ mod tests {
 
     #[test]
     fn validate_output_basename_rejects_absolute() {
-        let abs = if cfg!(windows) { "C:\\Windows\\System32" } else { "/etc/passwd" };
+        let abs = if cfg!(windows) {
+            "C:\\Windows\\System32"
+        } else {
+            "/etc/passwd"
+        };
         let err = validate_output_basename(abs, "out").unwrap_err();
         let msg = format!("{err}");
         // Either separator-check or absolute-check could fire first.
@@ -1797,8 +1797,7 @@ mod tests {
     /// letting a hostile case do `rscript = "/usr/bin/curl"`.
     #[test]
     fn validate_rscript_binary_rejects_arbitrary_binary() {
-        let err = validate_rscript_binary("/usr/bin/curl")
-            .expect_err("must reject /usr/bin/curl");
+        let err = validate_rscript_binary("/usr/bin/curl").expect_err("must reject /usr/bin/curl");
         let msg = format!("{err}");
         assert!(msg.contains("allow"), "msg: {msg}");
         assert!(msg.contains("curl"), "msg: {msg}");
@@ -1859,7 +1858,11 @@ mod tests {
 
     #[test]
     fn validate_output_dir_rejects_absolute_paths() {
-        let abs = if cfg!(windows) { "C:\\tmp\\out" } else { "/tmp/out" };
+        let abs = if cfg!(windows) {
+            "C:\\tmp\\out"
+        } else {
+            "/tmp/out"
+        };
         let err = validate_output_dir(std::path::Path::new(abs), "out")
             .expect_err("must reject absolute path");
         let msg = format!("{err}");
@@ -1871,15 +1874,9 @@ mod tests {
         // The whole point of the helper vs `validate_output_basename`:
         // multi-component relative paths like `results/run1` ARE
         // allowed.
-        assert!(
-            validate_output_dir(std::path::Path::new("results"), "out").is_ok()
-        );
-        assert!(
-            validate_output_dir(std::path::Path::new("results/run1"), "out").is_ok()
-        );
-        assert!(
-            validate_output_dir(std::path::Path::new("a/b/c"), "out").is_ok()
-        );
+        assert!(validate_output_dir(std::path::Path::new("results"), "out").is_ok());
+        assert!(validate_output_dir(std::path::Path::new("results/run1"), "out").is_ok());
+        assert!(validate_output_dir(std::path::Path::new("a/b/c"), "out").is_ok());
     }
 
     #[test]
@@ -1887,8 +1884,8 @@ mod tests {
         // Both POSIX root-relative (`/foo`) and Windows current-drive-
         // relative (`\foo`) must be rejected. On Linux `\foo` is just
         // a weird filename so the leading-`\` check is the only signal.
-        let err = validate_output_dir(std::path::Path::new("/foo"), "out")
-            .expect_err("must reject /foo");
+        let err =
+            validate_output_dir(std::path::Path::new("/foo"), "out").expect_err("must reject /foo");
         let msg = format!("{err}");
         assert!(
             msg.contains('/') || msg.contains("absolute") || msg.contains('\\'),
@@ -1914,8 +1911,8 @@ mod tests {
     #[test]
     fn confined_join_rejects_windows_drive_relative() {
         let case_dir = std::path::Path::new("C:\\case\\path");
-        let err = confined_join(case_dir, std::path::Path::new("C:foo"))
-            .expect_err("must reject C:foo");
+        let err =
+            confined_join(case_dir, std::path::Path::new("C:foo")).expect_err("must reject C:foo");
         let msg = format!("{err}");
         assert!(
             msg.contains("drive") || msg.contains("absolute"),
@@ -2232,7 +2229,8 @@ mod tests {
         let stderr: Vec<u8> = Vec::new();
         // Round-24 M6: inner now drains in parallel threads so the
         // readers must be `Send`. `Cursor<Vec<u8>>` already is.
-        let stdout_reader: Box<dyn std::io::Read + Send> = Box::new(std::io::Cursor::new(big_stdout));
+        let stdout_reader: Box<dyn std::io::Read + Send> =
+            Box::new(std::io::Cursor::new(big_stdout));
         let stderr_reader: Box<dyn std::io::Read + Send> = Box::new(std::io::Cursor::new(stderr));
         let got = capture_subprocess_stdout_inner(stdout_reader, stderr_reader).unwrap();
         // stdout truncated at MAX_PROBE_OUTPUT_BYTES; stderr was
@@ -2842,10 +2840,7 @@ mod tests {
         // Common safe inputs (material names, file basenames) must
         // round-trip unchanged so the writer's output stays human-
         // readable for well-behaved cases.
-        assert_eq!(
-            sanitize_structured_identifier("aluminium"),
-            "aluminium"
-        );
+        assert_eq!(sanitize_structured_identifier("aluminium"), "aluminium");
         assert_eq!(
             sanitize_structured_identifier("steel-7075-t6"),
             "steel-7075-t6"
@@ -2976,7 +2971,10 @@ mod tests {
     fn python_str_repr_keeps_plain_ascii_intact() {
         assert_eq!(python_str_repr("Chen2020"), "Chen2020");
         assert_eq!(python_str_repr("h2o2"), "h2o2");
-        assert_eq!(python_str_repr("CH4:1, O2:2, N2:7.52"), "CH4:1, O2:2, N2:7.52");
+        assert_eq!(
+            python_str_repr("CH4:1, O2:2, N2:7.52"),
+            "CH4:1, O2:2, N2:7.52"
+        );
     }
 
     /// Backslash must be escaped — the user could otherwise inject

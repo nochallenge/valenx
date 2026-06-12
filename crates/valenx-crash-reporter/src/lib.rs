@@ -920,11 +920,7 @@ mod tests {
             let barrier = Arc::clone(&barrier);
             handles.push(thread::spawn(move || {
                 barrier.wait();
-                let mut report = CrashReport::new(
-                    format!("concurrent panic #{i}"),
-                    None,
-                    "0.1.0",
-                );
+                let mut report = CrashReport::new(format!("concurrent panic #{i}"), None, "0.1.0");
                 // Distinct timestamps so the FINAL file names don't
                 // collide; we're isolating the SIDECAR-collision
                 // surface as the failure mode of interest.
@@ -1001,11 +997,7 @@ mod tests {
             let barrier = Arc::clone(&barrier);
             handles.push(thread::spawn(move || {
                 barrier.wait();
-                let mut report = CrashReport::new(
-                    format!("concurrent panic #{i}"),
-                    None,
-                    "0.1.0",
-                );
+                let mut report = CrashReport::new(format!("concurrent panic #{i}"), None, "0.1.0");
                 // SAME safe_ts across all N threads — the sidecar
                 // race AND the rename race both hit the same
                 // basename. Pre-R27's single-tmp sidecar would
@@ -1056,10 +1048,7 @@ mod tests {
             let entry = entry.expect("dir entry");
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            assert!(
-                !name.contains(".tmp."),
-                "orphan sidecar survived: {name}"
-            );
+            assert!(!name.contains(".tmp."), "orphan sidecar survived: {name}");
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

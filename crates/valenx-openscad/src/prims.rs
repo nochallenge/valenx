@@ -32,10 +32,7 @@ use crate::error::OpenScadCsgError;
 /// `points` is a list of 3-D vertex positions and `faces` is a list
 /// of vertex-index loops (any face with >3 indices is fan-triangulated
 /// from the first vertex).
-pub fn polyhedron(
-    points: &[[f64; 3]],
-    faces: &[Vec<usize>],
-) -> Result<Solid, OpenScadCsgError> {
+pub fn polyhedron(points: &[[f64; 3]], faces: &[Vec<usize>]) -> Result<Solid, OpenScadCsgError> {
     if points.len() < 4 {
         return Err(OpenScadCsgError::BadParameter {
             name: "points",
@@ -246,12 +243,7 @@ mod tests {
             [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0],
         ];
-        let faces = vec![
-            vec![0, 1, 2],
-            vec![0, 1, 3],
-            vec![0, 2, 3],
-            vec![1, 2, 3],
-        ];
+        let faces = vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]];
         let s = polyhedron(&pts, &faces).expect("ok");
         if let Solid::Mesh(m) = s {
             assert_eq!(m.nodes.len(), 4);

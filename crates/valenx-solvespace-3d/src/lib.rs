@@ -144,11 +144,7 @@ mod tests_integration {
         let mut s = Sketch3D::new();
         let a = s.add_point(0.0, 0.0, 0.0);
         let b = s.add_point(1.0, 1.0, 1.0);
-        s.add_constraint(Constraint3D::PointDistance3 {
-            a,
-            b,
-            target: 10.0,
-        });
+        s.add_constraint(Constraint3D::PointDistance3 { a, b, target: 10.0 });
         let rep = s.solve().expect("ok");
         assert_eq!(rep.status, SolverStatus::Converged);
         let (ax, ay, az) = s.point_xyz(a);
@@ -190,7 +186,10 @@ mod tests_integration {
         let mut s = Sketch3D::new();
         let c = s.add_point(0.0, 0.0, 0.0);
         let circle = s.add_circle(c, 1.0, 0.0, 0.0, 1.0).unwrap();
-        s.add_constraint(Constraint3D::CircleRadius { circle, target: 5.0 });
+        s.add_constraint(Constraint3D::CircleRadius {
+            circle,
+            target: 5.0,
+        });
         let rep = s.solve().expect("ok");
         assert_eq!(rep.status, SolverStatus::Converged);
         assert!(
@@ -207,7 +206,10 @@ mod tests_integration {
         let mut s = Sketch3D::new();
         let center = s.add_point(0.0, 0.0, 0.0);
         let circle = s.add_circle(center, 5.0, 0.0, 0.0, 1.0).unwrap();
-        s.add_constraint(Constraint3D::CircleRadius { circle, target: 5.0 });
+        s.add_constraint(Constraint3D::CircleRadius {
+            circle,
+            target: 5.0,
+        });
         let p = s.add_point(2.0, 1.0, 3.0);
         s.add_constraint(Constraint3D::PointOnCircle { point: p, circle });
         let rep = s.solve().expect("ok");
@@ -218,8 +220,14 @@ mod tests_integration {
         let dist = (rx * rx + ry * ry + rz * rz).sqrt();
         let nlen = (nx * nx + ny * ny + nz * nz).sqrt();
         let plane_resid = (nx * rx + ny * ry + nz * rz) / nlen;
-        assert!((dist - r).abs() < 1e-5, "point not at radius: dist={dist} r={r}");
-        assert!(plane_resid.abs() < 1e-5, "point not in circle plane: {plane_resid}");
+        assert!(
+            (dist - r).abs() < 1e-5,
+            "point not at radius: dist={dist} r={r}"
+        );
+        assert!(
+            plane_resid.abs() < 1e-5,
+            "point not in circle plane: {plane_resid}"
+        );
         assert!((r - 5.0).abs() < 1e-5, "radius drifted: {r}");
     }
 
@@ -231,7 +239,10 @@ mod tests_integration {
         let cb = s.add_point(10.0, 0.0, 0.0);
         let a = s.add_circle(ca, 3.0, 0.0, 0.0, 1.0).unwrap();
         let b = s.add_circle(cb, 1.0, 0.0, 0.0, 1.0).unwrap();
-        s.add_constraint(Constraint3D::CircleRadius { circle: a, target: 3.0 });
+        s.add_constraint(Constraint3D::CircleRadius {
+            circle: a,
+            target: 3.0,
+        });
         s.add_constraint(Constraint3D::EqualRadius { a, b });
         let rep = s.solve().expect("ok");
         assert_eq!(rep.status, SolverStatus::Converged);
@@ -275,7 +286,11 @@ mod tests_integration {
         s.add_constraint(Constraint3D::ArcRadius { arc, target: 5.0 });
         let rep = s.solve().expect("ok");
         assert_eq!(rep.status, SolverStatus::Converged);
-        assert!((s.arc_radius(arc) - 5.0).abs() < 1e-6, "radius = {}", s.arc_radius(arc));
+        assert!(
+            (s.arc_radius(arc) - 5.0).abs() < 1e-6,
+            "radius = {}",
+            s.arc_radius(arc)
+        );
     }
 
     /// ArcEndpointsOnArc — the start + end points are pulled onto the arc's
@@ -299,7 +314,10 @@ mod tests_integration {
             let (rx, ry, rz) = (px - cx, py - cy, pz - cz);
             let dist = (rx * rx + ry * ry + rz * rz).sqrt();
             let plane = (nx * rx + ny * ry + nz * rz) / nlen;
-            assert!((dist - r).abs() < 1e-5, "endpoint off radius: {dist} vs {r}");
+            assert!(
+                (dist - r).abs() < 1e-5,
+                "endpoint off radius: {dist} vs {r}"
+            );
             assert!(plane.abs() < 1e-5, "endpoint off plane: {plane}");
         }
     }
@@ -317,9 +335,16 @@ mod tests_integration {
         let start = s.spline_point_at(spline, 0.0);
         let end = s.spline_point_at(spline, 1.0);
         assert!(start.0.abs() < 1e-9 && start.1.abs() < 1e-9, "B(0) = p0");
-        assert!((end.0 - 3.0).abs() < 1e-9 && end.1.abs() < 1e-9, "B(1) = p3");
+        assert!(
+            (end.0 - 3.0).abs() < 1e-9 && end.1.abs() < 1e-9,
+            "B(1) = p3"
+        );
         // The control points solve under ordinary constraints.
-        s.add_constraint(Constraint3D::PointDistance3 { a: p0, b: p3, target: 10.0 });
+        s.add_constraint(Constraint3D::PointDistance3 {
+            a: p0,
+            b: p3,
+            target: 10.0,
+        });
         let rep = s.solve().expect("ok");
         assert_eq!(rep.status, SolverStatus::Converged);
     }

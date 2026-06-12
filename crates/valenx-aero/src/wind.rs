@@ -107,13 +107,9 @@ impl Wind {
             });
         }
         if !yaw.is_finite() || !pitch.is_finite() {
-            return Err(AeroError::IllPosedWind(
-                "yaw / pitch must be finite".into(),
-            ));
+            return Err(AeroError::IllPosedWind("yaw / pitch must be finite".into()));
         }
-        if !(turbulence_intensity.is_finite()
-            && (0.0..=1.0).contains(&turbulence_intensity))
-        {
+        if !(turbulence_intensity.is_finite() && (0.0..=1.0).contains(&turbulence_intensity)) {
             return Err(AeroError::IllPosedWind(format!(
                 "turbulence intensity must be in [0, 1], got {turbulence_intensity}"
             )));

@@ -41,7 +41,11 @@ fn describe(v: &Variant) -> String {
             )
         }
         Variant::CodingSub { pos, wt, mt } => {
-            format!("coding substitution c.{pos}{}>{}", wt.as_char(), mt.as_char())
+            format!(
+                "coding substitution c.{pos}{}>{}",
+                wt.as_char(),
+                mt.as_char()
+            )
         }
     }
 }
@@ -136,14 +140,20 @@ mod tests {
     #[test]
     fn parses_a_protein_substitution() {
         let v = parse("p.R273H").expect("parse");
-        assert!(matches!(v, Variant::ProteinSub { pos: 273, .. }), "got {v:?}");
+        assert!(
+            matches!(v, Variant::ProteinSub { pos: 273, .. }),
+            "got {v:?}"
+        );
         assert!(describe(&v).contains("273"));
     }
 
     #[test]
     fn parses_a_coding_substitution() {
         let v = parse("c.817C>T").expect("parse");
-        assert!(matches!(v, Variant::CodingSub { pos: 817, .. }), "got {v:?}");
+        assert!(
+            matches!(v, Variant::CodingSub { pos: 817, .. }),
+            "got {v:?}"
+        );
     }
 
     #[test]

@@ -380,7 +380,10 @@ mod tests {
 
     #[test]
     fn new_session_rejects_bad_goal() {
-        let bad = DesignGoal::coding(Vec::new(), valenx_genediting::mrna::tailcap::MrnaUseCase::Vaccine);
+        let bad = DesignGoal::coding(
+            Vec::new(),
+            valenx_genediting::mrna::tailcap::MrnaUseCase::Vaccine,
+        );
         assert!(DesignSession::new(bad, DesignConstraints::default()).is_err());
     }
 

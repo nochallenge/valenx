@@ -64,11 +64,7 @@ mod tests {
         )
         .expect("stock ok");
         let mut tp = Toolpath::new();
-        tp.push(Move::new(
-            MoveKind::Rapid,
-            Vector3::new(0.0, 5.0, 5.0),
-            0.0,
-        ));
+        tp.push(Move::new(MoveKind::Rapid, Vector3::new(0.0, 5.0, 5.0), 0.0));
         tp.push(Move::new(
             MoveKind::Cut,
             Vector3::new(20.0, 5.0, 5.0),
@@ -143,24 +139,28 @@ mod tests {
 
     #[test]
     fn invalid_inputs_rejected() {
-        let stock = Stock::new(
-            Vector3::zeros(),
-            Vector3::new(10.0, 10.0, 10.0),
-            "alu",
-        )
-        .unwrap();
+        let stock = Stock::new(Vector3::zeros(), Vector3::new(10.0, 10.0, 10.0), "alu").unwrap();
         let tp = Toolpath::new();
         assert!(matches!(
             Animation::new(stock.clone(), tp.clone(), 0.0, 5, (10, 10, 10)),
-            Err(CamoticsError::BadParameter { name: "tool_radius_mm", .. })
+            Err(CamoticsError::BadParameter {
+                name: "tool_radius_mm",
+                ..
+            })
         ));
         assert!(matches!(
             Animation::new(stock.clone(), tp.clone(), 1.0, 1, (10, 10, 10)),
-            Err(CamoticsError::BadParameter { name: "n_frames", .. })
+            Err(CamoticsError::BadParameter {
+                name: "n_frames",
+                ..
+            })
         ));
         assert!(matches!(
             Animation::new(stock, tp, 1.0, 5, (0, 10, 10)),
-            Err(CamoticsError::BadParameter { name: "voxel_resolution", .. })
+            Err(CamoticsError::BadParameter {
+                name: "voxel_resolution",
+                ..
+            })
         ));
     }
 

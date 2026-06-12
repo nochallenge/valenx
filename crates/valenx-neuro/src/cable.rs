@@ -150,7 +150,11 @@ pub struct StimPulse {
 impl StimPulse {
     /// A zero (off) pulse.
     pub fn off() -> Self {
-        Self { amp_ua_cm2: 0.0, start_ms: 0.0, width_ms: 0.0 }
+        Self {
+            amp_ua_cm2: 0.0,
+            start_ms: 0.0,
+            width_ms: 0.0,
+        }
     }
     /// The stimulus current (µA/cm²) at time `t_ms`.
     fn current_at(&self, t_ms: f64) -> f64 {
@@ -451,7 +455,11 @@ mod tests {
         // well over the HH firing threshold — so a full AP fires.
         let mut c = HhCompartment::at_rest();
         let trace = c.run(
-            StimPulse { amp_ua_cm2: 50.0, start_ms: 1.0, width_ms: 0.5 },
+            StimPulse {
+                amp_ua_cm2: 50.0,
+                start_ms: 1.0,
+                width_ms: 0.5,
+            },
             20.0,
             0.005,
         );
@@ -466,27 +474,57 @@ mod tests {
         let rest = hh_gating_kinetics(-65.0);
         assert!((rest.m_inf - 0.053).abs() < 0.005, "m∞(−65) {}", rest.m_inf);
         assert!((rest.h_inf - 0.596).abs() < 0.01, "h∞(−65) {}", rest.h_inf);
-        assert!((0.30..0.34).contains(&rest.n_inf), "n∞(−65) ≈ 0.32, got {}", rest.n_inf);
+        assert!(
+            (0.30..0.34).contains(&rest.n_inf),
+            "n∞(−65) ≈ 0.32, got {}",
+            rest.n_inf
+        );
         // Na activation is fast, K activation slow — the separation that makes a spike.
-        assert!(rest.tau_m_ms < rest.tau_n_ms, "τ_m {} ≪ τ_n {}", rest.tau_m_ms, rest.tau_n_ms);
+        assert!(
+            rest.tau_m_ms < rest.tau_n_ms,
+            "τ_m {} ≪ τ_n {}",
+            rest.tau_m_ms,
+            rest.tau_n_ms
+        );
         assert!(rest.tau_m_ms > 0.0 && rest.tau_h_ms > 0.0 && rest.tau_n_ms > 0.0);
 
         // Strong hyperpolarisation: activation shut (m∞,n∞→0), Na de-inactivated (h∞→1).
         let lo = hh_gating_kinetics(-100.0);
-        assert!(lo.m_inf < 0.02 && lo.n_inf < 0.1, "hyperpol activation {} {}", lo.m_inf, lo.n_inf);
+        assert!(
+            lo.m_inf < 0.02 && lo.n_inf < 0.1,
+            "hyperpol activation {} {}",
+            lo.m_inf,
+            lo.n_inf
+        );
         assert!(lo.h_inf > 0.95, "hyperpol h∞ {}", lo.h_inf);
 
         // Strong depolarisation: activation on (m∞,n∞→1), Na inactivated (h∞→0).
         let hi = hh_gating_kinetics(50.0);
-        assert!(hi.m_inf > 0.98 && hi.n_inf > 0.9, "depol activation {} {}", hi.m_inf, hi.n_inf);
+        assert!(
+            hi.m_inf > 0.98 && hi.n_inf > 0.9,
+            "depol activation {} {}",
+            hi.m_inf,
+            hi.n_inf
+        );
         assert!(hi.h_inf < 0.02, "depol h∞ {}", hi.h_inf);
 
         // Monotonic: m∞ and n∞ rise with depolarisation, h∞ falls; all stay in [0,1].
         let mid = hh_gating_kinetics(-30.0);
-        assert!(lo.m_inf < mid.m_inf && mid.m_inf < hi.m_inf, "m∞ rises with V");
-        assert!(lo.n_inf < mid.n_inf && mid.n_inf < hi.n_inf, "n∞ rises with V");
-        assert!(lo.h_inf > mid.h_inf && mid.h_inf > hi.h_inf, "h∞ falls with V");
-        for x in [rest.m_inf, rest.h_inf, rest.n_inf, lo.m_inf, hi.h_inf, mid.n_inf] {
+        assert!(
+            lo.m_inf < mid.m_inf && mid.m_inf < hi.m_inf,
+            "m∞ rises with V"
+        );
+        assert!(
+            lo.n_inf < mid.n_inf && mid.n_inf < hi.n_inf,
+            "n∞ rises with V"
+        );
+        assert!(
+            lo.h_inf > mid.h_inf && mid.h_inf > hi.h_inf,
+            "h∞ falls with V"
+        );
+        for x in [
+            rest.m_inf, rest.h_inf, rest.n_inf, lo.m_inf, hi.h_inf, mid.n_inf,
+        ] {
             assert!((0.0..=1.0).contains(&x), "gate {x} must be in [0,1]");
         }
     }
@@ -494,23 +532,38 @@ mod tests {
     #[test]
     fn boltzmann_activation_is_the_universal_voltage_clamp_sigmoid() {
         let (v_half, k) = (-30.0, 9.0); // a typical Kᵥ activation: V½ = −30 mV, k = 9 mV
-        // Half-activated exactly at V = V½, for any slope (and either sign).
+                                        // Half-activated exactly at V = V½, for any slope (and either sign).
         assert!((boltzmann_activation(v_half, v_half, k) - 0.5).abs() < 1e-15);
         assert!((boltzmann_activation(v_half, v_half, -4.0) - 0.5).abs() < 1e-15);
         // One slope-factor either side of V½ → the textbook 0.7311 / 0.2689.
         let up = boltzmann_activation(v_half + k, v_half, k);
-        assert!((up - 1.0 / (1.0 + (-1.0_f64).exp())).abs() < 1e-12, "closed form");
+        assert!(
+            (up - 1.0 / (1.0 + (-1.0_f64).exp())).abs() < 1e-12,
+            "closed form"
+        );
         assert!((up - 0.7311).abs() < 1e-3, "+k → 0.7311, got {up}");
-        assert!((boltzmann_activation(v_half - k, v_half, k) - 0.2689).abs() < 1e-3, "−k → 0.2689");
+        assert!(
+            (boltzmann_activation(v_half - k, v_half, k) - 0.2689).abs() < 1e-3,
+            "−k → 0.2689"
+        );
         // Activation (k>0): opens (rises 0→1) with depolarisation, saturating both ways.
-        assert!(boltzmann_activation(30.0, v_half, k) > 0.99, "far-depol → open");
-        assert!(boltzmann_activation(-90.0, v_half, k) < 0.01, "far-hyperpol → shut");
+        assert!(
+            boltzmann_activation(30.0, v_half, k) > 0.99,
+            "far-depol → open"
+        );
+        assert!(
+            boltzmann_activation(-90.0, v_half, k) < 0.01,
+            "far-hyperpol → shut"
+        );
         assert!(
             boltzmann_activation(0.0, v_half, k) > boltzmann_activation(-60.0, v_half, k),
             "activation is monotone up in V"
         );
         // Inactivation (k<0): the mirror — closes with depolarisation.
-        assert!(boltzmann_activation(30.0, v_half, -k) < 0.01, "inactivation shuts when depolarised");
+        assert!(
+            boltzmann_activation(30.0, v_half, -k) < 0.01,
+            "inactivation shuts when depolarised"
+        );
         assert!(
             boltzmann_activation(0.0, v_half, -k) < boltzmann_activation(-60.0, v_half, -k),
             "inactivation is monotone down in V"
@@ -527,9 +580,18 @@ mod tests {
             assert!(x > 0.0 && x < 1.0, "x∞ in (0,1) at V={v}: {x}");
         }
         // The degenerate step (k=0) and any non-finite input → the 0.5 midpoint.
-        assert!((boltzmann_activation(0.0, v_half, 0.0) - 0.5).abs() < 1e-15, "k=0 → 0.5");
-        assert!((boltzmann_activation(f64::NAN, v_half, k) - 0.5).abs() < 1e-15, "NaN → 0.5");
-        assert!((boltzmann_activation(0.0, v_half, f64::INFINITY) - 0.5).abs() < 1e-15, "∞ → 0.5");
+        assert!(
+            (boltzmann_activation(0.0, v_half, 0.0) - 0.5).abs() < 1e-15,
+            "k=0 → 0.5"
+        );
+        assert!(
+            (boltzmann_activation(f64::NAN, v_half, k) - 0.5).abs() < 1e-15,
+            "NaN → 0.5"
+        );
+        assert!(
+            (boltzmann_activation(0.0, v_half, f64::INFINITY) - 0.5).abs() < 1e-15,
+            "∞ → 0.5"
+        );
     }
 
     #[test]
@@ -537,12 +599,19 @@ mod tests {
         // 5 µA/cm² × 0.5 ms ≈ 2.5 mV — far below threshold, no AP.
         let mut c = HhCompartment::at_rest();
         let trace = c.run(
-            StimPulse { amp_ua_cm2: 5.0, start_ms: 1.0, width_ms: 0.5 },
+            StimPulse {
+                amp_ua_cm2: 5.0,
+                start_ms: 1.0,
+                width_ms: 0.5,
+            },
             20.0,
             0.005,
         );
         let peak = vmax(&trace);
-        assert!(peak < -40.0, "weak stim must not trigger an AP; peak={peak}");
+        assert!(
+            peak < -40.0,
+            "weak stim must not trigger an AP; peak={peak}"
+        );
     }
 
     #[test]
@@ -558,13 +627,25 @@ mod tests {
         // Two identical strong pulses. Close together (2 ms apart) the second
         // lands in the refractory period and is blocked → 1 spike. Far apart
         // (17 ms) the membrane has recovered and both fire → 2 spikes.
-        let pulse = |start| StimPulse { amp_ua_cm2: 50.0, start_ms: start, width_ms: 0.5 };
+        let pulse = |start| StimPulse {
+            amp_ua_cm2: 50.0,
+            start_ms: start,
+            width_ms: 0.5,
+        };
         let mut c_close = HhCompartment::at_rest();
         let close = c_close.run_two(pulse(1.0), pulse(3.0), 30.0, 0.005);
         let mut c_far = HhCompartment::at_rest();
         let far = c_far.run_two(pulse(1.0), pulse(18.0), 30.0, 0.005);
-        assert_eq!(count_spikes(&close, 0.0), 1, "second pulse blocked by refractory period");
-        assert_eq!(count_spikes(&far, 0.0), 2, "well-separated pulses both fire");
+        assert_eq!(
+            count_spikes(&close, 0.0),
+            1,
+            "second pulse blocked by refractory period"
+        );
+        assert_eq!(
+            count_spikes(&far, 0.0),
+            2,
+            "well-separated pulses both fire"
+        );
     }
 
     #[test]
@@ -572,7 +653,11 @@ mod tests {
         // squid giant axon: radius 238 µm, Rᵢ = 35.4 Ω·cm, 100-µm compartments
         let mut cable = HhCable::uniform(200, 100.0, 238.0, 35.4);
         let r = cable.stimulate_end(
-            StimPulse { amp_ua_cm2: 100.0, start_ms: 1.0, width_ms: 0.5 },
+            StimPulse {
+                amp_ua_cm2: 100.0,
+                start_ms: 1.0,
+                width_ms: 0.5,
+            },
             15.0,
             0.01,
         );

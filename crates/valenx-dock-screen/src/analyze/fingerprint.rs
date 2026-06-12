@@ -182,8 +182,8 @@ pub fn interaction_fingerprint(
             let rq = ra.partial_charge;
 
             // --- hydrogen bond -----------------------------------
-            let donor_acceptor = (lp_props.is_donor && rp.is_acceptor)
-                || (lp_props.is_acceptor && rp.is_donor);
+            let donor_acceptor =
+                (lp_props.is_donor && rp.is_acceptor) || (lp_props.is_acceptor && rp.is_donor);
             if donor_acceptor && d <= cutoffs::HBOND {
                 fp.interactions.push(Interaction {
                     kind: InteractionKind::HydrogenBond,
@@ -193,10 +193,7 @@ pub fn interaction_fingerprint(
                 });
             }
             // --- hydrophobic contact -----------------------------
-            if lp_props.is_hydrophobic
-                && rp.is_hydrophobic
-                && d <= cutoffs::HYDROPHOBIC
-            {
+            if lp_props.is_hydrophobic && rp.is_hydrophobic && d <= cutoffs::HYDROPHOBIC {
                 fp.interactions.push(Interaction {
                     kind: InteractionKind::Hydrophobic,
                     receptor_atom: ri,
@@ -205,9 +202,7 @@ pub fn interaction_fingerprint(
                 });
             }
             // --- π-stacking (two aromatic carbons) ---------------
-            if lt == Ad4AtomType::A && ra.ad4_type == Ad4AtomType::A
-                && d <= cutoffs::PI_STACKING
-            {
+            if lt == Ad4AtomType::A && ra.ad4_type == Ad4AtomType::A && d <= cutoffs::PI_STACKING {
                 fp.interactions.push(Interaction {
                     kind: InteractionKind::PiStacking,
                     receptor_atom: ri,

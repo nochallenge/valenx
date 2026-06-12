@@ -38,7 +38,10 @@ impl Mesh {
             vec![2, 3, 7, 6], // back
             vec![3, 0, 4, 7], // left
         ];
-        Self { vertices: v, faces: f }
+        Self {
+            vertices: v,
+            faces: f,
+        }
     }
 
     /// Vertex count.

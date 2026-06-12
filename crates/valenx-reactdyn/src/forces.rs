@@ -143,23 +143,63 @@ mod tests {
         // Compressed bond (0.5 bohr; equilibrium ≈ 1.4 bohr) → repulsion
         // pushes the atoms apart along z.
         let compressed = [[0.0, 0.0, 0.25], [0.0, 0.0, -0.25]];
-        let f = numerical_forces(&elems, &compressed, charge, mult, Method::Rhf, "STO-3G", delta)
-            .unwrap();
-        assert!(f[0][2] > 0.0, "compressed: top atom should be pushed +z, got {}", f[0][2]);
-        assert!(f[1][2] < 0.0, "compressed: bottom atom should be pushed -z, got {}", f[1][2]);
+        let f = numerical_forces(
+            &elems,
+            &compressed,
+            charge,
+            mult,
+            Method::Rhf,
+            "STO-3G",
+            delta,
+        )
+        .unwrap();
+        assert!(
+            f[0][2] > 0.0,
+            "compressed: top atom should be pushed +z, got {}",
+            f[0][2]
+        );
+        assert!(
+            f[1][2] < 0.0,
+            "compressed: bottom atom should be pushed -z, got {}",
+            f[1][2]
+        );
 
         // Stretched bond (2.0 bohr) → attraction pulls the atoms together.
         let stretched = [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]];
-        let f = numerical_forces(&elems, &stretched, charge, mult, Method::Rhf, "STO-3G", delta)
-            .unwrap();
-        assert!(f[0][2] < 0.0, "stretched: top atom should be pulled -z, got {}", f[0][2]);
-        assert!(f[1][2] > 0.0, "stretched: bottom atom should be pulled +z, got {}", f[1][2]);
+        let f = numerical_forces(
+            &elems,
+            &stretched,
+            charge,
+            mult,
+            Method::Rhf,
+            "STO-3G",
+            delta,
+        )
+        .unwrap();
+        assert!(
+            f[0][2] < 0.0,
+            "stretched: top atom should be pulled -z, got {}",
+            f[0][2]
+        );
+        assert!(
+            f[1][2] > 0.0,
+            "stretched: bottom atom should be pulled +z, got {}",
+            f[1][2]
+        );
     }
 
     #[test]
     fn non_positive_delta_fails_loud() {
         let h = Element::from_symbol("H").unwrap();
-        let r = numerical_forces(&[h, h], &[[0.0; 3], [0.0, 0.0, 1.4]], 0, 1, Method::Rhf, "STO-3G", 0.0);
+        let r = numerical_forces(
+            &[h, h],
+            &[[0.0; 3], [0.0, 0.0, 1.4]],
+            0,
+            1,
+            Method::Rhf,
+            "STO-3G",
+            0.0,
+        );
         assert!(matches!(r, Err(ReactDynError::Invalid { .. })));
     }
 }

@@ -26,8 +26,8 @@ use egui_plot::{Legend, Line, Plot, PlotPoints};
 use nalgebra::Vector3;
 
 use valenx_md::analysis::rmsd::rmsd as kabsch_rmsd;
-use valenx_md::ensemble::berendsen::Berendsen;
 use valenx_md::ensemble::andersen::{Andersen, VelocityRescale};
+use valenx_md::ensemble::berendsen::Berendsen;
 use valenx_md::ensemble::Thermostat;
 use valenx_md::forcefield::{
     AngleParam, BondParam, CombiningRule, DihedralParam, ForceField, LjParam,
@@ -188,8 +188,12 @@ impl MdPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 impl Default for MdPanel {
@@ -421,9 +425,7 @@ fn build_md_system(
             system.positions[j],
             system.positions[k],
         );
-        ff.push_angle(
-            AngleParam::new(theta0, 400.0).map_err(|e| format!("angle param: {e}"))?,
-        );
+        ff.push_angle(AngleParam::new(theta0, 400.0).map_err(|e| format!("angle param: {e}"))?);
     }
     for _ in &bonded.dihedrals {
         // A mild 3-fold periodic torsion — the generic alkane-like
@@ -579,10 +581,9 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .desired_rows(5),
     );
     ui.horizontal(|ui| {
-        ui.label("Bond-detection tolerance:")
-            .on_hover_text(
-                "Multiplier on the covalent-radius cutoff used to infer bonds from coordinates.",
-            );
+        ui.label("Bond-detection tolerance:").on_hover_text(
+            "Multiplier on the covalent-radius cutoff used to infer bonds from coordinates.",
+        );
         ui.add(
             egui::DragValue::new(&mut p.bond_tolerance)
                 .speed(0.05)
@@ -616,10 +617,7 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             egui::ComboBox::from_id_source("md_integrator")
                 .selected_text(p.integrator.label())
                 .show_ui(ui, |ui| {
-                    for c in [
-                        IntegratorChoice::VelocityVerlet,
-                        IntegratorChoice::Leapfrog,
-                    ] {
+                    for c in [IntegratorChoice::VelocityVerlet, IntegratorChoice::Leapfrog] {
                         ui.selectable_value(&mut p.integrator, c, c.label());
                     }
                 });
@@ -669,22 +667,21 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             ui.label("Steps")
                 .on_hover_text("Total number of integration steps.");
             ui.add(egui::DragValue::new(&mut p.steps).range(1..=20_000))
-                .on_hover_text(
-                    "Number of MD steps. Total simulated time = steps × time-step.",
-                );
+                .on_hover_text("Number of MD steps. Total simulated time = steps × time-step.");
             ui.end_row();
 
             ui.label("Report every")
                 .on_hover_text("Energy / temperature sampling interval (in steps).");
             ui.add(egui::DragValue::new(&mut p.report_interval).range(1..=1000))
-                .on_hover_text("Number of steps between energy / temperature samples in the report.");
+                .on_hover_text(
+                    "Number of steps between energy / temperature samples in the report.",
+                );
             ui.end_row();
 
-            ui.label("RNG seed")
-                .on_hover_text(
-                    "Pseudorandom seed for initial-velocity sampling + stochastic thermostats. \
+            ui.label("RNG seed").on_hover_text(
+                "Pseudorandom seed for initial-velocity sampling + stochastic thermostats. \
                      Same seed = exactly reproducible run.",
-                );
+            );
             ui.add(egui::DragValue::new(&mut p.seed))
                 .on_hover_text("Reproducibility seed.");
             ui.end_row();
@@ -697,9 +694,17 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
     ui.horizontal(|ui| {
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
-        ui.label(egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run").weak().small());
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
+        ui.label(
+            egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run")
+                .weak()
+                .small(),
+        );
     });
 
     common::error_line(ui, &p.error);
@@ -1061,7 +1066,10 @@ mod headless_ui_tests {
             ..MdPanel::default()
         };
         run_simulation(&mut p);
-        assert!(p.error.is_some(), "MD run should error on an unbonded structure");
+        assert!(
+            p.error.is_some(),
+            "MD run should error on an unbonded structure"
+        );
         assert!(p.trace.is_empty());
     }
 

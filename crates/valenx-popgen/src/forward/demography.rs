@@ -65,11 +65,7 @@ impl DemographicSchedule {
             return Err(PopgenError::invalid("duration", "must be positive"));
         }
         Ok(DemographicSchedule {
-            changes: vec![
-                (0, n0),
-                (start, bottleneck_n),
-                (start + duration, n0),
-            ],
+            changes: vec![(0, n0), (start, bottleneck_n), (start + duration, n0)],
         })
     }
 
@@ -81,19 +77,12 @@ impl DemographicSchedule {
     /// # Errors
     /// [`PopgenError::Invalid`] if `n0 == 0`, `rate <= -1`, or
     /// `generations == 0`.
-    pub fn exponential_growth(
-        n0: usize,
-        rate: f64,
-        generations: usize,
-    ) -> Result<Self> {
+    pub fn exponential_growth(n0: usize, rate: f64, generations: usize) -> Result<Self> {
         if n0 == 0 {
             return Err(PopgenError::invalid("n0", "size must be positive"));
         }
         if rate <= -1.0 {
-            return Err(PopgenError::invalid(
-                "rate",
-                "growth rate must exceed -1",
-            ));
+            return Err(PopgenError::invalid("rate", "growth rate must exceed -1"));
         }
         if generations == 0 {
             return Err(PopgenError::invalid("generations", "must be positive"));
@@ -167,10 +156,7 @@ impl Drift {
     /// [`PopgenError::Invalid`] if `ne <= 0`.
     pub fn new(ne: f64) -> Result<Self> {
         if ne <= 0.0 {
-            return Err(PopgenError::invalid(
-                "effective_size",
-                "must be positive",
-            ));
+            return Err(PopgenError::invalid("effective_size", "must be positive"));
         }
         Ok(Drift { effective_size: ne })
     }
@@ -243,9 +229,7 @@ mod tests {
 
     #[test]
     fn piecewise_sorts_change_points() {
-        let s =
-            DemographicSchedule::piecewise(vec![(20, 30), (0, 10), (10, 20)])
-                .unwrap();
+        let s = DemographicSchedule::piecewise(vec![(20, 30), (0, 10), (10, 20)]).unwrap();
         assert_eq!(s.size_at(0), 10);
         assert_eq!(s.size_at(10), 20);
         assert_eq!(s.size_at(25), 30);

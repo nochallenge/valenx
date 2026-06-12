@@ -193,7 +193,10 @@ fn clip_segment_to_circle(
     let t1 = (-b_q - sq) / (2.0 * a_q);
     let t2 = (-b_q + sq) / (2.0 * a_q);
     let lerp = |t: f64| -> (f64, f64) {
-        (seg[0].0 + t * (seg[1].0 - seg[0].0), seg[0].1 + t * (seg[1].1 - seg[0].1))
+        (
+            seg[0].0 + t * (seg[1].0 - seg[0].0),
+            seg[0].1 + t * (seg[1].1 - seg[0].1),
+        )
     };
     let in_range = |t: f64| (0.0..=1.0).contains(&t);
     match (a_in, b_in) {

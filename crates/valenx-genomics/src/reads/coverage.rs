@@ -151,11 +151,7 @@ pub type ContigLengths = BTreeMap<String, usize>;
 /// `min_mapq` excludes low-confidence reads; unmapped reads are
 /// skipped. When `lengths` declares a contig length, the depth array
 /// is padded to it.
-pub fn compute_depth(
-    records: &[SamRecord],
-    min_mapq: u8,
-    lengths: &ContigLengths,
-) -> DepthProfile {
+pub fn compute_depth(records: &[SamRecord], min_mapq: u8, lengths: &ContigLengths) -> DepthProfile {
     // contig -> Vec<u32> grown lazily
     let mut depth: BTreeMap<String, Vec<u32>> = BTreeMap::new();
 
@@ -176,10 +172,7 @@ pub fn compute_depth(
         for op in &rec.cigar.ops {
             let n = op.len as usize;
             match op.kind {
-                CigarKind::Match
-                | CigarKind::Equal
-                | CigarKind::Diff
-                | CigarKind::Del => {
+                CigarKind::Match | CigarKind::Equal | CigarKind::Diff | CigarKind::Del => {
                     let end = ref_pos + n;
                     if arr.len() < end {
                         arr.resize(end, 0);
@@ -200,12 +193,7 @@ pub fn compute_depth(
 
     let contigs = depth
         .into_iter()
-        .map(|(name, depth)| {
-            (
-                name.clone(),
-                ContigDepth { name, depth },
-            )
-        })
+        .map(|(name, depth)| (name.clone(), ContigDepth { name, depth }))
         .collect();
     DepthProfile { contigs }
 }

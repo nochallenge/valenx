@@ -121,10 +121,7 @@ impl Adapter for McellAdapter {
         let source_mdl = if input.mdl.is_absolute() {
             input.mdl.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.mdl,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.mdl)?
         };
         if !source_mdl.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -40,7 +40,9 @@ pub struct RamachandranRefinement {
 impl RamachandranRefinement {
     /// Number of outliers removed.
     pub fn removed(&self) -> usize {
-        self.outliers_before.len().saturating_sub(self.outliers_after.len())
+        self.outliers_before
+            .len()
+            .saturating_sub(self.outliers_after.len())
     }
 }
 

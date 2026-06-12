@@ -284,9 +284,7 @@ END
         for (a, b) in back.positions.iter().zip(&sys.positions) {
             assert!((a - b).norm() < 1e-3, "{a:?} vs {b:?}");
         }
-        assert!(
-            (back.cell.edge_lengths()[0] - sys.cell.edge_lengths()[0]).abs() < 1e-3
-        );
+        assert!((back.cell.edge_lengths()[0] - sys.cell.edge_lengths()[0]).abs() < 1e-3);
     }
 
     #[test]

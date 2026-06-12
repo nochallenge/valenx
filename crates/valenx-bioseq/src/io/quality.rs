@@ -232,10 +232,7 @@ mod tests {
     #[test]
     fn guess_encoding_extremes() {
         assert_eq!(guess_encoding(b"!!!!"), Some(QualityEncoding::Phred33));
-        assert_eq!(
-            guess_encoding(b"iiii"),
-            Some(QualityEncoding::Phred64)
-        );
+        assert_eq!(guess_encoding(b"iiii"), Some(QualityEncoding::Phred64));
         // Ambiguous mid-range -> None.
         assert_eq!(guess_encoding(b"BBBB"), None);
     }

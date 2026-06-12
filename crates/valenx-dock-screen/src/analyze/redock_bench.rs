@@ -122,8 +122,7 @@ pub fn brute_force_minimum(
 pub fn pin_reference_to_global_minimum(case: &mut RedockCase) -> Result<()> {
     let receptor = Receptor::from_pdbqt(&case.receptor_pdbqt)
         .map_err(|e| DockScreenError::invalid_receptor(e.to_string()))?;
-    let ligand =
-        Ligand::from_pdbqt(&case.ligand_pdbqt).map_err(DockScreenError::from)?;
+    let ligand = Ligand::from_pdbqt(&case.ligand_pdbqt).map_err(DockScreenError::from)?;
     // Probe with the first ligand-atom type (one-atom proxies use C).
     let probe = ligand
         .atoms
@@ -149,7 +148,8 @@ pub fn hiv1_protease_1hvr() -> RedockCase {
     // Receptor extract (centred so the binding pocket is near origin).
     // Coordinates are illustrative — chosen to give a sensible
     // binding-pocket geometry for the redocking test.
-    let receptor_pdbqt = "ATOM      1  CA  ASP A  25      -4.000   0.000   0.000  1.00  0.00     0.000 C
+    let receptor_pdbqt =
+        "ATOM      1  CA  ASP A  25      -4.000   0.000   0.000  1.00  0.00     0.000 C
 ATOM      2  CB  ASP A  25      -3.500   1.200   0.000  1.00  0.00     0.000 C
 ATOM      3  CG  ASP A  25      -2.300   1.500   0.500  1.00  0.00     0.000 C
 ATOM      4  OD1 ASP A  25      -1.200   1.200   0.000  1.00  0.00    -0.500 OA
@@ -196,7 +196,8 @@ TORSDOF 0
 /// atoms; the ligand proxy is a single C atom at the experimental
 /// binding-pose centroid (the amidinium-carbon position).
 pub fn trypsin_3ptb() -> RedockCase {
-    let receptor_pdbqt = "ATOM      1  CA  ASP A 189      -3.000   0.000   0.000  1.00  0.00     0.000 C
+    let receptor_pdbqt =
+        "ATOM      1  CA  ASP A 189      -3.000   0.000   0.000  1.00  0.00     0.000 C
 ATOM      2  CB  ASP A 189      -2.500   1.200   0.000  1.00  0.00     0.000 C
 ATOM      3  CG  ASP A 189      -1.300   1.500   0.500  1.00  0.00     0.000 C
 ATOM      4  OD1 ASP A 189      -0.200   1.000   0.000  1.00  0.00    -0.500 OA
@@ -237,7 +238,8 @@ TORSDOF 0
 /// carbons + ASN-23 and TYR-43 pocket atoms; the ligand proxy is a
 /// single hydrophobic C atom at the biotin-ureido centroid.
 pub fn streptavidin_1stp() -> RedockCase {
-    let receptor_pdbqt = "ATOM      1  CA  TRP A 120      -3.000   0.000   0.000  1.00  0.00     0.000 C
+    let receptor_pdbqt =
+        "ATOM      1  CA  TRP A 120      -3.000   0.000   0.000  1.00  0.00     0.000 C
 ATOM      2  CB  TRP A 120      -2.500   1.000   0.000  1.00  0.00     0.000 C
 ATOM      3  CG  TRP A 120      -1.500   1.500   0.500  1.00  0.00     0.000 A
 ATOM      4  CD1 TRP A 120      -0.500   2.000   0.000  1.00  0.00     0.000 A
@@ -287,10 +289,7 @@ TORSDOF 0
 /// crystallographic centroid the literature reports.
 pub fn run_canonical_benchmark(runs_per_case: usize, seed: u64) -> Result<RedockBenchmark> {
     if runs_per_case == 0 {
-        return Err(DockScreenError::invalid(
-            "runs_per_case",
-            "must be ≥ 1",
-        ));
+        return Err(DockScreenError::invalid("runs_per_case", "must be ≥ 1"));
     }
     let mut cases = canonical_cases();
     for case in cases.iter_mut() {

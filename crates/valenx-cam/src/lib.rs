@@ -93,7 +93,7 @@ pub use collision::{
     continuous_collision_check, CollisionBody, CollisionSetup, ContinuousCollision,
     ContinuousCollisionParams, Holder, HolderSegment, SetupPart, SetupPartKind,
 };
-pub use engagement::{engagement_at, engagement_along, EngagementSample, StockGrid};
+pub use engagement::{engagement_along, engagement_at, EngagementSample, StockGrid};
 pub use error::CamError;
 pub use feedrate::{FeedrateParams, FeedrateReport};
 pub use op::adaptive_constant_engagement::{

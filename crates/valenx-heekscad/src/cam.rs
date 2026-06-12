@@ -62,11 +62,7 @@ pub struct Toolpath {
 
 /// Pocket — clears the interior of a closed boundary polygon to
 /// `depth`. v1 uses a serpentine offset path (one inward pass).
-pub fn pocket_op(
-    boundary: &[[f64; 2]],
-    depth: f64,
-    tool: Tool,
-) -> Result<Toolpath, HeeksCadError> {
+pub fn pocket_op(boundary: &[[f64; 2]], depth: f64, tool: Tool) -> Result<Toolpath, HeeksCadError> {
     validate_depth(depth)?;
     validate_boundary(boundary)?;
     let clearance = 5.0;
@@ -115,11 +111,7 @@ pub fn profile_op(
 }
 
 /// Drill — peck-drill a list of holes.
-pub fn drill_op(
-    positions: &[[f64; 2]],
-    depth: f64,
-    tool: Tool,
-) -> Result<Toolpath, HeeksCadError> {
+pub fn drill_op(positions: &[[f64; 2]], depth: f64, tool: Tool) -> Result<Toolpath, HeeksCadError> {
     validate_depth(depth)?;
     if positions.is_empty() {
         return Err(HeeksCadError::BadParameter {

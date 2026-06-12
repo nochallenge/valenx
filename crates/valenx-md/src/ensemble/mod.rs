@@ -65,12 +65,7 @@ pub trait Barostat {
     ///
     /// # Errors
     /// Implementation-specific.
-    fn apply(
-        &mut self,
-        system: &mut System,
-        instantaneous_pressure: f64,
-        dt: f64,
-    ) -> Result<()>;
+    fn apply(&mut self, system: &mut System, instantaneous_pressure: f64, dt: f64) -> Result<()>;
 }
 
 #[cfg(test)]

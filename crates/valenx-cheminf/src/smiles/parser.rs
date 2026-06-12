@@ -106,7 +106,10 @@ impl<'a> Parser<'a> {
 
     fn err(&self, detail: impl Into<String>) -> CheminfError {
         let d = detail.into();
-        CheminfError::parse("smiles", format!("{d} (at position {} of `{}`)", self.pos, self.src))
+        CheminfError::parse(
+            "smiles",
+            format!("{d} (at position {} of `{}`)", self.pos, self.src),
+        )
     }
 
     fn peek(&self) -> Option<char> {
@@ -314,16 +317,13 @@ impl<'a> Parser<'a> {
             self.pos += 1;
             if let Some(c2) = self.peek() {
                 if c2.is_ascii_lowercase() {
-                    let two: String =
-                        [c.to_ascii_uppercase(), c2].iter().collect::<String>();
+                    let two: String = [c.to_ascii_uppercase(), c2].iter().collect::<String>();
                     if element::by_symbol(&two).is_some() {
                         self.pos += 1;
                     }
                 }
             }
-            let sym: String = self.chars[sym_start..self.pos]
-                .iter()
-                .collect::<String>();
+            let sym: String = self.chars[sym_start..self.pos].iter().collect::<String>();
             let cap: String = sym
                 .char_indices()
                 .map(|(i, ch)| if i == 0 { ch.to_ascii_uppercase() } else { ch })
@@ -563,8 +563,8 @@ fn pick_valence(valences: &[u8], bond_sum: f64, charge: i8, z: u8) -> f64 {
     // a bond slot; an anion loses one. For carbon a + or - removes a
     // valence. We model the common organic cases.
     let offset = match z {
-        7 | 15 => i32::from(charge),          // N+, P+ → +1 valence
-        8 | 16 => i32::from(charge),          // O+, S+ → +1; O- → -1
+        7 | 15 => i32::from(charge),            // N+, P+ → +1 valence
+        8 | 16 => i32::from(charge),            // O+, S+ → +1; O- → -1
         6 => -i32::from(charge.unsigned_abs()), // C+, C- both lose a slot
         _ => i32::from(charge),
     };

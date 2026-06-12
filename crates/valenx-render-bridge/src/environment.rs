@@ -176,8 +176,7 @@ impl EnvironmentMap {
             }
         }
         // Resolution line: `-Y <height> +X <width>`.
-        let res = read_line(bytes, &mut cursor)
-            .ok_or_else(|| bad("missing resolution line"))?;
+        let res = read_line(bytes, &mut cursor).ok_or_else(|| bad("missing resolution line"))?;
         let parts: Vec<&str> = res.split_whitespace().collect();
         if parts.len() != 4 || parts[0] != "-Y" || parts[2] != "+X" {
             return Err(bad(
@@ -213,8 +212,7 @@ impl EnvironmentMap {
         let mut bi = 0usize;
         for _ in 0..height {
             let mut rgbe_row = vec![[0u8; 4]; width];
-            decode_scanline(body, &mut bi, width, &mut rgbe_row)
-                .map_err(|e| bad(&e))?;
+            decode_scanline(body, &mut bi, width, &mut rgbe_row).map_err(|e| bad(&e))?;
             for rgbe in &rgbe_row {
                 pixels.push(rgbe_to_linear(*rgbe));
             }
@@ -325,11 +323,8 @@ impl EnvironmentMap {
                         + bitangent[2] as f64 * local[1]
                         + n[2] as f64 * local[2],
                 ];
-                let radiance = self.sample_direction([
-                    world[0] as f32,
-                    world[1] as f32,
-                    world[2] as f32,
-                ]);
+                let radiance =
+                    self.sample_direction([world[0] as f32, world[1] as f32, world[2] as f32]);
                 // Cosine-weighted: the measure of the hemisphere
                 // quadrature stratum is `sinθ·cosθ·dθ·dψ`. Accumulate
                 // radiance · cosθ · sinθ.
@@ -632,11 +627,7 @@ impl EnvironmentMap {
             let phi = std::f32::consts::TAU * u1;
             let cos_theta = (((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2)).max(0.0)).sqrt();
             let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
-            let h_local = [
-                sin_theta * phi.cos(),
-                sin_theta * phi.sin(),
-                cos_theta,
-            ];
+            let h_local = [sin_theta * phi.cos(), sin_theta * phi.sin(), cos_theta];
             // Half-vector to world space.
             let h = [
                 tangent[0] * h_local[0] + bitangent[0] * h_local[1] + n[0] * h_local[2],
@@ -727,11 +718,7 @@ fn rgbe_to_linear(rgbe: [u8; 4]) -> [f32; 3] {
     }
     // ldexp(1, e-136) == 2^(e-128) / 256.
     let f = libm_ldexp(1.0, e as i32 - 136);
-    [
-        rgbe[0] as f32 * f,
-        rgbe[1] as f32 * f,
-        rgbe[2] as f32 * f,
-    ]
+    [rgbe[0] as f32 * f, rgbe[1] as f32 * f, rgbe[2] as f32 * f]
 }
 
 /// `mantissa · 2^exp` without pulling in `libm` — a small loop over
@@ -763,12 +750,7 @@ fn decode_scanline(
     // New-style adaptive RLE applies only for 8..=0x7fff-wide rows.
     if (8..=0x7fff).contains(&width) {
         need(*bi, 4)?;
-        let header = [
-            body[*bi],
-            body[*bi + 1],
-            body[*bi + 2],
-            body[*bi + 3],
-        ];
+        let header = [body[*bi], body[*bi + 1], body[*bi + 2], body[*bi + 3]];
         if header[0] == 2
             && header[1] == 2
             && ((header[2] as usize) << 8 | header[3] as usize) == width
@@ -819,12 +801,7 @@ fn decode_scanline(
     let mut shift = 0u32;
     while x < width {
         need(*bi, 4)?;
-        let q = [
-            body[*bi],
-            body[*bi + 1],
-            body[*bi + 2],
-            body[*bi + 3],
-        ];
+        let q = [body[*bi], body[*bi + 1], body[*bi + 2], body[*bi + 3]];
         *bi += 4;
         if q[0] == 1 && q[1] == 1 && q[2] == 1 {
             // Old-style RLE repeat. `shift` grows by 8 per consecutive
@@ -1064,9 +1041,7 @@ mod tests {
         // NOT on the dimension check — the dims themselves are legal).
         // We use a 1-row image at max width to avoid allocating the full
         // 16384² buffer: width is at the cap, height is 1.
-        let header = format!(
-            "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X {MAX_HDR_DIM}\n"
-        );
+        let header = format!("#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X {MAX_HDR_DIM}\n");
         let err = EnvironmentMap::from_radiance_hdr(header.as_bytes())
             .expect_err("truncated body should error");
         let msg = err.to_string();
@@ -1091,8 +1066,8 @@ mod tests {
         bytes.extend_from_slice(b"#?RADIANCE\n");
         bytes.extend_from_slice(b"FORMAT=32-bit_rle_rgbe\n\n");
         bytes.extend_from_slice(b"-Y 1 +X 4\n"); // width 4 (< 8) → old-style scanline
-        // Twelve zero-length escapes drive `shift` well past usize::BITS
-        // (and past 32 on a 32-bit target) without ever filling the row.
+                                                 // Twelve zero-length escapes drive `shift` well past usize::BITS
+                                                 // (and past 32 on a 32-bit target) without ever filling the row.
         for _ in 0..12 {
             bytes.extend_from_slice(&[1, 1, 1, 0]);
         }

@@ -113,12 +113,7 @@ impl EriTensor {
 }
 
 /// The contracted electron-repulsion integral `(μν|λσ)`.
-pub fn eri(
-    mu: &BasisFunction,
-    nu: &BasisFunction,
-    la: &BasisFunction,
-    si: &BasisFunction,
-) -> f64 {
+pub fn eri(mu: &BasisFunction, nu: &BasisFunction, la: &BasisFunction, si: &BasisFunction) -> f64 {
     let mut total = 0.0;
     for pa in &mu.primitives {
         for pb in &nu.primitives {
@@ -221,20 +216,8 @@ fn primitive_eri(
                             }
                             // Ket Hermite functions enter with sign
                             // (-1)^{t2+u2+v2}.
-                            let sign = if (t2 + u2 + v2) % 2 == 0 {
-                                1.0
-                            } else {
-                                -1.0
-                            };
-                            let r = hermite_r(
-                                t1 + t2,
-                                u1 + u2,
-                                v1 + v2,
-                                0,
-                                alpha,
-                                pq,
-                                &boys,
-                            );
+                            let sign = if (t2 + u2 + v2) % 2 == 0 { 1.0 } else { -1.0 };
+                            let r = hermite_r(t1 + t2, u1 + u2, v1 + v2, 0, alpha, pq, &boys);
                             total += bra * ex2 * ey2 * ez2 * sign * r;
                         }
                     }
@@ -277,7 +260,10 @@ mod tests {
         let g = s_primitive(a, [0.0, 0.0, 0.0]);
         let v = eri(&g, &g, &g, &g);
         let expect = 2.0 * (a / std::f64::consts::PI).sqrt();
-        assert!((v - expect).abs() < 1.0e-9, "(ss|ss) = {v}, expect {expect}");
+        assert!(
+            (v - expect).abs() < 1.0e-9,
+            "(ss|ss) = {v}, expect {expect}"
+        );
     }
 
     #[test]
@@ -311,20 +297,19 @@ mod tests {
     #[test]
     fn tensor_build_respects_symmetry() {
         use crate::basis::{AngularMomentum, BasisSet, Shell};
-        let shell = |a: f64, c: [f64; 3]| Shell {
-            atom_index: 0,
-            centre: c,
-            angular: AngularMomentum::S,
-            primitives: vec![Primitive {
-                exponent: a,
-                coefficient: 1.0,
-            }],
-        }
-        .normalised();
-        let shells = vec![
-            shell(1.0, [0.0, 0.0, 0.0]),
-            shell(1.2, [0.0, 0.0, 1.4]),
-        ];
+        let shell = |a: f64, c: [f64; 3]| {
+            Shell {
+                atom_index: 0,
+                centre: c,
+                angular: AngularMomentum::S,
+                primitives: vec![Primitive {
+                    exponent: a,
+                    coefficient: 1.0,
+                }],
+            }
+            .normalised()
+        };
+        let shells = vec![shell(1.0, [0.0, 0.0, 0.0]), shell(1.2, [0.0, 0.0, 1.4])];
         let functions: Vec<BasisFunction> = shells
             .iter()
             .map(|s| BasisFunction {

@@ -73,9 +73,7 @@ pub struct PharmacophoreFeature {
 /// molecule).
 pub fn pharmacophore(mol: &Molecule) -> Vec<PharmacophoreFeature> {
     let mut features = Vec::new();
-    let pos = |i: usize| -> [f64; 3] {
-        mol.coords.get(i).copied().unwrap_or([0.0, 0.0, 0.0])
-    };
+    let pos = |i: usize| -> [f64; 3] { mol.coords.get(i).copied().unwrap_or([0.0, 0.0, 0.0]) };
 
     for (i, a) in mol.atoms.iter().enumerate() {
         if a.is_hydrogen() || a.is_dummy() {
@@ -138,10 +136,7 @@ pub fn pharmacophore(mol: &Molecule) -> Vec<PharmacophoreFeature> {
 
 /// Count features of a given kind — a coarse pharmacophore descriptor.
 pub fn feature_count(mol: &Molecule, kind: FeatureKind) -> usize {
-    pharmacophore(mol)
-        .iter()
-        .filter(|f| f.kind == kind)
-        .count()
+    pharmacophore(mol).iter().filter(|f| f.kind == kind).count()
 }
 
 /// The inter-feature distance matrix — a rotation-invariant
@@ -154,10 +149,7 @@ pub fn feature_distances(features: &[PharmacophoreFeature]) -> Vec<Vec<f64>> {
         for j in i + 1..n {
             let p = features[i].position;
             let q = features[j].position;
-            let d = ((p[0] - q[0]).powi(2)
-                + (p[1] - q[1]).powi(2)
-                + (p[2] - q[2]).powi(2))
-            .sqrt();
+            let d = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
             m[i][j] = d;
             m[j][i] = d;
         }

@@ -190,12 +190,7 @@ fn build_args(request: &CryoEmRequest) -> Vec<String> {
     let out = request.output_dir.display().to_string();
     match request.tool {
         CryoEmTool::Relion => {
-            let mut a = vec![
-                "--i".into(),
-                input,
-                "--o".into(),
-                format!("{out}/run"),
-            ];
+            let mut a = vec!["--i".into(), input, "--o".into(), format!("{out}/run")];
             match request.stage {
                 CryoEmStage::Class2D => {
                     a.push("--class2d".into());
@@ -283,12 +278,7 @@ mod tests {
 
     #[test]
     fn relion_refine_stage_uses_auto_refine_flag() {
-        let req = CryoEmRequest::new(
-            CryoEmTool::Relion,
-            CryoEmStage::Refine3D,
-            "in.star",
-            "out",
-        );
+        let req = CryoEmRequest::new(CryoEmTool::Relion, CryoEmStage::Refine3D, "in.star", "out");
         let args = build_args(&req);
         assert!(args.iter().any(|a| a == "--auto_refine"));
         assert!(args.iter().any(|a| a == "--split_random_halves"));

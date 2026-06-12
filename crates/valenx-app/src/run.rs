@@ -434,9 +434,7 @@ fn spawn_inner(adapter: Arc<dyn Adapter>, spec: RunSpec) -> RunHandle {
             Err(payload) => {
                 let msg = panic_payload_message(payload.as_ref());
                 let _ = tx_panic.send(RunEvent::Failed(format!("adapter panic: {msg}")));
-                Err(AdapterError::Other(anyhow::anyhow!(
-                    "adapter panic: {msg}"
-                )))
+                Err(AdapterError::Other(anyhow::anyhow!("adapter panic: {msg}")))
             }
         }
     });
@@ -736,7 +734,9 @@ mod tests {
 
         // Wait synchronously so the test is deterministic.
         let thread = handle.thread.take().expect("thread");
-        let result = thread.join().expect("worker thread should not propagate panic");
+        let result = thread
+            .join()
+            .expect("worker thread should not propagate panic");
         std::panic::set_hook(prev_hook);
         assert!(result.is_err(), "expected run() to surface AdapterError");
 
@@ -850,9 +850,9 @@ mod tests {
         // a `Failed(...)` from the outer guard.
         let events: Vec<SweepEvent> = handle.rx.try_iter().collect();
         let saw_panic_evidence = events.iter().any(|e| match e {
-            SweepEvent::JobFinished { reason: Some(r), .. } => {
-                r.contains("panic") || r.contains("test-sweep-panic-marker")
-            }
+            SweepEvent::JobFinished {
+                reason: Some(r), ..
+            } => r.contains("panic") || r.contains("test-sweep-panic-marker"),
             SweepEvent::Failed(msg) => {
                 msg.contains("panic") || msg.contains("test-sweep-panic-marker")
             }

@@ -93,38 +93,70 @@ const fn translate_codon(codon: &[u8; 3]) -> u8 {
 //
 // (codon, amino-acid, relative-frequency-within-aa)
 const HUMAN_CODON_USAGE: &[(&[u8; 3], u8, f32)] = &[
-    (b"TTT", b'F', 0.45), (b"TTC", b'F', 0.55),
-    (b"TTA", b'L', 0.07), (b"TTG", b'L', 0.13),
-    (b"CTT", b'L', 0.13), (b"CTC", b'L', 0.20),
-    (b"CTA", b'L', 0.07), (b"CTG", b'L', 0.41),
-    (b"ATT", b'I', 0.36), (b"ATC", b'I', 0.48), (b"ATA", b'I', 0.16),
+    (b"TTT", b'F', 0.45),
+    (b"TTC", b'F', 0.55),
+    (b"TTA", b'L', 0.07),
+    (b"TTG", b'L', 0.13),
+    (b"CTT", b'L', 0.13),
+    (b"CTC", b'L', 0.20),
+    (b"CTA", b'L', 0.07),
+    (b"CTG", b'L', 0.41),
+    (b"ATT", b'I', 0.36),
+    (b"ATC", b'I', 0.48),
+    (b"ATA", b'I', 0.16),
     (b"ATG", b'M', 1.00),
-    (b"GTT", b'V', 0.18), (b"GTC", b'V', 0.24),
-    (b"GTA", b'V', 0.11), (b"GTG", b'V', 0.47),
-    (b"TCT", b'S', 0.15), (b"TCC", b'S', 0.22),
-    (b"TCA", b'S', 0.15), (b"TCG", b'S', 0.06),
-    (b"AGT", b'S', 0.15), (b"AGC", b'S', 0.24),
-    (b"CCT", b'P', 0.28), (b"CCC", b'P', 0.33),
-    (b"CCA", b'P', 0.27), (b"CCG", b'P', 0.11),
-    (b"ACT", b'T', 0.24), (b"ACC", b'T', 0.36),
-    (b"ACA", b'T', 0.28), (b"ACG", b'T', 0.12),
-    (b"GCT", b'A', 0.26), (b"GCC", b'A', 0.40),
-    (b"GCA", b'A', 0.23), (b"GCG", b'A', 0.11),
-    (b"TAT", b'Y', 0.43), (b"TAC", b'Y', 0.57),
-    (b"TAA", b'*', 0.28), (b"TAG", b'*', 0.20), (b"TGA", b'*', 0.52),
-    (b"CAT", b'H', 0.41), (b"CAC", b'H', 0.59),
-    (b"CAA", b'Q', 0.25), (b"CAG", b'Q', 0.75),
-    (b"AAT", b'N', 0.46), (b"AAC", b'N', 0.54),
-    (b"AAA", b'K', 0.42), (b"AAG", b'K', 0.58),
-    (b"GAT", b'D', 0.46), (b"GAC", b'D', 0.54),
-    (b"GAA", b'E', 0.42), (b"GAG", b'E', 0.58),
-    (b"TGT", b'C', 0.45), (b"TGC", b'C', 0.55),
+    (b"GTT", b'V', 0.18),
+    (b"GTC", b'V', 0.24),
+    (b"GTA", b'V', 0.11),
+    (b"GTG", b'V', 0.47),
+    (b"TCT", b'S', 0.15),
+    (b"TCC", b'S', 0.22),
+    (b"TCA", b'S', 0.15),
+    (b"TCG", b'S', 0.06),
+    (b"AGT", b'S', 0.15),
+    (b"AGC", b'S', 0.24),
+    (b"CCT", b'P', 0.28),
+    (b"CCC", b'P', 0.33),
+    (b"CCA", b'P', 0.27),
+    (b"CCG", b'P', 0.11),
+    (b"ACT", b'T', 0.24),
+    (b"ACC", b'T', 0.36),
+    (b"ACA", b'T', 0.28),
+    (b"ACG", b'T', 0.12),
+    (b"GCT", b'A', 0.26),
+    (b"GCC", b'A', 0.40),
+    (b"GCA", b'A', 0.23),
+    (b"GCG", b'A', 0.11),
+    (b"TAT", b'Y', 0.43),
+    (b"TAC", b'Y', 0.57),
+    (b"TAA", b'*', 0.28),
+    (b"TAG", b'*', 0.20),
+    (b"TGA", b'*', 0.52),
+    (b"CAT", b'H', 0.41),
+    (b"CAC", b'H', 0.59),
+    (b"CAA", b'Q', 0.25),
+    (b"CAG", b'Q', 0.75),
+    (b"AAT", b'N', 0.46),
+    (b"AAC", b'N', 0.54),
+    (b"AAA", b'K', 0.42),
+    (b"AAG", b'K', 0.58),
+    (b"GAT", b'D', 0.46),
+    (b"GAC", b'D', 0.54),
+    (b"GAA", b'E', 0.42),
+    (b"GAG", b'E', 0.58),
+    (b"TGT", b'C', 0.45),
+    (b"TGC", b'C', 0.55),
     (b"TGG", b'W', 1.00),
-    (b"CGT", b'R', 0.08), (b"CGC", b'R', 0.19),
-    (b"CGA", b'R', 0.11), (b"CGG", b'R', 0.21),
-    (b"AGA", b'R', 0.20), (b"AGG", b'R', 0.20),
-    (b"GGT", b'G', 0.16), (b"GGC", b'G', 0.34),
-    (b"GGA", b'G', 0.25), (b"GGG", b'G', 0.25),
+    (b"CGT", b'R', 0.08),
+    (b"CGC", b'R', 0.19),
+    (b"CGA", b'R', 0.11),
+    (b"CGG", b'R', 0.21),
+    (b"AGA", b'R', 0.20),
+    (b"AGG", b'R', 0.20),
+    (b"GGT", b'G', 0.16),
+    (b"GGC", b'G', 0.34),
+    (b"GGA", b'G', 0.25),
+    (b"GGG", b'G', 0.25),
 ];
 
 // Fragment inspired by the human alpha-globin (HBA1) 5' UTR — a
@@ -133,8 +165,7 @@ const HUMAN_CODON_USAGE: &[(&[u8; 3], u8, f32)] = &[
 // that adds a hAg-derived leader sequence and a CGCCACC Kozak tail
 // not included here; this constant is a demo-grade fragment, not
 // the full production sequence.
-const HUMAN_ALPHA_GLOBIN_5UTR: &str =
-    "ACTCTTCTGGTCCCCACAGACTCAGAGAGAACCCACC";
+const HUMAN_ALPHA_GLOBIN_5UTR: &str = "ACTCTTCTGGTCCCCACAGACTCAGAGAGAACCCACC";
 
 // Kozak consensus context — A/G at -3, G at +4. Spans the ATG.
 const KOZAK_CONTEXT: &str = "GCCACC";
@@ -285,20 +316,22 @@ fn main() -> ExitCode {
     println!();
 
     // ----- Step 1: validate the source CDS through valenx-bio -----
-    let source_seq =
-        match Sequence::new("AeqVic_GFP_CDS", Alphabet::Dna, GFP_JELLYFISH_CDS) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Source sequence failed alphabet validation: {e}");
-                return ExitCode::from(1);
-            }
-        };
+    let source_seq = match Sequence::new("AeqVic_GFP_CDS", Alphabet::Dna, GFP_JELLYFISH_CDS) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Source sequence failed alphabet validation: {e}");
+            return ExitCode::from(1);
+        }
+    };
     println!("[1/5] Validated source CDS through valenx-bio::Sequence");
     format_block("name:", &source_seq.name);
     format_block("alphabet:", source_seq.alphabet.id());
     format_block("length (bp):", source_seq.len());
     format_block("codons:", source_seq.len() / 3);
-    format_block("GC content:", format!("{:>5.1}%", gc_content(source_seq.as_str()) * 100.0));
+    format_block(
+        "GC content:",
+        format!("{:>5.1}%", gc_content(source_seq.as_str()) * 100.0),
+    );
     format_block("first 60 bp:", &source_seq.as_str()[..60]);
     println!();
 
@@ -309,27 +342,37 @@ fn main() -> ExitCode {
     println!("[2/5] Translated CDS → protein (standard genetic code)");
     format_block("protein length (aa):", protein_seq.len());
     format_block("first 50 aa:", &protein_seq.as_str()[..50]);
-    format_block("last 20 aa:", &protein_seq.as_str()[protein_seq.len() - 20..]);
+    format_block(
+        "last 20 aa:",
+        &protein_seq.as_str()[protein_seq.len() - 20..],
+    );
     println!();
 
     // ----- Step 3: codon-optimise for Homo sapiens -----
     let (optimised_cds, swaps) = humanise_codons(source_seq.as_str());
-    let optimised_seq =
-        Sequence::new("AeqVic_GFP_humanised", Alphabet::Dna, &optimised_cds)
-            .expect("humanised CDS must validate as DNA");
+    let optimised_seq = Sequence::new("AeqVic_GFP_humanised", Alphabet::Dna, &optimised_cds)
+        .expect("humanised CDS must validate as DNA");
     let reconstructed_protein = translate(optimised_seq.as_str());
     assert_eq!(
         reconstructed_protein, protein,
         "humanised CDS must encode the IDENTICAL protein"
     );
     println!("[3/5] Codon-optimised for Homo sapiens expression");
-    format_block("codons swapped:", format!("{}/{}  ({:.1}%)",
-        swaps,
-        source_seq.len() / 3,
-        100.0 * swaps as f32 / (source_seq.len() / 3) as f32));
+    format_block(
+        "codons swapped:",
+        format!(
+            "{}/{}  ({:.1}%)",
+            swaps,
+            source_seq.len() / 3,
+            100.0 * swaps as f32 / (source_seq.len() / 3) as f32
+        ),
+    );
     format_block(
         "CAI (jellyfish CDS):",
-        format!("{:.3}  (low — slow translation in humans)", cai(source_seq.as_str())),
+        format!(
+            "{:.3}  (low — slow translation in humans)",
+            cai(source_seq.as_str())
+        ),
     );
     format_block(
         "CAI (humanised CDS):",
@@ -360,10 +403,22 @@ fn main() -> ExitCode {
     let mrna_rna = dna_to_rna(&mrna_dna);
     println!("[4/5] Assembled full mRNA construct");
     println!("        layout: [5'UTR α-globin] [Kozak] [GFP CDS] [3'UTR α-globin] [poly-A]");
-    format_block("5' UTR (α-globin):", format!("{} nt", HUMAN_ALPHA_GLOBIN_5UTR.len()));
-    format_block("Kozak context:", format!("{} nt  ({})", KOZAK_CONTEXT.len(), KOZAK_CONTEXT));
-    format_block("CDS (humanised GFP):", format!("{} nt", optimised_cds.len()));
-    format_block("3' UTR (α-globin):", format!("{} nt", HUMAN_ALPHA_GLOBIN_3UTR.len()));
+    format_block(
+        "5' UTR (α-globin):",
+        format!("{} nt", HUMAN_ALPHA_GLOBIN_5UTR.len()),
+    );
+    format_block(
+        "Kozak context:",
+        format!("{} nt  ({})", KOZAK_CONTEXT.len(), KOZAK_CONTEXT),
+    );
+    format_block(
+        "CDS (humanised GFP):",
+        format!("{} nt", optimised_cds.len()),
+    );
+    format_block(
+        "3' UTR (α-globin):",
+        format!("{} nt", HUMAN_ALPHA_GLOBIN_3UTR.len()),
+    );
     format_block("poly-A tail:", format!("{} nt", polya.len()));
     format_block("total mRNA:", format!("{} nt", mrna_rna.len()));
     // Kozak +4 nucleotide — the base immediately AFTER the start
@@ -392,10 +447,12 @@ fn main() -> ExitCode {
     // ----- Step 5: emit FASTA for downstream IVT order -----
     println!("[5/5] Final mRNA, ready for IVT (FASTA format)");
     println!();
-    println!(">AeqVic_GFP_humanised_mRNA  len={} nt  CAI={:.3}  GC={:.1}%",
+    println!(
+        ">AeqVic_GFP_humanised_mRNA  len={} nt  CAI={:.3}  GC={:.1}%",
         mrna_rna.len(),
         cai(&optimised_cds),
-        gc_content(&optimised_cds) * 100.0);
+        gc_content(&optimised_cds) * 100.0
+    );
     for line in mrna_rna.as_bytes().chunks(80) {
         println!("{}", std::str::from_utf8(line).unwrap());
     }

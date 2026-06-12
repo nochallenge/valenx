@@ -85,11 +85,7 @@ pub fn coaxial_correction(seq: &RnaSeq, structure: &Structure) -> Result<f64> {
 
 /// Shared evaluator. `coaxial` selects the dangle-folded (`false`) or
 /// the `-d2` coaxial-stacking (`true`) model.
-fn eval_with_coaxial(
-    seq: &RnaSeq,
-    structure: &Structure,
-    coaxial: bool,
-) -> Result<f64> {
+fn eval_with_coaxial(seq: &RnaSeq, structure: &Structure, coaxial: bool) -> Result<f64> {
     let codes = seq.codes();
     if structure.len() != codes.len() {
         return Err(RnaStructError::structure(format!(
@@ -198,13 +194,7 @@ fn exterior_coaxial(codes: &[u8], partner: &[Option<usize>]) -> f64 {
 /// Energy of the single loop closed by pair `(i, j)` — the inner
 /// dispatch used by [`structure_energy`]. `coaxial` adds the
 /// coaxial-stacking term to a multiloop.
-fn loop_energy(
-    codes: &[u8],
-    partner: &[Option<usize>],
-    i: usize,
-    j: usize,
-    coaxial: bool,
-) -> f64 {
+fn loop_energy(codes: &[u8], partner: &[Option<usize>], i: usize, j: usize, coaxial: bool) -> f64 {
     // Collect the pairs directly enclosed by (i, j): walk i+1..j and
     // record every pair whose 5' base we meet, skipping over already-
     // entered sub-loops.
@@ -241,16 +231,8 @@ fn loop_energy(
                 codes[l]
             };
             energy::internal_loop_energy(
-                codes[i],
-                codes[j],
-                codes[k],
-                codes[l],
-                left,
-                right,
-                mm_outer_5,
-                mm_outer_3,
-                mm_inner_5,
-                mm_inner_3,
+                codes[i], codes[j], codes[k], codes[l], left, right, mm_outer_5, mm_outer_3,
+                mm_inner_5, mm_inner_3,
             )
         }
         b => {
@@ -288,12 +270,7 @@ fn loop_energy(
 
 /// Coaxial-stacking correction for the multiloop closed by `(i, j)`
 /// with directly-`enclosed` branch pairs (in 5′→3′ order).
-fn multiloop_coaxial(
-    codes: &[u8],
-    i: usize,
-    j: usize,
-    enclosed: &[(usize, usize)],
-) -> f64 {
+fn multiloop_coaxial(codes: &[u8], i: usize, j: usize, enclosed: &[(usize, usize)]) -> f64 {
     // Helix ends around the loop, in cyclic 5'->3' order: each enclosed
     // branch (k, l) presents its loop-facing pair (codes[k], codes[l]);
     // the closing pair, met last walking the interior, presents its
@@ -325,9 +302,7 @@ fn multiloop_coaxial(
     for w in enclosed.windows(2) {
         push_gap(w[0].1, w[1].0);
     }
-    if let (Some(&(_, last_l)), Some(&(first_k, _))) =
-        (enclosed.last(), enclosed.first())
-    {
+    if let (Some(&(_, last_l)), Some(&(first_k, _))) = (enclosed.last(), enclosed.first()) {
         // last branch -> closing pair (closing pair's loop-facing 5'
         // base sits at j, so the gap runs from last_l to j).
         push_gap(last_l, j);
@@ -372,7 +347,10 @@ mod tests {
         let six = Structure::from_dot_bracket("((((((....))))))").unwrap();
         let e_two = structure_energy(&seq, &two).unwrap();
         let e_six = structure_energy(&seq, &six).unwrap();
-        assert!(e_six < e_two, "6 stacks {e_six} should beat 2 stacks {e_two}");
+        assert!(
+            e_six < e_two,
+            "6 stacks {e_six} should beat 2 stacks {e_two}"
+        );
     }
 
     #[test]
@@ -409,10 +387,7 @@ mod tests {
         // + terminal-AU penalties on every helix).
         //                       (((..(((...)))..(((...)))..)))
         let seq = RnaSeq::parse("GGGAAGGGAAACCCAAGGGAAACCCAACCC").unwrap();
-        let s = Structure::from_dot_bracket(
-            "(((..(((...)))..(((...)))..)))",
-        )
-        .unwrap();
+        let s = Structure::from_dot_bracket("(((..(((...)))..(((...)))..)))").unwrap();
         assert_eq!(s.n_pairs(), 9, "3 stems of 3 bp each");
         let e = structure_energy(&seq, &s).unwrap();
         // The energy is a real finite number (the multiloop arm ran).
@@ -420,9 +395,7 @@ mod tests {
         // An independent check: the same structure scored with one
         // hairpin removed (fewer branches) gives a different energy —
         // proving the multiloop term actually contributes.
-        let one_hairpin = Structure::from_dot_bracket(
-            "(((..(((...)))............)))",
-        );
+        let one_hairpin = Structure::from_dot_bracket("(((..(((...)))............)))");
         // length differs by design — only assert the multiloop case.
         assert!(one_hairpin.is_err() || one_hairpin.is_ok());
     }
@@ -490,13 +463,13 @@ mod tests {
         // loop with no gap between them — their inner helices can stack
         // coaxially across the exterior loop.
         let seq = RnaSeq::parse("GGGGAAAACCCCGGGGAAAACCCC").unwrap();
-        let s = Structure::from_dot_bracket(
-            "((((....))))((((....))))",
-        )
-        .unwrap();
+        let s = Structure::from_dot_bracket("((((....))))((((....))))").unwrap();
         let d0 = structure_energy(&seq, &s).unwrap();
         let d2 = structure_energy_d2(&seq, &s).unwrap();
         // Two flush exterior helices: a coaxial stack applies.
-        assert!(d2 < d0, "exterior coaxial stack should lower d2: {d2} vs {d0}");
+        assert!(
+            d2 < d0,
+            "exterior coaxial stack should lower d2: {d2} vs {d0}"
+        );
     }
 }

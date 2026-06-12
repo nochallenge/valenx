@@ -213,12 +213,9 @@ fn build_xc(
                 let dphi_nu = dphi[nu];
                 let mut contrib = v_rho * phi_mu * phi_nu;
                 // GGA: gga_vec · (φ_μ ∇φ_ν + φ_ν ∇φ_μ).
-                contrib += gga_vec[0]
-                    * (phi_mu * dphi_nu[0] + phi_nu * dphi_mu[0]);
-                contrib += gga_vec[1]
-                    * (phi_mu * dphi_nu[1] + phi_nu * dphi_mu[1]);
-                contrib += gga_vec[2]
-                    * (phi_mu * dphi_nu[2] + phi_nu * dphi_mu[2]);
+                contrib += gga_vec[0] * (phi_mu * dphi_nu[0] + phi_nu * dphi_mu[0]);
+                contrib += gga_vec[1] * (phi_mu * dphi_nu[1] + phi_nu * dphi_mu[1]);
+                contrib += gga_vec[2] * (phi_mu * dphi_nu[2] + phi_nu * dphi_mu[2]);
                 v_xc[(mu, nu)] += w * contrib;
             }
         }
@@ -309,9 +306,7 @@ pub fn run_ks_scf(
         let mut e_elec = 0.0;
         for mu in 0..n_basis {
             for nu in 0..n_basis {
-                e_elec += 0.5
-                    * density[(mu, nu)]
-                    * (2.0 * h_core[(mu, nu)] + j[(mu, nu)]);
+                e_elec += 0.5 * density[(mu, nu)] * (2.0 * h_core[(mu, nu)] + j[(mu, nu)]);
             }
         }
         e_elec += xc.energy;
@@ -329,8 +324,7 @@ pub fn run_ks_scf(
         let energy = e_elec + integrals.e_nuclear;
 
         // DIIS error and extrapolation.
-        let error =
-            Diis::error_vector(&fock, &density, &integrals.overlap, &ortho);
+        let error = Diis::error_vector(&fock, &density, &integrals.overlap, &ortho);
         let error_norm = Diis::error_norm(&error);
         diis.push(fock.clone(), error);
         let fock_used = diis.extrapolate().unwrap_or(fock);
@@ -362,9 +356,7 @@ pub fn run_ks_scf(
             let mut e_elec = 0.0;
             for mu in 0..n_basis {
                 for nu in 0..n_basis {
-                    e_elec += 0.5
-                        * density[(mu, nu)]
-                        * (2.0 * h_core[(mu, nu)] + j[(mu, nu)]);
+                    e_elec += 0.5 * density[(mu, nu)] * (2.0 * h_core[(mu, nu)] + j[(mu, nu)]);
                 }
             }
             e_elec += xc.energy;
@@ -397,10 +389,7 @@ pub fn run_ks_scf(
     let _ = (final_xc_energy, final_grid_n);
     Err(QchemError::ScfNotConverged {
         iterations: settings.max_iterations,
-        last_delta_energy: iterations
-            .last()
-            .map(|i| i.delta_energy)
-            .unwrap_or(0.0),
+        last_delta_energy: iterations.last().map(|i| i.delta_energy).unwrap_or(0.0),
     })
 }
 
@@ -576,10 +565,7 @@ mod tests {
         .unwrap();
         // total = electronic + nuclear repulsion.
         assert!(
-            (dft.total_energy
-                - (dft.electronic_energy + dft.nuclear_repulsion))
-                .abs()
-                < 1.0e-10
+            (dft.total_energy - (dft.electronic_energy + dft.nuclear_repulsion)).abs() < 1.0e-10
         );
         // The XC energy is negative and a chemically sensible
         // magnitude for water (exchange-correlation is roughly

@@ -42,10 +42,7 @@ pub fn tooth_profile(spec: &GearSpec) -> Result<Vec<[f64; 2]>, GearsError> {
     if !(0.0..=45.0).contains(&spec.pressure_angle_deg) {
         return Err(GearsError::BadParameter {
             name: "pressure_angle_deg",
-            reason: format!(
-                "must be in [0, 45], got {}",
-                spec.pressure_angle_deg
-            ),
+            reason: format!("must be in [0, 45], got {}", spec.pressure_angle_deg),
         });
     }
 
@@ -93,10 +90,7 @@ pub fn tooth_profile(spec: &GearSpec) -> Result<Vec<[f64; 2]>, GearsError> {
     // 1) Dedendum point at the start of the leading flank.
     let theta_ded_start = -std::f64::consts::PI / n;
     if r_ded > 0.0 {
-        out.push([
-            r_ded * theta_ded_start.cos(),
-            r_ded * theta_ded_start.sin(),
-        ]);
+        out.push([r_ded * theta_ded_start.cos(), r_ded * theta_ded_start.sin()]);
     }
     // 2) Leading flank from base → addendum. (Trailing list is
     // mirrored about +x; we want the flank closer to the trailing

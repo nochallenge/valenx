@@ -81,7 +81,10 @@ mod tests {
         let field = solve_point_heat(&grid, k, 0.01).expect("solve"); // 10 mW source
         let num4 = field.delta_t_k_at_radius_x(4.0);
         let num8 = field.delta_t_k_at_radius_x(8.0);
-        assert!(num4 > num8 && num8 > 0.0, "ΔT must fall with distance: {num4} {num8}");
+        assert!(
+            num4 > num8 && num8 > 0.0,
+            "ΔT must fall with distance: {num4} {num8}"
+        );
         let ana4 = analytic_point_heat_k(0.01, k, 4.0);
         assert!(
             (0.4..2.0).contains(&(num4 / ana4)),
@@ -93,9 +96,16 @@ mod tests {
     fn point_heat_isotherm_radius_inverts_the_analytic_rise() {
         // (a) ROUND-TRIP threading analytic_point_heat_k (non-tautological): the radius at
         // which ΔT occurs, fed back, reproduces ΔT — and a known radius recovers itself.
-        for &(p, k, dt) in &[(0.01_f64, 0.5_f64, 0.5_f64), (0.02, 0.6, 0.2), (0.005, 0.49, 1.0)] {
+        for &(p, k, dt) in &[
+            (0.01_f64, 0.5_f64, 0.5_f64),
+            (0.02, 0.6, 0.2),
+            (0.005, 0.49, 1.0),
+        ] {
             let r = point_heat_isotherm_radius_mm(p, k, dt);
-            assert!((analytic_point_heat_k(p, k, r) - dt).abs() <= 1e-9 * dt, "ΔT(r(ΔT)) = ΔT");
+            assert!(
+                (analytic_point_heat_k(p, k, r) - dt).abs() <= 1e-9 * dt,
+                "ΔT(r(ΔT)) = ΔT"
+            );
         }
         for &(p, k, r0) in &[(0.01_f64, 0.5_f64, 4.0_f64), (0.02, 0.6, 8.0)] {
             assert!(
@@ -107,7 +117,10 @@ mod tests {
 
         // (b) WORKED: P = 10 mW, k = 0.5, ΔT = 0.5 K → r = 1000·P/(4πk·ΔT) = 10/π ≈ 3.183 mm.
         let r = point_heat_isotherm_radius_mm(0.01, 0.5, 0.5);
-        assert!((r - 10.0 / std::f64::consts::PI).abs() <= 1e-9 * r, "r = 10/π ≈ 3.183 mm");
+        assert!(
+            (r - 10.0 / std::f64::consts::PI).abs() <= 1e-9 * r,
+            "r = 10/π ≈ 3.183 mm"
+        );
 
         // (c) MONOTONICITY: a hotter contour sits closer to the source; more power or lower
         // conductivity pushes a given contour farther out.
@@ -131,9 +144,16 @@ mod tests {
     #[test]
     fn point_heat_power_for_delta_t_completes_the_inverse_trio() {
         // (a) ROUND-TRIP threading analytic_point_heat_k (non-tautological, both directions).
-        for &(dt, k, r) in &[(0.5_f64, 0.5_f64, 4.0_f64), (0.2, 0.6, 8.0), (1.0, 0.49, 2.0)] {
+        for &(dt, k, r) in &[
+            (0.5_f64, 0.5_f64, 4.0_f64),
+            (0.2, 0.6, 8.0),
+            (1.0, 0.49, 2.0),
+        ] {
             let p = point_heat_power_for_delta_t_w(dt, k, r);
-            assert!((analytic_point_heat_k(p, k, r) - dt).abs() <= 1e-9 * dt, "ΔT(Q(ΔT)) = ΔT");
+            assert!(
+                (analytic_point_heat_k(p, k, r) - dt).abs() <= 1e-9 * dt,
+                "ΔT(Q(ΔT)) = ΔT"
+            );
         }
         for &(p, k, r) in &[(0.01_f64, 0.5_f64, 4.0_f64), (0.02, 0.6, 8.0)] {
             assert!(

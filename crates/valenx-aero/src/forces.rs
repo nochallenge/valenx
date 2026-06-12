@@ -334,11 +334,7 @@ fn integrate_forces_staircase(
                 // A cut (fluid) cell — examine its six faces. A face
                 // toward a solid cell is an exposed body surface.
                 for &(di, dj, dk) in &FACE_DIRS {
-                    let (ni, nj, nk) = (
-                        i as i32 + di,
-                        j as i32 + dj,
-                        k as i32 + dk,
-                    );
+                    let (ni, nj, nk) = (i as i32 + di, j as i32 + dj, k as i32 + dk);
                     if ni < 0
                         || nj < 0
                         || nk < 0
@@ -354,8 +350,7 @@ fn integrate_forces_staircase(
                     }
                     // This face is body surface. Its outward normal
                     // (pointing into the fluid) is −(di,dj,dk).
-                    let normal =
-                        Vector3::new(-di as f64, -dj as f64, -dk as f64);
+                    let normal = Vector3::new(-di as f64, -dj as f64, -dk as f64);
                     // The face area depends on which axis it spans.
                     let area = if di != 0 {
                         dy * dz
@@ -553,11 +548,7 @@ fn surface_field_staircase(tunnel: &WindTunnel, flow: &FlowField) -> Vec<Surface
                     continue;
                 }
                 for &(di, dj, dk) in &FACE_DIRS {
-                    let (ni, nj, nk) = (
-                        i as i32 + di,
-                        j as i32 + dj,
-                        k as i32 + dk,
-                    );
+                    let (ni, nj, nk) = (i as i32 + di, j as i32 + dj, k as i32 + dk);
                     if ni < 0
                         || nj < 0
                         || nk < 0
@@ -567,9 +558,7 @@ fn surface_field_staircase(tunnel: &WindTunnel, flow: &FlowField) -> Vec<Surface
                     {
                         continue;
                     }
-                    if body.tag(ni as usize, nj as usize, nk as usize)
-                        != CellTag::Solid
-                    {
+                    if body.tag(ni as usize, nj as usize, nk as usize) != CellTag::Solid {
                         continue;
                     }
                     let normal = Vector3::new(-di as f64, -dj as f64, -dk as f64);
@@ -670,9 +659,7 @@ pub fn surface_stats(points: &[SurfacePoint]) -> SurfaceStats {
 /// by the report to qualify the accuracy.
 pub fn turbulence_note(model: TurbulenceModel) -> &'static str {
     match model {
-        TurbulenceModel::Laminar => {
-            "laminar — coefficients valid only at low Reynolds number"
-        }
+        TurbulenceModel::Laminar => "laminar — coefficients valid only at low Reynolds number",
         TurbulenceModel::KEpsilon => {
             "k-epsilon — robust, weaker in strong adverse-pressure-gradient separation"
         }
@@ -737,10 +724,7 @@ mod tests {
         // vanishes. Build a box tunnel, overwrite the pressure field
         // with a constant, and confirm the integrated pressure force
         // is ~0.
-        let body = box_body(
-            Vector3::new(-1.0, -1.0, -1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        );
+        let body = box_body(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0));
         // The flow field is fully overwritten below — only its array
         // *shapes* are needed, so a coarse grid + a single iteration is
         // all this test requires.
@@ -774,10 +758,7 @@ mod tests {
         // side of a box is higher than on the −x side, the net force
         // pushes the body in −x. We fake such a field and confirm the
         // sign.
-        let body = box_body(
-            Vector3::new(-1.0, -1.0, -1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        );
+        let body = box_body(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0));
         // The flow is fully overwritten below — a coarse grid + a single
         // iteration suffices to allocate the field arrays.
         let tunnel = build_coarse_tunnel(&body);
@@ -821,10 +802,7 @@ mod tests {
         // enough for the test suite — the bluff-body Cd band is wide
         // and the qualitative result (a converged flow, a plausible
         // drag) does not need a fine mesh.
-        let body = box_body(
-            Vector3::new(-0.5, -0.5, -0.5),
-            Vector3::new(0.5, 0.5, 0.5),
-        );
+        let body = box_body(Vector3::new(-0.5, -0.5, -0.5), Vector3::new(0.5, 0.5, 0.5));
         let tunnel = WindTunnel::build_with(
             &body,
             Wind::straight(20.0).unwrap(),
@@ -866,10 +844,7 @@ mod tests {
 
     #[test]
     fn surface_field_and_stats_are_consistent() {
-        let body = box_body(
-            Vector3::new(-0.5, -0.5, -0.5),
-            Vector3::new(0.5, 0.5, 0.5),
-        );
+        let body = box_body(Vector3::new(-0.5, -0.5, -0.5), Vector3::new(0.5, 0.5, 0.5));
         // A coarse grid keeps this real solve fast — the test asserts
         // surface-field *consistency* (cp_min ≤ cp_max, finite Cp/Cf/y+),
         // which holds at any resolution.
@@ -951,10 +926,7 @@ mod tests {
         // over the true clipped faces, must land *at least as close* to
         // the reference — the wall-accuracy upgrade this is.
         use crate::cutcell::WallMethod;
-        let cube = box_body(
-            Vector3::new(-0.5, -0.5, -0.5),
-            Vector3::new(0.5, 0.5, 0.5),
-        );
+        let cube = box_body(Vector3::new(-0.5, -0.5, -0.5), Vector3::new(0.5, 0.5, 0.5));
         let reference = 1.05;
         let cd_stair = drag_with_method(&cube, WallMethod::Staircase, 8);
         let cd_cut = drag_with_method(&cube, WallMethod::CutCell, 8);
@@ -1053,4 +1025,3 @@ mod tests {
         assert!(coeff.cd < 0.5);
     }
 }
-

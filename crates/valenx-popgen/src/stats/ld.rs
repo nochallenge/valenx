@@ -77,11 +77,7 @@ pub fn ld_pair(matrix: &GenotypeMatrix, a: usize, b: usize) -> Result<LdStats> {
     } else {
         (p_a * (1.0 - p_b)).min((1.0 - p_a) * p_b)
     };
-    let d_prime = if d_max.abs() < 1e-12 {
-        0.0
-    } else {
-        d / d_max
-    };
+    let d_prime = if d_max.abs() < 1e-12 { 0.0 } else { d / d_max };
 
     // r^2 = D^2 / (pA qA pB qB).
     let denom = p_a * (1.0 - p_a) * p_b * (1.0 - p_b);
@@ -163,12 +159,7 @@ mod tests {
     #[test]
     fn perfectly_correlated_sites_have_r2_one() {
         // Two sites with identical columns -> r^2 = 1, D' = 1.
-        let m = matrix(vec![
-            vec![1, 1],
-            vec![1, 1],
-            vec![0, 0],
-            vec![0, 0],
-        ]);
+        let m = matrix(vec![vec![1, 1], vec![1, 1], vec![0, 0], vec![0, 0]]);
         let ld = ld_pair(&m, 0, 1).unwrap();
         assert!((ld.r_squared - 1.0).abs() < 1e-9, "r2 = {}", ld.r_squared);
         assert!((ld.d_prime - 1.0).abs() < 1e-9, "D' = {}", ld.d_prime);
@@ -178,12 +169,7 @@ mod tests {
     #[test]
     fn perfectly_anticorrelated_sites() {
         // Site B is the complement of site A -> r^2 = 1, D' = -1.
-        let m = matrix(vec![
-            vec![1, 0],
-            vec![1, 0],
-            vec![0, 1],
-            vec![0, 1],
-        ]);
+        let m = matrix(vec![vec![1, 0], vec![1, 0], vec![0, 1], vec![0, 1]]);
         let ld = ld_pair(&m, 0, 1).unwrap();
         assert!((ld.r_squared - 1.0).abs() < 1e-9);
         assert!((ld.d_prime + 1.0).abs() < 1e-9, "D' = {}", ld.d_prime);
@@ -193,12 +179,7 @@ mod tests {
     #[test]
     fn independent_sites_have_low_ld() {
         // Two sites whose alleles are uncorrelated.
-        let m = matrix(vec![
-            vec![1, 1],
-            vec![1, 0],
-            vec![0, 1],
-            vec![0, 0],
-        ]);
+        let m = matrix(vec![vec![1, 1], vec![1, 0], vec![0, 1], vec![0, 0]]);
         let ld = ld_pair(&m, 0, 1).unwrap();
         assert!(ld.r_squared.abs() < 1e-9, "r2 = {}", ld.r_squared);
         assert!(ld.d.abs() < 1e-9);
@@ -225,12 +206,7 @@ mod tests {
 
     #[test]
     fn convenience_wrappers_agree_with_ld_pair() {
-        let m = matrix(vec![
-            vec![1, 1],
-            vec![1, 1],
-            vec![0, 0],
-            vec![0, 0],
-        ]);
+        let m = matrix(vec![vec![1, 1], vec![1, 1], vec![0, 0], vec![0, 0]]);
         let full = ld_pair(&m, 0, 1).unwrap();
         assert!((ld_d(&m, 0, 1).unwrap() - full.d).abs() < 1e-12);
         assert!((ld_d_prime(&m, 0, 1).unwrap() - full.d_prime).abs() < 1e-12);

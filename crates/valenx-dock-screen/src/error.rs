@@ -291,7 +291,8 @@ mod tests {
         assert!(msg.contains("pdbqt"), "got: {msg}");
         assert!(msg.contains("bad atom"), "got: {msg}");
 
-        let msg = DockScreenError::tool_not_available("DiffDock", "pip install diffdock").to_string();
+        let msg =
+            DockScreenError::tool_not_available("DiffDock", "pip install diffdock").to_string();
         assert!(msg.contains("DiffDock"), "got: {msg}");
         assert!(msg.contains("pip install diffdock"), "got: {msg}");
     }

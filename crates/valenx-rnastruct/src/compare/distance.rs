@@ -56,9 +56,7 @@ pub fn base_pair_distance(a: &Structure, b: &Structure) -> Result<usize> {
 /// [`RnaStructError::Structure`] on a length mismatch.
 pub fn pairing_agreement(a: &Structure, b: &Structure) -> Result<f64> {
     if a.len() != b.len() {
-        return Err(RnaStructError::structure(
-            "structures differ in length",
-        ));
+        return Err(RnaStructError::structure("structures differ in length"));
     }
     if a.is_empty() {
         return Ok(1.0);
@@ -134,11 +132,7 @@ fn build_tree(s: &Structure) -> OrderedTree {
     let mut kind = Vec::new();
     let mut lmld = Vec::new();
 
-    fn flatten(
-        node: &Tmp,
-        kind: &mut Vec<NodeKind>,
-        lmld: &mut Vec<usize>,
-    ) -> usize {
+    fn flatten(node: &Tmp, kind: &mut Vec<NodeKind>, lmld: &mut Vec<usize>) -> usize {
         let Tmp::Node(k, children) = node;
         let mut leftmost: Option<usize> = None;
         for c in children {
@@ -225,8 +219,7 @@ pub fn tree_edit_distance(a: &Structure, b: &Structure) -> usize {
                     let ins = fd[di][dj - 1] + 1;
                     if ta.lmld[i] == il && tb.lmld[j] == jl {
                         // both are subtrees rooted at i / j
-                        let sub = fd[di - 1][dj - 1]
-                            + relabel_cost(ta.kind[i], tb.kind[j]);
+                        let sub = fd[di - 1][dj - 1] + relabel_cost(ta.kind[i], tb.kind[j]);
                         let m = del.min(ins).min(sub);
                         fd[di][dj] = m;
                         treedist[i][j] = m;

@@ -81,9 +81,7 @@ pub fn render_ascii(tree: &Tree, width: usize) -> String {
     let mut grid: Vec<Vec<char>> = vec![vec![' '; width + 1]; rows];
 
     // Snap a layout x to a column.
-    let col = |x: f64| -> usize {
-        ((x / max_x) * width as f64).round() as usize
-    };
+    let col = |x: f64| -> usize { ((x / max_x) * width as f64).round() as usize };
     // Snap a layout y to a row.
     let row = |y: f64| -> usize { y.round() as usize };
 

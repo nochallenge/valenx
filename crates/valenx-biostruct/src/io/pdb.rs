@@ -17,9 +17,7 @@
 //! `END`).
 
 use crate::error::{BiostructError, Result};
-use crate::structure::{
-    Atom, Chain, Disulfide, Model, Residue, Structure, SymmetryOperator,
-};
+use crate::structure::{Atom, Chain, Disulfide, Model, Residue, Structure, SymmetryOperator};
 use nalgebra::Point3;
 
 /// Parse a PDB-format string into a [`Structure`].
@@ -36,8 +34,7 @@ pub fn read_pdb(text: &str, id: &str) -> Result<Structure> {
     let mut seen_model_record = false;
     let mut seqres: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     // REMARK 350 BIOMT accumulator: serial -> 3 rows being filled.
-    let mut biomt: std::collections::HashMap<i32, [[f64; 4]; 3]> =
-        std::collections::HashMap::new();
+    let mut biomt: std::collections::HashMap<i32, [[f64; 4]; 3]> = std::collections::HashMap::new();
 
     for (lineno0, raw) in text.lines().enumerate() {
         let lineno = lineno0 + 1;
@@ -104,17 +101,17 @@ pub fn read_pdb(text: &str, id: &str) -> Result<Structure> {
                 if seen_model_record && !current_model.chains.is_empty() {
                     structure.models.push(current_model);
                 }
-                let serial = slice(raw, 10, 14).trim().parse::<i32>().unwrap_or(
-                    structure.models.len() as i32 + 1,
-                );
+                let serial = slice(raw, 10, 14)
+                    .trim()
+                    .parse::<i32>()
+                    .unwrap_or(structure.models.len() as i32 + 1);
                 current_model = Model::new(serial);
                 seen_model_record = true;
             }
             "ENDMDL" => {
-                structure.models.push(std::mem::replace(
-                    &mut current_model,
-                    Model::new(0),
-                ));
+                structure
+                    .models
+                    .push(std::mem::replace(&mut current_model, Model::new(0)));
             }
             "ATOM" | "HETATM" => {
                 let (chain_id, residue, atom) = parse_atom_record(raw, lineno)?;
@@ -213,9 +210,7 @@ pub fn write_pdb(structure: &Structure) -> String {
             let mut last_polymer: Option<&Residue> = None;
             for residue in &chain.residues {
                 for atom in &residue.atoms {
-                    out.push_str(&format_atom_record(
-                        serial, atom, residue, &chain.id,
-                    ));
+                    out.push_str(&format_atom_record(serial, atom, residue, &chain.id));
                     out.push('\n');
                     serial += 1;
                 }
@@ -226,11 +221,7 @@ pub fn write_pdb(structure: &Structure) -> String {
             if let Some(r) = last_polymer {
                 out.push_str(&format!(
                     "TER   {:>5}      {:>3} {:>1}{:>4}{}\n",
-                    serial,
-                    r.name,
-                    chain.id,
-                    r.seq_num,
-                    r.ins_code,
+                    serial, r.name, chain.id, r.seq_num, r.ins_code,
                 ));
                 serial += 1;
             }
@@ -291,14 +282,16 @@ fn parse_atom_record(line: &str, lineno: usize) -> Result<(String, Residue, Atom
     let res_name = slice(line, 17, 20).trim().to_ascii_uppercase();
     let chain_id = {
         let c = slice(line, 21, 22).trim();
-        if c.is_empty() { "A".to_string() } else { c.to_string() }
+        if c.is_empty() {
+            "A".to_string()
+        } else {
+            c.to_string()
+        }
     };
     let seq_num = slice(line, 22, 26)
         .trim()
         .parse::<i32>()
-        .map_err(|_| {
-            BiostructError::parse("pdb", lineno, "non-integer residue sequence number")
-        })?;
+        .map_err(|_| BiostructError::parse("pdb", lineno, "non-integer residue sequence number"))?;
     let ins_code = slice(line, 26, 27).chars().next().unwrap_or(' ');
     let x = parse_coord(line, 30, 38, lineno, "x")?;
     let y = parse_coord(line, 38, 46, lineno, "y")?;
@@ -377,14 +370,15 @@ pub fn guess_element(name: &str) -> String {
     let single_letter_aligned = name.starts_with(' ') && !name.trim().is_empty();
 
     let trimmed = name.trim();
-    let alpha: String = trimmed.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    let alpha: String = trimmed
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect();
     if alpha.is_empty() {
         return "C".to_string();
     }
     // Hydrogen atom names often start with a digit then H.
-    if trimmed.chars().next().map(|c| c.is_ascii_digit()) == Some(true)
-        && alpha.starts_with('H')
-    {
+    if trimmed.chars().next().map(|c| c.is_ascii_digit()) == Some(true) && alpha.starts_with('H') {
         return "H".to_string();
     }
     let upper = alpha.to_ascii_uppercase();
@@ -397,8 +391,8 @@ pub fn guess_element(name: &str) -> String {
 
     // Recognised two-letter elements that appear in PDB files.
     const TWO: &[&str] = &[
-        "FE", "ZN", "MG", "MN", "CA", "NA", "CL", "CU", "NI", "CO", "SE", "BR", "CD", "HG",
-        "PT", "AU", "AG", "MO", "AS",
+        "FE", "ZN", "MG", "MN", "CA", "NA", "CL", "CU", "NI", "CO", "SE", "BR", "CD", "HG", "PT",
+        "AU", "AG", "MO", "AS",
     ];
     if upper.len() >= 2 && TWO.contains(&&upper[0..2]) {
         // No column cue. A polymer atom name is a biopolymer element
@@ -434,9 +428,7 @@ fn push_atom(model: &mut Model, chain_id: &str, residue: Residue, atom: Atom) {
         .residues
         .last()
         .map(|r| {
-            r.seq_num == residue.seq_num
-                && r.ins_code == residue.ins_code
-                && r.name == residue.name
+            r.seq_num == residue.seq_num && r.ins_code == residue.ins_code && r.name == residue.name
         })
         .unwrap_or(false);
     if matches_tail {
@@ -613,7 +605,12 @@ END
     #[test]
     fn reads_hetatm_and_charge() {
         let s = read_pdb(MINI_PDB, "x").unwrap();
-        let zn = s.first_model().chain("A").unwrap().residue(101, ' ').unwrap();
+        let zn = s
+            .first_model()
+            .chain("A")
+            .unwrap()
+            .residue(101, ' ')
+            .unwrap();
         assert!(zn.hetatm);
         assert_eq!(zn.atoms[0].element, "ZN");
         assert_eq!(zn.atoms[0].charge, 2);

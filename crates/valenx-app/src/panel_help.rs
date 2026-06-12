@@ -124,7 +124,8 @@ pub fn short_summary(panel: &str) -> &'static str {
 /// "use Ctrl+P to find actions" hint.
 pub fn help_for_panel(panel: &str) -> &'static str {
     match panel {
-        "Sequence" => "\
+        "Sequence" => {
+            "\
 # Sequence — valenx-bioseq
 
 Edit a DNA / RNA / protein sequence and run six sub-tools:
@@ -142,8 +143,10 @@ restriction enzymes, design primers, simulate PCR.
 2. Pick the Tool you want (e.g. ORF finder).
 3. Click Run — results appear in the Result box.
 4. Ctrl+Z to undo a paste; Ctrl+R to re-run.
-",
-        "Alignment" => "\
+"
+        }
+        "Alignment" => {
+            "\
 # Alignment — valenx-align
 
 Pairwise alignment (global / local / semi-global), multiple-sequence
@@ -159,8 +162,10 @@ alignment, and k-mer seed search.
 1. Paste two sequences into Sequence A / Sequence B.
 2. Choose Mode — Local for finding a shared motif, Global for whole-sequence.
 3. Click Run; the alignment renders in the Result box.
-",
-        "RNA Structure" => "\
+"
+        }
+        "RNA Structure" => {
+            "\
 # RNA Structure — valenx-rnastruct
 
 Fold an RNA sequence into a minimum-free-energy secondary structure;
@@ -176,8 +181,10 @@ output is dot-bracket notation + the ΔG (kcal/mol).
 1. Paste an RNA sequence into the input box.
 2. Pick the Zuker algorithm for MFE-based folding.
 3. Click Run — the dot-bracket structure appears below.
-",
-        "RNA Designer" => "\
+"
+        }
+        "RNA Designer" => {
+            "\
 # RNA Designer — valenx-rnadesign
 
 A guided 6-step wizard for designing synthetic RNAs end-to-end:
@@ -192,8 +199,10 @@ masking → primer design → assembly file.
 1. Step 1 — paste the target dot-bracket structure.
 2. Step 2 — pick the codon-optimization target organism.
 3. Step 3 → 6 — accept the defaults or tune as needed.
-",
-        "Molecular Dynamics" => "\
+"
+        }
+        "Molecular Dynamics" => {
+            "\
 # Molecular Dynamics — valenx-md
 
 Classical MD on a small system (Lennard-Jones + harmonic bonds).
@@ -204,8 +213,10 @@ Outputs a trajectory the Visualization tab can render.
 - **Total time (ns)** — total simulated time.
 - **Temperature (K)** — thermostat setpoint.
 - **Run** — integrates the trajectory (Ctrl+R).
-",
-        "Cheminformatics" => "\
+"
+        }
+        "Cheminformatics" => {
+            "\
 # Cheminformatics — valenx-cheminf
 
 Compute molecular descriptors (LogP, TPSA, MW), Morgan fingerprints,
@@ -215,8 +226,10 @@ and Tanimoto similarity between two molecules.
 - **SMILES** — input molecule(s) in SMILES notation.
 - **Tool** — descriptors / fingerprint / similarity.
 - **Run** — executes the selected tool (Ctrl+R).
-",
-        "Genomics" => "\
+"
+        }
+        "Genomics" => {
+            "\
 # Genomics — valenx-genomics
 
 Parse VCF variant calls, design CRISPR guides, simulate short reads.
@@ -225,8 +238,10 @@ Parse VCF variant calls, design CRISPR guides, simulate short reads.
 - **VCF text** — paste a VCF blob (header optional).
 - **Tool** — summary / CRISPR design / read simulator.
 - **Run** — runs the selected tool (Ctrl+R).
-",
-        "Body" => "\
+"
+        }
+        "Body" => {
+            "\
 # Body — Wind Tunnel
 
 Pick the body the solver puts in the tunnel: a built-in demo box,
@@ -235,8 +250,10 @@ a CAD primitive, or the currently-loaded mesh.
 ## Tip
 The body's projected frontal area is auto-computed from the source —
 it's the reference area for Cd / Cl coefficients.
-",
-        "Wind" => "\
+"
+        }
+        "Wind" => {
+            "\
 # Wind conditions — Wind Tunnel
 
 Sets the freestream: speed (m/s), angle of attack (deg), air density
@@ -246,8 +263,10 @@ from speed × chord ÷ ν and displayed read-only.
 ## Quick start
 - Road-car defaults: 30 m/s, AoA 0, sea-level air.
 - Aircraft defaults: bump speed to 60 m/s; pick a chord-scale body.
-",
-        "Run" => "\
+"
+        }
+        "Run" => {
+            "\
 # Run — Wind Tunnel
 
 Steady solve runs once; Angle sweep loops through a range of AoA and
@@ -257,22 +276,28 @@ reports a Cd/Cl polar.
 - **Mode** — Steady / Sweep.
 - **Sweep range** — AoA start / stop / step (deg).
 - **Run / Cancel** — Ctrl+R to start, Esc to abort.
-",
-        "Results" => "\
+"
+        }
+        "Results" => {
+            "\
 # Results — Wind Tunnel
 
 Reports the converged Cd / Cl / Cm coefficients, residual history,
 and (for sweep runs) the AoA polar plot. Push fields into the
 3-D viewport from the Visualization section.
-",
-        "Visualization" => "\
+"
+        }
+        "Visualization" => {
+            "\
 # Flow visualization — Wind Tunnel
 
 Push a flow field into the 3-D viewport's colour overlay: pressure
 coefficient, velocity magnitude, static pressure, or Q-criterion
 vortex-marker. Use **Clear overlay** to return to a plain wireframe.
-",
-        _ => "\
+"
+        }
+        _ => {
+            "\
 # Panel help
 
 This panel doesn't have a dedicated help entry yet. Try:
@@ -280,7 +305,8 @@ This panel doesn't have a dedicated help entry yet. Try:
 - **Hover any control** — every interactive control has a tooltip.
 - **Ctrl+P** — open the command palette and fuzzy-search every action.
 - **?** — toggle the keyboard-shortcut cheat-sheet.
-",
+"
+        }
     }
 }
 
@@ -346,13 +372,7 @@ mod tests {
         let ctx = egui::Context::default();
         let mut open = true;
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            for p in [
-                "Sequence",
-                "Alignment",
-                "Wind",
-                "Run",
-                "UnregisteredPanel",
-            ] {
+            for p in ["Sequence", "Alignment", "Wind", "Run", "UnregisteredPanel"] {
                 render_help_window(ctx, &mut open, p);
             }
         });

@@ -84,7 +84,10 @@ impl SecondaryStructure {
 
     /// Whether this state is sheet-like (`E` or `B`).
     pub fn is_sheet(&self) -> bool {
-        matches!(self, SecondaryStructure::Strand | SecondaryStructure::Bridge)
+        matches!(
+            self,
+            SecondaryStructure::Strand | SecondaryStructure::Bridge
+        )
     }
 }
 
@@ -122,8 +125,7 @@ impl DsspResult {
         if self.states.is_empty() {
             return 0.0;
         }
-        self.states.iter().filter(|s| s.is_helix()).count() as f64
-            / self.states.len() as f64
+        self.states.iter().filter(|s| s.is_helix()).count() as f64 / self.states.len() as f64
     }
 
     /// Fraction of residues assigned to a sheet state.
@@ -131,8 +133,7 @@ impl DsspResult {
         if self.states.is_empty() {
             return 0.0;
         }
-        self.states.iter().filter(|s| s.is_sheet()).count() as f64
-            / self.states.len() as f64
+        self.states.iter().filter(|s| s.is_sheet()).count() as f64 / self.states.len() as f64
     }
 
     /// Per-state residue counts. Order: H, G, I, E, B, T, S, coil.
@@ -434,8 +435,8 @@ fn detect_bridges(hb: &[Vec<bool>], n: usize) -> Vec<(usize, usize, bool)> {
     for i in 1..n.saturating_sub(1) {
         for j in (i + 2)..n.saturating_sub(1) {
             // antiparallel
-            let anti = (get(i, j) && get(j, i))
-                || (i > 0 && get(i - 1, j + 1) && get(j - 1, i + 1));
+            let anti =
+                (get(i, j) && get(j, i)) || (i > 0 && get(i - 1, j + 1) && get(j - 1, i + 1));
             // parallel
             let para = (i > 0 && get(i - 1, j) && get(j, i + 1))
                 || (j > 0 && get(j - 1, i) && get(i, j + 1));
@@ -532,9 +533,8 @@ pub fn sheet_topology(chain: &Chain) -> SheetTopology {
     let bridges = detect_bridges(&hb, n);
 
     // Which strand contains residue r?
-    let strand_of = |r: usize| -> Option<usize> {
-        strands.iter().position(|s| r >= s.start && r <= s.end)
-    };
+    let strand_of =
+        |r: usize| -> Option<usize> { strands.iter().position(|s| r >= s.start && r <= s.end) };
 
     let mut pairings: Vec<(usize, usize, bool)> = Vec::new();
     for (i, j, anti) in bridges {
@@ -587,7 +587,7 @@ mod tests {
         let phi = (-57.0_f64).to_radians();
         let psi = (-47.0_f64).to_radians();
         let omega = std::f64::consts::PI; // ~180°
-        // Bond lengths.
+                                          // Bond lengths.
         let l_n_ca = 1.458;
         let l_ca_c = 1.525;
         let l_c_n = 1.329;
@@ -695,7 +695,7 @@ mod tests {
     fn ideal_antipar_sheet(n_res: usize) -> Chain {
         let mut chain = Chain::new("A");
         let rise = 3.3; // strand rise per residue
-        // Strand A, +z direction.
+                        // Strand A, +z direction.
         for i in 0..n_res {
             let z = i as f64 * rise;
             let mut r = Residue::new("ALA", i as i32 + 1);
@@ -834,14 +834,8 @@ mod tests {
         let counts = result.state_counts();
         // The interior should mostly be H — the helix has the right
         // geometry for 4-turn H-bonds.
-        assert!(
-            counts[0] >= counts[1],
-            "expected H >= G count: {counts:?}"
-        );
-        assert!(
-            counts[0] >= counts[2],
-            "expected H >= I count: {counts:?}"
-        );
+        assert!(counts[0] >= counts[1], "expected H >= G count: {counts:?}");
+        assert!(counts[0] >= counts[2], "expected H >= I count: {counts:?}");
     }
 
     #[test]

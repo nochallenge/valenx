@@ -78,9 +78,9 @@ pub use error::{AlignError, ErrorCategory, Result};
 pub use limits::{check_dp_size, MAX_DP_CELLS};
 pub use matrix::{GapCost, ScoringScheme, SubstitutionMatrix};
 pub use msa::{align as align_msa, Msa};
-pub use pairwise::{Alignment, AlignStats, Cigar, CigarOp};
 pub use pairwise::global::{gotoh, needleman_wunsch};
 pub use pairwise::local::smith_waterman;
+pub use pairwise::{AlignStats, Alignment, Cigar, CigarOp};
 pub use search::{KmerIndex, SeedSearch};
 
 #[cfg(test)]
@@ -108,11 +108,13 @@ mod tests {
         // The plain linear-gap Needleman-Wunsch ignores the `open` term
         // by design; to make it agree it must be given a linear scheme
         // (open = 0) — then both routines reach the same ungapped score.
-        let linear =
-            ScoringScheme::new(SubstitutionMatrix::nuc44(), GapCost::new(0, 5));
+        let linear = ScoringScheme::new(SubstitutionMatrix::nuc44(), GapCost::new(0, 5));
         let nw = needleman_wunsch(a, b, &linear).unwrap();
         let go_lin = gotoh(a, b, &linear).unwrap();
-        assert_eq!(nw.score, go_lin.score, "linear NW == Gotoh under a linear scheme");
+        assert_eq!(
+            nw.score, go_lin.score,
+            "linear NW == Gotoh under a linear scheme"
+        );
         assert_eq!(nw.len(), 12);
 
         // CIGAR + stats are wired through.
@@ -129,10 +131,7 @@ mod tests {
         use search::{KarlinAltschul, SeedParams};
         let db: Vec<&[u8]> = vec![b"TTTTTGATTACACATAGCATGGGGG"];
         let idx = KmerIndex::build_many(&db, 7).unwrap();
-        let scheme = ScoringScheme::new(
-            SubstitutionMatrix::dna_simple(2, -3),
-            GapCost::new(5, 2),
-        );
+        let scheme = ScoringScheme::new(SubstitutionMatrix::dna_simple(2, -3), GapCost::new(5, 2));
         let search = SeedSearch::new(&idx, db.clone(), &scheme, SeedParams::default())
             .with_stats(KarlinAltschul::dna_ungapped());
         let hsps = search.search(b"GATTACACATAGCAT");
@@ -145,10 +144,7 @@ mod tests {
     #[test]
     fn end_to_end_msa() {
         use msa::{analysis, refine, RefineParams};
-        let scheme = ScoringScheme::new(
-            SubstitutionMatrix::dna_simple(2, -1),
-            GapCost::new(4, 1),
-        );
+        let scheme = ScoringScheme::new(SubstitutionMatrix::dna_simple(2, -1), GapCost::new(4, 1));
         let seqs: &[&[u8]] = &[b"ACGTACGTACGT", b"ACGTACGTACGT", b"ACGTCGTACGT"];
         let msa = align_msa(seqs, &scheme).unwrap();
         assert_eq!(msa.depth(), 3);

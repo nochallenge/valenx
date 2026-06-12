@@ -208,7 +208,14 @@ mod tests {
             assert!(!icon.is_empty(), "run icon is empty");
         }
         // File family.
-        for icon in [file::SAVE, file::OPEN, file::NEW, file::IMPORT, file::EXPORT, file::FOLDER] {
+        for icon in [
+            file::SAVE,
+            file::OPEN,
+            file::NEW,
+            file::IMPORT,
+            file::EXPORT,
+            file::FOLDER,
+        ] {
             assert!(!icon.is_empty(), "file icon is empty");
         }
         // Edit family.

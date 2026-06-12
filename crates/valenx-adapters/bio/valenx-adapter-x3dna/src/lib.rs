@@ -161,10 +161,7 @@ impl Adapter for X3dnaAdapter {
         let source_pdb = if input.input_pdb.is_absolute() {
             input.input_pdb.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input_pdb,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input_pdb)?
         };
         if !source_pdb.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -325,7 +322,11 @@ impl Adapter for X3dnaAdapter {
 /// accepting every `.par` in that case.
 fn read_output_basename(workdir: &Path) -> Option<String> {
     let case_toml = workdir.join("case.toml");
-    let text = valenx_core::io_caps::read_capped_to_string(&case_toml, valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize).ok()?;
+    let text = valenx_core::io_caps::read_capped_to_string(
+        &case_toml,
+        valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize,
+    )
+    .ok()?;
     let parsed: toml::Value = toml::from_str(&text).ok()?;
     parsed
         .get("bio")?

@@ -122,7 +122,10 @@ mod tests {
         let m = cube_top_and_bottom();
         assert!(matches!(
             segment_by_normal(&m, -1.0),
-            Err(MeshPartError::BadParameter { name: "angle_threshold_deg", .. })
+            Err(MeshPartError::BadParameter {
+                name: "angle_threshold_deg",
+                ..
+            })
         ));
     }
 
@@ -134,7 +137,10 @@ mod tests {
         m.element_blocks[0].connectivity = vec![0, 1, 99]; // 99 >= 8 nodes
         assert!(matches!(
             segment_by_normal(&m, 5.0),
-            Err(MeshPartError::BadParameter { name: "connectivity", .. })
+            Err(MeshPartError::BadParameter {
+                name: "connectivity",
+                ..
+            })
         ));
     }
 }

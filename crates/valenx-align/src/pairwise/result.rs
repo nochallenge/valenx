@@ -431,24 +431,10 @@ mod tests {
     #[test]
     fn cigar_from_alignment() {
         // row1 = AC-GT, row2 = ACTGT -> M M D M M  =>  2M1D2M
-        let a = Alignment::new(
-            b"AC-GT".to_vec(),
-            b"ACTGT".to_vec(),
-            0,
-            (0, 4),
-            (0, 5),
-        )
-        .unwrap();
+        let a = Alignment::new(b"AC-GT".to_vec(), b"ACTGT".to_vec(), 0, (0, 4), (0, 5)).unwrap();
         assert_eq!(a.cigar().to_string(), "2M1D2M");
         // row1 has a residue where row2 has a gap -> insertion
-        let b = Alignment::new(
-            b"ACTGT".to_vec(),
-            b"AC-GT".to_vec(),
-            0,
-            (0, 5),
-            (0, 4),
-        )
-        .unwrap();
+        let b = Alignment::new(b"ACTGT".to_vec(), b"AC-GT".to_vec(), 0, (0, 5), (0, 4)).unwrap();
         assert_eq!(b.cigar().to_string(), "2M1I2M");
     }
 
@@ -462,14 +448,7 @@ mod tests {
     #[test]
     fn stats_and_identity() {
         // 4 identical, 1 mismatch, 1 gap column
-        let a = Alignment::new(
-            b"ACGTA-".to_vec(),
-            b"ACGTTC".to_vec(),
-            0,
-            (0, 5),
-            (0, 6),
-        )
-        .unwrap();
+        let a = Alignment::new(b"ACGTA-".to_vec(), b"ACGTTC".to_vec(), 0, (0, 5), (0, 6)).unwrap();
         let m = SubstitutionMatrix::identity(1, -1);
         let s = a.stats(&m);
         assert_eq!(s.columns, 6);

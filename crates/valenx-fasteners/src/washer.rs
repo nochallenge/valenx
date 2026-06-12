@@ -79,22 +79,26 @@ pub fn to_solid(spec: &WasherSpec) -> Result<Solid, FastenerError> {
     let out_top = mesh.nodes.len() as u32;
     for i in 0..n {
         let theta = (i as f64 / n as f64) * std::f64::consts::TAU;
-        mesh.nodes.push(Vector3::new(r_out * theta.cos(), r_out * theta.sin(), h));
+        mesh.nodes
+            .push(Vector3::new(r_out * theta.cos(), r_out * theta.sin(), h));
     }
     let out_bot = mesh.nodes.len() as u32;
     for i in 0..n {
         let theta = (i as f64 / n as f64) * std::f64::consts::TAU;
-        mesh.nodes.push(Vector3::new(r_out * theta.cos(), r_out * theta.sin(), 0.0));
+        mesh.nodes
+            .push(Vector3::new(r_out * theta.cos(), r_out * theta.sin(), 0.0));
     }
     let in_top = mesh.nodes.len() as u32;
     for i in 0..n {
         let theta = (i as f64 / n as f64) * std::f64::consts::TAU;
-        mesh.nodes.push(Vector3::new(r_in * theta.cos(), r_in * theta.sin(), h));
+        mesh.nodes
+            .push(Vector3::new(r_in * theta.cos(), r_in * theta.sin(), h));
     }
     let in_bot = mesh.nodes.len() as u32;
     for i in 0..n {
         let theta = (i as f64 / n as f64) * std::f64::consts::TAU;
-        mesh.nodes.push(Vector3::new(r_in * theta.cos(), r_in * theta.sin(), 0.0));
+        mesh.nodes
+            .push(Vector3::new(r_in * theta.cos(), r_in * theta.sin(), 0.0));
     }
     for i in 0..n {
         let j = (i + 1) % n;

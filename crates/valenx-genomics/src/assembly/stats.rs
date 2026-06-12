@@ -230,10 +230,7 @@ mod tests {
     fn n50_simple() {
         // Contigs 2,3,4,5,6 (total 20, half 10). Descending: 6,5,4,3,2.
         // Cumulative: 6, 11 (>=10) -> N50 = 5, L50 = 2.
-        let contigs: Vec<Vec<u8>> = [6, 5, 4, 3, 2]
-            .iter()
-            .map(|&n| vec![b'A'; n])
-            .collect();
+        let contigs: Vec<Vec<u8>> = [6, 5, 4, 3, 2].iter().map(|&n| vec![b'A'; n]).collect();
         let refs: Vec<&[u8]> = contigs.iter().map(|c| c.as_slice()).collect();
         let s = assembly_stats(&refs).unwrap();
         assert_eq!(s.total_length, 20);

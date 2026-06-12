@@ -63,10 +63,7 @@ pub fn fst_hudson(pop1: &GenotypeMatrix, pop2: &GenotypeMatrix) -> Result<f64> {
 /// [`PopgenError::Invalid`] if either population has fewer than two
 /// samples; [`PopgenError::Dimension`] if the matrices differ in site
 /// count.
-pub fn fst_weir_cockerham(
-    pop1: &GenotypeMatrix,
-    pop2: &GenotypeMatrix,
-) -> Result<f64> {
+pub fn fst_weir_cockerham(pop1: &GenotypeMatrix, pop2: &GenotypeMatrix) -> Result<f64> {
     let (n1u, n2u) = check_pair(pop1, pop2)?;
     let n1 = n1u as f64;
     let n2 = n2u as f64;
@@ -83,21 +80,17 @@ pub fn fst_weir_cockerham(
         // Sample-size-weighted average allele frequency.
         let p_bar = (n1 * p1 + n2 * p2) / (n1 + n2);
         // Variance of allele frequency among populations (weighted).
-        let s2 = (n1 * (p1 - p_bar).powi(2) + n2 * (p2 - p_bar).powi(2))
-            / ((r - 1.0) * n_bar);
+        let s2 = (n1 * (p1 - p_bar).powi(2) + n2 * (p2 - p_bar).powi(2)) / ((r - 1.0) * n_bar);
         // Average observed heterozygosity. With only allele counts
         // (haplotype rows) the observed heterozygosity is taken as the
         // expected 2p(1-p) under random union — the standard fallback
         // when individual genotype phase is unavailable.
-        let h_bar = (n1 * 2.0 * p1 * (1.0 - p1) + n2 * 2.0 * p2 * (1.0 - p2))
-            / (n1 + n2);
+        let h_bar = (n1 * 2.0 * p1 * (1.0 - p1) + n2 * 2.0 * p2 * (1.0 - p2)) / (n1 + n2);
         // Weir & Cockerham 1984 variance components.
         let a = (n_bar / nc)
             * (s2
                 - (1.0 / (n_bar - 1.0))
-                    * (p_bar * (1.0 - p_bar)
-                        - ((r - 1.0) / r) * s2
-                        - 0.25 * h_bar));
+                    * (p_bar * (1.0 - p_bar) - ((r - 1.0) / r) * s2 - 0.25 * h_bar));
         let b = (n_bar / (n_bar - 1.0))
             * (p_bar * (1.0 - p_bar)
                 - ((r - 1.0) / r) * s2
@@ -114,10 +107,7 @@ pub fn fst_weir_cockerham(
 }
 
 /// Validates a population pair and returns their sample sizes.
-fn check_pair(
-    pop1: &GenotypeMatrix,
-    pop2: &GenotypeMatrix,
-) -> Result<(usize, usize)> {
+fn check_pair(pop1: &GenotypeMatrix, pop2: &GenotypeMatrix) -> Result<(usize, usize)> {
     let n1 = pop1.n_samples();
     let n2 = pop2.n_samples();
     if n1 < 2 || n2 < 2 {

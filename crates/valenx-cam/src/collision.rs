@@ -175,12 +175,7 @@ impl CollisionSetup {
     }
 
     /// Add a fixture AABB (vise jaw, clamp, sub-plate).
-    pub fn push_fixture(
-        &mut self,
-        min: Vector3<f64>,
-        max: Vector3<f64>,
-        label: impl Into<String>,
-    ) {
+    pub fn push_fixture(&mut self, min: Vector3<f64>, max: Vector3<f64>, label: impl Into<String>) {
         self.parts.push(SetupPart {
             min,
             max,
@@ -443,11 +438,7 @@ mod tests {
         // Fixture AABB sits in the middle of the X span, within the flute's
         // z-range [5, 30].
         let mut setup = CollisionSetup::new();
-        setup.push_fixture(
-            p(15.0, -10.0, 6.0),
-            p(25.0, 10.0, 10.0),
-            "clamp",
-        );
+        setup.push_fixture(p(15.0, -10.0, 6.0), p(25.0, 10.0, 10.0), "clamp");
         let hits = continuous_collision_check(
             &tp,
             &em6(),
@@ -492,11 +483,7 @@ mod tests {
         tp.push(Move::new(MoveKind::Cut, p(0.0, 0.0, 0.0), 500.0));
         tp.push(Move::new(MoveKind::Cut, p(10.0, 0.0, 0.0), 500.0));
         let mut setup = CollisionSetup::new();
-        setup.push_workpiece(
-            p(-5.0, -10.0, -50.0),
-            p(15.0, 10.0, 5.0),
-            "stock",
-        );
+        setup.push_workpiece(p(-5.0, -10.0, -50.0), p(15.0, 10.0, 5.0), "stock");
         let params = ContinuousCollisionParams {
             allow_workpiece_contact: true,
             ..Default::default()
@@ -552,11 +539,7 @@ mod tests {
         let mut setup = CollisionSetup::new();
         // Fixture sits at x=5 within the flute's z-range [5, 30] — the
         // endpoints sit outside in X, but the path slices through the middle.
-        setup.push_fixture(
-            p(4.5, -5.0, 6.0),
-            p(5.5, 5.0, 10.0),
-            "tab",
-        );
+        setup.push_fixture(p(4.5, -5.0, 6.0), p(5.5, 5.0, 10.0), "tab");
         let hits = continuous_collision_check(
             &tp,
             &em6(),

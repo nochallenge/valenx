@@ -8,11 +8,7 @@ use crate::triangle::TriMesh;
 /// Uniform-Laplacian smoothing (in-place per call). Each iteration
 /// moves every vertex toward the average of its 1-ring neighbours by
 /// step `lambda ∈ (0, 1]`.
-pub fn laplacian_smooth(
-    mesh: &TriMesh,
-    iter: usize,
-    lambda: f64,
-) -> Result<TriMesh, LibiglError> {
+pub fn laplacian_smooth(mesh: &TriMesh, iter: usize, lambda: f64) -> Result<TriMesh, LibiglError> {
     if !(0.0..=1.0).contains(&lambda) {
         return Err(LibiglError::BadParameter {
             name: "lambda",
@@ -89,11 +85,7 @@ pub fn biharmonic(
     Ok(out)
 }
 
-fn bfs_hops(
-    seed: usize,
-    one_ring: &[std::collections::BTreeSet<usize>],
-    n: usize,
-) -> Vec<usize> {
+fn bfs_hops(seed: usize, one_ring: &[std::collections::BTreeSet<usize>], n: usize) -> Vec<usize> {
     let mut dist = vec![usize::MAX; n];
     if seed >= n {
         return dist;

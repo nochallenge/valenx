@@ -139,10 +139,7 @@ pub fn compute_overlaps(reads: &[&[u8]], params: &OlcParams) -> Vec<Overlap> {
 /// first; an overlap is taken only when both endpoints are still free.
 /// Returns a list of chains, each a `Vec` of `(read_index,
 /// overlap_with_previous)` — the first element's overlap is `0`.
-pub fn layout(
-    n_reads: usize,
-    overlaps: &[Overlap],
-) -> Vec<Vec<(usize, usize)>> {
+pub fn layout(n_reads: usize, overlaps: &[Overlap]) -> Vec<Vec<(usize, usize)>> {
     let mut succ: Vec<Option<(usize, usize)>> = vec![None; n_reads];
     let mut has_pred = vec![false; n_reads];
     let mut has_succ = vec![false; n_reads];
@@ -296,16 +293,15 @@ mod tests {
     fn assembles_tiled_long_reads() {
         // A 60-base sequence tiled by overlapping 30-base reads.
         let genome = b"ACGTTGCAGGCCAATTACGTACGTACGTTTACCGGTACGTACGTACGTGGCCAATTACGT";
-        let reads: Vec<&[u8]> = vec![
-            &genome[0..30],
-            &genome[15..45],
-            &genome[30..60],
-        ];
-        let contigs = assemble_olc(&reads, &OlcParams {
-            min_overlap: 10,
-            max_error_rate: 0.0,
-            min_contig_len: 0,
-        })
+        let reads: Vec<&[u8]> = vec![&genome[0..30], &genome[15..45], &genome[30..60]];
+        let contigs = assemble_olc(
+            &reads,
+            &OlcParams {
+                min_overlap: 10,
+                max_error_rate: 0.0,
+                min_contig_len: 0,
+            },
+        )
         .unwrap();
         let longest = contigs.iter().max_by_key(|c| c.len()).unwrap();
         assert_eq!(longest.as_slice(), genome.as_slice());
@@ -324,11 +320,14 @@ mod tests {
         // Two reads with no overlap -> two contigs.
         let r1 = b"AAAAAAAAAAAAAAAAAAAA";
         let r2 = b"CCCCCCCCCCCCCCCCCCCC";
-        let contigs = assemble_olc(&[r1.as_slice(), r2.as_slice()], &OlcParams {
-            min_overlap: 10,
-            max_error_rate: 0.0,
-            min_contig_len: 0,
-        })
+        let contigs = assemble_olc(
+            &[r1.as_slice(), r2.as_slice()],
+            &OlcParams {
+                min_overlap: 10,
+                max_error_rate: 0.0,
+                min_contig_len: 0,
+            },
+        )
         .unwrap();
         assert_eq!(contigs.len(), 2);
     }
@@ -357,17 +356,23 @@ mod tests {
     fn rejects_bad_params() {
         let reads: Vec<&[u8]> = vec![b"ACGT"];
         assert!(assemble_olc(&[], &OlcParams::default()).is_err());
-        assert!(assemble_olc(&reads, &OlcParams {
-            min_overlap: 0,
-            max_error_rate: 0.1,
-            min_contig_len: 0
-        })
+        assert!(assemble_olc(
+            &reads,
+            &OlcParams {
+                min_overlap: 0,
+                max_error_rate: 0.1,
+                min_contig_len: 0
+            }
+        )
         .is_err());
-        assert!(assemble_olc(&reads, &OlcParams {
-            min_overlap: 5,
-            max_error_rate: 2.0,
-            min_contig_len: 0
-        })
+        assert!(assemble_olc(
+            &reads,
+            &OlcParams {
+                min_overlap: 5,
+                max_error_rate: 2.0,
+                min_contig_len: 0
+            }
+        )
         .is_err());
     }
 }

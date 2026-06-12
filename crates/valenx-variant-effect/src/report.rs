@@ -108,13 +108,8 @@ impl VariantReport {
                         );
                     }
                     None => {
-                        let _ = writeln!(
-                            s,
-                            "  - {}: {} — {}",
-                            p.source,
-                            p.category.label(),
-                            p.notes
-                        );
+                        let _ =
+                            writeln!(s, "  - {}: {} — {}", p.source, p.category.label(), p.notes);
                     }
                 }
             }

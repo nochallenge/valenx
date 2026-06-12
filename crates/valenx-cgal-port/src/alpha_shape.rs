@@ -49,7 +49,9 @@ pub fn alpha_shape_2d(points: &[[f64; 2]], alpha: f64) -> Result<Vec<[f64; 2]>, 
     let mut safety = boundary_edges.len() + 1;
     loop {
         out.push(points[current]);
-        let pos = boundary_edges.iter().position(|(a, b)| *a == current || *b == current);
+        let pos = boundary_edges
+            .iter()
+            .position(|(a, b)| *a == current || *b == current);
         match pos {
             Some(i) => {
                 let (a, b) = boundary_edges.swap_remove(i);

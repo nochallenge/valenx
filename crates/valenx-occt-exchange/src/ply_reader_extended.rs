@@ -141,7 +141,10 @@ fn parse_annotations(text: &str) -> PlyVertexAnnotations {
         }
         let cols: Vec<&str> = line.split_whitespace().collect();
         if let Some(ni) = normal_idx {
-            let nx = cols.get(ni).and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
+            let nx = cols
+                .get(ni)
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.0);
             let ny = cols
                 .get(ni + 1)
                 .and_then(|s| s.parse::<f32>().ok())
@@ -154,8 +157,14 @@ fn parse_annotations(text: &str) -> PlyVertexAnnotations {
         }
         if let Some(ci) = color_idx {
             let r = cols.get(ci).and_then(|s| s.parse::<u8>().ok()).unwrap_or(0);
-            let g = cols.get(ci + 1).and_then(|s| s.parse::<u8>().ok()).unwrap_or(0);
-            let b = cols.get(ci + 2).and_then(|s| s.parse::<u8>().ok()).unwrap_or(0);
+            let g = cols
+                .get(ci + 1)
+                .and_then(|s| s.parse::<u8>().ok())
+                .unwrap_or(0);
+            let b = cols
+                .get(ci + 2)
+                .and_then(|s| s.parse::<u8>().ok())
+                .unwrap_or(0);
             colors.push([r, g, b]);
         }
     }

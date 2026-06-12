@@ -110,10 +110,7 @@ pub fn target_template_alignment(
     let regular_fraction = if template_ss.is_empty() {
         0.0
     } else {
-        let regular = template_ss
-            .iter()
-            .filter(|s| s.is_regular())
-            .count();
+        let regular = template_ss.iter().filter(|s| s.is_regular()).count();
         regular as f64 / template_ss.len() as f64
     };
 

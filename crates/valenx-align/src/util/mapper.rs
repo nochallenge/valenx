@@ -495,7 +495,10 @@ impl ReadMapper {
                     pair_name,
                     FLAG_FIRST,
                     best2.is_none(),
-                    best2.as_ref().map(|c| c.strand == Strand::Reverse).unwrap_or(false),
+                    best2
+                        .as_ref()
+                        .map(|c| c.strand == Strand::Reverse)
+                        .unwrap_or(false),
                 );
                 let (mut r2, _, _) = make_record(
                     best2.as_ref(),
@@ -504,7 +507,10 @@ impl ReadMapper {
                     pair_name,
                     FLAG_LAST,
                     best1.is_none(),
-                    best1.as_ref().map(|c| c.strand == Strand::Reverse).unwrap_or(false),
+                    best1
+                        .as_ref()
+                        .map(|c| c.strand == Strand::Reverse)
+                        .unwrap_or(false),
                 );
                 if let Some(ref c) = best1 {
                     r1.mapq = mapping_quality(c.score, second1);
@@ -537,18 +543,17 @@ impl ReadMapper {
                     continue;
                 }
                 for ref_pos in r.fm.smem_positions(&s) {
-                    anchors_by_ref
-                        .entry(seq_id)
-                        .or_default()
-                        .push(Anchor::new(s.query_start, ref_pos, s.len()));
+                    anchors_by_ref.entry(seq_id).or_default().push(Anchor::new(
+                        s.query_start,
+                        ref_pos,
+                        s.len(),
+                    ));
                 }
             }
         }
 
         // --- Minimizer anchors -----------------------------------
-        if let Ok(sk) =
-            minimizer_sketch(read, self.params.minimizer_k, self.params.minimizer_w)
-        {
+        if let Ok(sk) = minimizer_sketch(read, self.params.minimizer_k, self.params.minimizer_w) {
             for m in sk {
                 if let Some(refs) = self.minimizer_index.get(&m.hash) {
                     if refs.len() > self.params.max_occurrences_per_seed {
@@ -628,8 +633,8 @@ impl ReadMapper {
         // unaligned read prefix/suffix plus a margin.
         let pad = self.params.extension_band.max(16) + read.len() / 4;
         let ext_start = (diag - pad as isize).max(0) as usize;
-        let ext_end = (((read.len() as isize + diag) + pad as isize).max(0) as usize)
-            .min(r.seq.len());
+        let ext_end =
+            (((read.len() as isize + diag) + pad as isize).max(0) as usize).min(r.seq.len());
         let _ = (q_hi, t_hi);
         if ext_start >= ext_end {
             return None;
@@ -837,7 +842,10 @@ mod tests {
         assert_eq!(res.strand, Strand::Forward);
         // CIGAR should be perfect 50M.
         let cig = res.record.cigar.to_string();
-        assert!(cig.contains("50M") || cig == "50M", "expected 50M, got {cig}");
+        assert!(
+            cig.contains("50M") || cig == "50M",
+            "expected 50M, got {cig}"
+        );
     }
 
     #[test]
@@ -855,10 +863,7 @@ mod tests {
         assert_eq!(res.record.rname, "chr1");
         // The placement should be at or very near offset 70.
         let pos = res.record.pos as i64;
-        assert!(
-            (pos - 71).abs() <= 1,
-            "expected 1-based ~71, got {pos}"
-        );
+        assert!((pos - 71).abs() <= 1, "expected 1-based ~71, got {pos}");
     }
 
     #[test]
@@ -875,7 +880,10 @@ mod tests {
         // CIGAR must consume more reference than query — i.e. a
         // deletion appears.
         let cig = &res.record.cigar;
-        assert!(cig.ref_len() > cig.query_len(), "CIGAR must contain a deletion");
+        assert!(
+            cig.ref_len() > cig.query_len(),
+            "CIGAR must contain a deletion"
+        );
     }
 
     #[test]
@@ -888,19 +896,21 @@ mod tests {
         let res = m.map_read("r1", &read_rc);
         assert!(!res.record.is_unmapped(), "reverse-strand read should map");
         assert_eq!(res.strand, Strand::Reverse);
-        assert_ne!(res.record.flag & FLAG_REVERSE, 0, "FLAG must have REVERSE bit");
+        assert_ne!(
+            res.record.flag & FLAG_REVERSE,
+            0,
+            "FLAG must have REVERSE bit"
+        );
         // POS reports the forward-strand reference position; for our
         // 60 bp window at offset 80, that's 1-based 81.
         let pos = res.record.pos as i64;
-        assert!(
-            (pos - 81).abs() <= 1,
-            "expected 1-based ~81, got {pos}"
-        );
+        assert!((pos - 81).abs() <= 1, "expected 1-based ~81, got {pos}");
     }
 
     #[test]
     fn unmappable_read_reported_unmapped() {
-        let refs: &[(&str, &[u8])] = &[("chr1", b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")];
+        let refs: &[(&str, &[u8])] =
+            &[("chr1", b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")];
         let m = ReadMapper::with_defaults(refs, scheme()).unwrap();
         let res = m.map_read("r1", b"CCCCCCCCCCCCCCCCCCCCCCCC");
         assert!(res.record.is_unmapped());
@@ -916,7 +926,11 @@ mod tests {
         let read = &r[20..100];
         let res = m.map_read("r1", read);
         assert!(!res.record.is_unmapped());
-        assert!(res.record.mapq >= 40, "unique placement expected MAPQ>=40, got {}", res.record.mapq);
+        assert!(
+            res.record.mapq >= 40,
+            "unique placement expected MAPQ>=40, got {}",
+            res.record.mapq
+        );
     }
 
     #[test]
@@ -965,8 +979,16 @@ mod tests {
         assert_ne!(pair.mate1.flag & FLAG_PAIRED, 0);
         assert_ne!(pair.mate1.flag & FLAG_FIRST, 0);
         assert_ne!(pair.mate2.flag & FLAG_LAST, 0);
-        assert_ne!(pair.mate2.flag & FLAG_REVERSE, 0, "mate2 should be on reverse");
-        assert_ne!(pair.mate1.flag & FLAG_PROPER_PAIR, 0, "should be a proper pair");
+        assert_ne!(
+            pair.mate2.flag & FLAG_REVERSE,
+            0,
+            "mate2 should be on reverse"
+        );
+        assert_ne!(
+            pair.mate1.flag & FLAG_PROPER_PAIR,
+            0,
+            "should be a proper pair"
+        );
         assert!(
             pair.insert_size.abs() > 100 && pair.insert_size.abs() < 250,
             "insert size {} should be ~150",
@@ -1012,8 +1034,7 @@ mod tests {
         let refs: &[(&str, &[u8])] = &[("chr1", &r)];
         let m = ReadMapper::with_defaults(refs, scheme()).unwrap();
         let read = r[20..80].to_vec();
-        let reads: &[(&str, &[u8])] =
-            &[("r1", &read), ("r2", b"ZZZZZZZZ".as_slice())];
+        let reads: &[(&str, &[u8])] = &[("r1", &read), ("r2", b"ZZZZZZZZ".as_slice())];
         let sam = m.map_to_sam(reads);
         assert!(sam.contains("@HD"));
         assert!(sam.contains("@SQ\tSN:chr1"));
@@ -1026,7 +1047,7 @@ mod tests {
         assert_eq!(mapping_quality(100, i32::MIN), 60); // unique
         assert_eq!(mapping_quality(100, 100), 0); // tied -> ambiguous
         assert_eq!(mapping_quality(0, 0), 0); // floor
-        // 100 vs 50 => 30. With our BWA-MEM rule, 60*(1 - 0.5) = 30.
+                                              // 100 vs 50 => 30. With our BWA-MEM rule, 60*(1 - 0.5) = 30.
         assert_eq!(mapping_quality(100, 50), 30);
     }
 
@@ -1061,5 +1082,4 @@ mod tests {
         // 4 sd away: essentially zero.
         assert!(m.bonus(500.0) <= 1);
     }
-
 }

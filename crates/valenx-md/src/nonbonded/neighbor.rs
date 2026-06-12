@@ -128,11 +128,7 @@ impl NeighborList {
 ///
 /// Returned pairs are `(i, j)` with `i < j` and are *candidates* only
 /// — the caller still distance-tests them.
-pub fn cell_pairs(
-    positions: &[Vector3<f64>],
-    cell: &SimBox,
-    range: f64,
-) -> Vec<(usize, usize)> {
+pub fn cell_pairs(positions: &[Vector3<f64>], cell: &SimBox, range: f64) -> Vec<(usize, usize)> {
     let n = positions.len();
     if n < 2 {
         return Vec::new();
@@ -159,12 +155,12 @@ pub fn cell_pairs(
     let cell_of = |p: &Vector3<f64>| -> [usize; 3] {
         let wrapped = cell.wrap(*p);
         [
-            (((wrapped.x / edges[0]) * ncells[0] as f64) as isize)
-                .rem_euclid(ncells[0] as isize) as usize,
-            (((wrapped.y / edges[1]) * ncells[1] as f64) as isize)
-                .rem_euclid(ncells[1] as isize) as usize,
-            (((wrapped.z / edges[2]) * ncells[2] as f64) as isize)
-                .rem_euclid(ncells[2] as isize) as usize,
+            (((wrapped.x / edges[0]) * ncells[0] as f64) as isize).rem_euclid(ncells[0] as isize)
+                as usize,
+            (((wrapped.y / edges[1]) * ncells[1] as f64) as isize).rem_euclid(ncells[1] as isize)
+                as usize,
+            (((wrapped.z / edges[2]) * ncells[2] as f64) as isize).rem_euclid(ncells[2] as isize)
+                as usize,
         ]
     };
     let flat = |c: [usize; 3]| c[0] + ncells[0] * (c[1] + ncells[1] * c[2]);
@@ -207,12 +203,9 @@ pub fn cell_pairs(
                 }
                 // Forward-neighbour-cell pairs.
                 for off in &forward {
-                    let nx =
-                        (cx as isize + off[0]).rem_euclid(ncells[0] as isize) as usize;
-                    let ny =
-                        (cy as isize + off[1]).rem_euclid(ncells[1] as isize) as usize;
-                    let nz =
-                        (cz as isize + off[2]).rem_euclid(ncells[2] as isize) as usize;
+                    let nx = (cx as isize + off[0]).rem_euclid(ncells[0] as isize) as usize;
+                    let ny = (cy as isize + off[1]).rem_euclid(ncells[1] as isize) as usize;
+                    let nz = (cz as isize + off[2]).rem_euclid(ncells[2] as isize) as usize;
                     let there = &buckets[flat([nx, ny, nz])];
                     for &i in here {
                         for &j in there {

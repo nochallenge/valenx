@@ -113,9 +113,21 @@ impl Subsurface {
     pub fn albedo(&self) -> Vec3 {
         let ext = self.extinction();
         Vec3 {
-            x: if ext.x > 0.0 { self.scattering.x / ext.x } else { 0.0 },
-            y: if ext.y > 0.0 { self.scattering.y / ext.y } else { 0.0 },
-            z: if ext.z > 0.0 { self.scattering.z / ext.z } else { 0.0 },
+            x: if ext.x > 0.0 {
+                self.scattering.x / ext.x
+            } else {
+                0.0
+            },
+            y: if ext.y > 0.0 {
+                self.scattering.y / ext.y
+            } else {
+                0.0
+            },
+            z: if ext.z > 0.0 {
+                self.scattering.z / ext.z
+            } else {
+                0.0
+            },
         }
     }
 }
@@ -351,8 +363,7 @@ impl SceneBuilder {
 
     /// Add a triangle with explicit per-vertex normals.
     pub fn add_triangle(&mut self, verts: [Vec3; 3], normals: [Vec3; 3], material: usize) {
-        self.triangles
-            .push(Triangle::new(verts, normals, material));
+        self.triangles.push(Triangle::new(verts, normals, material));
     }
 
     /// Add a flat-shaded triangle (geometric normal on every vertex).
@@ -511,11 +522,19 @@ mod tests {
         let light = b.add_material(PtMaterial::emissive([5.0, 5.0, 5.0]));
         // One emitting triangle, one not.
         b.add_flat_triangle(
-            [vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0)],
+            [
+                vec3(0.0, 0.0, 0.0),
+                vec3(1.0, 0.0, 0.0),
+                vec3(0.0, 1.0, 0.0),
+            ],
             diffuse,
         );
         b.add_flat_triangle(
-            [vec3(0.0, 0.0, 2.0), vec3(1.0, 0.0, 2.0), vec3(0.0, 1.0, 2.0)],
+            [
+                vec3(0.0, 0.0, 2.0),
+                vec3(1.0, 0.0, 2.0),
+                vec3(0.0, 1.0, 2.0),
+            ],
             light,
         );
         let scene = b.build();

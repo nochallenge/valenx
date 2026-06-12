@@ -81,8 +81,7 @@ fn adjacency_bonus(a: HelixEnd, b: HelixEnd, gap: usize, bridge: u8) -> f64 {
         }
         1 => {
             // Mismatch-mediated: one bridging base.
-            t04::coaxial_mismatch(a.left, a.right, b.left, b.right, bridge)
-                .min(0.0)
+            t04::coaxial_mismatch(a.left, a.right, b.left, b.right, bridge).min(0.0)
         }
         _ => 0.0,
     }
@@ -100,12 +99,7 @@ fn adjacency_bonus(a: HelixEnd, b: HelixEnd, gap: usize, bridge: u8) -> f64 {
 /// `is_cycle` is `true` for a multiloop (the boundary closes on
 /// itself) and `false` for the exterior loop (a path: the last and
 /// first helix ends are *not* adjacent through the free ends).
-pub fn best_coaxial(
-    ends: &[HelixEnd],
-    gaps: &[usize],
-    bridges: &[u8],
-    is_cycle: bool,
-) -> f64 {
+pub fn best_coaxial(ends: &[HelixEnd], gaps: &[usize], bridges: &[u8], is_cycle: bool) -> f64 {
     let n = ends.len();
     if n < 2 {
         return 0.0;

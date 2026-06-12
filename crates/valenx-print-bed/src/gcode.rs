@@ -48,14 +48,12 @@ pub fn export_layout(
         // basename — no `/`, no `\`, no `..`, no absolute paths —
         // before the join, using the same canonical helper every
         // adapter goes through.
-        valenx_core::adapter_helpers::validate_output_basename(
-            &p.name,
-            "Part.name",
-        )
-        .map_err(|e| PrintBedError::BadParameter {
-            name: "Part.name",
-            reason: format!("{e}"),
-        })?;
+        valenx_core::adapter_helpers::validate_output_basename(&p.name, "Part.name").map_err(
+            |e| PrintBedError::BadParameter {
+                name: "Part.name",
+                reason: format!("{e}"),
+            },
+        )?;
         let stl_path = path.join(format!("{}.stl", p.name));
         // valenx-mesh's STL writer takes &Mesh + Path.
         write_stl_binary(&p.mesh, &stl_path).map_err(|e| PrintBedError::StlWrite {
@@ -123,11 +121,7 @@ mod tests {
     #[test]
     fn export_creates_stl_and_manifest() {
         let dir = tmp_outdir("export");
-        let printer = Printer::new(
-            (220.0, 220.0, 250.0),
-            BedType::Heated,
-            BedMaterial::Pei,
-        );
+        let printer = Printer::new((220.0, 220.0, 250.0), BedType::Heated, BedMaterial::Pei);
         let parts = vec![triangle_part("a"), triangle_part("b")];
         let settings = SlicerSettings {
             lines: vec!["layer_height: 0.2".into()],
@@ -146,11 +140,7 @@ mod tests {
     #[test]
     fn export_rejects_part_name_path_traversal() {
         let dir = tmp_outdir("traversal");
-        let printer = Printer::new(
-            (220.0, 220.0, 250.0),
-            BedType::Heated,
-            BedMaterial::Pei,
-        );
+        let printer = Printer::new((220.0, 220.0, 250.0), BedType::Heated, BedMaterial::Pei);
         let parts = vec![triangle_part("../etc/passwd")];
         let settings = SlicerSettings::default();
         let err = export_layout(&parts, &printer, &settings, &dir).unwrap_err();
@@ -166,11 +156,7 @@ mod tests {
     #[test]
     fn export_rejects_part_name_with_absolute_path() {
         let dir = tmp_outdir("abs");
-        let printer = Printer::new(
-            (220.0, 220.0, 250.0),
-            BedType::Heated,
-            BedMaterial::Pei,
-        );
+        let printer = Printer::new((220.0, 220.0, 250.0), BedType::Heated, BedMaterial::Pei);
         // Use a platform-flavoured absolute path: `/foo` is treated
         // as drive-root on Windows by Path::is_absolute → not quite,
         // but the basename validator also rejects `\` separators.

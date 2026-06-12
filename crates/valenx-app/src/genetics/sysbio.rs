@@ -192,8 +192,12 @@ impl SysbioPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 impl Default for SysbioPanel {
@@ -324,17 +328,13 @@ fn build_rate_law(r: &ReactionRow) -> Result<RateLaw, String> {
             reactants: r.reactants.clone(),
         }),
         LawKind::MichaelisMenten => {
-            let substrate = r
-                .reactants
-                .first()
-                .map(|&(i, _)| i)
-                .ok_or_else(|| {
-                    format!(
-                        "reaction `{}` is Michaelis-Menten but has no reactant \
+            let substrate = r.reactants.first().map(|&(i, _)| i).ok_or_else(|| {
+                format!(
+                    "reaction `{}` is Michaelis-Menten but has no reactant \
                          to use as the substrate",
-                        r.name
-                    )
-                })?;
+                    r.name
+                )
+            })?;
             Ok(RateLaw::MichaelisMenten {
                 vmax: r.k,
                 km: r.param2,
@@ -409,9 +409,17 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
     ui.horizontal(|ui| {
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
-        ui.label(egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run").weak().small());
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
+        ui.label(
+            egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run")
+                .weak()
+                .small(),
+        );
     });
 
     common::error_line(ui, &p.error);
@@ -470,7 +478,10 @@ fn draw_species_editor(p: &mut SysbioPanel, ui: &mut egui::Ui) {
         prune_species_refs(p, i);
     }
     if ui.small_button("➕ Add species").clicked() {
-        let name = next_name("S", &p.species.iter().map(|s| s.name.clone()).collect::<Vec<_>>());
+        let name = next_name(
+            "S",
+            &p.species.iter().map(|s| s.name.clone()).collect::<Vec<_>>(),
+        );
         p.species.push(SpeciesRow { name, initial: 0.0 });
     }
 }
@@ -527,7 +538,10 @@ fn draw_reaction_editor(p: &mut SysbioPanel, ui: &mut egui::Ui) {
     if ui.small_button("➕ Add reaction").clicked() {
         let name = next_name(
             "r",
-            &p.reactions.iter().map(|r| r.name.clone()).collect::<Vec<_>>(),
+            &p.reactions
+                .iter()
+                .map(|r| r.name.clone())
+                .collect::<Vec<_>>(),
         );
         p.reactions.push(ReactionRow::blank(name));
     }
@@ -546,11 +560,7 @@ fn draw_stoich_editor(
 ) {
     ui.label(egui::RichText::new(label).strong().small());
     if species_names.is_empty() {
-        ui.label(
-            egui::RichText::new("add a species first")
-                .weak()
-                .small(),
-        );
+        ui.label(egui::RichText::new("add a species first").weak().small());
         return;
     }
     let mut remove: Option<usize> = None;
@@ -569,11 +579,7 @@ fn draw_stoich_editor(
                     }
                 });
             ui.label("×");
-            ui.add(
-                egui::DragValue::new(stoich)
-                    .speed(0.1)
-                    .range(0.0..=100.0),
-            );
+            ui.add(egui::DragValue::new(stoich).speed(0.1).range(0.0..=100.0));
             if ui.small_button("✖").clicked() {
                 remove = Some(idx);
             }
@@ -592,12 +598,7 @@ fn draw_stoich_editor(
 
 /// Draw the rate-law parameter widgets for one reaction. Which fields
 /// show depends on the law family.
-fn draw_law_params(
-    ui: &mut egui::Ui,
-    r: &mut ReactionRow,
-    species_names: &[String],
-    rxn: usize,
-) {
+fn draw_law_params(ui: &mut egui::Ui, r: &mut ReactionRow, species_names: &[String], rxn: usize) {
     ui.label(egui::RichText::new("Parameters").strong().small());
     egui::Grid::new(format!("sysbio_law_params_{rxn}"))
         .num_columns(2)
@@ -619,11 +620,7 @@ fn draw_law_params(
             }
             LawKind::MichaelisMenten => {
                 ui.label("Vmax");
-                ui.add(
-                    egui::DragValue::new(&mut r.k)
-                        .speed(0.1)
-                        .range(0.0..=1.0e6),
-                );
+                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6));
                 ui.end_row();
                 ui.label("Km");
                 ui.add(
@@ -635,11 +632,7 @@ fn draw_law_params(
             }
             LawKind::Hill => {
                 ui.label("Vmax");
-                ui.add(
-                    egui::DragValue::new(&mut r.k)
-                        .speed(0.1)
-                        .range(0.0..=1.0e6),
-                );
+                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6));
                 ui.end_row();
                 ui.label("Kd");
                 ui.add(
@@ -936,7 +929,7 @@ mod tests {
         let b_to_c = &p.reactions[2];
         assert_eq!(b_to_c.reactants, vec![(0, 1.0)]); // was (1, ..)
         assert_eq!(b_to_c.products, vec![(1, 1.0)]); // was (2, ..)
-        // The influx reaction's product (was species 0) is dropped.
+                                                     // The influx reaction's product (was species 0) is dropped.
         assert!(p.reactions[0].products.is_empty());
     }
 

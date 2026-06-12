@@ -320,7 +320,8 @@ mod tests {
         // Cleanup before asserting so a failure doesn't leak.
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
-            ok, N,
+            ok,
+            N,
             "expected {N} concurrent writes to succeed, got {ok}; \
              first few errs: {:?}",
             errs.iter().take(5).collect::<Vec<_>>(),

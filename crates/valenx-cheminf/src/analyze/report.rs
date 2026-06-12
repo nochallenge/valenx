@@ -11,9 +11,7 @@ use crate::descriptors::{self, LipinskiResult, VeberResult};
 use crate::error::Result;
 use crate::fingerprint::{ecfp, FingerprintBits};
 use crate::molecule::Molecule;
-use crate::perceive::formula::{
-    average_molecular_weight, molecular_formula, monoisotopic_mass,
-};
+use crate::perceive::formula::{average_molecular_weight, molecular_formula, monoisotopic_mass};
 use crate::smiles::write_canonical_smiles;
 
 /// A full single-molecule analysis bundle.

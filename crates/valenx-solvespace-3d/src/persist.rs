@@ -153,11 +153,12 @@ mod tests {
         // (Were a constraint to reference this point, `Point3::read`'s
         // `vars[x_var]` would then panic on solve.)
         let mut s = Sketch3D::new();
-        s.entities.push(crate::entity::Entity3D::Point3(crate::entity::Point3 {
-            x_var: 0,
-            y_var: 1,
-            z_var: 2,
-        }));
+        s.entities
+            .push(crate::entity::Entity3D::Point3(crate::entity::Point3 {
+                x_var: 0,
+                y_var: 1,
+                z_var: 2,
+            }));
         let txt = to_ron_string(&s).unwrap();
         assert!(
             from_ron_str(&txt).is_err(),
@@ -184,9 +185,15 @@ mod tests {
         let aend = s.add_point(1.0, 0.5, 0.0);
         let arc = s.add_arc(center, 0.5, 0.0, 0.0, 1.0, astart, aend).unwrap();
         s.add_constraint(Constraint3D::PointInPlane { point: p, plane });
-        s.add_constraint(Constraint3D::OnPlane { point: p, workplane: wp });
+        s.add_constraint(Constraint3D::OnPlane {
+            point: p,
+            workplane: wp,
+        });
         s.lock_plane(plane).unwrap(); // adds a PlaneFixed constraint
-        s.add_constraint(Constraint3D::CircleRadius { circle, target: 0.5 });
+        s.add_constraint(Constraint3D::CircleRadius {
+            circle,
+            target: 0.5,
+        });
         s.add_constraint(Constraint3D::ArcRadius { arc, target: 0.5 });
         let txt = to_ron_string(&s).unwrap();
         let f = from_ron_str(&txt).expect("a valid mixed-constraint sketch must load");
@@ -217,11 +224,18 @@ mod tests {
         let mut tl = FeatureTimeline::new();
         tl.push(Step::at_origin(
             Op::New,
-            Feature::Box { dx: "size".into(), dy: "size".into(), dz: "size".into() },
+            Feature::Box {
+                dx: "size".into(),
+                dy: "size".into(),
+                dz: "size".into(),
+            },
         ));
         tl.push(Step::placed(
             Op::Cut,
-            Feature::Cylinder { radius: "hole_r".into(), height: "hole_h".into() },
+            Feature::Cylinder {
+                radius: "hole_r".into(),
+                height: "hole_h".into(),
+            },
             "size / 2",
             "size / 2",
             "-0.5",
@@ -244,7 +258,10 @@ mod tests {
             table.set(n, e);
         }
         let model = f.timeline.rebuild(&table).unwrap();
-        assert!(model.bodies[0].faces() > 6, "round-tripped tree still punches a hole");
+        assert!(
+            model.bodies[0].faces() > 6,
+            "round-tripped tree still punches a hole"
+        );
     }
 
     #[test]

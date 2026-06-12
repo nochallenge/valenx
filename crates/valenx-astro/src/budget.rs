@@ -209,10 +209,16 @@ mod tests {
         // Over-draining the tanks (propellant >= initial_mass) with a
         // valid isp still returns the documented +Inf, not an error.
         let dv = delta_v_for_propellant(12_000.0, 300.0, 10_000.0).expect("valid isp");
-        assert!(dv.is_infinite() && dv > 0.0, "expected +Inf sentinel, got {dv}");
+        assert!(
+            dv.is_infinite() && dv > 0.0,
+            "expected +Inf sentinel, got {dv}"
+        );
         // Exactly emptying the tanks (final_mass == 0) also hits it.
         let dv0 = delta_v_for_propellant(10_000.0, 300.0, 10_000.0).expect("valid isp");
-        assert!(dv0.is_infinite() && dv0 > 0.0, "expected +Inf sentinel, got {dv0}");
+        assert!(
+            dv0.is_infinite() && dv0 > 0.0,
+            "expected +Inf sentinel, got {dv0}"
+        );
     }
 
     #[test]

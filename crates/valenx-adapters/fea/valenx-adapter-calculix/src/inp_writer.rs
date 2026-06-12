@@ -638,8 +638,7 @@ mod tests {
         // `\n*BOUNDARY\n...` would otherwise emit a sibling card right
         // after the heading line. The sanitiser strips newlines so
         // the *HEADING block stays single-line.
-        let project_name =
-            "demo\n*BOUNDARY\n NALL, 1, 3, 0.0\n*PIRATED";
+        let project_name = "demo\n*BOUNDARY\n NALL, 1, 3, 0.0\n*PIRATED";
         let text = generate(&one_tet_mesh(), &sample_input(), project_name);
         // Walk the lines and assert the *HEADING block is exactly one
         // header line + one content line.

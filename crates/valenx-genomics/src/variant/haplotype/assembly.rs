@@ -100,13 +100,14 @@ pub fn assemble_local_haplotypes(
     // Build the graph from reads ∪ reference (the reference path is
     // always present in the graph, so the reference haplotype always
     // exists in the path enumeration).
-    let upper_ref: Vec<u8> = reference
-        .iter()
-        .map(|b| b.to_ascii_uppercase())
-        .collect();
+    let upper_ref: Vec<u8> = reference.iter().map(|b| b.to_ascii_uppercase()).collect();
     let mut pool: Vec<Vec<u8>> = reads
         .iter()
-        .map(|r| r.iter().map(|b| b.to_ascii_uppercase()).collect::<Vec<u8>>())
+        .map(|r| {
+            r.iter()
+                .map(|b| b.to_ascii_uppercase())
+                .collect::<Vec<u8>>()
+        })
         .filter(|r| r.len() >= k)
         .collect();
     pool.push(upper_ref.clone());
@@ -121,8 +122,7 @@ pub fn assemble_local_haplotypes(
     let source: Vec<u8> = upper_ref[..k - 1].to_vec();
     let sink: Vec<u8> = upper_ref[upper_ref.len() - (k - 1)..].to_vec();
 
-    let mut bases_of: Vec<Vec<u8>> =
-        enumerate_paths(&graph, &source, &sink, params);
+    let mut bases_of: Vec<Vec<u8>> = enumerate_paths(&graph, &source, &sink, params);
     if bases_of.is_empty() {
         return vec![reference_only(reference)];
     }
@@ -172,7 +172,10 @@ fn enumerate_paths(
     params: &LocalAssemblyParams,
 ) -> Vec<Vec<u8>> {
     let cap = params.max_haplotypes.saturating_add(1).max(2);
-    let visit_cap = params.max_path_expansion.saturating_add(source.len()).max(64);
+    let visit_cap = params
+        .max_path_expansion
+        .saturating_add(source.len())
+        .max(64);
 
     let edges = graph_edges(graph);
 
@@ -241,11 +244,7 @@ mod tests {
     fn reference_haplotype_always_emitted() {
         let reference = b"ACGTACGTACGTACGTACGT";
         let reads: Vec<&[u8]> = vec![reference];
-        let haps = assemble_local_haplotypes(
-            reference,
-            &reads,
-            &LocalAssemblyParams::default(),
-        );
+        let haps = assemble_local_haplotypes(reference, &reads, &LocalAssemblyParams::default());
         assert!(!haps.is_empty());
         assert!(haps[0].is_reference);
         assert_eq!(haps[0].bases, upper(reference));
@@ -258,7 +257,7 @@ mod tests {
         let reference = b"GCATCGATCGATGCATCGATCGATCGATGC";
         let mut alt: Vec<u8> = reference.to_vec();
         alt[15] = b'T'; // was C
-        // Many reads carry the alt; a few carry the reference.
+                        // Many reads carry the alt; a few carry the reference.
         let mut reads: Vec<&[u8]> = Vec::new();
         let ref_slice: &[u8] = reference;
         reads.extend(std::iter::repeat_n(alt.as_slice(), 12));
@@ -332,7 +331,9 @@ mod tests {
         assert!(
             haps.iter().any(|h| h.bases == upper(&alt)),
             "deletion haplotype missing in {:?}",
-            haps.iter().map(|h| String::from_utf8_lossy(&h.bases).into_owned()).collect::<Vec<_>>()
+            haps.iter()
+                .map(|h| String::from_utf8_lossy(&h.bases).into_owned())
+                .collect::<Vec<_>>()
         );
     }
 
@@ -340,11 +341,7 @@ mod tests {
     fn short_reference_falls_back_to_reference_only() {
         let reference = b"AC"; // shorter than k
         let reads: Vec<&[u8]> = vec![];
-        let haps = assemble_local_haplotypes(
-            reference,
-            &reads,
-            &LocalAssemblyParams::default(),
-        );
+        let haps = assemble_local_haplotypes(reference, &reads, &LocalAssemblyParams::default());
         assert_eq!(haps.len(), 1);
         assert!(haps[0].is_reference);
     }
@@ -353,11 +350,7 @@ mod tests {
     fn empty_reference_yields_nothing() {
         let reference: &[u8] = &[];
         let reads: Vec<&[u8]> = vec![];
-        let haps = assemble_local_haplotypes(
-            reference,
-            &reads,
-            &LocalAssemblyParams::default(),
-        );
+        let haps = assemble_local_haplotypes(reference, &reads, &LocalAssemblyParams::default());
         assert!(haps.is_empty());
     }
 
@@ -387,10 +380,7 @@ mod tests {
                 ..LocalAssemblyParams::default()
             },
         );
-        let n = haps
-            .iter()
-            .filter(|h| h.bases == upper(reference))
-            .count();
+        let n = haps.iter().filter(|h| h.bases == upper(reference)).count();
         assert_eq!(n, 1, "reference must appear exactly once");
     }
 }

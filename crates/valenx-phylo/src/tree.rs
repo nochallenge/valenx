@@ -187,9 +187,7 @@ impl Tree {
         let mut stack = vec![self.root];
         while let Some(id) = stack.pop() {
             if seen[id] {
-                return Err(PhyloError::invalid_tree(format!(
-                    "cycle through node {id}"
-                )));
+                return Err(PhyloError::invalid_tree(format!("cycle through node {id}")));
             }
             seen[id] = true;
             stack.extend(self.nodes[id].children.iter().copied());
@@ -351,8 +349,7 @@ impl Tree {
     /// Both ids must belong to this tree; the LCA always exists (the
     /// root, at worst).
     pub fn lca(&self, a: NodeId, b: NodeId) -> NodeId {
-        let path_a: std::collections::HashSet<NodeId> =
-            self.path_to_root(a).into_iter().collect();
+        let path_a: std::collections::HashSet<NodeId> = self.path_to_root(a).into_iter().collect();
         let mut x = b;
         loop {
             if path_a.contains(&x) {
@@ -382,10 +379,7 @@ impl Tree {
 
     /// Total tree length: the sum of every edge's branch length.
     pub fn total_length(&self) -> f64 {
-        self.nodes
-            .iter()
-            .filter_map(|n| n.branch_length)
-            .sum()
+        self.nodes.iter().filter_map(|n| n.branch_length).sum()
     }
 
     /// Sum of all leaves' depths in edge count (an unweighted height).

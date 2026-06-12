@@ -282,11 +282,7 @@ pub mod sto3g {
     /// Assemble the three STO-3G shells of a first-row atom: a `1s`
     /// core, a `2s` valence shell and a `2p` valence shell. The `2s`
     /// and `2p` share their exponents (the Pople `sp` convention).
-    fn sto3g_first_row(
-        s1: &[(f64, f64)],
-        s2: &[(f64, f64)],
-        p2: &[(f64, f64)],
-    ) -> Vec<RawShell> {
+    fn sto3g_first_row(s1: &[(f64, f64)], s2: &[(f64, f64)], p2: &[(f64, f64)]) -> Vec<RawShell> {
         vec![
             RawShell::new(AngularMomentum::S, s1),
             RawShell::new(AngularMomentum::S, s2),
@@ -315,20 +311,14 @@ pub mod pople_321g {
                 1 => vec![
                     RawShell::new(
                         AngularMomentum::S,
-                        &[
-                            (5.44717800, 0.15628498),
-                            (0.82454724, 0.90469091),
-                        ],
+                        &[(5.44717800, 0.15628498), (0.82454724, 0.90469091)],
                     ),
                     RawShell::new(AngularMomentum::S, &[(0.18319158, 1.0)]),
                 ],
                 2 => vec![
                     RawShell::new(
                         AngularMomentum::S,
-                        &[
-                            (13.6267000, 0.17523000),
-                            (1.99935000, 0.89348300),
-                        ],
+                        &[(13.6267000, 0.17523000), (1.99935000, 0.89348300)],
                     ),
                     RawShell::new(AngularMomentum::S, &[(0.38299300, 1.0)]),
                 ],
@@ -785,10 +775,7 @@ mod tests {
         for name in available_names() {
             let lib = resolve(name).unwrap();
             for z in 1..=10u8 {
-                assert!(
-                    lib.shells_for(z).is_some(),
-                    "{name} missing element Z={z}"
-                );
+                assert!(lib.shells_for(z).is_some(), "{name} missing element Z={z}");
             }
             // Beyond neon is out of v1 scope.
             assert!(lib.shells_for(11).is_none(), "{name} should stop at Ne");

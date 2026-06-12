@@ -145,10 +145,7 @@ impl Adapter for FastTreeAdapter {
         let source_alignment = if input.alignment.is_absolute() {
             input.alignment.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.alignment,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.alignment)?
         };
         if !source_alignment.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -379,7 +376,11 @@ impl Adapter for FastTreeAdapter {
                     stderr_tail.push(line);
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(status) = kill_guard.inner_mut().try_wait().map_err(AdapterError::Io)? {
+                    if let Some(status) = kill_guard
+                        .inner_mut()
+                        .try_wait()
+                        .map_err(AdapterError::Io)?
+                    {
                         // Drain remaining lines so nothing's lost.
                         for line in rx.try_iter() {
                             process_stderr(&line, ctx, &mut warnings);

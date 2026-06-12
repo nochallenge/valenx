@@ -106,8 +106,12 @@ impl QchemPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 impl Default for QchemPanel {
@@ -202,9 +206,17 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
     ui.horizontal(|ui| {
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
-        ui.label(egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run").weak().small());
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
+        ui.label(
+            egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run")
+                .weak()
+                .small(),
+        );
     });
 
     common::error_line(ui, &p.error);
@@ -221,98 +233,95 @@ fn run_scf(p: &mut QchemPanel) {
     p.error = None;
     match MolecularGeometry::from_xyz_str(&p.geometry) {
         Ok(geom) => {
-                let settings = ScfSettings::default();
-                let report = match p.method {
-                    Method::Rhf => run_rhf(&geom, &p.basis, settings),
-                    Method::Uhf => run_uhf(&geom, &p.basis, settings),
-                    Method::Dft => run_dft(
-                        &geom,
-                        &p.basis,
-                        p.functional.to_functional(),
-                        GridQuality::default(),
-                        settings,
-                    ),
-                    Method::Mp2 => run_mp2(&geom, &p.basis, settings),
-                };
-                match report {
-                    Ok(r) => {
-                        let method_label = match &r.dft {
-                            Some(d) => format!("DFT / {}", d.functional.label()),
-                            None => r.method.label().to_string(),
-                        };
-                        let mut out = format!(
-                            "method         : {}\nbasis          : {}\n\
+            let settings = ScfSettings::default();
+            let report = match p.method {
+                Method::Rhf => run_rhf(&geom, &p.basis, settings),
+                Method::Uhf => run_uhf(&geom, &p.basis, settings),
+                Method::Dft => run_dft(
+                    &geom,
+                    &p.basis,
+                    p.functional.to_functional(),
+                    GridQuality::default(),
+                    settings,
+                ),
+                Method::Mp2 => run_mp2(&geom, &p.basis, settings),
+            };
+            match report {
+                Ok(r) => {
+                    let method_label = match &r.dft {
+                        Some(d) => format!("DFT / {}", d.functional.label()),
+                        None => r.method.label().to_string(),
+                    };
+                    let mut out = format!(
+                        "method         : {}\nbasis          : {}\n\
                              SCF iterations : {}\n\n\
                              total energy   : {:.8} Ha\n",
-                            method_label,
-                            r.basis_name,
-                            r.scf_iterations,
-                            r.total_energy,
-                        );
-                        // MP2: show the HF reference + correlation correction.
-                        if let Some(corr) = r.correlation_energy {
-                            out.push_str(&format!(
-                                "Hartree-Fock E : {:.8} Ha\n\
-                                 correlation E  : {:.8} Ha\n",
-                                r.hartree_fock_energy, corr,
-                            ));
-                        }
-                        // DFT: show the exchange-correlation energy + a grid
-                        // sanity check (integrated electron count).
-                        if let Some(d) = &r.dft {
-                            out.push_str(&format!(
-                                "XC energy Exc  : {:.8} Ha\n\
-                                 grid electrons : {:.4}  (≈ N electrons)\n",
-                                d.xc_energy, d.grid_electron_count,
-                            ));
-                        }
+                        method_label, r.basis_name, r.scf_iterations, r.total_energy,
+                    );
+                    // MP2: show the HF reference + correlation correction.
+                    if let Some(corr) = r.correlation_energy {
                         out.push_str(&format!(
-                            "nuclear rep.   : {:.8} Ha\n\
-                             dipole moment  : {:.4} D\n",
-                            r.nuclear_repulsion,
-                            r.dipole.magnitude_debye(),
+                            "Hartree-Fock E : {:.8} Ha\n\
+                                 correlation E  : {:.8} Ha\n",
+                            r.hartree_fock_energy, corr,
                         ));
-                        match r.homo_lumo_gap {
-                            Some(g) => out.push_str(&format!(
-                                "HOMO-LUMO gap  : {:.4} Ha  ({:.2} eV)\n",
-                                g,
-                                g * 27.211_386,
-                            )),
-                            None => out.push_str("HOMO-LUMO gap  : (n/a)\n"),
-                        }
-                        if let Some(s2) = r.s_squared {
-                            out.push_str(&format!("⟨S²⟩           : {s2:.4}\n"));
-                        }
-
-                        out.push_str("\n-- molecular orbitals --\n");
-                        let orbs = &r.orbitals.orbitals;
-                        let homo = r.orbitals.homo_index;
-                        for (i, mo) in orbs.iter().enumerate() {
-                            let tag = match homo {
-                                Some(h) if i == h => "  <- HOMO",
-                                Some(h) if i == h + 1 => "  <- LUMO",
-                                _ => "",
-                            };
-                            out.push_str(&format!(
-                                "  MO {:<3} {:>10.5} Ha  occ {:.1}{}\n",
-                                i + 1,
-                                mo.energy,
-                                mo.occupation,
-                                tag,
-                            ));
-                        }
-
-                        out.push_str("\n-- Mulliken atomic charges --\n");
-                        for (i, q) in r.partial_charges.iter().enumerate() {
-                            out.push_str(&format!("  atom {:<3} {:>8.4} e\n", i + 1, q));
-                        }
-                        p.result = out;
                     }
-                    Err(e) => p.error = Some(e.to_string()),
+                    // DFT: show the exchange-correlation energy + a grid
+                    // sanity check (integrated electron count).
+                    if let Some(d) = &r.dft {
+                        out.push_str(&format!(
+                            "XC energy Exc  : {:.8} Ha\n\
+                                 grid electrons : {:.4}  (≈ N electrons)\n",
+                            d.xc_energy, d.grid_electron_count,
+                        ));
+                    }
+                    out.push_str(&format!(
+                        "nuclear rep.   : {:.8} Ha\n\
+                             dipole moment  : {:.4} D\n",
+                        r.nuclear_repulsion,
+                        r.dipole.magnitude_debye(),
+                    ));
+                    match r.homo_lumo_gap {
+                        Some(g) => out.push_str(&format!(
+                            "HOMO-LUMO gap  : {:.4} Ha  ({:.2} eV)\n",
+                            g,
+                            g * 27.211_386,
+                        )),
+                        None => out.push_str("HOMO-LUMO gap  : (n/a)\n"),
+                    }
+                    if let Some(s2) = r.s_squared {
+                        out.push_str(&format!("⟨S²⟩           : {s2:.4}\n"));
+                    }
+
+                    out.push_str("\n-- molecular orbitals --\n");
+                    let orbs = &r.orbitals.orbitals;
+                    let homo = r.orbitals.homo_index;
+                    for (i, mo) in orbs.iter().enumerate() {
+                        let tag = match homo {
+                            Some(h) if i == h => "  <- HOMO",
+                            Some(h) if i == h + 1 => "  <- LUMO",
+                            _ => "",
+                        };
+                        out.push_str(&format!(
+                            "  MO {:<3} {:>10.5} Ha  occ {:.1}{}\n",
+                            i + 1,
+                            mo.energy,
+                            mo.occupation,
+                            tag,
+                        ));
+                    }
+
+                    out.push_str("\n-- Mulliken atomic charges --\n");
+                    for (i, q) in r.partial_charges.iter().enumerate() {
+                        out.push_str(&format!("  atom {:<3} {:>8.4} e\n", i + 1, q));
+                    }
+                    p.result = out;
                 }
+                Err(e) => p.error = Some(e.to_string()),
             }
-            Err(e) => p.error = Some(e.to_string()),
         }
+        Err(e) => p.error = Some(e.to_string()),
+    }
 }
 
 #[cfg(test)]

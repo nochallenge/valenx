@@ -64,7 +64,9 @@ pub fn parse(text: &str) -> Result<SeqRecord> {
             i += 1;
         } else if line.starts_with("KEYWORDS") {
             let (text, next) = collect_continuation(&lines, i, 12);
-            keywords = strip_field("KEYWORDS", &text).trim_end_matches('.').to_string();
+            keywords = strip_field("KEYWORDS", &text)
+                .trim_end_matches('.')
+                .to_string();
             i = next;
         } else if let Some(rest) = line.strip_prefix("SOURCE") {
             let src = rest.trim().to_string();
@@ -234,9 +236,7 @@ fn parse_reference(lines: &[&str], start: usize) -> (Reference, usize) {
         }
         let trimmed = line.trim_start();
         // Recognize sub-field keywords.
-        let kw_end = trimmed
-            .find([' ', '\t'])
-            .unwrap_or(trimmed.len());
+        let kw_end = trimmed.find([' ', '\t']).unwrap_or(trimmed.len());
         let kw = &trimmed[..kw_end];
         match kw {
             "AUTHORS" | "CONSRTM" | "TITLE" | "JOURNAL" | "PUBMED" | "MEDLINE" | "REMARK" => {
@@ -538,10 +538,7 @@ fn write_reference(out: &mut String, r: &Reference) {
         } else {
             format!("({})", r.bases)
         };
-        out.push_str(&format!(
-            "REFERENCE   {}  {}\n",
-            r.number, bases_phrase
-        ));
+        out.push_str(&format!("REFERENCE   {}  {}\n", r.number, bases_phrase));
     }
     if !r.authors.is_empty() {
         out.push_str(&format!("  AUTHORS   {}\n", r.authors));

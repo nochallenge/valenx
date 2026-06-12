@@ -40,13 +40,7 @@ pub struct RevisionEntry {
 
 impl RevisionEntry {
     /// Manually-numbered entry.
-    pub fn new(
-        rev: &str,
-        date: &str,
-        description: &str,
-        by: &str,
-        approved: &str,
-    ) -> Self {
+    pub fn new(rev: &str, date: &str, description: &str, by: &str, approved: &str) -> Self {
         Self {
             rev: rev.into(),
             date: date.into(),
@@ -157,8 +151,14 @@ impl RevisionBlock {
         let mut grid: Vec<[(f64, f64); 2]> = vec![
             // Outer rectangle.
             [(ox, oy), (ox + total_width, oy)],
-            [(ox + total_width, oy), (ox + total_width, oy + total_height)],
-            [(ox + total_width, oy + total_height), (ox, oy + total_height)],
+            [
+                (ox + total_width, oy),
+                (ox + total_width, oy + total_height),
+            ],
+            [
+                (ox + total_width, oy + total_height),
+                (ox, oy + total_height),
+            ],
             [(ox, oy + total_height), (ox, oy)],
         ];
         // Column dividers.
@@ -183,11 +183,7 @@ impl RevisionBlock {
         let headers = ["Rev", "Date", "Description", "By", "Approved"];
         let mut cx = ox;
         for (i, h) in headers.iter().enumerate() {
-            labels.push((
-                cx + pad_x,
-                header_y + baseline_y_offset,
-                (*h).into(),
-            ));
+            labels.push((cx + pad_x, header_y + baseline_y_offset, (*h).into()));
             cx += col_widths[i];
         }
         for (row_idx, e) in self.entries.iter().enumerate() {
@@ -217,11 +213,29 @@ mod tests {
     #[test]
     fn next_letter_basic_sequence() {
         let mut blk = RevisionBlock::new([100.0, 100.0]);
-        blk.add_entry(RevisionEntry::next(&blk.entries, "2026-05-23", "initial", "GH", ""));
+        blk.add_entry(RevisionEntry::next(
+            &blk.entries,
+            "2026-05-23",
+            "initial",
+            "GH",
+            "",
+        ));
         assert_eq!(blk.entries[0].rev, "A");
-        blk.add_entry(RevisionEntry::next(&blk.entries, "2026-05-24", "fix dim", "GH", "BS"));
+        blk.add_entry(RevisionEntry::next(
+            &blk.entries,
+            "2026-05-24",
+            "fix dim",
+            "GH",
+            "BS",
+        ));
         assert_eq!(blk.entries[1].rev, "B");
-        blk.add_entry(RevisionEntry::next(&blk.entries, "2026-05-25", "tweak", "GH", "BS"));
+        blk.add_entry(RevisionEntry::next(
+            &blk.entries,
+            "2026-05-25",
+            "tweak",
+            "GH",
+            "BS",
+        ));
         assert_eq!(blk.entries[2].rev, "C");
     }
 
@@ -229,15 +243,7 @@ mod tests {
     #[test]
     fn next_letter_wraps_to_aa_after_z() {
         let mut existing: Vec<RevisionEntry> = (0..26)
-            .map(|i| {
-                RevisionEntry::new(
-                    &(b'A' + i as u8).to_string(),
-                    "2026-01-01",
-                    "x",
-                    "x",
-                    "x",
-                )
-            })
+            .map(|i| RevisionEntry::new(&(b'A' + i as u8).to_string(), "2026-01-01", "x", "x", "x"))
             .collect();
         // The 27th entry (index 26) should be "AA".
         let n = RevisionEntry::next(&existing, "2026-05-23", "next", "G", "");
@@ -270,7 +276,7 @@ mod tests {
     #[test]
     fn standard_position_above_title_block() {
         let pos = RevisionBlock::standard_position(297.0); // A4 landscape
-        // Y should be title-block height + 2 mm gap = 62.
+                                                           // Y should be title-block height + 2 mm gap = 62.
         assert!((pos[1] - 62.0).abs() < 1e-6);
         // X should be sheet_width - table_width.
         let expected_x = 297.0 - RevisionBlock::standard_total_width();

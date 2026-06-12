@@ -137,9 +137,7 @@ impl Prior {
                     self.kappa_rate.ln() - self.kappa_rate * kappa
                 }
             }
-            SubstModel::F81 { freqs } => {
-                ln_dirichlet_pdf(freqs, self.frequency_concentration)
-            }
+            SubstModel::F81 { freqs } => ln_dirichlet_pdf(freqs, self.frequency_concentration),
             SubstModel::Hky85 { kappa, freqs } => {
                 let k_lp = if *kappa <= 0.0 {
                     f64::NEG_INFINITY

@@ -170,7 +170,9 @@ mod tests {
         let m = mol_from_smiles("c1ccccc1").unwrap();
         let key = inchi_class_key(&m);
         assert_eq!(key.len(), 14);
-        assert!(key.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()));
+        assert!(key
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()));
         // same molecule, different numbering → same key
         let m2 = mol_from_smiles("c1ccccc1").unwrap();
         assert_eq!(inchi_class_key(&m), inchi_class_key(&m2));

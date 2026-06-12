@@ -184,9 +184,21 @@ mod tests {
     fn toolpath_stats_splits_rapid_and_cut() {
         let mut tp = Toolpath::new();
         tp.push(Move::new(MoveKind::Rapid, Vector3::new(0.0, 0.0, 5.0), 0.0));
-        tp.push(Move::new(MoveKind::Rapid, Vector3::new(10.0, 0.0, 5.0), 0.0));
-        tp.push(Move::new(MoveKind::Plunge, Vector3::new(10.0, 0.0, 0.0), 200.0));
-        tp.push(Move::new(MoveKind::Cut, Vector3::new(20.0, 0.0, 0.0), 500.0));
+        tp.push(Move::new(
+            MoveKind::Rapid,
+            Vector3::new(10.0, 0.0, 5.0),
+            0.0,
+        ));
+        tp.push(Move::new(
+            MoveKind::Plunge,
+            Vector3::new(10.0, 0.0, 0.0),
+            200.0,
+        ));
+        tp.push(Move::new(
+            MoveKind::Cut,
+            Vector3::new(20.0, 0.0, 0.0),
+            500.0,
+        ));
         let s = toolpath_stats(&tp);
         assert_eq!(s.moves, 4);
         // One rapid segment (10 mm); plunge 5 + cut 10 = 15 mm cutting.
@@ -215,7 +227,11 @@ mod tests {
         let cam = OrbitCamera::default();
         let mut tp = Toolpath::new();
         tp.push(Move::new(MoveKind::Rapid, Vector3::new(0.0, 0.0, 5.0), 0.0));
-        tp.push(Move::new(MoveKind::Cut, Vector3::new(10.0, 0.0, 0.0), 500.0));
+        tp.push(Move::new(
+            MoveKind::Cut,
+            Vector3::new(10.0, 0.0, 0.0),
+            500.0,
+        ));
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {

@@ -162,7 +162,10 @@ pub fn scaffold_by_id(id: &str) -> Option<&'static MotifScaffold> {
 
 /// All scaffolds of a given functional kind.
 pub fn scaffolds_of_kind(kind: ScaffoldKind) -> Vec<&'static MotifScaffold> {
-    scaffold_library().iter().filter(|s| s.kind == kind).collect()
+    scaffold_library()
+        .iter()
+        .filter(|s| s.kind == kind)
+        .collect()
 }
 
 /// Returns a built-in functional-motif scaffold as a starting
@@ -176,10 +179,7 @@ pub fn scaffolds_of_kind(kind: ScaffoldKind) -> Vec<&'static MotifScaffold> {
 /// [`RnaDesignError::NoDesign`] if `id` matches no library scaffold.
 pub fn motif_scaffold(id: &str) -> Result<RnaDesign> {
     let scaffold = scaffold_by_id(id).ok_or_else(|| {
-        RnaDesignError::no_design(
-            "motif",
-            format!("no built-in scaffold with id `{id}`"),
-        )
+        RnaDesignError::no_design("motif", format!("no built-in scaffold with id `{id}`"))
     })?;
 
     // Confirm the scaffold's shipped consensus dot-bracket is parseable
@@ -280,4 +280,3 @@ mod tests {
         assert_eq!(s.kind, ScaffoldKind::Ribozyme);
     }
 }
-

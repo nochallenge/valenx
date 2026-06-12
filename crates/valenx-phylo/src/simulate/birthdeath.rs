@@ -168,8 +168,7 @@ pub fn simulate_birth_death(params: &BirthDeathParams, seed: u64) -> Result<Tree
             // Close the parent lineage's edge and spawn two children.
             let parent_node = lineages[chosen].node;
             let parent_born = lineages[chosen].born;
-            tree.node_mut(parent_node).branch_length =
-                Some((time - parent_born).max(0.0));
+            tree.node_mut(parent_node).branch_length = Some((time - parent_born).max(0.0));
             lineages[chosen].alive = false;
             for _ in 0..2 {
                 let child = tree.push_node(Node {
@@ -199,8 +198,7 @@ pub fn simulate_birth_death(params: &BirthDeathParams, seed: u64) -> Result<Tree
     let mut tip_counter = 0usize;
     for lin in &lineages {
         if lin.alive {
-            tree.node_mut(lin.node).branch_length =
-                Some((time - lin.born).max(0.0));
+            tree.node_mut(lin.node).branch_length = Some((time - lin.born).max(0.0));
             tree.node_mut(lin.node).label = Some(format!("T{tip_counter}"));
             tip_counter += 1;
         }

@@ -174,9 +174,7 @@ impl Study {
         while grew {
             grew = false;
             for n in &self.nodes {
-                if !visited.contains(&n.id)
-                    && n.dependencies.iter().any(|d| visited.contains(d))
-                {
+                if !visited.contains(&n.id) && n.dependencies.iter().any(|d| visited.contains(d)) {
                     visited.insert(n.id);
                     grew = true;
                 }

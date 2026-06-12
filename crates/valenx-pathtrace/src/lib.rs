@@ -165,6 +165,6 @@ pub use scene::{PtCamera, PtMaterial, Scene, SceneBuilder, Subsurface};
 pub use sss::{random_walk_sss, RandomWalkResult};
 pub use tracer::{render, trace_single_ray, RenderParams};
 pub use volume::{
-    henyey_greenstein, march_ray, render_volume, transmittance, DensityGrid, Medium,
-    VolumeBox, VolumeLight, VolumeParams, VolumeResult,
+    henyey_greenstein, march_ray, render_volume, transmittance, DensityGrid, Medium, VolumeBox,
+    VolumeLight, VolumeParams, VolumeResult,
 };

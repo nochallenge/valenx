@@ -160,10 +160,7 @@ impl Adapter for LinearDesignAdapter {
         let source_protein = if input.protein.is_absolute() {
             input.protein.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.protein,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.protein)?
         };
         if !source_protein.is_file() {
             return Err(AdapterError::InvalidCase {

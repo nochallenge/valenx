@@ -95,7 +95,10 @@ pub fn cluster_decoys(
     rmsd_threshold: f64,
 ) -> Result<Vec<DecoyCluster>> {
     if models.is_empty() {
-        return Err(StructPredictError::invalid("models", "no decoys to cluster"));
+        return Err(StructPredictError::invalid(
+            "models",
+            "no decoys to cluster",
+        ));
     }
     if scores.len() != models.len() {
         return Err(StructPredictError::invalid(
@@ -142,8 +145,7 @@ pub fn cluster_decoys(
                 let mut sum = 0.0;
                 for &b in &members {
                     if a != b {
-                        sum += ca_rmsd_superposed(&models[a], &models[b])
-                            .unwrap_or(f64::INFINITY);
+                        sum += ca_rmsd_superposed(&models[a], &models[b]).unwrap_or(f64::INFINITY);
                     }
                 }
                 let mean = sum / (members.len() - 1) as f64;
@@ -268,8 +270,8 @@ mod tests {
         let models = vec![shifted_model(8, 0.0), bent_model(8), shifted_model(8, 2.0)];
         let scores = vec![5.0, -9.0, 4.0]; // the bent decoy has the best score
         let clusters = cluster_decoys(&models, &scores, 1.0).expect("cluster");
-        let consensus = select_model(&clusters, &scores, SelectionPolicy::LargestCluster)
-            .expect("consensus");
+        let consensus =
+            select_model(&clusters, &scores, SelectionPolicy::LargestCluster).expect("consensus");
         let lowest =
             select_model(&clusters, &scores, SelectionPolicy::LowestEnergy).expect("lowest");
         // Largest cluster is the linear pair; lowest energy is the bent one.

@@ -131,8 +131,7 @@ fn agglomerate(dm: &DistMatrix, linkage: Linkage) -> Result<Tree> {
             }
             let new_dist = match linkage {
                 Linkage::Weighted => {
-                    (sa as f64 * d[ia][k] + sb as f64 * d[ib][k])
-                        / (sa + sb) as f64
+                    (sa as f64 * d[ia][k] + sb as f64 * d[ib][k]) / (sa + sb) as f64
                 }
                 Linkage::Unweighted => (d[ia][k] + d[ib][k]) / 2.0,
             };
@@ -266,8 +265,7 @@ fn nj_core(dm: &DistMatrix, bio: bool) -> Result<Tree> {
             if k == ia || k == ib {
                 continue;
             }
-            let new_d =
-                lambda * (d[ia][k] - bl_i) + (1.0 - lambda) * (d[ib][k] - bl_j);
+            let new_d = lambda * (d[ia][k] - bl_i) + (1.0 - lambda) * (d[ib][k] - bl_j);
             d[ia][k] = new_d.max(0.0);
             d[k][ia] = new_d.max(0.0);
             if bio {
@@ -342,10 +340,7 @@ mod tests {
     fn additive_matrix() -> DistMatrix {
         // Distances generated from a known tree:
         // A,B close; C,D close; the two cherries far apart.
-        let labels: Vec<String> = ["A", "B", "C", "D"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let labels: Vec<String> = ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
         // row-major 4x4
         let data = vec![
             0.0, 0.2, 0.9, 1.0, //
@@ -442,4 +437,3 @@ mod tests {
         assert!(neighbor_joining(&dm).is_err());
     }
 }
-

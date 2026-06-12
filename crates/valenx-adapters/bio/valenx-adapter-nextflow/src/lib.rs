@@ -432,12 +432,13 @@ config   = "../etc/passwd"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = NextflowAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = NextflowAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("absolute") || msg.contains("escape") || msg.contains("traversal") || msg.contains(".."),
+            msg.contains("absolute")
+                || msg.contains("escape")
+                || msg.contains("traversal")
+                || msg.contains(".."),
             "expected confined_join rejection on relative-traversal config, got: {msg}"
         );
         let _ = std::fs::remove_dir_all(&d);

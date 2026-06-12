@@ -157,12 +157,9 @@ mod tests {
     #[test]
     fn rejects_non_finite_point() {
         let c = line(Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0));
-        let err = geom_lib_intersect_point_curve(
-            Vector3::new(f64::NAN, 0.0, 0.0),
-            &c,
-            DEFAULT_SAMPLES,
-        )
-        .unwrap_err();
+        let err =
+            geom_lib_intersect_point_curve(Vector3::new(f64::NAN, 0.0, 0.0), &c, DEFAULT_SAMPLES)
+                .unwrap_err();
         assert_eq!(err.code(), "occt_advanced.bad_input");
     }
 

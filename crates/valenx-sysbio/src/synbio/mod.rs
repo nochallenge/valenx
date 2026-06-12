@@ -28,7 +28,7 @@ pub use assembly::{
 pub use circuit::{Circuit, Gate, InputSignal, LogicNode, LogicOp, Wire};
 pub use grn::{Gene, GeneNetwork, RegEdge, Regulation};
 pub use library::{
-    annotate_sequence, codon_adaptation_index, relative_codon_frequency,
-    standard_part_library, Annotation, PartLibrary,
+    annotate_sequence, codon_adaptation_index, relative_codon_frequency, standard_part_library,
+    Annotation, PartLibrary,
 };
 pub use sbol::{Component, Device, Module, Part, PartRole, SequenceAnnotation};

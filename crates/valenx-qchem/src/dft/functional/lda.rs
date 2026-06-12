@@ -95,10 +95,8 @@ fn vwn_eps_and_deriv(x: f64, p: &VwnParams) -> (f64, f64) {
 
     let term1 = (x * x / big_x).ln();
     let term2 = 2.0 * p.b / q * atan;
-    let term3 = -p.b * p.x0 / big_x0
-        * ((x - p.x0).powi(2) / big_x).ln();
-    let term4 = -p.b * p.x0 / big_x0
-        * (2.0 * (p.b + 2.0 * p.x0) / q * atan);
+    let term3 = -p.b * p.x0 / big_x0 * ((x - p.x0).powi(2) / big_x).ln();
+    let term4 = -p.b * p.x0 / big_x0 * (2.0 * (p.b + 2.0 * p.x0) / q * atan);
     let eps = p.a * (term1 + term2 + term3 + term4);
 
     // dε_c/dx — analytic derivative of each term.
@@ -110,8 +108,7 @@ fn vwn_eps_and_deriv(x: f64, p: &VwnParams) -> (f64, f64) {
     // d/dx ln((x−x0)²/X) = 2/(x−x0) − (2x+b)/X.
     let d3_inner = 2.0 / (x - p.x0) - (2.0 * x + p.b) / big_x;
     let d3 = -p.b * p.x0 / big_x0 * d3_inner;
-    let d4 = -p.b * p.x0 / big_x0
-        * (2.0 * (p.b + 2.0 * p.x0) / q * (-2.0 * q / denom));
+    let d4 = -p.b * p.x0 / big_x0 * (2.0 * (p.b + 2.0 * p.x0) / q * (-2.0 * q / denom));
     let deps_dx = p.a * (d1 + d2 + d3 + d4);
     (eps, deps_dx)
 }

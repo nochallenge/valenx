@@ -126,9 +126,7 @@ pub fn gelman_rubin(chains: &[&[f64]]) -> Result<f64> {
     if w <= 0.0 || !w.is_finite() {
         // Every chain has zero variance — they're each constant. If
         // they agree on the same constant, R̂ = 1.
-        let all_equal = chain_means
-            .windows(2)
-            .all(|p| (p[0] - p[1]).abs() < 1e-12);
+        let all_equal = chain_means.windows(2).all(|p| (p[0] - p[1]).abs() < 1e-12);
         return if all_equal {
             Ok(1.0)
         } else {
@@ -168,8 +166,7 @@ impl ParameterDiagnostics {
         if chains.is_empty() {
             return Err(PhyloError::invalid("chains", "no traces supplied"));
         }
-        let ess_per_chain: Vec<f64> =
-            chains.iter().map(|c| effective_sample_size(c)).collect();
+        let ess_per_chain: Vec<f64> = chains.iter().map(|c| effective_sample_size(c)).collect();
         let ess_total: f64 = ess_per_chain.iter().sum();
         let r_hat = if chains.len() >= 2 {
             Some(gelman_rubin(chains)?)

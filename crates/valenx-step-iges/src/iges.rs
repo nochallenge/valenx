@@ -626,10 +626,8 @@ pub fn parse(text: &str) -> Result<IgesGeometry, StepIgesError> {
                         .unwrap_or_default();
                     rows.push(value);
                 }
-                geom.attribute_tables.push(IgesAttributeTable {
-                    schema_de,
-                    rows,
-                });
+                geom.attribute_tables
+                    .push(IgesAttributeTable { schema_de, rows });
             }
             other => {
                 *geom.skipped_types.entry(other).or_insert(0) += 1;
@@ -990,11 +988,25 @@ pub fn render_iges_geometry(geom: &IgesGeometry, path: &Path) -> String {
             "110,{},{},{},{},{},{};",
             l.start[0], l.start[1], l.start[2], l.end[0], l.end[1], l.end[2]
         );
-        emit(110, &payload, &mut d_section, &mut p_section, &mut entity_idx, &mut p_seq);
+        emit(
+            110,
+            &payload,
+            &mut d_section,
+            &mut p_section,
+            &mut entity_idx,
+            &mut p_seq,
+        );
     }
     for p in &geom.points {
         let payload = format!("116,{},{},{},0;", p.pos[0], p.pos[1], p.pos[2]);
-        emit(116, &payload, &mut d_section, &mut p_section, &mut entity_idx, &mut p_seq);
+        emit(
+            116,
+            &payload,
+            &mut d_section,
+            &mut p_section,
+            &mut entity_idx,
+            &mut p_seq,
+        );
     }
     for cc in &geom.composite_curves {
         // Type 102: type, N, DE_1, ..., DE_N
@@ -1003,7 +1015,14 @@ pub fn render_iges_geometry(geom: &IgesGeometry, path: &Path) -> String {
             payload.push_str(&format!(",{de}"));
         }
         payload.push(';');
-        emit(102, &payload, &mut d_section, &mut p_section, &mut entity_idx, &mut p_seq);
+        emit(
+            102,
+            &payload,
+            &mut d_section,
+            &mut p_section,
+            &mut entity_idx,
+            &mut p_seq,
+        );
     }
     for b in &geom.boundaries {
         // Type 141: type, sptr, n, [ctype, mptr, orient, count_xyz]+
@@ -1013,18 +1032,34 @@ pub fn render_iges_geometry(geom: &IgesGeometry, path: &Path) -> String {
             payload.push_str(&format!(",0,{},{},0", m.curve_de, m.orientation));
         }
         payload.push(';');
-        emit(141, &payload, &mut d_section, &mut p_section, &mut entity_idx, &mut p_seq);
+        emit(
+            141,
+            &payload,
+            &mut d_section,
+            &mut p_section,
+            &mut entity_idx,
+            &mut p_seq,
+        );
     }
     for s in &geom.manifold_solids {
         let mut payload = format!(
             "186,{},{},{}",
-            s.shell_de, s.shell_orientation, s.voids.len()
+            s.shell_de,
+            s.shell_orientation,
+            s.voids.len()
         );
         for v in &s.voids {
             payload.push_str(&format!(",{},{}", v.shell_de, v.orientation));
         }
         payload.push(';');
-        emit(186, &payload, &mut d_section, &mut p_section, &mut entity_idx, &mut p_seq);
+        emit(
+            186,
+            &payload,
+            &mut d_section,
+            &mut p_section,
+            &mut entity_idx,
+            &mut p_seq,
+        );
     }
     for at in &geom.attribute_tables {
         let mut payload = format!("422,{},{}", at.schema_de, at.rows.len());
@@ -1032,7 +1067,14 @@ pub fn render_iges_geometry(geom: &IgesGeometry, path: &Path) -> String {
             payload.push_str(&format!(",'{r}'"));
         }
         payload.push(';');
-        emit(422, &payload, &mut d_section, &mut p_section, &mut entity_idx, &mut p_seq);
+        emit(
+            422,
+            &payload,
+            &mut d_section,
+            &mut p_section,
+            &mut entity_idx,
+            &mut p_seq,
+        );
     }
 
     let mut t_section = String::new();
@@ -1281,7 +1323,10 @@ mod tests {
             ..Default::default()
         };
         let txt = render_iges_geometry(&geom, Path::new("t.iges"));
-        assert!(txt.contains("     102"), "Type 102 must appear in directory");
+        assert!(
+            txt.contains("     102"),
+            "Type 102 must appear in directory"
+        );
         let parsed = parse(&txt).expect("rendered composite curve must parse");
         assert_eq!(parsed.composite_curves.len(), 1);
         assert_eq!(parsed.composite_curves[0].member_des, cc.member_des);
@@ -1311,16 +1356,15 @@ mod tests {
             ..Default::default()
         };
         let txt = render_iges_geometry(&geom, Path::new("t.iges"));
-        assert!(txt.contains("     141"), "Type 141 must appear in directory");
+        assert!(
+            txt.contains("     141"),
+            "Type 141 must appear in directory"
+        );
         let parsed = parse(&txt).expect("rendered boundary must parse");
         assert_eq!(parsed.boundaries.len(), 1);
         assert_eq!(parsed.boundaries[0].surface_de, b.surface_de);
         assert_eq!(parsed.boundaries[0].members.len(), 3);
-        for (a, c) in parsed.boundaries[0]
-            .members
-            .iter()
-            .zip(b.members.iter())
-        {
+        for (a, c) in parsed.boundaries[0].members.iter().zip(b.members.iter()) {
             assert_eq!(a, c);
         }
     }
@@ -1346,7 +1390,10 @@ mod tests {
             ..Default::default()
         };
         let txt = render_iges_geometry(&geom, Path::new("t.iges"));
-        assert!(txt.contains("     186"), "Type 186 must appear in directory");
+        assert!(
+            txt.contains("     186"),
+            "Type 186 must appear in directory"
+        );
         let parsed = parse(&txt).expect("rendered manifold solid must parse");
         assert_eq!(parsed.manifold_solids.len(), 1);
         assert_eq!(parsed.manifold_solids[0], s);
@@ -1363,7 +1410,10 @@ mod tests {
             ..Default::default()
         };
         let txt = render_iges_geometry(&geom, Path::new("t.iges"));
-        assert!(txt.contains("     422"), "Type 422 must appear in directory");
+        assert!(
+            txt.contains("     422"),
+            "Type 422 must appear in directory"
+        );
         let parsed = parse(&txt).expect("rendered attribute table must parse");
         assert_eq!(parsed.attribute_tables.len(), 1);
         assert_eq!(parsed.attribute_tables[0], at);
@@ -1410,7 +1460,11 @@ mod tests {
         assert_eq!(parsed.manifold_solids.len(), 1);
         assert_eq!(parsed.attribute_tables.len(), 1);
         // No skipped types — every entity is supported.
-        assert!(parsed.skipped_types.is_empty(), "got: {:?}", parsed.skipped_types);
+        assert!(
+            parsed.skipped_types.is_empty(),
+            "got: {:?}",
+            parsed.skipped_types
+        );
     }
 
     #[test]
@@ -1473,9 +1527,7 @@ mod tests {
     #[test]
     fn type_102_with_zero_members_handled() {
         let geom = IgesGeometry {
-            composite_curves: vec![IgesCompositeCurve {
-                member_des: vec![],
-            }],
+            composite_curves: vec![IgesCompositeCurve { member_des: vec![] }],
             ..Default::default()
         };
         let txt = render_iges_geometry(&geom, Path::new("t.iges"));
@@ -1507,11 +1559,15 @@ mod tests {
         // G section — one global record (empty payload is fine).
         write_record(&mut s, "1H,,1H;", 'G', 1);
         // D section — entity 1 = Type 102, PD pointer 1.
-        let d1 = format!("{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}",
-            "102", "1", "0", "0", "0", "0", "0", "0", "0");
+        let d1 = format!(
+            "{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}",
+            "102", "1", "0", "0", "0", "0", "0", "0", "0"
+        );
         write_record(&mut s, &d1, 'D', 1);
-        let d2 = format!("{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}",
-            "102", "0", "0", "1", "0", "0", "0", "0", "0");
+        let d2 = format!(
+            "{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}{:>8}",
+            "102", "0", "0", "1", "0", "0", "0", "0", "0"
+        );
         write_record(&mut s, &d2, 'D', 2);
         // P section — the entity advertising count = usize::MAX.
         write_record(&mut s, &format!("{payload};"), 'P', 1);

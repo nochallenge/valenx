@@ -57,10 +57,22 @@ impl GhkIon {
 /// supplied — an empty mixture yields a non-finite result the caller should
 /// guard.
 pub fn ghk_potential_mv(temp_k: f64, cations: &[GhkIon], anions: &[GhkIon]) -> f64 {
-    let numerator: f64 = cations.iter().map(|c| c.permeability * c.outside).sum::<f64>()
-        + anions.iter().map(|a| a.permeability * a.inside).sum::<f64>();
-    let denominator: f64 = cations.iter().map(|c| c.permeability * c.inside).sum::<f64>()
-        + anions.iter().map(|a| a.permeability * a.outside).sum::<f64>();
+    let numerator: f64 = cations
+        .iter()
+        .map(|c| c.permeability * c.outside)
+        .sum::<f64>()
+        + anions
+            .iter()
+            .map(|a| a.permeability * a.inside)
+            .sum::<f64>();
+    let denominator: f64 = cations
+        .iter()
+        .map(|c| c.permeability * c.inside)
+        .sum::<f64>()
+        + anions
+            .iter()
+            .map(|a| a.permeability * a.outside)
+            .sum::<f64>();
     thermal_voltage_mv(temp_k) * (numerator / denominator).ln()
 }
 
@@ -149,8 +161,14 @@ mod tests {
         // much closer to E_K because potassium dominates the permeability.
         let e_k = nernst_potential_mv(BODY_TEMPERATURE_K, 1.0, 5.0, 140.0);
         let e_na = nernst_potential_mv(BODY_TEMPERATURE_K, 1.0, 145.0, 15.0);
-        assert!(e_k < vm && vm < e_na, "Vm {vm} must lie between E_K {e_k} and E_Na {e_na}");
-        assert!((vm - e_k).abs() < (vm - e_na).abs(), "resting Vm should hug E_K");
+        assert!(
+            e_k < vm && vm < e_na,
+            "Vm {vm} must lie between E_K {e_k} and E_Na {e_na}"
+        );
+        assert!(
+            (vm - e_k).abs() < (vm - e_na).abs(),
+            "resting Vm should hug E_K"
+        );
     }
 
     #[test]
@@ -169,8 +187,14 @@ mod tests {
             &[k, GhkIon::new(5.0, 145.0, 15.0)],
             &[cl],
         );
-        assert!(firing > rest, "more Na permeability depolarizes: {rest} -> {firing}");
-        assert!(firing > 0.0, "a Na-dominated membrane overshoots positive: {firing}");
+        assert!(
+            firing > rest,
+            "more Na permeability depolarizes: {rest} -> {firing}"
+        );
+        assert!(
+            firing > 0.0,
+            "a Na-dominated membrane overshoots positive: {firing}"
+        );
     }
 
     #[test]
@@ -182,8 +206,14 @@ mod tests {
         let e_rev = nernst_potential_mv(t, z, c_out, c_in);
         let i_rev = ghk_current_density(t, 1.0, z, e_rev, c_out, c_in);
         let i_near = ghk_current_density(t, 1.0, z, e_rev + 10.0, c_out, c_in);
-        assert!(i_rev.abs() < 1e-6, "current must vanish at reversal, got {i_rev}");
-        assert!(i_near.abs() > 1.0, "and be clearly non-zero 10 mV away, got {i_near}");
+        assert!(
+            i_rev.abs() < 1e-6,
+            "current must vanish at reversal, got {i_rev}"
+        );
+        assert!(
+            i_near.abs() > 1.0,
+            "and be clearly non-zero 10 mV away, got {i_near}"
+        );
     }
 
     #[test]
@@ -193,9 +223,15 @@ mod tests {
         let i0 = ghk_current_density(t, 1.0, 1.0, 0.0, 4.0, 140.0);
         assert!(i0.is_finite(), "no 0/0 blow-up at V_m = 0");
         let expected = FARADAY * (140.0 - 4.0); // P = z = 1
-        assert!((i0 - expected).abs() < 1e-6 * expected, "V=0 limit {i0} vs {expected}");
+        assert!(
+            (i0 - expected).abs() < 1e-6 * expected,
+            "V=0 limit {i0} vs {expected}"
+        );
         // More K⁺ inside than out ⇒ a net outward (positive) diffusive current.
-        assert!(i0 > 0.0, "outward diffusion at rest gives a positive current");
+        assert!(
+            i0 > 0.0,
+            "outward diffusion at rest gives a positive current"
+        );
     }
 
     #[test]

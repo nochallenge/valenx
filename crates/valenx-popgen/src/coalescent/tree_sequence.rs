@@ -86,10 +86,7 @@ impl TreeSequence {
     /// [`PopgenError::Invalid`] if `sequence_length <= 0`.
     pub fn new(sequence_length: f64) -> Result<Self> {
         if sequence_length <= 0.0 {
-            return Err(PopgenError::invalid(
-                "sequence_length",
-                "must be positive",
-            ));
+            return Err(PopgenError::invalid("sequence_length", "must be positive"));
         }
         Ok(TreeSequence {
             nodes: Vec::new(),
@@ -259,10 +256,7 @@ impl TreeSequence {
     /// sample).
     pub fn local_tree(&self, position: f64) -> Result<Tree> {
         if position < 0.0 || position >= self.sequence_length {
-            return Err(PopgenError::invalid(
-                "position",
-                "outside the chromosome",
-            ));
+            return Err(PopgenError::invalid("position", "outside the chromosome"));
         }
         // Parent of each ts-node under the local tree.
         let mut parent_of: Vec<Option<usize>> = vec![None; self.nodes.len()];
@@ -283,8 +277,7 @@ impl TreeSequence {
                 cur = parent_of[c];
             }
         }
-        let participating: Vec<usize> =
-            (0..self.nodes.len()).filter(|&i| used[i]).collect();
+        let participating: Vec<usize> = (0..self.nodes.len()).filter(|&i| used[i]).collect();
         if participating.is_empty() {
             return Err(PopgenError::model("local tree has no nodes"));
         }
@@ -323,8 +316,7 @@ impl TreeSequence {
                 roots.len()
             )));
         }
-        Tree::new(phylo_nodes, roots[0], true)
-            .map_err(|e| PopgenError::model(e.to_string()))
+        Tree::new(phylo_nodes, roots[0], true).map_err(|e| PopgenError::model(e.to_string()))
     }
 }
 

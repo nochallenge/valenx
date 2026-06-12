@@ -163,8 +163,7 @@ mod tests {
     /// Builds a diploid population with one site and the given diploid
     /// genotypes (`0`/`1`/`2` derived copies per individual).
     fn pop_with_genotypes(genotypes: &[u8]) -> Population {
-        let mut pop =
-            Population::founder(genotypes.len(), Ploidy::Diploid, 100.0).unwrap();
+        let mut pop = Population::founder(genotypes.len(), Ploidy::Diploid, 100.0).unwrap();
         let s = pop.add_site(Site::at(50.0));
         for (i, &g) in genotypes.iter().enumerate() {
             let ind = &mut pop.individuals_mut()[i];

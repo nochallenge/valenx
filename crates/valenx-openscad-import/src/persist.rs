@@ -36,7 +36,8 @@ pub fn to_ron_string(p: &OpenScadImportPanelState) -> Result<String, OpenScadErr
 
 /// Parse a panel state from a RON string. Fails on version mismatch.
 pub fn from_ron_str(s: &str) -> Result<OpenScadImportPanelState, OpenScadError> {
-    let file: PanelFile = ron::de::from_str(s).map_err(|e| OpenScadError::Cad(format!("ron: {e}")))?;
+    let file: PanelFile =
+        ron::de::from_str(s).map_err(|e| OpenScadError::Cad(format!("ron: {e}")))?;
     if file.version != VERSION {
         return Err(OpenScadError::Cad(format!(
             "version mismatch: file = {}, expected = {}",

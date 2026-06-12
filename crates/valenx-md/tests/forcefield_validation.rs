@@ -111,11 +111,7 @@ fn maxwell_boltzmann(system: &mut System, temperature: f64, seed: u64) {
     for atom in &system.topology.atoms {
         // σ_v = √(k_B T / m) per component.
         let sd = (BOLTZMANN * temperature / atom.mass).sqrt();
-        vels.push(Vector3::new(
-            normal() * sd,
-            normal() * sd,
-            normal() * sd,
-        ));
+        vels.push(Vector3::new(normal() * sd, normal() * sd, normal() * sd));
     }
     system.set_velocities(vels).unwrap();
     system.remove_com_motion();
@@ -170,10 +166,9 @@ fn nve_total_energy_has_no_secular_drift() {
 
     let reports = &sim.log.reports;
     let half = reports.len() / 2;
-    let mean_first: f64 =
-        reports[..half].iter().map(|r| r.total_energy).sum::<f64>() / half as f64;
-    let mean_second: f64 = reports[half..].iter().map(|r| r.total_energy).sum::<f64>()
-        / (reports.len() - half) as f64;
+    let mean_first: f64 = reports[..half].iter().map(|r| r.total_energy).sum::<f64>() / half as f64;
+    let mean_second: f64 =
+        reports[half..].iter().map(|r| r.total_energy).sum::<f64>() / (reports.len() - half) as f64;
     let drift = (mean_second - mean_first).abs();
     let scale = mean_first.abs().max(1.0);
     assert!(
@@ -268,8 +263,7 @@ fn fcc_lj_crystal_cohesive_energy_matches_the_lattice_sum() {
     };
 
     // (1) The engine reproduces the independent analytic sum.
-    let rel_vs_analytic =
-        (u_engine - analytic_truncated).abs() / analytic_truncated.abs();
+    let rel_vs_analytic = (u_engine - analytic_truncated).abs() / analytic_truncated.abs();
     assert!(
         rel_vs_analytic < 5e-3,
         "engine LJ energy {u_engine} kJ/mol/atom vs analytic truncated lattice sum \
@@ -304,7 +298,10 @@ fn lj_pair_minimum_is_at_the_published_distance_and_depth() {
     );
     // The zero-crossing is at exactly r = σ.
     let e_at_sigma = pair_energy(AR_SIGMA, ar_epsilon(), AR_SIGMA);
-    assert!(e_at_sigma.abs() < 1e-9, "V(sigma) = {e_at_sigma} should be 0");
+    assert!(
+        e_at_sigma.abs() < 1e-9,
+        "V(sigma) = {e_at_sigma} should be 0"
+    );
 }
 
 /// Liquid argon at a published state point. We run a thermostatted
@@ -327,8 +324,8 @@ fn liquid_argon_configurational_energy_is_in_the_published_band() {
     // Target ρ* ≈ 0.84  ->  number density ρ = ρ*/σ³.
     let rho_star = 0.84;
     let number_density = rho_star / AR_SIGMA.powi(3); // atoms / nm³
-    // 4×4×4 FCC = 256 atoms — large enough that the box edge admits
-    // the default 1.0 nm nonbonded cutoff (L/2 > 1.0 nm).
+                                                      // 4×4×4 FCC = 256 atoms — large enough that the box edge admits
+                                                      // the default 1.0 nm nonbonded cutoff (L/2 > 1.0 nm).
     let cells = 4;
     let n_atoms = 4 * cells * cells * cells;
     // box edge from ρ = N / V:
@@ -351,7 +348,12 @@ fn liquid_argon_configurational_energy_is_in_the_published_band() {
     sim.log.reports.clear();
     sim.run(1500).unwrap();
 
-    let mean_pe = sim.log.reports.iter().map(|r| r.potential_energy).sum::<f64>()
+    let mean_pe = sim
+        .log
+        .reports
+        .iter()
+        .map(|r| r.potential_energy)
+        .sum::<f64>()
         / sim.log.reports.len() as f64;
     let u_per_atom = mean_pe / sim.system.len() as f64;
     let u_reduced = u_per_atom / ar_epsilon(); // U/N in units of ε
@@ -419,7 +421,7 @@ fn dilute_lj_gas_approaches_the_ideal_gas_law() {
 fn thermostat_holds_temperature_and_kinetic_energy_obeys_equipartition() {
     let target = 120.0; // K
     let mut sys = fcc_argon(3, 0.58); // 108 atoms
-    // Start cold so the thermostat has to do real work.
+                                      // Start cold so the thermostat has to do real work.
     maxwell_boltzmann(&mut sys, 20.0, 9090);
 
     use valenx_md::ensemble::berendsen::Berendsen;
@@ -463,9 +465,9 @@ fn kinetic_energy_equals_three_halves_n_kt() {
 
     let ke = sys.kinetic_energy();
     let n_dof = sys.degrees_of_freedom(0); // 3N - 3
-    // T is defined by KE = ½ N_dof k_B T, so reconstruct T and check
-    // it round-trips, and check KE = (3/2) N_eff k_B T with
-    // N_eff = N_dof/3.
+                                           // T is defined by KE = ½ N_dof k_B T, so reconstruct T and check
+                                           // it round-trips, and check KE = (3/2) N_eff k_B T with
+                                           // N_eff = N_dof/3.
     let t_from_ke = sys.temperature(0);
     let ke_back = 1.5 * (n_dof as f64 / 3.0) * BOLTZMANN * t_from_ke;
     assert!(
@@ -671,12 +673,9 @@ fn lj_analytic_force_matches_finite_difference() {
     let mut top = Topology::new();
     top.push_atom(Atom::new("Ar", AR_MASS, 0.0).unwrap().with_element("Ar"));
     top.push_atom(Atom::new("Ar", AR_MASS, 0.0).unwrap().with_element("Ar"));
-    let base = System::new(
-        top,
-        vec![Vector3::zeros(), Vector3::new(0.38, 0.05, 0.0)],
-    )
-    .unwrap()
-    .with_cell(SimBox::cubic(10.0).unwrap());
+    let base = System::new(top, vec![Vector3::zeros(), Vector3::new(0.38, 0.05, 0.0)])
+        .unwrap()
+        .with_cell(SimBox::cubic(10.0).unwrap());
 
     let lj = LennardJones::from_system(&base, &argon_ff(), 2.0).unwrap();
     let mut ef = EnergyForce::zeros(2);
@@ -764,11 +763,7 @@ fn total_force_on_an_isolated_molecule_is_zero() {
 // =====================================================================
 
 /// Builds a generic molecule from elements + bonds + coordinates (nm).
-fn build_molecule(
-    elements: &[&str],
-    bonds: &[(usize, usize)],
-    positions: &[[f64; 3]],
-) -> System {
+fn build_molecule(elements: &[&str], bonds: &[(usize, usize)], positions: &[[f64; 3]]) -> System {
     let mut t = Topology::new();
     for &e in elements {
         let mass = match e {
@@ -795,15 +790,7 @@ fn build_molecule(
 fn ethane_system() -> System {
     build_molecule(
         &["C", "C", "H", "H", "H", "H", "H", "H"],
-        &[
-            (0, 1),
-            (0, 2),
-            (0, 3),
-            (0, 4),
-            (1, 5),
-            (1, 6),
-            (1, 7),
-        ],
+        &[(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (1, 6), (1, 7)],
         &[
             [0.0, 0.0, 0.0],
             [0.153, 0.0, 0.0],
@@ -822,11 +809,7 @@ fn water_system() -> System {
     build_molecule(
         &["O", "H", "H"],
         &[(0, 1), (0, 2)],
-        &[
-            [0.0, 0.0, 0.0],
-            [0.0957, 0.0, 0.0],
-            [-0.0240, 0.0927, 0.0],
-        ],
+        &[[0.0, 0.0, 0.0], [0.0957, 0.0, 0.0], [-0.0240, 0.0927, 0.0]],
     )
 }
 

@@ -127,14 +127,11 @@ impl Adapter for KallistoAdapter {
         // kallisto's index is a single `.idx` file (unlike salmon's
         // directory-based index), so basename-only is correct.
         if let Some(s) = input.index.to_str() {
-            valenx_core::adapter_helpers::validate_output_basename(
-                s,
-                "[bio.kallisto].index",
-            )
-            .map_err(|e| AdapterError::InvalidCase {
-                case_path: case.path.join("case.toml"),
-                reason: format!("{e}"),
-            })?;
+            valenx_core::adapter_helpers::validate_output_basename(s, "[bio.kallisto].index")
+                .map_err(|e| AdapterError::InvalidCase {
+                    case_path: case.path.join("case.toml"),
+                    reason: format!("{e}"),
+                })?;
         } else {
             return Err(AdapterError::InvalidCase {
                 case_path: case.path.join("case.toml"),
@@ -504,9 +501,7 @@ fragment_sd     = 20.0
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = KallistoAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = KallistoAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("..") || msg.contains("stay within") || msg.contains("escape"),
@@ -548,9 +543,7 @@ fragment_sd      = 20.0
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = KallistoAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = KallistoAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("[bio.kallisto].index"),

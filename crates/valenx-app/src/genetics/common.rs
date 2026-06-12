@@ -211,11 +211,7 @@ pub fn run_button(ui: &mut egui::Ui, label: &str) -> bool {
 /// `History::can_redo()` — they disable the button when nothing's
 /// left to undo / redo so the user gets immediate feedback that
 /// they've reached the end of the timeline.
-pub fn undo_redo_inline(
-    ui: &mut egui::Ui,
-    can_undo: bool,
-    can_redo: bool,
-) -> (bool, bool) {
+pub fn undo_redo_inline(ui: &mut egui::Ui, can_undo: bool, can_redo: bool) -> (bool, bool) {
     let undo_clicked = ui
         .add_enabled(can_undo, egui::Button::new(edit::UNDO))
         .on_hover_text("Undo last edit (Ctrl+Z)")
@@ -234,22 +230,14 @@ pub fn undo_redo_inline(
 /// `panel.undo_edit()` / `panel.redo_edit()`. Pairs with
 /// [`undo_redo_inline`] (which is the wrapped-horizontal variant
 /// callers paste into an existing `ui.horizontal(|ui| { ... })`).
-pub fn undo_redo_row(
-    ui: &mut egui::Ui,
-    can_undo: bool,
-    can_redo: bool,
-) -> (bool, bool) {
+pub fn undo_redo_row(ui: &mut egui::Ui, can_undo: bool, can_redo: bool) -> (bool, bool) {
     let mut undo_clicked = false;
     let mut redo_clicked = false;
     ui.horizontal(|ui| {
         let (u, r) = undo_redo_inline(ui, can_undo, can_redo);
         undo_clicked = u;
         redo_clicked = r;
-        ui.label(
-            egui::RichText::new("Ctrl+Z / Ctrl+Y")
-                .weak()
-                .small(),
-        );
+        ui.label(egui::RichText::new("Ctrl+Z / Ctrl+Y").weak().small());
     });
     (undo_clicked, redo_clicked)
 }

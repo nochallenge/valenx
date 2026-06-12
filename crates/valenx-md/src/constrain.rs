@@ -270,7 +270,11 @@ mod tests {
             DistanceConstraint::new(1, 2, 0.1).unwrap(),
         ]);
         cons.shake(&mut sys, &reference.positions, None).unwrap();
-        assert!(cons.max_violation(&sys) < 1e-6, "violation = {}", cons.max_violation(&sys));
+        assert!(
+            cons.max_violation(&sys) < 1e-6,
+            "violation = {}",
+            cons.max_violation(&sys)
+        );
     }
 
     #[test]

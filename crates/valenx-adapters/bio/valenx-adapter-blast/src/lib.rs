@@ -157,10 +157,7 @@ impl Adapter for BlastAdapter {
         let source_query = if input.query.is_absolute() {
             input.query.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.query,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.query)?
         };
         if !source_query.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -230,31 +227,30 @@ impl Adapter for BlastAdapter {
 
         // Look up the binary matching the user-selected `program`.
         // Fall back to native sentinel when not found.
-        let native_command: Vec<OsString> =
-            match find_on_path(&[input.program.as_str()]) {
-                Some(binary_path) => {
-                    let mut cmd: Vec<OsString> = vec![
-                        binary_path.into_os_string(),
-                        OsString::from("-query"),
-                        source_query.into_os_string(),
-                        OsString::from("-db"),
-                        source_database.into_os_string(),
-                        OsString::from("-out"),
-                        OsString::from(OUT_RESULTS),
-                        OsString::from("-evalue"),
-                        OsString::from(format_evalue(input.evalue)),
-                        OsString::from("-outfmt"),
-                        OsString::from(input.outfmt.to_string()),
-                        OsString::from("-num_threads"),
-                        OsString::from(input.threads.to_string()),
-                    ];
-                    for arg in &input.extra_args {
-                        cmd.push(OsString::from(arg));
-                    }
-                    cmd
+        let native_command: Vec<OsString> = match find_on_path(&[input.program.as_str()]) {
+            Some(binary_path) => {
+                let mut cmd: Vec<OsString> = vec![
+                    binary_path.into_os_string(),
+                    OsString::from("-query"),
+                    source_query.into_os_string(),
+                    OsString::from("-db"),
+                    source_database.into_os_string(),
+                    OsString::from("-out"),
+                    OsString::from(OUT_RESULTS),
+                    OsString::from("-evalue"),
+                    OsString::from(format_evalue(input.evalue)),
+                    OsString::from("-outfmt"),
+                    OsString::from(input.outfmt.to_string()),
+                    OsString::from("-num_threads"),
+                    OsString::from(input.threads.to_string()),
+                ];
+                for arg in &input.extra_args {
+                    cmd.push(OsString::from(arg));
                 }
-                None => vec![OsString::from(native::NATIVE_SENTINEL)],
-            };
+                cmd
+            }
+            None => vec![OsString::from(native::NATIVE_SENTINEL)],
+        };
 
         Ok(PreparedJob {
             workdir: workdir.to_path_buf(),

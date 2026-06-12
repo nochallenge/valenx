@@ -218,13 +218,21 @@ fn validate_protein(protein: &[u8]) -> Result<()> {
     }
     for (i, &b) in protein.iter().enumerate() {
         let u = b.to_ascii_uppercase();
-        let is_aa = u.is_ascii_uppercase() && u != b'B' && u != b'J' && u != b'O' && u != b'U'
-            && u != b'X' && u != b'Z';
+        let is_aa = u.is_ascii_uppercase()
+            && u != b'B'
+            && u != b'J'
+            && u != b'O'
+            && u != b'U'
+            && u != b'X'
+            && u != b'Z';
         let is_stop = u == b'*' && i + 1 == protein.len();
         if !is_aa && !is_stop {
             return Err(RnaDesignError::goal(
                 "protein",
-                format!("`{}` at position {i} is not a standard amino-acid code", b as char),
+                format!(
+                    "`{}` at position {i} is not a standard amino-acid code",
+                    b as char
+                ),
             ));
         }
     }
@@ -352,7 +360,10 @@ impl DesignConstraints {
         if self.gc_min > self.gc_max {
             return Err(RnaDesignError::goal(
                 "gc_range",
-                format!("gc_min {:.2} exceeds gc_max {:.2}", self.gc_min, self.gc_max),
+                format!(
+                    "gc_min {:.2} exceeds gc_max {:.2}",
+                    self.gc_min, self.gc_max
+                ),
             ));
         }
         if self.length_min != 0 && self.length_max != 0 && self.length_min > self.length_max {

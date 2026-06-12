@@ -60,11 +60,9 @@ impl MeltingCurve {
             let (a, b) = (w[0], w[1]);
             let hi = a.fraction_paired.max(b.fraction_paired);
             let lo = a.fraction_paired.min(b.fraction_paired);
-            if lo <= mid && mid <= hi && (a.fraction_paired - b.fraction_paired).abs() > 1e-12
-            {
+            if lo <= mid && mid <= hi && (a.fraction_paired - b.fraction_paired).abs() > 1e-12 {
                 // linear interpolation
-                let t = (mid - a.fraction_paired)
-                    / (b.fraction_paired - a.fraction_paired);
+                let t = (mid - a.fraction_paired) / (b.fraction_paired - a.fraction_paired);
                 return Some(a.temperature_c + t * (b.temperature_c - a.temperature_c));
             }
         }
@@ -78,12 +76,7 @@ impl MeltingCurve {
 /// # Errors
 /// [`RnaStructError::Invalid`] if `steps == 0`, `min_c >= max_c`, or
 /// either temperature is at or below absolute zero.
-pub fn melting_curve(
-    seq: &RnaSeq,
-    min_c: f64,
-    max_c: f64,
-    steps: usize,
-) -> Result<MeltingCurve> {
+pub fn melting_curve(seq: &RnaSeq, min_c: f64, max_c: f64, steps: usize) -> Result<MeltingCurve> {
     if steps == 0 {
         return Err(RnaStructError::invalid("steps", "need at least one step"));
     }

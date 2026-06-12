@@ -317,10 +317,7 @@ fn self_intersection_difference_collapses_to_empty_or_degenerate() {
         Err(CadError::EmptyResult) => { /* the clean outcome */ }
         Ok(s) => {
             let v = solid_volume_tol(&s, 1e-3).unwrap().abs();
-            assert!(
-                v < 1e-3,
-                "A−A should be empty or near-zero volume, got {v}"
-            );
+            assert!(v < 1e-3, "A−A should be empty or near-zero volume, got {v}");
         }
         Err(other) => panic!("A−A should not hard-fail with {other:?}"),
     }

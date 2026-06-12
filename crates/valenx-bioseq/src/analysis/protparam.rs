@@ -305,7 +305,10 @@ mod tests {
         let p = Seq::new(SeqKind::Protein, "KRDEHACYMLV").unwrap();
         let pi = isoelectric_point(&p).unwrap();
         let charge = net_charge_at_ph(&p, pi).unwrap();
-        assert!(charge.abs() < 1e-3, "net charge at pI should be ~0, got {charge}");
+        assert!(
+            charge.abs() < 1e-3,
+            "net charge at pI should be ~0, got {charge}"
+        );
     }
 
     #[test]

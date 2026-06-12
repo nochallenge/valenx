@@ -202,19 +202,19 @@ pub const ORGANIC_SUBSET: &[u8] = &[5, 6, 7, 8, 9, 15, 16, 17, 35, 53];
 /// gases) — those atoms carry only explicit hydrogens.
 pub fn standard_valences(z: u8) -> &'static [u8] {
     match z {
-        1 => &[1],          // H
-        5 => &[3],          // B
-        6 => &[4],          // C
-        7 => &[3],          // N  (5 handled via charge / explicit)
-        8 => &[2],          // O
-        9 => &[1],          // F
-        14 => &[4],         // Si
-        15 => &[3, 5],      // P
-        16 => &[2, 4, 6],   // S
-        17 => &[1],         // Cl
-        33 => &[3, 5],      // As
-        34 => &[2, 4, 6],   // Se
-        35 => &[1],         // Br
+        1 => &[1],           // H
+        5 => &[3],           // B
+        6 => &[4],           // C
+        7 => &[3],           // N  (5 handled via charge / explicit)
+        8 => &[2],           // O
+        9 => &[1],           // F
+        14 => &[4],          // Si
+        15 => &[3, 5],       // P
+        16 => &[2, 4, 6],    // S
+        17 => &[1],          // Cl
+        33 => &[3, 5],       // As
+        34 => &[2, 4, 6],    // Se
+        35 => &[1],          // Br
         53 => &[1, 3, 5, 7], // I
         _ => &[],
     }
@@ -326,7 +326,7 @@ mod tests {
         assert_eq!(standard_valences(34), &[2, 4, 6]); // Se — like S
         assert_eq!(standard_valences(35), &[1]); // Br
         assert_eq!(standard_valences(53), &[1, 3, 5, 7]); // I — up to 7 (IF7)
-        // The fallback arm: noble gases and metals carry no implicit H.
+                                                          // The fallback arm: noble gases and metals carry no implicit H.
         assert!(standard_valences(2).is_empty()); // He
         assert!(standard_valences(26).is_empty()); // Fe
         assert!(standard_valences(0).is_empty()); // invalid Z
@@ -348,10 +348,10 @@ mod tests {
         assert!((electronegativity(17) - 3.16).abs() < 1e-9); // Cl
         assert!((electronegativity(35) - 2.96).abs() < 1e-9); // Br
         assert!((electronegativity(53) - 2.66).abs() < 1e-9); // I
-        // The fallback arm: a hydrogen-like 2.20 for untabulated Z.
+                                                              // The fallback arm: a hydrogen-like 2.20 for untabulated Z.
         assert!((electronegativity(26) - 2.20).abs() < 1e-9); // Fe
         assert!((electronegativity(0) - 2.20).abs() < 1e-9); // invalid Z
-        // Halogen electronegativity decreases down the group.
+                                                             // Halogen electronegativity decreases down the group.
         assert!(electronegativity(9) > electronegativity(17));
         assert!(electronegativity(17) > electronegativity(35));
         assert!(electronegativity(35) > electronegativity(53));
@@ -373,10 +373,10 @@ mod tests {
         assert!((covalent_radius(17) - 1.02).abs() < 1e-9); // Cl
         assert!((covalent_radius(35) - 1.20).abs() < 1e-9); // Br
         assert!((covalent_radius(53) - 1.39).abs() < 1e-9); // I — largest here
-        // The fallback arm: a carbon-ish 0.75 for untabulated Z.
+                                                            // The fallback arm: a carbon-ish 0.75 for untabulated Z.
         assert!((covalent_radius(26) - 0.75).abs() < 1e-9); // Fe
         assert!((covalent_radius(0) - 0.75).abs() < 1e-9); // invalid Z
-        // Down a group the covalent radius grows (F < Cl < Br < I).
+                                                           // Down a group the covalent radius grows (F < Cl < Br < I).
         assert!(covalent_radius(9) < covalent_radius(17));
         assert!(covalent_radius(17) < covalent_radius(35));
         assert!(covalent_radius(35) < covalent_radius(53));

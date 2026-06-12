@@ -22,8 +22,8 @@
 //! size across the toggle). This function is the seam the UI toggle
 //! calls; it simply writes the requested mode onto the camera.
 
-pub use valenx_viz::ProjectionMode;
 use valenx_viz::OrbitCamera;
+pub use valenx_viz::ProjectionMode;
 
 use crate::error::OcctVizError;
 

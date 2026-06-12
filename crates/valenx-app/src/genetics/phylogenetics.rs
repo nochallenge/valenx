@@ -115,8 +115,12 @@ impl PhylogeneticsPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// Render the Phylogenetics panel.
@@ -126,14 +130,20 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     common::section(ui, "Tool");
     ui.horizontal(|ui| {
         ui.selectable_value(&mut p.tool, Tool::Build, "Build tree")
-            .on_hover_text("Build a phylogenetic tree from a multi-FASTA via NJ / BIONJ / UPGMA / WPGMA.");
+            .on_hover_text(
+                "Build a phylogenetic tree from a multi-FASTA via NJ / BIONJ / UPGMA / WPGMA.",
+            );
         ui.selectable_value(&mut p.tool, Tool::NewickIo, "Newick in/out")
             .on_hover_text("Round-trip a Newick string + render the tree as ASCII / SVG.");
         // Inline undo / redo so Ctrl+Z reverses the last input edit.
         ui.separator();
         let (undo, redo) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if undo { p.undo_edit(); }
-        if redo { p.redo_edit(); }
+        if undo {
+            p.undo_edit();
+        }
+        if redo {
+            p.redo_edit();
+        }
     });
     ui.separator();
 
@@ -180,11 +190,15 @@ fn draw_build(p: &mut PhylogeneticsPanel, ui: &mut egui::Ui) {
                 ui.selectable_value(&mut p.model, DistanceModel::PDistance, "p-distance")
                     .on_hover_text("Fraction of differing positions — uncorrected, fast.");
                 ui.selectable_value(&mut p.model, DistanceModel::JukesCantor, "Jukes-Cantor")
-                    .on_hover_text("Jukes-Cantor 1969 — single substitution rate, equal base frequencies.");
+                    .on_hover_text(
+                        "Jukes-Cantor 1969 — single substitution rate, equal base frequencies.",
+                    );
                 ui.selectable_value(&mut p.model, DistanceModel::Kimura2P, "Kimura-2P")
                     .on_hover_text("Kimura 1980 — distinct transition / transversion rates.");
                 ui.selectable_value(&mut p.model, DistanceModel::TamuraNei, "Tamura-Nei")
-                    .on_hover_text("Tamura-Nei 1993 — separate purine / pyrimidine transition rates.");
+                    .on_hover_text(
+                        "Tamura-Nei 1993 — separate purine / pyrimidine transition rates.",
+                    );
             });
     });
 
@@ -205,65 +219,64 @@ fn run_build(p: &mut PhylogeneticsPanel) {
         p.error = Some("need at least two named sequences (>name FASTA)".into());
         return;
     }
-        // The distance matrix needs an equal-width MSA. If the input
-        // rows already share a length use them directly; otherwise run
-        // a quick progressive alignment first.
-        let labels: Vec<String> = recs
-            .iter()
-            .enumerate()
-            .map(|(i, (l, _))| {
-                if l.is_empty() {
-                    format!("seq{}", i + 1)
-                } else {
-                    l.clone()
-                }
-            })
-            .collect();
-        let owned: Vec<Vec<u8>> = recs
-            .iter()
-            .map(|(_, s)| s.to_ascii_uppercase().into_bytes())
-            .collect();
-        let same_width = owned
-            .first()
-            .map(|f| owned.iter().all(|r| r.len() == f.len()))
-            .unwrap_or(false);
-        let msa: Msa = if same_width {
-            match Msa::new(owned.clone()) {
-                Ok(m) => m,
-                Err(e) => {
-                    p.error = Some(e.to_string());
-                    return;
-                }
+    // The distance matrix needs an equal-width MSA. If the input
+    // rows already share a length use them directly; otherwise run
+    // a quick progressive alignment first.
+    let labels: Vec<String> = recs
+        .iter()
+        .enumerate()
+        .map(|(i, (l, _))| {
+            if l.is_empty() {
+                format!("seq{}", i + 1)
+            } else {
+                l.clone()
             }
-        } else {
-            let refs: Vec<&[u8]> = owned.iter().map(|v| v.as_slice()).collect();
-            let scheme =
-                ScoringScheme::new(SubstitutionMatrix::nuc44(), GapCost::new(10, 1));
-            match msa_align(&refs, &scheme) {
-                Ok(m) => m,
-                Err(e) => {
-                    p.error = Some(format!("alignment: {e}"));
-                    return;
-                }
-            }
-        };
-        let dm = match distance_matrix(&msa, &labels, p.model) {
-            Ok(d) => d,
+        })
+        .collect();
+    let owned: Vec<Vec<u8>> = recs
+        .iter()
+        .map(|(_, s)| s.to_ascii_uppercase().into_bytes())
+        .collect();
+    let same_width = owned
+        .first()
+        .map(|f| owned.iter().all(|r| r.len() == f.len()))
+        .unwrap_or(false);
+    let msa: Msa = if same_width {
+        match Msa::new(owned.clone()) {
+            Ok(m) => m,
             Err(e) => {
-                p.error = Some(format!("distance matrix: {e}"));
+                p.error = Some(e.to_string());
                 return;
             }
-        };
-        let tree: Result<Tree, _> = match p.method {
-            Method::NeighborJoining => neighbor_joining(&dm),
-            Method::Bionj => bionj(&dm),
-            Method::Upgma => upgma(&dm),
-            Method::Wpgma => wpgma(&dm),
-        };
-        match tree {
-            Ok(t) => {
-                p.newick = write_newick(&t);
-                p.result = format!(
+        }
+    } else {
+        let refs: Vec<&[u8]> = owned.iter().map(|v| v.as_slice()).collect();
+        let scheme = ScoringScheme::new(SubstitutionMatrix::nuc44(), GapCost::new(10, 1));
+        match msa_align(&refs, &scheme) {
+            Ok(m) => m,
+            Err(e) => {
+                p.error = Some(format!("alignment: {e}"));
+                return;
+            }
+        }
+    };
+    let dm = match distance_matrix(&msa, &labels, p.model) {
+        Ok(d) => d,
+        Err(e) => {
+            p.error = Some(format!("distance matrix: {e}"));
+            return;
+        }
+    };
+    let tree: Result<Tree, _> = match p.method {
+        Method::NeighborJoining => neighbor_joining(&dm),
+        Method::Bionj => bionj(&dm),
+        Method::Upgma => upgma(&dm),
+        Method::Wpgma => wpgma(&dm),
+    };
+    match tree {
+        Ok(t) => {
+            p.newick = write_newick(&t);
+            p.result = format!(
                     "{:?} tree · {} leaves · {} nodes · {} cherries · depth {} · sackin {} · tree length {:.3} · binary {}\n\nCladogram:\n{}\n\nNewick:\n{}",
                     p.method,
                     t.leaf_count(),
@@ -276,9 +289,9 @@ fn run_build(p: &mut PhylogeneticsPanel) {
                     render_ascii(&t, 56),
                     p.newick,
                 );
-            }
-            Err(e) => p.error = Some(e.to_string()),
         }
+        Err(e) => p.error = Some(e.to_string()),
+    }
 }
 
 fn draw_newick(p: &mut PhylogeneticsPanel, ui: &mut egui::Ui) {

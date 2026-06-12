@@ -65,10 +65,7 @@ impl Superposition {
 /// # Errors
 /// [`MdError::DimensionMismatch`] if the two sets differ in length;
 /// [`MdError::Invalid`] if either is empty.
-pub fn kabsch(
-    mobile: &[Vector3<f64>],
-    reference: &[Vector3<f64>],
-) -> Result<Superposition> {
+pub fn kabsch(mobile: &[Vector3<f64>], reference: &[Vector3<f64>]) -> Result<Superposition> {
     if mobile.len() != reference.len() {
         return Err(MdError::dimension(format!(
             "{} mobile atoms vs {} reference atoms",
@@ -93,7 +90,9 @@ pub fn kabsch(
 
     // Optimal rotation from the SVD of H.
     let svd = h.svd(true, true);
-    let u = svd.u.ok_or_else(|| MdError::invalid("kabsch", "SVD failed"))?;
+    let u = svd
+        .u
+        .ok_or_else(|| MdError::invalid("kabsch", "SVD failed"))?;
     let v_t = svd
         .v_t
         .ok_or_else(|| MdError::invalid("kabsch", "SVD failed"))?;
@@ -157,10 +156,7 @@ pub fn rmsd_no_fit(a: &[Vector3<f64>], b: &[Vector3<f64>]) -> Result<f64> {
 /// # Errors
 /// [`MdError::Invalid`] for an empty trajectory; [`MdError::DimensionMismatch`]
 /// if a frame or the reference disagrees on atom count.
-pub fn rmsf(
-    frames: &[Vec<Vector3<f64>>],
-    reference: &[Vector3<f64>],
-) -> Result<Vec<f64>> {
+pub fn rmsf(frames: &[Vec<Vector3<f64>>], reference: &[Vector3<f64>]) -> Result<Vec<f64>> {
     if frames.is_empty() {
         return Err(MdError::invalid("rmsf", "needs at least one frame"));
     }
@@ -230,10 +226,8 @@ mod tests {
     #[test]
     fn pure_translation_is_removed() {
         let s = shape();
-        let shifted: Vec<Vector3<f64>> = s
-            .iter()
-            .map(|p| p + Vector3::new(5.0, -3.0, 2.0))
-            .collect();
+        let shifted: Vec<Vector3<f64>> =
+            s.iter().map(|p| p + Vector3::new(5.0, -3.0, 2.0)).collect();
         // Kabsch removes the translation -> RMSD ~ 0.
         assert!(rmsd(&shifted, &s).unwrap() < 1e-9);
         // ...but the no-fit RMSD is large.
@@ -306,7 +300,11 @@ mod tests {
             .filter(|(i, _)| *i != 2)
             .map(|(_, v)| *v)
             .fold(0.0, f64::max);
-        assert!(fluct[2] > others_max, "atom 2 RMSF {} not the largest", fluct[2]);
+        assert!(
+            fluct[2] > others_max,
+            "atom 2 RMSF {} not the largest",
+            fluct[2]
+        );
     }
 
     #[test]

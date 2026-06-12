@@ -77,12 +77,8 @@ fn place_rings(mol: &Molecule, rings: &RingInfo, pos: &mut [[f64; 2]], placed: &
                     continue;
                 }
                 // does this ring share ≥2 placed atoms with the system?
-                let shared: Vec<usize> = ring
-                    .atoms
-                    .iter()
-                    .copied()
-                    .filter(|&a| placed[a])
-                    .collect();
+                let shared: Vec<usize> =
+                    ring.atoms.iter().copied().filter(|&a| placed[a]).collect();
                 if shared.len() >= 2 {
                     place_polygon(&ring.atoms, Some(&shared), pos, placed);
                     ring_done[ri] = true;
@@ -134,17 +130,11 @@ fn place_polygon(
             // centre of the new polygon, pushed along the normal away
             // from the existing ring system
             let apothem = (radius * radius - (elen / 2.0).powi(2)).max(0.0).sqrt();
-            let mut center = [
-                mid[0] + normal[0] * apothem,
-                mid[1] + normal[1] * apothem,
-            ];
+            let mut center = [mid[0] + normal[0] * apothem, mid[1] + normal[1] * apothem];
             // ensure the centre is on the empty side: if any other
             // placed atom is closer to `center` than to the mirror,
             // flip
-            let mirror = [
-                mid[0] - normal[0] * apothem,
-                mid[1] - normal[1] * apothem,
-            ];
+            let mirror = [mid[0] - normal[0] * apothem, mid[1] - normal[1] * apothem];
             let crowd = |c: [f64; 2]| -> f64 {
                 pos.iter()
                     .enumerate()
@@ -203,8 +193,7 @@ fn normalize_angle(mut a: f64) -> f64 {
 fn place_chains(mol: &Molecule, pos: &mut [[f64; 2]], placed: &mut [bool]) {
     let n = mol.atoms.len();
     // BFS queue of placed atoms whose neighbours still need positions
-    let mut queue: std::collections::VecDeque<usize> =
-        (0..n).filter(|&i| placed[i]).collect();
+    let mut queue: std::collections::VecDeque<usize> = (0..n).filter(|&i| placed[i]).collect();
     // if nothing placed yet (acyclic), seed atom 0 at the origin
     if queue.is_empty() && n > 0 {
         pos[0] = [0.0, 0.0];

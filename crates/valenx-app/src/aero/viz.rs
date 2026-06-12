@@ -50,12 +50,8 @@ pub fn build_flow_viz(
     match field {
         FlowField::SurfaceCp => surface_viz(result, true),
         FlowField::SkinFriction => surface_viz(result, false),
-        FlowField::VelocityMagnitude => {
-            cutplane_viz(result, field, cut_axis, cut_fraction)
-        }
-        FlowField::PressureSlice => {
-            cutplane_viz(result, field, cut_axis, cut_fraction)
-        }
+        FlowField::VelocityMagnitude => cutplane_viz(result, field, cut_axis, cut_fraction),
+        FlowField::PressureSlice => cutplane_viz(result, field, cut_axis, cut_fraction),
         FlowField::VortexQ => cutplane_viz(result, field, cut_axis, cut_fraction),
     }
 }
@@ -75,9 +71,7 @@ pub fn build_flow_viz(
 fn surface_viz(result: &AeroResult, use_cp: bool) -> Result<FlowVizMesh, String> {
     let points = surface_field(&result.tunnel, &result.flow);
     if points.is_empty() {
-        return Err(
-            "the body voxelized to no surface faces — try a finer grid".to_string(),
-        );
+        return Err("the body voxelized to no surface faces — try a finer grid".to_string());
     }
     // Each face's quad spans one grid cell. Use the grid cell size as
     // the patch half-extent so the quads tile the staircased surface.
@@ -97,14 +91,9 @@ fn surface_viz(result: &AeroResult, use_cp: bool) -> Result<FlowVizMesh, String>
             mesh.nodes.push(corner);
         }
         // Two CCW triangles for the quad.
-        block.connectivity.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base,
-            base + 2,
-            base + 3,
-        ]);
+        block
+            .connectivity
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
         let scalar = if use_cp { p.cp } else { p.cf };
         // The same value on all four corners → a flat-shaded face.
         for _ in 0..4 {
@@ -193,11 +182,7 @@ fn vorticity_q(result: &AeroResult) -> valenx_aero::Field3 {
 /// `Vec`: each cell's value is carried onto all **four** of its corner
 /// nodes, so the colour reads flat per cell (matching the slice's
 /// cell-centred sampling) and `field.data.len() == mesh.nodes.len()`.
-fn slice_to_mesh(
-    slice: &FieldSlice,
-    g: &valenx_aero::Grid3,
-    coordinate: f64,
-) -> (Mesh, Vec<f64>) {
+fn slice_to_mesh(slice: &FieldSlice, g: &valenx_aero::Grid3, coordinate: f64) -> (Mesh, Vec<f64>) {
     let mut mesh = Mesh::new("aero-cut-plane");
     let mut block = ElementBlock::new(ElementType::Tri3);
     let mut values = Vec::new();
@@ -240,12 +225,15 @@ fn slice_to_mesh(
             let c = cell(a, b);
             let base = mesh.nodes.len() as u32;
             for &(su, sv) in &[(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)] {
-                mesh.nodes
-                    .push(c + (su * du) * au + (sv * dv) * av);
+                mesh.nodes.push(c + (su * du) * au + (sv * dv) * av);
             }
             // The cell-centred slice value, carried onto all four corner
             // nodes so the field stays node-aligned with the mesh.
-            let v = slice.values.get(a + b * slice.width).copied().unwrap_or(0.0);
+            let v = slice
+                .values
+                .get(a + b * slice.width)
+                .copied()
+                .unwrap_or(0.0);
             values.extend_from_slice(&[v, v, v, v]);
             block.connectivity.extend_from_slice(&[
                 base,
@@ -299,7 +287,10 @@ fn perpendicular_basis(normal: Vector3<f64>) -> (Vector3<f64>, Vector3<f64>) {
     } else {
         Vector3::new(0.0, 1.0, 0.0)
     };
-    let u = n.cross(&seed).try_normalize(1e-12).unwrap_or_else(Vector3::x);
+    let u = n
+        .cross(&seed)
+        .try_normalize(1e-12)
+        .unwrap_or_else(Vector3::x);
     let v = n.cross(&u).try_normalize(1e-12).unwrap_or_else(Vector3::y);
     (u, v)
 }
@@ -312,10 +303,7 @@ mod tests {
     /// A converged solve over a small box — the fixture every viz test
     /// builds against.
     fn solved_box() -> AeroResult {
-        let body = box_body(
-            Vector3::new(-0.5, -0.5, -0.5),
-            Vector3::new(0.5, 0.5, 0.5),
-        );
+        let body = box_body(Vector3::new(-0.5, -0.5, -0.5), Vector3::new(0.5, 0.5, 0.5));
         let req = AeroRequest::new(20.0)
             .with_turbulence(TurbulenceModel::KEpsilon)
             .with_max_iterations(12);
@@ -351,8 +339,8 @@ mod tests {
     #[test]
     fn surface_cp_viz_paints_the_body_shell() {
         let result = solved_box();
-        let viz = build_flow_viz(&result, FlowField::SurfaceCp, CutAxis::Y, 0.5)
-            .expect("surface Cp viz");
+        let viz =
+            build_flow_viz(&result, FlowField::SurfaceCp, CutAxis::Y, 0.5).expect("surface Cp viz");
         // The mesh has triangles and the field has one value per node.
         assert!(!viz.mesh.nodes.is_empty());
         assert_eq!(viz.field.data.len(), viz.mesh.nodes.len());
@@ -380,9 +368,8 @@ mod tests {
     #[test]
     fn velocity_cutplane_viz_builds_a_grid_patch() {
         let result = solved_box();
-        let viz =
-            build_flow_viz(&result, FlowField::VelocityMagnitude, CutAxis::Y, 0.5)
-                .expect("velocity cut-plane viz");
+        let viz = build_flow_viz(&result, FlowField::VelocityMagnitude, CutAxis::Y, 0.5)
+            .expect("velocity cut-plane viz");
         assert!(!viz.mesh.nodes.is_empty());
         assert_eq!(viz.field.data.len(), viz.mesh.nodes.len());
         // A cut plane is a grid of cell quads — node count is a

@@ -625,8 +625,7 @@ pub fn rayleigh_pitot_ratio(mach: f64, gamma: f64) -> f64 {
     }
     let m2 = mach * mach;
     let total_term = ((gamma + 1.0) * m2 / 2.0).powf(gamma / (gamma - 1.0));
-    let shock_term =
-        ((gamma + 1.0) / (2.0 * gamma * m2 - (gamma - 1.0))).powf(1.0 / (gamma - 1.0));
+    let shock_term = ((gamma + 1.0) / (2.0 * gamma * m2 - (gamma - 1.0))).powf(1.0 / (gamma - 1.0));
     total_term * shock_term
 }
 
@@ -843,8 +842,7 @@ pub fn induced_drag_coefficient(
     {
         return 0.0;
     }
-    lift_coefficient * lift_coefficient
-        / (std::f64::consts::PI * span_efficiency * aspect_ratio)
+    lift_coefficient * lift_coefficient / (std::f64::consts::PI * span_efficiency * aspect_ratio)
 }
 
 /// The **maximum lift-to-drag ratio** `(L/D)_max = ½·√(π·e·AR / C_D0)` of a wing
@@ -881,8 +879,7 @@ impl AeroReport {
     pub fn from_result(result: &AeroResult) -> AeroReport {
         let coeff = &result.coefficients;
         let total_cd = coeff.cd.abs().max(1e-12);
-        let pressure_drag_fraction =
-            (coeff.cd_pressure / total_cd).clamp(0.0, 1.0);
+        let pressure_drag_fraction = (coeff.cd_pressure / total_cd).clamp(0.0, 1.0);
 
         let mut caveats = Vec::new();
         // The standing v1 caveat.
@@ -918,7 +915,11 @@ impl AeroReport {
         // Compressibility note.
         let regime = FlowRegime::classify(result.mach_number);
         if regime != FlowRegime::Incompressible {
-            caveats.push(format!("Mach {:.2}: {}", result.mach_number, regime.caveat()));
+            caveats.push(format!(
+                "Mach {:.2}: {}",
+                result.mach_number,
+                regime.caveat()
+            ));
         }
 
         AeroReport {
@@ -1030,26 +1031,17 @@ impl AeroReport {
             "  glide angle  : {:.2} deg\n",
             self.glide_angle_rad().to_degrees()
         ));
-        s.push_str(&format!(
-            "  drag area CdA: {:.4} m^2\n",
-            self.drag_area
-        ));
+        s.push_str(&format!("  drag area CdA: {:.4} m^2\n", self.drag_area));
         s.push_str(&format!(
             "  dynamic press: {:.1} Pa  (q_inf)\n",
             self.dynamic_pressure
         ));
-        s.push_str(&format!(
-            "  drag force   : {:.1} N\n",
-            self.drag_force()
-        ));
+        s.push_str(&format!("  drag force   : {:.1} N\n", self.drag_force()));
         s.push_str(&format!(
             "  ref area A   : {:.4} m^2\n",
             self.reference_area
         ));
-        s.push_str(&format!(
-            "  lift force   : {:.1} N\n",
-            self.lift_force()
-        ));
+        s.push_str(&format!("  lift force   : {:.1} N\n", self.lift_force()));
         s.push_str(&format!(
             "  resultant F  : {:.1} N\n",
             self.resultant_force()
@@ -1237,10 +1229,16 @@ mod tests {
         // γ = atan2(Cd, Cl): a body with positive drag descends at an angle
         // strictly between 0 and π.
         let g = report.glide_angle_rad();
-        assert!(g > 0.0 && g < std::f64::consts::PI && g.is_finite(), "γ {g}");
+        assert!(
+            g > 0.0 && g < std::f64::consts::PI && g.is_finite(),
+            "γ {g}"
+        );
         // For a lifting body, tan γ = D/L = 1/(L/D).
         if report.cl > 0.0 && report.lift_to_drag() > 0.0 {
-            assert!((g.tan() - 1.0 / report.lift_to_drag()).abs() < 1e-9, "tan γ = 1/(L/D)");
+            assert!(
+                (g.tan() - 1.0 / report.lift_to_drag()).abs() < 1e-9,
+                "tan γ = 1/(L/D)"
+            );
         }
         // It surfaces in the text dump.
         assert!(report.to_text().contains("glide angle"));
@@ -1266,7 +1264,7 @@ mod tests {
     fn finite_wing_lift_slope_reduces_below_the_section_value() {
         use std::f64::consts::PI;
         let a0 = 2.0 * PI; // thin-airfoil section slope, per radian
-        // AR = 6, e = 1: a = 2π / (1 + 2π/(π·6)) = 2π / (1 + 1/3) = 2π·0.75.
+                           // AR = 6, e = 1: a = 2π / (1 + 2π/(π·6)) = 2π / (1 + 1/3) = 2π·0.75.
         let a = finite_wing_lift_slope(a0, 6.0, 1.0);
         assert!((a - 2.0 * PI * 0.75).abs() < 1e-9, "AR=6 slope {a}");
         // A finite wing is always gentler than its 2-D section.
@@ -1274,7 +1272,10 @@ mod tests {
 
         // As AR → ∞ the downwash vanishes and the 2-D slope is recovered.
         let a_inf = finite_wing_lift_slope(a0, 1.0e6, 1.0);
-        assert!((a_inf - a0).abs() < 1e-3, "AR→∞ should recover a0, got {a_inf}");
+        assert!(
+            (a_inf - a0).abs() < 1e-3,
+            "AR→∞ should recover a0, got {a_inf}"
+        );
 
         // Monotonic: a higher-aspect-ratio wing has a steeper slope.
         assert!(finite_wing_lift_slope(a0, 12.0, 1.0) > finite_wing_lift_slope(a0, 6.0, 1.0));
@@ -1294,7 +1295,10 @@ mod tests {
         assert!((v - 27.36).abs() < 0.1, "stall speed {v} m/s");
         // By construction the lift at V_stall and C_Lmax exactly balances the weight.
         let lift = 0.5 * rho * v * v * s * cl_max;
-        assert!((lift - w).abs() < 1e-6, "L={lift} must equal W={w} at the stall");
+        assert!(
+            (lift - w).abs() < 1e-6,
+            "L={lift} must equal W={w} at the stall"
+        );
         // V_stall ∝ 1/√C_Lmax: a higher max lift coefficient lowers the stall speed.
         let v_flapped = stall_speed(w, s, rho, 2.0 * cl_max);
         assert!((v_flapped - v / 2.0_f64.sqrt()).abs() < 1e-9, "∝ 1/√C_Lmax");
@@ -1320,14 +1324,27 @@ mod tests {
         let expected = v / c * ld * ratio.ln();
         assert!((r - expected).abs() < 1e-6, "range {r} vs {expected}");
         // A sensible long-haul figure (within a few thousand km of 10,000).
-        assert!((6.0e6..1.4e7).contains(&r), "airliner range {:.0} km", r / 1e3);
+        assert!(
+            (6.0e6..1.4e7).contains(&r),
+            "airliner range {:.0} km",
+            r / 1e3
+        );
 
         // Burning no fuel (W₀ = W₁) gives zero range.
         assert_eq!(breguet_range(v, c, ld, 1.0), 0.0);
         // R ∝ L/D, ∝ V, and ∝ ln(W₀/W₁) (ratio → ratio² doubles the log).
-        assert!((breguet_range(v, c, 2.0 * ld, ratio) - 2.0 * r).abs() < 1e-6, "∝ L/D");
-        assert!((breguet_range(2.0 * v, c, ld, ratio) - 2.0 * r).abs() < 1e-6, "∝ V");
-        assert!((breguet_range(v, c, ld, ratio * ratio) - 2.0 * r).abs() < 1e-6, "∝ ln(W₀/W₁)");
+        assert!(
+            (breguet_range(v, c, 2.0 * ld, ratio) - 2.0 * r).abs() < 1e-6,
+            "∝ L/D"
+        );
+        assert!(
+            (breguet_range(2.0 * v, c, ld, ratio) - 2.0 * r).abs() < 1e-6,
+            "∝ V"
+        );
+        assert!(
+            (breguet_range(v, c, ld, ratio * ratio) - 2.0 * r).abs() < 1e-6,
+            "∝ ln(W₀/W₁)"
+        );
 
         // Non-physical inputs → 0 (including an unphysical W₁ > W₀).
         assert_eq!(breguet_range(v, 0.0, ld, ratio), 0.0);
@@ -1340,8 +1357,14 @@ mod tests {
     fn dynamic_pressure_ratio_is_half_gamma_mach_squared() {
         let g = 1.4;
         // q/p = ½γM²: worked values.
-        assert!((dynamic_pressure_ratio(1.0, g) - 0.7).abs() < 1e-12, "M=1 → γ/2 = 0.7");
-        assert!((dynamic_pressure_ratio(2.0, g) - 2.8).abs() < 1e-12, "M=2 → 2.8");
+        assert!(
+            (dynamic_pressure_ratio(1.0, g) - 0.7).abs() < 1e-12,
+            "M=1 → γ/2 = 0.7"
+        );
+        assert!(
+            (dynamic_pressure_ratio(2.0, g) - 2.8).abs() < 1e-12,
+            "M=2 → 2.8"
+        );
         assert!(dynamic_pressure_ratio(0.0, g).abs() < 1e-12, "M=0 → 0");
 
         // Quadratic in M (2× M → 4×) and linear in γ.
@@ -1359,7 +1382,10 @@ mod tests {
         let m = 0.01;
         let q_over_p = dynamic_pressure_ratio(m, g);
         let stag_excess = isentropic_stagnation_pressure_ratio(m, g) - 1.0;
-        assert!((q_over_p / stag_excess - 1.0).abs() < 1e-3, "q/p ≈ p₀/p − 1 as M→0");
+        assert!(
+            (q_over_p / stag_excess - 1.0).abs() < 1e-3,
+            "q/p ≈ p₀/p − 1 as M→0"
+        );
 
         // Non-physical input → 0.
         assert_eq!(dynamic_pressure_ratio(-1.0, g), 0.0);
@@ -1374,7 +1400,10 @@ mod tests {
         assert!((mach_angle(1.0) - PI / 2.0).abs() < 1e-12);
         // M = 2 → arcsin(0.5) = 30°; M = √2 → arcsin(1/√2) = 45°.
         assert!((mach_angle(2.0) - PI / 6.0).abs() < 1e-12, "M=2 → 30°");
-        assert!((mach_angle(2.0_f64.sqrt()) - PI / 4.0).abs() < 1e-12, "M=√2 → 45°");
+        assert!(
+            (mach_angle(2.0_f64.sqrt()) - PI / 4.0).abs() < 1e-12,
+            "M=√2 → 45°"
+        );
         // The cone narrows as Mach rises, and → 0 at hypersonic speed.
         assert!(mach_angle(5.0) < mach_angle(2.0), "narrows with Mach");
         assert!(mach_angle(1.0e6) < 1e-3, "→ 0 as M → ∞");
@@ -1392,9 +1421,18 @@ mod tests {
         // ν(1) = 0: no turning at the sonic line.
         assert!(prandtl_meyer_angle(1.0, g).abs() < 1e-12, "ν(1) = 0");
         // Standard expansion-table points (γ = 1.4), in degrees.
-        assert!((prandtl_meyer_angle(2.0, g).to_degrees() - 26.380).abs() < 1e-2, "ν(2) ≈ 26.38°");
-        assert!((prandtl_meyer_angle(3.0, g).to_degrees() - 49.757).abs() < 1e-2, "ν(3) ≈ 49.76°");
-        assert!((prandtl_meyer_angle(5.0, g).to_degrees() - 76.920).abs() < 1e-2, "ν(5) ≈ 76.92°");
+        assert!(
+            (prandtl_meyer_angle(2.0, g).to_degrees() - 26.380).abs() < 1e-2,
+            "ν(2) ≈ 26.38°"
+        );
+        assert!(
+            (prandtl_meyer_angle(3.0, g).to_degrees() - 49.757).abs() < 1e-2,
+            "ν(3) ≈ 49.76°"
+        );
+        assert!(
+            (prandtl_meyer_angle(5.0, g).to_degrees() - 76.920).abs() < 1e-2,
+            "ν(5) ≈ 76.92°"
+        );
         // Monotonically increasing in M for M > 1.
         let (a, b, c) = (
             prandtl_meyer_angle(1.5, g),
@@ -1406,9 +1444,15 @@ mod tests {
         // very large Mach number approaches from below (≈ 130.45° for air). The limit
         // is an independent closed form; the impl is the two-atan expression.
         let nu_max = 0.5 * PI * (((g + 1.0) / (g - 1.0)).sqrt() - 1.0);
-        assert!((nu_max.to_degrees() - 130.454).abs() < 1e-2, "ν_max ≈ 130.45°");
+        assert!(
+            (nu_max.to_degrees() - 130.454).abs() < 1e-2,
+            "ν_max ≈ 130.45°"
+        );
         let nu_big = prandtl_meyer_angle(1.0e6, g);
-        assert!(nu_big < nu_max && nu_big > 0.999 * nu_max, "ν(1e6) → ν_max⁻: {nu_big} vs {nu_max}");
+        assert!(
+            nu_big < nu_max && nu_big > 0.999 * nu_max,
+            "ν(1e6) → ν_max⁻: {nu_big} vs {nu_max}"
+        );
         // Subsonic / non-physical → 0 (no expansion fan).
         assert_eq!(prandtl_meyer_angle(0.5, g), 0.0);
         assert_eq!(prandtl_meyer_angle(2.0, 1.0), 0.0); // γ ≤ 1
@@ -1445,8 +1489,14 @@ mod tests {
         // Elliptical loading (e=1) is the theoretical minimum C_Di = C_L²/(π·AR),
         // and it is strictly less than the e=0.8 case.
         let cdi_ell = induced_drag_coefficient(0.5, 8.0, 1.0);
-        assert!((cdi_ell - 0.25 / (PI * 8.0)).abs() < 1e-12, "elliptical {cdi_ell}");
-        assert!(cdi_ell < cdi, "elliptical loading has the least induced drag");
+        assert!(
+            (cdi_ell - 0.25 / (PI * 8.0)).abs() < 1e-12,
+            "elliptical {cdi_ell}"
+        );
+        assert!(
+            cdi_ell < cdi,
+            "elliptical loading has the least induced drag"
+        );
         // Quadratic in C_L: doubling the lift coefficient quadruples induced drag.
         let base = induced_drag_coefficient(0.4, 8.0, 0.8);
         assert!(
@@ -1488,7 +1538,10 @@ mod tests {
         // drag is 2·C_D0 and (L/D)_max = C_L*/(2·C_D0).
         let cl_star = (PI * e * ar * cd0).sqrt();
         let cdi = induced_drag_coefficient(cl_star, ar, e);
-        assert!((cdi - cd0).abs() < 1e-12, "induced = parasite at the optimum: {cdi}");
+        assert!(
+            (cdi - cd0).abs() < 1e-12,
+            "induced = parasite at the optimum: {cdi}"
+        );
         assert!(
             (ld_max - cl_star / (2.0 * cd0)).abs() < 1e-9,
             "(L/D)_max = C_L*/(2·C_D0)"
@@ -1516,10 +1569,16 @@ mod tests {
         assert!((isentropic_stagnation_pressure_ratio(0.0, 1.4) - 1.0).abs() < 1e-12);
         // M = 1, γ = 1.4 → 1.2^3.5 ≈ 1.8929 (the sonic stagnation ratio for air).
         assert!((isentropic_stagnation_pressure_ratio(1.0, 1.4) - 1.2_f64.powf(3.5)).abs() < 1e-12);
-        assert!((isentropic_stagnation_pressure_ratio(1.0, 1.4) - 1.8929).abs() < 1e-3, "sonic ≈ 1.893");
+        assert!(
+            (isentropic_stagnation_pressure_ratio(1.0, 1.4) - 1.8929).abs() < 1e-3,
+            "sonic ≈ 1.893"
+        );
         // M = 2, γ = 1.4 → 1.8^3.5 ≈ 7.824.
         assert!((isentropic_stagnation_pressure_ratio(2.0, 1.4) - 1.8_f64.powf(3.5)).abs() < 1e-12);
-        assert!((isentropic_stagnation_pressure_ratio(2.0, 1.4) - 7.824).abs() < 1e-2, "M=2 ≈ 7.82");
+        assert!(
+            (isentropic_stagnation_pressure_ratio(2.0, 1.4) - 7.824).abs() < 1e-2,
+            "M=2 ≈ 7.82"
+        );
         // Monotonic increasing in Mach, and always ≥ 1.
         let (a, b, c) = (
             isentropic_stagnation_pressure_ratio(0.5, 1.4),
@@ -1530,12 +1589,18 @@ mod tests {
         // Low-Mach limit reduces to 1 + (γ/2)·M² (the incompressible dynamic-pressure form).
         let m = 0.05;
         let exact = isentropic_stagnation_pressure_ratio(m, 1.4);
-        assert!((exact - (1.0 + 0.5 * 1.4 * m * m)).abs() < 1e-4, "low-M ≈ 1+(γ/2)M²");
+        assert!(
+            (exact - (1.0 + 0.5 * 1.4 * m * m)).abs() < 1e-4,
+            "low-M ≈ 1+(γ/2)M²"
+        );
         // Non-physical input → the no-correction identity 1.0.
         assert_eq!(isentropic_stagnation_pressure_ratio(-0.5, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_pressure_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_pressure_ratio(f64::NAN, 1.4), 1.0);
-        assert_eq!(isentropic_stagnation_pressure_ratio(2.0, f64::INFINITY), 1.0);
+        assert_eq!(
+            isentropic_stagnation_pressure_ratio(2.0, f64::INFINITY),
+            1.0
+        );
     }
 
     #[test]
@@ -1567,7 +1632,10 @@ mod tests {
         assert_eq!(isentropic_stagnation_temperature_ratio(-0.5, 1.4), 1.0);
         assert_eq!(isentropic_stagnation_temperature_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(isentropic_stagnation_temperature_ratio(f64::NAN, 1.4), 1.0);
-        assert_eq!(isentropic_stagnation_temperature_ratio(2.0, f64::INFINITY), 1.0);
+        assert_eq!(
+            isentropic_stagnation_temperature_ratio(2.0, f64::INFINITY),
+            1.0
+        );
     }
 
     #[test]
@@ -1656,10 +1724,16 @@ mod tests {
         assert!((isentropic_stagnation_density_ratio(0.0, 1.4) - 1.0).abs() < 1e-12);
         // M = 1, γ = 1.4 → 1.2^2.5 ≈ 1.5774 (the sonic stagnation density ratio for air).
         assert!((isentropic_stagnation_density_ratio(1.0, 1.4) - 1.2_f64.powf(2.5)).abs() < 1e-12);
-        assert!((isentropic_stagnation_density_ratio(1.0, 1.4) - 1.5774).abs() < 1e-3, "sonic ≈ 1.577");
+        assert!(
+            (isentropic_stagnation_density_ratio(1.0, 1.4) - 1.5774).abs() < 1e-3,
+            "sonic ≈ 1.577"
+        );
         // M = 2, γ = 1.4 → 1.8^2.5 ≈ 4.347.
         assert!((isentropic_stagnation_density_ratio(2.0, 1.4) - 1.8_f64.powf(2.5)).abs() < 1e-12);
-        assert!((isentropic_stagnation_density_ratio(2.0, 1.4) - 4.347).abs() < 1e-2, "M=2 ≈ 4.35");
+        assert!(
+            (isentropic_stagnation_density_ratio(2.0, 1.4) - 4.347).abs() < 1e-2,
+            "M=2 ≈ 4.35"
+        );
         // Monotone increasing in Mach, and always ≥ 1.
         let (a, b, c) = (
             isentropic_stagnation_density_ratio(0.5, 1.4),
@@ -1673,9 +1747,18 @@ mod tests {
             let rho = isentropic_stagnation_density_ratio(m, 1.4);
             let t_ratio = isentropic_stagnation_temperature_ratio(m, 1.4);
             let p_ratio = isentropic_stagnation_pressure_ratio(m, 1.4);
-            assert!((rho - t_ratio.powf(1.0 / 0.4)).abs() / rho < 1e-12, "ρ0/ρ=(T0/T)^(1/(γ−1)) at M={m}");
-            assert!((rho - p_ratio.powf(1.0 / 1.4)).abs() / rho < 1e-12, "ρ0/ρ=(p0/p)^(1/γ) at M={m}");
-            assert!((p_ratio - rho.powf(1.4)).abs() / p_ratio < 1e-12, "p0/p=(ρ0/ρ)^γ at M={m}");
+            assert!(
+                (rho - t_ratio.powf(1.0 / 0.4)).abs() / rho < 1e-12,
+                "ρ0/ρ=(T0/T)^(1/(γ−1)) at M={m}"
+            );
+            assert!(
+                (rho - p_ratio.powf(1.0 / 1.4)).abs() / rho < 1e-12,
+                "ρ0/ρ=(p0/p)^(1/γ) at M={m}"
+            );
+            assert!(
+                (p_ratio - rho.powf(1.4)).abs() / p_ratio < 1e-12,
+                "p0/p=(ρ0/ρ)^γ at M={m}"
+            );
         }
         // Non-physical input → the no-compression identity 1.0.
         assert_eq!(isentropic_stagnation_density_ratio(-0.5, 1.4), 1.0);
@@ -1737,21 +1820,42 @@ mod tests {
     #[test]
     fn isentropic_area_ratio_matches_compressible_flow_tables() {
         // M = 1 is the sonic throat: A/A* = 1 exactly.
-        assert!((isentropic_area_ratio(1.0, 1.4) - 1.0).abs() < 1e-12, "throat A/A* = 1");
+        assert!(
+            (isentropic_area_ratio(1.0, 1.4) - 1.0).abs() < 1e-12,
+            "throat A/A* = 1"
+        );
         // Standard compressible-flow table points (γ = 1.4).
-        assert!((isentropic_area_ratio(2.0, 1.4) - 1.6875).abs() < 1e-3, "M=2 → 1.6875");
-        assert!((isentropic_area_ratio(3.0, 1.4) - 4.2346).abs() < 1e-3, "M=3 → 4.2346");
-        assert!((isentropic_area_ratio(0.5, 1.4) - 1.3398).abs() < 1e-3, "M=0.5 → 1.3398");
+        assert!(
+            (isentropic_area_ratio(2.0, 1.4) - 1.6875).abs() < 1e-3,
+            "M=2 → 1.6875"
+        );
+        assert!(
+            (isentropic_area_ratio(3.0, 1.4) - 4.2346).abs() < 1e-3,
+            "M=3 → 4.2346"
+        );
+        assert!(
+            (isentropic_area_ratio(0.5, 1.4) - 1.3398).abs() < 1e-3,
+            "M=0.5 → 1.3398"
+        );
         // A/A* has its MINIMUM (= 1) at the throat and rises on BOTH sides — the same
         // area ratio serves one subsonic and one supersonic solution.
         let throat = isentropic_area_ratio(1.0, 1.4);
-        assert!(isentropic_area_ratio(0.9, 1.4) > throat, "subsonic side rises above the throat");
-        assert!(isentropic_area_ratio(1.1, 1.4) > throat, "supersonic side rises above the throat");
+        assert!(
+            isentropic_area_ratio(0.9, 1.4) > throat,
+            "subsonic side rises above the throat"
+        );
+        assert!(
+            isentropic_area_ratio(1.1, 1.4) > throat,
+            "supersonic side rises above the throat"
+        );
         // Diverges as M → 0 (an infinite reservoir); non-physical → ∞.
         assert!(isentropic_area_ratio(0.0, 1.4).is_infinite(), "M→0 → ∞");
         assert!(isentropic_area_ratio(-1.0, 1.4).is_infinite(), "M<0 → ∞");
         assert!(isentropic_area_ratio(2.0, 1.0).is_infinite(), "γ≤1 → ∞");
-        assert!(isentropic_area_ratio(f64::NAN, 1.4).is_infinite(), "non-finite M → ∞");
+        assert!(
+            isentropic_area_ratio(f64::NAN, 1.4).is_infinite(),
+            "non-finite M → ∞"
+        );
         // STRONG non-tautological cross-check via mass conservation ρAV = ρ*A*V*:
         //   A/A* = (ρ*/ρ)·(1/M)·√(T*/T) = [ρ0/ρ(M) / ρ0/ρ*(1)]·(1/M)·√((2/(γ+1))·T0/T),
         // composing the isentropic density ratio #175 and temperature ratio #169 — an
@@ -1778,13 +1882,25 @@ mod tests {
         // The choked peak FF(1) = √γ·(2/(γ+1))^((γ+1)/(2(γ−1))) ≈ 0.6847 for air,
         // re-derived here via the (2/(γ+1))^b form (the impl uses √γ·M·(…)^(−b)).
         let choke = g.sqrt() * (2.0 / (g + 1.0)).powf((g + 1.0) / (2.0 * (g - 1.0)));
-        assert!((mass_flow_function(1.0, g) - choke).abs() < 1e-12, "FF(1) = choke constant");
-        assert!((mass_flow_function(1.0, g) - 0.684731).abs() < 1e-5, "FF(1) ≈ 0.6847");
+        assert!(
+            (mass_flow_function(1.0, g) - choke).abs() < 1e-12,
+            "FF(1) = choke constant"
+        );
+        assert!(
+            (mass_flow_function(1.0, g) - 0.684731).abs() < 1e-5,
+            "FF(1) ≈ 0.6847"
+        );
         // FF is MAXIMISED at M = 1 — the choking condition: a converging duct cannot
         // pass more than the sonic-throat flux. Both branches sit below the peak.
         let peak = mass_flow_function(1.0, g);
-        assert!(mass_flow_function(0.5, g) < peak, "subsonic below the choke peak");
-        assert!(mass_flow_function(2.0, g) < peak, "supersonic below the choke peak");
+        assert!(
+            mass_flow_function(0.5, g) < peak,
+            "subsonic below the choke peak"
+        );
+        assert!(
+            mass_flow_function(2.0, g) < peak,
+            "supersonic below the choke peak"
+        );
         assert!(
             mass_flow_function(0.9, g) < peak && mass_flow_function(1.1, g) < peak,
             "peak is at M = 1"
@@ -1812,9 +1928,15 @@ mod tests {
         let g = 1.4;
         // M* = 0 at rest; M* = 1 exactly at the sonic point (V = a = a*).
         assert!(characteristic_mach(0.0, g).abs() < 1e-12, "M*(0) = 0");
-        assert!((characteristic_mach(1.0, g) - 1.0).abs() < 1e-12, "M*(1) = 1");
+        assert!(
+            (characteristic_mach(1.0, g) - 1.0).abs() < 1e-12,
+            "M*(1) = 1"
+        );
         // Worked point: M = 2 → M* = 2·√(2.4/3.6) ≈ 1.633.
-        assert!((characteristic_mach(2.0, g) - 1.63299).abs() < 1e-4, "M*(2) ≈ 1.633");
+        assert!(
+            (characteristic_mach(2.0, g) - 1.63299).abs() < 1e-4,
+            "M*(2) ≈ 1.633"
+        );
         // M* labels subsonic/supersonic the same way M does (crosses 1 with M).
         assert!(
             characteristic_mach(0.5, g) < 1.0 && characteristic_mach(3.0, g) > 1.0,
@@ -1822,18 +1944,27 @@ mod tests {
         );
         // Monotone in M, and SATURATES at the finite limit √((γ+1)/(γ−1)) (≈ 2.449 for
         // air) as M → ∞ — unlike the unbounded ordinary Mach number.
-        assert!(characteristic_mach(1.5, g) < characteristic_mach(2.5, g), "monotone in M");
+        assert!(
+            characteristic_mach(1.5, g) < characteristic_mach(2.5, g),
+            "monotone in M"
+        );
         let limit = ((g + 1.0) / (g - 1.0)).sqrt();
         assert!((limit - 6.0_f64.sqrt()).abs() < 1e-12, "limit = √6 for air");
         let m_big = characteristic_mach(1.0e6, g);
-        assert!(m_big < limit && m_big > 0.999 * limit, "M*(1e6) → √6⁻: {m_big} vs {limit}");
+        assert!(
+            m_big < limit && m_big > 0.999 * limit,
+            "M*(1e6) → √6⁻: {m_big} vs {limit}"
+        );
         // STRONG cross-check — the PRANDTL relation across a normal shock M₁*·M₂* = 1,
         // with M₂ = normal_shock_downstream_mach(M₁) (#181). Ties #223 to #181: M* via
         // its closed form, M₂ via the Rankine–Hugoniot relation — different derivations.
         for &m1 in &[1.2_f64, 1.5, 2.0, 3.0, 5.0] {
             let m2 = normal_shock_downstream_mach(m1, g);
             let product = characteristic_mach(m1, g) * characteristic_mach(m2, g);
-            assert!((product - 1.0).abs() < 1e-9, "M1*·M2* = 1 at M1={m1}: got {product}");
+            assert!(
+                (product - 1.0).abs() < 1e-9,
+                "M1*·M2* = 1 at M1={m1}: got {product}"
+            );
         }
         // Non-physical input → 0.
         assert_eq!(characteristic_mach(-1.0, g), 0.0);
@@ -1849,14 +1980,23 @@ mod tests {
         // Worked points against the normal-shock tables (γ = 1.4):
         // M1 = 2 → M2² = 1.8/5.4 = 1/3 → M2 ≈ 0.5774.
         assert!((normal_shock_downstream_mach(2.0, 1.4) - (1.0_f64 / 3.0).sqrt()).abs() < 1e-12);
-        assert!((normal_shock_downstream_mach(2.0, 1.4) - 0.5774).abs() < 1e-3, "M1=2 → 0.5774");
+        assert!(
+            (normal_shock_downstream_mach(2.0, 1.4) - 0.5774).abs() < 1e-3,
+            "M1=2 → 0.5774"
+        );
         // M1 = 3 → M2 ≈ 0.4752.
-        assert!((normal_shock_downstream_mach(3.0, 1.4) - 0.4752).abs() < 1e-3, "M1=3 → 0.4752");
+        assert!(
+            (normal_shock_downstream_mach(3.0, 1.4) - 0.4752).abs() < 1e-3,
+            "M1=3 → 0.4752"
+        );
         // A normal shock is always supersonic → subsonic: M2 < 1 for M1 > 1, and
         // the downstream Mach falls as the shock strengthens.
         let m_15 = normal_shock_downstream_mach(1.5, 1.4);
         let m_5 = normal_shock_downstream_mach(5.0, 1.4);
-        assert!(m_15 < 1.0 && m_5 < 1.0 && m_5 < m_15, "M2 < 1 and falls with M1: {m_15} {m_5}");
+        assert!(
+            m_15 < 1.0 && m_5 < 1.0 && m_5 < m_15,
+            "M2 < 1 and falls with M1: {m_15} {m_5}"
+        );
         // Strong-shock limit M1 → ∞: M2 → √((γ−1)/2γ) ≈ 0.378, approached from above.
         let limit = (0.4_f64 / 2.8).sqrt();
         let m_big = normal_shock_downstream_mach(1.0e6, 1.4);
@@ -1878,17 +2018,29 @@ mod tests {
         // M1 = 1 is the no-shock limit: no static-pressure jump.
         assert!((normal_shock_pressure_ratio(1.0, 1.4) - 1.0).abs() < 1e-12);
         // Worked table points (γ = 1.4): M1 = 2 → 4.5 (= 1 + (2.8/2.4)·3), M1 = 3 → 10.33.
-        assert!((normal_shock_pressure_ratio(2.0, 1.4) - 4.5).abs() < 1e-12, "M1=2 → 4.5");
-        assert!((normal_shock_pressure_ratio(3.0, 1.4) - 10.333).abs() < 1e-3, "M1=3 → 10.33");
+        assert!(
+            (normal_shock_pressure_ratio(2.0, 1.4) - 4.5).abs() < 1e-12,
+            "M1=2 → 4.5"
+        );
+        assert!(
+            (normal_shock_pressure_ratio(3.0, 1.4) - 10.333).abs() < 1e-3,
+            "M1=3 → 10.33"
+        );
         // A shock always compresses: p2/p1 > 1 and strictly increasing for M1 > 1.
         let (a, b, c) = (
             normal_shock_pressure_ratio(1.5, 1.4),
             normal_shock_pressure_ratio(2.5, 1.4),
             normal_shock_pressure_ratio(5.0, 1.4),
         );
-        assert!(a > 1.0 && a < b && b < c, "compresses & rises with M1: {a} {b} {c}");
+        assert!(
+            a > 1.0 && a < b && b < c,
+            "compresses & rises with M1: {a} {b} {c}"
+        );
         // Grows without bound (∝ M1²) — unlike the density jump's finite ceiling.
-        assert!(normal_shock_pressure_ratio(10.0, 1.4) > 100.0, "unbounded growth");
+        assert!(
+            normal_shock_pressure_ratio(10.0, 1.4) > 100.0,
+            "unbounded growth"
+        );
         // Subsonic/sonic upstream: no shock forms, the static pressure is unchanged.
         assert_eq!(normal_shock_pressure_ratio(0.5, 1.4), 1.0);
         // Non-physical input → the no-jump identity 1.0.
@@ -1903,20 +2055,32 @@ mod tests {
         // M1 = 1 is the no-shock limit: no density jump.
         assert!((normal_shock_density_ratio(1.0, 1.4) - 1.0).abs() < 1e-12);
         // Worked table points (γ = 1.4): M1 = 2 → 9.6/3.6 = 8/3 ≈ 2.667, M1 = 3 → 3.857.
-        assert!((normal_shock_density_ratio(2.0, 1.4) - 8.0 / 3.0).abs() < 1e-12, "M1=2 → 8/3");
-        assert!((normal_shock_density_ratio(3.0, 1.4) - 3.857).abs() < 1e-3, "M1=3 → 3.857");
+        assert!(
+            (normal_shock_density_ratio(2.0, 1.4) - 8.0 / 3.0).abs() < 1e-12,
+            "M1=2 → 8/3"
+        );
+        assert!(
+            (normal_shock_density_ratio(3.0, 1.4) - 3.857).abs() < 1e-3,
+            "M1=3 → 3.857"
+        );
         // A shock always compresses: ρ2/ρ1 > 1 and strictly increasing for M1 > 1.
         let (a, b, c) = (
             normal_shock_density_ratio(1.5, 1.4),
             normal_shock_density_ratio(2.5, 1.4),
             normal_shock_density_ratio(5.0, 1.4),
         );
-        assert!(a > 1.0 && a < b && b < c, "compresses & rises with M1: {a} {b} {c}");
+        assert!(
+            a > 1.0 && a < b && b < c,
+            "compresses & rises with M1: {a} {b} {c}"
+        );
         // Strong-shock ceiling M1 → ∞: ρ2/ρ1 → (γ+1)/(γ−1) = 6, approached from BELOW
         // (the finite limit that distinguishes it from the unbounded pressure jump).
         let limit = 2.4 / 0.4; // (γ+1)/(γ−1) = 6 for air
         let r_big = normal_shock_density_ratio(1.0e4, 1.4);
-        assert!((r_big - limit).abs() < 1e-3 && r_big < limit, "strong-shock ceiling 6, got {r_big}");
+        assert!(
+            (r_big - limit).abs() < 1e-3 && r_big < limit,
+            "strong-shock ceiling 6, got {r_big}"
+        );
         // Subsonic/sonic upstream: no shock forms, the density is unchanged.
         assert_eq!(normal_shock_density_ratio(0.5, 1.4), 1.0);
         // Non-physical input → the no-jump identity 1.0.
@@ -1945,16 +2109,21 @@ mod tests {
             normal_shock_temperature_ratio(2.5, 1.4),
             normal_shock_temperature_ratio(5.0, 1.4),
         );
-        assert!(a > 1.0 && a < b && b < c, "heats & rises with M1: {a} {b} {c}");
+        assert!(
+            a > 1.0 && a < b && b < c,
+            "heats & rises with M1: {a} {b} {c}"
+        );
         // Grows without bound (∝ M1²) — exceeds the density jump's finite ceiling (6).
-        assert!(normal_shock_temperature_ratio(10.0, 1.4) > 8.0, "unbounded growth");
+        assert!(
+            normal_shock_temperature_ratio(10.0, 1.4) > 8.0,
+            "unbounded growth"
+        );
         // STRONG non-tautological cross-check: by the ideal-gas law T = p/(ρR), the
         // temperature jump is the quotient of the pressure and density jumps. This
         // impl uses the single closed form in M; the check composes the OTHER two
         // Rankine–Hugoniot relations (#187, #193) — different code paths.
         for &m in &[1.2_f64, 1.5, 2.0, 3.0, 5.0, 8.0] {
-            let expected =
-                normal_shock_pressure_ratio(m, 1.4) / normal_shock_density_ratio(m, 1.4);
+            let expected = normal_shock_pressure_ratio(m, 1.4) / normal_shock_density_ratio(m, 1.4);
             assert!(
                 (normal_shock_temperature_ratio(m, 1.4) - expected).abs() < 1e-12,
                 "T2/T1 = (p2/p1)/(ρ2/ρ1) at M={m}"
@@ -2027,16 +2196,25 @@ mod tests {
         assert_eq!(normal_shock_stagnation_pressure_ratio(2.0, 1.0), 1.0); // γ ≤ 1
         assert_eq!(normal_shock_stagnation_pressure_ratio(f64::NAN, 1.4), 1.0);
         assert_eq!(normal_shock_stagnation_pressure_ratio(-1.0, 1.4), 1.0);
-        assert_eq!(normal_shock_stagnation_pressure_ratio(2.0, f64::INFINITY), 1.0);
+        assert_eq!(
+            normal_shock_stagnation_pressure_ratio(2.0, f64::INFINITY),
+            1.0
+        );
     }
 
     #[test]
     fn normal_shock_entropy_rise_matches_the_second_law_total_pressure_loss() {
         let g = 1.4;
         // M = 1: a vanishingly weak shock is reversible → no entropy generated.
-        assert!(normal_shock_entropy_rise(1.0, g).abs() < 1e-12, "M=1 → Δs/R = 0");
+        assert!(
+            normal_shock_entropy_rise(1.0, g).abs() < 1e-12,
+            "M=1 → Δs/R = 0"
+        );
         // Worked point M=2, γ=1.4: Δs/R = (γ/(γ−1))·ln(T2/T1) − ln(p2/p1) ≈ 0.3273.
-        assert!((normal_shock_entropy_rise(2.0, g) - 0.3273).abs() < 1e-3, "M=2 → Δs/R ≈ 0.3273");
+        assert!(
+            (normal_shock_entropy_rise(2.0, g) - 0.3273).abs() < 1e-3,
+            "M=2 → Δs/R ≈ 0.3273"
+        );
         // Monotone increasing with shock strength (a stronger shock generates more
         // entropy — the thermodynamic reason it recovers less total pressure).
         let (s15, s2, s3, s5) = (
@@ -2045,12 +2223,21 @@ mod tests {
             normal_shock_entropy_rise(3.0, g),
             normal_shock_entropy_rise(5.0, g),
         );
-        assert!(0.0 < s15 && s15 < s2 && s2 < s3 && s3 < s5, "monotone: {s15} {s2} {s3} {s5}");
+        assert!(
+            0.0 < s15 && s15 < s2 && s2 < s3 && s3 < s5,
+            "monotone: {s15} {s2} {s3} {s5}"
+        );
         // STRONG non-tautological cross-check via the second-law identity
         // Δs/R = −ln(p02/p01): the impl uses the static T/p jumps, this uses the
         // independently-derived stagnation-pressure recovery — two separate closed
         // forms (and a different γ too, monatomic 5/3, to show it is not air-specific).
-        for &(m, gg) in &[(1.5_f64, 1.4_f64), (2.0, 1.4), (3.0, 1.4), (5.0, 1.4), (2.5, 5.0 / 3.0)] {
+        for &(m, gg) in &[
+            (1.5_f64, 1.4_f64),
+            (2.0, 1.4),
+            (3.0, 1.4),
+            (5.0, 1.4),
+            (2.5, 5.0 / 3.0),
+        ] {
             let from_static = normal_shock_entropy_rise(m, gg);
             let from_stagnation = -normal_shock_stagnation_pressure_ratio(m, gg).ln();
             assert!(
@@ -2079,10 +2266,19 @@ mod tests {
             );
         }
         // Standard supersonic-pitot table points (γ = 1.4): M=2 → 5.640, M=3 → 12.06.
-        assert!((rayleigh_pitot_ratio(2.0, g) - 5.640).abs() < 1e-2, "M=2 → 5.640");
-        assert!((rayleigh_pitot_ratio(3.0, g) - 12.061).abs() < 1e-2, "M=3 → 12.06");
+        assert!(
+            (rayleigh_pitot_ratio(2.0, g) - 5.640).abs() < 1e-2,
+            "M=2 → 5.640"
+        );
+        assert!(
+            (rayleigh_pitot_ratio(3.0, g) - 12.061).abs() < 1e-2,
+            "M=3 → 12.06"
+        );
         // Monotonically increasing with M (a pitot reads ever-higher overpressure).
-        assert!(rayleigh_pitot_ratio(1.5, g) < rayleigh_pitot_ratio(2.5, g), "rises with M");
+        assert!(
+            rayleigh_pitot_ratio(1.5, g) < rayleigh_pitot_ratio(2.5, g),
+            "rises with M"
+        );
         // STRONG cross-check: p₀₂/p₁ = (p₀₂/p₀₁)·(p₀₁/p₁) — the across-shock total
         // recovery (#205) times the post-shock isentropic rise (#163), for several
         // M > 1. The impl uses the combined [(γ+1)M²/2]^… closed form; the check
@@ -2105,25 +2301,42 @@ mod tests {
     fn rayleigh_flow_total_temperature_ratio_matches_heat_addition_tables() {
         let g = 1.4;
         // Thermal-choking limit: T0/T0* = 1 exactly at M = 1 (the maximum).
-        assert!((rayleigh_flow_total_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(
+            (rayleigh_flow_total_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
         // No flow at rest.
-        assert!(rayleigh_flow_total_temperature_ratio(0.0, g).abs() < 1e-12, "M=0 → 0");
+        assert!(
+            rayleigh_flow_total_temperature_ratio(0.0, g).abs() < 1e-12,
+            "M=0 → 0"
+        );
         // Standard Rayleigh-flow table points (γ = 1.4).
-        assert!((rayleigh_flow_total_temperature_ratio(2.0, g) - 0.7934).abs() < 1e-3, "M=2 → 0.7934");
-        assert!((rayleigh_flow_total_temperature_ratio(0.5, g) - 0.6914).abs() < 1e-3, "M=0.5 → 0.6914");
-        assert!((rayleigh_flow_total_temperature_ratio(3.0, g) - 0.6540).abs() < 1e-3, "M=3 → 0.6540");
+        assert!(
+            (rayleigh_flow_total_temperature_ratio(2.0, g) - 0.7934).abs() < 1e-3,
+            "M=2 → 0.7934"
+        );
+        assert!(
+            (rayleigh_flow_total_temperature_ratio(0.5, g) - 0.6914).abs() < 1e-3,
+            "M=0.5 → 0.6914"
+        );
+        assert!(
+            (rayleigh_flow_total_temperature_ratio(3.0, g) - 0.6540).abs() < 1e-3,
+            "M=3 → 0.6540"
+        );
         // The peak is at M = 1: both subsonic and supersonic branches sit below 1.
         let peak = rayleigh_flow_total_temperature_ratio(1.0, g);
         for m in [0.3_f64, 0.5, 0.9, 1.1, 2.0, 4.0] {
-            assert!(rayleigh_flow_total_temperature_ratio(m, g) < peak, "T0/T0* < 1 at M={m}");
+            assert!(
+                rayleigh_flow_total_temperature_ratio(m, g) < peak,
+                "T0/T0* < 1 at M={m}"
+            );
         }
         // STRONG non-tautological cross-check: the (1+(γ−1)/2·M²) factor IS the
         // isentropic T0/T, so T0/T0* = 2(γ+1)M²·[T0/T](M)/(1+γM²)² composing the
         // independently-implemented isentropic_stagnation_temperature_ratio.
         for m in [0.3_f64, 0.7, 1.0, 1.5, 2.0, 3.5] {
             let denom = 1.0 + g * m * m;
-            let expected = 2.0 * (g + 1.0) * m * m
-                * isentropic_stagnation_temperature_ratio(m, g)
+            let expected = 2.0 * (g + 1.0) * m * m * isentropic_stagnation_temperature_ratio(m, g)
                 / (denom * denom);
             assert!(
                 (rayleigh_flow_total_temperature_ratio(m, g) - expected).abs() / expected < 1e-12,
@@ -2134,17 +2347,29 @@ mod tests {
         assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, 1.0), 0.0); // γ ≤ 1
         assert_eq!(rayleigh_flow_total_temperature_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_total_temperature_ratio(f64::NAN, g), 0.0); // non-finite M
-        assert_eq!(rayleigh_flow_total_temperature_ratio(2.0, f64::INFINITY), 0.0); // non-finite γ
+        assert_eq!(
+            rayleigh_flow_total_temperature_ratio(2.0, f64::INFINITY),
+            0.0
+        ); // non-finite γ
     }
 
     #[test]
     fn rayleigh_flow_total_pressure_ratio_threads_the_pressure_ratio() {
         let g = 1.4;
         // Sonic reference: p₀/p₀* = 1 exactly at M = 1.
-        assert!((rayleigh_flow_total_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(
+            (rayleigh_flow_total_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
         // STRONG cross-check threading rayleigh_flow_pressure_ratio:
         // p₀/p₀* = (p/p*)·((2+(γ−1)M²)/(γ+1))^(γ/(γ−1)).
-        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+        for &(m, gam) in &[
+            (0.3_f64, 1.4_f64),
+            (0.5, 1.4),
+            (2.0, 1.4),
+            (4.0, 1.3),
+            (0.8, 1.667),
+        ] {
             let expected = rayleigh_flow_pressure_ratio(m, gam)
                 * ((2.0 + (gam - 1.0) * m * m) / (gam + 1.0)).powf(gam / (gam - 1.0));
             assert!(
@@ -2153,8 +2378,14 @@ mod tests {
             );
         }
         // Standard Rayleigh-table values (γ = 1.4): M=0.5 → 1.1141, M=2 → 1.5031.
-        assert!((rayleigh_flow_total_pressure_ratio(0.5, g) - 1.1141).abs() < 1e-3, "M=0.5 table");
-        assert!((rayleigh_flow_total_pressure_ratio(2.0, g) - 1.5031).abs() < 1e-3, "M=2 table");
+        assert!(
+            (rayleigh_flow_total_pressure_ratio(0.5, g) - 1.1141).abs() < 1e-3,
+            "M=0.5 table"
+        );
+        assert!(
+            (rayleigh_flow_total_pressure_ratio(2.0, g) - 1.5031).abs() < 1e-3,
+            "M=2 table"
+        );
         // p₀/p₀* ≥ 1 with the minimum at the sonic point (heat addition erodes p₀).
         assert!(
             rayleigh_flow_total_pressure_ratio(0.5, g) > 1.0
@@ -2171,9 +2402,18 @@ mod tests {
     fn rayleigh_flow_velocity_ratio_threads_the_pressure_ratio() {
         let g = 1.4;
         // Sonic reference: V/V* = 1 exactly at M = 1.
-        assert!((rayleigh_flow_velocity_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(
+            (rayleigh_flow_velocity_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
         // STRONG cross-check threading rayleigh_flow_pressure_ratio: V/V* = M²·(p/p*).
-        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+        for &(m, gam) in &[
+            (0.3_f64, 1.4_f64),
+            (0.5, 1.4),
+            (2.0, 1.4),
+            (4.0, 1.3),
+            (0.8, 1.667),
+        ] {
             let expected = m * m * rayleigh_flow_pressure_ratio(m, gam);
             assert!(
                 (rayleigh_flow_velocity_ratio(m, gam) - expected).abs() / expected < 1e-12,
@@ -2181,11 +2421,18 @@ mod tests {
             );
         }
         // Standard Rayleigh-table values (γ = 1.4): M=0.5 → 0.44444, M=2 → 1.45454.
-        assert!((rayleigh_flow_velocity_ratio(0.5, g) - 0.44444).abs() < 1e-3, "M=0.5 table value");
-        assert!((rayleigh_flow_velocity_ratio(2.0, g) - 1.45454).abs() < 1e-3, "M=2 table value");
+        assert!(
+            (rayleigh_flow_velocity_ratio(0.5, g) - 0.44444).abs() < 1e-3,
+            "M=0.5 table value"
+        );
+        assert!(
+            (rayleigh_flow_velocity_ratio(2.0, g) - 1.45454).abs() < 1e-3,
+            "M=2 table value"
+        );
         // Monotone through the sonic point: subsonic < 1 < supersonic.
         assert!(
-            rayleigh_flow_velocity_ratio(0.5, g) < 1.0 && rayleigh_flow_velocity_ratio(2.0, g) > 1.0,
+            rayleigh_flow_velocity_ratio(0.5, g) < 1.0
+                && rayleigh_flow_velocity_ratio(2.0, g) > 1.0,
             "subsonic V/V* < 1 < supersonic"
         );
         // Non-physical input → 0.
@@ -2198,9 +2445,18 @@ mod tests {
     fn rayleigh_flow_pressure_ratio_threads_the_temperature_ratio() {
         let g = 1.4;
         // Sonic reference: p/p* = 1 exactly at M = 1.
-        assert!((rayleigh_flow_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(
+            (rayleigh_flow_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
         // STRONG cross-check threading rayleigh_flow_temperature_ratio: T/T* = M²·(p/p*)².
-        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+        for &(m, gam) in &[
+            (0.3_f64, 1.4_f64),
+            (0.5, 1.4),
+            (2.0, 1.4),
+            (4.0, 1.3),
+            (0.8, 1.667),
+        ] {
             let expected = m * m * rayleigh_flow_pressure_ratio(m, gam).powi(2);
             assert!(
                 (rayleigh_flow_temperature_ratio(m, gam) - expected).abs() / expected < 1e-12,
@@ -2208,14 +2464,24 @@ mod tests {
             );
         }
         // Standard Rayleigh-table values (γ = 1.4): M=0.5 → 1.7778, M=2 → 0.36364.
-        assert!((rayleigh_flow_pressure_ratio(0.5, g) - 1.7778).abs() < 1e-3, "M=0.5 table value");
-        assert!((rayleigh_flow_pressure_ratio(2.0, g) - 0.36364).abs() < 1e-3, "M=2 table value");
+        assert!(
+            (rayleigh_flow_pressure_ratio(0.5, g) - 1.7778).abs() < 1e-3,
+            "M=0.5 table value"
+        );
+        assert!(
+            (rayleigh_flow_pressure_ratio(2.0, g) - 0.36364).abs() < 1e-3,
+            "M=2 table value"
+        );
         // Subsonic p/p* > 1, supersonic p/p* < 1; tends to the max (1+γ) as M → 0.
         assert!(
-            rayleigh_flow_pressure_ratio(0.5, g) > 1.0 && rayleigh_flow_pressure_ratio(2.0, g) < 1.0,
+            rayleigh_flow_pressure_ratio(0.5, g) > 1.0
+                && rayleigh_flow_pressure_ratio(2.0, g) < 1.0,
             "subsonic > 1 > supersonic"
         );
-        assert!((rayleigh_flow_pressure_ratio(1.0e-6, g) - 2.4).abs() < 1e-3, "M→0 limit 1+γ");
+        assert!(
+            (rayleigh_flow_pressure_ratio(1.0e-6, g) - 2.4).abs() < 1e-3,
+            "M→0 limit 1+γ"
+        );
         // Non-physical input → 0.
         assert_eq!(rayleigh_flow_pressure_ratio(-1.0, g), 0.0); // M < 0
         assert_eq!(rayleigh_flow_pressure_ratio(2.0, 1.0), 0.0); // γ ≤ 1
@@ -2226,18 +2492,33 @@ mod tests {
     fn rayleigh_flow_temperature_ratio_peaks_below_sonic() {
         let g = 1.4;
         // Sonic reference: T/T* = 1 at M = 1; no flow at rest.
-        assert!((rayleigh_flow_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
-        assert!(rayleigh_flow_temperature_ratio(0.0, g).abs() < 1e-12, "M=0 → 0");
+        assert!(
+            (rayleigh_flow_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
+        assert!(
+            rayleigh_flow_temperature_ratio(0.0, g).abs() < 1e-12,
+            "M=0 → 0"
+        );
         // Standard Rayleigh-flow table points (γ = 1.4).
-        assert!((rayleigh_flow_temperature_ratio(2.0, g) - 0.5289).abs() < 1e-3, "M=2 → 0.5289");
-        assert!((rayleigh_flow_temperature_ratio(0.5, g) - 0.7901).abs() < 1e-3, "M=0.5 → 0.7901");
+        assert!(
+            (rayleigh_flow_temperature_ratio(2.0, g) - 0.5289).abs() < 1e-3,
+            "M=2 → 0.5289"
+        );
+        assert!(
+            (rayleigh_flow_temperature_ratio(0.5, g) - 0.7901).abs() < 1e-3,
+            "M=0.5 → 0.7901"
+        );
         // The static-temperature MAX is at M = 1/√γ (≈ 0.845), BELOW the sonic point,
         // and there T/T* > 1 (hotter than at sonic) — the classic Rayleigh feature.
         let m_peak = 1.0 / g.sqrt();
         let t_peak = rayleigh_flow_temperature_ratio(m_peak, g);
         assert!(t_peak > 1.0, "T/T* at M=1/√γ exceeds 1, got {t_peak}");
         for &m in &[0.6_f64, 0.75, 0.95, 1.0, 1.2] {
-            assert!(t_peak >= rayleigh_flow_temperature_ratio(m, g), "peak at M=1/√γ, beaten at M={m}");
+            assert!(
+                t_peak >= rayleigh_flow_temperature_ratio(m, g),
+                "peak at M=1/√γ, beaten at M={m}"
+            );
         }
         // STRONG cross-check threading rayleigh_flow_total_temperature_ratio #247 AND
         // isentropic_stagnation_temperature_ratio: since T0/T0* = (T0/T)·(T/T*)/(T0*/T*)
@@ -2264,7 +2545,13 @@ mod tests {
         assert!(fanno_friction_parameter(1.0, g).abs() < 1e-12, "M=1 → 0");
         // STRONG cross-check threading fanno_flow_temperature_ratio (#259): the ln
         // argument (γ+1)M²/(2+(γ−1)M²) is exactly M²·(T/T*).
-        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+        for &(m, gam) in &[
+            (0.3_f64, 1.4_f64),
+            (0.5, 1.4),
+            (2.0, 1.4),
+            (4.0, 1.3),
+            (0.8, 1.667),
+        ] {
             let expected = (1.0 - m * m) / (gam * m * m)
                 + (gam + 1.0) / (2.0 * gam) * (m * m * fanno_flow_temperature_ratio(m, gam)).ln();
             assert!(
@@ -2273,8 +2560,14 @@ mod tests {
             );
         }
         // Standard Fanno-table values (γ = 1.4): M=0.5 → 1.0691, M=2 → 0.3050.
-        assert!((fanno_friction_parameter(0.5, g) - 1.0691).abs() < 1e-3, "M=0.5 table value");
-        assert!((fanno_friction_parameter(2.0, g) - 0.3050).abs() < 1e-3, "M=2 table value");
+        assert!(
+            (fanno_friction_parameter(0.5, g) - 1.0691).abs() < 1e-3,
+            "M=0.5 table value"
+        );
+        assert!(
+            (fanno_friction_parameter(2.0, g) - 0.3050).abs() < 1e-3,
+            "M=2 table value"
+        );
         // Positive on both sides of the choke (the minimum is 0 at M = 1).
         assert!(
             fanno_friction_parameter(0.5, g) > 0.0 && fanno_friction_parameter(2.0, g) > 0.0,
@@ -2291,19 +2584,37 @@ mod tests {
     fn fanno_flow_velocity_ratio_threads_the_fanno_family() {
         let g = 1.4;
         // Sonic reference: V/V* = 1 exactly at M = 1.
-        assert!((fanno_flow_velocity_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(
+            (fanno_flow_velocity_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
         // STRONG dual cross-check threading the Fanno temperature (#259) and pressure
         // (#265) ratios: V/V* = M·√(T/T*) = M²·(p/p*) — two distinct closed forms.
-        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+        for &(m, gam) in &[
+            (0.3_f64, 1.4_f64),
+            (0.5, 1.4),
+            (2.0, 1.4),
+            (4.0, 1.3),
+            (0.8, 1.667),
+        ] {
             let v = fanno_flow_velocity_ratio(m, gam);
             let via_t = m * fanno_flow_temperature_ratio(m, gam).sqrt();
             let via_p = m * m * fanno_flow_pressure_ratio(m, gam);
-            assert!((v - via_t).abs() / via_t < 1e-12, "V/V* = M·√(T/T*) at M={m}, γ={gam}");
-            assert!((v - via_p).abs() / via_p < 1e-12, "V/V* = M²·(p/p*) at M={m}, γ={gam}");
+            assert!(
+                (v - via_t).abs() / via_t < 1e-12,
+                "V/V* = M·√(T/T*) at M={m}, γ={gam}"
+            );
+            assert!(
+                (v - via_p).abs() / via_p < 1e-12,
+                "V/V* = M²·(p/p*) at M={m}, γ={gam}"
+            );
         }
         // Subsonic V/V* < 1, supersonic > 1 — the opposite trend to T/T* and p/p*.
         assert!(fanno_flow_velocity_ratio(0.5, g) < 1.0, "subsonic V/V* < 1");
-        assert!(fanno_flow_velocity_ratio(2.0, g) > 1.0, "supersonic V/V* > 1");
+        assert!(
+            fanno_flow_velocity_ratio(2.0, g) > 1.0,
+            "supersonic V/V* > 1"
+        );
         // Monotonic increasing in M.
         assert!(
             fanno_flow_velocity_ratio(1.5, g) > fanno_flow_velocity_ratio(0.5, g),
@@ -2326,10 +2637,19 @@ mod tests {
     fn fanno_flow_pressure_ratio_threads_the_temperature_ratio() {
         let g = 1.4;
         // Sonic reference: p/p* = 1 exactly at M = 1.
-        assert!((fanno_flow_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(
+            (fanno_flow_pressure_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
         // STRONG cross-check threading fanno_flow_temperature_ratio (#259): the Fanno
         // pressure ratio is √(T/T*)/M — a distinct closed form.
-        for &(m, gam) in &[(0.3_f64, 1.4_f64), (0.5, 1.4), (2.0, 1.4), (4.0, 1.3), (0.8, 1.667)] {
+        for &(m, gam) in &[
+            (0.3_f64, 1.4_f64),
+            (0.5, 1.4),
+            (2.0, 1.4),
+            (4.0, 1.3),
+            (0.8, 1.667),
+        ] {
             let expected = fanno_flow_temperature_ratio(m, gam).sqrt() / m;
             assert!(
                 (fanno_flow_pressure_ratio(m, gam) - expected).abs() / expected < 1e-12,
@@ -2338,7 +2658,10 @@ mod tests {
         }
         // Subsonic pressure exceeds sonic; supersonic falls below it.
         assert!(fanno_flow_pressure_ratio(0.5, g) > 1.0, "subsonic p/p* > 1");
-        assert!(fanno_flow_pressure_ratio(2.0, g) < 1.0, "supersonic p/p* < 1");
+        assert!(
+            fanno_flow_pressure_ratio(2.0, g) < 1.0,
+            "supersonic p/p* < 1"
+        );
         // Monotonic decreasing in M (friction drives the flow toward sonic).
         assert!(
             fanno_flow_pressure_ratio(0.5, g) > fanno_flow_pressure_ratio(1.5, g),
@@ -2356,7 +2679,10 @@ mod tests {
     fn fanno_flow_temperature_ratio_is_the_friction_dual_of_rayleigh() {
         let g = 1.4;
         // Sonic reference: T/T* = 1 exactly at M = 1.
-        assert!((fanno_flow_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12, "M=1 → 1");
+        assert!(
+            (fanno_flow_temperature_ratio(1.0, g) - 1.0).abs() < 1e-12,
+            "M=1 → 1"
+        );
         // Hottest static temperature is at rest: T/T* = (γ+1)/2 at M = 0.
         assert!(
             (fanno_flow_temperature_ratio(0.0, g) - (g + 1.0) / 2.0).abs() < 1e-12,

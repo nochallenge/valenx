@@ -104,7 +104,11 @@ fn full_pipeline_adaptive_then_arcfit_then_feedrate() {
 fn arc_fit_reduces_circular_pocket_path_substantially() {
     // Hand-build a 64-segment circle path (no Z change, all Cut moves).
     let mut tp = Toolpath::new();
-    tp.push(Move::new(MoveKind::Rapid, Vector3::new(10.0, 0.0, 0.0), 0.0));
+    tp.push(Move::new(
+        MoveKind::Rapid,
+        Vector3::new(10.0, 0.0, 0.0),
+        0.0,
+    ));
     let r = 10.0;
     for k in 1..=64 {
         let t = (k as f64) * std::f64::consts::TAU / 64.0;
@@ -135,7 +139,11 @@ fn feedrate_optimizer_handles_arc_centripetal_correctly() {
     // Build a tight-radius arc path and confirm feed is bounded by
     // sqrt(a · r) per the centripetal-acceleration formula.
     let mut tp = Toolpath::new();
-    tp.push(Move::new(MoveKind::Cut, Vector3::new(0.0, 0.0, 0.0), 5000.0));
+    tp.push(Move::new(
+        MoveKind::Cut,
+        Vector3::new(0.0, 0.0, 0.0),
+        5000.0,
+    ));
     tp.push(Move {
         kind: MoveKind::Arc {
             centre_xy: nalgebra::Vector2::new(1.0, 0.0),
@@ -164,8 +172,16 @@ fn continuous_collision_catches_grazing_rapid_fixture_v1_misses() {
     let tool = Tool::new(1, "EM6", ToolKind::EndMill, 6.0, 25.0, 2, "").unwrap();
     let mut tp = Toolpath::new();
     // Endpoints clear the fixture, midpoint slices through it.
-    tp.push(Move::new(MoveKind::Rapid, Vector3::new(-20.0, 0.0, 5.0), 0.0));
-    tp.push(Move::new(MoveKind::Rapid, Vector3::new(20.0, 0.0, 5.0), 0.0));
+    tp.push(Move::new(
+        MoveKind::Rapid,
+        Vector3::new(-20.0, 0.0, 5.0),
+        0.0,
+    ));
+    tp.push(Move::new(
+        MoveKind::Rapid,
+        Vector3::new(20.0, 0.0, 5.0),
+        0.0,
+    ));
     let mut setup = CollisionSetup::new();
     // The clamp post must span the tool's z = 5 so the flute -- which
     // extends UP from the tool tip, `[tip_z, tip_z + flute_len]`, per the
@@ -184,7 +200,10 @@ fn continuous_collision_catches_grazing_rapid_fixture_v1_misses() {
         &setup,
         &ContinuousCollisionParams::default(),
     );
-    assert!(!hits.is_empty(), "continuous CCD failed to catch grazing rapid");
+    assert!(
+        !hits.is_empty(),
+        "continuous CCD failed to catch grazing rapid"
+    );
     assert_eq!(hits[0].part_kind, SetupPartKind::Fixture);
     assert_eq!(hits[0].body, CollisionBody::Flute);
 }
@@ -228,7 +247,11 @@ fn holder_collision_detected_separately_from_flute() {
     let holder = Holder::cylinder_shank(12.0, 30.0);
     let mut tp = Toolpath::new();
     tp.push(Move::new(MoveKind::Cut, Vector3::new(0.0, 0.0, 0.0), 500.0));
-    tp.push(Move::new(MoveKind::Cut, Vector3::new(20.0, 0.0, 0.0), 500.0));
+    tp.push(Move::new(
+        MoveKind::Cut,
+        Vector3::new(20.0, 0.0, 0.0),
+        500.0,
+    ));
     // Fixture sits *above* the tool tip (z=12..18 — within the holder
     // span of 8..38).
     let mut setup = CollisionSetup::new();

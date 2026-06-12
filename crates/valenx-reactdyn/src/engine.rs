@@ -206,7 +206,15 @@ impl ReactionEngine for AimdEngine {
 
         // Fallible force evaluation, reused by the integrator each step.
         let force_fn = |p: &[[f64; 3]]| -> Result<Vec<[f64; 3]>> {
-            numerical_forces(elements, p, charge, mult, method, basis, controls.fd_delta_bohr)
+            numerical_forces(
+                elements,
+                p,
+                charge,
+                mult,
+                method,
+                basis,
+                controls.fd_delta_bohr,
+            )
         };
 
         let mut pos = system.pos_bohr.clone();
@@ -225,7 +233,11 @@ impl ReactionEngine for AimdEngine {
 
         for step in 0..controls.n_steps {
             forces = velocity_verlet_step(&mut pos, &mut vel, &forces, &masses, dt, force_fn)?;
-            if let Thermostat::Berendsen { target_kelvin, tau_fs } = controls.thermostat {
+            if let Thermostat::Berendsen {
+                target_kelvin,
+                tau_fs,
+            } = controls.thermostat
+            {
                 berendsen_rescale(&mut vel, &masses, target_kelvin, controls.dt_fs, tau_fs);
             }
             let pe = single_point_energy(elements, &pos, charge, mult, method, basis)?;
@@ -297,7 +309,13 @@ fn remove_net_momentum(vel: &mut [[f64; 3]], masses: &[f64]) {
 
 /// Berendsen weak-coupling velocity rescale toward `target_kelvin`.
 /// Shared with the QM/MM engine.
-pub(crate) fn berendsen_rescale(vel: &mut [[f64; 3]], masses: &[f64], target_kelvin: f64, dt_fs: f64, tau_fs: f64) {
+pub(crate) fn berendsen_rescale(
+    vel: &mut [[f64; 3]],
+    masses: &[f64],
+    target_kelvin: f64,
+    dt_fs: f64,
+    tau_fs: f64,
+) {
     // Degrees of freedom: 3N minus the 3 removed COM components.
     let n_dof = (3 * vel.len()).saturating_sub(3).max(1);
     let ke = kinetic_energy(vel, masses);
@@ -306,7 +324,9 @@ pub(crate) fn berendsen_rescale(vel: &mut [[f64; 3]], masses: &[f64], target_kel
         return;
     }
     let tau = tau_fs.max(dt_fs); // never let dt/tau exceed 1
-    let lambda = (1.0 + (dt_fs / tau) * (target_kelvin / current_t - 1.0)).max(0.0).sqrt();
+    let lambda = (1.0 + (dt_fs / tau) * (target_kelvin / current_t - 1.0))
+        .max(0.0)
+        .sqrt();
     for v in vel.iter_mut() {
         for x in v.iter_mut() {
             *x *= lambda;

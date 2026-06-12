@@ -63,9 +63,7 @@ impl ScviInput {
             &case_toml,
             valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize,
         )
-        .map_err(|e| {
-            AdapterError::Other(anyhow::anyhow!("read {}: {e}", case_toml.display()))
-        })?;
+        .map_err(|e| AdapterError::Other(anyhow::anyhow!("read {}: {e}", case_toml.display())))?;
         let parsed: toml::Value = toml::from_str(&text).map_err(|e| {
             AdapterError::Other(anyhow::anyhow!("parse {}: {e}", case_toml.display()))
         })?;

@@ -51,17 +51,10 @@ fn split_header(header: &str) -> (String, String) {
 /// marker); `encoding` selects the Phred / Solexa offset. Returns
 /// [`BioseqError::Parse`] on a malformed record (wrong line count,
 /// missing `@` / `+`, or a sequence/quality length mismatch).
-pub fn parse(
-    text: &str,
-    kind: SeqKind,
-    encoding: QualityEncoding,
-) -> Result<Vec<FastqRecord>> {
+pub fn parse(text: &str, kind: SeqKind, encoding: QualityEncoding) -> Result<Vec<FastqRecord>> {
     let lines: Vec<&str> = text.lines().map(|l| l.trim_end()).collect();
     // Drop a trailing empty line if present.
-    let lines: Vec<&str> = lines
-        .into_iter()
-        .filter(|l| !l.is_empty())
-        .collect();
+    let lines: Vec<&str> = lines.into_iter().filter(|l| !l.is_empty()).collect();
     if lines.len() % 4 != 0 {
         return Err(BioseqError::parse(
             "fastq",
@@ -175,7 +168,12 @@ impl Iterator for FastqReader<'_> {
         };
         let idx = self.index;
         self.index += 1;
-        Some(parse_record(&[l0, l1, l2, l3], idx, self.kind, self.encoding))
+        Some(parse_record(
+            &[l0, l1, l2, l3],
+            idx,
+            self.kind,
+            self.encoding,
+        ))
     }
 }
 
@@ -211,8 +209,7 @@ pub fn write(records: &[FastqRecord], encoding: QualityEncoding) -> String {
 mod tests {
     use super::*;
 
-    const SAMPLE: &str =
-        "@read1 desc\nACGTACGT\n+\nIIIIIIII\n@read2\nTTTT\n+\n!!!!\n";
+    const SAMPLE: &str = "@read1 desc\nACGTACGT\n+\nIIIIIIII\n@read2\nTTTT\n+\n!!!!\n";
 
     #[test]
     fn parse_two_records() {

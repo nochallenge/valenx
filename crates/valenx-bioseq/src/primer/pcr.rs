@@ -83,7 +83,10 @@ pub fn simulate_pcr(
         || forward.kind() != SeqKind::Dna
         || reverse.kind() != SeqKind::Dna
     {
-        return Err(BioseqError::invalid("kind", "in-silico PCR needs DNA inputs"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "in-silico PCR needs DNA inputs",
+        ));
     }
     if forward.is_empty() || reverse.is_empty() {
         return Err(BioseqError::invalid("primer", "primers must be non-empty"));
@@ -107,8 +110,14 @@ pub fn simulate_pcr(
     // Forward primer binds the top strand directly. Each forward site
     // is unique modulo n, so wrap-copies in the doubled string are
     // discarded.
-    let fwd_sites =
-        find_binding_sites(&top, forward.as_bytes(), &opts, n, template.is_circular(), false);
+    let fwd_sites = find_binding_sites(
+        &top,
+        forward.as_bytes(),
+        &opts,
+        n,
+        template.is_circular(),
+        false,
+    );
     // Reverse primer binds the bottom strand: its reverse complement
     // matches the top strand. The reverse primer's 3' end corresponds
     // to the *low-coordinate* end of the matched top-strand footprint.
@@ -117,8 +126,14 @@ pub fn simulate_pcr(
     // site near the 3' end pairs with a reverse site that lies just past
     // the origin, producing an origin-spanning amplicon.
     let rev_rc = reverse_complement(reverse)?;
-    let rev_sites_raw =
-        find_binding_sites(&top, rev_rc.as_bytes(), &opts, n, template.is_circular(), true);
+    let rev_sites_raw = find_binding_sites(
+        &top,
+        rev_rc.as_bytes(),
+        &opts,
+        n,
+        template.is_circular(),
+        true,
+    );
 
     // The 3' anchor of the reverse primer is at the START of the
     // top-strand footprint (because rev_rc is reverse-complemented),
@@ -325,7 +340,9 @@ mod tests {
             ..Default::default()
         };
         // The 3' anchor mismatch should abolish the product.
-        assert!(simulate_pcr(&template, &bad_fwd, &r, opts).unwrap().is_empty());
+        assert!(simulate_pcr(&template, &bad_fwd, &r, opts)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -346,7 +363,12 @@ mod tests {
             ..Default::default()
         };
         // A single 5' mismatch within the budget still amplifies.
-        assert_eq!(simulate_pcr(&template, &tagged_fwd, &r, opts).unwrap().len(), 1);
+        assert_eq!(
+            simulate_pcr(&template, &tagged_fwd, &r, opts)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -360,8 +382,7 @@ mod tests {
         tmpl.extend_from_slice(&rev_rc); // 0..12
         tmpl.extend_from_slice(b"GGGGGGGG"); // filler
         tmpl.extend_from_slice(fwd.as_bytes()); // forward site near the end
-        let template =
-            Seq::with_topology(SeqKind::Dna, tmpl, Topology::Circular).unwrap();
+        let template = Seq::with_topology(SeqKind::Dna, tmpl, Topology::Circular).unwrap();
         let f = Seq::new(SeqKind::Dna, fwd).unwrap();
         let r = Seq::new(SeqKind::Dna, rev).unwrap();
         let amps = simulate_pcr(&template, &f, &r, PcrOptions::default()).unwrap();

@@ -90,8 +90,8 @@ pub fn read_mmcif(text: &str, id: &str) -> Result<Structure> {
         structure.title = t;
     }
 
-    let atom_loop = atom_loop
-        .ok_or_else(|| BiostructError::parse("mmcif", 0, "no _atom_site loop found"))?;
+    let atom_loop =
+        atom_loop.ok_or_else(|| BiostructError::parse("mmcif", 0, "no _atom_site loop found"))?;
     build_models_from_atom_site(&atom_loop, &mut structure)?;
 
     if let Some(loops) = oper_loop {
@@ -274,9 +274,7 @@ fn tokenize_line(line: &str, tokens: &mut Vec<Token>) {
             while i < chars.len() {
                 // A closing quote must be followed by whitespace or
                 // end-of-line per the CIF spec.
-                if chars[i] == quote
-                    && (i + 1 >= chars.len() || chars[i + 1].is_whitespace())
-                {
+                if chars[i] == quote && (i + 1 >= chars.len() || chars[i + 1].is_whitespace()) {
                     i += 1;
                     break;
                 }
@@ -416,12 +414,9 @@ fn build_models_from_atom_site(table: &LoopTable, structure: &mut Structure) -> 
     };
 
     for (rownum, row) in table.rows.iter().enumerate() {
-        let x: f64 = row
-            .get(c_x)
-            .and_then(|v| v.parse().ok())
-            .ok_or_else(|| {
-                BiostructError::parse("mmcif", 0, format!("bad x in row {}", rownum + 1))
-            })?;
+        let x: f64 = row.get(c_x).and_then(|v| v.parse().ok()).ok_or_else(|| {
+            BiostructError::parse("mmcif", 0, format!("bad x in row {}", rownum + 1))
+        })?;
         let y: f64 = row.get(c_y).and_then(|v| v.parse().ok()).ok_or_else(|| {
             BiostructError::parse("mmcif", 0, format!("bad y in row {}", rownum + 1))
         })?;
@@ -447,7 +442,11 @@ fn build_models_from_atom_site(table: &LoopTable, structure: &mut Structure) -> 
         let res_name = cell(row, c_comp).trim().to_ascii_uppercase();
         let chain_id = {
             let c = cell(row, c_asym);
-            if c.is_empty() { "A".to_string() } else { c }
+            if c.is_empty() {
+                "A".to_string()
+            } else {
+                c
+            }
         };
         let seq_num: i32 = cell(row, c_seq).parse().unwrap_or(0);
         let ins_raw = cell(row, c_ins);
@@ -495,9 +494,7 @@ fn build_models_from_atom_site(table: &LoopTable, structure: &mut Structure) -> 
         let matches_tail = chain
             .residues
             .last()
-            .map(|r| {
-                r.seq_num == seq_num && r.ins_code == ins_code && r.name == res_name
-            })
+            .map(|r| r.seq_num == seq_num && r.ins_code == ins_code && r.name == res_name)
             .unwrap_or(false);
         if matches_tail {
             chain.residues.last_mut().unwrap().atoms.push(atom);
@@ -529,7 +526,10 @@ fn parse_oper_row(table: &LoopTable, row: &[String]) -> Option<SymmetryOperator>
             rotation[i][j] = table.get(row, &tag).and_then(|v| v.parse().ok())?;
         }
         let vt = format!("_pdbx_struct_oper_list.vector[{ti}]");
-        translation[i] = table.get(row, &vt).and_then(|v| v.parse().ok()).unwrap_or(0.0);
+        translation[i] = table
+            .get(row, &vt)
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.0);
     }
     Some(SymmetryOperator {
         serial,
@@ -609,10 +609,7 @@ HETATM 6  ZN ZN  . ZN  A 3 ? 20.000 20.000 20.000 1.00 30.00 1
     fn tokenizer_handles_quotes() {
         let toks = tokenize("_struct.title   'A small test structure'\n");
         assert_eq!(toks.len(), 2);
-        assert_eq!(
-            toks[1],
-            Token::Value("A small test structure".to_string())
-        );
+        assert_eq!(toks[1], Token::Value("A small test structure".to_string()));
     }
 
     #[test]

@@ -274,7 +274,10 @@ fn parse_mrc_header(buf: &[u8]) -> Result<MrcHeader> {
     if buf.len() < MRC_HEADER_LEN {
         return Err(StructPredictError::parse(
             "mrc",
-            format!("buffer is {} bytes, shorter than the 1024-byte header", buf.len()),
+            format!(
+                "buffer is {} bytes, shorter than the 1024-byte header",
+                buf.len()
+            ),
         ));
     }
     // Word 27 (offset 208) must be the ASCII stamp "MAP ".
@@ -385,7 +388,9 @@ fn decode_voxels(buf: &[u8], header: &MrcHeader) -> Result<Vec<f32>> {
         )),
         m => Err(StructPredictError::parse(
             "mrc",
-            format!("unsupported MRC mode {m} — only mode 1 (int16) and mode 2 (float32) are supported"),
+            format!(
+                "unsupported MRC mode {m} — only mode 1 (int16) and mode 2 (float32) are supported"
+            ),
         )),
     }
 }

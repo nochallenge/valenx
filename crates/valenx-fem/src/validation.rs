@@ -286,9 +286,7 @@ impl BeamConvergenceStudy {
     /// The finest-mesh result for an element family, as a fraction of
     /// the analytic deflection.
     pub fn finest_fraction(&self, element: &str) -> Option<f64> {
-        self.family(element)
-            .last()
-            .map(|p| p.fraction_of_analytic)
+        self.family(element).last().map(|p| p.fraction_of_analytic)
     }
 }
 
@@ -638,5 +636,3 @@ mod tests {
         assert!((uniaxial_von_mises(5.0e6) - 5.0e6).abs() < 1.0);
     }
 }
-
-

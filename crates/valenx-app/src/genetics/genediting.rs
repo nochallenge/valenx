@@ -122,8 +122,12 @@ impl GeneEditingPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// The advisor's desired-change menu choice.
@@ -142,8 +146,7 @@ impl Default for GeneEditingPanel {
     fn default() -> Self {
         GeneEditingPanel {
             tool: Tool::Crispr,
-            target: "ACGTGGAATTCCGGAAGGTTCCAACGGGATGCATGCATGCTAGCTAGCTAGGCATGCATGC"
-                .to_string(),
+            target: "ACGTGGAATTCCGGAAGGTTCCAACGGGATGCATGCATGCTAGCTAGCTAGGCATGCATGC".to_string(),
             nuclease: NucleaseId::SpCas9,
             base_editor: BaseEditorId::Be4Max,
             prime_editor: PrimeEditorId::Pe3,
@@ -174,7 +177,9 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     common::section(ui, "Tool");
     ui.horizontal_wrapped(|ui| {
         ui.selectable_value(&mut p.tool, Tool::Crispr, "CRISPR guides")
-            .on_hover_text("Design guide RNAs against a target with PAM filtering + off-target scoring.");
+            .on_hover_text(
+                "Design guide RNAs against a target with PAM filtering + off-target scoring.",
+            );
         ui.selectable_value(&mut p.tool, Tool::BaseEdit, "Base editing")
             .on_hover_text("Pick a base-editor and identify edit windows + bystander positions.");
         ui.selectable_value(&mut p.tool, Tool::PrimeEdit, "Prime editing")
@@ -183,8 +188,12 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         ui.selectable_value(&mut p.tool, Tool::Advisor, "Strategy advisor");
         ui.separator();
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
     });
     ui.separator();
 
@@ -319,10 +328,18 @@ fn run_base_edit(p: &mut GeneEditingPanel) {
                 d.protospacer,
                 d.pam,
                 d.guide_start,
-                if d.guide_reverse { "reverse" } else { "forward" },
+                if d.guide_reverse {
+                    "reverse"
+                } else {
+                    "forward"
+                },
                 d.window_position,
                 d.window.bystander_positions.len(),
-                if d.window.clean { "yes" } else { "no — bystanders present" },
+                if d.window.clean {
+                    "yes"
+                } else {
+                    "no — bystanders present"
+                },
                 d.product_purity,
             );
         }
@@ -504,11 +521,15 @@ fn run_advisor(p: &mut GeneEditingPanel) {
     p.error = None;
     let change = match p.advisor_change {
         // A C->T transition is base-editor reachable.
-        AdvisorChange::PointTransition => DesiredChange::PointMutation { from: b'C', to: b'T' },
+        AdvisorChange::PointTransition => DesiredChange::PointMutation {
+            from: b'C',
+            to: b'T',
+        },
         // A C->A transversion is not base-editable.
-        AdvisorChange::PointTransversion => {
-            DesiredChange::PointMutation { from: b'C', to: b'A' }
-        }
+        AdvisorChange::PointTransversion => DesiredChange::PointMutation {
+            from: b'C',
+            to: b'A',
+        },
         AdvisorChange::SmallInsertion => DesiredChange::SmallInsertion { size: 3 },
         AdvisorChange::SmallDeletion => DesiredChange::SmallDeletion { size: 3 },
         AdvisorChange::LargeKnockIn => DesiredChange::LargeKnockIn { size: 800 },
@@ -572,7 +593,13 @@ mod tests {
 
     #[test]
     fn advisor_ranks_all_approaches() {
-        let advice = advise_strategy(&DesiredChange::PointMutation { from: b'C', to: b'T' }, true);
+        let advice = advise_strategy(
+            &DesiredChange::PointMutation {
+                from: b'C',
+                to: b'T',
+            },
+            true,
+        );
         // Four modalities are always scored.
         assert_eq!(advice.ranked.len(), 4);
     }
@@ -585,7 +612,6 @@ mod tests {
         let report = design_mrna(&req).expect("demo CDS must design");
         assert!(!report.construct.is_empty());
     }
-
 }
 
 /// Headless egui UI-logic tests for the Gene Editing panel.
@@ -714,7 +740,10 @@ mod headless_ui_tests {
             ..GeneEditingPanel::default()
         };
         run_crispr_design(&mut p);
-        assert!(p.error.is_some(), "guide design should error on empty target");
+        assert!(
+            p.error.is_some(),
+            "guide design should error on empty target"
+        );
         // Base edit with the edit position past the reference end.
         let mut p = GeneEditingPanel {
             tool: Tool::BaseEdit,
@@ -722,7 +751,10 @@ mod headless_ui_tests {
             ..GeneEditingPanel::default()
         };
         run_base_edit(&mut p);
-        assert!(p.error.is_some(), "base edit should error on an out-of-range position");
+        assert!(
+            p.error.is_some(),
+            "base edit should error on an out-of-range position"
+        );
         // mRNA design with an empty CDS.
         let mut p = GeneEditingPanel {
             tool: Tool::Mrna,
@@ -730,6 +762,9 @@ mod headless_ui_tests {
             ..GeneEditingPanel::default()
         };
         run_mrna(&mut p);
-        assert!(p.error.is_some(), "mRNA design should error on an empty CDS");
+        assert!(
+            p.error.is_some(),
+            "mRNA design should error on an empty CDS"
+        );
     }
 }

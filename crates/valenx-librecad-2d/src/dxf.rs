@@ -478,7 +478,11 @@ fn serialise_entity(s: &mut String, e: &Entity2D) {
             push_pair(s, 1, text);
         }
         Entity2D::Dimension {
-            a, b, text_pos, text, ..
+            a,
+            b,
+            text_pos,
+            text,
+            ..
         } => {
             push_pair_f(s, 10, a[0]);
             push_pair_f(s, 20, a[1]);

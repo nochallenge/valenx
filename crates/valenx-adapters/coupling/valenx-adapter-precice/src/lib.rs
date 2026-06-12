@@ -152,10 +152,7 @@ impl Adapter for PreciceAdapter {
         let config_src = if input.config_path.is_absolute() {
             input.config_path.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.config_path,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.config_path)?
         };
         if !config_src.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -485,9 +482,7 @@ reads      = ["Force"]
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = PreciceAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = PreciceAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("..") || msg.contains("stay within") || msg.contains("escape"),

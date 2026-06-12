@@ -114,7 +114,10 @@ pub fn molecular_weight_nucleic(seq: &Seq) -> Result<f64> {
 /// complement.
 pub fn molecular_weight_dna_double_stranded(seq: &Seq) -> Result<f64> {
     if seq.kind() != SeqKind::Dna {
-        return Err(BioseqError::invalid("kind", "double-stranded weight needs DNA"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "double-stranded weight needs DNA",
+        ));
     }
     let top = molecular_weight_nucleic(seq)?;
     let bottom = molecular_weight_nucleic(&reverse_complement(seq)?)?;
@@ -197,10 +200,7 @@ mod tests {
         let dna = Seq::new(SeqKind::Dna, "ACGA").unwrap();
         let rna = Seq::new(SeqKind::Rna, "ACGA").unwrap();
         // RNA residues are heavier (extra 2'-OH).
-        assert!(
-            molecular_weight_nucleic(&rna).unwrap()
-                > molecular_weight_nucleic(&dna).unwrap()
-        );
+        assert!(molecular_weight_nucleic(&rna).unwrap() > molecular_weight_nucleic(&dna).unwrap());
     }
 
     #[test]

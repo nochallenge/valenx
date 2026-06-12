@@ -226,7 +226,10 @@ mod tests {
             .map(|n| n.z)
             .fold(f64::NEG_INFINITY, f64::max);
         assert!(zmin.abs() < 1e-6, "loft should reach z=0, got {zmin}");
-        assert!((zmax - 4.0).abs() < 1e-6, "loft should reach z=4, got {zmax}");
+        assert!(
+            (zmax - 4.0).abs() < 1e-6,
+            "loft should reach z=4, got {zmax}"
+        );
     }
 
     #[test]
@@ -235,11 +238,7 @@ mod tests {
         // toward +X — the mesh's max X exceeds the un-warped square's
         // half-width of 1.0.
         let secs = vec![square(0.0, 1.0), square(6.0, 1.0)];
-        let bowed = vec![vec![
-            [0.0, 0.0, 0.0],
-            [4.0, 0.0, 3.0],
-            [0.0, 0.0, 6.0],
-        ]];
+        let bowed = vec![vec![[0.0, 0.0, 0.0], [4.0, 0.0, 3.0], [0.0, 0.0, 6.0]]];
         let solid = offset_api_thru_sections_with_guides(&secs, &bowed).unwrap();
         let mesh = valenx_cad::solid_to_mesh(&solid, 0.2).unwrap();
         let xmax = mesh
@@ -265,6 +264,9 @@ mod tests {
         let shell_tris = valenx_cad::solid_to_mesh(&shell, 0.2)
             .unwrap()
             .total_elements();
-        assert!(cap_tris > shell_tris, "capped solid should have more triangles");
+        assert!(
+            cap_tris > shell_tris,
+            "capped solid should have more triangles"
+        );
     }
 }

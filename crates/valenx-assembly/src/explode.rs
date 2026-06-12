@@ -426,12 +426,7 @@ mod tests {
         m.suppressed = true;
         a.add_mate(m);
         let exp = auto_explode(&a, Vector3::z(), ExplodeConfig::default()).unwrap();
-        let b_depth = exp
-            .steps
-            .iter()
-            .find(|s| s.part_id == id_b)
-            .unwrap()
-            .depth;
+        let b_depth = exp.steps.iter().find(|s| s.part_id == id_b).unwrap().depth;
         assert_eq!(b_depth, 0, "b should not be reachable through suppressed");
     }
 }

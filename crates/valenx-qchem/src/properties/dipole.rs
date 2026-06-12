@@ -35,10 +35,7 @@ pub struct DipoleMoment {
 impl DipoleMoment {
     /// The dipole magnitude in atomic units.
     pub fn magnitude_au(&self) -> f64 {
-        (self.vector_au[0].powi(2)
-            + self.vector_au[1].powi(2)
-            + self.vector_au[2].powi(2))
-        .sqrt()
+        (self.vector_au[0].powi(2) + self.vector_au[1].powi(2) + self.vector_au[2].powi(2)).sqrt()
     }
 
     /// The dipole magnitude in debye.
@@ -120,7 +117,11 @@ mod tests {
         let mu = dipole_moment(&geom, &ints, &res.density);
         // STO-3G water dipole is roughly 1.7 D — at least clearly
         // nonzero and pointing along z by C2v symmetry.
-        assert!(mu.magnitude_debye() > 1.0, "|μ| = {} D", mu.magnitude_debye());
+        assert!(
+            mu.magnitude_debye() > 1.0,
+            "|μ| = {} D",
+            mu.magnitude_debye()
+        );
         assert!(mu.vector_au[0].abs() < 1.0e-6);
         assert!(mu.vector_au[1].abs() < 1.0e-6);
     }

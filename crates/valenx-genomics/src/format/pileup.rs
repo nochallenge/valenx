@@ -187,7 +187,10 @@ impl Reference {
     pub fn add(&mut self, name: impl Into<String>, seq: impl AsRef<[u8]>) {
         self.contigs.insert(
             name.into(),
-            seq.as_ref().iter().map(|b| b.to_ascii_uppercase()).collect(),
+            seq.as_ref()
+                .iter()
+                .map(|b| b.to_ascii_uppercase())
+                .collect(),
         );
     }
 

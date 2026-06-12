@@ -276,7 +276,10 @@ mod tests {
         let mut a = Animation::new();
         a.push(Keyframe::at(0.0).with_joint(0, 0.0)).unwrap();
         a.push(Keyframe::at(1.0).with_joint(0, 1.0)).unwrap();
-        assert!(a.frames(0.0, 1e7, 1000).is_err(), "huge span must be rejected");
+        assert!(
+            a.frames(0.0, 1e7, 1000).is_err(),
+            "huge span must be rejected"
+        );
         // A non-finite product (end_t = f64::MAX) is rejected too.
         assert!(a.frames(0.0, f64::MAX, 1000).is_err());
     }

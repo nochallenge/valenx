@@ -173,7 +173,10 @@ impl LigandBindingSite {
         if i >= self.length {
             return Err(RnaDesignError::invalid(
                 "position",
-                format!("ligand-binding position {i} is out of range for length {}", self.length),
+                format!(
+                    "ligand-binding position {i} is out of range for length {}",
+                    self.length
+                ),
             ));
         }
         self.constraints[i] = LigandConstraint::Paired;
@@ -188,7 +191,10 @@ impl LigandBindingSite {
         if i >= self.length {
             return Err(RnaDesignError::invalid(
                 "position",
-                format!("ligand-binding position {i} is out of range for length {}", self.length),
+                format!(
+                    "ligand-binding position {i} is out of range for length {}",
+                    self.length
+                ),
             ));
         }
         self.constraints[i] = LigandConstraint::Unpaired;
@@ -197,7 +203,10 @@ impl LigandBindingSite {
 
     /// The constraint at position `i` (`Free` if out of range).
     pub fn at(&self, i: usize) -> LigandConstraint {
-        self.constraints.get(i).copied().unwrap_or(LigandConstraint::Free)
+        self.constraints
+            .get(i)
+            .copied()
+            .unwrap_or(LigandConstraint::Free)
     }
 
     /// All explicitly-constrained positions.
@@ -223,12 +232,12 @@ impl LigandBindingSite {
         for i in 0..self.length {
             match self.at(i) {
                 LigandConstraint::Free => {}
-                LigandConstraint::Paired => c.force_paired(i).map_err(|e| {
-                    RnaDesignError::upstream("valenx-rnastruct", e.to_string())
-                })?,
-                LigandConstraint::Unpaired => c.force_unpaired(i).map_err(|e| {
-                    RnaDesignError::upstream("valenx-rnastruct", e.to_string())
-                })?,
+                LigandConstraint::Paired => c
+                    .force_paired(i)
+                    .map_err(|e| RnaDesignError::upstream("valenx-rnastruct", e.to_string()))?,
+                LigandConstraint::Unpaired => c
+                    .force_unpaired(i)
+                    .map_err(|e| RnaDesignError::upstream("valenx-rnastruct", e.to_string()))?,
             }
         }
         Ok(c)
@@ -314,8 +323,7 @@ impl RiboswitchEdDesign {
         if n <= 0.0 {
             return false;
         }
-        self.apo_defect / n <= threshold + 1e-9
-            && self.holo_defect / n <= threshold + 1e-9
+        self.apo_defect / n <= threshold + 1e-9 && self.holo_defect / n <= threshold + 1e-9
     }
 }
 
@@ -535,11 +543,7 @@ pub fn design_riboswitch_ed(
 // ---------------------------------------------------------------------
 
 /// Builds a seed sequence compatible with the apo target's pairs.
-fn seed_sequence(
-    apo: &Structure,
-    holo: &Structure,
-    rng: &mut Rng,
-) -> Vec<u8> {
+fn seed_sequence(apo: &Structure, holo: &Structure, rng: &mut Rng) -> Vec<u8> {
     let n = apo.len();
     let mut seq = vec![b'A'; n];
     let mut assigned = vec![false; n];
@@ -748,9 +752,13 @@ mod tests {
 
     #[test]
     fn designs_a_two_state_riboswitch() {
-        let d =
-            design_riboswitch_ed(&apo(), &holo(), &empty_site(), RiboswitchEdParams::default())
-                .unwrap();
+        let d = design_riboswitch_ed(
+            &apo(),
+            &holo(),
+            &empty_site(),
+            RiboswitchEdParams::default(),
+        )
+        .unwrap();
         assert_eq!(d.sequence.len(), 16);
         // The combined defect is finite, the per-state defects are
         // bounded.
@@ -769,8 +777,7 @@ mod tests {
         // assertion.
         let holo = Structure::from_dot_bracket("....((((....))))").unwrap();
         let site = LigandBindingSite::new(16).unpaired(8).unwrap();
-        let d =
-            design_riboswitch_ed(&apo(), &holo, &site, RiboswitchEdParams::default()).unwrap();
+        let d = design_riboswitch_ed(&apo(), &holo, &site, RiboswitchEdParams::default()).unwrap();
         assert!(d.combined_defect.is_finite());
         let mut rng = Rng::new(99);
         let seed = seed_sequence(&apo(), &holo, &mut rng);
@@ -813,9 +820,13 @@ mod tests {
         let seed = seed_sequence(&apo(), &holo(), &mut rng);
         let seed_d = ensemble_defect_linear(&seed, &apo()).unwrap()
             + ensemble_defect_constrained(&seed, &holo(), &empty_site()).unwrap();
-        let d =
-            design_riboswitch_ed(&apo(), &holo(), &empty_site(), RiboswitchEdParams::default())
-                .unwrap();
+        let d = design_riboswitch_ed(
+            &apo(),
+            &holo(),
+            &empty_site(),
+            RiboswitchEdParams::default(),
+        )
+        .unwrap();
         assert!(
             d.combined_defect <= seed_d + 1e-9,
             "designed combined defect {} not below random seed's {}",
@@ -829,8 +840,8 @@ mod tests {
         let apo = Structure::from_dot_bracket("((((....))))").unwrap();
         let holo = Structure::from_dot_bracket("((((....))))....").unwrap();
         let site = LigandBindingSite::new(12);
-        let err = design_riboswitch_ed(&apo, &holo, &site, RiboswitchEdParams::default())
-            .unwrap_err();
+        let err =
+            design_riboswitch_ed(&apo, &holo, &site, RiboswitchEdParams::default()).unwrap_err();
         assert_eq!(err.code(), "rnadesign.goal");
     }
 
@@ -847,8 +858,7 @@ mod tests {
         let apo = Structure::from_dot_bracket("..((((....))))..").unwrap();
         let holo = Structure::from_dot_bracket("..((((....))))..").unwrap();
         let _ = (apo_no, holo_no);
-        let err = design_riboswitch_ed(&apo, &holo, &s, RiboswitchEdParams::default())
-            .unwrap_err();
+        let err = design_riboswitch_ed(&apo, &holo, &s, RiboswitchEdParams::default()).unwrap_err();
         assert_eq!(err.code(), "rnadesign.goal");
     }
 
@@ -871,20 +881,32 @@ mod tests {
 
     #[test]
     fn is_deterministic() {
-        let a =
-            design_riboswitch_ed(&apo(), &holo(), &empty_site(), RiboswitchEdParams::default())
-                .unwrap();
-        let b =
-            design_riboswitch_ed(&apo(), &holo(), &empty_site(), RiboswitchEdParams::default())
-                .unwrap();
+        let a = design_riboswitch_ed(
+            &apo(),
+            &holo(),
+            &empty_site(),
+            RiboswitchEdParams::default(),
+        )
+        .unwrap();
+        let b = design_riboswitch_ed(
+            &apo(),
+            &holo(),
+            &empty_site(),
+            RiboswitchEdParams::default(),
+        )
+        .unwrap();
         assert_eq!(a.sequence, b.sequence);
     }
 
     #[test]
     fn both_states_good_predicate_is_consistent() {
-        let d =
-            design_riboswitch_ed(&apo(), &holo(), &empty_site(), RiboswitchEdParams::default())
-                .unwrap();
+        let d = design_riboswitch_ed(
+            &apo(),
+            &holo(),
+            &empty_site(),
+            RiboswitchEdParams::default(),
+        )
+        .unwrap();
         let n = d.sequence.len() as f64;
         let thr = 0.5;
         let expected = d.apo_defect / n <= thr + 1e-9 && d.holo_defect / n <= thr + 1e-9;

@@ -119,10 +119,7 @@ pub fn genotype_site(obs: &[AlleleObs], priors: [f64; 3]) -> GenotypeCall {
     for i in 0..3 {
         logpost[i] = loglik[i] + priors[i].max(1e-300).log10();
     }
-    let max_lp = logpost
-        .iter()
-        .cloned()
-        .fold(f64::NEG_INFINITY, f64::max);
+    let max_lp = logpost.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let denom: f64 = logpost.iter().map(|&lp| 10f64.powf(lp - max_lp)).sum();
     let log_denom = max_lp + denom.log10();
     for lp in &mut logpost {
@@ -230,11 +227,7 @@ mod tests {
     #[test]
     fn posteriors_sum_to_one() {
         let call = genotype_site(&obs(10, 10, 30), flat_priors());
-        let sum: f64 = call
-            .log10_posteriors
-            .iter()
-            .map(|&lp| 10f64.powf(lp))
-            .sum();
+        let sum: f64 = call.log10_posteriors.iter().map(|&lp| 10f64.powf(lp)).sum();
         assert!((sum - 1.0).abs() < 1e-6, "sum = {sum}");
     }
 

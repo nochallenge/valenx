@@ -105,10 +105,7 @@ impl ValidationReport {
 ///
 /// `clash_tolerance` is the van der Waals overlap allowance (≈ 0.4 Å
 /// is the MolProbity default).
-pub fn validate_structure(
-    structure: &Structure,
-    clash_tolerance: f64,
-) -> Result<ValidationReport> {
+pub fn validate_structure(structure: &Structure, clash_tolerance: f64) -> Result<ValidationReport> {
     let model = structure.first_model();
 
     let clashes = detect_clashes(model, clash_tolerance)?;
@@ -148,9 +145,7 @@ fn check_geometry(model: &Model) -> Vec<GeometryOutlier> {
                 ("CA", "C", CA_C, "CA-C bond"),
                 ("C", "O", C_O, "C=O bond"),
             ] {
-                if let (Some(pa), Some(pb)) =
-                    (residue.primary_atom(a), residue.primary_atom(b))
-                {
+                if let (Some(pa), Some(pb)) = (residue.primary_atom(a), residue.primary_atom(b)) {
                     let d = pa.distance(pb);
                     if (d - ideal).abs() > tol {
                         outliers.push(GeometryOutlier {
@@ -231,8 +226,7 @@ fn expected_heavy_atoms(resname: &str) -> &'static [&'static str] {
             "N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "OH",
         ],
         "TRP" => &[
-            "N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "NE1", "CE2", "CE3",
-            "CZ2", "CZ3", "CH2",
+            "N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2",
         ],
         _ => &[],
     }
@@ -320,7 +314,8 @@ mod tests {
         let mut chain = Chain::new("A");
         let mut bad = Residue::new("ALA", 1);
         // N-CA stretched to 2.5 A — far outside tolerance.
-        bad.atoms.push(Atom::new("N", "N", Point3::new(0.0, 0.0, 0.0)));
+        bad.atoms
+            .push(Atom::new("N", "N", Point3::new(0.0, 0.0, 0.0)));
         bad.atoms
             .push(Atom::new("CA", "C", Point3::new(2.5, 0.0, 0.0)));
         bad.atoms
@@ -349,7 +344,8 @@ mod tests {
         let mut chain = Chain::new("A");
         // A TRP with only the backbone — many sidechain atoms missing.
         let mut trp = Residue::new("TRP", 1);
-        trp.atoms.push(Atom::new("N", "N", Point3::new(0.0, 0.0, 0.0)));
+        trp.atoms
+            .push(Atom::new("N", "N", Point3::new(0.0, 0.0, 0.0)));
         trp.atoms
             .push(Atom::new("CA", "C", Point3::new(1.46, 0.0, 0.0)));
         trp.atoms

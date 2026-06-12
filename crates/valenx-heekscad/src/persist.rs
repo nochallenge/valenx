@@ -28,8 +28,7 @@ pub fn to_ron_string(d: &Drawing) -> Result<String, HeeksCadError> {
 
 /// Deserialise.
 pub fn from_ron_str(s: &str) -> Result<PanelFile, HeeksCadError> {
-    let f: PanelFile =
-        ron::from_str(s).map_err(|e| HeeksCadError::Persist(e.to_string()))?;
+    let f: PanelFile = ron::from_str(s).map_err(|e| HeeksCadError::Persist(e.to_string()))?;
     if f.version != VERSION {
         return Err(HeeksCadError::Persist(format!(
             "unsupported version {} expected {VERSION}",

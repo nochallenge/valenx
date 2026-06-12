@@ -119,9 +119,18 @@ mod tests {
             (gibbs_free_energy_from_equilibrium_constant(10.0, 298.15) - expected).abs() < 1e-6
         );
         // Guard: non-positive K / T, or non-finite → 0 (no panic, no ln of ≤ 0).
-        assert_eq!(gibbs_free_energy_from_equilibrium_constant(0.0, 298.15), 0.0);
-        assert_eq!(gibbs_free_energy_from_equilibrium_constant(-1.0, 298.15), 0.0);
+        assert_eq!(
+            gibbs_free_energy_from_equilibrium_constant(0.0, 298.15),
+            0.0
+        );
+        assert_eq!(
+            gibbs_free_energy_from_equilibrium_constant(-1.0, 298.15),
+            0.0
+        );
         assert_eq!(gibbs_free_energy_from_equilibrium_constant(10.0, 0.0), 0.0);
-        assert_eq!(gibbs_free_energy_from_equilibrium_constant(f64::NAN, 298.15), 0.0);
+        assert_eq!(
+            gibbs_free_energy_from_equilibrium_constant(f64::NAN, 298.15),
+            0.0
+        );
     }
 }

@@ -102,8 +102,7 @@ impl TransientHistory {
         if self.frames.is_empty() {
             return 0.0;
         }
-        self.frames.iter().map(|f| f.coefficients.cd).sum::<f64>()
-            / self.frames.len() as f64
+        self.frames.iter().map(|f| f.coefficients.cd).sum::<f64>() / self.frames.len() as f64
     }
 
     /// The peak-to-peak amplitude of the lift coefficient — a measure
@@ -128,8 +127,8 @@ impl TransientHistory {
         if self.frames.len() < 3 {
             return 0.0;
         }
-        let mean = self.frames.iter().map(|f| f.coefficients.cl).sum::<f64>()
-            / self.frames.len() as f64;
+        let mean =
+            self.frames.iter().map(|f| f.coefficients.cl).sum::<f64>() / self.frames.len() as f64;
         let mut crossings = 0;
         for w in self.frames.windows(2) {
             let a = w[0].coefficients.cl - mean;
@@ -232,8 +231,7 @@ fn blend_fields(target: &mut Field3, prev: &Field3, weight: f64) {
         return;
     }
     for idx in 0..target.data.len() {
-        target.data[idx] =
-            (1.0 - weight) * target.data[idx] + weight * prev.data[idx];
+        target.data[idx] = (1.0 - weight) * target.data[idx] + weight * prev.data[idx];
     }
 }
 
@@ -241,8 +239,7 @@ fn blend_fields(target: &mut Field3, prev: &Field3, weight: f64) {
 fn body_centre(tunnel: &WindTunnel) -> nalgebra::Vector3<f64> {
     let g = tunnel.grid;
     let mut min = nalgebra::Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
-    let mut max =
-        nalgebra::Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let mut max = nalgebra::Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
     let mut any = false;
     for k in 0..g.nz {
         for j in 0..g.ny {
@@ -260,11 +257,7 @@ fn body_centre(tunnel: &WindTunnel) -> nalgebra::Vector3<f64> {
     if any {
         0.5 * (min + max)
     } else {
-        nalgebra::Vector3::new(
-            g.x0 + 0.5 * g.lx,
-            g.y0 + 0.5 * g.ly,
-            g.z0 + 0.5 * g.lz,
-        )
+        nalgebra::Vector3::new(g.x0 + 0.5 * g.lx, g.y0 + 0.5 * g.ly, g.z0 + 0.5 * g.lz)
     }
 }
 
@@ -290,7 +283,10 @@ mod tests {
         // The implicit-Euler blend must always lie in [0, 0.95].
         for dt in [1e-6, 1e-3, 1.0, 1e3] {
             let b = blend_factor(1.225, 0.01, dt);
-            assert!((0.0..=0.95).contains(&b), "blend {b} out of range for dt {dt}");
+            assert!(
+                (0.0..=0.95).contains(&b),
+                "blend {b} out of range for dt {dt}"
+            );
         }
         // A tiny dt retains almost all of the previous field.
         assert!(blend_factor(1.225, 1.0, 1e-6) > 0.9);

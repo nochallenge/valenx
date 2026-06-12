@@ -62,10 +62,8 @@ pub fn feat_make_revol_with_sketch(
             "must be non-zero finite",
         ));
     }
-    let a_norm = (axis_direction[0].powi(2)
-        + axis_direction[1].powi(2)
-        + axis_direction[2].powi(2))
-    .sqrt();
+    let a_norm =
+        (axis_direction[0].powi(2) + axis_direction[1].powi(2) + axis_direction[2].powi(2)).sqrt();
     if a_norm < f64::EPSILON {
         return Err(OcctAdvancedError::bad_input(
             "axis_direction",

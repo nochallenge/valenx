@@ -110,12 +110,11 @@ impl ReactionTransform {
         let product_bonds = mapped_bond_set(&self.product);
         let mut bonds_to_remove: Vec<(usize, usize)> = Vec::new();
         for &(m1, m2, _) in &reactant_bonds {
-            if !product_bonds.iter().any(|&(p1, p2, _)| {
-                (p1 == m1 && p2 == m2) || (p1 == m2 && p2 == m1)
-            }) {
-                if let (Some(&t1), Some(&t2)) =
-                    (map_to_target.get(&m1), map_to_target.get(&m2))
-                {
+            if !product_bonds
+                .iter()
+                .any(|&(p1, p2, _)| (p1 == m1 && p2 == m2) || (p1 == m2 && p2 == m1))
+            {
+                if let (Some(&t1), Some(&t2)) = (map_to_target.get(&m1), map_to_target.get(&m2)) {
                     bonds_to_remove.push((t1, t2));
                 }
             }
@@ -123,9 +122,7 @@ impl ReactionTransform {
 
         // 2. apply product bonds: change order or add new bond
         for &(m1, m2, order) in &product_bonds {
-            if let (Some(&t1), Some(&t2)) =
-                (map_to_target.get(&m1), map_to_target.get(&m2))
-            {
+            if let (Some(&t1), Some(&t2)) = (map_to_target.get(&m1), map_to_target.get(&m2)) {
                 match out.bond_between(t1, t2) {
                     Some(bi) => {
                         out.bonds[bi].order = order;
@@ -227,9 +224,9 @@ fn remove_bonds(mol: &mut Molecule, pairs: &[(usize, usize)]) {
         return;
     }
     mol.bonds.retain(|b| {
-        !pairs.iter().any(|&(a, c)| {
-            (b.a == a && b.b == c) || (b.a == c && b.b == a)
-        })
+        !pairs
+            .iter()
+            .any(|&(a, c)| (b.a == a && b.b == c) || (b.a == c && b.b == a))
     });
 }
 
@@ -328,7 +325,7 @@ mod tests {
     #[test]
     fn rejects_bad_smirks() {
         assert!(ReactionTransform::parse("CC>CO").is_err()); // no '>>'
-        // product map with no reactant counterpart
+                                                             // product map with no reactant counterpart
         assert!(ReactionTransform::parse("[C:1]>>[C:1][O:2]").is_err());
     }
 
@@ -378,7 +375,11 @@ mod tests {
         // two alcohol partners → up to two distinct products
         assert!(!lib.is_empty());
         for m in &lib {
-            assert!(m.is_connected(), "product {} disconnected", write_canonical_smiles(m));
+            assert!(
+                m.is_connected(),
+                "product {} disconnected",
+                write_canonical_smiles(m)
+            );
         }
     }
 }

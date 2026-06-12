@@ -232,12 +232,7 @@ pub fn banded_global(a: &[u8], b: &[u8], scheme: &ScoringScheme, k: usize) -> Re
 /// indels, the best *in-band* (possibly globally-suboptimal) alignment
 /// is returned rather than an error; an error is raised only when no
 /// in-band path reaches the corner. Widen `k` for an exact result.
-pub fn banded_affine(
-    a: &[u8],
-    b: &[u8],
-    scheme: &ScoringScheme,
-    k: usize,
-) -> Result<Alignment> {
+pub fn banded_affine(a: &[u8], b: &[u8], scheme: &ScoringScheme, k: usize) -> Result<Alignment> {
     let n = a.len();
     let m = b.len();
     let open = scheme.gap.open;

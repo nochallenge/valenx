@@ -23,9 +23,7 @@
 
 use crate::error::{Result, RnaDesignError};
 use serde::{Deserialize, Serialize};
-use valenx_genediting::mrna::utr::{
-    analyze_utr3, analyze_utr5, reference_utr3, reference_utr5,
-};
+use valenx_genediting::mrna::utr::{analyze_utr3, analyze_utr5, reference_utr3, reference_utr5};
 
 /// Parameters for [`design_regulatory`].
 #[derive(Clone, Debug, Default)]

@@ -96,8 +96,7 @@ pub const Y_PLUS_LOG_LOWER: f64 = 11.0;
 #[inline]
 pub fn spalding_y_plus(u_plus: f64) -> f64 {
     let ku = KAPPA * u_plus;
-    let bracket =
-        ku.exp() - 1.0 - ku - 0.5 * ku * ku - ku * ku * ku / 6.0;
+    let bracket = ku.exp() - 1.0 - ku - 0.5 * ku * ku - ku * ku * ku / 6.0;
     u_plus + (-KAPPA * B_LOGLAW).exp() * bracket
 }
 
@@ -124,12 +123,7 @@ fn spalding_dy_plus_du_plus(u_plus: f64) -> f64 {
 /// Degenerate inputs — a non-positive `u_t`, `y` or `nu` — return `0`.
 pub fn friction_velocity(u_t: f64, y: f64, nu: f64) -> f64 {
     let u_t = u_t.abs();
-    if !(u_t > 0.0
-        && y > 0.0
-        && nu > 0.0
-        && u_t.is_finite()
-        && y.is_finite())
-    {
+    if !(u_t > 0.0 && y > 0.0 && nu > 0.0 && u_t.is_finite() && y.is_finite()) {
         return 0.0;
     }
     // Residual in u_τ: F(u_τ) = spalding_y_plus(u_t/u_τ) − y·u_τ/ν = 0.
@@ -165,8 +159,7 @@ pub fn friction_velocity(u_t: f64, y: f64, nu: f64) -> f64 {
         let u_plus = u_t / u_tau;
         let f = spalding_y_plus(u_plus) - y * u_tau / nu;
         // dF/du_τ.
-        let df = spalding_dy_plus_du_plus(u_plus) * (-u_t / (u_tau * u_tau))
-            - y / nu;
+        let df = spalding_dy_plus_du_plus(u_plus) * (-u_t / (u_tau * u_tau)) - y / nu;
         if !df.is_finite() || df.abs() < 1e-300 {
             break;
         }
@@ -236,13 +229,7 @@ pub fn y_plus(u_t: f64, y: f64, nu: f64) -> f64 {
 /// of a laminar linear gradient. It is floored at the molecular
 /// viscosity `mu_lam` (the wall can never transport *less* momentum
 /// than molecular diffusion) and is finite for a vanishing `u_t`.
-pub fn wall_effective_viscosity(
-    rho: f64,
-    u_t: f64,
-    y: f64,
-    nu: f64,
-    mu_lam: f64,
-) -> f64 {
+pub fn wall_effective_viscosity(rho: f64, u_t: f64, y: f64, nu: f64, mu_lam: f64) -> f64 {
     let u_t = u_t.abs();
     if !(u_t > 1e-12 && y > 0.0 && u_t.is_finite()) {
         return mu_lam.max(0.0);
@@ -341,7 +328,11 @@ pub fn wall_turbulence(
     WallTurbulence {
         u_tau,
         k: if k.is_finite() { k.max(0.0) } else { 0.0 },
-        mu_t: if mu_t.is_finite() { mu_t } else { mu_lam.max(0.0) },
+        mu_t: if mu_t.is_finite() {
+            mu_t
+        } else {
+            mu_lam.max(0.0)
+        },
         epsilon: if epsilon.is_finite() {
             epsilon.max(1e-12)
         } else {
@@ -517,8 +508,7 @@ mod tests {
         );
         // μ_t = ρ·κ·u_τ·y — the log-layer mixing length.
         assert!(
-            (wt.mu_t - rho * KAPPA * wt.u_tau * 0.02).abs()
-                < 1e-9 * wt.mu_t,
+            (wt.mu_t - rho * KAPPA * wt.u_tau * 0.02).abs() < 1e-9 * wt.mu_t,
             "μ_t should be the ρκu_τy mixing-length value"
         );
     }

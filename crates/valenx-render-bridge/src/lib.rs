@@ -107,13 +107,9 @@ pub mod wgsl_pbr;
 pub use camera::Camera;
 pub use emit::scene_file;
 pub use engine::RenderEngine;
-pub use environment::{
-    EnvironmentMap, IrradianceMap, PrefilteredEnvironment, PrefilteredLevel,
-};
+pub use environment::{EnvironmentMap, IrradianceMap, PrefilteredEnvironment, PrefilteredLevel};
 pub use error::{ErrorCategory, RenderError};
-pub use irradiance_volume::{
-    fibonacci_sphere, sh_basis, IrradianceVolume, LightProbe, ShOrder,
-};
+pub use irradiance_volume::{fibonacci_sphere, sh_basis, IrradianceVolume, LightProbe, ShOrder};
 pub use light::Light;
 pub use material::{Material, MaterialId};
 pub use pbr::{

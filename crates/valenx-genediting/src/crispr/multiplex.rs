@@ -269,7 +269,10 @@ mod tests {
     #[test]
     fn empty_target_list_is_rejected() {
         let req = MultiplexRequest::new(Vec::new(), NucleaseId::SpCas9);
-        assert_eq!(design_multiplex(&req).unwrap_err().code(), "genediting.invalid");
+        assert_eq!(
+            design_multiplex(&req).unwrap_err().code(),
+            "genediting.invalid"
+        );
     }
 
     #[test]

@@ -135,7 +135,11 @@ fn alternating_gc_stem_folds_and_matches_eval() {
         r.energy
     );
     // A GC-rich stem of this length is firmly stable.
-    assert!(r.energy < -8.0, "GC-rich stem should be very stable: {}", r.energy);
+    assert!(
+        r.energy < -8.0,
+        "GC-rich stem should be very stable: {}",
+        r.energy
+    );
 }
 
 #[test]
@@ -156,7 +160,10 @@ fn weak_au_stem_is_less_stable_than_a_gc_stem() {
 fn hairpin_loop_size_dependence_follows_the_published_table() {
     // Three identical stems closing AAAA / AAAAAA / AAAAAAAA loops.
     let loop4 = loop_eval("GGGGGAAAACCCCC", "(((((....)))))");
-    let loop6 = loop_eval("GGGGGAAAAAACCCCC", "((((( ...... )))))".replace(' ', "").as_str());
+    let loop6 = loop_eval(
+        "GGGGGAAAAAACCCCC",
+        "((((( ...... )))))".replace(' ', "").as_str(),
+    );
     let loop8 = loop_eval(
         "GGGGGAAAAAAAACCCCC",
         "((((( ........ )))))".replace(' ', "").as_str(),
@@ -217,7 +224,11 @@ fn folds_a_realistic_trna_stably() {
     let seq = "GCGGAUUUAGCUCAGUUGGGAGAGCGCCAGACUGAAGAUCUGGAGGUCCUGUGUUCGAUCCACAGAAUUCGCACCA";
     let r = mfe(&RnaSeq::parse(seq).unwrap()).unwrap();
     assert!(r.structure.is_nested());
-    assert!(r.energy < -15.0, "a tRNA should fold to a deep MFE: {}", r.energy);
+    assert!(
+        r.energy < -15.0,
+        "a tRNA should fold to a deep MFE: {}",
+        r.energy
+    );
     let recomputed = structure_energy(&RnaSeq::parse(seq).unwrap(), &r.structure).unwrap();
     assert!(
         (recomputed - r.energy).abs() < 1e-4,

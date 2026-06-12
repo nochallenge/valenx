@@ -208,11 +208,7 @@ pub fn radial_distribution_averaged(
         }
     }
     let count = frames.len() as f64;
-    let g = sum_g
-        .unwrap()
-        .into_iter()
-        .map(|v| v / count)
-        .collect();
+    let g = sum_g.unwrap().into_iter().map(|v| v / count).collect();
     Ok(RadialDistribution {
         radii,
         g,
@@ -302,8 +298,7 @@ mod tests {
         let pos = random_gas(500, edge, 17);
         let cell = SimBox::cubic(edge).unwrap();
         let single = radial_distribution(&pos, &cell, 3.0, 25).unwrap();
-        let averaged =
-            radial_distribution_averaged(&[pos], &cell, 3.0, 25).unwrap();
+        let averaged = radial_distribution_averaged(&[pos], &cell, 3.0, 25).unwrap();
         for (a, b) in single.g.iter().zip(&averaged.g) {
             assert!((a - b).abs() < 1e-9);
         }

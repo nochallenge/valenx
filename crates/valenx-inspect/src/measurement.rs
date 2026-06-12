@@ -281,10 +281,7 @@ mod tests {
     #[test]
     fn bbox_diag_unit_cube() {
         let m = Measurement::BoundingBoxDiagonal {
-            points: vec![
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(1.0, 1.0, 1.0),
-            ],
+            points: vec![Vector3::new(0.0, 0.0, 0.0), Vector3::new(1.0, 1.0, 1.0)],
         };
         assert!((compute(&m).unwrap() - 3f64.sqrt()).abs() < 1e-12);
     }

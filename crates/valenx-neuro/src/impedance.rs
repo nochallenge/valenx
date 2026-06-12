@@ -101,7 +101,10 @@ mod tests {
         let z = ElectrodeImpedance::disk(50.0, 0.2, Cpe::default());
         let r_a = z.access_resistance_ohm();
         let expect = 1.0 / (4.0 * 0.2 * 50.0e-6);
-        assert!((r_a / expect - 1.0).abs() < 1e-9, "R_a={r_a} expect={expect}");
+        assert!(
+            (r_a / expect - 1.0).abs() < 1e-9,
+            "R_a={r_a} expect={expect}"
+        );
     }
 
     #[test]
@@ -109,7 +112,10 @@ mod tests {
         let z = ElectrodeImpedance::disk(50.0, 0.2, Cpe::default());
         let lo = z.magnitude_ohm(1.0); // 1 Hz
         let hi = z.magnitude_ohm(1.0e5); // 100 kHz
-        assert!(lo > hi, "low-f capacitive must exceed high-f resistive: lo={lo} hi={hi}");
+        assert!(
+            lo > hi,
+            "low-f capacitive must exceed high-f resistive: lo={lo} hi={hi}"
+        );
         // At high frequency the CPE shorts out and |Z| → R_a.
         let r_a = z.access_resistance_ohm();
         assert!(
@@ -126,12 +132,18 @@ mod tests {
 
         // High frequency: the CPE shorts out → the impedance is the resistive R_a
         // plateau, so the phase → 0°.
-        assert!(z.phase_deg(1.0e9).abs() < 1e-3, "high-f phase → 0° (resistive)");
+        assert!(
+            z.phase_deg(1.0e9).abs() < 1e-3,
+            "high-f phase → 0° (resistive)"
+        );
 
         // Low frequency: the double-layer CPE dominates → the phase → the bare-CPE
         // constant phase −n·90° (= −81° for n = 0.9).
         let lo = z.phase_deg(1.0e-9);
-        assert!((lo - (-n * 90.0)).abs() < 1e-3, "low-f phase → −n·90°, got {lo}");
+        assert!(
+            (lo - (-n * 90.0)).abs() < 1e-3,
+            "low-f phase → −n·90°, got {lo}"
+        );
 
         // At an arbitrary frequency: recompute Re/Im of Z = R_a + Z_CPE independently
         // and check (i) phase_deg = atan2(Im, Re) and (ii) the (magnitude, phase) pair
@@ -144,7 +156,10 @@ mod tests {
         let re = z.access_resistance_ohm() + mag_cpe * cpe_phase.cos();
         let im = -mag_cpe * cpe_phase.sin();
         let phi = z.phase_deg(f);
-        assert!((phi - im.atan2(re).to_degrees()).abs() < 1e-9, "phase = atan2(Im, Re)");
+        assert!(
+            (phi - im.atan2(re).to_degrees()).abs() < 1e-9,
+            "phase = atan2(Im, Re)"
+        );
         let mag = z.magnitude_ohm(f);
         let phi_rad = phi.to_radians();
         assert!((mag * phi_rad.cos() - re).abs() < 1e-9, "|Z|·cosφ = Re Z");
@@ -152,7 +167,10 @@ mod tests {
 
         // The double layer lags the current: phase is strictly negative and never
         // steeper than the −n·90° CPE asymptote.
-        assert!(phi < 0.0 && phi > -n * 90.0, "capacitive lag in (−n·90°, 0°): {phi}");
+        assert!(
+            phi < 0.0 && phi > -n * 90.0,
+            "capacitive lag in (−n·90°, 0°): {phi}"
+        );
     }
 
     #[test]

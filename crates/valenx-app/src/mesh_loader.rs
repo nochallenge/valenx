@@ -552,9 +552,8 @@ mod tests {
         f.set_len(valenx_core::io_caps::MAX_VTK_FILE_BYTES + 1)
             .unwrap();
         drop(f);
-        let err = load_mesh_from_vtk(&path).expect_err(
-            "round-22 M1: a 4 GiB+ vtk must be rejected as IO error before reading",
-        );
+        let err = load_mesh_from_vtk(&path)
+            .expect_err("round-22 M1: a 4 GiB+ vtk must be rejected as IO error before reading");
         assert!(
             err.starts_with("read "),
             "must surface as a read error, not parse: {err}"

@@ -146,10 +146,7 @@ impl EventDrivenTimeCourse {
                 }
                 // Next deadline: t_target or the earliest pending event
                 // execution time, whichever is sooner.
-                let next_deadline = pending
-                    .iter()
-                    .map(|p| p.exec_time)
-                    .fold(t_target, f64::min);
+                let next_deadline = pending.iter().map(|p| p.exec_time).fold(t_target, f64::min);
                 let step_end = next_deadline.min(t_target);
 
                 // Integrate one chunk from `t` to `step_end`.
@@ -167,9 +164,7 @@ impl EventDrivenTimeCourse {
                     if !was_high && now_high {
                         // Bisect the (t, new_t] span to find the
                         // crossing point.
-                        let t_cross = self.bisect_crossing(
-                            &sys, &state, t, new_t, &ev.trigger,
-                        )?;
+                        let t_cross = self.bisect_crossing(&sys, &state, t, new_t, &ev.trigger)?;
                         crossed.push((t_cross, ei));
                     }
                 }
@@ -194,9 +189,7 @@ impl EventDrivenTimeCourse {
                     simul.sort_by(|a, b| {
                         let pa = events[a.1].priority;
                         let pb = events[b.1].priority;
-                        pb.partial_cmp(&pa)
-                            .unwrap()
-                            .then_with(|| a.1.cmp(&b.1))
+                        pb.partial_cmp(&pa).unwrap().then_with(|| a.1.cmp(&b.1))
                     });
                     // Adopt the new state at new_t (the integrator's
                     // accepted step end); the crossing time itself is
@@ -226,8 +219,7 @@ impl EventDrivenTimeCourse {
                     }
                     // Triggers crossed in this segment are now high.
                     for ev in events.iter_mut() {
-                        ev.initial_value =
-                            ev.trigger.value(&state, sys.params(), t) > 0.0;
+                        ev.initial_value = ev.trigger.value(&state, sys.params(), t) > 0.0;
                     }
                     // Execute any pending events whose execution time is
                     // at or before the current t. (No-delay events queued
@@ -251,8 +243,7 @@ impl EventDrivenTimeCourse {
                         event_log.push((t, pe.event_idx));
                         sys.project_assignments(&mut state, t)?;
                         for ev2 in events.iter_mut() {
-                            ev2.initial_value =
-                                ev2.trigger.value(&state, sys.params(), t) > 0.0;
+                            ev2.initial_value = ev2.trigger.value(&state, sys.params(), t) > 0.0;
                         }
                     }
                     continue;
@@ -263,8 +254,7 @@ impl EventDrivenTimeCourse {
                 sys.project_assignments(&mut state, new_t)?;
                 // Update event baselines for the next sub-step.
                 for ev in events.iter_mut() {
-                    ev.initial_value =
-                        ev.trigger.value(&state, sys.params(), new_t) > 0.0;
+                    ev.initial_value = ev.trigger.value(&state, sys.params(), new_t) > 0.0;
                 }
                 t = new_t;
 
@@ -292,8 +282,7 @@ impl EventDrivenTimeCourse {
                     sys.project_assignments(&mut state, t)?;
                     // Refresh event baselines.
                     for ev2 in events.iter_mut() {
-                        ev2.initial_value =
-                            ev2.trigger.value(&state, sys.params(), t) > 0.0;
+                        ev2.initial_value = ev2.trigger.value(&state, sys.params(), t) > 0.0;
                     }
                 }
             }
@@ -389,13 +378,7 @@ impl EventDrivenTimeCourse {
     }
 
     /// Integrate one event-free segment with the configured integrator.
-    fn integrate_segment(
-        &self,
-        sys: &OdeSystem,
-        y0: &[f64],
-        a: f64,
-        b: f64,
-    ) -> Result<Trajectory> {
+    fn integrate_segment(&self, sys: &OdeSystem, y0: &[f64], a: f64, b: f64) -> Result<Trajectory> {
         if (b - a).abs() < 1e-14 {
             return Ok(Trajectory {
                 times: vec![a, b],
@@ -596,15 +579,19 @@ mod tests {
         // at sample just after, A should jump to ~200.
         let times = &traj.trajectory.times;
         let series = traj.trajectory.series(0);
-        let i_after =
-            times.iter().position(|&t| t > 1.51).expect("sample after exec");
+        let i_after = times
+            .iter()
+            .position(|&t| t > 1.51)
+            .expect("sample after exec");
         assert!(
             series[i_after] > 150.0,
             "post-delay A = {} not at 200",
             series[i_after]
         );
-        let i_before =
-            times.iter().rposition(|&t| t < 1.45).expect("sample before exec");
+        let i_before = times
+            .iter()
+            .rposition(|&t| t < 1.45)
+            .expect("sample before exec");
         assert!(
             series[i_before] < 50.0,
             "pre-delay A = {} not still decayed",

@@ -53,12 +53,8 @@ pub fn write_vcf(matrix: &GenotypeMatrix, chrom: &str) -> Result<String> {
             .ceil() as i64
             + 1
     ));
-    out.push_str(
-        "##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count\">\n",
-    );
-    out.push_str(
-        "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n",
-    );
+    out.push_str("##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count\">\n");
+    out.push_str("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n");
     out.push_str("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
     for k in 0..n_diploid {
         out.push_str(&format!("\tsample{k}"));
@@ -69,9 +65,7 @@ pub fn write_vcf(matrix: &GenotypeMatrix, chrom: &str) -> Result<String> {
     for col in 0..matrix.n_sites() {
         let pos = matrix.positions()[col].round().max(1.0) as i64;
         let ac = matrix.derived_count(col)?;
-        out.push_str(&format!(
-            "{chrom}\t{pos}\t.\tA\tT\t.\tPASS\tAC={ac}\tGT"
-        ));
+        out.push_str(&format!("{chrom}\t{pos}\t.\tA\tT\t.\tPASS\tAC={ac}\tGT"));
         for k in 0..n_diploid {
             let a0 = matrix.get(2 * k, col);
             let a1 = matrix.get(2 * k + 1, col);
@@ -95,10 +89,7 @@ pub fn write_vcf(matrix: &GenotypeMatrix, chrom: &str) -> Result<String> {
 /// [`PopgenError::Invalid`] if `sequence_length <= 0`.
 pub fn write_ms(matrix: &GenotypeMatrix, sequence_length: f64) -> Result<String> {
     if sequence_length <= 0.0 {
-        return Err(PopgenError::invalid(
-            "sequence_length",
-            "must be positive",
-        ));
+        return Err(PopgenError::invalid("sequence_length", "must be positive"));
     }
     let mut out = String::new();
     out.push_str("// valenx-popgen simulation\n");
@@ -109,7 +100,10 @@ pub fn write_ms(matrix: &GenotypeMatrix, sequence_length: f64) -> Result<String>
     }
     out.push('\n');
     for row in matrix.rows() {
-        let line: String = row.iter().map(|&v| if v == 1 { '1' } else { '0' }).collect();
+        let line: String = row
+            .iter()
+            .map(|&v| if v == 1 { '1' } else { '0' })
+            .collect();
         out.push_str(&line);
         out.push('\n');
     }
@@ -146,16 +140,17 @@ pub fn read_ms(text: &str) -> Result<GenotypeMatrix> {
             continue;
         }
         if let Some(rest) = line.strip_prefix("segsites:") {
-            segsites = Some(rest.trim().parse().map_err(|_| {
-                PopgenError::parse("ms", "segsites: value is not an integer")
-            })?);
+            segsites = Some(
+                rest.trim()
+                    .parse()
+                    .map_err(|_| PopgenError::parse("ms", "segsites: value is not an integer"))?,
+            );
         } else if let Some(rest) = line.strip_prefix("positions:") {
             positions = rest
                 .split_whitespace()
                 .map(|t| {
-                    t.parse::<f64>().map_err(|_| {
-                        PopgenError::parse("ms", "positions: value is not a number")
-                    })
+                    t.parse::<f64>()
+                        .map_err(|_| PopgenError::parse("ms", "positions: value is not a number"))
                 })
                 .collect::<Result<Vec<f64>>>()?;
         } else if line.chars().all(|c| c == '0' || c == '1') {
@@ -165,14 +160,11 @@ pub fn read_ms(text: &str) -> Result<GenotypeMatrix> {
         // Anything else (command line, seeds) is ignored.
     }
 
-    let s = segsites
-        .ok_or_else(|| PopgenError::parse("ms", "no `segsites:` line found"))?;
+    let s = segsites.ok_or_else(|| PopgenError::parse("ms", "no `segsites:` line found"))?;
     if positions.is_empty() && s > 0 {
         // Some ms output omits positions for segsites: 0; otherwise
         // synthesise an even grid.
-        positions = (0..s)
-            .map(|i| (i as f64 + 0.5) / s as f64)
-            .collect();
+        positions = (0..s).map(|i| (i as f64 + 0.5) / s as f64).collect();
     }
     if positions.len() != s {
         return Err(PopgenError::parse(
@@ -218,10 +210,7 @@ mod tests {
         // 4 haplotypes -> 2 diploid samples.
         assert!(vcf.contains("sample0") && vcf.contains("sample1"));
         // Two data lines for two sites.
-        let data_lines = vcf
-            .lines()
-            .filter(|l| l.starts_with("chr1\t"))
-            .count();
+        let data_lines = vcf.lines().filter(|l| l.starts_with("chr1\t")).count();
         assert_eq!(data_lines, 2);
         // Genotypes are phased a|b.
         assert!(vcf.contains("1|0") || vcf.contains("0|1"));

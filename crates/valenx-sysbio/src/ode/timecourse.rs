@@ -128,7 +128,10 @@ impl TimeCourse {
             return Err(SysbioError::invalid("t_end", "t_end must exceed t0"));
         }
         if self.n_points == 0 {
-            return Err(SysbioError::invalid("n_points", "need at least one interval"));
+            return Err(SysbioError::invalid(
+                "n_points",
+                "need at least one interval",
+            ));
         }
         let sys = OdeSystem::from_model(model);
 
@@ -186,13 +189,7 @@ impl TimeCourse {
 
     /// Integrate a single event-free sub-interval with the chosen
     /// integrator.
-    fn integrate_segment(
-        &self,
-        sys: &OdeSystem,
-        y0: &[f64],
-        a: f64,
-        b: f64,
-    ) -> Result<Trajectory> {
+    fn integrate_segment(&self, sys: &OdeSystem, y0: &[f64], a: f64, b: f64) -> Result<Trajectory> {
         match &self.integrator {
             Integrator::Rk4 { dt } => integrate_rk4(sys, y0, a, b, *dt, 1),
             Integrator::Rk45(r) => r.integrate(sys, y0, a, b),

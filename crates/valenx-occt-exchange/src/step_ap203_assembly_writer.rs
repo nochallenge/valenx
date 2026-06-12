@@ -83,9 +83,8 @@ fn read_capped_step_scratch(path: &Path) -> Result<String, OcctExchangeError> {
             ),
         )));
     }
-    String::from_utf8(buf).map_err(|e| {
-        OcctExchangeError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-    })
+    String::from_utf8(buf)
+        .map_err(|e| OcctExchangeError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
 }
 
 /// One placement in the assembly — a child solid + its world-space
@@ -166,8 +165,8 @@ pub fn step_ap203_assembly_writer(
 
     for (i, part) in parts.iter().enumerate() {
         let placed = bake_transform(&part.solid, &part.transform)?;
-        let scratch = std::env::temp_dir()
-            .join(format!("valenx_asm_part_{}_{i}.step", std::process::id()));
+        let scratch =
+            std::env::temp_dir().join(format!("valenx_asm_part_{}_{i}.step", std::process::id()));
         crate::step_ap203_writer(&placed, &scratch)?;
         // Round-20 L3: cap the scratch-file read at
         // `MAX_CAD_INTERCHANGE_FILE_BYTES` (256 MiB — the same cap
@@ -208,9 +207,7 @@ pub fn step_ap203_assembly_writer(
     merged_data.push_str(&hierarchy);
 
     let header = header.expect("at least one part processed");
-    let file = format!(
-        "ISO-10303-21;\n{header}DATA;\n{merged_data}ENDSEC;\nEND-ISO-10303-21;\n"
-    );
+    let file = format!("ISO-10303-21;\n{header}DATA;\n{merged_data}ENDSEC;\nEND-ISO-10303-21;\n");
     valenx_core::io_caps::atomic_write_str(path, &file)?;
     Ok(())
 }
@@ -553,7 +550,7 @@ mod tests {
         // form or kept as a literal arg inside a single-quoted string.
         // Either way no sibling #9999 entity opens.
         let _ = pwned_count; // not the primary assertion
-        // No fresh #9999= directive at column 0 (or after whitespace).
+                             // No fresh #9999= directive at column 0 (or after whitespace).
         assert!(
             !hierarchy.contains("\n#9999="),
             "part.name injection opened sibling #9999= entity: {hierarchy}"
@@ -619,12 +616,9 @@ mod tests {
             solid: valenx_cad::box_solid(1.0, 1.0, 1.0).unwrap(),
             transform: identity(),
         };
-        let out = std::env::temp_dir().join(format!(
-            "valenx_asm_round15_{}.step",
-            std::process::id()
-        ));
-        step_ap203_assembly_writer(&[safe_part, hostile_part], &out)
-            .expect("assembly write");
+        let out =
+            std::env::temp_dir().join(format!("valenx_asm_round15_{}.step", std::process::id()));
+        step_ap203_assembly_writer(&[safe_part, hostile_part], &out).expect("assembly write");
         let text = fs::read_to_string(&out).expect("read back");
         let _ = fs::remove_file(&out);
         // No fresh #9999= directive opened at column 0 (a real STEP
@@ -632,7 +626,9 @@ mod tests {
         // appears inside the single-quoted PRODUCT literal — that's
         // benign data, not a directive.
         assert!(
-            !text.lines().any(|l| l.starts_with("#9999=") || l.starts_with("#9999 =")),
+            !text
+                .lines()
+                .any(|l| l.starts_with("#9999=") || l.starts_with("#9999 =")),
             "part.name injection opened sibling #9999= directive at column 0: {text}"
         );
         // The merged hierarchy block ends with /* --- AP203 product
@@ -673,8 +669,7 @@ mod tests {
                 ],
             },
         ];
-        let out = std::env::temp_dir()
-            .join(format!("valenx_asm_test_{}.step", std::process::id()));
+        let out = std::env::temp_dir().join(format!("valenx_asm_test_{}.step", std::process::id()));
         step_ap203_assembly_writer(&parts, &out).expect("assembly write");
         let text = fs::read_to_string(&out).expect("read back");
         let _ = fs::remove_file(&out);

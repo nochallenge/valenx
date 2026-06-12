@@ -145,7 +145,8 @@ impl Adapter for PkSimAdapter {
         // stale "plain `case.path.join` is correct" comment was wrong;
         // PK-Sim reads the project file but a hostile case bundle
         // shouldn't be able to point `project` at `/etc/passwd`.
-        let source_project = valenx_core::adapter_helpers::confined_join(&case.path, &input.project)?;
+        let source_project =
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.project)?;
         if !source_project.is_file() {
             return Err(AdapterError::InvalidCase {
                 case_path: case.path.join("case.toml"),
@@ -387,7 +388,10 @@ output_basename = "sim"
         let err = PkSimAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("absolute") || msg.contains("escape") || msg.contains("`..`") || msg.contains("traversal"),
+            msg.contains("absolute")
+                || msg.contains("escape")
+                || msg.contains("`..`")
+                || msg.contains("traversal"),
             "expected confined_join rejection on project, got: {msg}"
         );
         let _ = std::fs::remove_dir_all(&d);

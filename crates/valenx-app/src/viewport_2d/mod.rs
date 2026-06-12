@@ -159,7 +159,11 @@ fn refresh_restriction_cache(state: &mut Viewport2dState, seq: &Seq) {
         return;
     }
     let key = sequence_fingerprint(seq);
-    if state.restriction_cache.as_ref().is_none_or(|c| c.key != key) {
+    if state
+        .restriction_cache
+        .as_ref()
+        .is_none_or(|c| c.key != key)
+    {
         state.restriction_cache = Some(RestrictionCache {
             key,
             cuts: unique_cutters(seq),
@@ -211,8 +215,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut Viewport2dState, seq: Option<&SeqReco
             let split_y = canvas.top() + canvas.height() * 0.45;
             let linear_rect =
                 Rect::from_min_max(canvas.min, Pos2::new(canvas.max.x, split_y - 1.0));
-            let circ_rect =
-                Rect::from_min_max(Pos2::new(canvas.min.x, split_y + 3.0), canvas.max);
+            let circ_rect = Rect::from_min_max(Pos2::new(canvas.min.x, split_y + 3.0), canvas.max);
 
             draw_linear_track(&painter, linear_rect, state, record);
             handle_linear_input(&resp, state, seq_len, canvas.width());
@@ -244,29 +247,32 @@ pub fn demo_record() -> SeqRecord {
     // starts at bp >= 50, so their positions are unaffected.
     let mut dna: Vec<u8> = b"GAATTCGGATCCAAGCTTGTCGACCTGCAGGAGCTCGGTACCTCTAGA".to_vec();
     dna.extend_from_slice(&b"ATGCATGCATGC".repeat(121)); // 48 + 1 452 = 1 500 bp
-    let seq = Seq::with_topology(SeqKind::Dna, dna, Topology::Circular)
-        .expect("demo sequence is valid");
+    let seq =
+        Seq::with_topology(SeqKind::Dna, dna, Topology::Circular).expect("demo sequence is valid");
 
     let mut rec = SeqRecord::new("pDEMO", seq);
     rec.description = "Demo plasmid shown when no sequence is loaded".to_string();
 
-    let add = |rec: &mut SeqRecord,
-               ft: &str,
-               start: usize,
-               end: usize,
-               strand: Strand,
-               label: &str| {
-        rec.features.push(
-            SeqFeature::new(ft, Location::Single(Span::with_strand(start, end, strand)))
-                .with_qualifier("label", label),
-        );
-    };
+    let add =
+        |rec: &mut SeqRecord, ft: &str, start: usize, end: usize, strand: Strand, label: &str| {
+            rec.features.push(
+                SeqFeature::new(ft, Location::Single(Span::with_strand(start, end, strand)))
+                    .with_qualifier("label", label),
+            );
+        };
 
     add(&mut rec, "promoter", 50, 100, Strand::Forward, "Ptac");
     add(&mut rec, "primer_bind", 88, 108, Strand::Forward, "M13 fwd");
     add(&mut rec, "CDS", 100, 700, Strand::Forward, "lacZ-α");
     add(&mut rec, "terminator", 700, 750, Strand::Forward, "T1");
-    add(&mut rec, "rep_origin", 800, 1050, Strand::Forward, "pUC ori");
+    add(
+        &mut rec,
+        "rep_origin",
+        800,
+        1050,
+        Strand::Forward,
+        "pUC ori",
+    );
     add(&mut rec, "CDS", 1100, 1450, Strand::Reverse, "AmpR");
 
     rec
@@ -325,15 +331,11 @@ const FEATURE_H: f32 = 13.0;
 const FEATURE_GAP: f32 = 4.0;
 const ARROW_TIP_W: f32 = 8.0;
 
-fn draw_linear_track(
-    painter: &Painter,
-    rect: Rect,
-    state: &Viewport2dState,
-    record: &SeqRecord,
-) {
+fn draw_linear_track(painter: &Painter, rect: Rect, state: &Viewport2dState, record: &SeqRecord) {
     let seq_len = record.seq.len();
 
-    let bp_x = |bp: f32| -> f32 { layout::bp_to_x(bp, state.pan, state.bases_per_pixel, rect.left()) };
+    let bp_x =
+        |bp: f32| -> f32 { layout::bp_to_x(bp, state.pan, state.bases_per_pixel, rect.left()) };
 
     // --- Ruler background ------------------------------------------------
     let ruler_rect = Rect::from_min_max(rect.min, Pos2::new(rect.max.x, rect.min.y + RULER_H));
@@ -382,7 +384,10 @@ fn draw_linear_track(
     // Sequence boundary ticks
     for &bx in &[x0, x1] {
         painter.line_segment(
-            [Pos2::new(bx, backbone_y - 6.0), Pos2::new(bx, backbone_y + 6.0)],
+            [
+                Pos2::new(bx, backbone_y - 6.0),
+                Pos2::new(bx, backbone_y + 6.0),
+            ],
             Stroke::new(1.5, Color32::from_gray(130)),
         );
     }
@@ -525,11 +530,17 @@ fn draw_feature_arrow(
             );
             // Arrowhead as three lines pointing right
             painter.line_segment(
-                [Pos2::new(body_end_x, top_left.y), Pos2::new(bot_right.x, mid_y)],
+                [
+                    Pos2::new(body_end_x, top_left.y),
+                    Pos2::new(bot_right.x, mid_y),
+                ],
                 Stroke::new(2.0, color),
             );
             painter.line_segment(
-                [Pos2::new(bot_right.x, mid_y), Pos2::new(body_end_x, bot_right.y)],
+                [
+                    Pos2::new(bot_right.x, mid_y),
+                    Pos2::new(body_end_x, bot_right.y),
+                ],
                 Stroke::new(2.0, color),
             );
         }
@@ -542,20 +553,22 @@ fn draw_feature_arrow(
             );
             // Arrowhead as three lines pointing left
             painter.line_segment(
-                [Pos2::new(body_start_x, top_left.y), Pos2::new(top_left.x, mid_y)],
+                [
+                    Pos2::new(body_start_x, top_left.y),
+                    Pos2::new(top_left.x, mid_y),
+                ],
                 Stroke::new(2.0, color),
             );
             painter.line_segment(
-                [Pos2::new(top_left.x, mid_y), Pos2::new(body_start_x, bot_right.y)],
+                [
+                    Pos2::new(top_left.x, mid_y),
+                    Pos2::new(body_start_x, bot_right.y),
+                ],
                 Stroke::new(2.0, color),
             );
         }
         Strand::Unknown => {
-            painter.rect_filled(
-                Rect::from_min_max(top_left, bot_right),
-                2.0,
-                color,
-            );
+            painter.rect_filled(Rect::from_min_max(top_left, bot_right), 2.0, color);
         }
     }
 }
@@ -586,8 +599,7 @@ fn handle_linear_input(
 
             // Zoom towards / away
             let factor = if scroll_y > 0.0 { 0.85 } else { 1.0 / 0.85 };
-            state.bases_per_pixel =
-                layout::clamp_zoom(state.bases_per_pixel * factor, seq_len);
+            state.bases_per_pixel = layout::clamp_zoom(state.bases_per_pixel * factor, seq_len);
 
             // Restore cursor_bp under cursor_x after zoom
             state.pan = cursor_bp - (cursor_x - resp.rect.left()) * state.bases_per_pixel;
@@ -653,10 +665,8 @@ fn draw_circular_map(painter: &Painter, rect: Rect, record: &SeqRecord) {
                 let t1 = (j + 1) as f32 / n_arc as f32;
                 let a0 = a_start + (a_end - a_start) * t0;
                 let a1 = a_start + (a_end - a_start) * t1;
-                let p0 =
-                    Pos2::new(center.x + feat_r * a0.cos(), center.y + feat_r * a0.sin());
-                let p1 =
-                    Pos2::new(center.x + feat_r * a1.cos(), center.y + feat_r * a1.sin());
+                let p0 = Pos2::new(center.x + feat_r * a0.cos(), center.y + feat_r * a0.sin());
+                let p1 = Pos2::new(center.x + feat_r * a1.cos(), center.y + feat_r * a1.sin());
                 painter.line_segment([p0, p1], arc_stroke);
             }
 
@@ -752,9 +762,18 @@ mod tests {
         let seq = Seq::new(SeqKind::Dna, "AAAGAATTCAAAGGATCCAAA").unwrap();
         let cuts = unique_cutters(&seq);
         let names: Vec<&str> = cuts.iter().map(|&(_, n)| n).collect();
-        assert!(names.contains(&"EcoRI"), "EcoRI is a single cutter here: {names:?}");
-        assert!(names.contains(&"BamHI"), "BamHI is a single cutter here: {names:?}");
-        assert!(cuts.windows(2).all(|w| w[0].0 <= w[1].0), "sorted by cut position");
+        assert!(
+            names.contains(&"EcoRI"),
+            "EcoRI is a single cutter here: {names:?}"
+        );
+        assert!(
+            names.contains(&"BamHI"),
+            "BamHI is a single cutter here: {names:?}"
+        );
+        assert!(
+            cuts.windows(2).all(|w| w[0].0 <= w[1].0),
+            "sorted by cut position"
+        );
     }
 
     #[test]
@@ -762,7 +781,10 @@ mod tests {
         // Two EcoRI sites -> EcoRI is no longer a *single* cutter.
         let seq = Seq::new(SeqKind::Dna, "GAATTCAAAAGAATTC").unwrap();
         let names: Vec<&str> = unique_cutters(&seq).iter().map(|&(_, n)| n).collect();
-        assert!(!names.contains(&"EcoRI"), "EcoRI cuts twice -> not unique: {names:?}");
+        assert!(
+            !names.contains(&"EcoRI"),
+            "EcoRI cuts twice -> not unique: {names:?}"
+        );
     }
 
     #[test]
@@ -788,7 +810,10 @@ mod tests {
         // Off -> no cache built.
         let mut off = Viewport2dState::default();
         refresh_restriction_cache(&mut off, &seq);
-        assert!(off.restriction_cache.is_none(), "no cache while the overlay is off");
+        assert!(
+            off.restriction_cache.is_none(),
+            "no cache while the overlay is off"
+        );
 
         // On -> cache built with the EcoRI single cutter; key stable on re-run.
         let mut on = Viewport2dState {
@@ -796,7 +821,10 @@ mod tests {
             ..Default::default()
         };
         refresh_restriction_cache(&mut on, &seq);
-        let cache = on.restriction_cache.as_ref().expect("cache built when enabled");
+        let cache = on
+            .restriction_cache
+            .as_ref()
+            .expect("cache built when enabled");
         assert!(cache.cuts.iter().any(|&(_, n)| n == "EcoRI"));
         let key = cache.key;
         refresh_restriction_cache(&mut on, &seq);
@@ -814,7 +842,9 @@ mod tests {
         let rec = demo_record();
         assert_eq!(rec.seq.len(), 1500, "demo stays a round 1500 bp");
         let names: Vec<&str> = unique_cutters(&rec.seq).iter().map(|&(_, n)| n).collect();
-        for enz in ["EcoRI", "BamHI", "HindIII", "SalI", "PstI", "SacI", "KpnI", "XbaI"] {
+        for enz in [
+            "EcoRI", "BamHI", "HindIII", "SalI", "PstI", "SacI", "KpnI", "XbaI",
+        ] {
             assert!(
                 names.contains(&enz),
                 "demo MCS should expose {enz} as a single cutter; got {names:?}"

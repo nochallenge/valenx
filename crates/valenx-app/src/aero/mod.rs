@@ -70,8 +70,7 @@ pub fn extract_body(
         }
         BodySource::ImportedStl => {
             let stl = stl.ok_or_else(|| {
-                "no STL is loaded — use the Import STL button, or pick the demo box"
-                    .to_string()
+                "no STL is loaded — use the Import STL button, or pick the demo box".to_string()
             })?;
             let mesh = trimesh_from_stl(stl)?;
             check_nonempty(&mesh)?;
@@ -126,8 +125,7 @@ fn check_nonempty(mesh: &TriMesh) -> Result<(), String> {
                 || e.y <= 0.0
                 || e.z <= 0.0
             {
-                Err("the body's bounding box is degenerate (zero or non-finite extent)"
-                    .to_string())
+                Err("the body's bounding box is degenerate (zero or non-finite extent)".to_string())
             } else {
                 Ok(())
             }

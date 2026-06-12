@@ -204,10 +204,7 @@ impl Population {
             return Err(PopgenError::invalid("n", "population must be non-empty"));
         }
         if sequence_length <= 0.0 {
-            return Err(PopgenError::invalid(
-                "sequence_length",
-                "must be positive",
-            ));
+            return Err(PopgenError::invalid("sequence_length", "must be positive"));
         }
         Ok(Population {
             sites: Vec::new(),
@@ -238,10 +235,7 @@ impl Population {
             ));
         }
         if sequence_length <= 0.0 {
-            return Err(PopgenError::invalid(
-                "sequence_length",
-                "must be positive",
-            ));
+            return Err(PopgenError::invalid("sequence_length", "must be positive"));
         }
         for ind in &individuals {
             if ind.genomes.len() != ploidy.copies() {
@@ -343,8 +337,7 @@ impl Population {
         let mut rows = Vec::with_capacity(self.chromosome_count());
         for ind in &self.individuals {
             for g in &ind.genomes {
-                let row: Vec<u8> =
-                    (0..self.sites.len()).map(|s| g.allele(s)).collect();
+                let row: Vec<u8> = (0..self.sites.len()).map(|s| g.allele(s)).collect();
                 rows.push(row);
             }
         }

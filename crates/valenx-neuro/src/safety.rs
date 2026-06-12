@@ -110,18 +110,30 @@ mod tests {
         let d_max = max_safe_charge_density(a, k);
 
         // Threads max_safe_charge_per_phase + charge_density: D_max = Q_max / A.
-        assert!((d_max - q_max / a).abs() <= 1e-9 * d_max, "D_max = Q_max / A");
+        assert!(
+            (d_max - q_max / a).abs() <= 1e-9 * d_max,
+            "D_max = Q_max / A"
+        );
         assert!(
             (d_max - charge_density(q_max, a)).abs() <= 1e-9 * d_max,
             "D_max = charge_density(Q_max, A)"
         );
 
         // Boundary round-trip via shannon_k: at the max charge, k == k_limit.
-        assert!((shannon_k(q_max, a) - k).abs() <= 1e-9 * k, "shannon_k(Q_max, A) = k");
+        assert!(
+            (shannon_k(q_max, a) - k).abs() <= 1e-9 * k,
+            "shannon_k(Q_max, A) = k"
+        );
 
         // is_safe straddles the boundary: just inside is safe, just outside is not.
-        assert!(is_safe(0.999 * q_max, a, k), "just inside the limit is safe");
-        assert!(!is_safe(1.001 * q_max, a, k), "just outside the limit is unsafe");
+        assert!(
+            is_safe(0.999 * q_max, a, k),
+            "just inside the limit is safe"
+        );
+        assert!(
+            !is_safe(1.001 * q_max, a, k),
+            "just outside the limit is unsafe"
+        );
     }
 
     #[test]
@@ -141,7 +153,10 @@ mod tests {
                 (max_safe_charge_per_phase(a, k) - q).abs() <= 1e-9 * q,
                 "max_safe_charge_per_phase(A_min, k) = Q"
             );
-            assert!((shannon_k(q, a) - k).abs() <= 1e-9 * k, "shannon_k(Q, A_min) = k");
+            assert!(
+                (shannon_k(q, a) - k).abs() <= 1e-9 * k,
+                "shannon_k(Q, A_min) = k"
+            );
         }
 
         // (d) MONOTONICITY: more charge needs more area; a stricter (lower) k needs more
@@ -159,7 +174,10 @@ mod tests {
     #[test]
     fn charge_per_phase_uc_feeds_the_shannon_chain() {
         // (a) WORKED: 2 mA × 0.5 ms → Q = 1.0 µC (since mA·ms = µC).
-        assert!((charge_per_phase_uc(2.0, 0.5) - 1.0).abs() <= 1e-9, "Q = I·t = 1 µC");
+        assert!(
+            (charge_per_phase_uc(2.0, 0.5) - 1.0).abs() <= 1e-9,
+            "Q = I·t = 1 µC"
+        );
 
         // (b) THREAD charge_density (non-tautological): D = Q/A.
         let (i, pw, a) = (2.0_f64, 0.5_f64, 0.01_f64);
@@ -175,13 +193,25 @@ mod tests {
             (charge_per_phase_uc(2.0, 0.5) - max_safe_charge_per_phase(0.01, 2.0)).abs() <= 1e-9,
             "Q = Q_max at k = 2.0"
         );
-        assert!(!is_safe(charge_per_phase_uc(2.0, 0.5), 0.01, 2.0), "at the boundary → unsafe");
-        assert!(is_safe(charge_per_phase_uc(2.0, 0.495), 0.01, 2.0), "just below → safe");
+        assert!(
+            !is_safe(charge_per_phase_uc(2.0, 0.5), 0.01, 2.0),
+            "at the boundary → unsafe"
+        );
+        assert!(
+            is_safe(charge_per_phase_uc(2.0, 0.495), 0.01, 2.0),
+            "just below → safe"
+        );
 
         // (d) PROPORTIONALITY + ZERO: linear in I and t; no current → no charge.
         let base = charge_per_phase_uc(2.0, 0.5);
-        assert!((charge_per_phase_uc(4.0, 0.5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base, "∝ I");
-        assert!((charge_per_phase_uc(2.0, 1.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base, "∝ t");
+        assert!(
+            (charge_per_phase_uc(4.0, 0.5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "∝ I"
+        );
+        assert!(
+            (charge_per_phase_uc(2.0, 1.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            "∝ t"
+        );
         assert_eq!(charge_per_phase_uc(0.0, 0.5), 0.0);
     }
 

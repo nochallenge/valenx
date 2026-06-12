@@ -371,11 +371,9 @@ mod tests {
         // After applying scale 2.0, every text-style size should be
         // about twice the baseline.
         let ctx = egui::Context::default();
-        let baseline_sizes: Vec<f32> =
-            ctx.style().text_styles.values().map(|f| f.size).collect();
+        let baseline_sizes: Vec<f32> = ctx.style().text_styles.values().map(|f| f.size).collect();
         apply(&ctx, ThemeVariant::Dark, 2.0);
-        let scaled_sizes: Vec<f32> =
-            ctx.style().text_styles.values().map(|f| f.size).collect();
+        let scaled_sizes: Vec<f32> = ctx.style().text_styles.values().map(|f| f.size).collect();
         assert_eq!(baseline_sizes.len(), scaled_sizes.len());
         for (b, s) in baseline_sizes.iter().zip(scaled_sizes.iter()) {
             assert!((s / b - 2.0).abs() < 0.01, "expected 2x scale: {b} → {s}");

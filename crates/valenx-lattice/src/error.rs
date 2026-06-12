@@ -83,7 +83,10 @@ mod tests {
 
     #[test]
     fn codes_and_cats() {
-        assert_eq!(LatticeError::Degenerate("x".into()).code(), "lattice.degenerate");
+        assert_eq!(
+            LatticeError::Degenerate("x".into()).code(),
+            "lattice.degenerate"
+        );
         assert_eq!(
             LatticeError::BadParameter {
                 name: "n",

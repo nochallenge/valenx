@@ -135,10 +135,7 @@ impl Adapter for Eman2Adapter {
         let source_particles = if input.particles.is_absolute() {
             input.particles.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.particles,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.particles)?
         };
         if !source_particles.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -155,10 +152,7 @@ impl Adapter for Eman2Adapter {
         let source_model = if input.model.is_absolute() {
             input.model.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.model,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.model)?
         };
         if !source_model.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -187,8 +187,7 @@ impl VcfHeader {
         for m in &self.meta {
             out.push(m.to_vcf_string());
         }
-        let mut chrom =
-            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO".to_string();
+        let mut chrom = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO".to_string();
         if !self.samples.is_empty() {
             chrom.push_str("\tFORMAT");
             for s in &self.samples {
@@ -485,8 +484,7 @@ impl VcfFile {
                 // cols[0] is empty (the text after "#CHROM"); fixed
                 // columns are POS..FORMAT; samples start at index 9.
                 if cols.len() > 9 {
-                    header.samples =
-                        cols[9..].iter().map(|s| s.to_string()).collect();
+                    header.samples = cols[9..].iter().map(|s| s.to_string()).collect();
                 }
                 seen_chrom_line = true;
             } else if line.starts_with('#') {

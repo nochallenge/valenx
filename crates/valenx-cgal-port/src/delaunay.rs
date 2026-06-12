@@ -123,8 +123,7 @@ fn in_circumcircle(a: [f64; 2], b: [f64; 2], c: [f64; 2], p: [f64; 2]) -> bool {
     let by = b[1] - p[1];
     let cx = c[0] - p[0];
     let cy = c[1] - p[1];
-    let det = (ax * ax + ay * ay) * (bx * cy - cx * by)
-        - (bx * bx + by * by) * (ax * cy - cx * ay)
+    let det = (ax * ax + ay * ay) * (bx * cy - cx * by) - (bx * bx + by * by) * (ax * cy - cx * ay)
         + (cx * cx + cy * cy) * (ax * by - bx * ay);
     // Signed area ×2 of triangle (a, b, c): >0 CCW, <0 CW.
     let orient = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);

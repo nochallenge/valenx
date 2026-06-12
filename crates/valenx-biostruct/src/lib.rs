@@ -105,9 +105,7 @@ pub mod validate;
 // --- Convenience re-exports of the most-used types --------------------
 
 pub use analyze::{analyze_batch, StructureReport};
-pub use compare::{
-    align_chains_ce, align_chains_tm, StructureAlignment, TmAlignment, TmSeedKind,
-};
+pub use compare::{align_chains_ce, align_chains_tm, StructureAlignment, TmAlignment, TmSeedKind};
 pub use error::{BiostructError, ErrorCategory, Result};
 pub use io::{read_structure, write_mmcif, write_pdb};
 pub use nucleic::{fit_curved_axis, fit_helical_axis, CurvedHelicalAxis, HelicalAxis};
@@ -144,10 +142,7 @@ END
         let s = load_structure(MINI_PDB, "fallback").expect("structure loads");
         assert_eq!(s.id, "1ABC");
         assert_eq!(s.atom_count(), 5);
-        assert_eq!(
-            s.first_model().chain("A").unwrap().observed_sequence(),
-            "A"
-        );
+        assert_eq!(s.first_model().chain("A").unwrap().observed_sequence(), "A");
     }
 
     #[test]

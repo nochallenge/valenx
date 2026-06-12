@@ -40,7 +40,6 @@ pub use ld::{ld_d, ld_d_prime, ld_matrix, ld_pair, ld_r_squared, LdStats};
 pub use selection_scan::{ehh, ihs, integrated_ehh};
 pub use sfs::{folded_spectrum, site_frequency_spectrum, Sfs};
 pub use tree_stats::{
-    branch_diversity, branch_divergence, equal_windows, windowed_branch_diversity,
-    windowed_segregating_sites, windowed_site_divergence, windowed_site_diversity,
-    WindowedStats,
+    branch_divergence, branch_diversity, equal_windows, windowed_branch_diversity,
+    windowed_segregating_sites, windowed_site_divergence, windowed_site_diversity, WindowedStats,
 };

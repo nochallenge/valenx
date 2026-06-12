@@ -97,9 +97,7 @@ pub fn shape_analysis_wireorder(
     if closed && gap > tolerance {
         return Err(OcctAdvancedError::defect(
             "closure",
-            format!(
-                "closed wire fails to close: gap {gap:.3e} > tolerance {tolerance:.3e}"
-            ),
+            format!("closed wire fails to close: gap {gap:.3e} > tolerance {tolerance:.3e}"),
         ));
     }
 
@@ -122,12 +120,8 @@ mod tests {
 
     #[test]
     fn rejects_zero_tolerance() {
-        let err = shape_analysis_wireorder(
-            &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-            false,
-            0.0,
-        )
-        .unwrap_err();
+        let err =
+            shape_analysis_wireorder(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], false, 0.0).unwrap_err();
         assert_eq!(err.code(), "occt_advanced.bad_input");
     }
 

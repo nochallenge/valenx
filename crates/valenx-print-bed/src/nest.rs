@@ -125,11 +125,7 @@ mod tests {
 
     #[test]
     fn auto_pack_places_two_parts_side_by_side() {
-        let printer = Printer::new(
-            (220.0, 220.0, 250.0),
-            BedType::Heated,
-            BedMaterial::Pei,
-        );
+        let printer = Printer::new((220.0, 220.0, 250.0), BedType::Heated, BedMaterial::Pei);
         let parts = vec![cube_part("a", 50.0), cube_part("b", 50.0)];
         let placed = auto_pack(parts, &printer).unwrap();
         // Two parts shouldn't share an x position.
@@ -138,11 +134,7 @@ mod tests {
 
     #[test]
     fn auto_pack_rejects_oversized_part() {
-        let printer = Printer::new(
-            (100.0, 100.0, 100.0),
-            BedType::Unheated,
-            BedMaterial::Glass,
-        );
+        let printer = Printer::new((100.0, 100.0, 100.0), BedType::Unheated, BedMaterial::Glass);
         let parts = vec![cube_part("big", 200.0)];
         let err = auto_pack(parts, &printer).unwrap_err();
         assert!(matches!(err, PrintBedError::PartTooLarge { .. }));

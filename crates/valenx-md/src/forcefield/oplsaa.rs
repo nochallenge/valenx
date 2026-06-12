@@ -221,26 +221,26 @@ fn angle_key(i: &str, j: &str, k: &str) -> (String, String, String) {
 fn bonded_class(opls_type: &str) -> &'static str {
     match opls_type {
         "opls_135" | "opls_136" | "opls_137" | "opls_139" | "opls_157" => "CT", // sp3 carbon
-        "opls_141" | "opls_142" => "CM",                           // alkene sp2 C
-        "opls_145" => "CA",                                        // aromatic C
-        "opls_235" | "opls_267" | "opls_177" => "C",               // carbonyl C
-        "opls_754" => "CZ",                                        // sp carbon
-        "opls_140" | "opls_156" => "HC",                           // aliphatic H
-        "opls_144" => "HC",                                        // alkene H
-        "opls_146" => "HA",                                        // aromatic H
-        "opls_155" | "opls_268" => "HO",                           // hydroxyl/acid H
-        "opls_240" => "H",                                         // amide / amine H
-        "opls_204" => "HS",                                        // thiol H
-        "opls_117" => "HW",                                        // water H
-        "opls_111" => "OW",                                        // water O
-        "opls_154" | "opls_268_O" => "OH",                         // hydroxyl O
-        "opls_180" => "OS",                                        // ether O
-        "opls_236" | "opls_269" | "opls_178" => "O",               // carbonyl O
-        "opls_238" => "N",                                         // amide N
-        "opls_900" | "opls_903" | "opls_287" => "N3",              // amine N
-        "opls_511" => "NC",                                        // aromatic N
-        "opls_753" => "NZ",                                        // nitrile N
-        "opls_200" | "opls_202" => "S",                            // sulfur
+        "opls_141" | "opls_142" => "CM",                                        // alkene sp2 C
+        "opls_145" => "CA",                                                     // aromatic C
+        "opls_235" | "opls_267" | "opls_177" => "C",                            // carbonyl C
+        "opls_754" => "CZ",                                                     // sp carbon
+        "opls_140" | "opls_156" => "HC",                                        // aliphatic H
+        "opls_144" => "HC",                                                     // alkene H
+        "opls_146" => "HA",                                                     // aromatic H
+        "opls_155" | "opls_268" => "HO",                                        // hydroxyl/acid H
+        "opls_240" => "H",                                                      // amide / amine H
+        "opls_204" => "HS",                                                     // thiol H
+        "opls_117" => "HW",                                                     // water H
+        "opls_111" => "OW",                                                     // water O
+        "opls_154" | "opls_268_O" => "OH",                                      // hydroxyl O
+        "opls_180" => "OS",                                                     // ether O
+        "opls_236" | "opls_269" | "opls_178" => "O",                            // carbonyl O
+        "opls_238" => "N",                                                      // amide N
+        "opls_900" | "opls_903" | "opls_287" => "N3",                           // amine N
+        "opls_511" => "NC",                                                     // aromatic N
+        "opls_753" => "NZ",                                                     // nitrile N
+        "opls_200" | "opls_202" => "S",                                         // sulfur
         "opls_164" => "F",
         "opls_165" => "Cl",
         "opls_722" => "Br",
@@ -530,10 +530,10 @@ pub fn improper(center_type: &str) -> Option<ImproperParam> {
     let class = bonded_class(center_type);
     // Published OPLS-AA improper barriers (kcal/mol) for the centre.
     let k_kcal = match class {
-        "CA" => 2.5, // aromatic carbon planarity
-        "C" => 2.5,  // carbonyl carbon planarity
+        "CA" => 2.5,  // aromatic carbon planarity
+        "C" => 2.5,   // carbonyl carbon planarity
         "CM" => 15.0, // alkene sp2 carbon planarity (stiff)
-        "N" => 2.0,  // amide nitrogen planarity
+        "N" => 2.0,   // amide nitrogen planarity
         _ => return None,
     };
     // Express the periodic barrier as a harmonic force constant about

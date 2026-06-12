@@ -21,10 +21,7 @@ pub fn write_heeks_string(toolpath: &Toolpath) -> String {
         match m {
             Move::Rapid { x, y } => s.push_str(&format!("G0 X{x:.4} Y{y:.4}\n")),
             Move::Plunge { z } => {
-                s.push_str(&format!(
-                    "G1 Z{z:.4} F{:.1}\n",
-                    toolpath.tool.plunge_rate
-                ));
+                s.push_str(&format!("G1 Z{z:.4} F{:.1}\n", toolpath.tool.plunge_rate));
             }
             Move::Retract { z } => s.push_str(&format!("G0 Z{z:.4}\n")),
             Move::Feed { x, y } => s.push_str(&format!(

@@ -110,7 +110,10 @@ pub fn plan_gibson(
         ));
     }
     if overlap_len == 0 {
-        return Err(SysbioError::invalid("overlap_len", "overlap must be positive"));
+        return Err(SysbioError::invalid(
+            "overlap_len",
+            "overlap must be positive",
+        ));
     }
     for (i, f) in fragments.iter().enumerate() {
         if f.len() < overlap_len {
@@ -216,9 +219,8 @@ pub fn design_gibson_fragments(
         };
         let slice = bytes[start..end].to_vec();
         frags.push(
-            Seq::new(SeqKind::Dna, slice).map_err(|e| {
-                SysbioError::invalid_model("gibson", format!("bad fragment: {e}"))
-            })?,
+            Seq::new(SeqKind::Dna, slice)
+                .map_err(|e| SysbioError::invalid_model("gibson", format!("bad fragment: {e}")))?,
         );
     }
     Ok(frags)
@@ -251,8 +253,7 @@ pub struct GoldenGatePlan {
 /// A small high-fidelity 4-nt fusion-site set (a subset of the
 /// commonly used Potapov et al. high-fidelity overhangs).
 const FUSION_SITES: [&str; 12] = [
-    "AATG", "GCTT", "CGCT", "TGCC", "ACTA", "TTAC", "GGTA", "AGGA", "ATCC", "CAGG",
-    "TACG", "GACT",
+    "AATG", "GCTT", "CGCT", "TGCC", "ACTA", "TTAC", "GGTA", "AGGA", "ATCC", "CAGG", "TACG", "GACT",
 ];
 
 /// Plan a Golden Gate assembly of `n_fragments` fragments (feature
@@ -316,7 +317,11 @@ pub fn plan_golden_gate_checked(
     let site = enzyme_site.to_uppercase().into_bytes();
     let rc_site = reverse_complement_dna_bytes(&site);
     for (i, f) in fragments.iter().enumerate() {
-        let up: Vec<u8> = f.as_bytes().iter().map(|b| b.to_ascii_uppercase()).collect();
+        let up: Vec<u8> = f
+            .as_bytes()
+            .iter()
+            .map(|b| b.to_ascii_uppercase())
+            .collect();
         let fwd = count_occurrences(&up, &site);
         let rev = if rc_site == site {
             0
@@ -385,7 +390,10 @@ pub const BIOBRICK_SUFFIX: &str = "TACTAGTAGCGGCCGCTGCAG";
 /// the 6-bp mixed `TACTAGAG` scar), suffix.
 pub fn plan_biobrick(parts: &[Seq]) -> Result<BioBrickPlan> {
     if parts.is_empty() {
-        return Err(SysbioError::invalid("parts", "need at least one BioBrick part"));
+        return Err(SysbioError::invalid(
+            "parts",
+            "need at least one BioBrick part",
+        ));
     }
     // Idempotent-scar check: a part must not contain a forbidden RFC10
     // restriction site internally (EcoRI, XbaI, SpeI, PstI, NotI).
@@ -398,7 +406,11 @@ pub fn plan_biobrick(parts: &[Seq]) -> Result<BioBrickPlan> {
     ];
     let mut steps = Vec::new();
     for (i, p) in parts.iter().enumerate() {
-        let up: Vec<u8> = p.as_bytes().iter().map(|b| b.to_ascii_uppercase()).collect();
+        let up: Vec<u8> = p
+            .as_bytes()
+            .iter()
+            .map(|b| b.to_ascii_uppercase())
+            .collect();
         for (name, site) in &forbidden {
             if count_occurrences(&up, site) > 0 {
                 return Err(SysbioError::invalid_model(
@@ -458,9 +470,7 @@ mod tests {
     fn gibson_design_then_plan_roundtrips() {
         // Split a known sequence into overlapping fragments, then plan
         // the assembly and confirm the product matches the original.
-        let target = dna(
-            "ATGCGTACGTTAGCCGGATCAATTGGCCAATTACGTACGTAGCTAGCTAGGGCCCTTTAAACCCGGGTTT",
-        );
+        let target = dna("ATGCGTACGTTAGCCGGATCAATTGGCCAATTACGTACGTAGCTAGCTAGGGCCCTTTAAACCCGGGTTT");
         let frags = design_gibson_fragments(&target, 3, 12).unwrap();
         assert_eq!(frags.len(), 3);
         let plan = plan_gibson(&frags, 12, false, 24.0).unwrap();
@@ -503,8 +513,7 @@ mod tests {
     fn golden_gate_assigns_distinct_overhangs() {
         let plan = plan_golden_gate(4, false, "GGTCTC").unwrap();
         assert_eq!(plan.junctions.len(), 3);
-        let overhangs: Vec<&str> =
-            plan.junctions.iter().map(|j| j.overhang.as_str()).collect();
+        let overhangs: Vec<&str> = plan.junctions.iter().map(|j| j.overhang.as_str()).collect();
         // All distinct.
         for (i, a) in overhangs.iter().enumerate() {
             for b in &overhangs[i + 1..] {

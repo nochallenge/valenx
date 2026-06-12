@@ -71,20 +71,12 @@ impl AabbTree {
     }
 
     /// All triangles whose AABB intersects the ray `(origin, direction)`.
-    pub fn intersect_ray(
-        &self,
-        origin: Vector3<f64>,
-        direction: Vector3<f64>,
-    ) -> Vec<TriangleId> {
+    pub fn intersect_ray(&self, origin: Vector3<f64>, direction: Vector3<f64>) -> Vec<TriangleId> {
         let mut out = Vec::new();
         if self.nodes.is_empty() {
             return out;
         }
-        let inv = Vector3::new(
-            inv(direction.x),
-            inv(direction.y),
-            inv(direction.z),
-        );
+        let inv = Vector3::new(inv(direction.x), inv(direction.y), inv(direction.z));
         let mut stack = vec![0usize];
         while let Some(i) = stack.pop() {
             let (min, max) = self.nodes[i].aabb();

@@ -90,13 +90,7 @@ impl Langevin {
         Self::build(dt, gamma, temperature, seed, Regime::Brownian)
     }
 
-    fn build(
-        dt: f64,
-        gamma: f64,
-        temperature: f64,
-        seed: u64,
-        regime: Regime,
-    ) -> Result<Self> {
+    fn build(dt: f64, gamma: f64, temperature: f64, seed: u64, regime: Regime) -> Result<Self> {
         if !(dt.is_finite() && dt > 0.0) {
             return Err(MdError::invalid("dt", "must be finite and positive"));
         }

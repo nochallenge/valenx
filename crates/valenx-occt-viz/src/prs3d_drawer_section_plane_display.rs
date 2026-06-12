@@ -54,12 +54,8 @@ pub fn prs3d_drawer_section_plane_display(
 ) -> Result<SectionDisplay, OcctVizError> {
     // Re-validate via the constructor in case the caller hand-rolled a
     // `FaceColorRgba` literal with out-of-range channels.
-    let curve = prs3d_drawer_face_color(
-        curve_color.r,
-        curve_color.g,
-        curve_color.b,
-        curve_color.a,
-    )?;
+    let curve =
+        prs3d_drawer_face_color(curve_color.r, curve_color.g, curve_color.b, curve_color.a)?;
     let cap = prs3d_drawer_face_color(cap_color.r, cap_color.g, cap_color.b, cap_color.a)?;
     Ok(SectionDisplay {
         curve_color: curve,

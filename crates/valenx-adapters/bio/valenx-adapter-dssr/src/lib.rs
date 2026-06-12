@@ -145,14 +145,11 @@ impl Adapter for DssrAdapter {
         // into `workdir.join(&input.output_json)`. Validate as a
         // basename — DSSR writes a single JSON file, not a directory.
         if let Some(s) = input.output_json.to_str() {
-            valenx_core::adapter_helpers::validate_output_basename(
-                s,
-                "[bio.dssr].output_json",
-            )
-            .map_err(|e| AdapterError::InvalidCase {
-                case_path: case.path.join("case.toml"),
-                reason: format!("{e}"),
-            })?;
+            valenx_core::adapter_helpers::validate_output_basename(s, "[bio.dssr].output_json")
+                .map_err(|e| AdapterError::InvalidCase {
+                    case_path: case.path.join("case.toml"),
+                    reason: format!("{e}"),
+                })?;
         } else {
             return Err(AdapterError::InvalidCase {
                 case_path: case.path.join("case.toml"),
@@ -167,10 +164,7 @@ impl Adapter for DssrAdapter {
         let source_pdb = if input.input_pdb.is_absolute() {
             input.input_pdb.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input_pdb,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input_pdb)?
         };
         if !source_pdb.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -309,7 +303,11 @@ impl Adapter for DssrAdapter {
 /// be parsed.
 fn read_output_json_path(workdir: &Path) -> Option<std::path::PathBuf> {
     let case_toml = workdir.join("case.toml");
-    let text = valenx_core::io_caps::read_capped_to_string(&case_toml, valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize).ok()?;
+    let text = valenx_core::io_caps::read_capped_to_string(
+        &case_toml,
+        valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize,
+    )
+    .ok()?;
     let parsed: toml::Value = toml::from_str(&text).ok()?;
     let raw = parsed
         .get("bio")?
@@ -399,9 +397,7 @@ output_json = "../etc/passwd"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = DssrAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = DssrAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("[bio.dssr].output_json"),

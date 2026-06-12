@@ -31,8 +31,7 @@ pub struct TissueGrid {
 /// vertex ordering.
 fn signed_vol(p: &[Vector3<f64>], t: [u32; 4]) -> f64 {
     let a = p[t[0] as usize];
-    (p[t[1] as usize] - a)
-        .dot(&((p[t[2] as usize] - a).cross(&(p[t[3] as usize] - a))))
+    (p[t[1] as usize] - a).dot(&((p[t[2] as usize] - a).cross(&(p[t[3] as usize] - a))))
 }
 
 /// Reorder a tet's vertices so its signed volume is positive (swap the last
@@ -98,7 +97,12 @@ impl TissueGrid {
         mesh.element_blocks = vec![blk];
         mesh.recompute_stats();
 
-        Self { mesh, n, spacing_m: spacing, sigma_s_m }
+        Self {
+            mesh,
+            n,
+            spacing_m: spacing,
+            sigma_s_m,
+        }
     }
 
     fn node_index(&self, i: usize, j: usize, k: usize) -> usize {
@@ -202,7 +206,11 @@ impl ExtracellularField {
         let nmax = self.n as f64 - 1.0;
         let g = |coord: f64| (coord / self.spacing_m + c).clamp(0.0, nmax);
         let (gx, gy, gz) = (g(pos.x), g(pos.y), g(pos.z));
-        let (i0, j0, k0) = (gx.floor() as usize, gy.floor() as usize, gz.floor() as usize);
+        let (i0, j0, k0) = (
+            gx.floor() as usize,
+            gy.floor() as usize,
+            gz.floor() as usize,
+        );
         let (i1, j1, k1) = (
             (i0 + 1).min(self.n - 1),
             (j0 + 1).min(self.n - 1),
@@ -255,7 +263,10 @@ mod tests {
         let mut fixed = Vec::new();
         for k in 0..n {
             for j in 0..n {
-                fixed.push(FixedTemperature { node: grid.node_index(0, j, k), temperature: 0.1 });
+                fixed.push(FixedTemperature {
+                    node: grid.node_index(0, j, k),
+                    temperature: 0.1,
+                });
                 fixed.push(FixedTemperature {
                     node: grid.node_index(n - 1, j, k),
                     temperature: 0.0,
@@ -277,7 +288,10 @@ mod tests {
         let field = grid.solve_point_source(100.0).expect("solve");
         let p4 = field.potential_mv_at_radius_x(4.0);
         let p8 = field.potential_mv_at_radius_x(8.0);
-        assert!(p4 > p8 && p8 > 0.0, "φ must decrease with r: p4={p4} p8={p8}");
+        assert!(
+            p4 > p8 && p8 > 0.0,
+            "φ must decrease with r: p4={p4} p8={p8}"
+        );
         // 1/r law (loose — coarse grid + grounded finite box distort it).
         assert!(
             (1.5..3.0).contains(&(p4 / p8)),

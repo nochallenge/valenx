@@ -112,8 +112,7 @@ fn pw92_eps_and_deriv(rs: f64) -> (f64, f64) {
 
     let rsh = rs.sqrt();
     // G = 2A (β1 r^{1/2} + β2 r + β3 r^{3/2} + β4 r²).
-    let g = 2.0 * a
-        * (beta1 * rsh + beta2 * rs + beta3 * rs * rsh + beta4 * rs * rs);
+    let g = 2.0 * a * (beta1 * rsh + beta2 * rs + beta3 * rs * rsh + beta4 * rs * rs);
     let one_plus_inv = 1.0 + 1.0 / g;
     let ln = one_plus_inv.ln();
     let eps = -2.0 * a * (1.0 + alpha1 * rs) * ln;
@@ -121,11 +120,7 @@ fn pw92_eps_and_deriv(rs: f64) -> (f64, f64) {
     // dε/dr_s. Let P = 1 + α1 r_s ; ε = −2A P ln(1 + 1/G).
     // dε/dr = −2A [ α1 ln(1+1/G) + P · d/dr ln(1+1/G) ].
     // d/dr ln(1+1/G) = (−G'/G²) / (1+1/G) = −G' / (G² + G).
-    let gp = 2.0 * a
-        * (0.5 * beta1 / rsh
-            + beta2
-            + 1.5 * beta3 * rsh
-            + 2.0 * beta4 * rs);
+    let gp = 2.0 * a * (0.5 * beta1 / rsh + beta2 + 1.5 * beta3 * rsh + 2.0 * beta4 * rs);
     let dln_dr = -gp / (g * g + g);
     let deps_dr = -2.0 * a * (alpha1 * ln + (1.0 + alpha1 * rs) * dln_dr);
     (eps, deps_dr)
@@ -211,8 +206,7 @@ pub fn pbe_correlation(rho: f64, grad_norm: f64) -> XcContribution {
     // dA/d(ε_c^PW): A = (β/γ)/(E−1) with E = exp(−ε_c/γ).
     //   dA/dε_c = (β/γ) · (−1/(E−1)²) · dE/dε_c, dE/dε_c = −E/γ.
     let e_minus_1 = (exp_arg - 1.0).max(1.0e-30);
-    let da_deps =
-        (PBE_BETA / gamma) * (exp_arg / gamma) / (e_minus_1 * e_minus_1);
+    let da_deps = (PBE_BETA / gamma) * (exp_arg / gamma) / (e_minus_1 * e_minus_1);
 
     let one_plus_r = 1.0 + bg * num / den;
     let dh_dt2 = gamma / one_plus_r * dr_dt2;
@@ -223,8 +217,7 @@ pub fn pbe_correlation(rho: f64, grad_norm: f64) -> XcContribution {
     //   dε_c^PW/dρ = deps_pw_drs · drs_drho.
     //   ∂H/∂ρ = dH/dε_c^PW · (dε_c^PW/dρ) + dH/dt² · ∂t²/∂ρ.
     let deps_pw_drho = deps_pw_drs * drs_drho;
-    let deps_c_drho =
-        deps_pw_drho + dh_deps_pw * deps_pw_drho + dh_dt2 * dt2_drho;
+    let deps_c_drho = deps_pw_drho + dh_deps_pw * deps_pw_drho + dh_dt2 * dt2_drho;
     // ∂e_c/∂ρ = ε_c + ρ ∂ε_c/∂ρ.
     let de_drho = eps_c + rho * deps_c_drho;
 
@@ -351,7 +344,10 @@ mod tests {
         // Shrinking gradient → shrinking difference from LDA.
         for &g in &[0.5, 0.1, 0.02, 0.004] {
             let diff = (pbe_correlation(rho, g).energy_density - lda).abs();
-            assert!(diff <= prev_diff, "diff not shrinking: {diff} > {prev_diff}");
+            assert!(
+                diff <= prev_diff,
+                "diff not shrinking: {diff} > {prev_diff}"
+            );
             prev_diff = diff;
         }
         assert!(prev_diff < 1.0e-4, "residual {prev_diff}");
@@ -368,10 +364,7 @@ mod tests {
             let fm = (rho - h) * pbe_exchange(rho - h, grad).energy_density;
             let fd = (fp - fm) / (2.0 * h);
             let v = pbe_exchange(rho, grad).potential;
-            assert!(
-                (v - fd).abs() < 1.0e-5,
-                "ρ={rho}: v={v} vs ∂(ρε_x)/∂ρ={fd}"
-            );
+            assert!((v - fd).abs() < 1.0e-5, "ρ={rho}: v={v} vs ∂(ρε_x)/∂ρ={fd}");
         }
     }
 
@@ -404,10 +397,7 @@ mod tests {
             let fm = (rho - h) * pbe_correlation(rho - h, grad).energy_density;
             let fd = (fp - fm) / (2.0 * h);
             let v = pbe_correlation(rho, grad).potential;
-            assert!(
-                (v - fd).abs() < 1.0e-5,
-                "ρ={rho}: v={v} vs FD={fd}"
-            );
+            assert!((v - fd).abs() < 1.0e-5, "ρ={rho}: v={v} vs FD={fd}");
         }
     }
 
@@ -422,10 +412,7 @@ mod tests {
             let fm = rho * pbe_correlation(rho, grad - h).energy_density;
             let fd = (fp - fm) / (2.0 * h);
             let v = pbe_correlation(rho, grad).gradient_potential;
-            assert!(
-                (v - fd).abs() < 1.0e-5,
-                "grad={grad}: v={v} vs FD={fd}"
-            );
+            assert!((v - fd).abs() < 1.0e-5, "grad={grad}: v={v} vs FD={fd}");
         }
     }
 

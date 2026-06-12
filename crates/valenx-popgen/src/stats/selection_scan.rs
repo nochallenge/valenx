@@ -39,11 +39,7 @@ use crate::infer::GenotypeMatrix;
 /// # Errors
 /// [`PopgenError::Invalid`] if `core` is out of range, `core_allele` is
 /// not `0`/`1`, or fewer than two haplotypes carry the core allele.
-pub fn ehh(
-    matrix: &GenotypeMatrix,
-    core: usize,
-    core_allele: u8,
-) -> Result<Vec<(f64, f64)>> {
+pub fn ehh(matrix: &GenotypeMatrix, core: usize, core_allele: u8) -> Result<Vec<(f64, f64)>> {
     if core >= matrix.n_sites() {
         return Err(PopgenError::invalid("core", "site index out of range"));
     }
@@ -78,12 +74,7 @@ pub fn ehh(
 ///
 /// Computed by partitioning the carriers into distinct-haplotype groups
 /// and summing `C(group, 2) / C(total, 2)`.
-fn homozygosity(
-    matrix: &GenotypeMatrix,
-    carriers: &[usize],
-    lo: usize,
-    hi: usize,
-) -> f64 {
+fn homozygosity(matrix: &GenotypeMatrix, carriers: &[usize], lo: usize, hi: usize) -> f64 {
     use std::collections::HashMap;
     let mut groups: HashMap<Vec<u8>, usize> = HashMap::new();
     for &r in carriers {
@@ -107,11 +98,7 @@ fn homozygosity(
 ///
 /// # Errors
 /// See [`ehh`].
-pub fn integrated_ehh(
-    matrix: &GenotypeMatrix,
-    core: usize,
-    core_allele: u8,
-) -> Result<f64> {
+pub fn integrated_ehh(matrix: &GenotypeMatrix, core: usize, core_allele: u8) -> Result<f64> {
     let curve = ehh(matrix, core, core_allele)?;
     Ok(trapezoid(&curve))
 }
@@ -174,12 +161,7 @@ mod tests {
     fn ehh_decays_away_from_the_core_when_haplotypes_differ() {
         // Carriers of the derived core allele have divergent flanks.
         let m = matrix(
-            vec![
-                vec![1, 0, 0],
-                vec![1, 1, 1],
-                vec![0, 0, 0],
-                vec![0, 1, 1],
-            ],
+            vec![vec![1, 0, 0], vec![1, 1, 1], vec![0, 0, 0], vec![0, 1, 1]],
             vec![0.0, 50.0, 100.0],
         );
         let curve = ehh(&m, 0, 1).unwrap();
@@ -212,12 +194,7 @@ mod tests {
         // Allele 1: identical flanks (long haplotype). Allele 0:
         // divergent flanks (short).
         let m = matrix(
-            vec![
-                vec![1, 1, 1],
-                vec![1, 1, 1],
-                vec![0, 1, 0],
-                vec![0, 0, 1],
-            ],
+            vec![vec![1, 1, 1], vec![1, 1, 1], vec![0, 1, 0], vec![0, 0, 1]],
             vec![0.0, 100.0, 200.0],
         );
         let ihh_der = integrated_ehh(&m, 0, 1).unwrap();
@@ -231,12 +208,7 @@ mod tests {
     #[test]
     fn ihs_is_negative_when_derived_haplotype_is_long() {
         let m = matrix(
-            vec![
-                vec![1, 1, 1],
-                vec![1, 1, 1],
-                vec![0, 1, 0],
-                vec![0, 0, 1],
-            ],
+            vec![vec![1, 1, 1], vec![1, 1, 1], vec![0, 1, 0], vec![0, 0, 1]],
             vec![0.0, 100.0, 200.0],
         );
         let score = ihs(&m, 0).unwrap();

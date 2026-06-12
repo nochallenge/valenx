@@ -163,7 +163,11 @@ fn extract_peaks(
     }
     // Greedy non-maximum suppression: take the strongest, drop any
     // candidate within `min_separation` of an already-accepted pick.
-    candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    candidates.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let mut picks: Vec<ParticlePick> = Vec::new();
     let sep2 = (min_separation * min_separation) as i64;
     for cand in candidates {
@@ -239,25 +243,19 @@ mod tests {
 
     /// A micrograph with bright disk-shaped "particles" planted at
     /// known centres on a noisy background.
-    fn synthetic_micrograph(
-        size: usize,
-        particles: &[(usize, usize)],
-        radius: f64,
-    ) -> Image2d {
+    fn synthetic_micrograph(size: usize, particles: &[(usize, usize)], radius: f64) -> Image2d {
         let mut img = Image2d::zeros(size, size);
         // A faint deterministic background ripple.
         for y in 0..size {
             for x in 0..size {
-                img.data[y * size + x] =
-                    0.05 * ((x as f32 * 0.3).sin() + (y as f32 * 0.21).cos());
+                img.data[y * size + x] = 0.05 * ((x as f32 * 0.3).sin() + (y as f32 * 0.21).cos());
             }
         }
         for &(px, py) in particles {
             for y in 0..size {
                 for x in 0..size {
-                    let d = ((x as f64 - px as f64).powi(2)
-                        + (y as f64 - py as f64).powi(2))
-                    .sqrt();
+                    let d =
+                        ((x as f64 - px as f64).powi(2) + (y as f64 - py as f64).powi(2)).sqrt();
                     if d <= radius {
                         img.data[y * size + x] += 1.0;
                     }
@@ -326,5 +324,3 @@ mod tests {
         assert!(pick_particles(&micro, &big, 0.5, 4).is_err());
     }
 }
-
-

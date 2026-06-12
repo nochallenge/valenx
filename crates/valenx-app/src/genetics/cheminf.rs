@@ -100,8 +100,12 @@ impl CheminfPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// Keyboard-shortcut entry: run the active sub-tool.
@@ -123,8 +127,12 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         ui.selectable_value(&mut p.tool, Tool::Similarity, "Fingerprint similarity");
         ui.separator();
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
     });
     ui.separator();
 
@@ -224,34 +232,34 @@ fn run_descriptors(p: &mut CheminfPanel) {
     p.error = None;
     match MoleculeReport::from_smiles(p.smiles_a.trim()) {
         Ok(r) => {
-                // The report struct doesn't carry these — recompute from the molecule.
-                let (
-                    heteroatoms,
-                    aromatic_atoms,
-                    aromatic_bonds,
-                    halogens,
-                    single_bonds,
-                    double_bonds,
-                    triple_bonds,
-                    stereocenters,
-                    structural_alerts,
-                ) = valenx_cheminf::mol_from_smiles(p.smiles_a.trim())
-                    .map(|m| {
-                        (
-                            valenx_cheminf::descriptors::heteroatom_count(&m),
-                            valenx_cheminf::descriptors::aromatic_atom_count(&m),
-                            valenx_cheminf::descriptors::aromatic_bond_count(&m),
-                            valenx_cheminf::descriptors::halogen_count(&m),
-                            valenx_cheminf::descriptors::single_bond_count(&m),
-                            valenx_cheminf::descriptors::double_bond_count(&m),
-                            valenx_cheminf::descriptors::triple_bond_count(&m),
-                            valenx_cheminf::perceive::stereo::stereocenter_count(&m),
-                            valenx_cheminf::analyze::structural_alert_count(&m),
-                        )
-                    })
-                    .unwrap_or((0, 0, 0, 0, 0, 0, 0, 0, 0));
-                p.result = format!(
-                    "canonical SMILES : {}\nformula          : {}\n\
+            // The report struct doesn't carry these — recompute from the molecule.
+            let (
+                heteroatoms,
+                aromatic_atoms,
+                aromatic_bonds,
+                halogens,
+                single_bonds,
+                double_bonds,
+                triple_bonds,
+                stereocenters,
+                structural_alerts,
+            ) = valenx_cheminf::mol_from_smiles(p.smiles_a.trim())
+                .map(|m| {
+                    (
+                        valenx_cheminf::descriptors::heteroatom_count(&m),
+                        valenx_cheminf::descriptors::aromatic_atom_count(&m),
+                        valenx_cheminf::descriptors::aromatic_bond_count(&m),
+                        valenx_cheminf::descriptors::halogen_count(&m),
+                        valenx_cheminf::descriptors::single_bond_count(&m),
+                        valenx_cheminf::descriptors::double_bond_count(&m),
+                        valenx_cheminf::descriptors::triple_bond_count(&m),
+                        valenx_cheminf::perceive::stereo::stereocenter_count(&m),
+                        valenx_cheminf::analyze::structural_alert_count(&m),
+                    )
+                })
+                .unwrap_or((0, 0, 0, 0, 0, 0, 0, 0, 0));
+            p.result = format!(
+                "canonical SMILES : {}\nformula          : {}\n\
                      average MW       : {:.3} g/mol\nmonoisotopic     : {:.4} u\n\
                      heavy atoms      : {}\nformal charge    : {}\n\n\
                      -- descriptors --\nCrippen logP     : {:.3}\n\
@@ -264,37 +272,41 @@ fn run_descriptors(p: &mut CheminfPanel) {
                      -- drug-likeness --\nstructural alerts   : {}\nLipinski violations : {} / 4\n\
                      Veber             : {}\nQED score          : {:.3}\n\
                      verdict            : {}",
-                    r.canonical_smiles,
-                    r.formula,
-                    r.average_mw,
-                    r.monoisotopic_mass,
-                    r.heavy_atoms,
-                    r.formal_charge,
-                    r.logp,
-                    r.tpsa,
-                    r.hbd,
-                    r.hba,
-                    r.rotatable_bonds,
-                    r.ring_count,
-                    r.aromatic_rings,
-                    heteroatoms,
-                    aromatic_atoms,
-                    aromatic_bonds,
-                    r.fraction_csp3,
-                    halogens,
-                    single_bonds,
-                    double_bonds,
-                    triple_bonds,
-                    stereocenters,
-                    structural_alerts,
-                    r.lipinski.violations,
-                    if r.veber.passes { "pass" } else { "fail" },
-                    r.qed,
-                    if r.is_drug_like() { "drug-like" } else { "non-drug-like" },
-                );
-            }
-            Err(e) => p.error = Some(e.to_string()),
+                r.canonical_smiles,
+                r.formula,
+                r.average_mw,
+                r.monoisotopic_mass,
+                r.heavy_atoms,
+                r.formal_charge,
+                r.logp,
+                r.tpsa,
+                r.hbd,
+                r.hba,
+                r.rotatable_bonds,
+                r.ring_count,
+                r.aromatic_rings,
+                heteroatoms,
+                aromatic_atoms,
+                aromatic_bonds,
+                r.fraction_csp3,
+                halogens,
+                single_bonds,
+                double_bonds,
+                triple_bonds,
+                stereocenters,
+                structural_alerts,
+                r.lipinski.violations,
+                if r.veber.passes { "pass" } else { "fail" },
+                r.qed,
+                if r.is_drug_like() {
+                    "drug-like"
+                } else {
+                    "non-drug-like"
+                },
+            );
         }
+        Err(e) => p.error = Some(e.to_string()),
+    }
 }
 
 fn draw_similarity(p: &mut CheminfPanel, ui: &mut egui::Ui) {

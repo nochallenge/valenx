@@ -145,13 +145,7 @@ pub fn render(scene: &Scene, params: &RenderParams) -> Result<HdrFramebuffer, Fr
 /// The pixel is jittered by a random sub-pixel offset (box-filter
 /// anti-aliasing), the primary ray is generated from the camera frame,
 /// and [`trace_path`] integrates the path.
-fn sample_pixel(
-    scene: &Scene,
-    params: &RenderParams,
-    x: u32,
-    y: u32,
-    rng: &mut Rng,
-) -> Vec3 {
+fn sample_pixel(scene: &Scene, params: &RenderParams, x: u32, y: u32, rng: &mut Rng) -> Vec3 {
     let cam = &scene.camera;
     // Jittered normalised image coordinates in [0, 1].
     let jx = rng.next_f32();
@@ -188,12 +182,7 @@ fn sample_pixel(
 ///
 /// A ray that escapes all geometry samples the HDR environment and the
 /// path ends.
-fn trace_path(
-    scene: &Scene,
-    params: &RenderParams,
-    mut ray: Ray,
-    rng: &mut Rng,
-) -> Vec3 {
+fn trace_path(scene: &Scene, params: &RenderParams, mut ray: Ray, rng: &mut Rng) -> Vec3 {
     let mut radiance = Vec3::ZERO;
     let mut throughput = Vec3::ONE;
     // `specular_bounce` tracks whether the *previous* bounce was a
@@ -320,8 +309,7 @@ fn sample_bsdf(
 
     if rng.next_f32() < p_specular {
         // --- specular (GGX) lobe ---
-        let (dir, half) =
-            sample_ggx_direction(n, v, roughness, rng.next_f32(), rng.next_f32())?;
+        let (dir, half) = sample_ggx_direction(n, v, roughness, rng.next_f32(), rng.next_f32())?;
         let n_dot_l = n.dot(dir);
         if n_dot_l <= 0.0 {
             return None; // sample went below the surface
@@ -489,10 +477,12 @@ fn next_event_estimation(
     let shadow = Ray::new(shadow_origin, wi);
     // Stop the shadow ray just short of the light so the emitter
     // triangle itself does not register as an occluder.
-    if scene
-        .bvh
-        .occluded(&scene.triangles, &shadow, RAY_EPSILON, dist - 2.0 * RAY_EPSILON)
-    {
+    if scene.bvh.occluded(
+        &scene.triangles,
+        &shadow,
+        RAY_EPSILON,
+        dist - 2.0 * RAY_EPSILON,
+    ) {
         return Vec3::ZERO;
     }
 
@@ -553,9 +543,7 @@ fn evaluate_brdf(material: &PtMaterial, hit: &Hit, incoming: Vec3, wi: Vec3) -> 
 
     // Energy-conserving Lambert diffuse term: albedo·(1−F)/π.
     let kd = Vec3::ONE.sub(f);
-    let diffuse = albedo
-        .mul(kd)
-        .scale(std::f32::consts::FRAC_1_PI);
+    let diffuse = albedo.mul(kd).scale(std::f32::consts::FRAC_1_PI);
 
     diffuse.add(spec)
 }
@@ -678,7 +666,10 @@ mod tests {
         };
         let fb = render(&scene, &params).expect("render small framebuffer");
         let c = fb.mean(4, 4);
-        assert!(c.max_component() < 0.02, "absorbing surface should be black");
+        assert!(
+            c.max_component() < 0.02,
+            "absorbing surface should be black"
+        );
     }
 
     #[test]
@@ -797,7 +788,10 @@ mod tests {
                 seed: 3,
                 exposure: 1.0,
             };
-            render(&scene, &params).expect("render small framebuffer").mean(4, 4).x
+            render(&scene, &params)
+                .expect("render small framebuffer")
+                .mean(4, 4)
+                .x
         };
         let lit = build(true);
         let dark = build(false);
@@ -894,7 +888,9 @@ mod tests {
                 seed: 4,
                 exposure: 1.0,
             };
-            render(&scene, &params).expect("render small framebuffer").mean(6, 6)
+            render(&scene, &params)
+                .expect("render small framebuffer")
+                .mean(6, 6)
         };
         // Direct-only: the white wall gets light straight from the red
         // emitter. With more bounces, additional red indirect light is

@@ -327,9 +327,12 @@ pub fn design_optimized_hdr_donor(req: &OptimizedDonorRequest) -> Result<Optimiz
         ArmLayout::Symmetric { len } => (len, len),
         ArmLayout::Asymmetric { left, right } => (left, right),
     };
-    let left_arm: Vec<u8> = edited_ref[req.base.insert_pos - left_len..req.base.insert_pos].to_vec();
-    let right_arm: Vec<u8> = edited_ref[req.base.insert_pos..req.base.insert_pos + right_len].to_vec();
-    let mut donor_bytes = Vec::with_capacity(left_arm.len() + req.base.insert.len() + right_arm.len());
+    let left_arm: Vec<u8> =
+        edited_ref[req.base.insert_pos - left_len..req.base.insert_pos].to_vec();
+    let right_arm: Vec<u8> =
+        edited_ref[req.base.insert_pos..req.base.insert_pos + right_len].to_vec();
+    let mut donor_bytes =
+        Vec::with_capacity(left_arm.len() + req.base.insert.len() + right_arm.len());
     donor_bytes.extend_from_slice(&left_arm);
     donor_bytes.extend_from_slice(&upper(&req.base.insert));
     donor_bytes.extend_from_slice(&right_arm);
@@ -523,9 +526,7 @@ fn cai_with_table(seq: &[u8], phase: usize, code: &GeneticCode, table: &CodonUsa
         let f = table.frequency(&codon);
         // Optimal codon for the AA.
         let optimal_codon = table.optimal_codon(aa, code);
-        let optimal_f = optimal_codon
-            .map(|c| table.frequency(&c))
-            .unwrap_or(0.0);
+        let optimal_f = optimal_codon.map(|c| table.frequency(&c)).unwrap_or(0.0);
         if f <= 0.0 || optimal_f <= 0.0 {
             i += 3;
             continue;
@@ -696,12 +697,7 @@ pub fn donor_outside_edits_matches_reference(
     ) {
         return false;
     }
-    if !arm_matches_with_exceptions(
-        &donor.donor.right_arm,
-        reference,
-        insert_pos,
-        &mut_set,
-    ) {
+    if !arm_matches_with_exceptions(&donor.donor.right_arm, reference, insert_pos, &mut_set) {
         return false;
     }
     true
@@ -716,7 +712,11 @@ fn arm_matches_with_exceptions(
     if offset + arm.len() > reference.len() {
         return false;
     }
-    for (k, (&a, &r)) in arm.iter().zip(&reference[offset..offset + arm.len()]).enumerate() {
+    for (k, (&a, &r)) in arm
+        .iter()
+        .zip(&reference[offset..offset + arm.len()])
+        .enumerate()
+    {
         let ref_pos = offset + k;
         if exceptions.contains(&ref_pos) {
             continue; // an intentional mutation
@@ -938,7 +938,8 @@ mod tests {
     fn noncoding_donor_optimiser_stacks_mutations() {
         // Non-coding window: every alt base is "silent" at the protein
         // level. The optimiser should still stack ≥ 2 mutations.
-        let reference: Vec<u8> = b"TTTTTTTTTTTTTTTTTTTTTTACGTACGTACGTACGTACGTAGGTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT".to_vec();
+        let reference: Vec<u8> =
+            b"TTTTTTTTTTTTTTTTTTTTTTACGTACGTACGTACGTACGTAGGTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT".to_vec();
         let base = HdrDonorRequest {
             reference,
             insert_pos: 35,
@@ -978,9 +979,7 @@ mod tests {
         let insert_pos = base.insert_pos;
         let opt = design_optimized_hdr_donor(&OptimizedDonorRequest::new(base)).unwrap();
         assert!(donor_outside_edits_matches_reference(
-            &opt,
-            &reference,
-            insert_pos,
+            &opt, &reference, insert_pos,
         ));
     }
 

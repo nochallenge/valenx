@@ -88,12 +88,7 @@ pub struct ReconstructionResult {
 ///
 /// # Errors
 /// [`StructPredictError::Invalid`] for a non-cubic volume.
-pub fn project_volume(
-    volume: &Volume3d,
-    rot: f64,
-    tilt: f64,
-    psi: f64,
-) -> Result<Image2d> {
+pub fn project_volume(volume: &Volume3d, rot: f64, tilt: f64, psi: f64) -> Result<Image2d> {
     if volume.nx != volume.ny || volume.ny != volume.nz {
         return Err(StructPredictError::invalid(
             "volume",
@@ -117,7 +112,8 @@ pub fn project_volume(
                 let dw = w as f64 - center;
                 // Detector coordinate (du, dv, dw) → world via R.
                 let world = r * Vector3::new(du, dv, dw);
-                sum += sample_trilinear(volume, world.x + center, world.y + center, world.z + center);
+                sum +=
+                    sample_trilinear(volume, world.x + center, world.y + center, world.z + center);
             }
             image.data[v * n + u] = sum as f32;
         }
@@ -179,7 +175,10 @@ pub fn reconstruct_3d(projections: &[Projection], box_size: usize) -> Result<Rec
         ));
     }
     if box_size == 0 {
-        return Err(StructPredictError::invalid("box_size", "must be at least 1"));
+        return Err(StructPredictError::invalid(
+            "box_size",
+            "must be at least 1",
+        ));
     }
     for (i, p) in projections.iter().enumerate() {
         if p.image.width != box_size || p.image.height != box_size {
@@ -209,11 +208,8 @@ pub fn reconstruct_3d(projections: &[Projection], box_size: usize) -> Result<Rec
         for z in 0..n {
             for y in 0..n {
                 for x in 0..n {
-                    let world = Vector3::new(
-                        x as f64 - center,
-                        y as f64 - center,
-                        z as f64 - center,
-                    );
+                    let world =
+                        Vector3::new(x as f64 - center, y as f64 - center, z as f64 - center);
                     // World → detector: the inverse rotation.
                     let det = r.inverse() * world;
                     let u = det.x + center;

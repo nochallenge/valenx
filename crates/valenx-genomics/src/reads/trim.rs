@@ -60,7 +60,10 @@ pub fn trim_adapter(
     max_error_rate: f64,
 ) -> Result<AdapterTrimResult> {
     if adapter.is_empty() {
-        return Err(GenomicsError::invalid("adapter", "adapter must be non-empty"));
+        return Err(GenomicsError::invalid(
+            "adapter",
+            "adapter must be non-empty",
+        ));
     }
     if min_overlap == 0 {
         return Err(GenomicsError::invalid(

@@ -9,8 +9,8 @@ use crate::series::SeriesStyle;
 /// Default colour palette used when a [`crate::Series`] doesn't carry
 /// its own colour.
 const PALETTE: &[&str] = &[
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
-    "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
+    "#bcbd22", "#17becf",
 ];
 
 const MARGIN: f64 = 50.0;
@@ -43,12 +43,10 @@ pub fn to_svg(plot: &Plot, width: u32, height: u32) -> Result<String, PlotError>
     let plot_t = MARGIN * 0.8;
     let plot_b = h - MARGIN;
 
-    let mapx = |x: f64| -> f64 {
-        plot_l + (x - x0) / (x1 - x0).max(f64::EPSILON) * (plot_r - plot_l)
-    };
-    let mapy = |y: f64| -> f64 {
-        plot_b - (y - y0) / (y1 - y0).max(f64::EPSILON) * (plot_b - plot_t)
-    };
+    let mapx =
+        |x: f64| -> f64 { plot_l + (x - x0) / (x1 - x0).max(f64::EPSILON) * (plot_r - plot_l) };
+    let mapy =
+        |y: f64| -> f64 { plot_b - (y - y0) / (y1 - y0).max(f64::EPSILON) * (plot_b - plot_t) };
 
     let mut out = String::new();
     out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");

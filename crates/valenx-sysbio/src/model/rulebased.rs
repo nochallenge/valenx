@@ -193,12 +193,16 @@ impl RuleModel {
             let tmpl = self.molecules.get(r.molecule).ok_or_else(|| {
                 SysbioError::invalid_model("rule_model", format!("rule {} bad molecule", r.id))
             })?;
-            let site = tmpl.sites.iter().find(|s| s.name == r.site).ok_or_else(|| {
-                SysbioError::invalid_model(
-                    "rule_model",
-                    format!("rule {} references missing site {}", r.id, r.site),
-                )
-            })?;
+            let site = tmpl
+                .sites
+                .iter()
+                .find(|s| s.name == r.site)
+                .ok_or_else(|| {
+                    SysbioError::invalid_model(
+                        "rule_model",
+                        format!("rule {} references missing site {}", r.id, r.site),
+                    )
+                })?;
             for st in [&r.from, &r.to] {
                 if !site.states.contains(st) {
                     return Err(SysbioError::invalid_model(
@@ -279,9 +283,7 @@ impl RuleModel {
                     if let Some(enz_mol) = rule.enzyme {
                         // Use the first reachable microstate of the
                         // enzyme molecule as the catalytic species.
-                        if let Some(enz_state) =
-                            order.iter().find(|s| s.molecule == enz_mol)
-                        {
+                        if let Some(enz_state) = order.iter().find(|s| s.molecule == enz_mol) {
                             let enz_idx = index[enz_state];
                             reactants.push((enz_idx, 1.0));
                             products.push((enz_idx, 1.0));
@@ -318,10 +320,7 @@ mod tests {
         let mut rm = RuleModel::new("kinase2");
         let k = rm.add_molecule(MoleculeTemplate {
             name: "K".into(),
-            sites: vec![
-                Site::new("a", &["u", "p"]),
-                Site::new("b", &["u", "p"]),
-            ],
+            sites: vec![Site::new("a", &["u", "p"]), Site::new("b", &["u", "p"])],
         });
         rm.add_rule(Rule {
             id: "phos_a".into(),

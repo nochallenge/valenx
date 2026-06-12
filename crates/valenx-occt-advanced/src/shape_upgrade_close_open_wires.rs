@@ -158,10 +158,7 @@ pub fn shape_upgrade_close_open_wires_arc(
         ));
     }
     if segments == 0 {
-        return Err(OcctAdvancedError::bad_input(
-            "segments",
-            "must be ≥1",
-        ));
+        return Err(OcctAdvancedError::bad_input("segments", "must be ≥1"));
     }
     if arc_through.iter().any(|c| !c.is_finite()) {
         return Err(OcctAdvancedError::bad_input(
@@ -196,12 +193,7 @@ pub fn shape_upgrade_close_open_wires_arc(
 /// Sample the circular arc through three points `p0 -> p1 -> p2`,
 /// returning `segments + 1` points from `p0` to `p2` (inclusive).
 /// Returns `None` when the three points are collinear.
-fn sample_arc(
-    p0: [f64; 3],
-    p1: [f64; 3],
-    p2: [f64; 3],
-    segments: usize,
-) -> Option<Vec<[f64; 3]>> {
+fn sample_arc(p0: [f64; 3], p1: [f64; 3], p2: [f64; 3], segments: usize) -> Option<Vec<[f64; 3]>> {
     // Plane of the three points.
     let v01 = sub(p1, p0);
     let v02 = sub(p2, p0);
@@ -388,23 +380,20 @@ mod tests {
     fn arc_close_rejects_collinear_through_point() {
         // last, through, first all on the X axis → no unique circle.
         let wire = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
-        let err =
-            shape_upgrade_close_open_wires_arc(&wire, [1.0, 0.0, 0.0], 8).unwrap_err();
+        let err = shape_upgrade_close_open_wires_arc(&wire, [1.0, 0.0, 0.0], 8).unwrap_err();
         assert_eq!(err.code(), "occt_advanced.bad_input");
     }
 
     #[test]
     fn arc_close_rejects_zero_segments() {
         let wire = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
-        let err =
-            shape_upgrade_close_open_wires_arc(&wire, [1.0, 1.0, 0.0], 0).unwrap_err();
+        let err = shape_upgrade_close_open_wires_arc(&wire, [1.0, 1.0, 0.0], 0).unwrap_err();
         assert_eq!(err.code(), "occt_advanced.bad_input");
     }
 
     #[test]
     fn arc_close_rejects_short_wire() {
-        let err =
-            shape_upgrade_close_open_wires_arc(&[[0.0; 3]], [1.0, 1.0, 0.0], 4).unwrap_err();
+        let err = shape_upgrade_close_open_wires_arc(&[[0.0; 3]], [1.0, 1.0, 0.0], 4).unwrap_err();
         assert_eq!(err.code(), "occt_advanced.bad_input");
     }
 }

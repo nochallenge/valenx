@@ -125,12 +125,9 @@ impl IntegralSet {
                 let s_v = one_electron::overlap(&f[mu], &f[nu]);
                 let t_v = one_electron::kinetic(&f[mu], &f[nu]);
                 let v_v = one_electron::nuclear_attraction(&f[mu], &f[nu], &charges);
-                let dx_v =
-                    one_electron::multipole(&f[mu], &f[nu], [0.0; 3], (1, 0, 0));
-                let dy_v =
-                    one_electron::multipole(&f[mu], &f[nu], [0.0; 3], (0, 1, 0));
-                let dz_v =
-                    one_electron::multipole(&f[mu], &f[nu], [0.0; 3], (0, 0, 1));
+                let dx_v = one_electron::multipole(&f[mu], &f[nu], [0.0; 3], (1, 0, 0));
+                let dy_v = one_electron::multipole(&f[mu], &f[nu], [0.0; 3], (0, 1, 0));
+                let dz_v = one_electron::multipole(&f[mu], &f[nu], [0.0; 3], (0, 0, 1));
                 for &(i, j) in &[(mu, nu), (nu, mu)] {
                     s[(i, j)] = s_v;
                     t[(i, j)] = t_v;
@@ -177,7 +174,7 @@ mod tests {
     #[test]
     fn nuclear_repulsion_single_atom_is_zero() {
         let geom = MolecularGeometry::new(vec![
-            Atom::from_symbol_angstrom("He", [0.0, 0.0, 0.0]).unwrap(),
+            Atom::from_symbol_angstrom("He", [0.0, 0.0, 0.0]).unwrap()
         ]);
         assert_eq!(nuclear_repulsion(&geom), 0.0);
     }

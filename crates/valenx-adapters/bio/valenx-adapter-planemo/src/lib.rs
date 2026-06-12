@@ -145,10 +145,7 @@ impl Adapter for PlanemoAdapter {
         let source_workflow = if input.workflow.is_absolute() {
             input.workflow.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.workflow,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.workflow)?
         };
         if !source_workflow.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -396,7 +393,10 @@ output_basename = "report"
         let err = PlanemoAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("absolute") || msg.contains("escape") || msg.contains("`..`") || msg.contains("traversal"),
+            msg.contains("absolute")
+                || msg.contains("escape")
+                || msg.contains("`..`")
+                || msg.contains("traversal"),
             "expected confined_join rejection on inputs, got: {msg}"
         );
         let _ = std::fs::remove_dir_all(&d);

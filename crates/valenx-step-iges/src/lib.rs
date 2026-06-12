@@ -46,7 +46,10 @@
 // crate parses untrusted text (STEP/IGES), where non-char-boundary
 // slices panic. WARN (not deny): most existing slices are safe ASCII;
 // this only flags NEW ones.
-#![allow(clippy::string_slice, reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries")]
+#![allow(
+    clippy::string_slice,
+    reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries"
+)]
 
 pub mod ap242;
 pub mod error;
@@ -116,12 +119,8 @@ pub(crate) fn read_capped_cad_text(
             cap: MAX_CAD_INTERCHANGE_FILE_BYTES,
         });
     }
-    String::from_utf8(buf).map_err(|e| {
-        StepIgesError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e,
-        ))
-    })
+    String::from_utf8(buf)
+        .map_err(|e| StepIgesError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
 }
 
 use valenx_cad::Solid;

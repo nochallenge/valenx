@@ -25,9 +25,9 @@
 //! hairpin) rather than at machine precision.
 
 use valenx_rnastruct::{
-    accessibility, fold_kinetics, fold_pknots_rg, fold_pknots_rg_with, mfe,
-    partition_function, predict_intarna, predict_intarna_with, IntaRnaParams,
-    KineticParams, PknotsRgParams, PseudoknotClass, RateModel, RnaSeq,
+    accessibility, fold_kinetics, fold_pknots_rg, fold_pknots_rg_with, mfe, partition_function,
+    predict_intarna, predict_intarna_with, IntaRnaParams, KineticParams, PknotsRgParams,
+    PseudoknotClass, RateModel, RnaSeq,
 };
 
 // ===========================================================================

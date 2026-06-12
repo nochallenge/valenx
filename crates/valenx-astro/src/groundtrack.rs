@@ -179,7 +179,13 @@ mod tests {
         // unbounded. It must return an Err immediately.
         let err = ground_track(&circular(0.0), 0.0, 5_000.0, usize::MAX);
         assert!(
-            matches!(err, Err(AstroError::OutOfRange { what: "samples", .. })),
+            matches!(
+                err,
+                Err(AstroError::OutOfRange {
+                    what: "samples",
+                    ..
+                })
+            ),
             "usize::MAX samples must be rejected, got {err:?}"
         );
         // Non-finite total_time is also rejected.

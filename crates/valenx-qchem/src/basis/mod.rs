@@ -161,9 +161,7 @@ impl Shell {
         for pi in &prims {
             for pj in &prims {
                 let g = pi.exponent + pj.exponent;
-                s += pi.coefficient * pj.coefficient
-                    * (std::f64::consts::PI / g).powf(1.5)
-                    * dfact
+                s += pi.coefficient * pj.coefficient * (std::f64::consts::PI / g).powf(1.5) * dfact
                     / (2.0 * g).powi(l as i32);
             }
         }
@@ -237,9 +235,9 @@ impl BasisSet {
         let mut shells = Vec::new();
         for (atom_index, atom) in geometry.atoms.iter().enumerate() {
             let z = atom.element.atomic_number();
-            let element_shells = lib.shells_for(z).ok_or_else(|| {
-                QchemError::basis_not_found(static_name, atom.element.symbol())
-            })?;
+            let element_shells = lib
+                .shells_for(z)
+                .ok_or_else(|| QchemError::basis_not_found(static_name, atom.element.symbol()))?;
             for raw in element_shells {
                 let shell = Shell {
                     atom_index,
@@ -346,7 +344,7 @@ mod tests {
     #[test]
     fn unknown_basis_name_errors() {
         let geom = MolecularGeometry::new(vec![
-            Atom::from_symbol_angstrom("H", [0.0, 0.0, 0.0]).unwrap(),
+            Atom::from_symbol_angstrom("H", [0.0, 0.0, 0.0]).unwrap()
         ]);
         assert!(BasisSet::build("cc-pvqz", &geom).is_err());
     }

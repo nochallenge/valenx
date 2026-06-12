@@ -84,12 +84,12 @@ fn apply_to_mesh(mesh: &mut Mesh, op: &ManipulateOp) -> Result<(), ManipulatorEr
             let b = block.connectivity[tri_idx * 3 + 1] as usize;
             let c = block.connectivity[tri_idx * 3 + 2] as usize;
             let centroid = (mesh.nodes[a] + mesh.nodes[b] + mesh.nodes[c]) / 3.0;
-            let ax = axis.try_normalize(1e-12).ok_or_else(|| {
-                ManipulatorError::BadParameter {
+            let ax = axis
+                .try_normalize(1e-12)
+                .ok_or_else(|| ManipulatorError::BadParameter {
                     name: "axis",
                     reason: "zero-length axis vector".into(),
-                }
-            })?;
+                })?;
             let rad = angle_deg.to_radians();
             let cs = rad.cos();
             let sn = rad.sin();
@@ -192,10 +192,7 @@ fn locate_face(mesh: &Mesh, face_idx: usize) -> Result<(usize, usize), Manipulat
     })
 }
 
-fn locate_edge(
-    mesh: &Mesh,
-    edge_idx: usize,
-) -> Result<(usize, usize, usize), ManipulatorError> {
+fn locate_edge(mesh: &Mesh, edge_idx: usize) -> Result<(usize, usize, usize), ManipulatorError> {
     // Unique-edge id = sum over preceding triangles × 3.
     // Each triangle contributes 3 edges; edge_idx is `tri × 3 + e`.
     let mut running = 0usize;
@@ -312,8 +309,7 @@ mod tests {
         match s2 {
             Solid::Mesh(m) => {
                 let centroid_before = Vector3::new(1.0 / 3.0, 1.0 / 3.0, 0.0);
-                let centroid_after =
-                    (m.nodes[0] + m.nodes[1] + m.nodes[2]) / 3.0;
+                let centroid_after = (m.nodes[0] + m.nodes[1] + m.nodes[2]) / 3.0;
                 assert!((centroid_after - centroid_before).norm() < 1e-9);
             }
             _ => panic!(),
@@ -344,7 +340,10 @@ mod tests {
             vertex_idx: 99,
             delta: Vector3::zeros(),
         };
-        assert!(matches!(apply(&solid, &op), Err(ManipulatorError::BadIndex { .. })));
+        assert!(matches!(
+            apply(&solid, &op),
+            Err(ManipulatorError::BadIndex { .. })
+        ));
     }
 
     #[test]

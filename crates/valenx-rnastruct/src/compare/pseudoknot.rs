@@ -139,12 +139,10 @@ pub fn fold_pseudoknot(seq: &RnaSeq) -> Result<PseudoknotResult> {
                             // For a tractable v1 we fold the three
                             // single-stranded gaps independently with
                             // Zuker and sum.
-                            let gaps_energy = fold_gaps(
-                                seq, a1, a1_end, b1, b1_end, a2, a2_end, b2, b2 + l2,
-                            )?;
+                            let gaps_energy =
+                                fold_gaps(seq, a1, a1_end, b1, b1_end, a2, a2_end, b2, b2 + l2)?;
 
-                            let total =
-                                s1_e + s2_e + gaps_energy + PSEUDOKNOT_PENALTY;
+                            let total = s1_e + s2_e + gaps_energy + PSEUDOKNOT_PENALTY;
                             if total < best.energy - 1e-6 {
                                 let mut all = s1_pairs.clone();
                                 all.extend_from_slice(&s2_pairs);

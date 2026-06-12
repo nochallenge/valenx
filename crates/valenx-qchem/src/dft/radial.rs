@@ -113,10 +113,7 @@ mod tests {
     #[test]
     fn integrates_exponential_r_squared() {
         let grid = treutler_ahlrichs(60, 1.0);
-        let integral: f64 = grid
-            .iter()
-            .map(|p| p.weight * (-p.radius).exp())
-            .sum();
+        let integral: f64 = grid.iter().map(|p| p.weight * (-p.radius).exp()).sum();
         assert!((integral - 2.0).abs() < 1.0e-4, "∫ = {integral}");
     }
 

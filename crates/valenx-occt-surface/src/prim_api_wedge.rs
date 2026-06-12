@@ -79,7 +79,11 @@ pub fn prim_api_wedge(dx: f64, dy: f64, dz: f64, ltx: f64) -> Result<Solid, Occt
         .map_err(|e| OcctSurfaceError::TruckLimit(format!("wedge prism: {e:?}")))?;
     // Rotate 90° about +X to swap Y↔Z.
     let rotated = solid
-        .rotated((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), std::f64::consts::FRAC_PI_2)
+        .rotated(
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            std::f64::consts::FRAC_PI_2,
+        )
         .map_err(|e| OcctSurfaceError::TruckLimit(format!("wedge rotate: {e}")))?;
     Ok(rotated)
 }

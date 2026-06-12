@@ -18,12 +18,7 @@
 /// Returns `0` before the event (`t < 0`) and for
 /// non-physical input (`τ ≤ 0`, or any non-finite argument).
 pub fn alpha_synapse_conductance(g_max: f64, tau_s: f64, t_s: f64) -> f64 {
-    if !g_max.is_finite()
-        || !tau_s.is_finite()
-        || tau_s <= 0.0
-        || !t_s.is_finite()
-        || t_s < 0.0
-    {
+    if !g_max.is_finite() || !tau_s.is_finite() || tau_s <= 0.0 || !t_s.is_finite() || t_s < 0.0 {
         return 0.0;
     }
     let x = t_s / tau_s;
@@ -236,12 +231,21 @@ mod tests {
         // Round-trip: at V½ the Jahr–Stevens block is exactly half-relieved (B = 0.5).
         for &mg in &[0.5_f64, 1.0, 1.5, 3.57] {
             let v_half = nmda_mg_block_half_voltage(mg);
-            assert!((nmda_mg_block(v_half, mg) - 0.5).abs() < 1e-12, "B(V½) = 0.5 at [Mg]={mg}");
+            assert!(
+                (nmda_mg_block(v_half, mg) - 0.5).abs() < 1e-12,
+                "B(V½) = 0.5 at [Mg]={mg}"
+            );
         }
 
         // Worked: V½ = 0 at [Mg] = 3.57 mM, ≈ −20.5 mV at the physiological 1 mM.
-        assert!((nmda_mg_block_half_voltage(3.57) - 0.0).abs() < 1e-12, "V½(3.57) = 0");
-        assert!((nmda_mg_block_half_voltage(1.0) - (-20.526)).abs() < 1e-2, "V½(1 mM) ≈ −20.5 mV");
+        assert!(
+            (nmda_mg_block_half_voltage(3.57) - 0.0).abs() < 1e-12,
+            "V½(3.57) = 0"
+        );
+        assert!(
+            (nmda_mg_block_half_voltage(1.0) - (-20.526)).abs() < 1e-2,
+            "V½(1 mM) ≈ −20.5 mV"
+        );
 
         // More magnesium needs more depolarisation to half-relieve.
         assert!(
@@ -279,7 +283,10 @@ mod tests {
         // (c) WORKED INDEPENDENT: at [Mg] = 3.57 the factor [Mg]/3.57 = 1, so
         // V = ln(f/(1−f))/0.062. f = 0.5 → ln(1)/0.062 = 0 mV; f = e/(1+e) →
         // f/(1−f) = e → V = ln(e)/0.062 = 1/0.062 ≈ 16.129 mV, both direct.
-        assert!((nmda_mg_block_voltage(0.5, 3.57) - 0.0).abs() < 1e-12, "V(0.5, 3.57) = 0");
+        assert!(
+            (nmda_mg_block_voltage(0.5, 3.57) - 0.0).abs() < 1e-12,
+            "V(0.5, 3.57) = 0"
+        );
         let f_e = std::f64::consts::E / (1.0 + std::f64::consts::E);
         let v_e = nmda_mg_block_voltage(f_e, 3.57);
         assert!(
@@ -312,16 +319,25 @@ mod tests {
     #[test]
     fn alpha_synapse_peaks_at_g_max_at_the_time_constant() {
         let (g_max, tau) = (5.0e-9, 0.002); // 5 nS peak, 2 ms time-to-peak
-        // No conductance at the moment of the presynaptic spike.
+                                            // No conductance at the moment of the presynaptic spike.
         assert_eq!(alpha_synapse_conductance(g_max, tau, 0.0), 0.0);
         // The peak is exactly g_max at t = τ.
-        assert!((alpha_synapse_conductance(g_max, tau, tau) - g_max).abs() < 1e-18, "peak at τ");
+        assert!(
+            (alpha_synapse_conductance(g_max, tau, tau) - g_max).abs() < 1e-18,
+            "peak at τ"
+        );
         // Below the peak on both sides — rising before, decaying after — and it
         // never exceeds g_max.
         let before = alpha_synapse_conductance(g_max, tau, tau / 2.0);
         let after = alpha_synapse_conductance(g_max, tau, 2.0 * tau);
-        assert!(before < g_max && before > 0.0, "rising before the peak: {before}");
-        assert!(after < g_max && after > 0.0, "decaying after the peak: {after}");
+        assert!(
+            before < g_max && before > 0.0,
+            "rising before the peak: {before}"
+        );
+        assert!(
+            after < g_max && after > 0.0,
+            "decaying after the peak: {after}"
+        );
         // Matches the closed form at an arbitrary time.
         let t = 0.005;
         let x = t / tau;
@@ -341,7 +357,10 @@ mod tests {
         let (g_max, tau) = (5.0e-9, 2.0e-3); // 5 nS peak, 2 ms time-to-peak
         let area = alpha_synapse_conductance_integral(g_max, tau);
         // Closed form: the area under the alpha transient is exactly g_max·τ·e.
-        assert!((area - g_max * tau * E).abs() / area < 1e-12, "closed form g_max·τ·e");
+        assert!(
+            (area - g_max * tau * E).abs() / area < 1e-12,
+            "closed form g_max·τ·e"
+        );
         // Numerical cross-check: midpoint-integrate the alpha conductance (#149)
         // out to 20τ — ties the closed form to the time course (non-tautological).
         let n = 100_000;
@@ -351,27 +370,35 @@ mod tests {
             let t = (k as f64 + 0.5) * dt;
             sum += alpha_synapse_conductance(g_max, tau, t) * dt;
         }
-        assert!((sum - area).abs() / area < 1e-3, "numerical ∫g dt {sum} ≈ {area}");
+        assert!(
+            (sum - area).abs() / area < 1e-3,
+            "numerical ∫g dt {sum} ≈ {area}"
+        );
         // Linear in g_max and in τ.
         assert!(
-            (alpha_synapse_conductance_integral(2.0 * g_max, tau) - 2.0 * area).abs() / area < 1e-12,
+            (alpha_synapse_conductance_integral(2.0 * g_max, tau) - 2.0 * area).abs() / area
+                < 1e-12,
             "linear in g_max"
         );
         assert!(
-            (alpha_synapse_conductance_integral(g_max, 3.0 * tau) - 3.0 * area).abs() / area < 1e-12,
+            (alpha_synapse_conductance_integral(g_max, 3.0 * tau) - 3.0 * area).abs() / area
+                < 1e-12,
             "linear in τ"
         );
         // Non-physical input → 0 (mirrors alpha_synapse_conductance).
         assert_eq!(alpha_synapse_conductance_integral(g_max, 0.0), 0.0);
         assert_eq!(alpha_synapse_conductance_integral(g_max, -1.0e-3), 0.0);
         assert_eq!(alpha_synapse_conductance_integral(f64::NAN, tau), 0.0);
-        assert_eq!(alpha_synapse_conductance_integral(g_max, f64::INFINITY), 0.0);
+        assert_eq!(
+            alpha_synapse_conductance_integral(g_max, f64::INFINITY),
+            0.0
+        );
     }
 
     #[test]
     fn dual_exponential_synapse_peaks_at_g_max_at_the_analytic_peak_time() {
         let (g_max, tau_r, tau_d) = (1.0e-9, 0.0005, 0.003); // 1 nS, τ_r = 0.5 ms, τ_d = 3 ms
-        // No conductance at the moment of the presynaptic spike.
+                                                             // No conductance at the moment of the presynaptic spike.
         assert_eq!(
             dual_exponential_synapse_conductance(g_max, tau_r, tau_d, 0.0),
             0.0
@@ -385,8 +412,14 @@ mod tests {
         // Rising before the peak, decaying after, never exceeding g_max.
         let before = dual_exponential_synapse_conductance(g_max, tau_r, tau_d, tp / 2.0);
         let after = dual_exponential_synapse_conductance(g_max, tau_r, tau_d, 2.0 * tp);
-        assert!(before > 0.0 && before < g_max, "rising before the peak: {before}");
-        assert!(after > 0.0 && after < g_max, "decaying after the peak: {after}");
+        assert!(
+            before > 0.0 && before < g_max,
+            "rising before the peak: {before}"
+        );
+        assert!(
+            after > 0.0 && after < g_max,
+            "decaying after the peak: {after}"
+        );
         assert!(
             before < dual_exponential_synapse_conductance(g_max, tau_r, tau_d, 0.8 * tp),
             "monotonic rise toward t_p"
@@ -399,13 +432,30 @@ mod tests {
             (dual_exponential_synapse_conductance(g_max, tau_r, tau_d, t) - expected).abs() < 1e-18
         );
         // Decays toward zero long after the event (the slow τ_d dominates).
-        assert!(dual_exponential_synapse_conductance(g_max, tau_r, tau_d, 50.0 * tau_d) < 0.001 * g_max);
+        assert!(
+            dual_exponential_synapse_conductance(g_max, tau_r, tau_d, 50.0 * tau_d) < 0.001 * g_max
+        );
         // Before the event, non-physical input, and the τ_r = τ_d singularity → 0.
-        assert_eq!(dual_exponential_synapse_conductance(g_max, tau_r, tau_d, -0.001), 0.0);
-        assert_eq!(dual_exponential_synapse_conductance(g_max, 0.0, tau_d, 0.001), 0.0);
-        assert_eq!(dual_exponential_synapse_conductance(g_max, tau_r, -1.0, 0.001), 0.0);
-        assert_eq!(dual_exponential_synapse_conductance(g_max, f64::NAN, tau_d, 0.001), 0.0);
-        assert_eq!(dual_exponential_synapse_conductance(g_max, 0.002, 0.002, 0.001), 0.0); // τ_r = τ_d
+        assert_eq!(
+            dual_exponential_synapse_conductance(g_max, tau_r, tau_d, -0.001),
+            0.0
+        );
+        assert_eq!(
+            dual_exponential_synapse_conductance(g_max, 0.0, tau_d, 0.001),
+            0.0
+        );
+        assert_eq!(
+            dual_exponential_synapse_conductance(g_max, tau_r, -1.0, 0.001),
+            0.0
+        );
+        assert_eq!(
+            dual_exponential_synapse_conductance(g_max, f64::NAN, tau_d, 0.001),
+            0.0
+        );
+        assert_eq!(
+            dual_exponential_synapse_conductance(g_max, 0.002, 0.002, 0.001),
+            0.0
+        ); // τ_r = τ_d
     }
 
     #[test]
@@ -436,7 +486,10 @@ mod tests {
         let (g_max, tau_r, tau_d) = (1.0, 0.001, 0.005); // 1 ms rise, 5 ms decay
         let area = dual_exponential_conductance_integral(g_max, tau_r, tau_d);
         // Worked point: t_p ≈ 2.012 ms, norm ≈ 0.53499, ∫ = g_max·(τd−τr)/norm ≈ 7.4767e-3.
-        assert!((area - 7.4767e-3).abs() / area < 1e-4, "efficacy ≈ 7.4767e-3 S·s, got {area}");
+        assert!(
+            (area - 7.4767e-3).abs() / area < 1e-4,
+            "efficacy ≈ 7.4767e-3 S·s, got {area}"
+        );
         // Linear in g_max (the peak conductance scales the whole waveform).
         assert!(
             (dual_exponential_conductance_integral(2.0 * g_max, tau_r, tau_d) - 2.0 * area).abs()
@@ -459,17 +512,29 @@ mod tests {
             "∫g dt (numeric {numeric}) matches the closed form {area}"
         );
         // Degenerate τ_r = τ_d → 0 (use the alpha integral there).
-        assert_eq!(dual_exponential_conductance_integral(g_max, tau_r, tau_r), 0.0);
+        assert_eq!(
+            dual_exponential_conductance_integral(g_max, tau_r, tau_r),
+            0.0
+        );
         // Non-physical input → 0.
-        assert_eq!(dual_exponential_conductance_integral(g_max, 0.0, tau_d), 0.0); // τ ≤ 0
-        assert_eq!(dual_exponential_conductance_integral(g_max, tau_r, f64::NAN), 0.0); // non-finite τ
-        assert_eq!(dual_exponential_conductance_integral(f64::NAN, tau_r, tau_d), 0.0); // non-finite g
+        assert_eq!(
+            dual_exponential_conductance_integral(g_max, 0.0, tau_d),
+            0.0
+        ); // τ ≤ 0
+        assert_eq!(
+            dual_exponential_conductance_integral(g_max, tau_r, f64::NAN),
+            0.0
+        ); // non-finite τ
+        assert_eq!(
+            dual_exponential_conductance_integral(f64::NAN, tau_r, tau_d),
+            0.0
+        ); // non-finite g
     }
 
     #[test]
     fn nmda_mg_block_relieves_with_depolarisation() {
         let mg = 1.0; // 1 mM physiological extracellular magnesium
-        // At rest (V = −80 mV) the channel is deeply blocked.
+                      // At rest (V = −80 mV) the channel is deeply blocked.
         let rest = nmda_mg_block(-80.0, mg);
         assert!(rest < 0.05, "blocked at rest: {rest}");
         assert!(
@@ -488,8 +553,14 @@ mod tests {
             assert!(b > 0.0 && b <= 1.0, "B in (0,1] at V={v}: {b}");
         }
         // No magnesium → no block: B = 1 at any voltage (from the formula itself).
-        assert!((nmda_mg_block(-80.0, 0.0) - 1.0).abs() < 1e-12, "Mg=0 → open at rest");
-        assert!((nmda_mg_block(40.0, 0.0) - 1.0).abs() < 1e-12, "Mg=0 → open depolarised");
+        assert!(
+            (nmda_mg_block(-80.0, 0.0) - 1.0).abs() < 1e-12,
+            "Mg=0 → open at rest"
+        );
+        assert!(
+            (nmda_mg_block(40.0, 0.0) - 1.0).abs() < 1e-12,
+            "Mg=0 → open depolarised"
+        );
         // Heavier magnesium deepens the block at a fixed voltage.
         assert!(
             nmda_mg_block(-30.0, 100.0) < nmda_mg_block(-30.0, 1.0),

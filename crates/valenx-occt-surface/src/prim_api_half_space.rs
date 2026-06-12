@@ -184,8 +184,7 @@ mod tests {
 
     #[test]
     fn half_space_below_xy_plane_is_a_box() {
-        let hs = prim_api_half_space([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], HALF_SPACE_EXTENT)
-            .unwrap();
+        let hs = prim_api_half_space([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], HALF_SPACE_EXTENT).unwrap();
         // A swept square is a closed box: 6 faces, 12 edges, 8 verts.
         assert_eq!(hs.faces(), 6);
         assert_eq!(hs.edges(), 12);

@@ -91,23 +91,20 @@ pub use rng::Rng;
 
 pub use catalog::{Catalog, DemographicModel, SpeciesModel};
 pub use coalescent::{
-    coalescent, overlay_mutations, overlay_on_tree, simulate_arg,
-    structured_coalescent, ArgParams, PopHistory, RecombinationMap, TreeSequence,
+    coalescent, overlay_mutations, overlay_on_tree, simulate_arg, structured_coalescent, ArgParams,
+    PopHistory, RecombinationMap, TreeSequence,
 };
 pub use forward::{
-    record_wright_fisher, DemographicSchedule, Drift, MigrationModel,
-    MutationModel, RecombinationModel, SelectionModel, SimulationConfig,
-    WrightFisher,
+    record_wright_fisher, DemographicSchedule, Drift, MigrationModel, MutationModel,
+    RecombinationModel, SelectionModel, SimulationConfig, WrightFisher,
 };
 pub use infer::{abc_reject, AbcConfig, AbcPosterior, GenotypeMatrix, Prior};
 pub use io::{read_ms, write_ms, write_newick_genealogy, write_vcf};
 pub use stats::{
-    branch_diversity, branch_divergence, equal_windows, expected_heterozygosity, fst_hudson,
+    branch_divergence, branch_diversity, equal_windows, expected_heterozygosity, fst_hudson,
     fst_weir_cockerham, genotype_concordance, minor_allele_frequency, nucleotide_diversity,
-    site_frequency_spectrum,
-    tajimas_d, wattersons_theta, windowed_branch_diversity,
-    windowed_segregating_sites, windowed_site_divergence,
-    windowed_site_diversity, WindowedStats,
+    site_frequency_spectrum, tajimas_d, wattersons_theta, windowed_branch_diversity,
+    windowed_segregating_sites, windowed_site_divergence, windowed_site_diversity, WindowedStats,
 };
 
 #[cfg(test)]
@@ -142,8 +139,7 @@ mod tests {
     /// whose genotype matrix exports to a valid VCF.
     #[test]
     fn forward_to_vcf_end_to_end() {
-        let cfg =
-            SimulationConfig::neutral(20, 30, 3e-3, 1e-4, 1000.0, 1).unwrap();
+        let cfg = SimulationConfig::neutral(20, 30, 3e-3, 1e-4, 1000.0, 1).unwrap();
         let pop = WrightFisher::new(cfg).unwrap().run().unwrap();
         let gm = pop.genotype_matrix();
         // 20 diploid individuals -> 40 haplotype rows -> valid VCF.

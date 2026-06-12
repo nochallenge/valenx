@@ -170,7 +170,12 @@ mod tests {
             e.energy
         };
         let fd = -(energy_at(h) - energy_at(-h)) / (2.0 * h);
-        assert!((ef.forces[0].x - fd).abs() < 1e-4, "{} vs {}", ef.forces[0].x, fd);
+        assert!(
+            (ef.forces[0].x - fd).abs() < 1e-4,
+            "{} vs {}",
+            ef.forces[0].x,
+            fd
+        );
     }
 
     #[test]

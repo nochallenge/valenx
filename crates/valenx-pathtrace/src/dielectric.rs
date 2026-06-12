@@ -409,10 +409,16 @@ mod tests {
         let cos_critical = (1.0f32 - (1.0 / 1.5) * (1.0 / 1.5)).sqrt();
         // Well past the critical angle.
         let past = fresnel_dielectric(cos_critical * 0.5, 1.5, 1.0);
-        assert!((past - 1.0).abs() < 1e-6, "TIR should give F = 1, got {past}");
+        assert!(
+            (past - 1.0).abs() < 1e-6,
+            "TIR should give F = 1, got {past}"
+        );
         // Just inside it, F < 1 (some light still transmits).
         let inside = fresnel_dielectric((cos_critical + 1.0) * 0.5, 1.5, 1.0);
-        assert!(inside < 1.0, "below the critical angle some light transmits");
+        assert!(
+            inside < 1.0,
+            "below the critical angle some light transmits"
+        );
     }
 
     /// `refract` obeys Snell's law: η_i·sinθi = η_t·sinθt. We refract a
@@ -437,7 +443,10 @@ mod tests {
             "Snell: sinθt {sin_t} should be (η_i/η_t)·sinθi = {expected_sin_t}"
         );
         // The refracted ray continues into the surface (−Z).
-        assert!(refracted.z < 0.0, "refracted ray should go through the surface");
+        assert!(
+            refracted.z < 0.0,
+            "refracted ray should go through the surface"
+        );
         // It is a unit vector.
         assert!((refracted.length() - 1.0).abs() < 1e-5);
     }
@@ -588,7 +597,10 @@ mod tests {
 
         let smooth = collect_transmitted(0.0);
         let frosted = collect_transmitted(0.6);
-        assert!(!frosted.is_empty(), "frosted glass should transmit some rays");
+        assert!(
+            !frosted.is_empty(),
+            "frosted glass should transmit some rays"
+        );
         let smooth_spread = spread(&smooth);
         let frosted_spread = spread(&frosted);
         assert!(

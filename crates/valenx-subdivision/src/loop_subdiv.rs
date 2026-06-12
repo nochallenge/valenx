@@ -75,9 +75,7 @@ fn one_iter(m: &SubdivMesh) -> SubdivMesh {
                         }
                     }
                 }
-                m.vertices[e.0] * (3.0 / 8.0)
-                    + m.vertices[e.1] * (3.0 / 8.0)
-                    + sum * (1.0 / 8.0)
+                m.vertices[e.0] * (3.0 / 8.0) + m.vertices[e.1] * (3.0 / 8.0) + sum * (1.0 / 8.0)
             } else {
                 mid
             }
@@ -116,9 +114,7 @@ fn one_iter(m: &SubdivMesh) -> SubdivMesh {
             let beta = if n == 3 {
                 3.0 / 16.0
             } else {
-                let c = 3.0 / 8.0
-                    + (1.0 / 4.0)
-                        * (2.0 * std::f64::consts::PI / n as f64).cos();
+                let c = 3.0 / 8.0 + (1.0 / 4.0) * (2.0 * std::f64::consts::PI / n as f64).cos();
                 (5.0 / 8.0 - c * c) / n as f64
             };
             let mut sum = Vector3::zeros();

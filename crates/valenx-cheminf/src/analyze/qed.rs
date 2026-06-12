@@ -119,12 +119,12 @@ fn alert_desirability(n: f64) -> f64 {
 /// A small built-in structural-alert SMARTS set (a Brenk-style
 /// subset). Each match counts as one alert.
 const ALERT_SMARTS: &[&str] = &[
-    "[N+](=O)[O-]", // nitro group
-    "C(=O)Cl",      // acyl chloride
+    "[N+](=O)[O-]",   // nitro group
+    "C(=O)Cl",        // acyl chloride
     "[N-]=[N+]=[N-]", // azide
-    "[S][S]",       // disulfide
-    "C=C=C",        // allene / cumulated diene
-    "[O-][O-]",     // peroxide-ish
+    "[S][S]",         // disulfide
+    "C=C=C",          // allene / cumulated diene
+    "[O-][O-]",       // peroxide-ish
 ];
 
 /// Count structural-alert substructures in `mol`.

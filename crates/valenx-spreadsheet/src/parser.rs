@@ -317,9 +317,7 @@ impl<'a> Parser<'a> {
             if self.depth >= MAX_PARSE_DEPTH {
                 return Err(self.err(
                     caret.pos,
-                    format!(
-                        "expression nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"
-                    ),
+                    format!("expression nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"),
                 ));
             }
             self.bump();
@@ -342,9 +340,7 @@ impl<'a> Parser<'a> {
             if self.depth >= MAX_PARSE_DEPTH {
                 return Err(self.err(
                     minus.pos,
-                    format!(
-                        "expression nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"
-                    ),
+                    format!("expression nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"),
                 ));
             }
             self.bump();
@@ -370,9 +366,7 @@ impl<'a> Parser<'a> {
                 if self.depth >= MAX_PARSE_DEPTH {
                     return Err(self.err(
                         t.pos,
-                        format!(
-                            "expression nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"
-                        ),
+                        format!("expression nesting exceeds the {MAX_PARSE_DEPTH}-deep cap"),
                     ));
                 }
                 self.depth += 1;

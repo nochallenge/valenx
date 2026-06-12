@@ -41,7 +41,7 @@ use crate::prime_edit::editor::{prime_editor, PrimeEditorId};
 use crate::prime_edit::strategy::length_scan_score;
 use crate::sequtil::{is_acgt, revcomp, transcribe, upper};
 use serde::{Deserialize, Serialize};
-use valenx_genomics::crispr::guide::{scan_guides, GuideStrand, PamSpec, PamSide};
+use valenx_genomics::crispr::guide::{scan_guides, GuideStrand, PamSide, PamSpec};
 
 /// The kind of edit a pegRNA installs.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,7 +101,11 @@ impl PrimeEdit {
                 format!("{len}-bp substitution to {}", String::from_utf8_lossy(to))
             }
             PrimeEdit::Insertion { seq } => {
-                format!("{}-bp insertion of {}", seq.len(), String::from_utf8_lossy(seq))
+                format!(
+                    "{}-bp insertion of {}",
+                    seq.len(),
+                    String::from_utf8_lossy(seq)
+                )
             }
             PrimeEdit::Deletion { len } => format!("{len}-bp deletion"),
         }
@@ -349,9 +353,8 @@ pub fn design_pegrna(req: &PegRnaRequest) -> Result<PegRna> {
     extension.extend_from_slice(&pbs_rna);
 
     let spacer_rna = transcribe(&req.reference[spacer_start..spacer_start + plen]);
-    let pam_dna = upper(
-        &req.reference[spacer_start + plen..spacer_start + plen + spec.motif.len()],
-    );
+    let pam_dna =
+        upper(&req.reference[spacer_start + plen..spacer_start + plen + spec.motif.len()]);
 
     let mut full = Vec::new();
     full.extend_from_slice(&spacer_rna);
@@ -630,7 +633,9 @@ mod tests {
         let req = PegRnaRequest::new(
             reference(),
             25,
-            PrimeEdit::Insertion { seq: b"GGG".to_vec() },
+            PrimeEdit::Insertion {
+                seq: b"GGG".to_vec(),
+            },
             PrimeEditorId::Pe2,
         );
         let peg = design_pegrna(&req).unwrap();
@@ -661,16 +666,23 @@ mod tests {
 
     #[test]
     fn rejects_non_acgt_reference() {
-        let req = PegRnaRequest::new(b"ACGTNNNN".to_vec(), 5, PrimeEdit::snv(b'A'), PrimeEditorId::Pe2);
+        let req = PegRnaRequest::new(
+            b"ACGTNNNN".to_vec(),
+            5,
+            PrimeEdit::snv(b'A'),
+            PrimeEditorId::Pe2,
+        );
         assert!(design_pegrna(&req).is_err());
     }
 
     #[test]
     fn rejects_zero_pbs_length() {
-        let mut req =
-            PegRnaRequest::new(reference(), 25, PrimeEdit::snv(b'A'), PrimeEditorId::Pe2);
+        let mut req = PegRnaRequest::new(reference(), 25, PrimeEdit::snv(b'A'), PrimeEditorId::Pe2);
         req.pbs_len = 0;
-        assert_eq!(design_pegrna(&req).unwrap_err().code(), "genediting.invalid");
+        assert_eq!(
+            design_pegrna(&req).unwrap_err().code(),
+            "genediting.invalid"
+        );
     }
 
     #[test]
@@ -719,9 +731,11 @@ mod tests {
     #[test]
     fn prime_edit_labels() {
         assert!(PrimeEdit::snv(b'A').label().contains("substitution"));
-        assert!(PrimeEdit::Insertion { seq: b"GG".to_vec() }
-            .label()
-            .contains("insertion"));
+        assert!(PrimeEdit::Insertion {
+            seq: b"GG".to_vec()
+        }
+        .label()
+        .contains("insertion"));
         assert!(PrimeEdit::Deletion { len: 2 }.label().contains("deletion"));
     }
 }

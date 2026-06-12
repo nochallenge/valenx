@@ -108,9 +108,13 @@ impl AeroWorkbenchState {
         }
     }
     /// `true` if Ctrl+Z would change the form state.
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
     /// `true` if Ctrl+Y would change the form state.
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// Draw the Aerodynamics / Wind Tunnel right-side panel.
@@ -138,11 +142,9 @@ pub fn draw_aero_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.heading("Wind Tunnel");
             });
             ui.label(
-                egui::RichText::new(
-                    "Virtual wind tunnel — 3-D external-aerodynamics CFD",
-                )
-                .weak()
-                .small(),
+                egui::RichText::new("Virtual wind tunnel — 3-D external-aerodynamics CFD")
+                    .weak()
+                    .small(),
             );
             ui.label(
                 egui::RichText::new("backed by `valenx-aero`")
@@ -236,8 +238,7 @@ fn pump_aero_run(app: &mut ValenxApp, ctx: &egui::Context) {
                 app.aero.last_polar = None;
             }
             AeroOutcome::Sweep(curve) => {
-                app.aero.status =
-                    format!("Sweep complete — {} angles", curve.points.len());
+                app.aero.status = format!("Sweep complete — {} angles", curve.points.len());
                 app.aero.last_polar = Some(PolarSweepResult { curve: *curve });
                 app.aero.last_result = None;
                 app.aero.last_report = None;

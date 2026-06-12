@@ -38,7 +38,9 @@ pub mod panel;
 pub mod triangle;
 
 pub use aabb_tree::{AabbTree, Node};
-pub use cutter::{AdaptiveDropCutter, DropCutter, EdgeCutter, PushCutter, Tool, WaterlinePathPlanner};
+pub use cutter::{
+    AdaptiveDropCutter, DropCutter, EdgeCutter, PushCutter, Tool, WaterlinePathPlanner,
+};
 pub use error::{ErrorCategory, OpencamlibError};
 pub use octree::{OctNode, Octree};
 pub use panel::OpenCamLibPanelState;

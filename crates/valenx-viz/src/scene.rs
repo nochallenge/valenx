@@ -195,14 +195,20 @@ mod tests {
         // As distance increases within a band the blend_t should increase.
         let (_, t_lo) = grid_lod_params(10.0);
         let (_, t_hi) = grid_lod_params(12.0);
-        assert!(t_hi > t_lo, "blend_t should rise as distance grows, lo={t_lo}, hi={t_hi}");
+        assert!(
+            t_hi > t_lo,
+            "blend_t should rise as distance grows, lo={t_lo}, hi={t_hi}"
+        );
     }
 
     #[test]
     fn grid_lod_blend_t_in_0_1() {
         for d in [0.1_f32, 1.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0] {
             let (_, t) = grid_lod_params(d);
-            assert!((0.0..=1.0).contains(&t), "blend_t out of [0,1] at d={d}: {t}");
+            assert!(
+                (0.0..=1.0).contains(&t),
+                "blend_t out of [0,1] at d={d}: {t}"
+            );
         }
     }
 
@@ -261,9 +267,17 @@ mod tests {
         cam.set_view(ViewDirection::Front); // az 0, el 0 → looking down -Z
         let d = gizmo_axis_screen_dirs(&cam);
         // +X points right on screen.
-        assert!(d[0].0[0] > 0.9 && d[0].0[1].abs() < 0.1, "X dir {:?}", d[0].0);
+        assert!(
+            d[0].0[0] > 0.9 && d[0].0[1].abs() < 0.1,
+            "X dir {:?}",
+            d[0].0
+        );
         // +Y points up on screen (screen y is down → negative).
-        assert!(d[1].0[1] < -0.9 && d[1].0[0].abs() < 0.1, "Y dir {:?}", d[1].0);
+        assert!(
+            d[1].0[1] < -0.9 && d[1].0[0].abs() < 0.1,
+            "Y dir {:?}",
+            d[1].0
+        );
         // +Z points toward the viewer (positive view-space depth).
         assert!(d[2].1 > 0.5, "Z depth {}", d[2].1);
     }

@@ -97,7 +97,11 @@ pub fn profile_solid(spec: &ThreadSpecPro, length: f64) -> Result<Solid, Threads
         let theta = (i as f64 / samples_per_turn as f64) * 2.0 * PI;
         // Crest (outer) + root (inner) ribbon.
         nodes.push(Vector3::new(r * theta.cos(), r * theta.sin(), p.z));
-        nodes.push(Vector3::new(r_minor * theta.cos(), r_minor * theta.sin(), p.z));
+        nodes.push(Vector3::new(
+            r_minor * theta.cos(),
+            r_minor * theta.sin(),
+            p.z,
+        ));
     }
 
     let mut mesh = Mesh::new(format!("thread_{}", spec.designation));
@@ -193,8 +197,7 @@ mod tests {
         let solid = profile_solid(&spec, 10.0).unwrap();
         // Mesh-backed solid → faces() returns 0 but the underlying
         // mesh has triangles. Check via tessellation:
-        let mesh =
-            valenx_cad::solid_to_mesh(&solid, valenx_cad::DEFAULT_TESS_TOLERANCE).unwrap();
+        let mesh = valenx_cad::solid_to_mesh(&solid, valenx_cad::DEFAULT_TESS_TOLERANCE).unwrap();
         assert!(mesh.nodes.len() > 10);
     }
 

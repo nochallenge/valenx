@@ -49,9 +49,7 @@ mod tests {
         // A favourable (negative) score yields a positive LE.
         assert!(ligand_efficiency(-6.0, 12) > 0.0);
         // Inverse scaling: at a fixed score, doubling the heavy-atom count halves LE.
-        assert!(
-            (ligand_efficiency(-10.0, 10) - 2.0 * ligand_efficiency(-10.0, 20)).abs() < 1e-9
-        );
+        assert!((ligand_efficiency(-10.0, 10) - 2.0 * ligand_efficiency(-10.0, 20)).abs() < 1e-9);
         // Guards: zero heavy atoms or a non-finite score → 0.0.
         assert_eq!(ligand_efficiency(-9.0, 0), 0.0);
         assert_eq!(ligand_efficiency(f64::NAN, 10), 0.0);

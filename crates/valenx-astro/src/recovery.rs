@@ -165,8 +165,7 @@ mod tests {
         let isp = 300.0;
         let m0 = 25_000.0;
         assert!(
-            big.propellant_used(m0, isp).expect("ok")
-                > small.propellant_used(m0, isp).expect("ok")
+            big.propellant_used(m0, isp).expect("ok") > small.propellant_used(m0, isp).expect("ok")
         );
     }
 

@@ -106,27 +106,45 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.selectable_value(&mut s.section, Section::Beam, "Beam");
                 ui.selectable_value(&mut s.section, Section::Column, "Column");
             });
-            egui::Grid::new("reinf_params").num_columns(2).show(ui, |ui| {
-                ui.label("width (m)");
-                ui.add(egui::DragValue::new(&mut s.width).speed(0.01).range(0.05..=3.0));
-                ui.end_row();
-                ui.label("depth (m)");
-                ui.add(egui::DragValue::new(&mut s.depth).speed(0.01).range(0.05..=3.0));
-                ui.end_row();
-                ui.label(if s.section == Section::Beam {
-                    "length (m)"
-                } else {
-                    "height (m)"
+            egui::Grid::new("reinf_params")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    ui.label("width (m)");
+                    ui.add(
+                        egui::DragValue::new(&mut s.width)
+                            .speed(0.01)
+                            .range(0.05..=3.0),
+                    );
+                    ui.end_row();
+                    ui.label("depth (m)");
+                    ui.add(
+                        egui::DragValue::new(&mut s.depth)
+                            .speed(0.01)
+                            .range(0.05..=3.0),
+                    );
+                    ui.end_row();
+                    ui.label(if s.section == Section::Beam {
+                        "length (m)"
+                    } else {
+                        "height (m)"
+                    });
+                    ui.add(
+                        egui::DragValue::new(&mut s.length)
+                            .speed(0.05)
+                            .range(0.1..=20.0),
+                    );
+                    ui.end_row();
+                    ui.label("bars");
+                    ui.add(egui::DragValue::new(&mut s.n_bars).speed(0.2));
+                    ui.end_row();
+                    ui.label("hoop spacing (m)");
+                    ui.add(
+                        egui::DragValue::new(&mut s.hoop_spacing)
+                            .speed(0.01)
+                            .range(0.02..=1.0),
+                    );
+                    ui.end_row();
                 });
-                ui.add(egui::DragValue::new(&mut s.length).speed(0.05).range(0.1..=20.0));
-                ui.end_row();
-                ui.label("bars");
-                ui.add(egui::DragValue::new(&mut s.n_bars).speed(0.2));
-                ui.end_row();
-                ui.label("hoop spacing (m)");
-                ui.add(egui::DragValue::new(&mut s.hoop_spacing).speed(0.01).range(0.02..=1.0));
-                ui.end_row();
-            });
             ui.separator();
             if ui.button("▶ Generate cage → 3D viewport").clicked() {
                 generate = true;
@@ -178,7 +196,10 @@ mod tests {
 
     #[test]
     fn column_cage_generates() {
-        let s = ReinforcementWorkbenchState { section: Section::Column, ..Default::default() };
+        let s = ReinforcementWorkbenchState {
+            section: Section::Column,
+            ..Default::default()
+        };
         let mesh = run_reinforcement(&s).expect("column cage");
         assert!(!mesh.nodes.is_empty());
     }

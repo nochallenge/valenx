@@ -25,13 +25,12 @@
 //! are the validation gate the commercial-depth pass stands on.
 
 use valenx_phylo::bayes::{
-    clade_probability, effective_sample_size, gelman_rubin, run_chain,
-    summarise_posterior, ChainConfig, ChainState, Prior, ProposalKind, ProposalSet,
+    clade_probability, effective_sample_size, gelman_rubin, run_chain, summarise_posterior,
+    ChainConfig, ChainState, Prior, ProposalKind, ProposalSet,
 };
 use valenx_phylo::io::newick::read_newick;
 use valenx_phylo::likelihood::{
-    log_likelihood, optimize_topology_ml, optimize_topology_ml_multistart,
-    optimize_topology_ml_spr,
+    log_likelihood, optimize_topology_ml, optimize_topology_ml_multistart, optimize_topology_ml_spr,
 };
 use valenx_phylo::simulate::seqgen::simulate_sequences;
 use valenx_phylo::SubstModel;
@@ -62,8 +61,7 @@ fn convergence_on_known_tree_recovers_true_clades_with_high_posterior() {
     // chain real signal. Run TWO independent chains, summarise the
     // pooled posterior, check the true (A,B) and (C,D) clades are
     // recovered with probability above 0.7.
-    let true_tree =
-        read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
+    let true_tree = read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
     let sim = simulate_sequences(&true_tree, &SubstModel::Jc69, 400, None, 17).unwrap();
     let aln = sim.rows;
 
@@ -72,7 +70,10 @@ fn convergence_on_known_tree_recovers_true_clades_with_high_posterior() {
     let init_a = jc_state("((A:0.5,C:0.5):0.5,(B:0.5,D:0.5):0.5);");
     let init_b = jc_state("((A:0.5,D:0.5):0.5,(B:0.5,C:0.5):0.5);");
     let cfg = default_chain_cfg(2000, 500, 5, 11);
-    let cfg_b = ChainConfig { seed: 12, ..cfg.clone() };
+    let cfg_b = ChainConfig {
+        seed: 12,
+        ..cfg.clone()
+    };
 
     let res_a = run_chain(
         init_a,
@@ -108,15 +109,17 @@ fn convergence_on_known_tree_has_acceptable_ess_and_r_hat() {
     // Same setup, but the assertions move to the diagnostics: each
     // chain's likelihood ESS exceeds a threshold and R̂ between chains
     // is close to 1.
-    let true_tree =
-        read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
+    let true_tree = read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
     let sim = simulate_sequences(&true_tree, &SubstModel::Jc69, 400, None, 19).unwrap();
     let aln = sim.rows;
 
     let init_a = jc_state("((A:0.5,C:0.5):0.5,(B:0.5,D:0.5):0.5);");
     let init_b = jc_state("((A:0.5,D:0.5):0.5,(B:0.5,C:0.5):0.5);");
     let cfg_a = default_chain_cfg(2000, 500, 1, 21);
-    let cfg_b = ChainConfig { seed: 22, ..cfg_a.clone() };
+    let cfg_b = ChainConfig {
+        seed: 22,
+        ..cfg_a.clone()
+    };
 
     let res_a = run_chain(
         init_a,
@@ -160,8 +163,7 @@ fn convergence_on_known_tree_has_acceptable_ess_and_r_hat() {
 fn map_tree_matches_ml_tree_on_a_simple_dataset() {
     // Simulated data under a known tree: both the MCMC's MAP and the
     // ML search should recover the same topology.
-    let true_tree =
-        read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
+    let true_tree = read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
     let sim = simulate_sequences(&true_tree, &SubstModel::Jc69, 300, None, 31).unwrap();
     let aln = sim.rows;
 
@@ -174,19 +176,8 @@ fn map_tree_matches_ml_tree_on_a_simple_dataset() {
     // MCMC.
     let init = jc_state("((A:0.5,C:0.5):0.5,(B:0.5,D:0.5):0.5);");
     let cfg = default_chain_cfg(1500, 300, 1, 41);
-    let res = run_chain(
-        init,
-        &Prior::default(),
-        &ProposalSet::default(),
-        &cfg,
-        &aln,
-    )
-    .unwrap();
-    let summary = summarise_posterior(
-        &res.tree_samples(),
-        &res.log_posterior_trace(),
-    )
-    .unwrap();
+    let res = run_chain(init, &Prior::default(), &ProposalSet::default(), &cfg, &aln).unwrap();
+    let summary = summarise_posterior(&res.tree_samples(), &res.log_posterior_trace()).unwrap();
     let map_clades = clades(&summary.map_tree);
 
     // ML clades that are non-trivial (the {A,B} / {C,D} type clades)
@@ -261,16 +252,13 @@ fn symmetric_branch_slide_is_detailed_balance_correct() {
 #[test]
 fn spr_ml_beats_or_matches_nni_on_a_hard_topology() {
     // A hard topology where NNI alone is prone to a local optimum.
-    let start = read_newick(
-        "(((((A:0.2,E:0.2):0.2,D:0.2):0.2,B:0.2):0.2,C:0.2):0.2,F:0.2);",
-    )
-    .unwrap();
+    let start =
+        read_newick("(((((A:0.2,E:0.2):0.2,D:0.2):0.2,B:0.2):0.2,C:0.2):0.2,F:0.2);").unwrap();
     // Simulate from a tree where the true (A, B) cherry sits behind a
     // bad NNI step.
-    let true_tree = read_newick(
-        "(((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10):0.05,(E:0.05,F:0.05):0.10);",
-    )
-    .unwrap();
+    let true_tree =
+        read_newick("(((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10):0.05,(E:0.05,F:0.05):0.10);")
+            .unwrap();
     let sim = simulate_sequences(&true_tree, &SubstModel::Jc69, 400, None, 61).unwrap();
     let aln = sim.rows;
     let nni = optimize_topology_ml(&start, &SubstModel::Jc69, &aln, 50).unwrap();
@@ -287,22 +275,15 @@ fn spr_ml_beats_or_matches_nni_on_a_hard_topology() {
 fn multistart_picks_at_least_as_good_as_solo() {
     // Multi-start with NJ-class + random starts must do at least as
     // well as any single start's SPR run.
-    let true_tree =
-        read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
+    let true_tree = read_newick("((A:0.05,B:0.05):0.10,(C:0.05,D:0.05):0.10);").unwrap();
     let sim = simulate_sequences(&true_tree, &SubstModel::Jc69, 200, None, 71).unwrap();
     let aln = sim.rows;
     let good = read_newick("((A:0.1,B:0.1):0.1,(C:0.1,D:0.1):0.1);").unwrap();
     let bad = read_newick("((A:0.5,C:0.5):0.5,(B:0.5,D:0.5):0.5);").unwrap();
     let other = read_newick("((A:0.3,D:0.3):0.3,(B:0.3,C:0.3):0.3);").unwrap();
-    let solo =
-        optimize_topology_ml_spr(&good, &SubstModel::Jc69, &aln, 20).unwrap();
-    let multi = optimize_topology_ml_multistart(
-        &[good, bad, other],
-        &SubstModel::Jc69,
-        &aln,
-        20,
-    )
-    .unwrap();
+    let solo = optimize_topology_ml_spr(&good, &SubstModel::Jc69, &aln, 20).unwrap();
+    let multi =
+        optimize_topology_ml_multistart(&[good, bad, other], &SubstModel::Jc69, &aln, 20).unwrap();
     assert!(
         multi.log_likelihood >= solo.log_likelihood - 1e-6,
         "multi-start picked a worse tree than the solo good start"

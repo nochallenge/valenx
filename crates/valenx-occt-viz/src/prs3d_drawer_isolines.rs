@@ -102,9 +102,7 @@ pub fn prs3d_drawer_isolines(
     if !(MIN_SAMPLES..=MAX_SAMPLES).contains(&samples_per_line) {
         return Err(OcctVizError::bad_input(
             "samples_per_line",
-            format!(
-                "must be in [{MIN_SAMPLES}, {MAX_SAMPLES}] (got {samples_per_line})"
-            ),
+            format!("must be in [{MIN_SAMPLES}, {MAX_SAMPLES}] (got {samples_per_line})"),
         ));
     }
 

@@ -213,17 +213,13 @@ pub fn run_uhf_scf(
         let f_alpha = build_spin_fock(&h_core, &d_total, &d_alpha, &integrals.eri);
         let f_beta = build_spin_fock(&h_core, &d_total, &d_beta, &integrals.eri);
 
-        let energy = uhf_electronic_energy(
-            &d_alpha, &d_beta, &h_core, &f_alpha, &f_beta,
-        ) + integrals.e_nuclear;
+        let energy = uhf_electronic_energy(&d_alpha, &d_beta, &h_core, &f_alpha, &f_beta)
+            + integrals.e_nuclear;
 
         // Independent DIIS per spin; the larger error drives convergence.
-        let err_a =
-            Diis::error_vector(&f_alpha, &d_alpha, &integrals.overlap, &ortho);
-        let err_b =
-            Diis::error_vector(&f_beta, &d_beta, &integrals.overlap, &ortho);
-        let error_norm =
-            Diis::error_norm(&err_a).max(Diis::error_norm(&err_b));
+        let err_a = Diis::error_vector(&f_alpha, &d_alpha, &integrals.overlap, &ortho);
+        let err_b = Diis::error_vector(&f_beta, &d_beta, &integrals.overlap, &ortho);
+        let error_norm = Diis::error_norm(&err_a).max(Diis::error_norm(&err_b));
         diis_a.push(f_alpha.clone(), err_a);
         diis_b.push(f_beta.clone(), err_b);
         let fa_used = diis_a.extrapolate().unwrap_or(f_alpha);
@@ -250,13 +246,9 @@ pub fn run_uhf_scf(
             && error_norm < settings.density_tol
         {
             let d_total = &d_alpha + &d_beta;
-            let f_alpha =
-                build_spin_fock(&h_core, &d_total, &d_alpha, &integrals.eri);
-            let f_beta =
-                build_spin_fock(&h_core, &d_total, &d_beta, &integrals.eri);
-            let electronic = uhf_electronic_energy(
-                &d_alpha, &d_beta, &h_core, &f_alpha, &f_beta,
-            );
+            let f_alpha = build_spin_fock(&h_core, &d_total, &d_alpha, &integrals.eri);
+            let f_beta = build_spin_fock(&h_core, &d_total, &d_beta, &integrals.eri);
+            let electronic = uhf_electronic_energy(&d_alpha, &d_beta, &h_core, &f_alpha, &f_beta);
             let s2 = compute_s_squared(&ca, &cb, &integrals.overlap, na, nb);
             return Ok(UhfResult {
                 total_energy: electronic + integrals.e_nuclear,
@@ -347,11 +339,7 @@ mod tests {
     #[test]
     fn h2_cation_open_shell() {
         // H2+ : 1 electron. UHF should converge and be bound vs H + H+.
-        let geom = MolecularGeometry::with_charge_multiplicity(
-            h2().atoms.clone(),
-            1,
-            2,
-        );
+        let geom = MolecularGeometry::with_charge_multiplicity(h2().atoms.clone(), 1, 2);
         let basis = BasisSet::build("sto-3g", &geom).unwrap();
         let ints = IntegralSet::compute(&geom, &basis);
         let uhf = run_uhf_scf(&ints, 1, 0, ScfSettings::default()).unwrap();

@@ -101,9 +101,7 @@ impl Distance {
                 .map(|(x, y)| (x - y).powi(2))
                 .sum::<f64>()
                 .sqrt(),
-            Distance::Manhattan => {
-                a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum()
-            }
+            Distance::Manhattan => a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum(),
         }
     }
 }
@@ -221,10 +219,7 @@ where
     F: FnMut(&[f64]) -> Vec<f64>,
 {
     if config.n_simulations == 0 {
-        return Err(PopgenError::invalid(
-            "n_simulations",
-            "must be positive",
-        ));
+        return Err(PopgenError::invalid("n_simulations", "must be positive"));
     }
     if config.tolerance < 0.0 {
         return Err(PopgenError::invalid("tolerance", "must be non-negative"));
@@ -381,9 +376,7 @@ mod tests {
             distance: Distance::Euclidean,
             seed: 1,
         };
-        assert!(
-            abc_reject(&prior, |_| vec![0.0, 0.0], &[0.5], cfg2).is_err()
-        );
+        assert!(abc_reject(&prior, |_| vec![0.0, 0.0], &[0.5], cfg2).is_err());
         // Bad prior bounds.
         assert!(Prior::uniform(vec![5.0], vec![1.0]).is_err());
     }

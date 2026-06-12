@@ -167,11 +167,7 @@ pub fn assign_cip_labels(mol: &mut Molecule) {
         // neighbours in the order they appear in the bond list — that
         // is the SMILES "as written" order the parity refers to
         let written: Vec<usize> = {
-            let mut v: Vec<usize> = mol
-                .bonds
-                .iter()
-                .filter_map(|b| b.other(center))
-                .collect();
+            let mut v: Vec<usize> = mol.bonds.iter().filter_map(|b| b.other(center)).collect();
             for _ in 0..n_h {
                 v.push(usize::MAX);
             }
@@ -179,9 +175,7 @@ pub fn assign_cip_labels(mol: &mut Molecule) {
         };
         let priority = cip_neighbor_order(mol, center);
         // map each written neighbour to its priority rank (0 = highest)
-        let rank = |atom: usize| -> usize {
-            priority.iter().position(|&p| p == atom).unwrap_or(3)
-        };
+        let rank = |atom: usize| -> usize { priority.iter().position(|&p| p == atom).unwrap_or(3) };
         let perm: Vec<usize> = written.iter().map(|&a| rank(a)).collect();
         // parity of the permutation that sorts `perm` ascending
         let swaps = permutation_parity(&perm);
@@ -267,11 +261,7 @@ pub fn assign_double_bond_stereo(mol: &mut Molecule) {
 
 /// Find a directional (`/` `\`) single bond on `atom` other than the
 /// double bond `db`. Returns `(bond_index, direction, other_atom)`.
-fn directional_ref(
-    mol: &Molecule,
-    atom: usize,
-    db: usize,
-) -> Option<(usize, BondStereo, usize)> {
+fn directional_ref(mol: &Molecule, atom: usize, db: usize) -> Option<(usize, BondStereo, usize)> {
     for bi in mol.bonds_on(atom) {
         if bi == db {
             continue;
@@ -300,15 +290,9 @@ fn directional_ref(
 
 /// The CIP-highest-priority substituent of `atom` that is not the other
 /// double-bond carbon `partner`.
-fn highest_priority_substituent(
-    mol: &Molecule,
-    atom: usize,
-    partner: usize,
-) -> Option<usize> {
+fn highest_priority_substituent(mol: &Molecule, atom: usize, partner: usize) -> Option<usize> {
     let order = cip_neighbor_order(mol, atom);
-    order
-        .into_iter()
-        .find(|&v| v != partner && v != usize::MAX)
+    order.into_iter().find(|&v| v != partner && v != usize::MAX)
 }
 
 /// Count the perceived tetrahedral stereo centres (atoms with an R or S
@@ -367,11 +351,20 @@ mod tests {
         assign_double_bond_stereo(&mut trans);
         let mut cis = parse_smiles("C/C=C\\C").unwrap();
         assign_double_bond_stereo(&mut cis);
-        let t = trans.bonds.iter().find(|b| b.order == BondOrder::Double).unwrap().stereo;
-        let c = cis.bonds.iter().find(|b| b.order == BondOrder::Double).unwrap().stereo;
+        let t = trans
+            .bonds
+            .iter()
+            .find(|b| b.order == BondOrder::Double)
+            .unwrap()
+            .stereo;
+        let c = cis
+            .bonds
+            .iter()
+            .find(|b| b.order == BondOrder::Double)
+            .unwrap()
+            .stereo;
         assert!(matches!(t, BondStereo::E | BondStereo::Z));
         assert!(matches!(c, BondStereo::E | BondStereo::Z));
         assert_ne!(t, c, "cis and trans must differ");
     }
 }
-

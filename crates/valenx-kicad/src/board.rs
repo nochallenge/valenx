@@ -72,12 +72,7 @@ impl KicadBoard {
     /// A simple 100×80 mm rectangular dev board with a corner drill.
     pub fn demo_devboard() -> Self {
         let mut b = Self::new_default();
-        b.outline = vec![
-            [0.0, 0.0],
-            [100.0, 0.0],
-            [100.0, 80.0],
-            [0.0, 80.0],
-        ];
+        b.outline = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 80.0], [0.0, 80.0]];
         b.drill_holes.push((Vector3::new(5.0, 5.0, 0.0), 3.2));
         b.drill_holes.push((Vector3::new(95.0, 5.0, 0.0), 3.2));
         b.drill_holes.push((Vector3::new(5.0, 75.0, 0.0), 3.2));

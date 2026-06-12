@@ -121,30 +121,26 @@ pub mod transient;
 pub mod turbulence;
 
 pub use benchmark::{
-    backward_facing_step_reattachment, compare_to_ghia_cavity,
-    poiseuille_centerline_check, sample_u, sample_v, BackwardStepResult,
-    GhiaError, PoiseuilleError, GHIA_U_RE_100, GHIA_U_RE_1000, GHIA_U_RE_400,
-    GHIA_V_RE_100, GHIA_V_RE_1000, GHIA_V_RE_400, GHIA_X, GHIA_Y,
+    backward_facing_step_reattachment, compare_to_ghia_cavity, poiseuille_centerline_check,
+    sample_u, sample_v, BackwardStepResult, GhiaError, PoiseuilleError, GHIA_U_RE_100,
+    GHIA_U_RE_1000, GHIA_U_RE_400, GHIA_V_RE_100, GHIA_V_RE_1000, GHIA_V_RE_400, GHIA_X, GHIA_Y,
 };
 pub use error::CfdError;
 pub use grid::{Field, Grid};
 pub use linsolve::{poisson_residual, solve_sor, PoissonCoeffs, SorResult};
 pub use multigrid::{
-    coarsen_coefficients, prolong_bilinear, restrict_full_weighting,
-    solve_multigrid, solve_pressure_poisson, v_cycle, weighted_jacobi_sweep,
-    MultigridControls, MultigridResult, PressurePoissonSolver,
+    coarsen_coefficients, prolong_bilinear, restrict_full_weighting, solve_multigrid,
+    solve_pressure_poisson, v_cycle, weighted_jacobi_sweep, MultigridControls, MultigridResult,
+    PressurePoissonSolver,
 };
 pub use solver::{
-    solve_simple, solve_simple_with, Boundaries, EffectiveViscosity, Fluid,
-    FlowSolution, SideBc, SimpleControls, TurbulenceSnapshot,
+    solve_simple, solve_simple_with, Boundaries, EffectiveViscosity, FlowSolution, Fluid, SideBc,
+    SimpleControls, TurbulenceSnapshot,
 };
-pub use transient::{
-    solve_transient, TransientControls, TransientSolution, TransientStep,
-};
+pub use transient::{solve_transient, TransientControls, TransientSolution, TransientStep};
 pub use turbulence::{
-    advance_k_epsilon, advance_k_omega_sst, f1_blend, f2_blend,
-    solve_turbulent_channel, solve_turbulent_channel_sst,
-    strain_rate_magnitude, strain_rate_squared, wall_distance_field,
-    ChannelProfile, KEpsilonModel, SstField, SstModel, SstSet,
-    TurbulenceField, WallFunction, WallMask,
+    advance_k_epsilon, advance_k_omega_sst, f1_blend, f2_blend, solve_turbulent_channel,
+    solve_turbulent_channel_sst, strain_rate_magnitude, strain_rate_squared, wall_distance_field,
+    ChannelProfile, KEpsilonModel, SstField, SstModel, SstSet, TurbulenceField, WallFunction,
+    WallMask,
 };

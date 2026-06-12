@@ -97,8 +97,14 @@ mod tests {
         // coincide with the edge endpoints. This pins the on-edge fallback
         // semantics against drift (e.g. a future change to a nonzero
         // fallback would push these off the edge).
-        assert!((r.vertices[base] - v0).norm() < 1e-12, "bevel row should start on the edge");
-        assert!((r.vertices[base + 3] - v1).norm() < 1e-12, "bevel row should end on the edge");
+        assert!(
+            (r.vertices[base] - v0).norm() < 1e-12,
+            "bevel row should start on the edge"
+        );
+        assert!(
+            (r.vertices[base + 3] - v1).norm() < 1e-12,
+            "bevel row should end on the edge"
+        );
     }
 
     #[test]

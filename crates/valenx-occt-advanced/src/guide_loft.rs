@@ -403,7 +403,10 @@ mod tests {
         }
         c[0] /= GUIDE_LOFT_RING_SAMPLES as f64;
         c[1] /= GUIDE_LOFT_RING_SAMPLES as f64;
-        assert!(c[0].abs() < 1e-6 && c[1].abs() < 1e-6, "centroid drifted: {c:?}");
+        assert!(
+            c[0].abs() < 1e-6 && c[1].abs() < 1e-6,
+            "centroid drifted: {c:?}"
+        );
     }
 
     #[test]

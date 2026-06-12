@@ -491,8 +491,7 @@ mod tests {
             _ => panic!("wrong variant"),
         }
         // Inside a join, the cross-record reference still surfaces.
-        let err =
-            parse_location("join(1..10,J00194.1:1..10)").unwrap_err();
+        let err = parse_location("join(1..10,J00194.1:1..10)").unwrap_err();
         assert!(matches!(err, BioseqError::CrossRecordLocation { .. }));
     }
 

@@ -140,9 +140,7 @@ pub fn structural_fraction(dry_mass: f64, propellant_mass: f64) -> Result<f64> {
     }
     let total = dry_mass + propellant_mass;
     if total <= 0.0 {
-        return Err(AstroError::InvalidParameter(
-            "total stage mass must be > 0",
-        ));
+        return Err(AstroError::InvalidParameter("total stage mass must be > 0"));
     }
     Ok(dry_mass / total)
 }
@@ -220,11 +218,17 @@ mod tests {
                 "ζ = 1 − 1/MR"
             );
             let c = effective_exhaust_velocity(isp).unwrap();
-            assert!((zeta - (1.0 - (-dv / c).exp())).abs() < 1e-12, "ζ = 1 − exp(−Δv/c)");
+            assert!(
+                (zeta - (1.0 - (-dv / c).exp())).abs() < 1e-12,
+                "ζ = 1 − exp(−Δv/c)"
+            );
             assert!((0.0..1.0).contains(&zeta), "0 ≤ ζ < 1");
         }
         // Zero Δv needs no propellant.
-        assert!(propellant_mass_fraction(0.0, 350.0).unwrap().abs() < 1e-12, "Δv=0 → ζ=0");
+        assert!(
+            propellant_mass_fraction(0.0, 350.0).unwrap().abs() < 1e-12,
+            "Δv=0 → ζ=0"
+        );
         // Worked: Δv = 9 km/s, Isp = 350 s → MR ≈ 13.765 → ζ ≈ 0.9274.
         assert!((propellant_mass_fraction(9_000.0, 350.0).unwrap() - 0.9274).abs() < 1e-3);
         // Monotonic increasing in Δv.

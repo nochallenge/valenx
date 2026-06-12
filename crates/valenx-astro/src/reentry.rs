@@ -61,7 +61,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::atmosphere;
-use crate::constants::{MU_EARTH, R_EARTH, G0};
+use crate::constants::{G0, MU_EARTH, R_EARTH};
 use crate::error::{AstroError, Result};
 use crate::sim::{check_step_count, MAX_SIM_STEPS};
 
@@ -404,13 +404,12 @@ mod tests {
         // 7000²·1/(2·e·7200) = 4.9e7/(39150.8...) = 1251.6... m/s².
         let a = allen_eggers_max_deceleration(7_000.0, std::f64::consts::FRAC_PI_2, 7_200.0)
             .expect("ok");
-        let expected =
-            7_000.0_f64.powi(2) * 1.0 / (2.0 * std::f64::consts::E * 7_200.0);
+        let expected = 7_000.0_f64.powi(2) * 1.0 / (2.0 * std::f64::consts::E * 7_200.0);
         assert!((a - expected).abs() / expected < 1e-12, "a = {a}");
         // It does not depend on the ballistic coefficient (no β in it).
         // Steeper entry -> larger peak (sin γ).
-        let shallow = allen_eggers_max_deceleration(7_000.0, 10.0_f64.to_radians(), 7_200.0)
-            .expect("ok");
+        let shallow =
+            allen_eggers_max_deceleration(7_000.0, 10.0_f64.to_radians(), 7_200.0).expect("ok");
         assert!(shallow < a, "shallow {shallow} should be < steep {a}");
     }
 
@@ -518,12 +517,42 @@ mod tests {
 
         let base = EntryConditions::default();
         assert!(base.validate().is_ok());
-        assert!(EntryConditions { entry_speed: 0.0, ..base }.validate().is_err());
-        assert!(EntryConditions { ballistic_coefficient: 0.0, ..base }.validate().is_err());
-        assert!(EntryConditions { nose_radius: -1.0, ..base }.validate().is_err());
-        assert!(EntryConditions { flight_path_angle: 0.0, ..base }.validate().is_err());
-        assert!(EntryConditions { time_step: 1e-9, ..base }.validate().is_err());
-        assert!(EntryConditions { lift_to_drag: f64::NAN, ..base }.validate().is_err());
+        assert!(EntryConditions {
+            entry_speed: 0.0,
+            ..base
+        }
+        .validate()
+        .is_err());
+        assert!(EntryConditions {
+            ballistic_coefficient: 0.0,
+            ..base
+        }
+        .validate()
+        .is_err());
+        assert!(EntryConditions {
+            nose_radius: -1.0,
+            ..base
+        }
+        .validate()
+        .is_err());
+        assert!(EntryConditions {
+            flight_path_angle: 0.0,
+            ..base
+        }
+        .validate()
+        .is_err());
+        assert!(EntryConditions {
+            time_step: 1e-9,
+            ..base
+        }
+        .validate()
+        .is_err());
+        assert!(EntryConditions {
+            lift_to_drag: f64::NAN,
+            ..base
+        }
+        .validate()
+        .is_err());
     }
 
     #[test]
@@ -542,7 +571,10 @@ mod tests {
         let result = cond.simulate().expect("valid entry");
         let s = serde_json::to_string(&result).expect("serialize result");
         let back: EntryResult = serde_json::from_str(&s).expect("deserialize result");
-        assert!((back.peak_heat_flux - result.peak_heat_flux).abs() <= result.peak_heat_flux.abs() * 1e-12);
+        assert!(
+            (back.peak_heat_flux - result.peak_heat_flux).abs()
+                <= result.peak_heat_flux.abs() * 1e-12
+        );
         assert!((back.heat_load - result.heat_load).abs() <= result.heat_load.abs() * 1e-12);
         assert!((back.final_speed - result.final_speed).abs() <= result.final_speed.abs() * 1e-12);
         assert!((back.final_time - result.final_time).abs() <= result.final_time.abs() * 1e-12);

@@ -111,15 +111,12 @@ pub fn tautomer_score(mol: &Molecule) -> f64 {
             continue;
         }
         n_doubles += 1;
-        let (za, zb) = (
-            mol.atoms[b.a].atomic_number,
-            mol.atoms[b.b].atomic_number,
-        );
+        let (za, zb) = (mol.atoms[b.a].atomic_number, mol.atoms[b.b].atomic_number);
         let pair = (za.min(zb), za.max(zb));
         score += match pair {
-            (6, 8) => 5.0, // C=O — strongly favoured (keto over enol)
-            (6, 7) => 4.0, // C=N (imine / amide carbonyl C)
-            (7, 8) => 2.0, // N=O
+            (6, 8) => 5.0,  // C=O — strongly favoured (keto over enol)
+            (6, 7) => 4.0,  // C=N (imine / amide carbonyl C)
+            (7, 8) => 2.0,  // N=O
             (7, 16) => 2.5, // N=S
             (6, 16) => 1.0, // C=S
             (8, 16) => 3.0, // S=O / sulfonyl
@@ -138,8 +135,8 @@ pub fn tautomer_score(mol: &Molecule) -> f64 {
             continue;
         }
         match a.atomic_number {
-            8 => score -= 0.40 * h, // hydroxyl / enol O-H
-            7 => score -= 0.10 * h, // amine / amide N-H
+            8 => score -= 0.40 * h,  // hydroxyl / enol O-H
+            7 => score -= 0.10 * h,  // amine / amide N-H
             16 => score -= 0.20 * h, // S-H
             _ => {}
         }
@@ -160,9 +157,10 @@ pub fn tautomer_score(mol: &Molecule) -> f64 {
         if !has_co_double {
             continue;
         }
-        let nh_nbr = mol.neighbors(c_idx).into_iter().any(|nb| {
-            mol.atoms[nb].atomic_number == 7 && mol.atoms[nb].total_h() > 0
-        });
+        let nh_nbr = mol
+            .neighbors(c_idx)
+            .into_iter()
+            .any(|nb| mol.atoms[nb].atomic_number == 7 && mol.atoms[nb].total_h() > 0);
         if nh_nbr {
             score += 1.5;
         }
@@ -307,9 +305,7 @@ fn one_five_shifts(mol: &Molecule) -> Vec<Molecule> {
                         if !shift_acceptor_ok(mol, u) {
                             continue;
                         }
-                        if let Some(taut) =
-                            do_shift(mol, x, &[bi_xy, bi_yz, bi_zw, bi_wu], u)
-                        {
+                        if let Some(taut) = do_shift(mol, x, &[bi_xy, bi_yz, bi_zw, bi_wu], u) {
                             let key = write_canonical_smiles(&taut);
                             if !seen.contains(&key) {
                                 seen.push(key);
@@ -329,12 +325,7 @@ fn one_five_shifts(mol: &Molecule) -> Vec<Molecule> {
 /// The first bond in the chain is the "single-like" donor bond
 /// (single or aromatic) → becomes double; the next is double-like →
 /// becomes single; and so on alternately.
-fn do_shift(
-    mol: &Molecule,
-    x: usize,
-    bond_chain: &[usize],
-    acceptor: usize,
-) -> Option<Molecule> {
+fn do_shift(mol: &Molecule, x: usize, bond_chain: &[usize], acceptor: usize) -> Option<Molecule> {
     let mut out = mol.clone();
     // move the hydrogen
     if out.atoms[x].explicit_h > 0 {
@@ -429,8 +420,7 @@ mod tests {
     fn tautomer_set_is_deduplicated() {
         let m = mol_from_smiles("CC=O").unwrap();
         let set = enumerate_tautomers(&m);
-        let mut keys: Vec<String> =
-            set.iter().map(write_canonical_smiles).collect();
+        let mut keys: Vec<String> = set.iter().map(write_canonical_smiles).collect();
         keys.sort();
         let unique = keys.len();
         keys.dedup();

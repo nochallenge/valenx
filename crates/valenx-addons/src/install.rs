@@ -263,8 +263,7 @@ mod tests {
         let dst = tmpdir("install_big_dst");
         make_addon_dir(&src, "big-addon");
         let big = src.join("payload.bin");
-        let oversize_bytes =
-            valenx_core::adapter_helpers::MAX_COPY_DIR_FILE_BYTES + 1;
+        let oversize_bytes = valenx_core::adapter_helpers::MAX_COPY_DIR_FILE_BYTES + 1;
         let f = std::fs::File::create(&big).unwrap();
         // set_len on a freshly-opened file allocates a sparse hole on
         // every modern filesystem; the 8 GiB doesn't hit the disk.
@@ -304,8 +303,8 @@ mod tests {
         let symlink_at = src.join("evil_link");
         std::os::unix::fs::symlink(&symlink_target, &symlink_at).unwrap();
 
-        let err = install_from_dir(&src, &dst)
-            .expect_err("shared helper must still reject symlinks");
+        let err =
+            install_from_dir(&src, &dst).expect_err("shared helper must still reject symlinks");
         let _ = fs::remove_dir_all(&src);
         let _ = fs::remove_dir_all(&dst);
         match err {

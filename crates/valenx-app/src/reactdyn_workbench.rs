@@ -285,7 +285,7 @@ fn build_reactive_inputs(s: &ReactdynWorkbenchState) -> Result<(ReactiveSystem, 
     let n = s.n_cluster.max(2);
     let c = Element::from_symbol("C").map_err(|e| format!("element: {e}"))?;
     let re = morse_param("C").r_e; // bohr
-    // A planar ring with adjacent atoms one equilibrium bond apart.
+                                   // A planar ring with adjacent atoms one equilibrium bond apart.
     let radius = re / (2.0 * (std::f64::consts::PI / n as f64).sin());
     let pos_bohr: Vec<[f64; 3]> = (0..n)
         .map(|i| {
@@ -387,11 +387,15 @@ fn start_run(s: &mut ReactdynWorkbenchState) {
     let handle = thread::spawn(move || {
         let mut on_step = |step: usize| progress_w.store(step + 1, Ordering::Relaxed);
         let outcome = match job {
-            Job::Aimd(sys, c) => AimdEngine.run(&sys, &c, &mut on_step).map_err(|e| e.to_string()),
-            Job::QmMm(sys, c) => QmMmEngine.run(&sys, &c, &mut on_step).map_err(|e| e.to_string()),
-            Job::Reactive(sys, c) => {
-                ReactiveEngine.run(&sys, &c, &mut on_step).map_err(|e| e.to_string())
-            }
+            Job::Aimd(sys, c) => AimdEngine
+                .run(&sys, &c, &mut on_step)
+                .map_err(|e| e.to_string()),
+            Job::QmMm(sys, c) => QmMmEngine
+                .run(&sys, &c, &mut on_step)
+                .map_err(|e| e.to_string()),
+            Job::Reactive(sys, c) => ReactiveEngine
+                .run(&sys, &c, &mut on_step)
+                .map_err(|e| e.to_string()),
         };
         *result_w.lock().unwrap() = Some(outcome);
     });
@@ -630,9 +634,21 @@ fn draw_results_and_playback(
     // Snapshot the energy series + frame count, dropping the s.last borrow
     // so the playback UI can mutate s.frame_idx / s.playing freely.
     let info = s.last.as_ref().map(|t| {
-        let pe: Vec<[f64; 2]> = t.frames.iter().map(|f| [f.time_fs, f.potential_hartree]).collect();
-        let ke: Vec<[f64; 2]> = t.frames.iter().map(|f| [f.time_fs, f.kinetic_hartree]).collect();
-        let tot: Vec<[f64; 2]> = t.frames.iter().map(|f| [f.time_fs, f.total_hartree()]).collect();
+        let pe: Vec<[f64; 2]> = t
+            .frames
+            .iter()
+            .map(|f| [f.time_fs, f.potential_hartree])
+            .collect();
+        let ke: Vec<[f64; 2]> = t
+            .frames
+            .iter()
+            .map(|f| [f.time_fs, f.kinetic_hartree])
+            .collect();
+        let tot: Vec<[f64; 2]> = t
+            .frames
+            .iter()
+            .map(|f| [f.time_fs, f.total_hartree()])
+            .collect();
         (t.frames.len(), pe, ke, tot)
     });
     let Some((n, pe, ke, tot)) = info else {
@@ -696,7 +712,10 @@ fn draw_results_and_playback(
             .small(),
         );
         if need_push {
-            *to_push = Some((view_molecule_for_frame(t, cur), format!("AIMD frame {cur}/{}", n - 1)));
+            *to_push = Some((
+                view_molecule_for_frame(t, cur),
+                format!("AIMD frame {cur}/{}", n - 1),
+            ));
         }
     }
     if need_push {
@@ -793,7 +812,12 @@ mod tests {
         let view = view_molecule_for_frame(&traj, 0);
         assert_eq!(view.atoms.len(), 2);
         // H2 at ~0.95 Å is bonded → exactly one bond.
-        assert_eq!(view.bonds.len(), 1, "expected one H-H bond, got {:?}", view.bonds);
+        assert_eq!(
+            view.bonds.len(),
+            1,
+            "expected one H-H bond, got {:?}",
+            view.bonds
+        );
     }
 
     #[test]
@@ -807,7 +831,9 @@ mod tests {
         let (sys, controls) = build_qmmm_inputs(&s).expect("qmmm inputs build");
         assert_eq!(sys.n_qm(), 2); // H2 default
         assert_eq!(sys.n_mm(), 8); // the solvent shell
-        let traj = QmMmEngine.run(&sys, &controls, &mut |_| {}).expect("qmmm run");
+        let traj = QmMmEngine
+            .run(&sys, &controls, &mut |_| {})
+            .expect("qmmm run");
         assert_eq!(traj.system.n_atoms(), 10); // 2 QM + 8 MM atoms in 3-D
     }
 
@@ -821,7 +847,9 @@ mod tests {
             ..Default::default()
         };
         let (sys, controls) = build_qmmm_inputs(&s).expect("electrostatic inputs");
-        let traj = QmMmEngine.run(&sys, &controls, &mut |_| {}).expect("electrostatic run");
+        let traj = QmMmEngine
+            .run(&sys, &controls, &mut |_| {})
+            .expect("electrostatic run");
         assert_eq!(traj.system.n_atoms(), 6); // 2 QM + 4 MM
     }
 
@@ -836,7 +864,9 @@ mod tests {
         };
         let (sys, controls) = build_reactive_inputs(&s).expect("reactive inputs");
         assert_eq!(sys.n_atoms(), 6);
-        let traj = ReactiveEngine.run(&sys, &controls, &mut |_| {}).expect("reactive run");
+        let traj = ReactiveEngine
+            .run(&sys, &controls, &mut |_| {})
+            .expect("reactive run");
         assert_eq!(traj.system.n_atoms(), 6);
         assert_eq!(traj.frames.len(), 6);
     }

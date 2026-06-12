@@ -32,14 +32,11 @@ use std::path::Path;
 use std::time::Instant;
 
 use valenx_align::msa::Msa;
+use valenx_core::{error::RunPhase, AdapterError, RunContext, RunReport};
 use valenx_phylo::{
-    distance::{distance_matrix, bionj, DistanceModel},
+    distance::{bionj, distance_matrix, DistanceModel},
     likelihood::{optimize_topology_ml_spr, SubstModel},
     write_newick,
-};
-use valenx_core::{
-    error::RunPhase,
-    AdapterError, RunContext, RunReport,
 };
 
 /// Parameters stored in `native_params.toml` by `prepare()`.
@@ -157,8 +154,7 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
             .iter()
             .zip(labels.iter())
             .map(|((_, seq), label)| {
-                let ungapped: Vec<u8> =
-                    seq.iter().copied().filter(|&b| b != b'-').collect();
+                let ungapped: Vec<u8> = seq.iter().copied().filter(|&b| b != b'-').collect();
                 (label.clone(), ungapped)
             })
             .collect();
@@ -210,9 +206,7 @@ fn read_text_file(path: &str) -> Result<String, AdapterError> {
 }
 
 /// Minimal multi-FASTA parser: (name, sequence_bytes) pairs.
-pub fn parse_fasta_simple(
-    text: &str,
-) -> Result<Vec<(Option<String>, Vec<u8>)>, AdapterError> {
+pub fn parse_fasta_simple(text: &str) -> Result<Vec<(Option<String>, Vec<u8>)>, AdapterError> {
     let mut records: Vec<(Option<String>, Vec<u8>)> = Vec::new();
     let mut cur_name: Option<String> = None;
     let mut cur_seq: Vec<u8> = Vec::new();
@@ -262,14 +256,20 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, (name, _))| {
-                name.as_deref().unwrap_or(&format!("s{}", i + 1)).to_string()
+                name.as_deref()
+                    .unwrap_or(&format!("s{}", i + 1))
+                    .to_string()
             })
             .collect();
         let rows: Vec<Vec<u8>> = records.iter().map(|(_, s)| s.clone()).collect();
         let msa = Msa::new(rows).unwrap();
         let dist = distance_matrix(&msa, &labels, DistanceModel::JukesCantor).unwrap();
         let tree = bionj(&dist).unwrap();
-        assert_eq!(tree.leaf_count(), 4, "4-sequence input must produce 4-leaf tree");
+        assert_eq!(
+            tree.leaf_count(),
+            4,
+            "4-sequence input must produce 4-leaf tree"
+        );
     }
 
     #[test]
@@ -281,7 +281,9 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, (name, _))| {
-                name.as_deref().unwrap_or(&format!("s{}", i + 1)).to_string()
+                name.as_deref()
+                    .unwrap_or(&format!("s{}", i + 1))
+                    .to_string()
             })
             .collect();
         let rows: Vec<Vec<u8>> = records.iter().map(|(_, s)| s.clone()).collect();
@@ -291,7 +293,10 @@ mod tests {
         assert_eq!(tree.leaf_count(), 4);
         // Write as Newick to confirm it serializes.
         let nwk = write_newick(&tree);
-        assert!(nwk.contains("a") && nwk.contains("b"), "Newick should contain leaf labels");
+        assert!(
+            nwk.contains("a") && nwk.contains("b"),
+            "Newick should contain leaf labels"
+        );
     }
 
     #[test]

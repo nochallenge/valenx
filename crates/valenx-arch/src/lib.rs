@@ -91,7 +91,7 @@ pub use door::{DoorParams, DoorStyle, Side};
 pub use entity::{ArchEntity, ArchEntityKind};
 pub use error::{ArchError, ErrorCategory};
 pub use mep::{
-    CableSegmentParams, ConduitSegmentParams, DuctShape, DuctSegmentParams, EquipmentKind,
+    CableSegmentParams, ConduitSegmentParams, DuctSegmentParams, DuctShape, EquipmentKind,
     FlowDirection, MepEquipmentParams, PipeSegmentParams,
 };
 pub use persist::ArchFile;

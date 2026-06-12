@@ -295,7 +295,10 @@ impl SimpleFoamInput {
     /// Load and parse a case directory's `case.toml`.
     pub fn from_case_dir(case_dir: &Path) -> Result<(CaseHeader, Self), AdapterError> {
         let case_toml = case_dir.join("case.toml");
-        let text = valenx_core::io_caps::read_capped_to_string(&case_toml, valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize)?;
+        let text = valenx_core::io_caps::read_capped_to_string(
+            &case_toml,
+            valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize,
+        )?;
         let case_def: CaseDef = toml::from_str(&text).map_err(|e| AdapterError::InvalidCase {
             case_path: case_toml.clone(),
             reason: format!("parse: {e}"),
@@ -491,14 +494,13 @@ impl SimpleFoamInput {
             // time gives the user a clean InvalidCase error mentioning
             // the offending field rather than a corrupted dict that
             // simpleFoam refuses to parse mid-run.
-            validate_structured_identifier(name, &format!("boundaries.{name}"))
-                .map_err(|e| {
-                    if let AdapterError::InvalidCase { reason, .. } = e {
-                        invalid(reason)
-                    } else {
-                        e
-                    }
-                })?;
+            validate_structured_identifier(name, &format!("boundaries.{name}")).map_err(|e| {
+                if let AdapterError::InvalidCase { reason, .. } = e {
+                    invalid(reason)
+                } else {
+                    e
+                }
+            })?;
             let table = v
                 .as_table()
                 .ok_or_else(|| invalid(format!("[boundaries.{name}] must be a table")))?;
@@ -1011,7 +1013,11 @@ residual_target = 1e-3
         // containing `}` would close the boundaryField block early.
         let mut cd = sample_case();
         let mut sections = cd.sections.clone();
-        let bdy_table = sections.get_mut("boundaries").unwrap().as_table_mut().unwrap();
+        let bdy_table = sections
+            .get_mut("boundaries")
+            .unwrap()
+            .as_table_mut()
+            .unwrap();
         let mut hostile = toml::value::Table::new();
         hostile.insert("type".into(), toml::Value::String("no-slip".into()));
         bdy_table.insert("evil}injected".into(), toml::Value::Table(hostile));

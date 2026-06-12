@@ -261,10 +261,8 @@ pub fn run_rhf_scf(
         {
             // Recompute energy with the final density for consistency.
             let final_fock = build_fock(&h_core, &density, &integrals.eri);
-            let final_energy =
-                rhf_energy(&density, &h_core, &final_fock, integrals.e_nuclear);
-            let electronic =
-                rhf_electronic_energy(&density, &h_core, &final_fock);
+            let final_energy = rhf_energy(&density, &h_core, &final_fock, integrals.e_nuclear);
+            let electronic = rhf_electronic_energy(&density, &h_core, &final_fock);
             return Ok(RhfResult {
                 total_energy: final_energy,
                 electronic_energy: electronic,

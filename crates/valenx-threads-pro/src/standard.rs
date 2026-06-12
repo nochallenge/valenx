@@ -124,7 +124,13 @@ mod tests {
     #[test]
     fn profile_shape_matches_family() {
         assert_eq!(ThreadStandardPro::Acme.profile_shape(), ProfileShape::Acme);
-        assert_eq!(ThreadStandardPro::Buttress.profile_shape(), ProfileShape::Buttress);
-        assert_eq!(ThreadStandardPro::IsoMetric.profile_shape(), ProfileShape::V);
+        assert_eq!(
+            ThreadStandardPro::Buttress.profile_shape(),
+            ProfileShape::Buttress
+        );
+        assert_eq!(
+            ThreadStandardPro::IsoMetric.profile_shape(),
+            ProfileShape::V
+        );
     }
 }

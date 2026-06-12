@@ -115,10 +115,7 @@ impl DesignConstraintSet {
     /// homopolymer run exceeds the cap, and no forbidden motif /
     /// subsequence occurs.
     pub fn satisfies(&self, seq: &[u8]) -> bool {
-        self.locks_ok(seq)
-            && self.gc_ok(seq)
-            && self.homopolymer_ok(seq)
-            && self.motifs_ok(seq)
+        self.locks_ok(seq) && self.gc_ok(seq) && self.homopolymer_ok(seq) && self.motifs_ok(seq)
     }
 
     /// A non-negative soft penalty for `seq` — `0` when every constraint
@@ -179,7 +176,10 @@ impl DesignConstraintSet {
     pub fn locks_ok(&self, seq: &[u8]) -> bool {
         self.locked.iter().enumerate().all(|(i, lk)| match lk {
             None => true,
-            Some(b) => seq.get(i).map(|a| a.eq_ignore_ascii_case(b)).unwrap_or(false),
+            Some(b) => seq
+                .get(i)
+                .map(|a| a.eq_ignore_ascii_case(b))
+                .unwrap_or(false),
         })
     }
 

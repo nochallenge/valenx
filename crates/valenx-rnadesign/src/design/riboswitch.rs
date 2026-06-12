@@ -111,7 +111,10 @@ pub fn design_riboswitch(
     params: TwoStateParams,
 ) -> Result<RiboswitchDesign> {
     if free_target.is_empty() || bound_target.is_empty() {
-        return Err(RnaDesignError::goal("target", "a riboswitch target is empty"));
+        return Err(RnaDesignError::goal(
+            "target",
+            "a riboswitch target is empty",
+        ));
     }
     if free_target.len() != bound_target.len() {
         return Err(RnaDesignError::goal(
@@ -181,12 +184,19 @@ pub fn design_riboswitch(
             Some((_, _, _, _, _, bs)) => score < *bs,
         };
         if take {
-            best = Some((seq_bytes, free_dist, bound_energy, mfe_res.energy, gap, score));
+            best = Some((
+                seq_bytes,
+                free_dist,
+                bound_energy,
+                mfe_res.energy,
+                gap,
+                score,
+            ));
         }
     }
 
-    let (sequence, free_dist, bound_energy, mfe_energy, gap, _) = best
-        .ok_or_else(|| RnaDesignError::no_design("riboswitch", "no candidate produced"))?;
+    let (sequence, free_dist, bound_energy, mfe_energy, gap, _) =
+        best.ok_or_else(|| RnaDesignError::no_design("riboswitch", "no candidate produced"))?;
 
     let mut notes = Vec::new();
     notes.push(format!(

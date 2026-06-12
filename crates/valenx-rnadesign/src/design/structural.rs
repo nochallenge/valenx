@@ -61,10 +61,7 @@ impl Default for StructuralDesignParams {
 /// - [`RnaDesignError::Goal`] if `target` is empty or pseudoknotted.
 /// - [`RnaDesignError::Invalid`] if `params.starts == 0`.
 /// - [`RnaDesignError::Upstream`] if the underlying folder fails.
-pub fn design_structural(
-    target: &Structure,
-    params: StructuralDesignParams,
-) -> Result<RnaDesign> {
+pub fn design_structural(target: &Structure, params: StructuralDesignParams) -> Result<RnaDesign> {
     if target.is_empty() {
         return Err(RnaDesignError::goal("target", "target structure is empty"));
     }
@@ -189,7 +186,9 @@ mod tests {
 
     #[test]
     fn rejects_empty_target() {
-        assert!(design_structural(&Structure::empty(0), StructuralDesignParams::default()).is_err());
+        assert!(
+            design_structural(&Structure::empty(0), StructuralDesignParams::default()).is_err()
+        );
     }
 
     #[test]

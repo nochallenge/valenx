@@ -30,9 +30,7 @@
 //! via the ETKDG path to explore the energy surface.
 
 use super::atom_type::{type_molecule, MmffType};
-use super::params::{
-    angle_param, bond_param, torsion_param, vdw_param, VdwParam,
-};
+use super::params::{angle_param, bond_param, torsion_param, vdw_param, VdwParam};
 use crate::charge::gasteiger_charges;
 use crate::element::covalent_radius;
 use crate::molecule::{BondOrder, Molecule};
@@ -187,7 +185,13 @@ pub fn setup(mol: &Molecule) -> Mmff94Setup {
                     let theta0 = guess_theta0(mol, j);
                     (theta0, 0.6)
                 };
-                angles.push(AngleEntry { i, j, k, theta0, ka });
+                angles.push(AngleEntry {
+                    i,
+                    j,
+                    k,
+                    theta0,
+                    ka,
+                });
             }
         }
     }
@@ -272,12 +276,10 @@ fn guess_theta0(mol: &Molecule, atom: usize) -> f64 {
     if triple {
         return 180.0;
     }
-    let multiple = mol.bonds_on(atom).iter().any(|&b| {
-        matches!(
-            mol.bonds[b].order,
-            BondOrder::Double | BondOrder::Aromatic
-        )
-    });
+    let multiple = mol
+        .bonds_on(atom)
+        .iter()
+        .any(|&b| matches!(mol.bonds[b].order, BondOrder::Double | BondOrder::Aromatic));
     if multiple || mol.atoms[atom].aromatic {
         120.0
     } else {
@@ -541,11 +543,7 @@ pub fn minimize(mol: &mut Molecule, setup: &Mmff94Setup, max_steps: usize) -> Mm
     for _ in 0..max_steps {
         let g = gradient(mol, setup);
         // largest gradient component
-        let max_g = g
-            .iter()
-            .flatten()
-            .map(|v| v.abs())
-            .fold(0.0f64, f64::max);
+        let max_g = g.iter().flatten().map(|v| v.abs()).fold(0.0f64, f64::max);
         if max_g < 0.01 {
             break;
         }
@@ -620,11 +618,7 @@ fn angle_position_grad(
         gi[d] = du * inv_sin;
         gk[d] = dv * inv_sin;
     }
-    let gj = [
-        -gi[0] - gk[0],
-        -gi[1] - gk[1],
-        -gi[2] - gk[2],
-    ];
+    let gj = [-gi[0] - gk[0], -gi[1] - gk[1], -gi[2] - gk[2]];
     (gi, gj, gk)
 }
 
@@ -663,16 +657,8 @@ fn torsion_position_grad(
     let b2 = dot(b, b).max(1e-12);
     let g_len = norm_of(g_vec).max(1e-9);
 
-    let gi = [
-        a[0] * g_len / a2,
-        a[1] * g_len / a2,
-        a[2] * g_len / a2,
-    ];
-    let gl = [
-        -b[0] * g_len / b2,
-        -b[1] * g_len / b2,
-        -b[2] * g_len / b2,
-    ];
+    let gi = [a[0] * g_len / a2, a[1] * g_len / a2, a[2] * g_len / a2];
+    let gl = [-b[0] * g_len / b2, -b[1] * g_len / b2, -b[2] * g_len / b2];
     let fg = dot(f, g_vec);
     let hg = dot(h_vec, g_vec);
     let g2 = dot(g_vec, g_vec).max(1e-12);
@@ -723,10 +709,7 @@ mod tests {
         minimize(&mut conf, &s, 200);
         let g = gradient(&conf, &s);
         let max_g = g.iter().flatten().map(|v| v.abs()).fold(0.0_f64, f64::max);
-        assert!(
-            max_g < 5.0,
-            "ethane minimum gradient too large: {max_g}"
-        );
+        assert!(max_g < 5.0, "ethane minimum gradient too large: {max_g}");
     }
 
     #[test]
@@ -792,10 +775,7 @@ mod tests {
         let e0 = energy(&conf, &s).total();
         minimize(&mut conf, &s, 100);
         let e1 = energy(&conf, &s).total();
-        assert!(
-            e1 <= e0 + 1e-3,
-            "minimization raised energy: {e0} -> {e1}"
-        );
+        assert!(e1 <= e0 + 1e-3, "minimization raised energy: {e0} -> {e1}");
     }
 
     #[test]
@@ -867,21 +847,9 @@ mod tests {
         let p2 = (m[0][0] - q).powi(2) + (m[1][1] - q).powi(2) + (m[2][2] - q).powi(2) + 2.0 * p1;
         let p = (p2 / 6.0).sqrt().max(1e-12);
         let b = [
-            [
-                (m[0][0] - q) / p,
-                m[0][1] / p,
-                m[0][2] / p,
-            ],
-            [
-                m[0][1] / p,
-                (m[1][1] - q) / p,
-                m[1][2] / p,
-            ],
-            [
-                m[0][2] / p,
-                m[1][2] / p,
-                (m[2][2] - q) / p,
-            ],
+            [(m[0][0] - q) / p, m[0][1] / p, m[0][2] / p],
+            [m[0][1] / p, (m[1][1] - q) / p, m[1][2] / p],
+            [m[0][2] / p, m[1][2] / p, (m[2][2] - q) / p],
         ];
         let det = b[0][0] * (b[1][1] * b[2][2] - b[1][2] * b[2][1])
             - b[0][1] * (b[1][0] * b[2][2] - b[1][2] * b[2][0])

@@ -288,7 +288,11 @@ mod tests {
         }
         // Every advertised tool carries a non-empty inputSchema.
         for t in arr {
-            assert!(t["inputSchema"].is_object(), "{} lacks an inputSchema", t["name"]);
+            assert!(
+                t["inputSchema"].is_object(),
+                "{} lacks an inputSchema",
+                t["name"]
+            );
         }
     }
 

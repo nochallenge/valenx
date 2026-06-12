@@ -104,12 +104,7 @@ impl GridBox {
     pub fn contains(&self, p: Vector3<f64>) -> bool {
         let lo = self.origin();
         let hi = self.max_corner();
-        p.x >= lo.x
-            && p.x <= hi.x
-            && p.y >= lo.y
-            && p.y <= hi.y
-            && p.z >= lo.z
-            && p.z <= hi.z
+        p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y && p.z >= lo.z && p.z <= hi.z
     }
 
     /// Build a box that snugly encloses a set of atom positions plus a
@@ -136,10 +131,7 @@ impl GridBox {
         // Each edge is at least 2*spacing wide so the box never
         // degenerates for a single-point input.
         let size = (hi - lo).map(|e| (e + 2.0 * pad).max(2.0 * Self::DEFAULT_SPACING));
-        Self::new(
-            [center.x, center.y, center.z],
-            [size.x, size.y, size.z],
-        )
+        Self::new([center.x, center.y, center.z], [size.x, size.y, size.z])
     }
 
     /// Bridge to the `valenx-dock` config — fills the centre, size and
@@ -198,10 +190,7 @@ mod tests {
 
     #[test]
     fn enclosing_box_covers_points_with_padding() {
-        let pts = vec![
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(4.0, 6.0, 8.0),
-        ];
+        let pts = vec![Vector3::new(0.0, 0.0, 0.0), Vector3::new(4.0, 6.0, 8.0)];
         let gb = GridBox::enclosing(&pts, 2.0).unwrap();
         // Centre is the midpoint.
         assert!((gb.center - Vector3::new(2.0, 3.0, 4.0)).norm() < 1e-9);

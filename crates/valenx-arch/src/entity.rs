@@ -272,15 +272,24 @@ impl ArchEntity {
             ),
             ArchEntity::PipeSegment(p) => format!(
                 "Pipe ø{:.3} m × {:.2} m ({}, {})",
-                p.diameter, p.length(), p.fluid, p.material
+                p.diameter,
+                p.length(),
+                p.fluid,
+                p.material
             ),
             ArchEntity::CableSegment(c) => format!(
                 "Cable {:.1} mm² × {:.2} m @ {:.0} V ({})",
-                c.conductor_csa_mm2, c.length(), c.voltage, c.material
+                c.conductor_csa_mm2,
+                c.length(),
+                c.voltage,
+                c.material
             ),
             ArchEntity::ConduitSegment(c) => format!(
                 "Conduit ø{:.3}/{:.3} m × {:.2} m ({})",
-                c.outer_diameter, c.inner_diameter, c.length(), c.material
+                c.outer_diameter,
+                c.inner_diameter,
+                c.length(),
+                c.material
             ),
             ArchEntity::MepEquipment(e) => format!(
                 "Equipment {} \"{}\" ({:.2}×{:.2}×{:.2} m)",

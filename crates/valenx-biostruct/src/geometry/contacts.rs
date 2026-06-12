@@ -98,9 +98,7 @@ pub fn contact_map(
     for i in 0..n {
         for j in (i + 1)..n {
             // Skip near-sequential residues within the same chain.
-            if residues[i].chain == residues[j].chain
-                && j - i < min_seq_sep
-            {
+            if residues[i].chain == residues[j].chain && j - i < min_seq_sep {
                 continue;
             }
             let d = match mode {
@@ -110,9 +108,7 @@ pub fn contact_map(
                 ContactMode::CalphaCalpha => {
                     residue_residue_reference(residues[i].residue, residues[j].residue, "CA")
                 }
-                ContactMode::MinAtom => {
-                    min_atom_distance(residues[i].residue, residues[j].residue)
-                }
+                ContactMode::MinAtom => min_atom_distance(residues[i].residue, residues[j].residue),
             };
             if let Some(d) = d {
                 if d <= cutoff {
@@ -132,22 +128,13 @@ fn residue_residue_reference(
     b: &crate::structure::Residue,
     name: &str,
 ) -> Option<f64> {
-    let pa = a
-        .primary_atom(name)
-        .or_else(|| a.primary_atom("CA"))?
-        .coord;
-    let pb = b
-        .primary_atom(name)
-        .or_else(|| b.primary_atom("CA"))?
-        .coord;
+    let pa = a.primary_atom(name).or_else(|| a.primary_atom("CA"))?.coord;
+    let pb = b.primary_atom(name).or_else(|| b.primary_atom("CA"))?.coord;
     Some((pa - pb).norm())
 }
 
 /// Minimum distance over all atom pairs of two residues.
-fn min_atom_distance(
-    a: &crate::structure::Residue,
-    b: &crate::structure::Residue,
-) -> Option<f64> {
+fn min_atom_distance(a: &crate::structure::Residue, b: &crate::structure::Residue) -> Option<f64> {
     let mut best = f64::INFINITY;
     for x in &a.atoms {
         for y in &b.atoms {
@@ -300,16 +287,23 @@ mod tests {
         let mut r = Residue::new(name, seq);
         r.atoms.push(Atom::new("CA", "C", ca));
         // Cbeta 1.5 A off the CA along +x.
-        r.atoms
-            .push(Atom::new("CB", "C", ca + nalgebra::Vector3::new(1.5, 0.0, 0.0)));
+        r.atoms.push(Atom::new(
+            "CB",
+            "C",
+            ca + nalgebra::Vector3::new(1.5, 0.0, 0.0),
+        ));
         r
     }
 
     #[test]
     fn contact_map_finds_close_residues() {
         let mut chain = Chain::new("A");
-        chain.residues.push(res_at("ALA", 1, Point3::new(0.0, 0.0, 0.0)));
-        chain.residues.push(res_at("ALA", 2, Point3::new(3.0, 0.0, 0.0)));
+        chain
+            .residues
+            .push(res_at("ALA", 1, Point3::new(0.0, 0.0, 0.0)));
+        chain
+            .residues
+            .push(res_at("ALA", 2, Point3::new(3.0, 0.0, 0.0)));
         chain
             .residues
             .push(res_at("ALA", 3, Point3::new(40.0, 0.0, 0.0)));
@@ -345,8 +339,12 @@ mod tests {
     #[test]
     fn contact_matrix_is_symmetric() {
         let mut chain = Chain::new("A");
-        chain.residues.push(res_at("ALA", 1, Point3::new(0.0, 0.0, 0.0)));
-        chain.residues.push(res_at("ALA", 2, Point3::new(2.0, 0.0, 0.0)));
+        chain
+            .residues
+            .push(res_at("ALA", 1, Point3::new(0.0, 0.0, 0.0)));
+        chain
+            .residues
+            .push(res_at("ALA", 2, Point3::new(2.0, 0.0, 0.0)));
         let mut model = Model::new(1);
         model.chains.push(chain);
         let m = contact_map(&model, 8.0, ContactMode::MinAtom, 1)
@@ -366,10 +364,12 @@ mod tests {
         let mut chain = Chain::new("A");
         let mut r1 = Residue::new("HOH", 1);
         r1.hetatm = true;
-        r1.atoms.push(Atom::new("O", "O", Point3::new(0.0, 0.0, 0.0)));
+        r1.atoms
+            .push(Atom::new("O", "O", Point3::new(0.0, 0.0, 0.0)));
         let mut r2 = Residue::new("HOH", 2);
         r2.hetatm = true;
-        r2.atoms.push(Atom::new("O", "O", Point3::new(2.0, 0.0, 0.0)));
+        r2.atoms
+            .push(Atom::new("O", "O", Point3::new(2.0, 0.0, 0.0)));
         chain.residues.push(r1);
         chain.residues.push(r2);
         let mut model = Model::new(1);
@@ -385,10 +385,12 @@ mod tests {
         let mut chain = Chain::new("A");
         let mut r1 = Residue::new("HOH", 1);
         r1.hetatm = true;
-        r1.atoms.push(Atom::new("O", "O", Point3::new(0.0, 0.0, 0.0)));
+        r1.atoms
+            .push(Atom::new("O", "O", Point3::new(0.0, 0.0, 0.0)));
         let mut r2 = Residue::new("HOH", 2);
         r2.hetatm = true;
-        r2.atoms.push(Atom::new("O", "O", Point3::new(6.0, 0.0, 0.0)));
+        r2.atoms
+            .push(Atom::new("O", "O", Point3::new(6.0, 0.0, 0.0)));
         chain.residues.push(r1);
         chain.residues.push(r2);
         let mut model = Model::new(1);

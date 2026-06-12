@@ -74,7 +74,10 @@
 // crate parses untrusted text, where non-char-boundary slices panic.
 // WARN (not deny): most existing slices are safe ASCII; this only flags
 // NEW ones.
-#![allow(clippy::string_slice, reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries")]
+#![allow(
+    clippy::string_slice,
+    reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries"
+)]
 
 pub mod bayes;
 pub mod compare;
@@ -94,8 +97,8 @@ pub use error::{ErrorCategory, PhyloError, Result};
 pub use tree::{Node, NodeId, Tree};
 
 pub use bayes::{
-    run_chain, summarise_posterior, ChainConfig, ChainResult, ChainState,
-    ParameterDiagnostics, PosteriorSummary, Prior, ProposalSet,
+    run_chain, summarise_posterior, ChainConfig, ChainResult, ChainState, ParameterDiagnostics,
+    PosteriorSummary, Prior, ProposalSet,
 };
 pub use distance::{distance_matrix, DistMatrix, DistanceModel};
 pub use io::{read_newick, read_nexus, write_newick, write_nexus};

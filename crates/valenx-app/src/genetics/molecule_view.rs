@@ -173,12 +173,7 @@ impl ViewMolecule {
         let bonds = if system.topology.bonds.is_empty() {
             detect_bonds(&atoms)
         } else {
-            system
-                .topology
-                .bonds
-                .iter()
-                .map(|b| (b.i, b.j))
-                .collect()
+            system.topology.bonds.iter().map(|b| (b.i, b.j)).collect()
         };
         ViewMolecule { atoms, bonds }
     }

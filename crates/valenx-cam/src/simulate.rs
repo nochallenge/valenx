@@ -272,8 +272,7 @@ pub fn removed_volume_mm3(toolpath: &Toolpath, tool: &Tool) -> f64 {
             MoveKind::Arc { centre_xy, dir } => {
                 // Use the arc length (tessellated) instead of the
                 // straight-line chord distance.
-                let segs =
-                    arc_polyline_segments(w[0].position, w[1].position, centre_xy, dir);
+                let segs = arc_polyline_segments(w[0].position, w[1].position, centre_xy, dir);
                 let arc_len: f64 = segs.iter().map(|(a, b)| (b - a).norm()).sum();
                 total += arc_len * tool.diameter_mm * r;
             }

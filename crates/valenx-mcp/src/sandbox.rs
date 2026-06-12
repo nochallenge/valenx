@@ -602,7 +602,9 @@ mod tests {
     fn windows_short_name_helper_flags_legacy_alias() {
         // Canonical NTFS short-names — `PROGRA~1`, `MY_FIL~1.TXT`,
         // `ABC~9` — should all match.
-        assert!(contains_windows_short_name_component(Path::new("C:/PROGRA~1/foo")));
+        assert!(contains_windows_short_name_component(Path::new(
+            "C:/PROGRA~1/foo"
+        )));
         assert!(contains_windows_short_name_component(Path::new(
             "C:/some/path/MY_FIL~1.TXT"
         )));
@@ -612,13 +614,17 @@ mod tests {
         assert!(!contains_windows_short_name_component(Path::new(
             "ProgramFiles/foo"
         )));
-        assert!(!contains_windows_short_name_component(Path::new("normalpath")));
+        assert!(!contains_windows_short_name_component(Path::new(
+            "normalpath"
+        )));
         // Lowercase doesn't match — NTFS aliases are always uppercase.
         assert!(!contains_windows_short_name_component(Path::new(
             "progra~1"
         )));
         // Tilde without a digit suffix.
-        assert!(!contains_windows_short_name_component(Path::new("PROGRA~X")));
+        assert!(!contains_windows_short_name_component(Path::new(
+            "PROGRA~X"
+        )));
         // Prefix longer than 6 chars doesn't match the NTFS layout.
         assert!(!contains_windows_short_name_component(Path::new(
             "TOOLONG~1"

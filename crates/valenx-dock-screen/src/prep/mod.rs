@@ -16,7 +16,7 @@ pub mod gridbox;
 pub mod protonate;
 pub mod torsion;
 
-pub use flex::{FlexibleSidechain, FlexSelection};
+pub use flex::{FlexSelection, FlexibleSidechain};
 pub use gridbox::GridBox;
 pub use protonate::{ChargeModel, ProtonationResult};
 pub use torsion::{RotatableBond, TorsionTree};

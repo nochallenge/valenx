@@ -25,68 +25,120 @@ struct KeyDef {
 /// The SMARTS-defined structural keys. Order is fixed — bit `i`
 /// corresponds to `KEY_DEFS[i]`.
 const KEY_DEFS: &[KeyDef] = &[
-    KeyDef { smarts: "[#8]" },               // oxygen present
-    KeyDef { smarts: "[#7]" },               // nitrogen present
-    KeyDef { smarts: "[#16]" },              // sulfur present
-    KeyDef { smarts: "[#15]" },              // phosphorus present
-    KeyDef { smarts: "[F,Cl,Br,I]" },        // halogen present
-    KeyDef { smarts: "[#6]=[#8]" },          // carbonyl
-    KeyDef { smarts: "[#6]=[#7]" },          // imine
-    KeyDef { smarts: "[#6]#[#7]" },          // nitrile
-    KeyDef { smarts: "[#6]#[#6]" },          // alkyne
-    KeyDef { smarts: "[#6]=[#6]" },          // alkene
-    KeyDef { smarts: "[#8H1]" },             // hydroxyl-ish (O with H)
-    KeyDef { smarts: "[#7H1,#7H2]" },        // N-H
-    KeyDef { smarts: "[#6][#8H1]" },         // C-O-H alcohol
-    KeyDef { smarts: "[#6](=[#8])[#8]" },    // carboxyl / ester O
-    KeyDef { smarts: "[#6](=[#8])[#7]" },    // amide
-    KeyDef { smarts: "[#6](=[#8])[#6]" },    // ketone
-    KeyDef { smarts: "[#7](=[#8])" },        // nitro-ish N=O
-    KeyDef { smarts: "[#8]=[#16]" },         // S=O sulfoxide/sulfone
-    KeyDef { smarts: "[#6][#7]" },           // C-N
-    KeyDef { smarts: "[#6][#8]" },           // C-O
-    KeyDef { smarts: "[#6][#16]" },          // C-S
-    KeyDef { smarts: "[#7][#7]" },           // N-N
-    KeyDef { smarts: "[#8][#8]" },           // O-O peroxide
-    KeyDef { smarts: "[#7][#8]" },           // N-O
-    KeyDef { smarts: "c" },                  // aromatic atom
-    KeyDef { smarts: "c[#7]" },              // aromatic C-N
-    KeyDef { smarts: "c[#8]" },              // aromatic C-O
-    KeyDef { smarts: "c[F,Cl,Br,I]" },       // aromatic halide
-    KeyDef { smarts: "[#6][#6][#6][#6]" },   // 4-carbon chain
-    KeyDef { smarts: "[#6][#6][#6][#6][#6][#6]" }, // 6-carbon chain
-    KeyDef { smarts: "[CH3]" },              // methyl
-    KeyDef { smarts: "[CH2]" },              // methylene
-    KeyDef { smarts: "[CH]" },               // methine
-    KeyDef { smarts: "[#6X4]" },             // sp3 carbon
-    KeyDef { smarts: "[#7X3]" },             // trivalent nitrogen
-    KeyDef { smarts: "[#8X2]" },             // divalent oxygen (ether)
-    KeyDef { smarts: "[+]" },                // a cation
-    KeyDef { smarts: "[-]" },                // an anion
-    KeyDef { smarts: "[R]" },                // any ring atom
-    KeyDef { smarts: "[r3]" },               // 3-membered ring
-    KeyDef { smarts: "[r4]" },               // 4-membered ring
-    KeyDef { smarts: "[r5]" },               // 5-membered ring
-    KeyDef { smarts: "[r6]" },               // 6-membered ring
-    KeyDef { smarts: "[r7]" },               // 7-membered ring
-    KeyDef { smarts: "[#7R]" },              // nitrogen in a ring
-    KeyDef { smarts: "[#8R]" },              // oxygen in a ring
-    KeyDef { smarts: "[#16R]" },             // sulfur in a ring
-    KeyDef { smarts: "c1ccccc1" },           // benzene ring
-    KeyDef { smarts: "[#6][#6](=[#8])[#8H1]" }, // carboxylic acid
-    KeyDef { smarts: "[#7][#6]=[#8]" },      // amide N-C=O
-    KeyDef { smarts: "[#6][#7][#6]" },       // C-N-C
-    KeyDef { smarts: "[#6][#8][#6]" },       // ether C-O-C
-    KeyDef { smarts: "[#6][#16][#6]" },      // thioether
-    KeyDef { smarts: "[#8H1][#6]=[#8]" },    // (another carboxyl form)
-    KeyDef { smarts: "[#7H2]" },             // primary amine NH2
-    KeyDef { smarts: "[#6]=[#6][#6]=[#6]" }, // conjugated diene
-    KeyDef { smarts: "[#6R]=[#6R]" },        // ring double bond
-    KeyDef { smarts: "[#6](-[#6])(-[#6])(-[#6])-[#6]" }, // quaternary C
-    KeyDef { smarts: "[#9]" },               // fluorine
-    KeyDef { smarts: "[#17]" },              // chlorine
-    KeyDef { smarts: "[#35]" },              // bromine
-    KeyDef { smarts: "[#53]" },              // iodine
+    KeyDef { smarts: "[#8]" },  // oxygen present
+    KeyDef { smarts: "[#7]" },  // nitrogen present
+    KeyDef { smarts: "[#16]" }, // sulfur present
+    KeyDef { smarts: "[#15]" }, // phosphorus present
+    KeyDef {
+        smarts: "[F,Cl,Br,I]",
+    }, // halogen present
+    KeyDef {
+        smarts: "[#6]=[#8]",
+    }, // carbonyl
+    KeyDef {
+        smarts: "[#6]=[#7]",
+    }, // imine
+    KeyDef {
+        smarts: "[#6]#[#7]",
+    }, // nitrile
+    KeyDef {
+        smarts: "[#6]#[#6]",
+    }, // alkyne
+    KeyDef {
+        smarts: "[#6]=[#6]",
+    }, // alkene
+    KeyDef { smarts: "[#8H1]" }, // hydroxyl-ish (O with H)
+    KeyDef {
+        smarts: "[#7H1,#7H2]",
+    }, // N-H
+    KeyDef {
+        smarts: "[#6][#8H1]",
+    }, // C-O-H alcohol
+    KeyDef {
+        smarts: "[#6](=[#8])[#8]",
+    }, // carboxyl / ester O
+    KeyDef {
+        smarts: "[#6](=[#8])[#7]",
+    }, // amide
+    KeyDef {
+        smarts: "[#6](=[#8])[#6]",
+    }, // ketone
+    KeyDef {
+        smarts: "[#7](=[#8])",
+    }, // nitro-ish N=O
+    KeyDef {
+        smarts: "[#8]=[#16]",
+    }, // S=O sulfoxide/sulfone
+    KeyDef { smarts: "[#6][#7]" }, // C-N
+    KeyDef { smarts: "[#6][#8]" }, // C-O
+    KeyDef {
+        smarts: "[#6][#16]",
+    }, // C-S
+    KeyDef { smarts: "[#7][#7]" }, // N-N
+    KeyDef { smarts: "[#8][#8]" }, // O-O peroxide
+    KeyDef { smarts: "[#7][#8]" }, // N-O
+    KeyDef { smarts: "c" },     // aromatic atom
+    KeyDef { smarts: "c[#7]" }, // aromatic C-N
+    KeyDef { smarts: "c[#8]" }, // aromatic C-O
+    KeyDef {
+        smarts: "c[F,Cl,Br,I]",
+    }, // aromatic halide
+    KeyDef {
+        smarts: "[#6][#6][#6][#6]",
+    }, // 4-carbon chain
+    KeyDef {
+        smarts: "[#6][#6][#6][#6][#6][#6]",
+    }, // 6-carbon chain
+    KeyDef { smarts: "[CH3]" }, // methyl
+    KeyDef { smarts: "[CH2]" }, // methylene
+    KeyDef { smarts: "[CH]" },  // methine
+    KeyDef { smarts: "[#6X4]" }, // sp3 carbon
+    KeyDef { smarts: "[#7X3]" }, // trivalent nitrogen
+    KeyDef { smarts: "[#8X2]" }, // divalent oxygen (ether)
+    KeyDef { smarts: "[+]" },   // a cation
+    KeyDef { smarts: "[-]" },   // an anion
+    KeyDef { smarts: "[R]" },   // any ring atom
+    KeyDef { smarts: "[r3]" },  // 3-membered ring
+    KeyDef { smarts: "[r4]" },  // 4-membered ring
+    KeyDef { smarts: "[r5]" },  // 5-membered ring
+    KeyDef { smarts: "[r6]" },  // 6-membered ring
+    KeyDef { smarts: "[r7]" },  // 7-membered ring
+    KeyDef { smarts: "[#7R]" }, // nitrogen in a ring
+    KeyDef { smarts: "[#8R]" }, // oxygen in a ring
+    KeyDef { smarts: "[#16R]" }, // sulfur in a ring
+    KeyDef { smarts: "c1ccccc1" }, // benzene ring
+    KeyDef {
+        smarts: "[#6][#6](=[#8])[#8H1]",
+    }, // carboxylic acid
+    KeyDef {
+        smarts: "[#7][#6]=[#8]",
+    }, // amide N-C=O
+    KeyDef {
+        smarts: "[#6][#7][#6]",
+    }, // C-N-C
+    KeyDef {
+        smarts: "[#6][#8][#6]",
+    }, // ether C-O-C
+    KeyDef {
+        smarts: "[#6][#16][#6]",
+    }, // thioether
+    KeyDef {
+        smarts: "[#8H1][#6]=[#8]",
+    }, // (another carboxyl form)
+    KeyDef { smarts: "[#7H2]" }, // primary amine NH2
+    KeyDef {
+        smarts: "[#6]=[#6][#6]=[#6]",
+    }, // conjugated diene
+    KeyDef {
+        smarts: "[#6R]=[#6R]",
+    }, // ring double bond
+    KeyDef {
+        smarts: "[#6](-[#6])(-[#6])(-[#6])-[#6]",
+    }, // quaternary C
+    KeyDef { smarts: "[#9]" },  // fluorine
+    KeyDef { smarts: "[#17]" }, // chlorine
+    KeyDef { smarts: "[#35]" }, // bromine
+    KeyDef { smarts: "[#53]" }, // iodine
 ];
 
 /// Compute the MACCS-class structural-key fingerprint.

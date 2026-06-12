@@ -396,7 +396,14 @@ mod tests {
         blk.add_entry(RevisionEntry::new("A", "2026-05-23", "init", "GH", ""));
         d.add_revision_block(blk);
 
-        d.add_detail_view(DetailView::new(0, [10.0, 5.0], 4.0, [250.0, 150.0], 2.0, "A"));
+        d.add_detail_view(DetailView::new(
+            0,
+            [10.0, 5.0],
+            4.0,
+            [250.0, 150.0],
+            2.0,
+            "A",
+        ));
 
         let svg = render(&d);
         assert!(svg.contains("class=\"bom-tables\""));

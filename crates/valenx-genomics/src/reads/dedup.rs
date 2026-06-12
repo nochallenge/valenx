@@ -135,7 +135,11 @@ pub fn mark_duplicates_coordinate(records: &mut [SamRecord]) -> DedupStats {
         if rec.is_unmapped() || rec.pos <= 0 {
             continue;
         }
-        let key = (rec.rname.clone(), rec.flags.is_reverse(), unclipped_5prime(rec));
+        let key = (
+            rec.rname.clone(),
+            rec.flags.is_reverse(),
+            unclipped_5prime(rec),
+        );
         let qk = quality_key(rec);
         match group_best.get(&key) {
             Some(&(_, best_qk)) if best_qk >= qk => {}
@@ -150,7 +154,11 @@ pub fn mark_duplicates_coordinate(records: &mut [SamRecord]) -> DedupStats {
         if rec.is_unmapped() || rec.pos <= 0 {
             continue;
         }
-        let key = (rec.rname.clone(), rec.flags.is_reverse(), unclipped_5prime(rec));
+        let key = (
+            rec.rname.clone(),
+            rec.flags.is_reverse(),
+            unclipped_5prime(rec),
+        );
         let winner = group_best.get(&key).map(|&(i, _)| i);
         if winner == Some(idx) {
             stats.unique += 1;
@@ -245,7 +253,14 @@ mod tests {
         // r1's POS.
         let mut recs = vec![
             aln("r1", 100, "10M", "ACGTACGTAC", "IIIIIIIIII", false),
-            aln("r2", 105, "5S10M", "AAAAAACGTACGTAC", "IIIIIIIIIIIIIII", false),
+            aln(
+                "r2",
+                105,
+                "5S10M",
+                "AAAAAACGTACGTAC",
+                "IIIIIIIIIIIIIII",
+                false,
+            ),
         ];
         let stats = mark_duplicates_coordinate(&mut recs);
         assert_eq!(stats.duplicates, 1);

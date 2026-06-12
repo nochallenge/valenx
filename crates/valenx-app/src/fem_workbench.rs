@@ -859,13 +859,31 @@ mod tests {
         assert!(s.result.contains("max displacement"));
         // The stress-state pair is surfaced: triaxiality (hydrostatic axis) and
         // its deviatoric companion, the Lode parameter, on the von-Mises line.
-        assert!(s.result.contains("triax"), "triaxiality in result: {}", s.result);
-        assert!(s.result.contains("Lode"), "Lode parameter in result: {}", s.result);
-        assert!(matches!(s.plot, Some(FemPlot::LoadDisp(_))), "static run plots a curve");
+        assert!(
+            s.result.contains("triax"),
+            "triaxiality in result: {}",
+            s.result
+        );
+        assert!(
+            s.result.contains("Lode"),
+            "Lode parameter in result: {}",
+            s.result
+        );
+        assert!(
+            matches!(s.plot, Some(FemPlot::LoadDisp(_))),
+            "static run plots a curve"
+        );
         // The deformed-shape overlay is built and queued for the viewport.
         assert!(s.push_viz, "static run queues the 3D viz");
-        let (mesh, field) = s.viz.as_ref().expect("static run builds the deformed mesh + field");
-        assert_eq!(field.data.len(), mesh.nodes.len(), "one von-Mises value per node");
+        let (mesh, field) = s
+            .viz
+            .as_ref()
+            .expect("static run builds the deformed mesh + field");
+        assert_eq!(
+            field.data.len(),
+            mesh.nodes.len(),
+            "one von-Mises value per node"
+        );
     }
 
     #[test]
@@ -898,7 +916,10 @@ mod tests {
         assert!(s.result.contains("Hz"));
         match &s.plot {
             Some(FemPlot::Modal(freqs)) => assert_eq!(freqs.len(), 6, "six modes plotted"),
-            other => panic!("modal run should plot frequencies, got {:?}", other.is_some()),
+            other => panic!(
+                "modal run should plot frequencies, got {:?}",
+                other.is_some()
+            ),
         }
         // The modal run now visualises the fundamental mode shape: a deformed
         // mesh coloured by per-node modal amplitude (one value per node).
@@ -930,7 +951,10 @@ mod tests {
         let m = s.mass_kg.expect("mass computed on a successful run");
         assert!((m - 78.5).abs() < 1e-9, "mass = {m}");
         // A failed run (degenerate mesh) leaves mass cleared, not stale.
-        let mut bad = FemWorkbenchState { nx: 0, ..Default::default() };
+        let mut bad = FemWorkbenchState {
+            nx: 0,
+            ..Default::default()
+        };
         run_fem(&mut bad);
         assert!(bad.mass_kg.is_none(), "a failed run clears the mass");
     }
@@ -950,21 +974,33 @@ mod tests {
         s.force_n *= 2.0;
         run_fem(&mut s);
         let k2 = s.stiffness_n_per_m.expect("stiffness recomputed");
-        assert!((k2 - k1).abs() / k1 < 1e-6, "stiffness is load-independent: {k1} → {k2}");
+        assert!(
+            (k2 - k1).abs() / k1 < 1e-6,
+            "stiffness is load-independent: {k1} → {k2}"
+        );
     }
 
     #[test]
     fn strain_energy_sums_half_force_dot_displacement() {
         // Two loaded nodes; the unloaded node 1 must not contribute.
         let forces = vec![
-            NodalForce { node: 0, force: [0.0, -10.0, 0.0] },
-            NodalForce { node: 2, force: [4.0, 0.0, 0.0] },
+            NodalForce {
+                node: 0,
+                force: [0.0, -10.0, 0.0],
+            },
+            NodalForce {
+                node: 2,
+                force: [4.0, 0.0, 0.0],
+            },
         ];
         let disp = [[0.0, -2.0, 0.0], [9.0, 9.0, 9.0], [3.0, 0.0, 0.0]];
         // U = ½[(-10)(-2) + 4·3] = ½[20 + 12] = 16 J.
         assert!((strain_energy_j(&forces, &disp) - 16.0).abs() < 1e-12);
         // An out-of-range node index is skipped, not a panic.
-        let bad = [NodalForce { node: 99, force: [1.0, 1.0, 1.0] }];
+        let bad = [NodalForce {
+            node: 99,
+            force: [1.0, 1.0, 1.0],
+        }];
         assert_eq!(strain_energy_j(&bad, &disp), 0.0);
     }
 
@@ -975,19 +1011,33 @@ mod tests {
             ..Default::default()
         };
         run_fem(&mut s);
-        let u1 = s.strain_energy_j.expect("static run computes strain energy");
-        assert!(u1 > 0.0 && u1.is_finite(), "a loaded body stores positive energy");
+        let u1 = s
+            .strain_energy_j
+            .expect("static run computes strain energy");
+        assert!(
+            u1 > 0.0 && u1.is_finite(),
+            "a loaded body stores positive energy"
+        );
         assert!(s.result.contains("strain energy"));
         // U = ½·Σ F·d with d ∝ F (linear FEM) ⇒ U ∝ F²: doubling the load
         // quadruples the stored energy.
         s.force_n *= 2.0;
         run_fem(&mut s);
         let u2 = s.strain_energy_j.expect("strain energy recomputed");
-        assert!((u2 / u1 - 4.0).abs() < 1e-3, "U scales with F²: {u1} → {u2}");
+        assert!(
+            (u2 / u1 - 4.0).abs() < 1e-3,
+            "U scales with F²: {u1} → {u2}"
+        );
         // A failed run clears it rather than leaving a stale value.
-        let mut bad = FemWorkbenchState { nx: 0, ..Default::default() };
+        let mut bad = FemWorkbenchState {
+            nx: 0,
+            ..Default::default()
+        };
         run_fem(&mut bad);
-        assert!(bad.strain_energy_j.is_none(), "a failed run clears the energy");
+        assert!(
+            bad.strain_energy_j.is_none(),
+            "a failed run clears the energy"
+        );
     }
 
     #[test]
@@ -1004,13 +1054,18 @@ mod tests {
             ..Default::default()
         };
         run_fem(&mut s);
-        let r1 = s.deflection_ratio.expect("static run computes a deflection ratio");
+        let r1 = s
+            .deflection_ratio
+            .expect("static run computes a deflection ratio");
         assert!(r1 > 0.0 && r1.is_finite());
         assert!(s.result.contains("deflection ratio"));
         s.force_n *= 2.0;
         run_fem(&mut s);
         let r2 = s.deflection_ratio.expect("ratio recomputed");
-        assert!((r2 - 0.5 * r1).abs() / r1 < 1e-6, "doubling the load halves L/δ: {r1} → {r2}");
+        assert!(
+            (r2 - 0.5 * r1).abs() / r1 < 1e-6,
+            "doubling the load halves L/δ: {r1} → {r2}"
+        );
     }
 
     #[test]

@@ -60,10 +60,7 @@ fn write_clade(tree: &Tree, id: NodeId, depth: usize, out: &mut String) {
     let node = tree.node(id);
     out.push_str(&format!("{pad}<clade>\n"));
     if let Some(name) = &node.label {
-        out.push_str(&format!(
-            "{pad}  <name>{}</name>\n",
-            xml_escape(name)
-        ));
+        out.push_str(&format!("{pad}  <name>{}</name>\n", xml_escape(name)));
     }
     if let Some(bl) = node.branch_length {
         out.push_str(&format!("{pad}  <branch_length>{bl}</branch_length>\n"));

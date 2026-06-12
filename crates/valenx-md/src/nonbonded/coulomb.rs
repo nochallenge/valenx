@@ -137,8 +137,7 @@ impl Coulomb {
                     // ε_rf → ∞: k_rf -> 1 / (2 r_c³).
                     1.0 / (2.0 * rc3)
                 } else {
-                    (epsilon_rf - epsilon_inner)
-                        / (rc3 * (2.0 * epsilon_rf + epsilon_inner))
+                    (epsilon_rf - epsilon_inner) / (rc3 * (2.0 * epsilon_rf + epsilon_inner))
                 }
             }
         }
@@ -178,7 +177,9 @@ impl Coulomb {
             if qq == 0.0 {
                 continue;
             }
-            let d = system.cell.min_image(system.positions[i] - system.positions[j]);
+            let d = system
+                .cell
+                .min_image(system.positions[i] - system.positions[j]);
             let r2 = d.norm_squared();
             if r2 >= rc2 || r2 < 1e-24 {
                 continue;
@@ -188,9 +189,7 @@ impl Coulomb {
             // Energy.
             let energy = match self.method {
                 CoulombMethod::Direct => qq * inv_r,
-                CoulombMethod::ReactionField { .. } => {
-                    qq * (inv_r + k_rf * r2 - c_rf)
-                }
+                CoulombMethod::ReactionField { .. } => qq * (inv_r + k_rf * r2 - c_rf),
             };
             out.energy += energy;
             // Force / r along d: dV/dr = qq(-1/r^2 + 2 k_rf r),
@@ -268,15 +267,14 @@ mod tests {
     #[test]
     fn reaction_field_energy_is_zero_at_cutoff() {
         let sys = two_charges(1.0, -1.0, 1.499);
-        let c = Coulomb::from_system(
-            &sys,
-            1.5,
-            CoulombMethod::conductor_reaction_field(),
-        )
-        .unwrap();
+        let c = Coulomb::from_system(&sys, 1.5, CoulombMethod::conductor_reaction_field()).unwrap();
         let mut ef = EnergyForce::zeros(2);
         c.accumulate_pairs(&sys, &[(0, 1)], &mut ef).unwrap();
-        assert!(ef.energy.abs() < 1e-2, "RF energy near cutoff = {}", ef.energy);
+        assert!(
+            ef.energy.abs() < 1e-2,
+            "RF energy near cutoff = {}",
+            ef.energy
+        );
     }
 
     #[test]
@@ -304,7 +302,12 @@ mod tests {
             e.energy
         };
         let fd = -(energy_at(h) - energy_at(-h)) / (2.0 * h);
-        assert!((ef.forces[0].x - fd).abs() < 1e-2, "{} vs {}", ef.forces[0].x, fd);
+        assert!(
+            (ef.forces[0].x - fd).abs() < 1e-2,
+            "{} vs {}",
+            ef.forces[0].x,
+            fd
+        );
     }
 
     #[test]
@@ -331,7 +334,12 @@ mod tests {
             e.energy
         };
         let fd = -(energy_at(h) - energy_at(-h)) / (2.0 * h);
-        assert!((ef.forces[0].x - fd).abs() < 1e-2, "{} vs {}", ef.forces[0].x, fd);
+        assert!(
+            (ef.forces[0].x - fd).abs() < 1e-2,
+            "{} vs {}",
+            ef.forces[0].x,
+            fd
+        );
     }
 
     #[test]

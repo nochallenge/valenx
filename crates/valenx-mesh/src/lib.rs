@@ -6,7 +6,8 @@
 //! Defined by [ARCHITECTURE.md § 4](../ARCHITECTURE.md).
 
 #![forbid(unsafe_code)]
-#![allow(missing_docs)] // relaxed during pre-alpha; see valenx-fields for rationale
+#![allow(missing_docs)]
+// relaxed during pre-alpha; see valenx-fields for rationale
 // Surface future `&str` byte-offset slicing in clippy review — this
 // crate parses untrusted text mesh formats (OBJ/PLY/etc.), where
 // non-char-boundary slices panic. WARN (not deny): most existing slices

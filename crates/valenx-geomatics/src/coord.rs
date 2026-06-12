@@ -92,7 +92,9 @@ pub fn wgs84_to_utm(p: LatLon) -> Result<Utm, GeomaticsError> {
     let sigma = (e * (e * sin_lat).atanh()).sinh();
     let tau_prime = tau * (1.0 + sigma * sigma).sqrt() - sigma * (1.0 + tau * tau).sqrt();
     let xi_prime = tau_prime.atan2((lon - lon0).cos());
-    let eta_prime = (((lon - lon0).sin()) / (tau_prime * tau_prime + (lon - lon0).cos().powi(2)).sqrt()).asinh();
+    let eta_prime = (((lon - lon0).sin())
+        / (tau_prime * tau_prime + (lon - lon0).cos().powi(2)).sqrt())
+    .asinh();
 
     // Krüger series coefficients (alpha_1 .. alpha_4).
     let alpha_1 = 0.5 * n - 2.0 / 3.0 * n2 + 5.0 / 16.0 * n3 + 41.0 / 180.0 * n4;
@@ -317,7 +319,11 @@ pub fn rhumb_distance(a: LatLon, b: LatLon) -> f64 {
     }
     // Mercator stretched-latitude difference; for an E–W course (Δψ → 0) fall back to cos φ₁.
     let dpsi = ((lat2 / 2.0 + PI / 4.0).tan() / (lat1 / 2.0 + PI / 4.0).tan()).ln();
-    let q = if dpsi.abs() > 1e-12 { dlat / dpsi } else { lat1.cos() };
+    let q = if dpsi.abs() > 1e-12 {
+        dlat / dpsi
+    } else {
+        lat1.cos()
+    };
     (dlat * dlat + q * q * dlon * dlon).sqrt() * EARTH_RADIUS_M
 }
 

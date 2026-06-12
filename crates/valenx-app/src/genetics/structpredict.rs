@@ -164,18 +164,28 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             common::seq_input(ui, "sp_seq", "sequence", &mut p.sequence, 4);
             ui.horizontal(|ui| {
                 ui.label("centroid moves");
-                ui.add(egui::DragValue::new(&mut p.centroid_moves).speed(10.0).range(1..=20_000));
+                ui.add(
+                    egui::DragValue::new(&mut p.centroid_moves)
+                        .speed(10.0)
+                        .range(1..=20_000),
+                );
                 ui.label("repack moves");
-                ui.add(egui::DragValue::new(&mut p.repack_moves).speed(5.0).range(1..=5_000));
+                ui.add(
+                    egui::DragValue::new(&mut p.repack_moves)
+                        .speed(5.0)
+                        .range(1..=5_000),
+                );
             });
             ui.horizontal(|ui| {
                 ui.label("seed");
                 ui.add(egui::DragValue::new(&mut p.seed).speed(1.0));
             });
             ui.label(
-                egui::RichText::new("Folding runs synchronously — a larger protein or more moves takes longer.")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "Folding runs synchronously — a larger protein or more moves takes longer.",
+                )
+                .weak()
+                .small(),
             );
             if common::run_button(ui, "Predict (ab-initio)") {
                 let snap = p.snapshot();
@@ -213,7 +223,11 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 ui.label("chain");
                 ui.add(egui::TextEdit::singleline(&mut p.chain).desired_width(40.0));
                 ui.label("design moves");
-                ui.add(egui::DragValue::new(&mut p.design_moves).speed(10.0).range(1..=10_000));
+                ui.add(
+                    egui::DragValue::new(&mut p.design_moves)
+                        .speed(10.0)
+                        .range(1..=10_000),
+                );
                 ui.label("seed");
                 ui.add(egui::DragValue::new(&mut p.seed).speed(1.0));
             });
@@ -330,6 +344,9 @@ mod tests {
             ..Default::default()
         };
         run_design(&mut p);
-        assert!(p.error.is_some(), "design with no backbone must surface an error");
+        assert!(
+            p.error.is_some(),
+            "design with no backbone must surface an error"
+        );
     }
 }

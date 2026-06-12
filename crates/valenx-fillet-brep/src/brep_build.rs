@@ -882,23 +882,29 @@ mod tests {
         let cube = box_solid(2.0, 2.0, 2.0).unwrap();
         let brep = inner_brep(&cube);
         let edge = pick_first_edge(brep);
-        let bad_start =
-            fillet_variable_radius_planar_edge(brep, &edge, 0.0, 0.3).unwrap_err();
+        let bad_start = fillet_variable_radius_planar_edge(brep, &edge, 0.0, 0.3).unwrap_err();
         assert!(matches!(
             bad_start,
-            FilletBrepError::BadParameter { name: "radius_start", .. }
+            FilletBrepError::BadParameter {
+                name: "radius_start",
+                ..
+            }
         ));
-        let bad_end =
-            fillet_variable_radius_planar_edge(brep, &edge, 0.3, -0.1).unwrap_err();
+        let bad_end = fillet_variable_radius_planar_edge(brep, &edge, 0.3, -0.1).unwrap_err();
         assert!(matches!(
             bad_end,
-            FilletBrepError::BadParameter { name: "radius_end", .. }
+            FilletBrepError::BadParameter {
+                name: "radius_end",
+                ..
+            }
         ));
-        let nan_end =
-            fillet_variable_radius_planar_edge(brep, &edge, 0.3, f64::NAN).unwrap_err();
+        let nan_end = fillet_variable_radius_planar_edge(brep, &edge, 0.3, f64::NAN).unwrap_err();
         assert!(matches!(
             nan_end,
-            FilletBrepError::BadParameter { name: "radius_end", .. }
+            FilletBrepError::BadParameter {
+                name: "radius_end",
+                ..
+            }
         ));
     }
 
@@ -911,8 +917,7 @@ mod tests {
         let cube = box_solid(1.0, 1.0, 1.0).unwrap();
         let brep = inner_brep(&cube);
         let edge = pick_first_edge(brep);
-        let err =
-            fillet_variable_radius_planar_edge(brep, &edge, 0.1, 0.7).unwrap_err();
+        let err = fillet_variable_radius_planar_edge(brep, &edge, 0.1, 0.7).unwrap_err();
         assert!(matches!(err, FilletBrepError::RadiusTooLarge { .. }));
     }
 
@@ -928,8 +933,7 @@ mod tests {
         let edge = pick_first_edge(brep);
         match fillet_variable_radius_planar_edge(brep, &edge, 0.2, 0.4) {
             Ok(filleted) => {
-                let faces: usize =
-                    filleted.boundaries().iter().map(|s| s.len()).sum();
+                let faces: usize = filleted.boundaries().iter().map(|s| s.len()).sum();
                 assert!(
                     faces >= 6,
                     "a variable-radius-filleted cube keeps the cube's faces, got {faces}"

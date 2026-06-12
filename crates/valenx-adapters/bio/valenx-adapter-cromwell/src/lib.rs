@@ -174,10 +174,7 @@ impl Adapter for CromwellAdapter {
         let source_workflow = if input.workflow.is_absolute() {
             input.workflow.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.workflow,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.workflow)?
         };
         if !source_workflow.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -439,12 +436,13 @@ output_basename = "metadata"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = CromwellAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = CromwellAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("absolute") || msg.contains("escape") || msg.contains("`..`") || msg.contains("traversal"),
+            msg.contains("absolute")
+                || msg.contains("escape")
+                || msg.contains("`..`")
+                || msg.contains("traversal"),
             "expected confined_join rejection on inputs, got: {msg}"
         );
         let _ = std::fs::remove_dir_all(&d);
@@ -479,12 +477,14 @@ output_basename = "metadata"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = CromwellAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = CromwellAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("absolute") || msg.contains("escape") || msg.contains("`..`") || msg.contains("traversal") || msg.contains("stay within"),
+            msg.contains("absolute")
+                || msg.contains("escape")
+                || msg.contains("`..`")
+                || msg.contains("traversal")
+                || msg.contains("stay within"),
             "expected confined_join rejection on jar, got: {msg}"
         );
         let _ = std::fs::remove_dir_all(&d);

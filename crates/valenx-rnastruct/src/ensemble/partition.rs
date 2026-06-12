@@ -129,7 +129,11 @@ impl PartitionFunction {
 
 /// Computes the McCaskill partition function of `seq` at 37 °C.
 pub fn partition_function(seq: &RnaSeq) -> Result<PartitionFunction> {
-    partition_function_at(seq, DEFAULT_TEMPERATURE_K, &FoldConstraints::none(seq.len()))
+    partition_function_at(
+        seq,
+        DEFAULT_TEMPERATURE_K,
+        &FoldConstraints::none(seq.len()),
+    )
 }
 
 /// Computes the McCaskill partition function of `seq` at an arbitrary
@@ -223,8 +227,16 @@ pub fn partition_function_at(
                             continue;
                         }
                         let il = energy::internal_loop_energy(
-                            codes[i], codes[j], codes[k], codes[l], left, right,
-                            codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                            codes[i],
+                            codes[j],
+                            codes[k],
+                            codes[l],
+                            left,
+                            right,
+                            codes[i + 1],
+                            codes[j - 1],
+                            codes[k - 1],
+                            codes[l + 1],
                         );
                         qbij += boltz(il) * inner;
                     }
@@ -232,9 +244,8 @@ pub fn partition_function_at(
                 // multiloop: interior qm2 over i+1..j-1
                 if j >= i + 2 {
                     let interior = qm2[at(i + 1, j - 1)];
-                    qbij += ml_closure
-                        * boltz(energy::terminal_penalty(codes[i], codes[j]))
-                        * interior;
+                    qbij +=
+                        ml_closure * boltz(energy::terminal_penalty(codes[i], codes[j])) * interior;
                 }
             }
             qb[at(i, j)] = qbij;
@@ -290,13 +301,10 @@ pub fn partition_function_at(
             }
             // last exterior helix (k, j), prefix is the exterior i..k-1.
             for k in i..=j {
-                if energy::can_pair_codes(codes[k], codes[j])
-                    && qb[at(k, j)] > 0.0
-                {
+                if energy::can_pair_codes(codes[k], codes[j]) && qb[at(k, j)] > 0.0 {
                     let left = if k > i { q[at(i, k - 1)] } else { 1.0 };
-                    qij += left
-                        * qb[at(k, j)]
-                        * boltz(energy::terminal_penalty(codes[k], codes[j]));
+                    qij +=
+                        left * qb[at(k, j)] * boltz(energy::terminal_penalty(codes[k], codes[j]));
                 }
             }
             q[at(i, j)] = qij;
@@ -326,9 +334,7 @@ pub fn partition_function_at(
             // (i,j) closes an exterior helix.
             let left = if i > 0 { q[at(0, i - 1)] } else { 1.0 };
             let right = if j + 1 < n { q[at(j + 1, n - 1)] } else { 1.0 };
-            outside += left
-                * right
-                * boltz(energy::terminal_penalty(codes[i], codes[j]));
+            outside += left * right * boltz(energy::terminal_penalty(codes[i], codes[j]));
 
             // (i,j) sits directly inside an enclosing pair (p,r) as the
             // single inner pair of an internal/bulge/stack loop.
@@ -348,8 +354,16 @@ pub fn partition_function_at(
                         continue;
                     }
                     let il = energy::internal_loop_energy(
-                        codes[p], codes[r], codes[i], codes[j], lft, rgt,
-                        codes[p + 1], codes[r - 1], codes[i - 1], codes[j + 1],
+                        codes[p],
+                        codes[r],
+                        codes[i],
+                        codes[j],
+                        lft,
+                        rgt,
+                        codes[p + 1],
+                        codes[r - 1],
+                        codes[i - 1],
+                        codes[j + 1],
                     );
                     outside += prob[at(p, r)] * boltz(il);
                 }

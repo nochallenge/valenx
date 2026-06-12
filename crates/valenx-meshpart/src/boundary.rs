@@ -106,7 +106,10 @@ pub fn extract_boundary_loop(
         loop_ids.push(n);
         cur = n;
     }
-    Ok(loop_ids.into_iter().map(|i| mesh.nodes[i as usize]).collect())
+    Ok(loop_ids
+        .into_iter()
+        .map(|i| mesh.nodes[i as usize])
+        .collect())
 }
 
 /// Project a 3D polyline `loop_3d` onto the 2D plane normal to
@@ -162,10 +165,7 @@ mod tests {
 
     #[test]
     fn flatten_xy_plane_basic() {
-        let pts = vec![
-            Vector3::new(1.0, 0.0, 5.0),
-            Vector3::new(0.0, 2.0, 5.0),
-        ];
+        let pts = vec![Vector3::new(1.0, 0.0, 5.0), Vector3::new(0.0, 2.0, 5.0)];
         let r = flatten_boundary(&pts, Vector3::z()).unwrap();
         assert_eq!(r.len(), 2);
         // Both 2D points should drop the z=5 offset.

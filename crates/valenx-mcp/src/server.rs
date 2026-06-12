@@ -61,8 +61,7 @@ where
         // the rest of the line so the next iteration starts on a fresh
         // JSON-RPC frame and emit a parse-error response.
         let overflowed_cap = buf.len() > MAX_MCP_REQUEST_BYTES;
-        let no_newline_at_cap = buf.len() == (MAX_MCP_REQUEST_BYTES + 1)
-            && !buf.ends_with(b"\n");
+        let no_newline_at_cap = buf.len() == (MAX_MCP_REQUEST_BYTES + 1) && !buf.ends_with(b"\n");
         if overflowed_cap || no_newline_at_cap {
             // Drain to end-of-line so the client's next frame lands
             // cleanly. We don't accumulate the drained bytes — just
@@ -224,9 +223,7 @@ mod tests {
         let mut input: Vec<u8> = Vec::with_capacity(20 * 1024 * 1024 + 256);
         input.extend(std::iter::repeat_n(b'X', 20 * 1024 * 1024));
         input.push(b'\n');
-        input.extend_from_slice(
-            br#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#,
-        );
+        input.extend_from_slice(br#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#);
         input.push(b'\n');
 
         let reader = BufReader::new(std::io::Cursor::new(input));

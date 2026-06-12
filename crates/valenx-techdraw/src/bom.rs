@@ -136,9 +136,7 @@ impl Bom {
     /// Build a BOM from a caller-supplied list of parts. Each tuple is
     /// `(part_name, quantity, part_number, description, material)`.
     /// Rows are renumbered starting at 1 in input order.
-    pub fn from_parts(
-        parts: &[(&str, u32, &str, &str, &str)],
-    ) -> Self {
+    pub fn from_parts(parts: &[(&str, u32, &str, &str, &str)]) -> Self {
         let mut b = Self::new();
         for (name, qty, pn, desc, mat) in parts {
             b.items.push(BomItem::full(name, *qty, pn, desc, mat));
@@ -154,8 +152,7 @@ impl Bom {
     /// after import (assembly parts don't carry those fields).
     pub fn from_assembly_parts(parts: &[valenx_assembly::Part]) -> Self {
         let mut order: Vec<String> = Vec::new();
-        let mut counts: std::collections::HashMap<String, u32> =
-            std::collections::HashMap::new();
+        let mut counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
         for p in parts {
             let k = p.name.clone();
             counts.entry(k.clone()).or_insert_with(|| {
@@ -202,8 +199,14 @@ impl Bom {
         let mut grid: Vec<[(f64, f64); 2]> = vec![
             // Outer rectangle.
             [(ox, oy), (ox + total_width, oy)],
-            [(ox + total_width, oy), (ox + total_width, oy + total_height)],
-            [(ox + total_width, oy + total_height), (ox, oy + total_height)],
+            [
+                (ox + total_width, oy),
+                (ox + total_width, oy + total_height),
+            ],
+            [
+                (ox + total_width, oy + total_height),
+                (ox, oy + total_height),
+            ],
             [(ox, oy + total_height), (ox, oy)],
         ];
         // Column dividers.
@@ -230,11 +233,7 @@ impl Bom {
         let headers = ["Item", "Qty", "Part No.", "Description", "Material"];
         let mut cx = ox;
         for (i, h) in headers.iter().enumerate() {
-            labels.push((
-                cx + pad_x,
-                header_y + baseline_y_offset,
-                (*h).into(),
-            ));
+            labels.push((cx + pad_x, header_y + baseline_y_offset, (*h).into()));
             cx += col_widths[i];
         }
         // Data rows: row 0 is the *topmost* data row (just below the header).
@@ -461,7 +460,9 @@ mod tests {
         assert_eq!(labels.len(), 15);
         // First label is the "Item" header.
         assert!(labels.iter().any(|(_, _, t)| t == "Item"));
-        assert!(labels.iter().any(|(_, _, t)| t == "Bracket" || t == "Mounting bracket"));
+        assert!(labels
+            .iter()
+            .any(|(_, _, t)| t == "Bracket" || t == "Mounting bracket"));
     }
 
     /// Phase 19 — `BomItem::full` populates every column.

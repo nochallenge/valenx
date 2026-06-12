@@ -237,8 +237,7 @@ impl BSpline2 {
             }
             // Newton step on f, with f' by central difference.
             let h = (span * 1e-5).max(1e-7);
-            let fp = (f((u + h).min(u_max)) - f((u - h).max(u_min)))
-                / (2.0 * h).max(1e-30);
+            let fp = (f((u + h).min(u_max)) - f((u - h).max(u_min))) / (2.0 * h).max(1e-30);
             let newton = if fp.abs() > 1e-14 {
                 u - fu / fp
             } else {
@@ -248,10 +247,7 @@ impl BSpline2 {
             // bracket; otherwise bisect. This is the safeguard.
             let bracket_lo = lo.min(hi);
             let bracket_hi = lo.max(hi);
-            let next = if newton.is_finite()
-                && newton > bracket_lo
-                && newton < bracket_hi
-            {
+            let next = if newton.is_finite() && newton > bracket_lo && newton < bracket_hi {
                 newton
             } else {
                 0.5 * (lo + hi)
@@ -427,16 +423,12 @@ mod tests {
         // 12.5: the closest parameter to a point lying exactly on the
         // curve must reproduce that point.
         let mut s = Sketch::new();
-        let curve = cubic_bezier(
-            &mut s,
-            [[0.0, 0.0], [1.0, 2.0], [3.0, 2.0], [4.0, 0.0]],
-        );
+        let curve = cubic_bezier(&mut s, [[0.0, 0.0], [1.0, 2.0], [3.0, 2.0], [4.0, 0.0]]);
         let on_curve = curve.evaluate(&s.vars, 0.37);
         let u = curve.closest_param(&s.vars, on_curve);
         let recovered = curve.evaluate(&s.vars, u);
-        let err = ((recovered[0] - on_curve[0]).powi(2)
-            + (recovered[1] - on_curve[1]).powi(2))
-        .sqrt();
+        let err =
+            ((recovered[0] - on_curve[0]).powi(2) + (recovered[1] - on_curve[1]).powi(2)).sqrt();
         assert!(err < 1e-7, "closest point off by {err}");
     }
 
@@ -450,10 +442,7 @@ mod tests {
         let mut s = Sketch::new();
         // An S-curve: control points zig-zag so the curve has two
         // bulges.
-        let curve = cubic_bezier(
-            &mut s,
-            [[0.0, 0.0], [0.0, 4.0], [4.0, -4.0], [4.0, 0.0]],
-        );
+        let curve = cubic_bezier(&mut s, [[0.0, 0.0], [0.0, 4.0], [4.0, -4.0], [4.0, 0.0]]);
         // Target near the *end* of the curve (u close to 1).
         let near_end = curve.evaluate(&s.vars, 0.92);
         // Nudge the target slightly off the curve.
@@ -481,10 +470,7 @@ mod tests {
         // A target far past the curve's end should project to (near)
         // the endpoint parameter.
         let mut s = Sketch::new();
-        let curve = cubic_bezier(
-            &mut s,
-            [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
-        );
+        let curve = cubic_bezier(&mut s, [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]]);
         // The curve is the x-axis segment [0,3]; target way past x=3.
         let u = curve.closest_param(&s.vars, [100.0, 0.0]);
         assert!((u - 1.0).abs() < 1e-6, "expected u≈1, got {u}");

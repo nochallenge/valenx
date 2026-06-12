@@ -803,13 +803,8 @@ pub fn write_pipe(w: &mut IfcWriter, p: &crate::mep::PipeSegmentParams) -> usize
         .copied()
         .unwrap_or_else(|| emit_origin_placement(w));
     let placement = emit_placement_at(w, storey_place, p.start.x, p.start.y, p.start.z);
-    let shape = emit_rectangular_extrusion(
-        w,
-        placement,
-        p.diameter,
-        p.diameter,
-        p.length().max(0.001),
-    );
+    let shape =
+        emit_rectangular_extrusion(w, placement, p.diameter, p.diameter, p.length().max(0.001));
     w.add(format!(
         "IFCPIPESEGMENT({guid},$,{name},$,$,{place},{shape},$,.RIGIDSEGMENT.)",
         guid = ifc_str(&ifc_guid_v4()),
@@ -827,13 +822,8 @@ pub fn write_cable(w: &mut IfcWriter, c: &crate::mep::CableSegmentParams) -> usi
         .copied()
         .unwrap_or_else(|| emit_origin_placement(w));
     let placement = emit_placement_at(w, storey_place, c.start.x, c.start.y, c.start.z);
-    let shape = emit_rectangular_extrusion(
-        w,
-        placement,
-        c.diameter,
-        c.diameter,
-        c.length().max(0.001),
-    );
+    let shape =
+        emit_rectangular_extrusion(w, placement, c.diameter, c.diameter, c.length().max(0.001));
     w.add(format!(
         "IFCCABLESEGMENT({guid},$,{name},$,$,{place},{shape},$,.CABLESEGMENT.)",
         guid = ifc_str(&ifc_guid_v4()),
@@ -951,7 +941,8 @@ pub fn write_curtain_wall(w: &mut IfcWriter, wall: &crate::wall::WallParams) -> 
         .copied()
         .unwrap_or_else(|| emit_origin_placement(w));
     let placement = emit_placement_at(w, storey_place, wall.start.x, wall.start.y, wall.start.z);
-    let shape = emit_rectangular_extrusion(w, placement, wall.length(), wall.thickness, wall.height);
+    let shape =
+        emit_rectangular_extrusion(w, placement, wall.length(), wall.thickness, wall.height);
     w.add(format!(
         "IFCCURTAINWALL({guid},$,{name},$,$,{place},{shape},$,.NOTDEFINED.)",
         guid = ifc_str(&ifc_guid_v4()),
@@ -1084,10 +1075,7 @@ pub fn write_chimney(w: &mut IfcWriter, col: &crate::column::ColumnParams) -> us
 
 /// Emit an IfcFurnishingElement at a position with the given size +
 /// label (used for furniture / fixtures placements).
-pub fn write_furnishing(
-    w: &mut IfcWriter,
-    e: &crate::mep::MepEquipmentParams,
-) -> usize {
+pub fn write_furnishing(w: &mut IfcWriter, e: &crate::mep::MepEquipmentParams) -> usize {
     let storey_place = w
         .singletons
         .get("storey")
@@ -1320,8 +1308,7 @@ pub fn write_document(doc: &crate::document::ArchDocument, path: &Path) -> Resul
     // after every element is emitted.
     let mut element_ids: Vec<usize> = Vec::with_capacity(doc.count());
     // (arch_id, ifc_id) tuples per kind, for relationship resolution.
-    let mut wall_ifc_id: std::collections::HashMap<usize, usize> =
-        std::collections::HashMap::new();
+    let mut wall_ifc_id: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
     let mut space_ifc_id: std::collections::HashMap<usize, usize> =
         std::collections::HashMap::new();
     // Window/door (arch_id, ifc_id, host_arch_id) — for openings.
@@ -1436,10 +1423,7 @@ pub fn write_document(doc: &crate::document::ArchDocument, path: &Path) -> Resul
                     &[
                         ("Reference", PropValue::Label(sp.space_name.clone())),
                         ("FloorArea", PropValue::Real(sp.floor_area())),
-                        (
-                            "GrossPlannedArea",
-                            PropValue::Real(sp.floor_area()),
-                        ),
+                        ("GrossPlannedArea", PropValue::Real(sp.floor_area())),
                         ("IsExternal", PropValue::Bool(false)),
                         ("PubliclyAccessible", PropValue::Bool(true)),
                     ],

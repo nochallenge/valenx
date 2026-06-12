@@ -185,8 +185,7 @@ impl FastqcReport {
             }
             if !rec.quality.is_empty() {
                 read_means.push(
-                    rec.quality.iter().map(|&q| q as f64).sum::<f64>()
-                        / rec.quality.len() as f64,
+                    rec.quality.iter().map(|&q| q as f64).sum::<f64>() / rec.quality.len() as f64,
                 );
             }
         }

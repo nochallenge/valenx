@@ -72,7 +72,10 @@
 // crate parses untrusted text (SMILES/InChI/MOL), where
 // non-char-boundary slices panic. WARN (not deny): most existing slices
 // are safe ASCII; this only flags NEW ones.
-#![allow(clippy::string_slice, reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries")]
+#![allow(
+    clippy::string_slice,
+    reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries"
+)]
 
 pub mod analyze;
 pub mod charge;

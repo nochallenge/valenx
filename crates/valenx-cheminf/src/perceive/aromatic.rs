@@ -163,9 +163,10 @@ fn pi_contribution(mol: &Molecule, atom: usize, ring: &Ring) -> i32 {
     });
     // an exocyclic double bond (C=O on the ring) → carbonyl carbon
     // donates 0 (its p-orbital is in the C=O π, not the ring)
-    let exocyclic_double = mol.bonds_on(atom).iter().any(|&bi| {
-        !ring.contains_bond(bi) && mol.bonds[bi].order == BondOrder::Double
-    });
+    let exocyclic_double = mol
+        .bonds_on(atom)
+        .iter()
+        .any(|&bi| !ring.contains_bond(bi) && mol.bonds[bi].order == BondOrder::Double);
 
     match a.atomic_number {
         6 => {

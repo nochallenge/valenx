@@ -184,10 +184,7 @@ mod tests {
         // exactly the core score, ignoring the flanks.
         let a = b"XXXACGTACGTXXX";
         let b = b"ACGTACGT";
-        let s = ScoringScheme::new(
-            SubstitutionMatrix::dna_simple(2, -1),
-            GapCost::new(4, 1),
-        );
+        let s = ScoringScheme::new(SubstitutionMatrix::dna_simple(2, -1), GapCost::new(4, 1));
         let al = smith_waterman(a, b, &s).unwrap();
         assert_eq!(al.score, 16); // 8 matches * 2, flanks excluded
     }

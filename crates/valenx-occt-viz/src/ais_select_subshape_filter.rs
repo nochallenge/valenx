@@ -24,7 +24,9 @@ use crate::error::OcctVizError;
 /// Topology kind to restrict selection to. Mirrors a subset of
 /// `TopAbs_ShapeEnum` — the parts that have well-defined hit-test
 /// semantics in the picking pass.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum SubshapeKind {
     /// No filter — pick whatever the activation mode returns.

@@ -95,10 +95,7 @@ impl RebarShape {
     /// scales with the visual complexity of each shape variant.
     pub fn to_polyline(&self) -> Vec<Vector3<f64>> {
         match self {
-            Self::Straight { length } => vec![
-                Vector3::zeros(),
-                Vector3::new(*length, 0.0, 0.0),
-            ],
+            Self::Straight { length } => vec![Vector3::zeros(), Vector3::new(*length, 0.0, 0.0)],
             Self::L { leg_a, leg_b } => vec![
                 Vector3::zeros(),
                 Vector3::new(*leg_a, 0.0, 0.0),
@@ -123,11 +120,19 @@ impl RebarShape {
                 for i in 1..=segs {
                     let theta = std::f64::consts::FRAC_PI_2
                         - (i as f64 / segs as f64) * std::f64::consts::PI;
-                    pts.push(Vector3::new(cx + r * theta.sin(), 0.0, cz + r * theta.cos()));
+                    pts.push(Vector3::new(
+                        cx + r * theta.sin(),
+                        0.0,
+                        cz + r * theta.cos(),
+                    ));
                 }
                 pts
             }
-            Self::Spiral { radius, pitch, turns } => {
+            Self::Spiral {
+                radius,
+                pitch,
+                turns,
+            } => {
                 let total = (*turns) * 16.0;
                 // A spiral with no (or negative) turns has no geometry; bail
                 // before the loop so `t = i / total` can't divide by zero and
