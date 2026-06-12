@@ -49,51 +49,64 @@ impl NurbsCurve {
         control_points: Vec<Vector3<f64>>,
         weights: Vec<f64>,
     ) -> Result<Self, SurfaceError> {
-        if !(1..=9).contains(&degree) {
-            return Err(SurfaceError::BadDegree(degree));
+        let curve = Self::new_unchecked(degree, knots, control_points, weights);
+        curve.validate()?;
+        Ok(curve)
+    }
+
+    /// Check the NURBS invariant on an already-built curve:
+    /// - `degree >= 1` and `<= 9`,
+    /// - `control_points.len() >= degree + 1`,
+    /// - `weights.len() == control_points.len()`,
+    /// - `knots.len() == control_points.len() + degree + 1`,
+    /// - knots are non-decreasing.
+    ///
+    /// [`Self::new`] runs this at construction. A curve obtained another
+    /// way — deserialised from an untrusted file, or via
+    /// [`Self::new_unchecked`] — can re-check itself with this before the
+    /// evaluation methods (which index `knots`/`control_points`) are
+    /// called.
+    pub fn validate(&self) -> Result<(), SurfaceError> {
+        if !(1..=9).contains(&self.degree) {
+            return Err(SurfaceError::BadDegree(self.degree));
         }
-        let n_cp = control_points.len();
-        if n_cp < degree + 1 {
+        let n_cp = self.control_points.len();
+        if n_cp < self.degree + 1 {
             return Err(SurfaceError::BadKnotVector {
                 reason: format!(
                     "need at least {} control points for degree {}, got {}",
-                    degree + 1,
-                    degree,
+                    self.degree + 1,
+                    self.degree,
                     n_cp
                 ),
             });
         }
-        if weights.len() != n_cp {
+        if self.weights.len() != n_cp {
             return Err(SurfaceError::BadKnotVector {
                 reason: format!(
                     "weights len {} ≠ control_points len {}",
-                    weights.len(),
+                    self.weights.len(),
                     n_cp
                 ),
             });
         }
-        let expected = n_cp + degree + 1;
-        if knots.len() != expected {
+        let expected = n_cp + self.degree + 1;
+        if self.knots.len() != expected {
             return Err(SurfaceError::BadKnotVector {
                 reason: format!(
                     "expected {expected} knots (n_cp + degree + 1), got {}",
-                    knots.len()
+                    self.knots.len()
                 ),
             });
         }
-        for w in knots.windows(2) {
+        for w in self.knots.windows(2) {
             if w[1] < w[0] {
                 return Err(SurfaceError::BadKnotVector {
                     reason: "knots must be non-decreasing".into(),
                 });
             }
         }
-        Ok(Self {
-            degree,
-            knots,
-            control_points,
-            weights,
-        })
+        Ok(())
     }
 
     /// Skip validation — caller asserts the inputs are well-formed.
