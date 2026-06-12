@@ -384,4 +384,36 @@ mod tests {
                 > 0.1
         );
     }
+
+    #[test]
+    fn tajimas_d_matches_the_hand_computed_value() {
+        // GROUND TRUTH (Tajima 1989). A 4-sample matrix with 3 segregating
+        // sites of derived counts 1, 2, 1 — every quantity hand-computed from
+        // first principles. The existing Tajima tests only check the SIGN
+        // (near-zero / negative / zero); this pins the exact statistic, so it
+        // validates the variance-coefficient pipeline (c1, c2, e1, e2):
+        //   pairs C(4,2)=6;  pi = (1·3 + 2·2 + 1·3)/6 = 10/6 = 5/3
+        //   S = 3;  a1 = 1+1/2+1/3 = 11/6;  a2 = 1+1/4+1/9 = 49/36
+        //   b1 = (n+1)/(3(n−1)) = 5/9;  b2 = 2(n²+n+3)/(9n(n−1)) = 23/54
+        //   c1 = b1 − 1/a1 = 0.0101010;  c2 = b2 − (n+2)/(a1·n) + a2/a1² = 0.0127028
+        //   e1 = c1/a1 = 0.0055096;  e2 = c2/(a1²+a2) = 0.0026899
+        //   Var = e1·S + e2·S(S−1) = 0.0165289 + 0.0161395 = 0.0326684
+        //   theta_w = S/a1 = 18/11;  D = (pi − theta_w)/√Var = 0.030303/0.180744 = 0.16765
+        let m = matrix(vec![
+            vec![1, 1, 0],
+            vec![0, 1, 0],
+            vec![0, 0, 1],
+            vec![0, 0, 0],
+        ]);
+        // Independent component checks (separate code paths), exact:
+        assert_eq!(m.segregating_sites(), 3);
+        assert!((pairwise_differences(&m).unwrap() - 5.0 / 3.0).abs() < 1e-12);
+        assert!((wattersons_theta(&m).unwrap() - 18.0 / 11.0).abs() < 1e-12);
+        // The full statistic, pinned to the first-principles hand value.
+        let d = tajimas_d(&m).unwrap();
+        assert!(
+            (d - 0.16765).abs() < 1e-4,
+            "Tajima's D {d} != 0.16765 (hand)"
+        );
+    }
 }
