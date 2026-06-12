@@ -400,6 +400,62 @@ mod tests {
     }
 
     #[test]
+    fn rk4_matches_analytical_kepler_on_eccentric_orbit() {
+        // GROUND-TRUTH VALIDATION. Propagate an eccentric (e = 0.6) orbit
+        // with the RK4 two-body integrator and compare, at several orbital
+        // phases, against the EXACT analytical Kepler solution: solve
+        // `M = E - e·sinE` for the eccentric anomaly, then the closed-form
+        // perifocal position `(a(cosE - e), a√(1-e²)·sinE)`. The gap is the
+        // integrator's true error against the analytic answer — the real
+        // measure of "is the orbital solver correct?", far stronger than a
+        // circular orbit (constant speed) or mere energy conservation.
+        let mu = MU_EARTH;
+        let a = R_EARTH + 20_000_000.0; // ~26 378 km semi-major axis (GTO-like)
+        let e = 0.6;
+
+        // Initial state at periapsis (on +x, moving +y → prograde).
+        let r_p = a * (1.0 - e);
+        let v_p = (mu / a).sqrt() * ((1.0 + e) / (1.0 - e)).sqrt();
+        let pos0 = Vector2::new(r_p, 0.0);
+        let vel0 = Vector2::new(0.0, v_p);
+
+        let n = (mu / a.powi(3)).sqrt(); // mean motion
+        let period = 2.0 * std::f64::consts::PI / n;
+
+        // Exact analytic position at elapsed time `t` (periapsis at t = 0).
+        let kepler = |t: f64| -> Vector2<f64> {
+            let m = n * t;
+            let mut ea = m; // Newton on Kepler's equation
+            for _ in 0..60 {
+                ea -= (ea - e * ea.sin() - m) / (1.0 - e * ea.cos());
+            }
+            Vector2::new(a * (ea.cos() - e), a * (1.0 - e * e).sqrt() * ea.sin())
+        };
+
+        let dt = 1.0;
+        let mut max_err = 0.0_f64;
+        for frac in [0.1_f64, 0.25, 0.5, 0.75, 0.9, 1.0] {
+            let steps = (frac * period / dt).round() as u64;
+            let (pf, _vf) = propagate_two_body(pos0, vel0, dt, steps).expect("valid steps");
+            let err = (pf - kepler(steps as f64 * dt)).norm();
+            max_err = max_err.max(err);
+        }
+        println!(
+            "VALIDATION rk4-vs-Kepler: a={:.0} km e={e} period={:.0} s  max position error = {max_err:.4e} m",
+            a / 1000.0,
+            period
+        );
+        // Measured: ~1.7e-5 m (≈17 µm, relative ≈6e-13) — floating-point-
+        // limited. RK4 at a 1 s step tracks the exact two-body solution to
+        // sub-millimetre over a full ~11.8 h eccentric revolution. The 1 m
+        // bound is a generous regression guard against future degradation.
+        assert!(
+            max_err < 1.0,
+            "RK4 deviates from analytic Kepler by {max_err:.3e} m (> 1 m)"
+        );
+    }
+
+    #[test]
     fn simulate_ascent_rejects_unbounded_config_without_hanging() {
         // The H1 hang/OOM repro: a 1 ns step with a 1e15 s cap would be
         // ~u64::MAX steps and an unbounded sample Vec. It must return an
