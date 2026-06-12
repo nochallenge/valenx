@@ -199,8 +199,16 @@ fn one_iter(c: &CreasedMesh) -> CreasedMesh {
             let new_sharp = (sharp - 1.0).max(0.0);
             if new_sharp > 0.0 {
                 let ep_idx = e_off + edge_idx[e];
-                let k1 = if e.0 < ep_idx { (e.0, ep_idx) } else { (ep_idx, e.0) };
-                let k2 = if ep_idx < e.1 { (ep_idx, e.1) } else { (e.1, ep_idx) };
+                let k1 = if e.0 < ep_idx {
+                    (e.0, ep_idx)
+                } else {
+                    (ep_idx, e.0)
+                };
+                let k2 = if ep_idx < e.1 {
+                    (ep_idx, e.1)
+                } else {
+                    (e.1, ep_idx)
+                };
                 new_creases.insert(k1, new_sharp);
                 new_creases.insert(k2, new_sharp);
             }

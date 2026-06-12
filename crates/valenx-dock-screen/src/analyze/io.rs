@@ -60,13 +60,11 @@ impl DockingResultTable {
 
     /// The best (lowest-score) pose, if any.
     pub fn best(&self) -> Option<&ResultPose> {
-        self.poses
-            .iter()
-            .min_by(|a, b| {
-                a.score
-                    .partial_cmp(&b.score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        self.poses.iter().min_by(|a, b| {
+            a.score
+                .partial_cmp(&b.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }
 
     /// Sort the poses ascending by score (best first).
@@ -160,7 +158,13 @@ pub fn read_docking_result(text: &str) -> Result<DockingResultTable> {
             current_atom_lines.clear();
         } else if trimmed.starts_with("ENDMDL") {
             if let Some(m) = current_model.take() {
-                flush(m, current_score, &current_atom_lines, &mut poses, &mut template)?;
+                flush(
+                    m,
+                    current_score,
+                    &current_atom_lines,
+                    &mut poses,
+                    &mut template,
+                )?;
             }
             current_atom_lines.clear();
         } else if let Some(score) = parse_vina_remark(trimmed) {
@@ -174,7 +178,13 @@ pub fn read_docking_result(text: &str) -> Result<DockingResultTable> {
     // A file with a single un-MODEL'd pose (a bare PDBQT) is still
     // valid — treat the trailing atom block as model 1.
     if poses.is_empty() && !current_atom_lines.is_empty() {
-        flush(1, current_score, &current_atom_lines, &mut poses, &mut template)?;
+        flush(
+            1,
+            current_score,
+            &current_atom_lines,
+            &mut poses,
+            &mut template,
+        )?;
     }
     if poses.is_empty() {
         return Err(DockScreenError::parse(
@@ -292,9 +302,7 @@ ENDMDL
         // Scores survive the round-trip.
         assert!((reparsed.poses[0].score - table.poses[0].score).abs() < 1e-3);
         // Coordinates survive the round-trip.
-        assert!(
-            (reparsed.poses[1].coordinates[0] - table.poses[1].coordinates[0]).norm() < 1e-2
-        );
+        assert!((reparsed.poses[1].coordinates[0] - table.poses[1].coordinates[0]).norm() < 1e-2);
     }
 
     #[test]

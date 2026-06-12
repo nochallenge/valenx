@@ -126,11 +126,7 @@ fn reference_energy(aa: char) -> f64 {
 /// Per-residue burial — the number of Cα–Cα contacts within 10 Å.
 /// A buried residue has many contacts; an exposed one few.
 pub fn residue_burial(model: &ProteinModel) -> Vec<usize> {
-    let trace: Vec<_> = model
-        .residues
-        .iter()
-        .map(|r| r.ca)
-        .collect::<Vec<_>>();
+    let trace: Vec<_> = model.residues.iter().map(|r| r.ca).collect::<Vec<_>>();
     let n = trace.len();
     let mut burial = vec![0usize; n];
     for i in 0..n {

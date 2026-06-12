@@ -304,16 +304,10 @@ TORSDOF 0
         let mut start = Pose::identity(0);
         start.translation = Vector3::new(6.0, 0.0, 0.0);
         let (refined, after) = solis_wets(&obj, &start, &SolisWetsParams::default(), 7);
-        assert!(
-            after < 0.0,
-            "expected a favourable minimum, got {after}"
-        );
+        assert!(after < 0.0, "expected a favourable minimum, got {after}");
         // The C-C optimum is ~3.8 Å centre-to-centre.
         let r = refined.translation.norm();
-        assert!(
-            (r - 3.8).abs() < 1.0,
-            "expected ~3.8 Å, got {r}"
-        );
+        assert!((r - 3.8).abs() < 1.0, "expected ~3.8 Å, got {r}");
     }
 
     #[test]

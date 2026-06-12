@@ -172,7 +172,11 @@ mod tests {
         assert!(!pts.is_empty(), "expected ≥1 evolute point");
         // Every survivor has finite radius.
         for p in &pts {
-            assert!(p.radius.is_finite(), "radius should be finite, got {}", p.radius);
+            assert!(
+                p.radius.is_finite(),
+                "radius should be finite, got {}",
+                p.radius
+            );
         }
     }
 }

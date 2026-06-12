@@ -36,12 +36,7 @@ pub struct SteadyState {
 /// count. Negative components are clamped to zero after each step
 /// (amounts cannot be negative). Returns
 /// [`SysbioError::NotConverged`] if the residual target is not met.
-pub fn steady_state(
-    sys: &OdeSystem,
-    y0: &[f64],
-    tol: f64,
-    max_iter: usize,
-) -> Result<SteadyState> {
+pub fn steady_state(sys: &OdeSystem, y0: &[f64], tol: f64, max_iter: usize) -> Result<SteadyState> {
     if tol <= 0.0 {
         return Err(SysbioError::invalid("tol", "tolerance must be positive"));
     }
@@ -74,8 +69,7 @@ pub fn steady_state(
         let mut lambda = 1.0;
         let mut accepted = false;
         for _ in 0..20 {
-            let mut trial: Vec<f64> =
-                y.iter().zip(&delta).map(|(a, d)| a + lambda * d).collect();
+            let mut trial: Vec<f64> = y.iter().zip(&delta).map(|(a, d)| a + lambda * d).collect();
             for v in trial.iter_mut() {
                 if *v < 0.0 {
                     *v = 0.0;

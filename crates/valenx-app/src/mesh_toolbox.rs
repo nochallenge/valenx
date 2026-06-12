@@ -1582,8 +1582,12 @@ impl PartDesignPanelState {
         if let Some(prev) = self.history.undo(self.tree.clone()) {
             self.tree = prev;
             // Stale ids may point past the new feature / sketch count.
-            self.selected_feature = self.selected_feature.filter(|id| id.0 < self.tree.features.len());
-            self.selected_sketch = self.selected_sketch.filter(|r| r.0 < self.tree.sketches.len());
+            self.selected_feature = self
+                .selected_feature
+                .filter(|id| id.0 < self.tree.features.len());
+            self.selected_sketch = self
+                .selected_sketch
+                .filter(|r| r.0 < self.tree.sketches.len());
             self.pending_replay = true;
             self.pending_delete_confirm = false;
             self.last_replay_error = None;
@@ -1597,8 +1601,12 @@ impl PartDesignPanelState {
     pub fn redo_edit(&mut self) -> bool {
         if let Some(next) = self.history.redo(self.tree.clone()) {
             self.tree = next;
-            self.selected_feature = self.selected_feature.filter(|id| id.0 < self.tree.features.len());
-            self.selected_sketch = self.selected_sketch.filter(|r| r.0 < self.tree.sketches.len());
+            self.selected_feature = self
+                .selected_feature
+                .filter(|id| id.0 < self.tree.features.len());
+            self.selected_sketch = self
+                .selected_sketch
+                .filter(|r| r.0 < self.tree.sketches.len());
             self.pending_replay = true;
             self.pending_delete_confirm = false;
             self.last_replay_error = None;
@@ -3021,9 +3029,7 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
         .width_range(220.0..=420.0)
         .show(ctx, |ui| {
             ui.heading("Mesh Toolbox")
-                .on_hover_text(
-                    "CAD-side workbench. Ctrl+1 toggles. F1 opens panel help.",
-                );
+                .on_hover_text("CAD-side workbench. Ctrl+1 toggles. F1 opens panel help.");
             ui.label(
                 egui::RichText::new(
                     "Inspector + Transformations + Part / Sketcher / Draft / TechDraw / \
@@ -3065,16 +3071,12 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_sketcher_panel(app, ui);
                     })
                     .header_response
-                    .on_hover_text(
-                        crate::panel_help::short_summary("Sketcher"),
-                    );
+                    .on_hover_text(crate::panel_help::short_summary("Sketcher"));
                     ui.collapsing("Part Design", |ui| {
                         draw_part_design_panel(app, ui);
                     })
                     .header_response
-                    .on_hover_text(
-                        crate::panel_help::short_summary("Part Design"),
-                    );
+                    .on_hover_text(crate::panel_help::short_summary("Part Design"));
                     ui.collapsing("Draft", |ui| {
                         draw_draft_panel(app, ui);
                     })
@@ -3232,8 +3234,9 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
 
     ui.horizontal(|ui| {
-        ui.label("Scale (axes)")
-            .on_hover_text("Independent scale factor per axis — useful for squashing / stretching.");
+        ui.label("Scale (axes)").on_hover_text(
+            "Independent scale factor per axis — useful for squashing / stretching.",
+        );
         ui.add(
             egui::DragValue::new(&mut s.scale_per_axis[0])
                 .speed(0.05)
@@ -3272,8 +3275,9 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Rotate around the Z axis (yaw).");
     });
     ui.horizontal(|ui| {
-        ui.label("Angle (deg)")
-            .on_hover_text("Rotation amount in degrees. Positive = right-hand rule around the axis.");
+        ui.label("Angle (deg)").on_hover_text(
+            "Rotation amount in degrees. Positive = right-hand rule around the axis.",
+        );
         ui.add(egui::DragValue::new(&mut s.rotate_angle_deg).speed(1.0))
             .on_hover_text("Rotation angle (degrees).");
     });
@@ -3342,7 +3346,9 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
 fn draw_cut_plane(app: &mut ValenxApp, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Cut plane").strong())
-        .on_hover_text("Slice the mesh along an arbitrary plane defined by a point + normal vector.");
+        .on_hover_text(
+            "Slice the mesh along an arbitrary plane defined by a point + normal vector.",
+        );
     let mut apply_cut = false;
     {
         let s = &mut app.mesh_toolbox;
@@ -3675,8 +3681,9 @@ fn draw_repair(app: &mut ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox;
         ui.horizontal(|ui| {
-            ui.label("Merge coincident — tolerance")
-                .on_hover_text("Welding distance — any two vertices closer than this collapse to one.");
+            ui.label("Merge coincident — tolerance").on_hover_text(
+                "Welding distance — any two vertices closer than this collapse to one.",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.repair_tolerance)
                     .speed(1e-7)
@@ -3751,7 +3758,9 @@ fn draw_export(app: &mut ValenxApp, ui: &mut egui::Ui) {
 /// borrow scope ends so we can call methods on `&mut app`.
 fn draw_mesh_tools(app: &mut ValenxApp, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Mesh Tools").strong())
-        .on_hover_text("Decimation / smoothing / remesh / fill — all canonical-mesh operations (not STL soup).");
+        .on_hover_text(
+        "Decimation / smoothing / remesh / fill — all canonical-mesh operations (not STL soup).",
+    );
 
     let mut do_decimate = false;
     let mut do_laplacian = false;
@@ -3763,8 +3772,9 @@ fn draw_mesh_tools(app: &mut ValenxApp, ui: &mut egui::Ui) {
         let s = &mut app.mesh_toolbox;
 
         ui.horizontal(|ui| {
-            ui.label("Decimate fraction")
-                .on_hover_text("Target vertex count as a fraction of the original. 0.5 = half the vertices.");
+            ui.label("Decimate fraction").on_hover_text(
+                "Target vertex count as a fraction of the original. 0.5 = half the vertices.",
+            );
             ui.add(
                 egui::Slider::new(&mut s.mesh_tools_decimate_fraction, 0.05..=1.0)
                     .text("of vertices"),
@@ -3783,8 +3793,9 @@ fn draw_mesh_tools(app: &mut ValenxApp, ui: &mut egui::Ui) {
         }
 
         ui.separator();
-        ui.label("Smoothing")
-            .on_hover_text("Iterative vertex relaxation — Laplacian (shrinks) and Taubin (shrink-free).");
+        ui.label("Smoothing").on_hover_text(
+            "Iterative vertex relaxation — Laplacian (shrinks) and Taubin (shrink-free).",
+        );
         ui.horizontal(|ui| {
             ui.label("Laplacian iter")
                 .on_hover_text("Number of Laplacian smoothing passes.");
@@ -4257,11 +4268,7 @@ pub fn draw_sketcher_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         {
             s.redo_edit();
         }
-        ui.label(
-            egui::RichText::new("Ctrl+Z / Ctrl+Y")
-                .weak()
-                .small(),
-        );
+        ui.label(egui::RichText::new("Ctrl+Z / Ctrl+Y").weak().small());
     });
 
     // ----- Viewport overlay toggle (Phase 1H — Task 51) -----
@@ -4960,11 +4967,7 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             {
                 s.redo_edit();
             }
-            ui.label(
-                egui::RichText::new("Ctrl+Z / Ctrl+Y")
-                    .weak()
-                    .small(),
-            );
+            ui.label(egui::RichText::new("Ctrl+Z / Ctrl+Y").weak().small());
         });
     }
 
@@ -4989,7 +4992,9 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         }
         if ui
             .button("Load project (.valenx)")
-            .on_hover_text("Replace the current feature tree with one loaded from a .valenx project file.")
+            .on_hover_text(
+                "Replace the current feature tree with one loaded from a .valenx project file.",
+            )
             .clicked()
         {
             persist_action = PersistAction::Load;
@@ -7409,7 +7414,9 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             ] {
                 ui.selectable_value(&mut s.sheet_size, opt, opt.label())
                     .on_hover_text(match opt {
-                        valenx_techdraw::SheetSize::A4 => "210 × 297 mm — single component / parts list.",
+                        valenx_techdraw::SheetSize::A4 => {
+                            "210 × 297 mm — single component / parts list."
+                        }
                         valenx_techdraw::SheetSize::A3 => "297 × 420 mm — typical assembly.",
                         valenx_techdraw::SheetSize::A2 => "420 × 594 mm — larger assembly.",
                         valenx_techdraw::SheetSize::A1 => "594 × 841 mm — general arrangement.",
@@ -7425,8 +7432,9 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
 
     // ----- Title-block fields -----
     ui.horizontal(|ui| {
-        ui.label("Title:")
-            .on_hover_text("Drawing title — appears in the title block and as the default export filename.");
+        ui.label("Title:").on_hover_text(
+            "Drawing title — appears in the title block and as the default export filename.",
+        );
         ui.text_edit_singleline(&mut s.drawing.sheet.title)
             .on_hover_text("Free-form title text.");
     });
@@ -7437,8 +7445,9 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Author / drafter name.");
     });
     ui.horizontal(|ui| {
-        ui.label("Revision:")
-            .on_hover_text("Drawing revision code — typically a letter (A, B, C…) or short numeric.");
+        ui.label("Revision:").on_hover_text(
+            "Drawing revision code — typically a letter (A, B, C…) or short numeric.",
+        );
         ui.text_edit_singleline(&mut s.drawing.sheet.revision)
             .on_hover_text("Revision text.");
     });
@@ -7482,43 +7491,50 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // current solid (if any), and pushes it onto the drawing.
     let mut to_add: Option<valenx_techdraw::ViewKind> = None;
     ui.horizontal_wrapped(|ui| {
-        if ui.button("Front")
+        if ui
+            .button("Front")
             .on_hover_text("Projection along +Y axis (looking toward -Y).")
             .clicked()
         {
             to_add = Some(valenx_techdraw::ViewKind::Front);
         }
-        if ui.button("Top")
+        if ui
+            .button("Top")
             .on_hover_text("Projection along +Z axis (looking down).")
             .clicked()
         {
             to_add = Some(valenx_techdraw::ViewKind::Top);
         }
-        if ui.button("Right")
+        if ui
+            .button("Right")
             .on_hover_text("Projection along +X axis (looking toward -X).")
             .clicked()
         {
             to_add = Some(valenx_techdraw::ViewKind::Right);
         }
-        if ui.button("Back")
+        if ui
+            .button("Back")
             .on_hover_text("Projection along -Y axis.")
             .clicked()
         {
             to_add = Some(valenx_techdraw::ViewKind::Back);
         }
-        if ui.button("Bottom")
+        if ui
+            .button("Bottom")
             .on_hover_text("Projection along -Z axis (looking up).")
             .clicked()
         {
             to_add = Some(valenx_techdraw::ViewKind::Bottom);
         }
-        if ui.button("Left")
+        if ui
+            .button("Left")
             .on_hover_text("Projection along -X axis.")
             .clicked()
         {
             to_add = Some(valenx_techdraw::ViewKind::Left);
         }
-        if ui.button("Iso")
+        if ui
+            .button("Iso")
             .on_hover_text("Isometric view — 30° axes, equal foreshortening on X / Y / Z.")
             .clicked()
         {
@@ -7785,8 +7801,11 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         ui.text_edit_singleline(&mut s.chain_entries)
             .on_hover_text("Entries — e.g. `0,0; 25,0; 50,0`.");
     });
-    if ui.button("Add chain")
-        .on_hover_text("Build the dimension chain from the entries above and append it to the drawing.")
+    if ui
+        .button("Add chain")
+        .on_hover_text(
+            "Build the dimension chain from the entries above and append it to the drawing.",
+        )
         .clicked()
     {
         let entries: Vec<[f64; 2]> = s
@@ -7831,8 +7850,9 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         .on_hover_text("Balloon Y (mm).");
     });
     ui.horizontal(|ui| {
-        ui.label("Target:")
-            .on_hover_text("Sheet-space point the balloon's leader arrow points to (the part being labelled).");
+        ui.label("Target:").on_hover_text(
+            "Sheet-space point the balloon's leader arrow points to (the part being labelled).",
+        );
         ui.add(
             egui::DragValue::new(&mut s.balloon_target[0])
                 .speed(1.0)
@@ -7863,13 +7883,20 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     ui.selectable_value(&mut s.balloon_style, st, st.label())
                         .on_hover_text(match st {
                             valenx_techdraw::BalloonStyle::Circle => "Round balloon — most common.",
-                            valenx_techdraw::BalloonStyle::Square => "Square balloon — used for accessory items.",
-                            valenx_techdraw::BalloonStyle::Hexagon => "Hexagonal balloon — often for fasteners.",
-                            valenx_techdraw::BalloonStyle::Triangle => "Triangular balloon — sometimes used for notes / warnings.",
+                            valenx_techdraw::BalloonStyle::Square => {
+                                "Square balloon — used for accessory items."
+                            }
+                            valenx_techdraw::BalloonStyle::Hexagon => {
+                                "Hexagonal balloon — often for fasteners."
+                            }
+                            valenx_techdraw::BalloonStyle::Triangle => {
+                                "Triangular balloon — sometimes used for notes / warnings."
+                            }
                         });
                 }
             });
-        if ui.button("Add balloon")
+        if ui
+            .button("Add balloon")
             .on_hover_text("Place the balloon at the chosen position with a leader to the target.")
             .clicked()
         {
@@ -7932,14 +7959,23 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 ] {
                     ui.selectable_value(&mut s.leader_arrow, k, k.label())
                         .on_hover_text(match k {
-                            valenx_techdraw::ArrowKind::Closed => "Filled triangular arrowhead — standard dimension arrow.",
-                            valenx_techdraw::ArrowKind::Open => "Open V-arrowhead — used for non-dimensional callouts.",
-                            valenx_techdraw::ArrowKind::Dot => "Filled dot — used for some leader styles (ANSI Y14).",
-                            valenx_techdraw::ArrowKind::Tick => "Architectural tick mark — 45° slash, common in architectural drawings.",
-                        });
+                        valenx_techdraw::ArrowKind::Closed => {
+                            "Filled triangular arrowhead — standard dimension arrow."
+                        }
+                        valenx_techdraw::ArrowKind::Open => {
+                            "Open V-arrowhead — used for non-dimensional callouts."
+                        }
+                        valenx_techdraw::ArrowKind::Dot => {
+                            "Filled dot — used for some leader styles (ANSI Y14)."
+                        }
+                        valenx_techdraw::ArrowKind::Tick => {
+                            "Architectural tick mark — 45° slash, common in architectural drawings."
+                        }
+                    });
                 }
             });
-        if ui.button("Add leader")
+        if ui
+            .button("Add leader")
             .on_hover_text("Place a leader with the chosen arrow style.")
             .clicked()
         {
@@ -8873,13 +8909,25 @@ pub fn draw_assembly_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 ] {
                     ui.selectable_value(&mut s.joint_kind, opt, opt.label())
                         .on_hover_text(match opt {
-                            AssemblyJointKindUi::Fixed => "Rigid connection — A and B move as one. 0 relative DOFs.",
-                            AssemblyJointKindUi::Revolute => "Hinge — rotation about one axis. 1 rotational DOF (think door hinge).",
-                            AssemblyJointKindUi::Prismatic => "Slider — translation along one axis. 1 translational DOF.",
-                            AssemblyJointKindUi::Cylindrical => "Combined slide + rotate about the same axis. 2 DOFs.",
-                            AssemblyJointKindUi::Spherical => "Ball joint — 3 rotational DOFs, 0 translational.",
-                            AssemblyJointKindUi::Planar => "Planar joint — 2 translational + 1 rotational within a plane.",
-                        });
+                        AssemblyJointKindUi::Fixed => {
+                            "Rigid connection — A and B move as one. 0 relative DOFs."
+                        }
+                        AssemblyJointKindUi::Revolute => {
+                            "Hinge — rotation about one axis. 1 rotational DOF (think door hinge)."
+                        }
+                        AssemblyJointKindUi::Prismatic => {
+                            "Slider — translation along one axis. 1 translational DOF."
+                        }
+                        AssemblyJointKindUi::Cylindrical => {
+                            "Combined slide + rotate about the same axis. 2 DOFs."
+                        }
+                        AssemblyJointKindUi::Spherical => {
+                            "Ball joint — 3 rotational DOFs, 0 translational."
+                        }
+                        AssemblyJointKindUi::Planar => {
+                            "Planar joint — 2 translational + 1 rotational within a plane."
+                        }
+                    });
                 }
             });
         ui.horizontal(|ui| {
@@ -11576,8 +11624,9 @@ fn draw_surface_curve_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Degree:")
-                .on_hover_text("Polynomial degree of the curve. 1 = polyline, 3 = cubic (typical), 5 = quintic.");
+            ui.label("Degree:").on_hover_text(
+                "Polynomial degree of the curve. 1 = polyline, 3 = cubic (typical), 5 = quintic.",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.curve_degree)
                     .range(1..=9)
@@ -11586,8 +11635,9 @@ fn draw_surface_curve_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Curve degree (1..9).");
         });
         ui.horizontal(|ui| {
-            ui.label("N control points:")
-                .on_hover_text("Number of control points. Must be > degree. More points = more curvature freedom.");
+            ui.label("N control points:").on_hover_text(
+                "Number of control points. Must be > degree. More points = more curvature freedom.",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.curve_n_cps)
                     .range(2..=20)
@@ -11629,7 +11679,8 @@ fn draw_surface_curve_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
         });
     }
-    if ui.button("Add curve")
+    if ui
+        .button("Add curve")
         .on_hover_text("Build the NURBS curve from the inputs above and add it to the curve list.")
         .clicked()
     {
@@ -11660,8 +11711,9 @@ fn draw_surface_surface_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("v-direction degree (1..9).");
         });
         ui.horizontal(|ui| {
-            ui.label("nu × nv:")
-                .on_hover_text("Control-point grid size: nu rows × nv columns. Each must be > respective degree.");
+            ui.label("nu × nv:").on_hover_text(
+                "Control-point grid size: nu rows × nv columns. Each must be > respective degree.",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.surface_nu)
                     .range(2..=10)
@@ -11706,8 +11758,11 @@ fn draw_surface_surface_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
         });
     }
-    if ui.button("Add surface")
-        .on_hover_text("Build the NURBS surface from the inputs above and add it to the surface list.")
+    if ui
+        .button("Add surface")
+        .on_hover_text(
+            "Build the NURBS surface from the inputs above and add it to the surface list.",
+        )
         .clicked()
     {
         app.surface_create_surface();
@@ -11742,7 +11797,8 @@ fn draw_surface_coons_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             });
         }
     }
-    if ui.button("Fill")
+    if ui
+        .button("Fill")
         .on_hover_text("Build a bilinearly-blended Coons patch from the four boundary curves.")
         .clicked()
     {
@@ -11801,8 +11857,9 @@ fn draw_surface_sew_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 });
         });
         ui.horizontal(|ui| {
-            ui.label("Tolerance:")
-                .on_hover_text("Geometric distance below which the two edges are considered coincident.");
+            ui.label("Tolerance:").on_hover_text(
+                "Geometric distance below which the two edges are considered coincident.",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.sew_tolerance)
                     .speed(0.0001)
@@ -11818,8 +11875,11 @@ fn draw_surface_sew_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             ui.label("(uncheck for G0 / Phase 9 fast averaging)");
         });
     }
-    if ui.button("Sew")
-        .on_hover_text("Stitch surfaces A and B along the chosen edges. Result is a single sewn surface.")
+    if ui
+        .button("Sew")
+        .on_hover_text(
+            "Stitch surfaces A and B along the chosen edges. Result is a single sewn surface.",
+        )
         .clicked()
     {
         app.surface_sew();
@@ -11834,8 +11894,7 @@ fn draw_surface_trim_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Surface id:")
-                .on_hover_text("Surface to trim.");
+            ui.label("Surface id:").on_hover_text("Surface to trim.");
             ui.add(
                 egui::DragValue::new(&mut s.trim_surface)
                     .range(0..=n_surf.saturating_sub(1).max(0))
@@ -11854,16 +11913,18 @@ fn draw_surface_trim_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Curve index in the curves list.");
         });
         ui.horizontal(|ui| {
-            ui.label("Side:")
-                .on_hover_text("Keep the inside region (bounded by the curve) or the outside (everything else).");
+            ui.label("Side:").on_hover_text(
+                "Keep the inside region (bounded by the curve) or the outside (everything else).",
+            );
             ui.selectable_value(&mut s.trim_side, 0, "Inside")
                 .on_hover_text("Keep the surface region inside the curve loop.");
             ui.selectable_value(&mut s.trim_side, 1, "Outside")
                 .on_hover_text("Keep the surface region outside the curve loop.");
         });
         ui.horizontal(|ui| {
-            ui.label("Resolution:")
-                .on_hover_text("Tessellation resolution for the trim output (higher = finer mesh).");
+            ui.label("Resolution:").on_hover_text(
+                "Tessellation resolution for the trim output (higher = finer mesh).",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.trim_resolution)
                     .range(8..=128)
@@ -11877,7 +11938,8 @@ fn draw_surface_trim_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         )
         .on_hover_text("Trim in parameter space rather than 3-D Euclidean. Mandatory for highly-warped surfaces where 3-D projection is ambiguous.");
     }
-    if ui.button("Trim → mesh")
+    if ui
+        .button("Trim → mesh")
         .on_hover_text("Apply the trim and produce a tessellated mesh of the kept region.")
         .clicked()
     {
@@ -11903,8 +11965,9 @@ fn draw_surface_knot_ops_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .range(0.0..=1.0),
             )
             .on_hover_text("Knot insertion parameter (0..1).");
-            ui.label("Tolerance:")
-                .on_hover_text("How close a knot must be to `u` to be considered a match (for remove).");
+            ui.label("Tolerance:").on_hover_text(
+                "How close a knot must be to `u` to be considered a match (for remove).",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.knot_op_tolerance)
                     .speed(0.0001)
@@ -11979,13 +12042,15 @@ fn draw_surface_knot_ops_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         });
     }
     ui.horizontal(|ui| {
-        if ui.button("Insert knot (surface)")
+        if ui
+            .button("Insert knot (surface)")
             .on_hover_text("Insert a knot in the selected direction at parameter u.")
             .clicked()
         {
             app.surface_insert_knot();
         }
-        if ui.button("Elevate degree (surface)")
+        if ui
+            .button("Elevate degree (surface)")
             .on_hover_text("Raise the surface degree in the selected direction by `Elevate by`.")
             .clicked()
         {
@@ -12019,8 +12084,9 @@ fn draw_surface_ssi_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Surface B index.");
         });
         ui.horizontal(|ui| {
-            ui.label("Tolerance:")
-                .on_hover_text("Distance below which a point is considered to lie on both surfaces.");
+            ui.label("Tolerance:").on_hover_text(
+                "Distance below which a point is considered to lie on both surfaces.",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.ssi_tolerance)
                     .speed(0.0001)
@@ -12060,8 +12126,9 @@ fn draw_surface_fit_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("v degree (1..9).");
         });
         ui.horizontal(|ui| {
-            ui.label("nu CPs:")
-                .on_hover_text("Number of control points in u — more CPs = lower RMS, but risk of overfitting.");
+            ui.label("nu CPs:").on_hover_text(
+                "Number of control points in u — more CPs = lower RMS, but risk of overfitting.",
+            );
             ui.add(
                 egui::DragValue::new(&mut s.fit_n_cps_u)
                     .range(2..=32)
@@ -12089,13 +12156,15 @@ fn draw_surface_fit_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         }
     }
     ui.horizontal(|ui| {
-        if ui.button("Fit curve")
+        if ui
+            .button("Fit curve")
             .on_hover_text("Fit a NURBS curve through the point list (preserves input order).")
             .clicked()
         {
             app.surface_fit_curve();
         }
-        if ui.button("Fit surface (scattered)")
+        if ui
+            .button("Fit surface (scattered)")
             .on_hover_text("Fit a NURBS surface to scattered point data via least-squares.")
             .clicked()
         {
@@ -12166,8 +12235,9 @@ fn draw_surface_ruled_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         }
         if s.ruled_kind == 2 {
             ui.horizontal(|ui| {
-                ui.label("Apex:")
-                    .on_hover_text("Single apex point that all rule lines connect to from curve A.");
+                ui.label("Apex:").on_hover_text(
+                    "Single apex point that all rule lines connect to from curve A.",
+                );
                 ui.add(
                     egui::DragValue::new(&mut s.ruled_apex[0])
                         .speed(0.05)
@@ -12189,8 +12259,11 @@ fn draw_surface_ruled_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             });
         }
     }
-    if ui.button("Build ruled surface")
-        .on_hover_text("Create the ruled surface from the inputs above and add it to the surfaces list.")
+    if ui
+        .button("Build ruled surface")
+        .on_hover_text(
+            "Create the ruled surface from the inputs above and add it to the surfaces list.",
+        )
         .clicked()
     {
         app.surface_ruled_build();
@@ -12671,12 +12744,18 @@ pub fn draw_arch_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
 fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let s = &mut app.mesh_toolbox.arch;
     ui.label(egui::RichText::new("Wall").strong())
-        .on_hover_text("Architectural wall from a start XYZ to an end XYZ, extruded upwards by Height.");
+        .on_hover_text(
+            "Architectural wall from a start XYZ to an end XYZ, extruded upwards by Height.",
+        );
     ui.horizontal(|ui| {
         ui.label("Start:")
             .on_hover_text("Start endpoint of the wall centreline (model units, typically m).");
         let prefixes = ["x ", "y ", "z "];
-        let tooltips = ["Start X (m).", "Start Y (m).", "Start Z (m, base of the wall)."];
+        let tooltips = [
+            "Start X (m).",
+            "Start Y (m).",
+            "Start Z (m, base of the wall).",
+        ];
         for i in 0..3 {
             ui.add(
                 egui::DragValue::new(&mut s.wall_start[i])
@@ -12710,8 +12789,9 @@ fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .suffix(" m"),
         )
         .on_hover_text("Wall height (m).");
-        ui.label("Thickness:")
-            .on_hover_text("Wall cross-section thickness — typically 100..400 mm for partitions / exterior walls.");
+        ui.label("Thickness:").on_hover_text(
+            "Wall cross-section thickness — typically 100..400 mm for partitions / exterior walls.",
+        );
         ui.add(
             egui::DragValue::new(&mut s.wall_thickness)
                 .range(0.001..=10.0)
@@ -12721,8 +12801,9 @@ fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         .on_hover_text("Wall thickness (m).");
     });
     ui.horizontal(|ui| {
-        ui.label("Material:")
-            .on_hover_text("Material tag — surfaces in the BIM entity list and the schedule export.");
+        ui.label("Material:").on_hover_text(
+            "Material tag — surfaces in the BIM entity list and the schedule export.",
+        );
         ui.text_edit_singleline(&mut s.wall_material)
             .on_hover_text("Free-text material name (e.g. \"concrete\", \"gypsum board\").");
     });
@@ -12740,8 +12821,9 @@ fn draw_arch_slab_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Slab").strong())
         .on_hover_text("Floor / ceiling slab — horizontal plate at the given Z, with the boundary polygon defined below.");
     ui.horizontal(|ui| {
-        ui.label("Z:")
-            .on_hover_text("Slab elevation — height of the slab's top surface above the project origin (m).");
+        ui.label("Z:").on_hover_text(
+            "Slab elevation — height of the slab's top surface above the project origin (m).",
+        );
         ui.add(egui::DragValue::new(&mut s.slab_z).speed(0.1).suffix(" m"))
             .on_hover_text("Slab Z (m).");
         ui.label("Thickness:")
@@ -13325,13 +13407,16 @@ pub fn draw_spreadsheet_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             });
     });
     ui.horizontal(|ui| {
-        ui.label("New sheet:")
-            .on_hover_text("Name for the next sheet to add. Formulas reference sheets as `SheetName.A1` etc.");
+        ui.label("New sheet:").on_hover_text(
+            "Name for the next sheet to add. Formulas reference sheets as `SheetName.A1` etc.",
+        );
         ui.text_edit_singleline(&mut s.new_sheet_name)
             .on_hover_text("Sheet name (must be unique within the workbook).");
-        if ui.button("Add sheet")
+        if ui
+            .button("Add sheet")
             .on_hover_text("Add a new empty sheet with the name above.")
-            .clicked() && !s.new_sheet_name.is_empty()
+            .clicked()
+            && !s.new_sheet_name.is_empty()
         {
             if s.workbook.add_sheet(s.new_sheet_name.clone()) {
                 s.last_status = Some(format!("Added sheet `{}`.", s.new_sheet_name));
@@ -13341,9 +13426,11 @@ pub fn draw_spreadsheet_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 s.last_error = Some(format!("Sheet `{}` already exists.", s.new_sheet_name));
             }
         }
-        if ui.button("Remove sheet")
+        if ui
+            .button("Remove sheet")
             .on_hover_text("Remove the currently-active sheet (irreversible — undo via re-add).")
-            .clicked() && !s.active_sheet.is_empty()
+            .clicked()
+            && !s.active_sheet.is_empty()
         {
             let removed = s.workbook.remove_sheet(&s.active_sheet);
             if removed {
@@ -13431,12 +13518,13 @@ pub fn draw_spreadsheet_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let (sel_row, sel_col) = s.selected_cell.unwrap_or((0, 0));
     ui.horizontal(|ui| {
         ui.label(format!("Selected: {}{}", col_letter(sel_col), sel_row + 1))
-            .on_hover_text("Cell currently being edited. Click a cell in the grid above to change selection.");
-        ui.text_edit_singleline(&mut s.editor_text)
             .on_hover_text(
-                "Cell content. Plain number = literal value. `=` prefix = formula \
-                 (e.g. `=A1+B1` or `=Sheet2.A1 * 2`). Anything else = text label.",
+                "Cell currently being edited. Click a cell in the grid above to change selection.",
             );
+        ui.text_edit_singleline(&mut s.editor_text).on_hover_text(
+            "Cell content. Plain number = literal value. `=` prefix = formula \
+                 (e.g. `=A1+B1` or `=Sheet2.A1 * 2`). Anything else = text label.",
+        );
     });
     ui.horizontal(|ui| {
         let r = valenx_spreadsheet::CellRef {
@@ -14036,9 +14124,9 @@ mod tests {
             ..Default::default()
         };
         run_dock_now(&mut s);
-        let err = s.last_error.expect(
-            "round-20 H1: oversized receptor must set last_error, not OOM the renderer",
-        );
+        let err = s
+            .last_error
+            .expect("round-20 H1: oversized receptor must set last_error, not OOM the renderer");
         assert!(
             err.contains("receptor read") && err.contains("cap"),
             "expected `receptor read: ...cap...` got: {err}"
@@ -14155,7 +14243,10 @@ mod headless_ui_tests {
                 "Create {kind:?} produced no solid: {:?}",
                 app.last_error
             );
-            assert!(app.mesh.is_some(), "Create {kind:?} produced no viewport mesh");
+            assert!(
+                app.mesh.is_some(),
+                "Create {kind:?} produced no viewport mesh"
+            );
         }
     }
 
@@ -14201,10 +14292,13 @@ mod headless_ui_tests {
     fn draft_panel_draws_post_edit_and_error_states() {
         // Post-edit — a document with entities.
         let mut app = ValenxApp::default();
-        app.mesh_toolbox.draft.document.add_entity(valenx_draft::DraftEntity::Circle {
-            center: [0.0, 0.0],
-            radius: 2.0,
-        });
+        app.mesh_toolbox
+            .draft
+            .document
+            .add_entity(valenx_draft::DraftEntity::Circle {
+                center: [0.0, 0.0],
+                radius: 2.0,
+            });
         app.mesh_toolbox.draft.selected_entity = Some(0);
         draw_headless(|ui| draw_draft_panel(&mut app, ui));
         // Error state.
@@ -14264,7 +14358,10 @@ mod headless_ui_tests {
         assert_eq!(doc.entity_count(), 4);
         doc.delete_entity(0).expect("delete a valid index");
         assert_eq!(doc.entity_count(), 3);
-        assert!(doc.delete_entity(99).is_err(), "out-of-range delete should error");
+        assert!(
+            doc.delete_entity(99).is_err(),
+            "out-of-range delete should error"
+        );
     }
 
     // ===================================================================
@@ -14281,11 +14378,7 @@ mod headless_ui_tests {
         draw_headless(|ui| draw_techdraw_panel(&mut app, ui));
         // With a view already present + selected, and an error.
         let mut app = ValenxApp::default();
-        let view = valenx_techdraw::View::new(
-            valenx_techdraw::ViewKind::Front,
-            1.0,
-            [80.0, 100.0],
-        );
+        let view = valenx_techdraw::View::new(valenx_techdraw::ViewKind::Front, 1.0, [80.0, 100.0]);
         app.mesh_toolbox.techdraw.drawing.add_view(view);
         app.mesh_toolbox.techdraw.selected_view = Some(0);
         app.mesh_toolbox.techdraw.last_error = Some("Add view: no solid".into());
@@ -14297,12 +14390,10 @@ mod headless_ui_tests {
         // The Run action (Add View) generates projected edges from a
         // real valenx-cad solid through the valenx-techdraw backend.
         let solid = valenx_cad::box_solid(2.0, 1.0, 1.0).expect("box");
-        let mut view = valenx_techdraw::View::new(
-            valenx_techdraw::ViewKind::Front,
-            1.0,
-            [0.0, 0.0],
-        );
-        view.generate(&solid).expect("view generation should succeed");
+        let mut view =
+            valenx_techdraw::View::new(valenx_techdraw::ViewKind::Front, 1.0, [0.0, 0.0]);
+        view.generate(&solid)
+            .expect("view generation should succeed");
         assert!(
             !view.visible_edges.is_empty(),
             "a projected box must yield visible edges"
@@ -14320,7 +14411,10 @@ mod headless_ui_tests {
         // error rather than panicking.
         let mut drawing =
             valenx_techdraw::Drawing::new(valenx_techdraw::Sheet::a4_landscape("T", "", "A"));
-        assert!(drawing.get_view_mut(0).is_err(), "empty drawing has no view 0");
+        assert!(
+            drawing.get_view_mut(0).is_err(),
+            "empty drawing has no view 0"
+        );
     }
 
     // ===================================================================
@@ -14354,7 +14448,11 @@ mod headless_ui_tests {
             let mut s = AssemblyPanelState::default();
             s.new_part_primitive = prim;
             assembly_add_part(&mut s);
-            assert!(s.last_error.is_none(), "{prim:?} add errored: {:?}", s.last_error);
+            assert!(
+                s.last_error.is_none(),
+                "{prim:?} add errored: {:?}",
+                s.last_error
+            );
             assert_eq!(s.assembly.parts.len(), 1, "{prim:?} part not added");
         }
     }
@@ -14750,7 +14848,10 @@ mod headless_ui_tests {
         s.workbook
             .set_cell(&a3, parse_editor_cell("=Default.A1 * Default.A2"))
             .expect("set A3 formula");
-        let value = s.workbook.evaluate_cell(&a3).expect("formula should evaluate");
+        let value = s
+            .workbook
+            .evaluate_cell(&a3)
+            .expect("formula should evaluate");
         assert_eq!(value, 42.0, "6 * 7 should evaluate to 42");
     }
 
@@ -14838,7 +14939,11 @@ mod headless_ui_tests {
 
     #[test]
     fn sketcher_panel_draws_every_tool() {
-        for tool in [SketcherTool::Select, SketcherTool::Line, SketcherTool::Circle] {
+        for tool in [
+            SketcherTool::Select,
+            SketcherTool::Line,
+            SketcherTool::Circle,
+        ] {
             let mut app = ValenxApp::default();
             app.mesh_toolbox.sketcher.tool = tool;
             draw_headless(|ui| draw_sketcher_panel(&mut app, ui));
@@ -14854,11 +14959,9 @@ mod headless_ui_tests {
             let p = s.sketch.add_point(0.0, 0.0);
             let q = s.sketch.add_point(1.0, 0.0);
             s.sketch.add_line(p, q).expect("add a line");
-            let report = valenx_sketch::solver::solve(
-                &mut s.sketch,
-                valenx_sketch::SolverConfig::default(),
-            )
-            .expect("solve a trivial sketch");
+            let report =
+                valenx_sketch::solver::solve(&mut s.sketch, valenx_sketch::SolverConfig::default())
+                    .expect("solve a trivial sketch");
             s.last_report = Some(report);
         }
         draw_headless(|ui| draw_sketcher_panel(&mut app, ui));
@@ -14879,7 +14982,11 @@ mod headless_ui_tests {
         let entities_before = s.sketch.entities.len();
         handle_sketcher_geometry_click(&mut s, 0.0, 0.0); // first click
         handle_sketcher_geometry_click(&mut s, 5.0, 0.0); // second click -> line
-        assert!(s.last_error.is_none(), "line click errored: {:?}", s.last_error);
+        assert!(
+            s.last_error.is_none(),
+            "line click errored: {:?}",
+            s.last_error
+        );
         assert!(
             s.sketch.entities.len() > entities_before + 1,
             "a line + its two points should have been added"
@@ -14899,10 +15006,8 @@ mod headless_ui_tests {
             b: q,
             target: 10.0,
         });
-        let report = valenx_sketch::solver::solve(
-            &mut sketch,
-            valenx_sketch::SolverConfig::default(),
-        );
+        let report =
+            valenx_sketch::solver::solve(&mut sketch, valenx_sketch::SolverConfig::default());
         assert!(report.is_ok(), "sketch solve errored: {:?}", report.err());
     }
 

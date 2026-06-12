@@ -112,28 +112,42 @@ pub fn cw_state_transition(
 
     // Φrr: position response to initial position.
     let phi_rr = Matrix3::new(
-        4.0 - 3.0 * c, 0.0, 0.0,
-        6.0 * (s - nt), 1.0, 0.0,
-        0.0, 0.0, c,
+        4.0 - 3.0 * c,
+        0.0,
+        0.0,
+        6.0 * (s - nt),
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        c,
     );
     // Φrv: position response to initial velocity.
     let phi_rv = Matrix3::new(
-        s / n, 2.0 * (1.0 - c) / n, 0.0,
-        -2.0 * (1.0 - c) / n, (4.0 * s - 3.0 * nt) / n, 0.0,
-        0.0, 0.0, s / n,
+        s / n,
+        2.0 * (1.0 - c) / n,
+        0.0,
+        -2.0 * (1.0 - c) / n,
+        (4.0 * s - 3.0 * nt) / n,
+        0.0,
+        0.0,
+        0.0,
+        s / n,
     );
     // Φvr: velocity response to initial position.
     let phi_vr = Matrix3::new(
-        3.0 * n * s, 0.0, 0.0,
-        6.0 * n * (c - 1.0), 0.0, 0.0,
-        0.0, 0.0, -n * s,
+        3.0 * n * s,
+        0.0,
+        0.0,
+        6.0 * n * (c - 1.0),
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -n * s,
     );
     // Φvv: velocity response to initial velocity.
-    let phi_vv = Matrix3::new(
-        c, 2.0 * s, 0.0,
-        -2.0 * s, 4.0 * c - 3.0, 0.0,
-        0.0, 0.0, c,
-    );
+    let phi_vv = Matrix3::new(c, 2.0 * s, 0.0, -2.0 * s, 4.0 * c - 3.0, 0.0, 0.0, 0.0, c);
     Ok((phi_rr, phi_rv, phi_vr, phi_vv))
 }
 
@@ -273,7 +287,10 @@ mod tests {
         let n2 = mean_motion(a2).expect("valid");
         let t_syn = synodic_period(a1, a2).expect("valid");
         // Definition: T_syn = 2π/|n1 − n2|.
-        assert!((t_syn - TAU / (n1 - n2).abs()).abs() / t_syn < 1e-12, "T_syn = 2π/|Δn|");
+        assert!(
+            (t_syn - TAU / (n1 - n2).abs()).abs() / t_syn < 1e-12,
+            "T_syn = 2π/|Δn|"
+        );
         // Beat-of-periods identity 1/T_syn = |1/P1 − 1/P2| (Pk = 2π/nk) — an
         // independent derivation threading mean_motion.
         let (p1, p2) = (TAU / n1, TAU / n2);
@@ -282,14 +299,20 @@ mod tests {
             "1/T_syn = |1/P1 − 1/P2|"
         );
         // For nearby orbits the beat is slow — longer than either orbital period.
-        assert!(t_syn > p1 && t_syn > p2, "close orbits → T_syn exceeds both periods");
+        assert!(
+            t_syn > p1 && t_syn > p2,
+            "close orbits → T_syn exceeds both periods"
+        );
         // Symmetric in its arguments.
         assert!(
             (synodic_period(a2, a1).expect("valid") - t_syn).abs() / t_syn < 1e-12,
             "symmetric"
         );
         // Identical orbits never re-conjunct → infinite synodic period (2π/0).
-        assert!(synodic_period(a1, a1).expect("valid").is_infinite(), "equal orbits → ∞");
+        assert!(
+            synodic_period(a1, a1).expect("valid").is_infinite(),
+            "equal orbits → ∞"
+        );
         // A non-positive semi-major axis is rejected (propagated from mean_motion).
         assert!(synodic_period(-1.0, a2).is_err(), "a ≤ 0 → Err");
     }
@@ -359,11 +382,22 @@ mod tests {
         let radial_extent = xmax - xmin;
         let along_extent = ymax - ymin;
         // Radial peak-to-peak is 2ρ; along-track is 4ρ -> ratio 2.000.
-        assert!((radial_extent - 2.0 * rho).abs() < 1.0, "radial {radial_extent}");
-        assert!((along_extent / radial_extent - 2.0).abs() < 1e-3, "ratio {}", along_extent / radial_extent);
+        assert!(
+            (radial_extent - 2.0 * rho).abs() < 1.0,
+            "radial {radial_extent}"
+        );
+        assert!(
+            (along_extent / radial_extent - 2.0).abs() < 1e-3,
+            "ratio {}",
+            along_extent / radial_extent
+        );
         // Bounded: returns to the start after one period (no secular drift).
         let (r_end, v_end) = cw_propagate(n, period, r0, v0).expect("valid");
-        assert!((r_end - r0).norm() < 1e-3, "closure {}", (r_end - r0).norm());
+        assert!(
+            (r_end - r0).norm() < 1e-3,
+            "closure {}",
+            (r_end - r0).norm()
+        );
         assert!((v_end - v0).norm() < 1e-6);
     }
 
@@ -385,10 +419,18 @@ mod tests {
 
         // Propagate with the first burn applied.
         let (r_arr, v_arr_minus) = cw_propagate(n, t, r0, v0 + plan.delta_v1).expect("valid");
-        assert!((r_arr - r_target).norm() < 1e-3, "miss = {} m", (r_arr - r_target).norm());
+        assert!(
+            (r_arr - r_target).norm() < 1e-3,
+            "miss = {} m",
+            (r_arr - r_target).norm()
+        );
         // The second burn nulls the arrival velocity to the target.
         let v_after = v_arr_minus + plan.delta_v2;
-        assert!((v_after - v_target).norm() < 1e-9, "residual v = {}", (v_after - v_target).norm());
+        assert!(
+            (v_after - v_target).norm() < 1e-9,
+            "residual v = {}",
+            (v_after - v_target).norm()
+        );
         assert!(plan.total_delta_v > 0.0);
         assert!((plan.transfer_time - t).abs() < 1e-12);
     }

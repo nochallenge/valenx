@@ -78,8 +78,7 @@ fn revcomp(seq: &[u8]) -> Vec<u8> {
 
 /// `true` when `window` matches the IUPAC `motif` base for base.
 fn pam_ok(motif: &[u8], window: &[u8]) -> bool {
-    motif.len() == window.len()
-        && motif.iter().zip(window).all(|(&c, &b)| iupac_match(c, b))
+    motif.len() == window.len() && motif.iter().zip(window).all(|(&c, &b)| iupac_match(c, b))
 }
 
 /// A CFD-style off-target activity score in `[0, 1]`.
@@ -143,7 +142,12 @@ fn pam_activity(pam: &[u8]) -> f64 {
     if pam.len() < 3 {
         return 1.0; // unknown PAM length — do not penalise
     }
-    let p: Vec<u8> = pam.iter().rev().take(2).map(|b| b.to_ascii_uppercase()).collect();
+    let p: Vec<u8> = pam
+        .iter()
+        .rev()
+        .take(2)
+        .map(|b| b.to_ascii_uppercase())
+        .collect();
     // p[0] is the last base, p[1] the second-to-last.
     match (p[1], p[0]) {
         (b'G', b'G') => 1.0,
@@ -197,13 +201,33 @@ pub fn enumerate_off_targets(
 
         // Forward strand.
         scan_one(
-            &fwd, &guide_u, motif, plen, pamlen, total, pam.side, name, false, &fwd,
-            max_mismatches, &mut hits,
+            &fwd,
+            &guide_u,
+            motif,
+            plen,
+            pamlen,
+            total,
+            pam.side,
+            name,
+            false,
+            &fwd,
+            max_mismatches,
+            &mut hits,
         );
         // Reverse strand.
         scan_one(
-            &rev, &guide_u, motif, plen, pamlen, total, pam.side, name, true, &fwd,
-            max_mismatches, &mut hits,
+            &rev,
+            &guide_u,
+            motif,
+            plen,
+            pamlen,
+            total,
+            pam.side,
+            name,
+            true,
+            &fwd,
+            max_mismatches,
+            &mut hits,
         );
     }
 
@@ -356,8 +380,7 @@ mod tests {
         // An off-target with 2 mismatches followed by a TGG PAM.
         let off = "TCGTACGTACGTACGTACGA"; // pos 0 and pos 19 differ
         let g = genome(&[("chr1", &format!("{off}TGG"))]);
-        let hits =
-            enumerate_off_targets(guide.as_bytes(), &g, &PamSpec::spcas9(), 3).unwrap();
+        let hits = enumerate_off_targets(guide.as_bytes(), &g, &PamSpec::spcas9(), 3).unwrap();
         let two_mm: Vec<_> = hits.iter().filter(|h| h.mismatches == 2).collect();
         assert!(!two_mm.is_empty());
         assert_eq!(two_mm[0].mismatch_positions, vec![0, 19]);
@@ -369,8 +392,7 @@ mod tests {
         // A site with 5 mismatches — over a budget of 2.
         let off = "TTTTTCGTACGTACGTACGT";
         let g = genome(&[("chr1", &format!("{off}AGG"))]);
-        let hits =
-            enumerate_off_targets(guide.as_bytes(), &g, &PamSpec::spcas9(), 2).unwrap();
+        let hits = enumerate_off_targets(guide.as_bytes(), &g, &PamSpec::spcas9(), 2).unwrap();
         assert!(hits.iter().all(|h| h.mismatches <= 2));
     }
 
@@ -412,8 +434,7 @@ mod tests {
         let perfect = format!("{guide}AGG");
         let off = format!("TCGTACGTACGTACGTACGA{}", "TGG");
         let g = genome(&[("chr1", &format!("{perfect}{off}"))]);
-        let hits =
-            enumerate_off_targets(guide.as_bytes(), &g, &PamSpec::spcas9(), 3).unwrap();
+        let hits = enumerate_off_targets(guide.as_bytes(), &g, &PamSpec::spcas9(), 3).unwrap();
         for w in hits.windows(2) {
             assert!(w[0].cfd_score >= w[1].cfd_score);
         }

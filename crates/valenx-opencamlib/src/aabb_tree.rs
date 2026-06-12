@@ -68,11 +68,7 @@ impl AabbTree {
     /// Query: indices of every triangle whose AABB intersects the
     /// ray `(origin, direction)` — returned in arbitrary order.
     /// Direction NOT required to be unit length.
-    pub fn intersect_ray(
-        &self,
-        origin: Vector3<f64>,
-        direction: Vector3<f64>,
-    ) -> Vec<usize> {
+    pub fn intersect_ray(&self, origin: Vector3<f64>, direction: Vector3<f64>) -> Vec<usize> {
         let mut out = Vec::new();
         if self.nodes.is_empty() {
             return out;

@@ -37,11 +37,7 @@ use valenx_phylo::tree::{NodeId, Tree};
 /// # Errors
 /// [`PopgenError::Invalid`] on a negative rate;
 /// [`PopgenError::Model`] on genotype-matrix assembly failure.
-pub fn overlay_on_tree(
-    tree: &Tree,
-    mutation_rate: f64,
-    seed: u64,
-) -> Result<GenotypeMatrix> {
+pub fn overlay_on_tree(tree: &Tree, mutation_rate: f64, seed: u64) -> Result<GenotypeMatrix> {
     if mutation_rate < 0.0 {
         return Err(PopgenError::invalid(
             "mutation_rate",
@@ -50,11 +46,8 @@ pub fn overlay_on_tree(
     }
     let mut rng = Rng::new(seed);
     let leaves = tree.leaves();
-    let leaf_index: std::collections::HashMap<NodeId, usize> = leaves
-        .iter()
-        .enumerate()
-        .map(|(i, &l)| (l, i))
-        .collect();
+    let leaf_index: std::collections::HashMap<NodeId, usize> =
+        leaves.iter().enumerate().map(|(i, &l)| (l, i)).collect();
 
     // For each non-root node, draw mutations on its incoming branch.
     // A mutation is (position, set of leaf rows that carry it).
@@ -80,9 +73,7 @@ pub fn overlay_on_tree(
         }
     }
     // Sort variants by position for a tidy matrix.
-    variants.sort_by(|a, b| {
-        a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    variants.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
     let n_rows = leaves.len();
     let n_cols = variants.len();
@@ -94,8 +85,7 @@ pub fn overlay_on_tree(
             rows[r][col] = 1;
         }
     }
-    GenotypeMatrix::from_rows(rows, positions)
-        .map_err(|e| PopgenError::model(e.to_string()))
+    GenotypeMatrix::from_rows(rows, positions).map_err(|e| PopgenError::model(e.to_string()))
 }
 
 /// Drops infinite-sites mutations onto a [`TreeSequence`], writing the
@@ -125,11 +115,8 @@ pub fn overlay_mutations(
     }
     let mut rng = Rng::new(seed);
     let samples = ts.samples();
-    let sample_index: std::collections::HashMap<usize, usize> = samples
-        .iter()
-        .enumerate()
-        .map(|(i, &s)| (s, i))
-        .collect();
+    let sample_index: std::collections::HashMap<usize, usize> =
+        samples.iter().enumerate().map(|(i, &s)| (s, i)).collect();
 
     // For each edge, draw mutations along its branch span.
     // edge gives parent/child and [left, right); branch time is
@@ -167,20 +154,14 @@ pub fn overlay_mutations(
         }
         let _ = &sample_index; // index kept for clarity / future use
     }
-    GenotypeMatrix::from_rows(rows, positions)
-        .map_err(|e| PopgenError::model(e.to_string()))
+    GenotypeMatrix::from_rows(rows, positions).map_err(|e| PopgenError::model(e.to_string()))
 }
 
 /// Sample-node ids descended from `node` in the local tree at
 /// `position`.
-fn descendants_in_local_tree(
-    ts: &TreeSequence,
-    position: f64,
-    node: usize,
-) -> Result<Vec<usize>> {
+fn descendants_in_local_tree(ts: &TreeSequence, position: f64, node: usize) -> Result<Vec<usize>> {
     // child -> parent under the local tree.
-    let mut parent_of: std::collections::HashMap<usize, usize> =
-        std::collections::HashMap::new();
+    let mut parent_of: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
     for e in ts.edges() {
         if position >= e.left && position < e.right {
             parent_of.insert(e.child, e.parent);
@@ -215,8 +196,7 @@ mod tests {
 
     #[test]
     fn overlay_on_tree_produces_a_matrix() {
-        let tree =
-            coalescent(&labels(10), &PopHistory::Constant(1000.0), 42).unwrap();
+        let tree = coalescent(&labels(10), &PopHistory::Constant(1000.0), 42).unwrap();
         // Rate scaled so a decent number of mutations land.
         let gm = overlay_on_tree(&tree, 1e-3, 7).unwrap();
         assert_eq!(gm.n_samples(), 10);
@@ -225,8 +205,7 @@ mod tests {
 
     #[test]
     fn higher_rate_yields_more_sites() {
-        let tree =
-            coalescent(&labels(12), &PopHistory::Constant(1000.0), 1).unwrap();
+        let tree = coalescent(&labels(12), &PopHistory::Constant(1000.0), 1).unwrap();
         let low = overlay_on_tree(&tree, 1e-4, 3).unwrap();
         let high = overlay_on_tree(&tree, 1e-2, 3).unwrap();
         assert!(high.n_sites() > low.n_sites());
@@ -234,8 +213,7 @@ mod tests {
 
     #[test]
     fn overlay_is_deterministic() {
-        let tree =
-            coalescent(&labels(8), &PopHistory::Constant(1000.0), 5).unwrap();
+        let tree = coalescent(&labels(8), &PopHistory::Constant(1000.0), 5).unwrap();
         let a = overlay_on_tree(&tree, 1e-3, 9).unwrap();
         let b = overlay_on_tree(&tree, 1e-3, 9).unwrap();
         assert_eq!(a, b);
@@ -246,21 +224,17 @@ mod tests {
         // A mutation on a leaf's terminal branch is carried by exactly
         // one sample. Over many mutations at least one column must be a
         // singleton (derived count 1).
-        let tree =
-            coalescent(&labels(15), &PopHistory::Constant(1000.0), 2).unwrap();
+        let tree = coalescent(&labels(15), &PopHistory::Constant(1000.0), 2).unwrap();
         let gm = overlay_on_tree(&tree, 5e-3, 4).unwrap();
-        let has_singleton =
-            (0..gm.n_sites()).any(|c| gm.derived_count(c).unwrap() == 1);
+        let has_singleton = (0..gm.n_sites()).any(|c| gm.derived_count(c).unwrap() == 1);
         assert!(has_singleton, "no singleton variant appeared");
     }
 
     #[test]
     fn overlay_on_tree_sequence_writes_tables() {
         use crate::coalescent::arg::{simulate_arg, ArgParams};
-        let mut ts = simulate_arg(
-            ArgParams::uniform(8, 1000.0, 3e-4, 5000.0, 11).unwrap(),
-        )
-        .unwrap();
+        let mut ts =
+            simulate_arg(ArgParams::uniform(8, 1000.0, 3e-4, 5000.0, 11).unwrap()).unwrap();
         let gm = overlay_mutations(&mut ts, 1e-4, 13).unwrap();
         assert_eq!(gm.n_samples(), 8);
         // Site and mutation tables grew in lockstep with the matrix.
@@ -270,8 +244,7 @@ mod tests {
 
     #[test]
     fn overlay_rejects_negative_rate() {
-        let tree =
-            coalescent(&labels(4), &PopHistory::Constant(1000.0), 1).unwrap();
+        let tree = coalescent(&labels(4), &PopHistory::Constant(1000.0), 1).unwrap();
         assert!(overlay_on_tree(&tree, -1.0, 1).is_err());
     }
 }

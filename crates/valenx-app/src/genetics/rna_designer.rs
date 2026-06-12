@@ -42,7 +42,7 @@
 use std::thread::JoinHandle;
 
 use eframe::egui;
-use egui_plot::{Line, MarkerShape, Plot, Points, PlotPoints};
+use egui_plot::{Line, MarkerShape, Plot, PlotPoints, Points};
 
 use valenx_genediting::mrna::codon::ExpressionHost;
 use valenx_genediting::mrna::construct::{MrnaConstruct, MrnaConstructBuilder};
@@ -119,21 +119,13 @@ impl Section {
     /// A one-line subtitle.
     pub fn subtitle(self) -> &'static str {
         match self {
-            Section::Fold => {
-                "Predict the secondary structure of an RNA sequence."
-            }
+            Section::Fold => "Predict the secondary structure of an RNA sequence.",
             Section::Visualize => {
                 "The folded structure as a 2-D diagram, a mountain plot and a base-pair dot-plot."
             }
-            Section::Inverse => {
-                "Design a sequence that folds to a target structure."
-            }
-            Section::Mrna => {
-                "Optimise a coding sequence jointly for stability and codon usage."
-            }
-            Section::Construct => {
-                "Wrap the optimised CDS into a synthesis-ready five-part mRNA."
-            }
+            Section::Inverse => "Design a sequence that folds to a target structure.",
+            Section::Mrna => "Optimise a coding sequence jointly for stability and codon usage.",
+            Section::Construct => "Wrap the optimised CDS into a synthesis-ready five-part mRNA.",
         }
     }
 }
@@ -323,8 +315,7 @@ pub fn run_inverse(
     }
 
     // Build the declarative constraints, then the active constraint set.
-    let mut constraints = DesignConstraints::default()
-        .with_gc_range(gc_min, gc_max);
+    let mut constraints = DesignConstraints::default().with_gc_range(gc_min, gc_max);
     constraints.max_homopolymer = max_homopolymer.max(1);
     for m in split_list(forbidden_motifs) {
         constraints = constraints.forbid_motif(&m);
@@ -333,9 +324,7 @@ pub fn run_inverse(
     let mut required: Vec<String> = Vec::new();
     for &(idx, base) in locked {
         if idx >= n {
-            return Err(format!(
-                "locked position {idx} is past the {n}-nt target"
-            ));
+            return Err(format!("locked position {idx} is past the {n}-nt target"));
         }
         required.push(lock_entry(idx, base as u8));
     }
@@ -411,8 +400,7 @@ pub fn run_linear_design(
         lambda,
         beam_size: DEFAULT_BEAM_SIZE,
     };
-    let r: LinearDesignResult =
-        linear_design(&req).map_err(|e| format!("[{}] {e}", e.code()))?;
+    let r: LinearDesignResult = linear_design(&req).map_err(|e| format!("[{}] {e}", e.code()))?;
     Ok(MrnaOutcome {
         cds: r.cds_str().to_string(),
         mfe: r.mfe,
@@ -431,10 +419,7 @@ const SWEEP_LAMBDAS: [f64; 7] = [0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0];
 
 /// Runs a λ-sweep for `protein`, returning the stability/efficiency
 /// Pareto front. Extracted so the headless UI tests can call it directly.
-pub fn run_pareto_sweep(
-    protein: &str,
-    host: ExpressionHost,
-) -> Result<Vec<ParetoPoint>, String> {
+pub fn run_pareto_sweep(protein: &str, host: ExpressionHost) -> Result<Vec<ParetoPoint>, String> {
     let cleaned = common::clean_sequence(protein);
     if cleaned.is_empty() {
         return Err("paste a protein sequence (one-letter codes)".to_string());
@@ -559,9 +544,7 @@ impl BackgroundRun {
     #[cfg(test)]
     fn spawn_with_cancel(
         job: Job,
-        f: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicBool>) -> JobResult
-            + Send
-            + 'static,
+        f: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicBool>) -> JobResult + Send + 'static,
     ) -> BackgroundRun {
         let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let inner = cancelled.clone();
@@ -578,7 +561,10 @@ impl BackgroundRun {
 
     /// `true` once the worker thread has finished.
     fn is_finished(&self) -> bool {
-        self.thread.as_ref().map(|t| t.is_finished()).unwrap_or(true)
+        self.thread
+            .as_ref()
+            .map(|t| t.is_finished())
+            .unwrap_or(true)
     }
 
     /// Flip the cooperative cancel flag. Workers that observe the
@@ -598,9 +584,7 @@ impl BackgroundRun {
         let thread = self.thread.take()?;
         Some(thread.join().unwrap_or_else(|_| match self.job {
             Job::Inverse => JobResult::Inverse(Err("the design thread panicked".into())),
-            Job::LinearDesign => {
-                JobResult::LinearDesign(Err("the design thread panicked".into()))
-            }
+            Job::LinearDesign => JobResult::LinearDesign(Err("the design thread panicked".into())),
             Job::Sweep => JobResult::Sweep(Err("the sweep thread panicked".into())),
         }))
     }
@@ -814,8 +798,12 @@ impl RnaDesignerPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
     /// Record the current snapshot before a Run. Callable from the
     /// inverse-design / mRNA spawn-thread paths so a long-running
     /// design is undo-able too.
@@ -890,9 +878,8 @@ impl RnaDesignerPanel {
         };
         for &(idx, _) in &locked {
             if idx >= n {
-                self.inverse_error = Some(format!(
-                    "locked position {idx} is past the {n}-nt target"
-                ));
+                self.inverse_error =
+                    Some(format!("locked position {idx} is past the {n}-nt target"));
                 return;
             }
         }
@@ -982,7 +969,11 @@ fn split_list(raw: &str) -> Vec<String> {
 /// separated, e.g. `"0=G, 13=C"` — into `(index, base)` pairs.
 fn parse_locked_form(raw: &str) -> Result<Vec<(usize, char)>, String> {
     let mut out = Vec::new();
-    for tok in raw.split([',', '\n', '\r', ';']).map(str::trim).filter(|t| !t.is_empty()) {
+    for tok in raw
+        .split([',', '\n', '\r', ';'])
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
         let Some(eq) = tok.find('=') else {
             return Err(format!("locked position `{tok}` must be `index=base`"));
         };
@@ -1135,7 +1126,11 @@ fn draw_fold_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
         4,
     );
     let len = common::clean_sequence(&p.fold_seq).len();
-    ui.label(egui::RichText::new(format!("length: {len} nt")).weak().small());
+    ui.label(
+        egui::RichText::new(format!("length: {len} nt"))
+            .weak()
+            .small(),
+    );
 
     ui.add_space(4.0);
     common::section(ui, "Folding engine");
@@ -1183,7 +1178,10 @@ fn draw_fold_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 common::kv(
                     ui,
                     "MFE-structure frequency",
-                    format!("{:.1}% of the Boltzmann ensemble", fold.mfe_frequency * 100.0),
+                    format!(
+                        "{:.1}% of the Boltzmann ensemble",
+                        fold.mfe_frequency * 100.0
+                    ),
                 );
                 common::kv(
                     ui,
@@ -1207,7 +1205,11 @@ fn draw_fold_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
             "Folded — open the Visualize section for the 2-D diagram.",
         );
         if running {
-            ui.label(egui::RichText::new("(a background job is running)").weak().small());
+            ui.label(
+                egui::RichText::new("(a background job is running)")
+                    .weak()
+                    .small(),
+            );
         }
     }
 }
@@ -1310,8 +1312,7 @@ fn draw_structure_diagram(ui: &mut egui::Ui, fold: &FoldOutcome) {
     };
 
     // 1) the backbone — a polyline through every base in 5'→3' order.
-    let backbone_stroke =
-        egui::Stroke::new(1.6, egui::Color32::from_rgb(120, 126, 140));
+    let backbone_stroke = egui::Stroke::new(1.6, egui::Color32::from_rgb(120, 126, 140));
     for w in lay.points.windows(2) {
         painter.line_segment(
             [to_screen(w[0].x, w[0].y), to_screen(w[1].x, w[1].y)],
@@ -1323,10 +1324,7 @@ fn draw_structure_diagram(ui: &mut egui::Ui, fold: &FoldOutcome) {
     let bond_stroke = egui::Stroke::new(1.8, egui::Color32::from_rgb(95, 165, 240));
     for &(i, j) in &lay.pairs {
         if let (Some(pi), Some(pj)) = (lay.points.get(i), lay.points.get(j)) {
-            painter.line_segment(
-                [to_screen(pi.x, pi.y), to_screen(pj.x, pj.y)],
-                bond_stroke,
-            );
+            painter.line_segment([to_screen(pi.x, pi.y), to_screen(pj.x, pj.y)], bond_stroke);
         }
     }
 
@@ -1373,7 +1371,11 @@ fn draw_structure_diagram(ui: &mut egui::Ui, fold: &FoldOutcome) {
             "{} bases drawn · {} base-pair bond(s){}",
             lay.len(),
             lay.pairs.len(),
-            if label_bases { "" } else { " · base letters hidden (zoom in by folding a shorter RNA)" },
+            if label_bases {
+                ""
+            } else {
+                " · base letters hidden (zoom in by folding a shorter RNA)"
+            },
         ))
         .weak()
         .small(),
@@ -1459,8 +1461,7 @@ fn draw_dot_plot(p: &mut RnaDesignerPanel, ui: &mut egui::Ui, fold: &FoldOutcome
     // A square canvas: n × n cells.
     let avail = ui.available_width().clamp(160.0, 460.0);
     let side = avail;
-    let (rect, _resp) =
-        ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::hover());
+    let (rect, _resp) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::hover());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(22, 24, 30));
 
@@ -1474,11 +1475,7 @@ fn draw_dot_plot(p: &mut RnaDesignerPanel, ui: &mut egui::Ui, fold: &FoldOutcome
     };
     // Faint diagonal so the matrix reads as a matrix.
     for k in 0..n {
-        painter.rect_filled(
-            cell_rect(k, k),
-            0.0,
-            egui::Color32::from_rgb(40, 43, 52),
-        );
+        painter.rect_filled(cell_rect(k, k), 0.0, egui::Color32::from_rgb(40, 43, 52));
     }
     // The significant pairs — shade by probability. Plot both (i, j) and
     // its mirror (j, i) so the symmetric dot-plot is filled.
@@ -1514,7 +1511,13 @@ fn draw_dot_plot(p: &mut RnaDesignerPanel, ui: &mut egui::Ui, fold: &FoldOutcome
         let mut text = String::new();
         for &&(i, j, prob) in shown.iter().take(16) {
             let bar = "#".repeat((prob * 20.0).round() as usize);
-            text.push_str(&format!("{:>4}-{:<4}  p={:.3}  {}\n", i + 1, j + 1, prob, bar));
+            text.push_str(&format!(
+                "{:>4}-{:<4}  p={:.3}  {}\n",
+                i + 1,
+                j + 1,
+                prob,
+                bar
+            ));
         }
         common::mono_output(ui, "rnad_dotplot_table", text.trim_end(), 8);
     }
@@ -1665,7 +1668,10 @@ fn draw_inverse_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     common::kv(
                         ui,
                         "constraints",
-                        format!("{} locked position(s), GC / motif band honoured", inv.locked_count),
+                        format!(
+                            "{} locked position(s), GC / motif band honoured",
+                            inv.locked_count
+                        ),
                     );
                 }
             });
@@ -1681,10 +1687,7 @@ fn draw_inverse_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
         );
         ui.add_space(2.0);
         if matches {
-            common::ok_line(
-                ui,
-                "✔ The design's MFE structure is exactly the target.",
-            );
+            common::ok_line(ui, "✔ The design's MFE structure is exactly the target.");
         } else {
             ui.colored_label(
                 egui::Color32::from_rgb(235, 195, 110),
@@ -1805,7 +1808,11 @@ fn draw_mrna_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 common::kv(
                     ui,
                     "lattice DP",
-                    if m.exact { "exact (no beam pruning)" } else { "beam-pruned (near-optimal)" },
+                    if m.exact {
+                        "exact (no beam pruning)"
+                    } else {
+                        "beam-pruned (near-optimal)"
+                    },
                 );
             });
         ui.add_space(2.0);
@@ -2088,10 +2095,7 @@ mod tests {
         while !run.is_finished() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        assert!(
-            run.is_finished(),
-            "worker did not honour cancel within 2s"
-        );
+        assert!(run.is_finished(), "worker did not honour cancel within 2s");
     }
 
     #[test]
@@ -2152,7 +2156,10 @@ mod tests {
         // Engine output is ACGU/dot-bracket (ASCII) today, but a
         // multibyte char would land `end` mid-char → panic. Now
         // char-aware: wraps every `width` *characters*, never panics.
-        assert_eq!(wrap_seq("\u{20AC}\u{20AC}\u{20AC}", 1), "\u{20AC}\n\u{20AC}\n\u{20AC}");
+        assert_eq!(
+            wrap_seq("\u{20AC}\u{20AC}\u{20AC}", 1),
+            "\u{20AC}\n\u{20AC}\n\u{20AC}"
+        );
         // ASCII behaviour is unchanged (chars == bytes).
         assert_eq!(wrap_seq("ACGUAC", 2), "AC\nGU\nAC");
     }
@@ -2290,11 +2297,8 @@ mod headless_ui_tests {
     fn fold_each_engine_runs() {
         // Every explicit engine folds the default sequence.
         for engine in [FoldEngine::Zuker, FoldEngine::LinearFold] {
-            let outcome = run_fold(
-                "GGGAAAUCCUCUUUACCCGGAAGAGGGAAACCC",
-                engine,
-            )
-            .expect("fold should succeed");
+            let outcome =
+                run_fold("GGGAAAUCCUCUUUACCCGGAAGAGGGAAACCC", engine).expect("fold should succeed");
             assert_eq!(outcome.engine, engine);
             assert_eq!(outcome.dot_bracket.len(), outcome.sequence.len());
         }
@@ -2329,7 +2333,11 @@ mod headless_ui_tests {
         app.genetics.rna_designer.start_inverse();
         drain_background(&mut app);
         let p = &app.genetics.rna_designer;
-        assert!(p.inverse_error.is_none(), "inverse errored: {:?}", p.inverse_error);
+        assert!(
+            p.inverse_error.is_none(),
+            "inverse errored: {:?}",
+            p.inverse_error
+        );
         let inv = p.inverse.as_ref().expect("inverse produced no outcome");
         // The designed sequence is the target's length.
         assert_eq!(inv.sequence.len(), inv.target_db.len());
@@ -2346,15 +2354,8 @@ mod headless_ui_tests {
     #[test]
     fn inverse_design_honours_locked_positions() {
         // Lock the outer pair of a 14-nt hairpin and confirm it holds.
-        let outcome = run_inverse(
-            "(((((....)))))",
-            0.0,
-            1.0,
-            6,
-            "",
-            &[(0, 'G'), (13, 'C')],
-        )
-        .expect("constrained inverse design should succeed");
+        let outcome = run_inverse("(((((....)))))", 0.0, 1.0, 6, "", &[(0, 'G'), (13, 'C')])
+            .expect("constrained inverse design should succeed");
         assert!(outcome.sequence.starts_with('G'), "locked pos 0 not held");
         assert!(outcome.sequence.ends_with('C'), "locked pos 13 not held");
         assert_eq!(outcome.locked_count, 2);
@@ -2394,7 +2395,11 @@ mod headless_ui_tests {
         app.genetics.rna_designer.start_linear_design();
         drain_background(&mut app);
         let p = &app.genetics.rna_designer;
-        assert!(p.mrna_error.is_none(), "linear-design errored: {:?}", p.mrna_error);
+        assert!(
+            p.mrna_error.is_none(),
+            "linear-design errored: {:?}",
+            p.mrna_error
+        );
         let m = p.mrna.as_ref().expect("linear-design produced no CDS");
         // The CDS is a valid AUG…stop coding sequence.
         assert!(m.cds.len() % 3 == 0, "CDS length not a multiple of 3");
@@ -2496,9 +2501,7 @@ mod headless_ui_tests {
             .expect("a valid CDS should assemble");
         assert_eq!(outcome.construct.codon_count(), 4);
         // The CDS is preserved verbatim inside the transcript.
-        assert!(
-            String::from_utf8_lossy(&outcome.construct.cds).contains("AUGGCCCUGUAA"),
-        );
+        assert!(String::from_utf8_lossy(&outcome.construct.cds).contains("AUGGCCCUGUAA"),);
     }
 
     #[test]

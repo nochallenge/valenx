@@ -133,7 +133,10 @@ mod tests {
         let rails = vec![vec![[0.0, 0.0, 0.0], [0.0, 0.0, 4.0]]];
         let result = feat_make_loft_with_rails(&base, &secs, &rails, true).unwrap();
         let mesh = valenx_cad::solid_to_mesh(&result, 0.3).unwrap();
-        assert!(!mesh.nodes.is_empty(), "boss-loft result should be non-empty");
+        assert!(
+            !mesh.nodes.is_empty(),
+            "boss-loft result should be non-empty"
+        );
         // The loft rises above the 1-tall base.
         let zmax = mesh
             .nodes
@@ -150,6 +153,9 @@ mod tests {
         let rails = vec![vec![[0.0, 0.0, -1.0], [0.0, 0.0, 7.0]]];
         let result = feat_make_loft_with_rails(&base, &secs, &rails, false).unwrap();
         let mesh = valenx_cad::solid_to_mesh(&result, 0.3).unwrap();
-        assert!(!mesh.nodes.is_empty(), "pocket-loft result should be non-empty");
+        assert!(
+            !mesh.nodes.is_empty(),
+            "pocket-loft result should be non-empty"
+        );
     }
 }

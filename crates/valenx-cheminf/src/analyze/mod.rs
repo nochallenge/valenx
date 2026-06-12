@@ -15,9 +15,7 @@ pub use pharmacophore::{
     feature_count, feature_distances, pharmacophore, FeatureKind, PharmacophoreFeature,
 };
 pub use qed::{qed, qed_components, structural_alert_count, QedComponents};
-pub use report::{
-    analyze_batch, analyze_sdf, filter_sdf, summarize, BatchSummary, MoleculeReport,
-};
+pub use report::{analyze_batch, analyze_sdf, filter_sdf, summarize, BatchSummary, MoleculeReport};
 
 #[cfg(test)]
 mod tests {

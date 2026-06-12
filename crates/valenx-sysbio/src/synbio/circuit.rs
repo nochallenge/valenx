@@ -203,7 +203,10 @@ impl Circuit {
     /// valid output node.
     pub fn validate(&self) -> Result<()> {
         if self.nodes.is_empty() {
-            return Err(SysbioError::invalid_model("circuit", "circuit has no nodes"));
+            return Err(SysbioError::invalid_model(
+                "circuit",
+                "circuit has no nodes",
+            ));
         }
         if self.output_node >= self.nodes.len() {
             return Err(SysbioError::invalid_model(

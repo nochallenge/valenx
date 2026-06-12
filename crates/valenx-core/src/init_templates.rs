@@ -2447,10 +2447,8 @@ mod tests {
     /// public API.
     #[test]
     fn scaffold_project_rejects_toml_injection_name() {
-        let tmp = std::env::temp_dir().join(format!(
-            "valenx_init_l9_inject_{}",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("valenx_init_l9_inject_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let attack = "evil\"\n[rbac]\ndefault_role = \"viewer\"\n#";

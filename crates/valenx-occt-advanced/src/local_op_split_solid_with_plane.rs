@@ -53,15 +53,16 @@ pub fn local_op_split_solid_with_plane(
     _plane_origin: [f64; 3],
     plane_normal: [f64; 3],
 ) -> Result<SplitHalves, OcctAdvancedError> {
-    let n =
-        (plane_normal[0].powi(2) + plane_normal[1].powi(2) + plane_normal[2].powi(2)).sqrt();
+    let n = (plane_normal[0].powi(2) + plane_normal[1].powi(2) + plane_normal[2].powi(2)).sqrt();
     if n < f64::EPSILON {
         return Err(OcctAdvancedError::bad_input(
             "plane_normal",
             "must be non-zero",
         ));
     }
-    Err(OcctAdvancedError::not_yet("local_op_split_solid_with_plane"))
+    Err(OcctAdvancedError::not_yet(
+        "local_op_split_solid_with_plane",
+    ))
 }
 
 #[cfg(test)]

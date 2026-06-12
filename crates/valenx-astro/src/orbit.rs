@@ -44,7 +44,10 @@ pub struct OrbitElements {
 /// otherwise yield a silent `NaN`/`Inf` orbit: a zero or non-finite
 /// position, a non-finite velocity, or the parabolic energy singularity
 /// (specific energy ≈ 0, where the semi-major axis blows up).
-pub fn elements(position: Vector2<f64>, velocity: Vector2<f64>) -> Result<OrbitElements, AstroError> {
+pub fn elements(
+    position: Vector2<f64>,
+    velocity: Vector2<f64>,
+) -> Result<OrbitElements, AstroError> {
     elements_with_mu(position, velocity, MU_EARTH)
 }
 
@@ -400,11 +403,7 @@ pub fn orbital_radius_from_escape_speed(speed: f64) -> Result<f64, AstroError> {
 /// Returns [`AstroError::NonPhysicalState`] if `speed` is non-finite or negative, or
 /// `semi_major_axis` is non-finite or non-positive.
 pub fn orbital_radius_from_speed(speed: f64, semi_major_axis: f64) -> Result<f64, AstroError> {
-    if !speed.is_finite()
-        || speed < 0.0
-        || !semi_major_axis.is_finite()
-        || semi_major_axis <= 0.0
-    {
+    if !speed.is_finite() || speed < 0.0 || !semi_major_axis.is_finite() || semi_major_axis <= 0.0 {
         return Err(AstroError::NonPhysicalState(
             "orbital_radius_from_speed requires finite speed >= 0 and semi_major_axis > 0",
         ));
@@ -667,10 +666,17 @@ mod tests {
     fn eccentricity_from_apsides_specifies_the_conic() {
         // Worked: r_a=8e6, r_p=7e6 → e = 1e6/1.5e7 ≈ 0.066667.
         let e = eccentricity_from_apsides(8.0e6, 7.0e6).unwrap();
-        assert!((e - 1.0e6 / 1.5e7).abs() <= 1e-9 * e, "e = (r_a−r_p)/(r_a+r_p)");
+        assert!(
+            (e - 1.0e6 / 1.5e7).abs() <= 1e-9 * e,
+            "e = (r_a−r_p)/(r_a+r_p)"
+        );
 
         // Circular: r_a == r_p → e == 0.
-        assert_eq!(eccentricity_from_apsides(7.0e6, 7.0e6).unwrap(), 0.0, "circular → e = 0");
+        assert_eq!(
+            eccentricity_from_apsides(7.0e6, 7.0e6).unwrap(),
+            0.0,
+            "circular → e = 0"
+        );
 
         // Reconstruction: a and e recover BOTH apsides (r_a = a(1+e), r_p = a(1−e)).
         for &(r_a, r_p) in &[(8.0e6, 7.0e6), (4.2e7, 7.0e6), (1.0e7, 1.0e7)] {
@@ -682,7 +688,10 @@ mod tests {
         }
 
         // Near-radial: r_p → 0 gives e → 1.
-        assert!(eccentricity_from_apsides(1.0e7, 1.0).unwrap() > 0.999, "near-radial → e ≈ 1");
+        assert!(
+            eccentricity_from_apsides(1.0e7, 1.0).unwrap() > 0.999,
+            "near-radial → e ≈ 1"
+        );
 
         // Err on non-physical input.
         assert!(eccentricity_from_apsides(7.0e6, 0.0).is_err());
@@ -743,7 +752,10 @@ mod tests {
             let e = eccentricity_from_apsides(r_a, r_p).unwrap();
             let p = semi_latus_rectum_from_elements(a, e).unwrap();
             let harmonic = 2.0 * r_a * r_p / (r_a + r_p);
-            assert!((p - harmonic).abs() <= 1e-9 * harmonic, "p = 2·r_a·r_p/(r_a+r_p)");
+            assert!(
+                (p - harmonic).abs() <= 1e-9 * harmonic,
+                "p = 2·r_a·r_p/(r_a+r_p)"
+            );
             assert!(r_p <= p && p <= r_a, "r_p ≤ p ≤ r_a");
         }
 
@@ -765,7 +777,10 @@ mod tests {
         for &(a, e) in &[(7.0e6_f64, 0.1_f64), (4.2e7, 0.0), (1.0e7, 0.3)] {
             let h = specific_angular_momentum_from_elements(a, e).unwrap();
             let p = semi_latus_rectum_from_elements(a, e).unwrap();
-            assert!((h * h - MU_EARTH * p).abs() <= 1e-9 * (MU_EARTH * p), "h² = μ·p");
+            assert!(
+                (h * h - MU_EARTH * p).abs() <= 1e-9 * (MU_EARTH * p),
+                "h² = μ·p"
+            );
         }
 
         // (c) CIRCULAR cross-check threading circular_angular_momentum (#348): at e = 0,
@@ -828,7 +843,10 @@ mod tests {
                 "2·r_a·r_p/(r_a+r_p) = p"
             );
             assert!(r_p <= a && a <= r_a, "r_p ≤ a ≤ r_a");
-            assert!((r_a + r_p - 2.0 * a).abs() <= 1e-9 * (2.0 * a), "r_a + r_p = 2a");
+            assert!(
+                (r_a + r_p - 2.0 * a).abs() <= 1e-9 * (2.0 * a),
+                "r_a + r_p = 2a"
+            );
         }
 
         // (e) CIRCULAR: at e = 0, both apsides collapse to a.
@@ -913,7 +931,10 @@ mod tests {
 
             // (c) ORDERING + RATIO: faster at periapsis; v_p/v_a = r_a/r_p = (1+e)/(1−e).
             assert!(v_p >= v_a, "v_p ≥ v_a");
-            assert!((v_p / v_a - r_a / r_p).abs() <= 1e-9 * (v_p / v_a), "v_p/v_a = r_a/r_p");
+            assert!(
+                (v_p / v_a - r_a / r_p).abs() <= 1e-9 * (v_p / v_a),
+                "v_p/v_a = r_a/r_p"
+            );
         }
 
         // (d) CIRCULAR threading circular_speed (#142): at e = 0 both apsis speeds equal it.
@@ -981,13 +1002,19 @@ mod tests {
         // √(2μ/r)).
         for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2164e7] {
             let recovered = orbital_radius_from_escape_speed(escape_speed(r).unwrap()).unwrap();
-            assert!((recovered - r).abs() <= 1e-12 * r, "r = 2μ/v² inverts v = √(2μ/r)");
+            assert!(
+                (recovered - r).abs() <= 1e-12 * r,
+                "r = 2μ/v² inverts v = √(2μ/r)"
+            );
         }
 
         // Worked: Earth's surface escape speed ≈ 11.18 km/s → back to ≈ Earth's radius
         // (a rough textbook anchor at 1%; the exact relation is the round-trip).
         let r = orbital_radius_from_escape_speed(11_180.0).unwrap();
-        assert!((r - R_EARTH).abs() / R_EARTH < 1e-2, "11.18 km/s → ≈ Earth's surface");
+        assert!(
+            (r - R_EARTH).abs() / R_EARTH < 1e-2,
+            "11.18 km/s → ≈ Earth's surface"
+        );
 
         // Threads orbital_radius_from_circular_speed: for the same speed the escape radius
         // is exactly twice the circular radius (escape speed is √2 × circular speed).
@@ -1017,7 +1044,10 @@ mod tests {
         // of √(μ/r)).
         for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2164e7] {
             let recovered = orbital_radius_from_circular_speed(circular_speed(r).unwrap()).unwrap();
-            assert!((recovered - r).abs() <= 1e-12 * r, "r = μ/v² inverts v = √(μ/r)");
+            assert!(
+                (recovered - r).abs() <= 1e-12 * r,
+                "r = μ/v² inverts v = √(μ/r)"
+            );
         }
 
         // Worked: a ≈ 7.67 km/s LEO orbital speed gives roughly a 400 km altitude (a
@@ -1047,12 +1077,18 @@ mod tests {
         // orbital_period).
         for &a in &[R_EARTH + 400_000.0, 1.5e7, 4.2164e7] {
             let recovered = semi_major_axis_from_period(orbital_period(a).unwrap()).unwrap();
-            assert!((recovered - a).abs() <= 1e-12 * a, "a = (μT²/4π²)^⅓ inverts T = 2π√(a³/μ)");
+            assert!(
+                (recovered - a).abs() <= 1e-12 * a,
+                "a = (μT²/4π²)^⅓ inverts T = 2π√(a³/μ)"
+            );
         }
 
         // Worked: a sidereal-day period gives the geostationary radius ≈ 42 164 km.
         let geo = semi_major_axis_from_period(86164.0).unwrap();
-        assert!((geo - 4.2164e7).abs() / 4.2164e7 < 1e-3, "GEO radius ≈ 42164 km, got {geo}");
+        assert!(
+            (geo - 4.2164e7).abs() / 4.2164e7 < 1e-3,
+            "GEO radius ≈ 42164 km, got {geo}"
+        );
 
         // Monotonic increasing in the period.
         assert!(
@@ -1083,7 +1119,10 @@ mod tests {
         );
 
         // Round-trips the energy: v∞² = 2ε.
-        assert!((vinf.powi(2) - 2.0 * eps).abs() <= 1e-9 * (2.0 * eps), "v∞² = 2ε");
+        assert!(
+            (vinf.powi(2) - 2.0 * eps).abs() <= 1e-9 * (2.0 * eps),
+            "v∞² = 2ε"
+        );
 
         // Worked: ε = 2e7 → v∞ = √(4e7) ≈ 6324.6 m/s.
         assert!(
@@ -1106,14 +1145,22 @@ mod tests {
     fn semi_major_axis_from_energy_inverts_the_orbit_energy() {
         // Round-trip inverting specific_orbital_energy: a → ε → a.
         for &a in &[7_000_000.0_f64, 4.2164e7, R_EARTH + 800_000.0] {
-            let recovered = semi_major_axis_from_energy(specific_orbital_energy(a).unwrap()).unwrap();
-            assert!((recovered - a).abs() <= 1e-9 * a, "a = −μ/2ε inverts ε = −μ/2a");
+            let recovered =
+                semi_major_axis_from_energy(specific_orbital_energy(a).unwrap()).unwrap();
+            assert!(
+                (recovered - a).abs() <= 1e-9 * a,
+                "a = −μ/2ε inverts ε = −μ/2a"
+            );
         }
 
         // Vis-viva orbit determination: recover a from a STATE (speed + radius), threading
         // specific_orbital_energy_from_state + orbital_speed.
-        for &(r, a) in &[(7_000_000.0_f64, 7_000_000.0_f64), (6_800_000.0, 8_000_000.0)] {
-            let energy = specific_orbital_energy_from_state(orbital_speed(r, a).unwrap(), r).unwrap();
+        for &(r, a) in &[
+            (7_000_000.0_f64, 7_000_000.0_f64),
+            (6_800_000.0, 8_000_000.0),
+        ] {
+            let energy =
+                specific_orbital_energy_from_state(orbital_speed(r, a).unwrap(), r).unwrap();
             let recovered = semi_major_axis_from_energy(energy).unwrap();
             assert!((recovered - a).abs() <= 1e-9 * a, "state → ε → a");
         }
@@ -1179,17 +1226,26 @@ mod tests {
             let eps = specific_orbital_energy(a).unwrap();
             for &r in &[a, 1.3 * a, 0.8 * a] {
                 let from_speed = orbital_speed(r, a).unwrap().powi(2) / 2.0 - MU_EARTH / r;
-                assert!((eps - from_speed).abs() <= 1e-12 * eps.abs(), "ε = v²/2 − μ/r");
+                assert!(
+                    (eps - from_speed).abs() <= 1e-12 * eps.abs(),
+                    "ε = v²/2 − μ/r"
+                );
             }
         }
 
         // Worked: a 400 km circular LEO has ε ≈ −2.943e7 J/kg.
         let leo = specific_orbital_energy(R_EARTH + 400_000.0).unwrap();
-        assert!((leo - (-2.943e7)).abs() / 2.943e7 < 1e-3, "LEO energy ≈ −29.4 MJ/kg, got {leo}");
+        assert!(
+            (leo - (-2.943e7)).abs() / 2.943e7 < 1e-3,
+            "LEO energy ≈ −29.4 MJ/kg, got {leo}"
+        );
 
         // Larger orbit → higher (less negative) energy; bound orbits have ε < 0.
         assert!(specific_orbital_energy(2.0e7).unwrap() > specific_orbital_energy(1.0e7).unwrap());
-        assert!(specific_orbital_energy(1.0e7).unwrap() < 0.0, "bound orbit ε < 0");
+        assert!(
+            specific_orbital_energy(1.0e7).unwrap() < 0.0,
+            "bound orbit ε < 0"
+        );
 
         // Non-physical semi-major axis → error.
         assert!(specific_orbital_energy(0.0).is_err());
@@ -1202,7 +1258,10 @@ mod tests {
         // Circular orbit (r = a): vis-viva reduces to the circular speed.
         for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2e7] {
             let v = orbital_speed(r, r).unwrap();
-            assert!((v - circular_speed(r).unwrap()).abs() <= 1e-12 * v, "orbital_speed(a,a) = v_circ");
+            assert!(
+                (v - circular_speed(r).unwrap()).abs() <= 1e-12 * v,
+                "orbital_speed(a,a) = v_circ"
+            );
         }
 
         // Parabolic limit (a → ∞): vis-viva tends to the escape speed.
@@ -1219,14 +1278,18 @@ mod tests {
         let v_peri = orbital_speed(a * (1.0 - e), a).unwrap();
         let v_apo = orbital_speed(a * (1.0 + e), a).unwrap();
         assert!(
-            (v_peri * a * (1.0 - e) - v_apo * a * (1.0 + e)).abs() <= 1e-9 * (v_peri * a * (1.0 - e)),
+            (v_peri * a * (1.0 - e) - v_apo * a * (1.0 + e)).abs()
+                <= 1e-9 * (v_peri * a * (1.0 - e)),
             "v·r conserved across the apsides"
         );
         assert!(v_peri > v_apo, "faster at periapsis");
 
         // Worked: a 400 km circular LEO orbits at ≈ 7.67 km/s.
         let leo = orbital_speed(R_EARTH + 400_000.0, R_EARTH + 400_000.0).unwrap();
-        assert!((leo - 7670.0).abs() < 20.0, "LEO speed ≈ 7.67 km/s, got {leo}");
+        assert!(
+            (leo - 7670.0).abs() < 20.0,
+            "LEO speed ≈ 7.67 km/s, got {leo}"
+        );
 
         // Non-physical: r beyond apoapsis (r > 2a), non-positive, or NaN → Err.
         assert!(orbital_speed(3.0 * a, a).is_err(), "r > 2a → Err");
@@ -1251,7 +1314,10 @@ mod tests {
         assert!((t4a - 8.0 * ta).abs() / ta < 1e-12, "T(4a) = 8·T(a)");
         // A 400 km LEO orbits in ≈ 92 min (≈ 5544 s).
         let leo = orbital_period(R_EARTH + 400_000.0).unwrap();
-        assert!((leo - 5544.0).abs() < 60.0, "LEO period ≈ 92 min, got {leo} s");
+        assert!(
+            (leo - 5544.0).abs() < 60.0,
+            "LEO period ≈ 92 min, got {leo} s"
+        );
         // Non-physical semi-major axis → error.
         assert!(orbital_period(0.0).is_err());
         assert!(orbital_period(-1.0).is_err());
@@ -1279,7 +1345,10 @@ mod tests {
             );
 
             // Worked closed form Φ = −μ/r, and it is negative (a potential well).
-            assert!((phi - (-MU_EARTH / r)).abs() <= 1e-9 * phi.abs(), "Φ = −μ/r");
+            assert!(
+                (phi - (-MU_EARTH / r)).abs() <= 1e-9 * phi.abs(),
+                "Φ = −μ/r"
+            );
             assert!(phi < 0.0, "potential well is negative");
         }
 
@@ -1301,7 +1370,10 @@ mod tests {
         for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2e7] {
             let v_esc = escape_speed(r).unwrap();
             let v_circ = circular_speed(r).unwrap();
-            assert!((v_esc - 2.0_f64.sqrt() * v_circ).abs() / v_esc < 1e-12, "v_esc = √2·v_circ");
+            assert!(
+                (v_esc - 2.0_f64.sqrt() * v_circ).abs() / v_esc < 1e-12,
+                "v_esc = √2·v_circ"
+            );
             assert!(
                 (v_esc * v_esc - 2.0 * MU_EARTH / r).abs() / (v_esc * v_esc) < 1e-12,
                 "v_esc² = 2μ/r"
@@ -1309,7 +1381,10 @@ mod tests {
         }
         // Earth-surface escape speed is the textbook ≈ 11.2 km/s.
         let surface = escape_speed(R_EARTH).unwrap();
-        assert!((11_000.0..11_400.0).contains(&surface), "surface escape ≈ 11.2 km/s, got {surface}");
+        assert!(
+            (11_000.0..11_400.0).contains(&surface),
+            "surface escape ≈ 11.2 km/s, got {surface}"
+        );
         // A higher orbit escapes more slowly.
         assert!(
             escape_speed(R_EARTH + 1.0e6).unwrap() < escape_speed(R_EARTH).unwrap(),
@@ -1414,7 +1489,10 @@ mod tests {
         for &r in &[R_EARTH, R_EARTH + 400_000.0, 4.2164e7] {
             // Threads circular_speed: h = v_circ·r.
             let h = circular_angular_momentum(r).unwrap();
-            assert!((h - circular_speed(r).unwrap() * r).abs() <= 1e-9 * h, "h = v_circ·r");
+            assert!(
+                (h - circular_speed(r).unwrap() * r).abs() <= 1e-9 * h,
+                "h = v_circ·r"
+            );
 
             // Threads orbital_period via Kepler's 2nd law: h·T = 2π·r² (area πr² swept per
             // period at dA/dt = h/2).

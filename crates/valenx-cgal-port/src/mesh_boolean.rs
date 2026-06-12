@@ -314,13 +314,11 @@ fn tri_tri_segment(a: &Triangle3, b: &Triangle3) -> Option<[Vector3<f64>; 2]> {
     ];
 
     // All on one side → no intersection.
-    if (db[0] > EPS && db[1] > EPS && db[2] > EPS)
-        || (db[0] < -EPS && db[1] < -EPS && db[2] < -EPS)
+    if (db[0] > EPS && db[1] > EPS && db[2] > EPS) || (db[0] < -EPS && db[1] < -EPS && db[2] < -EPS)
     {
         return None;
     }
-    if (da[0] > EPS && da[1] > EPS && da[2] > EPS)
-        || (da[0] < -EPS && da[1] < -EPS && da[2] < -EPS)
+    if (da[0] > EPS && da[1] > EPS && da[2] > EPS) || (da[0] < -EPS && da[1] < -EPS && da[2] < -EPS)
     {
         return None;
     }
@@ -415,11 +413,7 @@ fn tri_normal(t: &Triangle3) -> Option<Vector3<f64>> {
 /// triangle's plane (2D), insert each segment as a constraint by
 /// splitting every crossed sub-triangle, then lift the result back
 /// to 3D via barycentric coordinates of the original triangle.
-fn subdivide_triangle(
-    tri: &Triangle3,
-    segments: &[[Vector3<f64>; 2]],
-    out: &mut Vec<Triangle3>,
-) {
+fn subdivide_triangle(tri: &Triangle3, segments: &[[Vector3<f64>; 2]], out: &mut Vec<Triangle3>) {
     let Some(normal) = tri_normal(tri) else {
         out.push(*tri);
         return;
@@ -767,18 +761,16 @@ mod tests {
         // the union's bounding span covers x in [0, 1.5].
         let verts = u.vertices();
         let xmin = verts.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-        let xmax = verts
-            .iter()
-            .map(|p| p.x)
-            .fold(f64::NEG_INFINITY, f64::max);
+        let xmax = verts.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
         assert!((xmin - 0.0).abs() < 1e-6, "xmin={xmin}");
         assert!((xmax - 1.5).abs() < 1e-6, "xmax={xmax}");
         // The interior wall at x=0.5 (inside the other box) must be
         // gone: no triangle of the union should have all three
         // vertices at x≈0.5 within the y,z overlap.
-        let interior_wall = u.triangles.iter().any(|t| {
-            t.v.iter().all(|p| (p.x - 0.5).abs() < 1e-6)
-        });
+        let interior_wall = u
+            .triangles
+            .iter()
+            .any(|t| t.v.iter().all(|p| (p.x - 0.5).abs() < 1e-6));
         assert!(!interior_wall, "interior wall at x=0.5 should be removed");
     }
 

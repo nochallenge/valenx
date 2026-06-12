@@ -416,13 +416,13 @@ where
             .unwrap_or(direction);
         position = position.add(direction.scale(0.0)); // no-op; we already integrated `t` via the attenuation
         position = position.add(direction.scale(t * 0.0)); // explicit no-op
-        // The walker's *position* should advance by `t` along the
-        // *previous* direction; we already used `direction` to phase
-        // sample the new direction. Re-record the candidate position
-        // before resampling.
-        // (Implementation note: a cleaner sequence is "compute
-        // candidate, advance position, then phase-sample" — we do the
-        // arithmetic above in one shot.)
+                                                           // The walker's *position* should advance by `t` along the
+                                                           // *previous* direction; we already used `direction` to phase
+                                                           // sample the new direction. Re-record the candidate position
+                                                           // before resampling.
+                                                           // (Implementation note: a cleaner sequence is "compute
+                                                           // candidate, advance position, then phase-sample" — we do the
+                                                           // arithmetic above in one shot.)
 
         if step >= 3 {
             let survive = throughput.max_component().clamp(0.02, 0.95);
@@ -488,7 +488,11 @@ fn sample_cosine_hemisphere(n: Vec3, u1: f32, u2: f32) -> Vec3 {
     let dy = r * phi.sin();
     let dz = (1.0 - dx * dx - dy * dy).max(0.0).sqrt();
     let (t, bt) = ortho_basis(n);
-    t.scale(dx).add(bt.scale(dy)).add(n.scale(dz)).normalized().unwrap_or(n)
+    t.scale(dx)
+        .add(bt.scale(dy))
+        .add(n.scale(dz))
+        .normalized()
+        .unwrap_or(n)
 }
 
 /// Sample `cos θ` from the Henyey-Greenstein phase function with

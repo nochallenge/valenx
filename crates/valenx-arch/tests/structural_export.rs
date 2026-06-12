@@ -10,8 +10,7 @@ use valenx_arch::{
     ColumnSection, StructuralMaterial, StructuralMember, StructuralModelOptions, SupportKind,
 };
 use valenx_fem::{
-    material::FemMaterial,
-    solve_beam_static, BeamConstraint, BeamElement, BeamLoad,
+    material::FemMaterial, solve_beam_static, BeamConstraint, BeamElement, BeamLoad,
     BeamSection as FemBeamSection,
 };
 
@@ -145,11 +144,7 @@ fn portal_frame_solves_through_fem_beam_solver() {
     for sup in &model.supports {
         let t = sol.translation[sup.node];
         let mag = (t[0] * t[0] + t[1] * t[1] + t[2] * t[2]).sqrt();
-        assert!(
-            mag < 1.0e-6,
-            "clamped node {} moved by {mag}",
-            sup.node
-        );
+        assert!(mag < 1.0e-6, "clamped node {} moved by {mag}", sup.node);
     }
 
     // The solve must produce a finite, non-trivial max translation.

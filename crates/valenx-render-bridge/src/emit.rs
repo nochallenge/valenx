@@ -34,21 +34,20 @@ pub fn scene_file(job: &RenderJob) -> Result<String, RenderError> {
 /// entries. No texture maps; flat material maps to `Matte` BSDF.
 fn emit_lux(job: &RenderJob) -> String {
     let mut s = String::new();
-    let _ = writeln!(s, "# LuxCoreRender scene — emitted by valenx-render-bridge v1");
+    let _ = writeln!(
+        s,
+        "# LuxCoreRender scene — emitted by valenx-render-bridge v1"
+    );
     let _ = writeln!(s, "# Title: {}", job.title);
     let cam = &job.camera;
     let _ = writeln!(s, "Film \"fleximage\"");
+    let _ = writeln!(s, "  \"integer xresolution\" [{}]", cam.image_width);
+    let _ = writeln!(s, "  \"integer yresolution\" [{}]", cam.image_height);
     let _ = writeln!(
         s,
-        "  \"integer xresolution\" [{}]",
-        cam.image_width
+        "  \"string filename\" [\"{}\"]",
+        job.output_path.display()
     );
-    let _ = writeln!(
-        s,
-        "  \"integer yresolution\" [{}]",
-        cam.image_height
-    );
-    let _ = writeln!(s, "  \"string filename\" [\"{}\"]", job.output_path.display());
     let _ = writeln!(
         s,
         "LookAt {:.6} {:.6} {:.6}  {:.6} {:.6} {:.6}  {:.6} {:.6} {:.6}",
@@ -108,15 +107,16 @@ fn emit_lux_mesh(s: &mut String, m: &SceneMesh) {
 /// (`diffuse_bsdf`) per material plus a `mesh` node per object.
 fn emit_cycles(job: &RenderJob) -> String {
     let mut s = String::new();
-    let _ = writeln!(s, "<!-- Cycles XML scene — emitted by valenx-render-bridge v1 -->");
+    let _ = writeln!(
+        s,
+        "<!-- Cycles XML scene — emitted by valenx-render-bridge v1 -->"
+    );
     let _ = writeln!(s, "<cycles>");
     let cam = &job.camera;
     let _ = writeln!(
         s,
         "  <camera width=\"{}\" height=\"{}\" fov=\"{:.6}\" />",
-        cam.image_width,
-        cam.image_height,
-        cam.fov_v_rad
+        cam.image_width, cam.image_height, cam.fov_v_rad
     );
     let _ = writeln!(
         s,
@@ -132,7 +132,10 @@ fn emit_cycles(job: &RenderJob) -> String {
             "    <diffuse_bsdf name=\"bsdf\" color=\"{:.4} {:.4} {:.4}\" />",
             mat.diffuse_color[0], mat.diffuse_color[1], mat.diffuse_color[2]
         );
-        let _ = writeln!(s, "    <connect from=\"bsdf bsdf\" to=\"output surface\" />");
+        let _ = writeln!(
+            s,
+            "    <connect from=\"bsdf bsdf\" to=\"output surface\" />"
+        );
         let _ = writeln!(s, "  </shader>");
     }
     for m in &job.meshes {
@@ -306,7 +309,10 @@ mod tests {
     fn native_engine_returns_not_implemented() {
         assert!(matches!(
             scene_file(&one_mesh_job(RenderEngine::Native)).unwrap_err(),
-            RenderError::EngineNotImplemented { engine: "Native", .. }
+            RenderError::EngineNotImplemented {
+                engine: "Native",
+                ..
+            }
         ));
     }
 

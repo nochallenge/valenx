@@ -168,11 +168,7 @@ impl LightTree {
     /// Returns an *empty* tree when the scene has no emitters
     /// — [`LightTree::sample`] returns `None` for it, and the
     /// integrator falls back to its no-direct-light branch.
-    pub fn build(
-        triangles: &[Triangle],
-        materials: &[PtMaterial],
-        emitters: &[u32],
-    ) -> LightTree {
+    pub fn build(triangles: &[Triangle], materials: &[PtMaterial], emitters: &[u32]) -> LightTree {
         if emitters.is_empty() {
             return LightTree {
                 nodes: Vec::new(),
@@ -416,10 +412,8 @@ impl LightTree {
             // point and descend.
             let left = node + 1;
             let right = n.payload as usize;
-            let i_left =
-                cluster_importance(&self.nodes[left], shading_position, shading_normal);
-            let i_right =
-                cluster_importance(&self.nodes[right], shading_position, shading_normal);
+            let i_left = cluster_importance(&self.nodes[left], shading_position, shading_normal);
+            let i_right = cluster_importance(&self.nodes[right], shading_position, shading_normal);
             let sum = i_left + i_right;
             if sum <= 0.0 {
                 // Both children look zero from here — fall back to a
@@ -494,17 +488,14 @@ impl LightTree {
             if !in_left && !in_right {
                 return 0.0;
             }
-            let i_left =
-                cluster_importance(&self.nodes[left], shading_position, shading_normal);
-            let i_right =
-                cluster_importance(&self.nodes[right], shading_position, shading_normal);
+            let i_left = cluster_importance(&self.nodes[left], shading_position, shading_normal);
+            let i_right = cluster_importance(&self.nodes[right], shading_position, shading_normal);
             let sum = i_left + i_right;
             let p_left = if sum > 0.0 {
                 (i_left / sum).clamp(MIN_BRANCH_PROB, 1.0 - MIN_BRANCH_PROB)
             } else {
                 let pl = self.nodes[left].power
-                    / (self.nodes[left].power + self.nodes[right].power)
-                        .max(f32::MIN_POSITIVE);
+                    / (self.nodes[left].power + self.nodes[right].power).max(f32::MIN_POSITIVE);
                 pl.clamp(MIN_BRANCH_PROB, 1.0 - MIN_BRANCH_PROB)
             };
             if in_left {
@@ -530,8 +521,7 @@ impl LightTree {
         }
         let left = node + 1;
         let right = n.payload as usize;
-        self.subtree_contains(left, triangle_index)
-            || self.subtree_contains(right, triangle_index)
+        self.subtree_contains(left, triangle_index) || self.subtree_contains(right, triangle_index)
     }
 }
 
@@ -659,17 +649,16 @@ mod tests {
         let tree = LightTree::build(&[], &[], &[]);
         assert!(tree.is_empty());
         let mut rng = Rng::new(1, 1);
-        assert!(tree.sample(Vec3::ZERO, vec3(0.0, 0.0, 1.0), &mut rng).is_none());
+        assert!(tree
+            .sample(Vec3::ZERO, vec3(0.0, 0.0, 1.0), &mut rng)
+            .is_none());
     }
 
     #[test]
     fn single_emitter_is_always_chosen_with_pdf_one() {
         let (tri, mat) = emitter_at(vec3(0.0, 0.0, 3.0), [1.0, 1.0, 1.0]);
         let mats = vec![mat];
-        let tris = vec![Triangle {
-            material: 0,
-            ..tri
-        }];
+        let tris = vec![Triangle { material: 0, ..tri }];
         let emitters = vec![0u32];
         let tree = LightTree::build(&tris, &mats, &emitters);
         let mut rng = Rng::new(42, 7);
@@ -834,7 +823,7 @@ mod tests {
         let v2 = vec3(0.0, 0.5, 1.0);
         // Front-facing (normal pointing down toward shading point):
         let front_tri = Triangle::flat([v0, v2, v1], 0); // reversed → normal -Z
-        // Back-facing (normal pointing up away from shading point):
+                                                         // Back-facing (normal pointing up away from shading point):
         let back_tri = Triangle::flat([v0, v1, v2], 0); // normal +Z
         mats.push(PtMaterial::emissive([5.0, 5.0, 5.0]));
         mats.push(PtMaterial::emissive([5.0, 5.0, 5.0]));
@@ -915,9 +904,8 @@ mod tests {
         for &ei in &emitters {
             let tri = &tris[ei as usize];
             let mat = &mats[tri.material];
-            let radiance = 0.2126 * mat.emission.x
-                + 0.7152 * mat.emission.y
-                + 0.0722 * mat.emission.z;
+            let radiance =
+                0.2126 * mat.emission.x + 0.7152 * mat.emission.y + 0.0722 * mat.emission.z;
             let area = 0.5 * tri.double_area();
             let d2 = tri.centroid().sub(x).length_sq();
             converged += (radiance * area / d2) as f64;
@@ -934,9 +922,8 @@ mod tests {
             let ei = emitters[pick];
             let tri = &tris[ei as usize];
             let mat = &mats[tri.material];
-            let radiance = 0.2126 * mat.emission.x
-                + 0.7152 * mat.emission.y
-                + 0.0722 * mat.emission.z;
+            let radiance =
+                0.2126 * mat.emission.x + 0.7152 * mat.emission.y + 0.0722 * mat.emission.z;
             let area = 0.5 * tri.double_area();
             let d2 = tri.centroid().sub(x).length_sq();
             let contrib = radiance * area / d2;
@@ -950,9 +937,8 @@ mod tests {
             let s = tree.sample(x, n, &mut rng_tree).unwrap();
             let tri = &tris[s.triangle_index as usize];
             let mat = &mats[tri.material];
-            let radiance = 0.2126 * mat.emission.x
-                + 0.7152 * mat.emission.y
-                + 0.0722 * mat.emission.z;
+            let radiance =
+                0.2126 * mat.emission.x + 0.7152 * mat.emission.y + 0.0722 * mat.emission.z;
             let area = 0.5 * tri.double_area();
             let d2 = tri.centroid().sub(x).length_sq();
             let contrib = radiance * area / d2;

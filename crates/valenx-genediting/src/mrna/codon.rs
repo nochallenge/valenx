@@ -169,8 +169,7 @@ mod tests {
         let code = GeneticCode::standard();
         let before_dna =
             Seq::new(SeqKind::Dna, reverse_transcribe(&transcribe(&rare_cds()))).unwrap();
-        let after_dna =
-            Seq::new(SeqKind::Dna, reverse_transcribe(&opt.optimized_cds)).unwrap();
+        let after_dna = Seq::new(SeqKind::Dna, reverse_transcribe(&opt.optimized_cds)).unwrap();
         let p1 = translate_default(&before_dna, &code).unwrap();
         let p2 = translate_default(&after_dna, &code).unwrap();
         assert_eq!(p1.as_bytes(), p2.as_bytes());

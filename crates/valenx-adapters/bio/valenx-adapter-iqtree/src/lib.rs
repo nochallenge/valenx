@@ -139,10 +139,7 @@ impl Adapter for IqTreeAdapter {
         let source_alignment = if input.alignment.is_absolute() {
             input.alignment.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.alignment,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.alignment)?
         };
         if !source_alignment.is_file() {
             return Err(AdapterError::InvalidCase {

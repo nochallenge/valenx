@@ -316,8 +316,7 @@ mod tests {
         // An all-GC protospacer + PAM: with a strict GC band it is
         // filtered out, leaving no design.
         let target = "GCGCGCGCGCGCGCGCGCGCAGG";
-        let mut req =
-            GuideDesignRequest::new(target.as_bytes().to_vec(), NucleaseId::SpCas9);
+        let mut req = GuideDesignRequest::new(target.as_bytes().to_vec(), NucleaseId::SpCas9);
         req.gc_min = 0.3;
         req.gc_max = 0.7;
         let err = design_guides(&req).unwrap_err();
@@ -326,8 +325,7 @@ mod tests {
 
     #[test]
     fn results_sorted_by_design_score() {
-        let target =
-            "ACGTACGTACGTACGTACGTAGGTACGATCGATCGATCGATCGCGGTTACGGCATGCATGCATGCTGG";
+        let target = "ACGTACGTACGTACGTACGTAGGTACGATCGATCGATCGATCGCGGTTACGGCATGCATGCATGCTGG";
         let req = GuideDesignRequest::new(target.as_bytes().to_vec(), NucleaseId::SpCas9);
         let guides = design_guides(&req).unwrap();
         for w in guides.windows(2) {
@@ -337,10 +335,8 @@ mod tests {
 
     #[test]
     fn max_results_truncates() {
-        let target =
-            "ACGTACGTACGTACGTACGTAGGTACGATCGATCGATCGATCGCGGTTACGGCATGCATGCATGCTGG";
-        let mut req =
-            GuideDesignRequest::new(target.as_bytes().to_vec(), NucleaseId::SpCas9);
+        let target = "ACGTACGTACGTACGTACGTAGGTACGATCGATCGATCGATCGCGGTTACGGCATGCATGCATGCTGG";
+        let mut req = GuideDesignRequest::new(target.as_bytes().to_vec(), NucleaseId::SpCas9);
         req.max_results = 1;
         let guides = design_guides(&req).unwrap();
         assert_eq!(guides.len(), 1);

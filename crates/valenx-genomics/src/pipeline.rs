@@ -251,8 +251,7 @@ pub fn call_and_report(
     // Turn the calls into a small VCF so the report can summarise them.
     let mut vcf = VcfFile::new();
     for v in &variants {
-        let mut rec =
-            crate::format::vcf::VcfRecord::snv(&v.chrom, v.pos, &v.reference, &v.alt);
+        let mut rec = crate::format::vcf::VcfRecord::snv(&v.chrom, v.pos, &v.reference, &v.alt);
         rec.qual = Some(v.qual);
         rec.filter = vec!["PASS".to_string()];
         vcf.records.push(rec);
@@ -360,8 +359,7 @@ mod tests {
         }
         let mut refr = Reference::new();
         refr.add("chr1", "ACGAACGT");
-        let (variants, report) =
-            call_and_report(&sam, &refr, &CallParams::default()).unwrap();
+        let (variants, report) = call_and_report(&sam, &refr, &CallParams::default()).unwrap();
         // One het SNV expected at position 4.
         assert_eq!(variants.len(), 1);
         assert!(report.variants.is_some());

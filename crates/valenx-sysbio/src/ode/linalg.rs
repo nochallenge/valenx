@@ -156,7 +156,9 @@ pub fn solve_least_squares(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
     let m = DMatrix::from_row_slice(rows, cols, &flat);
     let rhs = DVector::from_row_slice(b);
     let svd = m.svd(true, true);
-    svd.solve(&rhs, 1e-12).ok().map(|x| x.iter().copied().collect())
+    svd.solve(&rhs, 1e-12)
+        .ok()
+        .map(|x| x.iter().copied().collect())
 }
 
 #[cfg(test)]
@@ -182,7 +184,11 @@ mod tests {
     #[test]
     fn requires_a_pivot() {
         // Identity solve is the cheapest sanity check.
-        let a = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0], vec![0.0, 0.0, 1.0]];
+        let a = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ];
         let x = solve_linear(&a, &[7.0, -3.0, 2.0]).unwrap();
         assert_eq!(x, vec![7.0, -3.0, 2.0]);
     }

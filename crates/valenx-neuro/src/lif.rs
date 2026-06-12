@@ -204,12 +204,18 @@ mod tests {
 
         // Decomposition (independent path): ISI = t_refractory + climb time.
         let climb = lif_time_to_first_spike(i, r, tau, vth);
-        assert!((isi - (tref + climb)).abs() <= 1e-9 * isi, "ISI = t_ref + climb");
+        assert!(
+            (isi - (tref + climb)).abs() <= 1e-9 * isi,
+            "ISI = t_ref + climb"
+        );
 
         // Refractory floor: a huge current shrinks the climb so ISI → t_refractory from
         // above; and more current fires faster (shorter ISI).
         let isi_huge = lif_interspike_interval(1.0, r, tau, vth, tref);
-        assert!((isi_huge - tref).abs() / tref < 1e-3 && isi_huge > tref, "ISI → t_ref");
+        assert!(
+            (isi_huge - tref).abs() / tref < 1e-3 && isi_huge > tref,
+            "ISI → t_ref"
+        );
         assert!(
             lif_interspike_interval(4.0e-7, r, tau, vth, tref) < isi,
             "more current → shorter ISI"
@@ -220,16 +226,20 @@ mod tests {
             lif_interspike_interval(1.0e-10, r, tau, vth, tref).is_infinite(),
             "silent → ∞"
         );
-        assert_eq!(lif_firing_rate(1.0e-10, r, tau, vth, tref), 0.0, "silent → rate 0");
+        assert_eq!(
+            lif_firing_rate(1.0e-10, r, tau, vth, tref),
+            0.0,
+            "silent → rate 0"
+        );
     }
 
     #[test]
     fn lif_firing_rate_traces_the_f_i_curve() {
         let (r, tau, v_th, t_ref) = (1.0e8, 0.02, 0.015, 0.002); // 100 MΩ, 20 ms, 15 mV, 2 ms
-        // Subthreshold: R·I ≤ V_th → the cell never fires (the LIF rheobase).
+                                                                 // Subthreshold: R·I ≤ V_th → the cell never fires (the LIF rheobase).
         assert_eq!(lif_firing_rate(1.4e-10, r, tau, v_th, t_ref), 0.0); // R·I = 14 mV < 15
         assert_eq!(lif_firing_rate(1.5e-10, r, tau, v_th, t_ref), 0.0); // R·I = 15 mV = V_th
-        // Worked point: I = 0.2 nA → R·I = 20 mV → f = 1/(t_ref + τ·ln 4) ≈ 33.6 Hz.
+                                                                        // Worked point: I = 0.2 nA → R·I = 20 mV → f = 1/(t_ref + τ·ln 4) ≈ 33.6 Hz.
         let f = lif_firing_rate(2.0e-10, r, tau, v_th, t_ref);
         let expected = 1.0 / (t_ref + tau * (0.02_f64 / 0.005).ln());
         assert!((f - expected).abs() < 1e-9, "closed form");
@@ -242,7 +252,10 @@ mod tests {
         // Saturates toward the refractory ceiling 1/t_ref as I → ∞ (the ln → 0).
         let f_huge = lif_firing_rate(1.0e-6, r, tau, v_th, t_ref);
         assert!(f_huge < 1.0 / t_ref, "stays below the 1/t_ref ceiling");
-        assert!(f_huge > 0.99 / t_ref, "approaches the 1/t_ref ceiling, got {f_huge}");
+        assert!(
+            f_huge > 0.99 / t_ref,
+            "approaches the 1/t_ref ceiling, got {f_huge}"
+        );
         // Non-physical input → 0.
         assert_eq!(lif_firing_rate(2.0e-10, 0.0, tau, v_th, t_ref), 0.0);
         assert_eq!(lif_firing_rate(2.0e-10, r, 0.0, v_th, t_ref), 0.0);
@@ -257,26 +270,41 @@ mod tests {
         let (r, tau) = (1.0e8, 0.02); // 100 MΩ, 20 ms (the firing-rate fixture)
         let i = 2.0e-10; // 0.2 nA → R·I = 20 mV, the worked point
         let drive = r * i; // 0.02 V steady value
-        // Starts from rest at the reset.
+                           // Starts from rest at the reset.
         assert_eq!(lif_membrane_potential(i, r, tau, 0.0), 0.0);
         // One time constant → R·I·(1 − 1/e) ≈ 0.632·R·I.
         let v_tau = lif_membrane_potential(i, r, tau, tau);
-        assert!((v_tau - drive * (1.0 - 1.0 / E)).abs() / drive < 1e-12, "V(τ) = R·I·(1−1/e)");
+        assert!(
+            (v_tau - drive * (1.0 - 1.0 / E)).abs() / drive < 1e-12,
+            "V(τ) = R·I·(1−1/e)"
+        );
         // Saturates toward the steady value R·I: at 10·τ_m the membrane is within
         // 0.1% of R·I but still strictly below it (e^(−10) ≈ 4.5e-5; a larger t
         // would round the exponential gap below f64 precision at this R·I).
         let v_inf = lif_membrane_potential(i, r, tau, 10.0 * tau);
-        assert!(v_inf < drive && v_inf > 0.999 * drive, "V → R·I, got {v_inf} vs {drive}");
+        assert!(
+            v_inf < drive && v_inf > 0.999 * drive,
+            "V → R·I, got {v_inf} vs {drive}"
+        );
         // Monotone increasing with time for a depolarising current.
-        assert!(lif_membrane_potential(i, r, tau, 2.0 * tau) > v_tau, "charges over time");
+        assert!(
+            lif_membrane_potential(i, r, tau, 2.0 * tau) > v_tau,
+            "charges over time"
+        );
         // Cross-check tying the trajectory to lif_firing_rate (#173): at the climb
         // time t* = τ·ln(R·I/(R·I − V_th)) the membrane reaches EXACTLY V_th.
         let v_th = 0.015;
         let t_climb = lif_time_to_first_spike(i, r, tau, v_th);
         let v_at_climb = lif_membrane_potential(i, r, tau, t_climb);
-        assert!((v_at_climb - v_th).abs() < 1e-9, "V(t*) = V_th, got {v_at_climb}");
+        assert!(
+            (v_at_climb - v_th).abs() < 1e-9,
+            "V(t*) = V_th, got {v_at_climb}"
+        );
         // A hyperpolarising (negative) current drives V negative.
-        assert!(lif_membrane_potential(-i, r, tau, tau) < 0.0, "negative current → negative V");
+        assert!(
+            lif_membrane_potential(-i, r, tau, tau) < 0.0,
+            "negative current → negative V"
+        );
         // Before the stimulus and non-physical input → 0.
         assert_eq!(lif_membrane_potential(i, r, tau, -0.001), 0.0);
         assert_eq!(lif_membrane_potential(i, 0.0, tau, tau), 0.0); // R ≤ 0
@@ -291,12 +319,18 @@ mod tests {
         let i = 2.0e-10; // 0.2 nA → R·I = 20 mV, the firing-rate worked point
         let t1 = lif_time_to_first_spike(i, r, tau, v_th);
         // Closed form τ·ln(R·I/(R·I − V_th)) = 0.02·ln(0.02/0.005) = 0.02·ln 4 ≈ 27.7 ms.
-        assert!((t1 - tau * (0.02_f64 / 0.005).ln()).abs() < 1e-12, "closed form");
+        assert!(
+            (t1 - tau * (0.02_f64 / 0.005).ln()).abs() < 1e-12,
+            "closed form"
+        );
         assert!((t1 - 0.02773).abs() < 1e-4, "≈27.7 ms, got {t1}");
         // The membrane reaches threshold EXACTLY at this latency (ties to #191,
         // non-tautological): V(t1) = R·I·(1 − e^(−t1/τ)) = V_th.
         let v_at_t1 = lif_membrane_potential(i, r, tau, t1);
-        assert!((v_at_t1 - v_th).abs() < 1e-12, "V(t1) = V_th, got {v_at_t1}");
+        assert!(
+            (v_at_t1 - v_th).abs() < 1e-12,
+            "V(t1) = V_th, got {v_at_t1}"
+        );
         // It is the climb time the firing rate is built on: f = 1/(t_ref + t1).
         let t_ref = 0.002;
         let f = lif_firing_rate(i, r, tau, v_th, t_ref);
@@ -307,7 +341,10 @@ mod tests {
             "more current → shorter latency"
         );
         // Subthreshold (R·I ≤ V_th) → never spikes → infinite latency.
-        assert!(lif_time_to_first_spike(1.4e-10, r, tau, v_th).is_infinite(), "subthreshold → ∞");
+        assert!(
+            lif_time_to_first_spike(1.4e-10, r, tau, v_th).is_infinite(),
+            "subthreshold → ∞"
+        );
         // Non-physical input → ∞ (so the firing rate it feeds returns 0).
         assert!(lif_time_to_first_spike(i, 0.0, tau, v_th).is_infinite()); // R ≤ 0
         assert!(lif_time_to_first_spike(i, r, 0.0, v_th).is_infinite()); // τ_m ≤ 0
@@ -321,20 +358,42 @@ mod tests {
         let i_rh = lif_rheobase_current(r, v_th);
         // Worked point: I_rh = V_th/R = 0.015 / 1e8 = 1.5e-10 A (0.15 nA) — exactly
         // the silent/fire boundary the f–I test brackets at 1.4e-10 / 1.5e-10.
-        assert!((i_rh - 1.5e-10).abs() / i_rh < 1e-12, "I_rh = V_th/R = 0.15 nA, got {i_rh}");
+        assert!(
+            (i_rh - 1.5e-10).abs() / i_rh < 1e-12,
+            "I_rh = V_th/R = 0.15 nA, got {i_rh}"
+        );
         // Definitional identity: R·I_rh = V_th exactly (the asymptote sits AT threshold).
         assert!((r * i_rh - v_th).abs() / v_th < 1e-12, "R·I_rh = V_th");
         // Inversely proportional to R, linearly proportional to V_th.
-        assert!((lif_rheobase_current(2.0 * r, v_th) - 0.5 * i_rh).abs() / i_rh < 1e-12, "∝ 1/R");
-        assert!((lif_rheobase_current(r, 2.0 * v_th) - 2.0 * i_rh).abs() / i_rh < 1e-12, "∝ V_th");
+        assert!(
+            (lif_rheobase_current(2.0 * r, v_th) - 0.5 * i_rh).abs() / i_rh < 1e-12,
+            "∝ 1/R"
+        );
+        assert!(
+            (lif_rheobase_current(r, 2.0 * v_th) - 2.0 * i_rh).abs() / i_rh < 1e-12,
+            "∝ V_th"
+        );
         // STRONG non-tautological cross-check to the whole triad: just BELOW I_rh the
         // cell is silent (rate 0, infinite latency); just ABOVE it fires (rate > 0,
         // finite latency). The impl is V_th/R; the checks use the three triad fns.
         let (below, above) = (0.99 * i_rh, 1.01 * i_rh);
-        assert_eq!(lif_firing_rate(below, r, tau, v_th, t_ref), 0.0, "below rheobase → silent");
-        assert!(lif_time_to_first_spike(below, r, tau, v_th).is_infinite(), "below → ∞ latency");
-        assert!(lif_firing_rate(above, r, tau, v_th, t_ref) > 0.0, "above rheobase → fires");
-        assert!(lif_time_to_first_spike(above, r, tau, v_th).is_finite(), "above → finite latency");
+        assert_eq!(
+            lif_firing_rate(below, r, tau, v_th, t_ref),
+            0.0,
+            "below rheobase → silent"
+        );
+        assert!(
+            lif_time_to_first_spike(below, r, tau, v_th).is_infinite(),
+            "below → ∞ latency"
+        );
+        assert!(
+            lif_firing_rate(above, r, tau, v_th, t_ref) > 0.0,
+            "above rheobase → fires"
+        );
+        assert!(
+            lif_time_to_first_spike(above, r, tau, v_th).is_finite(),
+            "above → finite latency"
+        );
         // Driven by EXACTLY the rheobase current the membrane asymptotes to V_th from
         // below (ties to #191): V(10·τ) is within 0.1% of V_th but strictly under it —
         // the marginal drive that never quite fires.
@@ -356,11 +415,23 @@ mod tests {
         // Worked point: I = 0.5 nA through R = 100 MΩ → V∞ = R·I = 0.05 V.
         let (i, r) = (0.5e-9, 100.0e6);
         let v_inf = lif_steady_state_potential(i, r);
-        assert!((v_inf - 0.05).abs() < 1e-12, "V∞ = R·I = 0.05 V, got {v_inf}");
+        assert!(
+            (v_inf - 0.05).abs() < 1e-12,
+            "V∞ = R·I = 0.05 V, got {v_inf}"
+        );
         // Linear in I and in R; sign-preserving (a hyperpolarising current → −V∞).
-        assert!((lif_steady_state_potential(2.0 * i, r) - 2.0 * v_inf).abs() < 1e-12, "∝ I");
-        assert!((lif_steady_state_potential(i, 3.0 * r) - 3.0 * v_inf).abs() < 1e-12, "∝ R");
-        assert!((lif_steady_state_potential(-i, r) + v_inf).abs() < 1e-12, "sign-preserving");
+        assert!(
+            (lif_steady_state_potential(2.0 * i, r) - 2.0 * v_inf).abs() < 1e-12,
+            "∝ I"
+        );
+        assert!(
+            (lif_steady_state_potential(i, 3.0 * r) - 3.0 * v_inf).abs() < 1e-12,
+            "∝ R"
+        );
+        assert!(
+            (lif_steady_state_potential(-i, r) + v_inf).abs() < 1e-12,
+            "sign-preserving"
+        );
         // STRONG cross-check (1): it is the t→∞ limit of the charging curve
         // lif_membrane_potential — at t = 20·τ the transient e^(−20) ≈ 2e-9 has died.
         let tau = 10.0e-3;
@@ -373,7 +444,10 @@ mod tests {
         // current is exactly the one whose steady state sits at threshold.
         let v_th = 0.015; // 15 mV threshold
         let i_rh = lif_rheobase_current(r, v_th);
-        assert!((lif_steady_state_potential(i_rh, r) - v_th).abs() < 1e-12, "V∞(I_rh) = V_th");
+        assert!(
+            (lif_steady_state_potential(i_rh, r) - v_th).abs() < 1e-12,
+            "V∞(I_rh) = V_th"
+        );
         // Non-physical input → 0 (matching lif_membrane_potential).
         assert_eq!(lif_steady_state_potential(i, 0.0), 0.0); // R ≤ 0
         assert_eq!(lif_steady_state_potential(i, -1.0e6), 0.0); // R < 0

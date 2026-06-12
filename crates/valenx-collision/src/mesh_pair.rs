@@ -118,11 +118,7 @@ fn tri_tri_test(t1: &[Vector3<f64>; 3], t2: &[Vector3<f64>; 3]) -> bool {
     true
 }
 
-fn overlap_on_axis(
-    t1: &[Vector3<f64>; 3],
-    t2: &[Vector3<f64>; 3],
-    axis: &Vector3<f64>,
-) -> bool {
+fn overlap_on_axis(t1: &[Vector3<f64>; 3], t2: &[Vector3<f64>; 3], axis: &Vector3<f64>) -> bool {
     let (a_lo, a_hi) = project(t1, axis);
     let (b_lo, b_hi) = project(t2, axis);
     !(a_hi < b_lo || b_hi < a_lo)

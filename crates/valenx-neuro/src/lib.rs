@@ -71,10 +71,9 @@ pub use chord_conductance::{
 };
 pub use conduction::{
     conduction_delay_s, conduction_distance_m, conduction_velocity_at_crossover,
-    conduction_velocity_from_latency, myelinated_conduction_velocity,
-    myelinated_fiber_diameter_um, myelination_crossover_diameter,
-    unmyelinated_conduction_velocity, unmyelinated_fiber_diameter_um,
-    HURSH_FACTOR_M_PER_S_PER_UM,
+    conduction_velocity_from_latency, myelinated_conduction_velocity, myelinated_fiber_diameter_um,
+    myelination_crossover_diameter, unmyelinated_conduction_velocity,
+    unmyelinated_fiber_diameter_um, HURSH_FACTOR_M_PER_S_PER_UM,
 };
 pub use current_distance::{activation_radius, fit_constant, threshold_current};
 pub use donnan::{donnan_osmotic_pressure_pa, donnan_potential_mv, donnan_ratio};
@@ -89,27 +88,23 @@ pub use ionic::{
 };
 pub use lif::{
     lif_firing_rate, lif_interspike_interval, lif_membrane_potential, lif_rheobase_current,
-    lif_steady_state_potential,
-    lif_time_to_first_spike,
+    lif_steady_state_potential, lif_time_to_first_spike,
 };
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
 pub use myelinated::MyelinatedFiber;
 pub use nernst::{
     nernst_concentration_ratio, nernst_potential_mv, nernst_slope_per_decade_mv,
-    thermal_voltage_mv, ussing_flux_ratio,
-    BODY_TEMPERATURE_K,
+    thermal_voltage_mv, ussing_flux_ratio, BODY_TEMPERATURE_K,
 };
 pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{
     charge_density, charge_per_phase_uc, is_safe, max_safe_charge_density,
-    max_safe_charge_per_phase,
-    min_safe_electrode_area, shannon_k,
+    max_safe_charge_per_phase, min_safe_electrode_area, shannon_k,
 };
 pub use steering::ContactArray;
 pub use strength_duration::{
-    chronaxie, chronaxie_from_strength_duration, lapicque_threshold,
-    minimum_stimulating_charge, rheobase, threshold_amplitude,
-    weiss_threshold_charge, weiss_threshold_current,
+    chronaxie, chronaxie_from_strength_duration, lapicque_threshold, minimum_stimulating_charge,
+    rheobase, threshold_amplitude, weiss_threshold_charge, weiss_threshold_current,
 };
 pub use synapse::{
     alpha_synapse_conductance, alpha_synapse_conductance_integral,

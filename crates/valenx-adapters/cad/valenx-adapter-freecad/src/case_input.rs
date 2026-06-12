@@ -123,7 +123,10 @@ impl ExportFormat {
 impl GeometryImportInput {
     pub fn from_case_dir(case_dir: &Path) -> Result<(CaseHeader, Self), AdapterError> {
         let case_toml = case_dir.join("case.toml");
-        let text = valenx_core::io_caps::read_capped_to_string(&case_toml, valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize)?;
+        let text = valenx_core::io_caps::read_capped_to_string(
+            &case_toml,
+            valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize,
+        )?;
         let case_def: CaseDef = toml::from_str(&text).map_err(|e| AdapterError::InvalidCase {
             case_path: case_toml.clone(),
             reason: format!("parse: {e}"),

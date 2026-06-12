@@ -50,7 +50,8 @@ pub fn is_supported_solid(t: ElementType) -> bool {
 /// a non-empty connectivity?
 pub fn has_solid_elements(mesh: &Mesh) -> bool {
     mesh.element_blocks.iter().any(|b| {
-        is_supported_solid(b.element_type) && b.connectivity.len() >= b.element_type.nodes_per_element()
+        is_supported_solid(b.element_type)
+            && b.connectivity.len() >= b.element_type.nodes_per_element()
     })
 }
 

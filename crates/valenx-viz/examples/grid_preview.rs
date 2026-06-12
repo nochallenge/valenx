@@ -54,9 +54,7 @@ fn main() {
                     (cdx[0] - c[0]).abs() + (cdy[0] - c[0]).abs(),
                     (cdx[1] - c[1]).abs() + (cdy[1] - c[1]).abs(),
                 ];
-                let cov = |s: f32| {
-                    line_cov(c[0] / s, fw[0] / s).max(line_cov(c[1] / s, fw[1] / s))
-                };
+                let cov = |s: f32| line_cov(c[0] / s, fw[0] / s).max(line_cov(c[1] / s, fw[1] / s));
                 let mut a = (cov(minor) * 0.45).max(cov(major) * 0.85);
                 let mut gcol = [0.33f32, 0.35, 0.40];
                 let aw = [1.5 * fw[0], 1.5 * fw[1]];

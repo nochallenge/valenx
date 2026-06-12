@@ -59,8 +59,13 @@ struct HvacResults {
 /// Compute the duct hydraulics for the current settings.
 fn run_hvac(s: &HvacWorkbenchState) -> HvacResults {
     let cs = match s.shape {
-        DuctShape::Round => CrossSection::Round { d: s.diameter_mm.max(10.0) },
-        DuctShape::Rect => CrossSection::Rect { w: s.width_mm.max(10.0), h: s.height_mm.max(10.0) },
+        DuctShape::Round => CrossSection::Round {
+            d: s.diameter_mm.max(10.0),
+        },
+        DuctShape::Rect => CrossSection::Rect {
+            w: s.width_mm.max(10.0),
+            h: s.height_mm.max(10.0),
+        },
     };
     let dh_mm = cs.hydraulic_diameter_mm();
     let area_m2 = cs.area_mm2() * 1.0e-6;
@@ -70,7 +75,8 @@ fn run_hvac(s: &HvacWorkbenchState) -> HvacResults {
         s.velocity_ms.max(0.1),
         s.friction.max(0.001),
     );
-    let (duct_w_in, duct_h_in) = flow::cfm_to_duct_size(s.cfm.max(1.0), s.max_velocity_fpm.max(50.0));
+    let (duct_w_in, duct_h_in) =
+        flow::cfm_to_duct_size(s.cfm.max(1.0), s.max_velocity_fpm.max(50.0));
     HvacResults {
         hydraulic_diameter_mm: dh_mm,
         area_m2,
@@ -160,10 +166,20 @@ mod tests {
     #[test]
     fn pressure_drop_is_positive_and_grows_with_length() {
         let r1 = run_hvac(&HvacWorkbenchState::default());
-        assert!(r1.pressure_drop_pa > 0.0, "ΔP positive: {}", r1.pressure_drop_pa);
+        assert!(
+            r1.pressure_drop_pa > 0.0,
+            "ΔP positive: {}",
+            r1.pressure_drop_pa
+        );
         assert!(r1.hydraulic_diameter_mm > 0.0 && r1.area_m2 > 0.0);
-        let r2 = run_hvac(&HvacWorkbenchState { length_m: 20.0, ..Default::default() });
-        assert!(r2.pressure_drop_pa > r1.pressure_drop_pa, "ΔP grows with duct length");
+        let r2 = run_hvac(&HvacWorkbenchState {
+            length_m: 20.0,
+            ..Default::default()
+        });
+        assert!(
+            r2.pressure_drop_pa > r1.pressure_drop_pa,
+            "ΔP grows with duct length"
+        );
     }
 
     #[test]
@@ -175,6 +191,10 @@ mod tests {
             ..Default::default()
         });
         // 4·A/P = 4·200·100 / (2·300) = 133.33 mm.
-        assert!((r.hydraulic_diameter_mm - 133.333).abs() < 0.1, "got {}", r.hydraulic_diameter_mm);
+        assert!(
+            (r.hydraulic_diameter_mm - 133.333).abs() < 0.1,
+            "got {}",
+            r.hydraulic_diameter_mm
+        );
     }
 }

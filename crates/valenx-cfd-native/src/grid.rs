@@ -52,7 +52,10 @@ impl Grid {
     /// Panics on a zero cell count or a non-positive domain length —
     /// those are programmer errors, not runtime inputs.
     pub fn new(nx: usize, ny: usize, lx: f64, ly: f64) -> Grid {
-        assert!(nx > 0 && ny > 0, "grid must have at least one cell per axis");
+        assert!(
+            nx > 0 && ny > 0,
+            "grid must have at least one cell per axis"
+        );
         assert!(
             lx > 0.0 && ly > 0.0 && lx.is_finite() && ly.is_finite(),
             "domain dimensions must be positive and finite"
@@ -202,7 +205,10 @@ mod tests {
         // For an nx × ny grid: p is nx×ny, u is (nx+1)×ny, v is
         // nx×(ny+1) — the defining shape of a MAC grid.
         let g = Grid::new(8, 6, 1.0, 1.0);
-        assert_eq!((g.pressure_field().width, g.pressure_field().height), (8, 6));
+        assert_eq!(
+            (g.pressure_field().width, g.pressure_field().height),
+            (8, 6)
+        );
         assert_eq!((g.u_field().width, g.u_field().height), (9, 6));
         assert_eq!((g.v_field().width, g.v_field().height), (8, 7));
     }

@@ -146,10 +146,11 @@ fn soup_to_mesh(soup: &Mesh3) -> valenx_mesh::Mesh {
     for f in &faces {
         conn.extend_from_slice(&[f[0] as u32, f[1] as u32, f[2] as u32]);
     }
-    mesh.element_blocks.push(valenx_mesh::element::ElementBlock {
-        element_type: valenx_mesh::ElementType::Tri3,
-        connectivity: conn,
-    });
+    mesh.element_blocks
+        .push(valenx_mesh::element::ElementBlock {
+            element_type: valenx_mesh::ElementType::Tri3,
+            connectivity: conn,
+        });
     mesh.recompute_stats();
     mesh
 }

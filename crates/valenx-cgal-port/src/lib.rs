@@ -43,13 +43,7 @@ mod tests {
 
     #[test]
     fn hull_2d_of_square_returns_corners() {
-        let pts = vec![
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 1.0],
-            [0.5, 0.5],
-        ];
+        let pts = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.5, 0.5]];
         let hull = hull_2d(&pts).unwrap();
         assert_eq!(hull.len(), 4);
     }
@@ -59,7 +53,10 @@ mod tests {
         let pts = vec![[0.0, 0.0], [1.0, 0.0]];
         assert!(matches!(
             hull_2d(&pts),
-            Err(CgalError::NotEnoughPoints { needed: 3, given: 2 })
+            Err(CgalError::NotEnoughPoints {
+                needed: 3,
+                given: 2
+            })
         ));
     }
 
@@ -78,13 +75,7 @@ mod tests {
 
     #[test]
     fn alpha_shape_returns_boundary() {
-        let pts = vec![
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 1.0],
-            [0.5, 0.5],
-        ];
+        let pts = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.5, 0.5]];
         let bnd = alpha_shape_2d(&pts, 10.0).unwrap();
         assert!(!bnd.is_empty());
     }
@@ -139,10 +130,7 @@ mod tests {
             },
         ];
         let tree = AabbTree::new(tris);
-        let hits = tree.intersect_ray(
-            Vector3::new(0.3, 0.3, 5.0),
-            Vector3::new(0.0, 0.0, -1.0),
-        );
+        let hits = tree.intersect_ray(Vector3::new(0.3, 0.3, 5.0), Vector3::new(0.0, 0.0, -1.0));
         assert!(hits.iter().any(|t| t.0 == 0));
     }
 

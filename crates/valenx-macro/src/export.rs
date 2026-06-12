@@ -211,7 +211,8 @@ mod tests {
         });
         let py = to_python(&m);
         assert!(
-            !py.lines().any(|l| l.trim_start().starts_with("INJECTED_NAME")),
+            !py.lines()
+                .any(|l| l.trim_start().starts_with("INJECTED_NAME")),
             "name newline injected Python:\n{py}"
         );
     }
@@ -224,7 +225,8 @@ mod tests {
         m.description = "first\rINJECTED_DESC = 1".into();
         let py = to_python(&m);
         assert!(
-            !py.lines().any(|l| l.trim_start().starts_with("INJECTED_DESC")),
+            !py.lines()
+                .any(|l| l.trim_start().starts_with("INJECTED_DESC")),
             "description CR injected Python:\n{py}"
         );
     }
@@ -255,7 +257,8 @@ mod tests {
         });
         let py = to_python(&m);
         assert!(
-            !py.lines().any(|l| l.trim_start().starts_with("INJECTED_LABEL")),
+            !py.lines()
+                .any(|l| l.trim_start().starts_with("INJECTED_LABEL")),
             "step label injected Python:\n{py}"
         );
     }

@@ -107,9 +107,11 @@ pub fn draw_geomatics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.add(egui::DragValue::new(&mut s.lon_p).speed(0.01));
                     });
                     ui.label(
-                        egui::RichText::new("cross / along-track measure P against the path A\u{2192}B")
-                            .weak()
-                            .small(),
+                        egui::RichText::new(
+                            "cross / along-track measure P against the path A\u{2192}B",
+                        )
+                        .weak()
+                        .small(),
                     );
 
                     ui.add_space(6.0);

@@ -246,7 +246,11 @@ mod tests {
         // Midpoint of (0.8,0.28)->(1.0,0.50): t=0.5 -> 0.39.
         assert!((c.cd(0.9) - 0.39).abs() < 1e-12, "cd(0.9) = {}", c.cd(0.9));
         // (1.2,0.48)->(2.0,0.34): M=1.5 -> t=0.375 -> 0.4275.
-        assert!((c.cd(1.5) - 0.4275).abs() < 1e-12, "cd(1.5) = {}", c.cd(1.5));
+        assert!(
+            (c.cd(1.5) - 0.4275).abs() < 1e-12,
+            "cd(1.5) = {}",
+            c.cd(1.5)
+        );
     }
 
     #[test]
@@ -255,10 +259,13 @@ mod tests {
         let sub = c.cd(0.3); // subsonic plateau
         let peak = c.cd(1.0); // transonic peak
         let suprsnc = c.cd(4.0); // supersonic decline
-        // Transonic peak is the maximum; subsonic and high-supersonic are
-        // both well below it.
+                                 // Transonic peak is the maximum; subsonic and high-supersonic are
+                                 // both well below it.
         assert!(peak > sub, "peak {peak} should exceed subsonic {sub}");
-        assert!(peak > suprsnc, "peak {peak} should exceed supersonic {suprsnc}");
+        assert!(
+            peak > suprsnc,
+            "peak {peak} should exceed supersonic {suprsnc}"
+        );
         // Subsonic is a low plateau ~0.2.
         assert!((sub - 0.20).abs() < 1e-9);
         // Supersonic declines monotonically past the peak across the
@@ -266,7 +273,10 @@ mod tests {
         let mut prev = c.cd(1.2);
         for &m in &[1.5, 2.0, 3.0, 5.0, 8.0] {
             let v = c.cd(m);
-            assert!(v <= prev + 1e-12, "Cd rose in supersonic at M={m}: {v} > {prev}");
+            assert!(
+                v <= prev + 1e-12,
+                "Cd rose in supersonic at M={m}: {v} > {prev}"
+            );
             prev = v;
         }
     }
@@ -294,11 +304,11 @@ mod tests {
         // A synthetic ascent: density falls, speed rises; the product
         // peaks in the middle. Hand-built so the max is unambiguous.
         let series = [
-            (1.225, 0.0),   // q = 0
-            (0.9, 150.0),   // q = 10125
-            (0.6, 300.0),   // q = 27000  <- peak
-            (0.3, 400.0),   // q = 24000
-            (0.05, 600.0),  // q = 9000
+            (1.225, 0.0),  // q = 0
+            (0.9, 150.0),  // q = 10125
+            (0.6, 300.0),  // q = 27000  <- peak
+            (0.3, 400.0),  // q = 24000
+            (0.05, 600.0), // q = 9000
         ];
         let (q, i) = max_q(&series).expect("ok");
         assert_eq!(i, 2, "peak index");
@@ -308,11 +318,11 @@ mod tests {
     #[test]
     fn new_rejects_bad_tables() {
         assert!(DragCurve::new(vec![(0.0, 0.2)]).is_err()); // < 2 nodes
-        // Non-monotone Mach column.
+                                                            // Non-monotone Mach column.
         assert!(DragCurve::new(vec![(0.0, 0.2), (0.5, 0.3), (0.5, 0.4)]).is_err());
         assert!(DragCurve::new(vec![(0.0, 0.2), (-0.1, 0.3)]).is_err());
         assert!(DragCurve::new(vec![(0.0, 0.2), (1.0, -0.3)]).is_err()); // negative Cd
-        // A valid custom table works.
+                                                                         // A valid custom table works.
         assert!(DragCurve::new(vec![(0.0, 0.25), (1.0, 0.6), (3.0, 0.3)]).is_ok());
     }
 

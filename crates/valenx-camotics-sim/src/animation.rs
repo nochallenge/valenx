@@ -166,7 +166,8 @@ impl Animation {
         let grid_now = {
             let mut g = self.fresh_grid()?;
             if !moves.is_empty() {
-                let n_moves = ((t * (moves.len() - 1) as f64).round() as usize).min(moves.len() - 1);
+                let n_moves =
+                    ((t * (moves.len() - 1) as f64).round() as usize).min(moves.len() - 1);
                 for window in moves[..=n_moves].windows(2) {
                     g.cut_segment(window[0].position, window[1].position, self.tool_radius_mm);
                 }

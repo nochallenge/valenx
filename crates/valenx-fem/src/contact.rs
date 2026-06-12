@@ -81,7 +81,7 @@ use valenx_mesh::Mesh;
 
 use crate::material::FemMaterial;
 use crate::native_solver::{
-    add_diagonal, element_stiffness, elasticity_matrix, ensure_finite3, tet_block,
+    add_diagonal, elasticity_matrix, element_stiffness, ensure_finite3, tet_block,
     von_mises_from_voigt, NativeSolverError, NodalConstraint, NodalForce,
 };
 
@@ -213,10 +213,7 @@ impl ContactSolution {
     /// `0` if no node penetrates, otherwise a positive depth (metres).
     /// This is the number the penalty tolerance bounds.
     pub fn max_penetration(&self) -> f64 {
-        self.gap
-            .iter()
-            .map(|&g| (-g).max(0.0))
-            .fold(0.0, f64::max)
+        self.gap.iter().map(|&g| (-g).max(0.0)).fold(0.0, f64::max)
     }
 
     /// The total contact force summed over all nodes (N) — at
@@ -309,8 +306,8 @@ pub fn solve_contact(
             mesh.nodes[nodes[2]],
             mesh.nodes[nodes[3]],
         ];
-        let ke = element_stiffness(&coords, &d_matrix)
-            .ok_or(NativeSolverError::DegenerateElement(e))?;
+        let ke =
+            element_stiffness(&coords, &d_matrix).ok_or(NativeSolverError::DegenerateElement(e))?;
         for a in 0..4 {
             for i in 0..3 {
                 let gi = 3 * nodes[a] + i;
@@ -425,15 +422,10 @@ pub fn solve_contact(
             // The current node position is rest + displacement; its
             // gap to the plane is g = n̂·x − d. A negative gap is
             // penetration; the penalty force −k_p·g·n̂ pushes it back.
-            let mut contact_diag: Vec<[[f64; 3]; 3]> =
-                vec![[[0.0; 3]; 3]; n_nodes];
+            let mut contact_diag: Vec<[[f64; 3]; 3]> = vec![[[0.0; 3]; 3]; n_nodes];
             for node in 0..n_nodes {
-                let pos = mesh.nodes[node]
-                    + Vector3::new(
-                        u[3 * node],
-                        u[3 * node + 1],
-                        u[3 * node + 2],
-                    );
+                let pos =
+                    mesh.nodes[node] + Vector3::new(u[3 * node], u[3 * node + 1], u[3 * node + 2]);
                 let gap = plane.gap(pos);
                 // A node that has penetrated (g < 0) OR is exactly on
                 // the surface (g == 0) is in contact. Including the
@@ -457,8 +449,7 @@ pub fn solve_contact(
                     // 3×3 diagonal block — d(f_c)/du.
                     for i in 0..3 {
                         for j in 0..3 {
-                            contact_diag[node][i][j] +=
-                                contact_penalty * n[i] * n[j];
+                            contact_diag[node][i][j] += contact_penalty * n[i] * n[j];
                         }
                     }
                 }
@@ -478,8 +469,7 @@ pub fn solve_contact(
                     if let Some(value) = con.fixed[i] {
                         let dof = 3 * con.node + i;
                         penalty_diag[dof] += constraint_penalty;
-                        residual[dof] +=
-                            constraint_penalty * (u[dof] - value);
+                        residual[dof] += constraint_penalty * (u[dof] - value);
                     }
                 }
             }
@@ -504,8 +494,7 @@ pub fn solve_contact(
             let k_t = add_diagonal(&k_t, &penalty_diag);
 
             // --- solve K_T·Δu = −r ---
-            let chol = CscCholesky::factor(&k_t)
-                .map_err(|_| NativeSolverError::SolveFailed)?;
+            let chol = CscCholesky::factor(&k_t).map_err(|_| NativeSolverError::SolveFailed)?;
             let rhs = -&residual;
             let delta: DMatrix<f64> = chol.solve(&rhs);
             let delta = delta.column(0);
@@ -549,8 +538,7 @@ pub fn solve_contact(
     let mut contact_force = vec![0.0_f64; n_nodes];
     let mut gap = vec![0.0_f64; n_nodes];
     for node in 0..n_nodes {
-        let pos = mesh.nodes[node]
-            + Vector3::new(u[3 * node], u[3 * node + 1], u[3 * node + 2]);
+        let pos = mesh.nodes[node] + Vector3::new(u[3 * node], u[3 * node + 1], u[3 * node + 2]);
         let g = plane.gap(pos);
         gap[node] = g;
         if g < 0.0 {
@@ -560,14 +548,7 @@ pub fn solve_contact(
     }
 
     // --- recover the nodal von Mises stress ---
-    let von_mises = recover_von_mises(
-        mesh,
-        &elem_nodes,
-        &elem_k,
-        &u,
-        &d_matrix,
-        n_nodes,
-    );
+    let von_mises = recover_von_mises(mesh, &elem_nodes, &elem_k, &u, &d_matrix, n_nodes);
 
     Ok(ContactSolution {
         displacement,
@@ -656,10 +637,8 @@ mod tests {
     #[test]
     fn contact_plane_through_point_normalises() {
         // through_point must accept a non-unit normal and normalise it.
-        let p = ContactPlane::through_point(
-            Vector3::new(0.0, 0.0, 5.0),
-            Vector3::new(0.0, 0.0, 2.0),
-        );
+        let p =
+            ContactPlane::through_point(Vector3::new(0.0, 0.0, 5.0), Vector3::new(0.0, 0.0, 2.0));
         assert!((p.normal.norm() - 1.0).abs() < 1e-12);
         // The plane passes through z = 2.
         assert!(p.gap(Vector3::new(9.0, 9.0, 2.0)).abs() < 1e-9);
@@ -697,7 +676,10 @@ mod tests {
         )
         .unwrap();
         assert!(sol.converged, "no-contact solve should converge");
-        assert!(!sol.in_contact(), "a body clear of the plane is not in contact");
+        assert!(
+            !sol.in_contact(),
+            "a body clear of the plane is not in contact"
+        );
         assert_eq!(sol.max_penetration(), 0.0);
     }
 
@@ -777,8 +759,7 @@ mod tests {
         );
         // Force balance: the total contact reaction must balance the
         // applied downward push.
-        let rel = (sol.total_contact_force() - total_push).abs()
-            / total_push;
+        let rel = (sol.total_contact_force() - total_push).abs() / total_push;
         assert!(
             rel < 0.05,
             "contact reaction {} should balance the push {total_push} (rel {rel})",
@@ -919,7 +900,13 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            matches!(err, NativeSolverError::InvalidLoad { kind: "prescribed displacement", .. }),
+            matches!(
+                err,
+                NativeSolverError::InvalidLoad {
+                    kind: "prescribed displacement",
+                    ..
+                }
+            ),
             "expected InvalidLoad(prescribed displacement), got {err:?}"
         );
     }
@@ -979,7 +966,9 @@ mod tests {
         )
         .expect("finite prescribed displacement must still solve");
         assert!(
-            sol.displacement.iter().all(|d| d.iter().all(|c| c.is_finite())),
+            sol.displacement
+                .iter()
+                .all(|d| d.iter().all(|c| c.is_finite())),
             "a finite prescribed displacement must give a finite solution"
         );
     }

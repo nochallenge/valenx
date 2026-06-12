@@ -398,8 +398,7 @@ mod tests {
         let a = 1.0;
         let f = s_primitive(a, [0.0, 0.0, 0.0]);
         let v = nuclear_attraction(&f, &f, &[(1.0, [0.0, 0.0, 0.0])]);
-        let expect =
-            -2.0 * std::f64::consts::SQRT_2 * (a / std::f64::consts::PI).sqrt();
+        let expect = -2.0 * std::f64::consts::SQRT_2 * (a / std::f64::consts::PI).sqrt();
         assert!((v - expect).abs() < 1.0e-9, "V = {v}, expect {expect}");
     }
 

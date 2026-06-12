@@ -66,10 +66,10 @@ pub fn approx_surface_fit(
             format!("must be a positive finite number, got {tolerance}"),
         ));
     }
-    let result = fit::nurbs_surface_through_grid(
-        points_uv, degree_u, degree_v, n_cps_u, n_cps_v,
-    )
-    .map_err(|e| OcctSurfaceError::TruckLimit(format!("fit::nurbs_surface_through_grid: {e:?}")))?;
+    let result = fit::nurbs_surface_through_grid(points_uv, degree_u, degree_v, n_cps_u, n_cps_v)
+        .map_err(|e| {
+        OcctSurfaceError::TruckLimit(format!("fit::nurbs_surface_through_grid: {e:?}"))
+    })?;
 
     if result.rms_error > tolerance {
         return Err(OcctSurfaceError::bad_input(

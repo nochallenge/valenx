@@ -179,10 +179,8 @@ pub fn show(
                 // build PlotPoints from an iterator. Cloning is
                 // still O(n) but skips the temporary intermediate
                 // Vec the slice impl would force.
-                plot_ui.line(
-                    Line::new(PlotPoints::from_iter(samples.iter().copied()))
-                        .name(*field),
-                );
+                plot_ui
+                    .line(Line::new(PlotPoints::from_iter(samples.iter().copied())).name(*field));
             }
             // Convergence-target overlay: a flat horizontal line at
             // log10(threshold) (or threshold itself for linear). The
@@ -371,7 +369,8 @@ mod tests {
         // The value column must survive as scientific notation so
         // tiny gradients (1e-30 floor) don't print as 0.
         let mut hist = ResidualHistory::default();
-        hist.by_field.insert("Ux", VecDeque::from(vec![[1.0, 1e-12]]));
+        hist.by_field
+            .insert("Ux", VecDeque::from(vec![[1.0, 1e-12]]));
         let csv = residuals_to_csv(&hist);
         assert!(
             csv.contains("1e-12") || csv.contains("1.0e-12"),
@@ -413,8 +412,10 @@ mod tests {
     fn chart_x_extent_finds_min_and_max_across_fields() {
         let mut hist = ResidualHistory::default();
         // Field A: x in [1.0, 5.0]
-        hist.by_field
-            .insert("A", VecDeque::from(vec![[1.0, 0.1], [3.0, 0.05], [5.0, 0.01]]));
+        hist.by_field.insert(
+            "A",
+            VecDeque::from(vec![[1.0, 0.1], [3.0, 0.05], [5.0, 0.01]]),
+        );
         // Field B: x in [2.0, 4.0]
         hist.by_field
             .insert("B", VecDeque::from(vec![[2.0, 0.5], [4.0, 0.2]]));

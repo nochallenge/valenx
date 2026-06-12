@@ -493,10 +493,17 @@ mod tests {
         m.recompute_stats();
         // Neither entry point may panic.
         let segs = intersect_plane(&m, pt(0.5, 0.0, 0.0), pt(1.0, 0.0, 0.0));
-        assert!(segs.is_empty(), "the out-of-range triangle yields no segment");
+        assert!(
+            segs.is_empty(),
+            "the out-of-range triangle yields no segment"
+        );
         let cut = slice(&m, pt(0.0, 0.0, -10.0), pt(0.0, 0.0, 1.0));
         // The bad element is dropped, so no connectivity survives.
-        let total: usize = cut.element_blocks.iter().map(|b| b.connectivity.len()).sum();
+        let total: usize = cut
+            .element_blocks
+            .iter()
+            .map(|b| b.connectivity.len())
+            .sum();
         assert_eq!(total, 0, "the out-of-range element must be dropped");
     }
 
@@ -524,7 +531,10 @@ mod tests {
             .iter()
             .map(|b| b.connectivity.len() / 3)
             .sum();
-        assert_eq!(kept_tris, 1, "exactly the one valid triangle should survive");
+        assert_eq!(
+            kept_tris, 1,
+            "exactly the one valid triangle should survive"
+        );
     }
 
     #[test]

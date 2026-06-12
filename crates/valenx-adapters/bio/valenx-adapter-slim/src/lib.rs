@@ -144,10 +144,7 @@ impl Adapter for SlimAdapter {
         let source_script = if input.script.is_absolute() {
             input.script.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.script,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.script)?
         };
         if !source_script.is_file() {
             return Err(AdapterError::InvalidCase {

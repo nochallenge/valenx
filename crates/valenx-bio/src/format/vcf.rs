@@ -141,8 +141,14 @@ mod tests {
                         #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tNA0001\tNA0002\n\
                         chr1\t100\t.\tA\tG\t.\tPASS\t.\tGT\t0/1\t1/1\n";
         let vcf = read_str(vcf_text).unwrap();
-        assert_eq!(vcf.samples, vec!["NA0001".to_string(), "NA0002".to_string()]);
-        assert_eq!(vcf.records[0].samples, vec!["0/1".to_string(), "1/1".to_string()]);
+        assert_eq!(
+            vcf.samples,
+            vec!["NA0001".to_string(), "NA0002".to_string()]
+        );
+        assert_eq!(
+            vcf.records[0].samples,
+            vec!["0/1".to_string(), "1/1".to_string()]
+        );
     }
 
     #[test]

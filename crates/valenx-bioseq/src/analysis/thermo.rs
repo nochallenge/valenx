@@ -47,10 +47,7 @@ pub fn nn_params(dimer: &[u8; 2]) -> Option<NnEntry> {
 /// added for each end of the duplex, depending on the terminal base.
 pub fn nn_init(end: u8) -> NnEntry {
     match end {
-        b'G' | b'C' => NnEntry {
-            dh: 0.1,
-            ds: -2.8,
-        },
+        b'G' | b'C' => NnEntry { dh: 0.1, ds: -2.8 },
         _ => NnEntry { dh: 2.3, ds: 4.1 },
     }
 }
@@ -181,7 +178,7 @@ pub fn duplex_enthalpy_entropy(seq: &[u8]) -> Option<NnEntry> {
 pub fn duplex_tm(seq: &[u8], salt: SaltParams, strand: StrandParams) -> Option<f64> {
     let nn = duplex_enthalpy_entropy(seq)?;
     let dh_cal = nn.dh * 1000.0; // kcal -> cal
-    // SantaLucia salt correction on ΔS (monovalent-equivalent).
+                                 // SantaLucia salt correction on ΔS (monovalent-equivalent).
     let n = seq.len() as f64;
     let na_eq = salt.effective_na().max(1e-6);
     let ds_salt = nn.ds + 0.368 * (n - 1.0) * na_eq.ln();
@@ -435,12 +432,7 @@ pub fn pairs(a: u8, b: u8) -> bool {
     let b = b.to_ascii_uppercase();
     matches!(
         (a, b),
-        (b'A', b'T')
-            | (b'T', b'A')
-            | (b'A', b'U')
-            | (b'U', b'A')
-            | (b'G', b'C')
-            | (b'C', b'G')
+        (b'A', b'T') | (b'T', b'A') | (b'A', b'U') | (b'U', b'A') | (b'G', b'C') | (b'C', b'G')
     )
 }
 
@@ -552,7 +544,10 @@ mod tests {
         };
         let tm_no = duplex_tm(seq, no_mg, strand).unwrap();
         let tm_mg = duplex_tm(seq, with_mg, strand).unwrap();
-        assert!(tm_mg > tm_no, "Mg should raise Tm; no_mg={tm_no} mg={tm_mg}");
+        assert!(
+            tm_mg > tm_no,
+            "Mg should raise Tm; no_mg={tm_no} mg={tm_mg}"
+        );
     }
 
     #[test]

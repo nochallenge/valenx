@@ -79,10 +79,7 @@ mod tests {
     /// sits far away.
     fn two_vertex_solid() -> Pickable {
         Pickable::TaggedVertices {
-            vertices: vec![
-                (2, [0.0, 0.0, 0.0]),
-                (8, [40.0, 40.0, 0.0]),
-            ],
+            vertices: vec![(2, [0.0, 0.0, 0.0]), (8, [40.0, 40.0, 0.0])],
         }
     }
 

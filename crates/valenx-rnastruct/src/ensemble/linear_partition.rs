@@ -136,9 +136,7 @@ impl LinearPartitionResult {
             .filter(|(_, &p)| p >= threshold)
             .map(|(&(i, j), &p)| (i, j, p))
             .collect();
-        out.sort_by(|a, b| {
-            b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        out.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
         out
     }
 }
@@ -315,8 +313,7 @@ impl<'a> BeamPartition<'a> {
             if l < MIN_HAIRPIN + 1 {
                 break;
             }
-            let inner: Vec<(usize, f64)> =
-                self.qp[l].iter().map(|(&k, &v)| (k, v)).collect();
+            let inner: Vec<(usize, f64)> = self.qp[l].iter().map(|(&k, &v)| (k, v)).collect();
             for (k, inner_q) in inner {
                 if inner_q == 0.0 {
                     continue;
@@ -335,8 +332,16 @@ impl<'a> BeamPartition<'a> {
                         continue;
                     }
                     let il = energy::internal_loop_energy(
-                        codes[i], codes[j], codes[k], codes[l], left, right,
-                        codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                        codes[i],
+                        codes[j],
+                        codes[k],
+                        codes[l],
+                        left,
+                        right,
+                        codes[i + 1],
+                        codes[j - 1],
+                        codes[k - 1],
+                        codes[l + 1],
                     );
                     *out.entry(i).or_insert(0.0) += self.boltz(il) * inner_q;
                 }
@@ -354,14 +359,12 @@ impl<'a> BeamPartition<'a> {
         let mut out: HashMap<usize, f64> = HashMap::new();
         // the branch ends exactly at j.
         for (&i, &q) in &self.qp[j] {
-            *out.entry(i).or_insert(0.0) +=
-                q * self.boltz(multiloop::PER_BRANCH);
+            *out.entry(i).or_insert(0.0) += q * self.boltz(multiloop::PER_BRANCH);
         }
         // j is a trailing unpaired base; the rest is qm1[i][j-1].
         if j > 0 {
             for (&i, &q) in &self.qm1[j - 1] {
-                *out.entry(i).or_insert(0.0) +=
-                    q * self.boltz(multiloop::PER_UNPAIRED);
+                *out.entry(i).or_insert(0.0) += q * self.boltz(multiloop::PER_UNPAIRED);
             }
         }
         self.qm1[j] = out;
@@ -376,8 +379,7 @@ impl<'a> BeamPartition<'a> {
         // qm2: Σ_k qm[i][k]·qm1[k+1][j]. Iterate the qm1[j] beam (start
         // = k+1) and join with the qm[k] beam.
         let mut qm2_out: HashMap<usize, f64> = HashMap::new();
-        let qm1_starts: Vec<(usize, f64)> =
-            self.qm1[j].iter().map(|(&kp1, &q)| (kp1, q)).collect();
+        let qm1_starts: Vec<(usize, f64)> = self.qm1[j].iter().map(|(&kp1, &q)| (kp1, q)).collect();
         for (kp1, qm1_q) in qm1_starts {
             if kp1 == 0 {
                 continue;
@@ -450,10 +452,7 @@ impl<'a> BeamPartition<'a> {
             for j in (i + 1)..n {
                 if let Some(&qp) = self.qp[j].get(&i) {
                     q += qp
-                        * self.boltz(energy::terminal_penalty(
-                            self.codes[i],
-                            self.codes[j],
-                        ))
+                        * self.boltz(energy::terminal_penalty(self.codes[i], self.codes[j]))
                         * qc_suffix[j + 1];
                 }
             }
@@ -475,10 +474,7 @@ impl<'a> BeamPartition<'a> {
                 let right = qc_suffix[j + 1];
                 outside += left
                     * right
-                    * self.boltz(energy::terminal_penalty(
-                        self.codes[i],
-                        self.codes[j],
-                    ));
+                    * self.boltz(energy::terminal_penalty(self.codes[i], self.codes[j]));
 
                 // (i,j) sits directly inside an enclosing pair (p,r) as
                 // the single inner pair of an internal/bulge/stack loop.
@@ -495,19 +491,23 @@ impl<'a> BeamPartition<'a> {
                         }
                         let lft = i - p - 1;
                         let rgt = r - j - 1;
-                        if lft + rgt != 0
-                            && (lft > MAX_LOOP || rgt > MAX_LOOP)
-                        {
+                        if lft + rgt != 0 && (lft > MAX_LOOP || rgt > MAX_LOOP) {
                             continue;
                         }
                         if r - p <= MIN_HAIRPIN {
                             continue;
                         }
                         let il = energy::internal_loop_energy(
-                            self.codes[p], self.codes[r], self.codes[i],
-                            self.codes[j], lft, rgt,
-                            self.codes[p + 1], self.codes[r - 1],
-                            self.codes[i - 1], self.codes[j + 1],
+                            self.codes[p],
+                            self.codes[r],
+                            self.codes[i],
+                            self.codes[j],
+                            lft,
+                            rgt,
+                            self.codes[p + 1],
+                            self.codes[r - 1],
+                            self.codes[i - 1],
+                            self.codes[j + 1],
                         );
                         outside += parent * self.boltz(il);
                     }
@@ -547,12 +547,9 @@ fn prune(beam_map: &mut HashMap<usize, f64>, beam: usize) -> bool {
     if beam_map.len() <= beam {
         return false;
     }
-    let mut entries: Vec<(usize, f64)> =
-        beam_map.iter().map(|(&i, &v)| (i, v)).collect();
+    let mut entries: Vec<(usize, f64)> = beam_map.iter().map(|(&i, &v)| (i, v)).collect();
     // Keep the `beam` highest-weight entries (descending).
-    entries.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     let keep: std::collections::HashSet<usize> =
         entries.iter().take(beam).map(|&(i, _)| i).collect();
     beam_map.retain(|i, _| keep.contains(i));
@@ -575,8 +572,7 @@ mod tests {
     #[test]
     fn q_is_at_least_one() {
         // The empty structure always contributes weight 1.
-        let pf =
-            linear_partition(&RnaSeq::parse("AAAAAAAA").unwrap()).unwrap();
+        let pf = linear_partition(&RnaSeq::parse("AAAAAAAA").unwrap()).unwrap();
         assert!(pf.q() >= 1.0 - 1e-9);
     }
 
@@ -610,9 +606,7 @@ mod tests {
             let lin = linear_partition_exact(&seq).unwrap();
             assert!(lin.is_exact());
             assert!(
-                (lin.ensemble_free_energy() - exact.ensemble_free_energy())
-                    .abs()
-                    < 1e-6,
+                (lin.ensemble_free_energy() - exact.ensemble_free_energy()).abs() < 1e-6,
                 "seq {s}: LinearPartition-exact G {} != McCaskill G {}",
                 lin.ensemble_free_energy(),
                 exact.ensemble_free_energy()

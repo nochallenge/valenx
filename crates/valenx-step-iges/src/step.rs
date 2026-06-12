@@ -315,7 +315,8 @@ mod tests {
                 .as_nanos()
         ));
         let f = std::fs::File::create(&tmp).unwrap();
-        f.set_len(crate::MAX_CAD_INTERCHANGE_FILE_BYTES + 1).unwrap();
+        f.set_len(crate::MAX_CAD_INTERCHANGE_FILE_BYTES + 1)
+            .unwrap();
         drop(f);
         let err = read(&tmp).expect_err("oversize .step must error");
         let _ = std::fs::remove_file(&tmp);

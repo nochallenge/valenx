@@ -988,30 +988,33 @@ mod headless_ui_tests {
     fn grid_shader_validates_with_naga() {
         let source = GRID_SHADER_WGSL;
         let label = "GRID_SHADER_WGSL";
-        let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
-            panic!("{label} failed to parse:\n{}", e.emit_to_string(source))
-        });
+        let module = naga::front::wgsl::parse_str(source)
+            .unwrap_or_else(|e| panic!("{label} failed to parse:\n{}", e.emit_to_string(source)));
         // Skip CONTROL_FLOW_UNIFORMITY: `fwidth` after `discard` is valid on
         // real GPUs but naga's static analysis flags it conservatively.
         let flags = naga::valid::ValidationFlags::all()
             & !naga::valid::ValidationFlags::CONTROL_FLOW_UNIFORMITY;
-        let mut validator =
-            naga::valid::Validator::new(flags, naga::valid::Capabilities::empty());
+        let mut validator = naga::valid::Validator::new(flags, naga::valid::Capabilities::empty());
         validator.validate(&module).unwrap_or_else(|e| {
-            panic!("{label} failed naga validation:\n{}", e.emit_to_string(source))
+            panic!(
+                "{label} failed naga validation:\n{}",
+                e.emit_to_string(source)
+            )
         });
     }
 
     fn validate_wgsl(source: &str, label: &str) {
-        let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
-            panic!("{label} failed to parse:\n{}", e.emit_to_string(source))
-        });
+        let module = naga::front::wgsl::parse_str(source)
+            .unwrap_or_else(|e| panic!("{label} failed to parse:\n{}", e.emit_to_string(source)));
         let mut validator = naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
             naga::valid::Capabilities::empty(),
         );
         validator.validate(&module).unwrap_or_else(|e| {
-            panic!("{label} failed naga validation:\n{}", e.emit_to_string(source))
+            panic!(
+                "{label} failed naga validation:\n{}",
+                e.emit_to_string(source)
+            )
         });
     }
 
@@ -1046,13 +1049,11 @@ mod headless_ui_tests {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
-        let adapter = pollster::block_on(instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                force_fallback_adapter: false,
-                compatible_surface: None,
-            },
-        ));
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            force_fallback_adapter: false,
+            compatible_surface: None,
+        }));
         let Some(adapter) = adapter else {
             eprintln!(
                 "headless_pbr_render_shades_a_lit_quad: no wgpu adapter in this \
@@ -1094,22 +1095,20 @@ mod headless_ui_tests {
             },
             count: None,
         };
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("valenx.headless_pbr.bgl"),
-                entries: &[
-                    uniform_entry(0),
-                    uniform_entry(1),
-                    uniform_entry(2),
-                    uniform_entry(3),
-                ],
-            });
-        let pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("valenx.headless_pbr.layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("valenx.headless_pbr.bgl"),
+            entries: &[
+                uniform_entry(0),
+                uniform_entry(1),
+                uniform_entry(2),
+                uniform_entry(3),
+            ],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("valenx.headless_pbr.layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
         let pbr_vertex_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
         // A linear (non-sRGB) target so the readback pixels are the
         // shader's tone-mapped + sRGB-encoded output unchanged — no
@@ -1154,12 +1153,30 @@ mod headless_ui_tests {
         // --- a quad in the z=0 plane, normal +Z, facing the camera ---
         // Two CCW triangles spanning x,y in [-1, 1].
         let quad = [
-            PbrVertex { position: [-1.0, -1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            PbrVertex { position: [1.0, -1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            PbrVertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            PbrVertex { position: [-1.0, -1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            PbrVertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            PbrVertex { position: [-1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            PbrVertex {
+                position: [-1.0, -1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            PbrVertex {
+                position: [1.0, -1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            PbrVertex {
+                position: [1.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            PbrVertex {
+                position: [-1.0, -1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            PbrVertex {
+                position: [1.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            PbrVertex {
+                position: [-1.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
         ];
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("valenx.headless_pbr.vertices"),
@@ -1195,7 +1212,9 @@ mod headless_ui_tests {
         let light = PbrLightUniform::point([1.5, 0.0, 1.0], [1.0, 1.0, 1.0], 90.0);
         let mut light_slots = [PbrLightUniform::inactive(); MAX_LIGHTS];
         light_slots[0] = light;
-        let light_array = LightArray { lights: light_slots };
+        let light_array = LightArray {
+            lights: light_slots,
+        };
 
         let frame_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("frame"),
@@ -1221,10 +1240,22 @@ mod headless_ui_tests {
             label: Some("valenx.headless_pbr.bg"),
             layout: &bind_group_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: frame_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: mat_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: light_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: gi_buf.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: frame_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: mat_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: light_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: gi_buf.as_entire_binding(),
+                },
             ],
         });
 
@@ -1245,7 +1276,12 @@ mod headless_ui_tests {
         });
         let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
         // The clear colour — distinct from anything the shader writes.
-        let clear = wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+        let clear = wgpu::Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        };
 
         // Readback buffer — 256-byte-aligned row pitch (wgpu's
         // COPY_BYTES_PER_ROW_ALIGNMENT). 256 px × 4 bytes = 1024,
@@ -1260,10 +1296,9 @@ mod headless_ui_tests {
         });
 
         // --- encode: render pass + copy-to-buffer ---
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("valenx.headless_pbr.encoder"),
-            });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("valenx.headless_pbr.encoder"),
+        });
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("valenx.headless_pbr.pass"),
@@ -1370,12 +1405,8 @@ mod headless_ui_tests {
             0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64
         };
         let quarter = SIZE / 4;
-        let left_mean: f64 =
-            (quarter - 16..quarter + 16).map(lum).sum::<f64>() / 32.0;
-        let right_mean: f64 = (3 * quarter - 16..3 * quarter + 16)
-            .map(lum)
-            .sum::<f64>()
-            / 32.0;
+        let left_mean: f64 = (quarter - 16..quarter + 16).map(lum).sum::<f64>() / 32.0;
+        let right_mean: f64 = (3 * quarter - 16..3 * quarter + 16).map(lum).sum::<f64>() / 32.0;
         // The left (far) band must NOT be saturated — otherwise both
         // bands are clipped white and the test would not actually be
         // exercising a gradient. Then require a clear ≥15 % margin,

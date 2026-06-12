@@ -67,8 +67,7 @@ fn rotate_image(image: &Image2d, angle: f64) -> Image2d {
             let dy = y as f64 - cy;
             let sx = cos * dx + sin * dy + cx;
             let sy = -sin * dx + cos * dy + cy;
-            if sx < 0.0 || sy < 0.0 || sx >= (n - 1) as f64 || sy >= (image.height - 1) as f64
-            {
+            if sx < 0.0 || sy < 0.0 || sx >= (n - 1) as f64 || sy >= (image.height - 1) as f64 {
                 continue;
             }
             let x0 = sx.floor() as usize;
@@ -183,7 +182,10 @@ pub fn class_averages(
         ));
     }
     if n_angles == 0 {
-        return Err(StructPredictError::invalid("n_angles", "must be at least 1"));
+        return Err(StructPredictError::invalid(
+            "n_angles",
+            "must be at least 1",
+        ));
     }
     let n = stack.len();
     let w = stack.box_size;
@@ -275,7 +277,11 @@ mod tests {
         let there = rotate_image(&img, 0.7);
         let back = rotate_image(&there, -0.7);
         // Rotating and unrotating recovers the image closely.
-        assert!(zncc(&img, &back) > 0.9, "round-trip corr {}", zncc(&img, &back));
+        assert!(
+            zncc(&img, &back) > 0.9,
+            "round-trip corr {}",
+            zncc(&img, &back)
+        );
     }
 
     #[test]
@@ -295,7 +301,11 @@ mod tests {
         let res = class_averages(&stack, 2, 24, 6).expect("classify");
         assert_eq!(res.num_classes(), 2);
         // Both classes get members.
-        assert!(res.class_sizes.iter().all(|&s| s > 0), "{:?}", res.class_sizes);
+        assert!(
+            res.class_sizes.iter().all(|&s| s > 0),
+            "{:?}",
+            res.class_sizes
+        );
     }
 
     #[test]

@@ -132,14 +132,11 @@ impl Adapter for RnaStructureAdapter {
         // `workdir.join(&input.output)`. Validate as a basename
         // before the join so `output = "../etc/passwd"` is rejected.
         if let Some(s) = input.output.to_str() {
-            valenx_core::adapter_helpers::validate_output_basename(
-                s,
-                "[bio.rnastructure].output",
-            )
-            .map_err(|e| AdapterError::InvalidCase {
-                case_path: case.path.join("case.toml"),
-                reason: format!("{e}"),
-            })?;
+            valenx_core::adapter_helpers::validate_output_basename(s, "[bio.rnastructure].output")
+                .map_err(|e| AdapterError::InvalidCase {
+                    case_path: case.path.join("case.toml"),
+                    reason: format!("{e}"),
+                })?;
         } else {
             return Err(AdapterError::InvalidCase {
                 case_path: case.path.join("case.toml"),
@@ -154,10 +151,7 @@ impl Adapter for RnaStructureAdapter {
         let source_input = if input.input.is_absolute() {
             input.input.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input)?
         };
         if !source_input.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -168,7 +168,11 @@ fn design_coding_joint(protein: &[u8], params: CodingDesignParams) -> Result<Rna
         params.joint_lambda,
         ld.mfe,
         ld.cai,
-        if ld.exact { ", exact lattice optimum" } else { "" },
+        if ld.exact {
+            ", exact lattice optimum"
+        } else {
+            ""
+        },
     ));
     if prepended_met {
         notes.push(

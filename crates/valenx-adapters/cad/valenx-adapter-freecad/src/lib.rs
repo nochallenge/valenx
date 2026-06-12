@@ -118,10 +118,7 @@ impl Adapter for FreeCadAdapter {
         let source_abs = if input.source.is_absolute() {
             input.source.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.source,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.source)?
         };
         if !source_abs.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -120,10 +120,7 @@ impl Adapter for OpenRadiossAdapter {
 
         // Stage the engine deck. Resolve relative path against the
         // case directory.
-        let source = valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.engine_input,
-        )?;
+        let source = valenx_core::adapter_helpers::confined_join(&case.path, &input.engine_input)?;
         if !source.is_file() {
             return Err(AdapterError::Other(anyhow::anyhow!(
                 "engine_input not found at {} (resolve relative to case dir)",

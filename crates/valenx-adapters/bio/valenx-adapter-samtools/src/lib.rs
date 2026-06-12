@@ -163,10 +163,7 @@ impl Adapter for SamtoolsAdapter {
         let source_input = if input.input.is_absolute() {
             input.input.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input)?
         };
         if !source_input.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -530,7 +527,11 @@ fn run_capture_stdout(
                 stderr_tail.push(line);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                if let Some(status) = kill_guard.inner_mut().try_wait().map_err(AdapterError::Io)? {
+                if let Some(status) = kill_guard
+                    .inner_mut()
+                    .try_wait()
+                    .map_err(AdapterError::Io)?
+                {
                     // Drain remaining lines so nothing's lost.
                     for line in rx.try_iter() {
                         process_stderr(&line, ctx, &mut warnings);

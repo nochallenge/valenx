@@ -8,9 +8,7 @@
 //! egui layout and makes the workbench's logic `#[test]`-coverable
 //! without standing up an egui context.
 
-use valenx_aero::{
-    AeroRequest, Air, BoundaryConditions, TunnelSizing, TurbulenceModel,
-};
+use valenx_aero::{AeroRequest, Air, BoundaryConditions, TunnelSizing, TurbulenceModel};
 
 // ---------------------------------------------------------------------------
 // Enumerations the form exposes
@@ -623,10 +621,7 @@ mod tests {
             resolution: GridResolution::Fine,
             ..WindTunnelForm::default()
         };
-        assert!(
-            fine.tunnel_sizing().cells_across_body
-                > coarse.tunnel_sizing().cells_across_body
-        );
+        assert!(fine.tunnel_sizing().cells_across_body > coarse.tunnel_sizing().cells_across_body);
         assert!(fine.tunnel_sizing().max_cells > coarse.tunnel_sizing().max_cells);
     }
 

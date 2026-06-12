@@ -105,11 +105,25 @@ pub fn graft_motif(
         // N-side.
         let m_idx = k;
         let s_idx = start - anchor + k;
-        push_pair(motif, scaffold, m_idx, s_idx, &mut motif_ca, &mut scaffold_ca)?;
+        push_pair(
+            motif,
+            scaffold,
+            m_idx,
+            s_idx,
+            &mut motif_ca,
+            &mut scaffold_ca,
+        )?;
         // C-side.
         let m_idx = motif.residues.len() - anchor + k;
         let s_idx = end + k;
-        push_pair(motif, scaffold, m_idx, s_idx, &mut motif_ca, &mut scaffold_ca)?;
+        push_pair(
+            motif,
+            scaffold,
+            m_idx,
+            s_idx,
+            &mut motif_ca,
+            &mut scaffold_ca,
+        )?;
     }
 
     let sup = kabsch(&motif_ca, &scaffold_ca)
@@ -158,9 +172,7 @@ fn push_pair(
         .residues
         .get(s_idx)
         .and_then(|r| r.ca)
-        .ok_or_else(|| {
-            StructPredictError::invalid("scaffold", "anchor residue lacks a Cα")
-        })?;
+        .ok_or_else(|| StructPredictError::invalid("scaffold", "anchor residue lacks a Cα"))?;
     motif_ca.push(m_ca);
     scaffold_ca.push(s_ca);
     Ok(())

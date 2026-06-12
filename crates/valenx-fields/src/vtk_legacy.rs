@@ -643,11 +643,13 @@ fn read_typed_block(
             max: MAX_VTK_LEGACY_POINTS,
         });
     }
-    let bytes_needed = n_elements.checked_mul(elem_size).ok_or(ParseError::TooLarge {
-        what: section.to_string(),
-        count: n_elements,
-        max: MAX_VTK_LEGACY_POINTS,
-    })?;
+    let bytes_needed = n_elements
+        .checked_mul(elem_size)
+        .ok_or(ParseError::TooLarge {
+            what: section.to_string(),
+            count: n_elements,
+            max: MAX_VTK_LEGACY_POINTS,
+        })?;
     let raw = cur.read_exact_bytes(section, bytes_needed)?;
     let mut out: Vec<f64> = Vec::with_capacity(n_elements);
     for i in 0..n_elements {

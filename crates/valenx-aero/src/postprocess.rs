@@ -108,7 +108,11 @@ pub fn sample_velocity(flow: &FlowField, grid: &Grid3, p: Vector3<f64>) -> Vecto
     let fx = ((p.x - grid.x0) / grid.dx() - 0.5).clamp(0.0, (grid.nx - 1) as f64);
     let fy = ((p.y - grid.y0) / grid.dy() - 0.5).clamp(0.0, (grid.ny - 1) as f64);
     let fz = ((p.z - grid.z0) / grid.dz() - 0.5).clamp(0.0, (grid.nz - 1) as f64);
-    let (i0, j0, k0) = (fx.floor() as usize, fy.floor() as usize, fz.floor() as usize);
+    let (i0, j0, k0) = (
+        fx.floor() as usize,
+        fy.floor() as usize,
+        fz.floor() as usize,
+    );
     let i1 = (i0 + 1).min(grid.nx - 1);
     let j1 = (j0 + 1).min(grid.ny - 1);
     let k1 = (k0 + 1).min(grid.nz - 1);
@@ -148,10 +152,7 @@ pub struct Streamline {
 impl Streamline {
     /// The streamline's arc length.
     pub fn length(&self) -> f64 {
-        self.points
-            .windows(2)
-            .map(|w| (w[1] - w[0]).norm())
-            .sum()
+        self.points.windows(2).map(|w| (w[1] - w[0]).norm()).sum()
     }
 }
 
@@ -351,10 +352,8 @@ pub fn q_criterion(flow: &FlowField) -> Field3 {
                 let s12 = 0.5 * (dudy + dvdx);
                 let s13 = 0.5 * (dudz + dwdx);
                 let s23 = 0.5 * (dvdz + dwdy);
-                let s_norm2 = s11 * s11
-                    + s22 * s22
-                    + s33 * s33
-                    + 2.0 * (s12 * s12 + s13 * s13 + s23 * s23);
+                let s_norm2 =
+                    s11 * s11 + s22 * s22 + s33 * s33 + 2.0 * (s12 * s12 + s13 * s13 + s23 * s23);
                 // Rotation-rate tensor Ω and its squared norm.
                 let o12 = 0.5 * (dudy - dvdx);
                 let o13 = 0.5 * (dudz - dwdx);
@@ -422,12 +421,7 @@ impl FieldSlice {
 /// pressure, a velocity component, the vorticity magnitude, etc.
 /// `axis` and `coordinate` place the plane; the nearest grid layer is
 /// taken.
-pub fn slice_field(
-    grid: &Grid3,
-    field: &Field3,
-    axis: SliceAxis,
-    coordinate: f64,
-) -> FieldSlice {
+pub fn slice_field(grid: &Grid3, field: &Field3, axis: SliceAxis, coordinate: f64) -> FieldSlice {
     match axis {
         SliceAxis::X => {
             let i = (((coordinate - grid.x0) / grid.dx()).floor() as i64)
@@ -589,7 +583,10 @@ mod tests {
         flow.v.fill(0.0);
         flow.w.fill(0.0);
         let vort = vorticity(&flow);
-        assert!(vort.magnitude.abs_max() < 1e-9, "uniform flow has zero vorticity");
+        assert!(
+            vort.magnitude.abs_max() < 1e-9,
+            "uniform flow has zero vorticity"
+        );
     }
 
     #[test]
@@ -669,10 +666,12 @@ mod tests {
         assert_eq!((s.width, s.height), (tunnel.grid.nx, tunnel.grid.ny));
         // Every value in the slice is the same z layer index.
         let (lo, hi) = s.range();
-        assert!((lo - hi).abs() < 1e-12, "z-slice of a z-varying field is flat");
+        assert!(
+            (lo - hi).abs() < 1e-12,
+            "z-slice of a z-varying field is flat"
+        );
         // A pressure slice should be finite everywhere.
         let ps = slice_field(&tunnel.grid, &flow.pressure, SliceAxis::Y, zc);
         assert!(ps.values.iter().all(|v| v.is_finite()));
     }
 }
-

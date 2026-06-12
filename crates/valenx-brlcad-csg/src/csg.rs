@@ -112,9 +112,7 @@ pub fn evaluate(tree: &CsgNode) -> Result<SolidHandle, BrlCadError> {
 fn validate(tree: &CsgNode) -> Result<(), BrlCadError> {
     match tree {
         CsgNode::Primitive(p) => validate_prim(p),
-        CsgNode::Union(a, b)
-        | CsgNode::Intersection(a, b)
-        | CsgNode::Difference(a, b) => {
+        CsgNode::Union(a, b) | CsgNode::Intersection(a, b) | CsgNode::Difference(a, b) => {
             validate(a)?;
             validate(b)
         }
@@ -149,7 +147,13 @@ fn validate_prim(p: &Primitive) -> Result<(), BrlCadError> {
             }
         }
         Primitive::Cone { r1, r2, h } => {
-            if !r1.is_finite() || *r1 < 0.0 || !r2.is_finite() || *r2 < 0.0 || !h.is_finite() || *h <= 0.0 {
+            if !r1.is_finite()
+                || *r1 < 0.0
+                || !r2.is_finite()
+                || *r2 < 0.0
+                || !h.is_finite()
+                || *h <= 0.0
+            {
                 return Err(BrlCadError::BadParameter {
                     name: "cone",
                     reason: format!("r1/r2 must be >= 0, h > 0 ({r1}, {r2}, {h})"),
@@ -413,9 +417,7 @@ fn parse_node(
     Ok(result)
 }
 
-fn pop_f64(
-    iter: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
-) -> Result<f64, BrlCadError> {
+fn pop_f64(iter: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> Result<f64, BrlCadError> {
     let tok = iter.next().ok_or(BrlCadError::Parse {
         line: 0,
         message: "unexpected end of input (expected number)".into(),

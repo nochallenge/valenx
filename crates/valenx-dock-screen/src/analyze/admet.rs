@@ -16,9 +16,7 @@
 //! [`admet_filter`] that partitions a library into pass / fail.
 
 use valenx_cheminf::analyze::qed::{qed, structural_alert_count};
-use valenx_cheminf::descriptors::{
-    crippen_logp, hba, hbd, lipinski, rotatable_bonds, tpsa, veber,
-};
+use valenx_cheminf::descriptors::{crippen_logp, hba, hbd, lipinski, rotatable_bonds, tpsa, veber};
 use valenx_cheminf::molecule::Molecule;
 use valenx_cheminf::perceive::formula::average_molecular_weight;
 
@@ -257,7 +255,11 @@ mod tests {
         // Benzene — tiny, well within every drug-likeness limit.
         let benzene = mol_from_smiles("c1ccccc1").unwrap();
         let result = admet_filter(&[benzene], &AdmetFilter::default()).unwrap();
-        assert!(result.verdicts[0].passes, "benzene should pass: {:?}", result.verdicts[0].failures);
+        assert!(
+            result.verdicts[0].passes,
+            "benzene should pass: {:?}",
+            result.verdicts[0].failures
+        );
         assert_eq!(result.n_passed(), 1);
     }
 

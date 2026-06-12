@@ -19,10 +19,7 @@ use valenx_align::{
     msa::{align, refine, RefineParams},
     ScoringScheme,
 };
-use valenx_core::{
-    error::RunPhase,
-    AdapterError, RunContext, RunReport,
-};
+use valenx_core::{error::RunPhase, AdapterError, RunContext, RunReport};
 
 /// Parameters stored in `native_params.toml` by `prepare()`.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -154,8 +151,7 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
 /// sequence are in the IUPAC DNA/RNA set, use NUC.4.4; otherwise
 /// BLOSUM62.
 fn detect_scheme(records: &[(Option<String>, Vec<u8>)]) -> ScoringScheme {
-    let dna_set: std::collections::HashSet<u8> =
-        b"ACGTURYNSWKMBVHD".iter().copied().collect();
+    let dna_set: std::collections::HashSet<u8> = b"ACGTURYNSWKMBVHD".iter().copied().collect();
 
     let mut total = 0usize;
     let mut dna_count = 0usize;

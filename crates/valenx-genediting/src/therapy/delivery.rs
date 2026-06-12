@@ -216,10 +216,7 @@ mod tests {
     #[test]
     fn aav8_is_hepatotropic() {
         let info = aav_serotype(AavSerotype::Aav8);
-        assert!(info
-            .primary_tropism
-            .iter()
-            .any(|t| t.contains("liver")));
+        assert!(info.primary_tropism.iter().any(|t| t.contains("liver")));
         assert!(!info.crosses_bbb);
     }
 

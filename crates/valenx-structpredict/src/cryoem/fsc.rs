@@ -146,10 +146,7 @@ fn dft3(volume: &Volume3d) -> Vec<Complex> {
 /// # Errors
 /// [`StructPredictError::Invalid`] if the volumes differ in shape or
 /// are smaller than `4³`.
-pub fn fourier_shell_correlation(
-    map_a: &Volume3d,
-    map_b: &Volume3d,
-) -> Result<FscCurve> {
+pub fn fourier_shell_correlation(map_a: &Volume3d, map_b: &Volume3d) -> Result<FscCurve> {
     if map_a.nx != map_b.nx || map_a.ny != map_b.ny || map_a.nz != map_b.nz {
         return Err(StructPredictError::invalid(
             "map_b",
@@ -319,7 +316,10 @@ mod tests {
         // than the highest (independent noise).
         let low = curve.fsc[1];
         let high = *curve.fsc.last().unwrap();
-        assert!(low > high, "low-freq FSC {low} should beat high-freq {high}");
+        assert!(
+            low > high,
+            "low-freq FSC {low} should beat high-freq {high}"
+        );
     }
 
     #[test]

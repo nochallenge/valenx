@@ -58,11 +58,7 @@ fn parent_of_at(ts: &TreeSequence, position: f64) -> Vec<Option<usize>> {
 /// Walks downward from `node` under the local tree given by
 /// `parent_of`, counting the sample nodes (those flagged
 /// `is_sample`) reachable.
-fn count_descendant_samples(
-    ts: &TreeSequence,
-    parent_of: &[Option<usize>],
-    node: usize,
-) -> usize {
+fn count_descendant_samples(ts: &TreeSequence, parent_of: &[Option<usize>], node: usize) -> usize {
     // Build a children-of view by inverting parent_of.
     let mut children_of: Vec<Vec<usize>> = vec![Vec::new(); ts.node_count()];
     for (c, &p) in parent_of.iter().enumerate() {
@@ -99,10 +95,7 @@ pub struct WindowedStats {
 fn validate_windows(ts: &TreeSequence, windows: &[(f64, f64)]) -> Result<()> {
     let l = ts.sequence_length();
     if windows.is_empty() {
-        return Err(PopgenError::invalid(
-            "windows",
-            "need at least one window",
-        ));
+        return Err(PopgenError::invalid("windows", "need at least one window"));
     }
     let mut last_right = 0.0;
     for (i, &(a, b)) in windows.iter().enumerate() {
@@ -115,9 +108,7 @@ fn validate_windows(ts: &TreeSequence, windows: &[(f64, f64)]) -> Result<()> {
         if a < 0.0 - 1e-12 || b > l + 1e-9 {
             return Err(PopgenError::invalid(
                 "windows",
-                format!(
-                    "window {i} [{a}, {b}) is outside the chromosome [0, {l})"
-                ),
+                format!("window {i} [{a}, {b}) is outside the chromosome [0, {l})"),
             ));
         }
         if b <= a {
@@ -258,9 +249,7 @@ pub fn windowed_site_divergence(
                 db += matrix.get(s, col) as usize;
             }
         }
-        let dxy = (da as f64 * (nb - db as f64)
-            + db as f64 * (na - da as f64))
-            / (na * nb);
+        let dxy = (da as f64 * (nb - db as f64) + db as f64 * (na - da as f64)) / (na * nb);
         for (w_idx, &(a, b)) in windows.iter().enumerate() {
             if pos >= a && pos < b {
                 values[w_idx] += dxy;
@@ -384,11 +373,7 @@ pub fn windowed_branch_diversity(
 /// # Errors
 /// [`PopgenError::Invalid`] on empty sample sets or out-of-range
 /// indices.
-pub fn branch_divergence(
-    ts: &TreeSequence,
-    set_a: &[usize],
-    set_b: &[usize],
-) -> Result<f64> {
+pub fn branch_divergence(ts: &TreeSequence, set_a: &[usize], set_b: &[usize]) -> Result<f64> {
     if set_a.is_empty() || set_b.is_empty() {
         return Err(PopgenError::invalid(
             "sample_set",
@@ -418,8 +403,7 @@ pub fn branch_divergence(
         for e in ts.edges() {
             if midpoint >= e.left && midpoint < e.right {
                 let dt = (nodes[e.parent].time - nodes[e.child].time).max(0.0);
-                let (ka, kb) =
-                    count_set_descendants(ts, &parent_of, e.child, set_a, set_b);
+                let (ka, kb) = count_set_descendants(ts, &parent_of, e.child, set_a, set_b);
                 let dxy = (ka * (nb - kb) + kb * (na - ka)) / (na * nb);
                 total += (hi - lo) * dt * dxy;
             }
@@ -498,8 +482,13 @@ mod tests {
         let ab = ts.add_node(1.0, false); // 3
         let root = ts.add_node(2.0, false); // 4
         for &(p, c) in &[(ab, 0), (ab, 1), (root, ab), (root, 2)] {
-            ts.add_edge(Edge { parent: p, child: c, left: 0.0, right: 100.0 })
-                .unwrap();
+            ts.add_edge(Edge {
+                parent: p,
+                child: c,
+                left: 0.0,
+                right: 100.0,
+            })
+            .unwrap();
         }
         ts.finalize().unwrap();
         ts
@@ -519,10 +508,7 @@ mod tests {
         // Total = 400/3 + 200/3 + 400/3 = 1000/3.
         let ts = build_tiny_ts();
         let pi = branch_diversity(&ts).unwrap();
-        assert!(
-            (pi - 1000.0 / 3.0).abs() < 1e-9,
-            "got {pi} vs 333.33...",
-        );
+        assert!((pi - 1000.0 / 3.0).abs() < 1e-9, "got {pi} vs 333.33...",);
     }
 
     #[test]
@@ -588,10 +574,8 @@ mod tests {
         let mut acc_branch = 0.0;
         let reps = 20;
         for seed in 0..reps {
-            let mut ts = simulate_arg(
-                ArgParams::uniform(12, 1000.0, 0.0, 1000.0, seed).unwrap(),
-            )
-            .unwrap();
+            let mut ts =
+                simulate_arg(ArgParams::uniform(12, 1000.0, 0.0, 1000.0, seed).unwrap()).unwrap();
             let bpi = branch_diversity(&ts).unwrap();
             let gm = overlay_mutations(&mut ts, mu, seed + 1000).unwrap();
             // site-mode total π = sum over sites of 2 d (n-d) / (n(n-1)).
@@ -615,10 +599,8 @@ mod tests {
 
     #[test]
     fn site_windowed_diversity_partitions_total() {
-        let mut ts = simulate_arg(
-            ArgParams::uniform(10, 1000.0, 1e-4, 1000.0, 7).unwrap(),
-        )
-        .unwrap();
+        let mut ts =
+            simulate_arg(ArgParams::uniform(10, 1000.0, 1e-4, 1000.0, 7).unwrap()).unwrap();
         let gm = overlay_mutations(&mut ts, 1e-3, 13).unwrap();
         // Total site π via the matrix.
         let n = gm.n_samples();
@@ -628,15 +610,15 @@ mod tests {
         let windows = equal_windows(&ts, 5);
         let ws = windowed_site_diversity(&ts, &gm, &windows).unwrap();
         let sum: f64 = ws.values.iter().sum();
-        assert!((sum - total).abs() < 1e-9, "windowed sum {sum} vs total {total}");
+        assert!(
+            (sum - total).abs() < 1e-9,
+            "windowed sum {sum} vs total {total}"
+        );
     }
 
     #[test]
     fn site_segregating_count_matches_matrix() {
-        let mut ts = simulate_arg(
-            ArgParams::uniform(8, 1000.0, 1e-4, 500.0, 3).unwrap(),
-        )
-        .unwrap();
+        let mut ts = simulate_arg(ArgParams::uniform(8, 1000.0, 1e-4, 500.0, 3).unwrap()).unwrap();
         let gm = overlay_mutations(&mut ts, 1e-3, 4).unwrap();
         let windows = equal_windows(&ts, 3);
         let ws = windowed_segregating_sites(&ts, &gm, &windows).unwrap();
@@ -650,16 +632,12 @@ mod tests {
 
     #[test]
     fn site_divergence_runs_and_is_non_negative() {
-        let mut ts = simulate_arg(
-            ArgParams::uniform(10, 1000.0, 1e-4, 500.0, 5).unwrap(),
-        )
-        .unwrap();
+        let mut ts = simulate_arg(ArgParams::uniform(10, 1000.0, 1e-4, 500.0, 5).unwrap()).unwrap();
         let gm = overlay_mutations(&mut ts, 1e-3, 6).unwrap();
         let set_a: Vec<usize> = (0..5).collect();
         let set_b: Vec<usize> = (5..10).collect();
         let windows = equal_windows(&ts, 4);
-        let ws =
-            windowed_site_divergence(&ts, &gm, &set_a, &set_b, &windows).unwrap();
+        let ws = windowed_site_divergence(&ts, &gm, &set_a, &set_b, &windows).unwrap();
         for &v in &ws.values {
             assert!(v >= 0.0, "divergence negative? {v}");
         }
@@ -676,10 +654,8 @@ mod tests {
         let set_a: Vec<usize> = (0..6).collect();
         let set_b: Vec<usize> = (6..12).collect();
         for seed in 0..reps {
-            let mut ts = simulate_arg(
-                ArgParams::uniform(12, 1000.0, 0.0, 1000.0, seed).unwrap(),
-            )
-            .unwrap();
+            let mut ts =
+                simulate_arg(ArgParams::uniform(12, 1000.0, 0.0, 1000.0, seed).unwrap()).unwrap();
             let bdxy = branch_divergence(&ts, &set_a, &set_b).unwrap();
             let gm = overlay_mutations(&mut ts, mu, seed + 1000).unwrap();
             // Site-mode total divergence via the matrix.
@@ -695,9 +671,7 @@ mod tests {
                 for &s in &set_b {
                     db += gm.get(s, col) as usize;
                 }
-                total += (da as f64 * (nb - db as f64)
-                    + db as f64 * (na - da as f64))
-                    / (na * nb);
+                total += (da as f64 * (nb - db as f64) + db as f64 * (na - da as f64)) / (na * nb);
             }
             acc_site += total;
             acc_branch += bdxy;

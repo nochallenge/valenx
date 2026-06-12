@@ -90,7 +90,11 @@ pub struct Duct {
 
 impl Duct {
     /// Construct directly.
-    pub fn new(cross_section: CrossSection, path: Vec<Vector3<f64>>, insulation_thickness: f64) -> Self {
+    pub fn new(
+        cross_section: CrossSection,
+        path: Vec<Vector3<f64>>,
+        insulation_thickness: f64,
+    ) -> Self {
         Self {
             cross_section,
             path,

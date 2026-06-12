@@ -58,7 +58,10 @@ mod tests {
         assert_eq!(PartKind::from_extension("step"), Some(PartKind::StepFile));
         assert_eq!(PartKind::from_extension("STL"), Some(PartKind::StlMesh));
         assert_eq!(PartKind::from_extension("igs"), Some(PartKind::IgesFile));
-        assert_eq!(PartKind::from_extension("ron"), Some(PartKind::NurbsSurface));
+        assert_eq!(
+            PartKind::from_extension("ron"),
+            Some(PartKind::NurbsSurface)
+        );
         assert_eq!(PartKind::from_extension("docx"), None);
     }
 }

@@ -148,12 +148,7 @@ impl SimBox {
     /// is orthorhombic and the fast minimum-image path applies.
     pub fn is_orthorhombic(&self) -> bool {
         let h = &self.h;
-        let off = h.m12.abs()
-            + h.m13.abs()
-            + h.m21.abs()
-            + h.m23.abs()
-            + h.m31.abs()
-            + h.m32.abs();
+        let off = h.m12.abs() + h.m13.abs() + h.m21.abs() + h.m23.abs() + h.m31.abs() + h.m32.abs();
         off < 1e-9
     }
 
@@ -357,8 +352,7 @@ mod tests {
         for i in -1..=1 {
             for j in -1..=1 {
                 for k in -1..=1 {
-                    let cand =
-                        d - h * Vector3::new(i as f64, j as f64, k as f64);
+                    let cand = d - h * Vector3::new(i as f64, j as f64, k as f64);
                     assert!(mi.norm() <= cand.norm() + 1e-9);
                 }
             }

@@ -239,12 +239,10 @@ pub fn check_dense_dofs(n_nodes: usize) -> Result<usize, NativeSolverError> {
     // `3·n_nodes` — the global DOF count for the 3-DOF/node volumetric
     // path. A wrap here would understate the size and defeat the cap,
     // so surface the overflow.
-    let n_dof = n_nodes
-        .checked_mul(3)
-        .ok_or(NativeSolverError::TooLarge {
-            dofs: usize::MAX,
-            max: MAX_DENSE_DOFS,
-        })?;
+    let n_dof = n_nodes.checked_mul(3).ok_or(NativeSolverError::TooLarge {
+        dofs: usize::MAX,
+        max: MAX_DENSE_DOFS,
+    })?;
     check_dense_dof_count(n_dof)
 }
 
@@ -480,8 +478,7 @@ fn principal_extremes_voigt(s: [f64; 6]) -> (f64, f64) {
     let p2 = a * a + b * b + c * c + 2.0 * p1;
     let p = (p2 / 6.0).sqrt();
     // det(A − qI), then r = det((A − qI)/p) / 2 clamped to the acos domain.
-    let det =
-        a * (b * c - syz * syz) - sxy * (sxy * c - syz * szx) + szx * (sxy * syz - b * szx);
+    let det = a * (b * c - syz * syz) - sxy * (sxy * c - syz * szx) + szx * (sxy * syz - b * szx);
     let r = (det / (p * p * p) / 2.0).clamp(-1.0, 1.0);
     let phi = r.acos() / 3.0;
     let two_thirds_pi = 2.0 * std::f64::consts::PI / 3.0;
@@ -510,8 +507,7 @@ fn principal_triple_voigt(s: [f64; 6]) -> [f64; 3] {
     let c = szz - q;
     let p2 = a * a + b * b + c * c + 2.0 * p1;
     let p = (p2 / 6.0).sqrt();
-    let det =
-        a * (b * c - syz * syz) - sxy * (sxy * c - syz * szx) + szx * (sxy * syz - b * szx);
+    let det = a * (b * c - syz * syz) - sxy * (sxy * c - syz * szx) + szx * (sxy * syz - b * szx);
     let r = (det / (p * p * p) / 2.0).clamp(-1.0, 1.0);
     let phi = r.acos() / 3.0;
     let two_thirds_pi = 2.0 * std::f64::consts::PI / 3.0;
@@ -618,9 +614,8 @@ pub fn solve_linear_static(
             mesh.nodes[nodes[2]],
             mesh.nodes[nodes[3]],
         ];
-        let ke = element_stiffness(&coords, &d_matrix).ok_or(
-            NativeSolverError::DegenerateElement(e),
-        )?;
+        let ke =
+            element_stiffness(&coords, &d_matrix).ok_or(NativeSolverError::DegenerateElement(e))?;
         // Scatter-add the 12×12 element matrix into the global system.
         // Local DOF `3a+i` maps to global DOF `3·nodes[a]+i`.
         for a in 0..4 {
@@ -906,8 +901,8 @@ pub fn solve_linear_static_mixed(
     // dense factor. A Reverse Cuthill-McKee node permutation shrinks
     // the bandwidth so the sparse factor stays sparse.
     use crate::ordering::{
-        node_adjacency, node_perm_to_dof_perm, permute_csc, permute_vector,
-        reverse_cuthill_mckee, unpermute_vector,
+        node_adjacency, node_perm_to_dof_perm, permute_csc, permute_vector, reverse_cuthill_mckee,
+        unpermute_vector,
     };
     let elem_nodes = crate::assembly::solid_element_node_lists(mesh);
     let adjacency = node_adjacency(n_nodes, &elem_nodes);
@@ -951,9 +946,7 @@ pub(crate) fn tet_block(mesh: &Mesh) -> Option<&ElementBlock> {
 ///
 /// Uses engineering shear strain (`γ = 2ε`); the lower-right block is
 /// therefore `G` (not `2G`).
-pub(crate) fn elasticity_matrix(
-    m: &FemMaterial,
-) -> Result<Matrix6<f64>, NativeSolverError> {
+pub(crate) fn elasticity_matrix(m: &FemMaterial) -> Result<Matrix6<f64>, NativeSolverError> {
     let e = m.youngs_modulus;
     let nu = m.poisson_ratio;
     if !(e.is_finite()) || e <= 0.0 {
@@ -1096,8 +1089,7 @@ pub(crate) fn add_diagonal(csc: &CscMatrix<f64>, diag: &[f64]) -> CscMatrix<f64>
 /// `[σxx σyy σzz σxy σyz σzx]`.
 pub(crate) fn von_mises_from_voigt(s: &[f64; 6]) -> f64 {
     let (sx, sy, sz, sxy, syz, szx) = (s[0], s[1], s[2], s[3], s[4], s[5]);
-    (0.5
-        * ((sx - sy).powi(2) + (sy - sz).powi(2) + (sz - sx).powi(2))
+    (0.5 * ((sx - sy).powi(2) + (sy - sz).powi(2) + (sz - sx).powi(2))
         + 3.0 * (sxy * sxy + syz * syz + szx * szx))
         .sqrt()
 }
@@ -1148,23 +1140,17 @@ pub fn structured_box_mesh(
 ) -> Result<Mesh, NativeSolverError> {
     if nx == 0 || ny == 0 || nz == 0 {
         return Err(NativeSolverError::InvalidParams {
-            reason: format!(
-                "subdivisions must be positive (got nx={nx}, ny={ny}, nz={nz})"
-            ),
+            reason: format!("subdivisions must be positive (got nx={nx}, ny={ny}, nz={nz})"),
         });
     }
     if !(lx.is_finite() && ly.is_finite() && lz.is_finite()) {
         return Err(NativeSolverError::InvalidParams {
-            reason: format!(
-                "box dimensions must be finite (got lx={lx}, ly={ly}, lz={lz})"
-            ),
+            reason: format!("box dimensions must be finite (got lx={lx}, ly={ly}, lz={lz})"),
         });
     }
     if !(lx > 0.0 && ly > 0.0 && lz > 0.0) {
         return Err(NativeSolverError::InvalidParams {
-            reason: format!(
-                "box dimensions must be positive (got lx={lx}, ly={ly}, lz={lz})"
-            ),
+            reason: format!("box dimensions must be positive (got lx={lx}, ly={ly}, lz={lz})"),
         });
     }
     // Round-3 fix: bound the implied allocations BEFORE we walk the
@@ -1172,15 +1158,21 @@ pub fn structured_box_mesh(
     // node count; raw `*` would silently wrap on 32-bit targets and
     // produce a tiny mesh whose later indexing then panics. checked_mul
     // surfaces the overflow as a structured error.
-    let nx1 = nx.checked_add(1).ok_or_else(|| NativeSolverError::InvalidParams {
-        reason: format!("nx+1 overflowed usize (nx={nx})"),
-    })?;
-    let ny1 = ny.checked_add(1).ok_or_else(|| NativeSolverError::InvalidParams {
-        reason: format!("ny+1 overflowed usize (ny={ny})"),
-    })?;
-    let nz1 = nz.checked_add(1).ok_or_else(|| NativeSolverError::InvalidParams {
-        reason: format!("nz+1 overflowed usize (nz={nz})"),
-    })?;
+    let nx1 = nx
+        .checked_add(1)
+        .ok_or_else(|| NativeSolverError::InvalidParams {
+            reason: format!("nx+1 overflowed usize (nx={nx})"),
+        })?;
+    let ny1 = ny
+        .checked_add(1)
+        .ok_or_else(|| NativeSolverError::InvalidParams {
+            reason: format!("ny+1 overflowed usize (ny={ny})"),
+        })?;
+    let nz1 = nz
+        .checked_add(1)
+        .ok_or_else(|| NativeSolverError::InvalidParams {
+            reason: format!("nz+1 overflowed usize (nz={nz})"),
+        })?;
     let node_count = nx1
         .checked_mul(ny1)
         .and_then(|v| v.checked_mul(nz1))
@@ -1198,11 +1190,12 @@ pub fn structured_box_mesh(
         .ok_or_else(|| NativeSolverError::InvalidParams {
             reason: "cell count nx*ny*nz overflowed usize".to_string(),
         })?;
-    let _conn_capacity = cell_count
-        .checked_mul(24)
-        .ok_or_else(|| NativeSolverError::InvalidParams {
-            reason: "connectivity capacity nx*ny*nz*24 overflowed usize".to_string(),
-        })?;
+    let _conn_capacity =
+        cell_count
+            .checked_mul(24)
+            .ok_or_else(|| NativeSolverError::InvalidParams {
+                reason: "connectivity capacity nx*ny*nz*24 overflowed usize".to_string(),
+            })?;
     // Sanity cap on total node count — beyond this the implied
     // allocation is in the multi-gigabyte range and definitely a
     // programmer error rather than a real mesh. Mirrors MAX_MODAL_SIZE.
@@ -1218,9 +1211,8 @@ pub fn structured_box_mesh(
     let mut mesh = Mesh::new("native-fem-box");
     let stride_y = nx + 1;
     let stride_z = (nx + 1) * (ny + 1);
-    let node_id = |i: usize, j: usize, k: usize| -> u32 {
-        (i + stride_y * j + stride_z * k) as u32
-    };
+    let node_id =
+        |i: usize, j: usize, k: usize| -> u32 { (i + stride_y * j + stride_z * k) as u32 };
     // Nodes.
     for k in 0..=nz {
         for j in 0..=ny {
@@ -1294,7 +1286,10 @@ mod tests {
         // A 2-D state (σxx=3, σyy=1, σxy=2): Mohr's circle gives 2 ± √5, so the
         // maximum principal stress is 2 + √5 ≈ 4.236.
         let mohr = max_principal_stress_voigt([3.0, 1.0, 0.0, 2.0, 0.0, 0.0]);
-        assert!((mohr - (2.0 + 5.0_f64.sqrt())).abs() < 1e-9, "Mohr max principal {mohr}");
+        assert!(
+            (mohr - (2.0 + 5.0_f64.sqrt())).abs() < 1e-9,
+            "Mohr max principal {mohr}"
+        );
     }
 
     #[test]
@@ -1310,7 +1305,10 @@ mod tests {
         // Mohr's circle (σxx=3, σyy=1, σxy=2): principals 2 ± √5 and 0, so the
         // minimum principal stress is 2 − √5 ≈ −0.236.
         let mohr = min_principal_stress_voigt([3.0, 1.0, 0.0, 2.0, 0.0, 0.0]);
-        assert!((mohr - (2.0 - 5.0_f64.sqrt())).abs() < 1e-9, "Mohr min principal {mohr}");
+        assert!(
+            (mohr - (2.0 - 5.0_f64.sqrt())).abs() < 1e-9,
+            "Mohr min principal {mohr}"
+        );
     }
 
     #[test]
@@ -1324,7 +1322,11 @@ mod tests {
             ],
         };
         // The peak per-node (σ₁ − σ₃)/2 is 5 (from the uniaxial node).
-        assert!((sol.max_shear_stress() - 5.0).abs() < 1e-9, "{}", sol.max_shear_stress());
+        assert!(
+            (sol.max_shear_stress() - 5.0).abs() < 1e-9,
+            "{}",
+            sol.max_shear_stress()
+        );
         // An empty field yields zero.
         let empty = NativeSolution {
             displacement: vec![],
@@ -1359,7 +1361,11 @@ mod tests {
             compression.peak_lode_parameter()
         );
         let shear = mk([0.0, 0.0, 0.0, sigma, 0.0, 0.0], sigma);
-        assert!(shear.peak_lode_parameter().abs() < 1e-9, "shear {}", shear.peak_lode_parameter());
+        assert!(
+            shear.peak_lode_parameter().abs() < 1e-9,
+            "shear {}",
+            shear.peak_lode_parameter()
+        );
         // Always within [−1, 1].
         for s in [&tension, &compression, &shear] {
             assert!((-1.0..=1.0).contains(&s.peak_lode_parameter()));
@@ -1381,14 +1387,22 @@ mod tests {
             displacement: vec![],
             von_mises: vec![],
             stress: vec![
-                [9.0, 0.0, 0.0, 0.0, 0.0, 0.0], // uniaxial tension → σ_m = 3
+                [9.0, 0.0, 0.0, 0.0, 0.0, 0.0],    // uniaxial tension → σ_m = 3
                 [-3.0, -3.0, -3.0, 0.0, 0.0, 0.0], // hydrostatic compression → σ_m = −3
-                [0.0, 0.0, 0.0, 5.0, 0.0, 0.0], // pure shear → σ_m = 0
+                [0.0, 0.0, 0.0, 5.0, 0.0, 0.0],    // pure shear → σ_m = 0
             ],
         };
         // σ_m = trace/3 per node; the field extremes are +3 and −3.
-        assert!((sol.max_hydrostatic_stress() - 3.0).abs() < 1e-12, "{}", sol.max_hydrostatic_stress());
-        assert!((sol.min_hydrostatic_stress() + 3.0).abs() < 1e-12, "{}", sol.min_hydrostatic_stress());
+        assert!(
+            (sol.max_hydrostatic_stress() - 3.0).abs() < 1e-12,
+            "{}",
+            sol.max_hydrostatic_stress()
+        );
+        assert!(
+            (sol.min_hydrostatic_stress() + 3.0).abs() < 1e-12,
+            "{}",
+            sol.min_hydrostatic_stress()
+        );
     }
 
     #[test]
@@ -1426,7 +1440,10 @@ mod tests {
                 [sigma, sigma, 0.0, 0.0, 0.0, 0.0],
             ],
         };
-        assert!((mixed.peak_triaxiality() - 2.0 / 3.0).abs() < 1e-9, "peak-node");
+        assert!(
+            (mixed.peak_triaxiality() - 2.0 / 3.0).abs() < 1e-9,
+            "peak-node"
+        );
         // Empty / unstressed → 0, never a divide-by-zero.
         let empty = NativeSolution {
             displacement: vec![],
@@ -1460,7 +1477,11 @@ mod tests {
             von_mises: vec![2.0e6, 4.0e6, 6.0e6],
             stress: vec![],
         };
-        assert!((sol.mean_von_mises() - 4.0e6).abs() < 1e-3, "{}", sol.mean_von_mises());
+        assert!(
+            (sol.mean_von_mises() - 4.0e6).abs() < 1e-3,
+            "{}",
+            sol.mean_von_mises()
+        );
         // Stress-concentration factor Kt = peak/mean = 6/4 = 1.5 here.
         assert!((sol.max_von_mises() / sol.mean_von_mises() - 1.5).abs() < 1e-9);
         // Empty field → 0 (no divide-by-zero).
@@ -1489,32 +1510,30 @@ mod tests {
     /// only one `structured_box_mesh` and it is fallible.
     #[test]
     fn structured_box_mesh_rejects_zero_subdivisions() {
-        let err = structured_box_mesh(1.0, 1.0, 1.0, 0, 1, 1)
-            .expect_err("nx=0 must be rejected");
+        let err = structured_box_mesh(1.0, 1.0, 1.0, 0, 1, 1).expect_err("nx=0 must be rejected");
         let msg = format!("{err}");
         assert!(msg.contains("positive"), "msg: {msg}");
     }
 
     #[test]
     fn structured_box_mesh_rejects_zero_dimension() {
-        let err = structured_box_mesh(0.0, 1.0, 1.0, 1, 1, 1)
-            .expect_err("lx=0 must be rejected");
+        let err = structured_box_mesh(0.0, 1.0, 1.0, 1, 1, 1).expect_err("lx=0 must be rejected");
         let msg = format!("{err}");
         assert!(msg.contains("positive"), "msg: {msg}");
     }
 
     #[test]
     fn structured_box_mesh_rejects_negative_dimension() {
-        let err = structured_box_mesh(-1.0, 1.0, 1.0, 1, 1, 1)
-            .expect_err("negative lx must be rejected");
+        let err =
+            structured_box_mesh(-1.0, 1.0, 1.0, 1, 1, 1).expect_err("negative lx must be rejected");
         let msg = format!("{err}");
         assert!(msg.contains("positive"), "msg: {msg}");
     }
 
     #[test]
     fn structured_box_mesh_rejects_non_finite_dimension() {
-        let err = structured_box_mesh(f64::NAN, 1.0, 1.0, 1, 1, 1)
-            .expect_err("NaN lx must be rejected");
+        let err =
+            structured_box_mesh(f64::NAN, 1.0, 1.0, 1, 1, 1).expect_err("NaN lx must be rejected");
         let msg = format!("{err}");
         assert!(msg.contains("finite"), "msg: {msg}");
     }
@@ -1850,7 +1869,10 @@ mod tests {
         // Both are positive, finite, and the refined mesh is closer to
         // (and still below) the analytic beam-theory deflection.
         assert!(coarse > 0.0 && fine > 0.0);
-        assert!(fine > coarse, "refinement should increase δ: {coarse} → {fine}");
+        assert!(
+            fine > coarse,
+            "refinement should increase δ: {coarse} → {fine}"
+        );
         assert!(
             fine < analytic * 1.2,
             "refined δ {fine} should not overshoot analytic {analytic}"
@@ -1930,7 +1952,10 @@ mod tests {
         // unchanged up to and including the cap, then rejects.
         assert_eq!(check_dense_dof_count(0).unwrap(), 0);
         assert_eq!(check_dense_dof_count(48).unwrap(), 48);
-        assert_eq!(check_dense_dof_count(MAX_DENSE_DOFS).unwrap(), MAX_DENSE_DOFS);
+        assert_eq!(
+            check_dense_dof_count(MAX_DENSE_DOFS).unwrap(),
+            MAX_DENSE_DOFS
+        );
         let err = check_dense_dof_count(MAX_DENSE_DOFS + 1).unwrap_err();
         match err {
             NativeSolverError::TooLarge { dofs, max } => {
@@ -2016,8 +2041,8 @@ mod tests {
                 fixed: [Some(f64::NAN), None, None],
             },
         ];
-        let err = solve_linear_static(&mesh, &FemMaterial::default(), &constraints, &[])
-            .unwrap_err();
+        let err =
+            solve_linear_static(&mesh, &FemMaterial::default(), &constraints, &[]).unwrap_err();
         assert!(matches!(err, NativeSolverError::InvalidLoad { .. }));
     }
 
@@ -2057,11 +2082,17 @@ mod tests {
             node: nid(nx, 0, 0, nx, ny),
             force: [1.0e5, 0.0, 0.0],
         }];
-        let sol = solve_linear_static(&mesh, &FemMaterial::default(), &constraints, &forces)
-            .unwrap();
+        let sol =
+            solve_linear_static(&mesh, &FemMaterial::default(), &constraints, &forces).unwrap();
         assert!(sol.max_displacement().is_finite());
-        assert!(sol.displacement.iter().all(|d| d.iter().all(|c| c.is_finite())));
-        assert!(sol.max_displacement() > 0.0, "a real load should move the body");
+        assert!(sol
+            .displacement
+            .iter()
+            .all(|d| d.iter().all(|c| c.is_finite())));
+        assert!(
+            sol.max_displacement() > 0.0,
+            "a real load should move the body"
+        );
     }
 
     #[test]

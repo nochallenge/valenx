@@ -13,7 +13,9 @@ use crate::error::MeshPartError;
 /// - [`MeshPartError::BadPolygon`] when the polygon is non-simple
 ///   (self-intersecting) or degenerate so the ear-clipping loop
 ///   bottoms out before producing all triangles.
-pub fn triangulate_polygon(polygon: &[[f64; 2]]) -> Result<Vec<(usize, usize, usize)>, MeshPartError> {
+pub fn triangulate_polygon(
+    polygon: &[[f64; 2]],
+) -> Result<Vec<(usize, usize, usize)>, MeshPartError> {
     if polygon.len() < 3 {
         return Err(MeshPartError::Empty("polygon (<3 points)"));
     }

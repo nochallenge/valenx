@@ -23,12 +23,10 @@ pub mod sensitivity;
 pub use bifurcation::{bifurcation_scan, BifurcationDiagram, BifurcationPoint, Stability};
 pub use conservation::{conservation_laws, ConservationLaw};
 pub use estimation::{
-    estimate_parameters, EstimationOptions, EstimationReport, EstimationTarget,
-    ObservedPoint,
+    estimate_parameters, EstimationOptions, EstimationReport, EstimationTarget, ObservedPoint,
 };
 pub use param::ParamTarget;
 pub use scan::{linspace, scan_1d, scan_2d, Scan1d, Scan2d};
 pub use sensitivity::{
-    global_sensitivity, local_sensitivity, relative_ranges, GlobalSensitivity,
-    LocalSensitivity,
+    global_sensitivity, local_sensitivity, relative_ranges, GlobalSensitivity, LocalSensitivity,
 };

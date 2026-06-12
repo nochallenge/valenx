@@ -207,8 +207,10 @@ fn preview_bend(s: &SheetmetalWorkbenchState) -> Option<Vec<Vector3<f64>>> {
 /// the profile. A segment is painted only when both endpoints project in
 /// front of the camera, so the render path never panics.
 fn draw_bend_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
-    let (response, painter) =
-        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let (response, painter) = ui.allocate_painter(
+        egui::vec2(ui.available_width(), 200.0),
+        egui::Sense::hover(),
+    );
     let rect = response.rect;
 
     let mut min = [f32::INFINITY; 3];
@@ -228,8 +230,18 @@ fn draw_bend_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
     let (w, h) = (rect.width(), rect.height());
     let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
     for pair in pts.windows(2) {
-        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
-        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        let a = project_point(
+            &cam,
+            w,
+            h,
+            [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32],
+        );
+        let b = project_point(
+            &cam,
+            w,
+            h,
+            [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32],
+        );
         if let (Some(a), Some(b)) = (a, b) {
             painter.line_segment(
                 [
@@ -284,13 +296,7 @@ fn run_sheetmetal(s: &mut SheetmetalWorkbenchState) {
          neutral radius : {:.4} mm   (r_i + k\u{00B7}t)\n\
          bend allowance : {:.4} mm   (r_n\u{00B7}\u{03B8}; neutral-axis arc)\n\
          bend deduction : {:.4} mm   (2\u{00B7}OSSB \u{2212} BA; flat-blank)",
-        s.thickness_mm,
-        s.inside_radius_mm,
-        s.bend_angle_deg,
-        s.k_factor,
-        r_neutral,
-        ba,
-        bd,
+        s.thickness_mm, s.inside_radius_mm, s.bend_angle_deg, s.k_factor, r_neutral, ba, bd,
     );
 }
 

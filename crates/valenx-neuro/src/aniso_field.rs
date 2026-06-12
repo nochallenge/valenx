@@ -38,7 +38,10 @@ pub struct AnisoTissue {
 fn tet_grads(p: &[Vector3<f64>; 4]) -> ([Vector3<f64>; 4], f64) {
     let j = Matrix3::from_columns(&[p[1] - p[0], p[2] - p[0], p[3] - p[0]]);
     let vol = j.determinant().abs() / 6.0;
-    let jit = j.try_inverse().expect("non-degenerate tetrahedron").transpose();
+    let jit = j
+        .try_inverse()
+        .expect("non-degenerate tetrahedron")
+        .transpose();
     let gl = [
         Vector3::new(-1.0, -1.0, -1.0),
         Vector3::new(1.0, 0.0, 0.0),
@@ -52,7 +55,10 @@ impl AnisoTissue {
     /// Build a `side_mm` cube with `n` nodes per edge (`n ≥ 3`), assigning each
     /// tetrahedron the conductivity tensor `sigma_at(centroid_m)`.
     pub fn cube(side_mm: f64, n: usize, sigma_at: impl Fn(Vector3<f64>) -> Conductivity) -> Self {
-        assert!(n >= 3, "need at least 3 nodes per edge for an interior source");
+        assert!(
+            n >= 3,
+            "need at least 3 nodes per edge for an interior source"
+        );
         let side_m = side_mm * 1.0e-3;
         let spacing = side_m / (n as f64 - 1.0);
         let half = side_m / 2.0;
@@ -97,7 +103,13 @@ impl AnisoTissue {
                 }
             }
         }
-        Self { nodes, tets, sigma, n, spacing_m: spacing }
+        Self {
+            nodes,
+            tets,
+            sigma,
+            n,
+            spacing_m: spacing,
+        }
     }
 
     /// A homogeneous anisotropic block — one conductivity tensor everywhere.
@@ -214,7 +226,11 @@ impl AnisoTissue {
                 phi_fixed[node] * 1.0e3
             };
         }
-        SolvedField { phi_mv, n: self.n, spacing_m: self.spacing_m }
+        SolvedField {
+            phi_mv,
+            n: self.n,
+            spacing_m: self.spacing_m,
+        }
     }
 }
 
@@ -409,7 +425,10 @@ mod tests {
         let f = AnisoTissue::homogeneous(40.0, 21, s).solve_point_source(100.0);
         let px = f.phi_at_steps(4, 0, 0);
         let py = f.phi_at_steps(0, 4, 0);
-        assert!(px > py * 1.4, "field extends along high-σ axis: φx={px:.2} φy={py:.2}");
+        assert!(
+            px > py * 1.4,
+            "field extends along high-σ axis: φx={px:.2} φy={py:.2}"
+        );
     }
 
     #[test]
@@ -423,7 +442,10 @@ mod tests {
             }
         })
         .solve_point_source(100.0);
-        assert!(f.phi_mv().iter().all(|v| v.is_finite()), "all potentials finite");
+        assert!(
+            f.phi_mv().iter().all(|v| v.is_finite()),
+            "all potentials finite"
+        );
         let center = f.phi_at_steps(0, 0, 0);
         assert!(
             center > f.phi_at_steps(0, 0, 3) && center > f.phi_at_steps(0, 0, -3),

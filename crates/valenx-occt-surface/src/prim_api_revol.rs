@@ -142,8 +142,8 @@ mod tests {
 
     #[test]
     fn revol_rejects_short_profile() {
-        let err = prim_api_revol(&[(0.0, 0.0), (1.0, 0.0)], [0.0; 3], [0.0, 0.0, 1.0], 1.5)
-            .unwrap_err();
+        let err =
+            prim_api_revol(&[(0.0, 0.0), (1.0, 0.0)], [0.0; 3], [0.0, 0.0, 1.0], 1.5).unwrap_err();
         assert_eq!(err.code(), "occt_surface.bad_input");
     }
 

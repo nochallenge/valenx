@@ -99,11 +99,7 @@ pub fn fit_helical_axis(centers: &[Point3<f64>]) -> Result<HelicalAxis> {
             min_i = i;
         }
     }
-    let mut direction = perp_eig
-        .eigenvectors
-        .column(min_i)
-        .into_owned()
-        .normalize();
+    let mut direction = perp_eig.eigenvectors.column(min_i).into_owned().normalize();
 
     // Orient the axis 5'->3' (toward the last base pair).
     let span = centers[centers.len() - 1] - centers[0];
@@ -171,8 +167,7 @@ pub fn fit_helical_axis(centers: &[Point3<f64>]) -> Result<HelicalAxis> {
     };
 
     // --- radius: mean perpendicular distance -----------------------
-    let radius =
-        radial.iter().map(|r| r.norm()).sum::<f64>() / radial.len() as f64;
+    let radius = radial.iter().map(|r| r.norm()).sum::<f64>() / radial.len() as f64;
 
     let bp_per_turn = if twist_per_bp.abs() > 1e-6 {
         360.0 / twist_per_bp
@@ -275,21 +270,12 @@ pub fn distance_to_axis(axis: &HelicalAxis, p: &Point3<f64>) -> f64 {
 /// Build an idealised helix of `n` base-pair centres for a given
 /// rise, twist (degrees) and radius — a convenience for testing and
 /// for previewing canonical B/A/Z-DNA geometry.
-pub fn ideal_helix_centers(
-    n: usize,
-    rise: f64,
-    twist_deg: f64,
-    radius: f64,
-) -> Vec<Point3<f64>> {
+pub fn ideal_helix_centers(n: usize, rise: f64, twist_deg: f64, radius: f64) -> Vec<Point3<f64>> {
     let twist = twist_deg.to_radians();
     (0..n)
         .map(|i| {
             let theta = i as f64 * twist;
-            Point3::new(
-                radius * theta.cos(),
-                radius * theta.sin(),
-                i as f64 * rise,
-            )
+            Point3::new(radius * theta.cos(), radius * theta.sin(), i as f64 * rise)
         })
         .collect()
 }
@@ -531,9 +517,7 @@ fn solve_tridiag(lower: &[f64], diag: &[f64], upper: &[f64], rhs: &[f64]) -> Vec
 /// Build a natural cubic spline through the given knot points,
 /// parameterised by arc length along the polyline. Returns one
 /// [`SplineSegment`] per interval and the cumulative arc-length array.
-fn natural_cubic_spline(
-    points: &[Point3<f64>],
-) -> (Vec<SplineSegment>, Vec<f64>) {
+fn natural_cubic_spline(points: &[Point3<f64>]) -> (Vec<SplineSegment>, Vec<f64>) {
     let n = points.len();
     assert!(n >= 3, "cubic spline needs at least 3 knots");
     // Chord-length parameterisation.
@@ -598,8 +582,7 @@ fn natural_cubic_spline(
             a[comp] = f_i;
             c[comp] = m[comp][i] / 2.0;
             d[comp] = (m[comp][i + 1] - m[comp][i]) / (6.0 * h[i]);
-            b[comp] = (f_ip1 - f_i) / h[i]
-                - h[i] * (2.0 * m[comp][i] + m[comp][i + 1]) / 6.0;
+            b[comp] = (f_ip1 - f_i) / h[i] - h[i] * (2.0 * m[comp][i] + m[comp][i + 1]) / 6.0;
         }
         segments.push(SplineSegment {
             h: h[i],
@@ -645,8 +628,7 @@ pub fn fit_curved_axis(frames: &[BaseFrame]) -> Result<CurvedHelicalAxis> {
     let mut accum: Vec<Vec<Point3<f64>>> = vec![Vec::new(); n];
     for k in 0..n - 1 {
         let lower_foot = local_axis_point_from_step(&frames[k], &frames[k + 1]);
-        let upper_foot =
-            local_axis_point_for_upper(&frames[k], &frames[k + 1]);
+        let upper_foot = local_axis_point_for_upper(&frames[k], &frames[k + 1]);
         accum[k].push(lower_foot);
         accum[k + 1].push(upper_foot);
     }
@@ -744,10 +726,7 @@ impl CurvedHelicalAxis {
 
     /// Maximum curvature across the spline — a single bend metric.
     pub fn max_curvature(&self) -> f64 {
-        self.curvature
-            .iter()
-            .copied()
-            .fold(0.0_f64, f64::max)
+        self.curvature.iter().copied().fold(0.0_f64, f64::max)
     }
 
     /// Evaluate the curved-axis position at an arc-length coordinate
@@ -772,21 +751,12 @@ impl CurvedHelicalAxis {
 /// Build a list of base-pair mid-frames from base-pair centres
 /// arranged along the +z axis at the given rise + twist. A convenience
 /// for testing the curved-axis fit on idealised B-DNA-like geometry.
-pub fn ideal_helix_frames(
-    n: usize,
-    rise: f64,
-    twist_deg: f64,
-    radius: f64,
-) -> Vec<BaseFrame> {
+pub fn ideal_helix_frames(n: usize, rise: f64, twist_deg: f64, radius: f64) -> Vec<BaseFrame> {
     let twist = twist_deg.to_radians();
     (0..n)
         .map(|i| {
             let theta = i as f64 * twist;
-            let origin = Point3::new(
-                radius * theta.cos(),
-                radius * theta.sin(),
-                i as f64 * rise,
-            );
+            let origin = Point3::new(radius * theta.cos(), radius * theta.sin(), i as f64 * rise);
             // Each base pair's z axis is the helix axis (+z).
             // The x axis points radially outward from the helix axis,
             // y completes a right-handed frame.
@@ -837,8 +807,7 @@ pub fn ideal_bent_helix_frames(
             let perp1 = Vector3::new(0.0, 1.0, 0.0);
             let perp2 = axis_dir.cross(&perp1).normalize();
             let radial = perp1 * phi.cos() + perp2 * phi.sin();
-            let origin =
-                Point3::new(cx, 0.0, cz) + radial * helix_radius;
+            let origin = Point3::new(cx, 0.0, cz) + radial * helix_radius;
             BaseFrame {
                 origin,
                 x: radial.normalize(),

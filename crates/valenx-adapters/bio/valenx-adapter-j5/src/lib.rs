@@ -155,10 +155,7 @@ impl Adapter for J5Adapter {
         let source_design = if input.design_csv.is_absolute() {
             input.design_csv.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.design_csv,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.design_csv)?
         };
         if !source_design.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -173,10 +170,7 @@ impl Adapter for J5Adapter {
         let source_parts = if input.parts_csv.is_absolute() {
             input.parts_csv.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.parts_csv,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.parts_csv)?
         };
         if !source_parts.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -192,7 +192,12 @@ mod tests {
     #[test]
     fn thomas_solves_a_known_system() {
         // Tridiagonal [[2,1,0],[1,2,1],[0,1,2]] · x = [1,2,3].
-        let x = thomas(&[0.0, 1.0, 1.0], &[2.0, 2.0, 2.0], &[1.0, 1.0, 0.0], &[1.0, 2.0, 3.0]);
+        let x = thomas(
+            &[0.0, 1.0, 1.0],
+            &[2.0, 2.0, 2.0],
+            &[1.0, 1.0, 0.0],
+            &[1.0, 2.0, 3.0],
+        );
         assert!((2.0 * x[0] + x[1] - 1.0).abs() < 1e-12);
         assert!((x[0] + 2.0 * x[1] + x[2] - 2.0).abs() < 1e-12);
         assert!((x[1] + 2.0 * x[2] - 3.0).abs() < 1e-12);
@@ -212,8 +217,15 @@ mod tests {
         let mut cable = ImplicitCable::uniform(200, HhMembrane::at_rest(), 100.0, 238.0, 35.4);
         let peak = cable.stimulate_block(100.0, 1.0, 0.5, 15.0, 0.01);
         let maxv = peak.iter().cloned().fold(f64::MIN, f64::max);
-        assert!(maxv.is_finite() && maxv < 80.0, "must stay bounded (no blow-up); maxv={maxv}");
-        assert!(peak[150] > 0.0, "AP must propagate to compartment 150; peak={}", peak[150]);
+        assert!(
+            maxv.is_finite() && maxv < 80.0,
+            "must stay bounded (no blow-up); maxv={maxv}"
+        );
+        assert!(
+            peak[150] > 0.0,
+            "AP must propagate to compartment 150; peak={}",
+            peak[150]
+        );
     }
 
     #[test]
@@ -223,6 +235,9 @@ mod tests {
         let mut cable = ImplicitCable::uniform(200, HhMembrane::at_rest(), 100.0, 238.0, 35.4);
         let peak = cable.stimulate_block(0.5, 1.0, 0.5, 15.0, 0.01);
         let maxv = peak.iter().cloned().fold(f64::MIN, f64::max);
-        assert!(maxv < -40.0, "sub-threshold must stay bounded + not fire; maxv={maxv}");
+        assert!(
+            maxv < -40.0,
+            "sub-threshold must stay bounded + not fire; maxv={maxv}"
+        );
     }
 }

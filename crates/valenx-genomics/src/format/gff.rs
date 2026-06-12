@@ -299,10 +299,7 @@ fn gff3_decode(s: &str) -> String {
             }
         }
         // Copy the next full UTF-8 codepoint verbatim.
-        let ch = s[i..]
-            .chars()
-            .next()
-            .expect("i is in-bounds inside a &str");
+        let ch = s[i..].chars().next().expect("i is in-bounds inside a &str");
         out.push(ch);
         i += ch.len_utf8();
     }
@@ -382,10 +379,7 @@ impl GffFile {
     }
 
     /// All records whose `type` equals `feature_type`.
-    pub fn by_type<'a>(
-        &'a self,
-        feature_type: &'a str,
-    ) -> impl Iterator<Item = &'a GffRecord> {
+    pub fn by_type<'a>(&'a self, feature_type: &'a str) -> impl Iterator<Item = &'a GffRecord> {
         self.records
             .iter()
             .filter(move |r| r.feature_type == feature_type)
@@ -405,15 +399,12 @@ fn detect_dialect(text: &str) -> GffDialect {
         if let Some(col9) = t.split('\t').nth(8) {
             // GTF tokens look like `gene_id "x";`; GFF3 like `ID=x;`.
             let gtf_like = col9.contains('"')
-                && col9
-                    .split(';')
-                    .filter(|s| !s.trim().is_empty())
-                    .any(|s| {
-                        let s = s.trim();
-                        s.split_once(char::is_whitespace)
-                            .map(|(_, v)| v.trim().starts_with('"'))
-                            .unwrap_or(false)
-                    });
+                && col9.split(';').filter(|s| !s.trim().is_empty()).any(|s| {
+                    let s = s.trim();
+                    s.split_once(char::is_whitespace)
+                        .map(|(_, v)| v.trim().starts_with('"'))
+                        .unwrap_or(false)
+                });
             return if gtf_like {
                 GffDialect::Gtf
             } else {

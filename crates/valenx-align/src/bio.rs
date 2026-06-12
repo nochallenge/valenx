@@ -40,11 +40,7 @@ fn unify_kind(seqs: &[&Seq]) -> Result<SeqKind> {
         if s.kind() != first {
             return Err(AlignError::invalid(
                 "kind",
-                format!(
-                    "cannot align {} with {}",
-                    first.name(),
-                    s.kind().name()
-                ),
+                format!("cannot align {} with {}", first.name(), s.kind().name()),
             ));
         }
     }

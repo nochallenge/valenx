@@ -149,14 +149,11 @@ impl Residue {
     /// alt-locs share a name this returns the dominant conformer; ties
     /// resolve to the first encountered.
     pub fn primary_atom(&self, name: &str) -> Option<&Atom> {
-        self.atoms
-            .iter()
-            .filter(|a| a.name == name)
-            .max_by(|a, b| {
-                a.occupancy
-                    .partial_cmp(&b.occupancy)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        self.atoms.iter().filter(|a| a.name == name).max_by(|a, b| {
+            a.occupancy
+                .partial_cmp(&b.occupancy)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }
 
     /// One representative atom per distinct atom name (the
@@ -546,10 +543,7 @@ pub fn residue_one_letter(name: &str) -> char {
 
 /// Whether `name` is a recognised nucleotide three-letter code.
 pub fn is_nucleotide_name(name: &str) -> bool {
-    matches!(
-        classify_residue(name),
-        ResidueKind::Dna | ResidueKind::Rna
-    )
+    matches!(classify_residue(name), ResidueKind::Dna | ResidueKind::Rna)
 }
 
 #[cfg(test)]
@@ -558,7 +552,8 @@ mod tests {
 
     fn aa_residue(name: &str, seq: i32) -> Residue {
         let mut r = Residue::new(name, seq);
-        r.atoms.push(Atom::new("N", "N", Point3::new(0.0, 0.0, 0.0)));
+        r.atoms
+            .push(Atom::new("N", "N", Point3::new(0.0, 0.0, 0.0)));
         r.atoms
             .push(Atom::new("CA", "C", Point3::new(1.5, 0.0, 0.0)));
         r.atoms

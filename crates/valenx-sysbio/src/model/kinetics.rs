@@ -136,9 +136,7 @@ impl RateLaw {
     pub fn dependencies(&self) -> Vec<usize> {
         match self {
             RateLaw::Constant { .. } => Vec::new(),
-            RateLaw::MassAction { reactants, .. } => {
-                reactants.iter().map(|&(i, _)| i).collect()
-            }
+            RateLaw::MassAction { reactants, .. } => reactants.iter().map(|&(i, _)| i).collect(),
             RateLaw::MichaelisMenten { substrate, .. } => vec![*substrate],
             RateLaw::Hill { regulator, .. } => vec![*regulator],
         }

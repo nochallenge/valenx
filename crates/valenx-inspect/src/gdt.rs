@@ -44,8 +44,8 @@ impl GdtRule {
     pub fn for_characteristic(c: GeometricCharacteristic) -> Self {
         use GeometricCharacteristic::*;
         match c {
-            Straightness | Flatness | Circularity | Cylindricity | ProfileLine
-            | ProfileSurface | CircularRunout | TotalRunout => Self::ZoneWidthMax,
+            Straightness | Flatness | Circularity | Cylindricity | ProfileLine | ProfileSurface
+            | CircularRunout | TotalRunout => Self::ZoneWidthMax,
             Perpendicularity | Angularity | Parallelism | Position | Concentricity | Symmetry => {
                 Self::RequiresDatumFrame
             }
@@ -150,33 +150,21 @@ mod tests {
 
     #[test]
     fn flatness_within_spec_passes() {
-        let frame = GdtSymbol::new(
-            [0.0, 0.0],
-            GeometricCharacteristic::Flatness,
-            "0.1",
-        );
+        let frame = GdtSymbol::new([0.0, 0.0], GeometricCharacteristic::Flatness, "0.1");
         let c = GdtCheck::new(frame, 0.05);
         assert_eq!(c.verify().unwrap(), CheckResult::Pass);
     }
 
     #[test]
     fn flatness_out_of_spec_fails() {
-        let frame = GdtSymbol::new(
-            [0.0, 0.0],
-            GeometricCharacteristic::Flatness,
-            "0.05",
-        );
+        let frame = GdtSymbol::new([0.0, 0.0], GeometricCharacteristic::Flatness, "0.05");
         let c = GdtCheck::new(frame, 0.07);
         assert_eq!(c.verify().unwrap(), CheckResult::Fail);
     }
 
     #[test]
     fn position_returns_not_implemented() {
-        let frame = GdtSymbol::new(
-            [0.0, 0.0],
-            GeometricCharacteristic::Position,
-            "⌀0.1",
-        );
+        let frame = GdtSymbol::new([0.0, 0.0], GeometricCharacteristic::Position, "⌀0.1");
         let c = GdtCheck::new(frame, 0.05);
         assert!(matches!(
             c.verify().unwrap_err(),

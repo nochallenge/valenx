@@ -468,6 +468,9 @@ mod tests {
         assert_eq!(arc_segment_count(f64::INFINITY, CIRCLE_SEGMENTS), 8);
         assert_eq!(arc_segment_count(f64::NAN, CIRCLE_SEGMENTS), 8);
         // Huge finite sweep clamps to the cap.
-        assert_eq!(arc_segment_count(1.0e9, CIRCLE_SEGMENTS), CIRCLE_SEGMENTS_MAX);
+        assert_eq!(
+            arc_segment_count(1.0e9, CIRCLE_SEGMENTS),
+            CIRCLE_SEGMENTS_MAX
+        );
     }
 }

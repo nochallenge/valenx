@@ -70,8 +70,8 @@ mod tests {
     #[test]
     fn rejects_non_finite() {
         let mut cam = OrbitCamera::default();
-        let err = v3d_view_camera_fit_all(&mut cam, [0.0; 3], [f32::INFINITY, 1.0, 1.0])
-            .unwrap_err();
+        let err =
+            v3d_view_camera_fit_all(&mut cam, [0.0; 3], [f32::INFINITY, 1.0, 1.0]).unwrap_err();
         assert_eq!(err.code(), "occt_viz.bad_input");
     }
 

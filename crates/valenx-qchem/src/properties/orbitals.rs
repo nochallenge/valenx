@@ -75,10 +75,7 @@ impl OrbitalSummary {
 
 /// Build the orbital summary for a restricted (closed-shell)
 /// calculation. The lowest `n_occupied` orbitals are doubly occupied.
-pub fn restricted_summary(
-    orbital_energies: &DVector<f64>,
-    n_occupied: usize,
-) -> OrbitalSummary {
+pub fn restricted_summary(orbital_energies: &DVector<f64>, n_occupied: usize) -> OrbitalSummary {
     let orbitals: Vec<MolecularOrbital> = orbital_energies
         .iter()
         .enumerate()
@@ -107,10 +104,7 @@ pub fn restricted_summary(
 
 /// Build the orbital summary for one spin of an unrestricted
 /// calculation. The lowest `n_spin` orbitals are singly occupied.
-pub fn unrestricted_spin_summary(
-    orbital_energies: &DVector<f64>,
-    n_spin: usize,
-) -> OrbitalSummary {
+pub fn unrestricted_spin_summary(orbital_energies: &DVector<f64>, n_spin: usize) -> OrbitalSummary {
     let orbitals: Vec<MolecularOrbital> = orbital_energies
         .iter()
         .enumerate()

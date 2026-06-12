@@ -277,8 +277,7 @@ pub fn aoa_sweep(
         base.air,
         base.turbulence_intensity,
     )?;
-    let tunnel =
-        WindTunnel::build_with(body, first_wind, base.boundary, base.sizing)?;
+    let tunnel = WindTunnel::build_with(body, first_wind, base.boundary, base.sizing)?;
 
     let mut points = Vec::with_capacity(angles.len());
     for &alpha in angles {
@@ -309,7 +308,11 @@ pub fn aoa_sweep(
     }
 
     // Order by angle.
-    points.sort_by(|a, b| a.alpha.partial_cmp(&b.alpha).unwrap_or(std::cmp::Ordering::Equal));
+    points.sort_by(|a, b| {
+        a.alpha
+            .partial_cmp(&b.alpha)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(PolarCurve { points })
 }
 
@@ -373,11 +376,41 @@ mod tests {
         // A hand-built polar: lift rises linearly, peaks, then falls
         // (a stall). The diagnostics must find the peak.
         let pts = vec![
-            PolarPoint { alpha: 0.0, cd: 0.02, cl: 0.0, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.1, cd: 0.03, cl: 0.5, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.2, cd: 0.05, cl: 1.0, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.3, cd: 0.12, cl: 1.2, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.4, cd: 0.25, cl: 0.8, cm: 0.0, converged: true },
+            PolarPoint {
+                alpha: 0.0,
+                cd: 0.02,
+                cl: 0.0,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.1,
+                cd: 0.03,
+                cl: 0.5,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.2,
+                cd: 0.05,
+                cl: 1.0,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.3,
+                cd: 0.12,
+                cl: 1.2,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.4,
+                cd: 0.25,
+                cl: 0.8,
+                cm: 0.0,
+                converged: true,
+            },
         ];
         let curve = PolarCurve { points: pts };
         // Max lift is 1.2 at alpha = 0.3.
@@ -393,11 +426,41 @@ mod tests {
     fn best_lift_to_drag_point_is_the_polar_peak() {
         // L/D by point: 0, 16.7, 20.0 (peak), 10.0, 3.2.
         let pts = vec![
-            PolarPoint { alpha: 0.0, cd: 0.02, cl: 0.0, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.1, cd: 0.03, cl: 0.5, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.2, cd: 0.05, cl: 1.0, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.3, cd: 0.12, cl: 1.2, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.4, cd: 0.25, cl: 0.8, cm: 0.0, converged: true },
+            PolarPoint {
+                alpha: 0.0,
+                cd: 0.02,
+                cl: 0.0,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.1,
+                cd: 0.03,
+                cl: 0.5,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.2,
+                cd: 0.05,
+                cl: 1.0,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.3,
+                cd: 0.12,
+                cl: 1.2,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.4,
+                cd: 0.25,
+                cl: 0.8,
+                cm: 0.0,
+                converged: true,
+            },
         ];
         let curve = PolarCurve { points: pts };
         let best = curve.best_lift_to_drag_point().expect("non-empty curve");
@@ -407,17 +470,49 @@ mod tests {
         // It agrees with the curve's reported maximum L/D value.
         assert!((best.lift_to_drag() - curve.max_lift_to_drag()).abs() < 1e-9);
         // An empty curve has no best point.
-        assert!(PolarCurve { points: vec![] }.best_lift_to_drag_point().is_none());
+        assert!(PolarCurve { points: vec![] }
+            .best_lift_to_drag_point()
+            .is_none());
     }
 
     #[test]
     fn min_drag_point_is_the_bottom_of_the_drag_bucket() {
         let pts = vec![
-            PolarPoint { alpha: 0.0, cd: 0.02, cl: 0.0, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.1, cd: 0.03, cl: 0.5, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.2, cd: 0.05, cl: 1.0, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.3, cd: 0.12, cl: 1.2, cm: 0.0, converged: true },
-            PolarPoint { alpha: 0.4, cd: 0.25, cl: 0.8, cm: 0.0, converged: true },
+            PolarPoint {
+                alpha: 0.0,
+                cd: 0.02,
+                cl: 0.0,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.1,
+                cd: 0.03,
+                cl: 0.5,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.2,
+                cd: 0.05,
+                cl: 1.0,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.3,
+                cd: 0.12,
+                cl: 1.2,
+                cm: 0.0,
+                converged: true,
+            },
+            PolarPoint {
+                alpha: 0.4,
+                cd: 0.25,
+                cl: 0.8,
+                cm: 0.0,
+                converged: true,
+            },
         ];
         let curve = PolarCurve { points: pts };
         let min = curve.min_drag_point().expect("non-empty curve");
@@ -436,8 +531,20 @@ mod tests {
         // α=+0.05. Linear interp t = 0.1/0.4 = 0.25 → α = −0.05 + 0.25·0.1.
         let curve = PolarCurve {
             points: vec![
-                PolarPoint { alpha: -0.05, cd: 0.02, cl: -0.1, cm: 0.0, converged: true },
-                PolarPoint { alpha: 0.05, cd: 0.03, cl: 0.3, cm: 0.0, converged: true },
+                PolarPoint {
+                    alpha: -0.05,
+                    cd: 0.02,
+                    cl: -0.1,
+                    cm: 0.0,
+                    converged: true,
+                },
+                PolarPoint {
+                    alpha: 0.05,
+                    cd: 0.03,
+                    cl: 0.3,
+                    cm: 0.0,
+                    converged: true,
+                },
             ],
         };
         let a0 = curve.zero_lift_angle().expect("crosses zero lift");
@@ -445,8 +552,20 @@ mod tests {
         // A purely positive-lift sweep never crosses zero → None.
         let positive = PolarCurve {
             points: vec![
-                PolarPoint { alpha: 0.0, cd: 0.02, cl: 0.5, cm: 0.0, converged: true },
-                PolarPoint { alpha: 0.1, cd: 0.03, cl: 1.0, cm: 0.0, converged: true },
+                PolarPoint {
+                    alpha: 0.0,
+                    cd: 0.02,
+                    cl: 0.5,
+                    cm: 0.0,
+                    converged: true,
+                },
+                PolarPoint {
+                    alpha: 0.1,
+                    cd: 0.03,
+                    cl: 1.0,
+                    cm: 0.0,
+                    converged: true,
+                },
             ],
         };
         assert!(positive.zero_lift_angle().is_none());
@@ -544,7 +663,9 @@ mod tests {
                 converged: true,
             })
             .collect();
-        let curve = PolarCurve { points: pts.clone() };
+        let curve = PolarCurve {
+            points: pts.clone(),
+        };
         let endurance = curve.best_endurance_point().unwrap();
         // It is exactly the sample that maximises Cl^1.5 / Cd.
         let best = pts
@@ -555,7 +676,11 @@ mod tests {
                     .unwrap()
             })
             .unwrap();
-        assert!((endurance.cl - best.cl).abs() < 1e-12, "endurance cl {}", endurance.cl);
+        assert!(
+            (endurance.cl - best.cl).abs() < 1e-12,
+            "endurance cl {}",
+            endurance.cl
+        );
         // Max endurance sits at a higher lift than max range (best L/D).
         let range = curve.best_lift_to_drag_point().unwrap();
         assert!(
@@ -611,6 +736,9 @@ mod tests {
         for w in curve.points.windows(2) {
             assert!(w[1].alpha >= w[0].alpha);
         }
-        assert!(curve.points.iter().all(|p| p.cd.is_finite() && p.cl.is_finite()));
+        assert!(curve
+            .points
+            .iter()
+            .all(|p| p.cd.is_finite() && p.cl.is_finite()));
     }
 }

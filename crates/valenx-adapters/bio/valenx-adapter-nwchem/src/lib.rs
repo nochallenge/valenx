@@ -133,14 +133,11 @@ impl Adapter for NwchemAdapter {
         // `workdir.join(&input.output)`. Validate as a basename
         // before the join so `output = "../etc/passwd"` is rejected.
         if let Some(s) = input.output.to_str() {
-            valenx_core::adapter_helpers::validate_output_basename(
-                s,
-                "[bio.nwchem].output",
-            )
-            .map_err(|e| AdapterError::InvalidCase {
-                case_path: case.path.join("case.toml"),
-                reason: format!("{e}"),
-            })?;
+            valenx_core::adapter_helpers::validate_output_basename(s, "[bio.nwchem].output")
+                .map_err(|e| AdapterError::InvalidCase {
+                    case_path: case.path.join("case.toml"),
+                    reason: format!("{e}"),
+                })?;
         } else {
             return Err(AdapterError::InvalidCase {
                 case_path: case.path.join("case.toml"),
@@ -155,10 +152,7 @@ impl Adapter for NwchemAdapter {
         let source_input = if input.input.is_absolute() {
             input.input.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input)?
         };
         if !source_input.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -359,7 +353,11 @@ impl Adapter for NwchemAdapter {
                     stderr_tail.push(line);
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(status) = kill_guard.inner_mut().try_wait().map_err(AdapterError::Io)? {
+                    if let Some(status) = kill_guard
+                        .inner_mut()
+                        .try_wait()
+                        .map_err(AdapterError::Io)?
+                    {
                         for line in rx.try_iter() {
                             process_stderr(&line, ctx, &mut warnings);
                             if stderr_tail.len() >= STDERR_TAIL_MAX {
@@ -536,9 +534,7 @@ mpi_procs = 1
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = NwchemAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = NwchemAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("[bio.nwchem].output"),

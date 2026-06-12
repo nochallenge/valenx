@@ -139,10 +139,7 @@ pub fn canonical_orthogonalizer(s: &DMatrix<f64>) -> Result<Orthogonalizer> {
 /// Returns `(ε ascending, C)` where `C` has the *full* `n` rows (one
 /// per basis function) and `m = X.ncols()` columns (one per retained
 /// orthogonal orbital).
-pub fn solve_roothaan(
-    f: &DMatrix<f64>,
-    ortho: &Orthogonalizer,
-) -> (DVector<f64>, DMatrix<f64>) {
+pub fn solve_roothaan(f: &DMatrix<f64>, ortho: &Orthogonalizer) -> (DVector<f64>, DMatrix<f64>) {
     let x = &ortho.x;
     // F' = Xᵀ F X.
     let f_prime = x.transpose() * f * x;

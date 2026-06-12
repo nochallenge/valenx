@@ -62,9 +62,7 @@ pub fn view_screenshot(
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
-        .ok_or_else(|| {
-            OcctVizError::bad_input("path", "must have a .bmp extension")
-        })?
+        .ok_or_else(|| OcctVizError::bad_input("path", "must have a .bmp extension"))?
         .to_ascii_lowercase();
     if ext == "png" || ext == "jpg" || ext == "jpeg" {
         return Err(OcctVizError::bad_input(
@@ -169,16 +167,14 @@ mod tests {
 
     #[test]
     fn rejects_png_extension_with_clear_message() {
-        let err =
-            view_screenshot(&[0; 4], 1, 1, &PathBuf::from("snap.png")).unwrap_err();
+        let err = view_screenshot(&[0; 4], 1, 1, &PathBuf::from("snap.png")).unwrap_err();
         assert_eq!(err.code(), "occt_viz.bad_input");
         assert!(err.to_string().contains("bmp"));
     }
 
     #[test]
     fn rejects_pdf_extension() {
-        let err =
-            view_screenshot(&[0; 4], 1, 1, &PathBuf::from("snap.pdf")).unwrap_err();
+        let err = view_screenshot(&[0; 4], 1, 1, &PathBuf::from("snap.pdf")).unwrap_err();
         assert_eq!(err.code(), "occt_viz.bad_input");
     }
 
@@ -191,8 +187,7 @@ mod tests {
     #[test]
     fn rejects_mismatched_buffer_length() {
         // 2x2 image needs 16 bytes; pass 12.
-        let err = view_screenshot(&[0; 12], 2, 2, &PathBuf::from("snap.bmp"))
-            .unwrap_err();
+        let err = view_screenshot(&[0; 12], 2, 2, &PathBuf::from("snap.bmp")).unwrap_err();
         assert_eq!(err.code(), "occt_viz.bad_input");
     }
 
@@ -227,8 +222,7 @@ mod tests {
     #[test]
     fn writes_a_bmp_file_to_disk() {
         let px = [10u8, 20, 30, 255].repeat(4); // 2x2
-        let tmp = std::env::temp_dir()
-            .join(format!("valenx_shot_{}.bmp", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("valenx_shot_{}.bmp", std::process::id()));
         view_screenshot(&px, 2, 2, &tmp).expect("write bmp");
         let bytes = std::fs::read(&tmp).expect("read back");
         let _ = std::fs::remove_file(&tmp);

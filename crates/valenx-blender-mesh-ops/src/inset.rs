@@ -34,7 +34,11 @@ pub fn faces(mesh: &Mesh, face_ids: &[usize], distance: f64) -> Result<Mesh, Ble
             let p = out.vertices[v];
             let dir = c - p;
             let len = dir.norm();
-            let off = if len > 1e-12 { dir / len * distance } else { dir };
+            let off = if len > 1e-12 {
+                dir / len * distance
+            } else {
+                dir
+            };
             out.vertices.push(p + off);
         }
         // Inset face — replaces the original.

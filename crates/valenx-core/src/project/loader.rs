@@ -111,7 +111,9 @@ pub enum ProjectLoadError {
     /// `cases/` subdir (e.g. `abc/../def` or `../escape`), and at
     /// `save()` time the write could land outside the project root if
     /// a traversed component is a symlink.
-    #[error("case name {0:?} is not a single path component (contains .., separators, or is absolute)")]
+    #[error(
+        "case name {0:?} is not a single path component (contains .., separators, or is absolute)"
+    )]
     UnsafeCaseName(String),
 
     /// A project file (`project.toml`, `tools.lock`, or a per-case
@@ -302,11 +304,7 @@ fn parse_format_major(s: &str) -> Result<u64, ProjectLoadError> {
 /// `writer.rs::save` as a belt-and-suspenders defensive check.
 pub(crate) fn is_safe_case_name(name: &str) -> bool {
     // Fast lexical rejections first: empty, separators, traversal.
-    if name.is_empty()
-        || name.contains('/')
-        || name.contains('\\')
-        || name.contains("..")
-    {
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
         return false;
     }
     // R30 L (cosmetic, Windows-only): Windows silently strips trailing
@@ -517,8 +515,8 @@ order = [\"../escape\"]
         )
         .expect("write escaped case.toml");
 
-        let err = LoadedProject::load(&tmp)
-            .expect_err("traversing case name must be rejected at load");
+        let err =
+            LoadedProject::load(&tmp).expect_err("traversing case name must be rejected at load");
         match err {
             ProjectLoadError::UnsafeCaseName(n) => {
                 assert_eq!(n, "../escape", "error must name the offending case");
@@ -553,9 +551,7 @@ order = [\"../escape\"]
         // comment so the size guard fires first (the cap must
         // reject before parsing).
         let mut padded = String::with_capacity((MAX_PROJECT_FILE_BYTES as usize) + 4096);
-        padded.push_str(
-            "[project]\nname = \"oversized\"\nformat = \"1.0\"\n# pad below\n# ",
-        );
+        padded.push_str("[project]\nname = \"oversized\"\nformat = \"1.0\"\n# pad below\n# ");
         // Roughly 5 MiB of '#' comment bytes so we comfortably exceed
         // the 1 MiB cap regardless of OS line-ending rewrites.
         padded.extend(std::iter::repeat_n('A', 5 * 1024 * 1024));

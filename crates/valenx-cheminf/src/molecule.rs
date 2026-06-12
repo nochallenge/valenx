@@ -280,10 +280,7 @@ impl Molecule {
 
     /// Indices of every atom directly bonded to `atom`.
     pub fn neighbors(&self, atom: usize) -> Vec<usize> {
-        self.bonds
-            .iter()
-            .filter_map(|b| b.other(atom))
-            .collect()
+        self.bonds.iter().filter_map(|b| b.other(atom)).collect()
     }
 
     /// Degree of `atom` — the number of incident bonds (heavy + the
@@ -294,9 +291,9 @@ impl Molecule {
 
     /// The bond joining `a` and `b`, if one exists.
     pub fn bond_between(&self, a: usize, b: usize) -> Option<usize> {
-        self.bonds.iter().position(|bd| {
-            (bd.a == a && bd.b == b) || (bd.a == b && bd.b == a)
-        })
+        self.bonds
+            .iter()
+            .position(|bd| (bd.a == a && bd.b == b) || (bd.a == b && bd.b == a))
     }
 
     /// Sum of bond orders around `atom` (aromatic bonds count `1.5`),

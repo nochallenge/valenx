@@ -31,10 +31,7 @@ use valenx_align::{
     search::{KarlinAltschul, KmerIndex, SeedParams, SeedSearch},
     smith_waterman, ScoringScheme,
 };
-use valenx_core::{
-    error::RunPhase,
-    AdapterError, RunContext, RunReport,
-};
+use valenx_core::{error::RunPhase, AdapterError, RunContext, RunReport};
 
 /// Parameters stored in `native_params.toml` by `prepare()`.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -157,21 +154,14 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
     let db_seqs_owned: Vec<Vec<u8>> = db_records.iter().map(|(_, s)| s.clone()).collect();
     let db_seqs: Vec<&[u8]> = db_seqs_owned.iter().map(|s| s.as_slice()).collect();
 
-    let index = KmerIndex::build_many(&db_seqs, k).map_err(|e| {
-        AdapterError::Run {
-            exit_code: 1,
-            stderr: format!("k-mer index build failed: {e}"),
-            phase: RunPhase::Startup,
-        }
+    let index = KmerIndex::build_many(&db_seqs, k).map_err(|e| AdapterError::Run {
+        exit_code: 1,
+        stderr: format!("k-mer index build failed: {e}"),
+        phase: RunPhase::Startup,
     })?;
 
-    let searcher = SeedSearch::new(
-        &index,
-        db_seqs.clone(),
-        &scheme,
-        SeedParams::default(),
-    )
-    .with_stats(ka);
+    let searcher =
+        SeedSearch::new(&index, db_seqs.clone(), &scheme, SeedParams::default()).with_stats(ka);
 
     ctx.report_progress(30.0, "native BLAST — searching");
 
@@ -228,8 +218,7 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
             let qslice = &qseq[qs_clamped..qe_clamped];
             let sslice = &sseq[ss_clamped..se_clamped];
 
-            let (pident, aln_len, mismatches, gap_opens) = if qslice.is_empty()
-                || sslice.is_empty()
+            let (pident, aln_len, mismatches, gap_opens) = if qslice.is_empty() || sslice.is_empty()
             {
                 (0.0_f64, 0usize, 0usize, 0usize)
             } else {
@@ -241,13 +230,26 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
                         } else {
                             stats.identities as f64 / stats.columns as f64 * 100.0
                         };
-                        (pct, stats.columns, stats.columns.saturating_sub(stats.identities + stats.gaps), stats.gap_opens)
+                        (
+                            pct,
+                            stats.columns,
+                            stats.columns.saturating_sub(stats.identities + stats.gaps),
+                            stats.gap_opens,
+                        )
                     }
                     Err(_) => {
                         // SW failed on this segment; use rough approximation.
                         let len = qslice.len().min(sslice.len());
-                        let matches = qslice.iter().zip(sslice.iter()).filter(|(a, b)| a == b).count();
-                        let pct = if len == 0 { 0.0 } else { matches as f64 / len as f64 * 100.0 };
+                        let matches = qslice
+                            .iter()
+                            .zip(sslice.iter())
+                            .filter(|(a, b)| a == b)
+                            .count();
+                        let pct = if len == 0 {
+                            0.0
+                        } else {
+                            matches as f64 / len as f64 * 100.0
+                        };
                         (pct, len, len - matches, 0)
                     }
                 }
@@ -265,10 +267,10 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
                 aln_len,
                 mismatches,
                 gap_opens,
-                qs_clamped + 1,       // qstart (1-based)
-                qe_clamped,           // qend (1-based inclusive = 0-based exclusive)
-                ss_clamped + 1,       // sstart
-                se_clamped,           // send
+                qs_clamped + 1, // qstart (1-based)
+                qe_clamped,     // qend (1-based inclusive = 0-based exclusive)
+                ss_clamped + 1, // sstart
+                se_clamped,     // send
                 evalue,
                 bitscore,
             ));
@@ -278,8 +280,11 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
     ctx.report_progress(95.0, "native BLAST — writing results");
 
     let out_path = workdir.join(&params.output_name);
-    valenx_core::io_caps::atomic_write_str(&out_path, &(output_lines.join("\n") + if output_lines.is_empty() { "" } else { "\n" }))
-        .map_err(|e| AdapterError::Other(anyhow::anyhow!("write {}: {e}", out_path.display())))?;
+    valenx_core::io_caps::atomic_write_str(
+        &out_path,
+        &(output_lines.join("\n") + if output_lines.is_empty() { "" } else { "\n" }),
+    )
+    .map_err(|e| AdapterError::Other(anyhow::anyhow!("write {}: {e}", out_path.display())))?;
 
     ctx.report_progress(100.0, "native BLAST — done");
 
@@ -295,8 +300,7 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
 
 /// Detects whether sequences look like nucleotide or protein.
 fn detect_scheme(records: &[(Option<String>, Vec<u8>)]) -> ScoringScheme {
-    let dna_set: std::collections::HashSet<u8> =
-        b"ACGTURYNSWKMBVHD".iter().copied().collect();
+    let dna_set: std::collections::HashSet<u8> = b"ACGTURYNSWKMBVHD".iter().copied().collect();
 
     let mut total = 0usize;
     let mut dna_count = 0usize;
@@ -339,9 +343,7 @@ fn read_text_file(path: &str) -> Result<String, AdapterError> {
 }
 
 /// Minimal multi-FASTA parser: (name, sequence_bytes) pairs.
-pub fn parse_fasta_simple(
-    text: &str,
-) -> Result<Vec<(Option<String>, Vec<u8>)>, AdapterError> {
+pub fn parse_fasta_simple(text: &str) -> Result<Vec<(Option<String>, Vec<u8>)>, AdapterError> {
     let mut records: Vec<(Option<String>, Vec<u8>)> = Vec::new();
     let mut cur_name: Option<String> = None;
     let mut cur_seq: Vec<u8> = Vec::new();
@@ -426,22 +428,23 @@ mod tests {
         let db_seqs: Vec<&[u8]> = db_seqs_owned.iter().map(|s| s.as_slice()).collect();
 
         let index = KmerIndex::build_many(&db_seqs, 5).unwrap();
-        let searcher = SeedSearch::new(
-            &index,
-            db_seqs.clone(),
-            &scheme,
-            SeedParams::default(),
-        )
-        .with_stats(KarlinAltschul::blosum62_ungapped());
+        let searcher = SeedSearch::new(&index, db_seqs.clone(), &scheme, SeedParams::default())
+            .with_stats(KarlinAltschul::blosum62_ungapped());
 
         let hsps = searcher.search(PROTEIN_SEQ);
         assert!(!hsps.is_empty(), "self-search must find at least one hit");
 
         // The top hit should have seq_id 0 (the exact match).
         let top = &hsps[0];
-        assert_eq!(top.seq_id, 0, "top hit should be against the identical sequence");
-        assert!(top.e_value.is_some_and(|e| e < 1.0),
-            "self-search E-value should be < 1.0; got {:?}", top.e_value);
+        assert_eq!(
+            top.seq_id, 0,
+            "top hit should be against the identical sequence"
+        );
+        assert!(
+            top.e_value.is_some_and(|e| e < 1.0),
+            "self-search E-value should be < 1.0; got {:?}",
+            top.e_value
+        );
     }
 
     #[test]

@@ -344,15 +344,7 @@ fn aromatic_atoms(conn: &Connectivity, in_ring: &[bool]) -> Vec<bool> {
     // has two aromatic ring neighbours (so an isolated false positive
     // on a non-aromatic ring atom is dropped).
     let confirmed: Vec<bool> = (0..n)
-        .map(|i| {
-            arom[i]
-                && conn
-                    .heavy_neighbors(i)
-                    .iter()
-                    .filter(|&&j| arom[j])
-                    .count()
-                    >= 2
-        })
+        .map(|i| arom[i] && conn.heavy_neighbors(i).iter().filter(|&&j| arom[j]).count() >= 2)
         .collect();
     confirmed
 }
@@ -482,12 +474,7 @@ pub fn perceive_types(topology: &Topology) -> Result<Vec<AtomType>> {
 }
 
 /// Assigns the OPLS-AA type string of a single atom `i`.
-fn type_one(
-    conn: &Connectivity,
-    arom: &[bool],
-    hyb: &[Hybridization],
-    i: usize,
-) -> Result<String> {
+fn type_one(conn: &Connectivity, arom: &[bool], hyb: &[Hybridization], i: usize) -> Result<String> {
     let el = conn.element(i);
     let unrec = |reason: &str| -> MdError {
         TypingError::Unrecognized {
@@ -520,15 +507,13 @@ fn type_carbon(
     // Carbonyl carbon (C=O): carboxylic-acid vs ketone/aldehyde/amide.
     if is_carbonyl_carbon(conn, i) {
         let heavy = conn.heavy_neighbors(i);
-        let hydroxyl_o = heavy.iter().any(|&o| {
-            conn.element(o) == "O" && conn.degree(o) == 2 && conn.hydrogen_count(o) == 1
-        });
+        let hydroxyl_o = heavy
+            .iter()
+            .any(|&o| conn.element(o) == "O" && conn.degree(o) == 2 && conn.hydrogen_count(o) == 1);
         if hydroxyl_o {
             return Some("opls_267".to_string()); // carboxylic-acid C
         }
-        let amide_n = heavy
-            .iter()
-            .any(|&n| conn.element(n) == "N");
+        let amide_n = heavy.iter().any(|&n| conn.element(n) == "N");
         if amide_n {
             return Some("opls_177".to_string()); // amide carbonyl C
         }
@@ -713,10 +698,7 @@ fn type_sulfur(conn: &Connectivity, i: usize) -> Option<String> {
 
 /// A typed-atom summary keyed by index, for diagnostics / reporting.
 pub fn type_map(topology: &Topology) -> Result<HashMap<usize, AtomType>> {
-    Ok(perceive_types(topology)?
-        .into_iter()
-        .enumerate()
-        .collect())
+    Ok(perceive_types(topology)?.into_iter().enumerate().collect())
 }
 
 #[cfg(test)]
@@ -751,15 +733,7 @@ mod tests {
         // C-C with 3 H each: CH3-CH3.
         let t = topo(
             &["C", "C", "H", "H", "H", "H", "H", "H"],
-            &[
-                (0, 1),
-                (0, 2),
-                (0, 3),
-                (0, 4),
-                (1, 5),
-                (1, 6),
-                (1, 7),
-            ],
+            &[(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (1, 6), (1, 7)],
         );
         let types = perceive_types(&t).unwrap();
         assert_eq!(types[0].opls_type, "opls_135"); // CH3 carbon
@@ -856,9 +830,7 @@ mod tests {
         // Acetone-like: C(=O) ketone — central C bonded to O(term),
         // and two methyls. Just the carbonyl carbon + its O matter.
         // CH3-C(=O)-CH3
-        let elements = vec![
-            "C", "C", "C", "O", "H", "H", "H", "H", "H", "H",
-        ];
+        let elements = vec!["C", "C", "C", "O", "H", "H", "H", "H", "H", "H"];
         let bonds = [
             (0, 1),
             (1, 2),

@@ -148,10 +148,7 @@ pub fn detect_active_regions(
 
 /// Per-contig active-region detection — runs on a slice already
 /// restricted to one chromosome and sorted by `pos`.
-fn detect_one_contig(
-    columns: &[PileupColumn],
-    params: &ActiveRegionParams,
-) -> Vec<ActiveRegion> {
+fn detect_one_contig(columns: &[PileupColumn], params: &ActiveRegionParams) -> Vec<ActiveRegion> {
     if columns.is_empty() {
         return Vec::new();
     }
@@ -287,7 +284,11 @@ mod tests {
     fn calm_region_yields_no_active_regions() {
         let cols: Vec<_> = (1..=20).map(calm_column).collect();
         let regs = detect_active_regions(&cols, &ActiveRegionParams::default());
-        assert!(regs.is_empty(), "calm slice produced {} regions", regs.len());
+        assert!(
+            regs.is_empty(),
+            "calm slice produced {} regions",
+            regs.len()
+        );
     }
 
     #[test]

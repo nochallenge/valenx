@@ -87,93 +87,175 @@ pub fn codon_usage_table(host: Host) -> CodonUsageTable {
     let raw: &[(&str, f64)] = match host {
         Host::EColi => &[
             // Phe
-            ("TTT", 0.58), ("TTC", 0.42),
+            ("TTT", 0.58),
+            ("TTC", 0.42),
             // Leu
-            ("TTA", 0.14), ("TTG", 0.13), ("CTT", 0.12),
-            ("CTC", 0.10), ("CTA", 0.04), ("CTG", 0.47),
+            ("TTA", 0.14),
+            ("TTG", 0.13),
+            ("CTT", 0.12),
+            ("CTC", 0.10),
+            ("CTA", 0.04),
+            ("CTG", 0.47),
             // Ile
-            ("ATT", 0.49), ("ATC", 0.39), ("ATA", 0.11),
+            ("ATT", 0.49),
+            ("ATC", 0.39),
+            ("ATA", 0.11),
             // Met / Trp
-            ("ATG", 1.00), ("TGG", 1.00),
+            ("ATG", 1.00),
+            ("TGG", 1.00),
             // Val
-            ("GTT", 0.28), ("GTC", 0.20), ("GTA", 0.17), ("GTG", 0.35),
+            ("GTT", 0.28),
+            ("GTC", 0.20),
+            ("GTA", 0.17),
+            ("GTG", 0.35),
             // Ser
-            ("TCT", 0.17), ("TCC", 0.15), ("TCA", 0.14),
-            ("TCG", 0.14), ("AGT", 0.16), ("AGC", 0.25),
+            ("TCT", 0.17),
+            ("TCC", 0.15),
+            ("TCA", 0.14),
+            ("TCG", 0.14),
+            ("AGT", 0.16),
+            ("AGC", 0.25),
             // Pro
-            ("CCT", 0.18), ("CCC", 0.13), ("CCA", 0.20), ("CCG", 0.49),
+            ("CCT", 0.18),
+            ("CCC", 0.13),
+            ("CCA", 0.20),
+            ("CCG", 0.49),
             // Thr
-            ("ACT", 0.19), ("ACC", 0.40), ("ACA", 0.17), ("ACG", 0.25),
+            ("ACT", 0.19),
+            ("ACC", 0.40),
+            ("ACA", 0.17),
+            ("ACG", 0.25),
             // Ala
-            ("GCT", 0.18), ("GCC", 0.26), ("GCA", 0.23), ("GCG", 0.33),
+            ("GCT", 0.18),
+            ("GCC", 0.26),
+            ("GCA", 0.23),
+            ("GCG", 0.33),
             // Tyr
-            ("TAT", 0.59), ("TAC", 0.41),
+            ("TAT", 0.59),
+            ("TAC", 0.41),
             // His
-            ("CAT", 0.57), ("CAC", 0.43),
+            ("CAT", 0.57),
+            ("CAC", 0.43),
             // Gln
-            ("CAA", 0.34), ("CAG", 0.66),
+            ("CAA", 0.34),
+            ("CAG", 0.66),
             // Asn
-            ("AAT", 0.49), ("AAC", 0.51),
+            ("AAT", 0.49),
+            ("AAC", 0.51),
             // Lys
-            ("AAA", 0.74), ("AAG", 0.26),
+            ("AAA", 0.74),
+            ("AAG", 0.26),
             // Asp
-            ("GAT", 0.63), ("GAC", 0.37),
+            ("GAT", 0.63),
+            ("GAC", 0.37),
             // Glu
-            ("GAA", 0.68), ("GAG", 0.32),
+            ("GAA", 0.68),
+            ("GAG", 0.32),
             // Cys
-            ("TGT", 0.46), ("TGC", 0.54),
+            ("TGT", 0.46),
+            ("TGC", 0.54),
             // Arg
-            ("CGT", 0.36), ("CGC", 0.36), ("CGA", 0.07),
-            ("CGG", 0.11), ("AGA", 0.07), ("AGG", 0.04),
+            ("CGT", 0.36),
+            ("CGC", 0.36),
+            ("CGA", 0.07),
+            ("CGG", 0.11),
+            ("AGA", 0.07),
+            ("AGG", 0.04),
             // Gly
-            ("GGT", 0.35), ("GGC", 0.37), ("GGA", 0.13), ("GGG", 0.15),
+            ("GGT", 0.35),
+            ("GGC", 0.37),
+            ("GGA", 0.13),
+            ("GGG", 0.15),
             // Stops
-            ("TAA", 0.61), ("TAG", 0.09), ("TGA", 0.30),
+            ("TAA", 0.61),
+            ("TAG", 0.09),
+            ("TGA", 0.30),
         ],
         Host::Human => &[
             // Phe
-            ("TTT", 0.45), ("TTC", 0.55),
+            ("TTT", 0.45),
+            ("TTC", 0.55),
             // Leu
-            ("TTA", 0.07), ("TTG", 0.13), ("CTT", 0.13),
-            ("CTC", 0.20), ("CTA", 0.07), ("CTG", 0.40),
+            ("TTA", 0.07),
+            ("TTG", 0.13),
+            ("CTT", 0.13),
+            ("CTC", 0.20),
+            ("CTA", 0.07),
+            ("CTG", 0.40),
             // Ile
-            ("ATT", 0.36), ("ATC", 0.48), ("ATA", 0.16),
+            ("ATT", 0.36),
+            ("ATC", 0.48),
+            ("ATA", 0.16),
             // Met / Trp
-            ("ATG", 1.00), ("TGG", 1.00),
+            ("ATG", 1.00),
+            ("TGG", 1.00),
             // Val
-            ("GTT", 0.18), ("GTC", 0.24), ("GTA", 0.11), ("GTG", 0.47),
+            ("GTT", 0.18),
+            ("GTC", 0.24),
+            ("GTA", 0.11),
+            ("GTG", 0.47),
             // Ser
-            ("TCT", 0.18), ("TCC", 0.22), ("TCA", 0.15),
-            ("TCG", 0.06), ("AGT", 0.15), ("AGC", 0.24),
+            ("TCT", 0.18),
+            ("TCC", 0.22),
+            ("TCA", 0.15),
+            ("TCG", 0.06),
+            ("AGT", 0.15),
+            ("AGC", 0.24),
             // Pro
-            ("CCT", 0.28), ("CCC", 0.33), ("CCA", 0.27), ("CCG", 0.11),
+            ("CCT", 0.28),
+            ("CCC", 0.33),
+            ("CCA", 0.27),
+            ("CCG", 0.11),
             // Thr
-            ("ACT", 0.24), ("ACC", 0.36), ("ACA", 0.28), ("ACG", 0.12),
+            ("ACT", 0.24),
+            ("ACC", 0.36),
+            ("ACA", 0.28),
+            ("ACG", 0.12),
             // Ala
-            ("GCT", 0.26), ("GCC", 0.40), ("GCA", 0.23), ("GCG", 0.11),
+            ("GCT", 0.26),
+            ("GCC", 0.40),
+            ("GCA", 0.23),
+            ("GCG", 0.11),
             // Tyr
-            ("TAT", 0.43), ("TAC", 0.57),
+            ("TAT", 0.43),
+            ("TAC", 0.57),
             // His
-            ("CAT", 0.41), ("CAC", 0.59),
+            ("CAT", 0.41),
+            ("CAC", 0.59),
             // Gln
-            ("CAA", 0.25), ("CAG", 0.75),
+            ("CAA", 0.25),
+            ("CAG", 0.75),
             // Asn
-            ("AAT", 0.46), ("AAC", 0.54),
+            ("AAT", 0.46),
+            ("AAC", 0.54),
             // Lys
-            ("AAA", 0.42), ("AAG", 0.58),
+            ("AAA", 0.42),
+            ("AAG", 0.58),
             // Asp
-            ("GAT", 0.46), ("GAC", 0.54),
+            ("GAT", 0.46),
+            ("GAC", 0.54),
             // Glu
-            ("GAA", 0.42), ("GAG", 0.58),
+            ("GAA", 0.42),
+            ("GAG", 0.58),
             // Cys
-            ("TGT", 0.45), ("TGC", 0.55),
+            ("TGT", 0.45),
+            ("TGC", 0.55),
             // Arg
-            ("CGT", 0.08), ("CGC", 0.19), ("CGA", 0.11),
-            ("CGG", 0.21), ("AGA", 0.20), ("AGG", 0.21),
+            ("CGT", 0.08),
+            ("CGC", 0.19),
+            ("CGA", 0.11),
+            ("CGG", 0.21),
+            ("AGA", 0.20),
+            ("AGG", 0.21),
             // Gly
-            ("GGT", 0.16), ("GGC", 0.34), ("GGA", 0.25), ("GGG", 0.25),
+            ("GGT", 0.16),
+            ("GGC", 0.34),
+            ("GGA", 0.25),
+            ("GGG", 0.25),
             // Stops
-            ("TAA", 0.28), ("TAG", 0.20), ("TGA", 0.52),
+            ("TAA", 0.28),
+            ("TAG", 0.20),
+            ("TGA", 0.52),
         ],
     };
     let mut freq = HashMap::new();
@@ -205,7 +287,11 @@ pub fn codon_optimize(protein: &Seq, host: Host) -> Result<Seq> {
         let codon = table.optimal_codon(aa, &code).ok_or_else(|| {
             BioseqError::invalid(
                 "sequence",
-                format!("amino acid `{}` has no codon in the {} table", aa as char, host.name()),
+                format!(
+                    "amino acid `{}` has no codon in the {} table",
+                    aa as char,
+                    host.name()
+                ),
             )
         })?;
         dna.extend_from_slice(&codon);
@@ -224,7 +310,10 @@ pub fn codon_optimize(protein: &Seq, host: Host) -> Result<Seq> {
 /// divisible by 3.
 pub fn codon_adaptation_index(cds: &Seq, host: Host) -> Result<f64> {
     if cds.kind() != SeqKind::Dna {
-        return Err(BioseqError::invalid("kind", "CAI needs a DNA coding sequence"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "CAI needs a DNA coding sequence",
+        ));
     }
     let bytes = cds.as_bytes();
     if bytes.is_empty() || bytes.len() % 3 != 0 {

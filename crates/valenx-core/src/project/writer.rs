@@ -234,10 +234,7 @@ mod tests {
             let entry = entry.expect("dir entry");
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            assert!(
-                !name.contains(".tmp."),
-                "orphan sidecar survived: {name}"
-            );
+            assert!(!name.contains(".tmp."), "orphan sidecar survived: {name}");
         }
 
         let _ = std::fs::remove_dir_all(&root);

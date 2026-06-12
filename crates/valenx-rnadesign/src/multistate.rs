@@ -427,11 +427,7 @@ pub fn locked_positions(constraints: &DesignConstraints, n: usize) -> Vec<(usize
 
 /// Builds a seed sequence compatible with `first_target`'s pairs and the
 /// locked positions.
-fn seed_sequence(
-    first_target: &Structure,
-    locked: &[Option<u8>],
-    rng: &mut Rng,
-) -> Vec<u8> {
+fn seed_sequence(first_target: &Structure, locked: &[Option<u8>], rng: &mut Rng) -> Vec<u8> {
     let n = first_target.len();
     let mut seq = vec![b'A'; n];
     let mut assigned = vec![false; n];
@@ -609,10 +605,7 @@ mod tests {
     fn two_states() -> Vec<StateSpec> {
         let a = Structure::from_dot_bracket("((((....))))....").unwrap();
         let b = Structure::from_dot_bracket("....((((....))))").unwrap();
-        vec![
-            StateSpec::new("state-A", a),
-            StateSpec::new("state-B", b),
-        ]
+        vec![StateSpec::new("state-A", a), StateSpec::new("state-B", b)]
     }
 
     #[test]
@@ -665,10 +658,7 @@ mod tests {
     #[test]
     fn rejects_pseudoknot() {
         let states = vec![
-            StateSpec::new(
-                "a",
-                Structure::from_dot_bracket("((..[[..))..]]").unwrap(),
-            ),
+            StateSpec::new("a", Structure::from_dot_bracket("((..[[..))..]]").unwrap()),
             StateSpec::new("b", Structure::empty(14)),
         ];
         assert!(design_multistate(&states, MultiStateParams::default()).is_err());
@@ -713,9 +703,15 @@ mod tests {
             ..DesignConstraints::default()
         };
         let states = vec![
-            StateSpec::new("a", Structure::from_dot_bracket("....((((....))))").unwrap())
-                .with_constraints(ca),
-            StateSpec::new("b", Structure::from_dot_bracket("((((....))))....").unwrap()),
+            StateSpec::new(
+                "a",
+                Structure::from_dot_bracket("....((((....))))").unwrap(),
+            )
+            .with_constraints(ca),
+            StateSpec::new(
+                "b",
+                Structure::from_dot_bracket("((((....))))....").unwrap(),
+            ),
         ];
         let d = design_multistate(&states, MultiStateParams::default()).unwrap();
         assert_eq!(d.sequence[0], b'G', "locked position 0 was not held at G");

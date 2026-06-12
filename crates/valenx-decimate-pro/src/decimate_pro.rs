@@ -109,8 +109,7 @@ fn curvature_protect_mask(curvature: &[f64], weight: f64) -> Vec<bool> {
         return Vec::new();
     }
     let mean = curvature.iter().sum::<f64>() / curvature.len() as f64;
-    let var =
-        curvature.iter().map(|k| (k - mean).powi(2)).sum::<f64>() / curvature.len() as f64;
+    let var = curvature.iter().map(|k| (k - mean).powi(2)).sum::<f64>() / curvature.len() as f64;
     let stddev = var.sqrt();
     // High weight → low threshold → more verts protected.
     let threshold = (mean + (1.0 - weight.clamp(0.0, 1.0)) * stddev).max(0.0);
@@ -136,11 +135,7 @@ fn top_quartile_mask(weights: &[f64]) -> Vec<bool> {
 /// QEM decimator. The general case keeps every protected node and
 /// every triangle that touches at least one protected vertex, then
 /// concatenates the (already-decimated) free subset.
-fn decimate_with_protected(
-    mesh: &Mesh,
-    target_fraction: f64,
-    protect: &[bool],
-) -> Mesh {
+fn decimate_with_protected(mesh: &Mesh, target_fraction: f64, protect: &[bool]) -> Mesh {
     if protect.is_empty() || protect.iter().all(|&p| !p) {
         return valenx_mesh::quadric_error_decimate(mesh, target_fraction);
     }
@@ -249,9 +244,11 @@ fn stitch_protected_and_free(orig: &Mesh, protect: &[bool], decimated_free: &Mes
                 continue;
             }
             if protect[a] && protect[b] && protect[c] {
-                prot_block
-                    .connectivity
-                    .extend_from_slice(&[prot_remap[a], prot_remap[b], prot_remap[c]]);
+                prot_block.connectivity.extend_from_slice(&[
+                    prot_remap[a],
+                    prot_remap[b],
+                    prot_remap[c],
+                ]);
             }
         }
     }

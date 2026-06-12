@@ -189,10 +189,7 @@ impl Adapter for CurvesAdapter {
         let source_pdb = if input.input_pdb.is_absolute() {
             input.input_pdb.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input_pdb,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input_pdb)?
         };
         if !source_pdb.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -230,10 +227,9 @@ impl Adapter for CurvesAdapter {
             input.first_residue,
             input.last_residue,
         );
-        valenx_core::io_caps::atomic_write_bytes(&params_path, params_body.as_bytes())
-            .map_err(|e| {
-                AdapterError::Other(anyhow::anyhow!("write {} body: {e}", params_path.display()))
-            })?;
+        valenx_core::io_caps::atomic_write_bytes(&params_path, params_body.as_bytes()).map_err(
+            |e| AdapterError::Other(anyhow::anyhow!("write {} body: {e}", params_path.display())),
+        )?;
 
         // Stash the params filename under a sentinel env var so
         // run() can recover it. The custom run() strips this var
@@ -405,7 +401,11 @@ impl Adapter for CurvesAdapter {
                     }
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(status) = kill_guard.inner_mut().try_wait().map_err(AdapterError::Io)? {
+                    if let Some(status) = kill_guard
+                        .inner_mut()
+                        .try_wait()
+                        .map_err(AdapterError::Io)?
+                    {
                         // Drain any remaining lines so nothing's lost.
                         for (level, line) in rx.try_iter() {
                             process_line(level, &line, ctx, &mut warnings);
@@ -596,7 +596,11 @@ fn finalize(
 /// accepting every `.lis` / `.cda` in that case.
 fn read_output_basename(workdir: &Path) -> Option<String> {
     let case_toml = workdir.join("case.toml");
-    let text = valenx_core::io_caps::read_capped_to_string(&case_toml, valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize).ok()?;
+    let text = valenx_core::io_caps::read_capped_to_string(
+        &case_toml,
+        valenx_core::project::loader::MAX_PROJECT_FILE_BYTES as usize,
+    )
+    .ok()?;
     let parsed: toml::Value = toml::from_str(&text).ok()?;
     parsed
         .get("bio")?

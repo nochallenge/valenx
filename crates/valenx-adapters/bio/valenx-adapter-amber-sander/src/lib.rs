@@ -157,10 +157,7 @@ impl Adapter for SanderAdapter {
         let resolved_topology = if input.topology.is_absolute() {
             input.topology.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.topology,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.topology)?
         };
         if !resolved_topology.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -176,10 +173,7 @@ impl Adapter for SanderAdapter {
         let resolved_coordinates = if input.coordinates.is_absolute() {
             input.coordinates.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.coordinates,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.coordinates)?
         };
         if !resolved_coordinates.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -195,10 +189,7 @@ impl Adapter for SanderAdapter {
         let resolved_config = if input.config.is_absolute() {
             input.config.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.config,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.config)?
         };
         if !resolved_config.is_file() {
             return Err(AdapterError::InvalidCase {

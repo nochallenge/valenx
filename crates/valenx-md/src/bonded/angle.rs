@@ -107,10 +107,8 @@ impl ForceTerm for HarmonicAngles {
             // dtheta/dcos = -1/sin(theta), so the two signs cancel:
             // f_i = +(dV/dtheta / sin theta) * dcos/dr_i.
             let prefac = dv_dtheta / sin_theta;
-            let fi = prefac
-                * (rkj / (lij * lkj) - cos_theta * rij / (lij * lij));
-            let fk = prefac
-                * (rij / (lij * lkj) - cos_theta * rkj / (lkj * lkj));
+            let fi = prefac * (rkj / (lij * lkj) - cos_theta * rij / (lij * lij));
+            let fk = prefac * (rij / (lij * lkj) - cos_theta * rkj / (lkj * lkj));
             let fj = -(fi + fk);
             out.forces[angle.i] += fi;
             out.forces[angle.j] += fj;
@@ -207,8 +205,7 @@ mod tests {
 
         let sys = bent_system(1.911);
         let term =
-            HarmonicAngles::from_system(&sys, &[AngleParam::new(1.911, 400.0).unwrap()])
-                .unwrap();
+            HarmonicAngles::from_system(&sys, &[AngleParam::new(1.911, 400.0).unwrap()]).unwrap();
         assert_eq!(term.len(), 1);
         assert!(!term.is_empty());
     }
@@ -233,8 +230,7 @@ mod tests {
         // The accumulator-size guard in `accumulate`.
         let sys = bent_system(1.911);
         let term =
-            HarmonicAngles::from_system(&sys, &[AngleParam::new(1.911, 400.0).unwrap()])
-                .unwrap();
+            HarmonicAngles::from_system(&sys, &[AngleParam::new(1.911, 400.0).unwrap()]).unwrap();
         let mut wrong = EnergyForce::zeros(99); // not 3
         assert!(term.accumulate(&sys, &mut wrong).is_err());
     }
@@ -257,13 +253,15 @@ mod tests {
         ];
         let sys = System::new(top, pos).unwrap();
         let term =
-            HarmonicAngles::from_system(&sys, &[AngleParam::new(1.911, 400.0).unwrap()])
-                .unwrap();
+            HarmonicAngles::from_system(&sys, &[AngleParam::new(1.911, 400.0).unwrap()]).unwrap();
         let mut ef = EnergyForce::zeros(3);
         term.accumulate(&sys, &mut ef).unwrap();
         assert_eq!(ef.energy, 0.0, "degenerate angle contributes nothing");
         for f in &ef.forces {
-            assert!(f.norm().is_finite(), "no NaN forces from a degenerate angle");
+            assert!(
+                f.norm().is_finite(),
+                "no NaN forces from a degenerate angle"
+            );
         }
     }
 }

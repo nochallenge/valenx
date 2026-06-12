@@ -84,7 +84,10 @@ impl NoseHoover {
     /// [`MdError::Invalid`] on bad parameters or a zero chain length.
     pub fn with_chain(target: f64, tau: f64, chain_length: usize) -> Result<Self> {
         if !(target.is_finite() && target >= 0.0) {
-            return Err(MdError::invalid("target", "must be finite and non-negative"));
+            return Err(MdError::invalid(
+                "target",
+                "must be finite and non-negative",
+            ));
         }
         if !(tau.is_finite() && tau > 0.0) {
             return Err(MdError::invalid("tau", "must be finite and positive"));
@@ -243,7 +246,9 @@ mod tests {
     fn chain_length_is_reported() {
         assert_eq!(NoseHoover::new(300.0, 0.5).unwrap().chain_length(), 1);
         assert_eq!(
-            NoseHoover::with_chain(300.0, 0.5, 4).unwrap().chain_length(),
+            NoseHoover::with_chain(300.0, 0.5, 4)
+                .unwrap()
+                .chain_length(),
             4
         );
     }

@@ -146,11 +146,7 @@ impl MockPredictor {
     }
 
     /// A mock that always returns `category` with the given `score`.
-    pub fn with_score(
-        name: impl Into<String>,
-        category: EffectCategory,
-        score: f64,
-    ) -> Self {
+    pub fn with_score(name: impl Into<String>, category: EffectCategory, score: f64) -> Self {
         MockPredictor {
             name: name.into(),
             behavior: MockBehavior::Fixed {
@@ -244,10 +240,7 @@ mod tests {
 
     #[test]
     fn mock_failing_returns_error() {
-        let p = MockPredictor::failing(
-            "Broken",
-            VariantError::Bioseq("model unavailable".into()),
-        );
+        let p = MockPredictor::failing("Broken", VariantError::Bioseq("model unavailable".into()));
         assert!(matches!(p.predict(&ctx()), Err(VariantError::Bioseq(_))));
     }
 

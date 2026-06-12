@@ -190,7 +190,11 @@ pub struct ProfileAlignment {
 /// mismatches — producing a spuriously wide, all-gaps merge. The
 /// affine open penalty restores the intended behaviour: a substitution
 /// aligns as a mismatch column, a true indel opens a gap.
-pub fn align_profiles(a: &Profile, b: &Profile, scheme: &ScoringScheme) -> Result<ProfileAlignment> {
+pub fn align_profiles(
+    a: &Profile,
+    b: &Profile,
+    scheme: &ScoringScheme,
+) -> Result<ProfileAlignment> {
     align_profiles_capped(a, b, scheme, MAX_DP_CELLS)
 }
 

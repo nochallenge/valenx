@@ -123,12 +123,7 @@ pub fn simulate_sequences(
                 }
                 let from = parent_seq[site] as usize;
                 // Sample the descendant base from P(t)'s `from` row.
-                let row = [
-                    p[(from, 0)],
-                    p[(from, 1)],
-                    p[(from, 2)],
-                    p[(from, 3)],
-                ];
+                let row = [p[(from, 0)], p[(from, 1)], p[(from, 2)], p[(from, 3)]];
                 child_seq[site] = rng.weighted_index(&row) as u8;
             }
         }
@@ -215,8 +210,7 @@ mod tests {
     fn gamma_heterogeneity_assigns_per_site_rates() {
         let tree = read_newick("((A:0.2,B:0.2):0.2,C:0.2);").unwrap();
         let gamma = DiscreteGamma::new(0.5, 4).unwrap();
-        let aln =
-            simulate_sequences(&tree, &SubstModel::Jc69, 100, Some(&gamma), 11).unwrap();
+        let aln = simulate_sequences(&tree, &SubstModel::Jc69, 100, Some(&gamma), 11).unwrap();
         assert_eq!(aln.site_rates.len(), 100);
         // With four categories at least two distinct rates should be
         // present.

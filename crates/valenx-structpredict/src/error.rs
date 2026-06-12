@@ -185,10 +185,7 @@ impl fmt::Display for StructPredictError {
                 write!(f, "no {what} found: {detail}")
             }
             StructPredictError::NotConverged { detail, iterations } => {
-                write!(
-                    f,
-                    "{detail} did not converge after {iterations} iterations"
-                )
+                write!(f, "{detail} did not converge after {iterations} iterations")
             }
             StructPredictError::Parse { format, detail } => {
                 write!(f, "{format} parse error: {detail}")
@@ -253,8 +250,7 @@ mod tests {
 
     #[test]
     fn error_trait_object() {
-        let err: Box<dyn std::error::Error> =
-            Box::new(StructPredictError::invalid("x", "y"));
+        let err: Box<dyn std::error::Error> = Box::new(StructPredictError::invalid("x", "y"));
         assert!(err.to_string().contains('x'));
     }
 }

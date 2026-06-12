@@ -172,9 +172,9 @@ pub fn score_model(model: &ProteinModel, weights: ScoreWeights) -> Result<Knowle
         let buried = contacts[i] as f64 >= median_contacts;
         let phobic = points[i].1 > 0.0;
         contact += match (phobic, buried) {
-            (true, true) => -1.0,  // hydrophobic & buried — good
-            (true, false) => 0.8, // hydrophobic & exposed — bad
-            (false, true) => 0.5, // polar & buried — slightly bad
+            (true, true) => -1.0,   // hydrophobic & buried — good
+            (true, false) => 0.8,   // hydrophobic & exposed — bad
+            (false, true) => 0.5,   // polar & buried — slightly bad
             (false, false) => -0.3, // polar & exposed — good
         };
     }

@@ -183,8 +183,8 @@ fn match_one(index: usize, mol: &Molecule, query: &PharmacophoreQuery) -> Pharma
     } else {
         satisfied as f64 / n_requirements as f64
     };
-    let matches = features_present == query.features.len()
-        && distances_satisfied == distances_total;
+    let matches =
+        features_present == query.features.len() && distances_satisfied == distances_total;
 
     PharmacophoreHit {
         molecule_index: index,
@@ -272,8 +272,7 @@ mod tests {
     fn out_of_range_distance_constraint_is_ignored() {
         let ethanol = mol_from_smiles("CCO").unwrap();
         // Constraint references feature index 9 which does not exist.
-        let q = PharmacophoreQuery::from_kinds([FeatureKind::Donor])
-            .with_distance(0, 9, 5.0, 1.0);
+        let q = PharmacophoreQuery::from_kinds([FeatureKind::Donor]).with_distance(0, 9, 5.0, 1.0);
         let hits = pharmacophore_screen(&[ethanol], &q).unwrap();
         // The bad constraint is ignored → the donor requirement alone
         // is satisfied → full match.

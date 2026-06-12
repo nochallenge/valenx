@@ -217,9 +217,7 @@ pub fn apply_constraint_drag(
 
     // (4) Restore every original `fixed` flag, whatever the solve did.
     for part in &mut assembly.parts {
-        if let Some(&(_, was_fixed)) =
-            original_fixed.iter().find(|&&(id, _)| id == part.id)
-        {
+        if let Some(&(_, was_fixed)) = original_fixed.iter().find(|&&(id, _)| id == part.id) {
             part.fixed = was_fixed;
         }
     }
@@ -322,9 +320,7 @@ impl AssemblyDragSession {
         // Restore the drag-start pose so the cumulative delta is always
         // applied to the original configuration, not compounded.
         for part in &mut assembly.parts {
-            if let Some(&(_, snap)) =
-                self.start_poses.iter().find(|&&(id, _)| id == part.id)
-            {
+            if let Some(&(_, snap)) = self.start_poses.iter().find(|&&(id, _)| id == part.id) {
                 part.transform.translation = snap.translation;
                 part.transform.orientation = snap.orientation;
             }
@@ -410,10 +406,16 @@ mod tests {
     fn drag_delta_constructors_are_correct() {
         let t = DragDelta::translation(Vector3::new(1.0, 2.0, 3.0));
         assert_eq!(t.translation, Vector3::new(1.0, 2.0, 3.0));
-        assert!(t.rotation.angle().abs() < 1e-12, "translation drag has no rotation");
+        assert!(
+            t.rotation.angle().abs() < 1e-12,
+            "translation drag has no rotation"
+        );
 
         let r = DragDelta::rotation(Vector3::z(), std::f64::consts::FRAC_PI_2);
-        assert!(r.translation.norm() < 1e-12, "rotation drag has no translation");
+        assert!(
+            r.translation.norm() < 1e-12,
+            "rotation drag has no translation"
+        );
         assert!((r.rotation.angle() - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
 
         // A zero rotation axis degrades to the identity rotation.
@@ -442,8 +444,7 @@ mod tests {
     fn rejects_a_non_finite_drag_delta() {
         let (mut a, _anchor, moving) = coincident_pair();
         let bad = DragDelta::translation(Vector3::new(f64::NAN, 0.0, 0.0));
-        let err = apply_constraint_drag(&mut a, moving, &bad, SolverConfig::default())
-            .unwrap_err();
+        let err = apply_constraint_drag(&mut a, moving, &bad, SolverConfig::default()).unwrap_err();
         assert_eq!(err.code(), "occt_viz.bad_input");
     }
 
@@ -469,7 +470,10 @@ mod tests {
             SolverConfig::default(),
         )
         .unwrap();
-        assert!(result.converged(), "the re-solve should converge: {result:?}");
+        assert!(
+            result.converged(),
+            "the re-solve should converge: {result:?}"
+        );
 
         // The anchor moved to x = 5.
         let anchor_pos = a
@@ -477,7 +481,10 @@ mod tests {
             .unwrap()
             .transform
             .apply_point(Vector3::zeros());
-        assert!((anchor_pos.x - 5.0).abs() < 1e-6, "anchor at {anchor_pos:?}");
+        assert!(
+            (anchor_pos.x - 5.0).abs() < 1e-6,
+            "anchor at {anchor_pos:?}"
+        );
 
         // The mated part FOLLOWED — its mate point coincides with the
         // anchor's mate point again (both now at x ≈ 5).
@@ -577,8 +584,7 @@ mod tests {
     #[test]
     fn drag_session_begin_rejects_unknown_part() {
         let (a, _anchor, _moving) = coincident_pair();
-        let err = AssemblyDragSession::begin(&a, 777, SolverConfig::default())
-            .unwrap_err();
+        let err = AssemblyDragSession::begin(&a, 777, SolverConfig::default()).unwrap_err();
         assert_eq!(err.code(), "occt_viz.bad_input");
     }
 
@@ -588,8 +594,7 @@ mod tests {
         // drag-start pose. Dragging out, then back to a zero delta,
         // must return every part to its start pose.
         let (mut a, anchor, moving) = coincident_pair();
-        let session =
-            AssemblyDragSession::begin(&a, anchor, SolverConfig::default()).unwrap();
+        let session = AssemblyDragSession::begin(&a, anchor, SolverConfig::default()).unwrap();
         let moving_start = a
             .get_part(moving)
             .unwrap()
@@ -706,8 +711,16 @@ mod tests {
         assert!(result.converged(), "{result:?}");
 
         // a—b coincident: b's origin meets a's origin (now at y=3).
-        let pa = asm.get_part(id_a).unwrap().transform.apply_point(Vector3::zeros());
-        let pb = asm.get_part(id_b).unwrap().transform.apply_point(Vector3::zeros());
+        let pa = asm
+            .get_part(id_a)
+            .unwrap()
+            .transform
+            .apply_point(Vector3::zeros());
+        let pb = asm
+            .get_part(id_b)
+            .unwrap()
+            .transform
+            .apply_point(Vector3::zeros());
         assert!((pa - pb).norm() < 1e-5, "b must follow a: {pa:?} vs {pb:?}");
         // b—c coincident: c's origin meets b's local (1,0,0).
         let pb1 = asm
@@ -715,7 +728,14 @@ mod tests {
             .unwrap()
             .transform
             .apply_point(Vector3::new(1.0, 0.0, 0.0));
-        let pc = asm.get_part(id_c).unwrap().transform.apply_point(Vector3::zeros());
-        assert!((pb1 - pc).norm() < 1e-5, "c must follow b: {pb1:?} vs {pc:?}");
+        let pc = asm
+            .get_part(id_c)
+            .unwrap()
+            .transform
+            .apply_point(Vector3::zeros());
+        assert!(
+            (pb1 - pc).norm() < 1e-5,
+            "c must follow b: {pb1:?} vs {pc:?}"
+        );
     }
 }

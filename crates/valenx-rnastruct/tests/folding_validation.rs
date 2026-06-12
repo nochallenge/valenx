@@ -36,8 +36,8 @@
 
 use valenx_rnastruct::{
     fold_linear, fold_linear_exact, fold_linear_with_beam, linear_partition,
-    linear_partition_exact, mfe, mfe_d2, partition_function, structure_energy,
-    structure_energy_d2, RnaSeq, Structure,
+    linear_partition_exact, mfe, mfe_d2, partition_function, structure_energy, structure_energy_d2,
+    RnaSeq, Structure,
 };
 
 // ===========================================================================
@@ -87,8 +87,7 @@ fn linearpartition_exact_beam_equals_mccaskill() {
         let lin = linear_partition_exact(&seq).unwrap();
         assert!(lin.is_exact(), "{s}: unpruned LinearPartition exact=true");
         assert!(
-            (lin.ensemble_free_energy() - exact.ensemble_free_energy()).abs()
-                < 1e-6,
+            (lin.ensemble_free_energy() - exact.ensemble_free_energy()).abs() < 1e-6,
             "{s}: LinearPartition-exact G {} != McCaskill G {}",
             lin.ensemble_free_energy(),
             exact.ensemble_free_energy()
@@ -275,8 +274,7 @@ const TRNA_PHE: &str =
 
 /// A 5S rRNA fragment (E. coli 5S rRNA, 5' helix-I / loop-A region) —
 /// a well-studied structured RNA segment.
-const RRNA_5S_FRAGMENT: &str =
-    "UGCCUGGCGGCCGUAGCGCGGUGGUCCCACCUGACCCCAUGCCGAACUCAGAAGUGAAA";
+const RRNA_5S_FRAGMENT: &str = "UGCCUGGCGGCCGUAGCGCGGUGGUCCCACCUGACCCCAUGCCGAACUCAGAAGUGAAA";
 
 #[test]
 fn yeast_trna_phe_folds_to_a_stable_nested_structure() {
@@ -340,8 +338,7 @@ fn yeast_trna_phe_linearpartition_agrees_with_exact_mccaskill() {
     let exact = partition_function(&seq).unwrap();
     let lin = linear_partition_exact(&seq).unwrap();
     assert!(
-        (lin.ensemble_free_energy() - exact.ensemble_free_energy()).abs()
-            < 1e-6,
+        (lin.ensemble_free_energy() - exact.ensemble_free_energy()).abs() < 1e-6,
         "tRNA-Phe: LinearPartition-exact G {} != McCaskill G {}",
         lin.ensemble_free_energy(),
         exact.ensemble_free_energy()
@@ -428,10 +425,7 @@ fn linearfold_beam_width_monotonically_improves_the_energy() {
     // A wider beam explores a superset of the structure space, so the
     // beam-search MFE energy is monotonically non-increasing in the
     // beam width — and converges to the exact MFE.
-    let seq = RnaSeq::parse(
-        "GGGGGCCCCCAAAGGGGGCCCCCAAAGGGGGCCCCCAAAGGGGGCCCCC",
-    )
-    .unwrap();
+    let seq = RnaSeq::parse("GGGGGCCCCCAAAGGGGGCCCCCAAAGGGGGCCCCCAAAGGGGGCCCCC").unwrap();
     let exact = mfe(&seq).unwrap().energy;
     let mut prev = f64::INFINITY;
     for beam in [1usize, 3, 10, 50, 1000] {
@@ -440,9 +434,15 @@ fn linearfold_beam_width_monotonically_improves_the_energy() {
             e <= prev + 1e-6,
             "beam {beam}: energy {e} worse than a narrower beam {prev}"
         );
-        assert!(e >= exact - 1e-6, "beam {beam} energy {e} below exact {exact}");
+        assert!(
+            e >= exact - 1e-6,
+            "beam {beam} energy {e} below exact {exact}"
+        );
         prev = e;
     }
     // The widest beam reaches the exact MFE.
-    assert!((prev - exact).abs() < 1e-6, "wide beam {prev} != exact {exact}");
+    assert!(
+        (prev - exact).abs() < 1e-6,
+        "wide beam {prev} != exact {exact}"
+    );
 }

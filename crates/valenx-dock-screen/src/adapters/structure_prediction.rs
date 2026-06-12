@@ -100,9 +100,7 @@ impl StructurePredictionTool {
             StructurePredictionTool::ColabFold => {
                 "install ColabFold (`pip install colabfold`) so `colabfold_batch` is on PATH"
             }
-            StructurePredictionTool::EsmFold => {
-                "install ESMFold (`pip install fair-esm[esmfold]`)"
-            }
+            StructurePredictionTool::EsmFold => "install ESMFold (`pip install fair-esm[esmfold]`)",
             StructurePredictionTool::RoseTTAFold => {
                 "install RoseTTAFold from github.com/RosettaCommons/RoseTTAFold"
             }
@@ -212,12 +210,9 @@ fn build_args(request: &StructurePredictionRequest) -> Vec<String> {
             format!("--fasta_paths={fasta}"),
             format!("--output_dir={out}"),
         ],
-        StructurePredictionTool::AlphaFold3 => vec![
-            "--json_path".into(),
-            fasta,
-            "--output_dir".into(),
-            out,
-        ],
+        StructurePredictionTool::AlphaFold3 => {
+            vec!["--json_path".into(), fasta, "--output_dir".into(), out]
+        }
         StructurePredictionTool::ColabFold => {
             let mut a = vec![fasta, out];
             a.push(format!("--num-recycle={}", request.num_recycles));
@@ -284,20 +279,14 @@ mod tests {
     #[test]
     fn tool_labels_and_names_are_stable() {
         assert_eq!(StructurePredictionTool::AlphaFold2.label(), "alphafold2");
-        assert_eq!(
-            StructurePredictionTool::EsmFold.display_name(),
-            "ESMFold"
-        );
+        assert_eq!(StructurePredictionTool::EsmFold.display_name(), "ESMFold");
         assert_eq!(StructurePredictionTool::Boltz.label(), "boltz");
     }
 
     #[test]
     fn request_defaults_are_sensible() {
-        let req = StructurePredictionRequest::new(
-            StructurePredictionTool::ColabFold,
-            "q.fasta",
-            "out",
-        );
+        let req =
+            StructurePredictionRequest::new(StructurePredictionTool::ColabFold, "q.fasta", "out");
         assert_eq!(req.num_recycles, 4);
         assert!(req.use_msa);
         assert_eq!(req.tool, StructurePredictionTool::ColabFold);
@@ -320,11 +309,8 @@ mod tests {
 
     #[test]
     fn colabfold_single_sequence_arg_appears_when_msa_disabled() {
-        let mut req = StructurePredictionRequest::new(
-            StructurePredictionTool::ColabFold,
-            "q.fasta",
-            "out",
-        );
+        let mut req =
+            StructurePredictionRequest::new(StructurePredictionTool::ColabFold, "q.fasta", "out");
         req.use_msa = false;
         let args = build_args(&req);
         assert!(args.iter().any(|a| a.contains("single_sequence")));

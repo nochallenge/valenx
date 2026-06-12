@@ -89,8 +89,7 @@ pub fn ao_to_mo_transform(ao: &EriTensor, coefficients: &DMatrix<f64>) -> EriTen
                 for si in 0..n {
                     let mut acc = 0.0;
                     for nu in 0..n {
-                        acc += coefficients[(nu, q)]
-                            * step1[((p * n + nu) * n + la) * n + si];
+                        acc += coefficients[(nu, q)] * step1[((p * n + nu) * n + la) * n + si];
                     }
                     step2[((p * n_mo + q) * n + la) * n + si] = acc;
                 }
@@ -105,8 +104,7 @@ pub fn ao_to_mo_transform(ao: &EriTensor, coefficients: &DMatrix<f64>) -> EriTen
                 for si in 0..n {
                     let mut acc = 0.0;
                     for la in 0..n {
-                        acc += coefficients[(la, r)]
-                            * step2[((p * n_mo + q) * n + la) * n + si];
+                        acc += coefficients[(la, r)] * step2[((p * n_mo + q) * n + la) * n + si];
                     }
                     step3[((p * n_mo + q) * n_mo + r) * n + si] = acc;
                 }
@@ -121,8 +119,7 @@ pub fn ao_to_mo_transform(ao: &EriTensor, coefficients: &DMatrix<f64>) -> EriTen
                 for s in 0..n_mo {
                     let mut acc = 0.0;
                     for si in 0..n {
-                        acc += coefficients[(si, s)]
-                            * step3[((p * n_mo + q) * n_mo + r) * n + si];
+                        acc += coefficients[(si, s)] * step3[((p * n_mo + q) * n_mo + r) * n + si];
                     }
                     mo.set(p, q, r, s, acc);
                 }
@@ -243,10 +240,7 @@ mod tests {
         assert!(mp2.total_energy() < rhf.total_energy);
         // The total = reference + correlation.
         assert!(
-            (mp2.total_energy()
-                - (mp2.reference_energy + mp2.correlation_energy))
-                .abs()
-                < 1.0e-14
+            (mp2.total_energy() - (mp2.reference_energy + mp2.correlation_energy)).abs() < 1.0e-14
         );
     }
 
@@ -254,10 +248,7 @@ mod tests {
     fn same_and_opposite_spin_sum_to_total() {
         let (rhf, ints) = h2_rhf();
         let mp2 = mp2_energy(&rhf, &ints.eri).unwrap();
-        assert!(
-            (mp2.same_spin + mp2.opposite_spin - mp2.correlation_energy).abs()
-                < 1.0e-12
-        );
+        assert!((mp2.same_spin + mp2.opposite_spin - mp2.correlation_energy).abs() < 1.0e-12);
     }
 
     #[test]

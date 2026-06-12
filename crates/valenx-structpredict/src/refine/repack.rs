@@ -169,8 +169,7 @@ fn dead_end_elimination(pool: &mut RotamerPool) -> usize {
                             if !pool.alive[j][t] {
                                 continue;
                             }
-                            let diff = pool.pair_energy(i, a, j, t)
-                                - pool.pair_energy(i, b, j, t);
+                            let diff = pool.pair_energy(i, a, j, t) - pool.pair_energy(i, b, j, t);
                             if diff < min_diff {
                                 min_diff = diff;
                             }
@@ -215,7 +214,10 @@ pub fn repack_sidechains(
         return Err(StructPredictError::invalid("model", "no residues"));
     }
     if mc_moves == 0 {
-        return Err(StructPredictError::invalid("mc_moves", "must be at least 1"));
+        return Err(StructPredictError::invalid(
+            "mc_moves",
+            "must be at least 1",
+        ));
     }
     let mut pool = RotamerPool::build(model);
     let dee_total: usize = pool.rotamers.iter().map(|r| r.len()).sum();

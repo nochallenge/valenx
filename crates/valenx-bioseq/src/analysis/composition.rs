@@ -14,11 +14,18 @@ use std::collections::BTreeMap;
 /// all-ambiguous / empty sequence.
 pub fn gc_content(seq: &Seq) -> Result<f64> {
     if seq.kind() == SeqKind::Protein {
-        return Err(BioseqError::invalid("kind", "GC content needs a nucleotide sequence"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "GC content needs a nucleotide sequence",
+        ));
     }
     let (gc, at) = gc_at_counts(seq.as_bytes());
     let total = gc + at;
-    Ok(if total == 0 { 0.0 } else { gc as f64 / total as f64 })
+    Ok(if total == 0 {
+        0.0
+    } else {
+        gc as f64 / total as f64
+    })
 }
 
 /// AT fraction — the complement of [`gc_content`] over the same
@@ -33,7 +40,10 @@ pub fn at_content(seq: &Seq) -> Result<f64> {
 /// `purine_count + pyrimidine_count == len`. Ambiguity codes are not counted.
 pub fn purine_count(seq: &Seq) -> Result<usize> {
     if seq.kind() == SeqKind::Protein {
-        return Err(BioseqError::invalid("kind", "purine count needs a nucleotide sequence"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "purine count needs a nucleotide sequence",
+        ));
     }
     Ok(seq.count(b'A') + seq.count(b'G'))
 }
@@ -43,7 +53,10 @@ pub fn purine_count(seq: &Seq) -> Result<usize> {
 /// counted. The complement grouping to [`purine_count`].
 pub fn pyrimidine_count(seq: &Seq) -> Result<usize> {
     if seq.kind() == SeqKind::Protein {
-        return Err(BioseqError::invalid("kind", "pyrimidine count needs a nucleotide sequence"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "pyrimidine count needs a nucleotide sequence",
+        ));
     }
     Ok(seq.count(b'C') + seq.count(b'T') + seq.count(b'U'))
 }
@@ -71,10 +84,16 @@ fn gc_at_counts(bytes: &[u8]) -> (usize, usize) {
 /// window larger than the sequence.
 pub fn gc_sliding_window(seq: &Seq, window: usize, step: usize) -> Result<Vec<f64>> {
     if seq.kind() == SeqKind::Protein {
-        return Err(BioseqError::invalid("kind", "GC content needs a nucleotide sequence"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "GC content needs a nucleotide sequence",
+        ));
     }
     if window == 0 || step == 0 {
-        return Err(BioseqError::invalid("window", "window and step must be > 0"));
+        return Err(BioseqError::invalid(
+            "window",
+            "window and step must be > 0",
+        ));
     }
     let bytes = seq.as_bytes();
     if window > bytes.len() {
@@ -104,7 +123,10 @@ pub fn gc_sliding_window(seq: &Seq, window: usize, step: usize) -> Result<Vec<f6
 /// genomes. Returns `0.0` when `G + C == 0`.
 pub fn gc_skew(seq: &Seq) -> Result<f64> {
     if seq.kind() == SeqKind::Protein {
-        return Err(BioseqError::invalid("kind", "GC skew needs a nucleotide sequence"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "GC skew needs a nucleotide sequence",
+        ));
     }
     let g = seq.count(b'G') as f64;
     let c = seq.count(b'C') as f64;
@@ -116,10 +138,16 @@ pub fn gc_skew(seq: &Seq) -> Result<f64> {
 /// [`gc_sliding_window`] for the windowing.
 pub fn cumulative_gc_skew(seq: &Seq, window: usize, step: usize) -> Result<Vec<f64>> {
     if seq.kind() == SeqKind::Protein {
-        return Err(BioseqError::invalid("kind", "GC skew needs a nucleotide sequence"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "GC skew needs a nucleotide sequence",
+        ));
     }
     if window == 0 || step == 0 {
-        return Err(BioseqError::invalid("window", "window and step must be > 0"));
+        return Err(BioseqError::invalid(
+            "window",
+            "window and step must be > 0",
+        ));
     }
     let bytes = seq.as_bytes();
     if window > bytes.len() {
@@ -133,8 +161,14 @@ pub fn cumulative_gc_skew(seq: &Seq, window: usize, step: usize) -> Result<Vec<f
     let mut start = 0;
     while start + window <= bytes.len() {
         let slice = &bytes[start..start + window];
-        let g = slice.iter().filter(|&&b| b.eq_ignore_ascii_case(&b'G')).count() as f64;
-        let c = slice.iter().filter(|&&b| b.eq_ignore_ascii_case(&b'C')).count() as f64;
+        let g = slice
+            .iter()
+            .filter(|&&b| b.eq_ignore_ascii_case(&b'G'))
+            .count() as f64;
+        let c = slice
+            .iter()
+            .filter(|&&b| b.eq_ignore_ascii_case(&b'C'))
+            .count() as f64;
         let skew = if g + c == 0.0 { 0.0 } else { (g - c) / (g + c) };
         running += skew;
         out.push(running);
@@ -309,15 +343,24 @@ mod tests {
         let dna = Seq::new(SeqKind::Dna, "ATGC").unwrap();
         assert_eq!(purine_count(&dna).unwrap(), 2);
         assert_eq!(pyrimidine_count(&dna).unwrap(), 2);
-        assert_eq!(purine_count(&Seq::new(SeqKind::Dna, "AAGG").unwrap()).unwrap(), 4);
-        assert_eq!(pyrimidine_count(&Seq::new(SeqKind::Dna, "CCTT").unwrap()).unwrap(), 4);
+        assert_eq!(
+            purine_count(&Seq::new(SeqKind::Dna, "AAGG").unwrap()).unwrap(),
+            4
+        );
+        assert_eq!(
+            pyrimidine_count(&Seq::new(SeqKind::Dna, "CCTT").unwrap()).unwrap(),
+            4
+        );
         // RNA: U is a pyrimidine.
         let rna = Seq::new(SeqKind::Rna, "AUGC").unwrap();
         assert_eq!(purine_count(&rna).unwrap(), 2);
         assert_eq!(pyrimidine_count(&rna).unwrap(), 2);
         // Non-tautological partition over an unambiguous sequence: purine + pyrimidine = len.
         let s = Seq::new(SeqKind::Dna, "ATGCATGCAT").unwrap();
-        assert_eq!(purine_count(&s).unwrap() + pyrimidine_count(&s).unwrap(), s.len());
+        assert_eq!(
+            purine_count(&s).unwrap() + pyrimidine_count(&s).unwrap(),
+            s.len()
+        );
         // Proteins are rejected (A, G are also amino-acid codes).
         let prot = Seq::new(SeqKind::Protein, "MAGK").unwrap();
         assert!(purine_count(&prot).is_err());
@@ -375,7 +418,10 @@ mod tests {
         assert_eq!(n50(&[100, 1, 1]), 100);
         assert_eq!(n50(&[]), 0);
         // Input order doesn't matter (the algorithm sorts).
-        assert_eq!(n50(&[3, 1, 4, 1, 5, 9, 2, 6]), n50(&[9, 6, 5, 4, 3, 2, 1, 1]));
+        assert_eq!(
+            n50(&[3, 1, 4, 1, 5, 9, 2, 6]),
+            n50(&[9, 6, 5, 4, 3, 2, 1, 1])
+        );
         // Non-tautological: N50 is one of the input lengths for non-empty input.
         let input = [7, 3, 15, 8];
         assert!(input.contains(&n50(&input)));

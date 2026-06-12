@@ -307,8 +307,7 @@ pub fn plan_ivt(
                 .to_string(),
         ),
         CapStrategy::Uncapped => notes.push(
-            "No cap — this is a non-coding structural RNA that is not translated."
-                .to_string(),
+            "No cap — this is a non-coding structural RNA that is not translated.".to_string(),
         ),
     }
     match poly_a_strategy {
@@ -446,12 +445,13 @@ pub fn plan_synthesis(
     let template = generate_dna_template(design, promoter)?;
 
     // 2) IVT plan.
-    let poly_a_len = design
-        .construct
-        .as_ref()
-        .map(|c| c.poly_a_len)
-        .unwrap_or(0);
-    let ivt_plan = plan_ivt(&template, design.is_coding(), constraints.nucleoside, poly_a_len)?;
+    let poly_a_len = design.construct.as_ref().map(|c| c.poly_a_len).unwrap_or(0);
+    let ivt_plan = plan_ivt(
+        &template,
+        design.is_coding(),
+        constraints.nucleoside,
+        poly_a_len,
+    )?;
 
     // 3) PCR primers for the DNA template — amplify the whole template.
     let primers = design_template_primers(&template);

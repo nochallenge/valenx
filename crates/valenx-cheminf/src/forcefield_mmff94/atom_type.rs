@@ -93,7 +93,10 @@ impl MmffType {
 
 macro_rules! mt {
     ($n:expr, $s:expr) => {
-        MmffType { number: $n, symbol: $s }
+        MmffType {
+            number: $n,
+            symbol: $s,
+        }
     };
 }
 
@@ -133,10 +136,10 @@ const SR: MmffType = mt!(15, "S"); // divalent thiother / thiol
 const S_E_C: MmffType = mt!(16, "=S"); // thione
 const SO: MmffType = mt!(17, "S=O"); // sulfoxide
 const SO2: MmffType = mt!(18, "SO2"); // sulfone / sulfonate
-// Phosphorus
+                                      // Phosphorus
 const PR: MmffType = mt!(25, "P"); // phosphine / phosphate
 const PEC: MmffType = mt!(26, "-P=C"); // P in -P= system
-// Halogens
+                                       // Halogens
 const F_TYPE: MmffType = mt!(11, "F");
 const CL_TYPE: MmffType = mt!(12, "CL");
 const BR_TYPE: MmffType = mt!(13, "BR");
@@ -201,11 +204,15 @@ fn type_carbon(mol: &Molecule, i: usize, _rings: &RingInfo) -> MmffType {
     let bonds = mol.bonds_on(i);
     // Pick the highest-order bond from this carbon to drive sp/sp²/sp³
     // classification.
-    let has_triple = bonds.iter().any(|&b| mol.bonds[b].order == BondOrder::Triple);
+    let has_triple = bonds
+        .iter()
+        .any(|&b| mol.bonds[b].order == BondOrder::Triple);
     if has_triple {
         return CSP;
     }
-    let has_double = bonds.iter().any(|&b| mol.bonds[b].order == BondOrder::Double);
+    let has_double = bonds
+        .iter()
+        .any(|&b| mol.bonds[b].order == BondOrder::Double);
     if has_double {
         // Carbonyl / imine / olefin discrimination.
         let mut bonded_to_o_double = false;
@@ -394,7 +401,9 @@ fn type_oxygen(mol: &Molecule, i: usize) -> MmffType {
         return OM;
     }
     let bonds = mol.bonds_on(i);
-    let has_double = bonds.iter().any(|&b| mol.bonds[b].order == BondOrder::Double);
+    let has_double = bonds
+        .iter()
+        .any(|&b| mol.bonds[b].order == BondOrder::Double);
     if has_double {
         // O=C on a carboxylate centre is itself O2CM (equivalent O
         // pair). Detect: there's another oxygen bonded to the same
@@ -437,7 +446,9 @@ fn type_sulfur(mol: &Molecule, i: usize) -> MmffType {
     match oxy_double {
         0 => {
             // S=C thione vs divalent SR.
-            let has_double = bonds.iter().any(|&b| mol.bonds[b].order == BondOrder::Double);
+            let has_double = bonds
+                .iter()
+                .any(|&b| mol.bonds[b].order == BondOrder::Double);
             if has_double {
                 S_E_C
             } else {
@@ -454,11 +465,10 @@ fn type_sulfur(mol: &Molecule, i: usize) -> MmffType {
 fn type_phosphorus(mol: &Molecule, i: usize) -> MmffType {
     let bonds = mol.bonds_on(i);
     let has_pec = bonds.iter().any(|&b| {
-        mol.bonds[b].order == BondOrder::Double
-            && {
-                let other = mol.bonds[b].other(i).unwrap();
-                mol.atoms[other].atomic_number == 6
-            }
+        mol.bonds[b].order == BondOrder::Double && {
+            let other = mol.bonds[b].other(i).unwrap();
+            mol.atoms[other].atomic_number == 6
+        }
     });
     if has_pec {
         PEC
@@ -543,7 +553,10 @@ mod tests {
             .filter(|(_, a)| a.atomic_number != 1)
             .map(|(i, _)| t[i])
             .collect();
-        assert!(heavy.iter().all(|x| *x == CR), "ethane heavies should be CR");
+        assert!(
+            heavy.iter().all(|x| *x == CR),
+            "ethane heavies should be CR"
+        );
         let h: Vec<_> = m
             .atoms
             .iter()
@@ -618,7 +631,13 @@ mod tests {
     #[test]
     fn methanethiol_is_s_hs() {
         let (t, m) = typed("CS");
-        let s = m.atoms.iter().enumerate().find(|(_, a)| a.atomic_number == 16).unwrap().0;
+        let s = m
+            .atoms
+            .iter()
+            .enumerate()
+            .find(|(_, a)| a.atomic_number == 16)
+            .unwrap()
+            .0;
         assert_eq!(t[s], SR);
         // the S-bound H
         let has_hs = m

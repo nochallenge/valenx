@@ -242,10 +242,7 @@ pub fn parse(text: &str) -> Result<SeqRecord> {
     }
 
     if origin.is_empty() {
-        return Err(BioseqError::parse(
-            "embl",
-            "no SQ sequence block found",
-        ));
+        return Err(BioseqError::parse("embl", "no SQ sequence block found"));
     }
     let final_id = if !accession.is_empty() {
         accession.clone()
@@ -444,21 +441,20 @@ fn parse_feature_table(lines: &[&str], start: usize) -> Result<(Vec<SeqFeature>,
     let mut cur_quals: BTreeMap<String, String> = BTreeMap::new();
     let mut pending_qual: Option<(String, String, bool)> = None;
 
-    let flush =
-        |key: &mut Option<String>,
-         loc: &mut String,
-         quals: &mut BTreeMap<String, String>,
-         out: &mut Vec<SeqFeature>|
-         -> Result<()> {
-            if let Some(k) = key.take() {
-                let location = locstr::parse_location(loc.trim())?;
-                let mut f = SeqFeature::new(k, location);
-                f.qualifiers = std::mem::take(quals);
-                out.push(f);
-            }
-            loc.clear();
-            Ok(())
-        };
+    let flush = |key: &mut Option<String>,
+                 loc: &mut String,
+                 quals: &mut BTreeMap<String, String>,
+                 out: &mut Vec<SeqFeature>|
+     -> Result<()> {
+        if let Some(k) = key.take() {
+            let location = locstr::parse_location(loc.trim())?;
+            let mut f = SeqFeature::new(k, location);
+            f.qualifiers = std::mem::take(quals);
+            out.push(f);
+        }
+        loc.clear();
+        Ok(())
+    };
 
     while i < lines.len() {
         let line = lines[i];
@@ -469,9 +465,7 @@ fn parse_feature_table(lines: &[&str], start: usize) -> Result<(Vec<SeqFeature>,
         // Feature-key lines have a non-space at column 5 (index 5);
         // continuation/qualifier lines are indented further.
         let body_trimmed = body.trim_start();
-        let key_line = !body.is_empty()
-            && !body.starts_with(' ')
-            && !body_trimmed.starts_with('/');
+        let key_line = !body.is_empty() && !body.starts_with(' ') && !body_trimmed.starts_with('/');
 
         if key_line {
             // Close the qualifier and feature in progress.
@@ -557,10 +551,7 @@ SQ   Sequence 30 BP; 9 A; 6 C; 9 G; 6 T; 0 other;
     fn parse_basic_record() {
         let rec = parse(SAMPLE).unwrap();
         assert_eq!(rec.id, "TEST01");
-        assert_eq!(
-            rec.description,
-            "A small synthetic EMBL test sequence."
-        );
+        assert_eq!(rec.description, "A small synthetic EMBL test sequence.");
         assert_eq!(rec.seq.len(), 30);
         assert_eq!(rec.seq.as_str(), "ATGAAAGGGTTTCCCGGGAAATTTTAGCTA");
     }
@@ -706,7 +697,10 @@ SQ   Sequence 30 BP; 9 A; 6 C; 9 G; 6 T; 0 other;
         assert_eq!(reparsed.references.len(), rec.references.len());
         assert_eq!(reparsed.references[0].pubmed, "12345678");
         assert_eq!(reparsed.references[0].title, "A synthetic test article");
-        assert_eq!(reparsed.references[1].consortium, "Synthetic Sequencing Consortium");
+        assert_eq!(
+            reparsed.references[1].consortium,
+            "Synthetic Sequencing Consortium"
+        );
     }
 
     #[test]

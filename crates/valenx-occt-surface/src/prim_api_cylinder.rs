@@ -83,8 +83,7 @@ pub fn prim_api_cylinder_on_axis(
     axis_origin: [f64; 3],
     axis_dir: [f64; 3],
 ) -> Result<Solid, OcctSurfaceError> {
-    let dir_len =
-        (axis_dir[0].powi(2) + axis_dir[1].powi(2) + axis_dir[2].powi(2)).sqrt();
+    let dir_len = (axis_dir[0].powi(2) + axis_dir[1].powi(2) + axis_dir[2].powi(2)).sqrt();
     if !dir_len.is_finite() || dir_len < f64::EPSILON {
         return Err(OcctSurfaceError::bad_input(
             "axis_dir",
@@ -152,8 +151,7 @@ mod tests {
 
     #[test]
     fn cylinder_on_axis_builds_for_x_axis() {
-        let cyl =
-            prim_api_cylinder_on_axis(1.0, 3.0, [5.0, 0.0, 0.0], [1.0, 0.0, 0.0]).unwrap();
+        let cyl = prim_api_cylinder_on_axis(1.0, 3.0, [5.0, 0.0, 0.0], [1.0, 0.0, 0.0]).unwrap();
         // Re-orientation is a rigid transform — topology is preserved,
         // so face/vertex counts match the canonical +Z cylinder.
         let canon = prim_api_cylinder(1.0, 3.0).unwrap();

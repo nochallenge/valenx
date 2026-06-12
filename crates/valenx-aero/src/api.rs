@@ -12,10 +12,15 @@
 
 use nalgebra::Vector3;
 
-use crate::compressible::{correct_coefficients, mach_number, speed_of_sound, CompressibleCoefficients};
+use crate::compressible::{
+    correct_coefficients, mach_number, speed_of_sound, CompressibleCoefficients,
+};
 use crate::domain::{BoundaryConditions, TunnelSizing, WindTunnel};
 use crate::error::AeroError;
-use crate::forces::{coefficients, integrate_forces, surface_field, surface_stats, AeroCoefficients, AeroForces, SurfaceStats};
+use crate::forces::{
+    coefficients, integrate_forces, surface_field, surface_stats, AeroCoefficients, AeroForces,
+    SurfaceStats,
+};
 use crate::geometry::TriMesh;
 use crate::postprocess::{wake_survey, WakeSurvey};
 use crate::solver::{solve_steady, BodyMotion, FlowField, SolverControls};
@@ -215,8 +220,7 @@ impl AeroResult {
 /// result, with `converged == false`.
 pub fn run_windtunnel(body: &TriMesh, request: &AeroRequest) -> Result<AeroResult, AeroError> {
     let wind = request.wind()?;
-    let tunnel =
-        WindTunnel::build_with(body, wind, request.boundary, request.sizing)?;
+    let tunnel = WindTunnel::build_with(body, wind, request.boundary, request.sizing)?;
     run_on_tunnel(&tunnel, request)
 }
 

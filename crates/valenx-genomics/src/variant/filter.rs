@@ -100,10 +100,7 @@ impl AnnotatedVariant {
 /// with a `+0.5` Haldane-Anscombe correction on every cell so a zero
 /// count cannot blow the ratio up. A balanced site scores near `0`; an
 /// allele seen on only one strand scores high.
-pub fn strand_bias_score(
-    ref_strand: (usize, usize),
-    alt_strand: (usize, usize),
-) -> f64 {
+pub fn strand_bias_score(ref_strand: (usize, usize), alt_strand: (usize, usize)) -> f64 {
     let a = alt_strand.0 as f64 + 0.5;
     let b = alt_strand.1 as f64 + 0.5;
     let c = ref_strand.0 as f64 + 0.5;
@@ -120,10 +117,7 @@ pub fn strand_bias_score(
 /// (the caller does not retain per-strand REF counts in v1, so this is
 /// a conservative even-split assumption — documented honestly).
 pub fn filter_variants(variants: &[Variant], filter: &VariantFilter) -> Vec<AnnotatedVariant> {
-    variants
-        .iter()
-        .map(|v| annotate_one(v, filter))
-        .collect()
+    variants.iter().map(|v| annotate_one(v, filter)).collect()
 }
 
 fn annotate_one(v: &Variant, filter: &VariantFilter) -> AnnotatedVariant {
@@ -180,8 +174,7 @@ pub fn variant_to_vcf(av: &AnnotatedVariant, sample: &str) -> VcfRecord {
     } else {
         av.failed.iter().map(|s| s.to_string()).collect()
     };
-    rec.info
-        .insert("DP".to_string(), v.depth.to_string());
+    rec.info.insert("DP".to_string(), v.depth.to_string());
     rec.info
         .insert("AF".to_string(), format!("{:.4}", v.alt_fraction));
     rec.info
@@ -204,7 +197,7 @@ pub fn variant_to_vcf(av: &AnnotatedVariant, sample: &str) -> VcfRecord {
 mod tests {
     use super::*;
     use crate::variant::call::VariantKind;
-    use crate::variant::genotype::{genotype_site, AlleleObs, default_priors};
+    use crate::variant::genotype::{default_priors, genotype_site, AlleleObs};
 
     fn variant(depth: usize, alt: usize, qual: f64, strand: (usize, usize)) -> Variant {
         let obs: Vec<AlleleObs> = (0..depth)
@@ -291,7 +284,10 @@ mod tests {
         let rec = variant_to_vcf(&av, "sampleA");
         assert_eq!(rec.info_get("DP"), Some("30"));
         assert!(rec.info_get("AF").is_some());
-        assert_eq!(rec.sample_field(0, "GT"), Some(av.variant.genotype.best.gt_string()));
+        assert_eq!(
+            rec.sample_field(0, "GT"),
+            Some(av.variant.genotype.best.gt_string())
+        );
         assert_eq!(rec.filter, vec!["PASS"]);
     }
 

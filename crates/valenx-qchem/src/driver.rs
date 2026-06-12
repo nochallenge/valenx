@@ -34,9 +34,7 @@ use crate::geometry::MolecularGeometry;
 use crate::integrals::IntegralSet;
 use crate::post::mp2::{mp2_energy, Mp2Result};
 use crate::properties::dipole::{dipole_moment, DipoleMoment};
-use crate::properties::orbitals::{
-    restricted_summary, unrestricted_spin_summary, OrbitalSummary,
-};
+use crate::properties::orbitals::{restricted_summary, unrestricted_spin_summary, OrbitalSummary};
 use crate::properties::population::{mulliken, PopulationAnalysis};
 use crate::scf::rhf::{run_rhf_scf, RhfResult, ScfSettings};
 use crate::scf::uhf::{run_uhf_scf, UhfResult};
@@ -144,7 +142,10 @@ impl QchemReport {
             self.total_energy
         );
         if let Some(corr) = self.correlation_energy {
-            s.push_str(&format!("  HF energy      {:.8} Ha\n", self.hartree_fock_energy));
+            s.push_str(&format!(
+                "  HF energy      {:.8} Ha\n",
+                self.hartree_fock_energy
+            ));
             s.push_str(&format!("  correlation    {corr:.8} Ha\n"));
         }
         if let Some(dft) = &self.dft {
@@ -172,10 +173,7 @@ impl QchemReport {
 
 /// Validate a molecule and build its basis set, the shared front end of
 /// every driver.
-fn setup(
-    geometry: &MolecularGeometry,
-    basis_name: &str,
-) -> Result<BasisSet> {
+fn setup(geometry: &MolecularGeometry, basis_name: &str) -> Result<BasisSet> {
     geometry.validate()?;
     BasisSet::build(basis_name, geometry)
 }
@@ -312,8 +310,7 @@ pub fn run_mp2(
 
     let t2 = Instant::now();
     let mp2: Mp2Result = mp2_energy(&rhf, &integrals.eri)?;
-    let report =
-        build_rhf_report(geometry, &basis, &integrals, &rhf, Some(mp2));
+    let report = build_rhf_report(geometry, &basis, &integrals, &rhf, Some(mp2));
     let t_post = t2.elapsed();
 
     Ok(QchemReport {
@@ -393,8 +390,7 @@ fn build_rhf_report(
     rhf: &RhfResult,
     mp2: Option<Mp2Result>,
 ) -> QchemReport {
-    let pop: PopulationAnalysis =
-        mulliken(geometry, basis, &rhf.density, &integrals.overlap);
+    let pop: PopulationAnalysis = mulliken(geometry, basis, &rhf.density, &integrals.overlap);
     let dipole = dipole_moment(geometry, integrals, &rhf.density);
     let orbitals = restricted_summary(&rhf.orbital_energies, rhf.n_occupied);
     let homo_lumo_gap = orbitals.homo_lumo_gap();
@@ -433,8 +429,7 @@ fn build_uhf_report(
     let pop = mulliken(geometry, basis, &total_density, &integrals.overlap);
     let dipole = dipole_moment(geometry, integrals, &total_density);
     // Report the alpha orbital set.
-    let orbitals =
-        unrestricted_spin_summary(&uhf.alpha_orbital_energies, uhf.n_alpha);
+    let orbitals = unrestricted_spin_summary(&uhf.alpha_orbital_energies, uhf.n_alpha);
     let homo_lumo_gap = orbitals.homo_lumo_gap();
 
     QchemReport {
@@ -462,11 +457,9 @@ fn build_dft_report(
     integrals: &IntegralSet,
     ks: &KsResult,
 ) -> QchemReport {
-    let pop: PopulationAnalysis =
-        mulliken(geometry, basis, &ks.density, &integrals.overlap);
+    let pop: PopulationAnalysis = mulliken(geometry, basis, &ks.density, &integrals.overlap);
     let dipole = dipole_moment(geometry, integrals, &ks.density);
-    let orbitals =
-        restricted_summary(&ks.orbital_energies, ks.n_occupied);
+    let orbitals = restricted_summary(&ks.orbital_energies, ks.n_occupied);
     let homo_lumo_gap = orbitals.homo_lumo_gap();
 
     QchemReport {
@@ -549,14 +542,13 @@ impl DftRequest {
     /// every [`QchemError`] from geometry validation, basis lookup and
     /// the Kohn-Sham SCF.
     pub fn run(&self) -> Result<QchemReport> {
-        let functional = Functional::from_name(&self.functional)
-            .ok_or_else(|| {
-                QchemError::invalid(format!(
-                    "unknown exchange-correlation functional `{}` — \
+        let functional = Functional::from_name(&self.functional).ok_or_else(|| {
+            QchemError::invalid(format!(
+                "unknown exchange-correlation functional `{}` — \
                      supported: lda / svwn, pbe, b3lyp",
-                    self.functional
-                ))
-            })?;
+                self.functional
+            ))
+        })?;
         run_dft(
             &self.geometry,
             &self.basis_name,
@@ -661,16 +653,29 @@ mod tests {
             .total_energy;
         // A +1 point charge ~4 bohr out attracts the electrons → the
         // electron–charge term lowers the energy.
-        let near = run_rhf_embedded(&g, "sto-3g", ScfSettings::default(), &[(1.0, [0.0, 0.0, 4.0])])
-            .unwrap()
-            .total_energy;
-        assert!(near < e0, "a nearby + charge should lower the energy: {near} vs {e0}");
+        let near = run_rhf_embedded(
+            &g,
+            "sto-3g",
+            ScfSettings::default(),
+            &[(1.0, [0.0, 0.0, 4.0])],
+        )
+        .unwrap()
+        .total_energy;
+        assert!(
+            near < e0,
+            "a nearby + charge should lower the energy: {near} vs {e0}"
+        );
         // The effect decays with distance: a charge farther out shifts
         // the energy less than the near one.
         let shift_near = (near - e0).abs();
-        let farther = run_rhf_embedded(&g, "sto-3g", ScfSettings::default(), &[(1.0, [0.0, 0.0, 20.0])])
-            .unwrap()
-            .total_energy;
+        let farther = run_rhf_embedded(
+            &g,
+            "sto-3g",
+            ScfSettings::default(),
+            &[(1.0, [0.0, 0.0, 20.0])],
+        )
+        .unwrap()
+        .total_energy;
         let shift_far = (farther - e0).abs();
         assert!(
             shift_far < shift_near,

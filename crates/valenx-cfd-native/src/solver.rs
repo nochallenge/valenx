@@ -54,8 +54,8 @@ use crate::grid::{Field, Grid};
 use crate::linsolve::PoissonCoeffs;
 use crate::multigrid::{solve_pressure_poisson, PressurePoissonSolver};
 use crate::turbulence::{
-    advance_k_epsilon, advance_k_omega_sst, wall_distance_field,
-    KEpsilonModel, SstField, SstModel, TurbulenceField, WallFunction, WallMask,
+    advance_k_epsilon, advance_k_omega_sst, wall_distance_field, KEpsilonModel, SstField, SstModel,
+    TurbulenceField, WallFunction, WallMask,
 };
 
 /// Fluid properties — constant density and kinematic viscosity.
@@ -70,10 +70,7 @@ pub struct Fluid {
 impl Fluid {
     /// Build a fluid; both properties must be positive.
     pub fn new(density: f64, viscosity: f64) -> Fluid {
-        Fluid {
-            density,
-            viscosity,
-        }
+        Fluid { density, viscosity }
     }
 }
 
@@ -2163,13 +2160,7 @@ pub fn solve_simple(
     bcs: &Boundaries,
     controls: &SimpleControls,
 ) -> FlowSolution {
-    let (sol, _turb) = solve_simple_with(
-        grid,
-        fluid,
-        bcs,
-        controls,
-        &EffectiveViscosity::Laminar,
-    );
+    let (sol, _turb) = solve_simple_with(grid, fluid, bcs, controls, &EffectiveViscosity::Laminar);
     sol
 }
 
@@ -2219,7 +2210,7 @@ pub fn solve_simple_with(
     let mut u = grid.u_field(); // (nx+1) × ny
     let mut v = grid.v_field(); // nx × (ny+1)
     let mut p = grid.pressure_field(); // nx × ny
-    // Apply the boundary velocities to the field once up front.
+                                       // Apply the boundary velocities to the field once up front.
     apply_velocity_bcs(&mut u, &mut v, bcs, nx, ny);
 
     // Per-face momentum-equation diagonal coefficients — reused to
@@ -2235,8 +2226,7 @@ pub fn solve_simple_with(
     match visc {
         EffectiveViscosity::Laminar => {}
         EffectiveViscosity::KEpsilon { model, .. } => {
-            turb_ke =
-                Some(TurbulenceField::initialise(grid, ref_velocity, 0.05, model));
+            turb_ke = Some(TurbulenceField::initialise(grid, ref_velocity, 0.05, model));
         }
         EffectiveViscosity::Sst { model, walls, .. } => {
             turb_sst = Some(SstField::initialise(grid, ref_velocity, 0.05, model));
@@ -2265,11 +2255,27 @@ pub fn solve_simple_with(
 
         // --- (1) momentum predictor: solve u*, v* with p frozen ---
         solve_u_momentum(
-            &mut u, &v, &p, &mut apu, grid, rho, nu, nu_t_ref, bcs,
+            &mut u,
+            &v,
+            &p,
+            &mut apu,
+            grid,
+            rho,
+            nu,
+            nu_t_ref,
+            bcs,
             controls.relax_u,
         );
         solve_v_momentum(
-            &u, &mut v, &p, &mut apv, grid, rho, nu, nu_t_ref, bcs,
+            &u,
+            &mut v,
+            &p,
+            &mut apv,
+            grid,
+            rho,
+            nu,
+            nu_t_ref,
+            bcs,
             controls.relax_u,
         );
         // Re-impose the prescribed boundary velocities (the sweep only
@@ -2309,18 +2315,35 @@ pub fn solve_simple_with(
             EffectiveViscosity::KEpsilon { model, wall, walls } => {
                 if let Some(turb) = turb_ke.as_mut() {
                     advance_k_epsilon(
-                        turb, &u, &v, grid, rho, nu, model, wall,
-                        walls.south, walls.north, 0.5,
+                        turb,
+                        &u,
+                        &v,
+                        grid,
+                        rho,
+                        nu,
+                        model,
+                        wall,
+                        walls.south,
+                        walls.north,
+                        0.5,
                     );
                 }
             }
             EffectiveViscosity::Sst { model, wall, walls } => {
-                if let (Some(state), Some(wd)) =
-                    (turb_sst.as_mut(), wall_dist.as_ref())
-                {
+                if let (Some(state), Some(wd)) = (turb_sst.as_mut(), wall_dist.as_ref()) {
                     advance_k_omega_sst(
-                        state, &u, &v, grid, rho, nu, model, wall, wd,
-                        walls.south, walls.north, 0.5,
+                        state,
+                        &u,
+                        &v,
+                        grid,
+                        rho,
+                        nu,
+                        model,
+                        wall,
+                        wd,
+                        walls.south,
+                        walls.north,
+                        0.5,
                     );
                 }
             }
@@ -2470,9 +2493,7 @@ fn solve_u_momentum(
     // Its **north** face is the corner straddling cells
     // (i-1, j), (i, j), (i-1, j+1), (i, j+1) — ν_eff is the average of
     // the four (or of the two on a boundary). Likewise for **south**.
-    let nut_cell = |i: usize, j: usize| -> f64 {
-        nu_t.map(|f| f.at(i, j).max(0.0)).unwrap_or(0.0)
-    };
+    let nut_cell = |i: usize, j: usize| -> f64 { nu_t.map(|f| f.at(i, j).max(0.0)).unwrap_or(0.0) };
 
     for _sweep in 0..2 {
         for j in 0..ny {
@@ -2592,9 +2613,7 @@ fn solve_v_momentum(
     let dx = grid.dx();
     let dy = grid.dy();
 
-    let nut_cell = |i: usize, j: usize| -> f64 {
-        nu_t.map(|f| f.at(i, j).max(0.0)).unwrap_or(0.0)
-    };
+    let nut_cell = |i: usize, j: usize| -> f64 { nu_t.map(|f| f.at(i, j).max(0.0)).unwrap_or(0.0) };
 
     for _sweep in 0..2 {
         for j in 1..ny {
@@ -2755,8 +2774,8 @@ fn assemble_pressure_correction(
             // velocity: (ρ·u_e − ρ·u_w)·dy + (ρ·v_n − ρ·v_s)·dx. The
             // pressure-correction *source* is the negative of this
             // imbalance (continuity wants it driven to zero).
-            let mass_out = rho * dy * (u.at(i + 1, j) - u.at(i, j))
-                + rho * dx * (v.at(i, j + 1) - v.at(i, j));
+            let mass_out =
+                rho * dy * (u.at(i + 1, j) - u.at(i, j)) + rho * dx * (v.at(i, j + 1) - v.at(i, j));
             let b = -mass_out;
 
             coeffs.ae.set(i, j, ae);
@@ -3028,7 +3047,10 @@ mod tests {
         };
         let sol = solve_simple(&grid, &fluid, &bcs, &controls);
         let dp = sol.pressure_range();
-        assert!(dp.is_finite() && dp > 0.0, "channel flow needs a pressure drop, got {dp}");
+        assert!(
+            dp.is_finite() && dp > 0.0,
+            "channel flow needs a pressure drop, got {dp}"
+        );
         // It matches an independent max − min scan of the cell pressures.
         let mut lo = f64::INFINITY;
         let mut hi = f64::NEG_INFINITY;
@@ -3039,7 +3061,11 @@ mod tests {
                 hi = hi.max(p);
             }
         }
-        assert!((dp - (hi - lo)).abs() < 1e-12, "Δp {dp} vs max−min {}", hi - lo);
+        assert!(
+            (dp - (hi - lo)).abs() < 1e-12,
+            "Δp {dp} vs max−min {}",
+            hi - lo
+        );
     }
 
     #[test]
@@ -3081,7 +3107,10 @@ mod tests {
         };
 
         // Worked: τ = Lₓ/U = 5/2 = 2.5 s.
-        assert!((sol.flow_through_time() - 2.5).abs() <= 1e-9 * 2.5, "τ = Lₓ/U = 2.5");
+        assert!(
+            (sol.flow_through_time() - 2.5).abs() <= 1e-9 * 2.5,
+            "τ = Lₓ/U = 2.5"
+        );
 
         // Threads max_speed: τ·U = Lₓ.
         let lx = grid.nx as f64 * grid.dx();
@@ -3188,7 +3217,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert_eq!(quiescent.bulk_reynolds_number(nu), 0.0, "no flow → Re_b = 0");
+        assert_eq!(
+            quiescent.bulk_reynolds_number(nu),
+            0.0,
+            "no flow → Re_b = 0"
+        );
     }
 
     #[test]
@@ -3300,7 +3333,10 @@ mod tests {
         // Threads both stability numbers: Re_h = CFL(dt)/d(ν,dt), independent of dt.
         for &dt in &[0.01, 0.05, 0.2] {
             let ratio = sol.convective_cfl_number(dt) / sol.diffusive_number(nu, dt);
-            assert!((sol.cell_reynolds_number(nu) - ratio).abs() <= 1e-9 * ratio, "Re_h = CFL/d");
+            assert!(
+                (sol.cell_reynolds_number(nu) - ratio).abs() <= 1e-9 * ratio,
+                "Re_h = CFL/d"
+            );
         }
 
         // Linear in 1/ν: doubling ν halves Re_h.
@@ -3339,7 +3375,10 @@ mod tests {
         let dt = 0.05;
 
         // Definition + worked value: d = ν·Δt/h² = 0.1·0.05/1 = 0.005.
-        assert!((sol.diffusive_number(nu, dt) - nu * dt / (h * h)).abs() < 1e-12, "d = ν·Δt/h²");
+        assert!(
+            (sol.diffusive_number(nu, dt) - nu * dt / (h * h)).abs() < 1e-12,
+            "d = ν·Δt/h²"
+        );
         assert!((sol.diffusive_number(0.1, 0.05) - 0.005).abs() < 1e-12);
 
         // Threads convective_cfl_number via the cell Reynolds number: CFL/d = U_max·h/ν.
@@ -3392,7 +3431,10 @@ mod tests {
             "C = U_max·Δt/h"
         );
         // Worked: max_speed = 3, Δt = 0.1, h = 1 → C = 0.3.
-        assert!((sol.convective_cfl_number(0.1) - 0.3).abs() < 1e-12, "C(0.1) = 0.3");
+        assert!(
+            (sol.convective_cfl_number(0.1) - 0.3).abs() < 1e-12,
+            "C(0.1) = 0.3"
+        );
         // Linear in Δt.
         assert!(
             (sol.convective_cfl_number(0.2) - 2.0 * sol.convective_cfl_number(0.1)).abs() < 1e-12,
@@ -3435,7 +3477,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((uniform.max_speed() - 5.0).abs() < 1e-12, "uniform peak speed = 5");
+        assert!(
+            (uniform.max_speed() - 5.0).abs() < 1e-12,
+            "uniform peak speed = 5"
+        );
         assert!(
             (uniform.max_speed() - uniform.mean_speed()).abs() < 1e-12,
             "a uniform field has peak == mean"
@@ -3488,9 +3533,18 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((uniform.min_speed() - 3.0).abs() <= 1e-9 * 3.0, "uniform → min = 3");
-        assert!((uniform.min_speed() - uniform.max_speed()).abs() <= 1e-9, "uniform: min = max");
-        assert!((uniform.min_speed() - uniform.mean_speed()).abs() <= 1e-9, "uniform: min = mean");
+        assert!(
+            (uniform.min_speed() - 3.0).abs() <= 1e-9 * 3.0,
+            "uniform → min = 3"
+        );
+        assert!(
+            (uniform.min_speed() - uniform.max_speed()).abs() <= 1e-9,
+            "uniform: min = max"
+        );
+        assert!(
+            (uniform.min_speed() - uniform.mean_speed()).abs() <= 1e-9,
+            "uniform: min = mean"
+        );
 
         // Non-uniform field (streamwise gradient).
         let mut ug = grid.u_field();
@@ -3512,7 +3566,10 @@ mod tests {
         // Statistical ordering min ≤ mean ≤ max, strict for a varying field (threads both).
         assert!(varied.min_speed() <= varied.mean_speed(), "min ≤ mean");
         assert!(varied.mean_speed() <= varied.max_speed(), "mean ≤ max");
-        assert!(varied.min_speed() < varied.max_speed(), "min < max for a varying field");
+        assert!(
+            varied.min_speed() < varied.max_speed(),
+            "min < max for a varying field"
+        );
 
         // It is the actual minimum: ≤ every cell speed, and non-negative.
         let m = varied.min_speed();
@@ -3542,7 +3599,10 @@ mod tests {
             converged: true,
         };
         let sr = sol.speed_range();
-        assert!((sr - 5.0).abs() <= 1e-12 * 5.0, "speed_range = 10 − 5 = 5, got {sr}");
+        assert!(
+            (sr - 5.0).abs() <= 1e-12 * 5.0,
+            "speed_range = 10 − 5 = 5, got {sr}"
+        );
 
         // (b) THREAD max_speed + min_speed (non-tautological — the body is one loop,
         // these are separate loops): speed_range == max_speed − min_speed.
@@ -3588,7 +3648,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(narrow.speed_range() < sol.speed_range(), "narrower spread → smaller range");
+        assert!(
+            narrow.speed_range() < sol.speed_range(),
+            "narrower spread → smaller range"
+        );
     }
 
     #[test]
@@ -3609,13 +3672,18 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        let (x, y) = sol.max_speed_location().expect("a non-empty grid has a fastest cell");
+        let (x, y) = sol
+            .max_speed_location()
+            .expect("a non-empty grid has a fastest cell");
         assert!(
             (x - 1.5).abs() < 1e-12 && (y - 0.5).abs() < 1e-12,
             "fastest cell centre (1.5, 0.5), got ({x}, {y})"
         );
         // The located cell's speed is indeed the peak (ties to max_speed).
-        assert!((sol.speed_at_cell(1, 0) - sol.max_speed()).abs() < 1e-12, "cell (1,0) is the peak");
+        assert!(
+            (sol.speed_at_cell(1, 0) - sol.max_speed()).abs() < 1e-12,
+            "cell (1,0) is the peak"
+        );
 
         // A 2×2 grid (dx = dy = 1) with the peak planted at cell (1, 1) → centre
         // (1.5, 1.5) — confirms the locator picks the right cell in 2-D.
@@ -3648,14 +3716,30 @@ mod tests {
             tolerance: 1e-5,
             ..SimpleControls::default()
         };
-        let slow = solve_simple(&grid, &fluid, &Boundaries::lid_driven_cavity(1.0), &controls);
-        let fast = solve_simple(&grid, &fluid, &Boundaries::lid_driven_cavity(2.0), &controls);
+        let slow = solve_simple(
+            &grid,
+            &fluid,
+            &Boundaries::lid_driven_cavity(1.0),
+            &controls,
+        );
+        let fast = solve_simple(
+            &grid,
+            &fluid,
+            &Boundaries::lid_driven_cavity(2.0),
+            &controls,
+        );
         let w_slow = slow.max_vorticity();
         let w_fast = fast.max_vorticity();
         // The lid shears the fluid into a rotating vortex: vorticity is positive
         // and finite, and driving the lid harder spins it up.
-        assert!(w_slow > 0.0 && w_slow.is_finite(), "cavity vorticity {w_slow}");
-        assert!(w_fast > w_slow, "a faster lid raises vorticity: {w_slow} → {w_fast}");
+        assert!(
+            w_slow > 0.0 && w_slow.is_finite(),
+            "cavity vorticity {w_slow}"
+        );
+        assert!(
+            w_fast > w_slow,
+            "a faster lid raises vorticity: {w_slow} → {w_fast}"
+        );
     }
 
     #[test]
@@ -3726,7 +3810,10 @@ mod tests {
         let interior = ((grid.nx - 2) * (grid.ny - 2)) as f64;
         let expected = 0.5 * gamma * gamma * interior * grid.dx() * grid.dy();
         let e = sol.enstrophy();
-        assert!((e - expected).abs() < 1e-9, "enstrophy {e} vs analytic {expected}");
+        assert!(
+            (e - expected).abs() < 1e-9,
+            "enstrophy {e} vs analytic {expected}"
+        );
         // Strictly positive for a rotational field (and never negative — it is ½∑ω²).
         assert!(e > 0.0);
 
@@ -3766,7 +3853,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((sol.mean_vorticity() - (-gamma)).abs() < 1e-9, "⟨ω⟩ = −γ = −2");
+        assert!(
+            (sol.mean_vorticity() - (-gamma)).abs() < 1e-9,
+            "⟨ω⟩ = −γ = −2"
+        );
 
         // (b) STOKES cross-check threading circulation (non-tautological — a different
         // code path): the area-average equals the circulation per unit interior area.
@@ -3837,7 +3927,10 @@ mod tests {
         );
 
         // (c) RMS ≥ |MEAN| (Cauchy–Schwarz), with equality for this uniform field.
-        assert!(sol.rms_vorticity() >= sol.mean_vorticity().abs() - 1e-12, "rms ≥ |mean|");
+        assert!(
+            sol.rms_vorticity() >= sol.mean_vorticity().abs() - 1e-12,
+            "rms ≥ |mean|"
+        );
         assert!(
             (sol.rms_vorticity() - sol.mean_vorticity().abs()).abs() < 1e-9,
             "uniform ω → rms = |mean|"
@@ -3905,7 +3998,10 @@ mod tests {
         let sigma = quad.vorticity_std_dev();
         assert!(sigma > 0.0, "varying ω → σ > 0");
         let identity = (quad.rms_vorticity().powi(2) - quad.mean_vorticity().powi(2)).sqrt();
-        assert!((sigma - identity).abs() <= 1e-9 * sigma, "σ = √(ω_rms² − ⟨ω⟩²)");
+        assert!(
+            (sigma - identity).abs() <= 1e-9 * sigma,
+            "σ = √(ω_rms² − ⟨ω⟩²)"
+        );
 
         // (c) SMALL GRID: too small for an interior central difference → 0.
         let tg = Grid::new(2, 2, 1.0, 1.0);
@@ -3956,7 +4052,11 @@ mod tests {
             converged: true,
         };
         let q_rot = rot.max_q_criterion();
-        assert!((q_rot - omega * omega).abs() < 1e-9, "rotation Q {q_rot} vs Ω² {}", omega * omega);
+        assert!(
+            (q_rot - omega * omega).abs() < 1e-9,
+            "rotation Q {q_rot} vs Ω² {}",
+            omega * omega
+        );
 
         // --- pure shear u = γ·y, v = 0 ---
         let gamma = 3.0_f64;
@@ -3977,7 +4077,11 @@ mod tests {
             converged: true,
         };
         // Q rejects the shear (Q=0) even though its enstrophy is clearly non-zero.
-        assert!(shear.max_q_criterion() < 1e-9, "shear Q {}", shear.max_q_criterion());
+        assert!(
+            shear.max_q_criterion() < 1e-9,
+            "shear Q {}",
+            shear.max_q_criterion()
+        );
         assert!(shear.enstrophy() > 0.0, "the shear still carries enstrophy");
 
         // A grid too small for an interior central difference → 0.
@@ -4036,8 +4140,14 @@ mod tests {
         // Φ = 2μ·(S:S = 2ε²)·area.
         let expected = 2.0 * mu * 2.0 * eps * eps * interior * dx * dy;
         let phi = strain.viscous_dissipation(mu);
-        assert!((phi - expected).abs() < 1e-9, "dissipation {phi} vs analytic {expected}");
-        assert!(phi > 0.0, "a straining flow dissipates despite zero enstrophy");
+        assert!(
+            (phi - expected).abs() < 1e-9,
+            "dissipation {phi} vs analytic {expected}"
+        );
+        assert!(
+            phi > 0.0,
+            "a straining flow dissipates despite zero enstrophy"
+        );
 
         // A uniform shear u = γ·y gives S:S = ½γ², so Φ = 2μ·½γ²·area = μγ²·area.
         let gamma = 3.0_f64;
@@ -4107,7 +4217,10 @@ mod tests {
         let interior = ((grid.nx - 4) * (grid.ny - 4)) as f64;
         let expected = 0.5 * gamma * gamma * interior * grid.dx() * grid.dy();
         let p = sol.palinstrophy();
-        assert!((p - expected).abs() < 1e-9, "palinstrophy {p} vs analytic {expected}");
+        assert!(
+            (p - expected).abs() < 1e-9,
+            "palinstrophy {p} vs analytic {expected}"
+        );
         assert!(p > 0.0, "a graded shear has positive palinstrophy");
 
         // The discriminator vs enstrophy: a *uniform* shear u = γy has constant
@@ -4129,8 +4242,15 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(uniform.palinstrophy() < 1e-9, "uniform shear → ∇ω=0 → 0, got {}", uniform.palinstrophy());
-        assert!(uniform.enstrophy() > 0.0, "but the uniform shear still has enstrophy");
+        assert!(
+            uniform.palinstrophy() < 1e-9,
+            "uniform shear → ∇ω=0 → 0, got {}",
+            uniform.palinstrophy()
+        );
+        assert!(
+            uniform.enstrophy() > 0.0,
+            "but the uniform shear still has enstrophy"
+        );
 
         // A grid too small for a doubly-interior difference → 0.
         let tg = Grid::new(4, 4, 1.0, 1.0);
@@ -4169,7 +4289,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((shear.max_strain_rate() - gamma).abs() < 1e-9, "shear strain {}", shear.max_strain_rate());
+        assert!(
+            (shear.max_strain_rate() - gamma).abs() < 1e-9,
+            "shear strain {}",
+            shear.max_strain_rate()
+        );
 
         // Solid-body rotation u=−Ωy, v=Ωx is *pure spin*: zero strain, even though
         // its vorticity is 2Ω. This is the whole point — strain ≠ rotation.
@@ -4197,7 +4321,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(rotation.max_strain_rate() < 1e-9, "rotation has no strain: {}", rotation.max_strain_rate());
+        assert!(
+            rotation.max_strain_rate() < 1e-9,
+            "rotation has no strain: {}",
+            rotation.max_strain_rate()
+        );
         assert!(
             (rotation.max_vorticity() - 2.0 * omega).abs() < 1e-9,
             "but it does rotate (ω = 2Ω)"
@@ -4247,7 +4375,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(rotation.mean_strain_rate().abs() < 1e-9, "rotation → 0 strain");
+        assert!(
+            rotation.mean_strain_rate().abs() < 1e-9,
+            "rotation → 0 strain"
+        );
 
         // (b) PURE SHEAR u(y) = γy, v = 0: |S| = γ uniformly over the interior, so the mean
         // equals γ AND equals the peak max_strain_rate (constant field; threads max).
@@ -4268,7 +4399,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((shear.mean_strain_rate() - gamma).abs() <= 1e-9, "uniform shear → ⟨|S|⟩ = γ");
+        assert!(
+            (shear.mean_strain_rate() - gamma).abs() <= 1e-9,
+            "uniform shear → ⟨|S|⟩ = γ"
+        );
         assert!(
             (shear.mean_strain_rate() - shear.max_strain_rate()).abs()
                 <= 1e-9 * shear.max_strain_rate(),
@@ -4339,7 +4473,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((shear.rms_strain_rate() - gamma).abs() <= 1e-9, "uniform shear → rms = γ");
+        assert!(
+            (shear.rms_strain_rate() - gamma).abs() <= 1e-9,
+            "uniform shear → rms = γ"
+        );
         assert!(
             (shear.rms_strain_rate() - shear.rms_vorticity()).abs() <= 1e-9 * shear.rms_vorticity(),
             "pure shear: |S| = |ω| ⟹ rms_strain_rate = rms_vorticity"
@@ -4371,7 +4508,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(rotation.rms_strain_rate().abs() < 1e-9, "rotation → 0 strain");
+        assert!(
+            rotation.rms_strain_rate().abs() < 1e-9,
+            "rotation → 0 strain"
+        );
         assert!(rotation.rms_vorticity() > 1e-9, "but it does rotate");
 
         // (c) NON-UNIFORM quadratic shear u(y) = a·y²: the rms is ≥ the mean (Jensen) and
@@ -4437,7 +4577,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((shear.mean_dissipation_rate(0.1) - 0.4).abs() <= 1e-9, "ε = ν·γ² = 0.4");
+        assert!(
+            (shear.mean_dissipation_rate(0.1) - 0.4).abs() <= 1e-9,
+            "ε = ν·γ² = 0.4"
+        );
 
         // (b) THREAD rms_vorticity (#406) (non-tautological): for a pure shear |S| = |ω| = γ,
         // so the dissipation also equals ν·rms_vorticity².
@@ -4473,7 +4616,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(rotation.mean_dissipation_rate(0.1).abs() < 1e-9, "rotation → no dissipation");
+        assert!(
+            rotation.mean_dissipation_rate(0.1).abs() < 1e-9,
+            "rotation → no dissipation"
+        );
 
         // (d) Proportional to viscosity, and zero at ν = 0.
         assert!(
@@ -4585,7 +4731,10 @@ mod tests {
 
         // (a) WORKED (closed form, ν-independent): for a shear ε = ν·γ² so τ_η = 1/γ = 0.5,
         // the same at any viscosity.
-        assert!((shear.kolmogorov_time_scale(0.1) - 1.0 / 2.0).abs() <= 1e-9, "τ_η = 1/γ = 0.5");
+        assert!(
+            (shear.kolmogorov_time_scale(0.1) - 1.0 / 2.0).abs() <= 1e-9,
+            "τ_η = 1/γ = 0.5"
+        );
         assert!(
             (shear.kolmogorov_time_scale(0.4) - shear.kolmogorov_time_scale(0.1)).abs() <= 1e-9,
             "τ_η is ν-independent for a fixed-strain shear"
@@ -4596,7 +4745,10 @@ mod tests {
         let nu = 0.1_f64;
         let eta = shear.kolmogorov_length_scale(nu);
         let tau = shear.kolmogorov_time_scale(nu);
-        assert!((eta * eta / (tau * nu) - 1.0).abs() <= 1e-9, "η²/(τ_η·ν) = 1");
+        assert!(
+            (eta * eta / (tau * nu) - 1.0).abs() <= 1e-9,
+            "η²/(τ_η·ν) = 1"
+        );
 
         // (c) NO DISSIPATION → 0 sentinel: a solid-body rotation strains nothing (ε = 0).
         let omega = 2.0_f64;
@@ -5415,10 +5567,22 @@ mod tests {
             converged: true,
         };
         // Q = U·height = 2·1 = 2 per unit depth, identical at inlet and outlet.
-        assert!((sol.inlet_flow_rate() - 2.0).abs() < 1e-12, "Q_in {}", sol.inlet_flow_rate());
-        assert!((sol.outlet_flow_rate() - 2.0).abs() < 1e-12, "Q_out {}", sol.outlet_flow_rate());
+        assert!(
+            (sol.inlet_flow_rate() - 2.0).abs() < 1e-12,
+            "Q_in {}",
+            sol.inlet_flow_rate()
+        );
+        assert!(
+            (sol.outlet_flow_rate() - 2.0).abs() < 1e-12,
+            "Q_out {}",
+            sol.outlet_flow_rate()
+        );
         // Uniform throughflow conserves mass exactly.
-        assert!(sol.continuity_error() < 1e-12, "continuity {}", sol.continuity_error());
+        assert!(
+            sol.continuity_error() < 1e-12,
+            "continuity {}",
+            sol.continuity_error()
+        );
     }
 
     #[test]
@@ -5447,11 +5611,17 @@ mod tests {
         // δ* = ∫(1 − u/U) dy = ∫(1 − y/Ly) dy = Ly/2 for a Couette profile; the
         // midpoint rule integrates the linear integrand exactly.
         let dstar = sol.displacement_thickness(u_top);
-        assert!((dstar - ly / 2.0).abs() < 1e-12, "δ* = Ly/2 = 1.5, got {dstar}");
+        assert!(
+            (dstar - ly / 2.0).abs() < 1e-12,
+            "δ* = Ly/2 = 1.5, got {dstar}"
+        );
         // STRONG non-tautological cross-check: the mass-deficit identity
         // δ* = Ly − Q_out/U against the independently-implemented outlet_flow_rate.
         let identity = ly - sol.outlet_flow_rate() / u_top;
-        assert!((dstar - identity).abs() < 1e-12, "δ* = Ly − Q_out/U: {dstar} vs {identity}");
+        assert!(
+            (dstar - identity).abs() < 1e-12,
+            "δ* = Ly − Q_out/U: {dstar} vs {identity}"
+        );
         // Bounded by the channel height (0 ≤ δ* ≤ Ly for u ∈ [0, U]).
         assert!((0.0..=ly + 1e-12).contains(&dstar));
 
@@ -5471,7 +5641,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(plug.displacement_thickness(u_top).abs() < 1e-12, "plug flow → δ* = 0");
+        assert!(
+            plug.displacement_thickness(u_top).abs() < 1e-12,
+            "plug flow → δ* = 0"
+        );
 
         // A non-physical reference speed is undefined → 0.
         assert_eq!(sol.displacement_thickness(0.0), 0.0); // u_ref = 0
@@ -5503,9 +5676,15 @@ mod tests {
             converged: true,
         };
         let theta = sol.momentum_thickness(u_full);
-        assert!((theta - ly / 4.0).abs() < 1e-12, "θ = Ly/4 = 0.75, got {theta}");
+        assert!(
+            (theta - ly / 4.0).abs() < 1e-12,
+            "θ = Ly/4 = 0.75, got {theta}"
+        );
         let dstar = sol.displacement_thickness(u_full);
-        assert!((dstar - ly / 2.0).abs() < 1e-12, "δ* = Ly/2 = 1.5, got {dstar}");
+        assert!(
+            (dstar - ly / 2.0).abs() < 1e-12,
+            "δ* = Ly/2 = 1.5, got {dstar}"
+        );
         // θ ≤ δ* always (δ* − θ = ∫(1−u/U)² dy ≥ 0) — threads displacement_thickness.
         assert!(theta <= dstar + 1e-12, "θ ≤ δ*: {theta} vs {dstar}");
 
@@ -5531,7 +5710,10 @@ mod tests {
             converged: true,
         };
         let theta_c = couette.momentum_thickness(u_full);
-        assert!((theta_c - ly / 6.0).abs() / (ly / 6.0) < 1e-3, "Couette θ ≈ Ly/6, got {theta_c}");
+        assert!(
+            (theta_c - ly / 6.0).abs() / (ly / 6.0) < 1e-3,
+            "Couette θ ≈ Ly/6, got {theta_c}"
+        );
         // Couette δ* = Ly/2 (exact, linear integrand) ⇒ shape factor H = δ*/θ ≈ 3.
         let dstar_c = couette.displacement_thickness(u_full);
         let h = dstar_c / theta_c;
@@ -5554,7 +5736,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(plug.momentum_thickness(u_full).abs() < 1e-12, "plug flow → θ = 0");
+        assert!(
+            plug.momentum_thickness(u_full).abs() < 1e-12,
+            "plug flow → θ = 0"
+        );
 
         // A non-physical reference speed is undefined → 0.
         assert_eq!(sol.momentum_thickness(0.0), 0.0); // u_ref = 0
@@ -5587,7 +5772,10 @@ mod tests {
 
         // (a) WORKED EXACT: δ_E = 0.375·Ly = 1.125.
         let de = sol.energy_thickness(u_full);
-        assert!((de - 0.375 * ly).abs() < 1e-12, "δ_E = 0.375·Ly = 1.125, got {de}");
+        assert!(
+            (de - 0.375 * ly).abs() < 1e-12,
+            "δ_E = 0.375·Ly = 1.125, got {de}"
+        );
 
         // (b) THREAD momentum_thickness (non-tautological): for this profile the energy
         // shape factor δ_E/θ = 0.375/0.25 = 1.5.
@@ -5612,7 +5800,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(plug.energy_thickness(u_full).abs() < 1e-12, "plug flow → δ_E = 0");
+        assert!(
+            plug.energy_thickness(u_full).abs() < 1e-12,
+            "plug flow → δ_E = 0"
+        );
 
         // (d) A non-physical reference speed is undefined → 0.
         assert_eq!(sol.energy_thickness(0.0), 0.0); // u_ref = 0
@@ -5726,7 +5917,10 @@ mod tests {
         // (d) GUARDS: non-physical viscosity or reference speed → 0.
         assert_eq!(sol.momentum_thickness_reynolds_number(u_full, 0.0), 0.0);
         assert_eq!(sol.momentum_thickness_reynolds_number(u_full, -1.0), 0.0);
-        assert_eq!(sol.momentum_thickness_reynolds_number(u_full, f64::NAN), 0.0);
+        assert_eq!(
+            sol.momentum_thickness_reynolds_number(u_full, f64::NAN),
+            0.0
+        );
         assert_eq!(sol.momentum_thickness_reynolds_number(0.0, nu), 0.0);
         assert_eq!(sol.momentum_thickness_reynolds_number(f64::NAN, nu), 0.0);
     }
@@ -5782,10 +5976,19 @@ mod tests {
         );
         // (d) GUARDS: non-physical viscosity or reference speed → 0.
         assert_eq!(sol.displacement_thickness_reynolds_number(u_full, 0.0), 0.0);
-        assert_eq!(sol.displacement_thickness_reynolds_number(u_full, -1.0), 0.0);
-        assert_eq!(sol.displacement_thickness_reynolds_number(u_full, f64::NAN), 0.0);
+        assert_eq!(
+            sol.displacement_thickness_reynolds_number(u_full, -1.0),
+            0.0
+        );
+        assert_eq!(
+            sol.displacement_thickness_reynolds_number(u_full, f64::NAN),
+            0.0
+        );
         assert_eq!(sol.displacement_thickness_reynolds_number(0.0, nu), 0.0);
-        assert_eq!(sol.displacement_thickness_reynolds_number(f64::NAN, nu), 0.0);
+        assert_eq!(
+            sol.displacement_thickness_reynolds_number(f64::NAN, nu),
+            0.0
+        );
     }
 
     #[test]
@@ -5810,7 +6013,10 @@ mod tests {
             converged: true,
         };
         let h = sol.shape_factor(u_full);
-        assert!((h - 2.0).abs() < 1e-12, "uniform-half H = 2 exactly, got {h}");
+        assert!(
+            (h - 2.0).abs() < 1e-12,
+            "uniform-half H = 2 exactly, got {h}"
+        );
         assert!(h >= 1.0, "H ≥ 1 (δ* ≥ θ)");
         // Sanity tie H·θ == δ* (catches a ratio inversion), threading #232/#238.
         assert!(
@@ -5919,7 +6125,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((uniform.max_pressure() - 5.0).abs() <= 1e-9, "uniform → max = 5");
+        assert!(
+            (uniform.max_pressure() - 5.0).abs() <= 1e-9,
+            "uniform → max = 5"
+        );
         assert!(
             (uniform.max_pressure() - uniform.mean_pressure()).abs() <= 1e-9,
             "uniform: max = mean"
@@ -5941,7 +6150,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((ramp.max_pressure() - (grid.nx - 1) as f64).abs() <= 1e-9, "ramp → max = nx−1");
+        assert!(
+            (ramp.max_pressure() - (grid.nx - 1) as f64).abs() <= 1e-9,
+            "ramp → max = nx−1"
+        );
 
         // Exact span: max − min = range (cross-checks three independent loops).
         assert!(
@@ -6001,7 +6213,10 @@ mod tests {
 
         // (a) WORKED: a 2×1 field {3, 7} → mean 5, deviations ±2 → σ_p = 2.
         let sol = build(2, 1, &[3.0, 7.0]);
-        assert!((sol.pressure_std_dev() - 2.0).abs() <= 1e-12 * 2.0, "σ_p = 2");
+        assert!(
+            (sol.pressure_std_dev() - 2.0).abs() <= 1e-12 * 2.0,
+            "σ_p = 2"
+        );
 
         // (b) VARIANCE IDENTITY (non-tautological — a different formula): σ_p² = ⟨p²⟩ − ⟨p⟩².
         let mut sum_p2 = 0.0;
@@ -6031,7 +6246,10 @@ mod tests {
 
         // (e) BOUND: non-negative, and ≤ the pressure range (here σ_p = range/2).
         assert!(sol.pressure_std_dev() >= 0.0, "non-negative");
-        assert!(sol.pressure_std_dev() <= sol.pressure_range(), "σ_p ≤ range");
+        assert!(
+            sol.pressure_std_dev() <= sol.pressure_range(),
+            "σ_p ≤ range"
+        );
     }
 
     #[test]
@@ -6075,15 +6293,24 @@ mod tests {
 
         // (c) UNIFORM: a constant p = 5 field → p_rms = |mean| = 5.
         let uniform = build(3, 2, &[5.0; 6]);
-        assert!((uniform.rms_pressure() - 5.0).abs() <= 1e-12 * 5.0, "uniform → p_rms = |mean|");
+        assert!(
+            (uniform.rms_pressure() - 5.0).abs() <= 1e-12 * 5.0,
+            "uniform → p_rms = |mean|"
+        );
 
         // (d) BOUND: p_rms ≥ |⟨p⟩| and p_rms ≥ σ_p (both follow from p_rms² = ⟨p⟩² + σ_p²).
-        assert!(sol.rms_pressure() >= sol.mean_pressure().abs(), "p_rms ≥ |mean|");
+        assert!(
+            sol.rms_pressure() >= sol.mean_pressure().abs(),
+            "p_rms ≥ |mean|"
+        );
         assert!(sol.rms_pressure() >= sol.pressure_std_dev(), "p_rms ≥ σ_p");
 
         // (e) ZERO-MEAN field {−3, 3}: p_rms = σ_p = 3 (mean = 0), always non-negative.
         let zero_mean = build(2, 1, &[-3.0, 3.0]);
-        assert!((zero_mean.rms_pressure() - 3.0).abs() <= 1e-12 * 3.0, "{{-3,3}} → p_rms = 3");
+        assert!(
+            (zero_mean.rms_pressure() - 3.0).abs() <= 1e-12 * 3.0,
+            "{{-3,3}} → p_rms = 3"
+        );
         assert!(zero_mean.rms_pressure() >= 0.0, "non-negative");
     }
 
@@ -6107,7 +6334,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((uniform.min_pressure() - 5.0).abs() <= 1e-9, "uniform → min = 5");
+        assert!(
+            (uniform.min_pressure() - 5.0).abs() <= 1e-9,
+            "uniform → min = 5"
+        );
         assert!(
             (uniform.min_pressure() - uniform.mean_pressure()).abs() <= 1e-9,
             "uniform: min = mean"
@@ -6134,7 +6364,10 @@ mod tests {
 
         // min + range = max (= nx−1 for the ramp); ordering min ≤ ⟨p⟩ ≤ max.
         let max_p = ramp.min_pressure() + ramp.pressure_range();
-        assert!((max_p - (grid.nx - 1) as f64).abs() <= 1e-9, "min + range = max = nx−1");
+        assert!(
+            (max_p - (grid.nx - 1) as f64).abs() <= 1e-9,
+            "min + range = max = nx−1"
+        );
         assert!(
             ramp.min_pressure() <= ramp.mean_pressure() && ramp.mean_pressure() <= max_p,
             "min ≤ ⟨p⟩ ≤ max"
@@ -6156,7 +6389,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((neg.min_pressure() - (-10.0)).abs() <= 1e-9, "negative min = −10");
+        assert!(
+            (neg.min_pressure() - (-10.0)).abs() <= 1e-9,
+            "negative min = −10"
+        );
     }
 
     #[test]
@@ -6179,7 +6415,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((uniform.mean_pressure() - 5.0).abs() <= 1e-9, "uniform → ⟨p⟩ = 5");
+        assert!(
+            (uniform.mean_pressure() - 5.0).abs() <= 1e-9,
+            "uniform → ⟨p⟩ = 5"
+        );
 
         // Linear ramp p = i → ⟨p⟩ = (nx−1)/2 (mean of 0..nx, independent of j).
         let mut pr = grid.pressure_field();
@@ -6198,7 +6437,10 @@ mod tests {
             converged: true,
         };
         let expected = (grid.nx - 1) as f64 / 2.0;
-        assert!((ramp.mean_pressure() - expected).abs() <= 1e-9 * expected, "ramp → (nx−1)/2");
+        assert!(
+            (ramp.mean_pressure() - expected).abs() <= 1e-9 * expected,
+            "ramp → (nx−1)/2"
+        );
 
         // Bounded by the field extremes (the ramp spans 0 .. nx−1).
         assert!(
@@ -6281,7 +6523,10 @@ mod tests {
         }
         // Non-positive reference dynamic pressure → 0 sentinel.
         assert_eq!(sol.pressure_coefficient_at_cell(2, 2, p_ref, rho, 0.0), 0.0);
-        assert_eq!(sol.pressure_coefficient_at_cell(2, 2, p_ref, 0.0, u_ref), 0.0);
+        assert_eq!(
+            sol.pressure_coefficient_at_cell(2, 2, p_ref, 0.0, u_ref),
+            0.0
+        );
     }
 
     #[test]
@@ -6405,7 +6650,8 @@ mod tests {
             for i in 0..grid.nx {
                 let s = sol.speed_at_cell(i, j);
                 assert!(
-                    (sol.kinetic_energy_density_at_cell(i, j, rho) - 0.5 * rho * s * s).abs() < 1e-12,
+                    (sol.kinetic_energy_density_at_cell(i, j, rho) - 0.5 * rho * s * s).abs()
+                        < 1e-12,
                     "KE density = ½ρ·speed² at ({i},{j})"
                 );
             }
@@ -6477,7 +6723,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(uniform.speed_coefficient_of_variation().abs() < 1e-12, "uniform → CV = 0");
+        assert!(
+            uniform.speed_coefficient_of_variation().abs() < 1e-12,
+            "uniform → CV = 0"
+        );
 
         // Quiescent field (all-zero velocity) → 0, not NaN (mean ≤ 0 guard).
         let quiescent = FlowSolution {
@@ -6489,7 +6738,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert_eq!(quiescent.speed_coefficient_of_variation(), 0.0, "zero field → 0, no NaN");
+        assert_eq!(
+            quiescent.speed_coefficient_of_variation(),
+            0.0,
+            "zero field → 0, no NaN"
+        );
 
         // Non-uniform field (streamwise gradient).
         let mut ug = grid.u_field();
@@ -6532,7 +6785,10 @@ mod tests {
                 <= 1e-9 * varied.speed_std_dev(),
             "CV · mean = σ"
         );
-        assert!(varied.speed_coefficient_of_variation() > 0.0, "varying field → CV > 0");
+        assert!(
+            varied.speed_coefficient_of_variation() > 0.0,
+            "varying field → CV > 0"
+        );
     }
 
     #[test]
@@ -6555,7 +6811,10 @@ mod tests {
             converged: true,
         };
         assert!(uniform.speed_std_dev().abs() < 1e-12, "uniform → σ = 0");
-        assert!(uniform.speed_std_dev() <= uniform.rms_speed() + 1e-12, "σ ≤ rms");
+        assert!(
+            uniform.speed_std_dev() <= uniform.rms_speed() + 1e-12,
+            "σ ≤ rms"
+        );
 
         // Non-uniform field (streamwise gradient).
         let mut ug = grid.u_field();
@@ -6615,8 +6874,14 @@ mod tests {
             converged: true,
         };
         assert!((uniform.rms_speed() - 3.0).abs() < 1e-12, "uniform rms = 3");
-        assert!((uniform.rms_speed() - uniform.mean_speed()).abs() < 1e-12, "uniform: rms = mean");
-        assert!((uniform.rms_speed() - uniform.max_speed()).abs() < 1e-12, "uniform: rms = max");
+        assert!(
+            (uniform.rms_speed() - uniform.mean_speed()).abs() < 1e-12,
+            "uniform: rms = mean"
+        );
+        assert!(
+            (uniform.rms_speed() - uniform.max_speed()).abs() < 1e-12,
+            "uniform: rms = max"
+        );
 
         // Non-uniform field (streamwise gradient) → rms strictly exceeds the mean.
         let mut ug = grid.u_field();
@@ -6634,15 +6899,24 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(varied.rms_speed() > varied.mean_speed(), "RMS > mean for a varying field");
-        assert!(varied.rms_speed() <= varied.max_speed() + 1e-12, "rms ≤ max");
+        assert!(
+            varied.rms_speed() > varied.mean_speed(),
+            "RMS > mean for a varying field"
+        );
+        assert!(
+            varied.rms_speed() <= varied.max_speed() + 1e-12,
+            "rms ≤ max"
+        );
 
         // Threads mean_kinetic_energy_density exactly: ½·ρ·u_rms² = ⟨½ρ|u|²⟩.
         let rho = 1.225;
         for sol in [&uniform, &varied] {
             let from_rms = 0.5 * rho * sol.rms_speed().powi(2);
             let mean_ke = sol.mean_kinetic_energy_density(rho);
-            assert!((from_rms - mean_ke).abs() <= 1e-9 * mean_ke, "½ρ·u_rms² = ⟨KE⟩");
+            assert!(
+                (from_rms - mean_ke).abs() <= 1e-9 * mean_ke,
+                "½ρ·u_rms² = ⟨KE⟩"
+            );
         }
     }
 
@@ -6697,7 +6971,8 @@ mod tests {
         }
         let from_cells = s * grid.dx() * grid.dy();
         assert!(
-            (sol.total_kinetic_energy(rho) - from_cells).abs() <= 1e-9 * sol.total_kinetic_energy(rho),
+            (sol.total_kinetic_energy(rho) - from_cells).abs()
+                <= 1e-9 * sol.total_kinetic_energy(rho),
             "Σ KE_cell·cell_area = total"
         );
 
@@ -6864,7 +7139,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(still.pressure_range() > 0.0, "still field retains a pressure range");
+        assert!(
+            still.pressure_range() > 0.0,
+            "still field retains a pressure range"
+        );
         assert_eq!(still.euler_number(rho), 0.0, "U_max = 0 ⇒ q = 0 ⇒ Eu = 0");
     }
 
@@ -6893,9 +7171,7 @@ mod tests {
         let ke = sol.mean_kinetic_energy_density(rho);
         assert!((ke - 0.5 * rho * 9.0).abs() < 1e-12, "mean KE density {ke}");
         // Linear in density: doubling ρ doubles the energy.
-        assert!(
-            (sol.mean_kinetic_energy_density(2.0 * rho) - 2.0 * ke).abs() < 1e-12
-        );
+        assert!((sol.mean_kinetic_energy_density(2.0 * rho) - 2.0 * ke).abs() < 1e-12);
     }
 
     #[test]
@@ -6940,8 +7216,15 @@ mod tests {
         };
         let expected = 0.5 * density * (10.0 * 10.0 - 5.0 * 5.0);
         let dp0 = speedy.total_pressure_range(density);
-        assert!((dp0 - expected).abs() / expected < 1e-9, "Δp0 = ½ρ·75 = {expected}, got {dp0}");
-        assert_eq!(speedy.pressure_range(), 0.0, "static range is zero — the loss is all dynamic");
+        assert!(
+            (dp0 - expected).abs() / expected < 1e-9,
+            "Δp0 = ½ρ·75 = {expected}, got {dp0}"
+        );
+        assert_eq!(
+            speedy.pressure_range(),
+            0.0,
+            "static range is zero — the loss is all dynamic"
+        );
 
         // (c) A fully uniform field (u = 3, v = 4, p = 0): p0 constant → Δp0 = 0.
         let g3 = Grid::new(2, 2, 2.0, 2.0);
@@ -6966,7 +7249,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert_eq!(uniform.total_pressure_range(density), 0.0, "uniform field → Δp0 = 0");
+        assert_eq!(
+            uniform.total_pressure_range(density),
+            0.0,
+            "uniform field → Δp0 = 0"
+        );
     }
 
     #[test]
@@ -7070,7 +7357,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((sol.bulk_velocity() - 2.0).abs() < 1e-12, "U_bulk {}", sol.bulk_velocity());
+        assert!(
+            (sol.bulk_velocity() - 2.0).abs() < 1e-12,
+            "U_bulk {}",
+            sol.bulk_velocity()
+        );
         // By definition U_bulk · H = Q_in.
         assert!((sol.bulk_velocity() * grid.ly - sol.inlet_flow_rate()).abs() < 1e-12);
     }
@@ -7174,7 +7465,10 @@ mod tests {
         let nu = 1.0e-3;
         // u_τ = √(ν·(∂u/∂y)_wall) = √(ν·γ) — the worked value for the imposed shear γ.
         let u_tau = sol.friction_velocity(nu);
-        assert!((u_tau - (nu * gamma).sqrt()).abs() < 1e-12, "u_τ = √(νγ), got {u_tau}");
+        assert!(
+            (u_tau - (nu * gamma).sqrt()).abs() < 1e-12,
+            "u_τ = √(νγ), got {u_tau}"
+        );
         // The defining relation u_τ² = ν·(wall shear), against the field's own wall
         // shear (independent path through bottom_wall_shear_rate).
         assert!(
@@ -7182,7 +7476,10 @@ mod tests {
             "u_τ² = ν·τ_w/ρ"
         );
         // It is a velocity that scales as √ν: quadrupling ν doubles u_τ.
-        assert!((sol.friction_velocity(4.0 * nu) - 2.0 * u_tau).abs() < 1e-12, "u_τ ∝ √ν");
+        assert!(
+            (sol.friction_velocity(4.0 * nu) - 2.0 * u_tau).abs() < 1e-12,
+            "u_τ ∝ √ν"
+        );
         // Non-physical viscosity → 0.
         assert_eq!(sol.friction_velocity(0.0), 0.0);
         assert_eq!(sol.friction_velocity(-1.0e-3), 0.0);
@@ -7258,7 +7555,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert_eq!(still.bottom_wall_shear_stress(mu), 0.0, "no wall shear → τ_w = 0");
+        assert_eq!(
+            still.bottom_wall_shear_stress(mu),
+            0.0,
+            "no wall shear → τ_w = 0"
+        );
     }
 
     #[test]
@@ -7290,7 +7591,8 @@ mod tests {
         let cf = sol.skin_friction_coefficient(mu, rho);
         // Delegation: C_f = τ_w / (½ρU²), against the field's own τ_w and U.
         assert!(
-            (cf - sol.bottom_wall_shear_stress(mu) / (0.5 * rho * u_ref * u_ref)).abs() <= 1e-9 * cf,
+            (cf - sol.bottom_wall_shear_stress(mu) / (0.5 * rho * u_ref * u_ref)).abs()
+                <= 1e-9 * cf,
             "C_f = τ_w/(½ρU²)"
         );
         // NON-TAUTOLOGICAL thread C_f = 2·(u_τ/U)² through the independent
@@ -7321,7 +7623,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert_eq!(still.skin_friction_coefficient(mu, rho), 0.0, "no flow → C_f = 0");
+        assert_eq!(
+            still.skin_friction_coefficient(mu, rho),
+            0.0,
+            "no flow → C_f = 0"
+        );
     }
 
     #[test]
@@ -7470,7 +7776,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((sol.circulation() - (-18.0)).abs() < 1e-9, "Γ {}", sol.circulation());
+        assert!(
+            (sol.circulation() - (-18.0)).abs() < 1e-9,
+            "Γ {}",
+            sol.circulation()
+        );
         // A grid too small for an interior difference → 0.
         let tg = Grid::new(2, 2, 1.0, 1.0);
         let tiny = FlowSolution {
@@ -7513,7 +7823,10 @@ mod tests {
             converged: true,
         };
         // Each interior cell sees ω = 2Ω = 4.
-        assert!((sol.vorticity_at_cell(3, 3) - 2.0 * omega).abs() < 1e-9, "interior ω = 2Ω");
+        assert!(
+            (sol.vorticity_at_cell(3, 3) - 2.0 * omega).abs() < 1e-9,
+            "interior ω = 2Ω"
+        );
         // Boundary cells (centred stencil unavailable) → 0.
         assert_eq!(sol.vorticity_at_cell(0, 3), 0.0);
         assert_eq!(sol.vorticity_at_cell(3, 0), 0.0);
@@ -7530,11 +7843,20 @@ mod tests {
             }
         }
         ens *= 0.5 * dx * dy;
-        assert!((gamma - sol.circulation()).abs() / gamma.abs() < 1e-9, "Σω·dA = circulation");
-        assert!((ens - sol.enstrophy()).abs() / ens < 1e-9, "½Σω²·dA = enstrophy");
+        assert!(
+            (gamma - sol.circulation()).abs() / gamma.abs() < 1e-9,
+            "Σω·dA = circulation"
+        );
+        assert!(
+            (ens - sol.enstrophy()).abs() / ens < 1e-9,
+            "½Σω²·dA = enstrophy"
+        );
         // Solid-body rotation: Γ = 2Ω · interior area.
         let interior_area = (grid.nx - 2) as f64 * (grid.ny - 2) as f64 * dx * dy;
-        assert!((gamma - 2.0 * omega * interior_area).abs() / gamma < 1e-9, "Γ = 2Ω·A_interior");
+        assert!(
+            (gamma - 2.0 * omega * interior_area).abs() / gamma < 1e-9,
+            "Γ = 2Ω·A_interior"
+        );
     }
 
     #[test]
@@ -7566,7 +7888,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(rot.strain_rate_at_cell(3, 3).abs() < 1e-9, "solid-body rotation has zero strain");
+        assert!(
+            rot.strain_rate_at_cell(3, 3).abs() < 1e-9,
+            "solid-body rotation has zero strain"
+        );
 
         // (2) Pure straining u = a·x, v = −a·y — strain rate 2a, zero spin.
         let a = 1.5_f64;
@@ -7591,9 +7916,15 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((strain.strain_rate_at_cell(3, 3) - 2.0 * a).abs() < 1e-9, "pure strain rate = 2a");
+        assert!(
+            (strain.strain_rate_at_cell(3, 3) - 2.0 * a).abs() < 1e-9,
+            "pure strain rate = 2a"
+        );
         // STRONG cross-check threading the independent max_strain_rate reducer.
-        assert!((strain.max_strain_rate() - 2.0 * a).abs() < 1e-9, "max strain rate = 2a");
+        assert!(
+            (strain.max_strain_rate() - 2.0 * a).abs() < 1e-9,
+            "max strain rate = 2a"
+        );
 
         // (3) Pure shear u = γ·y, v = 0 — strain rate |γ| (equals the vorticity
         // magnitude, which is exactly why a shear layer has Q = 0).
@@ -7613,7 +7944,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((shear.strain_rate_at_cell(3, 3) - gamma).abs() < 1e-9, "pure shear strain = γ");
+        assert!(
+            (shear.strain_rate_at_cell(3, 3) - gamma).abs() < 1e-9,
+            "pure shear strain = γ"
+        );
 
         // STRONG three-way identity tying all per-cell accessors together: the
         // Q-criterion is Q = (ω² − strain²)/4 (since Q = ½(‖Ω‖² − ‖S‖²), ‖Ω‖² = ½ω²,
@@ -7622,7 +7956,10 @@ mod tests {
             let q = sol.q_criterion_at_cell(3, 3);
             let w = sol.vorticity_at_cell(3, 3);
             let s = sol.strain_rate_at_cell(3, 3);
-            assert!((q - (w * w - s * s) / 4.0).abs() < 1e-9, "Q = (ω² − strain²)/4");
+            assert!(
+                (q - (w * w - s * s) / 4.0).abs() < 1e-9,
+                "Q = (ω² − strain²)/4"
+            );
         }
 
         // Boundary cells have no centred stencil → 0.
@@ -7660,7 +7997,10 @@ mod tests {
             converged: true,
         };
         let q = rot.q_criterion_at_cell(3, 3);
-        assert!((q - rate * rate).abs() < 1e-9, "solid-body rotation Q = Ω², got {q}");
+        assert!(
+            (q - rate * rate).abs() < 1e-9,
+            "solid-body rotation Q = Ω², got {q}"
+        );
         let w = rot.vorticity_at_cell(3, 3);
         assert!((q - w * w / 4.0).abs() < 1e-9, "pure rotation Q = ω²/4");
         assert!(q > 0.0, "rotation-dominated → Q > 0");
@@ -7668,7 +8008,10 @@ mod tests {
         assert_eq!(rot.q_criterion_at_cell(0, 3), 0.0);
         assert_eq!(rot.q_criterion_at_cell(3, grid.ny - 1), 0.0);
         // STRONG cross-check threading the independent max_q_criterion reducer.
-        assert!((rot.max_q_criterion() - rate * rate).abs() < 1e-9, "max Q = Ω²");
+        assert!(
+            (rot.max_q_criterion() - rate * rate).abs() < 1e-9,
+            "max Q = Ω²"
+        );
 
         // (2) Pure shear u = γ·y, v = 0 — equal rotation and strain → Q = 0, even
         // though the vorticity is non-zero (a shear layer is not a vortex).
@@ -7688,8 +8031,14 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(shear.q_criterion_at_cell(3, 3).abs() < 1e-9, "pure shear → Q = 0");
-        assert!(shear.vorticity_at_cell(3, 3).abs() > 0.1, "...yet shear has vorticity");
+        assert!(
+            shear.q_criterion_at_cell(3, 3).abs() < 1e-9,
+            "pure shear → Q = 0"
+        );
+        assert!(
+            shear.vorticity_at_cell(3, 3).abs() > 0.1,
+            "...yet shear has vorticity"
+        );
 
         // (3) Pure straining u = a·x, v = −a·y (incompressible, irrotational) → Q = −a²
         // < 0 (strain-dominated, not a vortex), and max_q_criterion clamps to 0.
@@ -7717,8 +8066,15 @@ mod tests {
         };
         let qs = strain.q_criterion_at_cell(3, 3);
         assert!((qs + a * a).abs() < 1e-9, "pure strain Q = −a², got {qs}");
-        assert!(strain.vorticity_at_cell(3, 3).abs() < 1e-9, "pure strain is irrotational");
-        assert_eq!(strain.max_q_criterion(), 0.0, "no vortex → max Q clamps to 0");
+        assert!(
+            strain.vorticity_at_cell(3, 3).abs() < 1e-9,
+            "pure strain is irrotational"
+        );
+        assert_eq!(
+            strain.max_q_criterion(),
+            0.0,
+            "no vortex → max Q clamps to 0"
+        );
     }
 
     #[test]
@@ -7940,7 +8296,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!(shear.mean_divergence().abs() < 1e-9, "solenoidal → ⟨∇·u⟩ = 0");
+        assert!(
+            shear.mean_divergence().abs() < 1e-9,
+            "solenoidal → ⟨∇·u⟩ = 0"
+        );
 
         // (b) UNIFORM EXPANSION: u(x) = c·x, v = 0 → ∂u/∂x = c in every cell, so ⟨∇·u⟩ = c;
         // and (c) for this CONSTANT-divergence field the mean equals the peak max_divergence
@@ -7961,7 +8320,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((expanding.mean_divergence() - c).abs() <= 1e-9 * c, "⟨∇·u⟩ = c");
+        assert!(
+            (expanding.mean_divergence() - c).abs() <= 1e-9 * c,
+            "⟨∇·u⟩ = c"
+        );
         assert!(
             (expanding.mean_divergence() - expanding.max_divergence()).abs()
                 <= 1e-9 * expanding.max_divergence(),
@@ -8023,7 +8385,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((expanding.rms_divergence() - c).abs() <= 1e-9 * c, "rms = c");
+        assert!(
+            (expanding.rms_divergence() - c).abs() <= 1e-9 * c,
+            "rms = c"
+        );
         assert!(
             (expanding.rms_divergence() - expanding.mean_divergence()).abs() <= 1e-9 * c,
             "constant field: rms = mean"
@@ -8052,7 +8417,10 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert!((tent.rms_divergence() - c).abs() <= 1e-9 * c, "tent rms = c");
+        assert!(
+            (tent.rms_divergence() - c).abs() <= 1e-9 * c,
+            "tent rms = c"
+        );
         assert!(
             (tent.mean_divergence() - c / 5.0).abs() <= 1e-9 * (c / 5.0),
             "tent mean = c/5 (cancellation)"
@@ -8144,7 +8512,11 @@ mod tests {
             residual: 0.0,
             converged: true,
         };
-        assert_eq!(uniform.vorticity_thickness(), 0.0, "uniform flow → no shear layer");
+        assert_eq!(
+            uniform.vorticity_thickness(),
+            0.0,
+            "uniform flow → no shear layer"
+        );
     }
 
     #[test]
@@ -8418,10 +8790,12 @@ mod tests {
         let bcs = Boundaries::lid_driven_cavity(1.0);
         let ctrl = SimpleControls::default();
         let baseline = solve_simple(&grid, &fluid, &bcs, &ctrl);
-        let (sol, snap) = solve_simple_with(
-            &grid, &fluid, &bcs, &ctrl, &EffectiveViscosity::Laminar,
+        let (sol, snap) =
+            solve_simple_with(&grid, &fluid, &bcs, &ctrl, &EffectiveViscosity::Laminar);
+        assert!(
+            snap.is_none(),
+            "laminar path returns no turbulence snapshot"
         );
-        assert!(snap.is_none(), "laminar path returns no turbulence snapshot");
         for k in 0..baseline.u.data.len() {
             assert!(
                 (baseline.u.data[k] - sol.u.data[k]).abs() < 1e-12,
@@ -8498,29 +8872,24 @@ mod tests {
             ..SimpleControls::default()
         };
         let mg_ctrl = SimpleControls {
-            pressure_solver: PressurePoissonSolver::Multigrid(
-                MultigridControls {
-                    max_cycles: 4,
-                    tolerance: 1e-8,
-                    ..MultigridControls::default()
-                },
-            ),
+            pressure_solver: PressurePoissonSolver::Multigrid(MultigridControls {
+                max_cycles: 4,
+                tolerance: 1e-8,
+                ..MultigridControls::default()
+            }),
             ..sor_ctrl
         };
-        let (sor_sol, _) = solve_simple_with(
-            &grid, &fluid, &bcs, &sor_ctrl, &EffectiveViscosity::Laminar,
-        );
-        let (mg_sol, _) = solve_simple_with(
-            &grid, &fluid, &bcs, &mg_ctrl, &EffectiveViscosity::Laminar,
-        );
+        let (sor_sol, _) =
+            solve_simple_with(&grid, &fluid, &bcs, &sor_ctrl, &EffectiveViscosity::Laminar);
+        let (mg_sol, _) =
+            solve_simple_with(&grid, &fluid, &bcs, &mg_ctrl, &EffectiveViscosity::Laminar);
         assert!(sor_sol.converged, "SOR baseline must converge");
         assert!(mg_sol.converged, "multigrid path must converge");
         // The two velocity fields agree to a small absolute tolerance —
         // both have reached the same fixed point of the SIMPLE iteration.
         let mut max_diff = 0.0_f64;
         for k in 0..sor_sol.u.data.len() {
-            max_diff =
-                max_diff.max((sor_sol.u.data[k] - mg_sol.u.data[k]).abs());
+            max_diff = max_diff.max((sor_sol.u.data[k] - mg_sol.u.data[k]).abs());
         }
         assert!(
             max_diff < 5e-3,
@@ -8568,9 +8937,6 @@ mod tests {
         let out_i = grid.nx - 3;
         let centre = sol.u_at_cell(out_i, grid.ny / 2);
         let near_wall = sol.u_at_cell(out_i, 0);
-        assert!(
-            centre > near_wall,
-            "centreline must exceed wall velocity"
-        );
+        assert!(centre > near_wall, "centreline must exceed wall velocity");
     }
 }

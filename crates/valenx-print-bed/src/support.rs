@@ -75,8 +75,7 @@ fn push_pillar(out: &mut Mesh, top: Vector3<f64>, radius: f64) {
     let r = radius;
     let s30 = (30.0_f64).to_radians();
     let c30 = s30.cos();
-    out.nodes
-        .push(bottom + Vector3::new(0.0, r, 0.0));
+    out.nodes.push(bottom + Vector3::new(0.0, r, 0.0));
     out.nodes
         .push(bottom + Vector3::new(r * c30, -r * 0.5, 0.0));
     out.nodes

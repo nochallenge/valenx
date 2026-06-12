@@ -227,7 +227,8 @@ mod tests {
         for z in 0..n {
             for y in 0..n {
                 for x in 0..n {
-                    let inside = x > c && x < c + n / 3
+                    let inside = x > c
+                        && x < c + n / 3
                         && y > c.saturating_sub(n / 4)
                         && y < c + 1
                         && z > c.saturating_sub(1)

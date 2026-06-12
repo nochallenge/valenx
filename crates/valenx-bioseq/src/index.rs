@@ -59,11 +59,7 @@ impl FastaIndex {
                     by_name.insert(e.name.clone(), entries.len());
                     entries.push(e);
                 }
-                let name = rest
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
+                let name = rest.split_whitespace().next().unwrap_or("").to_string();
                 cur = Some(FaiEntry {
                     name,
                     length: 0,
@@ -255,7 +251,7 @@ mod tests {
         assert_eq!(e1.name, "seq1");
         assert_eq!(e1.length, 12); // ACGTACGT + ACGT
         assert_eq!(e1.line_bases, 8); // first line had 8 residues
-        // Offset: ">seq1 first\n" is 12 bytes -> first residue at 12.
+                                      // Offset: ">seq1 first\n" is 12 bytes -> first residue at 12.
         assert_eq!(e1.offset, 12);
         let e2 = idx.get("seq2").unwrap();
         assert_eq!(e2.length, 8);

@@ -187,10 +187,7 @@ impl Adapter for FijiAdapter {
         let source_macro = if input.macro_file.is_absolute() {
             input.macro_file.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.macro_file,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.macro_file)?
         };
         if !source_macro.is_file() {
             return Err(AdapterError::InvalidCase {

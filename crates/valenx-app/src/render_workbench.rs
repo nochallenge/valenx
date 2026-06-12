@@ -54,12 +54,7 @@ impl Default for RenderWorkbenchState {
 /// which the `48..=512` resolution clamp keeps unreachable today — but a
 /// fallible call must never `expect`/panic on the user-clickable render
 /// path, so the error is surfaced in the panel instead.
-fn render_demo(
-    resolution: u32,
-    spp: u32,
-    max_depth: u32,
-    exposure: f32,
-) -> RenderOutput {
+fn render_demo(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> RenderOutput {
     let res = resolution.clamp(48, 512);
     let camera = PtCamera::look_at(
         vec3(0.0, 1.0, 3.6),
@@ -75,11 +70,41 @@ fn render_demo(
     let green = b.add_material(PtMaterial::diffuse([0.15, 0.70, 0.15]));
     let light = b.add_material(PtMaterial::emissive([8.0, 8.0, 8.0]));
     // Cornell-ish box: floor, ceiling, back wall, red left, green right.
-    b.add_quad(vec3(-1.0, 0.0, -1.0), vec3(1.0, 0.0, -1.0), vec3(1.0, 0.0, 1.0), vec3(-1.0, 0.0, 1.0), white);
-    b.add_quad(vec3(-1.0, 2.0, -1.0), vec3(-1.0, 2.0, 1.0), vec3(1.0, 2.0, 1.0), vec3(1.0, 2.0, -1.0), white);
-    b.add_quad(vec3(-1.0, 0.0, -1.0), vec3(-1.0, 2.0, -1.0), vec3(1.0, 2.0, -1.0), vec3(1.0, 0.0, -1.0), white);
-    b.add_quad(vec3(-1.0, 0.0, -1.0), vec3(-1.0, 0.0, 1.0), vec3(-1.0, 2.0, 1.0), vec3(-1.0, 2.0, -1.0), red);
-    b.add_quad(vec3(1.0, 0.0, -1.0), vec3(1.0, 2.0, -1.0), vec3(1.0, 2.0, 1.0), vec3(1.0, 0.0, 1.0), green);
+    b.add_quad(
+        vec3(-1.0, 0.0, -1.0),
+        vec3(1.0, 0.0, -1.0),
+        vec3(1.0, 0.0, 1.0),
+        vec3(-1.0, 0.0, 1.0),
+        white,
+    );
+    b.add_quad(
+        vec3(-1.0, 2.0, -1.0),
+        vec3(-1.0, 2.0, 1.0),
+        vec3(1.0, 2.0, 1.0),
+        vec3(1.0, 2.0, -1.0),
+        white,
+    );
+    b.add_quad(
+        vec3(-1.0, 0.0, -1.0),
+        vec3(-1.0, 2.0, -1.0),
+        vec3(1.0, 2.0, -1.0),
+        vec3(1.0, 0.0, -1.0),
+        white,
+    );
+    b.add_quad(
+        vec3(-1.0, 0.0, -1.0),
+        vec3(-1.0, 0.0, 1.0),
+        vec3(-1.0, 2.0, 1.0),
+        vec3(-1.0, 2.0, -1.0),
+        red,
+    );
+    b.add_quad(
+        vec3(1.0, 0.0, -1.0),
+        vec3(1.0, 2.0, -1.0),
+        vec3(1.0, 2.0, 1.0),
+        vec3(1.0, 0.0, 1.0),
+        green,
+    );
     // Ceiling light.
     b.add_quad(
         vec3(-0.3, 1.98, -0.3),
@@ -95,7 +120,9 @@ fn render_demo(
         seed: 0x5eed,
         exposure,
     };
-    let ldr = render(&scene, &params).map_err(|e| e.to_string())?.to_ldr(exposure);
+    let ldr = render(&scene, &params)
+        .map_err(|e| e.to_string())?
+        .to_ldr(exposure);
     Ok((ldr.width as usize, ldr.height as usize, ldr.pixels))
 }
 
@@ -112,7 +139,8 @@ fn poll_render(s: &mut RenderWorkbenchState, ctx: &egui::Context) {
                         rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
                     }
                     let color = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
-                    let tex = ctx.load_texture("pathtrace_render", color, egui::TextureOptions::LINEAR);
+                    let tex =
+                        ctx.load_texture("pathtrace_render", color, egui::TextureOptions::LINEAR);
                     s.texture = Some(tex);
                     s.status = format!("rendered {w}×{h} @ {} spp", s.spp);
                 }
@@ -158,20 +186,34 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 });
                 ui.disable();
             }
-            egui::Grid::new("render_params").num_columns(2).show(ui, |ui| {
-                ui.label("resolution");
-                ui.add(egui::DragValue::new(&mut s.resolution).speed(4.0).range(48..=512));
-                ui.end_row();
-                ui.label("samples / px");
-                ui.add(egui::DragValue::new(&mut s.spp).speed(1.0).range(1..=128));
-                ui.end_row();
-                ui.label("max bounces");
-                ui.add(egui::DragValue::new(&mut s.max_depth).speed(0.2).range(1..=16));
-                ui.end_row();
-                ui.label("exposure");
-                ui.add(egui::DragValue::new(&mut s.exposure).speed(0.05).range(0.1..=4.0));
-                ui.end_row();
-            });
+            egui::Grid::new("render_params")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    ui.label("resolution");
+                    ui.add(
+                        egui::DragValue::new(&mut s.resolution)
+                            .speed(4.0)
+                            .range(48..=512),
+                    );
+                    ui.end_row();
+                    ui.label("samples / px");
+                    ui.add(egui::DragValue::new(&mut s.spp).speed(1.0).range(1..=128));
+                    ui.end_row();
+                    ui.label("max bounces");
+                    ui.add(
+                        egui::DragValue::new(&mut s.max_depth)
+                            .speed(0.2)
+                            .range(1..=16),
+                    );
+                    ui.end_row();
+                    ui.label("exposure");
+                    ui.add(
+                        egui::DragValue::new(&mut s.exposure)
+                            .speed(0.05)
+                            .range(0.1..=4.0),
+                    );
+                    ui.end_row();
+                });
             if ui.button("▶ Render (Cornell box)").clicked() {
                 do_render = true;
             }
@@ -220,9 +262,13 @@ mod tests {
     fn renders_a_lit_image() {
         // Small + cheap: the scene must produce a correctly-sized RGB buffer
         // with some non-black pixels (the emissive light illuminates it).
-        let (w, h, pixels) = render_demo(64, 4, 4, 1.0).expect("64² render is well under the pixel cap");
+        let (w, h, pixels) =
+            render_demo(64, 4, 4, 1.0).expect("64² render is well under the pixel cap");
         assert_eq!(pixels.len(), w * h * 3, "RGB8 buffer of the right size");
-        assert!(pixels.iter().any(|&p| p > 0), "the scene is lit (non-black pixels)");
+        assert!(
+            pixels.iter().any(|&p| p > 0),
+            "the scene is lit (non-black pixels)"
+        );
     }
 
     #[test]

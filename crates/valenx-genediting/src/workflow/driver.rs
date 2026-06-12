@@ -415,7 +415,10 @@ mod tests {
         // the derives, `serde`-serialisable) so an MCP layer can carry
         // them as structured data.
         let req = GeneditingRequest::AdviseStrategy {
-            change: DesiredChange::PointMutation { from: b'A', to: b'G' },
+            change: DesiredChange::PointMutation {
+                from: b'A',
+                to: b'G',
+            },
             pam_available: true,
         };
         assert_eq!(req.clone(), req);

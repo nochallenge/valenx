@@ -94,7 +94,9 @@ impl ForceTerm for ScaledPairs14 {
             if i >= n || j >= n {
                 return Err(MdError::dimension("1-4 pair index out of range"));
             }
-            let d = system.cell.min_image(system.positions[i] - system.positions[j]);
+            let d = system
+                .cell
+                .min_image(system.positions[i] - system.positions[j]);
             let r2 = d.norm_squared();
             if r2 < 1e-24 {
                 continue;
@@ -212,7 +214,11 @@ mod tests {
         term.accumulate(&sys, &mut ef).unwrap();
         let r = (sys.positions[0] - sys.positions[3]).norm();
         let full = pair_energy(0.35, 0.3, r) + COULOMB * 0.2 * 0.2 / r;
-        assert!((ef.energy - full).abs() < 1e-9, "got {}, full {full}", ef.energy);
+        assert!(
+            (ef.energy - full).abs() < 1e-9,
+            "got {}, full {full}",
+            ef.energy
+        );
     }
 
     #[test]

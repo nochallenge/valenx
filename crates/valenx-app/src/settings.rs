@@ -346,9 +346,7 @@ pub fn show_with_response(
                         Theme::Auto,
                         catalogue.lookup("dialog.settings.theme.auto"),
                     )
-                    .on_hover_text(
-                        "Match the OS preference where supported; falls back to Dark.",
-                    )
+                    .on_hover_text("Match the OS preference where supported; falls back to Dark.")
                     .changed();
                 *changed |= ui
                     .radio_value(
@@ -789,10 +787,7 @@ mod tests {
         // The first entry is the LAST pushed (most-recent-first order).
         assert!(s.recent_projects[0]
             .to_string_lossy()
-            .ends_with(&format!(
-                "p-{}.valenx",
-                Settings::MAX_RECENT_PROJECTS + 3
-            )));
+            .ends_with(&format!("p-{}.valenx", Settings::MAX_RECENT_PROJECTS + 3)));
     }
 
     #[test]

@@ -126,10 +126,7 @@ impl Adapter for MrBayesAdapter {
         let source_nexus = if input.nexus.is_absolute() {
             input.nexus.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.nexus,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.nexus)?
         };
         if !source_nexus.is_file() {
             return Err(AdapterError::InvalidCase {

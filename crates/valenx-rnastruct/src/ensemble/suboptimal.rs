@@ -47,11 +47,7 @@ pub struct SuboptStructure {
 /// # Errors
 /// [`RnaStructError::Invalid`] if `delta` is negative or not finite,
 /// or if `max_count` is zero.
-pub fn suboptimal(
-    seq: &RnaSeq,
-    delta: f64,
-    max_count: usize,
-) -> Result<Vec<SuboptStructure>> {
+pub fn suboptimal(seq: &RnaSeq, delta: f64, max_count: usize) -> Result<Vec<SuboptStructure>> {
     if !delta.is_finite() || delta < 0.0 {
         return Err(RnaStructError::invalid(
             "delta",
@@ -98,12 +94,10 @@ pub fn suboptimal(
     let mut out: Vec<SuboptStructure> = results
         .into_iter()
         .filter_map(|(p, e)| {
-            Structure::from_partner(p)
-                .ok()
-                .map(|s| SuboptStructure {
-                    structure: s,
-                    energy: if e.abs() < 1e-9 { 0.0 } else { e },
-                })
+            Structure::from_partner(p).ok().map(|s| SuboptStructure {
+                structure: s,
+                energy: if e.abs() < 1e-9 { 0.0 } else { e },
+            })
         })
         .collect();
     out.sort_by(|a, b| {
@@ -245,8 +239,16 @@ fn enumerate_v(
                 continue;
             }
             let il = energy::internal_loop_energy(
-                codes[i], codes[j], codes[k], codes[l], left, right,
-                codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                codes[i],
+                codes[j],
+                codes[k],
+                codes[l],
+                left,
+                right,
+                codes[i + 1],
+                codes[j - 1],
+                codes[k - 1],
+                codes[l + 1],
             );
             if acc + il + inner > ctx.budget + 1e-7 {
                 continue;
@@ -273,8 +275,7 @@ fn enumerate_v(
                 // multiloop channel (suboptimal multiloop interiors
                 // are still reachable through internal-loop / split
                 // channels). This keeps the v1 tractable.
-                let interior =
-                    multiloop_interior(ctx, i + 1, j - 1);
+                let interior = multiloop_interior(ctx, i + 1, j - 1);
                 if let Some((ip, ie)) = interior {
                     let total = acc + closure + ie;
                     if total <= ctx.budget + 1e-7 {
@@ -294,11 +295,7 @@ fn enumerate_v(
 
 /// Resolve a multiloop interior `[i, j]` to its MFE branch set using a
 /// plain Zuker traceback restricted to the window.
-fn multiloop_interior(
-    ctx: &Ctx,
-    i: usize,
-    j: usize,
-) -> Option<(Vec<Option<usize>>, f64)> {
+fn multiloop_interior(ctx: &Ctx, i: usize, j: usize) -> Option<(Vec<Option<usize>>, f64)> {
     // Reuse the wm2 value as the interior energy; recover the branch
     // pairs by a small dedicated traceback over wm / wm2 / v.
     let t = ctx.t;
@@ -386,7 +383,10 @@ fn trace_v_mfe(ctx: &Ctx, i: usize, j: usize, partner: &mut [Option<usize>]) {
     let feq = |a: f64, b: f64| (a - b).abs() < 1e-6;
     let target = t.v[t.idx(i, j)];
     let loop_bases = &codes[(i + 1)..j];
-    if feq(target, energy::hairpin_energy(codes[i], codes[j], loop_bases)) {
+    if feq(
+        target,
+        energy::hairpin_energy(codes[i], codes[j], loop_bases),
+    ) {
         return;
     }
     let k_max = (i + 1 + MAX_LOOP).min(j.saturating_sub(MIN_HAIRPIN + 1));
@@ -406,8 +406,16 @@ fn trace_v_mfe(ctx: &Ctx, i: usize, j: usize, partner: &mut [Option<usize>]) {
                 continue;
             }
             let il = energy::internal_loop_energy(
-                codes[i], codes[j], codes[k], codes[l], left, right,
-                codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                codes[i],
+                codes[j],
+                codes[k],
+                codes[l],
+                left,
+                right,
+                codes[i + 1],
+                codes[j - 1],
+                codes[k - 1],
+                codes[l + 1],
             );
             if feq(target, il + inner) {
                 partner[k] = Some(l);
@@ -529,8 +537,7 @@ mod tests {
         // under one closing helix) — this drives the multiloop
         // traceback channels (enumerate_v's multiloop branch,
         // multiloop_interior, trace_v_mfe) that simple hairpins miss.
-        let seq =
-            RnaSeq::parse("GGGGGCCCCCAAAGGGGGCCCCCAAAGGGGG").unwrap();
+        let seq = RnaSeq::parse("GGGGGCCCCCAAAGGGGGCCCCCAAAGGGGG").unwrap();
         let subs = suboptimal(&seq, 3.0, 30).unwrap();
         assert!(!subs.is_empty(), "multiloop sequence must yield structures");
         let mfe_e = mfe(&seq).unwrap().energy;
@@ -556,6 +563,9 @@ mod tests {
         }
         // The MFE structure of a 2-hairpin/1-stem sequence has
         // multiple base pairs.
-        assert!(subs[0].structure.n_pairs() >= 3, "expected a folded structure");
+        assert!(
+            subs[0].structure.n_pairs() >= 3,
+            "expected a folded structure"
+        );
     }
 }

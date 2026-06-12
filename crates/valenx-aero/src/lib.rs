@@ -154,17 +154,16 @@ pub mod wind;
 
 pub use api::{run_windtunnel, AeroRequest, AeroResult};
 pub use benchmark::{
-    run_flat_plate, run_naca_airfoil, run_sphere_drag, AirfoilResult,
-    FlatPlateResult, SphereDragPoint,
+    run_flat_plate, run_naca_airfoil, run_sphere_drag, AirfoilResult, FlatPlateResult,
+    SphereDragPoint,
 };
+pub use cutcell::{CellGeometry, CutFace, WallMethod};
 pub use domain::{BoundaryConditions, FaceBc, TunnelSizing, WindTunnel};
 pub use error::{AeroError, ErrorCategory};
 pub use forces::{
-    coefficients, integrate_forces, integrate_forces_with, surface_field,
-    surface_stats, AeroCoefficients, AeroForces, SurfacePoint, SurfaceStats,
-    WindFrame,
+    coefficients, integrate_forces, integrate_forces_with, surface_field, surface_stats,
+    AeroCoefficients, AeroForces, SurfacePoint, SurfaceStats, WindFrame,
 };
-pub use cutcell::{CellGeometry, CutFace, WallMethod};
 pub use geometry::{
     box_body, naca4_half_thickness, naca_wing, sphere_body, Aabb, TriMesh, Triangle,
 };
@@ -172,15 +171,13 @@ pub use grid::{Field3, Grid3};
 pub use immersed::{voxelize, voxelize_with, CellTag, ImmersedBody};
 pub use poisson::{solve_multigrid, solve_sor, PoissonStencil};
 pub use postprocess::{
-    q_criterion, slice_field, trace_streamline, vorticity, wake_survey, FieldSlice,
-    SliceAxis, Streamline, VorticityField, WakeSurvey,
+    q_criterion, slice_field, trace_streamline, vorticity, wake_survey, FieldSlice, SliceAxis,
+    Streamline, VorticityField, WakeSurvey,
 };
 pub use report::AeroReport;
 pub use solver::{solve_steady, BodyMotion, FlowField, SolverControls};
 pub use sweep::{aoa_sweep, PolarCurve, PolarPoint};
 pub use transient::{solve_transient, TransientControls, TransientHistory};
 pub use turbulence::{TurbulenceModel, TurbulenceState};
-pub use wallmodel::{
-    friction_velocity, wall_effective_viscosity, wall_shear_stress, y_plus,
-};
+pub use wallmodel::{friction_velocity, wall_effective_viscosity, wall_shear_stress, y_plus};
 pub use wind::{Air, Wind};

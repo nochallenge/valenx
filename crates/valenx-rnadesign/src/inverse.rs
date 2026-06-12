@@ -76,8 +76,7 @@ use crate::constraints::DesignConstraintSet;
 use crate::error::{Result, RnaDesignError};
 use serde::{Deserialize, Serialize};
 use valenx_rnastruct::{
-    base_pair_distance, linear_partition_with_beam, mfe, LinearPartitionResult, RnaSeq,
-    Structure,
+    base_pair_distance, linear_partition_with_beam, mfe, LinearPartitionResult, RnaSeq, Structure,
 };
 
 /// The four bases the designer may place, as ASCII.
@@ -233,12 +232,7 @@ pub fn ensemble_defect_linear(seq: &[u8], target: &Structure) -> Result<f64> {
 
 /// The ensemble defect contributed by positions `[lo, hi)` of `target`,
 /// read from a LinearPartition result `lp` of the *whole* sequence.
-fn defect_from_lp(
-    lp: &LinearPartitionResult,
-    target: &Structure,
-    lo: usize,
-    hi: usize,
-) -> f64 {
+fn defect_from_lp(lp: &LinearPartitionResult, target: &Structure, lo: usize, hi: usize) -> f64 {
     let mut defect = 0.0;
     for i in lo..hi {
         match target.partner(i) {
@@ -420,8 +414,7 @@ fn run_inverse_fold(
         ));
     }
     for leaf in &leaves {
-        let (acc, tot) =
-            optimize_leaf(&mut seq, target, constraints, *leaf, &params, &mut rng)?;
+        let (acc, tot) = optimize_leaf(&mut seq, target, constraints, *leaf, &params, &mut rng)?;
         accepted += acc;
         total += tot;
     }
@@ -549,8 +542,7 @@ fn optimize_leaf(
             break;
         }
         total += 1;
-        let trial =
-            propose_in_window(seq, target, constraints, leaf.start, leaf.end, rng);
+        let trial = propose_in_window(seq, target, constraints, leaf.start, leaf.end, rng);
         let trial = match trial {
             Some(t) => t,
             None => continue,
@@ -607,8 +599,7 @@ fn optimize_global(
 ) -> Result<(usize, usize, f64)> {
     let n = seq.len();
     let mut best_defect = ensemble_defect_linear(seq, target)?;
-    let mut best_obj = best_defect
-        + constraints.map(|c| c.soft_penalty(seq)).unwrap_or(0.0);
+    let mut best_obj = best_defect + constraints.map(|c| c.soft_penalty(seq)).unwrap_or(0.0);
     let mut accepted = 0usize;
     let mut total = 0usize;
     for _ in 0..params.global_iterations {
@@ -626,8 +617,7 @@ fn optimize_global(
             None => continue,
         };
         let trial_defect = ensemble_defect_linear(&trial, target)?;
-        let trial_obj = trial_defect
-            + constraints.map(|c| c.soft_penalty(&trial)).unwrap_or(0.0);
+        let trial_obj = trial_defect + constraints.map(|c| c.soft_penalty(&trial)).unwrap_or(0.0);
         if trial_obj <= best_obj {
             seq.copy_from_slice(&trial);
             best_defect = trial_defect;
@@ -724,8 +714,7 @@ fn apply_mutation(
     let mut trial = seq.to_vec();
     match target.partner(pos) {
         Some(partner) => {
-            let partner_locked =
-                constraints.and_then(|c| c.locked_at(partner));
+            let partner_locked = constraints.and_then(|c| c.locked_at(partner));
             match partner_locked {
                 Some(locked_base) => {
                     // Re-seat only `pos` to a base pairing the locked
@@ -734,11 +723,9 @@ fn apply_mutation(
                         .iter()
                         .filter_map(|&(a, b)| {
                             if pos < partner {
-                                (b.eq_ignore_ascii_case(&locked_base))
-                                    .then_some(a)
+                                (b.eq_ignore_ascii_case(&locked_base)).then_some(a)
                             } else {
-                                (a.eq_ignore_ascii_case(&locked_base))
-                                    .then_some(b)
+                                (a.eq_ignore_ascii_case(&locked_base)).then_some(b)
                             }
                         })
                         .collect();
@@ -773,8 +760,7 @@ mod tests {
     #[test]
     fn designs_a_hairpin_with_low_defect() {
         let target = Structure::from_dot_bracket("(((((....)))))").unwrap();
-        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default())
-            .unwrap();
+        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default()).unwrap();
         assert_eq!(d.sequence.len(), 14);
         // A clean hairpin should reach a low normalised defect.
         assert!(
@@ -790,8 +776,7 @@ mod tests {
         // After ensemble-defect design the MFE fold should match the
         // target closely.
         let target = Structure::from_dot_bracket("((((((....))))))").unwrap();
-        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default())
-            .unwrap();
+        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default()).unwrap();
         assert!(
             d.mfe_distance <= 4,
             "designed sequence's MFE drifted by {} from the target",
@@ -802,37 +787,30 @@ mod tests {
     #[test]
     fn unpaired_target_is_trivial() {
         let target = Structure::empty(12);
-        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default())
-            .unwrap();
+        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default()).unwrap();
         // An all-unpaired target is solvable to a very low defect.
         assert!(d.normalized_defect < 0.1);
     }
 
     #[test]
     fn rejects_empty_target() {
-        let err = inverse_fold_ensemble_defect(
-            &Structure::empty(0),
-            EnsembleDefectParams::default(),
-        )
-        .unwrap_err();
+        let err =
+            inverse_fold_ensemble_defect(&Structure::empty(0), EnsembleDefectParams::default())
+                .unwrap_err();
         assert_eq!(err.code(), "rnadesign.goal");
     }
 
     #[test]
     fn rejects_pseudoknot() {
         let pk = Structure::from_dot_bracket("((..[[..))..]]").unwrap();
-        assert!(
-            inverse_fold_ensemble_defect(&pk, EnsembleDefectParams::default()).is_err()
-        );
+        assert!(inverse_fold_ensemble_defect(&pk, EnsembleDefectParams::default()).is_err());
     }
 
     #[test]
     fn is_deterministic() {
         let target = Structure::from_dot_bracket("(((....)))").unwrap();
-        let a = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default())
-            .unwrap();
-        let b = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default())
-            .unwrap();
+        let a = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default()).unwrap();
+        let b = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default()).unwrap();
         assert_eq!(a.sequence, b.sequence);
     }
 
@@ -852,8 +830,7 @@ mod tests {
     #[test]
     fn decompose_finds_a_leaf_per_hairpin() {
         // Two separate hairpins -> two leaves.
-        let target =
-            Structure::from_dot_bracket("((((....))))((((....))))").unwrap();
+        let target = Structure::from_dot_bracket("((((....))))((((....))))").unwrap();
         let leaves = decompose_leaves(&target);
         assert_eq!(leaves.len(), 2);
         assert_eq!(leaves[0], Leaf { start: 0, end: 12 });
@@ -876,8 +853,7 @@ mod tests {
         let mut rng = Rng::new(1);
         let seed = seed_sequence(&target, None, &mut rng);
         let seed_defect = ensemble_defect_linear(&seed, &target).unwrap();
-        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default())
-            .unwrap();
+        let d = inverse_fold_ensemble_defect(&target, EnsembleDefectParams::default()).unwrap();
         assert!(
             d.ensemble_defect <= seed_defect + 1e-9,
             "designed defect {} not below a random seed's {}",
@@ -895,8 +871,7 @@ mod tests {
         // Lock positions 0 and 13 (the outer pair) to G and C.
         c.required_subsequences = vec![lock_entry(0, b'G'), lock_entry(13, b'C')];
         let set = DesignConstraintSet::new(&c, 14);
-        let d = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default())
-            .unwrap();
+        let d = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default()).unwrap();
         assert_eq!(d.sequence[0], b'G', "locked position 0 not held");
         assert_eq!(d.sequence[13], b'C', "locked position 13 not held");
     }
@@ -909,8 +884,7 @@ mod tests {
         // A tight GC band the design must land inside.
         let c = DesignConstraints::default().with_gc_range(0.35, 0.65);
         let set = DesignConstraintSet::new(&c, 14);
-        let d = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default())
-            .unwrap();
+        let d = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default()).unwrap();
         let gc = d
             .sequence
             .iter()
@@ -933,8 +907,7 @@ mod tests {
             .with_gc_range(0.0, 1.0)
             .forbid_motif("GGGG");
         let set = DesignConstraintSet::new(&c, 16);
-        let d = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default())
-            .unwrap();
+        let d = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default()).unwrap();
         let has = d
             .sequence
             .windows(4)
@@ -948,10 +921,7 @@ mod tests {
         use crate::goal::DesignConstraints;
         let target = Structure::from_dot_bracket("((((....))))").unwrap();
         let set = DesignConstraintSet::new(&DesignConstraints::default(), 99);
-        assert!(
-            inverse_fold_constrained(&target, &set, EnsembleDefectParams::default())
-                .is_err()
-        );
+        assert!(inverse_fold_constrained(&target, &set, EnsembleDefectParams::default()).is_err());
     }
 
     #[test]
@@ -959,14 +929,10 @@ mod tests {
         use crate::constraints::DesignConstraintSet;
         use crate::goal::DesignConstraints;
         let target = Structure::from_dot_bracket("(((....)))").unwrap();
-        let set = DesignConstraintSet::new(
-            &DesignConstraints::default().with_gc_range(0.0, 1.0),
-            10,
-        );
-        let a = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default())
-            .unwrap();
-        let b = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default())
-            .unwrap();
+        let set =
+            DesignConstraintSet::new(&DesignConstraints::default().with_gc_range(0.0, 1.0), 10);
+        let a = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default()).unwrap();
+        let b = inverse_fold_constrained(&target, &set, EnsembleDefectParams::default()).unwrap();
         assert_eq!(a.sequence, b.sequence);
     }
 }

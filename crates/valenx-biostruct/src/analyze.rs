@@ -156,9 +156,7 @@ impl StructureReport {
             }
         }
         for atom in model.atoms() {
-            *element_composition
-                .entry(atom.element.clone())
-                .or_default() += 1;
+            *element_composition.entry(atom.element.clone()).or_default() += 1;
         }
 
         // Radius of gyration — falls back to 0 for an atom-less model.
@@ -262,9 +260,7 @@ fn summarize_chain(chain: &Chain) -> ChainSummary {
     // protein alphabet accepts; the nucleotide alphabets do not, so a
     // nucleic chain with an `X` falls back to `None`.
     let sequence = match kind {
-        ChainKind::Protein => {
-            Seq::new(SeqKind::Protein, chain.observed_sequence()).ok()
-        }
+        ChainKind::Protein => Seq::new(SeqKind::Protein, chain.observed_sequence()).ok(),
         ChainKind::Dna => Seq::new(SeqKind::Dna, chain.observed_sequence()).ok(),
         ChainKind::Rna => Seq::new(SeqKind::Rna, chain.observed_sequence()).ok(),
         ChainKind::NonPolymer => None,
@@ -399,20 +395,13 @@ pub fn summarize_batch(reports: &[StructureReport]) -> BatchSummary {
         count: reports.len(),
         total_chains: reports.iter().map(|r| r.chains.len()).sum(),
         mean_atom_count: reports.iter().map(|r| r.atom_count as f64).sum::<f64>() / n,
-        mean_radius_of_gyration: reports
-            .iter()
-            .map(|r| r.radius_of_gyration)
-            .sum::<f64>()
-            / n,
+        mean_radius_of_gyration: reports.iter().map(|r| r.radius_of_gyration).sum::<f64>() / n,
         mean_quality_score: reports
             .iter()
             .map(|r| r.validation.quality_score())
             .sum::<f64>()
             / n,
-        clean_structures: reports
-            .iter()
-            .filter(|r| r.validation.is_clean())
-            .count(),
+        clean_structures: reports.iter().filter(|r| r.validation.is_clean()).count(),
     }
 }
 
@@ -489,7 +478,8 @@ mod tests {
         let mut s = protein_structure("X");
         let mut w = Residue::new("HOH", 100);
         w.hetatm = true;
-        w.atoms.push(Atom::new("O", "O", Point3::new(50.0, 0.0, 0.0)));
+        w.atoms
+            .push(Atom::new("O", "O", Point3::new(50.0, 0.0, 0.0)));
         let mut zn = Residue::new("ZN", 101);
         zn.hetatm = true;
         zn.atoms
@@ -546,7 +536,8 @@ mod tests {
         let mut chain = Chain::new("A");
         for seq in 1..=3 {
             let mut r = Residue::new("DA", seq);
-            r.atoms.push(Atom::new("P", "P", Point3::new(seq as f64, 0.0, 0.0)));
+            r.atoms
+                .push(Atom::new("P", "P", Point3::new(seq as f64, 0.0, 0.0)));
             chain.residues.push(r);
         }
         s.first_model_mut().chains.push(chain);

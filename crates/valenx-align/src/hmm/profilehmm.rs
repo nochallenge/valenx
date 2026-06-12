@@ -95,7 +95,10 @@ impl ProfileHmm {
     /// match columns.
     pub fn from_msa(msa: &Msa, gap_threshold: f64) -> Result<Self> {
         if msa.is_empty() || msa.width() == 0 {
-            return Err(AlignError::invalid("msa", "cannot build HMM from empty MSA"));
+            return Err(AlignError::invalid(
+                "msa",
+                "cannot build HMM from empty MSA",
+            ));
         }
         let depth = msa.depth();
         let width = msa.width();
@@ -431,6 +434,9 @@ mod tests {
         let col0 = &hmm.nodes[0].match_emit;
         let m_idx = aa_index(b'M').unwrap();
         let max = col0.iter().cloned().fold(f64::MIN, f64::max);
-        assert!((col0[m_idx] - max).abs() < 1e-9, "M should dominate column 0");
+        assert!(
+            (col0[m_idx] - max).abs() < 1e-9,
+            "M should dominate column 0"
+        );
     }
 }

@@ -52,12 +52,7 @@ impl Default for Sheet {
     fn default() -> Self {
         // Default 100 x 100 plate, 1.5 mm thickness, aluminium k=0.44.
         Self {
-            outline: vec![
-                [0.0, 0.0],
-                [100.0, 0.0],
-                [100.0, 100.0],
-                [0.0, 100.0],
-            ],
+            outline: vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]],
             thickness: 1.5,
             material: SheetMaterial::new("Aluminium 6061-T6"),
             k_factor: 0.44,
@@ -78,12 +73,7 @@ impl Sheet {
             });
         }
         Ok(Self {
-            outline: vec![
-                [0.0, 0.0],
-                [width, 0.0],
-                [width, height],
-                [0.0, height],
-            ],
+            outline: vec![[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]],
             thickness,
             ..Default::default()
         })
@@ -182,10 +172,7 @@ impl Sheet {
 
 // ---------- internal helpers ----------
 
-fn build_thick_plate_mesh(
-    outline: &[[f64; 2]],
-    thickness: f64,
-) -> Result<Mesh, SheetMetalError> {
+fn build_thick_plate_mesh(outline: &[[f64; 2]], thickness: f64) -> Result<Mesh, SheetMetalError> {
     if outline.len() < 3 {
         return Err(SheetMetalError::BadPolygon(
             "outline has fewer than 3 vertices".into(),
@@ -250,8 +237,8 @@ fn apply_bend_inplace(mesh: &mut Mesh, bend: &Bend) {
         // Project rel onto bend direction → parallel component.
         let parallel = dir * rel.dot(&dir);
         let perp = rel - parallel; // perpendicular component in 3D
-        // Determine "downstream" side: cross product with world +Z
-        // gives the in-plane normal to the bend line.
+                                   // Determine "downstream" side: cross product with world +Z
+                                   // gives the in-plane normal to the bend line.
         let in_plane_normal = dir.cross(&Vector3::z());
         let side = perp.dot(&in_plane_normal);
         if side <= 0.0 {

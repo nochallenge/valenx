@@ -20,7 +20,7 @@ pub mod sam;
 pub use dotplot::{dot_plot, self_dot_plot, DiagonalRun, DotPlot};
 pub use editdist::{levenshtein, levenshtein_bounded, myers_bit_parallel};
 pub use mapper::{
-    mapping_quality, InsertSizeModel, MapperParams, MappingResult, PairedMappingResult,
-    ReadMapper, Strand,
+    mapping_quality, InsertSizeModel, MapperParams, MappingResult, PairedMappingResult, ReadMapper,
+    Strand,
 };
 pub use sam::{alignment_from_cigar, alignment_to_cigar, cigar_to_rows, SamRecord};

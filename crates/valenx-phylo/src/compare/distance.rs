@@ -84,9 +84,11 @@ fn bipartitions(
         }
         let mut side: Vec<usize> = Vec::new();
         for leaf in tree.descendant_leaves(id) {
-            let label = tree.node(leaf).label.as_deref().ok_or_else(|| {
-                PhyloError::invalid("tree", "leaf without a label")
-            })?;
+            let label = tree
+                .node(leaf)
+                .label
+                .as_deref()
+                .ok_or_else(|| PhyloError::invalid("tree", "leaf without a label"))?;
             let idx = *index.get(label).ok_or_else(|| {
                 PhyloError::invalid("tree", format!("leaf `{label}` not in both trees"))
             })?;
@@ -223,13 +225,7 @@ enum Quartet {
 /// The quartet is `pq | rs` iff the path connecting `p` and `q` shares
 /// no internal node with the path connecting `r` and `s`. Implemented
 /// via lowest-common-ancestor depths.
-fn quartet_topology(
-    tree: &Tree,
-    w: NodeId,
-    x: NodeId,
-    y: NodeId,
-    z: NodeId,
-) -> Quartet {
+fn quartet_topology(tree: &Tree, w: NodeId, x: NodeId, y: NodeId, z: NodeId) -> Quartet {
     // Depth (edge count from root) of each node.
     let depth = |mut n: NodeId| -> usize {
         let mut d = 0;
@@ -252,10 +248,7 @@ fn quartet_topology(
     let max = ab_cd.max(ac_bd).max(ad_bc);
     // A unique maximum gives the resolved topology; a tie is an
     // unresolved (star) quartet.
-    let winners = [ab_cd, ac_bd, ad_bc]
-        .iter()
-        .filter(|&&v| v == max)
-        .count();
+    let winners = [ab_cd, ac_bd, ad_bc].iter().filter(|&&v| v == max).count();
     if winners != 1 {
         Quartet::Star
     } else if ab_cd == max {

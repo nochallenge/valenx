@@ -75,9 +75,7 @@ pub enum VoxelError {
     Overflow((u32, u32, u32)),
 
     /// Total cell count is finite but exceeds [`MAX_VOXEL_CELLS`].
-    #[error(
-        "voxel grid would have {cells} cells, exceeding the {max}-cell cap"
-    )]
+    #[error("voxel grid would have {cells} cells, exceeding the {max}-cell cap")]
     TooManyCells {
         /// Computed total cell count (`nx*ny*nz`).
         cells: u64,
@@ -594,21 +592,20 @@ impl Voxel {
 
         // --- pass 2: a quad per sign-changing grid edge ---
         let mut conn: Vec<u32> = Vec::new();
-        let emit_quad =
-            |conn: &mut Vec<u32>, q: [u32; 4], flip: bool| {
-                // Skip if any of the 4 cells was inactive (a robust
-                // grid never hits this, but guard anyway).
-                if q.contains(&u32::MAX) {
-                    return;
-                }
-                let (a, b, c, d) = if flip {
-                    (q[0], q[3], q[2], q[1])
-                } else {
-                    (q[0], q[1], q[2], q[3])
-                };
-                conn.extend_from_slice(&[a, b, c]);
-                conn.extend_from_slice(&[a, c, d]);
+        let emit_quad = |conn: &mut Vec<u32>, q: [u32; 4], flip: bool| {
+            // Skip if any of the 4 cells was inactive (a robust
+            // grid never hits this, but guard anyway).
+            if q.contains(&u32::MAX) {
+                return;
+            }
+            let (a, b, c, d) = if flip {
+                (q[0], q[3], q[2], q[1])
+            } else {
+                (q[0], q[1], q[2], q[3])
             };
+            conn.extend_from_slice(&[a, b, c]);
+            conn.extend_from_slice(&[a, c, d]);
+        };
 
         // X-direction grid edges: sample (ix,iy,iz) → (ix+1,iy,iz).
         // The 4 cells sharing that edge differ in (cy, cz).
@@ -689,8 +686,8 @@ mod tests {
 
     #[test]
     fn from_aabb_solid_count_matches_n() {
-        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(10.0, 10.0, 10.0), (8, 8, 8))
-            .unwrap();
+        let v =
+            Voxel::from_aabb(Vector3::zeros(), Vector3::new(10.0, 10.0, 10.0), (8, 8, 8)).unwrap();
         assert_eq!(v.n(), 512);
         assert_eq!(v.solid_count(), 512);
     }
@@ -719,8 +716,7 @@ mod tests {
 
     #[test]
     fn world_to_voxel_roundtrip() {
-        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(8.0, 8.0, 8.0), (8, 8, 8))
-            .unwrap();
+        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(8.0, 8.0, 8.0), (8, 8, 8)).unwrap();
         let p = Vector3::new(2.5, 4.5, 6.5);
         let (ix, iy, iz) = v.world_to_voxel(p).unwrap();
         assert_eq!((ix, iy, iz), (2, 4, 6));
@@ -730,8 +726,7 @@ mod tests {
 
     #[test]
     fn to_mesh_produces_triangles() {
-        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(4.0, 4.0, 4.0), (4, 4, 4))
-            .unwrap();
+        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(4.0, 4.0, 4.0), (4, 4, 4)).unwrap();
         let m = v.to_mesh();
         // Outer surface of a 4×4×4 cube: 6 faces × 16 voxel-quads ×
         // 2 tris = 192 triangles.
@@ -741,8 +736,7 @@ mod tests {
 
     #[test]
     fn out_of_range_get_returns_false() {
-        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(1.0, 1.0, 1.0), (4, 4, 4))
-            .unwrap();
+        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(1.0, 1.0, 1.0), (4, 4, 4)).unwrap();
         assert!(!v.get(99, 0, 0));
         assert!(v.world_to_voxel(Vector3::new(-1.0, 0.0, 0.0)).is_none());
     }
@@ -759,12 +753,7 @@ mod tests {
     fn surface_nets_of_solid_block_is_a_closed_manifold() {
         // A solid block: Surface Nets must produce a watertight,
         // closed surface — every edge shared by exactly two triangles.
-        let v = Voxel::from_aabb(
-            Vector3::zeros(),
-            Vector3::new(4.0, 4.0, 4.0),
-            (4, 4, 4),
-        )
-        .unwrap();
+        let v = Voxel::from_aabb(Vector3::zeros(), Vector3::new(4.0, 4.0, 4.0), (4, 4, 4)).unwrap();
         let m = v.to_mesh_surface_nets().unwrap();
         assert!(tri_count(&m) > 0, "surface nets should produce geometry");
         // Manifold check: tally every undirected edge; a closed
@@ -854,12 +843,8 @@ mod tests {
     #[test]
     fn surface_nets_of_empty_grid_is_empty() {
         // An all-void grid has no boundary → no triangles.
-        let mut v = Voxel::from_aabb(
-            Vector3::zeros(),
-            Vector3::new(8.0, 8.0, 8.0),
-            (8, 8, 8),
-        )
-        .unwrap();
+        let mut v =
+            Voxel::from_aabb(Vector3::zeros(), Vector3::new(8.0, 8.0, 8.0), (8, 8, 8)).unwrap();
         // Clear everything by a huge cut.
         v.cut_segment(
             Vector3::new(4.0, 4.0, 4.0),
@@ -877,12 +862,8 @@ mod tests {
         // the number of active cells; for a flat slab that is the
         // ring of boundary cells. Just assert it is a sane closed
         // surface with the expected order of magnitude.
-        let v = Voxel::from_aabb(
-            Vector3::zeros(),
-            Vector3::new(10.0, 10.0, 2.0),
-            (10, 10, 2),
-        )
-        .unwrap();
+        let v =
+            Voxel::from_aabb(Vector3::zeros(), Vector3::new(10.0, 10.0, 2.0), (10, 10, 2)).unwrap();
         let m = v.to_mesh_surface_nets().unwrap();
         assert!(tri_count(&m) > 0);
         // The slab's surface area dwarfs its edge, so the mesh should

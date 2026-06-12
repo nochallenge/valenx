@@ -65,7 +65,7 @@ pub fn cotangent_laplacian(mesh: &TriMesh) -> DMatrix<f64> {
         let cot_i = cotangent(vi, vj, vk); // angle at i, edge (j,k)
         let cot_j = cotangent(vj, vk, vi); // angle at j, edge (k,i)
         let cot_k = cotangent(vk, vi, vj); // angle at k, edge (i,j)
-        // Each cotangent weights the *opposite* edge.
+                                           // Each cotangent weights the *opposite* edge.
         let mut add = |a: usize, b: usize, w: f64| {
             let half = w * 0.5;
             l[(a, b)] -= half;

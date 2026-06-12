@@ -68,11 +68,7 @@ impl VariantEffectPipeline {
     /// [module-level error policy](self): per-predictor errors become
     /// [`PredictionFailure`]s in the report; only an invalid
     /// variant/reference pair makes this return `Err`.
-    pub fn run(
-        &self,
-        variant: Variant,
-        wild_type: Seq,
-    ) -> Result<VariantReport, VariantError> {
+    pub fn run(&self, variant: Variant, wild_type: Seq) -> Result<VariantReport, VariantError> {
         let ctx = VariantContext::build(variant, wild_type)?;
 
         let mut predictions = Vec::new();
@@ -201,9 +197,10 @@ mod tests {
     fn invalid_variant_reference_pair_aborts_the_run() {
         // Wild-type mismatch (position 4 is C, not G) means there is
         // nothing to predict on -> the run returns Err, not a report.
-        let pipeline = VariantEffectPipeline::new().with_predictor(Box::new(
-            MockPredictor::new("Good", EffectCategory::Damaging),
-        ));
+        let pipeline = VariantEffectPipeline::new().with_predictor(Box::new(MockPredictor::new(
+            "Good",
+            EffectCategory::Damaging,
+        )));
         let result = pipeline.run(parse("c.4G>A").unwrap(), dna("ATGCGT"));
         assert!(matches!(result, Err(VariantError::WildTypeMismatch { .. })));
     }

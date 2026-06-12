@@ -1189,8 +1189,7 @@ outputs = ["pressure_max"]
     #[test]
     fn assemble_sweep_dataset_rejects_oversize_case_toml() {
         use valenx_core::project::loader::MAX_PROJECT_FILE_BYTES;
-        let (mut app, root, _sweep) =
-            project_with_sweep_workdir("oversize_case_toml");
+        let (mut app, root, _sweep) = project_with_sweep_workdir("oversize_case_toml");
         assert!(app.project.is_some(), "{:?}", app.last_error);
         // Enlarge the case.toml past the 1 MiB cap.
         let oversize = (MAX_PROJECT_FILE_BYTES as usize) + 1024;
@@ -1225,8 +1224,7 @@ outputs = ["pressure_max"]
     /// file is rejected at the metadata gate.
     #[test]
     fn assemble_sweep_dataset_rejects_oversize_results_json() {
-        let (mut app, root, sweep_parent) =
-            project_with_sweep_workdir("oversize_results");
+        let (mut app, root, sweep_parent) = project_with_sweep_workdir("oversize_results");
         assert!(app.project.is_some(), "{:?}", app.last_error);
         // Plant one derived-case subdir with an oversize results.json.
         let sub = sweep_parent.join("sweep-0001");
@@ -1234,10 +1232,8 @@ outputs = ["pressure_max"]
         let big = sub.join("results.json");
         let f = std::fs::File::create(&big).unwrap();
         // Sparse-allocate one byte past the cap.
-        f.set_len(
-            (valenx_core::io_caps::MAX_RESULTS_JSON_BYTES as u64) + 1,
-        )
-        .unwrap();
+        f.set_len((valenx_core::io_caps::MAX_RESULTS_JSON_BYTES as u64) + 1)
+            .unwrap();
         drop(f);
         app.last_error = None;
         app.assemble_sweep_dataset();
@@ -1250,9 +1246,7 @@ outputs = ["pressure_max"]
             .as_ref()
             .expect("oversize results.json should surface as missing");
         assert!(
-            err.contains("No results.json")
-                || err.contains("missing")
-                || err.contains("results"),
+            err.contains("No results.json") || err.contains("missing") || err.contains("results"),
             "expected missing/no-results error, got: {err}"
         );
         let _ = std::fs::remove_dir_all(&root);

@@ -24,7 +24,10 @@ use crate::molecule::{Atom, Bond, BondOrder, BondStereo, Molecule};
 pub fn read_mol(text: &str) -> Result<Molecule> {
     let lines: Vec<&str> = text.lines().collect();
     if lines.len() < 4 {
-        return Err(CheminfError::parse("mol", "truncated header — need ≥4 lines"));
+        return Err(CheminfError::parse(
+            "mol",
+            "truncated header — need ≥4 lines",
+        ));
     }
     // line 0: molecule name; 1: program/timestamp; 2: comment; 3: counts
     let mut mol = Molecule::new();
@@ -132,7 +135,10 @@ pub fn read_mol(text: &str) -> Result<Molecule> {
 
 /// Apply an `M  CHG` (charge) or `M  ISO` (isotope) property line.
 fn apply_chg_iso(mol: &mut Molecule, rest: &str, is_charge: bool) {
-    let nums: Vec<i32> = rest.split_whitespace().filter_map(|t| t.parse().ok()).collect();
+    let nums: Vec<i32> = rest
+        .split_whitespace()
+        .filter_map(|t| t.parse().ok())
+        .collect();
     if nums.is_empty() {
         return;
     }
@@ -177,7 +183,13 @@ fn parse_f(line: &str, lo: usize, hi: usize) -> Result<f64> {
 fn parse_u(line: &str, lo: usize, hi: usize) -> Result<usize> {
     line.get(lo..hi)
         .map(|s| s.trim())
-        .and_then(|s| if s.is_empty() { Some(0) } else { s.parse().ok() })
+        .and_then(|s| {
+            if s.is_empty() {
+                Some(0)
+            } else {
+                s.parse().ok()
+            }
+        })
         .ok_or_else(|| CheminfError::parse("mol", format!("bad integer in columns {lo}..{hi}")))
 }
 
@@ -306,9 +318,8 @@ pub fn read_sdf(text: &str) -> Result<Vec<Molecule>> {
             Some(p) => (&trimmed[..p + 6], &trimmed[p + 6..]),
             None => (trimmed, ""),
         };
-        let mut mol = read_mol(mol_block).map_err(|e| {
-            CheminfError::parse("sdf", format!("record {} — {e}", idx + 1))
-        })?;
+        let mut mol = read_mol(mol_block)
+            .map_err(|e| CheminfError::parse("sdf", format!("record {} — {e}", idx + 1)))?;
         parse_sdf_properties(prop_block, &mut mol);
         molecules.push(mol);
     }

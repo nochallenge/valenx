@@ -154,15 +154,9 @@ mod tests {
     #[test]
     fn rejects_zero_normal() {
         let base = box_solid(1.0, 1.0, 1.0).unwrap();
-        let err = feat_make_prism_with_sketch(
-            &base,
-            &square_sketch(0.5),
-            [0.0; 3],
-            [0.0; 3],
-            0.5,
-            true,
-        )
-        .unwrap_err();
+        let err =
+            feat_make_prism_with_sketch(&base, &square_sketch(0.5), [0.0; 3], [0.0; 3], 0.5, true)
+                .unwrap_err();
         assert_eq!(err.code(), "occt_advanced.bad_input");
     }
 
@@ -201,7 +195,10 @@ mod tests {
             .iter()
             .map(|n| n.z)
             .fold(f64::NEG_INFINITY, f64::max);
-        assert!(zmax > 1.0 + 1e-6, "sketch-driven boss should rise above z=1");
+        assert!(
+            zmax > 1.0 + 1e-6,
+            "sketch-driven boss should rise above z=1"
+        );
     }
 
     #[test]

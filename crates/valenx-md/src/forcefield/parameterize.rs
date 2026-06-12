@@ -120,10 +120,7 @@ pub fn parameterize(system: &System) -> Result<Parameterized> {
 }
 
 /// [`parameterize`] with explicit [`ParameterizeOptions`].
-pub fn parameterize_with(
-    system: &System,
-    options: ParameterizeOptions,
-) -> Result<Parameterized> {
+pub fn parameterize_with(system: &System, options: ParameterizeOptions) -> Result<Parameterized> {
     let topo = &system.topology;
     // 1. Atom typing.
     let atom_types = typing::perceive_types(topo)?;
@@ -172,7 +169,7 @@ pub fn parameterize_with(
     // 3. Build the force field — LJ table + bonded parameters parallel
     //    to the new topology's lists.
     let mut ff = ForceField::new(CombiningRule::Geometric); // OPLS-AA comb-rule 3
-    // OPLS-AA 1-4 scaling: LJ and Coulomb both 0.5.
+                                                            // OPLS-AA 1-4 scaling: LJ and Coulomb both 0.5.
     ff.lj_14_scale = 0.5;
     ff.coulomb_14_scale = 0.5;
 
@@ -395,11 +392,7 @@ mod tests {
 
     /// Builds a small molecule topology + a non-periodic system from an
     /// element list, bond list and rough coordinates.
-    fn molecule(
-        elements: &[&str],
-        bonds: &[(usize, usize)],
-        positions: &[[f64; 3]],
-    ) -> System {
+    fn molecule(elements: &[&str], bonds: &[(usize, usize)], positions: &[[f64; 3]]) -> System {
         let mut t = Topology::new();
         for &e in elements {
             let mass = match e {
@@ -426,15 +419,7 @@ mod tests {
     fn ethane() -> System {
         molecule(
             &["C", "C", "H", "H", "H", "H", "H", "H"],
-            &[
-                (0, 1),
-                (0, 2),
-                (0, 3),
-                (0, 4),
-                (1, 5),
-                (1, 6),
-                (1, 7),
-            ],
+            &[(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (1, 6), (1, 7)],
             &[
                 [0.0, 0.0, 0.0],
                 [0.153, 0.0, 0.0],
@@ -512,11 +497,7 @@ mod tests {
         let sys = molecule(
             &["O", "H", "H"],
             &[(0, 1), (0, 2)],
-            &[
-                [0.0, 0.0, 0.0],
-                [0.0957, 0.0, 0.0],
-                [-0.0240, 0.0927, 0.0],
-            ],
+            &[[0.0, 0.0, 0.0], [0.0957, 0.0, 0.0], [-0.0240, 0.0927, 0.0]],
         );
         let p = parameterize(&sys).unwrap();
         assert_eq!(p.type_of(0), Some("opls_111"));
@@ -549,8 +530,8 @@ mod tests {
         assert_eq!(p.type_of(0), Some("opls_157")); // alcohol methyl C
         assert_eq!(p.type_of(1), Some("opls_154")); // hydroxyl O
         assert_eq!(p.type_of(5), Some("opls_155")); // hydroxyl H
-        // OPLS-AA methanol charges sum to zero: +0.145 + 3(+0.040)
-        // − 0.683 + 0.418 = 0.
+                                                    // OPLS-AA methanol charges sum to zero: +0.145 + 3(+0.040)
+                                                    // − 0.683 + 0.418 = 0.
         assert!(p.net_charge().abs() < 1e-6, "net q = {}", p.net_charge());
     }
 

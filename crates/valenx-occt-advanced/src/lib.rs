@@ -102,43 +102,43 @@ pub mod error;
 pub mod guide_loft;
 
 // Sweep + Loft advanced (Phases 131-138)
-pub mod offset_api_thru_sections_with_guides;
-pub mod offset_api_draft_angle_with_neutral_plane;
-pub mod feat_make_prism_with_sketch;
-pub mod feat_make_revol_with_sketch;
-pub mod feat_make_pipe_with_path_constraint;
 pub mod feat_make_dgreater_pad;
 pub mod feat_make_dsubtract_pocket;
 pub mod feat_make_loft_with_rails;
+pub mod feat_make_pipe_with_path_constraint;
+pub mod feat_make_prism_with_sketch;
+pub mod feat_make_revol_with_sketch;
+pub mod offset_api_draft_angle_with_neutral_plane;
+pub mod offset_api_thru_sections_with_guides;
 
 // Shape analysis (Phases 139-146)
+pub mod shape_analysis_check_dist_ratio;
+pub mod shape_analysis_curve_validity;
+pub mod shape_analysis_fix_shape;
 pub mod shape_analysis_freebounds;
 pub mod shape_analysis_orientedclosedsolid;
-pub mod shape_analysis_curve_validity;
 pub mod shape_analysis_surface_validity;
-pub mod shape_analysis_wireorder;
-pub mod shape_analysis_check_dist_ratio;
 pub mod shape_analysis_topology;
-pub mod shape_analysis_fix_shape;
+pub mod shape_analysis_wireorder;
 
 // Shape upgrade (Phases 147-152)
-pub mod shape_upgrade_unifysamedomain;
-pub mod shape_upgrade_shapeconvert_revolution_to_bspline;
-pub mod shape_upgrade_remove_internal_wires;
-pub mod shape_upgrade_split_continuity;
 pub mod shape_upgrade_close_open_wires;
 pub mod shape_upgrade_face_division;
+pub mod shape_upgrade_remove_internal_wires;
+pub mod shape_upgrade_shapeconvert_revolution_to_bspline;
+pub mod shape_upgrade_split_continuity;
+pub mod shape_upgrade_unifysamedomain;
 
 // Geometric library (Phases 153-157)
+pub mod geom_lib_curvature_at_point;
+pub mod geom_lib_evolute_curve;
 pub mod geom_lib_intersect_point_curve;
 pub mod geom_lib_normal_at_point;
 pub mod geom_lib_tangent_at_point;
-pub mod geom_lib_curvature_at_point;
-pub mod geom_lib_evolute_curve;
 
 // Local operations (Phases 158-160)
-pub mod local_op_replace_face;
 pub mod local_op_remove_face;
+pub mod local_op_replace_face;
 pub mod local_op_split_solid_with_plane;
 
 pub use error::{ErrorCategory, OcctAdvancedError};
@@ -149,9 +149,7 @@ pub use error::{ErrorCategory, OcctAdvancedError};
 pub use feat_make_dgreater_pad::feat_make_dgreater_pad;
 pub use feat_make_dsubtract_pocket::feat_make_dsubtract_pocket;
 pub use feat_make_loft_with_rails::feat_make_loft_with_rails;
-pub use feat_make_pipe_with_path_constraint::{
-    feat_make_pipe_with_path_constraint, FrameLaw,
-};
+pub use feat_make_pipe_with_path_constraint::{feat_make_pipe_with_path_constraint, FrameLaw};
 pub use feat_make_prism_with_sketch::feat_make_prism_with_sketch;
 pub use feat_make_revol_with_sketch::feat_make_revol_with_sketch;
 pub use geom_lib_curvature_at_point::geom_lib_curvature_at_point;

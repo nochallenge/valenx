@@ -47,10 +47,7 @@ impl EnsembleMethod {
     /// score. `scores` must be non-empty.
     fn combine(&self, scores: &[f64]) -> f64 {
         match *self {
-            EnsembleMethod::Best => scores
-                .iter()
-                .copied()
-                .fold(f64::INFINITY, f64::min),
+            EnsembleMethod::Best => scores.iter().copied().fold(f64::INFINITY, f64::min),
             EnsembleMethod::Mean => scores.iter().sum::<f64>() / scores.len() as f64,
             EnsembleMethod::Boltzmann { kt } => {
                 // Boltzmann-weighted average ⟨E⟩ = Σ Eᵢ·wᵢ with
@@ -148,7 +145,14 @@ pub fn ensemble_dock(
     let mut per_conformation: Vec<ConformationResult> = Vec::with_capacity(receptors.len());
     for (ci, receptor) in receptors.iter().enumerate() {
         let conf_seed = seed.wrapping_add((ci as u64).wrapping_mul(0x9E37_79B9));
-        let run = rigid_dock(receptor, ligand, grid, algorithm, runs_per_receptor, conf_seed)?;
+        let run = rigid_dock(
+            receptor,
+            ligand,
+            grid,
+            algorithm,
+            runs_per_receptor,
+            conf_seed,
+        )?;
         let best = run
             .poses
             .into_iter()
@@ -160,10 +164,7 @@ pub fn ensemble_dock(
         });
     }
 
-    let scores: Vec<f64> = per_conformation
-        .iter()
-        .map(|c| c.best_pose.score)
-        .collect();
+    let scores: Vec<f64> = per_conformation.iter().map(|c| c.best_pose.score).collect();
     let ensemble_score = method.combine(&scores);
     // The conformation with the single best (lowest) pose score.
     let best_conformation = per_conformation

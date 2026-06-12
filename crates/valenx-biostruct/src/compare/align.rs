@@ -89,15 +89,11 @@ pub fn align_chains(
     // one-letter strings parallel to the traces.
     let aa_a: Vec<char> = trace_a
         .iter()
-        .map(|(i, _)| {
-            crate::structure::residue_one_letter(&chain_a.residues[*i].name)
-        })
+        .map(|(i, _)| crate::structure::residue_one_letter(&chain_a.residues[*i].name))
         .collect();
     let aa_b: Vec<char> = trace_b
         .iter()
-        .map(|(i, _)| {
-            crate::structure::residue_one_letter(&chain_b.residues[*i].name)
-        })
+        .map(|(i, _)| crate::structure::residue_one_letter(&chain_b.residues[*i].name))
         .collect();
     let _ = (&seq_a, &seq_b); // observed_sequence kept for callers
 
@@ -121,10 +117,8 @@ pub fn align_chains(
         if matched_trace.len() < 3 {
             break;
         }
-        let mob: Vec<Point3<f64>> =
-            matched_trace.iter().map(|(a, _)| trace_a[*a].1).collect();
-        let refp: Vec<Point3<f64>> =
-            matched_trace.iter().map(|(_, b)| trace_b[*b].1).collect();
+        let mob: Vec<Point3<f64>> = matched_trace.iter().map(|(a, _)| trace_a[*a].1).collect();
+        let refp: Vec<Point3<f64>> = matched_trace.iter().map(|(_, b)| trace_b[*b].1).collect();
         let sup: Superposition = kabsch(&mob, &refp)?;
         let iter_transform = sup.transform;
 
@@ -151,10 +145,8 @@ pub fn align_chains(
     }
 
     // Final metrics.
-    let mob: Vec<Point3<f64>> =
-        matched_trace.iter().map(|(a, _)| trace_a[*a].1).collect();
-    let refp: Vec<Point3<f64>> =
-        matched_trace.iter().map(|(_, b)| trace_b[*b].1).collect();
+    let mob: Vec<Point3<f64>> = matched_trace.iter().map(|(a, _)| trace_a[*a].1).collect();
+    let refp: Vec<Point3<f64>> = matched_trace.iter().map(|(_, b)| trace_b[*b].1).collect();
     let final_sup = kabsch(&mob, &refp)?;
     let transform = final_sup.transform.clone();
 

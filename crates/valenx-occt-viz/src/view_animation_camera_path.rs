@@ -63,7 +63,11 @@ pub fn view_animation_camera_path(
         start.target.z + (end.target.z - start.target.z) * t,
     );
     // FoV: step at t=1 (OCCT semantics).
-    let fov = if t >= 1.0 { end.fov_y_deg } else { start.fov_y_deg };
+    let fov = if t >= 1.0 {
+        end.fov_y_deg
+    } else {
+        start.fov_y_deg
+    };
 
     // Projection mode is discrete — switch at t=1 (same step
     // semantics as FoV).

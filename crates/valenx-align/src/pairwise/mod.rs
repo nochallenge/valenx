@@ -24,7 +24,7 @@ pub mod local;
 pub mod result;
 pub mod semiglobal;
 
-pub use result::{Alignment, AlignStats, Cigar, CigarOp};
+pub use result::{AlignStats, Alignment, Cigar, CigarOp};
 
 use crate::matrix::SubstitutionMatrix;
 

@@ -365,7 +365,11 @@ impl Adapter for ViennaRnaAdapter {
                     stderr_tail.push(line);
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(status) = kill_guard.inner_mut().try_wait().map_err(AdapterError::Io)? {
+                    if let Some(status) = kill_guard
+                        .inner_mut()
+                        .try_wait()
+                        .map_err(AdapterError::Io)?
+                    {
                         for line in rx.try_iter() {
                             process_stderr(&line, ctx, &mut warnings);
                             if stderr_tail.len() >= STDERR_TAIL_MAX {

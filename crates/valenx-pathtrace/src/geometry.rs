@@ -235,10 +235,7 @@ impl Triangle {
     /// Twice the triangle area — `|edge1 × edge2|`.
     #[inline]
     pub fn double_area(&self) -> f32 {
-        self.v1
-            .sub(self.v0)
-            .cross(self.v2.sub(self.v0))
-            .length()
+        self.v1.sub(self.v0).cross(self.v2.sub(self.v0)).length()
     }
 
     /// The triangle's axis-aligned bounding box.

@@ -134,9 +134,7 @@ impl<'a> WaterlinePathPlanner<'a> {
             for k in 0..3 {
                 let a = tri.v[k];
                 let b = tri.v[(k + 1) % 3];
-                if (a.z - z).signum() != (b.z - z).signum()
-                    && (a.z - b.z).abs() > 1e-18
-                {
+                if (a.z - z).signum() != (b.z - z).signum() && (a.z - b.z).abs() > 1e-18 {
                     let t = (z - a.z) / (b.z - a.z);
                     out.push(Vector3::new(
                         a.x + t * (b.x - a.x),
@@ -189,7 +187,9 @@ impl<'a> PushCutter<'a> {
         step: f64,
     ) -> Vec<Vector3<f64>> {
         let dc = DropCutter::new(self.tris);
-        let mag = (direction.0.powi(2) + direction.1.powi(2)).sqrt().max(1e-18);
+        let mag = (direction.0.powi(2) + direction.1.powi(2))
+            .sqrt()
+            .max(1e-18);
         let dx = direction.0 / mag * step;
         let dy = direction.1 / mag * step;
         let n = (max_distance / step).max(0.0).floor() as usize;

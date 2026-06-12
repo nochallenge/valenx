@@ -65,9 +65,9 @@ pub fn cigar_to_rows(
             }
             CigarOp::Ins => {
                 for _ in 0..len {
-                    let q = *query
-                        .get(qi)
-                        .ok_or_else(|| AlignError::dimension("CIGAR insertion overruns the query"))?;
+                    let q = *query.get(qi).ok_or_else(|| {
+                        AlignError::dimension("CIGAR insertion overruns the query")
+                    })?;
                     row_query.push(q);
                     row_ref.push(b'-');
                     qi += 1;
@@ -75,9 +75,9 @@ pub fn cigar_to_rows(
             }
             CigarOp::Del => {
                 for _ in 0..len {
-                    let r = *reference
-                        .get(ri)
-                        .ok_or_else(|| AlignError::dimension("CIGAR deletion overruns the reference"))?;
+                    let r = *reference.get(ri).ok_or_else(|| {
+                        AlignError::dimension("CIGAR deletion overruns the reference")
+                    })?;
                     row_query.push(b'-');
                     row_ref.push(r);
                     ri += 1;
@@ -202,13 +202,7 @@ impl SamRecord {
         };
         format!(
             "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t*",
-            self.qname,
-            self.flag,
-            self.rname,
-            self.pos,
-            self.mapq,
-            self.cigar,
-            seq,
+            self.qname, self.flag, self.rname, self.pos, self.mapq, self.cigar, seq,
         )
     }
 }
@@ -220,14 +214,7 @@ mod tests {
     #[test]
     fn alignment_cigar_roundtrip() {
         // read AC-GT vs ref ACTGT: 2M 1D 2M.
-        let al = Alignment::new(
-            b"AC-GT".to_vec(),
-            b"ACTGT".to_vec(),
-            0,
-            (0, 4),
-            (0, 5),
-        )
-        .unwrap();
+        let al = Alignment::new(b"AC-GT".to_vec(), b"ACTGT".to_vec(), 0, (0, 4), (0, 5)).unwrap();
         let cigar = alignment_to_cigar(&al);
         assert_eq!(cigar.to_string(), "2M1D2M");
 

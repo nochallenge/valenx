@@ -123,7 +123,13 @@ mod tests {
         let p10 = Vector3::new(1.0, 0.0, 0.0);
         let p01 = Vector3::new(0.0, 1.0, 0.0);
         let p11 = Vector3::new(1.0, 1.0, 0.0);
-        coons::fill([line(p00, p01), line(p10, p11), line(p00, p10), line(p01, p11)]).unwrap()
+        coons::fill([
+            line(p00, p01),
+            line(p10, p11),
+            line(p00, p10),
+            line(p01, p11),
+        ])
+        .unwrap()
     }
 
     #[test]
@@ -148,6 +154,10 @@ mod tests {
         // normal should be ±z. Coons orientation gives +z.
         assert!(n.x.abs() < 1e-6, "nx should be ~0, got {}", n.x);
         assert!(n.y.abs() < 1e-6, "ny should be ~0, got {}", n.y);
-        assert!((n.z.abs() - 1.0).abs() < 1e-6, "|nz| should be ~1, got {}", n.z);
+        assert!(
+            (n.z.abs() - 1.0).abs() < 1e-6,
+            "|nz| should be ~1, got {}",
+            n.z
+        );
     }
 }

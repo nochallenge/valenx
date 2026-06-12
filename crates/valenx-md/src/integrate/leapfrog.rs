@@ -121,11 +121,7 @@ mod tests {
         top.push_atom(Atom::new("A", 10.0, 0.0).unwrap());
         top.push_atom(Atom::new("B", 10.0, 0.0).unwrap());
         top.add_bond(0, 1).unwrap();
-        let sys = System::new(
-            top,
-            vec![Vector3::zeros(), Vector3::new(0.12, 0.0, 0.0)],
-        )
-        .unwrap();
+        let sys = System::new(top, vec![Vector3::zeros(), Vector3::new(0.12, 0.0, 0.0)]).unwrap();
         let term =
             HarmonicBonds::from_system(&sys, &[BondParam::new(0.1, 1000.0).unwrap()]).unwrap();
         (sys, term)
@@ -142,7 +138,8 @@ mod tests {
         let mut top = Topology::new();
         top.push_atom(Atom::new("A", 1.0, 0.0).unwrap());
         let mut sys = System::new(top, vec![Vector3::zeros()]).unwrap();
-        sys.set_velocities(vec![Vector3::new(2.0, 0.0, 0.0)]).unwrap();
+        sys.set_velocities(vec![Vector3::new(2.0, 0.0, 0.0)])
+            .unwrap();
         let mut integ = LeapFrog::new(0.001).unwrap();
         let mut zero = |s: &System| Ok(EnergyForce::zeros(s.len()));
         for _ in 0..50 {

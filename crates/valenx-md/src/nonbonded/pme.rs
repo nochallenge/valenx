@@ -58,9 +58,7 @@ fn erfc(x: f64) -> f64 {
     let ax = x.abs();
     let t = 1.0 / (1.0 + 0.327_591_1 * ax);
     let y = 1.0
-        - (((((1.061_405_429 * t - 1.453_152_027) * t) + 1.421_413_741) * t
-            - 0.284_496_736)
-            * t
+        - (((((1.061_405_429 * t - 1.453_152_027) * t) + 1.421_413_741) * t - 0.284_496_736) * t
             + 0.254_829_592)
             * t
             * (-ax * ax).exp();
@@ -98,7 +96,10 @@ impl Pme {
     /// periodic (Ewald is only defined under PBC).
     pub fn from_system(system: &System, real_cutoff: f64, accuracy: f64) -> Result<Self> {
         if !(real_cutoff.is_finite() && real_cutoff > 0.0) {
-            return Err(MdError::invalid("real_cutoff", "must be finite and positive"));
+            return Err(MdError::invalid(
+                "real_cutoff",
+                "must be finite and positive",
+            ));
         }
         if !(accuracy.is_finite() && accuracy > 0.0 && accuracy < 1.0) {
             return Err(MdError::invalid("accuracy", "must lie in (0, 1)"));
@@ -143,7 +144,10 @@ impl Pme {
         k_max: i32,
     ) -> Result<Self> {
         if !(real_cutoff.is_finite() && real_cutoff > 0.0) {
-            return Err(MdError::invalid("real_cutoff", "must be finite and positive"));
+            return Err(MdError::invalid(
+                "real_cutoff",
+                "must be finite and positive",
+            ));
         }
         if !(beta.is_finite() && beta > 0.0) {
             return Err(MdError::invalid("beta", "must be finite and positive"));
@@ -208,7 +212,9 @@ impl Pme {
             if qq == 0.0 {
                 continue;
             }
-            let d = system.cell.min_image(system.positions[i] - system.positions[j]);
+            let d = system
+                .cell
+                .min_image(system.positions[i] - system.positions[j]);
             let r2 = d.norm_squared();
             if r2 >= rc2 || r2 < 1e-24 {
                 continue;
@@ -219,9 +225,8 @@ impl Pme {
             let erfc_br = erfc(br);
             out.energy += qq * erfc_br * inv_r;
             // dV/dr = -qq[ erfc(βr)/r² + 2β/√π·exp(-β²r²)/r ].
-            let dv_dr = -qq
-                * (erfc_br * inv_r * inv_r
-                    + two_beta_over_sqrtpi * (-br * br).exp() * inv_r);
+            let dv_dr =
+                -qq * (erfc_br * inv_r * inv_r + two_beta_over_sqrtpi * (-br * br).exp() * inv_r);
             let fij = -(dv_dr * inv_r) * d;
             out.forces[i] += fij;
             out.forces[j] -= fij;
@@ -291,8 +296,7 @@ impl Pme {
                     for a in 0..n {
                         let phase = kvec.dot(&system.positions[a]);
                         let (sp, cp) = phase.sin_cos();
-                        let coeff =
-                            self.charges[a] * 2.0 * ak * COULOMB * (sp * s_re - cp * s_im);
+                        let coeff = self.charges[a] * 2.0 * ak * COULOMB * (sp * s_re - cp * s_im);
                         out.forces[a] += coeff * kvec;
                     }
                 }
@@ -333,9 +337,8 @@ impl Pme {
             out.energy -= qq * erf_br * inv_r;
             // E = −qq·erf(βr)/r, so
             // dE/dr = −qq·[ (2β/√π)·exp(−β²r²)/r − erf(βr)/r² ].
-            let de_dr = -qq
-                * (two_beta_over_sqrtpi * (-br * br).exp() * inv_r
-                    - erf_br * inv_r * inv_r);
+            let de_dr =
+                -qq * (two_beta_over_sqrtpi * (-br * br).exp() * inv_r - erf_br * inv_r * inv_r);
             let fij = -(de_dr * inv_r) * d;
             out.forces[i] += fij;
             out.forces[j] -= fij;

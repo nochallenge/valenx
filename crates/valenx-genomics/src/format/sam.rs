@@ -206,7 +206,10 @@ impl Cigar {
             }
         }
         if saw_digit {
-            return Err(GenomicsError::parse("sam", "CIGAR ends with a trailing length"));
+            return Err(GenomicsError::parse(
+                "sam",
+                "CIGAR ends with a trailing length",
+            ));
         }
         Ok(Cigar { ops })
     }
@@ -398,9 +401,11 @@ impl SamTag {
             .next()
             .ok_or_else(|| GenomicsError::parse("sam", "optional tag missing value"))?;
         let value = match ty {
-            "A" => SamTagValue::Char(raw.chars().next().ok_or_else(|| {
-                GenomicsError::parse("sam", "empty `A`-type tag value")
-            })?),
+            "A" => SamTagValue::Char(
+                raw.chars()
+                    .next()
+                    .ok_or_else(|| GenomicsError::parse("sam", "empty `A`-type tag value"))?,
+            ),
             "i" => SamTagValue::Int(
                 raw.parse::<i64>()
                     .map_err(|_| GenomicsError::parse("sam", "bad `i`-type tag value"))?,
@@ -543,8 +548,7 @@ impl SamRecord {
             ));
         }
         let flags = SamFlags(
-            f[1]
-                .parse::<u16>()
+            f[1].parse::<u16>()
                 .map_err(|_| GenomicsError::parse("sam", "bad FLAG"))?,
         );
         let pos = f[3]
@@ -560,8 +564,16 @@ impl SamRecord {
         let tlen = f[8]
             .parse::<i64>()
             .map_err(|_| GenomicsError::parse("sam", "bad TLEN"))?;
-        let seq = if f[9] == "*" { String::new() } else { f[9].to_string() };
-        let qual = if f[10] == "*" { String::new() } else { f[10].to_string() };
+        let seq = if f[9] == "*" {
+            String::new()
+        } else {
+            f[9].to_string()
+        };
+        let qual = if f[10] == "*" {
+            String::new()
+        } else {
+            f[10].to_string()
+        };
         let mut tags = Vec::new();
         for tok in &f[11..] {
             if tok.is_empty() {
@@ -590,7 +602,11 @@ impl SamRecord {
     /// Renders the record back to one tab-delimited SAM line.
     pub fn to_sam_line(&self) -> String {
         let seq = if self.seq.is_empty() { "*" } else { &self.seq };
-        let qual = if self.qual.is_empty() { "*" } else { &self.qual };
+        let qual = if self.qual.is_empty() {
+            "*"
+        } else {
+            &self.qual
+        };
         let mut s = format!(
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.qname,
@@ -687,17 +703,16 @@ impl SamHeader {
                     match k {
                         "SN" => name = Some(v.to_string()),
                         "LN" => {
-                            length = Some(v.parse::<u64>().map_err(|_| {
-                                GenomicsError::parse("sam", "bad @SQ LN")
-                            })?)
+                            length = Some(
+                                v.parse::<u64>()
+                                    .map_err(|_| GenomicsError::parse("sam", "bad @SQ LN"))?,
+                            )
                         }
                         _ => {}
                     }
                 }
-                let name = name
-                    .ok_or_else(|| GenomicsError::parse("sam", "@SQ missing SN"))?;
-                let length = length
-                    .ok_or_else(|| GenomicsError::parse("sam", "@SQ missing LN"))?;
+                let name = name.ok_or_else(|| GenomicsError::parse("sam", "@SQ missing SN"))?;
+                let length = length.ok_or_else(|| GenomicsError::parse("sam", "@SQ missing LN"))?;
                 self.references.push(RefSeq { name, length });
             }
             "@RG" => self.read_groups.push(line.to_string()),
@@ -887,10 +902,7 @@ r3\t4\t*\t0\t0\t*\t*\t0\t0\tACGTACGT\tIIIIIIII\n";
 
     #[test]
     fn tag_parses_each_type() {
-        assert_eq!(
-            SamTag::parse("NM:i:3").unwrap().value,
-            SamTagValue::Int(3)
-        );
+        assert_eq!(SamTag::parse("NM:i:3").unwrap().value, SamTagValue::Int(3));
         assert_eq!(
             SamTag::parse("RG:Z:group1").unwrap().value,
             SamTagValue::Str("group1".to_string())

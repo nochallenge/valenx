@@ -30,10 +30,7 @@ use valenx_align::{
     msa::{align, refine, RefineParams},
     ScoringScheme,
 };
-use valenx_core::{
-    error::RunPhase,
-    AdapterError, RunContext, RunReport,
-};
+use valenx_core::{error::RunPhase, AdapterError, RunContext, RunReport};
 
 /// Parameters stored in `native_params.toml` by `prepare()`.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -136,18 +133,14 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
     let names: Vec<String> = records
         .iter()
         .enumerate()
-        .map(|(i, (name, _))| {
-            name.clone().unwrap_or_else(|| format!("seq{}", i + 1))
-        })
+        .map(|(i, (name, _))| name.clone().unwrap_or_else(|| format!("seq{}", i + 1)))
         .collect();
     let sequences: Vec<Vec<u8>> = final_msa.rows;
 
-    let aln_io = AlignmentIo::new(names, sequences).map_err(|e| {
-        AdapterError::Run {
-            exit_code: 1,
-            stderr: format!("alignment rows inconsistent: {e}"),
-            phase: RunPhase::Solve,
-        }
+    let aln_io = AlignmentIo::new(names, sequences).map_err(|e| AdapterError::Run {
+        exit_code: 1,
+        stderr: format!("alignment rows inconsistent: {e}"),
+        phase: RunPhase::Solve,
     })?;
 
     let fasta_out = write_fasta(&aln_io, 80);
@@ -174,8 +167,7 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
 /// all sequences. If the set is a subset of `ACGTURYNSWKMBVHD` (IUPAC
 /// DNA/RNA), use NUC.4.4 + DNA defaults; otherwise use BLOSUM62.
 fn detect_scheme(records: &[(Option<String>, Vec<u8>)]) -> ScoringScheme {
-    let dna_set: std::collections::HashSet<u8> =
-        b"ACGTURYNSWKMBVHD".iter().copied().collect();
+    let dna_set: std::collections::HashSet<u8> = b"ACGTURYNSWKMBVHD".iter().copied().collect();
 
     let mut total = 0usize;
     let mut dna_count = 0usize;
@@ -267,8 +259,11 @@ mod tests {
         ];
         let scheme = detect_scheme(&records);
         // NUC.4.4 matrix name
-        assert!(scheme.matrix.name().contains("NUC") || scheme.matrix.name().contains("dna"),
-            "expected nucleotide scheme, got: {}", scheme.matrix.name());
+        assert!(
+            scheme.matrix.name().contains("NUC") || scheme.matrix.name().contains("dna"),
+            "expected nucleotide scheme, got: {}",
+            scheme.matrix.name()
+        );
     }
 
     #[test]
@@ -278,8 +273,11 @@ mod tests {
             (Some("b".to_string()), b"WYVTSRQPNMLKIHGFEDCA".to_vec()),
         ];
         let scheme = detect_scheme(&records);
-        assert!(scheme.matrix.name().contains("BLOSUM"),
-            "expected protein scheme, got: {}", scheme.matrix.name());
+        assert!(
+            scheme.matrix.name().contains("BLOSUM"),
+            "expected protein scheme, got: {}",
+            scheme.matrix.name()
+        );
     }
 
     #[test]

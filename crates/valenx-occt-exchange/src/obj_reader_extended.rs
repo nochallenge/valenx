@@ -137,7 +137,10 @@ fn parse_mtl(text: &str) -> MaterialLib {
 }
 
 fn parse_rgb<'a>(parts: impl Iterator<Item = &'a str>) -> [f32; 3] {
-    let vals: Vec<f32> = parts.take(3).filter_map(|s| s.parse::<f32>().ok()).collect();
+    let vals: Vec<f32> = parts
+        .take(3)
+        .filter_map(|s| s.parse::<f32>().ok())
+        .collect();
     [
         *vals.first().unwrap_or(&0.0),
         *vals.get(1).unwrap_or(&0.0),

@@ -100,10 +100,7 @@ pub fn read_path(path: impl AsRef<Path>) -> Result<Mesh, ObjError> {
     // bytes to `String` with strict UTF-8 validation, surfacing
     // invalid records with a precise line number rather than
     // silently replacing them with U+FFFD.
-    parse_streaming_bytes(
-        id,
-        read_capped_obj_lines(reader, MAX_OBJ_LINE_BYTES),
-    )
+    parse_streaming_bytes(id, read_capped_obj_lines(reader, MAX_OBJ_LINE_BYTES))
 }
 
 /// Round-25 M1: streaming OBJ parser. Mirrors `read_lines` but

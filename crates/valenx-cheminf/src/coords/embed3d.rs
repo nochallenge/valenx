@@ -57,9 +57,7 @@ impl Pcg32 {
     /// Next pseudo-random `u32`.
     pub fn next_u32(&mut self) -> u32 {
         let old = self.state;
-        self.state = old
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(self.inc);
+        self.state = old.wrapping_mul(6364136223846793005).wrapping_add(self.inc);
         let xorshifted = (((old >> 18) ^ old) >> 27) as u32;
         let rot = (old >> 59) as u32;
         xorshifted.rotate_right(rot)
@@ -85,7 +83,10 @@ pub fn embed_3d(mol: &Molecule, seed: u64) -> Result<Molecule> {
     let mut work = add_explicit_hydrogens(mol);
     let n = work.atoms.len();
     if n == 0 {
-        return Err(CheminfError::invalid("molecule", "cannot embed an empty molecule"));
+        return Err(CheminfError::invalid(
+            "molecule",
+            "cannot embed an empty molecule",
+        ));
     }
     if n == 1 {
         work.coords = vec![[0.0, 0.0, 0.0]];
@@ -113,7 +114,10 @@ pub fn embed_3d_mmff94(mol: &Molecule, seed: u64) -> Result<Molecule> {
     let mut work = add_explicit_hydrogens(mol);
     let n = work.atoms.len();
     if n == 0 {
-        return Err(CheminfError::invalid("molecule", "cannot embed an empty molecule"));
+        return Err(CheminfError::invalid(
+            "molecule",
+            "cannot embed an empty molecule",
+        ));
     }
     if n == 1 {
         work.coords = vec![[0.0, 0.0, 0.0]];
@@ -153,9 +157,7 @@ fn bounds_matrix(mol: &Molecule) -> (DMatrix<f64>, DMatrix<f64>) {
                 let l_bc = ideal_bond_length(mol, b, c, bond_order(mol, b, c));
                 let angle = ideal_angle(mol, c);
                 // law of cosines for the 1,3 distance
-                let d = (l_ac * l_ac + l_bc * l_bc
-                    - 2.0 * l_ac * l_bc * angle.cos())
-                .sqrt();
+                let d = (l_ac * l_ac + l_bc * l_bc - 2.0 * l_ac * l_bc * angle.cos()).sqrt();
                 set_bound(&mut lower, &mut upper, a, b, d * 0.93, d * 1.07);
             }
         }
@@ -164,8 +166,8 @@ fn bounds_matrix(mol: &Molecule) -> (DMatrix<f64>, DMatrix<f64>) {
     for i in 0..n {
         for j in i + 1..n {
             if upper[(i, j)] >= 99.0 {
-                let vdw = vdw_radius(mol.atoms[i].atomic_number)
-                    + vdw_radius(mol.atoms[j].atomic_number);
+                let vdw =
+                    vdw_radius(mol.atoms[i].atomic_number) + vdw_radius(mol.atoms[j].atomic_number);
                 lower[(i, j)] = vdw * 0.8;
                 lower[(j, i)] = vdw * 0.8;
                 // upper stays large
@@ -291,11 +293,7 @@ fn triangle_smooth(
 
 /// Metric-matrix embedding: sample distances, build the Gram matrix,
 /// take its top-3 eigenvectors as 3D coordinates.
-fn metric_embed(
-    bounds: &(DMatrix<f64>, DMatrix<f64>),
-    n: usize,
-    seed: u64,
-) -> Vec<[f64; 3]> {
+fn metric_embed(bounds: &(DMatrix<f64>, DMatrix<f64>), n: usize, seed: u64) -> Vec<[f64; 3]> {
     let (lower, upper) = bounds;
     let mut rng = Pcg32::new(seed.wrapping_add(0x9E3779B9));
     // trial distance matrix d[i][j] sampled in [lower, upper]
@@ -361,8 +359,7 @@ pub fn bond_length_rmsd(mol: &Molecule) -> f64 {
         let ideal = ideal_bond_length(mol, b.a, b.b, b.order);
         let p = mol.coords[b.a];
         let q = mol.coords[b.b];
-        let d = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2))
-            .sqrt();
+        let d = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
         sq += (d - ideal).powi(2);
     }
     (sq / mol.bonds.len() as f64).sqrt()

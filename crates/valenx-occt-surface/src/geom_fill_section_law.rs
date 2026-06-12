@@ -148,9 +148,7 @@ pub fn geom_fill_section_law(
     let fit = valenx_surface::fit::nurbs_surface_through_grid(
         &grid, degree_u, degree_v, n_cps_u, n_cps_v,
     )
-    .map_err(|e| {
-        OcctSurfaceError::bad_input("sections", format!("skinning fit failed: {e}"))
-    })?;
+    .map_err(|e| OcctSurfaceError::bad_input("sections", format!("skinning fit failed: {e}")))?;
     Ok(fit.surface)
 }
 
@@ -254,8 +252,7 @@ mod tests {
         let s2 = square_section(1.0, 1.5);
         let s3 = square_section(2.0, 0.5);
         let path = line(Vector3::zeros(), Vector3::new(0.0, 0.0, 2.0));
-        let surf =
-            geom_fill_section_law(&[s1, s2, s3], &[0.0, 0.5, 1.0], &path).unwrap();
+        let surf = geom_fill_section_law(&[s1, s2, s3], &[0.0, 0.5, 1.0], &path).unwrap();
         // Three sections → a valid surface; the middle bulges out.
         assert!(surf.nu() >= 3);
         let mid = surf.evaluate(0.5, 0.5);

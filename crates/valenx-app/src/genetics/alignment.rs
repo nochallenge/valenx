@@ -103,8 +103,7 @@ impl Default for AlignmentPanel {
             gap_extend: 1,
             seq_a: "ACGTACGTACGTAAGGTTCCAACGT".to_string(),
             seq_b: "ACGTAAGTACGTAACGTTCCAACGT".to_string(),
-            msa_text: ">a\nACGTACGTAAGGTT\n>b\nACGTAAGTAAGGTT\n>c\nACGTACGTAACGTT\n"
-                .to_string(),
+            msa_text: ">a\nACGTACGTAAGGTT\n>b\nACGTAAGTAAGGTT\n>c\nACGTACGTAACGTT\n".to_string(),
             kmer_db: ">ref\nACGTACGTACGTAAGGTTCCAACGTACGTACGT\n".to_string(),
             kmer_query: "AAGGTTCCAACGT".to_string(),
             kmer_k: 8,
@@ -163,8 +162,12 @@ impl AlignmentPanel {
     }
 
     /// Whether an undo / redo would do something.
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// Keyboard-shortcut entry: run the active sub-tool.
@@ -391,10 +394,7 @@ fn run_kmer(p: &mut AlignmentPanel) {
                     .filter(|l| !l.is_empty())
                     .map(|l| l.to_string())
                     .unwrap_or_else(|| format!("seq{}", hit.seq_id));
-                out.push_str(&format!(
-                    "  query@{q_off:<5} → {name} @{}\n",
-                    hit.offset,
-                ));
+                out.push_str(&format!("  query@{q_off:<5} → {name} @{}\n", hit.offset,));
             }
             p.result = out;
         }
@@ -526,6 +526,9 @@ mod headless_ui_tests {
             ..AlignmentPanel::default()
         };
         run_kmer(&mut p);
-        assert!(p.error.is_some(), "k-mer search should error on empty query");
+        assert!(
+            p.error.is_some(),
+            "k-mer search should error on empty query"
+        );
     }
 }

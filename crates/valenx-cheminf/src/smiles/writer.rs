@@ -97,14 +97,9 @@ pub fn canonical_ranks(mol: &Molecule) -> Vec<usize> {
     // invariants computed; pick one, halve its rank, and re-refine.
     // For canonical *output* we only need a total order, so resolve
     // ties by the original atom index — stable and deterministic.
-    let mut keyed: Vec<(u64, usize, usize)> = (0..n)
-        .map(|i| (invariant[i], classes[i], i))
-        .collect();
-    keyed.sort_by(|a, b| {
-        a.1.cmp(&b.1)
-            .then(a.0.cmp(&b.0))
-            .then(a.2.cmp(&b.2))
-    });
+    let mut keyed: Vec<(u64, usize, usize)> =
+        (0..n).map(|i| (invariant[i], classes[i], i)).collect();
+    keyed.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)).then(a.2.cmp(&b.2)));
 
     // Map sorted position → atom index, then invert to rank-of-atom.
     let mut rank_of_atom = vec![0usize; n];
@@ -126,12 +121,7 @@ fn atom_invariant(mol: &Molecule, i: usize) -> u64 {
     let h = a.total_h().min(15) as u64;
     let arom = a.aromatic as u64;
     let iso = a.isotope.unwrap_or(0).min(1023) as u64;
-    (degree << 40)
-        | (z << 32)
-        | (charge << 28)
-        | (h << 24)
-        | (arom << 23)
-        | (iso << 8)
+    (degree << 40) | (z << 32) | (charge << 28) | (h << 24) | (arom << 23) | (iso << 8)
 }
 
 /// Replace a vector of arbitrary values by dense ranks `0..k`.
@@ -283,9 +273,7 @@ fn dfs_emit(
         .collect();
     // a ring bond already assigned a digit (opened earlier) should be
     // closed first, in digit order; freshly-opened ones follow
-    ring_bonds.sort_by_key(|&(bi, v)| {
-        (rings.label_of_bond[bi].unwrap_or(u8::MAX), priority[v])
-    });
+    ring_bonds.sort_by_key(|&(bi, v)| (rings.label_of_bond[bi].unwrap_or(u8::MAX), priority[v]));
     for (bi, _) in ring_bonds {
         out.push_str(&bond_symbol(mol, bi, false));
         let lbl = rings.digit_for(bi);
@@ -320,7 +308,14 @@ fn dfs_emit(
         }
         out.push_str(&bond_symbol(mol, bi, false));
         dfs_emit(
-            mol, child, Some(bi), priority, tree_edges, rings, visited, out,
+            mol,
+            child,
+            Some(bi),
+            priority,
+            tree_edges,
+            rings,
+            visited,
+            out,
         );
         if branch {
             out.push(')');

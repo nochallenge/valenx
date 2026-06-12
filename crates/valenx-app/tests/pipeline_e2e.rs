@@ -332,17 +332,13 @@ GCTAAAGACAATTAAATAACATACACATCAGCACGAAAATTGTTGGCCCAATGTGCATCG
     // --- Stage 3: distance matrix + neighbor-joining tree
     //              (valenx-phylo) ---
     let labels: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
-    let dm = distance_matrix(&msa, &labels, DistanceModel::JukesCantor)
-        .expect("distance matrix");
+    let dm = distance_matrix(&msa, &labels, DistanceModel::JukesCantor).expect("distance matrix");
     assert_eq!(dm.len(), 4);
     // The within-pair distance must be smaller than the between-pair
     // distance — the genomic signal survived the whole pipeline.
     let d_ab = dm.get(0, 1);
     let d_ac = dm.get(0, 2);
-    assert!(
-        d_ab < d_ac,
-        "d(A,B)={d_ab:.4} should be < d(A,C)={d_ac:.4}"
-    );
+    assert!(d_ab < d_ac, "d(A,B)={d_ab:.4} should be < d(A,C)={d_ac:.4}");
 
     let tree = cluster::neighbor_joining(&dm).expect("NJ tree");
     assert_eq!(tree.leaf_count(), 4, "tree has one leaf per taxon");
@@ -427,8 +423,7 @@ fn e2e_smiles_to_descriptors_to_docking_prep() {
     // --- Ligand prep (valenx-dock-screen) ---
     // Protonation at physiological pH 7.4: the carboxylic acid
     // deprotonates to a carboxylate, giving the molecule net charge −1.
-    let prep = prepare_ligand(&mol, 7.4, ChargeModel::Gasteiger)
-        .expect("ligand preparation");
+    let prep = prepare_ligand(&mol, 7.4, ChargeModel::Gasteiger).expect("ligand preparation");
     assert_eq!(
         prep.deprotonated, 1,
         "the -COOH should deprotonate at pH 7.4"
@@ -586,10 +581,13 @@ GGGCACCATGGCTGCAAAAGAAGATCTGGCTGCAAAAGAAGATCTGGCTGCATAAGGGCAC";
         let orf_nt = dna
             .slice(best.span.start, best.span.end)
             .expect("ORF span is within the sequence");
-        let retranslated =
-            translate::translate_default(&orf_nt, &code).expect("re-translate");
+        let retranslated = translate::translate_default(&orf_nt, &code).expect("re-translate");
         assert_eq!(
-            retranslated.as_bytes().iter().filter(|&&b| b != b'*').count(),
+            retranslated
+                .as_bytes()
+                .iter()
+                .filter(|&&b| b != b'*')
+                .count(),
             protein.as_bytes().iter().filter(|&&b| b != b'*').count(),
             "independent re-translation matches the ORF protein length"
         );
@@ -673,9 +671,7 @@ fn e2e_reaction_network_ode_and_gillespie() {
 
     // --- Stage 1: deterministic ODE time-course (valenx-sysbio::ode) ---
     let t_end = 4.0;
-    let traj = TimeCourse::new(t_end)
-        .run(&model)
-        .expect("ODE integration");
+    let traj = TimeCourse::new(t_end).run(&model).expect("ODE integration");
     let last = traj.states.last().expect("trajectory has samples");
     // Total mass is conserved: [A] + [B] == A0 at every time.
     let total = last[0] + last[1];
@@ -727,17 +723,14 @@ fn e2e_body_mesh_to_windtunnel_drag_coefficient() {
     use nalgebra::Vector3;
     use valenx_aero::domain::{BoundaryConditions, TunnelSizing};
     use valenx_aero::{
-        coefficients, geometry, integrate_forces, solve_steady, BodyMotion,
-        SolverControls, TurbulenceModel, Wind, WindTunnel,
+        coefficients, geometry, integrate_forces, solve_steady, BodyMotion, SolverControls,
+        TurbulenceModel, Wind, WindTunnel,
     };
 
     // A 1 m cube — the canonical bluff body. Its drag coefficient is a
     // textbook number (~1.0-1.3 for a cube broadside in turbulent flow);
     // a coarse immersed-boundary grid lands in the right band.
-    let body = geometry::box_body(
-        Vector3::new(-0.5, -0.5, -0.5),
-        Vector3::new(0.5, 0.5, 0.5),
-    );
+    let body = geometry::box_body(Vector3::new(-0.5, -0.5, -0.5), Vector3::new(0.5, 0.5, 0.5));
     assert!(
         body.triangles.len() >= 12,
         "a box mesh has at least 12 triangles"
@@ -817,8 +810,7 @@ fn e2e_molecular_geometry_to_hartree_fock_energy() {
     assert_eq!(geom.n_atoms(), 2);
 
     // --- Run RHF/STO-3G (valenx-qchem) ---
-    let report = run_rhf(&geom, "STO-3G", ScfSettings::default())
-        .expect("RHF converges for H2");
+    let report = run_rhf(&geom, "STO-3G", ScfSettings::default()).expect("RHF converges for H2");
 
     // --- Stage 3: energy + properties must be physically sane ---
     // The RHF/STO-3G total energy of H2 is ~ -1.117 Hartree (a textbook

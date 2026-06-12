@@ -328,10 +328,7 @@ impl AdapterRegistry {
         let ce = [CryoEmTool::Relion, CryoEmTool::CryoSparc, CryoEmTool::Eman2];
 
         AdapterRegistry {
-            structure_prediction: sp
-                .iter()
-                .map(|t| probe_structure_prediction(*t))
-                .collect(),
+            structure_prediction: sp.iter().map(|t| probe_structure_prediction(*t)).collect(),
             generative_design: gd.iter().map(|t| probe_generative(*t)).collect(),
             nn_docking: nd.iter().map(|t| probe_nn_docking(*t)).collect(),
             cryo_em: ce.iter().map(|t| probe_cryo_em(*t)).collect(),
@@ -423,7 +420,8 @@ fn probe_cryo_em(tool: CryoEmTool) -> ToolAvailability {
 mod tests {
     use super::*;
 
-    const RECEPTOR: &str = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00     0.000 C
+    const RECEPTOR: &str =
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00     0.000 C
 ATOM      2  CB  ALA A   1       2.000   0.000   0.000  1.00  0.00     0.000 C
 ";
     const LIGAND: &str = "ROOT

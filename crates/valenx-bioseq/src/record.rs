@@ -219,9 +219,9 @@ fn clamp_slice(parent: &Seq, start: usize, end: usize) -> Seq {
     let n = parent.len();
     let s = start.min(n);
     let e = end.min(n);
-    parent
-        .slice(s, e.max(s))
-        .unwrap_or_else(|_| Seq::new_unchecked(parent.kind(), Vec::new(), crate::seq::Topology::Linear))
+    parent.slice(s, e.max(s)).unwrap_or_else(|_| {
+        Seq::new_unchecked(parent.kind(), Vec::new(), crate::seq::Topology::Linear)
+    })
 }
 
 /// An annotation on a [`SeqRecord`] — the Biopython `SeqFeature`

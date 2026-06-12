@@ -116,11 +116,7 @@ pub fn conservation_laws(model: &Model, tol: f64) -> Result<Vec<ConservationLaw>
                 }
             })
             .collect();
-        let conserved_total = coefficients
-            .iter()
-            .zip(&init)
-            .map(|(c, x)| c * x)
-            .sum();
+        let conserved_total = coefficients.iter().zip(&init).map(|(c, x)| c * x).sum();
         laws.push(ConservationLaw {
             coefficients,
             conserved_total,

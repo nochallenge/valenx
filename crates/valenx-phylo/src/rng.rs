@@ -38,9 +38,7 @@ impl Rng {
     /// Draws the next 32-bit value.
     pub fn next_u32(&mut self) -> u32 {
         let old = self.state;
-        self.state = old
-            .wrapping_mul(Self::MULT)
-            .wrapping_add(self.inc);
+        self.state = old.wrapping_mul(Self::MULT).wrapping_add(self.inc);
         // XSH-RR output permutation.
         let xorshifted = (((old >> 18) ^ old) >> 27) as u32;
         let rot = (old >> 59) as u32;
@@ -131,9 +129,7 @@ impl Rng {
                 continue;
             }
             let u = self.uniform();
-            if u < 1.0 - 0.0331 * x.powi(4)
-                || u.ln() < 0.5 * x * x + d * (1.0 - v + v.ln())
-            {
+            if u < 1.0 - 0.0331 * x.powi(4) || u.ln() < 0.5 * x * x + d * (1.0 - v + v.ln()) {
                 return d * v * scale;
             }
         }
@@ -212,8 +208,7 @@ mod tests {
     fn gamma_mean_is_about_right() {
         let mut rng = Rng::new(123);
         let n = 50_000;
-        let mean: f64 =
-            (0..n).map(|_| rng.gamma(2.0, 1.5)).sum::<f64>() / n as f64;
+        let mean: f64 = (0..n).map(|_| rng.gamma(2.0, 1.5)).sum::<f64>() / n as f64;
         // Expected mean k·θ = 3.0.
         assert!((mean - 3.0).abs() < 0.1, "mean = {mean}");
     }

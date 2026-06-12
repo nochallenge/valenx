@@ -85,10 +85,7 @@ pub fn offset_api_draft_angle_with_neutral_plane(
         ));
     }
     if !angle_rad.is_finite() {
-        return Err(OcctAdvancedError::bad_input(
-            "angle_rad",
-            "must be finite",
-        ));
+        return Err(OcctAdvancedError::bad_input("angle_rad", "must be finite"));
     }
     let n_norm =
         (neutral_normal[0].powi(2) + neutral_normal[1].powi(2) + neutral_normal[2].powi(2)).sqrt();
@@ -171,9 +168,8 @@ fn apply_neutral_plane_draft(
             + rel_origin[1] * neutral_normal[1]
             + rel_origin[2] * neutral_normal[2];
         // Height along the pulling direction.
-        let h = rel_origin[0] * pulling[0]
-            + rel_origin[1] * pulling[1]
-            + rel_origin[2] * pulling[2];
+        let h =
+            rel_origin[0] * pulling[0] + rel_origin[1] * pulling[1] + rel_origin[2] * pulling[2];
         // Draft only the geometry genuinely past the plane on the
         // pulling side.
         if plane_side <= 1e-9 || h <= 0.0 {
@@ -181,11 +177,7 @@ fn apply_neutral_plane_draft(
         }
         // Radial-outward direction = (vertex − centroid) with the
         // pulling component removed.
-        let rad = [
-            v.x - centroid[0],
-            v.y - centroid[1],
-            v.z - centroid[2],
-        ];
+        let rad = [v.x - centroid[0], v.y - centroid[1], v.z - centroid[2]];
         let rad_dot = rad[0] * pulling[0] + rad[1] * pulling[1] + rad[2] * pulling[2];
         let perp = [
             rad[0] - pulling[0] * rad_dot,

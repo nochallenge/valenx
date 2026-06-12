@@ -111,12 +111,7 @@ pub fn gotoh(a: &[u8], b: &[u8], scheme: &ScoringScheme) -> Result<Alignment> {
 
 /// [`gotoh`] with an explicit cell cap so tests can exercise the
 /// over-cap rejection without a production-size allocation.
-fn gotoh_capped(
-    a: &[u8],
-    b: &[u8],
-    scheme: &ScoringScheme,
-    max_cells: usize,
-) -> Result<Alignment> {
+fn gotoh_capped(a: &[u8], b: &[u8], scheme: &ScoringScheme, max_cells: usize) -> Result<Alignment> {
     let n = a.len();
     let m = b.len();
     let GapCost { open, extend } = scheme.gap;
@@ -288,7 +283,10 @@ mod tests {
     use crate::matrix::{GapCost, ScoringScheme, SubstitutionMatrix};
 
     fn dna_scheme(open: i32, extend: i32) -> ScoringScheme {
-        ScoringScheme::new(SubstitutionMatrix::dna_simple(1, -1), GapCost::new(open, extend))
+        ScoringScheme::new(
+            SubstitutionMatrix::dna_simple(1, -1),
+            GapCost::new(open, extend),
+        )
     }
 
     #[test]
@@ -344,10 +342,7 @@ mod tests {
     fn gotoh_identical_is_full_score() {
         let s = ScoringScheme::new(SubstitutionMatrix::blosum62(), GapCost::new(11, 1));
         let al = gotoh(b"MKVLAAG", b"MKVLAAG", &s).unwrap();
-        let expect: i32 = b"MKVLAAG"
-            .iter()
-            .map(|&r| s.sub(r, r))
-            .sum();
+        let expect: i32 = b"MKVLAAG".iter().map(|&r| s.sub(r, r)).sum();
         assert_eq!(al.score, expect);
     }
 

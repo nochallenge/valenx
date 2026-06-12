@@ -211,8 +211,8 @@ mod tests {
         // recover an α-helix structurally close to the canonical
         // (-63°, -42°) helix.
         let seq = "LLLLLLLLLLLL"; // 12 residues
-        // Build the canonical native (-63, -42) all-Leu helix as the
-        // reference.
+                                  // Build the canonical native (-63, -42) all-Leu helix as the
+                                  // reference.
         let mut native = crate::model::ProteinModel::from_sequence(seq).expect("native");
         crate::model::build_backbone_from_torsions(&mut native, &[(-63.0, -42.0); 12])
             .expect("build native");
@@ -227,8 +227,7 @@ mod tests {
             ..McRefineOptions::default()
         };
         let res = coarse_to_fine_with_refine(seq, 600, 100, 3, Some(refine)).expect("e2e");
-        let rmsd = crate::refine::superpose::ca_rmsd_superposed(&res.model, &native)
-            .expect("rmsd");
+        let rmsd = crate::refine::superpose::ca_rmsd_superposed(&res.model, &native).expect("rmsd");
         // For a short canonical helix the end-to-end predicted model
         // should be reasonably close to the native helix — a
         // **classical** ab-initio result; we assert RMSD ≤ 8 Å (a

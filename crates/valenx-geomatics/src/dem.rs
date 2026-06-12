@@ -102,24 +102,27 @@ pub fn from_xyz_ascii(text: &str) -> Result<Dem, GeomaticsError> {
                 msg: format!("expected 3 columns, got {}", parts.len()),
             });
         }
-        let x: f64 = parts[0].parse().map_err(|e: std::num::ParseFloatError| {
-            GeomaticsError::Parse {
-                line: i + 1,
-                msg: format!("bad x: {e}"),
-            }
-        })?;
-        let y: f64 = parts[1].parse().map_err(|e: std::num::ParseFloatError| {
-            GeomaticsError::Parse {
-                line: i + 1,
-                msg: format!("bad y: {e}"),
-            }
-        })?;
-        let z: f64 = parts[2].parse().map_err(|e: std::num::ParseFloatError| {
-            GeomaticsError::Parse {
-                line: i + 1,
-                msg: format!("bad z: {e}"),
-            }
-        })?;
+        let x: f64 =
+            parts[0]
+                .parse()
+                .map_err(|e: std::num::ParseFloatError| GeomaticsError::Parse {
+                    line: i + 1,
+                    msg: format!("bad x: {e}"),
+                })?;
+        let y: f64 =
+            parts[1]
+                .parse()
+                .map_err(|e: std::num::ParseFloatError| GeomaticsError::Parse {
+                    line: i + 1,
+                    msg: format!("bad y: {e}"),
+                })?;
+        let z: f64 =
+            parts[2]
+                .parse()
+                .map_err(|e: std::num::ParseFloatError| GeomaticsError::Parse {
+                    line: i + 1,
+                    msg: format!("bad z: {e}"),
+                })?;
         rows.push((x, y, z));
     }
     if rows.is_empty() {

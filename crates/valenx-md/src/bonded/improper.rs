@@ -145,9 +145,8 @@ mod tests {
     #[test]
     fn planar_centre_is_near_zero_energy() {
         let sys = improper_system(0.0);
-        let term =
-            ImproperDihedrals::from_system(&sys, &[ImproperParam::new(0.0, 200.0).unwrap()])
-                .unwrap();
+        let term = ImproperDihedrals::from_system(&sys, &[ImproperParam::new(0.0, 200.0).unwrap()])
+            .unwrap();
         let mut ef = EnergyForce::zeros(4);
         term.accumulate(&sys, &mut ef).unwrap();
         // Planar -> dihedral ~0 or ~pi; energy is small modulo the
@@ -205,9 +204,8 @@ mod tests {
     #[test]
     fn net_force_vanishes() {
         let sys = improper_system(0.05);
-        let term =
-            ImproperDihedrals::from_system(&sys, &[ImproperParam::new(0.0, 100.0).unwrap()])
-                .unwrap();
+        let term = ImproperDihedrals::from_system(&sys, &[ImproperParam::new(0.0, 100.0).unwrap()])
+            .unwrap();
         let mut ef = EnergyForce::zeros(4);
         term.accumulate(&sys, &mut ef).unwrap();
         let net: Vector3<f64> = ef.forces.iter().sum();

@@ -71,11 +71,7 @@ pub fn fold(seq: &RnaSeq) -> Result<NussinovResult> {
             let mut best = m[at(i + 1, j)].max(m[at(i, j - 1)]);
             // i pairs with j
             if j - i > MIN_HAIRPIN && can_pair_codes(codes[i], codes[j]) {
-                let inner = if i + 2 <= j {
-                    m[at(i + 1, j - 1)]
-                } else {
-                    0
-                };
+                let inner = if i + 2 <= j { m[at(i + 1, j - 1)] } else { 0 };
                 best = best.max(inner + 1);
             }
             // bifurcation
@@ -109,11 +105,7 @@ pub fn fold(seq: &RnaSeq) -> Result<NussinovResult> {
         }
         // case: i pairs j
         if j - i > MIN_HAIRPIN && can_pair_codes(codes[i], codes[j]) {
-            let inner = if i + 2 <= j {
-                m[at(i + 1, j - 1)]
-            } else {
-                0
-            };
+            let inner = if i + 2 <= j { m[at(i + 1, j - 1)] } else { 0 };
             if inner + 1 == here {
                 partner[i] = Some(j);
                 partner[j] = Some(i);

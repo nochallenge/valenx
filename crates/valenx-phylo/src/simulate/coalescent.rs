@@ -54,10 +54,7 @@ impl PopulationSize {
         match self {
             PopulationSize::Constant(n) => {
                 if *n <= 0.0 {
-                    return Err(PhyloError::invalid(
-                        "population_size",
-                        "must be positive",
-                    ));
+                    return Err(PhyloError::invalid("population_size", "must be positive"));
                 }
             }
             PopulationSize::Piecewise(segs) => {
@@ -94,11 +91,7 @@ impl PopulationSize {
 /// # Errors
 /// [`PhyloError::Invalid`] if fewer than two labels are given or the
 /// population history is invalid.
-pub fn simulate_coalescent(
-    labels: &[String],
-    pop: &PopulationSize,
-    seed: u64,
-) -> Result<Tree> {
+pub fn simulate_coalescent(labels: &[String], pop: &PopulationSize, seed: u64) -> Result<Tree> {
     if labels.len() < 2 {
         return Err(PhyloError::invalid("labels", "need at least two lineages"));
     }
@@ -214,8 +207,7 @@ mod tests {
 
     #[test]
     fn produces_a_valid_ultrametric_tree() {
-        let t = simulate_coalescent(&labels(8), &PopulationSize::Constant(1.0), 42)
-            .unwrap();
+        let t = simulate_coalescent(&labels(8), &PopulationSize::Constant(1.0), 42).unwrap();
         assert_eq!(t.leaf_count(), 8);
         assert!(t.validate().is_ok());
         assert!(t.rooted);
@@ -234,23 +226,17 @@ mod tests {
 
     #[test]
     fn is_deterministic_for_a_seed() {
-        let a = simulate_coalescent(&labels(6), &PopulationSize::Constant(2.0), 7)
-            .unwrap();
-        let b = simulate_coalescent(&labels(6), &PopulationSize::Constant(2.0), 7)
-            .unwrap();
+        let a = simulate_coalescent(&labels(6), &PopulationSize::Constant(2.0), 7).unwrap();
+        let b = simulate_coalescent(&labels(6), &PopulationSize::Constant(2.0), 7).unwrap();
         assert_eq!(write_topology(&a), write_topology(&b));
     }
 
     #[test]
     fn larger_population_gives_a_taller_tree() {
         // Coalescence rate ∝ 1/N, so bigger N => longer waiting times.
-        let small = simulate_coalescent(&labels(20), &PopulationSize::Constant(0.5), 1)
-            .unwrap();
-        let large = simulate_coalescent(&labels(20), &PopulationSize::Constant(50.0), 1)
-            .unwrap();
-        let height = |t: &Tree| -> f64 {
-            t.patristic_distance(t.root(), t.leaves()[0])
-        };
+        let small = simulate_coalescent(&labels(20), &PopulationSize::Constant(0.5), 1).unwrap();
+        let large = simulate_coalescent(&labels(20), &PopulationSize::Constant(50.0), 1).unwrap();
+        let height = |t: &Tree| -> f64 { t.patristic_distance(t.root(), t.leaves()[0]) };
         assert!(height(&large) > height(&small));
     }
 
@@ -268,19 +254,9 @@ mod tests {
 
     #[test]
     fn rejects_bad_input() {
-        assert!(
-            simulate_coalescent(&labels(1), &PopulationSize::Constant(1.0), 1).is_err()
-        );
-        assert!(
-            simulate_coalescent(&labels(4), &PopulationSize::Constant(-1.0), 1)
-                .is_err()
-        );
-        assert!(simulate_coalescent(
-            &labels(4),
-            &PopulationSize::Piecewise(vec![]),
-            1
-        )
-        .is_err());
+        assert!(simulate_coalescent(&labels(1), &PopulationSize::Constant(1.0), 1).is_err());
+        assert!(simulate_coalescent(&labels(4), &PopulationSize::Constant(-1.0), 1).is_err());
+        assert!(simulate_coalescent(&labels(4), &PopulationSize::Piecewise(vec![]), 1).is_err());
     }
 
     /// Topology fingerprint: sorted leaf set under each internal node.

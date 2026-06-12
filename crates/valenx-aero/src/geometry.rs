@@ -142,7 +142,11 @@ impl TriMesh {
                         mesh.nodes.len()
                     )));
                 }
-                tris.push(Triangle::new(mesh.nodes[ia], mesh.nodes[ib], mesh.nodes[ic]));
+                tris.push(Triangle::new(
+                    mesh.nodes[ia],
+                    mesh.nodes[ib],
+                    mesh.nodes[ic],
+                ));
             }
         }
         tris.retain(|t| !t.is_degenerate());
@@ -363,8 +367,7 @@ pub fn sphere_body(centre: Vector3<f64>, radius: f64, lat: usize, lon: usize) ->
 pub fn naca4_half_thickness(x: f64, t: f64) -> f64 {
     let x = x.clamp(0.0, 1.0);
     5.0 * t
-        * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x * x
-            + 0.2843 * x * x * x
+        * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x * x + 0.2843 * x * x * x
             - 0.1015 * x * x * x * x)
 }
 
@@ -383,12 +386,7 @@ pub fn naca4_half_thickness(x: f64, t: f64) -> f64 {
 /// A symmetric section at zero geometric incidence; the angle of attack
 /// is applied by yawing / pitching the *wind* (or rotating the body),
 /// exactly as a real wind-tunnel sweep does.
-pub fn naca_wing(
-    chord: f64,
-    span: f64,
-    thickness_fraction: f64,
-    chord_panels: usize,
-) -> TriMesh {
+pub fn naca_wing(chord: f64, span: f64, thickness_fraction: f64, chord_panels: usize) -> TriMesh {
     let n = chord_panels.max(4);
     let t = thickness_fraction.max(1e-4);
     // Chordwise stations with cosine clustering — the leading edge,
@@ -405,9 +403,8 @@ pub fn naca_wing(
 
     // Section profile points: upper surface (z = +y_t) and lower
     // surface (z = −y_t) at each chord station, scaled by the chord.
-    let upper = |x_frac: f64| -> (f64, f64) {
-        (x_frac * chord, naca4_half_thickness(x_frac, t) * chord)
-    };
+    let upper =
+        |x_frac: f64| -> (f64, f64) { (x_frac * chord, naca4_half_thickness(x_frac, t) * chord) };
 
     let mut tris = Vec::new();
     let v = Vector3::new;

@@ -438,9 +438,8 @@ TORSDOF 0
                 for entry in rd.flatten() {
                     let name = entry.file_name();
                     if let Some(s) = name.to_str() {
-                        if s.starts_with(
-                            tmp.file_name().and_then(|n| n.to_str()).unwrap_or(""),
-                        ) && s.contains(".tmp.")
+                        if s.starts_with(tmp.file_name().and_then(|n| n.to_str()).unwrap_or(""))
+                            && s.contains(".tmp.")
                         {
                             let _ = std::fs::remove_file(entry.path());
                         }

@@ -607,21 +607,33 @@ mod tests {
         let mut pts = Vec::with_capacity(64);
         let mut state: u64 = 0x12345;
         for _ in 0..64 {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let x = ((state >> 32) as i32 as f64) * 1e-7;
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let y = ((state >> 32) as i32 as f64) * 1e-7;
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let z = ((state >> 32) as i32 as f64) * 1e-7;
             pts.push(pt(x, y, z));
         }
         let tree = KdTree::build(&pts);
         for _ in 0..32 {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let qx = ((state >> 32) as i32 as f64) * 1e-7;
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let qy = ((state >> 32) as i32 as f64) * 1e-7;
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let qz = ((state >> 32) as i32 as f64) * 1e-7;
             let q = pt(qx, qy, qz);
             let kd_idx = tree.nearest(&q);

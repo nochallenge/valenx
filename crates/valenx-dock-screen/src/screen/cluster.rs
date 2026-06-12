@@ -168,7 +168,7 @@ TORSDOF 0
         let lig = one_atom_ligand();
         let poses = vec![
             pose_at(0.0, -8.0),
-            pose_at(0.5, -7.5), // 0.5 Å from the first — same cluster
+            pose_at(0.5, -7.5),  // 0.5 Å from the first — same cluster
             pose_at(10.0, -6.0), // far — its own cluster
         ];
         let clusters = cluster_poses(&lig, &poses, 1.0).unwrap();
@@ -194,11 +194,7 @@ TORSDOF 0
     #[test]
     fn ranked_representatives_returns_one_per_cluster() {
         let lig = one_atom_ligand();
-        let poses = vec![
-            pose_at(0.0, -8.0),
-            pose_at(0.4, -7.0),
-            pose_at(20.0, -9.0),
-        ];
+        let poses = vec![pose_at(0.0, -8.0), pose_at(0.4, -7.0), pose_at(20.0, -9.0)];
         let reps = ranked_representatives(&lig, &poses, 1.0).unwrap();
         assert_eq!(reps.len(), 2);
         // Best-first ranking: the -9.0 pose leads.

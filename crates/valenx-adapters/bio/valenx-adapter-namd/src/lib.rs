@@ -150,10 +150,7 @@ impl Adapter for NamdAdapter {
         let resolved_config = if input.config.is_absolute() {
             input.config.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.config,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.config)?
         };
 
         let binary_path = find_on_path(BINARIES).ok_or_else(|| AdapterError::ToolNotInstalled {

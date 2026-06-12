@@ -68,10 +68,7 @@ impl DesiredChange {
                 let t = to.to_ascii_uppercase();
                 matches!(
                     (f, t),
-                    (b'C', b'T')
-                        | (b'T', b'C')
-                        | (b'A', b'G')
-                        | (b'G', b'A')
+                    (b'C', b'T') | (b'T', b'C') | (b'A', b'G') | (b'G', b'A')
                 )
             }
             _ => false,
@@ -337,19 +334,31 @@ mod tests {
 
     #[test]
     fn transition_classifier() {
-        assert!(DesiredChange::PointMutation { from: b'C', to: b'T' }
-            .is_base_editable_transition());
-        assert!(DesiredChange::PointMutation { from: b'A', to: b'G' }
-            .is_base_editable_transition());
+        assert!(DesiredChange::PointMutation {
+            from: b'C',
+            to: b'T'
+        }
+        .is_base_editable_transition());
+        assert!(DesiredChange::PointMutation {
+            from: b'A',
+            to: b'G'
+        }
+        .is_base_editable_transition());
         // A transversion is not base-editable.
-        assert!(!DesiredChange::PointMutation { from: b'C', to: b'G' }
-            .is_base_editable_transition());
+        assert!(!DesiredChange::PointMutation {
+            from: b'C',
+            to: b'G'
+        }
+        .is_base_editable_transition());
         assert!(!DesiredChange::GeneKnockout.is_base_editable_transition());
     }
 
     #[test]
     fn base_editing_wins_for_a_transition_with_pam() {
-        let change = DesiredChange::PointMutation { from: b'A', to: b'G' };
+        let change = DesiredChange::PointMutation {
+            from: b'A',
+            to: b'G',
+        };
         let advice = advise_strategy(&change, true);
         assert_eq!(advice.recommended(), EditApproach::BaseEditing);
     }
@@ -357,7 +366,10 @@ mod tests {
     #[test]
     fn prime_editing_wins_for_a_transversion() {
         // C->G is not base-editable; prime editing should top the rank.
-        let change = DesiredChange::PointMutation { from: b'C', to: b'G' };
+        let change = DesiredChange::PointMutation {
+            from: b'C',
+            to: b'G',
+        };
         let advice = advise_strategy(&change, true);
         assert_eq!(advice.recommended(), EditApproach::PrimeEditing);
     }
@@ -384,7 +396,10 @@ mod tests {
 
     #[test]
     fn no_pam_demotes_pam_dependent_approaches() {
-        let change = DesiredChange::PointMutation { from: b'A', to: b'G' };
+        let change = DesiredChange::PointMutation {
+            from: b'A',
+            to: b'G',
+        };
         let with_pam = advise_strategy(&change, true);
         let without = advise_strategy(&change, false);
         // Base editing's score must drop when no PAM is available.

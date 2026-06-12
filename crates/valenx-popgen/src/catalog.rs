@@ -94,8 +94,7 @@ impl Catalog {
                     },
                     DemographicModel {
                         id: "OutOfAfricaExpansion",
-                        description:
-                            "an ancestral population, a bottleneck at the \
+                        description: "an ancestral population, a bottleneck at the \
                              out-of-Africa migration, then recent expansion",
                         epochs: vec![
                             // Recent: a large, recently expanded population.
@@ -142,13 +141,9 @@ impl Catalog {
                     },
                     DemographicModel {
                         id: "SouthMiddleAtlas",
-                        description:
-                            "a recent contraction following a larger \
+                        description: "a recent contraction following a larger \
                              ancestral population",
-                        epochs: vec![
-                            (10_000.0, 25_000.0),
-                            (f64::INFINITY, 250_000.0),
-                        ],
+                        epochs: vec![(10_000.0, 25_000.0), (f64::INFINITY, 250_000.0)],
                     },
                 ],
             ),
@@ -192,9 +187,7 @@ impl Catalog {
             .iter()
             .find(|(s, _)| s.id == id)
             .map(|(s, _)| s)
-            .ok_or_else(|| {
-                PopgenError::invalid("species", format!("no catalog entry `{id}`"))
-            })
+            .ok_or_else(|| PopgenError::invalid("species", format!("no catalog entry `{id}`")))
     }
 
     /// The named demographic models available for a species.
@@ -207,10 +200,7 @@ impl Catalog {
             .find(|(s, _)| s.id == species_id)
             .map(|(_, m)| m.as_slice())
             .ok_or_else(|| {
-                PopgenError::invalid(
-                    "species",
-                    format!("no catalog entry `{species_id}`"),
-                )
+                PopgenError::invalid("species", format!("no catalog entry `{species_id}`"))
             })
     }
 
@@ -218,11 +208,7 @@ impl Catalog {
     ///
     /// # Errors
     /// [`PopgenError::Invalid`] if the species or model id is unknown.
-    pub fn demographic_model(
-        &self,
-        species_id: &str,
-        model_id: &str,
-    ) -> Result<&DemographicModel> {
+    pub fn demographic_model(&self, species_id: &str, model_id: &str) -> Result<&DemographicModel> {
         self.demographic_models(species_id)?
             .iter()
             .find(|m| m.id == model_id)
@@ -304,8 +290,7 @@ mod tests {
         let cat = Catalog::standard();
         let model = cat.demographic_model("HomSap", "Constant").unwrap();
         let labels: Vec<String> = (0..6).map(|i| format!("s{i}")).collect();
-        let tree =
-            coalescent(&labels, &model.to_pop_history(), 42).unwrap();
+        let tree = coalescent(&labels, &model.to_pop_history(), 42).unwrap();
         assert_eq!(tree.leaf_count(), 6);
     }
 

@@ -385,17 +385,12 @@ pub fn simulate_arg(params: ArgParams) -> Result<TreeSequence> {
     while active.len() > 1 {
         events += 1;
         if events > cap {
-            return Err(PopgenError::model(
-                "ARG simulation exceeded its event cap",
-            ));
+            return Err(PopgenError::model("ARG simulation exceeded its event cap"));
         }
         let k = active.len() as f64;
         let coal_rate = k * (k - 1.0) / 2.0 / params.effective_size;
         // Per-lineage recombination intensity.
-        let lineage_rate: Vec<f64> = active
-            .iter()
-            .map(|lin| rate_integral(lin, map))
-            .collect();
+        let lineage_rate: Vec<f64> = active.iter().map(|lin| rate_integral(lin, map)).collect();
         let recomb_rate: f64 = lineage_rate.iter().sum();
         let total_rate = coal_rate + recomb_rate;
         if total_rate <= 0.0 {
@@ -451,10 +446,14 @@ fn coalesce(
     breakpoints.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
     // Pre-create per-interval node references (segments) from x and y.
     let x_at = |pos: f64| -> Option<usize> {
-        x.iter().find(|s| s.left <= pos && pos < s.right).map(|s| s.node)
+        x.iter()
+            .find(|s| s.left <= pos && pos < s.right)
+            .map(|s| s.node)
     };
     let y_at = |pos: f64| -> Option<usize> {
-        y.iter().find(|s| s.left <= pos && pos < s.right).map(|s| s.node)
+        y.iter()
+            .find(|s| s.left <= pos && pos < s.right)
+            .map(|s| s.node)
     };
 
     // Process each contiguous sub-interval.
@@ -573,15 +572,8 @@ fn recombine(
 
 /// Samples a recombination breakpoint within a lineage's material
 /// according to the rate-map intensity restricted to that material.
-fn sample_breakpoint_in_lineage(
-    rng: &mut Rng,
-    lin: &Lineage,
-    map: &RecombinationMap,
-) -> f64 {
-    let weights: Vec<f64> = lin
-        .iter()
-        .map(|s| map.integrate(s.left, s.right))
-        .collect();
+fn sample_breakpoint_in_lineage(rng: &mut Rng, lin: &Lineage, map: &RecombinationMap) -> f64 {
+    let weights: Vec<f64> = lin.iter().map(|s| map.integrate(s.left, s.right)).collect();
     let total: f64 = weights.iter().sum();
     if total <= 0.0 {
         let s = lin[0];
@@ -618,7 +610,9 @@ fn collect_breakpoints(x: &Lineage, y: &Lineage) -> Vec<f64> {
 /// Coalesces adjacent segments sharing the same node id.
 fn squash(mut seg: Lineage) -> Lineage {
     seg.sort_by(|a, b| {
-        a.left.partial_cmp(&b.left).unwrap_or(std::cmp::Ordering::Equal)
+        a.left
+            .partial_cmp(&b.left)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     let mut out: Lineage = Vec::with_capacity(seg.len());
     for s in seg {
@@ -655,11 +649,8 @@ mod tests {
     #[test]
     fn rate_map_piecewise_integrates_correctly() {
         // [0, 100) rate 1, [100, 200) rate 5, [200, 300) rate 0.
-        let m = RecombinationMap::piecewise(
-            vec![0.0, 100.0, 200.0, 300.0],
-            vec![1.0, 5.0, 0.0],
-        )
-        .unwrap();
+        let m = RecombinationMap::piecewise(vec![0.0, 100.0, 200.0, 300.0], vec![1.0, 5.0, 0.0])
+            .unwrap();
         assert!((m.integrate(0.0, 100.0) - 100.0).abs() < 1e-9);
         // integrate 50..250: 50 (rate 1) * 1 + 100 (rate 5) * 1 + 50
         // (rate 0) * 1 = 50 + 500 + 0 = 550.
@@ -681,20 +672,13 @@ mod tests {
         assert!(RecombinationMap::uniform(100.0, -1.0).is_err());
         assert!(RecombinationMap::piecewise(vec![0.0], vec![]).is_err());
         assert!(RecombinationMap::piecewise(vec![1.0, 2.0], vec![1.0]).is_err());
-        assert!(
-            RecombinationMap::piecewise(vec![0.0, 5.0, 3.0], vec![1.0, 1.0]).is_err()
-        );
-        assert!(
-            RecombinationMap::piecewise(vec![0.0, 5.0], vec![1.0, 2.0]).is_err()
-        );
+        assert!(RecombinationMap::piecewise(vec![0.0, 5.0, 3.0], vec![1.0, 1.0]).is_err());
+        assert!(RecombinationMap::piecewise(vec![0.0, 5.0], vec![1.0, 2.0]).is_err());
     }
 
     #[test]
     fn arg_with_no_recombination_is_a_single_tree() {
-        let ts = simulate_arg(
-            ArgParams::uniform(6, 1000.0, 0.0, 100.0, 42).unwrap(),
-        )
-        .unwrap();
+        let ts = simulate_arg(ArgParams::uniform(6, 1000.0, 0.0, 100.0, 42).unwrap()).unwrap();
         assert_eq!(ts.sample_count(), 6);
         assert_eq!(ts.tree_count(), 1);
         let tree = ts.local_tree(50.0).unwrap();
@@ -703,10 +687,7 @@ mod tests {
 
     #[test]
     fn arg_with_recombination_has_multiple_trees() {
-        let ts = simulate_arg(
-            ArgParams::uniform(8, 1000.0, 5e-4, 5000.0, 7).unwrap(),
-        )
-        .unwrap();
+        let ts = simulate_arg(ArgParams::uniform(8, 1000.0, 5e-4, 5000.0, 7).unwrap()).unwrap();
         assert_eq!(ts.sample_count(), 8);
         assert!(
             ts.tree_count() > 1,
@@ -727,10 +708,7 @@ mod tests {
 
     #[test]
     fn every_local_tree_is_extractable() {
-        let ts = simulate_arg(
-            ArgParams::uniform(5, 1000.0, 3e-4, 3000.0, 11).unwrap(),
-        )
-        .unwrap();
+        let ts = simulate_arg(ArgParams::uniform(5, 1000.0, 3e-4, 3000.0, 11).unwrap()).unwrap();
         for pos in [10.0, 750.0, 1500.0, 2900.0] {
             let tree = ts.local_tree(pos).unwrap();
             assert_eq!(tree.leaf_count(), 5);
@@ -740,11 +718,9 @@ mod tests {
 
     #[test]
     fn arg_rejects_bad_params() {
-        assert!(
-            ArgParams::uniform(1, 1000.0, 0.0, 100.0, 1)
-                .and_then(simulate_arg)
-                .is_err()
-        );
+        assert!(ArgParams::uniform(1, 1000.0, 0.0, 100.0, 1)
+            .and_then(simulate_arg)
+            .is_err());
         // Negative N is rejected by validate.
         let bad = ArgParams::uniform(4, -1.0, 0.0, 100.0, 1);
         assert!(bad.is_err() || bad.unwrap().validate().is_err());
@@ -759,10 +735,7 @@ mod tests {
         let reps = 100;
         let mut acc = 0.0;
         for seed in 0..reps {
-            let ts = simulate_arg(
-                ArgParams::uniform(n, ne, 0.0, 100.0, seed).unwrap(),
-            )
-            .unwrap();
+            let ts = simulate_arg(ArgParams::uniform(n, ne, 0.0, 100.0, seed).unwrap()).unwrap();
             let tree = ts.local_tree(50.0).unwrap();
             acc += tree_height(&tree);
         }
@@ -781,11 +754,9 @@ mod tests {
     fn hotspot_region_creates_more_recombinations() {
         // [0, 1000) cold rate 1e-7, [1000, 1500) hot rate 1e-3,
         // [1500, 2500) cold rate 1e-7.
-        let map = RecombinationMap::piecewise(
-            vec![0.0, 1000.0, 1500.0, 2500.0],
-            vec![1e-7, 1e-3, 1e-7],
-        )
-        .unwrap();
+        let map =
+            RecombinationMap::piecewise(vec![0.0, 1000.0, 1500.0, 2500.0], vec![1e-7, 1e-3, 1e-7])
+                .unwrap();
         let params = ArgParams {
             sample_size: 6,
             effective_size: 5000.0,
@@ -817,11 +788,7 @@ mod tests {
     /// A zero-rate map produces a single local tree.
     #[test]
     fn zero_rate_map_yields_single_tree() {
-        let map = RecombinationMap::piecewise(
-            vec![0.0, 500.0, 1000.0],
-            vec![0.0, 0.0],
-        )
-        .unwrap();
+        let map = RecombinationMap::piecewise(vec![0.0, 500.0, 1000.0], vec![0.0, 0.0]).unwrap();
         let ts = simulate_arg(ArgParams {
             sample_size: 4,
             effective_size: 1000.0,
@@ -835,8 +802,16 @@ mod tests {
     #[test]
     fn split_lineage_round_trips() {
         let lin = vec![
-            Segment { left: 0.0, right: 50.0, node: 0 },
-            Segment { left: 50.0, right: 100.0, node: 1 },
+            Segment {
+                left: 0.0,
+                right: 50.0,
+                node: 0,
+            },
+            Segment {
+                left: 50.0,
+                right: 100.0,
+                node: 1,
+            },
         ];
         let (l, r) = split_lineage(&lin, 75.0);
         assert!((span(&l) - 75.0).abs() < 1e-9);
@@ -849,9 +824,21 @@ mod tests {
     #[test]
     fn squash_merges_adjacent_same_node() {
         let v = vec![
-            Segment { left: 0.0, right: 10.0, node: 5 },
-            Segment { left: 10.0, right: 30.0, node: 5 },
-            Segment { left: 30.0, right: 40.0, node: 7 },
+            Segment {
+                left: 0.0,
+                right: 10.0,
+                node: 5,
+            },
+            Segment {
+                left: 10.0,
+                right: 30.0,
+                node: 5,
+            },
+            Segment {
+                left: 30.0,
+                right: 40.0,
+                node: 7,
+            },
         ];
         let s = squash(v);
         assert_eq!(s.len(), 2);
@@ -865,14 +852,8 @@ mod tests {
         let mut acc_small = 0.0;
         let mut acc_large = 0.0;
         for seed in 0..40 {
-            let s = simulate_arg(
-                ArgParams::uniform(4, ne, 0.0, 100.0, seed).unwrap(),
-            )
-            .unwrap();
-            let t = simulate_arg(
-                ArgParams::uniform(16, ne, 0.0, 100.0, seed).unwrap(),
-            )
-            .unwrap();
+            let s = simulate_arg(ArgParams::uniform(4, ne, 0.0, 100.0, seed).unwrap()).unwrap();
+            let t = simulate_arg(ArgParams::uniform(16, ne, 0.0, 100.0, seed).unwrap()).unwrap();
             acc_small += tree_height(&s.local_tree(50.0).unwrap());
             acc_large += tree_height(&t.local_tree(50.0).unwrap());
         }

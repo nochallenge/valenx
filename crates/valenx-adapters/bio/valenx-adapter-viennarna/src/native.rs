@@ -30,11 +30,7 @@ use std::time::Instant;
 
 use tracing::warn;
 
-use valenx_core::{
-    adapter::LogLevel,
-    error::RunPhase,
-    AdapterError, RunContext, RunReport,
-};
+use valenx_core::{adapter::LogLevel, error::RunPhase, AdapterError, RunContext, RunReport};
 use valenx_rnastruct::{
     fold::zuker::{mfe, mfe_d2},
     rna::RnaSeq,
@@ -101,10 +97,7 @@ fn unsupported_native_options(params: &NativeViennaParams) -> Vec<&'static str> 
 
 /// Runs the native Zuker MFE folder over every sequence in the input
 /// file, writing ViennaRNA-compatible output to `out_path`.
-pub fn run_native(
-    workdir: &Path,
-    ctx: &mut RunContext,
-) -> Result<RunReport, AdapterError> {
+pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, AdapterError> {
     let params = read_params(workdir)?;
     let start = Instant::now();
 
@@ -157,7 +150,11 @@ pub fn run_native(
         let pct = 5.0_f32 + (idx as f32 / n as f32) * 90.0_f32;
         ctx.report_progress(
             pct,
-            &format!("folding sequence {}/{n}: {}", idx + 1, name.as_deref().unwrap_or("<anonymous>")),
+            &format!(
+                "folding sequence {}/{n}: {}",
+                idx + 1,
+                name.as_deref().unwrap_or("<anonymous>")
+            ),
         );
 
         let seq_str = String::from_utf8_lossy(seq_bytes);
@@ -177,13 +174,13 @@ pub fn run_native(
 
         // Use d2 mode (coaxial stacking) by default — matches ViennaRNA's
         // `RNAfold -d2` default. Fall back to plain MFE if d2 fails.
-        let result = mfe_d2(&rna).or_else(|_| mfe(&rna)).map_err(|e| {
-            AdapterError::Run {
+        let result = mfe_d2(&rna)
+            .or_else(|_| mfe(&rna))
+            .map_err(|e| AdapterError::Run {
                 exit_code: 1,
                 stderr: format!("native fold failed: {e}"),
                 phase: RunPhase::Solve,
-            }
-        })?;
+            })?;
 
         let dot_bracket = result.structure.to_dot_bracket();
         let energy = result.energy;
@@ -199,9 +196,8 @@ pub fn run_native(
         let _ = writeln!(out_buf, "{dot_bracket}  ({energy:.2})");
     }
 
-    valenx_core::io_caps::atomic_write_str(&out_path, &out_buf).map_err(|e| {
-        AdapterError::Other(anyhow::anyhow!("write {}: {e}", out_path.display()))
-    })?;
+    valenx_core::io_caps::atomic_write_str(&out_path, &out_buf)
+        .map_err(|e| AdapterError::Other(anyhow::anyhow!("write {}: {e}", out_path.display())))?;
 
     ctx.report_progress(100.0, "native RNA folding — done");
 
@@ -222,9 +218,10 @@ fn read_text_file(path: &str) -> Result<String, AdapterError> {
     let mut f = std::fs::File::open(path)
         .map_err(|e| AdapterError::Other(anyhow::anyhow!("open {path}: {e}")))?;
     let mut buf = Vec::with_capacity(4096);
-    Read::by_ref(&mut f).take(MAX_BYTES + 1).read_to_end(&mut buf).map_err(|e| {
-        AdapterError::Other(anyhow::anyhow!("read {path}: {e}"))
-    })?;
+    Read::by_ref(&mut f)
+        .take(MAX_BYTES + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| AdapterError::Other(anyhow::anyhow!("read {path}: {e}")))?;
     if buf.len() as u64 > MAX_BYTES {
         return Err(AdapterError::Other(anyhow::anyhow!(
             "{path}: input file exceeds 256 MiB — too large for in-memory folding"
@@ -371,15 +368,14 @@ mod tests {
 
     #[test]
     fn native_gates_options_it_cannot_honor() {
-        let make = |temperature: f64, partition_function: bool, allow_gu: bool| {
-            NativeViennaParams {
+        let make =
+            |temperature: f64, partition_function: bool, allow_gu: bool| NativeViennaParams {
                 input_path: "/tmp/rna.fa".to_string(),
                 output_name: "fold.out".to_string(),
                 temperature,
                 partition_function,
                 allow_gu,
-            }
-        };
+            };
         // The native default (37 C, GU allowed, MFE only) is fully supported.
         assert!(unsupported_native_options(&make(37.0, false, true)).is_empty());
         // Each non-default option is reported as unsupported, so run_native

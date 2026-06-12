@@ -142,10 +142,7 @@ impl Adapter for TCoffeeAdapter {
         let source_input = if input.input.is_absolute() {
             input.input.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.input,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.input)?
         };
         if !source_input.is_file() {
             return Err(AdapterError::InvalidCase {

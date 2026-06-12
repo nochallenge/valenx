@@ -362,8 +362,7 @@ mod tests {
         let rs = resample_closed_polygon(&square, 16);
         assert_eq!(rs.len(), 16);
         for p in &rs {
-            let on_edge =
-                (p[0].abs() - 1.0).abs() < 1e-9 || (p[1].abs() - 1.0).abs() < 1e-9;
+            let on_edge = (p[0].abs() - 1.0).abs() < 1e-9 || (p[1].abs() - 1.0).abs() < 1e-9;
             assert!(on_edge, "resampled point off the perimeter: {p:?}");
         }
     }

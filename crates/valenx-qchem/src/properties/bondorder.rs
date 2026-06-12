@@ -131,7 +131,11 @@ mod tests {
         let res = run_rhf_scf(&ints, 10, ScfSettings::default()).unwrap();
         let bo = mayer_bond_orders(&geom, &basis, &res.density, &ints.overlap);
         // Two O-H single bonds → oxygen valence near 2.
-        assert!(bo.valence(0) > 1.6 && bo.valence(0) < 2.3, "O valence {}", bo.valence(0));
+        assert!(
+            bo.valence(0) > 1.6 && bo.valence(0) < 2.3,
+            "O valence {}",
+            bo.valence(0)
+        );
         // The two O-H bonds are the significant ones.
         let bonds = bo.significant_bonds(0.5);
         assert_eq!(bonds.len(), 2);

@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use valenx_assembly::Assembly;
 use valenx_assembly::part::Part;
+use valenx_assembly::Assembly;
 use valenx_cad::Solid;
 
 use crate::board::KicadBoard;
@@ -33,11 +33,7 @@ pub fn build_assembly(
             .iter()
             .find(|(name, _)| name == &comp.ref_designator)
         {
-            let part = Part::new(
-                asm.parts.len(),
-                comp.ref_designator.clone(),
-                solid.clone(),
-            );
+            let part = Part::new(asm.parts.len(), comp.ref_designator.clone(), solid.clone());
             asm.add_part(part);
         }
     }
@@ -84,12 +80,9 @@ mod tests {
     #[test]
     fn step_export_surfaces_deferred_error() {
         let b = KicadBoard::demo_devboard();
-        let err = export_step_with_components(
-            &b,
-            &[],
-            std::env::temp_dir().join("kicad_test.step"),
-        )
-        .unwrap_err();
+        let err =
+            export_step_with_components(&b, &[], std::env::temp_dir().join("kicad_test.step"))
+                .unwrap_err();
         assert!(matches!(err, KicadError::NotImplemented(_)));
     }
 }

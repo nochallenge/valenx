@@ -339,9 +339,7 @@ pub fn draw_run_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
         .default_open(true)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                let btn = egui::Button::new(
-                    egui::RichText::new("\u{25b6}  Run ascent").strong(),
-                );
+                let btn = egui::Button::new(egui::RichText::new("\u{25b6}  Run ascent").strong());
                 if ui
                     .add(btn)
                     .on_hover_text(
@@ -446,7 +444,11 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     kv(
                         ui,
                         "reached space",
-                        if result.reached_space { "yes (above 100 km)" } else { "no" },
+                        if result.reached_space {
+                            "yes (above 100 km)"
+                        } else {
+                            "no"
+                        },
                     );
                     kv(
                         ui,
@@ -457,12 +459,12 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             "no (suborbital / re-entry arc)"
                         },
                     );
-                    kv(ui, "eccentricity", format!("{:.4}", result.orbit.eccentricity));
                     kv(
                         ui,
-                        "MECO time",
-                        model::format_duration(result.final_time),
+                        "eccentricity",
+                        format!("{:.4}", result.orbit.eccentricity),
                     );
+                    kv(ui, "MECO time", model::format_duration(result.final_time));
                     kv(
                         ui,
                         "MECO speed",
@@ -473,8 +475,16 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         "max-Q altitude",
                         format!("{:.1} km", result.max_q_altitude_m / 1_000.0),
                     );
-                    kv(ui, "peak g-load", format!("{:.1} g", result.max_acceleration_g));
-                    kv(ui, "liftoff mass", format!("{:.0} t", result.liftoff_mass / 1_000.0));
+                    kv(
+                        ui,
+                        "peak g-load",
+                        format!("{:.1} g", result.max_acceleration_g),
+                    );
+                    kv(
+                        ui,
+                        "liftoff mass",
+                        format!("{:.0} t", result.liftoff_mass / 1_000.0),
+                    );
                 });
 
             // Flight milestones.
@@ -515,11 +525,7 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     .iter()
                     .map(|s| [s.time, s.speed_inertial / 1_000.0])
                     .collect();
-                let mach: PlotPoints = result
-                    .samples
-                    .iter()
-                    .map(|s| [s.time, s.mach])
-                    .collect();
+                let mach: PlotPoints = result.samples.iter().map(|s| [s.time, s.mach]).collect();
                 let qpress: PlotPoints = result
                     .samples
                     .iter()
@@ -611,7 +617,11 @@ fn draw_hohmann_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         .show(ui, |ui| {
                             kv(ui, "burn 1 \u{0394}v", model::format_delta_v(t.delta_v1));
                             kv(ui, "burn 2 \u{0394}v", model::format_delta_v(t.delta_v2));
-                            kv(ui, "total \u{0394}v", model::format_delta_v(t.total_delta_v));
+                            kv(
+                                ui,
+                                "total \u{0394}v",
+                                model::format_delta_v(t.total_delta_v),
+                            );
                             kv(ui, "transfer time", model::format_duration(t.transfer_time));
                             kv(ui, "phase angle", format!("{phase_deg:.1} °"));
                         });
@@ -678,7 +688,11 @@ fn draw_bielliptic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             kv(ui, "burn 1 \u{0394}v", model::format_delta_v(t.delta_v1));
                             kv(ui, "burn 2 \u{0394}v", model::format_delta_v(t.delta_v2));
                             kv(ui, "burn 3 \u{0394}v", model::format_delta_v(t.delta_v3));
-                            kv(ui, "total \u{0394}v", model::format_delta_v(t.total_delta_v));
+                            kv(
+                                ui,
+                                "total \u{0394}v",
+                                model::format_delta_v(t.total_delta_v),
+                            );
                             kv(ui, "transfer time", model::format_duration(t.transfer_time));
                         });
                 }
@@ -754,9 +768,8 @@ fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Orbit altitude").on_hover_text(
-                        "Circular-orbit altitude above the equator. SI unit: km.",
-                    );
+                    ui.label("Orbit altitude")
+                        .on_hover_text("Circular-orbit altitude above the equator. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.basics_altitude_km)
                             .speed(10.0)
@@ -778,7 +791,11 @@ fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     kv(ui, "orbital period", model::format_duration(period));
                     if let Some((energy, ang_mom)) = energy_momentum {
                         kv(ui, "specific energy", format!("{:.3} MJ/kg", energy / 1e6));
-                        kv(ui, "ang. momentum", format!("{:.0} km\u{00B2}/s", ang_mom / 1e6));
+                        kv(
+                            ui,
+                            "ang. momentum",
+                            format!("{:.0} km\u{00B2}/s", ang_mom / 1e6),
+                        );
                     }
                 });
         });
@@ -816,8 +833,7 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     );
                     ui.end_row();
                 });
-            let orbit =
-                model::elliptical_orbit(form.ellipse_perigee_km, form.ellipse_apogee_km);
+            let orbit = model::elliptical_orbit(form.ellipse_perigee_km, form.ellipse_apogee_km);
             egui::Grid::new("astro_ellipse_out")
                 .num_columns(2)
                 .spacing([8.0, 3.0])
@@ -833,8 +849,16 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         "semi-latus rectum",
                         format!("{:.1} km", orbit.semi_latus_rectum_m / 1000.0),
                     );
-                    kv(ui, "perigee speed", model::format_delta_v(orbit.perigee_speed_ms));
-                    kv(ui, "apogee speed", model::format_delta_v(orbit.apogee_speed_ms));
+                    kv(
+                        ui,
+                        "perigee speed",
+                        model::format_delta_v(orbit.perigee_speed_ms),
+                    );
+                    kv(
+                        ui,
+                        "apogee speed",
+                        model::format_delta_v(orbit.apogee_speed_ms),
+                    );
                     kv(ui, "orbital period", model::format_duration(orbit.period_s));
                     kv(
                         ui,
@@ -920,8 +944,7 @@ fn draw_target_period_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     );
                     ui.end_row();
                 });
-            let altitude_km =
-                model::orbit_altitude_for_period_km(form.target_period_h * 3600.0);
+            let altitude_km = model::orbit_altitude_for_period_km(form.target_period_h * 3600.0);
             egui::Grid::new("astro_target_period_out")
                 .num_columns(2)
                 .spacing([8.0, 3.0])

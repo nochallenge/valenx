@@ -126,10 +126,8 @@ impl Diis {
             None => return Some(self.fock_history[m - 1].clone()),
         };
 
-        let mut f = DMatrix::<f64>::zeros(
-            self.fock_history[0].nrows(),
-            self.fock_history[0].ncols(),
-        );
+        let mut f =
+            DMatrix::<f64>::zeros(self.fock_history[0].nrows(), self.fock_history[0].ncols());
         for i in 0..m {
             f += coeffs[i] * &self.fock_history[i];
         }

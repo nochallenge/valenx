@@ -434,8 +434,8 @@ pub fn solve_modal(
     c = (&c + &c_t) * 0.5;
 
     // --- symmetric eigensolve of C ---
-    let eigen = nalgebra::SymmetricEigen::try_new(c, 1.0e-12, 0)
-        .ok_or(ModalSolverError::EigenFailed)?;
+    let eigen =
+        nalgebra::SymmetricEigen::try_new(c, 1.0e-12, 0).ok_or(ModalSolverError::EigenFailed)?;
     let eigvals = &eigen.eigenvalues;
     let eigvecs = &eigen.eigenvectors;
 
@@ -521,11 +521,8 @@ pub fn solve_modal_mixed(
     crate::native_solver::check_dense_dofs(mesh.nodes.len())?;
 
     let d_matrix = elasticity_matrix(material)?;
-    let (k_global, m_global) = crate::assembly::assemble_global_stiffness_mass_mixed(
-        mesh,
-        &d_matrix,
-        material.density,
-    )?;
+    let (k_global, m_global) =
+        crate::assembly::assemble_global_stiffness_mass_mixed(mesh, &d_matrix, material.density)?;
     let n_dof = k_global.nrows();
 
     // Constrained-DOF set.
@@ -588,8 +585,8 @@ pub fn solve_modal_mixed(
     let c_t = c.transpose();
     c = (&c + &c_t) * 0.5;
 
-    let eigen = nalgebra::SymmetricEigen::try_new(c, 1.0e-12, 0)
-        .ok_or(ModalSolverError::EigenFailed)?;
+    let eigen =
+        nalgebra::SymmetricEigen::try_new(c, 1.0e-12, 0).ok_or(ModalSolverError::EigenFailed)?;
     let eigvals = &eigen.eigenvalues;
     let eigvecs = &eigen.eigenvectors;
 
@@ -687,8 +684,8 @@ pub fn assemble_global_stiffness_mass(
             mesh.nodes[nodes[2]],
             mesh.nodes[nodes[3]],
         ];
-        let ke = element_stiffness(&coords, &d_matrix)
-            .ok_or(NativeSolverError::DegenerateElement(e))?;
+        let ke =
+            element_stiffness(&coords, &d_matrix).ok_or(NativeSolverError::DegenerateElement(e))?;
         let me = element_consistent_mass(&coords, material.density)
             .ok_or(NativeSolverError::DegenerateElement(e))?;
         // Scatter-add the two 12×12 element matrices.
@@ -968,7 +965,8 @@ mod tests {
         // Mass-proportional (β=0): ζ = ½α/ω, falls with frequency.
         assert!((mode(5.0).rayleigh_damping_ratio(1.0, 0.0) - 0.5 / 5.0).abs() < 1e-12);
         assert!(
-            mode(5.0).rayleigh_damping_ratio(1.0, 0.0) > mode(50.0).rayleigh_damping_ratio(1.0, 0.0),
+            mode(5.0).rayleigh_damping_ratio(1.0, 0.0)
+                > mode(50.0).rayleigh_damping_ratio(1.0, 0.0),
             "mass-proportional damps low frequencies more"
         );
         // Stiffness-proportional (α=0): ζ = ½βω, rises with frequency.
@@ -981,7 +979,10 @@ mod tests {
         let (alpha, beta) = (0.5_f64, 0.002_f64);
         let omega_star = (alpha / beta).sqrt();
         let zeta_min = mode(omega_star).rayleigh_damping_ratio(alpha, beta);
-        assert!((zeta_min - (alpha * beta).sqrt()).abs() < 1e-12, "ζ_min = √(αβ)");
+        assert!(
+            (zeta_min - (alpha * beta).sqrt()).abs() < 1e-12,
+            "ζ_min = √(αβ)"
+        );
         assert!(mode(omega_star * 2.0).rayleigh_damping_ratio(alpha, beta) > zeta_min);
         assert!(mode(omega_star * 0.5).rayleigh_damping_ratio(alpha, beta) > zeta_min);
         // A zero-frequency rigid-body mode → 0.
@@ -1010,7 +1011,10 @@ mod tests {
         // and heavier damping pushes it lower still (while staying positive).
         let f_light = m10.damped_natural_frequency_hz(0.5, 0.001);
         let f_heavy = m10.damped_natural_frequency_hz(2.0, 0.001);
-        assert!(f_light < m10.frequency_hz, "damping lowers the rung frequency");
+        assert!(
+            f_light < m10.frequency_hz,
+            "damping lowers the rung frequency"
+        );
         assert!(f_heavy < f_light, "heavier damping lowers it further");
         assert!(f_heavy > 0.0, "still underdamped");
         // Critically / over-damped (|ζ| ≥ 1): no oscillation → 0. ω=1, α=3 → ζ=1.5.
@@ -1036,13 +1040,19 @@ mod tests {
             (m.quality_factor(0.5, 0.001) - 1.0 / (2.0 * zeta)).abs() < 1e-12,
             "Q = 1/(2ζ)"
         );
-        assert!((m.quality_factor(0.5, 0.001) - 50.0 / 3.0).abs() < 1e-9, "Q ≈ 16.67");
+        assert!(
+            (m.quality_factor(0.5, 0.001) - 50.0 / 3.0).abs() < 1e-9,
+            "Q ≈ 16.67"
+        );
         // Q and ζ are reciprocal partners: Q·2ζ = 1.
         assert!((m.quality_factor(0.5, 0.001) * 2.0 * zeta - 1.0).abs() < 1e-12);
         // Lighter damping → higher Q (a sharper resonance); both stay finite > 0.
         let light = mode(10.0).quality_factor(0.05, 0.0001); // ζ=0.003 → Q≈166.7
         let heavy = mode(10.0).quality_factor(1.0, 0.01); // ζ=0.1 → Q=5
-        assert!(light > heavy, "lighter damping is higher Q: {light} vs {heavy}");
+        assert!(
+            light > heavy,
+            "lighter damping is higher Q: {light} vs {heavy}"
+        );
         assert!(heavy > 0.0, "finite positive Q");
         // No positive damping → 0: a rigid-body mode (ω=0) and an undamped mode.
         assert_eq!(mode(0.0).quality_factor(0.5, 0.001), 0.0);
@@ -1129,11 +1139,7 @@ mod tests {
     #[test]
     fn invert_lower_triangular_round_trips() {
         // L·L⁻¹ should be the identity.
-        let l = DMatrix::from_row_slice(
-            3,
-            3,
-            &[2.0, 0.0, 0.0, 1.0, 3.0, 0.0, 0.5, -1.0, 4.0],
-        );
+        let l = DMatrix::from_row_slice(3, 3, &[2.0, 0.0, 0.0, 1.0, 3.0, 0.0, 0.5, -1.0, 4.0]);
         let inv = invert_lower_triangular(&l).unwrap();
         let prod = &l * &inv;
         for i in 0..3 {
@@ -1186,10 +1192,7 @@ mod tests {
         .unwrap_err();
         assert!(matches!(
             err,
-            ModalSolverError::TooManyModes {
-                requested: 100,
-                ..
-            }
+            ModalSolverError::TooManyModes { requested: 100, .. }
         ));
     }
 

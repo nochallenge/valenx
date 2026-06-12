@@ -161,7 +161,9 @@ fn lscm_solve(mesh: &TriMesh, pins: &[usize; 2]) -> Option<Vec<[f64; 2]>> {
     let nfree = 2 * free_count;
     // Pinned UVs: place pin0 at (0,0) and pin1 at (d, 0) where d is
     // their 3D distance — a natural conformal anchor.
-    let d = (mesh.vertices[pins[0]] - mesh.vertices[pins[1]]).norm().max(1e-9);
+    let d = (mesh.vertices[pins[0]] - mesh.vertices[pins[1]])
+        .norm()
+        .max(1e-9);
     let pin_uv = |i: usize| -> Vector2<f64> {
         if i == pins[0] {
             Vector2::new(0.0, 0.0)
@@ -295,8 +297,7 @@ fn arap_solve(mesh: &TriMesh, seed: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
         .map(|tri| triangle_edge_cotweights(mesh, tri))
         .collect();
 
-    let mut uv: Vec<Vector2<f64>> =
-        seed.iter().map(|p| Vector2::new(p[0], p[1])).collect();
+    let mut uv: Vec<Vector2<f64>> = seed.iter().map(|p| Vector2::new(p[0], p[1])).collect();
 
     for _ in 0..ARAP_ITERS {
         // --- Local step: best-fit rotation per triangle ---
@@ -483,7 +484,10 @@ mod tests {
         };
         assert!(matches!(
             lscm(&m, &[]),
-            Err(LibiglError::NotEnough { what: "vertices", .. })
+            Err(LibiglError::NotEnough {
+                what: "vertices",
+                ..
+            })
         ));
     }
 

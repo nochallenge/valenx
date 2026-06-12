@@ -134,11 +134,7 @@ mod tests {
         top.push_atom(Atom::new("A", 10.0, 0.0).unwrap());
         top.push_atom(Atom::new("B", 10.0, 0.0).unwrap());
         top.add_bond(0, 1).unwrap();
-        let sys = System::new(
-            top,
-            vec![Vector3::zeros(), Vector3::new(0.12, 0.0, 0.0)],
-        )
-        .unwrap();
+        let sys = System::new(top, vec![Vector3::zeros(), Vector3::new(0.12, 0.0, 0.0)]).unwrap();
         let term =
             HarmonicBonds::from_system(&sys, &[BondParam::new(0.1, 1000.0).unwrap()]).unwrap();
         (sys, term)
@@ -176,7 +172,10 @@ mod tests {
             max_dev = max_dev.max((e - e0).abs());
         }
         // Symplectic integrator: bounded energy drift.
-        assert!(max_dev < 0.05 * e0.abs().max(1.0), "drift = {max_dev}, e0 = {e0}");
+        assert!(
+            max_dev < 0.05 * e0.abs().max(1.0),
+            "drift = {max_dev}, e0 = {e0}"
+        );
     }
 
     #[test]

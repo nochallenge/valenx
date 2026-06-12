@@ -43,8 +43,7 @@ use crate::optimize::{
 };
 use serde::{Deserialize, Serialize};
 use valenx_rnastruct::{
-    base_pair_distance, mfe, melting_curve, partition_function, structure_energy, RnaSeq,
-    Structure,
+    base_pair_distance, melting_curve, mfe, partition_function, structure_energy, RnaSeq, Structure,
 };
 
 /// The pass / warn / fail verdict of one check.
@@ -285,10 +284,7 @@ pub fn ensemble_validate(seq: &[u8], target: &Structure) -> Result<EnsembleResul
 ///
 /// # Errors
 /// [`RnaDesignError::Upstream`] if a folding call fails.
-pub fn robustness_checks(
-    seq: &[u8],
-    intended: Option<&Structure>,
-) -> Result<RobustnessResult> {
+pub fn robustness_checks(seq: &[u8], intended: Option<&Structure>) -> Result<RobustnessResult> {
     let mut notes = Vec::new();
 
     // --- mutational robustness ---------------------------------------
@@ -589,7 +585,8 @@ pub fn validate_design(
                 detail: format!(
                     "design folds to {:.0}% of the target ({} base pair(s) differ); \
                      target probability {:.1}%",
-                    fb.structure_match_percent, fb.base_pair_distance,
+                    fb.structure_match_percent,
+                    fb.base_pair_distance,
                     en.target_probability * 100.0,
                 ),
             });
@@ -618,7 +615,11 @@ pub fn validate_design(
             detail: format!(
                 "mutational robustness {:.0}%; co-transcriptional folding {}",
                 r.mutational_robustness * 100.0,
-                if r.cotranscriptional_ok { "ok" } else { "flagged" },
+                if r.cotranscriptional_ok {
+                    "ok"
+                } else {
+                    "flagged"
+                },
             ),
         });
     }

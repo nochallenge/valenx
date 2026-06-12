@@ -61,13 +61,7 @@ pub fn molecular_formula(mol: &Molecule) -> String {
     }
     let mut rest: Vec<(&'static str, u8, u32)> = counts
         .iter()
-        .filter(|(&z, _)| {
-            if has_carbon {
-                z != 6 && z != 1
-            } else {
-                true
-            }
-        })
+        .filter(|(&z, _)| if has_carbon { z != 6 && z != 1 } else { true })
         .filter_map(|(&z, &n)| element::by_number(z).map(|e| (e.symbol, z, n)))
         .collect();
     rest.sort_by(|a, b| a.0.cmp(b.0));
@@ -208,13 +202,8 @@ mod validation {
             ("CC(=O)OC1=CC=CC=C1C(=O)O", "C9H8O4", 180.16),
         ];
         for &(smiles, formula, mw) in cases {
-            let m = parse_smiles(smiles)
-                .unwrap_or_else(|e| panic!("parse {smiles}: {e:?}"));
-            assert_eq!(
-                molecular_formula(&m),
-                formula,
-                "Hill formula of {smiles}"
-            );
+            let m = parse_smiles(smiles).unwrap_or_else(|e| panic!("parse {smiles}: {e:?}"));
+            assert_eq!(molecular_formula(&m), formula, "Hill formula of {smiles}");
             let got = average_molecular_weight(&m);
             assert!(
                 (got - mw).abs() < 0.05,

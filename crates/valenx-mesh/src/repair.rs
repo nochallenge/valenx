@@ -54,8 +54,7 @@ pub fn fill_holes(mesh: &Mesh, max_boundary_length: f64) -> Mesh {
         for k in 0..lp.len() {
             let a = lp[k];
             let b = lp[(k + 1) % lp.len()];
-            let (Some(pa), Some(pb)) =
-                (out.nodes.get(a as usize), out.nodes.get(b as usize))
+            let (Some(pa), Some(pb)) = (out.nodes.get(a as usize), out.nodes.get(b as usize))
             else {
                 loop_ok = false;
                 break;
@@ -524,11 +523,7 @@ impl AabbTree {
         AabbTree { nodes, root }
     }
 
-    fn build_recursive(
-        bboxes: &[Aabb],
-        indices: &mut [usize],
-        nodes: &mut Vec<AabbNode>,
-    ) -> usize {
+    fn build_recursive(bboxes: &[Aabb], indices: &mut [usize], nodes: &mut Vec<AabbNode>) -> usize {
         let node_idx = nodes.len();
         if indices.len() == 1 {
             let prim = indices[0];
@@ -619,12 +614,10 @@ impl AabbTree {
                 // Descend the larger subtree to keep the recursion
                 // tree balanced for the common "many overlaps"
                 // worst case.
-                let a_extent = (a.bbox.max[a.bbox.longest_axis()]
-                    - a.bbox.min[a.bbox.longest_axis()])
-                .abs();
-                let b_extent = (b.bbox.max[b.bbox.longest_axis()]
-                    - b.bbox.min[b.bbox.longest_axis()])
-                .abs();
+                let a_extent =
+                    (a.bbox.max[a.bbox.longest_axis()] - a.bbox.min[a.bbox.longest_axis()]).abs();
+                let b_extent =
+                    (b.bbox.max[b.bbox.longest_axis()] - b.bbox.min[b.bbox.longest_axis()]).abs();
                 if a_extent >= b_extent {
                     self.descend_cross(a.left, b_idx, out);
                     self.descend_cross(a.right, b_idx, out);
@@ -921,11 +914,8 @@ mod tests {
                 m.nodes.push(pt(x, y, 0.0));
                 m.nodes.push(pt(x + 1.0, y, 0.0));
                 m.nodes.push(pt(x, y + 1.0, 0.0));
-                blk.connectivity.extend_from_slice(&[
-                    node_id,
-                    node_id + 1,
-                    node_id + 2,
-                ]);
+                blk.connectivity
+                    .extend_from_slice(&[node_id, node_id + 1, node_id + 2]);
                 node_id += 3;
             }
         }
@@ -960,7 +950,9 @@ mod tests {
         );
         // The other connectivity consumers in this module must also
         // survive the same hostile mesh without panicking.
-        assert!(boundary_loops(&m).iter().all(|lp| !lp.is_empty()) || boundary_loops(&m).is_empty());
+        assert!(
+            boundary_loops(&m).iter().all(|lp| !lp.is_empty()) || boundary_loops(&m).is_empty()
+        );
         let _ = is_manifold(&m);
         let _ = fill_holes(&m, f64::INFINITY);
     }

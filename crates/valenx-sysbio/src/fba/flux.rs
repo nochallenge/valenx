@@ -131,8 +131,7 @@ impl FbaProblem {
                 "bound / objective length disagrees with reaction count",
             ));
         }
-        if self.stoich.len() != self.metabolites.len()
-            || self.stoich.iter().any(|r| r.len() != nr)
+        if self.stoich.len() != self.metabolites.len() || self.stoich.iter().any(|r| r.len() != nr)
         {
             return Err(SysbioError::invalid_model(
                 "fba",

@@ -152,9 +152,7 @@ pub fn sankoff_parsimony(
             .iter()
             .find(|(name, _)| name == label)
             .map(|(_, row)| row)
-            .ok_or_else(|| {
-                PhyloError::invalid("alignment", format!("no row for leaf `{label}`"))
-            })
+            .ok_or_else(|| PhyloError::invalid("alignment", format!("no row for leaf `{label}`")))
     };
 
     let post = tree.postorder();
@@ -196,16 +194,17 @@ pub fn sankoff_parsimony(
             }
         }
         let root = tree.root();
-        let (root_state, root_cost) = g[root]
-            .iter()
-            .enumerate()
-            .fold((0usize, f64::INFINITY), |(bs, bc), (s, &c)| {
-                if c < bc {
-                    (s, c)
-                } else {
-                    (bs, bc)
-                }
-            });
+        let (root_state, root_cost) =
+            g[root]
+                .iter()
+                .enumerate()
+                .fold((0usize, f64::INFINITY), |(bs, bc), (s, &c)| {
+                    if c < bc {
+                        (s, c)
+                    } else {
+                        (bs, bc)
+                    }
+                });
         site_costs[col] = root_cost;
         ancestral[root][col] = root_state as u8;
 

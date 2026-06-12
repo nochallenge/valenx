@@ -369,7 +369,12 @@ fn build_content_stream(drawing: &Drawing, _h_mm: f64) -> String {
                 + (dv.center[0] + dv.radius * std::f64::consts::FRAC_1_SQRT_2 + 1.5) * parent.scale;
             let tick_y = parent.position[1]
                 + (dv.center[1] + dv.radius * std::f64::consts::FRAC_1_SQRT_2 + 1.5) * parent.scale;
-            s.push_str(&text_op(tick_x * MM_TO_PT, tick_y * MM_TO_PT, 10.0, &dv.label));
+            s.push_str(&text_op(
+                tick_x * MM_TO_PT,
+                tick_y * MM_TO_PT,
+                10.0,
+                &dv.label,
+            ));
             // Magnified content drawn at the detail's sheet position.
             let magnified = dv.clip_and_magnify(&parent.visible_edges);
             s.push_str("q\n");
@@ -526,7 +531,14 @@ mod tests {
         let mut blk = RevisionBlock::new([10.0, 70.0]);
         blk.add_entry(RevisionEntry::new("A", "2026-05-23", "init", "GH", ""));
         d.add_revision_block(blk);
-        d.add_detail_view(DetailView::new(0, [10.0, 5.0], 4.0, [250.0, 150.0], 2.0, "Q"));
+        d.add_detail_view(DetailView::new(
+            0,
+            [10.0, 5.0],
+            4.0,
+            [250.0, 150.0],
+            2.0,
+            "Q",
+        ));
         let bytes = render_bytes(&d);
         let s = String::from_utf8_lossy(&bytes);
         assert!(s.contains("Part No.") || s.contains("UniqBracket"));

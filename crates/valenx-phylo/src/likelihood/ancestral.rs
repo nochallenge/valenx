@@ -258,12 +258,7 @@ mod tests {
         // Every taxon has A at column 0 => the ancestor is almost
         // certainly A.
         let tree = read_newick("((A:0.05,B:0.05):0.05,(C:0.05,D:0.05):0.05);").unwrap();
-        let aln = vec![
-            row("A", "A"),
-            row("B", "A"),
-            row("C", "A"),
-            row("D", "A"),
-        ];
+        let aln = vec![row("A", "A"), row("B", "A"), row("C", "A"), row("D", "A")];
         let r = ancestral_states(&tree, &SubstModel::Jc69, &aln).unwrap();
         let root = tree.root();
         // Index 0 == 'A'.
@@ -275,12 +270,7 @@ mod tests {
     fn clade_specific_state_propagates_to_its_ancestor() {
         // (A,B) = G, (C,D) = A. The (A,B) ancestor should favour G.
         let tree = read_newick("((A:0.05,B:0.05):0.1,(C:0.05,D:0.05):0.1);").unwrap();
-        let aln = vec![
-            row("A", "G"),
-            row("B", "G"),
-            row("C", "A"),
-            row("D", "A"),
-        ];
+        let aln = vec![row("A", "G"), row("B", "G"), row("C", "A"), row("D", "A")];
         let r = ancestral_states(&tree, &SubstModel::Jc69, &aln).unwrap();
         let ab = tree.lca(tree.find("A").unwrap(), tree.find("B").unwrap());
         // Index 2 == 'G'.

@@ -96,8 +96,11 @@ mod tests {
         let t = BODY_TEMPERATURE_K;
 
         // Round-trip: the inverse recovers c_out/c_in exactly from nernst_potential_mv.
-        for &(z, c_out, c_in) in &[(1.0_f64, 5.0_f64, 140.0_f64), (1.0, 145.0, 12.0), (2.0, 2.0, 0.1)]
-        {
+        for &(z, c_out, c_in) in &[
+            (1.0_f64, 5.0_f64, 140.0_f64),
+            (1.0, 145.0, 12.0),
+            (2.0, 2.0, 0.1),
+        ] {
             let e = nernst_potential_mv(t, z, c_out, c_in);
             let ratio = nernst_concentration_ratio(t, z, e);
             assert!(
@@ -115,7 +118,10 @@ mod tests {
         );
 
         // E_rev = 0 → equal concentrations (ratio 1).
-        assert!((nernst_concentration_ratio(t, 1.0, 0.0) - 1.0).abs() < 1e-12, "E=0 → 1");
+        assert!(
+            (nernst_concentration_ratio(t, 1.0, 0.0) - 1.0).abs() < 1e-12,
+            "E=0 → 1"
+        );
 
         // Worked: a K⁺-like ion at E = −90 mV (z = 1) has c_out/c_in ≈ 0.034 — about 29×
         // more concentrated inside.
@@ -132,24 +138,36 @@ mod tests {
     #[test]
     fn thermal_voltage_is_about_26_7_mv_at_body_temp() {
         let vt = thermal_voltage_mv(BODY_TEMPERATURE_K);
-        assert!((vt - 26.73).abs() < 0.05, "R·T/F should be ≈ 26.7 mV, got {vt}");
+        assert!(
+            (vt - 26.73).abs() < 0.05,
+            "R·T/F should be ≈ 26.7 mV, got {vt}"
+        );
         // Per-decade slope is R·T/F · ln(10) ≈ 61.5 mV.
         let decade = vt * 10.0_f64.ln();
-        assert!((decade - 61.5).abs() < 0.3, "decade slope ≈ 61.5 mV, got {decade}");
+        assert!(
+            (decade - 61.5).abs() < 0.3,
+            "decade slope ≈ 61.5 mV, got {decade}"
+        );
     }
 
     #[test]
     fn potassium_reversal_is_near_minus_95_mv() {
         // [K]o = 4 mM, [K]i = 140 mM, z = +1 → the textbook resting E_K.
         let e_k = nernst_potential_mv(BODY_TEMPERATURE_K, 1.0, 4.0, 140.0);
-        assert!((e_k - (-95.0)).abs() < 2.0, "E_K should be ≈ −95 mV, got {e_k}");
+        assert!(
+            (e_k - (-95.0)).abs() < 2.0,
+            "E_K should be ≈ −95 mV, got {e_k}"
+        );
     }
 
     #[test]
     fn sodium_reversal_is_near_plus_60_mv() {
         // [Na]o = 145 mM, [Na]i = 15 mM, z = +1.
         let e_na = nernst_potential_mv(BODY_TEMPERATURE_K, 1.0, 145.0, 15.0);
-        assert!((e_na - 60.6).abs() < 2.0, "E_Na should be ≈ +61 mV, got {e_na}");
+        assert!(
+            (e_na - 60.6).abs() < 2.0,
+            "E_Na should be ≈ +61 mV, got {e_na}"
+        );
     }
 
     #[test]
@@ -190,7 +208,8 @@ mod tests {
         for &(t, c_out, c_in) in &[(310.15_f64, 145.0_f64, 15.0_f64), (298.15, 4.0, 140.0)] {
             let from_slope = nernst_slope_per_decade_mv(t) * (c_out / c_in).log10();
             assert!(
-                (nernst_potential_mv(t, 1.0, c_out, c_in) - from_slope).abs() <= 1e-9 * from_slope.abs(),
+                (nernst_potential_mv(t, 1.0, c_out, c_in) - from_slope).abs()
+                    <= 1e-9 * from_slope.abs(),
                 "E = S·log10(ratio) for z=1"
             );
             // z = 2 carries the 1/z.
@@ -203,8 +222,14 @@ mod tests {
         }
 
         // Textbook: ≈ 59 mV/decade at 25 °C, ≈ 61.5 mV at body temperature.
-        assert!((nernst_slope_per_decade_mv(298.15) - 59.16).abs() < 0.3, "≈ 59 mV/decade at 25 °C");
-        assert!((nernst_slope_per_decade_mv(310.15) - 61.5).abs() < 0.3, "≈ 61.5 mV at body temp");
+        assert!(
+            (nernst_slope_per_decade_mv(298.15) - 59.16).abs() < 0.3,
+            "≈ 59 mV/decade at 25 °C"
+        );
+        assert!(
+            (nernst_slope_per_decade_mv(310.15) - 61.5).abs() < 0.3,
+            "≈ 61.5 mV at body temp"
+        );
 
         // Linear in absolute temperature.
         assert!(
@@ -237,13 +262,22 @@ mod tests {
         ] {
             let e = nernst_potential_mv(t, z, c_out, c_in);
             let r = ussing_flux_ratio(t, z, c_out, c_in, e);
-            assert!((r - 1.0).abs() < 1e-12, "flux ratio = 1 at E for z={z}: got {r}");
+            assert!(
+                (r - 1.0).abs() < 1e-12,
+                "flux ratio = 1 at E for z={z}: got {r}"
+            );
         }
         // At V = 0 the ratio is the bare concentration ratio (pure diffusion, no drift).
         let r0 = ussing_flux_ratio(t, 1.0, 4.0, 140.0, 0.0);
-        assert!((r0 - 4.0 / 140.0).abs() < 1e-12, "V=0 → c_out/c_in, got {r0}");
+        assert!(
+            (r0 - 4.0 / 140.0).abs() < 1e-12,
+            "V=0 → c_out/c_in, got {r0}"
+        );
         // Equal concentrations → pure drift exp(−z·V/V_T): 1 at V=0, e at V=−V_T (z=1).
-        assert!((ussing_flux_ratio(t, 1.0, 50.0, 50.0, 0.0) - 1.0).abs() < 1e-12, "equal conc, V=0 → 1");
+        assert!(
+            (ussing_flux_ratio(t, 1.0, 50.0, 50.0, 0.0) - 1.0).abs() < 1e-12,
+            "equal conc, V=0 → 1"
+        );
         let vt = thermal_voltage_mv(t);
         assert!(
             (ussing_flux_ratio(t, 1.0, 50.0, 50.0, -vt) - 1.0_f64.exp()).abs() < 1e-9,
@@ -255,10 +289,19 @@ mod tests {
             ussing_flux_ratio(t, 1.0, 4.0, 140.0, -95.0),
             ussing_flux_ratio(t, 1.0, 4.0, 140.0, -60.0),
         );
-        assert!(k > m && m > n, "cation flux ratio rises as V drops: {k} {m} {n}");
+        assert!(
+            k > m && m > n,
+            "cation flux ratio rises as V drops: {k} {m} {n}"
+        );
         // Direction sanity: below E_K the ratio exceeds 1 (net K⁺ influx), above it < 1.
         let e_k = nernst_potential_mv(t, 1.0, 4.0, 140.0);
-        assert!(ussing_flux_ratio(t, 1.0, 4.0, 140.0, e_k - 20.0) > 1.0, "below E_K → influx");
-        assert!(ussing_flux_ratio(t, 1.0, 4.0, 140.0, e_k + 20.0) < 1.0, "above E_K → efflux");
+        assert!(
+            ussing_flux_ratio(t, 1.0, 4.0, 140.0, e_k - 20.0) > 1.0,
+            "below E_K → influx"
+        );
+        assert!(
+            ussing_flux_ratio(t, 1.0, 4.0, 140.0, e_k + 20.0) < 1.0,
+            "above E_K → efflux"
+        );
     }
 }

@@ -105,8 +105,7 @@ impl TorsionTree {
         }
         // 2. Cut the molecule at every rotatable bond — the resulting
         //    connected components are the rigid groups.
-        let rotatable_set: BTreeSet<usize> =
-            rotatable.iter().map(|r| r.bond_index).collect();
+        let rotatable_set: BTreeSet<usize> = rotatable.iter().map(|r| r.bond_index).collect();
         let rigid_components = rigid_components(mol, &rotatable_set);
         // Component id per atom; usize::MAX for atoms in no component
         // (cannot happen — every atom is in exactly one component).
@@ -273,9 +272,7 @@ fn is_amide_bond(mol: &Molecule, a: usize, b: usize) -> bool {
             && mol.bonds.iter().any(|bd| {
                 bd.touches(c)
                     && bd.order == BondOrder::Double
-                    && bd
-                        .other(c)
-                        .is_some_and(|o| mol.atoms[o].atomic_number == 8)
+                    && bd.other(c).is_some_and(|o| mol.atoms[o].atomic_number == 8)
             })
     };
     amide(a, b) || amide(b, a)
@@ -370,8 +367,11 @@ mod tests {
         // The root has one child branch.
         assert_eq!(tree.groups[tree.root].children.len(), 1);
         // Every heavy atom appears in exactly one group.
-        let mut all: Vec<usize> =
-            tree.groups.iter().flat_map(|g| g.atoms.iter().copied()).collect();
+        let mut all: Vec<usize> = tree
+            .groups
+            .iter()
+            .flat_map(|g| g.atoms.iter().copied())
+            .collect();
         all.sort();
         all.dedup();
         assert_eq!(all.len(), m.atom_count());

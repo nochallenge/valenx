@@ -158,8 +158,20 @@ mod tests {
         assert_eq!(idx.sequence_count(), 1);
         let hits = idx.lookup(b"ACG");
         assert_eq!(hits.len(), 2);
-        assert_eq!(hits[0], KmerHit { seq_id: 0, offset: 0 });
-        assert_eq!(hits[1], KmerHit { seq_id: 0, offset: 4 });
+        assert_eq!(
+            hits[0],
+            KmerHit {
+                seq_id: 0,
+                offset: 0
+            }
+        );
+        assert_eq!(
+            hits[1],
+            KmerHit {
+                seq_id: 0,
+                offset: 4
+            }
+        );
         assert!(idx.contains(b"CGT"));
         assert!(!idx.contains(b"TTT"));
     }

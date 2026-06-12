@@ -13,7 +13,11 @@ type ArgList = (Vec<Ast>, Vec<(String, Ast)>);
 /// blocks. The interpreter folds the list into a single expression by
 /// implicit unioning of the resulting solids.
 pub fn parse(tokens: &[Token]) -> Result<Vec<Ast>, OpenScadError> {
-    let mut p = Parser { toks: tokens, i: 0, depth: 0 };
+    let mut p = Parser {
+        toks: tokens,
+        i: 0,
+        depth: 0,
+    };
     let mut out = Vec::new();
     while p.peek().is_some() {
         let stmt = p.parse_statement()?;
@@ -76,7 +80,9 @@ impl<'a> Parser<'a> {
 
     fn parse_statement_impl(&mut self) -> Result<Ast, OpenScadError> {
         // `ident = expr ;` is an assignment.
-        if let (Some(Token::Ident(name)), Some(Token::Eq)) = (self.toks.get(self.i), self.toks.get(self.i + 1)) {
+        if let (Some(Token::Ident(name)), Some(Token::Eq)) =
+            (self.toks.get(self.i), self.toks.get(self.i + 1))
+        {
             let name = name.clone();
             self.i += 2; // ident =
             let value = self.parse_expr()?;
@@ -309,7 +315,10 @@ mod tests {
         let toks = lex("cube([1, 2, 3]);").expect("lex");
         let ast = parse(&toks).expect("parse");
         assert_eq!(ast.len(), 1);
-        if let Ast::Call { name, positional, .. } = &ast[0] {
+        if let Ast::Call {
+            name, positional, ..
+        } = &ast[0]
+        {
             assert_eq!(name, "cube");
             assert_eq!(positional.len(), 1);
         } else {
@@ -328,8 +337,7 @@ mod tests {
 
     #[test]
     fn parse_translated_block() {
-        let toks =
-            lex("translate([10, 0, 0]) { cube([1, 1, 1]); sphere(r = 2); }").expect("lex");
+        let toks = lex("translate([10, 0, 0]) { cube([1, 1, 1]); sphere(r = 2); }").expect("lex");
         let ast = parse(&toks).expect("parse");
         assert_eq!(ast.len(), 1);
         if let Ast::Call { name, children, .. } = &ast[0] {
@@ -342,8 +350,7 @@ mod tests {
 
     #[test]
     fn parse_for_loop() {
-        let toks =
-            lex("for(i = [0 : 2]) translate([i * 5, 0, 0]) cube([1,1,1]);").expect("lex");
+        let toks = lex("for(i = [0 : 2]) translate([i * 5, 0, 0]) cube([1,1,1]);").expect("lex");
         let ast = parse(&toks).expect("parse");
         assert_eq!(ast.len(), 1);
         assert!(matches!(ast[0], Ast::For { .. }));

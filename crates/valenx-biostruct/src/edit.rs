@@ -66,8 +66,7 @@ pub fn bfactor_analysis(model: &Model) -> Result<BFactorAnalysis> {
         return Err(BiostructError::invalid("model", "model has no atoms"));
     }
     let mean = all.iter().sum::<f64>() / all.len() as f64;
-    let variance =
-        all.iter().map(|b| (b - mean).powi(2)).sum::<f64>() / all.len() as f64;
+    let variance = all.iter().map(|b| (b - mean).powi(2)).sum::<f64>() / all.len() as f64;
     let std_dev = variance.sqrt();
 
     let per_residue_normalized: Vec<f64> = per_residue_mean
@@ -254,10 +253,7 @@ fn sidechain_template(resname: &str) -> Option<&'static [(&'static str, &'static
             ("SD", "S", [2.9, 1.1, 0.0]),
             ("CE", "C", [4.4, 1.7, 0.0]),
         ]),
-        "PRO" => Some(&[
-            ("CG", "C", [1.5, 0.5, 0.0]),
-            ("CD", "C", [2.4, 1.3, 0.0]),
-        ]),
+        "PRO" => Some(&[("CG", "C", [1.5, 0.5, 0.0]), ("CD", "C", [2.4, 1.3, 0.0])]),
         "GLY" => Some(&[]), // GLY has no CB; handled specially
         _ => None,
     }
@@ -371,15 +367,12 @@ pub fn mutate_residue(
 
 /// Highest-occupancy backbone-atom coordinate, or an error.
 fn backbone_coord(residue: &Residue, name: &str) -> Result<Point3<f64>> {
-    residue
-        .primary_atom(name)
-        .map(|a| a.coord)
-        .ok_or_else(|| {
-            BiostructError::invalid(
-                "residue",
-                format!("residue lacks the backbone atom `{name}` needed for mutation"),
-            )
-        })
+    residue.primary_atom(name).map(|a| a.coord).ok_or_else(|| {
+        BiostructError::invalid(
+            "residue",
+            format!("residue lacks the backbone atom `{name}` needed for mutation"),
+        )
+    })
 }
 
 /// Build an idealised Cβ position from the backbone `N`, `CA`, `C`.
@@ -470,7 +463,8 @@ mod tests {
         // residues should form the interface.
         let mut a = Chain::new("A");
         let mut ra = Residue::new("ALA", 1);
-        ra.atoms.push(Atom::new("CA", "C", Point3::new(0.0, 0.0, 0.0)));
+        ra.atoms
+            .push(Atom::new("CA", "C", Point3::new(0.0, 0.0, 0.0)));
         a.residues.push(ra);
         let mut ra2 = Residue::new("ALA", 2);
         ra2.atoms
@@ -479,7 +473,8 @@ mod tests {
 
         let mut b = Chain::new("B");
         let mut rb = Residue::new("ALA", 1);
-        rb.atoms.push(Atom::new("CA", "C", Point3::new(4.0, 0.0, 0.0)));
+        rb.atoms
+            .push(Atom::new("CA", "C", Point3::new(4.0, 0.0, 0.0)));
         b.residues.push(rb);
 
         let (ai, bi) = interface_residues(&a, &b, 5.0).unwrap();

@@ -183,8 +183,10 @@ fn preview_boxes(s: &CollisionWorkbenchState) -> Option<Vec<([Vector3<f64>; 2], 
 /// is painted only when both endpoints project in front of the camera, so
 /// the render path never panics.
 fn draw_boxes_preview(ui: &mut egui::Ui, edges: &[([Vector3<f64>; 2], egui::Color32)]) {
-    let (response, painter) =
-        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let (response, painter) = ui.allocate_painter(
+        egui::vec2(ui.available_width(), 200.0),
+        egui::Sense::hover(),
+    );
     let rect = response.rect;
 
     let mut min = [f32::INFINITY; 3];
@@ -205,8 +207,18 @@ fn draw_boxes_preview(ui: &mut egui::Ui, edges: &[([Vector3<f64>; 2], egui::Colo
 
     let (w, h) = (rect.width(), rect.height());
     for (edge, color) in edges {
-        let a = project_point(&cam, w, h, [edge[0].x as f32, edge[0].y as f32, edge[0].z as f32]);
-        let b = project_point(&cam, w, h, [edge[1].x as f32, edge[1].y as f32, edge[1].z as f32]);
+        let a = project_point(
+            &cam,
+            w,
+            h,
+            [edge[0].x as f32, edge[0].y as f32, edge[0].z as f32],
+        );
+        let b = project_point(
+            &cam,
+            w,
+            h,
+            [edge[1].x as f32, edge[1].y as f32, edge[1].z as f32],
+        );
         if let (Some(a), Some(b)) = (a, b) {
             painter.line_segment(
                 [

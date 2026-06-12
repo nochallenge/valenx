@@ -136,7 +136,9 @@ impl LennardJones {
             if epsilon <= 0.0 {
                 continue;
             }
-            let d = system.cell.min_image(system.positions[i] - system.positions[j]);
+            let d = system
+                .cell
+                .min_image(system.positions[i] - system.positions[j]);
             let r2 = d.norm_squared();
             if r2 >= rc2 || r2 < 1e-24 {
                 continue;
@@ -276,7 +278,12 @@ mod tests {
             e.energy
         };
         let fd = -(energy_at(h) - energy_at(-h)) / (2.0 * h);
-        assert!((ef.forces[0].x - fd).abs() < 1e-2, "{} vs {}", ef.forces[0].x, fd);
+        assert!(
+            (ef.forces[0].x - fd).abs() < 1e-2,
+            "{} vs {}",
+            ef.forces[0].x,
+            fd
+        );
     }
 
     #[test]

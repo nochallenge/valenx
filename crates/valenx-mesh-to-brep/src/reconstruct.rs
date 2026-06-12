@@ -452,11 +452,8 @@ mod tests {
         let mut m = Mesh::new("grid");
         for j in 0..=n {
             for i in 0..=n {
-                m.nodes.push(Vector3::new(
-                    i as f64 / n as f64,
-                    j as f64 / n as f64,
-                    0.0,
-                ));
+                m.nodes
+                    .push(Vector3::new(i as f64 / n as f64, j as f64 / n as f64, 0.0));
             }
         }
         let stride = (n + 1) as u32;
@@ -535,6 +532,9 @@ mod tests {
             max_error: 0.5,
             sample_count: 49,
         };
-        assert!(!spiky.within_tolerance(0.01), "a local spike must fail the gate");
+        assert!(
+            !spiky.within_tolerance(0.01),
+            "a local spike must fail the gate"
+        );
     }
 }

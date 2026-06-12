@@ -389,21 +389,19 @@ impl Sketch {
     /// `valenx-feature-tree` (project load validates every sketch).
     pub fn validate(&self) -> Result<(), crate::SketchError> {
         let len = self.vars.len();
-        let check = |entity: usize,
-                     field: &'static str,
-                     var: usize|
-         -> Result<(), crate::SketchError> {
-            if var >= len {
-                Err(crate::SketchError::CorruptHandle {
-                    entity,
-                    field,
-                    var,
-                    len,
-                })
-            } else {
-                Ok(())
-            }
-        };
+        let check =
+            |entity: usize, field: &'static str, var: usize| -> Result<(), crate::SketchError> {
+                if var >= len {
+                    Err(crate::SketchError::CorruptHandle {
+                        entity,
+                        field,
+                        var,
+                        len,
+                    })
+                } else {
+                    Ok(())
+                }
+            };
         // Helper: every Point2 carries an (x_var, y_var) pair. The
         // `kind` prefix disambiguates nested points (line start/end,
         // ellipse centre, etc.) in the error message.
@@ -443,8 +441,10 @@ impl Sketch {
                     // re-checking (see geom_bspline), so a malformed curve must
                     // be rejected here rather than panic during replay.
                     let n_cp = b.control_points.len();
-                    let bad =
-                        |reason: String| crate::SketchError::CorruptBSpline { entity: idx, reason };
+                    let bad = |reason: String| crate::SketchError::CorruptBSpline {
+                        entity: idx,
+                        reason,
+                    };
                     if b.degree < 1 {
                         return Err(bad(format!("degree {} must be >= 1", b.degree)));
                     }
@@ -481,7 +481,12 @@ impl Sketch {
                     check(idx, "minor_radius_var", e.minor_radius_var)?;
                 }
                 Entity::EllipticalArc(a) => {
-                    check_point(idx, "ellipse.center.x_var", "ellipse.center.y_var", &a.ellipse.center)?;
+                    check_point(
+                        idx,
+                        "ellipse.center.x_var",
+                        "ellipse.center.y_var",
+                        &a.ellipse.center,
+                    )?;
                     check(idx, "ellipse.major_x_var", a.ellipse.major_x_var)?;
                     check(idx, "ellipse.major_y_var", a.ellipse.major_y_var)?;
                     check(idx, "ellipse.minor_radius_var", a.ellipse.minor_radius_var)?;
@@ -663,7 +668,9 @@ mod tests {
             })],
             ..Sketch::default()
         };
-        let err = s.validate().expect_err("out-of-range x_var must be rejected");
+        let err = s
+            .validate()
+            .expect_err("out-of-range x_var must be rejected");
         assert_eq!(err.code(), "sketch.corrupt_handle");
     }
 
@@ -806,7 +813,10 @@ mod tests {
         };
         match s.validate() {
             Err(crate::SketchError::CorruptBSpline { reason, .. }) => {
-                assert!(reason.contains("knot"), "reason names the knot mismatch: {reason}");
+                assert!(
+                    reason.contains("knot"),
+                    "reason names the knot mismatch: {reason}"
+                );
             }
             other => panic!("expected CorruptBSpline, got {other:?}"),
         }
@@ -844,13 +854,8 @@ mod tests {
         s.add_ellipse(a, (2.0, 0.0), 1.0).unwrap();
         s.add_elliptical_arc(a, (2.0, 0.0), 1.0, 0.0, std::f64::consts::PI)
             .unwrap();
-        s.add_bspline(
-            1,
-            vec![0.0, 0.0, 1.0, 1.0],
-            &[a, b],
-            vec![1.0, 1.0],
-        )
-        .unwrap();
+        s.add_bspline(1, vec![0.0, 0.0, 1.0, 1.0], &[a, b], vec![1.0, 1.0])
+            .unwrap();
         assert!(
             s.validate().is_ok(),
             "a sketch built through the normal API must always validate"

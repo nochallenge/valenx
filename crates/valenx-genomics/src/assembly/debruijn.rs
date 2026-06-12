@@ -77,11 +77,7 @@ impl DeBruijnGraph {
             *indegree.entry(suffix).or_insert(0) += 1;
             indegree.entry(prefix).or_insert(0);
         }
-        Ok(DeBruijnGraph {
-            k,
-            edges,
-            indegree,
-        })
+        Ok(DeBruijnGraph { k, edges, indegree })
     }
 
     /// Number of distinct nodes (`(k−1)`-mers).
@@ -105,8 +101,7 @@ impl DeBruijnGraph {
     /// algorithms that need the raw structure (e.g. the local
     /// haplotype reassembler in [`crate::variant::haplotype`]).
     pub fn adjacency(&self) -> HashMap<Vec<u8>, Vec<Vec<u8>>> {
-        let mut out: HashMap<Vec<u8>, Vec<Vec<u8>>> =
-            HashMap::with_capacity(self.edges.len());
+        let mut out: HashMap<Vec<u8>, Vec<Vec<u8>>> = HashMap::with_capacity(self.edges.len());
         for (k, vs) in &self.edges {
             out.insert(k.clone(), vs.iter().map(|(s, _)| s.clone()).collect());
         }
@@ -407,12 +402,15 @@ mod tests {
             &genome[15..35],
             &genome[20..40],
         ];
-        let contigs = assemble(&reads, &AssemblyParams {
-            k: 11,
-            max_tip_len: 3,
-            pop_bubbles: true,
-            min_contig_len: 0,
-        })
+        let contigs = assemble(
+            &reads,
+            &AssemblyParams {
+                k: 11,
+                max_tip_len: 3,
+                pop_bubbles: true,
+                min_contig_len: 0,
+            },
+        )
         .unwrap();
         assert!(!contigs.is_empty());
         // The longest contig should reconstruct the whole genome.
@@ -442,12 +440,15 @@ mod tests {
         // into a single contig.
         let seq = b"AAGCCCAATAAACCACTCTGACTG";
         let reads: Vec<&[u8]> = vec![seq];
-        let contigs = assemble(&reads, &AssemblyParams {
-            k: 7,
-            max_tip_len: 3,
-            pop_bubbles: false,
-            min_contig_len: 0,
-        })
+        let contigs = assemble(
+            &reads,
+            &AssemblyParams {
+                k: 7,
+                max_tip_len: 3,
+                pop_bubbles: false,
+                min_contig_len: 0,
+            },
+        )
         .unwrap();
         // The whole read reassembles into one contig.
         assert!(contigs.iter().any(|c| c.as_slice() == seq.as_slice()));
@@ -486,8 +487,22 @@ mod tests {
     fn deterministic_output() {
         let genome = b"ACGTTGCAACGATGCAGGCCAATTACGTACGT";
         let reads: Vec<&[u8]> = vec![&genome[0..16], &genome[8..24], &genome[16..32]];
-        let a = assemble(&reads, &AssemblyParams { k: 9, ..AssemblyParams::default() }).unwrap();
-        let b = assemble(&reads, &AssemblyParams { k: 9, ..AssemblyParams::default() }).unwrap();
+        let a = assemble(
+            &reads,
+            &AssemblyParams {
+                k: 9,
+                ..AssemblyParams::default()
+            },
+        )
+        .unwrap();
+        let b = assemble(
+            &reads,
+            &AssemblyParams {
+                k: 9,
+                ..AssemblyParams::default()
+            },
+        )
+        .unwrap();
         assert_eq!(a, b);
     }
 
@@ -495,12 +510,15 @@ mod tests {
     fn min_contig_length_filters() {
         let genome = b"ACGTTGCAACGATGCAGGCCAATTACGTACGT";
         let reads: Vec<&[u8]> = vec![genome];
-        let big = assemble(&reads, &AssemblyParams {
-            k: 9,
-            max_tip_len: 3,
-            pop_bubbles: false,
-            min_contig_len: 1000,
-        })
+        let big = assemble(
+            &reads,
+            &AssemblyParams {
+                k: 9,
+                max_tip_len: 3,
+                pop_bubbles: false,
+                min_contig_len: 1000,
+            },
+        )
         .unwrap();
         // Nothing reaches 1000 bp.
         assert!(big.is_empty());

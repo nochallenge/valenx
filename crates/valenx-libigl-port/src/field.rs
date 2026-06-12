@@ -83,7 +83,11 @@ pub fn heat_geodesics(mesh: &TriMesh, source_vertex: usize) -> Result<Vec<f64>, 
         let g = triangle_gradient(mesh, tri, &u);
         let neg = -g;
         let len = neg.norm();
-        tri_dir.push(if len < 1e-14 { Vector3::zeros() } else { neg / len });
+        tri_dir.push(if len < 1e-14 {
+            Vector3::zeros()
+        } else {
+            neg / len
+        });
     }
 
     // --- Step 3: Poisson reconstruction.  L φ = ∇·X ---
@@ -135,13 +139,11 @@ fn triangle_gradient(mesh: &TriMesh, tri: &[usize; 3], u: &DVector<f64>) -> Vect
         return Vector3::zeros();
     }
     let n = normal_raw / area2; // unit normal
-    // Edge opposite each vertex (CCW): opposite i is (j→k), etc.
+                                // Edge opposite each vertex (CCW): opposite i is (j→k), etc.
     let e_i = vk - vj;
     let e_j = vi - vk;
     let e_k = vj - vi;
-    let grad = n.cross(&e_i) * u[tri[0]]
-        + n.cross(&e_j) * u[tri[1]]
-        + n.cross(&e_k) * u[tri[2]];
+    let grad = n.cross(&e_i) * u[tri[0]] + n.cross(&e_j) * u[tri[1]] + n.cross(&e_k) * u[tri[2]];
     grad / area2
 }
 
@@ -170,8 +172,8 @@ fn integrated_divergence(mesh: &TriMesh, tri_dir: &[Vector3<f64>]) -> DVector<f6
             // Edges from vertex i.
             let e1 = v[(c + 1) % 3] - v[c]; // i → a
             let e2 = v[(c + 2) % 3] - v[c]; // i → b
-            // Opposite angles: angle at b is opposite e1, angle at a
-            // opposite e2.
+                                            // Opposite angles: angle at b is opposite e1, angle at a
+                                            // opposite e2.
             let cot_at_b = cot_angle(v[(c + 2) % 3], v[c], v[(c + 1) % 3]);
             let cot_at_a = cot_angle(v[(c + 1) % 3], v[(c + 2) % 3], v[c]);
             let _ = (a, b);
@@ -263,7 +265,10 @@ mod tests {
         let m = grid(3);
         assert!(matches!(
             heat_geodesics(&m, 99),
-            Err(LibiglError::BadParameter { name: "source_vertex", .. })
+            Err(LibiglError::BadParameter {
+                name: "source_vertex",
+                ..
+            })
         ));
     }
 

@@ -120,9 +120,7 @@ impl BedRecord {
     /// Half-open intervals overlap when `a.start < b.end &&
     /// b.start < a.end`.
     pub fn overlaps(&self, other: &BedRecord) -> bool {
-        self.chrom == other.chrom
-            && self.start < other.end
-            && other.start < self.end
+        self.chrom == other.chrom && self.start < other.end && other.start < self.end
     }
 
     /// Parses one tab-delimited BED line.
@@ -280,9 +278,7 @@ impl BedFile {
         let mut out: Vec<BedRecord> = Vec::new();
         for r in sorted.records {
             match out.last_mut() {
-                Some(last)
-                    if last.chrom == r.chrom && r.start <= last.end =>
-                {
+                Some(last) if last.chrom == r.chrom && r.start <= last.end => {
                     last.end = last.end.max(r.end);
                 }
                 _ => {

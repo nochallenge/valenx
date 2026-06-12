@@ -153,9 +153,7 @@ fn merge_coplanar_faces(mesh: &Mesh) -> Mesh {
                     continue;
                 };
                 for &nt in neigh {
-                    if region_of[nt] == usize::MAX
-                        && same_plane(t, &tris[nt])
-                    {
+                    if region_of[nt] == usize::MAX && same_plane(t, &tris[nt]) {
                         region_of[nt] = rid;
                         queue.push_back(nt);
                     }

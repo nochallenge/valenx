@@ -409,7 +409,8 @@ mod tests {
     #[test]
     fn domain_annotation_is_detected() {
         // Domain covering CDS 40..120; a cut there should be flagged.
-        let g = GeneModel::from_cds(cds(), &[0, 69]).unwrap()
+        let g = GeneModel::from_cds(cds(), &[0, 69])
+            .unwrap()
             .with_domain("kinase", 40, 120);
         let req = KnockoutRequest::new(g, NucleaseId::SpCas9);
         let strat = design_knockout(&req).unwrap();

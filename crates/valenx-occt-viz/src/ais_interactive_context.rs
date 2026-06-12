@@ -45,7 +45,9 @@ use crate::error::OcctVizError;
 
 /// Per-object visibility / highlight state mirror of OCCT's
 /// `AIS_DisplayStatus` + dynamic/selected highlight flags.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum ObjectState {
     /// Object is hidden from the viewer.
@@ -131,16 +133,14 @@ impl Pickable {
             c / pts.len() as f64
         };
         match self {
-            Pickable::Mesh { triangles } | Pickable::TaggedMesh { triangles, .. } => {
-                avg(triangles)
-            }
+            Pickable::Mesh { triangles } | Pickable::TaggedMesh { triangles, .. } => avg(triangles),
             Pickable::Polyline { points } => avg(points),
-            Pickable::Point { position } => {
-                Vector3::new(position[0], position[1], position[2])
-            }
+            Pickable::Point { position } => Vector3::new(position[0], position[1], position[2]),
             Pickable::TaggedEdges { edges } => {
-                let all: Vec<[f64; 3]> =
-                    edges.iter().flat_map(|(_, pts)| pts.iter().copied()).collect();
+                let all: Vec<[f64; 3]> = edges
+                    .iter()
+                    .flat_map(|(_, pts)| pts.iter().copied())
+                    .collect();
                 avg(&all)
             }
             Pickable::TaggedVertices { vertices } => {
@@ -404,9 +404,7 @@ pub(crate) fn ray_pick_subshape(
             }
             best.map(|t| (t, 0))
         }
-        Pickable::Point { position } => {
-            ray_point(ray, v3(position), tolerance).map(|t| (t, 0))
-        }
+        Pickable::Point { position } => ray_point(ray, v3(position), tolerance).map(|t| (t, 0)),
         Pickable::TaggedMesh {
             triangles,
             face_tags,
@@ -553,11 +551,7 @@ mod tests {
     /// A unit-ish triangle facing the camera, centred on the axis.
     fn axis_triangle() -> Pickable {
         Pickable::Mesh {
-            triangles: vec![
-                [-1.0, -1.0, 0.0],
-                [1.0, -1.0, 0.0],
-                [0.0, 1.0, 0.0],
-            ],
+            triangles: vec![[-1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 1.0, 0.0]],
         }
     }
 
@@ -618,7 +612,9 @@ mod tests {
         let id = ctx.display_geometry(axis_triangle());
         // The centre ray hits the axis triangle at z=0.
         let ray = ctx.ray_at(50.0, 50.0).unwrap();
-        let hit = ctx.pick_nearest(&ray, 0.1).expect("centre ray hits triangle");
+        let hit = ctx
+            .pick_nearest(&ray, 0.1)
+            .expect("centre ray hits triangle");
         assert_eq!(hit.id, id);
         // The hit is ~10 units away (eye at z=10, triangle at z=0).
         assert!((hit.distance - 10.0).abs() < 1.0, "t={}", hit.distance);
@@ -631,11 +627,7 @@ mod tests {
         // Far triangle at z=0, near triangle at z=5 — the near one wins.
         let _far = ctx.display_geometry(axis_triangle());
         let near = ctx.display_geometry(Pickable::Mesh {
-            triangles: vec![
-                [-1.0, -1.0, 5.0],
-                [1.0, -1.0, 5.0],
-                [0.0, 1.0, 5.0],
-            ],
+            triangles: vec![[-1.0, -1.0, 5.0], [1.0, -1.0, 5.0], [0.0, 1.0, 5.0]],
         });
         let ray = ctx.ray_at(50.0, 50.0).unwrap();
         let hit = ctx.pick_nearest(&ray, 0.1).unwrap();
@@ -658,11 +650,7 @@ mod tests {
         ctx.set_view(test_view(), 100.0, 100.0);
         // Triangle far off to the side — the centre ray misses it.
         ctx.display_geometry(Pickable::Mesh {
-            triangles: vec![
-                [50.0, 50.0, 0.0],
-                [52.0, 50.0, 0.0],
-                [51.0, 52.0, 0.0],
-            ],
+            triangles: vec![[50.0, 50.0, 0.0], [52.0, 50.0, 0.0], [51.0, 52.0, 0.0]],
         });
         let ray = ctx.ray_at(50.0, 50.0).unwrap();
         assert!(ctx.pick_nearest(&ray, 0.1).is_none());

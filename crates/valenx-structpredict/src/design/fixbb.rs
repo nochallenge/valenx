@@ -187,5 +187,3 @@ mod tests {
         assert!(design_fixed_backbone(&m, &palette, 10, 0).is_err());
     }
 }
-
-

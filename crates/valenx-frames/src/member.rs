@@ -105,7 +105,11 @@ fn local_frame(tangent: Vector3<f64>) -> (Vector3<f64>, Vector3<f64>, Vector3<f6
 }
 
 /// Apply the optional roll rotation about the tangent axis.
-fn rotate_about_tangent(u: Vector3<f64>, v: Vector3<f64>, angle_deg: f64) -> (Vector3<f64>, Vector3<f64>) {
+fn rotate_about_tangent(
+    u: Vector3<f64>,
+    v: Vector3<f64>,
+    angle_deg: f64,
+) -> (Vector3<f64>, Vector3<f64>) {
     if angle_deg == 0.0 {
         return (u, v);
     }
@@ -187,23 +191,22 @@ pub fn to_solid(m: &Member) -> Result<Solid, FramesError> {
     }
 
     // End caps: fan to centroid at first + last station.
-    let mut cap_centroid =
-        |station: Vector3<f64>, base: u32, _flip: bool| -> u32 {
-            // Compute centroid from the ring nodes already pushed for
-            // this station — they're consecutive in `nodes` starting
-            // at `base`.
-            let mut c = Vector3::zeros();
-            for i in 0..n {
-                c += mesh.nodes[base as usize + i];
-            }
-            c /= n as f64;
-            // Replace one component with the station to keep cap
-            // co-planar with the section (best-effort: caps live in
-            // the section plane already).
-            let _ = station;
-            mesh.nodes.push(c);
-            mesh.nodes.len() as u32 - 1
-        };
+    let mut cap_centroid = |station: Vector3<f64>, base: u32, _flip: bool| -> u32 {
+        // Compute centroid from the ring nodes already pushed for
+        // this station — they're consecutive in `nodes` starting
+        // at `base`.
+        let mut c = Vector3::zeros();
+        for i in 0..n {
+            c += mesh.nodes[base as usize + i];
+        }
+        c /= n as f64;
+        // Replace one component with the station to keep cap
+        // co-planar with the section (best-effort: caps live in
+        // the section plane already).
+        let _ = station;
+        mesh.nodes.push(c);
+        mesh.nodes.len() as u32 - 1
+    };
     let c_first = cap_centroid(m.path[0], ring_base[0], true);
     let c_last = cap_centroid(*m.path.last().unwrap(), *ring_base.last().unwrap(), false);
     for i in 0..n {
@@ -216,11 +219,9 @@ pub fn to_solid(m: &Member) -> Result<Solid, FramesError> {
         ]);
         // Last cap fan.
         let base_last = *ring_base.last().unwrap();
-        block.connectivity.extend_from_slice(&[
-            c_last,
-            base_last + i as u32,
-            base_last + j as u32,
-        ]);
+        block
+            .connectivity
+            .extend_from_slice(&[c_last, base_last + i as u32, base_last + j as u32]);
     }
 
     mesh.element_blocks.push(block);
@@ -309,9 +310,7 @@ mod tests {
         assert_eq!(m.path.len(), 20, "path should have n_samples vertices");
         // Curve endpoints are the first and last control points.
         assert!((m.path[0] - Vector3::new(0.0, 0.0, 0.0)).norm() < 1e-6);
-        assert!(
-            (m.path[19] - Vector3::new(1000.0, 0.0, 0.0)).norm() < 1e-6
-        );
+        assert!((m.path[19] - Vector3::new(1000.0, 0.0, 0.0)).norm() < 1e-6);
         // The curve bulges toward +Y — at least one interior sample
         // must have y > 0 (a straight line could not).
         assert!(m.path.iter().any(|p| p.y > 1.0), "path should be curved");
@@ -319,8 +318,7 @@ mod tests {
 
     #[test]
     fn from_nurbs_curve_member_sweeps_to_a_solid() {
-        let m = Member::from_nurbs_curve(&sample_nurbs(), 16, Profile::default_ipe200())
-            .unwrap();
+        let m = Member::from_nurbs_curve(&sample_nurbs(), 16, Profile::default_ipe200()).unwrap();
         let s = to_solid(&m).expect("curved member meshes");
         match s {
             Solid::Mesh(mesh) => {
@@ -333,8 +331,8 @@ mod tests {
 
     #[test]
     fn from_nurbs_curve_rejects_too_few_samples() {
-        let err = Member::from_nurbs_curve(&sample_nurbs(), 1, Profile::default_ipe200())
-            .unwrap_err();
+        let err =
+            Member::from_nurbs_curve(&sample_nurbs(), 1, Profile::default_ipe200()).unwrap_err();
         assert!(matches!(err, FramesError::BadParameter { .. }));
     }
 }

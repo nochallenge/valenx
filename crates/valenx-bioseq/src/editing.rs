@@ -146,9 +146,7 @@ fn remap_location_insert(loc: &Location, pos: usize, len: usize) -> Location {
 fn remap_location_delete(loc: &Location, del_start: usize, del_end: usize) -> Option<Location> {
     let del_len = del_end - del_start;
     match loc {
-        Location::Single(s) => {
-            shift_span_for_delete(*s, del_start, del_end).map(Location::Single)
-        }
+        Location::Single(s) => shift_span_for_delete(*s, del_start, del_end).map(Location::Single),
         Location::Join(v) => {
             let kept: Vec<Span> = v
                 .iter()
@@ -376,7 +374,10 @@ mod tests {
     fn replace_basic() {
         let s = dna("AAAATTTT");
         // Replace a 2-base stretch with a 4-base one.
-        assert_eq!(replace(&s, 4, 6, &dna("GGGG")).unwrap().as_str(), "AAAAGGGGTT");
+        assert_eq!(
+            replace(&s, 4, 6, &dna("GGGG")).unwrap().as_str(),
+            "AAAAGGGGTT"
+        );
     }
 
     #[test]

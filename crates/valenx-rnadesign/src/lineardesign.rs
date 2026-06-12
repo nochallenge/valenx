@@ -522,8 +522,7 @@ impl<'a> LatticeFold<'a> {
     #[inline]
     fn min_codon_charge(&self, p: usize) -> f64 {
         if CodonLattice::offset_of(p) == 2 {
-            self.lambda
-                * self.lat.penalty(CodonLattice::codon_of(p), 0)
+            self.lambda * self.lat.penalty(CodonLattice::codon_of(p), 0)
         } else {
             0.0
         }
@@ -541,8 +540,7 @@ impl<'a> LatticeFold<'a> {
         ];
         for a in 0..4 {
             for b in (a + 1)..4 {
-                if CodonLattice::codon_of(positions[a].0)
-                    == CodonLattice::codon_of(positions[b].0)
+                if CodonLattice::codon_of(positions[a].0) == CodonLattice::codon_of(positions[b].0)
                     && positions[a].1 != positions[b].1
                 {
                     return false;
@@ -678,7 +676,10 @@ impl<'a> LatticeFold<'a> {
         let mut choice = vec![0usize; bnd.len()];
         loop {
             let ch_of = |c: usize| -> usize {
-                bnd.iter().position(|&x| x == c).map(|idx| choice[idx]).unwrap_or(0)
+                bnd.iter()
+                    .position(|&x| x == c)
+                    .map(|idx| choice[idx])
+                    .unwrap_or(0)
             };
             let cod = PCodons {
                 ci: ch_of(CodonLattice::codon_of(i)),
@@ -703,8 +704,7 @@ impl<'a> LatticeFold<'a> {
                         if CodonLattice::offset_of(p) == 2 {
                             let codon = CodonLattice::codon_of(p);
                             if bnd.contains(&codon) {
-                                charge += self.lambda
-                                    * lat.penalty(codon, ch_of(codon));
+                                charge += self.lambda * lat.penalty(codon, ch_of(codon));
                             } else {
                                 // Interior codon: host-optimal.
                                 charge += self.min_codon_charge(p);
@@ -771,23 +771,15 @@ impl<'a> LatticeFold<'a> {
                 let bl = lat.base_at(l, inner.cj);
                 // Internal-loop energy with left = right = 0 is the
                 // stack energy.
-                let e = energy::internal_loop_energy(
-                    bi, bj, bk, bl, 0, 0, bk, bl, bk, bl,
-                );
+                let e = energy::internal_loop_energy(bi, bj, bk, bl, 0, 0, bk, bl, bk, bl);
                 if e >= INF / 2.0 {
                     continue;
                 }
                 // Charge codons closed at i and j (offset-2 rule); the
                 // inner pair self-charged [k..=l].
-                let charge =
-                    self.codon_charge(i, choice_i) + self.codon_charge(j, choice_j);
+                let charge = self.codon_charge(i, choice_i) + self.codon_charge(j, choice_j);
                 let obj = e + inner_obj + charge;
-                relax_p(
-                    out,
-                    PKey { i, cod },
-                    obj,
-                    PFrom::Stack(inner),
-                );
+                relax_p(out, PKey { i, cod }, obj, PFrom::Stack(inner));
             }
         }
     }
@@ -823,11 +815,9 @@ impl<'a> LatticeFold<'a> {
                 if !energy::can_pair_codes(bi, bj) {
                     continue;
                 }
-                let closure = multiloop::OFFSET
-                    + multiloop::PER_BRANCH
-                    + energy::terminal_penalty(bi, bj);
-                let charge =
-                    self.codon_charge(i, choice_i) + self.codon_charge(j, choice_j);
+                let closure =
+                    multiloop::OFFSET + multiloop::PER_BRANCH + energy::terminal_penalty(bi, bj);
+                let charge = self.codon_charge(i, choice_i) + self.codon_charge(j, choice_j);
                 let obj = closure + m2_obj + charge;
                 relax_p(
                     out,
@@ -869,12 +859,7 @@ impl<'a> LatticeFold<'a> {
                 for choice_j in 0..lat.n_choices(cj_codon) {
                     // j's codon must extend the previous fragment's
                     // right codon, and stay consistent with its left.
-                    if !codons_consistent(
-                        cj_codon,
-                        choice_j,
-                        cjm1_codon,
-                        prev_key.cj,
-                    ) {
+                    if !codons_consistent(cj_codon, choice_j, cjm1_codon, prev_key.cj) {
                         continue;
                     }
                     if !codons_consistent(
@@ -930,12 +915,7 @@ impl<'a> LatticeFold<'a> {
             for (m_key, m_obj) in m_states {
                 // M's right codon (codon of k) must agree with M1's
                 // left codon (codon of k+1).
-                if !codons_consistent(
-                    ck_codon,
-                    m_key.cj,
-                    CodonLattice::codon_of(kp1),
-                    m1_key.ci,
-                ) {
+                if !codons_consistent(ck_codon, m_key.cj, CodonLattice::codon_of(kp1), m1_key.ci) {
                     continue;
                 }
                 // Combined fragment's endpoint codons consistent.
@@ -973,12 +953,7 @@ impl<'a> LatticeFold<'a> {
             let cjm1_codon = CodonLattice::codon_of(j - 1);
             for (prev_key, prev_obj) in prev {
                 for choice_j in 0..lat.n_choices(cj_codon) {
-                    if !codons_consistent(
-                        cj_codon,
-                        choice_j,
-                        cjm1_codon,
-                        prev_key.cj,
-                    ) {
+                    if !codons_consistent(cj_codon, choice_j, cjm1_codon, prev_key.cj) {
                         continue;
                     }
                     if !codons_consistent(
@@ -1039,12 +1014,7 @@ impl<'a> LatticeFold<'a> {
                     if !codons_consistent(cprev, choice_prev, cs, key.ci) {
                         continue;
                     }
-                    if !codons_consistent(
-                        cprev,
-                        choice_prev,
-                        cj_codon,
-                        key.cj,
-                    ) {
+                    if !codons_consistent(cprev, choice_prev, cj_codon, key.cj) {
                         continue;
                     }
                     let charge = self.codon_charge(prev_pos, choice_prev);
@@ -1093,12 +1063,7 @@ impl<'a> LatticeFold<'a> {
                 .collect();
             for (prev_choice, prev_obj) in &prev {
                 for choice_j in 0..lat.n_choices(cj_codon) {
-                    if !codons_consistent(
-                        cj_codon,
-                        choice_j,
-                        cjm1_codon,
-                        *prev_choice,
-                    ) {
+                    if !codons_consistent(cj_codon, choice_j, cjm1_codon, *prev_choice) {
                         continue;
                     }
                     let charge = self.codon_charge(j, choice_j);
@@ -1191,11 +1156,7 @@ impl<'a> LatticeFold<'a> {
         let objective = best_cell.objective;
 
         // Pins a codon, erroring on a contradiction.
-        fn pin(
-            codon_choice: &mut [Option<usize>],
-            codon: usize,
-            choice: usize,
-        ) -> Result<()> {
+        fn pin(codon_choice: &mut [Option<usize>], codon: usize, choice: usize) -> Result<()> {
             match codon_choice[codon] {
                 None => {
                     codon_choice[codon] = Some(choice);
@@ -1204,9 +1165,7 @@ impl<'a> LatticeFold<'a> {
                 Some(prev) if prev == choice => Ok(()),
                 Some(prev) => Err(RnaDesignError::no_design(
                     "lineardesign",
-                    format!(
-                        "traceback codon contradiction at {codon}: {prev} vs {choice}"
-                    ),
+                    format!("traceback codon contradiction at {codon}: {prev} vs {choice}"),
                 )),
             }
         }
@@ -1243,10 +1202,7 @@ impl<'a> LatticeFold<'a> {
                     let ju = j as usize;
                     pin(&mut codon_choice, CodonLattice::codon_of(ju), choice_j)?;
                     let cell = self.c[ju].get(&choice_j).ok_or_else(|| {
-                        RnaDesignError::no_design(
-                            "lineardesign",
-                            "traceback: missing C state",
-                        )
+                        RnaDesignError::no_design("lineardesign", "traceback: missing C state")
                     })?;
                     match cell.from {
                         CFrom::Unpaired { prev_cj } => {
@@ -1268,10 +1224,7 @@ impl<'a> LatticeFold<'a> {
                     pin_pcodons(&mut codon_choice, i, j, &cod)?;
                     let key = PKey { i, cod };
                     let cell = self.p[j].get(&key).ok_or_else(|| {
-                        RnaDesignError::no_design(
-                            "lineardesign",
-                            "traceback: missing P state",
-                        )
+                        RnaDesignError::no_design("lineardesign", "traceback: missing P state")
                     })?;
                     match cell.from {
                         PFrom::Hairpin => {
@@ -1297,10 +1250,7 @@ impl<'a> LatticeFold<'a> {
                     pin(&mut codon_choice, CodonLattice::codon_of(key.i), key.ci)?;
                     pin(&mut codon_choice, CodonLattice::codon_of(j), key.cj)?;
                     let cell = self.m1[j].get(&key).ok_or_else(|| {
-                        RnaDesignError::no_design(
-                            "lineardesign",
-                            "traceback: missing M1 state",
-                        )
+                        RnaDesignError::no_design("lineardesign", "traceback: missing M1 state")
                     })?;
                     match cell.from {
                         M1From::Branch(cod) => {
@@ -1322,10 +1272,7 @@ impl<'a> LatticeFold<'a> {
                     pin(&mut codon_choice, CodonLattice::codon_of(key.i), key.ci)?;
                     pin(&mut codon_choice, CodonLattice::codon_of(j), key.cj)?;
                     let cell = self.m[j].get(&key).ok_or_else(|| {
-                        RnaDesignError::no_design(
-                            "lineardesign",
-                            "traceback: missing M state",
-                        )
+                        RnaDesignError::no_design("lineardesign", "traceback: missing M state")
                     })?;
                     match cell.from {
                         MFrom::FromM1 => stack.push(Job::M1(key, j)),
@@ -1346,10 +1293,7 @@ impl<'a> LatticeFold<'a> {
                     pin(&mut codon_choice, CodonLattice::codon_of(key.i), key.ci)?;
                     pin(&mut codon_choice, CodonLattice::codon_of(j), key.cj)?;
                     let cell = self.m2[j].get(&key).ok_or_else(|| {
-                        RnaDesignError::no_design(
-                            "lineardesign",
-                            "traceback: missing M2 state",
-                        )
+                        RnaDesignError::no_design("lineardesign", "traceback: missing M2 state")
                     })?;
                     match cell.from {
                         M2From::Split { k, m_cj, m1_ci } => {
@@ -1395,9 +1339,8 @@ impl<'a> LatticeFold<'a> {
                 cds.push(code_to_ascii(self.lat.slots[c].options[ch].bases[off]));
             }
         }
-        let structure = Structure::from_partner(partner).map_err(|e| {
-            RnaDesignError::upstream("valenx-rnastruct", e.to_string())
-        })?;
+        let structure = Structure::from_partner(partner)
+            .map_err(|e| RnaDesignError::upstream("valenx-rnastruct", e.to_string()))?;
         Ok((cds, structure, objective))
     }
 
@@ -1440,9 +1383,7 @@ impl<'a> LatticeFold<'a> {
                     let bj = lat.base_at(j, cod.cj);
                     if energy::can_pair_codes(bi, bj) {
                         let loop_bases: Vec<u8> = ((i + 1)..j)
-                            .map(|p| {
-                                lat.base_at(p, ch_of(CodonLattice::codon_of(p)))
-                            })
+                            .map(|p| lat.base_at(p, ch_of(CodonLattice::codon_of(p))))
                             .collect();
                         let e = energy::hairpin_energy(bi, bj, &loop_bases);
                         let mut charge = 0.0;
@@ -1492,8 +1433,10 @@ impl<'a> LatticeFold<'a> {
 /// The distinct codons (ascending) the given nucleotide positions fall
 /// in.
 fn distinct_codons(positions: &[usize]) -> Vec<usize> {
-    let mut codons: Vec<usize> =
-        positions.iter().map(|&p| CodonLattice::codon_of(p)).collect();
+    let mut codons: Vec<usize> = positions
+        .iter()
+        .map(|&p| CodonLattice::codon_of(p))
+        .collect();
     codons.sort_unstable();
     codons.dedup();
     codons
@@ -1524,7 +1467,10 @@ fn relax_p(out: &mut HashMap<PKey, Cell<PFrom>>, key: PKey, obj: f64, from: PFro
     if obj >= INF / 2.0 {
         return;
     }
-    let slot = out.entry(key).or_insert(Cell { objective: INF, from });
+    let slot = out.entry(key).or_insert(Cell {
+        objective: INF,
+        from,
+    });
     if obj < slot.objective {
         slot.objective = obj;
         slot.from = from;
@@ -1532,16 +1478,14 @@ fn relax_p(out: &mut HashMap<PKey, Cell<PFrom>>, key: PKey, obj: f64, from: PFro
 }
 
 /// Relaxes an `M`-channel beam entry.
-fn relax_m<T: Copy>(
-    out: &mut HashMap<MKey, Cell<T>>,
-    key: MKey,
-    obj: f64,
-    from: T,
-) {
+fn relax_m<T: Copy>(out: &mut HashMap<MKey, Cell<T>>, key: MKey, obj: f64, from: T) {
     if obj >= INF / 2.0 {
         return;
     }
-    let slot = out.entry(key).or_insert(Cell { objective: INF, from });
+    let slot = out.entry(key).or_insert(Cell {
+        objective: INF,
+        from,
+    });
     if obj < slot.objective {
         slot.objective = obj;
         slot.from = from;
@@ -1553,7 +1497,10 @@ fn relax_c(out: &mut HashMap<usize, Cell<CFrom>>, key: usize, obj: f64, from: CF
     if obj >= INF / 2.0 {
         return;
     }
-    let slot = out.entry(key).or_insert(Cell { objective: INF, from });
+    let slot = out.entry(key).or_insert(Cell {
+        objective: INF,
+        from,
+    });
     if obj < slot.objective {
         slot.objective = obj;
         slot.from = from;
@@ -1566,11 +1513,8 @@ fn prune_p(beam_map: &mut HashMap<PKey, Cell<PFrom>>, beam: usize) -> bool {
     if beam_map.len() <= beam {
         return false;
     }
-    let mut entries: Vec<(PKey, f64)> =
-        beam_map.iter().map(|(&k, c)| (k, c.objective)).collect();
-    entries.sort_by(|a, b| {
-        a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    let mut entries: Vec<(PKey, f64)> = beam_map.iter().map(|(&k, c)| (k, c.objective)).collect();
+    entries.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     let keep: std::collections::HashSet<PKey> =
         entries.iter().take(beam).map(|&(k, _)| k).collect();
     beam_map.retain(|k, _| keep.contains(k));
@@ -1582,11 +1526,8 @@ fn prune_m<T: Copy>(beam_map: &mut HashMap<MKey, Cell<T>>, beam: usize) -> bool 
     if beam_map.len() <= beam {
         return false;
     }
-    let mut entries: Vec<(MKey, f64)> =
-        beam_map.iter().map(|(&k, c)| (k, c.objective)).collect();
-    entries.sort_by(|a, b| {
-        a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    let mut entries: Vec<(MKey, f64)> = beam_map.iter().map(|(&k, c)| (k, c.objective)).collect();
+    entries.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     let keep: std::collections::HashSet<MKey> =
         entries.iter().take(beam).map(|&(k, _)| k).collect();
     beam_map.retain(|k, _| keep.contains(k));
@@ -1598,11 +1539,8 @@ fn prune_c(beam_map: &mut HashMap<usize, Cell<CFrom>>, beam: usize) -> bool {
     if beam_map.len() <= beam {
         return false;
     }
-    let mut entries: Vec<(usize, f64)> =
-        beam_map.iter().map(|(&k, c)| (k, c.objective)).collect();
-    entries.sort_by(|a, b| {
-        a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    let mut entries: Vec<(usize, f64)> = beam_map.iter().map(|(&k, c)| (k, c.objective)).collect();
+    entries.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     let keep: std::collections::HashSet<usize> =
         entries.iter().take(beam).map(|&(k, _)| k).collect();
     beam_map.retain(|k, _| keep.contains(k));
@@ -1797,7 +1735,10 @@ mod tests {
         let r = linear_design(&req).unwrap();
         // M K V L A * = 6 codons = 18 nt.
         assert_eq!(r.cds.len(), 18);
-        assert!(r.cds.iter().all(|&b| matches!(b, b'A' | b'C' | b'G' | b'U')));
+        assert!(r
+            .cds
+            .iter()
+            .all(|&b| matches!(b, b'A' | b'C' | b'G' | b'U')));
         assert_eq!(&r.cds[..3], b"AUG");
     }
 
@@ -1850,11 +1791,7 @@ mod tests {
 
     #[test]
     fn reported_mfe_matches_structure_energy() {
-        let req = LinearDesignRequest::new(
-            b"MKKLLAAGGEEDD".to_vec(),
-            ExpressionHost::Human,
-            0.0,
-        );
+        let req = LinearDesignRequest::new(b"MKKLLAAGGEEDD".to_vec(), ExpressionHost::Human, 0.0);
         let r = linear_design(&req).unwrap();
         let rna = RnaSeq::parse(&r.cds).unwrap();
         let e = structure_energy(&rna, &r.structure).unwrap();
@@ -1867,8 +1804,7 @@ mod tests {
         // non-decreasing (parametric-optimisation monotonicity).
         let protein = b"MKKLLAAGGEEDDRRSS";
         let lambdas = [0.0, 0.1, 0.5, 1.0, 5.0, 100.0];
-        let front =
-            pareto_sweep(protein, ExpressionHost::Human, &lambdas, EXACT_BEAM).unwrap();
+        let front = pareto_sweep(protein, ExpressionHost::Human, &lambdas, EXACT_BEAM).unwrap();
         for w in front.windows(2) {
             assert!(
                 w[1].cai >= w[0].cai - 1e-6,
@@ -1887,8 +1823,7 @@ mod tests {
         // non-decreasing — the mRNA gets less stable.
         let protein = b"MKKLLAAGGEEDDRRSS";
         let lambdas = [0.0, 0.1, 0.5, 1.0, 5.0, 100.0];
-        let front =
-            pareto_sweep(protein, ExpressionHost::Human, &lambdas, EXACT_BEAM).unwrap();
+        let front = pareto_sweep(protein, ExpressionHost::Human, &lambdas, EXACT_BEAM).unwrap();
         for w in front.windows(2) {
             assert!(
                 w[1].mfe >= w[0].mfe - 1e-6,
@@ -1910,7 +1845,10 @@ mod tests {
             beam_size: EXACT_BEAM,
         };
         let r = linear_design(&req).unwrap();
-        assert!(r.exact, "a wide beam should disable pruning on a 9-codon CDS");
+        assert!(
+            r.exact,
+            "a wide beam should disable pruning on a 9-codon CDS"
+        );
     }
 
     #[test]
@@ -1944,11 +1882,7 @@ mod tests {
 
     #[test]
     fn structure_is_valid_and_nested() {
-        let req = LinearDesignRequest::new(
-            b"MKKLLAAGGEEDD".to_vec(),
-            ExpressionHost::Human,
-            0.0,
-        );
+        let req = LinearDesignRequest::new(b"MKKLLAAGGEEDD".to_vec(), ExpressionHost::Human, 0.0);
         let r = linear_design(&req).unwrap();
         assert_eq!(r.structure.len(), r.cds.len());
         assert!(r.structure.is_nested());
@@ -1980,8 +1914,8 @@ mod tests {
         // CAI, but we compare objectives directly via the DP — the
         // joint DP's objective is the minimum, so it is ≤ any other
         // CDS's objective including the naive one.
-        let naive_objective = naive.mfe
-            + lambda * total_codon_penalty(&naive.cds, ExpressionHost::Human);
+        let naive_objective =
+            naive.mfe + lambda * total_codon_penalty(&naive.cds, ExpressionHost::Human);
         assert!(
             joint.objective <= naive_objective + 1e-6,
             "joint objective {} should beat naive objective {}",

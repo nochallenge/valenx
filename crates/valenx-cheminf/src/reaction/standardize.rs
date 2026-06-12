@@ -24,7 +24,7 @@ use crate::molecule::Molecule;
 pub const COMMON_SALTS: &[&str] = &[
     "Cl", "Br", "I", "F", // halide counter-ions
     "Na", "K", "Li", "Ca", "Mg", // metal counter-ions
-    "O", // water of crystallisation
+    "O",  // water of crystallisation
 ];
 
 /// Remove salt / solvent fragments, returning the parent molecule.

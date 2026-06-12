@@ -6,8 +6,8 @@
 
 use eframe::egui;
 use valenx_viz::{
-    gizmo_axis_screen_dirs, intersect_ground_y0, project_point, ray_from_screen,
-    snap_ground_point, GizmoFace, OrbitCamera,
+    gizmo_axis_screen_dirs, intersect_ground_y0, project_point, ray_from_screen, snap_ground_point,
+    GizmoFace, OrbitCamera,
 };
 
 const GIZMO_RADIUS: f32 = 44.0;

@@ -34,9 +34,7 @@ fn apply_one(mesh: &mut Mesh, d: Defeature) -> Result<(), DefeatureError> {
             if !(0.0..1.0).contains(&max_aspect) {
                 return Err(DefeatureError::BadParameter {
                     name: "max_aspect",
-                    reason: format!(
-                        "must be in [0, 1), got {max_aspect}"
-                    ),
+                    reason: format!("must be in [0, 1), got {max_aspect}"),
                 });
             }
             filter_tri_blocks(mesh, |a, b, c| {
@@ -66,9 +64,7 @@ fn apply_one(mesh: &mut Mesh, d: Defeature) -> Result<(), DefeatureError> {
             if max_radius_mm <= 0.0 {
                 return Err(DefeatureError::BadParameter {
                     name: "max_radius_mm",
-                    reason: format!(
-                        "must be > 0, got {max_radius_mm}"
-                    ),
+                    reason: format!("must be > 0, got {max_radius_mm}"),
                 });
             }
             // v1 proxy: drop triangles whose minimum circumscribed
@@ -94,9 +90,7 @@ fn apply_one(mesh: &mut Mesh, d: Defeature) -> Result<(), DefeatureError> {
             if max_diameter_mm <= 0.0 {
                 return Err(DefeatureError::BadParameter {
                     name: "max_diameter_mm",
-                    reason: format!(
-                        "must be > 0, got {max_diameter_mm}"
-                    ),
+                    reason: format!("must be > 0, got {max_diameter_mm}"),
                 });
             }
             // v1 proxy: triangles whose centroid sits in a region
@@ -108,9 +102,7 @@ fn apply_one(mesh: &mut Mesh, d: Defeature) -> Result<(), DefeatureError> {
             filter_tri_blocks(mesh, |a, b, c| {
                 let n = (b - a).cross(&(c - a)).try_normalize(1e-12);
                 let centroid = (a + b + c) / 3.0;
-                let max_edge = ((b - a).norm())
-                    .max((c - b).norm())
-                    .max((a - c).norm());
+                let max_edge = ((b - a).norm()).max((c - b).norm()).max((a - c).norm());
                 if let Some(nn) = n {
                     if nn.z < -0.95 && max_edge < r && centroid.z.abs() < r {
                         return false;
@@ -142,12 +134,8 @@ fn apply_one(mesh: &mut Mesh, d: Defeature) -> Result<(), DefeatureError> {
             }
             filter_tri_blocks(mesh, |a, b, c| {
                 let centroid = (a + b + c) / 3.0;
-                let max_edge = ((b - a).norm())
-                    .max((c - b).norm())
-                    .max((a - c).norm());
-                if max_edge < max_depth_mm
-                    && (centroid.z - bb_min.z).abs() < max_depth_mm
-                {
+                let max_edge = ((b - a).norm()).max((c - b).norm()).max((a - c).norm());
+                if max_edge < max_depth_mm && (centroid.z - bb_min.z).abs() < max_depth_mm {
                     return false;
                 }
                 true
@@ -202,11 +190,7 @@ mod tests {
     #[test]
     fn sliver_remove_drops_thin_triangle() {
         let s = Solid::from_mesh(two_tri_mesh_with_sliver());
-        let s2 = apply(
-            &s,
-            &[Defeature::SliverRemove { max_aspect: 0.1 }],
-        )
-        .unwrap();
+        let s2 = apply(&s, &[Defeature::SliverRemove { max_aspect: 0.1 }]).unwrap();
         match s2 {
             Solid::Mesh(m) => {
                 // One triangle remaining.
@@ -219,24 +203,14 @@ mod tests {
     #[test]
     fn sliver_remove_rejects_aspect_outside_range() {
         let s = Solid::from_mesh(two_tri_mesh_with_sliver());
-        let err = apply(
-            &s,
-            &[Defeature::SliverRemove { max_aspect: 1.5 }],
-        )
-        .unwrap_err();
+        let err = apply(&s, &[Defeature::SliverRemove { max_aspect: 1.5 }]).unwrap_err();
         assert!(matches!(err, DefeatureError::BadParameter { .. }));
     }
 
     #[test]
     fn fillet_remove_keeps_large_triangles() {
         let s = Solid::from_mesh(two_tri_mesh_with_sliver());
-        let s2 = apply(
-            &s,
-            &[Defeature::FilletRemove {
-                max_radius_mm: 0.5,
-            }],
-        )
-        .unwrap();
+        let s2 = apply(&s, &[Defeature::FilletRemove { max_radius_mm: 0.5 }]).unwrap();
         match s2 {
             Solid::Mesh(m) => assert!(m.total_elements() >= 1),
             _ => panic!(),

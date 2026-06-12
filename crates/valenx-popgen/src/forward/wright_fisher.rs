@@ -98,10 +98,7 @@ impl SimulationConfig {
     /// component's own validator.
     pub fn validate(&self) -> Result<()> {
         if self.sequence_length <= 0.0 {
-            return Err(PopgenError::invalid(
-                "sequence_length",
-                "must be positive",
-            ));
+            return Err(PopgenError::invalid("sequence_length", "must be positive"));
         }
         self.selection.validate()?;
         self.mutation.validate()?;
@@ -190,11 +187,7 @@ impl WrightFisher {
         let mut offspring = Vec::with_capacity(next_n);
         for child_id in 0..next_n {
             // Resolve the offspring's deme (panmixia => deme 0).
-            let deme = if n_demes > 1 {
-                child_id % n_demes
-            } else {
-                0
-            };
+            let deme = if n_demes > 1 { child_id % n_demes } else { 0 };
             // Backward migration: the parents live in the source deme.
             let parent_deme = match &self.config.migration {
                 Some(m) => m.sample_source(deme, rng),
@@ -303,8 +296,7 @@ mod tests {
 
     #[test]
     fn neutral_run_produces_a_population() {
-        let cfg =
-            SimulationConfig::neutral(20, 30, 1e-3, 1e-4, 1000.0, 42).unwrap();
+        let cfg = SimulationConfig::neutral(20, 30, 1e-3, 1e-4, 1000.0, 42).unwrap();
         let sim = WrightFisher::new(cfg).unwrap();
         let pop = sim.run().unwrap();
         assert_eq!(pop.size(), 20);
@@ -323,8 +315,7 @@ mod tests {
     fn mutation_accumulates_segregating_sites() {
         // A reasonably high mutation rate over many generations must
         // leave segregating variation behind.
-        let cfg =
-            SimulationConfig::neutral(30, 40, 5e-3, 1e-4, 2000.0, 99).unwrap();
+        let cfg = SimulationConfig::neutral(30, 40, 5e-3, 1e-4, 2000.0, 99).unwrap();
         let pop = WrightFisher::new(cfg).unwrap().run().unwrap();
         assert!(pop.site_count() > 0, "no mutations accumulated");
     }
@@ -407,8 +398,7 @@ mod tests {
 
     #[test]
     fn invalid_config_is_rejected() {
-        let mut cfg =
-            SimulationConfig::neutral(10, 5, 1e-3, 1e-4, 100.0, 1).unwrap();
+        let mut cfg = SimulationConfig::neutral(10, 5, 1e-3, 1e-4, 100.0, 1).unwrap();
         cfg.sequence_length = -1.0;
         assert!(WrightFisher::new(cfg).is_err());
     }

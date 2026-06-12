@@ -273,12 +273,7 @@ fn perp_basis(t: [f64; 3]) -> ([f64; 3], [f64; 3]) {
 
 /// Rotate the orthonormal frame `(u, v)` by the minimal rotation that
 /// carries unit tangent `t0` onto unit tangent `t1` (Rodrigues).
-fn rotate_frame(
-    u: [f64; 3],
-    v: [f64; 3],
-    t0: [f64; 3],
-    t1: [f64; 3],
-) -> ([f64; 3], [f64; 3]) {
+fn rotate_frame(u: [f64; 3], v: [f64; 3], t0: [f64; 3], t1: [f64; 3]) -> ([f64; 3], [f64; 3]) {
     let axis = cross(t0, t1);
     let sin_a = norm(axis);
     let cos_a = dot(t0, t1).clamp(-1.0, 1.0);
@@ -340,8 +335,7 @@ mod tests {
 
     #[test]
     fn pipe_rejects_too_few_spine_points() {
-        let err = sweep_api_pipe(&[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)], &[[0.0; 3]])
-            .unwrap_err();
+        let err = sweep_api_pipe(&[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)], &[[0.0; 3]]).unwrap_err();
         assert_eq!(err.code(), "occt_surface.bad_input");
     }
 

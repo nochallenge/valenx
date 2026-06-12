@@ -133,8 +133,7 @@ pub fn optimize(toolpath: &Toolpath, params: &FeedrateParams) -> (Toolpath, Feed
             if !(r > 0.0) {
                 continue;
             }
-            let v_arc =
-                (params.a_centripetal_max_mm_per_min2 * r).sqrt();
+            let v_arc = (params.a_centripetal_max_mm_per_min2 * r).sqrt();
             if v_arc < out.moves[i].feed {
                 let red = out.moves[i].feed - v_arc;
                 if red > report.max_reduction_mm_per_min {

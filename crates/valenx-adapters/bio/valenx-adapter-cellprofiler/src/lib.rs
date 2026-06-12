@@ -165,10 +165,7 @@ impl Adapter for CellProfilerAdapter {
         let resolved_pipeline = if input.pipeline.is_absolute() {
             input.pipeline.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.pipeline,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.pipeline)?
         };
         if !resolved_pipeline.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -151,7 +151,12 @@ impl WindTunnel {
     /// body's projected frontal area onto the plane normal to the
     /// wind.
     pub fn build(body: &TriMesh, wind: Wind) -> Result<WindTunnel, AeroError> {
-        WindTunnel::build_with(body, wind, BoundaryConditions::external_aero(), TunnelSizing::default())
+        WindTunnel::build_with(
+            body,
+            wind,
+            BoundaryConditions::external_aero(),
+            TunnelSizing::default(),
+        )
     }
 
     /// Build a virtual wind tunnel with an explicit boundary set and

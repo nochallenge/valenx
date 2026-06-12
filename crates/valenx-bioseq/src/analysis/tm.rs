@@ -101,14 +101,16 @@ pub fn tm_nearest_neighbor(seq: &Seq, params: NnParams) -> Result<f64> {
         if !matches!(b, b'A' | b'C' | b'G' | b'T') {
             return Err(BioseqError::invalid(
                 "sequence",
-                format!("non-canonical base `{}` — NN model needs pure ACGT", b as char),
+                format!(
+                    "non-canonical base `{}` — NN model needs pure ACGT",
+                    b as char
+                ),
             ));
         }
     }
     let (salt, strand) = params.into();
-    thermo::duplex_tm(bytes, salt, strand).ok_or_else(|| {
-        BioseqError::invalid("params", "degenerate thermodynamic denominator")
-    })
+    thermo::duplex_tm(bytes, salt, strand)
+        .ok_or_else(|| BioseqError::invalid("params", "degenerate thermodynamic denominator"))
 }
 
 /// Nearest-neighbor Tm with the default PCR-primer parameters.
@@ -153,7 +155,10 @@ mod tests {
         let at = Seq::new(SeqKind::Dna, "ATATATATATATATAT").unwrap();
         let tm_gc = tm_nearest_neighbor_default(&gc).unwrap();
         let tm_at = tm_nearest_neighbor_default(&at).unwrap();
-        assert!(tm_gc > tm_at, "GC-rich Tm {tm_gc} should exceed AT-rich {tm_at}");
+        assert!(
+            tm_gc > tm_at,
+            "GC-rich Tm {tm_gc} should exceed AT-rich {tm_at}"
+        );
     }
 
     #[test]
@@ -216,7 +221,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(with_mg > no_mg, "Mg should raise Tm; no={no_mg} with={with_mg}");
+        assert!(
+            with_mg > no_mg,
+            "Mg should raise Tm; no={no_mg} with={with_mg}"
+        );
     }
 
     #[test]

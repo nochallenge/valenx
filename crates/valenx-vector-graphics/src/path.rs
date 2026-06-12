@@ -12,10 +12,18 @@ pub fn bbox(path: &[PathSegment]) -> (Vector2<f64>, Vector2<f64>) {
     let mut cur = Vector2::zeros();
     let mut start_of_subpath = Vector2::zeros();
     let add = |p: Vector2<f64>, lo: &mut Vector2<f64>, hi: &mut Vector2<f64>| {
-        if p.x < lo.x { lo.x = p.x; }
-        if p.y < lo.y { lo.y = p.y; }
-        if p.x > hi.x { hi.x = p.x; }
-        if p.y > hi.y { hi.y = p.y; }
+        if p.x < lo.x {
+            lo.x = p.x;
+        }
+        if p.y < lo.y {
+            lo.y = p.y;
+        }
+        if p.x > hi.x {
+            hi.x = p.x;
+        }
+        if p.y > hi.y {
+            hi.y = p.y;
+        }
     };
     for seg in path {
         match seg {
@@ -121,12 +129,7 @@ fn cubic_bezier(
     a * (u * u * u) + b * (3.0 * u * u * t) + c * (3.0 * u * t * t) + d * (t * t * t)
 }
 
-fn quad_bezier(
-    a: Vector2<f64>,
-    b: Vector2<f64>,
-    c: Vector2<f64>,
-    t: f64,
-) -> Vector2<f64> {
+fn quad_bezier(a: Vector2<f64>, b: Vector2<f64>, c: Vector2<f64>, t: f64) -> Vector2<f64> {
     let u = 1.0 - t;
     a * (u * u) + b * (2.0 * u * t) + c * (t * t)
 }

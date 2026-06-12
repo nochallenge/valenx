@@ -52,9 +52,10 @@ pub fn export_fasta(
 
     let rna_rec = SeqRecord::new(format!("{id_prefix}_rna"), rna)
         .with_description(format!("designed RNA ({})", design.kind.name()));
-    let dna_rec = SeqRecord::new(format!("{id_prefix}_template"), dna).with_description(
-        format!("DNA template ({} promoter)", synthesis.template.promoter.name()),
-    );
+    let dna_rec = SeqRecord::new(format!("{id_prefix}_template"), dna).with_description(format!(
+        "DNA template ({} promoter)",
+        synthesis.template.promoter.name()
+    ));
 
     Ok(fasta_write(
         &[rna_rec, dna_rec],
@@ -205,7 +206,11 @@ pub fn export_design_report(
         out.push_str(&format!(
             "  Robustness      : mutational robustness {:.0}%, co-transcriptional {}\n",
             r.mutational_robustness * 100.0,
-            if r.cotranscriptional_ok { "ok" } else { "flagged" },
+            if r.cotranscriptional_ok {
+                "ok"
+            } else {
+                "flagged"
+            },
         ));
     }
     out.push('\n');

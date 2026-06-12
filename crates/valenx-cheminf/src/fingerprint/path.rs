@@ -142,20 +142,14 @@ mod tests {
         // end the atoms were numbered from
         let a = mol_from_smiles("CCOCC").unwrap();
         let b = mol_from_smiles("CCOCC").unwrap();
-        assert_eq!(
-            path_fingerprint(&a, 5, 512),
-            path_fingerprint(&b, 5, 512)
-        );
+        assert_eq!(path_fingerprint(&a, 5, 512), path_fingerprint(&b, 5, 512));
     }
 
     #[test]
     fn distinct_molecules_distinct() {
         let a = mol_from_smiles("CCCC").unwrap();
         let b = mol_from_smiles("CCCN").unwrap();
-        assert_ne!(
-            path_fingerprint(&a, 7, 1024),
-            path_fingerprint(&b, 7, 1024)
-        );
+        assert_ne!(path_fingerprint(&a, 7, 1024), path_fingerprint(&b, 7, 1024));
     }
 
     #[test]

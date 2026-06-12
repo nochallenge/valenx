@@ -87,18 +87,12 @@ pub fn consensus_structure(alignment: &[&str]) -> Result<ConsensusResult> {
     let mut matrix: Vec<Vec<Option<u8>>> = vec![vec![None; cols]; nseq];
     for (s, row) in alignment.iter().enumerate() {
         for (c, ch) in row.bytes().enumerate() {
-            matrix[s][c] = if ch == b'-' {
-                None
-            } else {
-                encode_base(ch)
-            };
+            matrix[s][c] = if ch == b'-' { None } else { encode_base(ch) };
         }
     }
 
     // Column-pair score function.
-    let pair_score = |i: usize, j: usize| -> f64 {
-        column_pair_score(&matrix, nseq, i, j)
-    };
+    let pair_score = |i: usize, j: usize| -> f64 { column_pair_score(&matrix, nseq, i, j) };
 
     // Nussinov-style maximisation over the column-pair score.
     let mut m = vec![0.0_f64; cols * cols];
@@ -110,11 +104,7 @@ pub fn consensus_structure(alignment: &[&str]) -> Result<ConsensusResult> {
             if j - i > MIN_HAIRPIN {
                 let s = pair_score(i, j);
                 if s > 0.0 {
-                    let inner = if i + 2 <= j {
-                        m[at(i + 1, j - 1)]
-                    } else {
-                        0.0
-                    };
+                    let inner = if i + 2 <= j { m[at(i + 1, j - 1)] } else { 0.0 };
                     best = best.max(inner + s);
                 }
             }
@@ -147,11 +137,7 @@ pub fn consensus_structure(alignment: &[&str]) -> Result<ConsensusResult> {
         }
         if j - i > MIN_HAIRPIN {
             let s = pair_score(i, j);
-            let inner = if i + 2 <= j {
-                m[at(i + 1, j - 1)]
-            } else {
-                0.0
-            };
+            let inner = if i + 2 <= j { m[at(i + 1, j - 1)] } else { 0.0 };
             if s > 0.0 && feq(here, inner + s) {
                 partner[i] = Some(j);
                 partner[j] = Some(i);
@@ -181,12 +167,7 @@ pub fn consensus_structure(alignment: &[&str]) -> Result<ConsensusResult> {
 
 /// The RNAalifold-style score of pairing alignment columns `i` and
 /// `j`: average pairability plus a covariation bonus.
-fn column_pair_score(
-    matrix: &[Vec<Option<u8>>],
-    nseq: usize,
-    i: usize,
-    j: usize,
-) -> f64 {
+fn column_pair_score(matrix: &[Vec<Option<u8>>], nseq: usize, i: usize, j: usize) -> f64 {
     let mut canonical = 0usize; // sequences with a canonical pair here
     let mut inconsistent = 0usize; // sequences where the pair is impossible
     let mut distinct_pairs = std::collections::HashSet::new();
@@ -237,11 +218,7 @@ mod tests {
     fn covarying_alignment_recovers_the_helix() {
         // three sequences, all forming the same hairpin but with
         // compensatory mutations in the stem
-        let aln = [
-            "GGGGAAAACCCC",
-            "GCGCAAAAGCGC",
-            "AUAUAAAAAUAU",
-        ];
+        let aln = ["GGGGAAAACCCC", "GCGCAAAAGCGC", "AUAUAAAAAUAU"];
         let r = consensus_structure(&aln).unwrap();
         // the outer columns should pair in the consensus
         assert!(r.structure.n_pairs() >= 3, "expected a consensus stem");
@@ -251,10 +228,7 @@ mod tests {
     #[test]
     fn inconsistent_columns_are_not_paired() {
         // a column pair that no sequence can form should be rejected
-        let aln = [
-            "AAAAAAAAAAAA",
-            "AAAAAAAAAAAA",
-        ];
+        let aln = ["AAAAAAAAAAAA", "AAAAAAAAAAAA"];
         let r = consensus_structure(&aln).unwrap();
         assert_eq!(r.structure.n_pairs(), 0);
     }
@@ -274,10 +248,7 @@ mod tests {
     #[test]
     fn handles_gaps() {
         // gapped alignment: '-' columns are neutral
-        let aln = [
-            "GGGG-AAAA-CCCC",
-            "GGGGAAAAAACCCC",
-        ];
+        let aln = ["GGGG-AAAA-CCCC", "GGGGAAAAAACCCC"];
         let r = consensus_structure(&aln).unwrap();
         assert_eq!(r.columns, 14);
         assert!(r.structure.is_nested());
@@ -285,10 +256,7 @@ mod tests {
 
     #[test]
     fn consensus_structure_is_always_nested() {
-        let aln = [
-            "GGGGCCCCAAAGGGGCCCC",
-            "GCGCGCGCAAAGCGCGCGC",
-        ];
+        let aln = ["GGGGCCCCAAAGGGGCCCC", "GCGCGCGCAAAGCGCGCGC"];
         let r = consensus_structure(&aln).unwrap();
         assert!(r.structure.is_nested());
     }

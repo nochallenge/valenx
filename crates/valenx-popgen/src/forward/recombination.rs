@@ -77,8 +77,9 @@ impl RecombinationModel {
     /// Draws the sorted crossover breakpoints on `[0, length)`.
     pub fn crossover_breakpoints(&self, rng: &mut Rng, length: f64) -> Vec<f64> {
         let n = rng.poisson(self.crossover_rate * length.max(0.0));
-        let mut bp: Vec<f64> =
-            (0..n).map(|_| rng.uniform() * length.max(f64::MIN_POSITIVE)).collect();
+        let mut bp: Vec<f64> = (0..n)
+            .map(|_| rng.uniform() * length.max(f64::MIN_POSITIVE))
+            .collect();
         bp.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         bp
     }
