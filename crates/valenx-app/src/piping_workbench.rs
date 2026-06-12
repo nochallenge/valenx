@@ -2,7 +2,7 @@
 //! over `valenx-piping`.
 //!
 //! Mirrors the springs / gears / geomatics workbenches: a resizable
-//! [`egui::SidePanel`] gated on [`crate::ValenxApp::show_piping_workbench`],
+//! [`egui::SidePanel`] gated on `crate::ValenxApp::show_piping_workbench`,
 //! toggled from the View menu. The form picks an NPS designation, a wall
 //! schedule, a material, and a length; the "Compute" button reports the
 //! outer / inner diameters and the flow / metal cross-section areas, the

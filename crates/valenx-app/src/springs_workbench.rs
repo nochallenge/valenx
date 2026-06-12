@@ -2,7 +2,7 @@
 //! design over `valenx-springs`.
 //!
 //! Mirrors the CFD / FEM workbenches: a resizable [`egui::SidePanel`]
-//! gated on [`crate::ValenxApp::show_springs_workbench`], toggled from the
+//! gated on `crate::ValenxApp::show_springs_workbench`, toggled from the
 //! View menu. The form drives a [`valenx_springs::SpringSpec`]; the
 //! "Analyze" button computes the design scalars — spring index, axial
 //! stiffness, Wahl stress-correction factor, the outer/inner diameters,

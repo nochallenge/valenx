@@ -693,7 +693,7 @@ impl FlowSolution {
 
     /// The **diffusive (von Neumann) stability number** `d = ν·Δt / min(Δx, Δy)²` for
     /// kinematic viscosity `kinematic_viscosity` `ν` (m²/s) and explicit time step `dt`
-    /// (s) — the viscous-diffusion counterpart of the [`convective_cfl_number`]. An
+    /// (s) — the viscous-diffusion counterpart of the `convective_cfl_number`. An
     /// explicit diffusion update is stable only for `d ≤ 1/4` in 2-D, so together with
     /// the convective CFL it bounds the stable time step. Their ratio is the cell
     /// Reynolds number `CFL/d = U_max·h/ν`. Returns `0` for a non-positive grid
@@ -712,10 +712,10 @@ impl FlowSolution {
     }
 
     /// The **cell (grid) Reynolds number** `Re_h = U_max·h / ν` (dimensionless), with
-    /// `h = min(Δx, Δy)` and `U_max` the peak speed [`max_speed`] — the ratio of
+    /// `h = min(Δx, Δy)` and `U_max` the peak speed `max_speed` — the ratio of
     /// convective to diffusive transport across one grid cell, for kinematic viscosity
-    /// `kinematic_viscosity` `ν` (m²/s). It is the [`convective_cfl_number`] to
-    /// [`diffusive_number`] ratio (`Re_h = CFL/d`, independent of the time step), and a
+    /// `kinematic_viscosity` `ν` (m²/s). It is the `convective_cfl_number` to
+    /// `diffusive_number` ratio (`Re_h = CFL/d`, independent of the time step), and a
     /// central-difference convection scheme stays free of spurious node-to-node
     /// oscillations only while `Re_h ≤ 2`. Returns `0` for a non-positive grid spacing
     /// or non-finite / non-positive `ν`.

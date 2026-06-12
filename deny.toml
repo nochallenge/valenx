@@ -27,6 +27,15 @@ ignore = [
     # proc-macro-error 1.0.4 — unmaintained. Same situation: pulled in
     # by older proc-macro deps. Replacement is proc-macro-error2.
     "RUSTSEC-2024-0370",
+    # pyo3 0.24.2 — RUSTSEC-2026-0176 (OOB read in `nth`/`nth_back` for
+    # PyList/PyTuple iterators) and -0177 (missing `Sync` bound on
+    # `PyCFunction::new_closure`). Both affect only `valenx-py`, the
+    # OPTIONAL Python binding — not the desktop app. The fix is pyo3
+    # 0.25+, a breaking minor bump that needs valenx-py API updates and a
+    # Python toolchain to verify; ignore here to unblock CI and track the
+    # pyo3 0.25 upgrade as a follow-up.
+    "RUSTSEC-2026-0176",
+    "RUSTSEC-2026-0177",
 ]
 
 [licenses]

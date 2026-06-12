@@ -3,7 +3,7 @@
 //!
 //! Mirrors the springs / gears / CFD workbenches: a resizable
 //! [`egui::SidePanel`] gated on
-//! [`crate::ValenxApp::show_geomatics_workbench`], toggled from the View
+//! `crate::ValenxApp::show_geomatics_workbench`, toggled from the View
 //! menu. The form takes three WGS84 points — A, B, and a query point P —
 //! and the "Compute" button reports the great-circle (haversine) and
 //! rhumb-line distances A→B, the initial and final bearings, and the
