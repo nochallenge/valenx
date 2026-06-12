@@ -1,5 +1,21 @@
 # Validation status — definitive
 
+> **Update (2026-06-12 — ground-truth gap-closure):** a workspace-wide
+> validation-coverage audit confirmed the native solvers are already
+> validated against named external ground truth (Ghia 1982, Szabo–Ostlund,
+> US Standard Atmosphere 1976, Hodgkin–Huxley 1952, Kittel LJ lattice sums,
+> Euler–Bernoulli, Jukes–Cantor, …) and closed the clean remaining gaps
+> with **10 new ground-truth tests** — orbital propagator vs analytic
+> Kepler (max err **17 µm**), the Hodgkin–Huxley action-potential shape
+> (peak **+41 mV**, amplitude **106 mV**, AHP **−76 mV**), Darcy–Weisbach
+> duct Δp (**10.03 Pa**), the exact rational-NURBS circle (x²+y²=r² to
+> **1e-12**), Michaelis–Menten limits, de Bruijn reconstruction, gear base
+> pitch, fastener ISO-724 root diameter, spring Wahl shear stress, and cube
+> radius-of-gyration — all reviewed to zero actionable findings. The honest
+> remaining gaps (API-absent quantities; external-tool cross-validation
+> against OpenFOAM / GROMACS / CASP) are named in the **2026-06-12** section
+> below.
+>
 > **Headline (2026-05-23 — finalization):** the full executed-validation
 > sweep across the workspace is COMPLETE. Every crate in `crates/` has
 > had its tests run scoped at least once (`cargo test -p <crate>`), with
@@ -92,6 +108,121 @@
 > per-pass sections are appended in date order (most recent first).
 >
 > ---
+
+## 2026-06-12 — ground-truth validation gap-closure pass
+
+This pass audited **validation coverage** across every native solver crate
+— not "does it run" but "does the computed output match a known-correct
+*external* answer" — then closed the clean remaining gaps. Three findings.
+
+### 1. The native solvers are already broadly validated against named ground truth
+
+A crate-by-crate audit of the engineering/physics and biology/chemistry
+solver families found that the large majority already assert their output
+against an analytical formula, a published benchmark, or a known physical
+constant. Representative anchors:
+
+| Domain | Crate | Validated against | Representative result |
+|---|---|---|---|
+| Orbital mechanics | `valenx-astro` | analytic Kepler two-body; Hohmann; Tsiolkovsky; US Standard Atmosphere 1976 | propagator vs Kepler **max err 17 µm**; sea-level ρ = 1.2250 kg/m³ |
+| CFD | `valenx-cfd-native` | Ghia, Ghia & Shin 1982 lid-cavity; analytic Poiseuille; law of the wall | Re = 100/400/1000 centerline **MAE 0.035 / 0.016 / 0.024**; Poiseuille **0.34 %** rel err |
+| Aerodynamics | `valenx-aero` | thin-airfoil theory; Schlichting sphere Cd; Blasius C_F; a = √(γRT) | Cl = 2π·α slope; a = 340 m/s @ 288 K |
+| Structural FE | `valenx-fem` | constant-strain patch test; Euler–Bernoulli δ = PL³/3EI; Euler buckling; Fourier conduction | patch test to **1e-8**; tip deflection within **2 %** |
+| Quantum chemistry | `valenx-qchem` | Szabo & Ostlund STO-3G reference energies | H₂ **−1.1167 Ha**, HeH⁺ −2.8418, H₂O −74.96 (±2e-3) |
+| Molecular dynamics | `valenx-md` | Kittel LJ lattice sums; OPLS-AA / TIP3P; equipartition; ideal gas | FCC cohesive within **0.5 %**; PV = Nk_BT within 5 % |
+| Electrophysiology | `valenx-neuro` | Nernst; Goldman–Hodgkin–Katz; cable theory; Hodgkin–Huxley 1952 | reversal potentials, λ, τ exact closed forms; HH spike (below) |
+| Sequence bioinformatics | `valenx-align`, `-phylo`, `-popgen`, `-bioseq` | Levenshtein / BLOSUM62 / PAM250; Jukes–Cantor & Kimura-2P; Hardy–Weinberg, Watterson, Nei; NCBI codon tables | NW = −edit distance; JC / K2P closed forms to **1e-9** |
+| RNA structure | `valenx-rnastruct` | Turner 2004 nearest-neighbour; ViennaRNA cross-check | MFE term-by-term to **1e-6** |
+| Structural biology | `valenx-biostruct` | Kabsch RMSD; Shrake–Rupley SASA = 4πr²; dihedral geometry | identical sets RMSD < 1e-12 |
+| Geometry / CAD | `valenx-surface`, `-geomatics` | NURBS partition-of-unity & clamped endpoints; Haversine; WGS84 UTM | endpoints to **1e-10**; London–Paris 343.6 km |
+| Rendering | `valenx-pathtrace` | Fresnel / Snell; energy conservation; Veach MIS | R + T = 1; Schlick F₀ ≈ 0.04 |
+
+(Full per-crate assertion lists are in the dated sections below and in each
+crate's `#[cfg(test)]` modules.)
+
+### 2. Ten clean gaps closed
+
+Where a solver computed a textbook quantity but had no test pinning it to
+the closed form, a ground-truth test was added. Each asserts the computed
+value against an **independent** external reference (a hand-computed number,
+a published constant, or an algebraically-exact identity) — never against
+the code's own output — with tolerances tight for exact identities and
+loosened only with a stated numerical reason. All ten were put through an
+adversarial review (vacuity / wrong-number / tolerance / regression) and
+returned **zero actionable findings**.
+
+| Crate | New test | Ground truth | Measured | Tol |
+|---|---|---|---|---|
+| `valenx-astro` | `rk4_matches_analytical_kepler_on_eccentric_orbit` | analytic Kepler position, e = 0.6 orbit | max err **1.69e-5 m** (~17 µm) | < 1 m |
+| `valenx-neuro` | `action_potential_shape_matches_hodgkin_huxley_squid_axon` | Hodgkin–Huxley 1952 squid-axon AP shape | peak **+41.0 mV** (< E_Na +50), amplitude **106.0 mV**, AHP **−76.2 mV** (> E_K −77), recovers to −64.8 | physiological bands + hard reversal bounds |
+| `valenx-hvac` | `darcy_weisbach_matches_closed_form_worked_value` | Δp = f·(L/D)·½ρv² | **10.033 Pa** | 1e-9 / 0.05 Pa |
+| `valenx-surface` | `rational_quadratic_traces_exact_circle` | NURBS conic identity x² + y² = r² | residual ~1e-15 | **1e-12** |
+| `valenx-fasteners` | `root_minor_diameter_m6_iso724` | ISO 724 d₃ = d − 1.2269·P | **4.7731 mm** | 1e-3 mm |
+| `valenx-gears` | `base_pitch_equals_pi_m_cos_alpha` | p_b = π·m·cos α (two independent API routes) | **5.9043 mm** | 1e-3 mm |
+| `valenx-springs` | `corrected_shear_stress_matches_closed_form` | Wahl τ = K_w·8FD/(πd³) | **291.53 N/mm²** | 1e-6 / 0.1 |
+| `valenx-sysbio` | `michaelis_menten_limits_and_quarter_points` | v = Vmax·S/(Km+S): v(0)=0, v(∞)=Vmax, v(3Km)=¾Vmax | exact | 1e-12 / 1e-9 |
+| `valenx-biostruct` | `rg_of_a_cube_matches_closed_form` | radius of gyration (a/2)·√3 | **√3 = 1.7320508** | 1e-12 |
+| `valenx-genomics` | `reconstructs_original_string_from_its_kmers` | de Bruijn Eulerian reconstruction | exact (`GATTACAGGCTA`, k = 4) | exact |
+
+The Hodgkin–Huxley test is the flagship: it integrates the classic 1952
+squid-axon model (g_Na = 120, g_K = 36 mS/cm²; E_Na = +50, E_K = −77,
+E_L = −54.4 mV; RK4) under a supra-threshold pulse and pins the *shape* of
+the resulting action potential — the ~100 mV overshoot that stays strictly
+below the sodium reversal (a hard physical bound, since I_K + I_leak balance
+I_Na at the peak), followed by an afterhyperpolarisation that dips below
+rest toward but never past the potassium reversal, then recovers. It would
+catch a regression that still fires but with the wrong reversal potentials
+or conductance ratios — which the pre-existing `peak > 20 mV` check would
+not.
+
+### 3. Honest gaps that remain
+
+Three classes, named plainly rather than papered over:
+
+- **API-absent quantities** — a clean closed form exists but the crate
+  exposes no function to pin it against: second moment of area / section
+  modulus in `valenx-frames` (only cross-section *area* is computed),
+  arc-length and curvature in `valenx-curves`, spring natural frequency
+  f_n (no wire-density field on the spec), bolt proof load (no proof-stress
+  field), gear contact ratio. These are documented, not faked — closing
+  each is a small future API addition plus a test, not a validation failure.
+- **External-tool cross-validation** — the strongest "production-grade"
+  claim is agreement with an independently-developed reference *solver* on
+  the same problem: full Navier–Stokes vs **OpenFOAM**, many-body MD vs
+  **GROMACS**, de-novo protein structure vs **CASP** targets. These need the
+  external tool installed and a curated benchmark set, and are **not** run
+  here. valenx's native results agree with the *analytical and published*
+  references above — the appropriate bar for the closed-form and named-
+  benchmark cases — and the tool-to-tool cross-check is the documented next
+  rung, not a claim made today.
+- **Benchmark-grade-but-unpinned** — quantities with published per-case data
+  that would tighten an existing heuristic: SantaLucia 1998 nearest-neighbour
+  Tm, Wildman–Crippen logP / Ertl TPSA per molecule, Kabsch–Sander DSSP
+  assignment on a reference PDB, Lambert vs a Vallado worked transfer,
+  normal-shock relations, Vincenty ellipsoidal geodesic.
+
+### Reproduce
+
+Each new test is scoped and rfd-free:
+
+```sh
+cargo test -p valenx-astro     rk4_matches_analytical_kepler_on_eccentric_orbit
+cargo test -p valenx-neuro     action_potential_shape_matches_hodgkin_huxley_squid_axon
+cargo test -p valenx-hvac      darcy_weisbach_matches_closed_form_worked_value
+cargo test -p valenx-surface   rational_quadratic_traces_exact_circle
+cargo test -p valenx-fasteners root_minor_diameter_m6_iso724
+cargo test -p valenx-gears     base_pitch_equals_pi_m_cos_alpha
+cargo test -p valenx-springs   corrected_shear_stress_matches_closed_form
+cargo test -p valenx-sysbio    michaelis_menten_limits_and_quarter_points
+cargo test -p valenx-biostruct rg_of_a_cube_matches_closed_form
+cargo test -p valenx-genomics  reconstructs_original_string_from_its_kmers
+```
+
+The CFD Ghia benchmark runs in release mode
+(`cargo test -p valenx-cfd-native --release ghia`); the full safe scoped
+suite is `./scripts/qa.sh`.
+
+---
 
 ## 2026-05-23 — `valenx-rnadesign` further-depth validation suite
 

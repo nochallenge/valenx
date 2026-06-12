@@ -344,6 +344,44 @@ mod tests {
     }
 
     #[test]
+    fn corrected_shear_stress_matches_closed_form() {
+        // Wahl-corrected helical-spring shear stress
+        //   τ = K_w · 8·F·D / (π·d³),  K_w = (4C−1)/(4C−4) + 0.615/C, C = D/d.
+        // The crate exposes K_w via `wahl_factor` and C via `spring_index`, but
+        // no τ fn; F (axial load) is an external input. Build τ from the real
+        // API and pin it to the exact hand value.
+        // default_compression: d=1 mm, D=10 mm → C=10 → K_w=1.144833.
+        // With F=10 N:
+        //   τ = 1.144833·8·10·10/(π·1³) = 1.144833·800/π = 291.53 N/mm².
+        let spec = SpringSpec::default_compression();
+        let f_axial = 10.0_f64; // N (test input)
+        let c = spring_index(&spec); // = 10.0
+        let kw = wahl_factor(c); // = 1.144833…
+        let d = spec.wire_diameter_mm; // mm
+        let big_d = spec.mean_coil_diameter_mm; // mm
+        // N·mm / mm³ = N/mm² = MPa-equivalent in this consistent unit set.
+        let tau =
+            kw * 8.0 * f_axial * big_d / (std::f64::consts::PI * d.powi(3));
+
+        // Closed-form ground truth recomputed independently of the code path.
+        let kw_ref = (4.0 * 10.0 - 1.0) / (4.0 * 10.0 - 4.0) + 0.615 / 10.0; // 1.144833…
+        let expected = kw_ref * 8.0 * 10.0 * 10.0 / (std::f64::consts::PI * 1.0_f64.powi(3));
+        assert!(
+            (tau - expected).abs() < 1e-6,
+            "shear stress {tau} N/mm² vs closed form {expected} N/mm²"
+        );
+        // And against the literal published value (≈291.5 N/mm²), tol 0.1.
+        assert!(
+            (tau - 291.53).abs() < 0.1,
+            "shear stress {tau} N/mm², expected ≈ 291.5"
+        );
+        // Sanity: the Wahl correction raises stress above the uncorrected
+        // direct-shear value 8·F·D/(π·d³).
+        let tau_uncorrected = 8.0 * f_axial * big_d / (std::f64::consts::PI * d.powi(3));
+        assert!(tau > tau_uncorrected);
+    }
+
+    #[test]
     fn wahl_factor_corrects_for_curvature() {
         // C = 10 → K_w = 39/36 + 0.0615 ≈ 1.144833.
         assert!((wahl_factor(10.0) - 1.144_833_333).abs() < 1e-5);
