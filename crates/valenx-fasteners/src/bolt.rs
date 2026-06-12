@@ -348,7 +348,10 @@ mod tests {
             (d3 - expected).abs() < 1e-3,
             "minor dia {d3} mm vs ISO 724 {expected} mm"
         );
-        assert!((d3 - 4.7731).abs() < 1e-3, "minor dia {d3} mm, expected 4.7731");
+        assert!(
+            (d3 - 4.7731).abs() < 1e-3,
+            "minor dia {d3} mm, expected 4.7731"
+        );
         // Ordering sanity: root < pitch < major (nominal).
         assert!(d3 < m6.pitch_diameter_mm());
         assert!(m6.pitch_diameter_mm() < m6.thread.nominal_diameter);

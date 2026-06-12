@@ -359,9 +359,7 @@ mod tests {
         let kw = wahl_factor(c); // = 1.144833…
         let d = spec.wire_diameter_mm; // mm
         let big_d = spec.mean_coil_diameter_mm; // mm
-        // N·mm / mm³ = N/mm² = MPa-equivalent in this consistent unit set.
-        let tau =
-            kw * 8.0 * f_axial * big_d / (std::f64::consts::PI * d.powi(3));
+        let tau = kw * 8.0 * f_axial * big_d / (std::f64::consts::PI * d.powi(3)); // N/mm² = MPa
 
         // Closed-form ground truth recomputed independently of the code path.
         let kw_ref = (4.0 * 10.0 - 1.0) / (4.0 * 10.0 - 4.0) + 0.615 / 10.0; // 1.144833…

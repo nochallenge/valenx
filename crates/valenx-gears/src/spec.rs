@@ -146,19 +146,20 @@ mod tests {
         let mut g = GearSpec::standard_spur(20);
         g.module_mm = 2.0; // 20° pressure angle is the standard_spur default
         let expected = std::f64::consts::PI * 2.0 * 20.0_f64.to_radians().cos(); // 5.90430 mm
-        assert!((expected - 5.904_30).abs() < 1e-4, "ground-truth check: {expected}");
+        assert!(
+            (expected - 5.904_30).abs() < 1e-4,
+            "ground-truth check: {expected}"
+        );
 
         // Route 1: via base circle — p_b = π·D_base / N.
-        let pb_via_base =
-            std::f64::consts::PI * g.base_diameter_mm() / g.teeth as f64;
+        let pb_via_base = std::f64::consts::PI * g.base_diameter_mm() / g.teeth as f64;
         assert!(
             (pb_via_base - expected).abs() < 1e-3,
             "base pitch via base circle {pb_via_base} mm vs closed form {expected} mm"
         );
 
         // Route 2: via circular pitch — p_b = p·cos(α) = (π·m)·cos(α).
-        let pb_via_cp =
-            circular_pitch_mm(g.module_mm) * g.pressure_angle_deg.to_radians().cos();
+        let pb_via_cp = circular_pitch_mm(g.module_mm) * g.pressure_angle_deg.to_radians().cos();
         assert!(
             (pb_via_cp - expected).abs() < 1e-3,
             "base pitch via circular pitch {pb_via_cp} mm vs closed form {expected} mm"
