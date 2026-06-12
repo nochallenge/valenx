@@ -197,4 +197,29 @@ mod tests {
         let p2 = matrix(vec![vec![0]]);
         assert!(fst_hudson(&p1, &p2).is_err());
     }
+
+    #[test]
+    fn fst_estimators_match_hand_computed_values() {
+        // GROUND TRUTH. Two 4-sample populations, one shared site: pop1 has
+        // derived frequency p1 = 3/4, pop2 p2 = 1/4. The existing Fst tests
+        // only check sign/range (≈0 / >0.8 / in-(0,1)); this pins BOTH
+        // estimators to exact hand-computed values.
+        //
+        // Hudson (Bhatia 2013): num = (p1−p2)² − p1(1−p1)/(n1−1) − p2(1−p2)/(n2−1)
+        //   = 0.25 − 0.1875/3 − 0.1875/3 = 0.25 − 0.0625 − 0.0625 = 0.125;
+        //   den = p1(1−p2) + p2(1−p1) = 0.5625 + 0.0625 = 0.625;
+        //   Fst = 0.125/0.625 = 0.2.
+        // Weir & Cockerham (1984), r=2, n̄=4, nc=4, p̄=0.5, s²=0.125, h̄=0.375
+        //   → a = 0.09375, b = 0.03125, c = 0.1875;
+        //   θ = a/(a+b+c) = 0.09375/0.3125 = 0.3.
+        let p1 = matrix(vec![vec![1], vec![1], vec![1], vec![0]]); // p = 3/4
+        let p2 = matrix(vec![vec![1], vec![0], vec![0], vec![0]]); // p = 1/4
+        let fst_h = fst_hudson(&p1, &p2).unwrap();
+        assert!((fst_h - 0.2).abs() < 1e-12, "Hudson Fst {fst_h} != 0.2");
+        let fst_wc = fst_weir_cockerham(&p1, &p2).unwrap();
+        assert!(
+            (fst_wc - 0.3).abs() < 1e-9,
+            "Weir-Cockerham Fst {fst_wc} != 0.3"
+        );
+    }
 }
