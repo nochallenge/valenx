@@ -52,4 +52,31 @@ mod tests {
         let dp_thin = darcy_weisbach_rho(0.3, 10.0, 5.0, 0.02, 0.5);
         assert!(dp_thin < dp_dense);
     }
+
+    #[test]
+    fn darcy_weisbach_matches_closed_form_worked_value() {
+        // Closed form ΔP = f·(L/D)·½·ρ·v². With f=0.02, L=10 m, D=0.3 m,
+        // v=5 m/s, ρ=1.204 kg/m³ (air at 20 °C):
+        //   ΔP = 0.02·(10/0.3)·0.5·1.204·5² = 10.03333… Pa.
+        // Pin the caller-density entry point against the exact hand-computed
+        // ground truth (not the code's own output) at a tight absolute tol.
+        let f = 0.02;
+        let l = 10.0;
+        let d = 0.3;
+        let v = 5.0;
+        let rho = 1.204;
+        let expected = f * (l / d) * 0.5 * rho * v * v; // = 10.0333… Pa
+        let dp = darcy_weisbach_rho(d, l, v, f, rho);
+        assert!(
+            (dp - expected).abs() < 1e-9,
+            "computed {dp} vs closed form {expected}"
+        );
+        // And against the literal published value, tol 0.05 Pa.
+        assert!(
+            (dp - 10.0333).abs() < 0.05,
+            "computed {dp} Pa, expected ≈ 10.03 Pa"
+        );
+        // The convenience wrapper hard-codes ρ_air = 1.204, so it must agree.
+        assert!((darcy_weisbach(d, l, v, f) - dp).abs() < 1e-12);
+    }
 }

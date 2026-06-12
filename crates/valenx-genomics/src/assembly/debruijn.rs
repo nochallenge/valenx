@@ -419,6 +419,61 @@ mod tests {
     }
 
     #[test]
+    fn reconstructs_original_string_from_its_kmers() {
+        // GROUND TRUTH (Eulerian-path reconstruction): a string whose
+        // De Bruijn graph is a single non-branching path must reassemble
+        // EXACTLY from the (unordered) set of its own k-mers — this is the
+        // defining correctness property of De Bruijn assembly.
+        //
+        // "GATTACAGGCTA" at k=4 has all 9 four-mers distinct and all
+        // 3-mer nodes of in/out-degree ≤ 1 (verified: zero branching
+        // nodes, one source, one sink), so the unique Eulerian path is
+        // the original string and the assembler must emit it verbatim.
+        //
+        // Unlike the existing read-tiling tests, this drives assembly from
+        // the explicit k-mer multiset (each k-mer fed as its own read) and
+        // shuffles their order, proving order-independence of the result.
+        let original: &[u8] = b"GATTACAGGCTA";
+        let k = 4usize;
+        // Enumerate the k-mers, then present them in a deliberately
+        // non-sequential order to show reconstruction does not depend on
+        // input ordering.
+        let mut kmers: Vec<&[u8]> = original.windows(k).collect();
+        let n = kmers.len();
+        assert_eq!(n, original.len() - k + 1, "expected {n} k-mers");
+        kmers.reverse();
+        if n >= 3 {
+            kmers.swap(0, n / 2); // perturb the order further
+        }
+
+        let contigs = assemble(
+            &kmers,
+            &AssemblyParams {
+                k,
+                max_tip_len: 0, // nothing to clip — the path is clean
+                pop_bubbles: false,
+                min_contig_len: 0,
+            },
+        )
+        .unwrap();
+
+        // Exactly one unitig, equal to the original string (not merely a
+        // substring or rotation — the path is linear and unique).
+        assert_eq!(
+            contigs.len(),
+            1,
+            "single clean path must yield one contig, got {contigs:?}"
+        );
+        assert_eq!(
+            contigs[0].as_slice(),
+            original,
+            "reconstructed {:?} != original {:?}",
+            String::from_utf8_lossy(&contigs[0]),
+            String::from_utf8_lossy(original),
+        );
+    }
+
+    #[test]
     fn rejects_small_k() {
         let reads: Vec<&[u8]> = vec![b"ACGT"];
         assert!(DeBruijnGraph::build(&reads, 1).is_err());

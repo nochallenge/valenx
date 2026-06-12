@@ -453,6 +453,53 @@ mod tests {
     }
 
     #[test]
+    fn rational_quadratic_traces_exact_circle() {
+        // GROUND TRUTH: a rational quadratic NURBS with the canonical
+        // weights represents a conic EXACTLY. The standard 90° arc uses
+        // control points P0=(r,0), P1=(r,r), P2=(0,r) with weights
+        // (1, √2/2, 1) and clamped knots [0,0,0,1,1,1]; the resulting
+        // curve is the EXACT quarter circle x² + y² = r², not an
+        // approximation. (Middle weight w = cos(45°) = √2/2 for a 90°
+        // sweep; the general rule is w = cos(half-angle).)
+        //
+        // This pins the exact-conic property that partition-of-unity and
+        // endpoint-clamp tests do not cover. Tolerance is 1e-12 because
+        // the identity is algebraically exact in f64 — the only error is
+        // floating-point round-off in the Bernstein/denominator sums.
+        let r = 2.5_f64;
+        let w = std::f64::consts::FRAC_1_SQRT_2; // √2/2 = cos45°
+        let cps = vec![
+            Vector3::new(r, 0.0, 0.0),
+            Vector3::new(r, r, 0.0),
+            Vector3::new(0.0, r, 0.0),
+        ];
+        let weights = vec![1.0, w, 1.0];
+        let knots = vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+        let c = NurbsCurve::new(2, knots, cps, weights).unwrap();
+        // Sample across the whole domain, including the interior where a
+        // mere polygon/parabola would deviate from the true circle.
+        for &u in &[0.0_f64, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0] {
+            let p = c.evaluate(u);
+            let r2 = p.x * p.x + p.y * p.y;
+            assert!(
+                (r2 - r * r).abs() < 1e-12,
+                "u={u}: point {p:?} has r²={r2} ≠ {} (off circle)",
+                r * r
+            );
+            assert!(p.z.abs() < 1e-12, "u={u}: arc left the z=0 plane");
+        }
+        // Spot-check the geometric midpoint: a 90° rational-quadratic arc
+        // evaluated at u=0.5 lands at (r/√2, r/√2) — the 45° point —
+        // which a non-rational parabola through the same CPs would miss.
+        let mid = c.evaluate(0.5);
+        let half = r * std::f64::consts::FRAC_1_SQRT_2;
+        assert!(
+            (mid.x - half).abs() < 1e-12 && (mid.y - half).abs() < 1e-12,
+            "midpoint {mid:?} != (r/√2, r/√2) = ({half}, {half})"
+        );
+    }
+
+    #[test]
     fn straight_line_derivative_is_constant() {
         // 4 collinear CPs along x → tangent at any u is the +x axis.
         let c = cubic_bezier([

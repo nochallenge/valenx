@@ -220,6 +220,39 @@ mod tests {
     }
 
     #[test]
+    fn rg_of_a_cube_matches_closed_form() {
+        // GROUND TRUTH: the eight corners of a cube of side `a` centred
+        // at the origin sit at (±a/2, ±a/2, ±a/2). By symmetry the centre
+        // of mass is the origin, and every corner is at distance
+        //   |r| = √((a/2)² · 3) = (a/2)·√3
+        // from it. With equal masses the mass weighting drops out and
+        //   Rg = sqrt( (1/8) · Σ |rᵢ|² ) = (a/2)·√3.
+        // For a = 2 this is exactly √3 = 1.7320508075688772.
+        //
+        // Distinct from `rg_of_a_known_shell` (octahedral, Rg=1): here the
+        // corners are NOT all the same trivial unit distance, so this
+        // exercises the |r|² accumulation with a non-unit per-point term.
+        // Tolerance 1e-12 — the identity is algebraically exact.
+        let a = 2.0_f64;
+        let h = a / 2.0;
+        let corners = [-h, h];
+        let mut pts = Vec::with_capacity(8);
+        for &x in &corners {
+            for &y in &corners {
+                for &z in &corners {
+                    pts.push((Point3::new(x, y, z), 1.0));
+                }
+            }
+        }
+        let rg = radius_of_gyration(&pts).unwrap();
+        let expected = h * 3.0_f64.sqrt(); // (a/2)·√3
+        assert!(
+            (rg - expected).abs() < 1e-12,
+            "cube Rg = {rg} ≠ (a/2)·√3 = {expected}"
+        );
+    }
+
+    #[test]
     fn principal_axes_of_a_rod() {
         // A rod along x: the smallest moment is about x, the two
         // larger moments are degenerate about y and z.

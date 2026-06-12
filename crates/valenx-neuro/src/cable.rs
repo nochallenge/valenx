@@ -469,6 +469,73 @@ mod tests {
     }
 
     #[test]
+    fn action_potential_shape_matches_hodgkin_huxley_squid_axon() {
+        // Quantitative AP-shape validation against the canonical Hodgkin–Huxley
+        // (1952) squid giant axon. The sibling test above only checks that the
+        // spike overshoots 0 mV; here we pin the *shape* to the published
+        // reference: a ~100 mV overshooting spike that peaks strictly below the
+        // sodium reversal E_Na, followed by an afterhyperpolarisation that dips
+        // below rest toward (but never past) the potassium reversal E_K, then
+        // recovers. These properties would catch a regression that still fires
+        // but with the wrong reversal potentials or conductance ratios.
+        let mut c = HhCompartment::at_rest();
+        let trace = c.run(
+            StimPulse {
+                amp_ua_cm2: 50.0,
+                start_ms: 1.0,
+                width_ms: 0.5,
+            },
+            25.0,
+            0.005,
+        );
+
+        // Peak overshoot. The Na current drives V toward E_Na (+50 mV) but at
+        // the peak (dV/dt = 0, stimulus already off) the outward I_K + I_leak
+        // balance the inward I_Na, so V *must* stay strictly below E_Na — a
+        // hard physical bound, not a fitted number. The squid-axon spike peaks
+        // near +40 mV.
+        let peak = vmax(&trace);
+        let peak_idx = trace.iter().position(|&v| v == peak).unwrap();
+        assert!(
+            peak < E_NA,
+            "spike peak must stay below the Na reversal E_Na={E_NA}; got {peak}"
+        );
+        assert!(
+            (35.0..45.0).contains(&peak),
+            "HH squid-axon spike peaks near +40 mV; got {peak}"
+        );
+
+        // Amplitude (peak − rest): the classic HH action potential is ~100 mV.
+        let amplitude = peak - V_REST;
+        assert!(
+            (100.0..110.0).contains(&amplitude),
+            "AP amplitude (peak − rest) should be ~105 mV; got {amplitude}"
+        );
+
+        // Afterhyperpolarisation: after the spike the still-open K conductance
+        // pulls V below rest toward E_K, then it recovers. The undershoot dips
+        // below rest but, because the leak (E_L = −54.4 mV) always pulls upward,
+        // can never reach the K reversal — E_K is a strict lower bound.
+        let trough = trace[peak_idx..].iter().cloned().fold(f64::MAX, f64::min);
+        assert!(
+            trough < V_REST - 1.0,
+            "AP should be followed by an afterhyperpolarisation below rest {V_REST}; trough {trough}"
+        );
+        assert!(
+            trough > E_K,
+            "the afterhyperpolarisation cannot pass the K reversal E_K={E_K}; trough {trough}"
+        );
+
+        // Recovery: by the end of the 25 ms window the membrane has relaxed
+        // most of the way back from the AHP trough toward rest.
+        let final_v = *trace.last().unwrap();
+        assert!(
+            final_v > trough + 0.5 * (V_REST - trough),
+            "membrane should be recovering toward rest {V_REST} by 25 ms; final {final_v}, trough {trough}"
+        );
+    }
+
+    #[test]
     fn hh_gating_kinetics_match_the_classic_resting_and_limit_values() {
         // At the resting potential the classic HH gates sit near m≈0.05, h≈0.6, n≈0.32.
         let rest = hh_gating_kinetics(-65.0);
