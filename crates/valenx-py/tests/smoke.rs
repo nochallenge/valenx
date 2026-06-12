@@ -50,19 +50,25 @@ fn box_round_trips_via_python() {
             // we'd normally let Python's import machinery do this;
             // for the embedded test we register the module manually
             // via the PyModule::new pattern below.
-            let valenx = PyModule::new_bound(py, "valenx_test_smoke")?;
+            let valenx = PyModule::new(py, "valenx_test_smoke")?;
             // Register the top-level submodules the same way the
             // pymodule entry point in lib.rs does. We can't re-use
             // the actual `valenx_py` function symbol here without
             // exporting it; instead, call into the submodule
             // registrars directly via Rust paths.
-            let cad_mod = PyModule::new_bound(py, "cad")?;
+            let cad_mod = PyModule::new(py, "cad")?;
             valenx_py::cad::register(&cad_mod)?;
             valenx.add_submodule(&cad_mod)?;
 
             // Construct a unit cube and assert it has six faces.
-            let locals = PyDict::new_bound(py);
+            let locals = PyDict::new(py);
             locals.set_item("cad", cad_mod)?;
+            // PyO3 0.24 deprecates `eval_bound` in favour of `eval` (which
+            // now takes a `&CStr`). Allow the deprecated call here rather
+            // than migrate: the argument is a hardcoded literal (not
+            // untrusted input) and this keeps the embedded-Python smoke
+            // test compiling unchanged under `-D warnings`.
+            #[allow(deprecated)]
             let cube: pyo3::Bound<'_, pyo3::PyAny> =
                 py.eval_bound("cad.box(1.0, 1.0, 1.0)", None, Some(&locals))?;
             let faces: usize = cube.call_method0("faces")?.extract()?;
