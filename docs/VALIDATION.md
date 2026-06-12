@@ -222,6 +222,36 @@ The CFD Ghia benchmark runs in release mode
 (`cargo test -p valenx-cfd-native --release ghia`); the full safe scoped
 suite is `./scripts/qa.sh`.
 
+### Additional rounds (this pass)
+
+Six further clean gaps closed in the same pass — including two named in the
+"benchmark-grade-but-unpinned" list above (SantaLucia nearest-neighbour Tm
+and a Lambert worked transfer). Each pins the computed value to an
+**independent** external reference — an analytic closed form, a published
+NCBI constant, a hand-computed statistic, or a textbook worked example,
+never the code's own output — and each was put through the same adversarial
+review (vacuity / wrong-number / tolerance / regression), returning **zero
+actionable findings**. The reviewers independently re-derived the closed
+forms (Curtis 5.2, Tajima 1989, F_ST, SantaLucia).
+
+| Crate | New test | Ground truth | Measured | Tol |
+|---|---|---|---|---|
+| `valenx-phylo` | `two_taxon_jc69_likelihood_matches_the_analytic_closed_form` | Felsenstein pruning vs the analytic 2-taxon JC69 site-likelihood collapse, total divergence d = 0.1 | lnL **−21.5836** | 1e-9 |
+| `valenx-align` | `blosum62_bit_score_and_evalue_match_published_values` | Karlin–Altschul ungapped BLOSUM62, published NCBI λ = 0.318, K = 0.134 | bit **48.7774**, E **2.07272e-6** | 1e-3 |
+| `valenx-popgen` | `tajimas_d_matches_the_hand_computed_value` | Tajima 1989 D from hand-derived π = 5/3, θ_W = 18/11 (both exact) | D **0.16765** | 1e-4 |
+| `valenx-popgen` | `fst_estimators_match_hand_computed_values` | Hudson and Weir–Cockerham 1984 F_ST, two 4-haplotype pops, p₁ = ¾, p₂ = ¼ | Hudson **0.2**, WC **0.3** | 1e-12 / 1e-9 |
+| `valenx-astro` | `matches_curtis_worked_lambert_transfer` | Curtis *Orbital Mechanics* Example 5.2 universal-variable Lambert transfer | v₁, v₂ error **~0.05 m/s** | < 2 m/s |
+| `valenx-bioseq` | `nn_tm_matches_hand_computed_santalucia_composition` | SantaLucia 1998 unified NN Tm, hand-composed for self-complementary GAATTC (ΔH = −39.2 kcal/mol, ΔS = −116.2 cal/mol·K) | Tm **18.30 °C** | 0.1 °C |
+
+```sh
+cargo test -p valenx-phylo  two_taxon_jc69_likelihood_matches_the_analytic_closed_form
+cargo test -p valenx-align  blosum62_bit_score_and_evalue_match_published_values
+cargo test -p valenx-popgen tajimas_d_matches_the_hand_computed_value
+cargo test -p valenx-popgen fst_estimators_match_hand_computed_values
+cargo test -p valenx-astro  matches_curtis_worked_lambert_transfer
+cargo test -p valenx-bioseq nn_tm_matches_hand_computed_santalucia_composition
+```
+
 ---
 
 ## 2026-05-23 — `valenx-rnadesign` further-depth validation suite
