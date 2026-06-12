@@ -209,4 +209,33 @@ mod tests {
         let r2 = Vector3::new(0.0, R_EARTH + 500_000.0, 0.0);
         assert!(lambert(r1, r2, 0.0, true).is_none());
     }
+
+    #[test]
+    fn matches_curtis_worked_lambert_transfer() {
+        // GROUND TRUTH: Curtis, "Orbital Mechanics for Engineering Students",
+        // Example 5.2 — a published worked Lambert transfer about Earth. The
+        // other tests here are all round-trip (propagate, then re-solve); this
+        // pins the ABSOLUTE departure/arrival velocities to the textbook's
+        // independent numbers, validating the universal-variable solve itself.
+        //   r1 = (5000, 10000, 2100) km, r2 = (−14600, 2500, 7000) km,
+        //   Δt = 3600 s, prograde, μ = 398600 km³/s² →
+        //   v1 = (−5.9925, 1.9254, 3.2456) km/s,
+        //   v2 = (−3.3125, −4.1966, −0.38529) km/s.
+        let r1 = Vector3::new(5_000e3, 10_000e3, 2_100e3);
+        let r2 = Vector3::new(-14_600e3, 2_500e3, 7_000e3);
+        let (v1, v2) = lambert(r1, r2, 3_600.0, true).expect("Lambert should converge");
+        // Published Curtis velocities (m/s). Tol 2 m/s absorbs Curtis's
+        // 5-significant-figure rounding and the ~1 ppm difference between
+        // valenx's MU_EARTH (3.986004418e14) and Curtis's rounded 3.986e14.
+        let v1_curtis = Vector3::new(-5992.5, 1925.4, 3245.6);
+        let v2_curtis = Vector3::new(-3312.5, -4196.6, -385.29);
+        assert!(
+            (v1 - v1_curtis).norm() < 2.0,
+            "v1 {v1:?} m/s vs Curtis {v1_curtis:?}"
+        );
+        assert!(
+            (v2 - v2_curtis).norm() < 2.0,
+            "v2 {v2:?} m/s vs Curtis {v2_curtis:?}"
+        );
+    }
 }
