@@ -2,7 +2,7 @@
 //! properties over `valenx-frames`.
 //!
 //! Mirrors the springs / gears / … / fasteners workbenches: a resizable
-//! [`egui::SidePanel`] gated on [`crate::ValenxApp::show_frames_workbench`],
+//! [`egui::SidePanel`] gated on `crate::ValenxApp::show_frames_workbench`,
 //! toggled from the View menu. The form picks a profile family (I-beam,
 //! C-channel, L-angle, rectangular HSS, round CHS, or T-beam) and its
 //! dimensions; the "Compute" button reports the cross-sectional area and

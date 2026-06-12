@@ -3,7 +3,7 @@
 //!
 //! Mirrors the springs / gears / geomatics / piping workbenches: a
 //! resizable [`egui::SidePanel`] gated on
-//! [`crate::ValenxApp::show_collision_workbench`], toggled from the View
+//! `crate::ValenxApp::show_collision_workbench`, toggled from the View
 //! menu. The form takes two axis-aligned bounding boxes (each a min and a
 //! max corner); the "Compute" button reports each box's volume, surface
 //! area, space diagonal, and inradius, plus whether the pair overlaps and

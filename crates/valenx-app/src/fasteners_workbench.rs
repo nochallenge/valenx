@@ -2,7 +2,7 @@
 //! dimensions over `valenx-fasteners`.
 //!
 //! Mirrors the springs / gears / … / fields workbenches: a resizable
-//! [`egui::SidePanel`] gated on [`crate::ValenxApp::show_fasteners_workbench`],
+//! [`egui::SidePanel`] gated on `crate::ValenxApp::show_fasteners_workbench`,
 //! toggled from the View menu. The form picks a standard metric bolt size
 //! from the ISO 4017 hex table; the "Compute" button reports the width
 //! across flats, head height, pitch diameter, and tensile stress area, as
