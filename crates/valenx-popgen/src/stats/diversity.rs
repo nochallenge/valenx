@@ -411,6 +411,9 @@ mod tests {
         assert!((wattersons_theta(&m).unwrap() - 18.0 / 11.0).abs() < 1e-12);
         // The full statistic, pinned to the first-principles hand value.
         let d = tajimas_d(&m).unwrap();
-        assert!((d - 0.16765).abs() < 1e-4, "Tajima's D {d} != 0.16765 (hand)");
+        assert!(
+            (d - 0.16765).abs() < 1e-4,
+            "Tajima's D {d} != 0.16765 (hand)"
+        );
     }
 }
