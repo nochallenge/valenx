@@ -10,6 +10,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — exhaustive "review every file until zero bugs" pass (#561–#595)
+
+An 18-round file-by-file review loop drove the workspace to zero open
+code findings, each fix shipped as a reviewed, regression-tested PR:
+
+- **Untrusted-input parser hardening** — integer-overflow size math,
+  unbounded recursion, and shift-overflow in the Radiance-HDR, MGED CSG,
+  OpenSCAD, kicad, DCD, and gmsh readers (checked arithmetic + count /
+  depth caps).
+- **Deserialize-bypass index panics** — types whose validating
+  constructor serde bypasses now re-validate on load: sketch B-splines,
+  NURBS curves/surfaces (`SurfaceFile`), lattice placements, schematic
+  wires, paramhist dependencies, the 3-D constraint solver, thread specs.
+- **Geometry NaN / divide-by-zero** guards (CFD diffusion, mesh bevel,
+  CAM point-in-polygon and the adaptive-engagement grid) and
+  unbounded-allocation caps for deserialized sizes (animation frames,
+  thread turns).
+- **Numerically-correct fixes** — CFD ρ-weighted diffusion conductances,
+  MD scaled 1-4 nonbonded pairs, IFC GUID big-endian packing, kinematics
+  reference validation; plus a stale CAM collision-test fixture left by
+  the earlier flute-convention change.
+
+### CI
+
+- **Re-enabled `ci.yml` auto-triggers** (push + pull_request) and
+  required the `CI OK` summary check in branch protection — the repo is
+  public, so Actions standard runners are free and the original
+  private-repo billing concern no longer applies (#600).
+- Brought the pipeline to green for the first time since the triggers
+  were disabled: a workspace-wide `cargo fmt` baseline (the tree had
+  never been formatted, #598), pyo3 0.24 deprecation fixes (#597),
+  cargo-deny advisory triage, and rustdoc broken-link repair (#599).
+
 ### Security
 
 **Rounds 15–33 — sustained robustness & untrusted-input hardening
