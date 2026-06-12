@@ -83,11 +83,7 @@ pub struct Part {
 
 impl Part {
     /// A DNA part from an id, role and IUPAC sequence string.
-    pub fn new(
-        id: impl Into<String>,
-        role: PartRole,
-        seq: impl AsRef<[u8]>,
-    ) -> Result<Self> {
+    pub fn new(id: impl Into<String>, role: PartRole, seq: impl AsRef<[u8]>) -> Result<Self> {
         let id = id.into();
         let sequence = Seq::new(SeqKind::Dna, seq).map_err(|e| {
             SysbioError::invalid_model("sbol", format!("part `{id}` has a bad sequence: {e}"))
@@ -269,8 +265,7 @@ impl Device {
             .components
             .iter()
             .flat_map(|c| {
-                std::iter::once(c.id.as_str())
-                    .chain(c.parts.iter().map(|p| p.id.as_str()))
+                std::iter::once(c.id.as_str()).chain(c.parts.iter().map(|p| p.id.as_str()))
             })
             .collect();
         for m in &self.modules {
@@ -350,14 +345,15 @@ mod tests {
             .with_part(rbs())
             .with_part(cds());
         assert_eq!(comp.parts_with_role(PartRole::Cds), vec![2]);
-        assert_eq!(comp.parts_with_role(PartRole::Terminator), Vec::<usize>::new());
+        assert_eq!(
+            comp.parts_with_role(PartRole::Terminator),
+            Vec::<usize>::new()
+        );
     }
 
     #[test]
     fn device_validates_module_endpoints() {
-        let comp = Component::new("tu1")
-            .with_part(promoter())
-            .with_part(cds());
+        let comp = Component::new("tu1").with_part(promoter()).with_part(cds());
         let mut dev = Device::new("d1");
         dev.add_component(comp);
         dev.add_module(Module {

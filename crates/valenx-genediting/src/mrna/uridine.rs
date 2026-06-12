@@ -192,11 +192,7 @@ pub fn minimize_uridine(cds: &[u8], host: Option<ExpressionHost>) -> Result<Urid
     let mut out = cds_rna.clone();
 
     for ci in 0..n_codons {
-        let orig: [u8; 3] = [
-            cds_rna[ci * 3],
-            cds_rna[ci * 3 + 1],
-            cds_rna[ci * 3 + 2],
-        ];
+        let orig: [u8; 3] = [cds_rna[ci * 3], cds_rna[ci * 3 + 1], cds_rna[ci * 3 + 2]];
         let orig_dna = reverse_transcribe(&orig);
         let aa = code.translate_codon(&orig_dna);
         // Keep the start codon and stop codon fixed.
@@ -269,8 +265,7 @@ mod tests {
 
     #[test]
     fn plan_counts_uridines() {
-        let p = plan_modification(b"AUGUUUTAA", ModifiedNucleoside::N1MethylPseudouridine)
-            .unwrap();
+        let p = plan_modification(b"AUGUUUTAA", ModifiedNucleoside::N1MethylPseudouridine).unwrap();
         // AUGUUUUAA after transcription: count the U's.
         assert!(p.uridine_positions > 0);
         assert!(p.reduces_immunogenicity);

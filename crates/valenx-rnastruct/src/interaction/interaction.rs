@@ -130,10 +130,7 @@ pub fn predict_interaction_with(
     // position ts+len-1-k. We slide both windows and grow the length.
     for qs in 0..q.len() {
         for ts in 0..tg.len() {
-            let max_len = params
-                .max_length
-                .min(q.len() - qs)
-                .min(tg.len() - ts);
+            let max_len = params.max_length.min(q.len() - qs).min(tg.len() - ts);
             for len in params.min_seed..=max_len {
                 // Check that every position in the duplex pairs.
                 let mut ok = true;
@@ -158,7 +155,11 @@ pub fn predict_interaction_with(
                     .and_then(|a| a.opening_energy(ts, len))
                     .unwrap_or(0.0);
                 let total = hybrid + q_open + t_open;
-                if best.as_ref().map(|b| total < b.total_energy).unwrap_or(true) {
+                if best
+                    .as_ref()
+                    .map(|b| total < b.total_energy)
+                    .unwrap_or(true)
+                {
                     best = Some(Interaction {
                         query_start: qs,
                         target_start: ts,

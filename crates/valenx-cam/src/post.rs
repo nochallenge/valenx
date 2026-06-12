@@ -357,12 +357,7 @@ pub(crate) fn format_g1(p: Vector3<f64>, feed: f64) -> Result<String, CamError> 
 /// failures.
 pub(crate) fn format_g0(p: Vector3<f64>) -> String {
     let safe = |v: f64| if v.is_finite() { v } else { 0.0 };
-    format!(
-        "G0 X{:.3} Y{:.3} Z{:.3}",
-        safe(p.x),
-        safe(p.y),
-        safe(p.z)
-    )
+    format!("G0 X{:.3} Y{:.3} Z{:.3}", safe(p.x), safe(p.y), safe(p.z))
 }
 
 /// Like [`format_g0`] but returns [`CamError::PostprocessorFailed`]

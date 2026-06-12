@@ -29,7 +29,9 @@ use crate::error::OcctVizError;
 use crate::v3d_viewer_xor_drag::v3d_viewer_xor_drag;
 
 /// Selection mode mirror of OCCT's `Aspect_TypeOfHighlightMethod`.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum BoxSelectionMode {
     /// Object's screen-AABB must overlap the rectangle by ≥ 1 pixel
@@ -119,12 +121,11 @@ fn geometry_vertices(
         }
         Pickable::Polyline { points } => points.iter().map(v3).collect(),
         Pickable::Point { position } => vec![v3(position)],
-        Pickable::TaggedEdges { edges } => {
-            edges.iter().flat_map(|(_, pts)| pts.iter().map(v3)).collect()
-        }
-        Pickable::TaggedVertices { vertices } => {
-            vertices.iter().map(|(_, p)| v3(p)).collect()
-        }
+        Pickable::TaggedEdges { edges } => edges
+            .iter()
+            .flat_map(|(_, pts)| pts.iter().map(v3))
+            .collect(),
+        Pickable::TaggedVertices { vertices } => vertices.iter().map(|(_, p)| v3(p)).collect(),
     }
 }
 
@@ -146,11 +147,7 @@ mod tests {
 
     fn axis_triangle() -> Pickable {
         Pickable::Mesh {
-            triangles: vec![
-                [-0.5, -0.5, 0.0],
-                [0.5, -0.5, 0.0],
-                [0.0, 0.5, 0.0],
-            ],
+            triangles: vec![[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]],
         }
     }
 

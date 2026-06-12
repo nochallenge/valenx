@@ -84,9 +84,10 @@ pub fn from_ply_str(text: &str) -> Result<PointCloud, ReverseError> {
             }
         } else if let Some(rest) = t.strip_prefix("element vertex ") {
             in_vertex_element = true;
-            vertex_count = rest.trim().parse::<usize>().map_err(|e| {
-                ReverseError::PlyParse(format!("bad vertex count `{rest}`: {e}"))
-            })?;
+            vertex_count = rest
+                .trim()
+                .parse::<usize>()
+                .map_err(|e| ReverseError::PlyParse(format!("bad vertex count `{rest}`: {e}")))?;
         } else if t.starts_with("element ") {
             in_vertex_element = false;
         } else if in_vertex_element {
@@ -104,32 +105,31 @@ pub fn from_ply_str(text: &str) -> Result<PointCloud, ReverseError> {
     if !end_header_seen {
         return Err(ReverseError::PlyParse("missing end_header".into()));
     }
-    let idx_x = props.iter().position(|p| p == "x").ok_or_else(|| {
-        ReverseError::PlyParse("missing property `x`".into())
-    })?;
-    let idx_y = props.iter().position(|p| p == "y").ok_or_else(|| {
-        ReverseError::PlyParse("missing property `y`".into())
-    })?;
-    let idx_z = props.iter().position(|p| p == "z").ok_or_else(|| {
-        ReverseError::PlyParse("missing property `z`".into())
-    })?;
+    let idx_x = props
+        .iter()
+        .position(|p| p == "x")
+        .ok_or_else(|| ReverseError::PlyParse("missing property `x`".into()))?;
+    let idx_y = props
+        .iter()
+        .position(|p| p == "y")
+        .ok_or_else(|| ReverseError::PlyParse("missing property `y`".into()))?;
+    let idx_z = props
+        .iter()
+        .position(|p| p == "z")
+        .ok_or_else(|| ReverseError::PlyParse("missing property `z`".into()))?;
     let idx_nx = props.iter().position(|p| p == "nx");
     let idx_ny = props.iter().position(|p| p == "ny");
     let idx_nz = props.iter().position(|p| p == "nz");
     let has_normals = idx_nx.is_some() && idx_ny.is_some() && idx_nz.is_some();
     let mut points: Vec<Vector3<f64>> = Vec::with_capacity(vertex_count);
-    let mut normals: Vec<Vector3<f64>> = Vec::with_capacity(if has_normals {
-        vertex_count
-    } else {
-        0
-    });
+    let mut normals: Vec<Vector3<f64>> =
+        Vec::with_capacity(if has_normals { vertex_count } else { 0 });
     for (row_i, raw) in lines.take(vertex_count).enumerate() {
         let cols: Vec<f64> = raw
             .split_whitespace()
             .map(|s| {
-                s.parse::<f64>().map_err(|e| {
-                    ReverseError::PlyParse(format!("row {row_i} col parse: {e}"))
-                })
+                s.parse::<f64>()
+                    .map_err(|e| ReverseError::PlyParse(format!("row {row_i} col parse: {e}")))
             })
             .collect::<Result<_, _>>()?;
         let need = props.len();
@@ -174,9 +174,8 @@ pub fn from_xyz(text: &str) -> Result<PointCloud, ReverseError> {
         let cols: Vec<f64> = line
             .split_whitespace()
             .map(|s| {
-                s.parse::<f64>().map_err(|e| {
-                    ReverseError::PlyParse(format!("xyz row {i}: {e}"))
-                })
+                s.parse::<f64>()
+                    .map_err(|e| ReverseError::PlyParse(format!("xyz row {i}: {e}")))
             })
             .collect::<Result<_, _>>()?;
         if cols.len() != 3 && cols.len() != 6 {
@@ -384,7 +383,10 @@ mod tests {
         let text = "ply\nformat ascii 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nproperty float nx\nproperty float ny\nproperty float nz\nend_header\n0 0 0 0 0 1\n";
         let cloud = from_ply_str(text).unwrap();
         assert_eq!(cloud.len(), 1);
-        assert_eq!(cloud.normals.as_ref().unwrap()[0], Vector3::new(0.0, 0.0, 1.0));
+        assert_eq!(
+            cloud.normals.as_ref().unwrap()[0],
+            Vector3::new(0.0, 0.0, 1.0)
+        );
     }
 
     #[test]

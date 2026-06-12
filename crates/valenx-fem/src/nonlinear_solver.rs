@@ -339,11 +339,7 @@ pub fn solve_nonlinear_static(
                         c[i] += u[3 * nodes[a] + i];
                     }
                 }
-                let (fe, kte) = corotational_element(
-                    &rest_coords[e],
-                    &current,
-                    &elem_k[e],
-                );
+                let (fe, kte) = corotational_element(&rest_coords[e], &current, &elem_k[e]);
                 // Scatter the 12-vector internal force.
                 for a in 0..4 {
                     for i in 0..3 {
@@ -409,8 +405,7 @@ pub fn solve_nonlinear_static(
             let k_t = crate::native_solver::add_diagonal(&k_t, &penalty_diag);
 
             // --- solve the tangent system K_T·Δu = −r ---
-            let chol = CscCholesky::factor(&k_t)
-                .map_err(|_| NativeSolverError::SolveFailed)?;
+            let chol = CscCholesky::factor(&k_t).map_err(|_| NativeSolverError::SolveFailed)?;
             let rhs = -&residual;
             let delta: DMatrix<f64> = chol.solve(&rhs);
             let delta = delta.column(0);
@@ -458,13 +453,7 @@ pub fn solve_nonlinear_static(
     }
 
     // --- stress recovery in the co-rotated frame ---
-    let von_mises = recover_von_mises(
-        &rest_coords,
-        &elem_nodes,
-        &u,
-        &d_matrix,
-        n_nodes,
-    );
+    let von_mises = recover_von_mises(&rest_coords, &elem_nodes, &u, &d_matrix, n_nodes);
 
     Ok(NonlinearSolution {
         displacement,
@@ -503,11 +492,7 @@ pub fn corotational_element(
     ke: &DMatrix<f64>,
 ) -> (DVector<f64>, DMatrix<f64>) {
     // Edge matrices (columns = edges from node 0).
-    let d_rest = Matrix3::from_columns(&[
-        rest[1] - rest[0],
-        rest[2] - rest[0],
-        rest[3] - rest[0],
-    ]);
+    let d_rest = Matrix3::from_columns(&[rest[1] - rest[0], rest[2] - rest[0], rest[3] - rest[0]]);
     let d_cur = Matrix3::from_columns(&[
         current[1] - current[0],
         current[2] - current[0],
@@ -527,8 +512,7 @@ pub fn corotational_element(
 
     // Centroids.
     let rest_centroid = (rest[0] + rest[1] + rest[2] + rest[3]) / 4.0;
-    let cur_centroid =
-        (current[0] + current[1] + current[2] + current[3]) / 4.0;
+    let cur_centroid = (current[0] + current[1] + current[2] + current[3]) / 4.0;
 
     // Deformational displacement of each node:
     //   u_local_a = Rᵀ·(x_a − x̄) − (X_a − X̄)
@@ -550,11 +534,7 @@ pub fn corotational_element(
     let f_local = ke * &u_local;
     let mut f_global = DVector::<f64>::zeros(12);
     for a in 0..4 {
-        let fl = Vector3::new(
-            f_local[3 * a],
-            f_local[3 * a + 1],
-            f_local[3 * a + 2],
-        );
+        let fl = Vector3::new(f_local[3 * a], f_local[3 * a + 1], f_local[3 * a + 2]);
         let fg = r * fl;
         f_global[3 * a] = fg.x;
         f_global[3 * a + 1] = fg.y;
@@ -635,11 +615,8 @@ fn recover_von_mises(
         }
         // Rotation + deformational displacement (same as the force
         // assembly).
-        let d_rest = Matrix3::from_columns(&[
-            rest[1] - rest[0],
-            rest[2] - rest[0],
-            rest[3] - rest[0],
-        ]);
+        let d_rest =
+            Matrix3::from_columns(&[rest[1] - rest[0], rest[2] - rest[0], rest[3] - rest[0]]);
         let d_cur = Matrix3::from_columns(&[
             current[1] - current[0],
             current[2] - current[0],
@@ -651,12 +628,10 @@ fn recover_von_mises(
         };
         let rt = r.transpose();
         let rest_centroid = (rest[0] + rest[1] + rest[2] + rest[3]) / 4.0;
-        let cur_centroid =
-            (current[0] + current[1] + current[2] + current[3]) / 4.0;
+        let cur_centroid = (current[0] + current[1] + current[2] + current[3]) / 4.0;
         let mut u_local = DVector::<f64>::zeros(12);
         for a in 0..4 {
-            let def =
-                rt * (current[a] - cur_centroid) - (rest[a] - rest_centroid);
+            let def = rt * (current[a] - cur_centroid) - (rest[a] - rest_centroid);
             u_local[3 * a] = def.x;
             u_local[3 * a + 1] = def.y;
             u_local[3 * a + 2] = def.z;
@@ -760,12 +735,7 @@ mod tests {
         let a = 90f64.to_radians();
         let (c, s) = (a.cos(), a.sin());
         let rot = Matrix3::new(c, -s, 0.0, s, c, 0.0, 0.0, 0.0, 1.0);
-        let current = [
-            rot * rest[0],
-            rot * rest[1],
-            rot * rest[2],
-            rot * rest[3],
-        ];
+        let current = [rot * rest[0], rot * rest[1], rot * rest[2], rot * rest[3]];
         let (f, _kt) = corotational_element(&rest, &current, &ke);
         // The internal force is f = R·(Kₑ·u_local). Under a rigid
         // rotation u_local is zero only to machine precision, and Kₑ
@@ -797,12 +767,7 @@ mod tests {
         let d = elasticity_matrix(&FemMaterial::default()).unwrap();
         let ke = crate::native_solver::element_stiffness(&rest, &d).unwrap();
         // Stretch 10% along X.
-        let current = [
-            rest[0],
-            Vector3::new(1.1, 0.0, 0.0),
-            rest[2],
-            rest[3],
-        ];
+        let current = [rest[0], Vector3::new(1.1, 0.0, 0.0), rest[2], rest[3]];
         let (f, _kt) = corotational_element(&rest, &current, &ke);
         assert!(
             f.norm() > 1e-3,
@@ -862,8 +827,7 @@ mod tests {
             .map(|&n| lin.displacement[n][2].abs())
             .sum::<f64>()
             / tip.len() as f64;
-        let nl_tip = nl
-            .max_displacement();
+        let nl_tip = nl.max_displacement();
         // For a tiny load the two predictions agree to a few percent.
         let rel = (lin_tip - nl_tip).abs() / lin_tip.max(1e-30);
         assert!(
@@ -1118,7 +1082,13 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            matches!(err, NativeSolverError::InvalidLoad { kind: "prescribed displacement", .. }),
+            matches!(
+                err,
+                NativeSolverError::InvalidLoad {
+                    kind: "prescribed displacement",
+                    ..
+                }
+            ),
             "expected InvalidLoad(prescribed displacement), got {err:?}"
         );
     }
@@ -1171,7 +1141,9 @@ mod tests {
         )
         .expect("finite prescribed displacement must still solve");
         assert!(
-            sol.displacement.iter().all(|d| d.iter().all(|c| c.is_finite())),
+            sol.displacement
+                .iter()
+                .all(|d| d.iter().all(|c| c.is_finite())),
             "a finite prescribed displacement must give a finite solution"
         );
     }

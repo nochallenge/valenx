@@ -195,7 +195,10 @@ impl DuctSegmentParams {
         if (self.end - self.start).norm() < 1e-9 {
             return Err(ArchError::BadDimension {
                 name: "length",
-                reason: format!("duct length must be > 0 (got {})", (self.end - self.start).norm()),
+                reason: format!(
+                    "duct length must be > 0 (got {})",
+                    (self.end - self.start).norm()
+                ),
             });
         }
         let (w, h) = self.shape.outer_box();
@@ -251,7 +254,10 @@ impl PipeSegmentParams {
         if (self.end - self.start).norm() < 1e-9 {
             return Err(ArchError::BadDimension {
                 name: "length",
-                reason: format!("pipe length must be > 0 (got {})", (self.end - self.start).norm()),
+                reason: format!(
+                    "pipe length must be > 0 (got {})",
+                    (self.end - self.start).norm()
+                ),
             });
         }
         if !self.diameter.is_finite() || self.diameter <= 0.0 {
@@ -277,7 +283,14 @@ impl PipeSegmentParams {
     /// round cross-section).
     pub fn tessellate_mesh(&self) -> Result<Mesh, ArchError> {
         self.validate()?;
-        swept_box_mesh("pipe", self.start, self.end, self.diameter, self.diameter, 0.0)
+        swept_box_mesh(
+            "pipe",
+            self.start,
+            self.end,
+            self.diameter,
+            self.diameter,
+            0.0,
+        )
     }
 
     /// Hint points for [`crate::ArchDocument::bbox`].
@@ -310,7 +323,10 @@ impl CableSegmentParams {
         if (self.end - self.start).norm() < 1e-9 {
             return Err(ArchError::BadDimension {
                 name: "length",
-                reason: format!("cable length must be > 0 (got {})", (self.end - self.start).norm()),
+                reason: format!(
+                    "cable length must be > 0 (got {})",
+                    (self.end - self.start).norm()
+                ),
             });
         }
         if !self.diameter.is_finite() || self.diameter <= 0.0 {
@@ -336,7 +352,14 @@ impl CableSegmentParams {
     /// Tessellate as a swept square box.
     pub fn tessellate_mesh(&self) -> Result<Mesh, ArchError> {
         self.validate()?;
-        swept_box_mesh("cable", self.start, self.end, self.diameter, self.diameter, 0.0)
+        swept_box_mesh(
+            "cable",
+            self.start,
+            self.end,
+            self.diameter,
+            self.diameter,
+            0.0,
+        )
     }
 
     /// Hint points for [`crate::ArchDocument::bbox`].
@@ -740,10 +763,7 @@ mod tests {
             tag: "P-1".into(),
             description: "".into(),
         };
-        assert!(matches!(
-            e.validate(),
-            Err(ArchError::BadDimension { .. })
-        ));
+        assert!(matches!(e.validate(), Err(ArchError::BadDimension { .. })));
     }
 
     #[test]

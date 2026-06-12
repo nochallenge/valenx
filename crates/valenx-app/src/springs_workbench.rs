@@ -189,8 +189,10 @@ fn preview_centerline(s: &SpringsWorkbenchState) -> Option<Vec<Vector3<f64>>> {
 /// Draw a centreline polyline as an isometric wireframe in a fixed-height
 /// canvas, with the camera auto-framed to the geometry's bounds.
 fn draw_centerline_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
-    let (response, painter) =
-        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let (response, painter) = ui.allocate_painter(
+        egui::vec2(ui.available_width(), 200.0),
+        egui::Sense::hover(),
+    );
     let rect = response.rect;
 
     let mut min = [f32::INFINITY; 3];
@@ -210,8 +212,18 @@ fn draw_centerline_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
     let (w, h) = (rect.width(), rect.height());
     let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
     for pair in pts.windows(2) {
-        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
-        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        let a = project_point(
+            &cam,
+            w,
+            h,
+            [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32],
+        );
+        let b = project_point(
+            &cam,
+            w,
+            h,
+            [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32],
+        );
         if let (Some(a), Some(b)) = (a, b) {
             painter.line_segment(
                 [

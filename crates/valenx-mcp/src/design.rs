@@ -247,10 +247,7 @@ fn tool_ok(text: impl Into<String>, structured: Value) -> Value {
 /// new sketch's id (an index the other sketch tools take as
 /// `sketch_id`).
 pub fn create_sketch(args: &Value) -> Result<Value> {
-    let plane_str = args
-        .get("plane")
-        .and_then(|v| v.as_str())
-        .unwrap_or("XY");
+    let plane_str = args.get("plane").and_then(|v| v.as_str()).unwrap_or("XY");
     let plane = match plane_str.to_ascii_uppercase().as_str() {
         "XY" => SketchPlane::Xy,
         other => {
@@ -420,9 +417,7 @@ pub fn add_constraint(args: &Value) -> Result<Value> {
     let sketch_id = req_usize(args, "sketch_id")?;
     let kind = req_str(args, "type")?.to_ascii_lowercase();
     // Entity-id helpers: read a named arg as a 1-based EntityId.
-    let ent = |name: &str| -> Result<EntityId> {
-        Ok(EntityId(req_usize(args, name)?))
-    };
+    let ent = |name: &str| -> Result<EntityId> { Ok(EntityId(req_usize(args, name)?)) };
     // Round-17 L1: read the dimensional `value` once and gate it on
     // is_finite(). The Distance / Angle constraints feed `value`
     // straight into the solver as the target residual; a NaN would
@@ -492,7 +487,11 @@ pub fn add_constraint(args: &Value) -> Result<Value> {
     Ok(tool_ok(
         format!(
             "added `{kind}` constraint to sketch {sketch_id}; solver {} (residual {:.2e})",
-            if converged { "converged" } else { "did not converge" },
+            if converged {
+                "converged"
+            } else {
+                "did not converge"
+            },
             report.residual_norm
         ),
         json!({
@@ -559,7 +558,9 @@ pub fn pad(args: &Value) -> Result<Value> {
         depth: depth.into(),
         direction_positive,
     });
-    let id = s.tree.add_feature(feature, format!("Pad (sketch {sketch_id})"));
+    let id = s
+        .tree
+        .add_feature(feature, format!("Pad (sketch {sketch_id})"));
     Ok(tool_ok(
         format!("padded sketch {sketch_id} by {depth} → feature {}", id.0),
         json!({ "feature_id": id.0, "operation": "pad" }),
@@ -591,10 +592,7 @@ pub fn pocket(args: &Value) -> Result<Value> {
         .tree
         .add_feature(feature, format!("Pocket (sketch {sketch_id})"));
     Ok(tool_ok(
-        format!(
-            "pocketed sketch {sketch_id} by {depth} → feature {}",
-            id.0
-        ),
+        format!("pocketed sketch {sketch_id} by {depth} → feature {}", id.0),
         json!({ "feature_id": id.0, "operation": "pocket" }),
     ))
 }
@@ -740,15 +738,9 @@ pub fn boolean(args: &Value) -> Result<Value> {
         operation,
         targets: targets.clone(),
     });
-    let id = s
-        .tree
-        .add_feature(feature, format!("Boolean ({op_str})"));
+    let id = s.tree.add_feature(feature, format!("Boolean ({op_str})"));
     Ok(tool_ok(
-        format!(
-            "{op_str} of {} features → feature {}",
-            targets.len(),
-            id.0
-        ),
+        format!("{op_str} of {} features → feature {}", targets.len(), id.0),
         json!({ "feature_id": id.0, "operation": op_str }),
     ))
 }
@@ -1270,9 +1262,21 @@ mod tests {
             size[1].as_f64().unwrap(),
             size[2].as_f64().unwrap(),
         ];
-        assert!((sz[0] - 1.0).abs() < 0.05, "x extent should be 1, got {}", sz[0]);
-        assert!((sz[1] - 1.0).abs() < 0.05, "y extent should be 1, got {}", sz[1]);
-        assert!((sz[2] - 3.0).abs() < 0.05, "z extent should be 3, got {}", sz[2]);
+        assert!(
+            (sz[0] - 1.0).abs() < 0.05,
+            "x extent should be 1, got {}",
+            sz[0]
+        );
+        assert!(
+            (sz[1] - 1.0).abs() < 0.05,
+            "y extent should be 1, got {}",
+            sz[1]
+        );
+        assert!(
+            (sz[2] - 3.0).abs() < 0.05,
+            "z extent should be 3, got {}",
+            sz[2]
+        );
     }
 
     #[test]
@@ -1460,12 +1464,18 @@ mod tests {
         // 12 triangles, all wound counter-clockwise as seen from
         // outside (outward normals → positive volume).
         let tris: [[u32; 3]; 12] = [
-            [0, 2, 1], [0, 3, 2], // bottom (−z)
-            [4, 5, 6], [4, 6, 7], // top (+z)
-            [0, 1, 5], [0, 5, 4], // −y
-            [2, 3, 7], [2, 7, 6], // +y
-            [1, 2, 6], [1, 6, 5], // +x
-            [0, 4, 7], [0, 7, 3], // −x
+            [0, 2, 1],
+            [0, 3, 2], // bottom (−z)
+            [4, 5, 6],
+            [4, 6, 7], // top (+z)
+            [0, 1, 5],
+            [0, 5, 4], // −y
+            [2, 3, 7],
+            [2, 7, 6], // +y
+            [1, 2, 6],
+            [1, 6, 5], // +x
+            [0, 4, 7],
+            [0, 7, 3], // −x
         ];
         let mut conn = Vec::new();
         for t in tris {
@@ -1476,7 +1486,11 @@ mod tests {
             connectivity: conn,
         });
         let m = mesh_metrics(&mesh);
-        assert!((m.volume - 1.0).abs() < 1e-9, "cube volume should be 1, got {}", m.volume);
+        assert!(
+            (m.volume - 1.0).abs() < 1e-9,
+            "cube volume should be 1, got {}",
+            m.volume
+        );
         assert!((m.surface_area - 6.0).abs() < 1e-9, "cube area should be 6");
         assert_eq!(m.bbox_min, [0.0, 0.0, 0.0]);
         assert_eq!(m.bbox_max, [1.0, 1.0, 1.0]);
@@ -1596,7 +1610,9 @@ mod tests {
             let mut s = lock_session().unwrap();
             let draft = s.drafts.get_mut(sid).unwrap();
             for _ in 0..MAX_DESIGN_CONSTRAINTS_PER_SKETCH {
-                draft.sketch.add_constraint(Constraint::Horizontal(EntityId(line_id as usize)));
+                draft
+                    .sketch
+                    .add_constraint(Constraint::Horizontal(EntityId(line_id as usize)));
             }
         }
         // The next add_constraint must be rejected.

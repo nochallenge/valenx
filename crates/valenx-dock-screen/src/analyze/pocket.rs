@@ -53,10 +53,7 @@ impl Pocket {
         // Estimate an edge length from the volume (a cube of equal
         // volume), padded.
         let edge = self.volume.max(1.0).cbrt() + 2.0 * padding.max(0.0);
-        GridBox::cubic(
-            [self.center.x, self.center.y, self.center.z],
-            edge.max(6.0),
-        )
+        GridBox::cubic([self.center.x, self.center.y, self.center.z], edge.max(6.0))
     }
 }
 
@@ -223,8 +220,7 @@ pub fn detect_pockets(receptor: &Structure, params: &PocketParams) -> Result<Vec
     for iz in 0..nz {
         for iy in 0..ny {
             for ix in 0..nx {
-                let p = lo
-                    + Vector3::new(ix as f64, iy as f64, iz as f64) * sp;
+                let p = lo + Vector3::new(ix as f64, iy as f64, iz as f64) * sp;
                 if buried(p) {
                     flags[idx(ix, iy, iz)] = true;
                 }
@@ -362,9 +358,8 @@ mod tests {
             for iy in 0..7 {
                 for iz in 0..7 {
                     // Hollow out the central 3×3×3.
-                    let inner = (2..=4).contains(&ix)
-                        && (2..=4).contains(&iy)
-                        && (2..=4).contains(&iz);
+                    let inner =
+                        (2..=4).contains(&ix) && (2..=4).contains(&iy) && (2..=4).contains(&iz);
                     if inner {
                         continue;
                     }
@@ -395,7 +390,8 @@ mod tests {
     #[test]
     fn rejects_structure_with_no_heavy_atoms() {
         // A PDB containing only a hydrogen.
-        let pdb = "ATOM      1  H   ALA A   1       0.000   0.000   0.000  1.00  0.00           H\nEND\n";
+        let pdb =
+            "ATOM      1  H   ALA A   1       0.000   0.000   0.000  1.00  0.00           H\nEND\n";
         let s = load_structure(pdb, "x").unwrap();
         assert!(detect_pockets(&s, &PocketParams::default()).is_err());
     }
@@ -470,6 +466,9 @@ mod tests {
             min_cluster_points: 50,
         };
         let pockets = detect_pockets(&structure, &params).unwrap();
-        assert!(pockets.is_empty(), "solid block should expose no large cavity");
+        assert!(
+            pockets.is_empty(),
+            "solid block should expose no large cavity"
+        );
     }
 }

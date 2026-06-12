@@ -37,40 +37,36 @@
 
 pub mod aero;
 pub mod aero_workbench;
+pub mod animate_workbench;
 pub(crate) mod background;
-pub mod fem_workbench;
 pub mod cad_workbench;
 pub mod cfd_workbench;
 pub mod draft2d_workbench;
+pub mod fem_workbench;
+pub mod hvac_workbench;
+pub mod interior_workbench;
+pub mod neuro_workbench;
 pub mod reinforcement_workbench;
 pub mod render_workbench;
-pub mod hvac_workbench;
 pub mod reverse_workbench;
-pub mod interior_workbench;
-pub mod animate_workbench;
 pub mod variant_effect_workbench;
-pub mod neuro_workbench;
 
-#[cfg(test)]
-mod coverage_ui_tests;
-pub mod reactdyn_workbench;
-pub mod springs_workbench;
-pub mod gears_workbench;
-pub mod geomatics_workbench;
-pub mod piping_workbench;
-pub mod collision_workbench;
-pub mod sheetmetal_workbench;
-pub mod fields_workbench;
-pub mod fasteners_workbench;
-pub mod frames_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
+pub mod collision_workbench;
 pub mod commands;
+#[cfg(test)]
+mod coverage_ui_tests;
 pub mod draft_overlay;
+pub mod fasteners_workbench;
+pub mod fields_workbench;
 pub mod first_run;
+pub mod frames_workbench;
+pub mod gears_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
+pub mod geomatics_workbench;
 pub mod keyboard_help;
 pub mod landing_page;
 pub mod log_panel;
@@ -78,13 +74,17 @@ pub mod mesh_toolbox;
 pub mod new_project_dialog;
 pub mod panel_help;
 pub mod pbr_forward_pass;
+pub mod piping_workbench;
+pub mod reactdyn_workbench;
 pub mod residuals;
 pub mod run;
 pub mod scene_overlay;
 pub mod settings;
 pub mod setup;
+pub mod sheetmetal_workbench;
 pub mod shortcuts;
 pub mod sketch_overlay;
+pub mod springs_workbench;
 pub mod theme;
 pub mod tooltips;
 pub mod types;
@@ -850,10 +850,7 @@ impl ValenxApp {
     /// Make the right-side Genetics Workbench SidePanel visible and
     /// select `panel` as its active tab. The screenshot harness drives
     /// this once per genetics panel — one PNG per active selection.
-    pub fn enable_genetics_workbench(
-        &mut self,
-        panel: crate::genetics_workbench::GeneticsPanel,
-    ) {
+    pub fn enable_genetics_workbench(&mut self, panel: crate::genetics_workbench::GeneticsPanel) {
         self.show_genetics_workbench = true;
         self.genetics.active = panel;
     }

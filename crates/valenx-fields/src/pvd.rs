@@ -410,7 +410,9 @@ mod tests {
         let mut state: u64 = 0x6A09_E667_F3BC_C908; // fixed seed
         for _ in 0..2000 {
             let len = (xorshift64(&mut state) % 256) as usize;
-            let buf: Vec<u8> = (0..len).map(|_| (xorshift64(&mut state) & 0xFF) as u8).collect();
+            let buf: Vec<u8> = (0..len)
+                .map(|_| (xorshift64(&mut state) & 0xFF) as u8)
+                .collect();
             let _ = parse_pvd(&String::from_utf8_lossy(&buf));
         }
         // 4. Burst corruption of the valid manifest: the <VTKFile…Collection>
@@ -582,7 +584,10 @@ mod tests {
             group: String::new(),
             part: 0,
         };
-        assert_eq!(resolve_entry_path(&pvd_path, &abs).expect("resolve"), abs_path);
+        assert_eq!(
+            resolve_entry_path(&pvd_path, &abs).expect("resolve"),
+            abs_path
+        );
     }
 
     /// Round-19 M2 RED→GREEN: a PVD whose `<DataSet>` entry contains
@@ -613,8 +618,7 @@ mod tests {
             group: String::new(),
             part: 0,
         };
-        let err = resolve_entry_path(&pvd_path, &traversal)
-            .expect_err("traversal must be refused");
+        let err = resolve_entry_path(&pvd_path, &traversal).expect_err("traversal must be refused");
         match err {
             PvdError::PathEscape { file } => {
                 assert!(file.contains(".."), "got: {file:?}");

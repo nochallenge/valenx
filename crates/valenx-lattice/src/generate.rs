@@ -84,8 +84,7 @@ fn orient_z_to(target: Vector3<f64>) -> UnitQuaternion<f64> {
         return UnitQuaternion::identity();
     }
     let dir = target / len;
-    UnitQuaternion::rotation_between(&REFERENCE_AXIS, &dir)
-        .unwrap_or_else(UnitQuaternion::identity)
+    UnitQuaternion::rotation_between(&REFERENCE_AXIS, &dir).unwrap_or_else(UnitQuaternion::identity)
 }
 
 /// Dispatch the recipe to the matching per-variant generator.
@@ -202,9 +201,7 @@ fn bezier_tangent(cps: &[Vector3<f64>], t: f64) -> Vector3<f64> {
         return Vector3::zeros();
     }
     let deg = (n - 1) as f64;
-    let hodograph: Vec<Vector3<f64>> = (0..n - 1)
-        .map(|i| (cps[i + 1] - cps[i]) * deg)
-        .collect();
+    let hodograph: Vec<Vector3<f64>> = (0..n - 1).map(|i| (cps[i + 1] - cps[i]) * deg).collect();
     bezier_at(&hodograph, t)
 }
 
@@ -369,16 +366,12 @@ fn on_mesh(
                     continue;
                 }
                 for chunk in block.connectivity.chunks_exact(3) {
-                    let (i0, i1, i2) =
-                        (chunk[0] as usize, chunk[1] as usize, chunk[2] as usize);
-                    if i0 >= mesh.nodes.len()
-                        || i1 >= mesh.nodes.len()
-                        || i2 >= mesh.nodes.len()
-                    {
+                    let (i0, i1, i2) = (chunk[0] as usize, chunk[1] as usize, chunk[2] as usize);
+                    if i0 >= mesh.nodes.len() || i1 >= mesh.nodes.len() || i2 >= mesh.nodes.len() {
                         continue;
                     }
-                    let fn_ = (mesh.nodes[i1] - mesh.nodes[i0])
-                        .cross(&(mesh.nodes[i2] - mesh.nodes[i0]));
+                    let fn_ =
+                        (mesh.nodes[i1] - mesh.nodes[i0]).cross(&(mesh.nodes[i2] - mesh.nodes[i0]));
                     normals[i0] += fn_;
                     normals[i1] += fn_;
                     normals[i2] += fn_;
@@ -527,11 +520,7 @@ mod tests {
     fn bezier_orientation_follows_tangent() {
         // A straight Bezier along +X: every instance's +Z must rotate
         // onto +X (the constant tangent).
-        let p = bezier(
-            &[Vector3::zeros(), Vector3::new(10.0, 0.0, 0.0)],
-            5,
-        )
-        .unwrap();
+        let p = bezier(&[Vector3::zeros(), Vector3::new(10.0, 0.0, 0.0)], 5).unwrap();
         for pl in &p {
             let local_z = pl.orientation * Vector3::z();
             assert!(
@@ -554,7 +543,10 @@ mod tests {
     fn grid_rejects_overflowing_placement_count() {
         let r = grid(usize::MAX, usize::MAX, 1, Vector3::new(1.0, 1.0, 1.0));
         assert!(
-            matches!(r.as_ref().err(), Some(LatticeError::TooManyPlacements { .. })),
+            matches!(
+                r.as_ref().err(),
+                Some(LatticeError::TooManyPlacements { .. })
+            ),
             "expected TooManyPlacements, got: {:?}",
             r.as_ref().err()
         );
@@ -629,10 +621,7 @@ mod tests {
     fn bezier_rejects_oversized_sample_count() {
         // Single-factor variants get the cap too — `n_samples =
         // usize::MAX` pre-fix flowed straight into Vec::with_capacity.
-        let r = bezier(
-            &[Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0)],
-            usize::MAX,
-        );
+        let r = bezier(&[Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0)], usize::MAX);
         assert!(matches!(
             r.err(),
             Some(LatticeError::TooManyPlacements { .. })

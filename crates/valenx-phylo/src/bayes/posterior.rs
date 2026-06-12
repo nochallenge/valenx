@@ -52,10 +52,7 @@ pub struct PosteriorSummary {
 /// [`PhyloError::Invalid`] if `trees` is empty, if the trees / log
 /// posteriors disagree in length, or if the trees disagree on their
 /// leaf set.
-pub fn summarise_posterior(
-    trees: &[Tree],
-    log_posteriors: &[f64],
-) -> Result<PosteriorSummary> {
+pub fn summarise_posterior(trees: &[Tree], log_posteriors: &[f64]) -> Result<PosteriorSummary> {
     if trees.is_empty() {
         return Err(PhyloError::invalid("trees", "empty tree sample"));
     }
@@ -99,8 +96,7 @@ pub fn clade_posterior_table(trees: &[Tree]) -> Vec<CladePosterior> {
         // contains, deduplicate (a clade may correspond to multiple
         // internal node ids on a malformed tree — keep one count per
         // distinct leaf set per tree), and tally.
-        let mut seen: std::collections::HashSet<Vec<String>> =
-            std::collections::HashSet::new();
+        let mut seen: std::collections::HashSet<Vec<String>> = std::collections::HashSet::new();
         for id in 0..tree.node_count() {
             let node = tree.node(id);
             if node.is_leaf() || node.parent.is_none() {

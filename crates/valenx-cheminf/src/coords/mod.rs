@@ -19,8 +19,8 @@ pub mod layout2d;
 
 pub use embed3d::{bond_length_rmsd, embed_3d, embed_3d_mmff94, Pcg32};
 pub use etkdg::{
-    etkdg_embed, generate_conformers, heavy_atom_rmsd, torsion_pref, EtkdgOptions,
-    ScoredConformer, TorsionClass, TorsionPref, TORSION_LIBRARY,
+    etkdg_embed, generate_conformers, heavy_atom_rmsd, torsion_pref, EtkdgOptions, ScoredConformer,
+    TorsionClass, TorsionPref, TORSION_LIBRARY,
 };
 pub use layout2d::{compute_2d_coords, mean_bond_length_2d};
 

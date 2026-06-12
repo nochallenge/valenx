@@ -83,11 +83,7 @@ impl BatchResult {
         let mut out = String::new();
         out.push_str("label\tstatus\tapproach\n");
         for e in &self.entries {
-            out.push_str(&format!(
-                "{}\tok\t{}\n",
-                e.label,
-                e.report.approach.name()
-            ));
+            out.push_str(&format!("{}\tok\t{}\n", e.label, e.report.approach.name()));
         }
         for f in &self.failures {
             out.push_str(&format!("{}\tfailed\t{}\n", f.label, f.error_code));
@@ -207,10 +203,7 @@ mod tests {
         let targets = vec![good_target("A"), good_target("B")];
         let result = run_batch_design(&targets).unwrap();
         // Both are knockouts.
-        assert_eq!(
-            result.count_by_approach(EditApproach::NucleaseNhej),
-            2
-        );
+        assert_eq!(result.count_by_approach(EditApproach::NucleaseNhej), 2);
         assert_eq!(result.count_by_approach(EditApproach::BaseEditing), 0);
     }
 

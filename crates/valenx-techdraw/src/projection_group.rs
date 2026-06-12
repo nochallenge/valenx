@@ -151,9 +151,7 @@ impl ProjectionGroup {
         // bbox drives Top + Right placement.
         let mut front = View::new(ViewKind::Front, self.scale, self.base_position);
         front.generate(solid)?;
-        let (front_min, front_max) = front
-            .bbox()
-            .ok_or(TechDrawError::EmptySolid)?;
+        let (front_min, front_max) = front.bbox().ok_or(TechDrawError::EmptySolid)?;
         let front_w = (front_max[0] - front_min[0]) * self.scale;
         let front_h = (front_max[1] - front_min[1]) * self.scale;
 
@@ -259,11 +257,7 @@ impl ProjectionGroup {
                 l.front[1] + cap_dy,
                 "Front".into(),
             ),
-            (
-                l.top[0] + front_w * 0.5,
-                l.top[1] + cap_dy,
-                "Top".into(),
-            ),
+            (l.top[0] + front_w * 0.5, l.top[1] + cap_dy, "Top".into()),
             (
                 l.right[0] + front_w * 0.5, // approximated — right view is roughly the same width
                 l.right[1] + cap_dy,
@@ -310,7 +304,10 @@ mod tests {
         let l = g.layout_positions(40.0, 30.0);
         assert_eq!(l.front, [100.0, 50.0]);
         assert!(l.top[1] > l.front[1], "Top should be above Front");
-        assert!(l.right[0] > l.front[0], "Right should be to the right of Front");
+        assert!(
+            l.right[0] > l.front[0],
+            "Right should be to the right of Front"
+        );
         // Iso in the upper-right corner.
         assert!(l.iso[0] > l.front[0] && l.iso[1] > l.front[1]);
     }
@@ -322,7 +319,10 @@ mod tests {
         let l = g.layout_positions(40.0, 30.0);
         assert_eq!(l.front, [100.0, 100.0]);
         assert!(l.top[1] < l.front[1], "Top should be below Front");
-        assert!(l.right[0] < l.front[0], "Right should be to the left of Front");
+        assert!(
+            l.right[0] < l.front[0],
+            "Right should be to the left of Front"
+        );
     }
 
     /// Build a third-angle group from a 50×30×20 box; verify the three
@@ -460,6 +460,9 @@ mod tests {
     /// Projection labels are distinct strings.
     #[test]
     fn projection_labels_are_distinct() {
-        assert_ne!(Projection::FirstAngle.label(), Projection::ThirdAngle.label());
+        assert_ne!(
+            Projection::FirstAngle.label(),
+            Projection::ThirdAngle.label()
+        );
     }
 }

@@ -135,7 +135,10 @@ fn run_neuro(s: &NeuroWorkbenchState) -> Result<NeuroResults, NeuroError> {
     // Forward recording: the extracellular spike (EAP) a nearby electrode would
     // see from a representative axon at the bundle's nearest depth.
     let recorder = ExtracellularRecorder::new(sigma, 100.0, 238.0, 35.4);
-    let eap = recorder.record(200, Vector3::new(10.0e-3, s.depth_mm.max(0.1) * 1.0e-3, 0.0));
+    let eap = recorder.record(
+        200,
+        Vector3::new(10.0e-3, s.depth_mm.max(0.1) * 1.0e-3, 0.0),
+    );
 
     Ok(NeuroResults {
         recruited_fraction,
@@ -498,8 +501,10 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 /// A 2-D cross-section: the electrode at top, axons at their depths, coloured
 /// green when recruited.
 fn draw_schematic(ui: &mut egui::Ui, r: &NeuroResults) {
-    let (resp, painter) =
-        ui.allocate_painter(egui::vec2(ui.available_width(), 120.0), egui::Sense::hover());
+    let (resp, painter) = ui.allocate_painter(
+        egui::vec2(ui.available_width(), 120.0),
+        egui::Sense::hover(),
+    );
     let rect = resp.rect;
     let cx = rect.center().x;
     let top = rect.top() + 12.0;
@@ -537,7 +542,10 @@ mod tests {
         assert!(!r.eap_uv.is_empty(), "EAP recorded");
         let lo = r.eap_uv.iter().cloned().fold(f64::INFINITY, f64::min);
         let hi = r.eap_uv.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        assert!(lo < 0.0 && hi > 0.0, "recorded EAP must be biphasic: {lo}..{hi}");
+        assert!(
+            lo < 0.0 && hi > 0.0,
+            "recorded EAP must be biphasic: {lo}..{hi}"
+        );
         let fr: Vec<f64> = r.recruitment_curve.iter().map(|&(_, f)| f).collect();
         for w in fr.windows(2) {
             assert!(w[1] >= w[0], "recruitment curve must not decrease: {fr:?}");
@@ -562,9 +570,15 @@ mod tests {
         // charge is safe, double is unsafe.
         let pw_factor = s.pulse_width_us * 1.0e-6; // µC per µA at this pulse width
         s.electrode_ua = 0.5 * base.max_safe_q_uc / pw_factor;
-        assert!(charge_safety(&s).safe, "half the max-safe charge must be safe");
+        assert!(
+            charge_safety(&s).safe,
+            "half the max-safe charge must be safe"
+        );
         s.electrode_ua = 2.0 * base.max_safe_q_uc / pw_factor;
-        assert!(!charge_safety(&s).safe, "double the max-safe charge must be unsafe");
+        assert!(
+            !charge_safety(&s).safe,
+            "double the max-safe charge must be unsafe"
+        );
     }
 
     #[test]

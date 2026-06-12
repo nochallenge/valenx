@@ -70,10 +70,9 @@ mod tests {
         let mut pos = [[1.0, 0.0, 0.0]]; // amplitude A = 1, v = 0
         let mut vel = [[0.0, 0.0, 0.0]];
         let masses = [m];
-        let force =
-            move |p: &[[f64; 3]]| -> core::result::Result<Vec<[f64; 3]>, ()> {
-                Ok(vec![[-k * p[0][0], 0.0, 0.0]])
-            };
+        let force = move |p: &[[f64; 3]]| -> core::result::Result<Vec<[f64; 3]>, ()> {
+            Ok(vec![[-k * p[0][0], 0.0, 0.0]])
+        };
         let mut forces = force(&pos).unwrap();
 
         let energy = |pos: &[[f64; 3]], vel: &[[f64; 3]]| {
@@ -90,7 +89,11 @@ mod tests {
             assert!((e - e0).abs() / e0 < 1e-3, "energy drift: {e} vs {e0}");
         }
         // After one full period, back to (x≈A, v≈0) — confirms the period.
-        assert!((pos[0][0] - 1.0).abs() < 5e-3, "x after one period: {}", pos[0][0]);
+        assert!(
+            (pos[0][0] - 1.0).abs() < 5e-3,
+            "x after one period: {}",
+            pos[0][0]
+        );
         assert!(vel[0][0].abs() < 5e-3, "v after one period: {}", vel[0][0]);
     }
 

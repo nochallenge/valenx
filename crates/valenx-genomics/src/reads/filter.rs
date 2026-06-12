@@ -76,11 +76,7 @@ pub struct FilterStats {
 impl FilterStats {
     /// Total reads dropped (all reasons summed).
     pub fn dropped(&self) -> usize {
-        self.too_short
-            + self.too_long
-            + self.low_quality
-            + self.too_many_ns
-            + self.low_complexity
+        self.too_short + self.too_long + self.low_quality + self.too_many_ns + self.low_complexity
     }
 
     fn record(&mut self, reason: FilterReason) {
@@ -147,8 +143,7 @@ pub fn evaluate(read: &FastqRecord, filter: &ReadFilter) -> Option<FilterReason>
         }
     }
     if filter.min_mean_quality > 0.0 && !read.quality.is_empty() {
-        let mean =
-            read.quality.iter().map(|&q| q as f64).sum::<f64>() / read.quality.len() as f64;
+        let mean = read.quality.iter().map(|&q| q as f64).sum::<f64>() / read.quality.len() as f64;
         if mean < filter.min_mean_quality {
             return Some(FilterReason::LowQuality);
         }
@@ -215,7 +210,10 @@ mod tests {
             min_length: 5,
             ..ReadFilter::default()
         };
-        assert_eq!(evaluate(&fq("ACG", &[40; 3]), &f), Some(FilterReason::TooShort));
+        assert_eq!(
+            evaluate(&fq("ACG", &[40; 3]), &f),
+            Some(FilterReason::TooShort)
+        );
         assert_eq!(evaluate(&fq("ACGTACGT", &[40; 8]), &f), None);
     }
 

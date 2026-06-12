@@ -26,10 +26,10 @@
 
 use crate::error::{GenomicsError, Result};
 use crate::util::rng::Rng;
+use valenx_bioseq::alphabet::SeqKind;
 use valenx_bioseq::io::fastq::FastqRecord;
 use valenx_bioseq::record::SeqRecord;
 use valenx_bioseq::seq::Seq;
-use valenx_bioseq::alphabet::SeqKind;
 
 /// Configuration for the Illumina simulator.
 #[derive(Clone, Debug, PartialEq)]
@@ -89,8 +89,7 @@ impl IlluminaProfile {
             return self.quality_high;
         }
         let t = i as f64 / (self.read_length - 1) as f64;
-        let q = self.quality_high as f64
-            - t * (self.quality_high as f64 - self.quality_low as f64);
+        let q = self.quality_high as f64 - t * (self.quality_high as f64 - self.quality_low as f64);
         q.round().clamp(2.0, 60.0) as u8
     }
 

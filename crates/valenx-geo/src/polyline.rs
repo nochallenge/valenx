@@ -110,11 +110,7 @@ impl Polyline {
         if n < 2 {
             return 0.0;
         }
-        let mut total: f64 = self
-            .vertices
-            .windows(2)
-            .map(|w| (w[1] - w[0]).norm())
-            .sum();
+        let mut total: f64 = self.vertices.windows(2).map(|w| (w[1] - w[0]).norm()).sum();
         if self.closed {
             total += (self.vertices[0] - self.vertices[n - 1]).norm();
         }

@@ -26,12 +26,13 @@
 fn main() {
     use std::path::PathBuf;
 
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR is always set by cargo");
-    let out_dir = std::env::var("OUT_DIR")
-        .expect("OUT_DIR is always set by cargo");
+    let manifest_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is always set by cargo");
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is always set by cargo");
 
-    let ico_path: PathBuf = [manifest_dir.as_str(), "wix", "valenx.ico"].iter().collect();
+    let ico_path: PathBuf = [manifest_dir.as_str(), "wix", "valenx.ico"]
+        .iter()
+        .collect();
     let rc_path: PathBuf = [out_dir.as_str(), "valenx.rc"].iter().collect();
 
     // Resource ID 1 + ICON convention: explorer.exe picks the

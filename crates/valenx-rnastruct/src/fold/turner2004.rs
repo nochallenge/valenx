@@ -507,10 +507,7 @@ pub fn special_hairpin(closing: (u8, u8), loop_bases: &[u8]) -> Option<f64> {
         4 => TETRALOOPS,
         _ => return None,
     };
-    table
-        .iter()
-        .find(|(seq, _)| *seq == key)
-        .map(|(_, e)| *e)
+    table.iter().find(|(seq, _)| *seq == key).map(|(_, e)| *e)
 }
 
 // ---------------------------------------------------------------------------
@@ -542,14 +539,14 @@ pub fn internal_1x1(outer: usize, inner: usize, m5: u8, m3: u8) -> f64 {
     let strong_inner = inner < 2;
     let base = INTERNAL[2];
     let mm = match (m5, m3) {
-        (2, 2) => -1.10, // G·G
+        (2, 2) => -1.10,          // G·G
         (2, 0) | (0, 2) => -1.00, // G·A / A·G
-        (3, 3) => -0.70, // U·U
-        (1, 0) | (0, 1) => 0.40, // C·A / A·C  (destabilising)
+        (3, 3) => -0.70,          // U·U
+        (1, 0) | (0, 1) => 0.40,  // C·A / A·C  (destabilising)
         _ => 0.00,
     };
-    let end = if strong_outer { 0.0 } else { TERMINAL_AU }
-        + if strong_inner { 0.0 } else { TERMINAL_AU };
+    let end =
+        if strong_outer { 0.0 } else { TERMINAL_AU } + if strong_inner { 0.0 } else { TERMINAL_AU };
     base + mm + end
 }
 
@@ -669,7 +666,10 @@ mod tests {
     #[test]
     fn extrapolation_extends_past_the_table() {
         let big = hairpin_init(60);
-        assert!(big > HAIRPIN[30], "size-60 hairpin must cost more than size 30");
+        assert!(
+            big > HAIRPIN[30],
+            "size-60 hairpin must cost more than size 30"
+        );
         assert_eq!(hairpin_init(30), HAIRPIN[30]);
     }
 
@@ -718,7 +718,10 @@ mod tests {
         let flush = coaxial_flush(2, 1, 2, 1);
         let mm = coaxial_mismatch(2, 1, 2, 1, 0);
         assert!(mm <= 0.0, "coaxial mismatch should be stabilising");
-        assert!(mm > flush, "mismatch stack {mm} must be weaker than flush {flush}");
+        assert!(
+            mm > flush,
+            "mismatch stack {mm} must be weaker than flush {flush}"
+        );
         // No bonus for a non-canonical helix end.
         assert_eq!(coaxial_mismatch(0, 0, 2, 1, 0), 0.0);
     }

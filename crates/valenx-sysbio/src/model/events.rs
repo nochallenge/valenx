@@ -250,12 +250,7 @@ impl SbmlRules {
     /// Apply the assignment rules in topological order to `y` and `p`.
     /// `t` is the current simulation time. Returns the rule
     /// permutation used (for diagnostics).
-    pub fn apply_assignments(
-        &self,
-        y: &mut [f64],
-        p: &mut [f64],
-        t: f64,
-    ) -> Result<Vec<usize>> {
+    pub fn apply_assignments(&self, y: &mut [f64], p: &mut [f64], t: f64) -> Result<Vec<usize>> {
         let order = self.topo_sort()?;
         for &idx in &order {
             let rule = &self.assignments[idx];
@@ -368,14 +363,10 @@ mod tests {
 
     #[test]
     fn event_builder_chaining_works() {
-        let ev = SbmlEvent::new(
-            "e1",
-            Expr::Const(0.0),
-            vec![],
-        )
-        .with_delay(2.0)
-        .with_priority(5.0)
-        .evaluate_at_execution_time();
+        let ev = SbmlEvent::new("e1", Expr::Const(0.0), vec![])
+            .with_delay(2.0)
+            .with_priority(5.0)
+            .evaluate_at_execution_time();
         assert_eq!(ev.delay, Some(2.0));
         assert_eq!(ev.priority, 5.0);
         assert!(!ev.use_values_from_trigger_time);

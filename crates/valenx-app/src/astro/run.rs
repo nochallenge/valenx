@@ -76,7 +76,11 @@ mod tests {
         // produce a stored result with no error.
         let mut app = ValenxApp::default();
         run_ascent(&mut app);
-        assert!(app.astro.error.is_none(), "unexpected error: {:?}", app.astro.error);
+        assert!(
+            app.astro.error.is_none(),
+            "unexpected error: {:?}",
+            app.astro.error
+        );
         let r = app.astro.last_result.as_ref().expect("a result was stored");
         assert!(r.reached_space, "apoapsis only {:.1} km", r.apoapsis_km());
         assert!(!app.astro.status.is_empty());
@@ -94,10 +98,18 @@ mod tests {
         // without lofting.
         app.astro.ascent.pitch_kick_deg = 12.9;
         run_ascent(&mut app);
-        assert!(app.astro.error.is_none(), "unexpected error: {:?}", app.astro.error);
+        assert!(
+            app.astro.error.is_none(),
+            "unexpected error: {:?}",
+            app.astro.error
+        );
         let r = app.astro.last_result.as_ref().expect("a result was stored");
         assert!(r.reached_orbit, "periapsis only {:.1} km", r.periapsis_km());
-        assert!(r.orbit.eccentricity < 0.05, "ecc {:.4}", r.orbit.eccentricity);
+        assert!(
+            r.orbit.eccentricity < 0.05,
+            "ecc {:.4}",
+            r.orbit.eccentricity
+        );
     }
 
     #[test]
@@ -112,7 +124,10 @@ mod tests {
         app.astro.ascent.stages.clear();
         run_ascent(&mut app);
         assert!(app.astro.error.is_some(), "empty stack should error");
-        assert!(app.astro.last_result.is_none(), "stale result must be cleared");
+        assert!(
+            app.astro.last_result.is_none(),
+            "stale result must be cleared"
+        );
     }
 
     #[test]

@@ -181,9 +181,9 @@ fn is_hairpin_arm(s: &Structure, i: usize, j: usize) -> bool {
     loop {
         let branches = direct_branches(s, a, b);
         match branches.len() {
-            0 => return true,            // reached the hairpin loop
-            1 => (a, b) = branches[0],   // descend the stem one pair
-            _ => return false,           // an internal multiloop — not a plain arm
+            0 => return true,          // reached the hairpin loop
+            1 => (a, b) = branches[0], // descend the stem one pair
+            _ => return false,         // an internal multiloop — not a plain arm
         }
     }
 }
@@ -228,9 +228,8 @@ mod tests {
     #[test]
     fn count_branches_helper() {
         // outer pair encloses two hairpins
-        let s = Structure::from_dot_bracket("(((....))((....)))").unwrap_or_else(
-            |_| Structure::from_dot_bracket("((((..))((..))))").unwrap(),
-        );
+        let s = Structure::from_dot_bracket("(((....))((....)))")
+            .unwrap_or_else(|_| Structure::from_dot_bracket("((((..))((..))))").unwrap());
         // just exercise the helper without panicking
         let _ = count_multiloop_hairpins(&s);
     }

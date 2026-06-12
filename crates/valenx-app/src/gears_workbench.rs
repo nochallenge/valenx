@@ -166,9 +166,7 @@ fn preview_profile(s: &GearsWorkbenchState) -> Option<Vec<Vector3<f64>>> {
         || !(s.pressure_angle_deg.is_finite()
             && s.pressure_angle_deg > 0.0
             && s.pressure_angle_deg < 90.0)
-        || !(s.helix_angle_deg.is_finite()
-            && s.helix_angle_deg >= 0.0
-            && s.helix_angle_deg < 90.0)
+        || !(s.helix_angle_deg.is_finite() && s.helix_angle_deg >= 0.0 && s.helix_angle_deg < 90.0)
         || !(s.face_width_mm.is_finite() && s.face_width_mm > 0.0)
     {
         return None;
@@ -199,8 +197,10 @@ fn preview_profile(s: &GearsWorkbenchState) -> Option<Vec<Vector3<f64>>> {
 /// wireframe in a fixed-height canvas, the camera auto-framed to the
 /// geometry's bounds.
 fn draw_profile_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
-    let (response, painter) =
-        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let (response, painter) = ui.allocate_painter(
+        egui::vec2(ui.available_width(), 200.0),
+        egui::Sense::hover(),
+    );
     let rect = response.rect;
 
     let mut min = [f32::INFINITY; 3];
@@ -220,8 +220,18 @@ fn draw_profile_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
     let (w, h) = (rect.width(), rect.height());
     let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
     for pair in pts.windows(2) {
-        let a = project_point(&cam, w, h, [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32]);
-        let b = project_point(&cam, w, h, [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32]);
+        let a = project_point(
+            &cam,
+            w,
+            h,
+            [pair[0].x as f32, pair[0].y as f32, pair[0].z as f32],
+        );
+        let b = project_point(
+            &cam,
+            w,
+            h,
+            [pair[1].x as f32, pair[1].y as f32, pair[1].z as f32],
+        );
         if let (Some(a), Some(b)) = (a, b) {
             painter.line_segment(
                 [
@@ -249,7 +259,9 @@ fn run_gears(s: &mut GearsWorkbenchState) {
         return;
     }
     // The base circle d·cos(α) needs 0 < α < 90 (cos α > 0).
-    if !(s.pressure_angle_deg.is_finite() && s.pressure_angle_deg > 0.0 && s.pressure_angle_deg < 90.0)
+    if !(s.pressure_angle_deg.is_finite()
+        && s.pressure_angle_deg > 0.0
+        && s.pressure_angle_deg < 90.0)
     {
         s.error = Some("pressure angle must be between 0° and 90°".into());
         return;

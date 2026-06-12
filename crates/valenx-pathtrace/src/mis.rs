@@ -235,7 +235,12 @@ struct BsdfSample {
 /// Mirrors [`crate::tracer`]'s `sample_bsdf` but additionally returns
 /// the full-BSDF solid-angle `pdf` so the caller can MIS-weight an
 /// emitter the sampled ray happens to hit.
-fn sample_bsdf(material: &PtMaterial, hit: &Hit, incoming: Vec3, rng: &mut Rng) -> Option<BsdfSample> {
+fn sample_bsdf(
+    material: &PtMaterial,
+    hit: &Hit,
+    incoming: Vec3,
+    rng: &mut Rng,
+) -> Option<BsdfSample> {
     let n = hit.normal;
     let v = incoming.neg();
     let n_dot_v = n.dot(v);
@@ -378,10 +383,12 @@ fn sample_light_mis(
     // Shadow test.
     let shadow_origin = offset_origin(hit.position, hit.geo_normal, wi);
     let shadow = Ray::new(shadow_origin, wi);
-    if scene
-        .bvh
-        .occluded(&scene.triangles, &shadow, RAY_EPSILON, dist - 2.0 * RAY_EPSILON)
-    {
+    if scene.bvh.occluded(
+        &scene.triangles,
+        &shadow,
+        RAY_EPSILON,
+        dist - 2.0 * RAY_EPSILON,
+    ) {
         return Vec3::ZERO;
     }
 
@@ -504,11 +511,8 @@ fn trace_path_mis(scene: &Scene, params: &RenderParams, mut ray: Ray, rng: &mut 
             .bvh
             .intersect(&scene.triangles, &ray, RAY_EPSILON, f32::INFINITY);
         let Some(hit) = hit else {
-            let env = Vec3::from_array(
-                scene
-                    .environment
-                    .sample_direction(ray.direction.to_array()),
-            );
+            let env =
+                Vec3::from_array(scene.environment.sample_direction(ray.direction.to_array()));
             radiance = radiance.add(throughput.mul(env));
             break;
         };

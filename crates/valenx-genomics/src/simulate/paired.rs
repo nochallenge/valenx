@@ -229,9 +229,14 @@ mod tests {
     #[test]
     fn simulate_yields_pairs() {
         let reference = ref_seq(10_000);
-        let pairs =
-            simulate_pairs(&reference, &profile(), &InsertSizeModel::short_insert(), 50, 42)
-                .unwrap();
+        let pairs = simulate_pairs(
+            &reference,
+            &profile(),
+            &InsertSizeModel::short_insert(),
+            50,
+            42,
+        )
+        .unwrap();
         assert_eq!(pairs.len(), 50);
         for p in &pairs {
             assert_eq!(p.read1.len(), 100);
@@ -270,9 +275,14 @@ mod tests {
     #[test]
     fn split_mates_separates_streams() {
         let reference = ref_seq(10_000);
-        let pairs =
-            simulate_pairs(&reference, &profile(), &InsertSizeModel::short_insert(), 10, 5)
-                .unwrap();
+        let pairs = simulate_pairs(
+            &reference,
+            &profile(),
+            &InsertSizeModel::short_insert(),
+            10,
+            5,
+        )
+        .unwrap();
         let (r1, r2) = split_mates(&pairs);
         assert_eq!(r1.len(), 10);
         assert_eq!(r2.len(), 10);

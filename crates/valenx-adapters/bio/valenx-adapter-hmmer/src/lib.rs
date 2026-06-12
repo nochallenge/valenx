@@ -34,9 +34,7 @@ use std::time::Duration;
 use semver::Version;
 
 use valenx_core::{
-    adapter_helpers::{
-        confined_join, detect_tool_version_semver, find_on_path, live_provenance,
-    },
+    adapter_helpers::{confined_join, detect_tool_version_semver, find_on_path, live_provenance},
     error::RunPhase,
     subprocess, Adapter, AdapterError, AdapterInfo, Capabilities, Case, LicenseMode, Physics,
     PreparedJob, ProbeReport, RunContext, RunReport, VersionRange,

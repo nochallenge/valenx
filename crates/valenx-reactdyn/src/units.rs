@@ -98,8 +98,6 @@ mod tests {
 
     #[test]
     fn force_factor_is_energy_over_length() {
-        assert!(
-            (force_kj_mol_nm_to_au(1.0) - HARTREE_PER_KJ_MOL / BOHR_PER_NM).abs() < 1e-15
-        );
+        assert!((force_kj_mol_nm_to_au(1.0) - HARTREE_PER_KJ_MOL / BOHR_PER_NM).abs() < 1e-15);
     }
 }

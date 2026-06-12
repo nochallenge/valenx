@@ -67,7 +67,11 @@ impl Scene {
     pub fn bundle(n: usize, spread_mm: f64) -> Self {
         let axons = (0..n)
             .map(|i| {
-                let frac = if n > 1 { i as f64 / (n as f64 - 1.0) } else { 0.0 };
+                let frac = if n > 1 {
+                    i as f64 / (n as f64 - 1.0)
+                } else {
+                    0.0
+                };
                 Axon::squid_at(0.5 + frac * spread_mm)
             })
             .collect();
@@ -218,8 +222,14 @@ mod tests {
         let scene = Scene::single_axon(1.0);
         let below = stimulate(&scene, -20.0).expect("solve");
         let above = stimulate(&scene, -400.0).expect("solve");
-        assert!(!below.any_fired(), "weak cathodic stimulus must not recruit");
-        assert!(above.any_fired(), "strong cathodic stimulus must recruit the near axon");
+        assert!(
+            !below.any_fired(),
+            "weak cathodic stimulus must not recruit"
+        );
+        assert!(
+            above.any_fired(),
+            "strong cathodic stimulus must recruit the near axon"
+        );
     }
 
     #[test]
@@ -228,8 +238,14 @@ mod tests {
         let curve = recruitment_curve(&scene, &[10.0, 50.0, 200.0, 1000.0, 3000.0]).expect("solve");
         let fracs: Vec<f64> = curve.iter().map(|&(_, f)| f).collect();
         for w in fracs.windows(2) {
-            assert!(w[1] >= w[0], "recruitment must not decrease with current: {fracs:?}");
+            assert!(
+                w[1] >= w[0],
+                "recruitment must not decrease with current: {fracs:?}"
+            );
         }
-        assert!(*fracs.last().unwrap() > 0.0, "strong stimulus should recruit someone: {fracs:?}");
+        assert!(
+            *fracs.last().unwrap() > 0.0,
+            "strong stimulus should recruit someone: {fracs:?}"
+        );
     }
 }

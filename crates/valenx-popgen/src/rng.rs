@@ -255,8 +255,7 @@ mod tests {
     fn exponential_mean_is_about_right() {
         let mut rng = Rng::new(99);
         let n = 50_000;
-        let mean: f64 =
-            (0..n).map(|_| rng.exponential(2.0)).sum::<f64>() / n as f64;
+        let mean: f64 = (0..n).map(|_| rng.exponential(2.0)).sum::<f64>() / n as f64;
         assert!((mean - 0.5).abs() < 0.05, "mean = {mean}");
     }
 
@@ -265,12 +264,10 @@ mod tests {
         let mut rng = Rng::new(13);
         let n = 60_000;
         // Small-lambda branch.
-        let mean: f64 =
-            (0..n).map(|_| rng.poisson(3.0) as f64).sum::<f64>() / n as f64;
+        let mean: f64 = (0..n).map(|_| rng.poisson(3.0) as f64).sum::<f64>() / n as f64;
         assert!((mean - 3.0).abs() < 0.06, "small mean = {mean}");
         // Large-lambda branch.
-        let mean2: f64 =
-            (0..n).map(|_| rng.poisson(100.0) as f64).sum::<f64>() / n as f64;
+        let mean2: f64 = (0..n).map(|_| rng.poisson(100.0) as f64).sum::<f64>() / n as f64;
         assert!((mean2 - 100.0).abs() < 1.0, "large mean = {mean2}");
     }
 
@@ -279,14 +276,10 @@ mod tests {
         let mut rng = Rng::new(21);
         let n = 40_000;
         // Small-n branch.
-        let mean: f64 =
-            (0..n).map(|_| rng.binomial(20, 0.3) as f64).sum::<f64>() / n as f64;
+        let mean: f64 = (0..n).map(|_| rng.binomial(20, 0.3) as f64).sum::<f64>() / n as f64;
         assert!((mean - 6.0).abs() < 0.1, "small mean = {mean}");
         // Large-n branch.
-        let mean2: f64 = (0..n)
-            .map(|_| rng.binomial(1000, 0.1) as f64)
-            .sum::<f64>()
-            / n as f64;
+        let mean2: f64 = (0..n).map(|_| rng.binomial(1000, 0.1) as f64).sum::<f64>() / n as f64;
         assert!((mean2 - 100.0).abs() < 1.0, "large mean = {mean2}");
     }
 
@@ -304,8 +297,7 @@ mod tests {
         let n = 50_000;
         let xs: Vec<f64> = (0..n).map(|_| rng.normal_with(5.0, 2.0)).collect();
         let mean: f64 = xs.iter().sum::<f64>() / n as f64;
-        let var: f64 =
-            xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+        let var: f64 = xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
         assert!((mean - 5.0).abs() < 0.1, "mean = {mean}");
         assert!((var - 4.0).abs() < 0.3, "var = {var}");
     }

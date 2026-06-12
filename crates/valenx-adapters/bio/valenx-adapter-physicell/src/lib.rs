@@ -190,10 +190,7 @@ impl Adapter for PhysiCellAdapter {
         let source_config = if input.config.is_absolute() {
             input.config.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.config,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.config)?
         };
         if !source_config.is_file() {
             return Err(AdapterError::InvalidCase {

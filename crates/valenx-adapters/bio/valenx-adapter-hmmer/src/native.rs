@@ -36,14 +36,8 @@ use std::io::Read;
 use std::path::Path;
 use std::time::Instant;
 
-use valenx_align::{
-    hmm::ProfileHmm,
-    msa::Msa,
-};
-use valenx_core::{
-    error::RunPhase,
-    AdapterError, RunContext, RunReport,
-};
+use valenx_align::{hmm::ProfileHmm, msa::Msa};
+use valenx_core::{error::RunPhase, AdapterError, RunContext, RunReport};
 
 /// Parameters stored in `native_params.toml` by `prepare()`.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -88,7 +82,10 @@ pub fn read_params(workdir: &Path) -> Result<NativeHmmerParams, AdapterError> {
 /// (by extension) rather than a prebuilt `.hmm` database.
 pub fn profile_is_fasta(path: &Path) -> bool {
     match path.extension().and_then(|s| s.to_str()) {
-        Some(e) => matches!(e.to_ascii_lowercase().as_str(), "fa" | "fasta" | "aln" | "sto" | "mfa"),
+        Some(e) => matches!(
+            e.to_ascii_lowercase().as_str(),
+            "fa" | "fasta" | "aln" | "sto" | "mfa"
+        ),
         None => false,
     }
 }
@@ -132,10 +129,7 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
     ctx.report_progress(15.0, "native HMMER — building profile HMM");
 
     // Build an Msa from the aligned FASTA rows.
-    let rows: Vec<Vec<u8>> = profile_records
-        .iter()
-        .map(|(_, s)| s.clone())
-        .collect();
+    let rows: Vec<Vec<u8>> = profile_records.iter().map(|(_, s)| s.clone()).collect();
     let max_len = rows.iter().map(|r| r.len()).max().unwrap_or(0);
     // Pad rows to equal length (gap-pad to the longest row).
     let rows_padded: Vec<Vec<u8>> = rows
@@ -175,7 +169,10 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
     for (qi, (name, seq)) in seq_records.iter().enumerate() {
         if qi % 50 == 0 {
             let pct = 30.0 + (qi as f32 / total as f32) * 60.0;
-            ctx.report_progress(pct, &format!("native HMMER — {}/{} sequences scored", qi + 1, total));
+            ctx.report_progress(
+                pct,
+                &format!("native HMMER — {}/{} sequences scored", qi + 1, total),
+            );
         }
 
         let seqid = name
@@ -219,7 +216,9 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
     };
     let tblout_path = workdir.join(&params.tblout_name);
     valenx_core::io_caps::atomic_write_str(&tblout_path, &(tblout_lines.join("\n") + "\n"))
-        .map_err(|e| AdapterError::Other(anyhow::anyhow!("write {}: {e}", tblout_path.display())))?;
+        .map_err(|e| {
+            AdapterError::Other(anyhow::anyhow!("write {}: {e}", tblout_path.display()))
+        })?;
 
     // Write summary report.
     let report = format!(
@@ -233,8 +232,9 @@ pub fn run_native(workdir: &Path, ctx: &mut RunContext) -> Result<RunReport, Ada
         params.min_score,
     );
     let report_path = workdir.join(&params.report_name);
-    valenx_core::io_caps::atomic_write_str(&report_path, &report)
-        .map_err(|e| AdapterError::Other(anyhow::anyhow!("write {}: {e}", report_path.display())))?;
+    valenx_core::io_caps::atomic_write_str(&report_path, &report).map_err(|e| {
+        AdapterError::Other(anyhow::anyhow!("write {}: {e}", report_path.display()))
+    })?;
 
     ctx.report_progress(100.0, "native HMMER — done");
 
@@ -290,9 +290,7 @@ fn read_text_file(path: &str) -> Result<String, AdapterError> {
 }
 
 /// Minimal multi-FASTA parser: (name, sequence_bytes) pairs.
-pub fn parse_fasta_simple(
-    text: &str,
-) -> Result<Vec<(Option<String>, Vec<u8>)>, AdapterError> {
+pub fn parse_fasta_simple(text: &str) -> Result<Vec<(Option<String>, Vec<u8>)>, AdapterError> {
     let mut records: Vec<(Option<String>, Vec<u8>)> = Vec::new();
     let mut cur_name: Option<String> = None;
     let mut cur_seq: Vec<u8> = Vec::new();
@@ -362,7 +360,10 @@ mod tests {
     #[test]
     fn nucleotide_profile_is_detected_and_protein_is_not() {
         let dna = parse_fasta_simple(">a\nACGTACGTACGT\n>b\nACGTACGTACGT\n").unwrap();
-        assert!(looks_like_nucleotide(&dna), "DNA alignment should be detected");
+        assert!(
+            looks_like_nucleotide(&dna),
+            "DNA alignment should be detected"
+        );
         let protein = parse_fasta_simple(">a\nEFILPQEFILPQ\n>b\nEFILPQEFILPQ\n").unwrap();
         assert!(
             !looks_like_nucleotide(&protein),

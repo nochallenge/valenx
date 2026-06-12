@@ -129,10 +129,16 @@ pub fn call_haplotype_variants(
     // Deduplicate identical variants at the same site (multiple chunks
     // could overlap).
     out.sort_by(|a, b| {
-        (a.chrom.clone(), a.pos, a.reference.clone(), a.alt.clone())
-            .cmp(&(b.chrom.clone(), b.pos, b.reference.clone(), b.alt.clone()))
+        (a.chrom.clone(), a.pos, a.reference.clone(), a.alt.clone()).cmp(&(
+            b.chrom.clone(),
+            b.pos,
+            b.reference.clone(),
+            b.alt.clone(),
+        ))
     });
-    out.dedup_by(|a, b| a.chrom == b.chrom && a.pos == b.pos && a.reference == b.reference && a.alt == b.alt);
+    out.dedup_by(|a, b| {
+        a.chrom == b.chrom && a.pos == b.pos && a.reference == b.reference && a.alt == b.alt
+    });
     Ok(out)
 }
 
@@ -169,8 +175,7 @@ fn call_one_region(
 
     // Local assembly — candidate haplotypes including the reference.
     let read_seqs: Vec<&[u8]> = local_reads.iter().map(|r| r.bases.as_slice()).collect();
-    let haplotypes =
-        assemble_local_haplotypes(&ref_sub, &read_seqs, &params.assembly);
+    let haplotypes = assemble_local_haplotypes(&ref_sub, &read_seqs, &params.assembly);
     if haplotypes.len() < 2 {
         // No alternate haplotype was reconstructed — no variants.
         return Ok(Vec::new());
@@ -181,12 +186,8 @@ fn call_one_region(
     for read in &local_reads {
         let mut row = Vec::with_capacity(haplotypes.len());
         for h in &haplotypes {
-            let lp = log10_p_read_given_haplotype(
-                &read.bases,
-                &read.quals,
-                &h.bases,
-                &params.pairhmm,
-            )?;
+            let lp =
+                log10_p_read_given_haplotype(&read.bases, &read.quals, &h.bases, &params.pairhmm)?;
             row.push(lp);
         }
         likelihoods.push(row);
@@ -205,10 +206,7 @@ fn call_one_region(
     // For each non-reference haplotype, materialise the variants it
     // implies relative to the reference, and emit one Variant per
     // locus.
-    let ref_hap_idx = haplotypes
-        .iter()
-        .position(|h| h.is_reference)
-        .unwrap_or(0);
+    let ref_hap_idx = haplotypes.iter().position(|h| h.is_reference).unwrap_or(0);
     let mut out: Vec<Variant> = Vec::new();
     for (alt_idx, alt_hap) in haplotypes.iter().enumerate() {
         if alt_idx == ref_hap_idx {
@@ -238,8 +236,12 @@ fn call_one_region(
     }
     // Cull duplicate sites (same alt haplotype may produce identical
     // alleles via multiple anchors).
-    out.sort_by(|a, b| (a.chrom.clone(), a.pos, a.alt.clone()).cmp(&(b.chrom.clone(), b.pos, b.alt.clone())));
-    out.dedup_by(|a, b| a.chrom == b.chrom && a.pos == b.pos && a.reference == b.reference && a.alt == b.alt);
+    out.sort_by(|a, b| {
+        (a.chrom.clone(), a.pos, a.alt.clone()).cmp(&(b.chrom.clone(), b.pos, b.alt.clone()))
+    });
+    out.dedup_by(|a, b| {
+        a.chrom == b.chrom && a.pos == b.pos && a.reference == b.reference && a.alt == b.alt
+    });
 
     // Cross-check against the per-site pileup evidence to populate AD/DP
     // and supply a fallback strand-count.
@@ -351,11 +353,7 @@ fn collect_local_reads(records: &[SamRecord], region: &ActiveRegion) -> Vec<Loca
 /// runs of insertions / deletions get a single anchor each.
 ///
 /// `start_pos` is the 1-based reference coordinate of `reference[0]`.
-fn haplotype_diffs(
-    reference: &[u8],
-    haplotype: &[u8],
-    start_pos: i64,
-) -> Vec<HaplotypeAllele> {
+fn haplotype_diffs(reference: &[u8], haplotype: &[u8], start_pos: i64) -> Vec<HaplotypeAllele> {
     let mut out = Vec::new();
     // Run a simple global-alignment with affine-like banding via direct
     // O(m*n) DP — these sequences are short (region length), so plain
@@ -721,11 +719,8 @@ fn annotate_with_pileup(variants: &mut [Variant], pileup: &[PileupColumn]) {
                 let mut fwd = 0usize;
                 let mut rev = 0usize;
                 for b in &col.bases {
-                    let ins_up: Vec<u8> = b
-                        .insertion
-                        .iter()
-                        .map(|c| c.to_ascii_uppercase())
-                        .collect();
+                    let ins_up: Vec<u8> =
+                        b.insertion.iter().map(|c| c.to_ascii_uppercase()).collect();
                     if ins_up == inserted {
                         if b.reverse {
                             rev += 1;
@@ -799,8 +794,7 @@ mod tests {
     fn nonrep_ref80() -> Vec<u8> {
         // Hand-written 80 bp sequence with no 8-mer repeated twice in
         // it. Verified manually.
-        b"GCATAGCGTCTAGCGAAGCTGCAATGCCTAGTCATGGCACTGAATGTCCGAGTAGCCTGAGCTAAGCGTACGGTTCAGTC"
-            .to_vec()
+        b"GCATAGCGTCTAGCGAAGCTGCAATGCCTAGTCATGGCACTGAATGTCCGAGTAGCCTGAGCTAAGCGTACGGTTCAGTC".to_vec()
     }
 
     #[test]
@@ -812,7 +806,7 @@ mod tests {
 
         let mut alt_ref: Vec<u8> = reference.to_vec();
         let ref_at_30 = reference[29]; // 0-based 29 == 1-based 30
-        // Pick a different base.
+                                       // Pick a different base.
         let alt_at_30: u8 = if ref_at_30 == b'A' {
             b'T'
         } else if ref_at_30 == b'C' {
@@ -905,12 +899,8 @@ mod tests {
             ));
         }
 
-        let vars = call_haplotype_variants(
-            &records,
-            &refr,
-            &HaplotypeCallParams::default(),
-        )
-        .unwrap();
+        let vars =
+            call_haplotype_variants(&records, &refr, &HaplotypeCallParams::default()).unwrap();
         let v = vars.iter().find(|v| v.pos == 30).expect("missing call");
         assert_eq!(v.genotype.best, Genotype::HomAlt);
         assert_eq!(v.alt, (alt_at_30 as char).to_string());
@@ -1184,12 +1174,8 @@ mod tests {
 
         let mut refr = Reference::new();
         refr.add("chr1", &reference);
-        let vars = call_haplotype_variants(
-            &records,
-            &refr,
-            &HaplotypeCallParams::default(),
-        )
-        .unwrap();
+        let vars =
+            call_haplotype_variants(&records, &refr, &HaplotypeCallParams::default()).unwrap();
 
         // The known SNV must be in the output, with the right REF/ALT
         // and a het genotype call (40/40 alt/ref).
@@ -1253,12 +1239,8 @@ mod tests {
             ));
         }
 
-        let hap_vars = call_haplotype_variants(
-            &records,
-            &refr,
-            &HaplotypeCallParams::default(),
-        )
-        .unwrap();
+        let hap_vars =
+            call_haplotype_variants(&records, &refr, &HaplotypeCallParams::default()).unwrap();
         let pileup = build_pileup(&records, &refr, 0).unwrap();
         let pileup_vars = crate::variant::call::call_variants(
             &pileup,

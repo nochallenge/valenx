@@ -137,7 +137,10 @@ mod tests {
         let rh = rheobase();
         let cx = chronaxie();
         // HH membrane τ = Rm·Cm ≈ 3.3 ms → chronaxie ≈ 0.5·τ, order ~1–2 ms.
-        assert!((0.1..20.0).contains(&cx), "chronaxie in a plausible ms range; got {cx}");
+        assert!(
+            (0.1..20.0).contains(&cx),
+            "chronaxie in a plausible ms range; got {cx}"
+        );
         let i_at_cx = threshold_amplitude(cx);
         assert!(
             (i_at_cx / rh - 2.0).abs() < 0.2,
@@ -152,20 +155,33 @@ mod tests {
         let q_005 = threshold_amplitude(0.05) * 0.05;
         let q_010 = threshold_amplitude(0.10) * 0.10;
         let q_025 = threshold_amplitude(0.25) * 0.25;
-        assert!((q_005 / q_010 - 1.0).abs() < 0.1, "charge ~constant: {q_005:.2} vs {q_010:.2}");
-        assert!((q_025 / q_010 - 1.0).abs() < 0.1, "charge ~constant: {q_025:.2} vs {q_010:.2}");
+        assert!(
+            (q_005 / q_010 - 1.0).abs() < 0.1,
+            "charge ~constant: {q_005:.2} vs {q_010:.2}"
+        );
+        assert!(
+            (q_025 / q_010 - 1.0).abs() < 0.1,
+            "charge ~constant: {q_025:.2} vs {q_010:.2}"
+        );
     }
 
     #[test]
     fn rheobase_is_finite_and_positive() {
         let rh = rheobase();
-        assert!(rh > 0.0 && rh.is_finite() && rh < 1.0e4, "rheobase plausible; got {rh}");
+        assert!(
+            rh > 0.0 && rh.is_finite() && rh < 1.0e4,
+            "rheobase plausible; got {rh}"
+        );
     }
 
     #[test]
     fn weiss_threshold_current_completes_the_weiss_model() {
         // Threads weiss_threshold_charge: I = Q / width (charge = current·width).
-        for &(r, c, w) in &[(1.0_f64, 0.3_f64, 0.1_f64), (2.5, 0.5, 1.0), (0.8, 0.2, 0.05)] {
+        for &(r, c, w) in &[
+            (1.0_f64, 0.3_f64, 0.1_f64),
+            (2.5, 0.5, 1.0),
+            (0.8, 0.2, 0.05),
+        ] {
             let i = weiss_threshold_current(r, c, w).unwrap();
             let q = weiss_threshold_charge(r, c, w).unwrap();
             assert!((i - q / w).abs() <= 1e-12 * i, "I = Q/w");
@@ -183,7 +199,10 @@ mod tests {
             (weiss_threshold_current(1.4, 0.3, 1.0e6).unwrap() - 1.4).abs() / 1.4 < 1e-3,
             "long pulse → rheobase"
         );
-        assert!(weiss_threshold_current(1.4, 0.3, 0.5).unwrap() > 1.4, "I > rheobase for finite w");
+        assert!(
+            weiss_threshold_current(1.4, 0.3, 0.5).unwrap() > 1.4,
+            "I > rheobase for finite w"
+        );
 
         // Monotonic decreasing in width (shorter pulse needs more current).
         assert!(
@@ -202,7 +221,10 @@ mod tests {
         // Lapicque: shorter pulses need more current.
         let i_long = threshold_amplitude(5.0);
         let i_short = threshold_amplitude(0.1);
-        assert!(i_short > i_long, "short pulse needs more current: {i_short} vs {i_long}");
+        assert!(
+            i_short > i_long,
+            "short pulse needs more current: {i_short} vs {i_long}"
+        );
     }
 
     #[test]
@@ -233,21 +255,36 @@ mod tests {
         let (rh, cx) = (10.0, 0.5); // 10 µA/cm² rheobase, 0.5 ms chronaxie
         let q_min = minimum_stimulating_charge(rh, cx);
         // Worked point: Q_min = I_rh·chronaxie = 5 µA·ms/cm².
-        assert!((q_min - 5.0).abs() < 1e-12, "Q_min = rheobase·chronaxie = 5, got {q_min}");
+        assert!(
+            (q_min - 5.0).abs() < 1e-12,
+            "Q_min = rheobase·chronaxie = 5, got {q_min}"
+        );
         // STRONG cross-check: Q_min is the w → 0 intercept of the Weiss line
         // Q(w) = I_rh·(w + chronaxie), so Q_min = Q(w) − I_rh·w for ANY width, and the
         // short-pulse floor lies below the charge required at any finite width.
         for w in [0.1_f64, 0.5, 2.0, 10.0] {
             let q = weiss_threshold_charge(rh, cx, w).unwrap();
-            assert!((q_min - (q - rh * w)).abs() < 1e-12, "Q_min = Weiss(w) − I_rh·w at w={w}");
+            assert!(
+                (q_min - (q - rh * w)).abs() < 1e-12,
+                "Q_min = Weiss(w) − I_rh·w at w={w}"
+            );
             assert!(q_min < q, "Q_min < Q(w) at w={w}");
         }
         // Linear in both factors.
-        assert!((minimum_stimulating_charge(2.0 * rh, cx) - 2.0 * q_min).abs() < 1e-12, "∝ rheobase");
-        assert!((minimum_stimulating_charge(rh, 2.0 * cx) - 2.0 * q_min).abs() < 1e-12, "∝ chronaxie");
+        assert!(
+            (minimum_stimulating_charge(2.0 * rh, cx) - 2.0 * q_min).abs() < 1e-12,
+            "∝ rheobase"
+        );
+        assert!(
+            (minimum_stimulating_charge(rh, 2.0 * cx) - 2.0 * q_min).abs() < 1e-12,
+            "∝ chronaxie"
+        );
         // The model's own rheobase()·chronaxie() gives a finite positive Q_min.
         let q_model = minimum_stimulating_charge(rheobase(), chronaxie());
-        assert!(q_model > 0.0 && q_model.is_finite(), "model Q_min plausible: {q_model}");
+        assert!(
+            q_model > 0.0 && q_model.is_finite(),
+            "model Q_min plausible: {q_model}"
+        );
     }
 
     #[test]
@@ -275,7 +312,7 @@ mod tests {
                 )
                 .unwrap()
                     - i)
-                .abs()
+                    .abs()
                     <= 1e-9 * i,
                 "I(chronaxie(I)) = I"
             );

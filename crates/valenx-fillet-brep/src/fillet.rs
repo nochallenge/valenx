@@ -295,12 +295,7 @@ pub fn fillet_variable_radius_edge(
     radius_start: f64,
     radius_end: f64,
 ) -> Result<TruckSolid, FilletBrepError> {
-    crate::brep_build::fillet_variable_radius_planar_edge(
-        solid,
-        edge,
-        radius_start,
-        radius_end,
-    )
+    crate::brep_build::fillet_variable_radius_planar_edge(solid, edge, radius_start, radius_end)
 }
 
 /// Apply a real BRep **rolling-ball corner blend** at an orthogonal
@@ -444,8 +439,7 @@ mod tests {
                 // one corner, so the result has strictly more faces
                 // than the original 6-face cube (the cube loses no
                 // face but gains the cylindrical fillet face).
-                let faces: usize =
-                    filleted.boundaries().iter().map(|s| s.len()).sum();
+                let faces: usize = filleted.boundaries().iter().map(|s| s.len()).sum();
                 assert!(
                     faces >= 6,
                     "filleted cube should have at least the cube's faces, got {faces}"
@@ -598,7 +592,10 @@ mod tests {
         let brep = inner_brep(&cube);
         let edge = pick_first_unique_edge(brep);
         let result = fillet_solid_edges(brep, std::slice::from_ref(&edge), 0.7);
-        assert!(matches!(result, Err(FilletBrepError::RadiusTooLarge { .. })));
+        assert!(matches!(
+            result,
+            Err(FilletBrepError::RadiusTooLarge { .. })
+        ));
     }
 
     #[test]

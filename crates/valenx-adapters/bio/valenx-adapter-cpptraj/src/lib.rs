@@ -120,10 +120,7 @@ impl Adapter for CpptrajAdapter {
         let source_script = if input.script.is_absolute() {
             input.script.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.script,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.script)?
         };
         if !source_script.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -141,10 +138,7 @@ impl Adapter for CpptrajAdapter {
         let source_topology = if input.topology.is_absolute() {
             input.topology.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.topology,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.topology)?
         };
         if !source_topology.is_file() {
             return Err(AdapterError::InvalidCase {

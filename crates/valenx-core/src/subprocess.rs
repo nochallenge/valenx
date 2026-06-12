@@ -313,10 +313,7 @@ pub fn run<'a>(
                 }
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                let status = kill_guard
-                    .inner_mut()
-                    .wait()
-                    .map_err(AdapterError::Io)?;
+                let status = kill_guard.inner_mut().wait().map_err(AdapterError::Io)?;
                 let _ = so_thread.join();
                 let _ = se_thread.join();
                 return finalize(status, start.elapsed(), warnings, stderr_tail);

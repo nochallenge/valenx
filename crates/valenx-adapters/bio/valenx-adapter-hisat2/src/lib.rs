@@ -126,10 +126,7 @@ impl Adapter for Hisat2Adapter {
         let source_reference = if input.reference.is_absolute() {
             input.reference.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.reference,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.reference)?
         };
         if !source_reference.is_file() {
             return Err(AdapterError::InvalidCase {

@@ -178,9 +178,7 @@ fn single_edge_fillet_either_removes_the_analytic_sliver_or_soft_fails() {
             // The coincident-face cutter boolean could not be resolved
             // by truck_shapeops — the documented soft fall-through.
         }
-        other => panic!(
-            "a textbook convex planar edge should fillet or soft-fail, got {other:?}"
-        ),
+        other => panic!("a textbook convex planar edge should fillet or soft-fail, got {other:?}"),
     }
 }
 

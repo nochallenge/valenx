@@ -61,7 +61,7 @@
 
 use nalgebra::Vector3;
 
-use crate::geometry::{Triangle, TriMesh};
+use crate::geometry::{TriMesh, Triangle};
 use crate::grid::Grid3;
 use crate::immersed::point_inside;
 
@@ -580,7 +580,11 @@ mod tests {
         let poly = clip_triangle_to_box(&tri, &cell);
         assert_eq!(poly.len(), 3);
         let a = polygon_area_vector(&poly).norm();
-        assert!((a - tri.area()).abs() < 1e-12, "clipped area {a} vs {}", tri.area());
+        assert!(
+            (a - tri.area()).abs() < 1e-12,
+            "clipped area {a} vs {}",
+            tri.area()
+        );
     }
 
     #[test]
@@ -645,7 +649,11 @@ mod tests {
         let mesh = TriMesh::from_triangles(vec![t1, t2]);
         let cf = cell_cut_face(&cell, &mesh);
         assert!(cf.has_wall());
-        assert!((cf.area - 1.0).abs() < 1e-9, "cut-face area {} should be 1", cf.area);
+        assert!(
+            (cf.area - 1.0).abs() < 1e-9,
+            "cut-face area {} should be 1",
+            cf.area
+        );
         // The triangles wind so their normal is +x.
         assert!(
             (cf.normal - Vector3::new(1.0, 0.0, 0.0)).norm() < 1e-9,
@@ -694,10 +702,7 @@ mod tests {
     fn volume_fraction_is_zero_inside_one_and_outside() {
         // A box body: a cell wholly inside has θ = 0, a cell wholly
         // outside has θ = 1.
-        let body = box_body(
-            Vector3::new(-5.0, -5.0, -5.0),
-            Vector3::new(5.0, 5.0, 5.0),
-        );
+        let body = box_body(Vector3::new(-5.0, -5.0, -5.0), Vector3::new(5.0, 5.0, 5.0));
         // A unit cell deep inside the body.
         let inside = CellBox {
             min: Vector3::new(-0.5, -0.5, -0.5),
@@ -748,7 +753,10 @@ mod tests {
         let minus_x = sample_face_aperture(&cell, &body, 0);
         let plus_x = sample_face_aperture(&cell, &body, 1);
         assert!(minus_x < 1e-9, "-x face should be closed, got {minus_x}");
-        assert!((plus_x - 1.0).abs() < 1e-9, "+x face should be open, got {plus_x}");
+        assert!(
+            (plus_x - 1.0).abs() < 1e-9,
+            "+x face should be open, got {plus_x}"
+        );
         // A face parallel to the cut (e.g. +y) is half open.
         let plus_y = sample_face_aperture(&cell, &body, 3);
         assert!(

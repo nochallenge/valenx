@@ -101,11 +101,7 @@ impl MutationModel {
     /// position on `[0, sequence_length)`. For
     /// [`MutationModel::FiniteSites`] each locus independently flips
     /// with probability `rate` (`sequence_length` is ignored).
-    pub fn draw_mutations(
-        &self,
-        rng: &mut Rng,
-        sequence_length: f64,
-    ) -> Vec<MutationEvent> {
+    pub fn draw_mutations(&self, rng: &mut Rng, sequence_length: f64) -> Vec<MutationEvent> {
         match self {
             MutationModel::InfiniteSites { rate } => {
                 let expected = rate * sequence_length.max(0.0);

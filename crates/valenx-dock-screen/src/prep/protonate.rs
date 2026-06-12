@@ -143,9 +143,8 @@ fn oxyacid_pka(mol: &Molecule, oxygen: usize) -> Option<f64> {
     let has_carbonyl_o = mol.bonds.iter().any(|b| {
         b.touches(center)
             && b.order == BondOrder::Double
-            && b.other(center).is_some_and(|o| {
-                mol.atoms[o].atomic_number == 8 && o != oxygen
-            })
+            && b.other(center)
+                .is_some_and(|o| mol.atoms[o].atomic_number == 8 && o != oxygen)
     });
     if !has_carbonyl_o {
         return None;

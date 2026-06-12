@@ -103,8 +103,7 @@ fn eval_stmt(node: &Ast, env: &mut Env) -> Result<Option<Solid>, OpenScadError> 
                 guard += 1;
                 if guard > 100_000 {
                     return Err(OpenScadError::Eval {
-                        reason: "for-loop exceeded 100k iterations (likely runaway range)"
-                            .into(),
+                        reason: "for-loop exceeded 100k iterations (likely runaway range)".into(),
                     });
                 }
             }
@@ -145,8 +144,8 @@ fn eval_call(
         // ---- Primitives ----------------------------------------------
         "cube" => {
             // cube(size) or cube([x,y,z])
-            let s = pos_or_named(positional, named, 0, "size")
-                .ok_or_else(|| OpenScadError::Eval {
+            let s =
+                pos_or_named(positional, named, 0, "size").ok_or_else(|| OpenScadError::Eval {
                     reason: "cube: missing size".into(),
                 })?;
             let v = eval_expr(s, env)?;
@@ -267,9 +266,7 @@ fn eval_call(
                 Value::Vector(vs) if vs.len() == 3 && vs[0] == vs[1] && vs[1] == vs[2] => vs[0],
                 other => {
                     return Err(OpenScadError::Eval {
-                        reason: format!(
-                            "scale: only uniform scale supported in v1, got {other:?}"
-                        ),
+                        reason: format!("scale: only uniform scale supported in v1, got {other:?}"),
                     });
                 }
             };
@@ -290,9 +287,13 @@ fn eval_call(
 fn eval_expr(node: &Ast, env: &Env) -> Result<Value, OpenScadError> {
     match node {
         Ast::Number(v) => Ok(Value::Number(*v)),
-        Ast::Ident(name) => env.vars.get(name).cloned().ok_or_else(|| OpenScadError::Eval {
-            reason: format!("undefined variable `{name}`"),
-        }),
+        Ast::Ident(name) => env
+            .vars
+            .get(name)
+            .cloned()
+            .ok_or_else(|| OpenScadError::Eval {
+                reason: format!("undefined variable `{name}`"),
+            }),
         Ast::Vector(items) => {
             let mut vs = Vec::with_capacity(items.len());
             for it in items {
@@ -430,8 +431,7 @@ mod tests {
     #[test]
     fn evaluate_for_loop_creates_union() {
         // 3 cubes side by side — union should succeed.
-        let s = run("for(i = [0 : 2]) translate([i * 10, 0, 0]) cube([1, 1, 1]);")
-            .expect("ok");
+        let s = run("for(i = [0 : 2]) translate([i * 10, 0, 0]) cube([1, 1, 1]);").expect("ok");
         assert!(s.faces() > 0);
     }
 

@@ -14,8 +14,8 @@
 //!   are detected by the canonical G-run regular pattern and scored
 //!   by run length and loop lengths (a G4Hunter / QGRS-class rule).
 
-use crate::error::{Result, RnaStructError};
 use crate::ensemble::rng::Rng;
+use crate::error::{Result, RnaStructError};
 use crate::fold::zuker::mfe;
 use crate::rna::RnaSeq;
 use crate::structure::Structure;
@@ -373,10 +373,7 @@ mod tests {
         let s = predict_gquadruplex(&short);
         let l = predict_gquadruplex(&long);
         assert!(!s.is_empty() && !l.is_empty());
-        assert!(
-            l[0].score > s[0].score,
-            "longer G-runs should score higher"
-        );
+        assert!(l[0].score > s[0].score, "longer G-runs should score higher");
     }
 
     #[test]

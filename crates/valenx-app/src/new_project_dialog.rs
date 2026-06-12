@@ -452,10 +452,8 @@ pub fn render(ctx: &egui::Context, dialog: &mut NewProjectDialog) -> DialogOutco
                 .max_height(280.0)
                 .show(ui, |ui| {
                     for group in TemplateGroup::ALL {
-                        let default_open = matches!(
-                            group,
-                            TemplateGroup::Empty | TemplateGroup::Engineering
-                        );
+                        let default_open =
+                            matches!(group, TemplateGroup::Empty | TemplateGroup::Engineering);
                         egui::CollapsingHeader::new(group.label())
                             .default_open(default_open)
                             .show(ui, |ui| {
@@ -473,10 +471,8 @@ pub fn render(ctx: &egui::Context, dialog: &mut NewProjectDialog) -> DialogOutco
                                     // for the current Template enum which
                                     // contains only unit variants today.
                                     let selected = dialog.template == opt.template;
-                                    let label = format!(
-                                        "{}  —  {}",
-                                        opt.display_name, opt.description
-                                    );
+                                    let label =
+                                        format!("{}  —  {}", opt.display_name, opt.description);
                                     if ui
                                         .selectable_label(selected, label)
                                         .on_hover_text(opt.description)
@@ -500,9 +496,7 @@ pub fn render(ctx: &egui::Context, dialog: &mut NewProjectDialog) -> DialogOutco
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 if ui
-                    .add(egui::Button::new(
-                        egui::RichText::new("Create").strong(),
-                    ))
+                    .add(egui::Button::new(egui::RichText::new("Create").strong()))
                     .clicked()
                 {
                     create_clicked = true;
@@ -599,10 +593,7 @@ pub fn try_create(dialog: &NewProjectDialog) -> Result<PathBuf, String> {
             // of the default `~/Documents/Valenx Projects/` not
             // existing yet on a fresh OS install.
             std::fs::create_dir_all(parent).map_err(|e| {
-                format!(
-                    "Couldn't create parent directory {}: {e}",
-                    parent.display()
-                )
+                format!("Couldn't create parent directory {}: {e}", parent.display())
             })?;
         } else if !parent.is_dir() {
             return Err(format!(

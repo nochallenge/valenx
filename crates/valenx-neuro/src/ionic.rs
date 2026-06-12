@@ -80,10 +80,16 @@ mod tests {
     fn ionic_conductance_inverts_the_ohmic_current() {
         // Round-trip: recover g from the current it produces (the exact inverse of
         // ionic_current), for several (g, vm, e) with a non-zero driving force.
-        for &(g, vm, e) in &[(5.0_f64, -50.0_f64, -80.0_f64), (0.3, -65.0, 0.0), (1.2, -70.0, -90.0)]
-        {
+        for &(g, vm, e) in &[
+            (5.0_f64, -50.0_f64, -80.0_f64),
+            (0.3, -65.0, 0.0),
+            (1.2, -70.0, -90.0),
+        ] {
             let recovered = ionic_conductance(ionic_current(g, vm, e), vm, e);
-            assert!((recovered - g).abs() <= 1e-12 * g.abs(), "g = I/(V−E) inverts I = g(V−E)");
+            assert!(
+                (recovered - g).abs() <= 1e-12 * g.abs(),
+                "g = I/(V−E) inverts I = g(V−E)"
+            );
         }
 
         // Worked: I = 1 µA/cm² at V = −50, E = −80 → driving force 30 mV → g = 1/30 mS/cm².
@@ -93,19 +99,31 @@ mod tests {
         );
 
         // Conductance is positive when current and driving force share a sign.
-        assert!(ionic_conductance(1.0, -50.0, -80.0) > 0.0, "above E_rev, outward current");
-        assert!(ionic_conductance(-2.0, -90.0, -80.0) > 0.0, "below E_rev, inward current");
+        assert!(
+            ionic_conductance(1.0, -50.0, -80.0) > 0.0,
+            "above E_rev, outward current"
+        );
+        assert!(
+            ionic_conductance(-2.0, -90.0, -80.0) > 0.0,
+            "below E_rev, inward current"
+        );
 
         // At the reversal potential the driving force vanishes → non-finite conductance.
-        assert!(ionic_conductance(1.0, -65.0, -65.0).is_infinite(), "zero driving force → ∞");
+        assert!(
+            ionic_conductance(1.0, -65.0, -65.0).is_infinite(),
+            "zero driving force → ∞"
+        );
     }
 
     #[test]
     fn ionic_reversal_potential_is_the_iv_intercept() {
         // (a) ROUND-TRIP (non-tautological): the recovered E_rev reproduces the current,
         // and inverts the current ionic_current produces from E.
-        for &(g, vm, e) in &[(5.0_f64, -50.0_f64, -80.0_f64), (0.3, -65.0, 0.0), (1.2, -70.0, -90.0)]
-        {
+        for &(g, vm, e) in &[
+            (5.0_f64, -50.0_f64, -80.0_f64),
+            (0.3, -65.0, 0.0),
+            (1.2, -70.0, -90.0),
+        ] {
             let i = ionic_current(g, vm, e);
             assert!(
                 (ionic_reversal_potential(i, g, vm) - e).abs() <= 1e-9 * e.abs().max(1.0),
@@ -135,7 +153,10 @@ mod tests {
         let (g, vm) = (0.8_f64, -55.0_f64);
         let i = ionic_current(g, vm, -75.0);
         let e_rec = ionic_reversal_potential(i, g, vm);
-        assert!((ionic_conductance(i, vm, e_rec) - g).abs() <= 1e-9 * g, "g recovered via E_rev");
+        assert!(
+            (ionic_conductance(i, vm, e_rec) - g).abs() <= 1e-9 * g,
+            "g recovered via E_rev"
+        );
 
         // (e) THREAD driving_force: the implied driving force V − E_rev is exactly I/g.
         assert!(
@@ -149,26 +170,42 @@ mod tests {
         let g = 0.36;
         // Threads ionic_current and driving_force; equals g·(V−E)²; and is
         // non-negative on BOTH sides of the reversal potential (unlike the current).
-        for &(vm, e) in &[(-65.0_f64, -90.0_f64), (-100.0, -90.0), (60.0, -90.0), (-80.0, 60.0)] {
+        for &(vm, e) in &[
+            (-65.0_f64, -90.0_f64),
+            (-100.0, -90.0),
+            (60.0, -90.0),
+            (-80.0, 60.0),
+        ] {
             let p = ionic_power_density(g, vm, e);
             assert!(
                 (p - ionic_current(g, vm, e) * driving_force_mv(vm, e)).abs() < 1e-12,
                 "P = I·(V−E)"
             );
             assert!((p - g * (vm - e) * (vm - e)).abs() < 1e-9, "P = g·(V−E)²");
-            assert!(p >= 0.0, "dissipated power is non-negative: {p} at V={vm}, E={e}");
+            assert!(
+                p >= 0.0,
+                "dissipated power is non-negative: {p} at V={vm}, E={e}"
+            );
         }
         // Below reversal the current is inward (negative) yet the power is positive.
-        assert!(ionic_current(g, -100.0, -90.0) < 0.0 && ionic_power_density(g, -100.0, -90.0) > 0.0);
+        assert!(
+            ionic_current(g, -100.0, -90.0) < 0.0 && ionic_power_density(g, -100.0, -90.0) > 0.0
+        );
 
         // Worked value: g = 0.36 mS/cm², ΔV = 25 mV → P = 0.36·625 = 225 nW/cm².
         assert!((ionic_power_density(0.36, -65.0, -90.0) - 225.0).abs() < 1e-9);
         // No dissipation at the reversal potential (no current flows).
-        assert!(ionic_power_density(0.36, -77.0, -77.0).abs() < 1e-12, "zero at E_rev");
+        assert!(
+            ionic_power_density(0.36, -77.0, -77.0).abs() < 1e-12,
+            "zero at E_rev"
+        );
         // Quadratic in the driving force: doubling V_m − E quadruples the power.
         let p25 = ionic_power_density(0.36, -65.0, -90.0); // ΔV = 25
         let p50 = ionic_power_density(0.36, -40.0, -90.0); // ΔV = 50
-        assert!((p50 - 4.0 * p25).abs() / (4.0 * p25) < 1e-9, "quadratic in driving force");
+        assert!(
+            (p50 - 4.0 * p25).abs() / (4.0 * p25) < 1e-9,
+            "quadratic in driving force"
+        );
     }
 
     #[test]
@@ -194,6 +231,9 @@ mod tests {
         // The current reverses sign as V_m crosses the reversal potential.
         let below = ionic_current(0.36, -100.0, -90.0); // V_m < E → inward (−)
         let above = ionic_current(0.36, -80.0, -90.0); // V_m > E → outward (+)
-        assert!(below < 0.0 && above > 0.0, "current reverses across E: {below}, {above}");
+        assert!(
+            below < 0.0 && above > 0.0,
+            "current reverses across E: {below}, {above}"
+        );
     }
 }

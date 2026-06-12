@@ -42,12 +42,7 @@ pub fn to_solid_helical(spec: &GearSpec) -> Result<Solid, GearsError> {
     let profile2d = full_profile(spec)?;
     let r_p = spec.pitch_diameter_mm() * 0.5;
     let twist_rad = spec.helix_angle_deg.to_radians() * spec.face_width_mm / r_p;
-    extrude_twisted(
-        &profile2d,
-        spec.face_width_mm,
-        twist_rad,
-        "gears_helical",
-    )
+    extrude_twisted(&profile2d, spec.face_width_mm, twist_rad, "gears_helical")
 }
 
 /// Bevel gear — conical sweep. Each station along the cone slope
@@ -93,13 +88,7 @@ pub fn to_solid_bevel(spec: &GearSpec) -> Result<Solid, GearsError> {
     }
     // Caps.
     cap_polygon(&mut mesh, &mut block, ring_base[0], n, true);
-    cap_polygon(
-        &mut mesh,
-        &mut block,
-        *ring_base.last().unwrap(),
-        n,
-        false,
-    );
+    cap_polygon(&mut mesh, &mut block, *ring_base.last().unwrap(), n, false);
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
     Ok(Solid::from_mesh(mesh))
@@ -173,9 +162,7 @@ fn extrude_twisted(
 ) -> Result<Solid, GearsError> {
     let n = profile2d.len();
     if n < 3 {
-        return Err(GearsError::Degenerate(format!(
-            "profile has {n} vertices"
-        )));
+        return Err(GearsError::Degenerate(format!("profile has {n} vertices")));
     }
     let n_layers = 12;
     let mut mesh = Mesh::new(mesh_id);
@@ -190,8 +177,11 @@ fn extrude_twisted(
         let base = mesh.nodes.len() as u32;
         ring_base.push(base);
         for p in profile2d {
-            mesh.nodes
-                .push(Vector3::new(p[0] * cs - p[1] * sn, p[0] * sn + p[1] * cs, z));
+            mesh.nodes.push(Vector3::new(
+                p[0] * cs - p[1] * sn,
+                p[0] * sn + p[1] * cs,
+                z,
+            ));
         }
     }
     for layer in 0..n_layers {
@@ -206,13 +196,7 @@ fn extrude_twisted(
         }
     }
     cap_polygon(&mut mesh, &mut block, ring_base[0], n, true);
-    cap_polygon(
-        &mut mesh,
-        &mut block,
-        *ring_base.last().unwrap(),
-        n,
-        false,
-    );
+    cap_polygon(&mut mesh, &mut block, *ring_base.last().unwrap(), n, false);
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
     Ok(Solid::from_mesh(mesh))
@@ -229,17 +213,13 @@ fn cap_polygon(mesh: &mut Mesh, block: &mut ElementBlock, base: u32, n: usize, f
     for i in 0..n {
         let j = (i + 1) % n;
         if flip {
-            block.connectivity.extend_from_slice(&[
-                centroid,
-                base + j as u32,
-                base + i as u32,
-            ]);
+            block
+                .connectivity
+                .extend_from_slice(&[centroid, base + j as u32, base + i as u32]);
         } else {
-            block.connectivity.extend_from_slice(&[
-                centroid,
-                base + i as u32,
-                base + j as u32,
-            ]);
+            block
+                .connectivity
+                .extend_from_slice(&[centroid, base + i as u32, base + j as u32]);
         }
     }
 }

@@ -251,7 +251,9 @@ mod tests {
         // both rings size 6
         assert!(info.rings.iter().all(|r| r.size() == 6));
         // the two fusion atoms belong to both rings
-        let fused = (0..m.atom_count()).filter(|&a| info.is_fusion_atom(a)).count();
+        let fused = (0..m.atom_count())
+            .filter(|&a| info.is_fusion_atom(a))
+            .count();
         assert_eq!(fused, 2);
     }
 

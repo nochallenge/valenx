@@ -186,14 +186,7 @@ pub fn fit_scatter(
 
     // Step 2 — initial LSQ fit.
     let surface = lsq_fit_surface(
-        points,
-        &uv_params,
-        degree_u,
-        degree_v,
-        n_cps_u,
-        n_cps_v,
-        &u_knots,
-        &v_knots,
+        points, &uv_params, degree_u, degree_v, n_cps_u, n_cps_v, &u_knots, &v_knots,
     )?;
     let initial_rms = rms_error(&surface, points, &uv_params);
 
@@ -208,12 +201,8 @@ pub fn fit_scatter(
         // Re-project each point onto the current surface to update
         // its (u, v) parameter.
         for (i, p) in points.iter().enumerate() {
-            uv_params[i] = newton_closest_foot(
-                &current,
-                *p,
-                prev_params[i],
-                params.projection_iters,
-            );
+            uv_params[i] =
+                newton_closest_foot(&current, *p, prev_params[i], params.projection_iters);
         }
         // Max shift.
         let mut max_shift = 0.0_f64;
@@ -225,14 +214,7 @@ pub fn fit_scatter(
         }
         // Refit.
         let refit = lsq_fit_surface(
-            points,
-            &uv_params,
-            degree_u,
-            degree_v,
-            n_cps_u,
-            n_cps_v,
-            &u_knots,
-            &v_knots,
+            points, &uv_params, degree_u, degree_v, n_cps_u, n_cps_v, &u_knots, &v_knots,
         )?;
         let refit_rms = rms_error(&refit, points, &uv_params);
         // Accept only if RMS improved or shift is still large.
@@ -290,7 +272,11 @@ fn pca_axes(points: &[Vector3<f64>]) -> (Vector3<f64>, [Vector3<f64>; 3]) {
     let (eigvecs, eigvals) = jacobi_eig_3x3(cov);
     // Sort by descending eigenvalue.
     let mut idx = [0usize, 1, 2];
-    idx.sort_by(|&a, &b| eigvals[b].partial_cmp(&eigvals[a]).unwrap_or(std::cmp::Ordering::Equal));
+    idx.sort_by(|&a, &b| {
+        eigvals[b]
+            .partial_cmp(&eigvals[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let axes = [eigvecs[idx[0]], eigvecs[idx[1]], eigvecs[idx[2]]];
     (centroid, axes)
 }
@@ -374,10 +360,18 @@ fn normalize_to_unit_square(uv: &mut [Vector2<f64>]) {
     let mut v_min = f64::INFINITY;
     let mut v_max = f64::NEG_INFINITY;
     for q in uv.iter() {
-        if q.x < u_min { u_min = q.x; }
-        if q.x > u_max { u_max = q.x; }
-        if q.y < v_min { v_min = q.y; }
-        if q.y > v_max { v_max = q.y; }
+        if q.x < u_min {
+            u_min = q.x;
+        }
+        if q.x > u_max {
+            u_max = q.x;
+        }
+        if q.y < v_min {
+            v_min = q.y;
+        }
+        if q.y > v_max {
+            v_max = q.y;
+        }
     }
     let du = (u_max - u_min).max(1.0e-18);
     let dv = (v_max - v_min).max(1.0e-18);
@@ -592,9 +586,7 @@ fn lsq_fit_surface(
     let n_total = n_cps_u * n_cps_v;
     if m < n_total {
         return Err(SurfaceError::BadKnotVector {
-            reason: format!(
-                "lsq_fit_surface: need at least {n_total} points, got {m}"
-            ),
+            reason: format!("lsq_fit_surface: need at least {n_total} points, got {m}"),
         });
     }
 
@@ -900,7 +892,9 @@ mod tests {
         // (0.5, 0.5) — the center of the patch.
         let (u_min, u_max) = fit.surface.u_range();
         let (v_min, v_max) = fit.surface.v_range();
-        let mid = fit.surface.evaluate(0.5 * (u_min + u_max), 0.5 * (v_min + v_max));
+        let mid = fit
+            .surface
+            .evaluate(0.5 * (u_min + u_max), 0.5 * (v_min + v_max));
         assert!(
             (mid.norm() - r).abs() < 0.05 * r,
             "midpoint norm = {}, expected ≈ {}",
@@ -953,11 +947,7 @@ mod tests {
 
     #[test]
     fn jacobi_eig_matches_known_diagonal() {
-        let m = Matrix3::new(
-            3.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 0.0, 2.0,
-        );
+        let m = Matrix3::new(3.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0);
         let (_, vals) = jacobi_eig_3x3(m);
         let mut sorted = vals;
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -1057,9 +1047,7 @@ mod tests {
 
     #[test]
     fn rejects_too_few_points() {
-        let pts: Vec<Vector3<f64>> = (0..3)
-            .map(|i| Vector3::new(i as f64, 0.0, 0.0))
-            .collect();
+        let pts: Vec<Vector3<f64>> = (0..3).map(|i| Vector3::new(i as f64, 0.0, 0.0)).collect();
         let err = fit_scatter(&pts, 3, 3, 4, 4, &ScatterFitParams::default()).unwrap_err();
         assert_eq!(err.code(), "surface.bad_knot_vector");
     }

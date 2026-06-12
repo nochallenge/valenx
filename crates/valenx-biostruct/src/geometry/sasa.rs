@@ -189,8 +189,7 @@ mod tests {
         let mut chain = Chain::new("A");
         let mut r = Residue::new("LIG", 1);
         r.hetatm = true;
-        r.atoms
-            .push(Atom::new("C1", "C", Point3::origin()));
+        r.atoms.push(Atom::new("C1", "C", Point3::origin()));
         chain.residues.push(r);
         let mut model = Model::new(1);
         model.chains.push(chain);
@@ -242,11 +241,8 @@ mod tests {
         let mut chain = Chain::new("A");
         for s in 1..=3 {
             let mut r = Residue::new("ALA", s);
-            r.atoms.push(Atom::new(
-                "CA",
-                "C",
-                Point3::new(s as f64 * 4.0, 0.0, 0.0),
-            ));
+            r.atoms
+                .push(Atom::new("CA", "C", Point3::new(s as f64 * 4.0, 0.0, 0.0)));
             chain.residues.push(r);
         }
         let mut model = Model::new(1);

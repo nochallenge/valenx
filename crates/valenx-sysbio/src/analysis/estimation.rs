@@ -177,10 +177,7 @@ pub fn estimate_parameters(
     model.validate()?;
 
     // Effective simulation horizon - cover every observation.
-    let max_obs_t = observations
-        .iter()
-        .map(|o| o.time)
-        .fold(0.0_f64, f64::max);
+    let max_obs_t = observations.iter().map(|o| o.time).fold(0.0_f64, f64::max);
     let t_end = opts.t_end.max(max_obs_t * 1.05);
     if t_end <= 0.0 {
         return Err(SysbioError::invalid(
@@ -266,8 +263,7 @@ pub fn estimate_parameters(
             let r = residuals(&proposal, &mut evals)?;
             let ss = residual_ss(&r);
             let delta = ss - current_ss;
-            let accept = delta <= 0.0
-                || rng.uniform() < (-delta / temp.max(1e-12)).exp();
+            let accept = delta <= 0.0 || rng.uniform() < (-delta / temp.max(1e-12)).exp();
             if accept {
                 current = proposal;
                 current_ss = ss;
@@ -336,11 +332,7 @@ pub fn estimate_parameters(
             }
         };
         // Trial step.
-        let mut trial: Vec<f64> = theta
-            .iter()
-            .zip(&delta)
-            .map(|(a, d)| a + d)
-            .collect();
+        let mut trial: Vec<f64> = theta.iter().zip(&delta).map(|(a, d)| a + d).collect();
         clamp_to_bounds(&mut trial);
         let r_trial = residuals(&trial, &mut evals)?;
         let ss_trial = residual_ss(&r_trial);
@@ -377,7 +369,11 @@ pub fn estimate_parameters(
 
 /// Run the simulator at parameter set `theta`.
 fn simulate_for_fit(model: &Model, t_end: f64, opts: &EstimationOptions) -> Result<Trajectory> {
-    if opts.use_event_driver && (!model.events.is_empty() || !model.rules.assignments.is_empty() || !model.rules.rates.is_empty()) {
+    if opts.use_event_driver
+        && (!model.events.is_empty()
+            || !model.rules.assignments.is_empty()
+            || !model.rules.rates.is_empty())
+    {
         let driver = EventDrivenTimeCourse {
             t0: 0.0,
             t_end,
@@ -440,12 +436,7 @@ fn residual_ss(r: &[f64]) -> f64 {
 
 /// Finite-difference Jacobian of the residual vector with respect to
 /// each parameter (central difference, relative step `sqrt(eps)`).
-fn jacobian<F>(
-    residuals: &F,
-    theta: &[f64],
-    r0: &[f64],
-    evals: &mut usize,
-) -> Result<Vec<Vec<f64>>>
+fn jacobian<F>(residuals: &F, theta: &[f64], r0: &[f64], evals: &mut usize) -> Result<Vec<Vec<f64>>>
 where
     F: Fn(&[f64], &mut usize) -> Result<Vec<f64>>,
 {
@@ -560,11 +551,7 @@ fn invert_matrix(a: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
             }
         }
     }
-    Some(
-        m.into_iter()
-            .map(|row| row[n..(2 * n)].to_vec())
-            .collect(),
-    )
+    Some(m.into_iter().map(|row| row[n..(2 * n)].to_vec()).collect())
 }
 
 /// Latin-hypercube design generator over `[0, 1)^k`.
@@ -651,7 +638,9 @@ mod tests {
     ) -> Vec<ObservedPoint> {
         let sys = OdeSystem::from_model(model);
         let rk = Rk45::default();
-        let traj = rk.integrate(&sys, &model.initial_state(), 0.0, t_end).unwrap();
+        let traj = rk
+            .integrate(&sys, &model.initial_state(), 0.0, t_end)
+            .unwrap();
         times
             .iter()
             .map(|&t| ObservedPoint {
@@ -754,10 +743,7 @@ mod tests {
             report.residual_ss,
             report.lm_iterations,
         );
-        assert!(
-            (k_est - 0.9).abs() < 0.02,
-            "k_est = {k_est:.4} (want 0.9)"
-        );
+        assert!((k_est - 0.9).abs() < 0.02, "k_est = {k_est:.4} (want 0.9)");
     }
 
     #[test]
@@ -822,10 +808,7 @@ mod tests {
             for s in &samples {
                 let stratum = (s[col] * n as f64).floor() as usize;
                 let idx = stratum.min(n - 1);
-                assert!(
-                    !strata[idx],
-                    "col {col}: stratum {idx} sampled twice"
-                );
+                assert!(!strata[idx], "col {col}: stratum {idx} sampled twice");
                 strata[idx] = true;
             }
             assert!(strata.iter().all(|&b| b), "col {col}: gap in design");

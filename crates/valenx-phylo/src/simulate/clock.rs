@@ -74,10 +74,7 @@ pub fn root_to_tip_regression(
             .find(|(name, _)| name == label)
             .map(|(_, t)| *t)
             .ok_or_else(|| {
-                PhyloError::invalid(
-                    "sampling_times",
-                    format!("no sampling time for `{label}`"),
-                )
+                PhyloError::invalid("sampling_times", format!("no sampling time for `{label}`"))
             })?;
         xs.push(time);
         ys.push(tree.patristic_distance(root, leaf));
@@ -173,8 +170,7 @@ mod tests {
 
     #[test]
     fn positive_rate_for_increasing_distance_with_time() {
-        let tree =
-            read_newick("(((A:0.1,B:0.2):0.1,C:0.4):0.1,D:0.6);").unwrap();
+        let tree = read_newick("(((A:0.1,B:0.2):0.1,C:0.4):0.1,D:0.6);").unwrap();
         let times = vec![
             ("A".to_string(), 2000.0),
             ("B".to_string(), 2001.0),

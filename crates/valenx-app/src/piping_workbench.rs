@@ -199,8 +199,10 @@ fn preview_rings(s: &PipingWorkbenchState) -> Option<Vec<([Vector3<f64>; 2], egu
 /// A segment is painted only when both endpoints project in front of the
 /// camera, so the render path never panics.
 fn draw_rings_preview(ui: &mut egui::Ui, edges: &[([Vector3<f64>; 2], egui::Color32)]) {
-    let (response, painter) =
-        ui.allocate_painter(egui::vec2(ui.available_width(), 200.0), egui::Sense::hover());
+    let (response, painter) = ui.allocate_painter(
+        egui::vec2(ui.available_width(), 200.0),
+        egui::Sense::hover(),
+    );
     let rect = response.rect;
 
     let mut min = [f32::INFINITY; 3];
@@ -221,8 +223,18 @@ fn draw_rings_preview(ui: &mut egui::Ui, edges: &[([Vector3<f64>; 2], egui::Colo
 
     let (w, h) = (rect.width(), rect.height());
     for (edge, color) in edges {
-        let a = project_point(&cam, w, h, [edge[0].x as f32, edge[0].y as f32, edge[0].z as f32]);
-        let b = project_point(&cam, w, h, [edge[1].x as f32, edge[1].y as f32, edge[1].z as f32]);
+        let a = project_point(
+            &cam,
+            w,
+            h,
+            [edge[0].x as f32, edge[0].y as f32, edge[0].z as f32],
+        );
+        let b = project_point(
+            &cam,
+            w,
+            h,
+            [edge[1].x as f32, edge[1].y as f32, edge[1].z as f32],
+        );
         if let (Some(a), Some(b)) = (a, b) {
             painter.line_segment(
                 [
@@ -285,16 +297,7 @@ fn run_piping(s: &mut PipingWorkbenchState) {
          metal section  : {:.2} mm\u{00B2}   (\u{03C0}\u{00B7}(OD\u{00B2}\u{2212}ID\u{00B2})/4)\n\
          wetted perim.  : {:.3} mm   (\u{03C0}\u{00B7}ID)\n\
          external surf. : {:.0} mm\u{00B2}   (\u{03C0}\u{00B7}OD\u{00B7}L)",
-        s.nominal_size,
-        s.schedule,
-        s.material,
-        s.length_mm,
-        od,
-        id,
-        flow,
-        metal,
-        wetted,
-        external,
+        s.nominal_size, s.schedule, s.material, s.length_mm, od, id, flow, metal, wetted, external,
     );
 }
 
@@ -358,7 +361,7 @@ mod tests {
         let pts = circle(5.0, 64);
         assert_eq!(pts.len(), 65); // 64 segments → 65 points
         assert_eq!(pts.first(), pts.last()); // closed exactly (last == first)
-        // Every vertex lies on the circle of the given radius, in the z=0 plane.
+                                             // Every vertex lies on the circle of the given radius, in the z=0 plane.
         assert!(pts
             .iter()
             .all(|p| ((p.x * p.x + p.y * p.y).sqrt() - 5.0).abs() < 1e-9));

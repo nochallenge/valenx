@@ -153,9 +153,7 @@ fn run(path: &std::path::Path, format: Format) -> ExitCode {
             return ExitCode::from(3);
         }
         if buf.len() as u64 > MAX_RESULTS_INPUT_BYTES {
-            eprintln!(
-                "error: stdin exceeded {MAX_RESULTS_INPUT_BYTES}-byte cap"
-            );
+            eprintln!("error: stdin exceeded {MAX_RESULTS_INPUT_BYTES}-byte cap");
             return ExitCode::from(3);
         }
         match String::from_utf8(buf) {
@@ -185,9 +183,11 @@ fn run(path: &std::path::Path, format: Format) -> ExitCode {
             }
         }
         let mut buf = Vec::new();
-        match std::fs::File::open(path)
-            .and_then(|f| f.take(MAX_RESULTS_INPUT_BYTES.saturating_add(1)).read_to_end(&mut buf).map(|_| ()))
-        {
+        match std::fs::File::open(path).and_then(|f| {
+            f.take(MAX_RESULTS_INPUT_BYTES.saturating_add(1))
+                .read_to_end(&mut buf)
+                .map(|_| ())
+        }) {
             Ok(()) => {}
             Err(e) => {
                 eprintln!("error: read {}: {e}", path.display());

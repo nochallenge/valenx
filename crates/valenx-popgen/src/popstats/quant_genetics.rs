@@ -135,11 +135,7 @@ impl AdditiveTrait {
 
     /// A phenotype: the individual's breeding value plus a Gaussian
     /// environmental deviation with variance `Ve`.
-    pub fn phenotype(
-        &self,
-        individual: &crate::model::Individual,
-        rng: &mut Rng,
-    ) -> f64 {
+    pub fn phenotype(&self, individual: &crate::model::Individual, rng: &mut Rng) -> f64 {
         let env = rng.normal() * self.environmental_variance.sqrt();
         self.breeding_value(individual) + env
     }
@@ -183,8 +179,7 @@ mod tests {
     /// Diploid population with one site and the given diploid genotype
     /// dosages (`0`/`1`/`2`).
     fn pop(genotypes: &[u8]) -> Population {
-        let mut p =
-            Population::founder(genotypes.len(), Ploidy::Diploid, 100.0).unwrap();
+        let mut p = Population::founder(genotypes.len(), Ploidy::Diploid, 100.0).unwrap();
         let s = p.add_site(Site::at(50.0));
         for (i, &g) in genotypes.iter().enumerate() {
             let ind = &mut p.individuals_mut()[i];
@@ -204,18 +199,9 @@ mod tests {
         let mut trait_def = AdditiveTrait::new(0.0).unwrap();
         trait_def.set_effect(0, 2.5);
         // genotype 0 -> 0; 1 -> 2.5; 2 -> 5.0.
-        assert_eq!(
-            trait_def.breeding_value(&population.individuals()[0]),
-            0.0
-        );
-        assert!(
-            (trait_def.breeding_value(&population.individuals()[1]) - 2.5).abs()
-                < 1e-12
-        );
-        assert!(
-            (trait_def.breeding_value(&population.individuals()[2]) - 5.0).abs()
-                < 1e-12
-        );
+        assert_eq!(trait_def.breeding_value(&population.individuals()[0]), 0.0);
+        assert!((trait_def.breeding_value(&population.individuals()[1]) - 2.5).abs() < 1e-12);
+        assert!((trait_def.breeding_value(&population.individuals()[2]) - 5.0).abs() < 1e-12);
     }
 
     #[test]
@@ -225,8 +211,9 @@ mod tests {
         let mut trait_def = AdditiveTrait::new(0.0).unwrap();
         trait_def.set_effect(0, 1.0);
         let empirical = trait_def.additive_variance(&population).unwrap();
-        let theoretical =
-            trait_def.theoretical_additive_variance(&population).unwrap();
+        let theoretical = trait_def
+            .theoretical_additive_variance(&population)
+            .unwrap();
         // 2pq a^2 = 2*0.5*0.5*1 = 0.5.
         assert!((theoretical - 0.5).abs() < 1e-12);
         assert!(
@@ -241,7 +228,9 @@ mod tests {
         let mut trait_def = AdditiveTrait::new(0.0).unwrap();
         trait_def.set_effect(0, 3.0);
         assert_eq!(
-            trait_def.theoretical_additive_variance(&population).unwrap(),
+            trait_def
+                .theoretical_additive_variance(&population)
+                .unwrap(),
             0.0
         );
     }

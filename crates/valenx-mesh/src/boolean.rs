@@ -361,7 +361,11 @@ mod tests {
         // Both nodes are distinct (no dedup), and the malformed element
         // is dropped rather than crashing.
         assert_eq!(out.nodes.len(), 2);
-        let total_conn: usize = out.element_blocks.iter().map(|b| b.connectivity.len()).sum();
+        let total_conn: usize = out
+            .element_blocks
+            .iter()
+            .map(|b| b.connectivity.len())
+            .sum();
         assert_eq!(
             total_conn, 0,
             "the element touching an out-of-range index must be dropped"

@@ -29,7 +29,11 @@ pub fn polyline_length(vertices: &[[f64; 2]]) -> f64 {
 /// cyclic closure (the last vertex wraps to the first). Always non-negative (orientation-
 /// independent). Returns `0.0` for fewer than three vertices or if any coordinate is non-finite.
 pub fn polygon_area(vertices: &[[f64; 2]]) -> f64 {
-    if vertices.len() < 3 || !vertices.iter().all(|v| v[0].is_finite() && v[1].is_finite()) {
+    if vertices.len() < 3
+        || !vertices
+            .iter()
+            .all(|v| v[0].is_finite() && v[1].is_finite())
+    {
         return 0.0;
     }
     let n = vertices.len();
@@ -49,7 +53,11 @@ pub fn polygon_area(vertices: &[[f64; 2]]) -> f64 {
 /// (perimeter) and polygon_area. Returns `0.0` for fewer than two vertices or if any coordinate
 /// is non-finite.
 pub fn bounding_box_diagonal_2d(vertices: &[[f64; 2]]) -> f64 {
-    if vertices.len() < 2 || !vertices.iter().all(|v| v[0].is_finite() && v[1].is_finite()) {
+    if vertices.len() < 2
+        || !vertices
+            .iter()
+            .all(|v| v[0].is_finite() && v[1].is_finite())
+    {
         return 0.0;
     }
     let (mut xmin, mut ymin) = (vertices[0][0], vertices[0][1]);
@@ -75,8 +83,7 @@ mod tests {
         assert!((polyline_length(&[[0.0, 0.0], [3.0, 4.0]]) - 5.0).abs() < 1e-9);
         // Open square path (0,0)→(1,0)→(1,1)→(0,1): 1+1+1 = 3.0 (no closing segment).
         assert!(
-            (polyline_length(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]) - 3.0).abs()
-                < 1e-9
+            (polyline_length(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]) - 3.0).abs() < 1e-9
         );
         // Right-triangle legs (0,0)→(3,0)→(3,4): 3 + 4 = 7.0.
         assert!((polyline_length(&[[0.0, 0.0], [3.0, 0.0], [3.0, 4.0]]) - 7.0).abs() < 1e-9);
@@ -107,7 +114,10 @@ mod tests {
         // Collinear → 0.0; <3 verts → 0.0; non-finite → 0.0.
         assert_eq!(polygon_area(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), 0.0);
         assert_eq!(polygon_area(&[[0.0, 0.0], [1.0, 0.0]]), 0.0);
-        assert_eq!(polygon_area(&[[0.0, 0.0], [f64::NAN, 0.0], [0.0, 1.0]]), 0.0);
+        assert_eq!(
+            polygon_area(&[[0.0, 0.0], [f64::NAN, 0.0], [0.0, 1.0]]),
+            0.0
+        );
     }
 
     #[test]
@@ -131,6 +141,9 @@ mod tests {
         // <2 verts → 0.0; empty → 0.0; non-finite → 0.0.
         assert_eq!(bounding_box_diagonal_2d(&[[5.0, 5.0]]), 0.0);
         assert_eq!(bounding_box_diagonal_2d(&[]), 0.0);
-        assert_eq!(bounding_box_diagonal_2d(&[[f64::NAN, 0.0], [1.0, 1.0]]), 0.0);
+        assert_eq!(
+            bounding_box_diagonal_2d(&[[f64::NAN, 0.0], [1.0, 1.0]]),
+            0.0
+        );
     }
 }

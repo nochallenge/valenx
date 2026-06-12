@@ -111,11 +111,7 @@ pub(crate) fn evaluate(tree: &FeatureTree, p: &SweepParams) -> Result<Solid, Fea
             // Map profile-local (qx, qy) → world: qx along the in-plane
             // normal, qy along +Z. The cross-section therefore stands
             // perpendicular to the path.
-            nodes.push(Vector3::new(
-                pt.x + qx * nx,
-                pt.y + qx * ny,
-                qy,
-            ));
+            nodes.push(Vector3::new(pt.x + qx * nx, pt.y + qx * ny, qy));
         }
     }
 
@@ -206,9 +202,7 @@ fn try_brep_straight_sweep(
     // perpendicular to the path.
     let verts: Vec<_> = profile_wp
         .iter()
-        .map(|&(qx, qy)| {
-            builder::vertex(Point3::new(p0.0 + qx * nx, p0.1 + qx * ny, qy))
-        })
+        .map(|&(qx, qy)| builder::vertex(Point3::new(p0.0 + qx * nx, p0.1 + qx * ny, qy)))
         .collect();
     let mut edges = Vec::with_capacity(verts.len());
     for i in 0..verts.len() {
@@ -412,8 +406,8 @@ mod tests {
             .unwrap()
             .translated(2.0, -1.0, -1.0)
             .unwrap();
-        let inter = valenx_cad::intersection(&swept, &box_s)
-            .expect("BRep intersection of the swept tube");
+        let inter =
+            valenx_cad::intersection(&swept, &box_s).expect("BRep intersection of the swept tube");
         assert!(inter.faces() > 0, "the intersection should have faces");
     }
 

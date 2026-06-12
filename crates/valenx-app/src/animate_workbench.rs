@@ -23,7 +23,11 @@ pub struct AnimateWorkbenchState {
 impl Default for AnimateWorkbenchState {
     fn default() -> Self {
         let tween = TweenMode::EaseInOut;
-        Self { anim: demo_animation(tween), tween, playhead: 0.0 }
+        Self {
+            anim: demo_animation(tween),
+            tween,
+            playhead: 0.0,
+        }
     }
 }
 
@@ -37,7 +41,10 @@ fn demo_animation(tween: TweenMode) -> Animation {
 
 /// Sample joint 0's value (rad) at time `t`.
 fn joint0(anim: &Animation, t: f64) -> f64 {
-    anim.sample(t).ok().and_then(|m| m.get(&0).copied()).unwrap_or(0.0)
+    anim.sample(t)
+        .ok()
+        .and_then(|m| m.get(&0).copied())
+        .unwrap_or(0.0)
 }
 
 /// Draw the animation workbench (a no-op unless toggled on via

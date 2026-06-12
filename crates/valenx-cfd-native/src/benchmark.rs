@@ -63,8 +63,8 @@
 
 use crate::grid::Grid;
 use crate::solver::{
-    solve_simple, solve_simple_with, Boundaries, EffectiveViscosity, Fluid,
-    FlowSolution, SimpleControls,
+    solve_simple, solve_simple_with, Boundaries, EffectiveViscosity, FlowSolution, Fluid,
+    SimpleControls,
 };
 
 // ---------------------------------------------------------------------
@@ -77,61 +77,53 @@ use crate::solver::{
 /// Lid is at `y = 1`; bottom wall at `y = 0`. The set is the standard
 /// non-uniform stretched grid Ghia used.
 pub const GHIA_Y: [f64; 17] = [
-    0.0000, 0.0547, 0.0625, 0.0703, 0.1016, 0.1719, 0.2813, 0.4531,
-    0.5000, 0.6172, 0.7344, 0.8516, 0.9531, 0.9609, 0.9688, 0.9766,
-    1.0000,
+    0.0000, 0.0547, 0.0625, 0.0703, 0.1016, 0.1719, 0.2813, 0.4531, 0.5000, 0.6172, 0.7344, 0.8516,
+    0.9531, 0.9609, 0.9688, 0.9766, 1.0000,
 ];
 
 /// The 17 sample `x/L` coordinates of **Ghia 1982 Table II** —
 /// `v(x, y=0.5)`, the horizontal-centerline `v`-profile.
 pub const GHIA_X: [f64; 17] = [
-    0.0000, 0.0625, 0.0703, 0.0781, 0.0938, 0.1563, 0.2266, 0.2344,
-    0.5000, 0.8047, 0.8594, 0.9063, 0.9453, 0.9531, 0.9609, 0.9688,
-    1.0000,
+    0.0000, 0.0625, 0.0703, 0.0781, 0.0938, 0.1563, 0.2266, 0.2344, 0.5000, 0.8047, 0.8594, 0.9063,
+    0.9453, 0.9531, 0.9609, 0.9688, 1.0000,
 ];
 
 /// **Ghia 1982 Table I, Re = 100** — `u(0.5, y_k)` at the 17 sample
 /// y-points. Normalised by the lid speed (which Ghia takes as unity).
 pub const GHIA_U_RE_100: [f64; 17] = [
-    0.00000, -0.03717, -0.04192, -0.04775, -0.06434, -0.10150, -0.15662,
-    -0.21090, -0.20581, -0.13641, 0.00332, 0.23151, 0.68717, 0.73722,
-    0.78871, 0.84123, 1.00000,
+    0.00000, -0.03717, -0.04192, -0.04775, -0.06434, -0.10150, -0.15662, -0.21090, -0.20581,
+    -0.13641, 0.00332, 0.23151, 0.68717, 0.73722, 0.78871, 0.84123, 1.00000,
 ];
 
 /// **Ghia 1982 Table I, Re = 400** — `u(0.5, y_k)`.
 pub const GHIA_U_RE_400: [f64; 17] = [
-    0.00000, -0.08186, -0.09266, -0.10338, -0.14612, -0.24299, -0.32726,
-    -0.17119, -0.11477, 0.02135, 0.16256, 0.29093, 0.55892, 0.61756,
-    0.68439, 0.75837, 1.00000,
+    0.00000, -0.08186, -0.09266, -0.10338, -0.14612, -0.24299, -0.32726, -0.17119, -0.11477,
+    0.02135, 0.16256, 0.29093, 0.55892, 0.61756, 0.68439, 0.75837, 1.00000,
 ];
 
 /// **Ghia 1982 Table I, Re = 1000** — `u(0.5, y_k)`.
 pub const GHIA_U_RE_1000: [f64; 17] = [
-    0.00000, -0.18109, -0.20196, -0.22220, -0.29730, -0.38289, -0.27805,
-    -0.10648, -0.06080, 0.05702, 0.18719, 0.33304, 0.46604, 0.51117,
-    0.57492, 0.65928, 1.00000,
+    0.00000, -0.18109, -0.20196, -0.22220, -0.29730, -0.38289, -0.27805, -0.10648, -0.06080,
+    0.05702, 0.18719, 0.33304, 0.46604, 0.51117, 0.57492, 0.65928, 1.00000,
 ];
 
 /// **Ghia 1982 Table II, Re = 100** — `v(x_k, 0.5)` at the 17 sample
 /// x-points.
 pub const GHIA_V_RE_100: [f64; 17] = [
-    0.00000, 0.09233, 0.10091, 0.10890, 0.12317, 0.16077, 0.17507,
-    0.17527, 0.05454, -0.24533, -0.22445, -0.16914, -0.10313, -0.08864,
-    -0.07391, -0.05906, 0.00000,
+    0.00000, 0.09233, 0.10091, 0.10890, 0.12317, 0.16077, 0.17507, 0.17527, 0.05454, -0.24533,
+    -0.22445, -0.16914, -0.10313, -0.08864, -0.07391, -0.05906, 0.00000,
 ];
 
 /// **Ghia 1982 Table II, Re = 400** — `v(x_k, 0.5)`.
 pub const GHIA_V_RE_400: [f64; 17] = [
-    0.00000, 0.18360, 0.19713, 0.20920, 0.22965, 0.28124, 0.30203,
-    0.30174, 0.05186, -0.38598, -0.44993, -0.33827, -0.22847, -0.19254,
-    -0.15663, -0.12146, 0.00000,
+    0.00000, 0.18360, 0.19713, 0.20920, 0.22965, 0.28124, 0.30203, 0.30174, 0.05186, -0.38598,
+    -0.44993, -0.33827, -0.22847, -0.19254, -0.15663, -0.12146, 0.00000,
 ];
 
 /// **Ghia 1982 Table II, Re = 1000** — `v(x_k, 0.5)`.
 pub const GHIA_V_RE_1000: [f64; 17] = [
-    0.00000, 0.27485, 0.29012, 0.30353, 0.32627, 0.37095, 0.33075,
-    0.32235, 0.02526, -0.31966, -0.42665, -0.51550, -0.39188, -0.33714,
-    -0.27669, -0.21388, 0.00000,
+    0.00000, 0.27485, 0.29012, 0.30353, 0.32627, 0.37095, 0.33075, 0.32235, 0.02526, -0.31966,
+    -0.42665, -0.51550, -0.39188, -0.33714, -0.27669, -0.21388, 0.00000,
 ];
 
 // ---------------------------------------------------------------------
@@ -241,13 +233,7 @@ pub fn compare_to_ghia_cavity(reynolds: f64, nx_ny: usize) -> GhiaError {
         sor_iterations: 80,
         ..SimpleControls::default()
     };
-    let (sol, _) = solve_simple_with(
-        &grid,
-        &fluid,
-        &bcs,
-        &controls,
-        &EffectiveViscosity::Laminar,
-    );
+    let (sol, _) = solve_simple_with(&grid, &fluid, &bcs, &controls, &EffectiveViscosity::Laminar);
     let (ghia_u, ghia_v) = match reynolds.round() as i32 {
         100 => (&GHIA_U_RE_100, &GHIA_V_RE_100),
         400 => (&GHIA_U_RE_400, &GHIA_V_RE_400),
@@ -420,7 +406,7 @@ pub fn backward_facing_step_reattachment(
             0.0
         } else {
             let eta = (y - open_y_lo) / open_span; // 0..1
-            // Parabolic profile of mean = inlet_mean → centre = 1.5×
+                                                   // Parabolic profile of mean = inlet_mean → centre = 1.5×
             6.0 * inlet_mean * eta * (1.0 - eta)
         }
     };
@@ -466,9 +452,8 @@ pub fn backward_facing_step_reattachment(
     let mut converged = false;
     let mass_scale = (rho * inlet_mean * dy).max(1e-30);
 
-    let hybrid = |d: f64, f: f64, sign: f64| -> f64 {
-        (d - 0.5 * f.abs()).max(0.0) + (sign * f).max(0.0)
-    };
+    let hybrid =
+        |d: f64, f: f64, sign: f64| -> f64 { (d - 0.5 * f.abs()).max(0.0) + (sign * f).max(0.0) };
 
     for outer in 0..controls.max_iterations {
         iterations = outer + 1;
@@ -482,12 +467,8 @@ pub fn backward_facing_step_reattachment(
                 for i in 1..nx {
                     let fe = rho * dy * 0.5 * (u.at(i, j) + u.at(i + 1, j));
                     let fw = rho * dy * 0.5 * (u.at(i - 1, j) + u.at(i, j));
-                    let fn_ = rho
-                        * dx
-                        * 0.5
-                        * (v.at(i - 1, j + 1) + v.at(i, j + 1));
-                    let fs =
-                        rho * dx * 0.5 * (v.at(i - 1, j) + v.at(i, j));
+                    let fn_ = rho * dx * 0.5 * (v.at(i - 1, j + 1) + v.at(i, j + 1));
+                    let fs = rho * dx * 0.5 * (v.at(i - 1, j) + v.at(i, j));
                     let ae = hybrid(dx_diff, fe, -1.0);
                     let aw = hybrid(dx_diff, fw, 1.0);
                     let mut a_p = ae + aw;
@@ -533,10 +514,7 @@ pub fn backward_facing_step_reattachment(
                 for i in 0..nx {
                     let fn_ = rho * dx * 0.5 * (v.at(i, j) + v.at(i, j + 1));
                     let fs = rho * dx * 0.5 * (v.at(i, j - 1) + v.at(i, j));
-                    let fe = rho
-                        * dy
-                        * 0.5
-                        * (u.at(i + 1, j - 1) + u.at(i + 1, j));
+                    let fe = rho * dy * 0.5 * (u.at(i + 1, j - 1) + u.at(i + 1, j));
                     let fw = rho * dy * 0.5 * (u.at(i, j - 1) + u.at(i, j));
                     let an = hybrid(dy_diff, fn_, -1.0);
                     let as_ = hybrid(dy_diff, fs, 1.0);
@@ -831,8 +809,7 @@ mod tests {
         // catch a missed-bubble false positive; the upper edge is the
         // top of the published spread.
         assert!(
-            r.reattachment_length_step_heights >= 0.5
-                && r.reattachment_length_step_heights <= 6.0,
+            r.reattachment_length_step_heights >= 0.5 && r.reattachment_length_step_heights <= 6.0,
             "BFS x_r/h {} should lie in the published range 0.5..6 step heights",
             r.reattachment_length_step_heights
         );

@@ -43,11 +43,7 @@ fn function_atoms(basis: &BasisSet) -> Vec<usize> {
 
 /// Sum per-basis-function gross populations onto atoms and form the
 /// partial charges.
-fn assemble(
-    geometry: &MolecularGeometry,
-    basis: &BasisSet,
-    gross: &[f64],
-) -> PopulationAnalysis {
+fn assemble(geometry: &MolecularGeometry, basis: &BasisSet, gross: &[f64]) -> PopulationAnalysis {
     let owners = function_atoms(basis);
     let n_atoms = geometry.n_atoms();
     let mut atomic = vec![0.0; n_atoms];
@@ -152,7 +148,11 @@ mod tests {
         let pop = mulliken(&geom, &basis, &res.density, &ints.overlap);
         // Oxygen pulls electron density: it should be negative,
         // the hydrogens positive.
-        assert!(pop.partial_charges[0] < 0.0, "O charge {}", pop.partial_charges[0]);
+        assert!(
+            pop.partial_charges[0] < 0.0,
+            "O charge {}",
+            pop.partial_charges[0]
+        );
         assert!(pop.partial_charges[1] > 0.0);
         assert!(pop.total_charge().abs() < 1.0e-6);
     }

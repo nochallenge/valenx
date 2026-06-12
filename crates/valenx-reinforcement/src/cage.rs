@@ -452,8 +452,8 @@ mod tests {
         // 2 centreline vertices × SECTION_FACETS ring nodes.
         assert_eq!(m.nodes.len(), 2 * SECTION_FACETS);
         let r = 20.0 * 0.5e-3; // 10 mm in metres
-        // The straight bar runs along +X; ring nodes lie in the YZ
-        // plane offset, so their (y,z) radius equals r.
+                               // The straight bar runs along +X; ring nodes lie in the YZ
+                               // plane offset, so their (y,z) radius equals r.
         for node in &m.nodes {
             let radial = (node.y * node.y + node.z * node.z).sqrt();
             assert!(

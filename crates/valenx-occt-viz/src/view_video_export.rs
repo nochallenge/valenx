@@ -80,7 +80,10 @@ impl VideoFrame {
         if pixels.len() != expected {
             return Err(OcctVizError::bad_input(
                 "pixels",
-                format!("buffer length {} != width*height*4 = {expected}", pixels.len()),
+                format!(
+                    "buffer length {} != width*height*4 = {expected}",
+                    pixels.len()
+                ),
             ));
         }
         Ok(Self {
@@ -287,7 +290,7 @@ pub fn encode_avi(frames: &[VideoFrame], fps: u32) -> Result<Vec<u8>, OcctVizErr
     out.extend_from_slice(&(frame_bytes as u32).to_le_bytes()); // dwSuggestedBufferSize
     out.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // dwQuality (-1 = default)
     out.extend_from_slice(&0u32.to_le_bytes()); // dwSampleSize (0 = variable)
-    // rcFrame: left, top, right, bottom (i16 each).
+                                                // rcFrame: left, top, right, bottom (i16 each).
     out.extend_from_slice(&0i16.to_le_bytes());
     out.extend_from_slice(&0i16.to_le_bytes());
     out.extend_from_slice(&(width as i16).to_le_bytes());
@@ -468,9 +471,10 @@ pub fn run_ffmpeg_mp4(frames: &[VideoFrame], fps: u32, path: &Path) -> Result<()
 
     // Stream every frame's raw RGBA bytes to ffmpeg's stdin.
     {
-        let mut stdin = child.stdin.take().ok_or_else(|| {
-            OcctVizError::render("could not open ffmpeg stdin pipe")
-        })?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| OcctVizError::render("could not open ffmpeg stdin pipe"))?;
         for f in frames {
             stdin.write_all(&f.pixels)?;
         }
@@ -618,14 +622,8 @@ mod tests {
             body.windows(4).any(|w| w == b"strf"),
             "stream format chunk missing"
         );
-        assert!(
-            body.windows(4).any(|w| w == b"movi"),
-            "movi list missing"
-        );
-        assert!(
-            body.windows(4).any(|w| w == b"idx1"),
-            "idx1 index missing"
-        );
+        assert!(body.windows(4).any(|w| w == b"movi"), "movi list missing");
+        assert!(body.windows(4).any(|w| w == b"idx1"), "idx1 index missing");
     }
 
     #[test]
@@ -658,12 +656,7 @@ mod tests {
             .windows(4)
             .position(|w| w == b"00db")
             .expect("a 00db frame chunk");
-        let size = u32::from_le_bytes([
-            avi[pos + 4],
-            avi[pos + 5],
-            avi[pos + 6],
-            avi[pos + 7],
-        ]);
+        let size = u32::from_le_bytes([avi[pos + 4], avi[pos + 5], avi[pos + 6], avi[pos + 7]]);
         assert_eq!(size, 24, "expected a 24-byte padded DIB frame");
     }
 
@@ -695,8 +688,7 @@ mod tests {
             solid_frame(4, 4, [200, 100, 50, 255]),
             solid_frame(4, 4, [50, 100, 200, 255]),
         ];
-        let tmp = std::env::temp_dir()
-            .join(format!("valenx_vid_{}.avi", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("valenx_vid_{}.avi", std::process::id()));
         write_avi(&frames, 30, &tmp).expect("write avi");
         let bytes = std::fs::read(&tmp).expect("read back");
         let _ = std::fs::remove_file(&tmp);

@@ -75,47 +75,135 @@ const DEG: f64 = std::f64::consts::PI / 180.0;
 
 // sp³–sp³ alkyl C-C: prefers gauche / anti (±60, 180).
 const SP3_CC_PREFS: &[TorsionPref] = &[
-    TorsionPref { mean: 60.0 * DEG, sigma: 15.0 * DEG, weight: 0.30 },
-    TorsionPref { mean: -60.0 * DEG, sigma: 15.0 * DEG, weight: 0.30 },
-    TorsionPref { mean: 180.0 * DEG, sigma: 12.0 * DEG, weight: 0.40 },
+    TorsionPref {
+        mean: 60.0 * DEG,
+        sigma: 15.0 * DEG,
+        weight: 0.30,
+    },
+    TorsionPref {
+        mean: -60.0 * DEG,
+        sigma: 15.0 * DEG,
+        weight: 0.30,
+    },
+    TorsionPref {
+        mean: 180.0 * DEG,
+        sigma: 12.0 * DEG,
+        weight: 0.40,
+    },
 ];
 
 // sp²-sp² C-C (biaryl-class): prefers 0 / 180 with a moderate spread.
 const SP2_CC_PREFS: &[TorsionPref] = &[
-    TorsionPref { mean: 0.0, sigma: 10.0 * DEG, weight: 0.50 },
-    TorsionPref { mean: 180.0 * DEG, sigma: 10.0 * DEG, weight: 0.50 },
+    TorsionPref {
+        mean: 0.0,
+        sigma: 10.0 * DEG,
+        weight: 0.50,
+    },
+    TorsionPref {
+        mean: 180.0 * DEG,
+        sigma: 10.0 * DEG,
+        weight: 0.50,
+    },
 ];
 
 // aromatic C-C: strongly planar, 0 / 180 with a tight spread.
 const AR_CC_PREFS: &[TorsionPref] = &[
-    TorsionPref { mean: 0.0, sigma: 5.0 * DEG, weight: 0.50 },
-    TorsionPref { mean: 180.0 * DEG, sigma: 5.0 * DEG, weight: 0.50 },
+    TorsionPref {
+        mean: 0.0,
+        sigma: 5.0 * DEG,
+        weight: 0.50,
+    },
+    TorsionPref {
+        mean: 180.0 * DEG,
+        sigma: 5.0 * DEG,
+        weight: 0.50,
+    },
 ];
 
 // C-O / C-N alcohols and amines, sp3 alkyl side: anti / gauche.
 const SP3_CO_PREFS: &[TorsionPref] = &[
-    TorsionPref { mean: 60.0 * DEG, sigma: 15.0 * DEG, weight: 0.33 },
-    TorsionPref { mean: -60.0 * DEG, sigma: 15.0 * DEG, weight: 0.33 },
-    TorsionPref { mean: 180.0 * DEG, sigma: 12.0 * DEG, weight: 0.34 },
+    TorsionPref {
+        mean: 60.0 * DEG,
+        sigma: 15.0 * DEG,
+        weight: 0.33,
+    },
+    TorsionPref {
+        mean: -60.0 * DEG,
+        sigma: 15.0 * DEG,
+        weight: 0.33,
+    },
+    TorsionPref {
+        mean: 180.0 * DEG,
+        sigma: 12.0 * DEG,
+        weight: 0.34,
+    },
 ];
 
 // Amide C-N: strongly planar (E/Z), bias to 0 and 180 with tight spread.
 const AMIDE_CN_PREFS: &[TorsionPref] = &[
-    TorsionPref { mean: 0.0, sigma: 6.0 * DEG, weight: 0.40 },
-    TorsionPref { mean: 180.0 * DEG, sigma: 6.0 * DEG, weight: 0.60 },
+    TorsionPref {
+        mean: 0.0,
+        sigma: 6.0 * DEG,
+        weight: 0.40,
+    },
+    TorsionPref {
+        mean: 180.0 * DEG,
+        sigma: 6.0 * DEG,
+        weight: 0.60,
+    },
 ];
 
 /// The Riniker-Landrum-class torsion preference table. Entries are
 /// matched in order; the first matching class wins.
 pub const TORSION_LIBRARY: &[TorsionClass] = &[
-    TorsionClass { za: 6, zb: 6, order: 4, prefs: AR_CC_PREFS },
-    TorsionClass { za: 6, zb: 6, order: 2, prefs: SP2_CC_PREFS },
-    TorsionClass { za: 6, zb: 7, order: 4, prefs: AR_CC_PREFS },
-    TorsionClass { za: 6, zb: 7, order: 2, prefs: AMIDE_CN_PREFS },
-    TorsionClass { za: 6, zb: 7, order: 1, prefs: SP3_CO_PREFS },
-    TorsionClass { za: 6, zb: 8, order: 1, prefs: SP3_CO_PREFS },
-    TorsionClass { za: 6, zb: 6, order: 1, prefs: SP3_CC_PREFS },
-    TorsionClass { za: 7, zb: 7, order: 1, prefs: SP3_CC_PREFS },
+    TorsionClass {
+        za: 6,
+        zb: 6,
+        order: 4,
+        prefs: AR_CC_PREFS,
+    },
+    TorsionClass {
+        za: 6,
+        zb: 6,
+        order: 2,
+        prefs: SP2_CC_PREFS,
+    },
+    TorsionClass {
+        za: 6,
+        zb: 7,
+        order: 4,
+        prefs: AR_CC_PREFS,
+    },
+    TorsionClass {
+        za: 6,
+        zb: 7,
+        order: 2,
+        prefs: AMIDE_CN_PREFS,
+    },
+    TorsionClass {
+        za: 6,
+        zb: 7,
+        order: 1,
+        prefs: SP3_CO_PREFS,
+    },
+    TorsionClass {
+        za: 6,
+        zb: 8,
+        order: 1,
+        prefs: SP3_CO_PREFS,
+    },
+    TorsionClass {
+        za: 6,
+        zb: 6,
+        order: 1,
+        prefs: SP3_CC_PREFS,
+    },
+    TorsionClass {
+        za: 7,
+        zb: 7,
+        order: 1,
+        prefs: SP3_CC_PREFS,
+    },
 ];
 
 /// Look up the torsion preference for a rotatable bond between
@@ -167,10 +255,7 @@ pub struct ScoredConformer {
 /// RMSD and sorted by energy ascending. Returns a (possibly smaller)
 /// list — the de-duplication can drop trials that converge to the
 /// same minimum.
-pub fn generate_conformers(
-    mol: &Molecule,
-    opts: &EtkdgOptions,
-) -> Result<Vec<ScoredConformer>> {
+pub fn generate_conformers(mol: &Molecule, opts: &EtkdgOptions) -> Result<Vec<ScoredConformer>> {
     if mol.atoms.is_empty() {
         return Err(CheminfError::invalid(
             "molecule",
@@ -183,17 +268,21 @@ pub fn generate_conformers(
         let mut conf = etkdg_embed(mol, seed)?;
         let setup = forcefield_mmff94::setup(&conf);
         let e = forcefield_mmff94::minimize(&mut conf, &setup, opts.minimize_steps);
-        raw.push(ScoredConformer { mol: conf, energy: e.total() });
+        raw.push(ScoredConformer {
+            mol: conf,
+            energy: e.total(),
+        });
     }
-    raw.sort_by(|a, b| a.energy.partial_cmp(&b.energy).unwrap_or(std::cmp::Ordering::Equal));
+    raw.sort_by(|a, b| {
+        a.energy
+            .partial_cmp(&b.energy)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(prune_by_rmsd(raw, opts.rmsd_threshold))
 }
 
 /// Drop trial conformers within `threshold` RMSD of a kept one.
-fn prune_by_rmsd(
-    mut sorted: Vec<ScoredConformer>,
-    threshold: f64,
-) -> Vec<ScoredConformer> {
+fn prune_by_rmsd(mut sorted: Vec<ScoredConformer>, threshold: f64) -> Vec<ScoredConformer> {
     let mut kept: Vec<ScoredConformer> = Vec::new();
     while let Some(next) = sorted.first().cloned() {
         sorted.remove(0);
@@ -249,7 +338,10 @@ pub fn etkdg_embed(mol: &Molecule, seed: u64) -> Result<Molecule> {
     let work = add_explicit_hydrogens(mol);
     let n = work.atoms.len();
     if n == 0 {
-        return Err(CheminfError::invalid("molecule", "cannot embed an empty molecule"));
+        return Err(CheminfError::invalid(
+            "molecule",
+            "cannot embed an empty molecule",
+        ));
     }
     if n == 1 {
         let mut single = work;

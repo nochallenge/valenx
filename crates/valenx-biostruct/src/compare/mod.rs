@@ -16,9 +16,6 @@ pub mod tmalign;
 
 pub use align::{align_chains, tm_d0, tm_score, StructureAlignment};
 pub use foldseek::{
-    best_ungapped_similarity, descriptor_identity, structural_descriptor,
-    StructuralDescriptor,
+    best_ungapped_similarity, descriptor_identity, structural_descriptor, StructuralDescriptor,
 };
-pub use tmalign::{
-    align_chains as align_chains_tm, align_chains_ce, TmAlignment, TmSeedKind,
-};
+pub use tmalign::{align_chains as align_chains_tm, align_chains_ce, TmAlignment, TmSeedKind};

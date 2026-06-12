@@ -193,11 +193,7 @@ const FRAGMENT_CLASSES: &[FragmentClass] = &[
     FragmentClass {
         state: SecondaryStructure::Coil,
         label: "beta-turn Type I' (residues 2-4)",
-        motifs: &[
-            (60.0, 30.0, 180.0),
-            (90.0, 0.0, 180.0),
-            (-90.0, 0.0, 180.0),
-        ],
+        motifs: &[(60.0, 30.0, 180.0), (90.0, 0.0, 180.0), (-90.0, 0.0, 180.0)],
         spreads: &[(15.0, 15.0), (15.0, 20.0), (15.0, 20.0)],
     },
     // Type II' β-turn (mirror of Type II) — common in β-hairpins
@@ -434,14 +430,12 @@ fn uniform(state: &mut u64, scale: f64) -> f64 {
 /// is uniform within each pool (the published Rosetta frequencies are
 /// position-specific PDB statistics — not encoded here; a curated
 /// uniform-within-class draw is the honest v1).
-fn pick_class(
-    want: SecondaryStructure,
-    honour: bool,
-    state: &mut u64,
-) -> &'static FragmentClass {
+fn pick_class(want: SecondaryStructure, honour: bool, state: &mut u64) -> &'static FragmentClass {
     if honour {
-        let matching: Vec<&FragmentClass> =
-            FRAGMENT_CLASSES.iter().filter(|c| c.state == want).collect();
+        let matching: Vec<&FragmentClass> = FRAGMENT_CLASSES
+            .iter()
+            .filter(|c| c.state == want)
+            .collect();
         if !matching.is_empty() {
             let idx = (next_u32(state) as usize) % matching.len();
             return matching[idx];
@@ -565,10 +559,7 @@ mod tests {
         let mut by_class: std::collections::HashMap<&str, Vec<&Fragment>> =
             std::collections::HashMap::new();
         for f in frags {
-            by_class
-                .entry(f.class_label.as_str())
-                .or_default()
-                .push(f);
+            by_class.entry(f.class_label.as_str()).or_default().push(f);
         }
         let mut found_distinct = false;
         for v in by_class.values() {

@@ -94,11 +94,7 @@ pub fn edges(
             // above and in inset/solidify.
             let raw = na * (1.0 - t) + nb * t;
             let l = raw.norm();
-            let n = if l > 1e-12 {
-                raw / l
-            } else {
-                Vector3::zeros()
-            };
+            let n = if l > 1e-12 { raw / l } else { Vector3::zeros() };
             out.vertices.push(p + n * distance);
         }
     }

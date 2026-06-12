@@ -154,26 +154,15 @@ impl OrbitCamera {
     pub fn projection_matrix(&self, aspect: f32) -> Matrix4<f32> {
         let aspect = aspect.max(1e-6);
         match self.projection_mode {
-            ProjectionMode::Perspective => Matrix4::new_perspective(
-                aspect,
-                self.fov_y_deg.to_radians(),
-                self.near,
-                self.far,
-            ),
+            ProjectionMode::Perspective => {
+                Matrix4::new_perspective(aspect, self.fov_y_deg.to_radians(), self.near, self.far)
+            }
             ProjectionMode::Orthographic => {
                 // Half-height of the perspective footprint at the
                 // target plane (distance away from the eye).
-                let half_h = (self.distance * (self.fov_y_deg * 0.5).to_radians().tan())
-                    .max(1e-6);
+                let half_h = (self.distance * (self.fov_y_deg * 0.5).to_radians().tan()).max(1e-6);
                 let half_w = half_h * aspect;
-                Matrix4::new_orthographic(
-                    -half_w,
-                    half_w,
-                    -half_h,
-                    half_h,
-                    self.near,
-                    self.far,
-                )
+                Matrix4::new_orthographic(-half_w, half_w, -half_h, half_h, self.near, self.far)
             }
         }
     }
@@ -228,7 +217,10 @@ mod tests {
 
     #[test]
     fn default_projection_mode_is_perspective() {
-        assert_eq!(OrbitCamera::default().projection_mode, ProjectionMode::Perspective);
+        assert_eq!(
+            OrbitCamera::default().projection_mode,
+            ProjectionMode::Perspective
+        );
     }
 
     #[test]

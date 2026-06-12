@@ -224,21 +224,25 @@ mod tests {
         // R_∞ = r_a·λ — cross-check against the length constant.
         let lambda = length_constant_cm(4e-4, 1e4, 100.0);
         let r_a = 4.0 * 100.0 / (std::f64::consts::PI * 4e-4 * 4e-4);
-        assert!((r_inf - r_a * lambda).abs() / r_inf < 1e-9, "R_∞ = r_a·λ: {r_inf}");
+        assert!(
+            (r_inf - r_a * lambda).abs() / r_inf < 1e-9,
+            "R_∞ = r_a·λ: {r_inf}"
+        );
         // ~80 MΩ for this thin fibre.
         assert!((r_inf / 1e6 - 79.6).abs() < 1.0, "R_∞ {} MΩ", r_inf / 1e6);
         // R_∞ ∝ d^(−3/2): a 4× thicker fibre has 1/8 the input resistance.
         let thick = semi_infinite_input_resistance(16e-4, 1e4, 100.0);
-        assert!((thick - r_inf / 8.0).abs() / r_inf < 1e-9, "d^(−3/2) scaling");
+        assert!(
+            (thick - r_inf / 8.0).abs() / r_inf < 1e-9,
+            "d^(−3/2) scaling"
+        );
     }
 
     #[test]
     fn charging_fraction_follows_the_rc_curve() {
         // 0 at t=0, 1 − 1/e (~63.2%) at one τ, ~95.0% at three τ.
         assert!(charging_fraction(0.0, 0.01).abs() < 1e-12);
-        assert!(
-            (charging_fraction(0.01, 0.01) - (1.0 - 1.0 / std::f64::consts::E)).abs() < 1e-12
-        );
+        assert!((charging_fraction(0.01, 0.01) - (1.0 - 1.0 / std::f64::consts::E)).abs() < 1e-12);
         assert!((charging_fraction(0.03, 0.01) - 0.9502).abs() < 1e-3);
         // Monotonically rising toward 1; a non-positive τ gives 0.
         assert!(charging_fraction(0.05, 0.01) > charging_fraction(0.03, 0.01));
@@ -286,9 +290,7 @@ mod tests {
     fn steady_state_attenuation_decays_exponentially_over_lambda() {
         // V/V₀ = 1 at the injection site, 1/e at one λ, ~5% by L = 3.
         assert!((steady_state_attenuation(0.0) - 1.0).abs() < 1e-12);
-        assert!(
-            (steady_state_attenuation(1.0) - 1.0 / std::f64::consts::E).abs() < 1e-12
-        );
+        assert!((steady_state_attenuation(1.0) - 1.0 / std::f64::consts::E).abs() < 1e-12);
         assert!((steady_state_attenuation(3.0) - 0.049_787).abs() < 1e-5);
         // Composes with electrotonic_length: a 0.2 cm segment on a λ = 0.1 cm
         // cable (L = 2) attenuates to e^(−2).
@@ -304,14 +306,23 @@ mod tests {
         use std::f64::consts::E;
         // Worked points: att = 1 → L = 0 (no decay); att = 1/e → L = 1; att = 0.5 →
         // L = ln 2 ≈ 0.6931.
-        assert!(electrotonic_length_from_attenuation(1.0).abs() < 1e-12, "att=1 → L=0");
-        assert!((electrotonic_length_from_attenuation(1.0 / E) - 1.0).abs() < 1e-12, "att=1/e → L=1");
+        assert!(
+            electrotonic_length_from_attenuation(1.0).abs() < 1e-12,
+            "att=1 → L=0"
+        );
+        assert!(
+            (electrotonic_length_from_attenuation(1.0 / E) - 1.0).abs() < 1e-12,
+            "att=1/e → L=1"
+        );
         assert!(
             (electrotonic_length_from_attenuation(0.5) - 2.0_f64.ln()).abs() < 1e-12,
             "att=0.5 → ln 2"
         );
         // att ≥ 1 (no physical decay along a passive cable) clamps to L = 0.
-        assert!(electrotonic_length_from_attenuation(1.5).abs() < 1e-12, "att>1 clamps to 0");
+        assert!(
+            electrotonic_length_from_attenuation(1.5).abs() < 1e-12,
+            "att>1 clamps to 0"
+        );
         // STRONG round-trip cross-checks threading steady_state_attenuation BOTH ways.
         for &l in &[0.0_f64, 0.3, 1.0, 2.5, 5.0] {
             let back = electrotonic_length_from_attenuation(steady_state_attenuation(l));
@@ -325,8 +336,12 @@ mod tests {
         // L closes the loop across electrotonic_length and steady_state_attenuation.
         for &(len, lambda) in &[(0.5_f64, 1.0_f64), (3.0, 2.0), (1.2, 0.7)] {
             let l_geom = electrotonic_length(len, lambda);
-            let l_recovered = electrotonic_length_from_attenuation(steady_state_attenuation(l_geom));
-            assert!((l_recovered - l_geom).abs() < 1e-9, "geom vs recovered L at len={len}, λ={lambda}");
+            let l_recovered =
+                electrotonic_length_from_attenuation(steady_state_attenuation(l_geom));
+            assert!(
+                (l_recovered - l_geom).abs() < 1e-9,
+                "geom vs recovered L at len={len}, λ={lambda}"
+            );
         }
         // Monotone decreasing in attenuation (more decay ⇒ greater distance).
         assert!(
@@ -348,9 +363,7 @@ mod tests {
         assert!((sealed_end_input_resistance(r_inf, 1.0) / r_inf - 1.31304).abs() < 1e-4);
         assert!((open_end_input_resistance(r_inf, 1.0) / r_inf - 0.76159).abs() < 1e-4);
         // Sealed always exceeds open at the same length (trapped vs sunk current).
-        assert!(
-            sealed_end_input_resistance(r_inf, 0.8) > open_end_input_resistance(r_inf, 0.8)
-        );
+        assert!(sealed_end_input_resistance(r_inf, 0.8) > open_end_input_resistance(r_inf, 0.8));
         // Degenerate length: sealed → R_∞, open → 0 (a direct short to rest).
         assert_eq!(sealed_end_input_resistance(r_inf, 0.0), r_inf);
         assert_eq!(open_end_input_resistance(r_inf, 0.0), 0.0);
@@ -377,7 +390,7 @@ mod tests {
     fn ac_length_constant_low_pass_filters_in_space() {
         let lambda = 0.1; // cm (DC length constant)
         let tau = 0.01; // s (10 ms)
-        // At DC the AC length constant equals the steady length constant.
+                        // At DC the AC length constant equals the steady length constant.
         assert!((ac_length_constant(lambda, tau, 0.0) - lambda).abs() < 1e-12);
         // It matches the closed form at an arbitrary frequency.
         let f = 25.0;

@@ -301,11 +301,9 @@ pub fn parse_ascii(text: &str) -> Result<VtuData, ParseError> {
     // Round-11: `n_points * 3` was unchecked pre-fix; the cap above
     // already keeps n_points within MAX_VTU_POINTS, so `* 3` cannot
     // overflow usize on any reasonable platform.
-    let expected_coords = n_points
-        .checked_mul(3)
-        .ok_or(ParseError::BadAttribute(
-            "Points: n_points * 3 overflows usize".to_string(),
-        ))?;
+    let expected_coords = n_points.checked_mul(3).ok_or(ParseError::BadAttribute(
+        "Points: n_points * 3 overflows usize".to_string(),
+    ))?;
     if coords.len() != expected_coords {
         return Err(ParseError::CountMismatch {
             what: "Points",
@@ -461,11 +459,9 @@ pub fn parse_appended_raw(bytes: &[u8]) -> Result<VtuData, ParseError> {
     }
     let coords = read_appended_floats(raw, &points_attrs, "Points")?;
     // Round-11: same `n_points * 3` overflow guard as parse_ascii.
-    let expected_coords = n_points
-        .checked_mul(3)
-        .ok_or(ParseError::BadAttribute(
-            "Points: n_points * 3 overflows usize".to_string(),
-        ))?;
+    let expected_coords = n_points.checked_mul(3).ok_or(ParseError::BadAttribute(
+        "Points: n_points * 3 overflows usize".to_string(),
+    ))?;
     if coords.len() != expected_coords {
         return Err(ParseError::CountMismatch {
             what: "Points",
@@ -714,9 +710,13 @@ fn read_appended_block<'r>(
     arr: &AppendedDataArrayAttrs,
     what: &'static str,
 ) -> Result<(&'r [u8], usize), ParseError> {
-    let block_start = arr.offset.checked_add(4).ok_or(ParseError::BadAttribute(
-        format!("{what}: offset+4 overflows usize (offset={})", arr.offset),
-    ))?;
+    let block_start = arr
+        .offset
+        .checked_add(4)
+        .ok_or(ParseError::BadAttribute(format!(
+            "{what}: offset+4 overflows usize (offset={})",
+            arr.offset
+        )))?;
     if block_start > raw.len() {
         return Err(ParseError::CountMismatch {
             what,
@@ -1240,7 +1240,9 @@ mod tests {
         let mut state: u64 = 0xD1B5_4A32_D192_ED03; // fixed seed
         for _ in 0..2000 {
             let len = (xorshift64(&mut state) % 512) as usize;
-            let buf: Vec<u8> = (0..len).map(|_| (xorshift64(&mut state) & 0xFF) as u8).collect();
+            let buf: Vec<u8> = (0..len)
+                .map(|_| (xorshift64(&mut state) & 0xFF) as u8)
+                .collect();
             let _ = parse_appended_raw(&buf);
             let _ = parse_ascii(&String::from_utf8_lossy(&buf));
         }
@@ -1586,11 +1588,14 @@ mod tests {
         let mesh = VtuMesh {
             points: vec![[0.0; 3]; 4],
             connectivity: vec![0u32, 1, 2, 3], // 4 entries
-            offsets: vec![10u32],               // claims 10 — past end
+            offsets: vec![10u32],              // claims 10 — past end
             cell_types: vec![VtuCellType::Tet],
         };
         let collected: Vec<_> = mesh.cells().collect();
-        assert!(collected.is_empty(), "cell with overrun offset must be dropped");
+        assert!(
+            collected.is_empty(),
+            "cell with overrun offset must be dropped"
+        );
         let err = mesh.validate().expect_err("validate must reject");
         let msg = format!("{err}");
         assert!(msg.contains("Cells/offsets"), "msg: {msg}");

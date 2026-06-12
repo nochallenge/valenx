@@ -315,9 +315,7 @@ fn simplex_two_phase(
         // Drive any artificial still basic (at zero) out of the basis.
         for i in 0..m {
             if basis[i] >= n + slack_count {
-                if let Some(pcol) =
-                    (0..n + slack_count).find(|&j| tab[i][j].abs() > EPS)
-                {
+                if let Some(pcol) = (0..n + slack_count).find(|&j| tab[i][j].abs() > EPS) {
                     pivot(&mut tab, &mut basis, i, pcol, total);
                 }
             }
@@ -444,11 +442,7 @@ mod tests {
         // x,y >= 0. Classic textbook LP; optimum at (6, 4) -> 10.
         let lp = LinearProgram {
             c: vec![1.0, 1.0],
-            a: vec![
-                vec![1.0, 2.0],
-                vec![3.0, -1.0],
-                vec![1.0, -1.0],
-            ],
+            a: vec![vec![1.0, 2.0], vec![3.0, -1.0], vec![1.0, -1.0]],
             b: vec![14.0, 0.0, 2.0],
             sense: vec![
                 ConstraintSense::Le,

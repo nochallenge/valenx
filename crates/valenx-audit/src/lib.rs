@@ -952,9 +952,7 @@ pub fn verify_chain_report(path: &Path) -> Result<ChainReport, AuditError> {
     // Round-20 M3: same bounded-line read as the other slow walks —
     // a hostile log with a multi-GB un-newline-terminated "line"
     // can't OOM `verify_chain` / its UI surface.
-    for (line_idx, line) in
-        read_capped_lines(&mut reader, MAX_AUDIT_LINE_BYTES).enumerate()
-    {
+    for (line_idx, line) in read_capped_lines(&mut reader, MAX_AUDIT_LINE_BYTES).enumerate() {
         let line_bytes = line.map_err(|e| AuditError::Io {
             path: path.to_path_buf(),
             source: e,
@@ -1093,7 +1091,10 @@ mod tests {
                 }
             }
         }
-        assert!(got_cap_err, "expected cap-exceeded error on the poisoned line");
+        assert!(
+            got_cap_err,
+            "expected cap-exceeded error on the poisoned line"
+        );
         assert!(
             !got_good_line,
             "round-26 M1: iterator must stop on the poisoned line; \
@@ -1816,8 +1817,7 @@ mod tests {
             .filter(|l| !l.trim().is_empty())
             .next_back()
             .expect("at least one entry in file");
-        let second_entry: AuditEntry =
-            serde_json::from_str(last_line).expect("last line is JSONL");
+        let second_entry: AuditEntry = serde_json::from_str(last_line).expect("last line is JSONL");
         // The first-entry serialised form (what `first`'s cache would
         // have stored as the tail hash) is no longer on disk after the
         // recreate. If the cache was honoured, second_entry.prev_hash
@@ -1874,8 +1874,8 @@ mod tests {
         f.write_all(&vec![b'x'; 1024 * 1024]).unwrap();
         // No trailing `\n` — this is the unbounded-line shape.
         drop(f);
-        let err = verify_chain(&path)
-            .expect_err("round-20 M3: oversized line must reject as IO error");
+        let err =
+            verify_chain(&path).expect_err("round-20 M3: oversized line must reject as IO error");
         match err {
             AuditError::Io { source, .. } => {
                 assert_eq!(
@@ -1960,10 +1960,7 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         // The error message reflects the cap of 8.
         let msg = format!("{err}");
-        assert!(
-            msg.contains("8-byte cap"),
-            "unexpected message: {msg}"
-        );
+        assert!(msg.contains("8-byte cap"), "unexpected message: {msg}");
     }
 
     /// RED→GREEN (round-24 H1): a well-formed multi-line file still

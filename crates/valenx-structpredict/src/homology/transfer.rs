@@ -42,11 +42,7 @@ pub fn transfer_backbone(
         return Err(StructPredictError::invalid("target_sequence", "empty"));
     }
     // The number of residues in the gapped target row.
-    let row_residues = alignment
-        .target_row
-        .iter()
-        .filter(|&&b| b != b'-')
-        .count();
+    let row_residues = alignment.target_row.iter().filter(|&&b| b != b'-').count();
     if row_residues != target_sequence.len() {
         return Err(StructPredictError::invalid(
             "target_sequence",

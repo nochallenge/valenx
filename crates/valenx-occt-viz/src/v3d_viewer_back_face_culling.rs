@@ -29,7 +29,9 @@ use crate::error::OcctVizError;
 
 /// Back-face culling mode mirror of OCCT's
 /// `Graphic3d_TypeOfBackfacingModel`.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum BackFaceMode {
     /// Back-face culling enabled (default — drops back-facing

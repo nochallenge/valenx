@@ -27,16 +27,13 @@ pub fn hull_2d(points: &[[f64; 2]]) -> Result<Vec<[f64; 2]>, CgalError> {
     pts[1..].sort_by(|a, b| {
         let ang_a = (a[1] - anchor[1]).atan2(a[0] - anchor[0]);
         let ang_b = (b[1] - anchor[1]).atan2(b[0] - anchor[0]);
-        ang_a.partial_cmp(&ang_b).unwrap_or(std::cmp::Ordering::Equal)
+        ang_a
+            .partial_cmp(&ang_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     let mut stack: Vec<[f64; 2]> = Vec::with_capacity(pts.len());
     for p in pts {
-        while stack.len() >= 2
-            && cross_2d(
-                stack[stack.len() - 2],
-                stack[stack.len() - 1],
-                p,
-            ) <= 0.0
+        while stack.len() >= 2 && cross_2d(stack[stack.len() - 2], stack[stack.len() - 1], p) <= 0.0
         {
             stack.pop();
         }
@@ -138,11 +135,8 @@ pub fn hull_3d(points: &[Vector3<f64>]) -> Result<Vec<(usize, usize, usize)>, Cg
                 let cp = points[idx];
                 let n = (cb - ca).cross(&(cp - ca));
                 // Centre estimate = avg of tet points.
-                let centre = (points[tet[0]]
-                    + points[tet[1]]
-                    + points[tet[2]]
-                    + points[tet[3]])
-                    / 4.0;
+                let centre =
+                    (points[tet[0]] + points[tet[1]] + points[tet[2]] + points[tet[3]]) / 4.0;
                 if (ca - centre).dot(&n) > 0.0 {
                     faces.push((*a, *b, idx));
                 } else {

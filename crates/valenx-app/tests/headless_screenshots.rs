@@ -235,8 +235,7 @@ fn panel_catalogue() -> Vec<PanelSpec> {
         workbench: Workbench::MeshCad,
         slug: "00-toolbox-host",
         label: "Mesh Toolbox (host panel)",
-        description:
-            "The whole right-side Mesh Toolbox SidePanel — inspector, \
+        description: "The whole right-side Mesh Toolbox SidePanel — inspector, \
              part workbench, transformations, cut plane, repair, export, \
              plus every CAD sub-panel as a collapsing header.",
         mount: Mount::HostSidePanel,
@@ -336,8 +335,7 @@ fn panel_catalogue() -> Vec<PanelSpec> {
         workbench: Workbench::Genetics,
         slug: "00-workbench-host",
         label: "Genetics Workbench (host panel)",
-        description:
-            "The whole right-side Genetics Workbench SidePanel — \
+        description: "The whole right-side Genetics Workbench SidePanel — \
              tab selector for 14 panels, default Sequence panel shown.",
         mount: Mount::HostSidePanel,
         draw: |app, ctx| {
@@ -367,8 +365,7 @@ fn panel_catalogue() -> Vec<PanelSpec> {
         workbench: Workbench::Aero,
         slug: "00-workbench-host",
         label: "Wind Tunnel Workbench (host panel)",
-        description:
-            "The whole right-side Wind Tunnel SidePanel — Body, Wind, \
+        description: "The whole right-side Wind Tunnel SidePanel — Body, Wind, \
              Ground, Tunnel, Solver, Run, Results, Visualization \
              sections all visible.",
         mount: Mount::HostSidePanel,
@@ -488,66 +485,102 @@ fn push_aero_section(
 /// stores the slug; the actual draw fns live in this jump table.
 fn select_cad_draw(slug: &'static str) -> PanelDrawFn {
     match slug {
-        "01-part" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_part_design_panel(app, ui);
-        }),
-        "02-draft" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_draft_panel(app, ui);
-        }),
-        "03-techdraw" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_techdraw_panel(app, ui);
-        }),
-        "04-assembly" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_assembly_panel(app, ui);
-        }),
-        "05-surface" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_surface_panel(app, ui);
-        }),
-        "06-cam" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_cam_panel(app, ui);
-        }),
-        "07-arch" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_arch_panel(app, ui);
-        }),
-        "08-spreadsheet" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_spreadsheet_panel(app, ui);
-        }),
-        "09-dock" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_dock_panel(app, ui);
-        }),
-        "10-sketcher" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::mesh_toolbox::draw_sketcher_panel(app, ui);
-        }),
+        "01-part" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_part_design_panel(app, ui);
+            })
+        },
+        "02-draft" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_draft_panel(app, ui);
+            })
+        },
+        "03-techdraw" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_techdraw_panel(app, ui);
+            })
+        },
+        "04-assembly" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_assembly_panel(app, ui);
+            })
+        },
+        "05-surface" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_surface_panel(app, ui);
+            })
+        },
+        "06-cam" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_cam_panel(app, ui);
+            })
+        },
+        "07-arch" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_arch_panel(app, ui);
+            })
+        },
+        "08-spreadsheet" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_spreadsheet_panel(app, ui);
+            })
+        },
+        "09-dock" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_dock_panel(app, ui);
+            })
+        },
+        "10-sketcher" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::mesh_toolbox::draw_sketcher_panel(app, ui);
+            })
+        },
         other => panic!("unknown CAD sub-panel slug: {other}"),
     }
 }
 
 fn select_aero_draw(slug: &'static str) -> PanelDrawFn {
     match slug {
-        "01-body" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_body_section(app, ui);
-        }),
-        "02-wind" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_wind_section(app, ui);
-        }),
-        "03-ground" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_ground_section(app, ui);
-        }),
-        "04-tunnel" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_tunnel_section(app, ui);
-        }),
-        "05-solver" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_solver_section(app, ui);
-        }),
-        "06-run" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_run_section(app, ui);
-        }),
-        "07-results" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_results_section(app, ui);
-        }),
-        "08-visualization" => |app, ctx| draw_in_central(ctx, |ui| {
-            valenx_app::aero::panels::draw_visualization_section(app, ui);
-        }),
+        "01-body" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_body_section(app, ui);
+            })
+        },
+        "02-wind" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_wind_section(app, ui);
+            })
+        },
+        "03-ground" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_ground_section(app, ui);
+            })
+        },
+        "04-tunnel" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_tunnel_section(app, ui);
+            })
+        },
+        "05-solver" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_solver_section(app, ui);
+            })
+        },
+        "06-run" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_run_section(app, ui);
+            })
+        },
+        "07-results" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_results_section(app, ui);
+            })
+        },
+        "08-visualization" => |app, ctx| {
+            draw_in_central(ctx, |ui| {
+                valenx_app::aero::panels::draw_visualization_section(app, ui);
+            })
+        },
         other => panic!("unknown aero section slug: {other}"),
     }
 }
@@ -566,16 +599,24 @@ fn genetics_draw_fn(panel: GeneticsPanel) -> PanelDrawFn {
     match panel {
         GeneticsPanel::Sequence => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Sequence),
         GeneticsPanel::Alignment => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Alignment),
-        GeneticsPanel::Phylogenetics => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Phylogenetics),
+        GeneticsPanel::Phylogenetics => {
+            |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Phylogenetics)
+        }
         GeneticsPanel::PopulationGenetics => {
             |app, ctx| draw_genetics(app, ctx, GeneticsPanel::PopulationGenetics)
         }
-        GeneticsPanel::RnaStructure => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::RnaStructure),
-        GeneticsPanel::RnaDesigner => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::RnaDesigner),
+        GeneticsPanel::RnaStructure => {
+            |app, ctx| draw_genetics(app, ctx, GeneticsPanel::RnaStructure)
+        }
+        GeneticsPanel::RnaDesigner => {
+            |app, ctx| draw_genetics(app, ctx, GeneticsPanel::RnaDesigner)
+        }
         GeneticsPanel::MolecularDynamics => {
             |app, ctx| draw_genetics(app, ctx, GeneticsPanel::MolecularDynamics)
         }
-        GeneticsPanel::Cheminformatics => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Cheminformatics),
+        GeneticsPanel::Cheminformatics => {
+            |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Cheminformatics)
+        }
         GeneticsPanel::MacromolecularStructure => {
             |app, ctx| draw_genetics(app, ctx, GeneticsPanel::MacromolecularStructure)
         }
@@ -583,9 +624,13 @@ fn genetics_draw_fn(panel: GeneticsPanel) -> PanelDrawFn {
             |app, ctx| draw_genetics(app, ctx, GeneticsPanel::QuantumChemistry)
         }
         GeneticsPanel::Genomics => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Genomics),
-        GeneticsPanel::SystemsBiology => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::SystemsBiology),
+        GeneticsPanel::SystemsBiology => {
+            |app, ctx| draw_genetics(app, ctx, GeneticsPanel::SystemsBiology)
+        }
         GeneticsPanel::Docking => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::Docking),
-        GeneticsPanel::GeneEditing => |app, ctx| draw_genetics(app, ctx, GeneticsPanel::GeneEditing),
+        GeneticsPanel::GeneEditing => {
+            |app, ctx| draw_genetics(app, ctx, GeneticsPanel::GeneEditing)
+        }
         GeneticsPanel::StructurePrediction => {
             |app, ctx| draw_genetics(app, ctx, GeneticsPanel::StructurePrediction)
         }
@@ -640,52 +685,65 @@ fn genetics_label(panel: GeneticsPanel) -> &'static str {
 
 fn genetics_description(panel: GeneticsPanel) -> &'static str {
     match panel {
-        GeneticsPanel::Sequence =>
+        GeneticsPanel::Sequence => {
             "Sequence editing, translation, ORF finder, restriction \
-             digest virtual gel, primer / PCR design (valenx-bioseq).",
-        GeneticsPanel::Alignment =>
+             digest virtual gel, primer / PCR design (valenx-bioseq)."
+        }
+        GeneticsPanel::Alignment => {
             "Pairwise (Needleman-Wunsch / Smith-Waterman / Gotoh affine), \
-             progressive MSA, k-mer seed search (valenx-align).",
-        GeneticsPanel::Phylogenetics =>
+             progressive MSA, k-mer seed search (valenx-align)."
+        }
+        GeneticsPanel::Phylogenetics => {
             "Distance-method phylogenetic trees (NJ / UPGMA), Newick \
-             export, tree visualization (valenx-phylo).",
-        GeneticsPanel::PopulationGenetics =>
+             export, tree visualization (valenx-phylo)."
+        }
+        GeneticsPanel::PopulationGenetics => {
             "Wright-Fisher / coalescent simulations, summary stats (π, \
-             θ, Tajima's D), allele-frequency trajectories (valenx-popgen).",
-        GeneticsPanel::RnaStructure =>
+             θ, Tajima's D), allele-frequency trajectories (valenx-popgen)."
+        }
+        GeneticsPanel::RnaStructure => {
             "RNA secondary-structure folding (Zuker / LinearFold), \
-             ensemble defect, MFE/PFE energy (valenx-rnastruct).",
-        GeneticsPanel::RnaDesigner =>
+             ensemble defect, MFE/PFE energy (valenx-rnastruct)."
+        }
+        GeneticsPanel::RnaDesigner => {
             "Guided synthetic-RNA design wizard — fold, visualize, \
              inverse design, mRNA LinearDesign, full construct \
-             (valenx-rnadesign).",
-        GeneticsPanel::MolecularDynamics =>
+             (valenx-rnadesign)."
+        }
+        GeneticsPanel::MolecularDynamics => {
             "Classical MD — Lennard-Jones, Coulomb, harmonic-bond + \
              angle + dihedral force fields, Berendsen / Langevin \
-             integrators (valenx-md).",
-        GeneticsPanel::Cheminformatics =>
+             integrators (valenx-md)."
+        }
+        GeneticsPanel::Cheminformatics => {
             "Cheminformatics descriptors (MW, logP, TPSA), Morgan \
              fingerprints, Tanimoto similarity, substructure search \
-             (valenx-cheminf).",
-        GeneticsPanel::MacromolecularStructure =>
+             (valenx-cheminf)."
+        }
+        GeneticsPanel::MacromolecularStructure => {
             "Macromolecular structure analysis — secondary structure, \
-             Ramachandran plot, B-factor, contact map (valenx-biostruct).",
-        GeneticsPanel::QuantumChemistry =>
+             Ramachandran plot, B-factor, contact map (valenx-biostruct)."
+        }
+        GeneticsPanel::QuantumChemistry => {
             "Hartree-Fock SCF, MP2 correlation energy, basis-set picker \
-             (valenx-qchem).",
-        GeneticsPanel::Genomics =>
+             (valenx-qchem)."
+        }
+        GeneticsPanel::Genomics => {
             "NGS / variant / CRISPR tooling — read alignment, variant \
-             calling, gRNA design (valenx-genomics).",
-        GeneticsPanel::SystemsBiology =>
+             calling, gRNA design (valenx-genomics)."
+        }
+        GeneticsPanel::SystemsBiology => {
             "Systems-biology reaction networks — ODE / stochastic \
-             simulation, sensitivity analysis (valenx-sysbio).",
-        GeneticsPanel::Docking =>
-            "Molecular docking + virtual screening (valenx-dock-screen).",
-        GeneticsPanel::GeneEditing =>
-            "CRISPR / base / prime / mRNA editing design (valenx-genediting).",
-        GeneticsPanel::StructurePrediction =>
+             simulation, sensitivity analysis (valenx-sysbio)."
+        }
+        GeneticsPanel::Docking => "Molecular docking + virtual screening (valenx-dock-screen).",
+        GeneticsPanel::GeneEditing => {
+            "CRISPR / base / prime / mRNA editing design (valenx-genediting)."
+        }
+        GeneticsPanel::StructurePrediction => {
             "Classical protein structure prediction (ab-initio fragment \
-             assembly) + fixed-backbone design (valenx-structpredict).",
+             assembly) + fixed-backbone design (valenx-structpredict)."
+        }
     }
 }
 
@@ -708,13 +766,11 @@ impl ScreenshotHarness {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
-        let adapter = pollster::block_on(instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: false,
-                compatible_surface: None,
-            },
-        ))?;
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: false,
+            compatible_surface: None,
+        }))?;
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("valenx.screenshots.device"),

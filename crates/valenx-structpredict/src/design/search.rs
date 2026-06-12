@@ -130,9 +130,7 @@ pub fn combinatorial_design(
     let mut rng = Rng::new(seed);
 
     // Initial sequence: the first allowed choice at every position.
-    let mut sequence: Vec<char> = (0..n)
-        .map(|i| palette.choices(i)[0])
-        .collect();
+    let mut sequence: Vec<char> = (0..n).map(|i| palette.choices(i)[0]).collect();
     let initial_seq: String = sequence.iter().collect();
     let mut current_score = design_score(model, &initial_seq, ss, weights)?;
     let initial_total = current_score.total;
@@ -205,15 +203,8 @@ mod tests {
     fn design_lowers_the_score() {
         let m = blob(27);
         let palette = ResiduePalette::unrestricted(m.residues.len());
-        let res = combinatorial_design(
-            &m,
-            &palette,
-            &[],
-            DesignScoreWeights::default(),
-            800,
-            17,
-        )
-        .expect("design");
+        let res = combinatorial_design(&m, &palette, &[], DesignScoreWeights::default(), 800, 17)
+            .expect("design");
         assert!(
             res.score.total <= res.initial_total,
             "score {} -> {}",
@@ -228,9 +219,8 @@ mod tests {
         let m = blob(8);
         let native = "ACDEFGHI";
         let palette = ResiduePalette::fixed_to(native);
-        let res =
-            combinatorial_design(&m, &palette, &[], DesignScoreWeights::default(), 200, 1)
-                .expect("design");
+        let res = combinatorial_design(&m, &palette, &[], DesignScoreWeights::default(), 200, 1)
+            .expect("design");
         // Every position is fixed → the sequence cannot change.
         assert_eq!(res.sequence, native);
         assert_eq!(res.accepted, 0);
@@ -250,14 +240,8 @@ mod tests {
     fn palette_length_mismatch_rejected() {
         let m = blob(8);
         let palette = ResiduePalette::unrestricted(5);
-        assert!(combinatorial_design(
-            &m,
-            &palette,
-            &[],
-            DesignScoreWeights::default(),
-            10,
-            0
-        )
-        .is_err());
+        assert!(
+            combinatorial_design(&m, &palette, &[], DesignScoreWeights::default(), 10, 0).is_err()
+        );
     }
 }

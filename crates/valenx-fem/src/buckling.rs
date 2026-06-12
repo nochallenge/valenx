@@ -98,8 +98,8 @@ use valenx_mesh::Mesh;
 
 use crate::material::FemMaterial;
 use crate::native_solver::{
-    check_dense_dofs, elasticity_matrix, element_stiffness, shape_gradients,
-    solve_linear_static, tet_volume, NativeSolverError, NodalConstraint, NodalForce,
+    check_dense_dofs, elasticity_matrix, element_stiffness, shape_gradients, solve_linear_static,
+    tet_volume, NativeSolverError, NodalConstraint, NodalForce,
 };
 
 /// The **Euler critical buckling load** `P_cr = π²·E·I / (K·L)²` of an ideal
@@ -159,7 +159,12 @@ pub fn critical_buckling_stress(
     if !area.is_finite() || area <= 0.0 {
         return 0.0;
     }
-    euler_critical_load(e_modulus, area_moment_of_inertia, length, effective_length_factor) / area
+    euler_critical_load(
+        e_modulus,
+        area_moment_of_inertia,
+        length,
+        effective_length_factor,
+    ) / area
 }
 
 /// The **radius of gyration** `r = √(I / A)` (m) of a cross-section — the distance from the
@@ -213,7 +218,9 @@ pub enum BucklingSolverError {
     Native(#[from] NativeSolverError),
     /// Fewer modes were requested than 1, or more than the constrained
     /// system can supply.
-    #[error("requested {requested} buckling modes but the constrained system has only {available} DOFs")]
+    #[error(
+        "requested {requested} buckling modes but the constrained system has only {available} DOFs"
+    )]
     TooManyModes {
         /// Modes the caller asked for.
         requested: usize,
@@ -315,9 +322,7 @@ pub fn solve_buckling(
     }
     let n_nodes = mesh.nodes.len();
     if n_nodes == 0 {
-        return Err(BucklingSolverError::Native(
-            NativeSolverError::EmptyMesh,
-        ));
+        return Err(BucklingSolverError::Native(NativeSolverError::EmptyMesh));
     }
     // Round-1 H1–H3: buckling builds TWO dense `n_dof × n_dof` matrices
     // (K and K_g) with NO prior cap. Reject an oversized mesh BEFORE the
@@ -327,8 +332,7 @@ pub fn solve_buckling(
     let n_dof = check_dense_dofs(n_nodes)?;
 
     // --- (1) reference linear-static solve → reference stress state ---
-    let static_sol =
-        solve_linear_static(mesh, material, constraints, reference_forces)?;
+    let static_sol = solve_linear_static(mesh, material, constraints, reference_forces)?;
 
     // --- (2) assemble the elastic K and the geometric K_g ---
     let d_matrix = elasticity_matrix(material)?;
@@ -368,11 +372,9 @@ pub fn solve_buckling(
             mesh.nodes[nodes[3]],
         ];
         // Element elastic stiffness.
-        let ke = element_stiffness(&coords, &d_matrix).ok_or(
-            BucklingSolverError::Native(NativeSolverError::DegenerateElement(
-                e,
-            )),
-        )?;
+        let ke = element_stiffness(&coords, &d_matrix).ok_or(BucklingSolverError::Native(
+            NativeSolverError::DegenerateElement(e),
+        ))?;
         // The element's reference stress — the average of its four
         // nodal stresses (the linear-static solve recovered nodal
         // stress; for a constant-strain tet the element stress is
@@ -384,11 +386,9 @@ pub fn solve_buckling(
             }
         }
         // Element geometric stiffness from that reference stress.
-        let kge = geometric_stiffness(&coords, &elem_stress).ok_or(
-            BucklingSolverError::Native(NativeSolverError::DegenerateElement(
-                e,
-            )),
-        )?;
+        let kge = geometric_stiffness(&coords, &elem_stress).ok_or(BucklingSolverError::Native(
+            NativeSolverError::DegenerateElement(e),
+        ))?;
         // Scatter both 12×12 matrices into the global system.
         for a in 0..4 {
             for i in 0..3 {
@@ -453,8 +453,8 @@ pub fn solve_buckling(
         .cholesky()
         .ok_or(BucklingSolverError::StiffnessNotPositiveDefinite)?;
     let l = chol.l();
-    let l_inv = invert_lower_triangular(&l)
-        .ok_or(BucklingSolverError::StiffnessNotPositiveDefinite)?;
+    let l_inv =
+        invert_lower_triangular(&l).ok_or(BucklingSolverError::StiffnessNotPositiveDefinite)?;
     let l_inv_t = l_inv.transpose();
     let mut c = &l_inv * &kg_ff * &l_inv_t;
     // Symmetrise to kill floating-point asymmetry.
@@ -462,8 +462,8 @@ pub fn solve_buckling(
     c = (&c + &c_t) * 0.5;
 
     // --- symmetric eigensolve of C ---
-    let eigen = nalgebra::SymmetricEigen::try_new(c, 1.0e-12, 0)
-        .ok_or(BucklingSolverError::EigenFailed)?;
+    let eigen =
+        nalgebra::SymmetricEigen::try_new(c, 1.0e-12, 0).ok_or(BucklingSolverError::EigenFailed)?;
     let eigvals = &eigen.eigenvalues;
     let eigvecs = &eigen.eigenvectors;
 
@@ -487,9 +487,7 @@ pub fn solve_buckling(
         return Err(BucklingSolverError::NoPositiveBucklingLoad);
     }
     // Sort ascending by load factor — the lowest buckles first.
-    candidates.sort_by(|a, b| {
-        a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
     // --- build the lowest n_modes BucklingModes ---
     let take = n_modes.min(candidates.len());
@@ -664,7 +662,10 @@ mod tests {
         let i = b * h.powi(3) / 12.0;
         let a = b * h;
         let r = section_radius_of_gyration(i, a);
-        assert!((r - h / 12.0_f64.sqrt()).abs() <= 1e-9 * r, "rectangle r = h/√12");
+        assert!(
+            (r - h / 12.0_f64.sqrt()).abs() <= 1e-9 * r,
+            "rectangle r = h/√12"
+        );
 
         // Definition: r² = I/A.
         assert!((r.powi(2) - i / a).abs() <= 1e-9 * (i / a), "r² = I/A");
@@ -696,7 +697,10 @@ mod tests {
 
         // Threads euler_critical_load: σ_cr = P_cr / A (the round-trip σ_cr·A = P_cr).
         let sigma = critical_buckling_stress(e, i, l, k, a);
-        assert!((sigma - euler_critical_load(e, i, l, k) / a).abs() <= 1e-9 * sigma, "σ = P_cr/A");
+        assert!(
+            (sigma - euler_critical_load(e, i, l, k) / a).abs() <= 1e-9 * sigma,
+            "σ = P_cr/A"
+        );
         assert!(
             (sigma * a - euler_critical_load(e, i, l, k)).abs()
                 <= 1e-9 * euler_critical_load(e, i, l, k),
@@ -709,44 +713,69 @@ mod tests {
 
         // Scaling: ∝ I, ∝ 1/L², ∝ 1/A.
         assert!(
-            (critical_buckling_stress(e, 3.0 * i, l, k, a) - 3.0 * sigma).abs() <= 1e-9 * (3.0 * sigma),
+            (critical_buckling_stress(e, 3.0 * i, l, k, a) - 3.0 * sigma).abs()
+                <= 1e-9 * (3.0 * sigma),
             "∝ I"
         );
         assert!(
-            (critical_buckling_stress(e, i, 2.0 * l, k, a) - sigma / 4.0).abs() <= 1e-9 * (sigma / 4.0),
+            (critical_buckling_stress(e, i, 2.0 * l, k, a) - sigma / 4.0).abs()
+                <= 1e-9 * (sigma / 4.0),
             "∝ 1/L² (2× longer → ¼ stress)"
         );
         assert!(
-            (critical_buckling_stress(e, i, l, k, 2.0 * a) - sigma / 2.0).abs() <= 1e-9 * (sigma / 2.0),
+            (critical_buckling_stress(e, i, l, k, 2.0 * a) - sigma / 2.0).abs()
+                <= 1e-9 * (sigma / 2.0),
             "∝ 1/A (2× area → ½ stress)"
         );
 
         // Area guard, and propagation of euler_critical_load's 0-sentinel.
         assert_eq!(critical_buckling_stress(e, i, l, k, 0.0), 0.0, "A ≤ 0 → 0");
         assert_eq!(critical_buckling_stress(e, i, l, k, -1.0e-3), 0.0);
-        assert_eq!(critical_buckling_stress(0.0, i, l, k, a), 0.0, "non-physical E → 0");
+        assert_eq!(
+            critical_buckling_stress(0.0, i, l, k, a),
+            0.0,
+            "non-physical E → 0"
+        );
     }
 
     #[test]
     fn euler_critical_load_matches_the_closed_form_and_end_conditions() {
         use std::f64::consts::PI;
         let (e, i, l) = (200.0e9, 1.0e-6, 2.0); // steel, I = 1e-6 m⁴, 2 m column
-        // Pinned–pinned (K=1): P_cr = π²EI/L² ≈ 4.93e5 N.
+                                                // Pinned–pinned (K=1): P_cr = π²EI/L² ≈ 4.93e5 N.
         let pinned = euler_critical_load(e, i, l, 1.0);
-        assert!((pinned - PI.powi(2) * e * i / (l * l)).abs() < 1e-3, "closed form");
+        assert!(
+            (pinned - PI.powi(2) * e * i / (l * l)).abs() < 1e-3,
+            "closed form"
+        );
         assert!((pinned - 4.9348e5).abs() < 1e2, "≈493 kN, got {pinned}");
         // End conditions scale as 1/K² relative to pinned–pinned: fixed–free K=2
         // → ¼, fixed–fixed K=0.5 → 4×, fixed–pinned K=0.7 → ~2.04×.
-        assert!((euler_critical_load(e, i, l, 2.0) - pinned / 4.0).abs() < 1.0, "fixed-free ¼");
-        assert!((euler_critical_load(e, i, l, 0.5) - 4.0 * pinned).abs() < 1.0, "fixed-fixed 4×");
+        assert!(
+            (euler_critical_load(e, i, l, 2.0) - pinned / 4.0).abs() < 1.0,
+            "fixed-free ¼"
+        );
+        assert!(
+            (euler_critical_load(e, i, l, 0.5) - 4.0 * pinned).abs() < 1.0,
+            "fixed-fixed 4×"
+        );
         assert!(
             (euler_critical_load(e, i, l, 0.7) / pinned - 1.0 / 0.49).abs() < 1e-9,
             "fixed-pinned ~2.04×"
         );
         // Scaling: ∝ E, ∝ I, ∝ 1/L².
-        assert!((euler_critical_load(2.0 * e, i, l, 1.0) - 2.0 * pinned).abs() < 1.0, "∝ E");
-        assert!((euler_critical_load(e, 3.0 * i, l, 1.0) - 3.0 * pinned).abs() < 1.0, "∝ I");
-        assert!((euler_critical_load(e, i, 2.0 * l, 1.0) - pinned / 4.0).abs() < 1.0, "∝ 1/L²");
+        assert!(
+            (euler_critical_load(2.0 * e, i, l, 1.0) - 2.0 * pinned).abs() < 1.0,
+            "∝ E"
+        );
+        assert!(
+            (euler_critical_load(e, 3.0 * i, l, 1.0) - 3.0 * pinned).abs() < 1.0,
+            "∝ I"
+        );
+        assert!(
+            (euler_critical_load(e, i, 2.0 * l, 1.0) - pinned / 4.0).abs() < 1.0,
+            "∝ 1/L²"
+        );
         // Non-physical input → 0.
         assert_eq!(euler_critical_load(0.0, i, l, 1.0), 0.0);
         assert_eq!(euler_critical_load(e, 0.0, l, 1.0), 0.0);
@@ -771,8 +800,7 @@ mod tests {
         for i in 0..12 {
             for j in 0..12 {
                 assert!(
-                    (kg[(i, j)] - kg[(j, i)]).abs()
-                        < 1e-3 * kg[(i, i)].abs().max(1.0),
+                    (kg[(i, j)] - kg[(j, i)]).abs() < 1e-3 * kg[(i, i)].abs().max(1.0),
                     "K_g must be symmetric"
                 );
             }
@@ -813,8 +841,7 @@ mod tests {
         for i in 0..12 {
             for j in 0..12 {
                 assert!(
-                    (kg_t[(i, j)] + kg_c[(i, j)]).abs()
-                        < 1e-3 * kg_t[(i, i)].abs().max(1.0),
+                    (kg_t[(i, j)] + kg_c[(i, j)]).abs() < 1e-3 * kg_t[(i, i)].abs().max(1.0),
                     "K_g(−σ) must equal −K_g(σ)"
                 );
             }
@@ -904,8 +931,8 @@ mod tests {
         // must approach the analytic Euler value.
         let b = 1.0;
         let l = 24.0; // slender: L/b = 24
-        // Enough elements along the length to resolve the smooth
-        // quarter-sine buckling mode.
+                      // Enough elements along the length to resolve the smooth
+                      // quarter-sine buckling mode.
         let (nx, ny, nz) = (2, 2, 24);
         let mesh = structured_box_mesh(b, b, l, nx, ny, nz).expect("valid box params");
         let e_mod = 200.0e9;
@@ -940,8 +967,7 @@ mod tests {
             })
             .collect();
 
-        let sol =
-            solve_buckling(&mesh, &mat, &constraints, &forces, 3).unwrap();
+        let sol = solve_buckling(&mesh, &mat, &constraints, &forces, 3).unwrap();
         let lambda = sol.critical_load_factor().unwrap();
         assert!(lambda > 0.0, "the critical load factor must be positive");
         // Since the reference load is unit, the buckling load IS the
@@ -998,8 +1024,7 @@ mod tests {
         // The free tip of the cantilever strut bows sideways the most —
         // its lateral displacement must be well away from zero.
         let tip = nid(nx / 2, ny / 2, nz, nx, ny);
-        let tip_lateral =
-            (m0.shape[tip][0].powi(2) + m0.shape[tip][1].powi(2)).sqrt();
+        let tip_lateral = (m0.shape[tip][0].powi(2) + m0.shape[tip][1].powi(2)).sqrt();
         assert!(
             tip_lateral > 0.3,
             "the cantilever tip should bow sideways, lateral motion {tip_lateral}"
@@ -1027,8 +1052,7 @@ mod tests {
             let mut constraints = Vec::new();
             for j in 0..=ny {
                 for i in 0..=nx {
-                    constraints
-                        .push(NodalConstraint::fixed(nid(i, j, 0, nx, ny)));
+                    constraints.push(NodalConstraint::fixed(nid(i, j, 0, nx, ny)));
                 }
             }
             let top_nodes: Vec<usize> = (0..=ny)
@@ -1043,8 +1067,7 @@ mod tests {
                     force: [0.0, 0.0, -per],
                 })
                 .collect();
-            let sol =
-                solve_buckling(&mesh, &mat, &constraints, &forces, 1).unwrap();
+            let sol = solve_buckling(&mesh, &mat, &constraints, &forces, 1).unwrap();
             sol.critical_load_factor().unwrap()
         };
 

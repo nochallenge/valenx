@@ -36,11 +36,7 @@ impl StructureRecord {
     ///
     /// # Errors
     /// [`RnaStructError::Structure`] on a length mismatch.
-    pub fn new(
-        title: impl Into<String>,
-        seq: RnaSeq,
-        structure: Structure,
-    ) -> Result<Self> {
+    pub fn new(title: impl Into<String>, seq: RnaSeq, structure: Structure) -> Result<Self> {
         if seq.len() != structure.len() {
             return Err(RnaStructError::structure(format!(
                 "sequence length {} != structure length {}",
@@ -89,10 +85,7 @@ pub fn read_ct(text: &str) -> Result<StructureRecord> {
     if n > text.len() {
         return Err(RnaStructError::parse(
             "ct",
-            format!(
-                "declared length {n} exceeds file size {} bytes",
-                text.len()
-            ),
+            format!("declared length {n} exceeds file size {} bytes", text.len()),
         ));
     }
 
@@ -268,8 +261,7 @@ fn finish_record(
             }
         }
     }
-    let seq = RnaSeq::parse(bases)
-        .map_err(|e| RnaStructError::parse(format, e.to_string()))?;
+    let seq = RnaSeq::parse(bases).map_err(|e| RnaStructError::parse(format, e.to_string()))?;
     let structure = Structure::from_partner(partner)
         .map_err(|e| RnaStructError::parse(format, e.to_string()))?;
     StructureRecord::new(title, seq, structure)

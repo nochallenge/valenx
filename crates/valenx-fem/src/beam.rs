@@ -529,12 +529,7 @@ pub fn cantilever_udl_tip_slope(
 /// stiffer material or a fatter section twists less). For a solid circular shaft
 /// `J = πr⁴/2`. Returns `0` for non-physical input (`T` non-finite, or `G`, `J`,
 /// or `L` non-positive or non-finite).
-pub fn beam_angle_of_twist(
-    torque: f64,
-    length: f64,
-    shear_modulus: f64,
-    polar_moment: f64,
-) -> f64 {
+pub fn beam_angle_of_twist(torque: f64, length: f64, shear_modulus: f64, polar_moment: f64) -> f64 {
     if !torque.is_finite()
         || !length.is_finite()
         || length <= 0.0
@@ -557,7 +552,10 @@ pub fn beam_angle_of_twist(
 /// `γ = r·θ/L`. Returns `0` for non-physical input (`T` or `r` non-finite, or `J`
 /// non-positive or non-finite).
 pub fn torsional_shear_stress(torque: f64, radius: f64, polar_moment: f64) -> f64 {
-    if !torque.is_finite() || !radius.is_finite() || !polar_moment.is_finite() || polar_moment <= 0.0
+    if !torque.is_finite()
+        || !radius.is_finite()
+        || !polar_moment.is_finite()
+        || polar_moment <= 0.0
     {
         return 0.0;
     }
@@ -872,7 +870,11 @@ pub fn p_wave_modulus(youngs_modulus: f64, poisson_ratio: f64) -> f64 {
 /// material's yield strength). It is the stress conjugate of the curvature
 /// [`beam_curvature`] through Hooke's law `σ = E·κ·y`. Returns `0` for non-physical
 /// input (`M` or `y` non-finite, or `I` non-positive or non-finite).
-pub fn bending_stress(moment: f64, distance_from_neutral_axis: f64, second_moment_area: f64) -> f64 {
+pub fn bending_stress(
+    moment: f64,
+    distance_from_neutral_axis: f64,
+    second_moment_area: f64,
+) -> f64 {
     if !moment.is_finite()
         || !distance_from_neutral_axis.is_finite()
         || !second_moment_area.is_finite()
@@ -1519,7 +1521,10 @@ pub fn two_span_continuous_beam_udl_outer_reaction(load_per_length: f64, span_le
 /// extra span shares the load. Pure statics: independent of `E` and `I`, linear in `w`,
 /// quadratic in `L`. Returns `0` for non-physical input (`w` non-finite, or `L` non-positive
 /// or non-finite).
-pub fn three_span_continuous_beam_udl_interior_moment(load_per_length: f64, span_length: f64) -> f64 {
+pub fn three_span_continuous_beam_udl_interior_moment(
+    load_per_length: f64,
+    span_length: f64,
+) -> f64 {
     if !load_per_length.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
         return 0.0;
     }
@@ -1555,7 +1560,10 @@ pub fn three_span_continuous_beam_udl_end_reaction(load_per_length: f64, span_le
 /// reactions sum to the total load `2·R_A + 2·R_B = 3wL`, giving `R_B = 11wL/10`. Pure
 /// statics: independent of `E` and `I`, linear in `w` and `L`. Returns `0` for non-physical
 /// input (`w` non-finite, or `L` non-positive or non-finite).
-pub fn three_span_continuous_beam_udl_interior_reaction(load_per_length: f64, span_length: f64) -> f64 {
+pub fn three_span_continuous_beam_udl_interior_reaction(
+    load_per_length: f64,
+    span_length: f64,
+) -> f64 {
     if !load_per_length.is_finite() || !span_length.is_finite() || span_length <= 0.0 {
         return 0.0;
     }
@@ -2055,9 +2063,7 @@ impl BeamSection {
         let a_h = long / 2.0;
         let b_h = short / 2.0;
         let ratio = b_h / a_h;
-        let j = a_h
-            * b_h.powi(3)
-            * (16.0 / 3.0 - 3.36 * ratio * (1.0 - ratio.powi(4) / 12.0));
+        let j = a_h * b_h.powi(3) * (16.0 / 3.0 - 3.36 * ratio * (1.0 - ratio.powi(4) / 12.0));
         Self {
             area: a,
             iy,
@@ -2197,14 +2203,7 @@ impl BeamConstraint {
     pub fn pinned(node: usize) -> Self {
         Self {
             node,
-            fixed: [
-                Some(0.0),
-                Some(0.0),
-                Some(0.0),
-                None,
-                None,
-                None,
-            ],
+            fixed: [Some(0.0), Some(0.0), Some(0.0), None, None, None],
         }
     }
 }
@@ -2366,12 +2365,7 @@ fn beam_triad(
 /// element's local frame (`x` along the beam). Couples axial, torsion
 /// and the two bending planes; the bending blocks carry the Timoshenko
 /// shear-flexibility factors `Φ` so a stocky beam is handled correctly.
-fn beam_local_stiffness(
-    length: f64,
-    e: f64,
-    g: f64,
-    s: &BeamSection,
-) -> DMatrix<f64> {
+fn beam_local_stiffness(length: f64, e: f64, g: f64, s: &BeamSection) -> DMatrix<f64> {
     let l = length;
     let mut k = DMatrix::<f64>::zeros(12, 12);
 
@@ -2567,12 +2561,10 @@ fn beam_transform(r: &Matrix3<f64>) -> DMatrix<f64> {
 /// re-tagged as the beam-local [`BeamSolverError::TooLarge`]. Pure
 /// `O(1)` arithmetic, no allocation.
 fn check_beam_dense_dofs(n_nodes: usize) -> Result<usize, BeamSolverError> {
-    let n_dof = n_nodes
-        .checked_mul(6)
-        .ok_or(BeamSolverError::TooLarge {
-            dofs: usize::MAX,
-            max: crate::native_solver::MAX_DENSE_DOFS,
-        })?;
+    let n_dof = n_nodes.checked_mul(6).ok_or(BeamSolverError::TooLarge {
+        dofs: usize::MAX,
+        max: crate::native_solver::MAX_DENSE_DOFS,
+    })?;
     crate::native_solver::check_dense_dof_count(n_dof).map_err(|e| match e {
         crate::native_solver::NativeSolverError::TooLarge { dofs, max } => {
             BeamSolverError::TooLarge { dofs, max }
@@ -2994,7 +2986,10 @@ mod tests {
         let s = BeamSection::circle(0.05);
         let i = std::f64::consts::PI * 0.05_f64.powi(4) / 4.0;
         assert!((s.iy - i).abs() < 1e-18);
-        assert!((s.j - 2.0 * i).abs() < 1e-18, "J should be the polar moment");
+        assert!(
+            (s.j - 2.0 * i).abs() < 1e-18,
+            "J should be the polar moment"
+        );
     }
 
     #[test]
@@ -3026,7 +3021,10 @@ mod tests {
         let mut ty = DVector::zeros(12);
         ty[1] = 1.0;
         ty[7] = 1.0;
-        assert!((&k * &ty).norm() < 1e-3 * k.norm(), "transverse-y rigid mode");
+        assert!(
+            (&k * &ty).norm() < 1e-3 * k.norm(),
+            "transverse-y rigid mode"
+        );
         // Rigid rotation about local z: v = θz·x, so node 2 (at x=L)
         // gets v = L and both nodes get θz = 1.
         let mut rz = DVector::zeros(12);
@@ -3093,21 +3091,31 @@ mod tests {
         ] {
             let from_moment = cantilever_udl_root_moment(w, l) * l * l / (4.0 * e * i);
             let delta = cantilever_udl_tip_deflection(w, l, e, i);
-            assert!((from_moment - delta).abs() <= 1e-12 * delta.abs(), "M·L²/4EI = δ_udl");
+            assert!(
+                (from_moment - delta).abs() <= 1e-12 * delta.abs(),
+                "M·L²/4EI = δ_udl"
+            );
 
             let from_moment_u = cantilever_udl_root_moment(w, l).powi(2) * l / (10.0 * e * i);
             let energy = cantilever_udl_strain_energy(w, l, e, i);
-            assert!((from_moment_u - energy).abs() <= 1e-12 * energy.abs(), "M²·L/10EI = U");
+            assert!(
+                (from_moment_u - energy).abs() <= 1e-12 * energy.abs(),
+                "M²·L/10EI = U"
+            );
         }
 
         // Quadratic in span; linear and sign-preserving in w.
         assert!(
-            (cantilever_udl_root_moment(1000.0, 4.0) - 4.0 * cantilever_udl_root_moment(1000.0, 2.0))
-                .abs()
+            (cantilever_udl_root_moment(1000.0, 4.0)
+                - 4.0 * cantilever_udl_root_moment(1000.0, 2.0))
+            .abs()
                 < 1e-9,
             "quadratic in L"
         );
-        assert!(cantilever_udl_root_moment(-1000.0, 2.0) < 0.0, "sign follows the load");
+        assert!(
+            cantilever_udl_root_moment(-1000.0, 2.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(cantilever_udl_root_moment(f64::NAN, 2.0), 0.0);
@@ -3125,9 +3133,15 @@ mod tests {
         // distributed load, and the root moment is the shear acting at the load centroid L/2.
         for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 1.2)] {
             let shear = cantilever_udl_max_shear(w, l);
-            assert!((shear - w * l).abs() <= 1e-12 * (w * l).abs(), "V = total load w·L");
+            assert!(
+                (shear - w * l).abs() <= 1e-12 * (w * l).abs(),
+                "V = total load w·L"
+            );
             let moment = cantilever_udl_root_moment(w, l);
-            assert!((moment - shear * l / 2.0).abs() <= 1e-9 * moment.abs(), "M_root = V·L/2");
+            assert!(
+                (moment - shear * l / 2.0).abs() <= 1e-9 * moment.abs(),
+                "M_root = V·L/2"
+            );
         }
 
         // Linear in w and L; sign follows the load.
@@ -3143,7 +3157,10 @@ mod tests {
                 < 1e-9,
             "linear in L"
         );
-        assert!(cantilever_udl_max_shear(-1000.0, 2.0) < 0.0, "sign follows the load");
+        assert!(
+            cantilever_udl_max_shear(-1000.0, 2.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(cantilever_udl_max_shear(f64::NAN, 2.0), 0.0);
@@ -3166,16 +3183,24 @@ mod tests {
         ] {
             let from_moment = cantilever_point_load_root_moment(p, l) * l * l / (3.0 * e * i);
             let delta = cantilever_tip_deflection(p, l, e, i);
-            assert!((from_moment - delta).abs() <= 1e-12 * delta.abs(), "M·L²/3EI = δ_tip");
+            assert!(
+                (from_moment - delta).abs() <= 1e-12 * delta.abs(),
+                "M·L²/3EI = δ_tip"
+            );
 
-            let from_moment_u =
-                cantilever_point_load_root_moment(p, l).powi(2) * l / (6.0 * e * i);
+            let from_moment_u = cantilever_point_load_root_moment(p, l).powi(2) * l / (6.0 * e * i);
             let energy = cantilever_point_load_strain_energy(p, l, e, i);
-            assert!((from_moment_u - energy).abs() <= 1e-12 * energy.abs(), "M²·L/6EI = U");
+            assert!(
+                (from_moment_u - energy).abs() <= 1e-12 * energy.abs(),
+                "M²·L/6EI = U"
+            );
         }
 
         // Linear and sign-preserving in P; linear in L.
-        assert!(cantilever_point_load_root_moment(-1000.0, 2.0) < 0.0, "sign follows the load");
+        assert!(
+            cantilever_point_load_root_moment(-1000.0, 2.0) < 0.0,
+            "sign follows the load"
+        );
         assert!(
             (cantilever_point_load_root_moment(1000.0, 4.0)
                 - 2.0 * cantilever_point_load_root_moment(1000.0, 2.0))
@@ -3221,7 +3246,10 @@ mod tests {
                 < 1e-9,
             "independent of L",
         );
-        assert!(cantilever_point_load_max_shear(-1000.0, 2.0) < 0.0, "sign follows the load");
+        assert!(
+            cantilever_point_load_max_shear(-1000.0, 2.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(cantilever_point_load_max_shear(f64::NAN, 2.0), 0.0);
@@ -3270,10 +3298,22 @@ mod tests {
         );
 
         // (d) GUARD: non-physical input → 0.
-        assert_eq!(cantilever_end_moment_tip_deflection(f64::NAN, 2.0, 200.0e9, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_tip_deflection(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_tip_deflection(1000.0, 2.0, 0.0, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_tip_deflection(1000.0, 2.0, 200.0e9, 0.0), 0.0);
+        assert_eq!(
+            cantilever_end_moment_tip_deflection(f64::NAN, 2.0, 200.0e9, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_tip_deflection(1000.0, 0.0, 200.0e9, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_tip_deflection(1000.0, 2.0, 0.0, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_tip_deflection(1000.0, 2.0, 200.0e9, 0.0),
+            0.0
+        );
     }
 
     #[test]
@@ -3305,7 +3345,7 @@ mod tests {
         assert!(
             (cantilever_end_moment_tip_slope(m, l, e, i)
                 - 2.0 * cantilever_end_moment_tip_deflection(m, l, e, i) / l)
-            .abs()
+                .abs()
                 <= 1e-9 * cantilever_end_moment_tip_slope(m, l, e, i),
             "θ = 2δ/L"
         );
@@ -3328,10 +3368,22 @@ mod tests {
         );
 
         // (e) GUARD: non-physical input → 0.
-        assert_eq!(cantilever_end_moment_tip_slope(f64::NAN, 2.0, 200.0e9, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_tip_slope(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_tip_slope(1000.0, 2.0, 0.0, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_tip_slope(1000.0, 2.0, 200.0e9, 0.0), 0.0);
+        assert_eq!(
+            cantilever_end_moment_tip_slope(f64::NAN, 2.0, 200.0e9, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_tip_slope(1000.0, 0.0, 200.0e9, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_tip_slope(1000.0, 2.0, 0.0, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_tip_slope(1000.0, 2.0, 200.0e9, 0.0),
+            0.0
+        );
     }
 
     #[test]
@@ -3376,10 +3428,22 @@ mod tests {
         );
 
         // (d) GUARD: non-physical input → 0.
-        assert_eq!(cantilever_end_moment_strain_energy(f64::NAN, 2.0, 200.0e9, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_strain_energy(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_strain_energy(1000.0, 2.0, 0.0, 1.0e-6), 0.0);
-        assert_eq!(cantilever_end_moment_strain_energy(1000.0, 2.0, 200.0e9, 0.0), 0.0);
+        assert_eq!(
+            cantilever_end_moment_strain_energy(f64::NAN, 2.0, 200.0e9, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_strain_energy(1000.0, 0.0, 200.0e9, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_strain_energy(1000.0, 2.0, 0.0, 1.0e-6),
+            0.0
+        );
+        assert_eq!(
+            cantilever_end_moment_strain_energy(1000.0, 2.0, 200.0e9, 0.0),
+            0.0
+        );
     }
 
     #[test]
@@ -3388,15 +3452,30 @@ mod tests {
         // E = 200 GPa, I = 1e-6 m⁴ → δ = P·L³/(3·E·I) = 8000/6e5 = 1/75 ≈ 0.01333 m.
         let (p, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
         let delta = cantilever_tip_deflection(p, l, e, i);
-        assert!((delta - 1.0 / 75.0).abs() / delta < 1e-9, "δ = 1/75 m, got {delta}");
+        assert!(
+            (delta - 1.0 / 75.0).abs() / delta < 1e-9,
+            "δ = 1/75 m, got {delta}"
+        );
         // Linear in the load, and sign-preserving (an upward load lifts the tip).
         assert!((cantilever_tip_deflection(2.0 * p, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
-        assert!((cantilever_tip_deflection(-p, l, e, i) + delta).abs() / delta < 1e-12, "sign-preserving");
+        assert!(
+            (cantilever_tip_deflection(-p, l, e, i) + delta).abs() / delta < 1e-12,
+            "sign-preserving"
+        );
         // Cubic in the span: double L → 8× δ.
-        assert!((cantilever_tip_deflection(p, 2.0 * l, e, i) - 8.0 * delta).abs() / delta < 1e-9, "L³ scaling");
+        assert!(
+            (cantilever_tip_deflection(p, 2.0 * l, e, i) - 8.0 * delta).abs() / delta < 1e-9,
+            "L³ scaling"
+        );
         // Inverse in the flexural rigidity E·I: double E or I → half δ.
-        assert!((cantilever_tip_deflection(p, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
-        assert!((cantilever_tip_deflection(p, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        assert!(
+            (cantilever_tip_deflection(p, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (cantilever_tip_deflection(p, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12,
+            "1/I"
+        );
         // Non-physical input → 0.
         assert_eq!(cantilever_tip_deflection(p, l, e, -1.0e-6), 0.0); // I ≤ 0
         assert_eq!(cantilever_tip_deflection(p, l, 0.0, i), 0.0); // E ≤ 0
@@ -3414,18 +3493,38 @@ mod tests {
         assert!((u - 20.0 / 3.0).abs() / u < 1e-9, "U = 20/3 J, got {u}");
         // Quadratic in the load → SIGN-INDEPENDENT: an up- or down-load store equal
         // energy (unlike deflection, which is sign-preserving).
-        assert!((cantilever_point_load_strain_energy(2.0 * p, l, e, i) - 4.0 * u).abs() / u < 1e-9, "P² scaling");
-        assert!((cantilever_point_load_strain_energy(-p, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
+        assert!(
+            (cantilever_point_load_strain_energy(2.0 * p, l, e, i) - 4.0 * u).abs() / u < 1e-9,
+            "P² scaling"
+        );
+        assert!(
+            (cantilever_point_load_strain_energy(-p, l, e, i) - u).abs() / u < 1e-12,
+            "sign-independent"
+        );
         // Cubic in the span: double L → 8× U.
-        assert!((cantilever_point_load_strain_energy(p, 2.0 * l, e, i) - 8.0 * u).abs() / u < 1e-9, "L³ scaling");
+        assert!(
+            (cantilever_point_load_strain_energy(p, 2.0 * l, e, i) - 8.0 * u).abs() / u < 1e-9,
+            "L³ scaling"
+        );
         // Inverse in the flexural rigidity E·I: double E or I → half U.
-        assert!((cantilever_point_load_strain_energy(p, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
-        assert!((cantilever_point_load_strain_energy(p, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        assert!(
+            (cantilever_point_load_strain_energy(p, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (cantilever_point_load_strain_energy(p, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12,
+            "1/I"
+        );
         // STRONG non-tautological cross-check via Clapeyron's theorem: the work a
         // single static load does is half the load times the deflection it makes,
         // U = ½·P·δ_tip. The energy impl is ∫M²/(2EI) → P²L³/(6EI); the check uses the
         // independent deflection fn (P·L³/(3EI)) — different path, same value.
-        for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+        for &(pp, ll) in &[
+            (1000.0_f64, 2.0_f64),
+            (250.0, 1.5),
+            (-800.0, 3.0),
+            (4200.0, 0.8),
+        ] {
             let energy = cantilever_point_load_strain_energy(pp, ll, e, i);
             let half_p_delta = 0.5 * pp * cantilever_tip_deflection(pp, ll, e, i);
             assert!(
@@ -3438,7 +3537,10 @@ mod tests {
         assert_eq!(cantilever_point_load_strain_energy(p, l, 0.0, i), 0.0); // E ≤ 0
         assert_eq!(cantilever_point_load_strain_energy(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(cantilever_point_load_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite P
-        assert_eq!(cantilever_point_load_strain_energy(p, l, f64::INFINITY, i), 0.0); // non-finite E
+        assert_eq!(
+            cantilever_point_load_strain_energy(p, l, f64::INFINITY, i),
+            0.0
+        ); // non-finite E
     }
 
     #[test]
@@ -3449,14 +3551,38 @@ mod tests {
         let u = simply_supported_point_load_strain_energy(p, l, e, i);
         assert!((u - 5.0 / 12.0).abs() / u < 1e-9, "U = 5/12 J, got {u}");
         // Quadratic in the load → SIGN-INDEPENDENT; cubic in span; inverse in E·I.
-        assert!((simply_supported_point_load_strain_energy(2.0 * p, l, e, i) - 4.0 * u).abs() / u < 1e-9, "P² scaling");
-        assert!((simply_supported_point_load_strain_energy(-p, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
-        assert!((simply_supported_point_load_strain_energy(p, 2.0 * l, e, i) - 8.0 * u).abs() / u < 1e-9, "L³ scaling");
-        assert!((simply_supported_point_load_strain_energy(p, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
-        assert!((simply_supported_point_load_strain_energy(p, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        assert!(
+            (simply_supported_point_load_strain_energy(2.0 * p, l, e, i) - 4.0 * u).abs() / u
+                < 1e-9,
+            "P² scaling"
+        );
+        assert!(
+            (simply_supported_point_load_strain_energy(-p, l, e, i) - u).abs() / u < 1e-12,
+            "sign-independent"
+        );
+        assert!(
+            (simply_supported_point_load_strain_energy(p, 2.0 * l, e, i) - 8.0 * u).abs() / u
+                < 1e-9,
+            "L³ scaling"
+        );
+        assert!(
+            (simply_supported_point_load_strain_energy(p, l, 2.0 * e, i) - 0.5 * u).abs() / u
+                < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (simply_supported_point_load_strain_energy(p, l, e, 2.0 * i) - 0.5 * u).abs() / u
+                < 1e-12,
+            "1/I"
+        );
         // STRONG cross-check (1) via Clapeyron's theorem U = ½·P·δ_centre, threading
         // the independent simply_supported_center_deflection (δ = P·L³/(48EI)).
-        for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+        for &(pp, ll) in &[
+            (1000.0_f64, 2.0_f64),
+            (250.0, 1.5),
+            (-800.0, 3.0),
+            (4200.0, 0.8),
+        ] {
             let energy = simply_supported_point_load_strain_energy(pp, ll, e, i);
             let half_p_delta = 0.5 * pp * simply_supported_center_deflection(pp, ll, e, i);
             assert!(
@@ -3469,14 +3595,29 @@ mod tests {
         for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (4200.0, 0.8)] {
             let ss = simply_supported_point_load_strain_energy(pp, ll, e, i);
             let cant = cantilever_point_load_strain_energy(pp, ll, e, i);
-            assert!((cant - 16.0 * ss).abs() / cant < 1e-12, "cantilever = 16× SS at P={pp}, L={ll}");
+            assert!(
+                (cant - 16.0 * ss).abs() / cant < 1e-12,
+                "cantilever = 16× SS at P={pp}, L={ll}"
+            );
         }
         // Non-physical input → 0.
-        assert_eq!(simply_supported_point_load_strain_energy(p, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(
+            simply_supported_point_load_strain_energy(p, l, e, -1.0e-6),
+            0.0
+        ); // I ≤ 0
         assert_eq!(simply_supported_point_load_strain_energy(p, l, 0.0, i), 0.0); // E ≤ 0
-        assert_eq!(simply_supported_point_load_strain_energy(p, -1.0, e, i), 0.0); // L ≤ 0
-        assert_eq!(simply_supported_point_load_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite P
-        assert_eq!(simply_supported_point_load_strain_energy(p, l, f64::INFINITY, i), 0.0); // non-finite E
+        assert_eq!(
+            simply_supported_point_load_strain_energy(p, -1.0, e, i),
+            0.0
+        ); // L ≤ 0
+        assert_eq!(
+            simply_supported_point_load_strain_energy(f64::NAN, l, e, i),
+            0.0
+        ); // non-finite P
+        assert_eq!(
+            simply_supported_point_load_strain_energy(p, l, f64::INFINITY, i),
+            0.0
+        ); // non-finite E
     }
 
     #[test]
@@ -3530,20 +3671,40 @@ mod tests {
         // I = 1e-6 m⁴ → θ = P·L²/(2·E·I) = 4000/4e5 = 0.01 rad.
         let (p, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
         let theta = cantilever_tip_slope(p, l, e, i);
-        assert!((theta - 0.01).abs() / theta < 1e-12, "θ = 0.01 rad, got {theta}");
+        assert!(
+            (theta - 0.01).abs() / theta < 1e-12,
+            "θ = 0.01 rad, got {theta}"
+        );
         // Linear in the load, and sign-preserving (an upward load rotates the tip up).
         assert!((cantilever_tip_slope(2.0 * p, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
-        assert!((cantilever_tip_slope(-p, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
+        assert!(
+            (cantilever_tip_slope(-p, l, e, i) + theta).abs() / theta < 1e-12,
+            "sign-preserving"
+        );
         // Quadratic in the span: double L → 4× θ.
-        assert!((cantilever_tip_slope(p, 2.0 * l, e, i) - 4.0 * theta).abs() / theta < 1e-12, "L² scaling");
+        assert!(
+            (cantilever_tip_slope(p, 2.0 * l, e, i) - 4.0 * theta).abs() / theta < 1e-12,
+            "L² scaling"
+        );
         // Inverse in the flexural rigidity E·I: double E or I → half θ.
-        assert!((cantilever_tip_slope(p, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
-        assert!((cantilever_tip_slope(p, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        assert!(
+            (cantilever_tip_slope(p, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (cantilever_tip_slope(p, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/I"
+        );
         // STRONG non-tautological cross-check tying it to #176: for a tip-loaded
         // cantilever the tip deflection is exactly two-thirds of the span times the
         // tip slope, δ = (2/3)·L·θ. The slope impl uses L²/(2EI); the check uses the
         // independent deflection fn L³/(3EI) — a known beam relation, different path.
-        for &(pp, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+        for &(pp, ll) in &[
+            (1000.0_f64, 2.0_f64),
+            (250.0, 1.5),
+            (-800.0, 3.0),
+            (4200.0, 0.8),
+        ] {
             let slope = cantilever_tip_slope(pp, ll, e, i);
             let defl = cantilever_tip_deflection(pp, ll, e, i);
             assert!(
@@ -3565,21 +3726,43 @@ mod tests {
         // E = 200 GPa, I = 1e-6 m⁴ → δ = w·L⁴/(8·E·I) = 16000/1.6e6 = 0.01 m.
         let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
         let delta = cantilever_udl_tip_deflection(w, l, e, i);
-        assert!((delta - 0.01).abs() / delta < 1e-9, "δ = 0.01 m, got {delta}");
+        assert!(
+            (delta - 0.01).abs() / delta < 1e-9,
+            "δ = 0.01 m, got {delta}"
+        );
         // Linear in the load intensity, and sign-preserving (an upward load lifts the tip).
-        assert!((cantilever_udl_tip_deflection(2.0 * w, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
-        assert!((cantilever_udl_tip_deflection(-w, l, e, i) + delta).abs() / delta < 1e-12, "sign-preserving");
+        assert!(
+            (cantilever_udl_tip_deflection(2.0 * w, l, e, i) - 2.0 * delta).abs() / delta < 1e-12
+        );
+        assert!(
+            (cantilever_udl_tip_deflection(-w, l, e, i) + delta).abs() / delta < 1e-12,
+            "sign-preserving"
+        );
         // Quartic in the span: double L → 16× δ.
-        assert!((cantilever_udl_tip_deflection(w, 2.0 * l, e, i) - 16.0 * delta).abs() / delta < 1e-9, "L⁴ scaling");
+        assert!(
+            (cantilever_udl_tip_deflection(w, 2.0 * l, e, i) - 16.0 * delta).abs() / delta < 1e-9,
+            "L⁴ scaling"
+        );
         // Inverse in the flexural rigidity E·I: double E or I → half δ.
-        assert!((cantilever_udl_tip_deflection(w, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
-        assert!((cantilever_udl_tip_deflection(w, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        assert!(
+            (cantilever_udl_tip_deflection(w, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (cantilever_udl_tip_deflection(w, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12,
+            "1/I"
+        );
         // STRONG non-tautological cross-check: the same TOTAL load W = w·L, spread as a
         // UDL, deflects the tip to exactly 3/8 of the same total concentrated at the
         // tip. The UDL impl uses w·L⁴/(8EI); the check uses the independent point-load
         // fn cantilever_tip_deflection (P·L³/(3EI)) with P = w·L — a known
         // structural-mechanics ratio, a different code path.
-        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+        for &(ww, ll) in &[
+            (1000.0_f64, 2.0_f64),
+            (250.0, 1.5),
+            (-800.0, 3.0),
+            (4200.0, 0.8),
+        ] {
             let udl = cantilever_udl_tip_deflection(ww, ll, e, i);
             let point = cantilever_tip_deflection(ww * ll, ll, e, i);
             assert!(
@@ -3603,11 +3786,26 @@ mod tests {
         let u = cantilever_udl_strain_energy(w, l, e, i);
         assert!((u - 4.0).abs() / u < 1e-9, "U = 4.0 J, got {u}");
         // Quadratic in w → SIGN-INDEPENDENT; L⁵ scaling; inverse in E·I.
-        assert!((cantilever_udl_strain_energy(2.0 * w, l, e, i) - 4.0 * u).abs() / u < 1e-9, "w² scaling");
-        assert!((cantilever_udl_strain_energy(-w, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
-        assert!((cantilever_udl_strain_energy(w, 2.0 * l, e, i) - 32.0 * u).abs() / u < 1e-9, "L⁵ scaling");
-        assert!((cantilever_udl_strain_energy(w, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
-        assert!((cantilever_udl_strain_energy(w, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        assert!(
+            (cantilever_udl_strain_energy(2.0 * w, l, e, i) - 4.0 * u).abs() / u < 1e-9,
+            "w² scaling"
+        );
+        assert!(
+            (cantilever_udl_strain_energy(-w, l, e, i) - u).abs() / u < 1e-12,
+            "sign-independent"
+        );
+        assert!(
+            (cantilever_udl_strain_energy(w, 2.0 * l, e, i) - 32.0 * u).abs() / u < 1e-9,
+            "L⁵ scaling"
+        );
+        assert!(
+            (cantilever_udl_strain_energy(w, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (cantilever_udl_strain_energy(w, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12,
+            "1/I"
+        );
         // STRONG cross-check (1): a first-principles NUMERICAL Riemann integral of the
         // bending energy ∫₀^L M(x)²/(2EI) dx with the cantilever-UDL moment
         // M(x) = w(L−x)²/2 — an independent derivation of the closed form.
@@ -3619,7 +3817,10 @@ mod tests {
             let m = w * (l - x) * (l - x) / 2.0;
             energy_sum += m * m / (2.0 * e * i) * dx;
         }
-        assert!((u - energy_sum).abs() / u < 1e-5, "U = ∫M²/(2EI)dx numerically: {u} vs {energy_sum}");
+        assert!(
+            (u - energy_sum).abs() / u < 1e-5,
+            "U = ∫M²/(2EI)dx numerically: {u} vs {energy_sum}"
+        );
         // STRONG cross-check (2): U = (1/5)·(w·L)·δ_tip, threading the independent
         // cantilever_udl_tip_deflection (δ = wL⁴/(8EI)).
         for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (300.0, 1.5), (-750.0, 3.0)] {
@@ -3646,11 +3847,26 @@ mod tests {
         let u = simply_supported_udl_strain_energy(w, l, e, i);
         assert!((u - 2.0 / 3.0).abs() / u < 1e-9, "U = 2/3 J, got {u}");
         // Quadratic in w → SIGN-INDEPENDENT; L⁵ scaling; inverse in E·I.
-        assert!((simply_supported_udl_strain_energy(2.0 * w, l, e, i) - 4.0 * u).abs() / u < 1e-9, "w² scaling");
-        assert!((simply_supported_udl_strain_energy(-w, l, e, i) - u).abs() / u < 1e-12, "sign-independent");
-        assert!((simply_supported_udl_strain_energy(w, 2.0 * l, e, i) - 32.0 * u).abs() / u < 1e-9, "L⁵ scaling");
-        assert!((simply_supported_udl_strain_energy(w, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12, "1/E");
-        assert!((simply_supported_udl_strain_energy(w, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12, "1/I");
+        assert!(
+            (simply_supported_udl_strain_energy(2.0 * w, l, e, i) - 4.0 * u).abs() / u < 1e-9,
+            "w² scaling"
+        );
+        assert!(
+            (simply_supported_udl_strain_energy(-w, l, e, i) - u).abs() / u < 1e-12,
+            "sign-independent"
+        );
+        assert!(
+            (simply_supported_udl_strain_energy(w, 2.0 * l, e, i) - 32.0 * u).abs() / u < 1e-9,
+            "L⁵ scaling"
+        );
+        assert!(
+            (simply_supported_udl_strain_energy(w, l, 2.0 * e, i) - 0.5 * u).abs() / u < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (simply_supported_udl_strain_energy(w, l, e, 2.0 * i) - 0.5 * u).abs() / u < 1e-12,
+            "1/I"
+        );
         // STRONG cross-check (1): a first-principles NUMERICAL Riemann integral of the
         // bending energy ∫₀^L M(x)²/(2EI) dx with the SS-UDL moment M(x) = (w/2)·x·(L−x).
         let n = 100_000;
@@ -3661,20 +3877,29 @@ mod tests {
             let m = 0.5 * w * x * (l - x);
             energy_sum += m * m / (2.0 * e * i) * dx;
         }
-        assert!((u - energy_sum).abs() / u < 1e-5, "U = ∫M²/(2EI)dx numerically: {u} vs {energy_sum}");
+        assert!(
+            (u - energy_sum).abs() / u < 1e-5,
+            "U = ∫M²/(2EI)dx numerically: {u} vs {energy_sum}"
+        );
         // STRONG cross-check (2): completing the energy 2×2 matrix — for equal w,L,E,I
         // a cantilever stores exactly 6× the simply-supported UDL energy (threads #248).
         for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (300.0, 1.5), (-750.0, 3.0)] {
             let ss = simply_supported_udl_strain_energy(ww, ll, e, i);
             let cant = cantilever_udl_strain_energy(ww, ll, e, i);
-            assert!((cant - 6.0 * ss).abs() / cant < 1e-12, "cantilever = 6× SS UDL at w={ww}, L={ll}");
+            assert!(
+                (cant - 6.0 * ss).abs() / cant < 1e-12,
+                "cantilever = 6× SS UDL at w={ww}, L={ll}"
+            );
         }
         // Non-physical input → 0.
         assert_eq!(simply_supported_udl_strain_energy(w, l, e, -1.0e-6), 0.0); // I ≤ 0
         assert_eq!(simply_supported_udl_strain_energy(w, l, 0.0, i), 0.0); // E ≤ 0
         assert_eq!(simply_supported_udl_strain_energy(w, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_udl_strain_energy(f64::NAN, l, e, i), 0.0); // non-finite w
-        assert_eq!(simply_supported_udl_strain_energy(w, l, f64::INFINITY, i), 0.0); // non-finite E
+        assert_eq!(
+            simply_supported_udl_strain_energy(w, l, f64::INFINITY, i),
+            0.0
+        ); // non-finite E
     }
 
     #[test]
@@ -3683,13 +3908,28 @@ mod tests {
         // I = 1e-6 m⁴ → θ = w·L³/(6·E·I) = 8000/1.2e6 = 1/150 rad.
         let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
         let theta = cantilever_udl_tip_slope(w, l, e, i);
-        assert!((theta - 1.0 / 150.0).abs() / theta < 1e-12, "θ = 1/150 rad, got {theta}");
+        assert!(
+            (theta - 1.0 / 150.0).abs() / theta < 1e-12,
+            "θ = 1/150 rad, got {theta}"
+        );
         // Linear in the load intensity (sign-preserving); cubic in span; inverse in E·I.
         assert!((cantilever_udl_tip_slope(2.0 * w, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
-        assert!((cantilever_udl_tip_slope(-w, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
-        assert!((cantilever_udl_tip_slope(w, 2.0 * l, e, i) - 8.0 * theta).abs() / theta < 1e-12, "L³ scaling");
-        assert!((cantilever_udl_tip_slope(w, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
-        assert!((cantilever_udl_tip_slope(w, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        assert!(
+            (cantilever_udl_tip_slope(-w, l, e, i) + theta).abs() / theta < 1e-12,
+            "sign-preserving"
+        );
+        assert!(
+            (cantilever_udl_tip_slope(w, 2.0 * l, e, i) - 8.0 * theta).abs() / theta < 1e-12,
+            "L³ scaling"
+        );
+        assert!(
+            (cantilever_udl_tip_slope(w, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (cantilever_udl_tip_slope(w, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/I"
+        );
         // Cross-check (a) tying it to the UDL deflection #200: δ = (3/4)·L·θ.
         for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (250.0, 1.5), (-800.0, 3.0)] {
             let slope = cantilever_udl_tip_slope(ww, ll, e, i);
@@ -3722,10 +3962,7 @@ mod tests {
         // Axial extension δ = F·L/(E·A).
         let mat = steel();
         let l = 3.0;
-        let nodes = vec![
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(l, 0.0, 0.0),
-        ];
+        let nodes = vec![Vector3::new(0.0, 0.0, 0.0), Vector3::new(l, 0.0, 0.0)];
         let section = BeamSection::circle(0.02);
         let elements = [BeamElement::new(0, 1, section)];
         let f = 5.0e4;
@@ -3734,7 +3971,11 @@ mod tests {
         let sol = solve_beam_static(&nodes, &elements, &mat, &constraints, &loads).unwrap();
         let analytic = beam_axial_extension(f, l, mat.youngs_modulus, section.area);
         let rel = (sol.translation[1][0] - analytic).abs() / analytic;
-        assert!(rel < 1e-6, "axial δ {} vs {analytic}", sol.translation[1][0]);
+        assert!(
+            rel < 1e-6,
+            "axial δ {} vs {analytic}",
+            sol.translation[1][0]
+        );
     }
 
     #[test]
@@ -3778,7 +4019,10 @@ mod tests {
     fn rectangular_second_moment_of_area_is_bh3_over_12() {
         // (a) WORKED: b=0.1, h=0.2 → I = b·h³/12 = 6.6667e-5 m⁴.
         let i = rectangular_second_moment_of_area(0.1, 0.2);
-        assert!((i - 0.1 * 0.2_f64.powi(3) / 12.0).abs() <= 1e-9 * i, "I = b·h³/12");
+        assert!(
+            (i - 0.1 * 0.2_f64.powi(3) / 12.0).abs() <= 1e-9 * i,
+            "I = b·h³/12"
+        );
 
         // (b) THREAD elastic_section_modulus (#380) (non-tautological): the rectangular
         // section modulus is S = I/(h/2) = b·h²/6.
@@ -3786,7 +4030,7 @@ mod tests {
         assert!(
             (elastic_section_modulus(rectangular_second_moment_of_area(b, h), h / 2.0)
                 - b * h * h / 6.0)
-            .abs()
+                .abs()
                 <= 1e-9 * (b * h * h / 6.0),
             "S = I/(h/2) = b·h²/6"
         );
@@ -3821,7 +4065,10 @@ mod tests {
     fn rectangular_plastic_section_modulus_is_bh2_over_4() {
         // (a) WORKED: b=0.1, h=0.2 → Z = b·h²/4 = 0.001 m³.
         let z = rectangular_plastic_section_modulus(0.1, 0.2);
-        assert!((z - 0.1 * 0.2_f64 * 0.2 / 4.0).abs() <= 1e-9 * z, "Z = b·h²/4");
+        assert!(
+            (z - 0.1 * 0.2_f64 * 0.2 / 4.0).abs() <= 1e-9 * z,
+            "Z = b·h²/4"
+        );
 
         // (b) THREAD elastic_section_modulus + rectangular_second_moment_of_area (#415)
         // (non-tautological): the rectangular elastic modulus is S = I/(h/2) = b·h²/6, and the
@@ -3915,7 +4162,7 @@ mod tests {
         assert!(
             (elastic_section_modulus(circular_second_moment_of_area(d), d / 2.0)
                 - std::f64::consts::PI * d.powi(3) / 32.0)
-            .abs()
+                .abs()
                 <= 1e-9 * (std::f64::consts::PI * d.powi(3) / 32.0),
             "S = I/(d/2) = π·d³/32"
         );
@@ -4028,7 +4275,10 @@ mod tests {
         assert_eq!(hollow_circular_polar_second_moment_of_area(0.0, 0.0), 0.0);
         assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, 0.1), 0.0); // d ≥ D
         assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, 0.2), 0.0); // d > D
-        assert_eq!(hollow_circular_polar_second_moment_of_area(f64::NAN, 0.05), 0.0);
+        assert_eq!(
+            hollow_circular_polar_second_moment_of_area(f64::NAN, 0.05),
+            0.0
+        );
         assert_eq!(hollow_circular_polar_second_moment_of_area(0.1, -0.01), 0.0);
     }
 
@@ -4067,11 +4317,26 @@ mod tests {
         );
 
         // Guards: non-physical / bore-not-inside → 0.
-        assert_eq!(hollow_rectangular_second_moment_of_area(0.0, 2.0, 1.0, 1.0), 0.0);
-        assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 2.0, 1.0), 0.0); // bᵢ ≥ b
-        assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 2.0), 0.0); // hᵢ ≥ h
-        assert_eq!(hollow_rectangular_second_moment_of_area(f64::NAN, 2.0, 1.0, 1.0), 0.0);
-        assert_eq!(hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, -0.1), 0.0);
+        assert_eq!(
+            hollow_rectangular_second_moment_of_area(0.0, 2.0, 1.0, 1.0),
+            0.0
+        );
+        assert_eq!(
+            hollow_rectangular_second_moment_of_area(2.0, 2.0, 2.0, 1.0),
+            0.0
+        ); // bᵢ ≥ b
+        assert_eq!(
+            hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, 2.0),
+            0.0
+        ); // hᵢ ≥ h
+        assert_eq!(
+            hollow_rectangular_second_moment_of_area(f64::NAN, 2.0, 1.0, 1.0),
+            0.0
+        );
+        assert_eq!(
+            hollow_rectangular_second_moment_of_area(2.0, 2.0, 1.0, -0.1),
+            0.0
+        );
     }
 
     #[test]
@@ -4079,7 +4344,8 @@ mod tests {
         // WORKED: 2×2 outer, 1×1 bore → J = (b·h·(b²+h²) − bᵢ·hᵢ·(bᵢ²+hᵢ²))/12
         //         = (2·2·8 − 1·1·2)/12 = (32 − 2)/12 = 2.5 m⁴.
         assert!(
-            (hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, 1.0) - 2.5).abs() < 1e-12,
+            (hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, 1.0) - 2.5).abs()
+                < 1e-12,
             "J = 2.5",
         );
 
@@ -4103,11 +4369,26 @@ mod tests {
         );
 
         // Guards: non-physical / bore-not-inside → 0.
-        assert_eq!(hollow_rectangular_polar_second_moment_of_area(0.0, 2.0, 1.0, 1.0), 0.0);
-        assert_eq!(hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 2.0, 1.0), 0.0); // bᵢ ≥ b
-        assert_eq!(hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, 2.0), 0.0); // hᵢ ≥ h
-        assert_eq!(hollow_rectangular_polar_second_moment_of_area(f64::NAN, 2.0, 1.0, 1.0), 0.0);
-        assert_eq!(hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, -0.1), 0.0);
+        assert_eq!(
+            hollow_rectangular_polar_second_moment_of_area(0.0, 2.0, 1.0, 1.0),
+            0.0
+        );
+        assert_eq!(
+            hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 2.0, 1.0),
+            0.0
+        ); // bᵢ ≥ b
+        assert_eq!(
+            hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, 2.0),
+            0.0
+        ); // hᵢ ≥ h
+        assert_eq!(
+            hollow_rectangular_polar_second_moment_of_area(f64::NAN, 2.0, 1.0, 1.0),
+            0.0
+        );
+        assert_eq!(
+            hollow_rectangular_polar_second_moment_of_area(2.0, 2.0, 1.0, -0.1),
+            0.0
+        );
     }
 
     #[test]
@@ -4168,7 +4449,7 @@ mod tests {
         assert!(
             (polar_section_modulus(circular_polar_second_moment_of_area(d), d / 2.0)
                 - std::f64::consts::PI * d.powi(3) / 16.0)
-            .abs()
+                .abs()
                 <= 1e-9 * (std::f64::consts::PI * d.powi(3) / 16.0),
             "Z_p = J/(d/2) = π·d³/16"
         );
@@ -4204,24 +4485,31 @@ mod tests {
         let v = 10000.0;
         let tau = beam_transverse_shear_stress(v, q, i, b);
         let area = b * h;
-        assert!((tau - 1.5 * v / area).abs() <= 1e-9 * tau, "τ_max = 1.5·V/A");
+        assert!(
+            (tau - 1.5 * v / area).abs() <= 1e-9 * tau,
+            "τ_max = 1.5·V/A"
+        );
         assert!(tau > v / area, "peak exceeds the average shear V/A");
 
         // Linear in V and Q; inverse in I and b.
         assert!(
-            (beam_transverse_shear_stress(2.0 * v, q, i, b) - 2.0 * tau).abs() <= 1e-9 * (2.0 * tau),
+            (beam_transverse_shear_stress(2.0 * v, q, i, b) - 2.0 * tau).abs()
+                <= 1e-9 * (2.0 * tau),
             "∝ V"
         );
         assert!(
-            (beam_transverse_shear_stress(v, 3.0 * q, i, b) - 3.0 * tau).abs() <= 1e-9 * (3.0 * tau),
+            (beam_transverse_shear_stress(v, 3.0 * q, i, b) - 3.0 * tau).abs()
+                <= 1e-9 * (3.0 * tau),
             "∝ Q"
         );
         assert!(
-            (beam_transverse_shear_stress(v, q, 2.0 * i, b) - 0.5 * tau).abs() <= 1e-9 * (0.5 * tau),
+            (beam_transverse_shear_stress(v, q, 2.0 * i, b) - 0.5 * tau).abs()
+                <= 1e-9 * (0.5 * tau),
             "∝ 1/I"
         );
         assert!(
-            (beam_transverse_shear_stress(v, q, i, 2.0 * b) - 0.5 * tau).abs() <= 1e-9 * (0.5 * tau),
+            (beam_transverse_shear_stress(v, q, i, 2.0 * b) - 0.5 * tau).abs()
+                <= 1e-9 * (0.5 * tau),
             "∝ 1/b"
         );
 
@@ -4252,8 +4540,10 @@ mod tests {
         }
 
         // Threads the cantilever moment family: σ_root = M_root·c/I = P·L·c/I.
-        for &(p, l, c, i) in &[(1000.0_f64, 2.0_f64, 0.05_f64, 1.0e-6_f64), (-450.0, 3.5, 0.03, 4.2e-7)]
-        {
+        for &(p, l, c, i) in &[
+            (1000.0_f64, 2.0_f64, 0.05_f64, 1.0e-6_f64),
+            (-450.0, 3.5, 0.03, 4.2e-7),
+        ] {
             let sigma_root = bending_stress(cantilever_point_load_root_moment(p, l), c, i);
             assert!(
                 (sigma_root - p * l * c / i).abs() <= 1e-12 * (p * l * c / i).abs(),
@@ -4263,11 +4553,13 @@ mod tests {
 
         // Opposite faces carry opposite (tension/compression) stress; inverse in I.
         assert!(
-            (bending_stress(2000.0, -0.05, 1.0e-6) + bending_stress(2000.0, 0.05, 1.0e-6)).abs() < 1e-3,
+            (bending_stress(2000.0, -0.05, 1.0e-6) + bending_stress(2000.0, 0.05, 1.0e-6)).abs()
+                < 1e-3,
             "σ(−y) = −σ(y)"
         );
         assert!(
-            (bending_stress(2000.0, 0.05, 2.0e-6) - 0.5 * bending_stress(2000.0, 0.05, 1.0e-6)).abs()
+            (bending_stress(2000.0, 0.05, 2.0e-6) - 0.5 * bending_stress(2000.0, 0.05, 1.0e-6))
+                .abs()
                 < 1e-3,
             "inverse in I"
         );
@@ -4343,7 +4635,10 @@ mod tests {
             (-450.0, 70.0e9, 4.2e-7),
             (8200.0, 120.0e9, 9.0e-8),
         ] {
-            assert!((beam_curvature(m, e, i) * e * i - m).abs() <= 1e-12 * m.abs(), "M = E·I·κ");
+            assert!(
+                (beam_curvature(m, e, i) * e * i - m).abs() <= 1e-12 * m.abs(),
+                "M = E·I·κ"
+            );
         }
 
         // Threads the cantilever family: δ_tip = κ_root·L²/3 (since δ = PL³/3EI and
@@ -4356,11 +4651,17 @@ mod tests {
             let from_curvature =
                 beam_curvature(cantilever_point_load_root_moment(p, l), e, i) * l * l / 3.0;
             let delta = cantilever_tip_deflection(p, l, e, i);
-            assert!((from_curvature - delta).abs() <= 1e-12 * delta.abs(), "δ_tip = κ_root·L²/3");
+            assert!(
+                (from_curvature - delta).abs() <= 1e-12 * delta.abs(),
+                "δ_tip = κ_root·L²/3"
+            );
         }
 
         // Linear & sign-preserving in M; inverse in E·I.
-        assert!(beam_curvature(-2000.0, 200.0e9, 1.0e-6) < 0.0, "sign follows the moment");
+        assert!(
+            beam_curvature(-2000.0, 200.0e9, 1.0e-6) < 0.0,
+            "sign follows the moment"
+        );
         assert!(
             (beam_curvature(2000.0, 400.0e9, 2.0e-6)
                 - 0.25 * beam_curvature(2000.0, 200.0e9, 1.0e-6))
@@ -4384,7 +4685,10 @@ mod tests {
         );
 
         // (b) THREAD beam_curvature (non-tautological): EI = M/κ.
-        for &(m, e, i) in &[(2000.0_f64, 200.0e9_f64, 1.0e-6_f64), (8200.0, 70.0e9, 9.0e-8)] {
+        for &(m, e, i) in &[
+            (2000.0_f64, 200.0e9_f64, 1.0e-6_f64),
+            (8200.0, 70.0e9, 9.0e-8),
+        ] {
             assert!(
                 (flexural_rigidity(e, i) - m / beam_curvature(m, e, i)).abs()
                     <= 1e-9 * flexural_rigidity(e, i),
@@ -4509,7 +4813,10 @@ mod tests {
         let (e, nu) = (200.0e9_f64, 0.3_f64);
         let g = shear_modulus_from_youngs(e, nu);
         let k = bulk_modulus(e, nu);
-        assert!((9.0 * k * g / (3.0 * k + g) - e).abs() <= 1e-9 * e, "E = 9KG/(3K+G)");
+        assert!(
+            (9.0 * k * g / (3.0 * k + g) - e).abs() <= 1e-9 * e,
+            "E = 9KG/(3K+G)"
+        );
 
         // (d) ν=0 → G=E/2: no lateral coupling.
         assert!(
@@ -4529,7 +4836,10 @@ mod tests {
     fn p_wave_modulus_is_the_capstone_of_the_elastic_constants() {
         // (a) WORKED: E=200e9, ν=0.3 → M = E(1−ν)/((1+ν)(1−2ν)) = 140e9/0.52 ≈ 2.6923e11.
         let m = p_wave_modulus(200.0e9, 0.3);
-        assert!((m - 200.0e9 * 0.7 / (1.3 * 0.4)).abs() <= 1e-9 * m, "M = E(1−ν)/((1+ν)(1−2ν))");
+        assert!(
+            (m - 200.0e9 * 0.7 / (1.3 * 0.4)).abs() <= 1e-9 * m,
+            "M = E(1−ν)/((1+ν)(1−2ν))"
+        );
 
         // (b) IDENTITY M = K + 4G/3 (thread bulk_modulus + shear_modulus_from_youngs, exact).
         for &(e, nu) in &[(200.0e9_f64, 0.3_f64), (70.0e9, 0.33)] {
@@ -4653,7 +4963,11 @@ mod tests {
         // Threads beam_axial_extension via Hooke's law σ = E·δ/L (E and L cancel, since
         // δ = F·L/E·A).
         let (l, e) = (2.0, 200.0e9);
-        for &(f, a) in &[(10000.0_f64, 1.0e-4_f64), (-5000.0, 3.0e-4), (25000.0, 5.0e-5)] {
+        for &(f, a) in &[
+            (10000.0_f64, 1.0e-4_f64),
+            (-5000.0, 3.0e-4),
+            (25000.0, 5.0e-5),
+        ] {
             let from_strain = e * beam_axial_extension(f, l, e, a) / l;
             assert!(
                 (axial_stress(f, a) - from_strain).abs() <= 1e-12 * from_strain.abs(),
@@ -4662,7 +4976,10 @@ mod tests {
         }
 
         // Worked: σ = F/A = 1e4 / 1e-4 = 100 MPa.
-        assert!((axial_stress(10000.0, 1.0e-4) - 1.0e8).abs() <= 1e-12 * 1.0e8, "F/A = 100 MPa");
+        assert!(
+            (axial_stress(10000.0, 1.0e-4) - 1.0e8).abs() <= 1e-12 * 1.0e8,
+            "F/A = 100 MPa"
+        );
 
         // Sign-preserving (tension +, compression −), linear in F, inverse in A.
         assert_eq!(
@@ -4705,7 +5022,10 @@ mod tests {
         // (c) YIELD round-trip: a member's squash load F_y = σ_y·A maps back to σ_y.
         let (sy, a) = (250.0e6_f64, 5.0e-4_f64);
         let fy = axial_force_capacity(sy, a);
-        assert!((axial_stress(fy, a) - sy).abs() <= 1e-9 * sy, "F_y = σ_y·A maps back to σ_y");
+        assert!(
+            (axial_stress(fy, a) - sy).abs() <= 1e-9 * sy,
+            "F_y = σ_y·A maps back to σ_y"
+        );
 
         // (d) LINEARITY + SIGN: linear in stress and area; a negative (compressive)
         // stress yields a negative force.
@@ -4764,7 +5084,10 @@ mod tests {
                 < 1e-9,
             "quadratic in F"
         );
-        assert!(axial_strain_energy(10000.0, 2.0, 200.0e9, 1.0e-4) > 0.0, "non-negative");
+        assert!(
+            axial_strain_energy(10000.0, 2.0, 200.0e9, 1.0e-4) > 0.0,
+            "non-negative"
+        );
 
         // 0 sentinel for non-physical input.
         assert_eq!(axial_strain_energy(10000.0, 0.0, 200.0e9, 1.0e-4), 0.0);
@@ -4779,7 +5102,10 @@ mod tests {
         // → δ = F·L/(E·A) = 20000 / 2e7 = 0.001 m = 1 mm.
         let (f, l, e, a) = (10_000.0, 2.0, 200.0e9, 1.0e-4);
         let delta = beam_axial_extension(f, l, e, a);
-        assert!((delta - 0.001).abs() / delta < 1e-9, "δ = 1 mm, got {delta}");
+        assert!(
+            (delta - 0.001).abs() / delta < 1e-9,
+            "δ = 1 mm, got {delta}"
+        );
         // Linear in the force, and sign-preserving (tension lengthens, compression shortens).
         assert!((beam_axial_extension(2.0 * f, l, e, a) - 2.0 * delta).abs() / delta < 1e-12);
         assert!(
@@ -4792,8 +5118,14 @@ mod tests {
             "L scaling"
         );
         // Inverse in the axial rigidity E·A: double E or A → half δ.
-        assert!((beam_axial_extension(f, l, 2.0 * e, a) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
-        assert!((beam_axial_extension(f, l, e, 2.0 * a) - 0.5 * delta).abs() / delta < 1e-12, "1/A");
+        assert!(
+            (beam_axial_extension(f, l, 2.0 * e, a) - 0.5 * delta).abs() / delta < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (beam_axial_extension(f, l, e, 2.0 * a) - 0.5 * delta).abs() / delta < 1e-12,
+            "1/A"
+        );
         // Non-physical input → 0.
         assert_eq!(beam_axial_extension(f, l, e, -1.0e-4), 0.0); // A ≤ 0
         assert_eq!(beam_axial_extension(f, l, 0.0, a), 0.0); // E ≤ 0
@@ -4807,10 +5139,7 @@ mod tests {
         // Twist of a shaft under an end torque: φ = T·L/(G·J).
         let mat = steel();
         let l = 2.0;
-        let nodes = vec![
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(l, 0.0, 0.0),
-        ];
+        let nodes = vec![Vector3::new(0.0, 0.0, 0.0), Vector3::new(l, 0.0, 0.0)];
         let section = BeamSection::circle(0.03);
         let elements = [BeamElement::new(0, 1, section)];
         let torque = 800.0;
@@ -4821,7 +5150,11 @@ mod tests {
         let g = mat.youngs_modulus / (2.0 * (1.0 + mat.poisson_ratio));
         let analytic = beam_angle_of_twist(torque, l, g, section.j);
         let rel = (sol.rotation[1][0] - analytic).abs() / analytic;
-        assert!(rel < 1e-6, "twist {} vs analytic {analytic}", sol.rotation[1][0]);
+        assert!(
+            rel < 1e-6,
+            "twist {} vs analytic {analytic}",
+            sol.rotation[1][0]
+        );
     }
 
     #[test]
@@ -4886,7 +5219,10 @@ mod tests {
         }
 
         // Linear & sign-preserving in T and r, inverse in J.
-        assert!(torsional_shear_stress(-1000.0, 0.05, 1.0e-6) < 0.0, "sign follows the torque");
+        assert!(
+            torsional_shear_stress(-1000.0, 0.05, 1.0e-6) < 0.0,
+            "sign follows the torque"
+        );
         assert!(
             (torsional_shear_stress(1000.0, 0.05, 2.0e-6)
                 - 0.5 * torsional_shear_stress(1000.0, 0.05, 1.0e-6))
@@ -4934,7 +5270,8 @@ mod tests {
         // stress yields a negative (reversed) torque.
         let base = torsional_moment_capacity(5.0e7, 2.0e-5);
         assert!(
-            (torsional_moment_capacity(2.0 * 5.0e7, 2.0e-5) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            (torsional_moment_capacity(2.0 * 5.0e7, 2.0e-5) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
             "linear in shear stress"
         );
         assert!(
@@ -4963,7 +5300,8 @@ mod tests {
         ] {
             let from_twist = 0.5 * tq * beam_angle_of_twist(tq, l, g, j);
             assert!(
-                (torsional_strain_energy(tq, l, g, j) - from_twist).abs() <= 1e-12 * from_twist.abs(),
+                (torsional_strain_energy(tq, l, g, j) - from_twist).abs()
+                    <= 1e-12 * from_twist.abs(),
                 "U = ½·T·θ"
             );
         }
@@ -4987,7 +5325,10 @@ mod tests {
                 < 1e-12,
             "quadratic in T"
         );
-        assert!(torsional_strain_energy(100.0, 2.0, 80.0e9, 1.0e-6) > 0.0, "non-negative");
+        assert!(
+            torsional_strain_energy(100.0, 2.0, 80.0e9, 1.0e-6) > 0.0,
+            "non-negative"
+        );
 
         // 0 sentinel for non-physical input.
         assert_eq!(torsional_strain_energy(100.0, 0.0, 80.0e9, 1.0e-6), 0.0);
@@ -5002,7 +5343,10 @@ mod tests {
         // J = 1e-8 m⁴ → θ = T·L/(G·J) = 200 / 800 = 0.25 rad.
         let (t, l, g, j) = (100.0, 2.0, 80.0e9, 1.0e-8);
         let theta = beam_angle_of_twist(t, l, g, j);
-        assert!((theta - 0.25).abs() / theta < 1e-9, "θ = 0.25 rad, got {theta}");
+        assert!(
+            (theta - 0.25).abs() / theta < 1e-9,
+            "θ = 0.25 rad, got {theta}"
+        );
         // Linear in the torque, and sign-preserving (reverse T → reverse twist).
         assert!((beam_angle_of_twist(2.0 * t, l, g, j) - 2.0 * theta).abs() / theta < 1e-12);
         assert!(
@@ -5015,8 +5359,14 @@ mod tests {
             "L scaling"
         );
         // Inverse in the torsional rigidity G·J: double G or J → half θ.
-        assert!((beam_angle_of_twist(t, l, 2.0 * g, j) - 0.5 * theta).abs() / theta < 1e-12, "1/G");
-        assert!((beam_angle_of_twist(t, l, g, 2.0 * j) - 0.5 * theta).abs() / theta < 1e-12, "1/J");
+        assert!(
+            (beam_angle_of_twist(t, l, 2.0 * g, j) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/G"
+        );
+        assert!(
+            (beam_angle_of_twist(t, l, g, 2.0 * j) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/J"
+        );
         // Non-physical input → 0.
         assert_eq!(beam_angle_of_twist(t, l, g, -1.0e-8), 0.0); // J ≤ 0
         assert_eq!(beam_angle_of_twist(t, l, 0.0, j), 0.0); // G ≤ 0
@@ -5066,7 +5416,10 @@ mod tests {
         // Worked point: P = 1 kN central load on a 4 m clamped–clamped steel beam,
         // E = 200 GPa, I = 1e-6 m⁴ → δ = P·L³/(192·E·I) = 64000/3.84e7 = 1/600 m.
         let d = fixed_fixed_center_deflection(1000.0, 4.0, 200.0e9, 1.0e-6);
-        assert!((d - 1.0 / 600.0).abs() / (1.0 / 600.0) < 1e-12, "worked δ = 1/600 m, got {d}");
+        assert!(
+            (d - 1.0 / 600.0).abs() / (1.0 / 600.0) < 1e-12,
+            "worked δ = 1/600 m, got {d}"
+        );
 
         // STRONG cross-checks threading the other two boundary conditions: clamping
         // both ends is exactly 4× stiffer at mid-span than pinning both (δ = δ_ss/4),
@@ -5079,8 +5432,14 @@ mod tests {
             let ff = fixed_fixed_center_deflection(p, l, e, i);
             let ss = simply_supported_center_deflection(p, l, e, i);
             let cant = cantilever_tip_deflection(p, l, e, i);
-            assert!((ff - ss / 4.0).abs() <= 1e-12 * (ss / 4.0).abs(), "δ_ff = δ_ss/4");
-            assert!((ff - cant / 64.0).abs() <= 1e-12 * (cant / 64.0).abs(), "δ_ff = δ_cant/64");
+            assert!(
+                (ff - ss / 4.0).abs() <= 1e-12 * (ss / 4.0).abs(),
+                "δ_ff = δ_ss/4"
+            );
+            assert!(
+                (ff - cant / 64.0).abs() <= 1e-12 * (cant / 64.0).abs(),
+                "δ_ff = δ_cant/64"
+            );
             // Sign-preserving: a downward (negative) load gives a downward deflection.
             assert!(ff * p > 0.0, "deflection follows the load sign");
         }
@@ -5091,10 +5450,22 @@ mod tests {
         assert!((d2 - 8.0 * d1).abs() / (8.0 * d1) < 1e-12, "δ ∝ L³");
 
         // Non-physical input → 0.
-        assert_eq!(fixed_fixed_center_deflection(f64::NAN, 4.0, 200.0e9, 1.0e-6), 0.0); // P NaN
-        assert_eq!(fixed_fixed_center_deflection(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0); // L = 0
-        assert_eq!(fixed_fixed_center_deflection(1000.0, 4.0, -1.0, 1.0e-6), 0.0); // E < 0
-        assert_eq!(fixed_fixed_center_deflection(1000.0, 4.0, 200.0e9, 0.0), 0.0); // I = 0
+        assert_eq!(
+            fixed_fixed_center_deflection(f64::NAN, 4.0, 200.0e9, 1.0e-6),
+            0.0
+        ); // P NaN
+        assert_eq!(
+            fixed_fixed_center_deflection(1000.0, 0.0, 200.0e9, 1.0e-6),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            fixed_fixed_center_deflection(1000.0, 4.0, -1.0, 1.0e-6),
+            0.0
+        ); // E < 0
+        assert_eq!(
+            fixed_fixed_center_deflection(1000.0, 4.0, 200.0e9, 0.0),
+            0.0
+        ); // I = 0
     }
 
     #[test]
@@ -5118,7 +5489,10 @@ mod tests {
         ] {
             let from_moment = 5.0 * simply_supported_udl_max_moment(w, l) * l * l / (48.0 * e * i);
             let delta = simply_supported_udl_center_deflection(w, l, e, i);
-            assert!((from_moment - delta).abs() <= 1e-12 * delta.abs(), "5·M·L²/48EI = δ_udl");
+            assert!(
+                (from_moment - delta).abs() <= 1e-12 * delta.abs(),
+                "5·M·L²/48EI = δ_udl"
+            );
         }
 
         // Quadratic in span; linear and sign-preserving in w.
@@ -5129,7 +5503,10 @@ mod tests {
                 < 1e-9,
             "quadratic in L"
         );
-        assert!(simply_supported_udl_max_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+        assert!(
+            simply_supported_udl_max_moment(-1000.0, 4.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(simply_supported_udl_max_moment(f64::NAN, 4.0), 0.0);
@@ -5148,7 +5525,10 @@ mod tests {
         // (M = wL²/8, V = wL/2 → V·L = wL²/2 = 4·M).
         for &(w, l) in &[(1000.0_f64, 4.0_f64), (-650.0, 2.5), (8200.0, 1.2)] {
             let shear = simply_supported_udl_max_shear(w, l);
-            assert!((shear - w * l / 2.0).abs() <= 1e-12 * (w * l).abs(), "V = w·L/2 (½ total load)");
+            assert!(
+                (shear - w * l / 2.0).abs() <= 1e-12 * (w * l).abs(),
+                "V = w·L/2 (½ total load)"
+            );
             let moment = simply_supported_udl_max_moment(w, l);
             assert!(
                 (shear * l - 4.0 * moment).abs() <= 1e-9 * (shear * l).abs(),
@@ -5171,7 +5551,10 @@ mod tests {
                 < 1e-9,
             "linear in L"
         );
-        assert!(simply_supported_udl_max_shear(-1000.0, 4.0) < 0.0, "sign follows the load");
+        assert!(
+            simply_supported_udl_max_shear(-1000.0, 4.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(simply_supported_udl_max_shear(f64::NAN, 4.0), 0.0);
@@ -5200,14 +5583,19 @@ mod tests {
             (-650.0, 2.5, 70.0e9, 4.2e-7),
             (8200.0, 1.2, 120.0e9, 9.0e-8),
         ] {
-            let from_moment =
-                simply_supported_point_load_max_moment(p, l) * l * l / (12.0 * e * i);
+            let from_moment = simply_supported_point_load_max_moment(p, l) * l * l / (12.0 * e * i);
             let delta = simply_supported_center_deflection(p, l, e, i);
-            assert!((from_moment - delta).abs() <= 1e-12 * delta.abs(), "M·L²/12EI = δ_center");
+            assert!(
+                (from_moment - delta).abs() <= 1e-12 * delta.abs(),
+                "M·L²/12EI = δ_center"
+            );
         }
 
         // Linear and sign-preserving in P; linear in L.
-        assert!(simply_supported_point_load_max_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+        assert!(
+            simply_supported_point_load_max_moment(-1000.0, 4.0) < 0.0,
+            "sign follows the load"
+        );
         assert!(
             (simply_supported_point_load_max_moment(1000.0, 8.0)
                 - 2.0 * simply_supported_point_load_max_moment(1000.0, 4.0))
@@ -5233,7 +5621,10 @@ mod tests {
         // (M = PL/4, V = P/2 → V·L = PL/2 = 2·M).
         for &(p, l) in &[(1000.0_f64, 4.0_f64), (-650.0, 2.5), (8200.0, 1.2)] {
             let shear = simply_supported_point_load_max_shear(p, l);
-            assert!((shear - p / 2.0).abs() <= 1e-12 * p.abs(), "V = P/2 (½ the load)");
+            assert!(
+                (shear - p / 2.0).abs() <= 1e-12 * p.abs(),
+                "V = P/2 (½ the load)"
+            );
             let moment = simply_supported_point_load_max_moment(p, l);
             assert!(
                 (shear * l - 2.0 * moment).abs() <= 1e-9 * (shear * l).abs(),
@@ -5256,7 +5647,10 @@ mod tests {
                 < 1e-9,
             "independent of L",
         );
-        assert!(simply_supported_point_load_max_shear(-1000.0, 4.0) < 0.0, "sign follows the load");
+        assert!(
+            simply_supported_point_load_max_shear(-1000.0, 4.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(simply_supported_point_load_max_shear(f64::NAN, 4.0), 0.0);
@@ -5270,31 +5664,49 @@ mod tests {
         // beam, E = 200 GPa, I = 1e-6 m⁴ → δ = P·L³/(48·E·I) = 64000/9.6e6 = 1/150 m.
         let (p, l, e, i) = (1000.0, 4.0, 200.0e9, 1.0e-6);
         let delta = simply_supported_center_deflection(p, l, e, i);
-        assert!((delta - 1.0 / 150.0).abs() / delta < 1e-9, "δ = 1/150 m, got {delta}");
+        assert!(
+            (delta - 1.0 / 150.0).abs() / delta < 1e-9,
+            "δ = 1/150 m, got {delta}"
+        );
         // 16× stiffer than a cantilever of the same span/section under the same load.
         assert!(
             (delta - cantilever_tip_deflection(p, l, e, i) / 16.0).abs() / delta < 1e-12,
             "δ_ss = δ_cantilever / 16"
         );
         // Linear in the load (and sign-preserving).
-        assert!((simply_supported_center_deflection(2.0 * p, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
+        assert!(
+            (simply_supported_center_deflection(2.0 * p, l, e, i) - 2.0 * delta).abs() / delta
+                < 1e-12
+        );
         assert!(
             (simply_supported_center_deflection(-p, l, e, i) + delta).abs() / delta < 1e-12,
             "sign-preserving"
         );
         // Cubic in the span; inverse in the flexural rigidity E·I.
         assert!(
-            (simply_supported_center_deflection(p, 2.0 * l, e, i) - 8.0 * delta).abs() / delta < 1e-9,
+            (simply_supported_center_deflection(p, 2.0 * l, e, i) - 8.0 * delta).abs() / delta
+                < 1e-9,
             "L³ scaling"
         );
-        assert!((simply_supported_center_deflection(p, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
-        assert!((simply_supported_center_deflection(p, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        assert!(
+            (simply_supported_center_deflection(p, l, 2.0 * e, i) - 0.5 * delta).abs() / delta
+                < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (simply_supported_center_deflection(p, l, e, 2.0 * i) - 0.5 * delta).abs() / delta
+                < 1e-12,
+            "1/I"
+        );
         // Non-physical input → 0.
         assert_eq!(simply_supported_center_deflection(p, l, e, -1.0e-6), 0.0); // I ≤ 0
         assert_eq!(simply_supported_center_deflection(p, l, 0.0, i), 0.0); // E ≤ 0
         assert_eq!(simply_supported_center_deflection(p, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_center_deflection(f64::NAN, l, e, i), 0.0); // non-finite P
-        assert_eq!(simply_supported_center_deflection(p, l, f64::INFINITY, i), 0.0); // non-finite E
+        assert_eq!(
+            simply_supported_center_deflection(p, l, f64::INFINITY, i),
+            0.0
+        ); // non-finite E
     }
 
     #[test]
@@ -5303,19 +5715,39 @@ mod tests {
         // E = 200 GPa, I = 1e-6 m⁴ → θ = P·L²/(16·E·I) = 16000/3.2e6 = 0.005 rad.
         let (p, l, e, i) = (1000.0, 4.0, 200.0e9, 1.0e-6);
         let theta = simply_supported_end_slope(p, l, e, i);
-        assert!((theta - 0.005).abs() / theta < 1e-12, "θ = 0.005 rad, got {theta}");
+        assert!(
+            (theta - 0.005).abs() / theta < 1e-12,
+            "θ = 0.005 rad, got {theta}"
+        );
         // Linear in the load (and sign-preserving).
         assert!((simply_supported_end_slope(2.0 * p, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
-        assert!((simply_supported_end_slope(-p, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
+        assert!(
+            (simply_supported_end_slope(-p, l, e, i) + theta).abs() / theta < 1e-12,
+            "sign-preserving"
+        );
         // Quadratic in the span; inverse in the flexural rigidity E·I.
-        assert!((simply_supported_end_slope(p, 2.0 * l, e, i) - 4.0 * theta).abs() / theta < 1e-12, "L² scaling");
-        assert!((simply_supported_end_slope(p, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
-        assert!((simply_supported_end_slope(p, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        assert!(
+            (simply_supported_end_slope(p, 2.0 * l, e, i) - 4.0 * theta).abs() / theta < 1e-12,
+            "L² scaling"
+        );
+        assert!(
+            (simply_supported_end_slope(p, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (simply_supported_end_slope(p, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/I"
+        );
         // STRONG non-tautological cross-check tying it to #194: for a centrally loaded
         // simply-supported beam the mid-span deflection is a third of the span times
         // the support rotation, δ = (L/3)·θ. The slope impl uses L²/(16EI); the check
         // uses the independent deflection fn L³/(48EI) — a known beam relation.
-        for &(pp, ll) in &[(1000.0_f64, 4.0_f64), (250.0, 1.5), (-800.0, 3.0), (4200.0, 0.8)] {
+        for &(pp, ll) in &[
+            (1000.0_f64, 4.0_f64),
+            (250.0, 1.5),
+            (-800.0, 3.0),
+            (4200.0, 0.8),
+        ] {
             let slope = simply_supported_end_slope(pp, ll, e, i);
             let defl = simply_supported_center_deflection(pp, ll, e, i);
             assert!(
@@ -5356,7 +5788,10 @@ mod tests {
             let lift = fixed_fixed_udl_end_moment(w, l) * l * l / (8.0 * e * i);
             let diff = simply_supported_udl_center_deflection(w, l, e, i)
                 - fixed_fixed_udl_center_deflection(w, l, e, i);
-            assert!((lift - diff).abs() <= 1e-12 * diff.abs(), "M·L²/8EI = δ_ss_udl − δ_ff_udl");
+            assert!(
+                (lift - diff).abs() <= 1e-12 * diff.abs(),
+                "M·L²/8EI = δ_ss_udl − δ_ff_udl"
+            );
         }
 
         // Quadratic in span; linear and sign-preserving in w.
@@ -5367,7 +5802,10 @@ mod tests {
                 < 1e-9,
             "quadratic in L"
         );
-        assert!(fixed_fixed_udl_end_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+        assert!(
+            fixed_fixed_udl_end_moment(-1000.0, 4.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(fixed_fixed_udl_end_moment(f64::NAN, 4.0), 0.0); // w NaN
@@ -5379,14 +5817,20 @@ mod tests {
     fn fixed_fixed_udl_max_sagging_moment_is_half_the_end_moment() {
         // Worked: w = 1 kN/m on a 2 m clamped–clamped beam → M_sag = w·L²/24 = 4000/24 N·m.
         let m_sag = fixed_fixed_udl_max_sagging_moment(1000.0, 2.0);
-        assert!((m_sag - 4000.0 / 24.0).abs() < 1e-9, "M_sag = w·L²/24, got {m_sag}");
+        assert!(
+            (m_sag - 4000.0 / 24.0).abs() < 1e-9,
+            "M_sag = w·L²/24, got {m_sag}"
+        );
 
         // STRONG non-tautological thread over signed (w, L): the mid-span sagging moment is
         // exactly half the magnitude of the fixed-end hogging moment (wL²/24 = ½·wL²/12).
         for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 1.2)] {
             let sag = fixed_fixed_udl_max_sagging_moment(w, l);
             let end = fixed_fixed_udl_end_moment(w, l);
-            assert!((sag - end / 2.0).abs() <= 1e-12 * end.abs(), "M_sag = M_end/2");
+            assert!(
+                (sag - end / 2.0).abs() <= 1e-12 * end.abs(),
+                "M_sag = M_end/2"
+            );
         }
 
         // Quadratic in L; linear and sign-preserving in w.
@@ -5404,7 +5848,10 @@ mod tests {
                 < 1e-9,
             "linear in w"
         );
-        assert!(fixed_fixed_udl_max_sagging_moment(-1000.0, 2.0) < 0.0, "sign follows the load");
+        assert!(
+            fixed_fixed_udl_max_sagging_moment(-1000.0, 2.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(fixed_fixed_udl_max_sagging_moment(f64::NAN, 2.0), 0.0);
@@ -5440,14 +5887,19 @@ mod tests {
         // (c) LINEARITY: linear and sign-preserving in w, linear in L.
         let base = propped_cantilever_udl_prop_reaction(1000.0, 2.0);
         assert!(
-            (propped_cantilever_udl_prop_reaction(2000.0, 2.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            (propped_cantilever_udl_prop_reaction(2000.0, 2.0) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
             "linear in w"
         );
         assert!(
-            (propped_cantilever_udl_prop_reaction(1000.0, 4.0) - 2.0 * base).abs() <= 1e-9 * 2.0 * base,
+            (propped_cantilever_udl_prop_reaction(1000.0, 4.0) - 2.0 * base).abs()
+                <= 1e-9 * 2.0 * base,
             "linear in L"
         );
-        assert!(propped_cantilever_udl_prop_reaction(-1000.0, 2.0) < 0.0, "sign follows the load");
+        assert!(
+            propped_cantilever_udl_prop_reaction(-1000.0, 2.0) < 0.0,
+            "sign follows the load"
+        );
 
         // (d) Non-physical input → 0.
         assert_eq!(propped_cantilever_udl_prop_reaction(f64::NAN, 2.0), 0.0); // w NaN
@@ -5469,7 +5921,10 @@ mod tests {
         for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
             let m = propped_cantilever_udl_fixed_end_moment(w, l);
             let equil = w * l * l / 2.0 - propped_cantilever_udl_prop_reaction(w, l) * l;
-            assert!((m - equil).abs() <= 1e-9 * m.abs().max(1.0), "M_A = wL²/2 − R_B·L");
+            assert!(
+                (m - equil).abs() <= 1e-9 * m.abs().max(1.0),
+                "M_A = wL²/2 − R_B·L"
+            );
         }
 
         // (c) SCALING: quadratic in L, linear and sign-preserving in w.
@@ -5484,7 +5939,10 @@ mod tests {
                 <= 1e-9 * 2.0 * base,
             "linear in w"
         );
-        assert!(propped_cantilever_udl_fixed_end_moment(-1000.0, 2.0) < 0.0, "sign follows load");
+        assert!(
+            propped_cantilever_udl_fixed_end_moment(-1000.0, 2.0) < 0.0,
+            "sign follows load"
+        );
 
         // (d) Non-physical input → 0.
         assert_eq!(propped_cantilever_udl_fixed_end_moment(f64::NAN, 2.0), 0.0); // w NaN
@@ -5497,7 +5955,8 @@ mod tests {
         // (a) WORKED: w = 1 kN/m UDL on a 2 m propped cantilever → M_sag = 9·w·L²/128 =
         // 9·1000·4/128 = 281.25 N·m.
         assert!(
-            (propped_cantilever_udl_max_sagging_moment(1000.0, 2.0) - 281.25).abs() <= 1e-9 * 281.25,
+            (propped_cantilever_udl_max_sagging_moment(1000.0, 2.0) - 281.25).abs()
+                <= 1e-9 * 281.25,
             "M_sag = 9wL²/128 = 281.25 N·m"
         );
 
@@ -5508,7 +5967,10 @@ mod tests {
             let a = 3.0 * l / 8.0;
             let m = propped_cantilever_udl_max_sagging_moment(w, l);
             let stat = propped_cantilever_udl_prop_reaction(w, l) * a - w * a * a / 2.0;
-            assert!((m - stat).abs() <= 1e-9 * m.abs().max(1.0), "M_sag = R_B·(3L/8) − w·(3L/8)²/2");
+            assert!(
+                (m - stat).abs() <= 1e-9 * m.abs().max(1.0),
+                "M_sag = R_B·(3L/8) − w·(3L/8)²/2"
+            );
         }
 
         // (c) SCALING: quadratic in L, linear and sign-preserving in w.
@@ -5523,12 +5985,19 @@ mod tests {
                 <= 1e-9 * 2.0 * base,
             "linear in w"
         );
-        assert!(propped_cantilever_udl_max_sagging_moment(-1000.0, 2.0) < 0.0, "sign follows load");
+        assert!(
+            propped_cantilever_udl_max_sagging_moment(-1000.0, 2.0) < 0.0,
+            "sign follows load"
+        );
 
         // (d) Non-physical input → 0.
-        assert_eq!(propped_cantilever_udl_max_sagging_moment(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(
+            propped_cantilever_udl_max_sagging_moment(f64::NAN, 2.0),
+            0.0
+        ); // w NaN
         assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, 0.0), 0.0); // L = 0
-        assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, -2.0), 0.0); // L < 0
+        assert_eq!(propped_cantilever_udl_max_sagging_moment(1000.0, -2.0), 0.0);
+        // L < 0
     }
 
     #[test]
@@ -5570,9 +6039,15 @@ mod tests {
         );
 
         // Guards: non-physical input → 0.
-        assert_eq!(two_span_continuous_beam_udl_middle_moment(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(
+            two_span_continuous_beam_udl_middle_moment(f64::NAN, 2.0),
+            0.0
+        ); // w NaN
         assert_eq!(two_span_continuous_beam_udl_middle_moment(1000.0, 0.0), 0.0); // L = 0
-        assert_eq!(two_span_continuous_beam_udl_middle_moment(1000.0, -2.0), 0.0); // L < 0
+        assert_eq!(
+            two_span_continuous_beam_udl_middle_moment(1000.0, -2.0),
+            0.0
+        ); // L < 0
     }
 
     #[test]
@@ -5620,9 +6095,18 @@ mod tests {
         );
 
         // Guards: non-physical input → 0.
-        assert_eq!(two_span_continuous_beam_udl_middle_reaction(f64::NAN, 2.0), 0.0); // w NaN
-        assert_eq!(two_span_continuous_beam_udl_middle_reaction(1000.0, 0.0), 0.0); // L = 0
-        assert_eq!(two_span_continuous_beam_udl_middle_reaction(1000.0, -2.0), 0.0); // L < 0
+        assert_eq!(
+            two_span_continuous_beam_udl_middle_reaction(f64::NAN, 2.0),
+            0.0
+        ); // w NaN
+        assert_eq!(
+            two_span_continuous_beam_udl_middle_reaction(1000.0, 0.0),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            two_span_continuous_beam_udl_middle_reaction(1000.0, -2.0),
+            0.0
+        ); // L < 0
     }
 
     #[test]
@@ -5670,9 +6154,18 @@ mod tests {
         );
 
         // Guards: non-physical input → 0.
-        assert_eq!(two_span_continuous_beam_udl_outer_reaction(f64::NAN, 2.0), 0.0); // w NaN
-        assert_eq!(two_span_continuous_beam_udl_outer_reaction(1000.0, 0.0), 0.0); // L = 0
-        assert_eq!(two_span_continuous_beam_udl_outer_reaction(1000.0, -2.0), 0.0); // L < 0
+        assert_eq!(
+            two_span_continuous_beam_udl_outer_reaction(f64::NAN, 2.0),
+            0.0
+        ); // w NaN
+        assert_eq!(
+            two_span_continuous_beam_udl_outer_reaction(1000.0, 0.0),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            two_span_continuous_beam_udl_outer_reaction(1000.0, -2.0),
+            0.0
+        ); // L < 0
     }
 
     #[test]
@@ -5715,9 +6208,18 @@ mod tests {
         );
 
         // Guards: non-physical input → 0.
-        assert_eq!(three_span_continuous_beam_udl_interior_moment(f64::NAN, 2.0), 0.0); // w NaN
-        assert_eq!(three_span_continuous_beam_udl_interior_moment(1000.0, 0.0), 0.0); // L = 0
-        assert_eq!(three_span_continuous_beam_udl_interior_moment(1000.0, -2.0), 0.0); // L < 0
+        assert_eq!(
+            three_span_continuous_beam_udl_interior_moment(f64::NAN, 2.0),
+            0.0
+        ); // w NaN
+        assert_eq!(
+            three_span_continuous_beam_udl_interior_moment(1000.0, 0.0),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            three_span_continuous_beam_udl_interior_moment(1000.0, -2.0),
+            0.0
+        ); // L < 0
     }
 
     #[test]
@@ -5763,9 +6265,18 @@ mod tests {
         );
 
         // Guards: non-physical input → 0.
-        assert_eq!(three_span_continuous_beam_udl_end_reaction(f64::NAN, 2.0), 0.0);
-        assert_eq!(three_span_continuous_beam_udl_interior_reaction(1000.0, 0.0), 0.0);
-        assert_eq!(three_span_continuous_beam_udl_end_reaction(1000.0, -2.0), 0.0);
+        assert_eq!(
+            three_span_continuous_beam_udl_end_reaction(f64::NAN, 2.0),
+            0.0
+        );
+        assert_eq!(
+            three_span_continuous_beam_udl_interior_reaction(1000.0, 0.0),
+            0.0
+        );
+        assert_eq!(
+            three_span_continuous_beam_udl_end_reaction(1000.0, -2.0),
+            0.0
+        );
     }
 
     #[test]
@@ -5822,8 +6333,14 @@ mod tests {
             two_span_continuous_beam_central_point_load_middle_moment(f64::NAN, 2.0),
             0.0
         ); // P NaN
-        assert_eq!(two_span_continuous_beam_central_point_load_middle_moment(32.0, 0.0), 0.0); // L = 0
-        assert_eq!(two_span_continuous_beam_central_point_load_middle_moment(32.0, -2.0), 0.0); // L < 0
+        assert_eq!(
+            two_span_continuous_beam_central_point_load_middle_moment(32.0, 0.0),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            two_span_continuous_beam_central_point_load_middle_moment(32.0, -2.0),
+            0.0
+        ); // L < 0
     }
 
     #[test]
@@ -5872,7 +6389,8 @@ mod tests {
         // Linear in P (these reactions are L-independent); R_C reverses sign with the load.
         let base_rb = two_span_continuous_beam_central_point_load_middle_reaction(10.0, 2.0);
         assert!(
-            (two_span_continuous_beam_central_point_load_middle_reaction(20.0, 2.0) - 2.0 * base_rb)
+            (two_span_continuous_beam_central_point_load_middle_reaction(20.0, 2.0)
+                - 2.0 * base_rb)
                 .abs()
                 < 1e-12,
             "R_B linear in P",
@@ -5903,7 +6421,8 @@ mod tests {
         // (a) WORKED: w = 1 kN/m UDL on a 2 m propped cantilever → R_A = 5·w·L/8 =
         // 5·1000·2/8 = 1250 N.
         assert!(
-            (propped_cantilever_udl_fixed_end_reaction(1000.0, 2.0) - 1250.0).abs() <= 1e-9 * 1250.0,
+            (propped_cantilever_udl_fixed_end_reaction(1000.0, 2.0) - 1250.0).abs()
+                <= 1e-9 * 1250.0,
             "R_A = 5wL/8 = 1250 N"
         );
 
@@ -5912,7 +6431,10 @@ mod tests {
         for &(w, l) in &[(1000.0_f64, 2.0_f64), (-450.0, 3.5), (8200.0, 0.8)] {
             let ra = propped_cantilever_udl_fixed_end_reaction(w, l);
             let rb = propped_cantilever_udl_prop_reaction(w, l);
-            assert!((ra + rb - w * l).abs() <= 1e-9 * (w * l).abs().max(1.0), "R_A + R_B = wL");
+            assert!(
+                (ra + rb - w * l).abs() <= 1e-9 * (w * l).abs().max(1.0),
+                "R_A + R_B = wL"
+            );
         }
 
         // (c) SCALING: linear and sign-preserving in w, linear in L.
@@ -5927,12 +6449,19 @@ mod tests {
                 <= 1e-9 * 2.0 * base,
             "linear in L"
         );
-        assert!(propped_cantilever_udl_fixed_end_reaction(-1000.0, 2.0) < 0.0, "sign follows load");
+        assert!(
+            propped_cantilever_udl_fixed_end_reaction(-1000.0, 2.0) < 0.0,
+            "sign follows load"
+        );
 
         // (d) Non-physical input → 0.
-        assert_eq!(propped_cantilever_udl_fixed_end_reaction(f64::NAN, 2.0), 0.0); // w NaN
+        assert_eq!(
+            propped_cantilever_udl_fixed_end_reaction(f64::NAN, 2.0),
+            0.0
+        ); // w NaN
         assert_eq!(propped_cantilever_udl_fixed_end_reaction(1000.0, 0.0), 0.0); // L = 0
-        assert_eq!(propped_cantilever_udl_fixed_end_reaction(1000.0, -2.0), 0.0); // L < 0
+        assert_eq!(propped_cantilever_udl_fixed_end_reaction(1000.0, -2.0), 0.0);
+        // L < 0
     }
 
     #[test]
@@ -5971,8 +6500,14 @@ mod tests {
 
         // Guards: non-physical input → 0.
         assert_eq!(propped_cantilever_central_load_prop_reaction(8.0, 0.0), 0.0); // L = 0
-        assert_eq!(propped_cantilever_central_load_prop_reaction(8.0, -2.0), 0.0); // L < 0
-        assert_eq!(propped_cantilever_central_load_prop_reaction(f64::NAN, 2.0), 0.0); // P NaN
+        assert_eq!(
+            propped_cantilever_central_load_prop_reaction(8.0, -2.0),
+            0.0
+        ); // L < 0
+        assert_eq!(
+            propped_cantilever_central_load_prop_reaction(f64::NAN, 2.0),
+            0.0
+        ); // P NaN
     }
 
     #[test]
@@ -6008,9 +6543,18 @@ mod tests {
         );
 
         // Guards: non-physical input → 0.
-        assert_eq!(propped_cantilever_central_load_fixed_end_reaction(8.0, 0.0), 0.0); // L = 0
-        assert_eq!(propped_cantilever_central_load_fixed_end_reaction(8.0, -2.0), 0.0); // L < 0
-        assert_eq!(propped_cantilever_central_load_fixed_end_reaction(f64::NAN, 2.0), 0.0); // P NaN
+        assert_eq!(
+            propped_cantilever_central_load_fixed_end_reaction(8.0, 0.0),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            propped_cantilever_central_load_fixed_end_reaction(8.0, -2.0),
+            0.0
+        ); // L < 0
+        assert_eq!(
+            propped_cantilever_central_load_fixed_end_reaction(f64::NAN, 2.0),
+            0.0
+        ); // P NaN
     }
 
     #[test]
@@ -6037,11 +6581,13 @@ mod tests {
         // Linear in P and (unlike the reactions) linear in L.
         let base = propped_cantilever_central_load_fixed_end_moment(10.0, 2.0);
         assert!(
-            (propped_cantilever_central_load_fixed_end_moment(20.0, 2.0) - 2.0 * base).abs() < 1e-12,
+            (propped_cantilever_central_load_fixed_end_moment(20.0, 2.0) - 2.0 * base).abs()
+                < 1e-12,
             "doubling P doubles M_A",
         );
         assert!(
-            (propped_cantilever_central_load_fixed_end_moment(10.0, 4.0) - 2.0 * base).abs() < 1e-12,
+            (propped_cantilever_central_load_fixed_end_moment(10.0, 4.0) - 2.0 * base).abs()
+                < 1e-12,
             "doubling L doubles M_A",
         );
         assert!(
@@ -6050,9 +6596,18 @@ mod tests {
         );
 
         // Guards: non-physical input → 0.
-        assert_eq!(propped_cantilever_central_load_fixed_end_moment(8.0, 0.0), 0.0); // L = 0
-        assert_eq!(propped_cantilever_central_load_fixed_end_moment(8.0, -2.0), 0.0); // L < 0
-        assert_eq!(propped_cantilever_central_load_fixed_end_moment(f64::NAN, 2.0), 0.0); // P NaN
+        assert_eq!(
+            propped_cantilever_central_load_fixed_end_moment(8.0, 0.0),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            propped_cantilever_central_load_fixed_end_moment(8.0, -2.0),
+            0.0
+        ); // L < 0
+        assert_eq!(
+            propped_cantilever_central_load_fixed_end_moment(f64::NAN, 2.0),
+            0.0
+        ); // P NaN
     }
 
     #[test]
@@ -6075,7 +6630,10 @@ mod tests {
             let lift = fixed_fixed_point_load_end_moment(p, l) * l * l / (8.0 * e * i);
             let diff = simply_supported_center_deflection(p, l, e, i)
                 - fixed_fixed_center_deflection(p, l, e, i);
-            assert!((lift - diff).abs() <= 1e-12 * diff.abs(), "M·L²/8EI = δ_ss − δ_ff");
+            assert!(
+                (lift - diff).abs() <= 1e-12 * diff.abs(),
+                "M·L²/8EI = δ_ss − δ_ff"
+            );
         }
 
         // Linear in P (sign-preserving) and linear in L.
@@ -6086,7 +6644,10 @@ mod tests {
                 < 1e-9,
             "linear in P"
         );
-        assert!(fixed_fixed_point_load_end_moment(-1000.0, 4.0) < 0.0, "sign follows the load");
+        assert!(
+            fixed_fixed_point_load_end_moment(-1000.0, 4.0) < 0.0,
+            "sign follows the load"
+        );
 
         // Non-physical input → 0.
         assert_eq!(fixed_fixed_point_load_end_moment(f64::NAN, 4.0), 0.0); // P NaN
@@ -6099,7 +6660,10 @@ mod tests {
         // Worked point: w = 1 kN/m UDL on a 4 m clamped–clamped steel beam,
         // E = 200 GPa, I = 1e-6 m⁴ → δ = w·L⁴/(384·E·I) = 256000/7.68e7 = 1/300 m.
         let d = fixed_fixed_udl_center_deflection(1000.0, 4.0, 200.0e9, 1.0e-6);
-        assert!((d - 1.0 / 300.0).abs() / (1.0 / 300.0) < 1e-12, "worked δ = 1/300 m, got {d}");
+        assert!(
+            (d - 1.0 / 300.0).abs() / (1.0 / 300.0) < 1e-12,
+            "worked δ = 1/300 m, got {d}"
+        );
 
         // STRONG cross-check threading simply_supported_udl_center_deflection: clamping
         // both ends is exactly 5× stiffer at mid-span than pinning both under a UDL
@@ -6111,7 +6675,10 @@ mod tests {
         ] {
             let ff = fixed_fixed_udl_center_deflection(w, l, e, i);
             let ss = simply_supported_udl_center_deflection(w, l, e, i);
-            assert!((ff - ss / 5.0).abs() <= 1e-12 * (ss / 5.0).abs(), "δ_ff_udl = δ_ss_udl/5");
+            assert!(
+                (ff - ss / 5.0).abs() <= 1e-12 * (ss / 5.0).abs(),
+                "δ_ff_udl = δ_ss_udl/5"
+            );
             // Sign-preserving: a downward (negative) load gives a downward deflection.
             assert!(ff * w > 0.0, "deflection follows the load sign");
         }
@@ -6122,10 +6689,22 @@ mod tests {
         assert!((d2 - 16.0 * d1).abs() / (16.0 * d1) < 1e-12, "δ ∝ L⁴");
 
         // Non-physical input → 0.
-        assert_eq!(fixed_fixed_udl_center_deflection(f64::NAN, 4.0, 200.0e9, 1.0e-6), 0.0); // w NaN
-        assert_eq!(fixed_fixed_udl_center_deflection(1000.0, 0.0, 200.0e9, 1.0e-6), 0.0); // L = 0
-        assert_eq!(fixed_fixed_udl_center_deflection(1000.0, 4.0, -1.0, 1.0e-6), 0.0); // E < 0
-        assert_eq!(fixed_fixed_udl_center_deflection(1000.0, 4.0, 200.0e9, 0.0), 0.0); // I = 0
+        assert_eq!(
+            fixed_fixed_udl_center_deflection(f64::NAN, 4.0, 200.0e9, 1.0e-6),
+            0.0
+        ); // w NaN
+        assert_eq!(
+            fixed_fixed_udl_center_deflection(1000.0, 0.0, 200.0e9, 1.0e-6),
+            0.0
+        ); // L = 0
+        assert_eq!(
+            fixed_fixed_udl_center_deflection(1000.0, 4.0, -1.0, 1.0e-6),
+            0.0
+        ); // E < 0
+        assert_eq!(
+            fixed_fixed_udl_center_deflection(1000.0, 4.0, 200.0e9, 0.0),
+            0.0
+        ); // I = 0
     }
 
     #[test]
@@ -6134,27 +6713,47 @@ mod tests {
         // E = 200 GPa, I = 1e-6 m⁴ → δ = 5·w·L⁴/(384·E·I) = 80000/7.68e7 = 1/960 m.
         let (w, l, e, i) = (1000.0, 2.0, 200.0e9, 1.0e-6);
         let delta = simply_supported_udl_center_deflection(w, l, e, i);
-        assert!((delta - 1.0 / 960.0).abs() / delta < 1e-9, "δ = 1/960 m, got {delta}");
+        assert!(
+            (delta - 1.0 / 960.0).abs() / delta < 1e-9,
+            "δ = 1/960 m, got {delta}"
+        );
         // Linear in the load intensity, and sign-preserving (an upward load lifts mid-span).
-        assert!((simply_supported_udl_center_deflection(2.0 * w, l, e, i) - 2.0 * delta).abs() / delta < 1e-12);
+        assert!(
+            (simply_supported_udl_center_deflection(2.0 * w, l, e, i) - 2.0 * delta).abs() / delta
+                < 1e-12
+        );
         assert!(
             (simply_supported_udl_center_deflection(-w, l, e, i) + delta).abs() / delta < 1e-12,
             "sign-preserving"
         );
         // Quartic in the span: double L → 16× δ.
         assert!(
-            (simply_supported_udl_center_deflection(w, 2.0 * l, e, i) - 16.0 * delta).abs() / delta < 1e-9,
+            (simply_supported_udl_center_deflection(w, 2.0 * l, e, i) - 16.0 * delta).abs() / delta
+                < 1e-9,
             "L⁴ scaling"
         );
         // Inverse in the flexural rigidity E·I: double E or I → half δ.
-        assert!((simply_supported_udl_center_deflection(w, l, 2.0 * e, i) - 0.5 * delta).abs() / delta < 1e-12, "1/E");
-        assert!((simply_supported_udl_center_deflection(w, l, e, 2.0 * i) - 0.5 * delta).abs() / delta < 1e-12, "1/I");
+        assert!(
+            (simply_supported_udl_center_deflection(w, l, 2.0 * e, i) - 0.5 * delta).abs() / delta
+                < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (simply_supported_udl_center_deflection(w, l, e, 2.0 * i) - 0.5 * delta).abs() / delta
+                < 1e-12,
+            "1/I"
+        );
         // STRONG non-tautological cross-check: the same TOTAL load W = w·L, spread as a
         // UDL, deflects mid-span to exactly 5/8 of the same total as a central point
         // load. The UDL impl uses 5wL⁴/(384EI); the check uses the independent point-
         // load fn simply_supported_center_deflection (P·L³/(48EI)) with P = w·L — a
         // known structural-mechanics ratio, a different code path.
-        for &(ww, ll) in &[(1000.0_f64, 2.0_f64), (300.0, 1.5), (-750.0, 3.0), (4200.0, 0.8)] {
+        for &(ww, ll) in &[
+            (1000.0_f64, 2.0_f64),
+            (300.0, 1.5),
+            (-750.0, 3.0),
+            (4200.0, 0.8),
+        ] {
             let udl = simply_supported_udl_center_deflection(ww, ll, e, i);
             let point = simply_supported_center_deflection(ww * ll, ll, e, i);
             assert!(
@@ -6163,11 +6762,20 @@ mod tests {
             );
         }
         // Non-physical input → 0.
-        assert_eq!(simply_supported_udl_center_deflection(w, l, e, -1.0e-6), 0.0); // I ≤ 0
+        assert_eq!(
+            simply_supported_udl_center_deflection(w, l, e, -1.0e-6),
+            0.0
+        ); // I ≤ 0
         assert_eq!(simply_supported_udl_center_deflection(w, l, 0.0, i), 0.0); // E ≤ 0
         assert_eq!(simply_supported_udl_center_deflection(w, -1.0, e, i), 0.0); // L ≤ 0
-        assert_eq!(simply_supported_udl_center_deflection(f64::NAN, l, e, i), 0.0); // non-finite w
-        assert_eq!(simply_supported_udl_center_deflection(w, l, f64::INFINITY, i), 0.0); // non-finite E
+        assert_eq!(
+            simply_supported_udl_center_deflection(f64::NAN, l, e, i),
+            0.0
+        ); // non-finite w
+        assert_eq!(
+            simply_supported_udl_center_deflection(w, l, f64::INFINITY, i),
+            0.0
+        ); // non-finite E
     }
 
     #[test]
@@ -6176,13 +6784,30 @@ mod tests {
         // GPa, I = 1e-6 m⁴ → θ = w·L³/(24·E·I) = 64000/4.8e6 = 1/75 rad.
         let (w, l, e, i) = (1000.0, 4.0, 200.0e9, 1.0e-6);
         let theta = simply_supported_udl_end_slope(w, l, e, i);
-        assert!((theta - 1.0 / 75.0).abs() / theta < 1e-12, "θ = 1/75 rad, got {theta}");
+        assert!(
+            (theta - 1.0 / 75.0).abs() / theta < 1e-12,
+            "θ = 1/75 rad, got {theta}"
+        );
         // Linear in w (sign-preserving); cubic in span; inverse in E·I.
-        assert!((simply_supported_udl_end_slope(2.0 * w, l, e, i) - 2.0 * theta).abs() / theta < 1e-12);
-        assert!((simply_supported_udl_end_slope(-w, l, e, i) + theta).abs() / theta < 1e-12, "sign-preserving");
-        assert!((simply_supported_udl_end_slope(w, 2.0 * l, e, i) - 8.0 * theta).abs() / theta < 1e-12, "L³ scaling");
-        assert!((simply_supported_udl_end_slope(w, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12, "1/E");
-        assert!((simply_supported_udl_end_slope(w, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12, "1/I");
+        assert!(
+            (simply_supported_udl_end_slope(2.0 * w, l, e, i) - 2.0 * theta).abs() / theta < 1e-12
+        );
+        assert!(
+            (simply_supported_udl_end_slope(-w, l, e, i) + theta).abs() / theta < 1e-12,
+            "sign-preserving"
+        );
+        assert!(
+            (simply_supported_udl_end_slope(w, 2.0 * l, e, i) - 8.0 * theta).abs() / theta < 1e-12,
+            "L³ scaling"
+        );
+        assert!(
+            (simply_supported_udl_end_slope(w, l, 2.0 * e, i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/E"
+        );
+        assert!(
+            (simply_supported_udl_end_slope(w, l, e, 2.0 * i) - 0.5 * theta).abs() / theta < 1e-12,
+            "1/I"
+        );
         // Cross-check (a) tying it to the UDL centre deflection #206: δ = (5/16)·L·θ.
         for &(ww, ll) in &[(1000.0_f64, 4.0_f64), (300.0, 1.5), (-750.0, 3.0)] {
             let slope = simply_supported_udl_end_slope(ww, ll, e, i);
@@ -6207,7 +6832,8 @@ mod tests {
         assert_eq!(simply_supported_udl_end_slope(w, l, 0.0, i), 0.0); // E ≤ 0
         assert_eq!(simply_supported_udl_end_slope(w, -1.0, e, i), 0.0); // L ≤ 0
         assert_eq!(simply_supported_udl_end_slope(f64::NAN, l, e, i), 0.0); // non-finite w
-        assert_eq!(simply_supported_udl_end_slope(w, l, f64::INFINITY, i), 0.0); // non-finite E
+        assert_eq!(simply_supported_udl_end_slope(w, l, f64::INFINITY, i), 0.0);
+        // non-finite E
     }
 
     #[test]
@@ -6280,7 +6906,10 @@ mod tests {
         let f_ss = euler_bernoulli_beam_frequency(PI, e, i, rho, area, l);
         let omega = PI.powi(2) / (l * l) * (e * i / (rho * area)).sqrt();
         assert!((f_ss - omega / (2.0 * PI)).abs() < 1e-9, "f = ω/2π");
-        assert!((f_ss - 79.28).abs() < 0.5, "SS fundamental ≈ 79.3 Hz, got {f_ss}");
+        assert!(
+            (f_ss - 79.28).abs() < 0.5,
+            "SS fundamental ≈ 79.3 Hz, got {f_ss}"
+        );
         // The boundary/mode enters only through (β·L)²: the cantilever fundamental
         // (β₁L = 1.875104) sits a factor (1.875104/π)² below the simply-supported one.
         let f_cant = euler_bernoulli_beam_frequency(1.875_104, e, i, rho, area, l);
@@ -6289,15 +6918,40 @@ mod tests {
             "f ∝ (β·L)²"
         );
         // Scaling: ∝ √E, ∝ √I, ∝ 1/√ρ, ∝ 1/L².
-        assert!((euler_bernoulli_beam_frequency(PI, 4.0 * e, i, rho, area, l) - 2.0 * f_ss).abs() < 1e-6, "∝ √E");
-        assert!((euler_bernoulli_beam_frequency(PI, e, 4.0 * i, rho, area, l) - 2.0 * f_ss).abs() < 1e-6, "∝ √I");
-        assert!((euler_bernoulli_beam_frequency(PI, e, i, 4.0 * rho, area, l) - f_ss / 2.0).abs() < 1e-6, "∝ 1/√ρ");
-        assert!((euler_bernoulli_beam_frequency(PI, e, i, rho, area, 2.0 * l) - f_ss / 4.0).abs() < 1e-6, "∝ 1/L²");
+        assert!(
+            (euler_bernoulli_beam_frequency(PI, 4.0 * e, i, rho, area, l) - 2.0 * f_ss).abs()
+                < 1e-6,
+            "∝ √E"
+        );
+        assert!(
+            (euler_bernoulli_beam_frequency(PI, e, 4.0 * i, rho, area, l) - 2.0 * f_ss).abs()
+                < 1e-6,
+            "∝ √I"
+        );
+        assert!(
+            (euler_bernoulli_beam_frequency(PI, e, i, 4.0 * rho, area, l) - f_ss / 2.0).abs()
+                < 1e-6,
+            "∝ 1/√ρ"
+        );
+        assert!(
+            (euler_bernoulli_beam_frequency(PI, e, i, rho, area, 2.0 * l) - f_ss / 4.0).abs()
+                < 1e-6,
+            "∝ 1/L²"
+        );
         // Non-physical input → 0.
-        assert_eq!(euler_bernoulli_beam_frequency(PI, 0.0, i, rho, area, l), 0.0);
-        assert_eq!(euler_bernoulli_beam_frequency(PI, e, i, rho, area, 0.0), 0.0);
+        assert_eq!(
+            euler_bernoulli_beam_frequency(PI, 0.0, i, rho, area, l),
+            0.0
+        );
+        assert_eq!(
+            euler_bernoulli_beam_frequency(PI, e, i, rho, area, 0.0),
+            0.0
+        );
         assert_eq!(euler_bernoulli_beam_frequency(PI, e, i, 0.0, area, l), 0.0);
-        assert_eq!(euler_bernoulli_beam_frequency(f64::NAN, e, i, rho, area, l), 0.0);
+        assert_eq!(
+            euler_bernoulli_beam_frequency(f64::NAN, e, i, rho, area, l),
+            0.0
+        );
     }
 
     #[test]
@@ -6312,8 +6966,8 @@ mod tests {
         let elements: Vec<BeamElement> = (0..n_elem)
             .map(|i| BeamElement::new(i, i + 1, section))
             .collect();
-        let sol = solve_beam_modal(&nodes, &elements, &mat, &[BeamConstraint::clamped(0)], 5)
-            .unwrap();
+        let sol =
+            solve_beam_modal(&nodes, &elements, &mat, &[BeamConstraint::clamped(0)], 5).unwrap();
         assert_eq!(sol.modes.len(), 5);
         for w in sol.modes.windows(2) {
             assert!(
@@ -6375,8 +7029,7 @@ mod tests {
         // silently-NaN displacement returned as Ok(..). Reject it.
         let (nodes, elements, constraints) = simple_cantilever();
         let loads = vec![BeamLoad::force(1, [f64::NAN, 0.0, 0.0])];
-        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &loads)
-            .unwrap_err();
+        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &loads).unwrap_err();
         assert!(
             matches!(err, BeamSolverError::InvalidLoad { .. }),
             "expected InvalidLoad, got {err:?}"
@@ -6387,8 +7040,7 @@ mod tests {
     fn beam_rejects_infinite_moment() {
         let (nodes, elements, constraints) = simple_cantilever();
         let loads = vec![BeamLoad::moment(1, [0.0, f64::INFINITY, 0.0])];
-        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &loads)
-            .unwrap_err();
+        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &loads).unwrap_err();
         assert!(matches!(err, BeamSolverError::InvalidLoad { .. }));
     }
 
@@ -6404,8 +7056,7 @@ mod tests {
                 fixed: [Some(f64::NAN), None, None, None, None, None],
             },
         ];
-        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &[])
-            .unwrap_err();
+        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &[]).unwrap_err();
         assert!(matches!(err, BeamSolverError::InvalidLoad { .. }));
     }
 
@@ -6414,9 +7065,11 @@ mod tests {
         // The validation must not reject a normal finite load.
         let (nodes, elements, constraints) = simple_cantilever();
         let loads = vec![BeamLoad::force(1, [0.0, 0.0, -1.0e3])];
-        let sol = solve_beam_static(&nodes, &elements, &steel(), &constraints, &loads)
-            .unwrap();
-        assert!(sol.translation.iter().all(|t| t.iter().all(|c| c.is_finite())));
+        let sol = solve_beam_static(&nodes, &elements, &steel(), &constraints, &loads).unwrap();
+        assert!(sol
+            .translation
+            .iter()
+            .all(|t| t.iter().all(|c| c.is_finite())));
         assert!(sol.translation[1][2] < 0.0, "tip should deflect downward");
     }
 
@@ -6451,7 +7104,9 @@ mod tests {
     /// A long straight chain of `n_nodes` collinear nodes with a beam
     /// element between each adjacent pair, node 0 clamped. Cheap to
     /// build (the `O(n_dof²)` cost is the dense matrix the cap prevents).
-    fn straight_chain(n_nodes: usize) -> (Vec<Vector3<f64>>, Vec<BeamElement>, Vec<BeamConstraint>) {
+    fn straight_chain(
+        n_nodes: usize,
+    ) -> (Vec<Vector3<f64>>, Vec<BeamElement>, Vec<BeamConstraint>) {
         let nodes: Vec<Vector3<f64>> = (0..n_nodes)
             .map(|i| Vector3::new(i as f64, 0.0, 0.0))
             .collect();
@@ -6470,8 +7125,7 @@ mod tests {
         // if it did not, this test would OOM rather than return Err.
         let n = MAX_DENSE_DOFS / 6 + 1;
         let (nodes, elements, constraints) = straight_chain(n);
-        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &[])
-            .unwrap_err();
+        let err = solve_beam_static(&nodes, &elements, &steel(), &constraints, &[]).unwrap_err();
         assert!(
             matches!(err, BeamSolverError::TooLarge { .. }),
             "expected TooLarge, got {err:?}"
@@ -6483,8 +7137,7 @@ mod tests {
         use crate::native_solver::MAX_DENSE_DOFS;
         let n = MAX_DENSE_DOFS / 6 + 1;
         let (nodes, elements, constraints) = straight_chain(n);
-        let err = solve_beam_modal(&nodes, &elements, &steel(), &constraints, 2)
-            .unwrap_err();
+        let err = solve_beam_modal(&nodes, &elements, &steel(), &constraints, 2).unwrap_err();
         assert!(
             matches!(err, BeamSolverError::TooLarge { .. }),
             "expected TooLarge, got {err:?}"

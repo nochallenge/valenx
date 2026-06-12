@@ -79,7 +79,11 @@ pub fn geom_lib_curvature_at_point(
     }
     let cross = d1.cross(&d2);
     let kappa = cross.norm() / d1_norm.powi(3);
-    let radius = if kappa > 1e-12 { 1.0 / kappa } else { f64::INFINITY };
+    let radius = if kappa > 1e-12 {
+        1.0 / kappa
+    } else {
+        f64::INFINITY
+    };
     Ok(CurvatureReport {
         curvature: kappa,
         radius,

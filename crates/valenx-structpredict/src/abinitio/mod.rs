@@ -43,8 +43,7 @@ pub use assemble::{fragment_assembly, AssemblyOptions, AssemblyResult, AssemblyS
 pub use decoy::{cluster_decoys, select_model, DecoyCluster};
 pub use dope::{dope_energy, dope_score, dope_table, DopePair, DopeScore, DopeWeights};
 pub use fragments::{
-    build_fragment_library, fragment_class_count, fragment_class_labels, Fragment,
-    FragmentLibrary,
+    build_fragment_library, fragment_class_count, fragment_class_labels, Fragment, FragmentLibrary,
 };
 pub use protocol::{coarse_to_fine, coarse_to_fine_with_refine, ProtocolResult};
 pub use score::{score_model, KnowledgeScore, ScoreWeights};

@@ -56,16 +56,38 @@ pub fn is_valid_residue(kind: SeqKind, b: u8) -> bool {
     match kind {
         SeqKind::Dna => matches!(
             u,
-            b'A' | b'C' | b'G' | b'T'
-                | b'N' | b'R' | b'Y' | b'S' | b'W' | b'K' | b'M'
-                | b'B' | b'D' | b'H' | b'V'
+            b'A' | b'C'
+                | b'G'
+                | b'T'
+                | b'N'
+                | b'R'
+                | b'Y'
+                | b'S'
+                | b'W'
+                | b'K'
+                | b'M'
+                | b'B'
+                | b'D'
+                | b'H'
+                | b'V'
                 | b'-'
         ),
         SeqKind::Rna => matches!(
             u,
-            b'A' | b'C' | b'G' | b'U'
-                | b'N' | b'R' | b'Y' | b'S' | b'W' | b'K' | b'M'
-                | b'B' | b'D' | b'H' | b'V'
+            b'A' | b'C'
+                | b'G'
+                | b'U'
+                | b'N'
+                | b'R'
+                | b'Y'
+                | b'S'
+                | b'W'
+                | b'K'
+                | b'M'
+                | b'B'
+                | b'D'
+                | b'H'
+                | b'V'
                 | b'-'
         ),
         // The 20 standard amino acids plus the IUPAC extras (B Z J X)

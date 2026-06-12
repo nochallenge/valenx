@@ -24,7 +24,9 @@ use eframe::egui_wgpu;
 use valenx_mesh::{ElementType, Mesh};
 use valenx_viz::{project_point, project_triangle, OrbitCamera, ScreenPoint, StlTriangle};
 
-use crate::wgpu_renderer::{inv_mvp_from_camera, mvp_from_camera, triangles_to_vertices, WgpuRenderer};
+use crate::wgpu_renderer::{
+    inv_mvp_from_camera, mvp_from_camera, triangles_to_vertices, WgpuRenderer,
+};
 use crate::{LoadedMesh, LoadedStl};
 
 /// Which renderer state the viewport draws in.

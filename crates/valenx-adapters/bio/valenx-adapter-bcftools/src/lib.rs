@@ -501,12 +501,13 @@ reference = "../etc/passwd"
             path: d.clone(),
         };
         let workdir = d.join("workdir");
-        let err = BcftoolsAdapter::new()
-            .prepare(&case, &workdir)
-            .unwrap_err();
+        let err = BcftoolsAdapter::new().prepare(&case, &workdir).unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("absolute") || msg.contains("escape") || msg.contains("`..`") || msg.contains("traversal"),
+            msg.contains("absolute")
+                || msg.contains("escape")
+                || msg.contains("`..`")
+                || msg.contains("traversal"),
             "expected confined_join rejection, got: {msg}"
         );
         let _ = std::fs::remove_dir_all(&d);

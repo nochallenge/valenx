@@ -119,12 +119,8 @@ pub fn record_wright_fisher(config: RecordingConfig) -> Result<TreeSequence> {
 
             // Draw an arbitrary number of crossover breakpoints.
             let n_xo = rng.poisson(config.recombination_rate * l);
-            let mut breakpoints: Vec<f64> = (0..n_xo)
-                .map(|_| rng.uniform() * l)
-                .collect();
-            breakpoints.sort_by(|a, b| {
-                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            let mut breakpoints: Vec<f64> = (0..n_xo).map(|_| rng.uniform() * l).collect();
+            breakpoints.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             // Dedup essentially-equal breakpoints to avoid zero-width
             // edges.
             breakpoints.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
@@ -222,9 +218,7 @@ fn simplify(
     let mut squashed: Vec<(usize, usize, f64, f64)> = raw_edges
         .iter()
         .copied()
-        .filter(|&(p, c, _, _)| {
-            p < n_nodes && c < n_nodes && keep[p] && keep[c]
-        })
+        .filter(|&(p, c, _, _)| p < n_nodes && c < n_nodes && keep[p] && keep[c])
         .collect();
     // Build a "child -> single ancestral child" map per node when the
     // node has exactly one child *over the whole chromosome*. For each
@@ -240,8 +234,7 @@ fn simplify(
         // its edge list AND check whether they tile the whole [0, L)
         // exactly once.
         let mut single_child: Vec<Option<usize>> = vec![None; n_nodes];
-        let mut children_intervals: Vec<Vec<(f64, f64, usize)>> =
-            vec![Vec::new(); n_nodes];
+        let mut children_intervals: Vec<Vec<(f64, f64, usize)>> = vec![Vec::new(); n_nodes];
         for &(p, c, l, r) in &squashed {
             children_intervals[p].push((l, r, c));
         }
@@ -254,8 +247,7 @@ fn simplify(
                 continue;
             }
             // Distinct child ids.
-            let mut child_ids: Vec<usize> =
-                intervals.iter().map(|&(_, _, c)| c).collect();
+            let mut child_ids: Vec<usize> = intervals.iter().map(|&(_, _, c)| c).collect();
             child_ids.sort_unstable();
             child_ids.dedup();
             if child_ids.len() != 1 {
@@ -264,9 +256,7 @@ fn simplify(
             // Coverage check: their intervals tile [0, L). Sort by
             // left; walk; ensure contiguous and covering [0, L].
             let mut sorted = intervals.clone();
-            sorted.sort_by(|a, b| {
-                a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
             let mut covered = 0.0f64;
             let mut ok = (sorted[0].0 - 0.0).abs() < 1e-9;
             for w in sorted.windows(2) {
@@ -300,8 +290,7 @@ fn simplify(
         // ending at it (parent -> intermediate) as edges to its child
         // (parent -> child) covering the same intervals.
         // First snapshot parents-of for the intermediate.
-        let mut parent_edges_at: Vec<Vec<(usize, f64, f64)>> =
-            vec![Vec::new(); n_nodes];
+        let mut parent_edges_at: Vec<Vec<(usize, f64, f64)>> = vec![Vec::new(); n_nodes];
         for &(p, c, l, r) in &squashed {
             if single_child[c].is_some() {
                 parent_edges_at[c].push((p, l, r));
@@ -338,12 +327,7 @@ fn simplify(
         ts.add_node(time, is_s);
     }
     for &(parent, child, left, right) in &squashed {
-        if parent < n_nodes
-            && child < n_nodes
-            && keep[parent]
-            && keep[child]
-            && right > left
-        {
+        if parent < n_nodes && child < n_nodes && keep[parent] && keep[child] && right > left {
             ts.add_edge(Edge {
                 parent: new_id[parent],
                 child: new_id[child],
@@ -441,7 +425,7 @@ mod tests {
     fn multiple_crossovers_yield_three_plus_edges_per_offspring() {
         let cfg = RecordingConfig {
             n: 50,
-            generations: 1, // single-generation run keeps the table small
+            generations: 1,           // single-generation run keeps the table small
             recombination_rate: 2e-2, // mean 20 breakpoints on L=1000
             sequence_length: 1000.0,
             seed: 99,
@@ -453,8 +437,7 @@ mod tests {
         for e in ts.edges() {
             *edges_per_child.entry(e.child).or_insert(0) += 1;
         }
-        let three_plus =
-            edges_per_child.values().filter(|&&v| v >= 3).count();
+        let three_plus = edges_per_child.values().filter(|&&v| v >= 3).count();
         assert!(
             three_plus > 0,
             "no offspring had 3+ edges, max {:?}",
@@ -477,16 +460,11 @@ mod tests {
         let mut by_child: std::collections::HashMap<usize, Vec<(f64, f64)>> =
             std::collections::HashMap::new();
         for e in ts.edges() {
-            by_child
-                .entry(e.child)
-                .or_default()
-                .push((e.left, e.right));
+            by_child.entry(e.child).or_default().push((e.left, e.right));
         }
         for samp in ts.samples() {
             let mut ivs = by_child.get(&samp).cloned().unwrap_or_default();
-            ivs.sort_by(|a, b| {
-                a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            ivs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
             assert!(!ivs.is_empty(), "sample {samp} has no parent edges");
             assert!(ivs.first().unwrap().0.abs() < 1e-9);
             assert!((ivs.last().unwrap().1 - 500.0).abs() < 1e-9);

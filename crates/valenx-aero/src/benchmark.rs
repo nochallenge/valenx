@@ -334,12 +334,7 @@ pub fn run_sphere_drag(
         ..SolverControls::default()
     };
     let flow = solve_steady(&tunnel, &controls, &BodyMotion::static_body());
-    let forces = crate::forces::integrate_forces_with(
-        &tunnel,
-        &flow,
-        Vector3::zeros(),
-        wall_model,
-    );
+    let forces = crate::forces::integrate_forces_with(&tunnel, &flow, Vector3::zeros(), wall_model);
     let cd = crate::forces::coefficients(&tunnel, &forces).cd;
     let re = tunnel.reynolds_number();
     SphereDragPoint {
@@ -393,10 +388,7 @@ pub fn run_flat_plate(
 ) -> FlatPlateResult {
     // A 1 m (chord) × 1 m (span) plate, 2 cm thick — thin enough that
     // the drag is friction-dominated, thick enough to voxelize cleanly.
-    let plate = box_body(
-        Vector3::new(0.0, 0.0, -0.01),
-        Vector3::new(1.0, 1.0, 0.01),
-    );
+    let plate = box_body(Vector3::new(0.0, 0.0, -0.01), Vector3::new(1.0, 1.0, 0.01));
     let wind = Wind::straight(speed).unwrap();
     let mut tunnel = WindTunnel::build_with(
         &plate,
@@ -420,12 +412,7 @@ pub fn run_flat_plate(
         ..SolverControls::default()
     };
     let flow = solve_steady(&tunnel, &controls, &BodyMotion::static_body());
-    let forces = crate::forces::integrate_forces_with(
-        &tunnel,
-        &flow,
-        Vector3::zeros(),
-        wall_model,
-    );
+    let forces = crate::forces::integrate_forces_with(&tunnel, &flow, Vector3::zeros(), wall_model);
     let coeff = crate::forces::coefficients(&tunnel, &forces);
     let re = tunnel.reynolds_number();
     // The friction-drag part of Cd is the skin-friction coefficient.
@@ -473,8 +460,7 @@ impl AirfoilResult {
     /// The relative error of the fitted lift slope versus the `2π`
     /// thin-airfoil reference.
     pub fn lift_slope_relative_error(&self) -> f64 {
-        (self.lift_slope - self.lift_slope_reference).abs()
-            / self.lift_slope_reference
+        (self.lift_slope - self.lift_slope_reference).abs() / self.lift_slope_reference
     }
 }
 
@@ -533,12 +519,8 @@ pub fn run_naca_airfoil(
             ..SolverControls::default()
         };
         let flow = solve_steady(&tunnel, &controls, &BodyMotion::static_body());
-        let forces = crate::forces::integrate_forces_with(
-            &tunnel,
-            &flow,
-            Vector3::zeros(),
-            wall_model,
-        );
+        let forces =
+            crate::forces::integrate_forces_with(&tunnel, &flow, Vector3::zeros(), wall_model);
         let coeff = crate::forces::coefficients(&tunnel, &forces);
         reynolds = tunnel.reynolds_number();
         polar.push(AirfoilPolarPoint {
@@ -557,10 +539,7 @@ pub fn run_naca_airfoil(
         den += p.alpha * p.alpha;
     }
     let lift_slope = if den > 1e-12 { num / den } else { 0.0 };
-    let cd_min = polar
-        .iter()
-        .map(|p| p.cd)
-        .fold(f64::INFINITY, f64::min);
+    let cd_min = polar.iter().map(|p| p.cd).fold(f64::INFINITY, f64::min);
 
     AirfoilResult {
         reynolds,
@@ -665,7 +644,11 @@ mod tests {
         }
 
         // (c) ZERO: α=0 → no moment.
-        assert_eq!(thin_airfoil_leading_edge_moment_coefficient(0.0), 0.0, "α=0 → Cm_LE=0");
+        assert_eq!(
+            thin_airfoil_leading_edge_moment_coefficient(0.0),
+            0.0,
+            "α=0 → Cm_LE=0"
+        );
 
         // (d) SIGN + LINEARITY: nose-down for positive α, linear, odd in α.
         assert!(
@@ -721,7 +704,11 @@ mod tests {
         );
 
         // (d) ZERO, LINEAR, SIGN: no lift → no incidence; linear; sign-preserving.
-        assert_eq!(thin_airfoil_angle_for_lift_coefficient(0.0), 0.0, "C_l=0 → α=0");
+        assert_eq!(
+            thin_airfoil_angle_for_lift_coefficient(0.0),
+            0.0,
+            "C_l=0 → α=0"
+        );
         assert!(
             (thin_airfoil_angle_for_lift_coefficient(1.0)
                 - 2.0 * thin_airfoil_angle_for_lift_coefficient(0.5))
@@ -770,7 +757,6 @@ mod tests {
     /// keep the suite fast, fine enough that the integrated coefficient
     /// is a meaningful number.
     const VAL_CELLS: usize = 6;
-
 
     #[test]
     fn sphere_drag_lands_in_the_subcritical_band() {
@@ -858,7 +844,10 @@ mod tests {
     #[test]
     fn turbulent_shape_factor_is_nine_sevenths() {
         // Worked: H = 9/7 ≈ 1.2857.
-        assert!((turbulent_shape_factor() - 9.0 / 7.0).abs() <= 1e-12 * (9.0 / 7.0), "H = 9/7");
+        assert!(
+            (turbulent_shape_factor() - 9.0 / 7.0).abs() <= 1e-12 * (9.0 / 7.0),
+            "H = 9/7"
+        );
 
         // Threads δ*/θ (#361 / #355): H = δ*/θ, Reynolds-independent.
         for &re in &[1.0e6, 5.0e6, 1.0e7] {
@@ -999,7 +988,10 @@ mod tests {
         assert!(turbulent_local_cf(1.0e5) > turbulent_local_cf(1.0e7));
 
         // The Re < 1 clamp.
-        assert!((turbulent_local_cf(0.5) - 0.0592).abs() < 1e-12, "clamped to Re = 1");
+        assert!(
+            (turbulent_local_cf(0.5) - 0.0592).abs() < 1e-12,
+            "clamped to Re = 1"
+        );
     }
 
     #[test]
@@ -1080,7 +1072,10 @@ mod tests {
         }
 
         // Known textbook value H ≈ 2.59 for the laminar Blasius profile.
-        assert!((blasius_shape_factor() - 2.5918).abs() < 1e-3, "laminar H ≈ 2.59");
+        assert!(
+            (blasius_shape_factor() - 2.5918).abs() < 1e-3,
+            "laminar H ≈ 2.59"
+        );
 
         // δ* always exceeds θ (H > 1), and laminar H stays below the ≈3.5 separation value.
         assert!(
@@ -1191,7 +1186,10 @@ mod tests {
         );
 
         // The Re < 1 clamp (matching blasius_local_cf): δ/x(0.5) = 5.0.
-        assert!((blasius_boundary_layer_thickness_ratio(0.5) - 5.0).abs() < 1e-12, "clamped to Re = 1");
+        assert!(
+            (blasius_boundary_layer_thickness_ratio(0.5) - 5.0).abs() < 1e-12,
+            "clamped to Re = 1"
+        );
     }
 
     #[test]
@@ -1201,11 +1199,17 @@ mod tests {
         for &re in &[1.0e5, 1.0e6, 5.0e6] {
             let avg = blasius_flat_plate_cf(re);
             let local = blasius_local_cf(re);
-            assert!((avg - 2.0 * local).abs() <= 1e-12 * avg, "C_F = 2·c_f at Re={re}");
+            assert!(
+                (avg - 2.0 * local).abs() <= 1e-12 * avg,
+                "C_F = 2·c_f at Re={re}"
+            );
         }
 
         // Worked value: c_f(1e6) = 0.664/1000 = 6.64e-4.
-        assert!((blasius_local_cf(1.0e6) - 6.64e-4).abs() <= 1e-12 * 6.64e-4, "c_f(1e6) = 6.64e-4");
+        assert!(
+            (blasius_local_cf(1.0e6) - 6.64e-4).abs() <= 1e-12 * 6.64e-4,
+            "c_f(1e6) = 6.64e-4"
+        );
 
         // Scales as Re^(−1/2): quadrupling Re halves c_f.
         assert!(
@@ -1215,7 +1219,10 @@ mod tests {
         );
 
         // The Re < 1 clamp (matching blasius_flat_plate_cf): c_f(0.5) = 0.664.
-        assert!((blasius_local_cf(0.5) - 0.664).abs() < 1e-12, "clamped to Re = 1");
+        assert!(
+            (blasius_local_cf(0.5) - 0.664).abs() < 1e-12,
+            "clamped to Re = 1"
+        );
     }
 
     #[test]
@@ -1274,8 +1281,7 @@ mod tests {
         // body-fitted near-wall mesh with a resolved trailing edge is
         // the documented Tier-3 work for accurate airfoil lift; this
         // benchmark validates the drag and the converged polar.
-        let result =
-            run_naca_airfoil(25.0, &[-2.0, 0.0, 2.0], VAL_CELLS, 150, true);
+        let result = run_naca_airfoil(25.0, &[-2.0, 0.0, 2.0], VAL_CELLS, 150, true);
         assert!(
             result.reynolds > 1.0e5,
             "airfoil Re {} should be ~1e6",

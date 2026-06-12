@@ -63,17 +63,13 @@ pub fn pcb_to_solid(board: &KicadBoard) -> Result<Solid, KicadError> {
     for i in 0..n {
         let j = (i + 1) % n;
         // Top fan.
-        block.connectivity.extend_from_slice(&[
-            top_c,
-            top_base + i as u32,
-            top_base + j as u32,
-        ]);
+        block
+            .connectivity
+            .extend_from_slice(&[top_c, top_base + i as u32, top_base + j as u32]);
         // Bottom fan (reversed).
-        block.connectivity.extend_from_slice(&[
-            bot_c,
-            bot_base + j as u32,
-            bot_base + i as u32,
-        ]);
+        block
+            .connectivity
+            .extend_from_slice(&[bot_c, bot_base + j as u32, bot_base + i as u32]);
         // Walls.
         let a = top_base + i as u32;
         let b = top_base + j as u32;

@@ -277,11 +277,7 @@ fn try_sew_box(planes: &[PlanarRegion]) -> Option<Solid> {
     let canonical = valenx_cad::box_solid(lengths[0], lengths[1], lengths[2]).ok()?;
     // Move the canonical box so its centre sits at the origin.
     let centred = canonical
-        .translated(
-            -lengths[0] / 2.0,
-            -lengths[1] / 2.0,
-            -lengths[2] / 2.0,
-        )
+        .translated(-lengths[0] / 2.0, -lengths[1] / 2.0, -lengths[2] / 2.0)
         .ok()?;
     // Orient: rotate the canonical X/Y/Z frame onto axes[0/1/2]. We
     // build the rotation as two successive minimal rotations (X→axis0,
@@ -317,17 +313,16 @@ fn orient_frame(solid: &Solid, target: &[Vector3<f64>]) -> Option<Solid> {
     let cos = yr_perp.dot(&t1_perp).clamp(-1.0, 1.0);
     let sin = yr_perp.cross(&t1_perp).dot(&n);
     let angle2 = sin.atan2(cos);
-    let step2 = step1.rotated((0.0, 0.0, 0.0), (n.x, n.y, n.z), angle2).ok()?;
+    let step2 = step1
+        .rotated((0.0, 0.0, 0.0), (n.x, n.y, n.z), angle2)
+        .ok()?;
     Some(step2)
 }
 
 /// The minimal rotation `(axis, angle)` carrying unit vector `from`
 /// onto unit vector `to`. Handles the parallel and antiparallel
 /// degenerate cases.
-fn minimal_rotation(
-    from: Vector3<f64>,
-    to: Vector3<f64>,
-) -> Option<(Vector3<f64>, f64)> {
+fn minimal_rotation(from: Vector3<f64>, to: Vector3<f64>) -> Option<(Vector3<f64>, f64)> {
     let from = from.normalize();
     let to = to.normalize();
     let dot = from.dot(&to).clamp(-1.0, 1.0);
@@ -420,8 +415,7 @@ fn try_sew_cylinder(
 
     // Build the canonical +Z cylinder and orient it onto the axis.
     let canonical = valenx_cad::cylinder(radius, height).ok()?;
-    let (rot_axis, angle) =
-        minimal_rotation(Vector3::new(0.0, 0.0, 1.0), axis)?;
+    let (rot_axis, angle) = minimal_rotation(Vector3::new(0.0, 0.0, 1.0), axis)?;
     let oriented = canonical
         .rotated((0.0, 0.0, 0.0), (rot_axis.x, rot_axis.y, rot_axis.z), angle)
         .ok()?;
@@ -607,7 +601,9 @@ mod tests {
             block.connectivity.extend_from_slice(&[b0, b1, t1]);
             block.connectivity.extend_from_slice(&[b0, t1, t0]);
             // Bottom cap fan.
-            block.connectivity.extend_from_slice(&[bottom_centre, b1, b0]);
+            block
+                .connectivity
+                .extend_from_slice(&[bottom_centre, b1, b0]);
             // Top cap fan.
             block.connectivity.extend_from_slice(&[top_centre, t0, t1]);
         }
@@ -770,7 +766,10 @@ mod tests {
         m.element_blocks.push(block);
         let result = sew_regions(&m, 1.0, 1e-3).unwrap();
         // One planar region, open → not a closed solid.
-        assert!(!result.outcome.is_brep(), "a flat quad is no BRep primitive");
+        assert!(
+            !result.outcome.is_brep(),
+            "a flat quad is no BRep primitive"
+        );
         assert_eq!(result.outcome, SewOutcome::OpenPatchSet);
         assert!(result.free_edge_count > 0, "an open quad has free edges");
         // It still returns a (mesh-backed) solid, never an error.

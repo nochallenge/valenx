@@ -220,7 +220,10 @@ mod tests {
         let cmd = build_file_browser_command(&file);
         assert_eq!(cmd.get_program(), std::ffi::OsStr::new("open"));
         let args: Vec<_> = cmd.get_args().collect();
-        assert_eq!(args.first().map(|a| a.to_string_lossy()).as_deref(), Some("-R"));
+        assert_eq!(
+            args.first().map(|a| a.to_string_lossy()).as_deref(),
+            Some("-R")
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

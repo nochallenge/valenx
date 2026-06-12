@@ -948,17 +948,32 @@ mod tests {
         // ν=0 → periapsis a(1−e); ν=π → apoapsis a(1+e).
         assert!((coe.radius_at_true_anomaly(0.0) - coe.periapsis_radius()).abs() < 1e-6);
         assert!((coe.radius_at_true_anomaly(PI) - coe.apoapsis_radius()).abs() < 1e-6);
-        assert!((coe.radius_at_true_anomaly(0.0) - a * (1.0 - e)).abs() < 1e-6, "perigee");
-        assert!((coe.radius_at_true_anomaly(PI) - a * (1.0 + e)).abs() < 1e-6, "apogee");
+        assert!(
+            (coe.radius_at_true_anomaly(0.0) - a * (1.0 - e)).abs() < 1e-6,
+            "perigee"
+        );
+        assert!(
+            (coe.radius_at_true_anomaly(PI) - a * (1.0 + e)).abs() < 1e-6,
+            "apogee"
+        );
         // ν=±π/2 → the semi-latus rectum p = a(1−e²).
         let p = a * (1.0 - e * e);
-        assert!((coe.radius_at_true_anomaly(PI / 2.0) - p).abs() < 1e-6, "semi-latus rectum");
+        assert!(
+            (coe.radius_at_true_anomaly(PI / 2.0) - p).abs() < 1e-6,
+            "semi-latus rectum"
+        );
         // Symmetric about the line of apsides: r(ν) = r(−ν).
         assert!((coe.radius_at_true_anomaly(1.0) - coe.radius_at_true_anomaly(-1.0)).abs() < 1e-9);
         // A circular orbit has constant radius a at every true anomaly.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for nu in [0.0, 1.0, PI, 2.5] {
-            assert!((circ.radius_at_true_anomaly(nu) - a).abs() < 1e-6, "circular r at {nu}");
+            assert!(
+                (circ.radius_at_true_anomaly(nu) - a).abs() < 1e-6,
+                "circular r at {nu}"
+            );
         }
     }
 
@@ -976,11 +991,23 @@ mod tests {
         let a = coe.semi_major_axis;
         // E=0 → periapsis a(1−e); E=π → apoapsis a(1+e): the two radius forms agree
         // at the apsides.
-        assert!((coe.radius_at_eccentric_anomaly(0.0) - coe.periapsis_radius()).abs() / a < 1e-12, "E=0 → periapsis");
-        assert!((coe.radius_at_eccentric_anomaly(PI) - coe.apoapsis_radius()).abs() / a < 1e-12, "E=π → apoapsis");
+        assert!(
+            (coe.radius_at_eccentric_anomaly(0.0) - coe.periapsis_radius()).abs() / a < 1e-12,
+            "E=0 → periapsis"
+        );
+        assert!(
+            (coe.radius_at_eccentric_anomaly(PI) - coe.apoapsis_radius()).abs() / a < 1e-12,
+            "E=π → apoapsis"
+        );
         // E=±π/2 → exactly the semi-major axis a.
-        assert!((coe.radius_at_eccentric_anomaly(PI / 2.0) - a).abs() / a < 1e-12, "E=π/2 → a");
-        assert!((coe.radius_at_eccentric_anomaly(-PI / 2.0) - a).abs() / a < 1e-12, "E=−π/2 → a");
+        assert!(
+            (coe.radius_at_eccentric_anomaly(PI / 2.0) - a).abs() / a < 1e-12,
+            "E=π/2 → a"
+        );
+        assert!(
+            (coe.radius_at_eccentric_anomaly(-PI / 2.0) - a).abs() / a < 1e-12,
+            "E=−π/2 → a"
+        );
         // STRONG cross-check: at a corresponding (E, ν) pair the eccentric-anomaly
         // radius a(1−e·cos E) equals the true-anomaly polar form p/(1+e·cos ν) (#168),
         // with ν from true_anomaly_from_eccentric (#150) — different formulas, same r.
@@ -991,9 +1018,15 @@ mod tests {
             assert!((r_e - r_nu).abs() / r_e < 1e-9, "r(E) = r(ν) at E={e_anom}");
         }
         // A circular orbit has constant radius a at every E.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for ea in [0.0_f64, 1.0, PI, 4.2] {
-            assert!((circ.radius_at_eccentric_anomaly(ea) - a).abs() / a < 1e-12, "circular r=a at E={ea}");
+            assert!(
+                (circ.radius_at_eccentric_anomaly(ea) - a).abs() / a < 1e-12,
+                "circular r=a at E={ea}"
+            );
         }
     }
 
@@ -1010,7 +1043,10 @@ mod tests {
         };
         let p = coe.semi_latus_rectum();
         // Worked point: p = a(1−e²) = 8e6·0.9375 = 7.5e6 m.
-        assert!((p - 7.5e6).abs() / p < 1e-12, "p = a(1−e²) = 7.5e6 m, got {p}");
+        assert!(
+            (p - 7.5e6).abs() / p < 1e-12,
+            "p = a(1−e²) = 7.5e6 m, got {p}"
+        );
         // Cross-check (a): p = h²/μ, tying the geometry to the dynamics via the
         // specific angular momentum #174 (h = √(μ·p) round-trips through sqrt).
         let h = coe.specific_angular_momentum().expect("closed orbit has h");
@@ -1019,11 +1055,20 @@ mod tests {
         // p = 2·r_a·r_p/(r_a + r_p) (r_a = 1e7, r_p = 6e6 → 7.5e6) — an independent
         // path through apoapsis_radius/periapsis_radius.
         let (ra, rp) = (coe.apoapsis_radius(), coe.periapsis_radius());
-        assert!((p - 2.0 * ra * rp / (ra + rp)).abs() / p < 1e-12, "p = harmonic mean of r_a, r_p");
+        assert!(
+            (p - 2.0 * ra * rp / (ra + rp)).abs() / p < 1e-12,
+            "p = harmonic mean of r_a, r_p"
+        );
         // Cross-check (c): the radius at ν = π/2 IS the semi-latus rectum (#168).
-        assert!((p - coe.radius_at_true_anomaly(PI / 2.0)).abs() / p < 1e-9, "p = r(π/2)");
+        assert!(
+            (p - coe.radius_at_true_anomaly(PI / 2.0)).abs() / p < 1e-9,
+            "p = r(π/2)"
+        );
         // A circular orbit collapses to p = a.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         assert!(
             (circ.semi_latus_rectum() - circ.semi_major_axis).abs() / circ.semi_major_axis < 1e-12,
             "circular p = a"
@@ -1043,7 +1088,10 @@ mod tests {
         let b = coe.semi_minor_axis();
         let (a, e) = (coe.semi_major_axis, coe.eccentricity);
         // Worked point: b = a√(1−e²) = 8e6·√0.9375 ≈ 7.745967e6 m.
-        assert!((b - 7.745966692e6).abs() / b < 1e-9, "b = a√(1−e²) ≈ 7.746e6 m, got {b}");
+        assert!(
+            (b - 7.745966692e6).abs() / b < 1e-9,
+            "b = a√(1−e²) ≈ 7.746e6 m, got {b}"
+        );
         // Cross-check (a): b is the GEOMETRIC mean of a and the semi-latus rectum,
         // b² = a·p (#204) — the geometric-mean counterpart to p = harmonic mean.
         let p = coe.semi_latus_rectum();
@@ -1053,12 +1101,24 @@ mod tests {
         let (ra, rp) = (coe.apoapsis_radius(), coe.periapsis_radius());
         assert!((b - (ra * rp).sqrt()).abs() / b < 1e-12, "b = √(r_a·r_p)");
         // Cross-check (c): the defining closed form, recomputed independently.
-        assert!((b - a * (1.0 - e * e).sqrt()).abs() / b < 1e-12, "b = a√(1−e²)");
+        assert!(
+            (b - a * (1.0 - e * e).sqrt()).abs() / b < 1e-12,
+            "b = a√(1−e²)"
+        );
         // A circular orbit collapses: b = a (= p).
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
-        assert!((circ.semi_minor_axis() - circ.semi_major_axis).abs() / a < 1e-12, "circular b = a");
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
+        assert!(
+            (circ.semi_minor_axis() - circ.semi_major_axis).abs() / a < 1e-12,
+            "circular b = a"
+        );
         // An open orbit (e ≥ 1) has no real ellipse minor axis → NaN.
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
         assert!(hyp.semi_minor_axis().is_nan(), "open orbit → NaN");
     }
 
@@ -1078,7 +1138,10 @@ mod tests {
         // (The apsidal checks use 1e-6: acos is ill-conditioned at cos = ±1, so a
         // ~1e-16 round-off in the argument shows up as a ~1e-8 angle error.)
         assert!(
-            coe.true_anomaly_at_radius(coe.periapsis_radius()).unwrap().abs() < 1e-6,
+            coe.true_anomaly_at_radius(coe.periapsis_radius())
+                .unwrap()
+                .abs()
+                < 1e-6,
             "perigee → ν=0"
         );
         assert!(
@@ -1095,27 +1158,45 @@ mod tests {
             let r = coe.radius_at_true_anomaly(nu);
             let nu_back = coe.true_anomaly_at_radius(r).expect("r is reachable");
             // 1e-6: the ν=π round-trip touches the acos cos=−1 boundary.
-            assert!((nu_back - nu).abs() < 1e-6, "round trip at ν={nu}: got {nu_back}");
+            assert!(
+                (nu_back - nu).abs() < 1e-6,
+                "round trip at ν={nu}: got {nu_back}"
+            );
         }
         // Radii the orbit never reaches → None.
         assert!(
-            coe.true_anomaly_at_radius(coe.periapsis_radius() * 0.5).is_none(),
+            coe.true_anomaly_at_radius(coe.periapsis_radius() * 0.5)
+                .is_none(),
             "below perigee"
         );
         assert!(
-            coe.true_anomaly_at_radius(coe.apoapsis_radius() * 2.0).is_none(),
+            coe.true_anomaly_at_radius(coe.apoapsis_radius() * 2.0)
+                .is_none(),
             "above apogee"
         );
         // Undefined for a circular, hyperbolic, or non-finite case → None.
         assert!(
-            ClassicalElements { eccentricity: 0.0, ..coe }.true_anomaly_at_radius(a).is_none(),
+            ClassicalElements {
+                eccentricity: 0.0,
+                ..coe
+            }
+            .true_anomaly_at_radius(a)
+            .is_none(),
             "circular"
         );
         assert!(
-            ClassicalElements { eccentricity: 1.5, ..coe }.true_anomaly_at_radius(a).is_none(),
+            ClassicalElements {
+                eccentricity: 1.5,
+                ..coe
+            }
+            .true_anomaly_at_radius(a)
+            .is_none(),
             "hyperbolic"
         );
-        assert!(coe.true_anomaly_at_radius(f64::NAN).is_none(), "non-finite r");
+        assert!(
+            coe.true_anomaly_at_radius(f64::NAN).is_none(),
+            "non-finite r"
+        );
     }
 
     #[test]
@@ -1131,12 +1212,21 @@ mod tests {
         };
         let e = coe.eccentricity;
         // Apsides are fixed points: E=0 → ν=0, E=π → ν=π.
-        assert!(coe.true_anomaly_from_eccentric(0.0).abs() < 1e-12, "E=0 → ν=0");
-        assert!((coe.true_anomaly_from_eccentric(PI) - PI).abs() < 1e-12, "E=π → ν=π");
+        assert!(
+            coe.true_anomaly_from_eccentric(0.0).abs() < 1e-12,
+            "E=0 → ν=0"
+        );
+        assert!(
+            (coe.true_anomaly_from_eccentric(PI) - PI).abs() < 1e-12,
+            "E=π → ν=π"
+        );
         // Worked point e=0.5, E=π/2 → ν=2π/3, cross-checked against the standard
         // cos ν = (cos E − e)/(1 − e·cos E) = −0.5.
         let nu = coe.true_anomaly_from_eccentric(PI / 2.0);
-        assert!((nu - 2.0 * PI / 3.0).abs() < 1e-12, "e=0.5, E=π/2 → ν=2π/3, got {nu}");
+        assert!(
+            (nu - 2.0 * PI / 3.0).abs() < 1e-12,
+            "e=0.5, E=π/2 → ν=2π/3, got {nu}"
+        );
         assert!((nu.cos() + 0.5).abs() < 1e-12, "cos ν = −0.5 cross-check");
         // Agrees with the closed cos-form at arbitrary E, stays in [0,2π), and
         // shares E's quadrant (same sign of sine).
@@ -1145,12 +1235,21 @@ mod tests {
             let cos_nu = (ea.cos() - e) / (1.0 - e * ea.cos());
             assert!((nu.cos() - cos_nu).abs() < 1e-9, "cos ν at E={ea}");
             assert!((0.0..TAU).contains(&nu), "ν in [0,2π) at E={ea}: {nu}");
-            assert!(nu.sin() * ea.sin() >= 0.0, "ν shares E's quadrant at E={ea}");
+            assert!(
+                nu.sin() * ea.sin() >= 0.0,
+                "ν shares E's quadrant at E={ea}"
+            );
         }
         // A circular orbit collapses the map to ν = E.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for ea in [0.0_f64, 0.5, PI / 2.0, PI, 4.0, 5.5] {
-            assert!((circ.true_anomaly_from_eccentric(ea) - ea).abs() < 1e-12, "circular ν=E at {ea}");
+            assert!(
+                (circ.true_anomaly_from_eccentric(ea) - ea).abs() < 1e-12,
+                "circular ν=E at {ea}"
+            );
         }
     }
 
@@ -1166,18 +1265,33 @@ mod tests {
             true_anomaly: 0.0,
         };
         // Apsides are fixed points: ν=0 → E=0, ν=π → E=π.
-        assert!(coe.eccentric_anomaly_from_true(0.0).abs() < 1e-12, "ν=0 → E=0");
-        assert!((coe.eccentric_anomaly_from_true(PI) - PI).abs() < 1e-12, "ν=π → E=π");
+        assert!(
+            coe.eccentric_anomaly_from_true(0.0).abs() < 1e-12,
+            "ν=0 → E=0"
+        );
+        assert!(
+            (coe.eccentric_anomaly_from_true(PI) - PI).abs() < 1e-12,
+            "ν=π → E=π"
+        );
         // Worked inverse of the true-anomaly test: e=0.5, ν=2π/3 → E=π/2.
         let ea = coe.eccentric_anomaly_from_true(2.0 * PI / 3.0);
-        assert!((ea - PI / 2.0).abs() < 1e-12, "e=0.5, ν=2π/3 → E=π/2, got {ea}");
+        assert!(
+            (ea - PI / 2.0).abs() < 1e-12,
+            "e=0.5, ν=2π/3 → E=π/2, got {ea}"
+        );
         // STRONG round-trip threading true_anomaly_from_eccentric: ν→E→ν recovers the
         // input over the full revolution, and E stays in the canonical [0,2π).
         for nu in [0.3_f64, 1.0, 2.0, 3.0, 4.5, 6.0] {
             let e_val = coe.eccentric_anomaly_from_true(nu);
-            assert!((0.0..TAU).contains(&e_val), "E in [0,2π) at ν={nu}: {e_val}");
+            assert!(
+                (0.0..TAU).contains(&e_val),
+                "E in [0,2π) at ν={nu}: {e_val}"
+            );
             let back = coe.true_anomaly_from_eccentric(e_val);
-            assert!((back - nu).abs() < 1e-9, "ν→E→ν round-trip at ν={nu}: {back}");
+            assert!(
+                (back - nu).abs() < 1e-9,
+                "ν→E→ν round-trip at ν={nu}: {back}"
+            );
         }
         // STRONG composition cross-check: mean_anomaly_from_true must equal
         // mean_anomaly_from_eccentric ∘ eccentric_anomaly_from_true, tying three
@@ -1185,17 +1299,32 @@ mod tests {
         for nu in [0.4_f64, 1.3, 2.7, 5.0] {
             let direct = coe.mean_anomaly_from_true(nu);
             let composed = coe.mean_anomaly_from_eccentric(coe.eccentric_anomaly_from_true(nu));
-            assert!((direct - composed).abs() < 1e-9, "M direct vs E-composition at ν={nu}");
+            assert!(
+                (direct - composed).abs() < 1e-9,
+                "M direct vs E-composition at ν={nu}"
+            );
         }
         // A circular orbit collapses the map to E = ν.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for nu in [0.0_f64, 0.5, PI / 2.0, PI, 4.0, 5.5] {
-            assert!((circ.eccentric_anomaly_from_true(nu) - nu).abs() < 1e-12, "circular E=ν at {nu}");
+            assert!(
+                (circ.eccentric_anomaly_from_true(nu) - nu).abs() < 1e-12,
+                "circular E=ν at {nu}"
+            );
         }
         // Out of domain: a hyperbolic eccentricity and a non-finite ν → NaN.
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
         assert!(hyp.eccentric_anomaly_from_true(1.0).is_nan(), "e≥1 → NaN");
-        assert!(coe.eccentric_anomaly_from_true(f64::NAN).is_nan(), "NaN ν → NaN");
+        assert!(
+            coe.eccentric_anomaly_from_true(f64::NAN).is_nan(),
+            "NaN ν → NaN"
+        );
     }
 
     #[test]
@@ -1213,18 +1342,36 @@ mod tests {
         // The returned E satisfies Kepler's equation M = E − e·sin E to tight tol.
         for m in [0.1_f64, 1.0, 2.5, 4.0, 5.9] {
             let ea = coe.eccentric_anomaly_from_mean(m);
-            assert!((ea - e * ea.sin() - m).abs() < 1e-12, "Kepler residual at M={m}");
+            assert!(
+                (ea - e * ea.sin() - m).abs() < 1e-12,
+                "Kepler residual at M={m}"
+            );
         }
         // Apsides are fixed points: M=0 → E=0, M=π → E=π (sin E = 0 there).
-        assert!(coe.eccentric_anomaly_from_mean(0.0).abs() < 1e-12, "M=0 → E=0");
-        assert!((coe.eccentric_anomaly_from_mean(PI) - PI).abs() < 1e-12, "M=π → E=π");
+        assert!(
+            coe.eccentric_anomaly_from_mean(0.0).abs() < 1e-12,
+            "M=0 → E=0"
+        );
+        assert!(
+            (coe.eccentric_anomaly_from_mean(PI) - PI).abs() < 1e-12,
+            "M=π → E=π"
+        );
         // A circular orbit (e=0) collapses Kepler's equation to E = M.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for m in [0.0_f64, 0.7, PI, 4.2] {
-            assert!((circ.eccentric_anomaly_from_mean(m) - m).abs() < 1e-12, "circular E=M at {m}");
+            assert!(
+                (circ.eccentric_anomaly_from_mean(m) - m).abs() < 1e-12,
+                "circular E=M at {m}"
+            );
         }
         // Round-trips with the forward map M = E − e·sin E even at high eccentricity.
-        let ecc = ClassicalElements { eccentricity: 0.9, ..coe };
+        let ecc = ClassicalElements {
+            eccentricity: 0.9,
+            ..coe
+        };
         for e_true in [0.2_f64, 1.5, 3.0, 5.0] {
             let m = e_true - 0.9 * e_true.sin();
             assert!(
@@ -1237,15 +1384,24 @@ mod tests {
         let ea = coe.eccentric_anomaly_from_mean(1.0);
         let nu = coe.true_anomaly_from_eccentric(ea);
         let r = coe.radius_at_true_anomaly(nu);
-        assert!(ea.is_finite() && nu.is_finite() && r.is_finite() && r > 0.0, "chain finite r>0");
+        assert!(
+            ea.is_finite() && nu.is_finite() && r.is_finite() && r > 0.0,
+            "chain finite r>0"
+        );
         assert!(
             r >= coe.periapsis_radius() - 1.0 && r <= coe.apoapsis_radius() + 1.0,
             "r in [r_p, r_a]: {r}"
         );
         // Out of domain: a hyperbolic eccentricity and a non-finite M → NaN.
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
         assert!(hyp.eccentric_anomaly_from_mean(1.0).is_nan(), "e≥1 → NaN");
-        assert!(coe.eccentric_anomaly_from_mean(f64::NAN).is_nan(), "NaN M → NaN");
+        assert!(
+            coe.eccentric_anomaly_from_mean(f64::NAN).is_nan(),
+            "NaN M → NaN"
+        );
     }
 
     #[test]
@@ -1261,15 +1417,33 @@ mod tests {
         };
         // Worked value: M = E − e·sin E at E = 1.0 rad, e = 0.3 (≈ 0.747558705).
         let m = coe.mean_anomaly_from_eccentric(1.0);
-        assert!((m - (1.0 - 0.3 * 1.0_f64.sin())).abs() < 1e-12, "M = E − e·sin E, got {m}");
+        assert!(
+            (m - (1.0 - 0.3 * 1.0_f64.sin())).abs() < 1e-12,
+            "M = E − e·sin E, got {m}"
+        );
         // Apsides are fixed points: E=0 → M=0, E=π → M=π, E=2π → M=2π (sin E = 0).
-        assert!(coe.mean_anomaly_from_eccentric(0.0).abs() < 1e-12, "E=0 → M=0");
-        assert!((coe.mean_anomaly_from_eccentric(PI) - PI).abs() < 1e-12, "E=π → M=π");
-        assert!((coe.mean_anomaly_from_eccentric(TAU) - TAU).abs() < 1e-12, "E=2π → M=2π");
+        assert!(
+            coe.mean_anomaly_from_eccentric(0.0).abs() < 1e-12,
+            "E=0 → M=0"
+        );
+        assert!(
+            (coe.mean_anomaly_from_eccentric(PI) - PI).abs() < 1e-12,
+            "E=π → M=π"
+        );
+        assert!(
+            (coe.mean_anomaly_from_eccentric(TAU) - TAU).abs() < 1e-12,
+            "E=2π → M=2π"
+        );
         // A circular orbit (e=0) collapses Kepler's equation to M = E.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for ea in [0.0_f64, 0.7, PI, 4.2] {
-            assert!((circ.mean_anomaly_from_eccentric(ea) - ea).abs() < 1e-12, "circular M=E at {ea}");
+            assert!(
+                (circ.mean_anomaly_from_eccentric(ea) - ea).abs() < 1e-12,
+                "circular M=E at {ea}"
+            );
         }
         // Strictly monotone in E over a period (dM/dE = 1 − e·cos E ≥ 1 − e > 0).
         let mut prev = coe.mean_anomaly_from_eccentric(0.0);
@@ -1281,7 +1455,10 @@ mod tests {
         // STRONG round-trip threading the Newton solver: forward Kepler then invert.
         for ea in [0.2_f64, 1.0, 2.5, 4.0, 5.9] {
             let back = coe.eccentric_anomaly_from_mean(coe.mean_anomaly_from_eccentric(ea));
-            assert!((back - ea).abs() < 1e-9, "E → M → E round-trip at E={ea}: {back}");
+            assert!(
+                (back - ea).abs() < 1e-9,
+                "E → M → E round-trip at E={ea}: {back}"
+            );
         }
         // STRONG cross-check threading TWO other methods: E → ν (true_anomaly_from_
         // eccentric) → M (mean_anomaly_from_true) must equal the direct E → M here —
@@ -1289,12 +1466,21 @@ mod tests {
         for ea in [0.3_f64, 1.2, 2.8, 5.0] {
             let via_true = coe.mean_anomaly_from_true(coe.true_anomaly_from_eccentric(ea));
             let direct = coe.mean_anomaly_from_eccentric(ea);
-            assert!((via_true - direct).abs() < 1e-9, "M via ν vs direct at E={ea}: {via_true} vs {direct}");
+            assert!(
+                (via_true - direct).abs() < 1e-9,
+                "M via ν vs direct at E={ea}: {via_true} vs {direct}"
+            );
         }
         // Out of domain: a hyperbolic eccentricity and a non-finite E → NaN.
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
         assert!(hyp.mean_anomaly_from_eccentric(1.0).is_nan(), "e≥1 → NaN");
-        assert!(coe.mean_anomaly_from_eccentric(f64::NAN).is_nan(), "NaN E → NaN");
+        assert!(
+            coe.mean_anomaly_from_eccentric(f64::NAN).is_nan(),
+            "NaN E → NaN"
+        );
     }
 
     #[test]
@@ -1310,11 +1496,20 @@ mod tests {
         };
         // Apsides are fixed points: ν=0 → M=0, ν=π → M=π (sin E = 0 there).
         assert!(coe.mean_anomaly_from_true(0.0).abs() < 1e-12, "ν=0 → M=0");
-        assert!((coe.mean_anomaly_from_true(PI) - PI).abs() < 1e-12, "ν=π → M=π");
+        assert!(
+            (coe.mean_anomaly_from_true(PI) - PI).abs() < 1e-12,
+            "ν=π → M=π"
+        );
         // A circular orbit (e=0) collapses the map to the identity M = ν.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for nu in [0.3_f64, 1.0, 2.0, 4.5] {
-            assert!((circ.mean_anomaly_from_true(nu) - nu).abs() < 1e-12, "circular M=ν at {nu}");
+            assert!(
+                (circ.mean_anomaly_from_true(nu) - nu).abs() < 1e-12,
+                "circular M=ν at {nu}"
+            );
         }
         // Strong round-trip M → E (#156) → ν (#150) → M (this), tying three
         // independent methods (non-tautological); angle_diff handles the 2π branch.
@@ -1322,12 +1517,21 @@ mod tests {
             let ea = coe.eccentric_anomaly_from_mean(m);
             let nu = coe.true_anomaly_from_eccentric(ea);
             let m_back = coe.mean_anomaly_from_true(nu);
-            assert!(angle_diff(m_back, m).abs() < 1e-9, "round trip M={m}, got {m_back}");
+            assert!(
+                angle_diff(m_back, m).abs() < 1e-9,
+                "round trip M={m}, got {m_back}"
+            );
         }
         // An open orbit has no mean anomaly; a non-finite ν is undefined.
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
         assert!(hyp.mean_anomaly_from_true(1.0).is_nan(), "e≥1 → NaN");
-        assert!(coe.mean_anomaly_from_true(f64::NAN).is_nan(), "non-finite ν → NaN");
+        assert!(
+            coe.mean_anomaly_from_true(f64::NAN).is_nan(),
+            "non-finite ν → NaN"
+        );
     }
 
     #[test]
@@ -1343,13 +1547,19 @@ mod tests {
         };
         // Apsides are fixed points: M=0 → ν=0, M=π → ν=π.
         assert!(coe.true_anomaly_from_mean(0.0).abs() < 1e-12, "M=0 → ν=0");
-        assert!((coe.true_anomaly_from_mean(PI) - PI).abs() < 1e-9, "M=π → ν=π");
+        assert!(
+            (coe.true_anomaly_from_mean(PI) - PI).abs() < 1e-9,
+            "M=π → ν=π"
+        );
         // STRONG round-trip cross-check threading mean_anomaly_from_true: M → ν → M
         // recovers the input (angle_diff absorbs the 2π branch), and r(ν) stays
         // between perigee and apogee at every step.
         for m in [0.4_f64, 1.0, 2.5, 4.0, 5.5] {
             let nu = coe.true_anomaly_from_mean(m);
-            assert!(angle_diff(coe.mean_anomaly_from_true(nu), m).abs() < 1e-9, "M→ν→M at M={m}");
+            assert!(
+                angle_diff(coe.mean_anomaly_from_true(nu), m).abs() < 1e-9,
+                "M→ν→M at M={m}"
+            );
             let r = coe.radius_at_true_anomaly(nu);
             assert!(
                 r >= coe.periapsis_radius() - 1.0 && r <= coe.apoapsis_radius() + 1.0,
@@ -1364,12 +1574,21 @@ mod tests {
             prev = nu;
         }
         // A circular orbit (e=0) collapses the map to the identity ν = M.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for m in [0.3_f64, 1.0, 2.0, 4.5] {
-            assert!((circ.true_anomaly_from_mean(m) - m).abs() < 1e-9, "circular ν=M at M={m}");
+            assert!(
+                (circ.true_anomaly_from_mean(m) - m).abs() < 1e-9,
+                "circular ν=M at M={m}"
+            );
         }
         // Out of domain: a hyperbolic eccentricity and a non-finite M → NaN.
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
         assert!(hyp.true_anomaly_from_mean(1.0).is_nan(), "e≥1 → NaN");
         assert!(coe.true_anomaly_from_mean(f64::NAN).is_nan(), "NaN M → NaN");
     }
@@ -1389,9 +1608,15 @@ mod tests {
         // Periapsis (ν=0) is t=0; apoapsis (ν=π) is exactly half the period.
         assert_eq!(coe.time_since_periapsis(0.0), Some(0.0), "ν=0 → t=0");
         let t_apo = coe.time_since_periapsis(PI).expect("bound");
-        assert!((t_apo - t_period / 2.0).abs() / t_period < 1e-9, "apoapsis at T/2, got {t_apo}");
+        assert!(
+            (t_apo - t_period / 2.0).abs() / t_period < 1e-9,
+            "apoapsis at T/2, got {t_apo}"
+        );
         // A circular orbit advances uniformly: t = ν·T/(2π).
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         let tc = circ.period().unwrap();
         for nu in [0.5_f64, 1.0, PI / 2.0, 3.0] {
             let expected = nu * tc / (2.0 * PI);
@@ -1404,14 +1629,23 @@ mod tests {
         for nu in [0.3_f64, 1.0, 2.5, 4.0, 5.7] {
             let t = coe.time_since_periapsis(nu).unwrap();
             let m = coe.mean_anomaly_from_true(nu);
-            assert!((t * 2.0 * PI / t_period - m).abs() < 1e-9, "t·n = M at ν={nu}");
+            assert!(
+                (t * 2.0 * PI / t_period - m).abs() < 1e-9,
+                "t·n = M at ν={nu}"
+            );
         }
         // Monotone increasing over [0, 2π).
         assert!(coe.time_since_periapsis(1.0).unwrap() < coe.time_since_periapsis(2.0).unwrap());
         // Unbound / non-elliptical → None.
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
         assert_eq!(hyp.time_since_periapsis(1.0), None, "e≥1 → None");
-        let neg_a = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
+        let neg_a = ClassicalElements {
+            semi_major_axis: -8.0e6,
+            ..coe
+        };
         assert_eq!(neg_a.time_since_periapsis(1.0), None, "a≤0 → None");
     }
 
@@ -1431,11 +1665,17 @@ mod tests {
         // At perigee (ν=0): purely transverse, v_θ = √(μ/a·(1+e)/(1−e)) (max speed).
         let (vr0, vt0) = coe.velocity_components_at_true_anomaly(0.0);
         assert!(vr0.abs() < 1e-6, "v_r = 0 at perigee, got {vr0}");
-        assert!((vt0 - (mu / a * (1.0 + e) / (1.0 - e)).sqrt()).abs() < 1e-3, "perigee speed");
+        assert!(
+            (vt0 - (mu / a * (1.0 + e) / (1.0 - e)).sqrt()).abs() < 1e-3,
+            "perigee speed"
+        );
         // At apogee (ν=π): purely transverse, v_θ = √(μ/a·(1−e)/(1+e)) (min speed).
         let (vrp, vtp) = coe.velocity_components_at_true_anomaly(PI);
         assert!(vrp.abs() < 1e-6, "v_r = 0 at apogee, got {vrp}");
-        assert!((vtp - (mu / a * (1.0 - e) / (1.0 + e)).sqrt()).abs() < 1e-3, "apogee speed");
+        assert!(
+            (vtp - (mu / a * (1.0 - e) / (1.0 + e)).sqrt()).abs() < 1e-3,
+            "apogee speed"
+        );
         assert!(vt0 > vtp, "faster at perigee than apogee");
         // The speed √(v_r²+v_θ²) reproduces vis-viva μ(2/r − 1/a) at the matching r.
         for nu in [0.3_f64, 1.0, 2.0, PI, 4.0, 5.5] {
@@ -1443,13 +1683,25 @@ mod tests {
             let speed_sq = vr * vr + vt * vt;
             let r = coe.radius_at_true_anomaly(nu);
             let vis_viva_sq = mu * (2.0 / r - 1.0 / a);
-            assert!((speed_sq - vis_viva_sq).abs() / vis_viva_sq < 1e-12, "vis-viva at ν={nu}");
+            assert!(
+                (speed_sq - vis_viva_sq).abs() / vis_viva_sq < 1e-12,
+                "vis-viva at ν={nu}"
+            );
         }
         // Radial velocity is positive climbing out (0<ν<π) and negative falling in.
-        assert!(coe.velocity_components_at_true_anomaly(1.0).0 > 0.0, "outbound v_r > 0");
-        assert!(coe.velocity_components_at_true_anomaly(4.0).0 < 0.0, "inbound v_r < 0");
+        assert!(
+            coe.velocity_components_at_true_anomaly(1.0).0 > 0.0,
+            "outbound v_r > 0"
+        );
+        assert!(
+            coe.velocity_components_at_true_anomaly(4.0).0 < 0.0,
+            "inbound v_r < 0"
+        );
         // A circular orbit: no radial velocity, constant transverse speed √(μ/a).
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         let v_circ = (mu / a).sqrt();
         for nu in [0.0_f64, 1.0, PI, 4.2] {
             let (vr, vt) = circ.velocity_components_at_true_anomaly(nu);
@@ -1474,8 +1726,14 @@ mod tests {
         // Worked closed form at the apsides: fastest at periapsis, slowest at apoapsis.
         let v_peri = coe.speed_at_radius(rp);
         let v_apo = coe.speed_at_radius(ra);
-        assert!((v_peri - (mu * (2.0 / rp - 1.0 / a)).sqrt()).abs() / v_peri < 1e-12, "vis-viva at periapsis");
-        assert!((v_apo - (mu * (2.0 / ra - 1.0 / a)).sqrt()).abs() / v_apo < 1e-12, "vis-viva at apoapsis");
+        assert!(
+            (v_peri - (mu * (2.0 / rp - 1.0 / a)).sqrt()).abs() / v_peri < 1e-12,
+            "vis-viva at periapsis"
+        );
+        assert!(
+            (v_apo - (mu * (2.0 / ra - 1.0 / a)).sqrt()).abs() / v_apo < 1e-12,
+            "vis-viva at apoapsis"
+        );
         assert!(v_peri > v_apo, "fastest at periapsis: {v_peri} > {v_apo}");
         // Cross-check (a): at the apsides the motion is purely transverse, so v·r = h
         // (angular momentum) — ties to specific_angular_momentum #174.
@@ -1488,7 +1746,10 @@ mod tests {
             let r = coe.radius_at_true_anomaly(nu);
             let (vr, vt) = coe.velocity_components_at_true_anomaly(nu);
             let mag = (vr * vr + vt * vt).sqrt();
-            assert!((coe.speed_at_radius(r) - mag).abs() / mag < 1e-12, "speed = ‖(v_r,v_θ)‖ at ν={nu}");
+            assert!(
+                (coe.speed_at_radius(r) - mag).abs() / mag < 1e-12,
+                "speed = ‖(v_r,v_θ)‖ at ν={nu}"
+            );
         }
         // Cross-check (c): the vis-viva energy identity ½v² − μ/r = ε (#180).
         let energy = coe.specific_orbital_energy();
@@ -1500,7 +1761,10 @@ mod tests {
             );
         }
         // A circular orbit runs at the constant circular speed √(μ/a).
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         assert!(
             (circ.speed_at_radius(a) - (mu / a).sqrt()).abs() / (mu / a).sqrt() < 1e-12,
             "circular v = √(μ/a)"
@@ -1520,8 +1784,14 @@ mod tests {
         };
         let e = coe.eccentricity;
         // Velocity is purely transverse at the apsides → γ = 0 exactly.
-        assert!(coe.flight_path_angle(0.0).abs() < 1e-12, "γ(0) = 0 (periapsis)");
-        assert!(coe.flight_path_angle(PI).abs() < 1e-12, "γ(π) = 0 (apoapsis)");
+        assert!(
+            coe.flight_path_angle(0.0).abs() < 1e-12,
+            "γ(0) = 0 (periapsis)"
+        );
+        assert!(
+            coe.flight_path_angle(PI).abs() < 1e-12,
+            "γ(π) = 0 (apoapsis)"
+        );
         // At ν = π/2: γ = atan2(e·1, 1+0) = atan(e).
         assert!(
             (coe.flight_path_angle(PI / 2.0) - e.atan()).abs() < 1e-12,
@@ -1535,9 +1805,15 @@ mod tests {
             "descending arc → γ < 0"
         );
         // A circular orbit has γ = 0 everywhere (motion always transverse).
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         for nu in [0.0_f64, 0.3, 1.0, PI, 4.5] {
-            assert!(circ.flight_path_angle(nu).abs() < 1e-12, "circular γ = 0 at {nu}");
+            assert!(
+                circ.flight_path_angle(nu).abs() < 1e-12,
+                "circular γ = 0 at {nu}"
+            );
         }
         // Strong cross-check: γ = atan2(v_r, v_θ) from the velocity components
         // (#162). NON-tautological — the method uses (e, ν); this check uses the
@@ -1609,7 +1885,10 @@ mod tests {
             arg_periapsis: 0.0,
             true_anomaly: 0.0,
         };
-        let with_e = |e: f64| ClassicalElements { eccentricity: e, ..base };
+        let with_e = |e: f64| ClassicalElements {
+            eccentricity: e,
+            ..base
+        };
 
         // Exact anchors: e = 2 → 60° (π/3); e = √2 → 90° (π/2).
         assert!(
@@ -1632,13 +1911,22 @@ mod tests {
                 "e={e}: 2·asin(1/e) = 2·acos(−1/e) − π"
             );
             // sin(δ/2) = 1/e recovers the eccentricity from a measured turn.
-            assert!(((delta / 2.0).sin() - 1.0 / e).abs() < 1e-12, "e={e}: sin(δ/2) = 1/e");
+            assert!(
+                ((delta / 2.0).sin() - 1.0 / e).abs() < 1e-12,
+                "e={e}: sin(δ/2) = 1/e"
+            );
         }
 
         // Limits: a near-parabolic pass (e → 1⁺) bends ~180°; a fast distant pass
         // (large e) is barely deflected.
-        assert!(with_e(1.0001).hyperbolic_turn_angle().unwrap() > 3.10, "e→1⁺ → δ → π");
-        assert!(with_e(1.0e6).hyperbolic_turn_angle().unwrap() < 1e-3, "large e → δ → 0");
+        assert!(
+            with_e(1.0001).hyperbolic_turn_angle().unwrap() > 3.10,
+            "e→1⁺ → δ → π"
+        );
+        assert!(
+            with_e(1.0e6).hyperbolic_turn_angle().unwrap() < 1e-3,
+            "large e → δ → 0"
+        );
 
         // Monotonic decreasing in e.
         let (d15, d3, d10) = (
@@ -1646,12 +1934,24 @@ mod tests {
             with_e(3.0).hyperbolic_turn_angle().unwrap(),
             with_e(10.0).hyperbolic_turn_angle().unwrap(),
         );
-        assert!(d15 > d3 && d3 > d10, "δ decreases with e: {d15} > {d3} > {d10}");
+        assert!(
+            d15 > d3 && d3 > d10,
+            "δ decreases with e: {d15} > {d3} > {d10}"
+        );
 
         // Not a hyperbola → no finite turn: None for circular / elliptic / parabolic.
-        assert!(with_e(0.0).hyperbolic_turn_angle().is_none(), "circular e=0");
-        assert!(with_e(0.5).hyperbolic_turn_angle().is_none(), "elliptic e=0.5");
-        assert!(with_e(1.0).hyperbolic_turn_angle().is_none(), "parabolic e=1");
+        assert!(
+            with_e(0.0).hyperbolic_turn_angle().is_none(),
+            "circular e=0"
+        );
+        assert!(
+            with_e(0.5).hyperbolic_turn_angle().is_none(),
+            "elliptic e=0.5"
+        );
+        assert!(
+            with_e(1.0).hyperbolic_turn_angle().is_none(),
+            "parabolic e=1"
+        );
     }
 
     #[test]
@@ -1680,21 +1980,56 @@ mod tests {
         // Apsidal form: h = r_peri·v_peri = r_apo·v_apo.
         let (_, vt_peri) = coe.velocity_components_at_true_anomaly(0.0);
         let (_, vt_apo) = coe.velocity_components_at_true_anomaly(PI);
-        assert!((coe.periapsis_radius() * vt_peri - h).abs() / h < 1e-12, "h at periapsis");
-        assert!((coe.apoapsis_radius() * vt_apo - h).abs() / h < 1e-12, "h at apoapsis");
+        assert!(
+            (coe.periapsis_radius() * vt_peri - h).abs() / h < 1e-12,
+            "h at periapsis"
+        );
+        assert!(
+            (coe.apoapsis_radius() * vt_apo - h).abs() / h < 1e-12,
+            "h at apoapsis"
+        );
         // A circular orbit (e=0): h = √(μ·a).
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
-        let h_circ = circ.specific_angular_momentum().expect("circular orbit has h");
-        assert!((h_circ - (MU_EARTH * a).sqrt()).abs() / h_circ < 1e-9, "circular h = √(μ·a)");
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
+        let h_circ = circ
+            .specific_angular_momentum()
+            .expect("circular orbit has h");
+        assert!(
+            (h_circ - (MU_EARTH * a).sqrt()).abs() / h_circ < 1e-9,
+            "circular h = √(μ·a)"
+        );
         // Same a, higher eccentricity carries less angular momentum (smaller p).
-        let ecc = ClassicalElements { eccentricity: 0.6, ..coe };
-        assert!(ecc.specific_angular_momentum().unwrap() < h, "more eccentric → smaller h");
+        let ecc = ClassicalElements {
+            eccentricity: 0.6,
+            ..coe
+        };
+        assert!(
+            ecc.specific_angular_momentum().unwrap() < h,
+            "more eccentric → smaller h"
+        );
         // Not bound/closed → None.
-        let para = ClassicalElements { eccentricity: 1.0, ..coe };
-        assert!(para.specific_angular_momentum().is_none(), "parabolic (e=1) → None");
-        let hyp = ClassicalElements { eccentricity: 1.5, ..coe };
-        assert!(hyp.specific_angular_momentum().is_none(), "hyperbolic (e>1) → None");
-        let neg_a = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
+        let para = ClassicalElements {
+            eccentricity: 1.0,
+            ..coe
+        };
+        assert!(
+            para.specific_angular_momentum().is_none(),
+            "parabolic (e=1) → None"
+        );
+        let hyp = ClassicalElements {
+            eccentricity: 1.5,
+            ..coe
+        };
+        assert!(
+            hyp.specific_angular_momentum().is_none(),
+            "hyperbolic (e>1) → None"
+        );
+        let neg_a = ClassicalElements {
+            semi_major_axis: -8.0e6,
+            ..coe
+        };
         assert!(neg_a.specific_angular_momentum().is_none(), "a ≤ 0 → None");
     }
 
@@ -1710,7 +2045,9 @@ mod tests {
             true_anomaly: 0.0,
         };
         let h = coe.specific_angular_momentum().expect("bound orbit has h");
-        let da_dt = coe.areal_velocity().expect("bound orbit has areal velocity");
+        let da_dt = coe
+            .areal_velocity()
+            .expect("bound orbit has areal velocity");
         // It is exactly half the specific angular momentum.
         assert!((da_dt - 0.5 * h).abs() / da_dt < 1e-12, "dA/dt = h/2");
         // STRONG cross-check — Kepler's 2nd law made global: swept over one full
@@ -1723,7 +2060,10 @@ mod tests {
             "(h/2)·T = π·a·b"
         );
         // A circular orbit: dA/dt = √(μ·a)/2.
-        let circ = ClassicalElements { eccentricity: 0.0, ..coe };
+        let circ = ClassicalElements {
+            eccentricity: 0.0,
+            ..coe
+        };
         let da_circ = circ.areal_velocity().unwrap();
         assert!(
             (da_circ - 0.5 * (MU_EARTH * coe.semi_major_axis).sqrt()).abs() / da_circ < 1e-9,
@@ -1731,11 +2071,21 @@ mod tests {
         );
         // Not bound/closed → None (matching specific_angular_momentum).
         assert!(
-            ClassicalElements { eccentricity: 1.5, ..coe }.areal_velocity().is_none(),
+            ClassicalElements {
+                eccentricity: 1.5,
+                ..coe
+            }
+            .areal_velocity()
+            .is_none(),
             "hyperbolic → None"
         );
         assert!(
-            ClassicalElements { semi_major_axis: -8.0e6, ..coe }.areal_velocity().is_none(),
+            ClassicalElements {
+                semi_major_axis: -8.0e6,
+                ..coe
+            }
+            .areal_velocity()
+            .is_none(),
             "a ≤ 0 → None"
         );
     }
@@ -1767,16 +2117,25 @@ mod tests {
             let (v_r, v_theta) = coe.velocity_components_at_true_anomaly(nu);
             let speed_sq = v_r * v_r + v_theta * v_theta;
             let e_at_nu = 0.5 * speed_sq - MU_EARTH / r;
-            assert!((e_at_nu - eps).abs() / eps.abs() < 1e-9, "vis-viva at ν={nu}");
+            assert!(
+                (e_at_nu - eps).abs() / eps.abs() < 1e-9,
+                "vis-viva at ν={nu}"
+            );
         }
         // A larger orbit is more energetic (ε rises toward 0 as a grows).
-        let bigger = ClassicalElements { semi_major_axis: 2.0e7, ..coe };
+        let bigger = ClassicalElements {
+            semi_major_axis: 2.0e7,
+            ..coe
+        };
         assert!(
             bigger.specific_orbital_energy() > eps,
             "larger a → higher (less negative) energy"
         );
         // A hyperbolic orbit (a < 0) has positive specific energy (unbound).
-        let hyper = ClassicalElements { semi_major_axis: -8.0e6, ..coe };
+        let hyper = ClassicalElements {
+            semi_major_axis: -8.0e6,
+            ..coe
+        };
         assert!(hyper.specific_orbital_energy() > 0.0, "hyperbolic ε > 0");
     }
 
@@ -1791,13 +2150,18 @@ mod tests {
             arg_periapsis: 0.0,
             true_anomaly: 0.0,
         };
-        let v_inf = hyp.hyperbolic_excess_velocity().expect("hyperbolic orbit has v∞");
+        let v_inf = hyp
+            .hyperbolic_excess_velocity()
+            .expect("hyperbolic orbit has v∞");
         // Threads characteristic_energy_c3: v∞² = C₃.
         let c3 = hyp.characteristic_energy_c3();
         assert!((v_inf * v_inf - c3).abs() / c3 < 1e-12, "v∞² = C₃");
         // Threads specific_orbital_energy: v∞ = √(2ε) (since 2ε = −μ/a = C₃).
         let from_energy = (2.0 * hyp.specific_orbital_energy()).sqrt();
-        assert!((v_inf - from_energy).abs() / from_energy < 1e-12, "v∞ = √(2ε)");
+        assert!(
+            (v_inf - from_energy).abs() / from_energy < 1e-12,
+            "v∞ = √(2ε)"
+        );
         assert!(v_inf > 0.0, "hyperbolic excess speed is positive");
 
         // A bound orbit reaches infinity at zero speed — no hyperbolic excess.
@@ -1806,7 +2170,10 @@ mod tests {
             eccentricity: 0.1,
             ..hyp
         };
-        assert!(bound.hyperbolic_excess_velocity().is_none(), "bound orbit → None");
+        assert!(
+            bound.hyperbolic_excess_velocity().is_none(),
+            "bound orbit → None"
+        );
     }
 
     #[test]
@@ -1821,24 +2188,43 @@ mod tests {
         };
         // Regime signs: bound (a>0) → C3 < 0; hyperbolic (a<0) → C3 > 0.
         assert!(coe.characteristic_energy_c3() < 0.0, "bound orbit → C3 < 0");
-        let hyp = ClassicalElements { semi_major_axis: -1.0e7, ..coe };
-        assert!(hyp.characteristic_energy_c3() > 0.0, "hyperbolic orbit → C3 > 0");
+        let hyp = ClassicalElements {
+            semi_major_axis: -1.0e7,
+            ..coe
+        };
+        assert!(
+            hyp.characteristic_energy_c3() > 0.0,
+            "hyperbolic orbit → C3 > 0"
+        );
         // STRONG cross-check: C3 = 2·ε, threading specific_orbital_energy (exact),
         // over several semi-major axes of both signs.
         for a in [7.0e6_f64, 4.2e7, -1.0e7, -5.0e6] {
-            let o = ClassicalElements { semi_major_axis: a, ..coe };
+            let o = ClassicalElements {
+                semi_major_axis: a,
+                ..coe
+            };
             let c3 = o.characteristic_energy_c3();
             let two_e = 2.0 * o.specific_orbital_energy();
-            assert!((c3 - two_e).abs() / two_e.abs() < 1e-12, "C3 = 2ε at a={a}: {c3} vs {two_e}");
+            assert!(
+                (c3 - two_e).abs() / two_e.abs() < 1e-12,
+                "C3 = 2ε at a={a}: {c3} vs {two_e}"
+            );
         }
         // STRONG vis-viva cross-check: for a hyperbolic orbit C3 = lim_{r→∞} v(r)².
         // At a large finite r the residual is 2μ/r (relative ~2e-6 at r = 1e13).
         let c3 = hyp.characteristic_energy_c3();
         let v_far_sq = hyp.speed_at_radius(1.0e13).powi(2);
-        assert!((v_far_sq - c3).abs() / c3 < 1e-4, "C3 = lim v² (vis-viva): {v_far_sq} vs {c3}");
+        assert!(
+            (v_far_sq - c3).abs() / c3 < 1e-4,
+            "C3 = lim v² (vis-viva): {v_far_sq} vs {c3}"
+        );
         // C3 scales as 1/a: doubling a halves C3.
         let c3a = coe.characteristic_energy_c3();
-        let c3_2a = ClassicalElements { semi_major_axis: 1.4e7, ..coe }.characteristic_energy_c3();
+        let c3_2a = ClassicalElements {
+            semi_major_axis: 1.4e7,
+            ..coe
+        }
+        .characteristic_energy_c3();
         assert!((c3_2a - 0.5 * c3a).abs() / c3a.abs() < 1e-12, "C3 ∝ 1/a");
     }
 
@@ -1966,7 +2352,10 @@ mod tests {
         let a = R_EARTH + 700_000.0;
         let i = sun_synchronous_inclination(a, 0.0).expect("700 km is sun-syncable");
         let deg = i.to_degrees();
-        assert!((deg - 98.2).abs() < 0.5, "sun-sync inclination ≈ 98.2°, got {deg}");
+        assert!(
+            (deg - 98.2).abs() < 0.5,
+            "sun-sync inclination ≈ 98.2°, got {deg}"
+        );
         // Sun-sync orbits are retrograde (cos i < 0 ⇒ i > 90°).
         assert!(deg > 90.0, "must be retrograde, got {deg}");
 

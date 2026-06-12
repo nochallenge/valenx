@@ -68,9 +68,7 @@ impl RnaSeq {
     /// ambiguous / empty nucleotide sequence.
     pub fn from_seq(seq: &Seq) -> Result<Self> {
         match seq.kind() {
-            SeqKind::Protein => Err(RnaStructError::sequence(
-                "cannot fold a protein sequence",
-            )),
+            SeqKind::Protein => Err(RnaStructError::sequence("cannot fold a protein sequence")),
             SeqKind::Dna | SeqKind::Rna => Self::parse(seq.as_bytes()),
         }
     }

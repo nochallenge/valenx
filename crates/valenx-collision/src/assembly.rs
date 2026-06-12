@@ -55,16 +55,8 @@ mod tests {
     #[test]
     fn check_collisions_finds_overlapping_pair() {
         let mut asm = Assembly::new();
-        asm.add_part(Part::new(
-            0,
-            "A",
-            unit_tri_solid(Vector3::zeros()),
-        ));
-        asm.add_part(Part::new(
-            1,
-            "B",
-            unit_tri_solid(Vector3::zeros()),
-        ));
+        asm.add_part(Part::new(0, "A", unit_tri_solid(Vector3::zeros())));
+        asm.add_part(Part::new(1, "B", unit_tri_solid(Vector3::zeros())));
         let result = check_collisions(&asm).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].0, 0);
@@ -74,11 +66,7 @@ mod tests {
     #[test]
     fn check_collisions_skips_disjoint_pair() {
         let mut asm = Assembly::new();
-        asm.add_part(Part::new(
-            0,
-            "A",
-            unit_tri_solid(Vector3::zeros()),
-        ));
+        asm.add_part(Part::new(0, "A", unit_tri_solid(Vector3::zeros())));
         asm.add_part(Part::new(
             1,
             "B",

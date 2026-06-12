@@ -52,7 +52,11 @@ pub struct EnsembleStats {
 impl EnsembleStats {
     /// The mean trajectory of species `i` as a `(time, mean)` series.
     pub fn mean_series(&self, i: usize) -> Vec<(f64, f64)> {
-        self.grid.iter().copied().zip(self.mean[i].iter().copied()).collect()
+        self.grid
+            .iter()
+            .copied()
+            .zip(self.mean[i].iter().copied())
+            .collect()
     }
 }
 
@@ -125,8 +129,7 @@ pub fn run_ensemble(
     let mut mean = vec![vec![0.0; grid.len()]; n_species];
     let mut variance = vec![vec![0.0; grid.len()]; n_species];
     let mut std_dev = vec![vec![0.0; grid.len()]; n_species];
-    let mut percentiles =
-        vec![vec![vec![0.0; grid.len()]; n_species]; percentile_levels.len()];
+    let mut percentiles = vec![vec![vec![0.0; grid.len()]; n_species]; percentile_levels.len()];
 
     for sp in 0..n_species {
         for gp in 0..grid.len() {
@@ -247,8 +250,7 @@ mod tests {
     #[test]
     fn variance_is_zero_at_deterministic_start() {
         let m = decay(100, 1.0);
-        let stats =
-            run_ensemble(&m, 1.0, 20, 5, SsaMethod::NextReaction, 0.0, 1, &[]).unwrap();
+        let stats = run_ensemble(&m, 1.0, 20, 5, SsaMethod::NextReaction, 0.0, 1, &[]).unwrap();
         // Every run starts at exactly N0 -> zero variance there.
         assert!(stats.variance[0][0].abs() < 1e-12);
         // Later, variance grows.
@@ -258,8 +260,7 @@ mod tests {
     #[test]
     fn tau_leap_ensemble_runs() {
         let m = decay(400, 1.0);
-        let stats =
-            run_ensemble(&m, 2.0, 30, 8, SsaMethod::TauLeap, 0.02, 9, &[50.0]).unwrap();
+        let stats = run_ensemble(&m, 2.0, 30, 8, SsaMethod::TauLeap, 0.02, 9, &[50.0]).unwrap();
         assert_eq!(stats.n_runs, 30);
         assert!((stats.mean[0][0] - 400.0).abs() < 1e-9);
     }
@@ -269,9 +270,7 @@ mod tests {
         let m = decay(10, 1.0);
         assert!(run_ensemble(&m, 1.0, 0, 5, SsaMethod::Direct, 0.0, 0, &[]).is_err());
         assert!(run_ensemble(&m, 1.0, 5, 0, SsaMethod::Direct, 0.0, 0, &[]).is_err());
-        assert!(
-            run_ensemble(&m, 1.0, 5, 5, SsaMethod::Direct, 0.0, 0, &[150.0]).is_err()
-        );
+        assert!(run_ensemble(&m, 1.0, 5, 5, SsaMethod::Direct, 0.0, 0, &[150.0]).is_err());
     }
 
     #[test]

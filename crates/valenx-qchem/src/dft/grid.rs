@@ -106,10 +106,12 @@ impl MolecularGrid {
     /// grid; the Becke scheme then partitions the overlapping atomic
     /// grids into a single space-filling quadrature.
     pub fn build(geometry: &MolecularGeometry, quality: GridQuality) -> Self {
-        let positions: Vec<[f64; 3]> =
-            geometry.atoms.iter().map(|a| a.position).collect();
-        let atom_z: Vec<u8> =
-            geometry.atoms.iter().map(|a| a.element.atomic_number()).collect();
+        let positions: Vec<[f64; 3]> = geometry.atoms.iter().map(|a| a.position).collect();
+        let atom_z: Vec<u8> = geometry
+            .atoms
+            .iter()
+            .map(|a| a.element.atomic_number())
+            .collect();
         let angular = quality.angular();
         let n_radial = quality.radial_points();
 
@@ -127,11 +129,8 @@ impl MolecularGrid {
                     ];
                     // Atomic weight: 4π folds in here (Lebedev weights
                     // sum to 1, radial weight carries r²).
-                    let atomic_w =
-                        4.0 * std::f64::consts::PI * rp.weight * ap.weight;
-                    let becke = becke_weight(
-                        position, atom_idx, &positions, &atom_z,
-                    );
+                    let atomic_w = 4.0 * std::f64::consts::PI * rp.weight * ap.weight;
+                    let becke = becke_weight(position, atom_idx, &positions, &atom_z);
                     let weight = atomic_w * becke;
                     // Drop negligible-weight points to keep the grid
                     // lean; they contribute nothing to any integral.
@@ -231,11 +230,7 @@ impl GridDensity {
     /// `density` is the closed-shell (or total) AO density matrix `D`;
     /// the density is `ρ = Σ_{μν} D_{μν} φ_μ φ_ν` and the gradient is
     /// `∇ρ = 2 Σ_{μν} D_{μν} φ_μ ∇φ_ν` (using `D` symmetric).
-    pub fn evaluate(
-        grid: &MolecularGrid,
-        basis: &BasisSet,
-        density: &DMatrix<f64>,
-    ) -> GridDensity {
+    pub fn evaluate(grid: &MolecularGrid, basis: &BasisSet, density: &DMatrix<f64>) -> GridDensity {
         let n = basis.n_functions();
         let np = grid.points.len();
         let mut rho = vec![0.0; np];
@@ -410,7 +405,10 @@ mod tests {
         let point = [0.1, 0.2, 0.7];
         // Analytic gradient via a one-point grid.
         let one = MolecularGrid {
-            points: vec![GridPoint { position: point, weight: 1.0 }],
+            points: vec![GridPoint {
+                position: point,
+                weight: 1.0,
+            }],
             quality: GridQuality::Coarse,
         };
         let gd = GridDensity::evaluate(&one, &basis, d);

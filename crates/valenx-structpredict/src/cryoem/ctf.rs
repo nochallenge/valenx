@@ -69,12 +69,7 @@ impl Ctf {
     fn aberration_phase(&self, s: f64) -> f64 {
         let s2 = s * s;
         std::f64::consts::PI * self.wavelength * s2 * self.defocus
-            - 0.5
-                * std::f64::consts::PI
-                * self.cs
-                * self.wavelength.powi(3)
-                * s2
-                * s2
+            - 0.5 * std::f64::consts::PI * self.cs * self.wavelength.powi(3) * s2 * s2
             + self.phase_shift
     }
 
@@ -184,8 +179,7 @@ pub fn estimate_ctf(
     best.defocus = defocus_min;
     let mut best_score = f64::NEG_INFINITY;
     for step in 0..=n_steps {
-        let defocus =
-            defocus_min + (defocus_max - defocus_min) * step as f64 / n_steps as f64;
+        let defocus = defocus_min + (defocus_max - defocus_min) * step as f64 / n_steps as f64;
         let mut trial = base_ctf;
         trial.defocus = defocus;
         // Theoretical CTF² over the same radial samples.
@@ -318,13 +312,6 @@ mod tests {
     #[test]
     fn bad_spectrum_rejected() {
         assert!(estimate_ctf(&[1.0; 4], 0.01, Ctf::at_300kv(0.0), 1000.0, 2000.0).is_err());
-        assert!(estimate_ctf(
-            &[1.0; 16],
-            -0.01,
-            Ctf::at_300kv(0.0),
-            1000.0,
-            2000.0
-        )
-        .is_err());
+        assert!(estimate_ctf(&[1.0; 16], -0.01, Ctf::at_300kv(0.0), 1000.0, 2000.0).is_err());
     }
 }

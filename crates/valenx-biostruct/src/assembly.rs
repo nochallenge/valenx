@@ -128,8 +128,7 @@ mod tests {
         let mut shifted = SymmetryOperator::identity();
         shifted.serial = 2;
         shifted.translation = [10.0, 0.0, 0.0];
-        let asm =
-            generate_assembly(&s, &[SymmetryOperator::identity(), shifted]).unwrap();
+        let asm = generate_assembly(&s, &[SymmetryOperator::identity(), shifted]).unwrap();
         assert_eq!(asm.first_model().chains.len(), 2);
         // The two chains have distinct ids.
         let ids: Vec<&str> = asm

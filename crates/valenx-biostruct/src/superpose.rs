@@ -99,12 +99,12 @@ pub fn kabsch(mobile: &[Point3<f64>], reference: &[Point3<f64>]) -> Result<Super
     }
 
     let svd = h.svd(true, true);
-    let u = svd.u.ok_or_else(|| {
-        BiostructError::invalid("svd", "covariance SVD produced no U")
-    })?;
-    let v_t = svd.v_t.ok_or_else(|| {
-        BiostructError::invalid("svd", "covariance SVD produced no Vᵀ")
-    })?;
+    let u = svd
+        .u
+        .ok_or_else(|| BiostructError::invalid("svd", "covariance SVD produced no U"))?;
+    let v_t = svd
+        .v_t
+        .ok_or_else(|| BiostructError::invalid("svd", "covariance SVD produced no Vᵀ"))?;
     let v = v_t.transpose();
 
     // Reflection correction: ensure a proper rotation.
@@ -287,10 +287,7 @@ mod tests {
         let c = cloud();
         let rot = Matrix3::new(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
         let t = Vector3::new(5.0, -3.0, 2.0);
-        let moved: Vec<_> = c
-            .iter()
-            .map(|p| Point3::from(rot * p.coords + t))
-            .collect();
+        let moved: Vec<_> = c.iter().map(|p| Point3::from(rot * p.coords + t)).collect();
         // kabsch(mobile=c, reference=moved) should find (rot, t).
         let sup = kabsch(&c, &moved).unwrap();
         assert!(sup.rmsd < 1e-9, "rmsd after fit was {}", sup.rmsd);
@@ -304,8 +301,7 @@ mod tests {
         // some arbitrary rotation about (1,1,1)
         let axis = nalgebra::Unit::new_normalize(Vector3::new(1.0, 1.0, 1.0));
         let angle = 0.7_f64;
-        let rot: Matrix3<f64> =
-            nalgebra::Rotation3::from_axis_angle(&axis, angle).into_inner();
+        let rot: Matrix3<f64> = nalgebra::Rotation3::from_axis_angle(&axis, angle).into_inner();
         let moved: Vec<_> = c.iter().map(|p| Point3::from(rot * p.coords)).collect();
         let k = kabsch(&c, &moved).unwrap();
         let q = quaternion_superpose(&c, &moved).unwrap();
@@ -331,10 +327,7 @@ mod tests {
         // A mirrored cloud must still produce a proper rotation
         // (det = +1), not an improper one.
         let c = cloud();
-        let mirror: Vec<_> = c
-            .iter()
-            .map(|p| Point3::new(-p.x, p.y, p.z))
-            .collect();
+        let mirror: Vec<_> = c.iter().map(|p| Point3::new(-p.x, p.y, p.z)).collect();
         let sup = kabsch(&c, &mirror).unwrap();
         let det = sup.transform.rotation.determinant();
         assert!((det - 1.0).abs() < 1e-6, "rotation det was {det}");

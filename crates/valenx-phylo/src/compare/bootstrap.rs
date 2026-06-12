@@ -198,10 +198,7 @@ mod tests {
             b"GGGGGGGGGGTTTTT".to_vec(), // C
             b"GGGGGGGGGGTTTTT".to_vec(), // D
         ];
-        let labels: Vec<String> = ["A", "B", "C", "D"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let labels: Vec<String> = ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
         (Msa::new(rows).unwrap(), labels)
     }
 
@@ -221,10 +218,7 @@ mod tests {
         assert_eq!(result.replicates, 100);
         // The (A,B) clade should be recovered in (nearly) every
         // replicate.
-        let ab = reference.lca(
-            reference.find("A").unwrap(),
-            reference.find("B").unwrap(),
-        );
+        let ab = reference.lca(reference.find("A").unwrap(), reference.find("B").unwrap());
         assert!(result.support[ab] > 0.9, "support = {}", result.support[ab]);
     }
 
@@ -232,15 +226,8 @@ mod tests {
     fn support_values_are_fractions() {
         let (msa, labels) = clean_msa();
         let reference = read_newick("((A,B),(C,D));").unwrap();
-        let result = bootstrap_support(
-            &msa,
-            &labels,
-            &reference,
-            DistanceModel::PDistance,
-            50,
-            7,
-        )
-        .unwrap();
+        let result =
+            bootstrap_support(&msa, &labels, &reference, DistanceModel::PDistance, 50, 7).unwrap();
         for &s in &result.support {
             assert!((0.0..=1.0).contains(&s));
         }
@@ -250,15 +237,9 @@ mod tests {
     fn internal_nodes_get_a_support_label() {
         let (msa, labels) = clean_msa();
         let reference = read_newick("((A,B),(C,D));").unwrap();
-        let result = bootstrap_support(
-            &msa,
-            &labels,
-            &reference,
-            DistanceModel::JukesCantor,
-            30,
-            1,
-        )
-        .unwrap();
+        let result =
+            bootstrap_support(&msa, &labels, &reference, DistanceModel::JukesCantor, 30, 1)
+                .unwrap();
         // The relabelled tree has a numeric label on the (A,B) node.
         let ab = result.tree.lca(
             result.tree.find("A").unwrap(),
@@ -298,14 +279,8 @@ mod tests {
         let (msa, labels) = clean_msa();
         let reference = read_newick("((A,B),(C,D));").unwrap();
         // Zero replicates.
-        assert!(bootstrap_support(
-            &msa,
-            &labels,
-            &reference,
-            DistanceModel::PDistance,
-            0,
-            1
-        )
-        .is_err());
+        assert!(
+            bootstrap_support(&msa, &labels, &reference, DistanceModel::PDistance, 0, 1).is_err()
+        );
     }
 }

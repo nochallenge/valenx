@@ -17,8 +17,7 @@
 
 use crate::analysis::composition::gc_content;
 use crate::analysis::thermo::{
-    most_stable_hairpin, most_stable_hetero_dimer, most_stable_self_dimer, DimerScore,
-    HairpinScore,
+    most_stable_hairpin, most_stable_hetero_dimer, most_stable_self_dimer, DimerScore, HairpinScore,
 };
 use crate::analysis::tm::tm_nearest_neighbor_default;
 use crate::error::{BioseqError, Result};
@@ -170,7 +169,10 @@ pub fn design_primers(
     constraints: PrimerConstraints,
 ) -> Result<PrimerPair> {
     if template.kind() != SeqKind::Dna {
-        return Err(BioseqError::invalid("kind", "primer design needs a DNA template"));
+        return Err(BioseqError::invalid(
+            "kind",
+            "primer design needs a DNA template",
+        ));
     }
     let n = template.len();
     if target_start >= target_end || target_end > n {
@@ -188,9 +190,12 @@ pub fn design_primers(
 
     let forward = design_forward(template, target_start, &constraints)?;
     let reverse = design_reverse(template, target_end, &constraints)?;
-    let hetero_dimer =
-        most_stable_hetero_dimer(forward.seq.as_bytes(), reverse.seq.as_bytes(), constraints.screen_temp)
-            .filter(|d| d.dg < constraints.max_hetero_dimer_dg);
+    let hetero_dimer = most_stable_hetero_dimer(
+        forward.seq.as_bytes(),
+        reverse.seq.as_bytes(),
+        constraints.screen_temp,
+    )
+    .filter(|d| d.dg < constraints.max_hetero_dimer_dg);
     Ok(PrimerPair {
         forward,
         reverse,
@@ -200,11 +205,7 @@ pub fn design_primers(
 
 /// Designs the forward primer — ends at `target_start` on the top
 /// strand, extends 5′ from there.
-fn design_forward(
-    template: &Seq,
-    target_start: usize,
-    c: &PrimerConstraints,
-) -> Result<Primer> {
+fn design_forward(template: &Seq, target_start: usize, c: &PrimerConstraints) -> Result<Primer> {
     let bytes = template.as_bytes();
     let mut best: Option<(Primer, f64)> = None;
     for len in c.min_len..=c.max_len {
@@ -214,7 +215,11 @@ fn design_forward(
         }
         let start = target_start - len;
         let end = target_start;
-        let sub = Seq::new_unchecked(SeqKind::Dna, bytes[start..end].to_vec(), template.topology());
+        let sub = Seq::new_unchecked(
+            SeqKind::Dna,
+            bytes[start..end].to_vec(),
+            template.topology(),
+        );
         if let Some(primer) = evaluate_candidate(sub, true, start, end, c) {
             consider(&mut best, primer, c.target_tm);
         }
@@ -229,11 +234,7 @@ fn design_forward(
 
 /// Designs the reverse primer — binds the top strand starting at
 /// `target_end`, the primer itself is the reverse complement.
-fn design_reverse(
-    template: &Seq,
-    target_end: usize,
-    c: &PrimerConstraints,
-) -> Result<Primer> {
+fn design_reverse(template: &Seq, target_end: usize, c: &PrimerConstraints) -> Result<Primer> {
     let bytes = template.as_bytes();
     let n = bytes.len();
     let mut best: Option<(Primer, f64)> = None;
@@ -243,8 +244,11 @@ fn design_reverse(
         }
         let start = target_end;
         let end = target_end + len;
-        let footprint =
-            Seq::new_unchecked(SeqKind::Dna, bytes[start..end].to_vec(), template.topology());
+        let footprint = Seq::new_unchecked(
+            SeqKind::Dna,
+            bytes[start..end].to_vec(),
+            template.topology(),
+        );
         // The reverse primer is the reverse complement of the footprint.
         let primer_seq = reverse_complement(&footprint)?;
         if let Some(primer) = evaluate_candidate(primer_seq, false, start, end, c) {

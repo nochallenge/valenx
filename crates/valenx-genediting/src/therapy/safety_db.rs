@@ -87,24 +87,22 @@ impl ReferenceGeneList {
 pub fn essential_genes() -> ReferenceGeneList {
     let symbols: &[&str] = &[
         // RNA Pol II + transcription core.
-        "POLR2A", "POLR2B", "POLR2C", "POLR2D", "POLR2E", "POLR2F", "POLR2G", "POLR2H",
-        "POLR2I", "POLR2J", "POLR2K", "POLR2L",
-        // DNA polymerases + replication.
-        "POLA1", "POLA2", "POLD1", "POLD2", "POLE", "POLE2", "PCNA", "RFC1", "RFC2",
-        "RFC3", "RFC4", "MCM2", "MCM3", "MCM4", "MCM5", "MCM6", "MCM7",
+        "POLR2A", "POLR2B", "POLR2C", "POLR2D", "POLR2E", "POLR2F", "POLR2G", "POLR2H", "POLR2I",
+        "POLR2J", "POLR2K", "POLR2L", // DNA polymerases + replication.
+        "POLA1", "POLA2", "POLD1", "POLD2", "POLE", "POLE2", "PCNA", "RFC1", "RFC2", "RFC3",
+        "RFC4", "MCM2", "MCM3", "MCM4", "MCM5", "MCM6", "MCM7",
         // Ribosomal proteins — large subunit (RPL).
-        "RPL3", "RPL4", "RPL5", "RPL6", "RPL7", "RPL8", "RPL9", "RPL10", "RPL11", "RPL12",
-        "RPL13", "RPL14", "RPL15", "RPL17", "RPL18", "RPL19", "RPL21", "RPL22", "RPL23",
-        "RPL24", "RPL26", "RPL27", "RPL28", "RPL29", "RPL30", "RPL31", "RPL32", "RPL34",
-        "RPL35", "RPL36", "RPL37", "RPL38", "RPL39", "RPLP0", "RPLP1", "RPLP2",
+        "RPL3", "RPL4", "RPL5", "RPL6", "RPL7", "RPL8", "RPL9", "RPL10", "RPL11", "RPL12", "RPL13",
+        "RPL14", "RPL15", "RPL17", "RPL18", "RPL19", "RPL21", "RPL22", "RPL23", "RPL24", "RPL26",
+        "RPL27", "RPL28", "RPL29", "RPL30", "RPL31", "RPL32", "RPL34", "RPL35", "RPL36", "RPL37",
+        "RPL38", "RPL39", "RPLP0", "RPLP1", "RPLP2",
         // Ribosomal proteins — small subunit (RPS).
-        "RPS2", "RPS3", "RPS4X", "RPS5", "RPS6", "RPS7", "RPS8", "RPS9", "RPS10", "RPS11",
-        "RPS12", "RPS13", "RPS14", "RPS15", "RPS16", "RPS17", "RPS18", "RPS19", "RPS20",
-        "RPS21", "RPS23", "RPS24", "RPS25", "RPS26", "RPS27", "RPS28", "RPS29", "RPSA",
+        "RPS2", "RPS3", "RPS4X", "RPS5", "RPS6", "RPS7", "RPS8", "RPS9", "RPS10", "RPS11", "RPS12",
+        "RPS13", "RPS14", "RPS15", "RPS16", "RPS17", "RPS18", "RPS19", "RPS20", "RPS21", "RPS23",
+        "RPS24", "RPS25", "RPS26", "RPS27", "RPS28", "RPS29", "RPSA",
         // Spliceosome core.
-        "PRPF8", "PRPF19", "PRPF31", "PRPF38A", "SNRNP200", "SNRPA1", "SNRPB", "SNRPD1",
-        "SNRPD2", "SNRPD3", "SNRPE", "SNRPF", "SNRPG",
-        // tRNA synthetases (a sample).
+        "PRPF8", "PRPF19", "PRPF31", "PRPF38A", "SNRNP200", "SNRPA1", "SNRPB", "SNRPD1", "SNRPD2",
+        "SNRPD3", "SNRPE", "SNRPF", "SNRPG", // tRNA synthetases (a sample).
         "AARS1", "DARS1", "EARS2", "FARSA", "GARS1", "HARS1", "IARS1", "KARS1", "LARS1",
         // Proteasome core.
         "PSMA1", "PSMA2", "PSMA3", "PSMA4", "PSMA5", "PSMA6", "PSMA7", "PSMB1", "PSMB2",
@@ -136,33 +134,24 @@ pub fn essential_genes() -> ReferenceGeneList {
 pub fn cancer_driver_genes() -> ReferenceGeneList {
     let symbols: &[&str] = &[
         // Receptor tyrosine kinases.
-        "EGFR", "ERBB2", "ERBB3", "ERBB4", "FGFR1", "FGFR2", "FGFR3", "FGFR4", "MET",
-        "ALK", "ROS1", "RET", "KIT", "PDGFRA", "PDGFRB",
-        // RAS-MAPK pathway.
-        "KRAS", "NRAS", "HRAS", "BRAF", "MAP2K1", "MAP2K2", "NF1",
-        // PI3K-AKT-mTOR.
-        "PIK3CA", "PIK3CB", "PIK3R1", "AKT1", "AKT2", "AKT3", "MTOR", "PTEN", "TSC1",
-        "TSC2", "STK11",
-        // Cell cycle + DNA damage response.
-        "TP53", "RB1", "CDKN2A", "CDK4", "CDK6", "CCND1", "CCNE1", "MDM2", "MDM4",
-        "ATM", "ATR", "CHEK2", "BRCA1", "BRCA2", "PALB2",
-        // Transcription factors + chromatin.
-        "MYC", "MYCN", "MYCL", "EZH2", "KDM6A", "KMT2A", "KMT2C", "KMT2D", "CREBBP",
-        "EP300", "ARID1A", "ARID1B", "ARID2", "SMARCA4", "SMARCB1",
-        // Wnt + Hedgehog + Notch.
-        "APC", "CTNNB1", "AXIN1", "AXIN2", "PTCH1", "SMO", "GLI1", "NOTCH1", "NOTCH2",
-        "FBXW7",
+        "EGFR", "ERBB2", "ERBB3", "ERBB4", "FGFR1", "FGFR2", "FGFR3", "FGFR4", "MET", "ALK", "ROS1",
+        "RET", "KIT", "PDGFRA", "PDGFRB", // RAS-MAPK pathway.
+        "KRAS", "NRAS", "HRAS", "BRAF", "MAP2K1", "MAP2K2", "NF1", // PI3K-AKT-mTOR.
+        "PIK3CA", "PIK3CB", "PIK3R1", "AKT1", "AKT2", "AKT3", "MTOR", "PTEN", "TSC1", "TSC2",
+        "STK11", // Cell cycle + DNA damage response.
+        "TP53", "RB1", "CDKN2A", "CDK4", "CDK6", "CCND1", "CCNE1", "MDM2", "MDM4", "ATM", "ATR",
+        "CHEK2", "BRCA1", "BRCA2", "PALB2", // Transcription factors + chromatin.
+        "MYC", "MYCN", "MYCL", "EZH2", "KDM6A", "KMT2A", "KMT2C", "KMT2D", "CREBBP", "EP300",
+        "ARID1A", "ARID1B", "ARID2", "SMARCA4", "SMARCB1", // Wnt + Hedgehog + Notch.
+        "APC", "CTNNB1", "AXIN1", "AXIN2", "PTCH1", "SMO", "GLI1", "NOTCH1", "NOTCH2", "FBXW7",
         // Translation initiation + ribosome biogenesis.
-        "DICER1", "DROSHA",
-        // Apoptosis + survival.
+        "DICER1", "DROSHA", // Apoptosis + survival.
         "BCL2", "BCL6", "BCL10", "MCL1", "BIRC3", "CASP8",
         // Hematological-malignancy core.
-        "FLT3", "NPM1", "DNMT3A", "TET2", "IDH1", "IDH2", "WT1", "RUNX1", "JAK2",
-        "JAK3", "CALR", "MPL", "CBL", "ASXL1", "SF3B1", "SRSF2", "U2AF1", "ETV6",
-        "GATA2", "PAX5", "IKZF1",
+        "FLT3", "NPM1", "DNMT3A", "TET2", "IDH1", "IDH2", "WT1", "RUNX1", "JAK2", "JAK3", "CALR",
+        "MPL", "CBL", "ASXL1", "SF3B1", "SRSF2", "U2AF1", "ETV6", "GATA2", "PAX5", "IKZF1",
         // Mismatch repair + replication-fidelity tumour suppressors.
-        "MLH1", "MSH2", "MSH6", "PMS2",
-        // VHL + renal/pheo drivers.
+        "MLH1", "MSH2", "MSH6", "PMS2", // VHL + renal/pheo drivers.
         "VHL", "SDHA", "SDHB", "SDHC", "SDHD",
     ];
     let mut v: Vec<String> = symbols.iter().map(|s| s.to_ascii_uppercase()).collect();
@@ -192,12 +181,8 @@ pub fn cancer_driver_genes() -> ReferenceGeneList {
 /// 2016 / IDT / Benchling safe-harbor panels.
 pub fn safe_harbor_loci() -> ReferenceGeneList {
     let symbols: &[&str] = &[
-        "AAVS1",
-        "PPP1R12C", // host gene for AAVS1
-        "HROSA26",
-        "ROSA26",
-        "THUMPD3",
-        "CCR5",
+        "AAVS1", "PPP1R12C", // host gene for AAVS1
+        "HROSA26", "ROSA26", "THUMPD3", "CCR5",
     ];
     let mut v: Vec<String> = symbols.iter().map(|s| s.to_ascii_uppercase()).collect();
     v.sort();
@@ -282,18 +267,19 @@ mod tests {
 
     #[test]
     fn lists_are_sorted_for_binary_search() {
-        for g in [
-            essential_genes(),
-            cancer_driver_genes(),
-            safe_harbor_loci(),
-        ] {
+        for g in [essential_genes(), cancer_driver_genes(), safe_harbor_loci()] {
             let mut sorted = g.symbols.clone();
             sorted.sort();
             assert_eq!(g.symbols, sorted, "{:?} list not sorted", g.kind);
             // No duplicates.
             let mut dedup = sorted.clone();
             dedup.dedup();
-            assert_eq!(dedup.len(), sorted.len(), "{:?} list has duplicates", g.kind);
+            assert_eq!(
+                dedup.len(),
+                sorted.len(),
+                "{:?} list has duplicates",
+                g.kind
+            );
         }
     }
 

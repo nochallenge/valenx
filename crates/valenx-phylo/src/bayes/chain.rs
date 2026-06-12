@@ -22,9 +22,7 @@
 //! - acceptance counts per proposal kind.
 
 use crate::bayes::prior::Prior;
-use crate::bayes::proposal::{
-    sample_proposal, ChainState, ProposalKind, ProposalSet,
-};
+use crate::bayes::proposal::{sample_proposal, ChainState, ProposalKind, ProposalSet};
 use crate::error::{PhyloError, Result};
 use crate::likelihood::felsenstein::{log_likelihood, log_likelihood_gamma};
 use crate::likelihood::gamma::DiscreteGamma;
@@ -143,13 +141,9 @@ impl AcceptanceCounts {
     /// Acceptance rate for a single proposal kind, or `None` if the
     /// kind was never proposed.
     pub fn rate(&self, kind: ProposalKind) -> Option<f64> {
-        self.by_kind.get(&kind).map(|(p, a)| {
-            if *p == 0 {
-                0.0
-            } else {
-                *a as f64 / *p as f64
-            }
-        })
+        self.by_kind
+            .get(&kind)
+            .map(|(p, a)| if *p == 0 { 0.0 } else { *a as f64 / *p as f64 })
     }
 }
 
@@ -288,8 +282,7 @@ pub fn run_chain(
 
     let mut rng = Rng::new(cfg.seed);
     let mut state = init;
-    let (mut ll, mut lp) =
-        compute_posterior(&state, alignment, prior, cfg.gamma_categories)?;
+    let (mut ll, mut lp) = compute_posterior(&state, alignment, prior, cfg.gamma_categories)?;
     let mut acceptance = AcceptanceCounts::default();
     let mut samples: Vec<ChainSample> = Vec::new();
 
@@ -300,30 +293,20 @@ pub fn run_chain(
         // sample count equals the iteration count after burn-in /
         // thinning (every chain run with the same config produces a
         // trace of the same length).
-        if let Some((kind, outcome)) =
-            sample_proposal(&state, proposals, &mut rng, 5)?
-        {
-            let scored = compute_posterior(
-                &outcome.new_state,
-                alignment,
-                prior,
-                cfg.gamma_categories,
-            );
+        if let Some((kind, outcome)) = sample_proposal(&state, proposals, &mut rng, 5)? {
+            let scored =
+                compute_posterior(&outcome.new_state, alignment, prior, cfg.gamma_categories);
             let (new_ll, new_lp) = match scored {
                 Ok(pair) => pair,
                 Err(_) => {
                     acceptance.record(kind, false);
-                    record_sample(
-                        &mut samples, iter, &state, ll, lp, cfg,
-                    );
+                    record_sample(&mut samples, iter, &state, ll, lp, cfg);
                     continue;
                 }
             };
             if !new_ll.is_finite() || !new_lp.is_finite() {
                 acceptance.record(kind, false);
-                record_sample(
-                    &mut samples, iter, &state, ll, lp, cfg,
-                );
+                record_sample(&mut samples, iter, &state, ll, lp, cfg);
                 continue;
             }
             let log_alpha = (new_ll + new_lp) - (ll + lp) + outcome.log_hastings;
@@ -405,14 +388,8 @@ mod tests {
             seed: 1,
             gamma_categories: 4,
         };
-        let result = run_chain(
-            init,
-            &Prior::default(),
-            &ProposalSet::default(),
-            &cfg,
-            &aln,
-        )
-        .unwrap();
+        let result =
+            run_chain(init, &Prior::default(), &ProposalSet::default(), &cfg, &aln).unwrap();
         // 150 post-burn-in iterations, thinning 10 → ~15 samples.
         assert!(!result.samples.is_empty(), "no samples recorded");
         assert!(result.samples.len() <= 16);
@@ -429,14 +406,8 @@ mod tests {
             seed: 2,
             gamma_categories: 4,
         };
-        let result = run_chain(
-            init,
-            &Prior::default(),
-            &ProposalSet::default(),
-            &cfg,
-            &aln,
-        )
-        .unwrap();
+        let result =
+            run_chain(init, &Prior::default(), &ProposalSet::default(), &cfg, &aln).unwrap();
         let total = result.acceptance.total_proposed();
         let acc = result.acceptance.total_accepted();
         assert!(total > 0);
@@ -456,14 +427,8 @@ mod tests {
             seed: 3,
             gamma_categories: 4,
         };
-        let result = run_chain(
-            init,
-            &Prior::default(),
-            &ProposalSet::default(),
-            &cfg,
-            &aln,
-        )
-        .unwrap();
+        let result =
+            run_chain(init, &Prior::default(), &ProposalSet::default(), &cfg, &aln).unwrap();
         for s in &result.samples {
             assert!(s.log_posterior.is_finite());
             assert!(s.log_likelihood.is_finite());
@@ -488,14 +453,8 @@ mod tests {
             seed: 4,
             gamma_categories: 4,
         };
-        let result = run_chain(
-            init,
-            &Prior::default(),
-            &ProposalSet::default(),
-            &cfg,
-            &aln,
-        )
-        .unwrap();
+        let result =
+            run_chain(init, &Prior::default(), &ProposalSet::default(), &cfg, &aln).unwrap();
         let trace = result.log_posterior_trace();
         // The mean of the second half should be much higher than the
         // mean of the first quarter — the chain finds better parameter
@@ -529,14 +488,7 @@ mod tests {
             &aln,
         )
         .unwrap();
-        let b = run_chain(
-            init,
-            &Prior::default(),
-            &ProposalSet::default(),
-            &cfg,
-            &aln,
-        )
-        .unwrap();
+        let b = run_chain(init, &Prior::default(), &ProposalSet::default(), &cfg, &aln).unwrap();
         let ta = a.log_posterior_trace();
         let tb = b.log_posterior_trace();
         assert_eq!(ta.len(), tb.len());

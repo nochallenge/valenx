@@ -209,10 +209,8 @@ pub fn read_jt_model(path: &Path) -> Result<JtModel, OcctExchangeError> {
     // CAD container; production assemblies cross 1 GiB but a
     // multi-GB hostile file would OOM the parser before any header
     // check.
-    let bytes = valenx_core::io_caps::read_capped_to_bytes(
-        path,
-        valenx_core::io_caps::MAX_JT_FILE_BYTES,
-    )?;
+    let bytes =
+        valenx_core::io_caps::read_capped_to_bytes(path, valenx_core::io_caps::MAX_JT_FILE_BYTES)?;
     parse_jt(&bytes)
 }
 
@@ -322,11 +320,7 @@ fn parse_jt(bytes: &[u8]) -> Result<JtModel, OcctExchangeError> {
 fn parse_version(header: &str) -> Result<(u32, u32), OcctExchangeError> {
     let rest = header[JT_MAGIC.len()..].trim_start();
     // The first whitespace-delimited token is `major.minor`.
-    let token = rest
-        .split([' ', ',', '\t'])
-        .next()
-        .unwrap_or("")
-        .trim();
+    let token = rest.split([' ', ',', '\t']).next().unwrap_or("").trim();
     let mut parts = token.split('.');
     let major = parts
         .next()
@@ -671,10 +665,7 @@ fn decode_uncompressed_tristrip(body: &[u8], mesh: &mut Mesh) -> Result<(), Occt
 /// [u32 × index_count]`. Indices come in *independent* triplets — every
 /// run of three is one triangle — so an `index_count` that isn't a
 /// multiple of three has the tail truncated.
-fn decode_uncompressed_triangle_set(
-    body: &[u8],
-    mesh: &mut Mesh,
-) -> Result<(), OcctExchangeError> {
+fn decode_uncompressed_triangle_set(body: &[u8], mesh: &mut Mesh) -> Result<(), OcctExchangeError> {
     let mut cur = ByteCursor::new(body, 0);
     let vcount = match cur.try_read_u32() {
         Some(v) => v as usize,
@@ -737,10 +728,7 @@ fn decode_uncompressed_triangle_set(
 /// buffer, no index list. Each vertex becomes one degenerate Line2
 /// edge `(i, i)` so downstream consumers that walk element blocks see
 /// the points without needing a dedicated `Point` element type.
-fn decode_uncompressed_point_cloud(
-    body: &[u8],
-    mesh: &mut Mesh,
-) -> Result<(), OcctExchangeError> {
+fn decode_uncompressed_point_cloud(body: &[u8], mesh: &mut Mesh) -> Result<(), OcctExchangeError> {
     let mut cur = ByteCursor::new(body, 0);
     let vcount = match cur.try_read_u32() {
         Some(v) => v as usize,
@@ -782,10 +770,7 @@ fn decode_uncompressed_point_cloud(
 /// the 4-byte segment type, and the 4-byte segment length. The
 /// payload is everything after that 24-byte header, bounded by the
 /// segment's TOC length.
-fn segment_payload<'a>(
-    bytes: &'a [u8],
-    entry: &JtTocEntry,
-) -> Result<&'a [u8], OcctExchangeError> {
+fn segment_payload<'a>(bytes: &'a [u8], entry: &JtTocEntry) -> Result<&'a [u8], OcctExchangeError> {
     let start = entry.offset as usize;
     // Segment header is 16 (GUID) + 4 (type) + 4 (length) = 24 bytes.
     const SEG_HEADER: usize = 24;
@@ -915,11 +900,9 @@ fn inflate_zlib_segment(payload: &[u8], what: &str) -> Result<Vec<u8>, OcctExcha
     // so we additionally check whether the stream had more bytes to
     // produce by attempting one more 1-byte read.
     let mut limited = (&mut decoder).take(ZLIB_INFLATED_CAP as u64);
-    limited
-        .read_to_end(&mut out)
-        .map_err(|e| OcctExchangeError::Backend(format!(
-            "JT {what} segment ZLIB inflate failed: {e}"
-        )))?;
+    limited.read_to_end(&mut out).map_err(|e| {
+        OcctExchangeError::Backend(format!("JT {what} segment ZLIB inflate failed: {e}"))
+    })?;
     if out.len() >= ZLIB_INFLATED_CAP {
         // Try one more byte to distinguish "exactly the cap" from
         // "still has data" — if the stream is truly done we keep the
@@ -1084,11 +1067,7 @@ mod tests {
         // a 3-index strip.
         let mut body: Vec<u8> = Vec::new();
         body.extend_from_slice(&3u32.to_le_bytes()); // vertex count
-        for v in [
-            [0.0f32, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ] {
+        for v in [[0.0f32, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]] {
             for c in v {
                 body.extend_from_slice(&c.to_le_bytes());
             }
@@ -1106,8 +1085,7 @@ mod tests {
 
         // Patch the segment length (segment header + element).
         let segment_total = (file.len() - segment_offset as usize) as u32;
-        file[seg_len_pos..seg_len_pos + 4]
-            .copy_from_slice(&segment_total.to_le_bytes());
+        file[seg_len_pos..seg_len_pos + 4].copy_from_slice(&segment_total.to_le_bytes());
 
         // --- TOC ---
         let toc_offset = file.len() as u32;
@@ -1115,12 +1093,11 @@ mod tests {
         file.extend_from_slice(&[0xAB; 16]); // segment GUID
         file.extend_from_slice(&segment_offset.to_le_bytes()); // offset
         file.extend_from_slice(&segment_total.to_le_bytes()); // length
-        // attributes: segment type 2 in the high byte.
+                                                              // attributes: segment type 2 in the high byte.
         file.extend_from_slice(&(2u32 << 24).to_le_bytes());
 
         // Patch the TOC offset back into the header area.
-        file[toc_offset_pos..toc_offset_pos + 4]
-            .copy_from_slice(&toc_offset.to_le_bytes());
+        file[toc_offset_pos..toc_offset_pos + 4].copy_from_slice(&toc_offset.to_le_bytes());
 
         file
     }
@@ -1142,9 +1119,8 @@ mod tests {
         //   [80..84)  4-byte TOC offset (little-endian)
         //   [84..N)   shape segment: 16-byte GUID + 4-byte type + 4-byte length + payload
         //   [N..)     TOC
-        let toc_offset_old = u32::from_le_bytes([
-            input[80], input[81], input[82], input[83],
-        ]) as usize;
+        let toc_offset_old =
+            u32::from_le_bytes([input[80], input[81], input[82], input[83]]) as usize;
         let segment_start = 80 + 4; // 84
         let segment_header_len = 24;
         let segment_total_old = toc_offset_old - segment_start;
@@ -1161,8 +1137,8 @@ mod tests {
         // (with updated length).
         let mut out: Vec<u8> = Vec::new();
         out.extend_from_slice(&input[..80]); // header
-        // Placeholder TOC offset — patched after the segment is laid
-        // out.
+                                             // Placeholder TOC offset — patched after the segment is laid
+                                             // out.
         let toc_offset_pos = out.len();
         out.extend_from_slice(&[0u8; 4]);
         // Segment header: copy the original 16-byte GUID + 4-byte type,
@@ -1179,9 +1155,8 @@ mod tests {
         out.extend_from_slice(&(segment_start as u32).to_le_bytes()); // offset
         out.extend_from_slice(&new_segment_total.to_le_bytes()); // length
         out.extend_from_slice(&(2u32 << 24).to_le_bytes()); // attributes
-        // Patch the TOC offset in the header.
-        out[toc_offset_pos..toc_offset_pos + 4]
-            .copy_from_slice(&toc_offset_new.to_le_bytes());
+                                                            // Patch the TOC offset in the header.
+        out[toc_offset_pos..toc_offset_pos + 4].copy_from_slice(&toc_offset_new.to_le_bytes());
         out
     }
 
@@ -1239,9 +1214,7 @@ mod tests {
         assert_eq!(model.mesh.nodes.len(), 3, "three vertices");
         assert_eq!(model.mesh.total_elements(), 1, "one triangle");
         // The vertex coordinates round-tripped through the f32 array.
-        assert!(
-            (model.mesh.nodes[1] - nalgebra::Vector3::new(1.0, 0.0, 0.0)).norm() < 1e-6
-        );
+        assert!((model.mesh.nodes[1] - nalgebra::Vector3::new(1.0, 0.0, 0.0)).norm() < 1e-6);
     }
 
     #[test]
@@ -1250,8 +1223,7 @@ mod tests {
         // mesh-backed Solid — write the synthetic file to disk and
         // read it back.
         let file = synth_jt_one_triangle();
-        let tmp = std::env::temp_dir()
-            .join(format!("valenx_jt_rt_{}.jt", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("valenx_jt_rt_{}.jt", std::process::id()));
         std::fs::write(&tmp, &file).expect("write synthetic JT");
         let solid = jt_reader(&tmp).expect("read synthetic JT");
         let _ = std::fs::remove_file(&tmp);
@@ -1280,10 +1252,7 @@ mod tests {
         file[payload_start + 1] = 0x9C;
         let err = parse_jt(&file).unwrap_err();
         assert_eq!(err.code(), "occt_exchange.backend");
-        assert!(
-            err.to_string().contains("ZLIB inflate"),
-            "got: {err}",
-        );
+        assert!(err.to_string().contains("ZLIB inflate"), "got: {err}",);
     }
 
     #[test]
@@ -1293,11 +1262,10 @@ mod tests {
         // uncompressed payload. The decoded mesh must match the
         // uncompressed reading byte-for-byte.
         let uncompressed = synth_jt_one_triangle();
-        let model_plain = parse_jt(&uncompressed)
-            .expect("uncompressed JT must parse");
+        let model_plain = parse_jt(&uncompressed).expect("uncompressed JT must parse");
         let compressed = compress_jt_shape_payload(&uncompressed);
-        let model_zlib = parse_jt(&compressed)
-            .expect("ZLIB-compressed JT must parse via the deflate codec");
+        let model_zlib =
+            parse_jt(&compressed).expect("ZLIB-compressed JT must parse via the deflate codec");
         // Vertex + element counts identical.
         assert_eq!(
             model_plain.mesh.nodes.len(),
@@ -1315,7 +1283,10 @@ mod tests {
             .iter()
             .zip(model_zlib.mesh.nodes.iter())
         {
-            assert!((a - b).norm() < 1e-12, "vertex coordinates must match exactly: {a:?} vs {b:?}");
+            assert!(
+                (a - b).norm() < 1e-12,
+                "vertex coordinates must match exactly: {a:?} vs {b:?}"
+            );
         }
     }
 
@@ -1368,11 +1339,7 @@ mod tests {
         // A bare vertex array — 3 points, no index list.
         let mut body: Vec<u8> = Vec::new();
         body.extend_from_slice(&3u32.to_le_bytes());
-        for v in [
-            [1.0f32, 2.0, 3.0],
-            [4.0, 5.0, 6.0],
-            [7.0, 8.0, 9.0],
-        ] {
+        for v in [[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]] {
             for c in v {
                 body.extend_from_slice(&c.to_le_bytes());
             }
@@ -1405,7 +1372,7 @@ mod tests {
         let mut hdr = b"Version 9.0 jt".to_vec();
         hdr.resize(79, b' ');
         hdr.push(0); // byte 79: little-endian byte-order flag
-        // A TOC offset that points past the file end.
+                     // A TOC offset that points past the file end.
         hdr.extend_from_slice(&9_999_999u32.to_le_bytes());
         let err = parse_jt(&hdr).unwrap_err();
         assert_eq!(err.code(), "occt_exchange.parse");

@@ -32,7 +32,11 @@ mod tests {
 
     fn sample_tree() -> CsgNode {
         // (cube 1) - sphere(0.5) wrapped in identity transform.
-        let a = CsgNode::Primitive(Primitive::Box { lx: 1.0, ly: 1.0, lz: 1.0 });
+        let a = CsgNode::Primitive(Primitive::Box {
+            lx: 1.0,
+            ly: 1.0,
+            lz: 1.0,
+        });
         let b = CsgNode::Primitive(Primitive::Sphere { r: 0.5 });
         let diff = CsgNode::Difference(Box::new(a), Box::new(b));
         CsgNode::Transform(Box::new(diff), identity())

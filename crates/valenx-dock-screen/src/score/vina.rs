@@ -246,7 +246,11 @@ mod tests {
         // Two carbons near their VDW-contact distance score below 0.
         let ligand = vec![(Vector3::new(3.8, 0.0, 0.0), Ad4AtomType::C)];
         let terms = score_complex(&receptor, &ligand, 0);
-        assert!(terms.total() < 0.0, "expected attractive score, got {}", terms.total());
+        assert!(
+            terms.total() < 0.0,
+            "expected attractive score, got {}",
+            terms.total()
+        );
     }
 
     #[test]
@@ -259,7 +263,10 @@ mod tests {
         let rigid = score_complex(&receptor, &ligand, 0).total();
         let floppy = score_complex(&receptor, &ligand, 10).total();
         assert!(rigid < 0.0 && floppy < 0.0);
-        assert!(floppy > rigid, "floppy {floppy} should be closer to 0 than rigid {rigid}");
+        assert!(
+            floppy > rigid,
+            "floppy {floppy} should be closer to 0 than rigid {rigid}"
+        );
     }
 
     #[test]

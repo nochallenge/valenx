@@ -111,8 +111,7 @@ fn platform_candidates(name: &str) -> Vec<String> {
     if !cfg!(windows) {
         return vec![name.to_string()];
     }
-    let pathext =
-        std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
     let mut out = vec![name.to_string()];
     let name_lower = name.to_ascii_lowercase();
     let mut seen: Vec<String> = Vec::new();
@@ -194,11 +193,7 @@ mod tests {
 
     #[test]
     fn adapter_command_to_process_command_carries_program_and_args() {
-        let cmd = AdapterCommand::new(
-            PathBuf::from("/usr/bin/tool"),
-            vec!["--flag".into()],
-            "x",
-        );
+        let cmd = AdapterCommand::new(PathBuf::from("/usr/bin/tool"), vec!["--flag".into()], "x");
         let proc = cmd.to_process_command();
         // get_program is the program path.
         assert_eq!(proc.get_program(), std::ffi::OsStr::new("/usr/bin/tool"));

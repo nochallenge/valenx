@@ -174,12 +174,7 @@ fn aabb_volume(a: &AABB) -> f64 {
 ///
 /// We take the maximum of the two signals: a deep-overlap pair gets
 /// the nested term, a partial-overlap pair gets the product term.
-fn overlap_volume_estimate(
-    part_a: &Part,
-    part_b: &Part,
-    inter_aabb: &AABB,
-    tess_tol: f64,
-) -> f64 {
+fn overlap_volume_estimate(part_a: &Part, part_b: &Part, inter_aabb: &AABB, tess_tol: f64) -> f64 {
     let aabb_vol = aabb_volume(inter_aabb);
     if aabb_vol < f64::EPSILON {
         return 0.0;

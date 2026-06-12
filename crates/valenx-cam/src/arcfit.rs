@@ -237,11 +237,7 @@ fn try_fit(points: &[Vector3<f64>], params: &ArcFitParams) -> Option<FittedArc> 
     let rhs_d = -(sx3 + sxy2);
     let rhs_e = -(sx2y + sy3);
     let rhs_f = -(sxx + syy);
-    let m = [
-        [sxx, sxy, sx],
-        [sxy, syy, sy],
-        [sx, sy, n_f],
-    ];
+    let m = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n_f]];
     let rhs = [rhs_d, rhs_e, rhs_f];
     let coeffs = solve_3x3(m, rhs)?;
     let d = coeffs[0];

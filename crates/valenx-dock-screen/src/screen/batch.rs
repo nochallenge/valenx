@@ -143,7 +143,14 @@ pub fn screen_library(
         .enumerate()
         .map(|(i, entry)| {
             let ligand_seed = seed.wrapping_add((i as u64).wrapping_mul(0x9E37_79B9));
-            dock_one(receptor, entry, grid, algorithm, runs_per_ligand, ligand_seed)
+            dock_one(
+                receptor,
+                entry,
+                grid,
+                algorithm,
+                runs_per_ligand,
+                ligand_seed,
+            )
         })
         .collect();
 
@@ -230,10 +237,15 @@ TORSDOF 0
         let grid = GridBox::cubic([0.0; 3], 10.0).unwrap();
         assert!(screen_library(&r, &[], &grid, SearchAlgorithm::fast(), 1, 1).is_err());
         let lib = vec![LibraryEntry::new("x", GOOD_LIGAND)];
-        assert!(
-            screen_library(&Receptor::default(), &lib, &grid, SearchAlgorithm::fast(), 1, 1)
-                .is_err()
-        );
+        assert!(screen_library(
+            &Receptor::default(),
+            &lib,
+            &grid,
+            SearchAlgorithm::fast(),
+            1,
+            1
+        )
+        .is_err());
     }
 
     #[test]
@@ -249,11 +261,7 @@ TORSDOF 0
         assert_eq!(result.len(), 3);
         assert_eq!(result.n_failed, 0);
         // Entries sorted ascending by score.
-        let scores: Vec<f64> = result
-            .entries
-            .iter()
-            .filter_map(|e| e.best_score)
-            .collect();
+        let scores: Vec<f64> = result.entries.iter().filter_map(|e| e.best_score).collect();
         for w in scores.windows(2) {
             assert!(w[0] <= w[1], "screen result not sorted: {scores:?}");
         }

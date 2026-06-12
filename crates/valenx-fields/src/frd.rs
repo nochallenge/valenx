@@ -291,12 +291,13 @@ pub fn parse_ascii(text: &str) -> Result<FrdData, ParseError> {
                             cap: MAX_FRD_LIST_LEN,
                         });
                     }
-                    let total = n_nodes
-                        .checked_mul(field_components)
-                        .ok_or(ParseError::ListTooLarge {
-                            len: n_nodes,
-                            cap: MAX_FRD_LIST_LEN,
-                        })?;
+                    let total =
+                        n_nodes
+                            .checked_mul(field_components)
+                            .ok_or(ParseError::ListTooLarge {
+                                len: n_nodes,
+                                cap: MAX_FRD_LIST_LEN,
+                            })?;
                     let mut flat: Vec<f64> = vec![0.0; total];
                     for (id, values) in &field_data {
                         let zero_idx = (*id as usize).saturating_sub(1);

@@ -200,7 +200,7 @@ mod tests {
         // Keep the step count in range but make the sample count explode.
         let cfg = AscentConfig {
             time_step: 1.0,
-            max_time: 1e7,        // 1e7 steps, in-range
+            max_time: 1e7,         // 1e7 steps, in-range
             sample_interval: 1e-3, // 1e10 samples > MAX_SAMPLES -> reject
             ..AscentConfig::default()
         };

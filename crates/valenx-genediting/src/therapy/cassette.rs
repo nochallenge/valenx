@@ -319,8 +319,7 @@ pub fn design_cassette(req: &CassetteRequest) -> Result<ExpressionCassette> {
         // Concrete size-reduction advice.
         if req.promoter != Promoter::SyntheticSmall {
             notes.push(
-                "Consider a smaller synthetic promoter to recover payload space."
-                    .to_string(),
+                "Consider a smaller synthetic promoter to recover payload space.".to_string(),
             );
         }
         if req.include_wpre {
@@ -401,7 +400,10 @@ mod tests {
         assert_eq!(c.headroom_bp, 0);
         assert!(c.notes.iter().any(|n| n.contains("OVER")));
         // Advice to switch vectors is present.
-        assert!(c.notes.iter().any(|n| n.contains("dual-AAV") || n.contains("lentiviral")));
+        assert!(c
+            .notes
+            .iter()
+            .any(|n| n.contains("dual-AAV") || n.contains("lentiviral")));
     }
 
     #[test]

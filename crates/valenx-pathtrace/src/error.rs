@@ -68,10 +68,7 @@ mod tests {
             .code(),
             "pathtrace.bad_parameter"
         );
-        assert_eq!(
-            PathTraceError::EmptyScene.code(),
-            "pathtrace.empty_scene"
-        );
+        assert_eq!(PathTraceError::EmptyScene.code(), "pathtrace.empty_scene");
     }
 
     #[test]

@@ -128,10 +128,7 @@ pub fn unwrap_trajectory(
 /// # Errors
 /// [`MdError::Invalid`] for fewer than two frames, inconsistent frame
 /// sizes, or a non-positive `dt`.
-pub fn mean_squared_displacement(
-    frames: &[Vec<Vector3<f64>>],
-    dt: f64,
-) -> Result<MsdCurve> {
+pub fn mean_squared_displacement(frames: &[Vec<Vector3<f64>>], dt: f64) -> Result<MsdCurve> {
     if frames.len() < 2 {
         return Err(MdError::invalid("frames", "needs at least two frames"));
     }
@@ -207,7 +204,11 @@ mod tests {
         let frames = ballistic(5, 30, v);
         let curve = mean_squared_displacement(&frames, 1.0).unwrap();
         // MSD at lag 1 should be |v|² = 0.0025.
-        assert!((curve.msd[0] - 0.0025).abs() < 1e-9, "MSD(1) = {}", curve.msd[0]);
+        assert!(
+            (curve.msd[0] - 0.0025).abs() < 1e-9,
+            "MSD(1) = {}",
+            curve.msd[0]
+        );
         // MSD at lag 4 should be (4|v|)² = 16·0.0025.
         assert!((curve.msd[3] - 16.0 * 0.0025).abs() < 1e-9);
     }
@@ -225,7 +226,11 @@ mod tests {
         }
         let unwrapped = unwrap_trajectory(&wrapped, &cell).unwrap();
         // Frame 4 unwrapped x should be ~1.6 nm, not wrapped 0.6.
-        assert!((unwrapped[4][0].x - 1.6).abs() < 1e-9, "x = {}", unwrapped[4][0].x);
+        assert!(
+            (unwrapped[4][0].x - 1.6).abs() < 1e-9,
+            "x = {}",
+            unwrapped[4][0].x
+        );
     }
 
     #[test]

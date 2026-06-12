@@ -29,9 +29,7 @@ pub fn from_str(text: &str) -> Result<KicadBoard, KicadError> {
     let tokens = tokenize(text);
     let (root, _) = parse_sexpr(&tokens, 0, 0)?;
     let Sexpr::List(top) = &root else {
-        return Err(KicadError::Parse(
-            "root must be a list".into(),
-        ));
+        return Err(KicadError::Parse("root must be a list".into()));
     };
     if top.first().map(name_of) != Some("kicad_pcb") {
         return Err(KicadError::Parse(format!(

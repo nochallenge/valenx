@@ -180,11 +180,7 @@ mod tests {
     fn partition_weights_sum_to_one() {
         // For any point, the partition weights over all atoms must
         // sum to exactly 1 (the partition of unity property).
-        let positions = vec![
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, 2.0],
-            [1.5, 0.0, 1.0],
-        ];
+        let positions = vec![[0.0, 0.0, 0.0], [0.0, 0.0, 2.0], [1.5, 0.0, 1.0]];
         let z = vec![8u8, 1, 1];
         for &probe in &[
             [0.3, 0.1, 0.5],

@@ -61,8 +61,7 @@ pub fn optimize_branch_lengths(
             // Golden-section search for this branch's optimum, with
             // the rest of the tree held fixed. The helper leaves the
             // branch set to the located optimum.
-            let (new_len, new_ll) =
-                golden_section_branch(&mut best, node, model, alignment)?;
+            let (new_len, new_ll) = golden_section_branch(&mut best, node, model, alignment)?;
             best.node_mut(node).branch_length = Some(new_len);
             if new_ll > best_ll + 1e-9 {
                 best_ll = new_ll;
@@ -164,8 +163,7 @@ pub fn optimize_topology_ml(
 ) -> Result<MlSearchReport> {
     // Optimise the starting tree's branch lengths first so the
     // comparison is fair.
-    let (mut best, mut best_ll) =
-        optimize_branch_lengths(start, model, alignment, 3)?;
+    let (mut best, mut best_ll) = optimize_branch_lengths(start, model, alignment, 3)?;
     let start_ll = best_ll;
     let mut moves_accepted = 0usize;
     let mut iterations = 0usize;
@@ -177,9 +175,7 @@ pub fn optimize_topology_ml(
         iterations += 1;
         let mut improved = false;
         for candidate in nni_neighbours(&best) {
-            let Ok((opt, ll)) =
-                optimize_branch_lengths(&candidate, model, alignment, 2)
-            else {
+            let Ok((opt, ll)) = optimize_branch_lengths(&candidate, model, alignment, 2) else {
                 continue;
             };
             if ll > best_ll + 1e-6 {
@@ -225,8 +221,7 @@ pub fn optimize_topology_ml_spr(
     alignment: &[(String, Vec<u8>)],
     max_iterations: usize,
 ) -> Result<MlSearchReport> {
-    let (mut best, mut best_ll) =
-        optimize_branch_lengths(start, model, alignment, 3)?;
+    let (mut best, mut best_ll) = optimize_branch_lengths(start, model, alignment, 3)?;
     let start_ll = best_ll;
     let mut moves_accepted = 0usize;
     let mut iterations = 0usize;
@@ -240,9 +235,7 @@ pub fn optimize_topology_ml_spr(
 
         // --- NNI sweep ---
         for candidate in nni_neighbours(&best) {
-            let Ok((opt, ll)) =
-                optimize_branch_lengths(&candidate, model, alignment, 2)
-            else {
+            let Ok((opt, ll)) = optimize_branch_lengths(&candidate, model, alignment, 2) else {
                 continue;
             };
             if ll > best_ll + 1e-6 {
@@ -258,9 +251,7 @@ pub fn optimize_topology_ml_spr(
         }
         // --- SPR sweep (only if NNI did not improve) ---
         for candidate in spr_neighbours(&best) {
-            let Ok((opt, ll)) =
-                optimize_branch_lengths(&candidate, model, alignment, 2)
-            else {
+            let Ok((opt, ll)) = optimize_branch_lengths(&candidate, model, alignment, 2) else {
                 continue;
             };
             if ll > best_ll + 1e-6 {
@@ -309,8 +300,7 @@ pub fn optimize_topology_ml_multistart(
     }
     let mut best: Option<MlSearchReport> = None;
     for s in starts {
-        let report =
-            optimize_topology_ml_spr(s, model, alignment, max_iterations_per_start)?;
+        let report = optimize_topology_ml_spr(s, model, alignment, max_iterations_per_start)?;
         best = match best {
             None => Some(report),
             Some(prev) => {
@@ -365,8 +355,7 @@ mod tests {
             row("B", "ACGTACGTACGT"),
             row("C", "ACGTACGTACGT"),
         ];
-        let (opt, _) =
-            optimize_branch_lengths(&tree, &SubstModel::Jc69, &aln, 5).unwrap();
+        let (opt, _) = optimize_branch_lengths(&tree, &SubstModel::Jc69, &aln, 5).unwrap();
         let a = opt.find("A").unwrap();
         assert!(
             opt.node(a).branch_length.unwrap() < 0.5,
@@ -384,8 +373,7 @@ mod tests {
             row("C", "GGGGGGGGGGGG"),
             row("D", "GGGGGGGGGGGG"),
         ];
-        let report =
-            optimize_topology_ml(&start, &SubstModel::Jc69, &aln, 20).unwrap();
+        let report = optimize_topology_ml(&start, &SubstModel::Jc69, &aln, 20).unwrap();
         assert!(report.log_likelihood >= report.start_log_likelihood - 1e-6);
         // The recovered tree must group A with B.
         let cl: Vec<Vec<String>> = (0..report.tree.node_count())
@@ -413,8 +401,7 @@ mod tests {
             row("C", "GGGGGGGG"),
             row("D", "GGGGGGGG"),
         ];
-        let report =
-            optimize_topology_ml(&start, &SubstModel::Jc69, &aln, 20).unwrap();
+        let report = optimize_topology_ml(&start, &SubstModel::Jc69, &aln, 20).unwrap();
         assert_eq!(report.moves_accepted, 0);
     }
 
@@ -484,15 +471,10 @@ mod tests {
             row("C", "GGGGGGGGGGGG"),
             row("D", "GGGGGGGGGGGG"),
         ];
-        let report = optimize_topology_ml_multistart(
-            &[good.clone(), bad],
-            &SubstModel::Jc69,
-            &aln,
-            20,
-        )
-        .unwrap();
-        let solo =
-            optimize_topology_ml_spr(&good, &SubstModel::Jc69, &aln, 20).unwrap();
+        let report =
+            optimize_topology_ml_multistart(&[good.clone(), bad], &SubstModel::Jc69, &aln, 20)
+                .unwrap();
+        let solo = optimize_topology_ml_spr(&good, &SubstModel::Jc69, &aln, 20).unwrap();
         assert!(
             report.log_likelihood >= solo.log_likelihood - 1e-6,
             "multi-start worse than running the good start alone"
@@ -503,12 +485,6 @@ mod tests {
     fn multistart_rejects_empty_starts() {
         let aln = vec![row("A", "AC"), row("B", "AC"), row("C", "AC")];
         let starts: Vec<Tree> = Vec::new();
-        assert!(optimize_topology_ml_multistart(
-            &starts,
-            &SubstModel::Jc69,
-            &aln,
-            10
-        )
-        .is_err());
+        assert!(optimize_topology_ml_multistart(&starts, &SubstModel::Jc69, &aln, 10).is_err());
     }
 }

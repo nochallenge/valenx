@@ -102,10 +102,7 @@ impl Adapter for Su2Adapter {
         fs::create_dir_all(workdir)?;
 
         // Stage the SU2 .cfg into the workdir.
-        let cfg_source = valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.config,
-        )?;
+        let cfg_source = valenx_core::adapter_helpers::confined_join(&case.path, &input.config)?;
         if !cfg_source.is_file() {
             return Err(AdapterError::Other(anyhow::anyhow!(
                 "config not found at {} (resolve relative to case dir)",

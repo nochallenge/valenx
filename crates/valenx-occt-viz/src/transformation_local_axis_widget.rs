@@ -241,8 +241,12 @@ impl TranslationGizmo {
         let c01 = o + a * near + b * far;
         let p = |v: Vector3<f64>| [v.x, v.y, v.z];
         vec![
-            p(c00), p(c10), p(c11), // triangle 1
-            p(c00), p(c11), p(c01), // triangle 2
+            p(c00),
+            p(c10),
+            p(c11), // triangle 1
+            p(c00),
+            p(c11),
+            p(c01), // triangle 2
         ]
     }
 
@@ -266,8 +270,7 @@ impl TranslationGizmo {
     /// If the cursor ray grazes the plane (nearly parallel) the drag
     /// still begins but the start hit falls back to the gizmo origin.
     pub fn begin_plane_drag(&mut self, plane: GizmoPlane, ray: &Ray) {
-        let start_hit =
-            ray_plane_hit(self.origin, plane.normal(), ray).unwrap_or(self.origin);
+        let start_hit = ray_plane_hit(self.origin, plane.normal(), ray).unwrap_or(self.origin);
         self.drag = Some(DragState {
             constraint: DragConstraint::Plane { plane, start_hit },
             start_origin: self.origin,
@@ -294,8 +297,8 @@ impl TranslationGizmo {
                 // Intersect the ray with the plane through the *drag
                 // start origin* — the constraint plane does not move
                 // with the gizmo during the drag.
-                let hit = ray_plane_hit(drag.start_origin, plane.normal(), ray)
-                    .unwrap_or(start_hit);
+                let hit =
+                    ray_plane_hit(drag.start_origin, plane.normal(), ray).unwrap_or(start_hit);
                 hit - start_hit
             }
         };
@@ -447,7 +450,10 @@ mod tests {
             direction: Vector3::new(0.0, 0.0, -1.0),
         };
         let delta = g.update_drag(&ray1).unwrap();
-        assert!((delta - Vector3::new(3.0, 0.0, 0.0)).norm() < 1e-6, "delta={delta:?}");
+        assert!(
+            (delta - Vector3::new(3.0, 0.0, 0.0)).norm() < 1e-6,
+            "delta={delta:?}"
+        );
         // The origin moved along X only.
         assert!((g.origin - Vector3::new(3.0, 0.0, 0.0)).norm() < 1e-6);
     }

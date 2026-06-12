@@ -39,10 +39,18 @@ fn bbox_all(entities: &[VectorEntity]) -> (Vector2<f64>, Vector2<f64>) {
     let mut lo = Vector2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Vector2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     let mut add = |p: Vector2<f64>| {
-        if p.x < lo.x { lo.x = p.x; }
-        if p.y < lo.y { lo.y = p.y; }
-        if p.x > hi.x { hi.x = p.x; }
-        if p.y > hi.y { hi.y = p.y; }
+        if p.x < lo.x {
+            lo.x = p.x;
+        }
+        if p.y < lo.y {
+            lo.y = p.y;
+        }
+        if p.x > hi.x {
+            hi.x = p.x;
+        }
+        if p.y > hi.y {
+            hi.y = p.y;
+        }
     };
     for e in entities {
         match e {
@@ -107,7 +115,11 @@ fn push_entity(s: &mut String, e: &VectorEntity) {
             }
             s.push_str("\" fill=\"none\" stroke=\"black\"/>");
         }
-        VectorEntity::Text { anchor, font_size, text } => {
+        VectorEntity::Text {
+            anchor,
+            font_size,
+            text,
+        } => {
             s.push_str(&format!(
                 "<text x=\"{}\" y=\"{}\" font-size=\"{}\">{}</text>",
                 anchor.x,
@@ -136,10 +148,9 @@ fn push_path_d(s: &mut String, segs: &[PathSegment]) {
                 "C {} {} {} {} {} {}",
                 c1.x, c1.y, c2.x, c2.y, end.x, end.y
             )),
-            PathSegment::QuadTo { c, end } => s.push_str(&format!(
-                "Q {} {} {} {}",
-                c.x, c.y, end.x, end.y
-            )),
+            PathSegment::QuadTo { c, end } => {
+                s.push_str(&format!("Q {} {} {} {}", c.x, c.y, end.x, end.y))
+            }
             PathSegment::Arc {
                 rx,
                 ry,
@@ -203,7 +214,11 @@ pub fn from_svg(text: &str) -> Result<Vec<VectorEntity>, VectorError> {
         if tag.starts_with('?') || tag.starts_with('!') || tag.starts_with('/') {
             continue;
         }
-        let name = tag.split_whitespace().next().unwrap_or("").trim_end_matches('/');
+        let name = tag
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_end_matches('/');
         let (attrs, content_after) = match name {
             "text" => {
                 // Read body until matching </text>.
@@ -481,9 +496,7 @@ fn parse_path_d(text: &str) -> Result<Vec<PathSegment>, VectorError> {
     Ok(out)
 }
 
-fn pop_f(
-    iter: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
-) -> Result<f64, VectorError> {
+fn pop_f(iter: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> Result<f64, VectorError> {
     let tok = iter.next().ok_or(VectorError::Parse {
         byte_offset: 0,
         message: "missing number".into(),

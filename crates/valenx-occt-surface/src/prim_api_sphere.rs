@@ -27,8 +27,7 @@ use crate::error::OcctSurfaceError;
 ///
 /// [`OcctSurfaceError::TruckLimit`] for non-positive radius.
 pub fn prim_api_sphere(radius: f64) -> Result<Solid, OcctSurfaceError> {
-    valenx_cad::sphere(radius)
-        .map_err(|e| OcctSurfaceError::TruckLimit(format!("sphere: {e:?}")))
+    valenx_cad::sphere(radius).map_err(|e| OcctSurfaceError::TruckLimit(format!("sphere: {e:?}")))
 }
 
 #[cfg(test)]

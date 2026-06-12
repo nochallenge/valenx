@@ -89,18 +89,13 @@ pub fn encode_base(b: u8) -> Option<u8> {
 /// # Errors
 /// Returns the offending byte if any residue is not `A C G U T`.
 pub fn encode_seq(seq: &[u8]) -> std::result::Result<Vec<u8>, u8> {
-    seq.iter()
-        .map(|&b| encode_base(b).ok_or(b))
-        .collect()
+    seq.iter().map(|&b| encode_base(b).ok_or(b)).collect()
 }
 
 /// `true` if encoded bases `a` and `b` form a canonical Watson-Crick
 /// (A-U, G-C) or wobble (G-U) pair.
 pub fn can_pair_codes(a: u8, b: u8) -> bool {
-    matches!(
-        (a, b),
-        (A, U) | (U, A) | (G, C) | (C, G) | (G, U) | (U, G)
-    )
+    matches!((a, b), (A, U) | (U, A) | (G, C) | (C, G) | (G, U) | (U, G))
 }
 
 /// `true` if ASCII bases `a` and `b` can form a canonical / wobble
@@ -340,9 +335,7 @@ pub fn internal_loop_energy(
                 // inner pair in 5'->3' orientation (k < l)
                 t04::pair_type(bk, bl),
             ) {
-                (Some(po), Some(pi)) => {
-                    t04::internal_1x1(po, pi, mm_outer_5, mm_outer_3)
-                }
+                (Some(po), Some(pi)) => t04::internal_1x1(po, pi, mm_outer_5, mm_outer_3),
                 _ => FORBIDDEN,
             }
         }

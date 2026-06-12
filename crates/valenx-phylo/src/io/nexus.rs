@@ -81,7 +81,9 @@ pub fn read_nexus(input: &str) -> Result<NexusFile> {
         let semi = cleaned[after_begin..]
             .find(';')
             .ok_or_else(|| PhyloError::parse("nexus", "BEGIN with no ';'"))?;
-        let block_name = cleaned[after_begin..after_begin + semi].trim().to_lowercase();
+        let block_name = cleaned[after_begin..after_begin + semi]
+            .trim()
+            .to_lowercase();
         let body_start = after_begin + semi + 1;
         let end_rel = find_ci(&cleaned[body_start..], "end;")
             .or_else(|| find_ci(&cleaned[body_start..], "endblock;"))
@@ -227,10 +229,8 @@ fn parse_data_block(body: &str, file: &mut NexusFile) {
                 }
                 let mut it = line.split_whitespace();
                 if let (Some(taxon), Some(seq)) = (it.next(), it.next()) {
-                    file.data.push((
-                        taxon.trim_matches('\'').to_string(),
-                        seq.to_string(),
-                    ));
+                    file.data
+                        .push((taxon.trim_matches('\'').to_string(), seq.to_string()));
                 }
             }
         }
@@ -421,8 +421,7 @@ END;
 
         // And a concrete positive: a `İ` taxon label is read with its
         // case preserved (the original-case text is not corrupted).
-        let f =
-            read_nexus("#NEXUS\nBEGIN TAXA;\n TAXLABELS Foo\u{130}bar Baz;\nEND;\n").unwrap();
+        let f = read_nexus("#NEXUS\nBEGIN TAXA;\n TAXLABELS Foo\u{130}bar Baz;\nEND;\n").unwrap();
         assert_eq!(f.taxa, vec!["Foo\u{130}bar".to_string(), "Baz".to_string()]);
     }
 }

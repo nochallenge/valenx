@@ -232,7 +232,10 @@ mod tests {
         )
         .unwrap();
         let mesh = valenx_cad::solid_to_mesh(&result, 0.2).unwrap();
-        assert!(!mesh.nodes.is_empty(), "path-constrained boss should be non-empty");
+        assert!(
+            !mesh.nodes.is_empty(),
+            "path-constrained boss should be non-empty"
+        );
         let zmax = mesh
             .nodes
             .iter()

@@ -148,10 +148,7 @@ impl Adapter for BioNetGenAdapter {
         let source_model = if input.model.is_absolute() {
             input.model.clone()
         } else {
-            valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.model,
-        )?
+            valenx_core::adapter_helpers::confined_join(&case.path, &input.model)?
         };
         if !source_model.is_file() {
             return Err(AdapterError::InvalidCase {
@@ -407,7 +404,8 @@ output_basename = "../../etc/cron.d/x"
             AdapterError::InvalidCase { reason, .. } => {
                 let msg = reason;
                 assert!(
-                    msg.contains("output_basename") && (msg.contains("..") || msg.contains("separators")),
+                    msg.contains("output_basename")
+                        && (msg.contains("..") || msg.contains("separators")),
                     "expected traversal-rejection message, got: {msg}"
                 );
             }

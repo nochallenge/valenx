@@ -128,58 +128,58 @@
 pub mod error;
 
 // Viewer + camera (Phases 161-170)
+pub mod v3d_view_camera_axo_axonometric;
+pub mod v3d_view_camera_fit_all;
 pub mod v3d_view_camera_orbit;
 pub mod v3d_view_camera_pan;
-pub mod v3d_view_camera_zoom;
 pub mod v3d_view_camera_perspective_toggle;
-pub mod v3d_view_camera_fit_all;
-pub mod v3d_view_camera_axo_axonometric;
-pub mod v3d_viewer_z_buffer;
+pub mod v3d_view_camera_zoom;
 pub mod v3d_viewer_back_face_culling;
 pub mod v3d_viewer_clipping_plane;
 pub mod v3d_viewer_xor_drag;
+pub mod v3d_viewer_z_buffer;
 
 // Selection + AIS (Phases 171-180)
-pub mod ais_interactive_context;
-pub mod ais_move_to_hover;
-pub mod ais_select_single;
-pub mod ais_select_box;
-pub mod ais_select_polygon;
 pub mod ais_highlight_dynamic;
 pub mod ais_highlight_selection;
-pub mod ais_select_face;
+pub mod ais_interactive_context;
+pub mod ais_move_to_hover;
+pub mod ais_select_box;
 pub mod ais_select_edge;
-pub mod ais_select_vertex;
+pub mod ais_select_face;
+pub mod ais_select_polygon;
+pub mod ais_select_single;
 pub mod ais_select_subshape_filter;
+pub mod ais_select_vertex;
 
 // Display attributes (Phases 181-188)
-pub mod prs3d_drawer_material_default;
-pub mod prs3d_drawer_face_color;
 pub mod prs3d_drawer_edge_color;
-pub mod prs3d_drawer_transparency;
-pub mod prs3d_drawer_line_width;
-pub mod prs3d_drawer_line_style;
+pub mod prs3d_drawer_face_color;
 pub mod prs3d_drawer_hidden_line_display;
 pub mod prs3d_drawer_isolines;
+pub mod prs3d_drawer_line_style;
+pub mod prs3d_drawer_line_width;
+pub mod prs3d_drawer_material_default;
+pub mod prs3d_drawer_transparency;
 
 // Animation + transformation (Phases 189-193)
-pub mod view_animation_camera_path;
-pub mod view_animation_object_motion;
-pub mod view_animation_explode;
 pub mod transformation_local_axis_widget;
 pub mod transformation_rotation_widget;
+pub mod view_animation_camera_path;
+pub mod view_animation_explode;
+pub mod view_animation_object_motion;
 // Assembly-constraint-aware gizmo — drag one part, re-solve the
 // assembly's mates / joints (the Tier-3 constraint-propagating drag).
 pub mod transformation_assembly_gizmo;
 
 // Misc viz (Phases 194-200)
-pub mod view_screenshot;
-pub mod view_video_export;
 pub mod prs3d_drawer_section_plane_display;
-pub mod view_navigation_cube;
-pub mod view_legend_display;
 pub mod view_axes_origin_marker;
 pub mod view_grid_floor_xy;
+pub mod view_legend_display;
+pub mod view_navigation_cube;
+pub mod view_screenshot;
+pub mod view_video_export;
 
 pub use error::{ErrorCategory, OcctVizError};
 
@@ -189,8 +189,7 @@ pub use error::{ErrorCategory, OcctVizError};
 pub use ais_highlight_dynamic::ais_highlight_dynamic;
 pub use ais_highlight_selection::ais_highlight_selection;
 pub use ais_interactive_context::{
-    ais_interactive_context, InteractiveContext, ObjectState, Pickable, PickHit, PickView,
-    Ray,
+    ais_interactive_context, InteractiveContext, ObjectState, PickHit, PickView, Pickable, Ray,
 };
 pub use ais_move_to_hover::{move_to, HoverPreview, HoverTarget, SubKind};
 pub use ais_select_box::ais_select_box;
@@ -238,6 +237,6 @@ pub use view_legend_display::view_legend_display;
 pub use view_navigation_cube::view_navigation_cube;
 pub use view_screenshot::view_screenshot;
 pub use view_video_export::{
-    encode_avi, encode_h264_mp4_command, ffmpeg_available, run_ffmpeg_mp4,
-    video_output_path, view_video_export, write_avi, VideoFormat, VideoFrame,
+    encode_avi, encode_h264_mp4_command, ffmpeg_available, run_ffmpeg_mp4, video_output_path,
+    view_video_export, write_avi, VideoFormat, VideoFrame,
 };

@@ -473,8 +473,7 @@ mod tests {
         assert!((d - ideal::N_CA).abs() < 1e-6, "N-CA = {d}");
         // An α-helix has ~1.5 Å rise per residue → the chain is
         // markedly shorter end-to-end than an extended chain.
-        let end_to_end =
-            (m.residues[7].ca.unwrap() - m.residues[0].ca.unwrap()).norm();
+        let end_to_end = (m.residues[7].ca.unwrap() - m.residues[0].ca.unwrap()).norm();
         assert!(end_to_end < 7.0 * CA_GAP, "helix is compact: {end_to_end}");
     }
 

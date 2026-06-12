@@ -134,12 +134,7 @@ pub fn drag_part(
 
 /// Roll the dragged part *and* the rest of the assembly back to their
 /// pre-drag poses. Internal helper.
-fn rollback(
-    a: &mut Assembly,
-    saved_pose: &[f64],
-    part_id: usize,
-    saved_xform: PartTransform,
-) {
+fn rollback(a: &mut Assembly, saved_pose: &[f64], part_id: usize, saved_xform: PartTransform) {
     // The dragged part was pinned (fixed=true) during the solve, so its
     // pose is not represented in the saved_pose vector (which only spans
     // the *originally* non-fixed parts). Apply the non-fixed pose first;

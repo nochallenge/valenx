@@ -78,11 +78,7 @@ impl MigrationModel {
         }
         let off = m / (d - 1) as f64;
         let matrix = (0..d)
-            .map(|i| {
-                (0..d)
-                    .map(|j| if i == j { 1.0 - m } else { off })
-                    .collect()
-            })
+            .map(|i| (0..d).map(|j| if i == j { 1.0 - m } else { off }).collect())
             .collect();
         Ok(MigrationModel { matrix })
     }
@@ -220,8 +216,6 @@ mod tests {
         // A non-square matrix.
         assert!(MigrationModel::new(vec![vec![1.0, 0.0], vec![1.0]]).is_err());
         // A row that does not sum to 1.
-        assert!(
-            MigrationModel::new(vec![vec![0.5, 0.0], vec![0.0, 1.0]]).is_err()
-        );
+        assert!(MigrationModel::new(vec![vec![0.5, 0.0], vec![0.0, 1.0]]).is_err());
     }
 }

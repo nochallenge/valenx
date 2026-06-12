@@ -23,13 +23,8 @@ pub mod quant_genetics;
 pub use frequencies::{
     genotype_counts, locus_stats, mean_heterozygosity, mean_inbreeding, LocusStats,
 };
-pub use hardy_weinberg::{
-    hwe_chi_square, hwe_exact, GenotypeCounts, HweResult,
-};
+pub use hardy_weinberg::{hwe_chi_square, hwe_exact, GenotypeCounts, HweResult};
 pub use microsatellite::{
-    allele_size_variance, m_ratio, mean_allele_size, microsat_heterozygosity,
-    StepwiseMutationModel,
+    allele_size_variance, m_ratio, mean_allele_size, microsat_heterozygosity, StepwiseMutationModel,
 };
-pub use quant_genetics::{
-    narrow_sense_heritability, response_to_selection, AdditiveTrait,
-};
+pub use quant_genetics::{narrow_sense_heritability, response_to_selection, AdditiveTrait};

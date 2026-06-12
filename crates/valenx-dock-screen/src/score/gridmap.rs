@@ -145,10 +145,7 @@ pub struct AffinityMapSet {
 impl AffinityMapSet {
     /// The map for a given atom type, if present.
     pub fn map_for(&self, t: Ad4AtomType) -> Option<&AffinityMap> {
-        self.maps
-            .iter()
-            .find(|(mt, _)| *mt == t)
-            .map(|(_, m)| m)
+        self.maps.iter().find(|(mt, _)| *mt == t).map(|(_, m)| m)
     }
 
     /// Number of per-type maps in the set.
@@ -244,11 +241,7 @@ fn precompute_ad4(receptor: &Receptor, probe: Ad4AtomType, grid: &GridBox) -> Af
                 let p = map.position(ix, iy, iz);
                 // Score a single uncharged probe atom of `probe` type
                 // at this lattice point against the whole receptor.
-                let terms = crate::score::ad4::score_complex(
-                    receptor,
-                    &[(p, probe, 0.0)],
-                    0,
-                );
+                let terms = crate::score::ad4::score_complex(receptor, &[(p, probe, 0.0)], 0);
                 // Drop electrostatics (zero anyway — uncharged probe)
                 // and the torsional term (zero, n_torsions=0).
                 let idx = map.index(ix, iy, iz);
@@ -272,11 +265,8 @@ fn precompute_electrostatic(receptor: &Receptor, grid: &GridBox) -> AffinityMap 
                 // Probe with unit positive charge; use a tiny VDW
                 // atom type (HD) so only the electrostatic term
                 // matters here.
-                let terms = crate::score::ad4::score_complex(
-                    receptor,
-                    &[(p, Ad4AtomType::HD, 1.0)],
-                    0,
-                );
+                let terms =
+                    crate::score::ad4::score_complex(receptor, &[(p, Ad4AtomType::HD, 1.0)], 0);
                 let idx = map.index(ix, iy, iz);
                 map.data[idx] = terms.electrostatic;
             }
@@ -328,7 +318,9 @@ mod tests {
     fn precompute_rejects_empty_inputs() {
         let grid = GridBox::cubic([0.0; 3], 6.0).unwrap();
         let empty = Receptor::default();
-        assert!(AffinityMapSet::precompute(&empty, &[Ad4AtomType::C], &grid, MapKind::Vina).is_err());
+        assert!(
+            AffinityMapSet::precompute(&empty, &[Ad4AtomType::C], &grid, MapKind::Vina).is_err()
+        );
         let r = carbon_receptor();
         assert!(AffinityMapSet::precompute(&r, &[], &grid, MapKind::Vina).is_err());
     }

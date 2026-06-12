@@ -142,8 +142,7 @@ mod tests {
     fn poisson_mean_matches_parameter() {
         let mut r = Rng::new(555);
         let n = 100_000;
-        let mean: f64 =
-            (0..n).map(|_| r.poisson(4.0) as f64).sum::<f64>() / n as f64;
+        let mean: f64 = (0..n).map(|_| r.poisson(4.0) as f64).sum::<f64>() / n as f64;
         assert!((mean - 4.0).abs() < 0.05, "mean {mean}");
     }
 
@@ -151,8 +150,7 @@ mod tests {
     fn poisson_large_mean_uses_approximation() {
         let mut r = Rng::new(8);
         let n = 50_000;
-        let mean: f64 =
-            (0..n).map(|_| r.poisson(100.0) as f64).sum::<f64>() / n as f64;
+        let mean: f64 = (0..n).map(|_| r.poisson(100.0) as f64).sum::<f64>() / n as f64;
         assert!((mean - 100.0).abs() < 1.0, "mean {mean}");
     }
 
@@ -162,8 +160,7 @@ mod tests {
         let n = 100_000;
         let xs: Vec<f64> = (0..n).map(|_| r.normal()).collect();
         let mean: f64 = xs.iter().sum::<f64>() / n as f64;
-        let var: f64 =
-            xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+        let var: f64 = xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
         assert!(mean.abs() < 0.02, "mean {mean}");
         assert!((var - 1.0).abs() < 0.05, "var {var}");
     }

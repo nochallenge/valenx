@@ -113,9 +113,8 @@ fn fill_triangular(
     )
     .map_err(|e| OcctSurfaceError::bad_input("boundary", format!("degenerate edge: {e}")))?;
     // Coons order: [c0, c1, d0, d1].
-    fill([c0.clone(), c1, d0.clone(), d1.clone()]).map_err(|e| {
-        OcctSurfaceError::bad_input("boundary", format!("triangular coons fill: {e}"))
-    })
+    fill([c0.clone(), c1, d0.clone(), d1.clone()])
+        .map_err(|e| OcctSurfaceError::bad_input("boundary", format!("triangular coons fill: {e}")))
 }
 
 #[cfg(test)]
@@ -166,7 +165,11 @@ mod tests {
         // Every point on the filled patch lies in the z=0 plane.
         for &(u, v) in &[(0.0, 0.0), (0.5, 0.5), (1.0, 0.3), (0.2, 1.0)] {
             let p = surf.evaluate(u, v);
-            assert!(p.z.abs() < 1e-9, "patch off the z=0 plane at ({u},{v}): {}", p.z);
+            assert!(
+                p.z.abs() < 1e-9,
+                "patch off the z=0 plane at ({u},{v}): {}",
+                p.z
+            );
         }
         // The corners interpolate the boundary corners exactly.
         let p00 = surf.evaluate(0.0, 0.0);

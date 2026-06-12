@@ -29,10 +29,7 @@ pub struct Scan1d {
 impl Scan1d {
     /// The `(value, readout)` pair with the largest readout.
     pub fn argmax(&self) -> Option<(f64, f64)> {
-        self.values
-            .iter()
-            .zip(&self.readouts)
-            .copied_pairs_max()
+        self.values.iter().zip(&self.readouts).copied_pairs_max()
     }
 }
 

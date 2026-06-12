@@ -90,14 +90,11 @@ pub mod synbio;
 // --- Convenience re-exports of the most-used types --------------------
 
 pub use analysis::estimation::{
-    estimate_parameters, EstimationOptions, EstimationReport, EstimationTarget,
-    ObservedPoint,
+    estimate_parameters, EstimationOptions, EstimationReport, EstimationTarget, ObservedPoint,
 };
 pub use error::{ErrorCategory, Result, SysbioError};
 pub use fba::{FbaProblem, FbaSolution};
-pub use model::events::{
-    AssignmentRule, EventAssignment, RateRule, SbmlEvent, SbmlRules, VarRef,
-};
+pub use model::events::{AssignmentRule, EventAssignment, RateRule, SbmlEvent, SbmlRules, VarRef};
 pub use model::expr::Expr;
 pub use model::{read_sbml, write_sbml, Model, RateLaw, Reaction, Species};
 pub use ode::{

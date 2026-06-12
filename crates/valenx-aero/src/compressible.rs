@@ -104,12 +104,8 @@ impl FlowRegime {
     /// A human-readable caveat for the regime.
     pub fn caveat(self) -> &'static str {
         match self {
-            FlowRegime::Incompressible => {
-                "incompressible — no compressibility correction needed"
-            }
-            FlowRegime::Subsonic => {
-                "subsonic — Prandtl-Glauert correction applied, reliable"
-            }
+            FlowRegime::Incompressible => "incompressible — no compressibility correction needed",
+            FlowRegime::Subsonic => "subsonic — Prandtl-Glauert correction applied, reliable",
             FlowRegime::HighSubsonic => {
                 "high subsonic — Prandtl-Glauert correction applied but increasingly \
                  unreliable near drag-divergence; not a transonic solver"
@@ -203,10 +199,19 @@ mod tests {
     fn ideal_gas_density_at_sea_level() {
         // 101325 Pa, 288 K → ρ ≈ 1.225 kg/m³.
         let rho = ideal_gas_density(101325.0, 288.0);
-        assert!((rho - 1.225).abs() < 1e-2, "sea-level density {rho} ≈ 1.225");
+        assert!(
+            (rho - 1.225).abs() < 1e-2,
+            "sea-level density {rho} ≈ 1.225"
+        );
         // ρ ∝ P (double P → double ρ); ρ ∝ 1/T (halve T → double ρ).
-        assert!((ideal_gas_density(202650.0, 288.0) / rho - 2.0).abs() < 1e-9, "ρ ∝ P");
-        assert!((ideal_gas_density(101325.0, 144.0) / rho - 2.0).abs() < 1e-9, "ρ ∝ 1/T");
+        assert!(
+            (ideal_gas_density(202650.0, 288.0) / rho - 2.0).abs() < 1e-9,
+            "ρ ∝ P"
+        );
+        assert!(
+            (ideal_gas_density(101325.0, 144.0) / rho - 2.0).abs() < 1e-9,
+            "ρ ∝ 1/T"
+        );
         // Non-physical input → 0.
         assert_eq!(ideal_gas_density(0.0, 288.0), 0.0);
         assert_eq!(ideal_gas_density(101325.0, 0.0), 0.0);
@@ -222,7 +227,10 @@ mod tests {
     #[test]
     fn speed_from_mach_inverts_the_mach_number() {
         // (a) WORKED: at M = 2, a = 340 m/s → v = 680 m/s.
-        assert!((speed_from_mach(2.0, 340.0) - 680.0).abs() <= 1e-9 * 680.0, "v = M·a = 680");
+        assert!(
+            (speed_from_mach(2.0, 340.0) - 680.0).abs() <= 1e-9 * 680.0,
+            "v = M·a = 680"
+        );
 
         // (b) ROUND-TRIP threading mach_number (non-tautological), both directions.
         for &(m, a) in &[(0.5_f64, 340.0_f64), (2.0, 295.0), (0.0, 340.0)] {
@@ -241,7 +249,10 @@ mod tests {
         // (c) SONIC cross-check threading speed_of_sound: Mach 1 IS the speed of sound.
         for &t in &[216.65_f64, 288.15, 320.0] {
             let a = speed_of_sound(t);
-            assert!((speed_from_mach(1.0, a) - a).abs() <= 1e-9 * a, "M=1 → v = a at T={t}");
+            assert!(
+                (speed_from_mach(1.0, a) - a).abs() <= 1e-9 * a,
+                "M=1 → v = a at T={t}"
+            );
         }
 
         // (d) LINEAR + ZERO: linear in Mach; M = 0 → at rest.

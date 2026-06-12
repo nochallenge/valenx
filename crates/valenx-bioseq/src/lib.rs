@@ -55,7 +55,10 @@
 // crate parses untrusted text, where non-char-boundary slices panic.
 // WARN (not deny): most existing slices are safe ASCII; this only flags
 // NEW ones.
-#![allow(clippy::string_slice, reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries")]
+#![allow(
+    clippy::string_slice,
+    reason = "parsers slice ASCII fixed-format records at byte offsets from find() or constant ASCII prefixes, always valid char boundaries"
+)]
 
 pub mod alphabet;
 pub mod analysis;
@@ -150,9 +153,7 @@ mod tests {
 mod validation {
     use super::*;
     use crate::analysis::composition::gc_content;
-    use crate::analysis::weight::{
-        molecular_weight_dna_double_stranded, molecular_weight_protein,
-    };
+    use crate::analysis::weight::{molecular_weight_dna_double_stranded, molecular_weight_protein};
     use crate::ops::revcomp::reverse_complement;
     use crate::ops::translate::{translate_default, GeneticCode};
 

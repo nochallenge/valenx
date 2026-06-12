@@ -102,10 +102,7 @@ impl Adapter for NetgenAdapter {
 
         // Stage the geometry source into the workdir under its
         // original name so netgen's relative-path lookups work.
-        let source = valenx_core::adapter_helpers::confined_join(
-            &case.path,
-            &input.geometry_file,
-        )?;
+        let source = valenx_core::adapter_helpers::confined_join(&case.path, &input.geometry_file)?;
         if !source.is_file() {
             return Err(AdapterError::Other(anyhow::anyhow!(
                 "geometry_file not found at {} (resolve relative to case dir)",

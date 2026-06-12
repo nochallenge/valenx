@@ -172,8 +172,7 @@ pub fn solve_sor(
         // removing the mean. Skipped when a Dirichlet anchor already
         // fixes the gauge — subtracting the mean would fight it.
         if pin_mean {
-            let mean: f64 =
-                solution.data.iter().sum::<f64>() / solution.data.len() as f64;
+            let mean: f64 = solution.data.iter().sum::<f64>() / solution.data.len() as f64;
             for v in solution.data.iter_mut() {
                 *v -= mean;
             }
@@ -280,7 +279,11 @@ mod tests {
             for i in 0..n {
                 let x = (i as f64 + 0.5) * h;
                 let y = (j as f64 + 0.5) * h;
-                target.set(i, j, (std::f64::consts::PI * x).cos() * (std::f64::consts::PI * y).cos());
+                target.set(
+                    i,
+                    j,
+                    (std::f64::consts::PI * x).cos() * (std::f64::consts::PI * y).cos(),
+                );
             }
         }
         // Make it exactly zero-mean (the singular system's gauge).
@@ -310,7 +313,11 @@ mod tests {
         // Solve from a zero start.
         let mut sol = Field::zeros(n, n);
         let res = solve_sor(&c, &mut sol, 1.7, 1e-10, 5000, true);
-        assert!(res.converged, "SOR should converge, residual {}", res.residual);
+        assert!(
+            res.converged,
+            "SOR should converge, residual {}",
+            res.residual
+        );
         // The recovered field must match the zero-mean target.
         let mut max_err = 0.0f64;
         for k in 0..sol.data.len() {
@@ -338,7 +345,11 @@ mod tests {
             "solve must reduce the residual: {initial} → {}",
             res.residual
         );
-        assert!(res.residual < 1e-6, "final residual {} not small", res.residual);
+        assert!(
+            res.residual < 1e-6,
+            "final residual {} not small",
+            res.residual
+        );
     }
 
     #[test]

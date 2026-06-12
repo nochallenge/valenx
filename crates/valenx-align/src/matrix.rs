@@ -356,7 +356,9 @@ fn blosum62_table() -> Vec<i32> {
         &[-2, -3, -3, -3, -2, -3, -3, -3, -1, 0, 0, -3, 0, 6],
         &[-1, -2, -2, -1, -3, -1, -1, -2, -2, -3, -3, -1, -2, -4, 7],
         &[1, -1, 1, 0, -1, 0, 0, 0, -1, -2, -2, 0, -1, -2, -1, 4],
-        &[0, -1, 0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -2, -1, 1, 5],
+        &[
+            0, -1, 0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -2, -1, 1, 5,
+        ],
         &[
             -3, -3, -4, -4, -2, -2, -3, -2, -2, -3, -2, -3, -1, 1, -4, -3, -2, 11,
         ],
@@ -401,7 +403,9 @@ fn blosum45_table() -> Vec<i32> {
         &[-2, -2, -2, -4, -2, -4, -3, -3, -2, 0, 1, -3, 0, 8],
         &[-1, -2, -2, -1, -4, -1, 0, -2, -2, -2, -3, -1, -2, -3, 9],
         &[1, -1, 1, 0, -1, 0, 0, 0, -1, -2, -3, -1, -2, -2, -1, 4],
-        &[0, -1, 0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -1, -1, 2, 5],
+        &[
+            0, -1, 0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -1, -1, 2, 5,
+        ],
         &[
             -2, -2, -4, -4, -5, -2, -3, -2, -3, -2, -2, -2, -2, 1, -3, -4, -3, 15,
         ],
@@ -418,7 +422,8 @@ fn blosum45_table() -> Vec<i32> {
             -1, 0, 0, 1, -3, 4, 4, -2, 0, -3, -2, 1, -1, -3, -1, 0, -1, -2, -2, -3, 2, 4,
         ],
         &[
-            -1, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, -2, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, -2, -1, -1, -1, -1,
+            -1,
         ],
         &[
             -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5,
@@ -446,7 +451,9 @@ fn blosum80_table() -> Vec<i32> {
         &[-4, -5, -6, -6, -4, -5, -6, -6, -2, -1, 0, -5, 0, 10],
         &[-1, -3, -4, -3, -6, -3, -2, -5, -4, -5, -6, -2, -4, -6, 12],
         &[2, -2, 1, -1, -2, -1, -1, -1, -2, -4, -4, -1, -3, -4, -2, 7],
-        &[0, -2, 0, -2, -2, -1, -2, -3, -3, -2, -3, -1, -1, -4, -3, 2, 8],
+        &[
+            0, -2, 0, -2, -2, -1, -2, -3, -3, -2, -3, -1, -1, -4, -3, 2, 8,
+        ],
         &[
             -5, -5, -7, -8, -5, -4, -6, -6, -4, -5, -4, -6, -3, 0, -7, -6, -5, 16,
         ],
@@ -492,7 +499,9 @@ fn pam30_table() -> Vec<i32> {
         &[-8, -9, -9, -15, -13, -13, -14, -9, -6, -2, -3, -14, -4, 9],
         &[-2, -4, -6, -8, -8, -3, -5, -6, -4, -8, -7, -6, -8, -10, 8],
         &[0, -3, 0, -4, -3, -5, -4, -2, -6, -7, -8, -4, -5, -6, -2, 6],
-        &[-1, -6, -2, -5, -8, -5, -6, -6, -7, -2, -7, -3, -4, -9, -4, 0, 7],
+        &[
+            -1, -6, -2, -5, -8, -5, -6, -6, -7, -2, -7, -3, -4, -9, -4, 0, 7,
+        ],
         &[
             -13, -2, -8, -15, -15, -13, -17, -15, -7, -14, -6, -12, -13, -4, -14, -5, -13, 13,
         ],
@@ -509,8 +518,8 @@ fn pam30_table() -> Vec<i32> {
             -3, -4, -3, 1, -14, 6, 6, -5, -1, -6, -7, -4, -5, -13, -4, -5, -6, -14, -9, -6, 0, 6,
         ],
         &[
-            -3, -6, -3, -5, -9, -5, -5, -5, -5, -6, -6, -5, -5, -8, -5, -3, -4, -11, -7, -5, -5, -5,
-            -5,
+            -3, -6, -3, -5, -9, -5, -5, -5, -5, -6, -6, -5, -5, -8, -5, -3, -4, -11, -7, -5, -5,
+            -5, -5,
         ],
         &[
             -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17,
@@ -538,7 +547,9 @@ fn pam70_table() -> Vec<i32> {
         &[-6, -7, -6, -10, -8, -9, -9, -7, -4, 0, -1, -9, -2, 8],
         &[0, -2, -3, -4, -5, -1, -3, -3, -2, -5, -5, -4, -5, -7, 7],
         &[1, -1, 1, -1, -1, -3, -2, 0, -3, -4, -6, -2, -3, -4, 0, 5],
-        &[1, -3, 0, -2, -5, -3, -3, -3, -4, -1, -4, -1, -2, -6, -2, 2, 6],
+        &[
+            1, -3, 0, -2, -5, -3, -3, -3, -4, -1, -4, -1, -2, -6, -2, 2, 6,
+        ],
         &[
             -9, 0, -5, -10, -11, -8, -11, -10, -5, -9, -3, -6, -8, -2, -9, -3, -8, 13,
         ],
@@ -711,9 +722,18 @@ mod tests {
 
     #[test]
     fn by_name_dispatch() {
-        assert_eq!(SubstitutionMatrix::by_name("blosum62").unwrap().name(), "BLOSUM62");
-        assert_eq!(SubstitutionMatrix::by_name("PAM250").unwrap().name(), "PAM250");
-        assert_eq!(SubstitutionMatrix::by_name("nuc44").unwrap().name(), "NUC.4.4");
+        assert_eq!(
+            SubstitutionMatrix::by_name("blosum62").unwrap().name(),
+            "BLOSUM62"
+        );
+        assert_eq!(
+            SubstitutionMatrix::by_name("PAM250").unwrap().name(),
+            "PAM250"
+        );
+        assert_eq!(
+            SubstitutionMatrix::by_name("nuc44").unwrap().name(),
+            "NUC.4.4"
+        );
         assert!(SubstitutionMatrix::by_name("nope").is_err());
     }
 
@@ -756,10 +776,7 @@ mod validation {
     /// optimal global score 0.
     #[test]
     fn needleman_wunsch_textbook_example_scores_zero() {
-        let scheme = ScoringScheme::new(
-            SubstitutionMatrix::dna_simple(1, -1),
-            GapCost::new(0, 1),
-        );
+        let scheme = ScoringScheme::new(SubstitutionMatrix::dna_simple(1, -1), GapCost::new(0, 1));
         let al = needleman_wunsch(b"GCATGCG", b"GATTACA", &scheme).unwrap();
         assert_eq!(al.score, 0, "textbook NW optimal score is 0");
         // Both rows are the same length.
@@ -780,10 +797,7 @@ mod validation {
     /// has score 13, with the aligned core `GTT-AC` / `GTTGAC`.
     #[test]
     fn smith_waterman_textbook_example_scores_13() {
-        let scheme = ScoringScheme::new(
-            SubstitutionMatrix::dna_simple(3, -3),
-            GapCost::new(0, 2),
-        );
+        let scheme = ScoringScheme::new(SubstitutionMatrix::dna_simple(3, -3), GapCost::new(0, 2));
         let al = smith_waterman(b"TGTTACGG", b"GGTTGACTA", &scheme).unwrap();
         assert_eq!(al.score, 13, "textbook SW optimal local score is 13");
         assert_eq!(al.row1_str(), "GTT-AC");
@@ -832,7 +846,7 @@ mod validation {
         assert_eq!(m.score(b'F', b'Y'), 3); // aromatic pair
         assert_eq!(m.score(b'K', b'R'), 2); // basic pair
         assert_eq!(m.score(b'D', b'E'), 2); // acidic pair
-        // The matrix is symmetric.
+                                            // The matrix is symmetric.
         assert_eq!(m.score(b'A', b'R'), m.score(b'R', b'A'));
     }
 }

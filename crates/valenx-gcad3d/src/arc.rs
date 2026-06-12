@@ -56,8 +56,7 @@ impl Arc3d {
                 "three_point: degenerate triangle".into(),
             ));
         }
-        let centre =
-            p1 + (b.cross(&n) * a2 + n.cross(&a) * b2) / denom;
+        let centre = p1 + (b.cross(&n) * a2 + n.cross(&a) * b2) / denom;
         let radius = (p1 - centre).norm();
         let u_axis = (p1 - centre) / radius;
         let v_axis = normal.cross(&u_axis);
@@ -69,7 +68,11 @@ impl Arc3d {
         let theta3 = p3_v.atan2(p3_u);
         // Sweep from 0 (p1) to theta3, going through theta2 — pick
         // sign by the sign of theta2.
-        let sweep = if theta2 >= 0.0 { theta3.rem_euclid(2.0 * std::f64::consts::PI) } else { -((-theta3).rem_euclid(2.0 * std::f64::consts::PI)) };
+        let sweep = if theta2 >= 0.0 {
+            theta3.rem_euclid(2.0 * std::f64::consts::PI)
+        } else {
+            -((-theta3).rem_euclid(2.0 * std::f64::consts::PI))
+        };
         Ok(Self {
             centre,
             normal,

@@ -237,10 +237,7 @@ fn spr_proposal(state: &ChainState, rng: &mut Rng) -> Option<ProposalOutcome> {
 /// Balding (1998) give the closed-form Hastings ratio as the ratio of
 /// the new edge length to the old `(sibling + parent)` length on
 /// unrooted trees. We use that here as a clean closed form.
-fn wilson_balding_proposal(
-    state: &ChainState,
-    rng: &mut Rng,
-) -> Option<ProposalOutcome> {
+fn wilson_balding_proposal(state: &ChainState, rng: &mut Rng) -> Option<ProposalOutcome> {
     let neighbours = spr_neighbours(&state.tree);
     if neighbours.is_empty() {
         return None;
@@ -566,8 +563,8 @@ pub(crate) fn ln_dirichlet_density(xs: &[f64], alphas: &[f64]) -> f64 {
     if (sum - 1.0).abs() > 1e-6 {
         return f64::NEG_INFINITY;
     }
-    let log_b: f64 = alphas.iter().map(|&a| ln_gamma(a)).sum::<f64>()
-        - ln_gamma(alphas.iter().sum());
+    let log_b: f64 =
+        alphas.iter().map(|&a| ln_gamma(a)).sum::<f64>() - ln_gamma(alphas.iter().sum());
     let mut acc = -log_b;
     for (x, &a) in xs.iter().zip(alphas.iter()) {
         acc += (a - 1.0) * x.ln();
@@ -663,10 +660,8 @@ mod tests {
         let set = ProposalSet::default();
         let out = branch_scale_proposal(&st, &set, &mut rng).unwrap();
         // At least one branch length differs.
-        let differs = (0..st.tree.node_count()).any(|id| {
-            st.tree.node(id).branch_length
-                != out.new_state.tree.node(id).branch_length
-        });
+        let differs = (0..st.tree.node_count())
+            .any(|id| st.tree.node(id).branch_length != out.new_state.tree.node(id).branch_length);
         assert!(differs);
         assert!(out.log_hastings.is_finite());
     }

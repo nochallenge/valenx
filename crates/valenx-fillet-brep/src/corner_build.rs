@@ -382,7 +382,10 @@ mod tests {
         let ball = build_corner_ball(&blend).unwrap();
         let faces: usize = ball.boundaries().iter().map(|s| s.len()).sum();
         assert!(faces > 0, "corner ball should have faces");
-        assert!(ball.vertex_iter().count() > 0, "corner ball has no vertices");
+        assert!(
+            ball.vertex_iter().count() > 0,
+            "corner ball has no vertices"
+        );
     }
 
     #[test]

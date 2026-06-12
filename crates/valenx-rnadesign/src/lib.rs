@@ -135,14 +135,14 @@ pub use workflow::{DesignSession, StageStatus, WorkflowStage};
 
 pub use design::{DesignKind, RnaDesign};
 
-pub use lineardesign::{
-    linear_design, pareto_sweep, LinearDesignRequest, LinearDesignResult, ParetoPoint,
-};
+pub use constraints::{lock_entry, parse_locked, DesignConstraintSet};
 pub use inverse::{
     inverse_fold_constrained, inverse_fold_ensemble_defect, EnsembleDefectDesign,
     EnsembleDefectParams,
 };
-pub use constraints::{lock_entry, parse_locked, DesignConstraintSet};
+pub use lineardesign::{
+    linear_design, pareto_sweep, LinearDesignRequest, LinearDesignResult, ParetoPoint,
+};
 pub use multistate::{design_multistate, MultiStateDesign, MultiStateParams, StateSpec};
 
 pub use aptamer::{
@@ -156,15 +156,14 @@ pub use riboswitch_ed::{
 };
 pub use tube::{
     design_tube, fold_all_complexes, solve_tube_equilibrium, ComplexEnergies, ComplexKind,
-    TargetDistribution, TargetFraction, TubeDesign, TubeDesignParams, TubeEquilibrium,
-    TubeStrand,
+    TargetDistribution, TargetFraction, TubeDesign, TubeDesignParams, TubeEquilibrium, TubeStrand,
 };
 
 pub use optimize::{optimize_design, ObjectiveWeights, OptimizationResult};
 pub use validate::{validate_design, ConstraintCheck, ValidationReport, ValidationVerdict};
 
-pub use synthesis::{plan_synthesis, Promoter, SynthesisPackage};
 pub use export::{export_design_report, export_fasta, export_genbank};
+pub use synthesis::{plan_synthesis, Promoter, SynthesisPackage};
 
 pub use driver::{
     design_rna, design_rna_batch, handle_request, RnaDesignReport, RnaDesignRequest,
@@ -180,8 +179,7 @@ mod tests {
     /// Goal → Export workflow and produces a coherent report.
     #[test]
     fn structural_design_end_to_end() {
-        let goal =
-            DesignGoal::structural("((((((....))))))", StructuralClass::Hairpin).unwrap();
+        let goal = DesignGoal::structural("((((((....))))))", StructuralClass::Hairpin).unwrap();
         let report = design_rna(&goal, &DesignConstraints::default()).unwrap();
         // The report carries a design, a validation, and a synthesis plan.
         assert!(!report.design.is_empty());

@@ -542,10 +542,8 @@ mod tests {
     #[test]
     fn prepare_rejects_parent_dir_traversal_python_spec() {
         use std::fs;
-        let tmp = std::env::temp_dir().join(format!(
-            "alphamissense_round12_m7_{}",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("alphamissense_round12_m7_{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         let case_dir = tmp.join("case");
         fs::create_dir_all(&case_dir).unwrap();

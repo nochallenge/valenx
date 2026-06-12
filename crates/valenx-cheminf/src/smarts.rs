@@ -313,12 +313,7 @@ impl<'a> MatchContext<'a> {
     }
 
     fn atom_matches(&self, q: usize, t: usize) -> bool {
-        atom_expr_matches(
-            &self.pattern.atoms[q].expr,
-            self.target,
-            t,
-            &self.ring_info,
-        )
+        atom_expr_matches(&self.pattern.atoms[q].expr, self.target, t, &self.ring_info)
     }
 }
 
@@ -426,8 +421,11 @@ impl<'a> SmartsParser<'a> {
                     self.pos += 1;
                 }
                 ')' => {
-                    self.prev =
-                        Some(self.branch.pop().ok_or_else(|| self.err("unbalanced ')'"))?);
+                    self.prev = Some(
+                        self.branch
+                            .pop()
+                            .ok_or_else(|| self.err("unbalanced ')'"))?,
+                    );
                     self.pos += 1;
                 }
                 '-' | '=' | '#' | ':' | '~' | '@' => {
@@ -497,7 +495,10 @@ impl<'a> SmartsParser<'a> {
 
     fn connect(&mut self, atom: usize) {
         if let Some(prev) = self.prev {
-            let expr = self.pending_bond.take().unwrap_or(BondExpr::SingleOrAromatic);
+            let expr = self
+                .pending_bond
+                .take()
+                .unwrap_or(BondExpr::SingleOrAromatic);
             self.pat.bonds.push(QueryBond {
                 a: prev,
                 b: atom,
@@ -857,7 +858,7 @@ mod tests {
     #[test]
     fn bracket_primitives() {
         let mol = mol_from_smiles("CC(=O)O").unwrap(); // acetic acid
-        // carboxyl carbon: a carbon with degree 3
+                                                       // carboxyl carbon: a carbon with degree 3
         let p = SmartsPattern::parse("[#6][D3]").unwrap();
         assert!(p.matches(&mol));
 

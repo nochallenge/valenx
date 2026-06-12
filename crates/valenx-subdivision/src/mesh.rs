@@ -77,7 +77,10 @@ impl SubdivMesh {
             vec![2, 3, 7, 6], // back   (+Y)
             vec![3, 0, 4, 7], // left   (-X)
         ];
-        Self { vertices: v, faces: f }
+        Self {
+            vertices: v,
+            faces: f,
+        }
     }
 
     /// Unit-tetrahedron triangle mesh — four triangles. Used by
@@ -89,13 +92,11 @@ impl SubdivMesh {
             Vector3::new(0.5, 1.0, 0.0),
             Vector3::new(0.5, 0.5, 1.0),
         ];
-        let f = vec![
-            vec![0, 1, 2],
-            vec![0, 2, 3],
-            vec![0, 3, 1],
-            vec![1, 3, 2],
-        ];
-        Self { vertices: v, faces: f }
+        let f = vec![vec![0, 1, 2], vec![0, 2, 3], vec![0, 3, 1], vec![1, 3, 2]];
+        Self {
+            vertices: v,
+            faces: f,
+        }
     }
 
     /// Undirected edge set with consistent ordering (low, high).

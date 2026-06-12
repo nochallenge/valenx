@@ -46,17 +46,10 @@ fn reroot_on_node(tree: &Tree, target: NodeId) -> Result<Tree> {
 /// parent); `None` places it at the edge midpoint. This is what
 /// midpoint-rooting needs — the root can sit at an arbitrary point along
 /// an edge, not only at its half.
-fn reroot_on_edge(
-    tree: &Tree,
-    target: NodeId,
-    dist_from_target: Option<f64>,
-) -> Result<Tree> {
+fn reroot_on_edge(tree: &Tree, target: NodeId, dist_from_target: Option<f64>) -> Result<Tree> {
     let old_root = tree.root();
     if target == old_root {
-        return Err(PhyloError::invalid(
-            "outgroup",
-            "node is already the root",
-        ));
+        return Err(PhyloError::invalid("outgroup", "node is already the root"));
     }
     let parent = tree
         .node(target)
@@ -131,8 +124,7 @@ fn reroot_on_edge(
     while let Some(cur) = stack.pop() {
         for &nb in &adj[cur] {
             // Skip the original edge that the new root replaced.
-            if (cur == target && nb == parent) || (cur == parent && nb == target)
-            {
+            if (cur == target && nb == parent) || (cur == parent && nb == target) {
                 continue;
             }
             if visited.insert(nb) {
@@ -394,9 +386,8 @@ fn rebuild_retained(tree: &Tree, retained: &HashSet<NodeId>) -> Result<Tree> {
 fn suppress_unifurcations(tree: &mut Tree) -> Result<()> {
     loop {
         // Find a non-root node with exactly one child.
-        let victim = (0..tree.node_count()).find(|&id| {
-            id != tree.root() && tree.node(id).children.len() == 1
-        });
+        let victim = (0..tree.node_count())
+            .find(|&id| id != tree.root() && tree.node(id).children.len() == 1);
         let Some(v) = victim else { break };
         let parent = tree.node(v).parent.expect("non-root has parent");
         let child = tree.node(v).children[0];

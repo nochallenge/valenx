@@ -202,7 +202,12 @@ pub fn design_mrna(req: &MrnaDesignRequest) -> Result<MrnaDesignReport> {
         + 0.25 * start_openness
         + 0.20 * u5.kozak_score
         + 0.20 * u3.stability_score
-        + 0.10 * if modification.reduces_immunogenicity { 1.0 } else { 0.4 })
+        + 0.10
+            * if modification.reduces_immunogenicity {
+                1.0
+            } else {
+                0.4
+            })
     .clamp(0.0, 1.0);
 
     Ok(MrnaDesignReport {

@@ -169,7 +169,7 @@ mod tests {
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
             [0.0, 0.0, 2.0], // sketch on the top face
             [0.0, 0.0, 1.0],
-            -1.0, // negative height → cut downward into the box
+            -1.0,  // negative height → cut downward into the box
             false, // pocket
         )
         .unwrap();

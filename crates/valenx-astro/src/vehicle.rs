@@ -380,8 +380,8 @@ mod tests {
             throat_area: 0.05,
             expansion_ratio: 16.0,
         };
-        let s = Stage::from_engine("booster", 20_000.0, 400_000.0, &engine, 9)
-            .expect("valid engine");
+        let s =
+            Stage::from_engine("booster", 20_000.0, 400_000.0, &engine, 9).expect("valid engine");
         // Nine engines -> roughly nine times one engine's thrust.
         let one = engine.vacuum().expect("valid engine").thrust;
         assert!((s.thrust_vac - 9.0 * one).abs() / s.thrust_vac < 1e-9);
@@ -464,14 +464,20 @@ mod tests {
         s2.isp_vac = 0.0;
         assert!(matches!(
             s2.burn_time(),
-            Err(AstroError::InvalidPropulsion { field: "isp_vac", .. })
+            Err(AstroError::InvalidPropulsion {
+                field: "isp_vac",
+                ..
+            })
         ));
         // thrust_vac = 0 alone -> mass_flow = 0 -> burn_time = Inf silently.
         let mut s3 = demo_stage();
         s3.thrust_vac = 0.0;
         assert!(matches!(
             s3.burn_time(),
-            Err(AstroError::InvalidPropulsion { field: "thrust_vac", .. })
+            Err(AstroError::InvalidPropulsion {
+                field: "thrust_vac",
+                ..
+            })
         ));
     }
 
@@ -484,7 +490,10 @@ mod tests {
         s.isp_vac = 0.0;
         assert!(matches!(
             s.mass_flow(),
-            Err(AstroError::InvalidPropulsion { field: "isp_vac", .. })
+            Err(AstroError::InvalidPropulsion {
+                field: "isp_vac",
+                ..
+            })
         ));
         let mut s2 = demo_stage();
         s2.isp_vac = f64::NAN;
@@ -493,7 +502,10 @@ mod tests {
         s3.thrust_vac = 0.0;
         assert!(matches!(
             s3.mass_flow(),
-            Err(AstroError::InvalidPropulsion { field: "thrust_vac", .. })
+            Err(AstroError::InvalidPropulsion {
+                field: "thrust_vac",
+                ..
+            })
         ));
     }
 
@@ -509,7 +521,10 @@ mod tests {
         s0.isp_vac = 0.0;
         assert!(matches!(
             s0.ideal_delta_v(0.0),
-            Err(AstroError::InvalidPropulsion { field: "isp_vac", .. })
+            Err(AstroError::InvalidPropulsion {
+                field: "isp_vac",
+                ..
+            })
         ));
         // A burnout mass of zero (dry_mass = 0, no upper mass) -> m0/mf is
         // m0/0 = Inf -> ln(Inf) = Inf silently. Now an InvalidMass error.
@@ -517,7 +532,10 @@ mod tests {
         s2.dry_mass = 0.0;
         assert!(matches!(
             s2.ideal_delta_v(0.0),
-            Err(AstroError::InvalidMass { field: "burnout_mass", .. })
+            Err(AstroError::InvalidMass {
+                field: "burnout_mass",
+                ..
+            })
         ));
         // A non-finite upper_mass poisons both m0 and mf.
         assert!(demo_stage().ideal_delta_v(f64::INFINITY).is_err());

@@ -82,7 +82,10 @@ impl MinimizeOptions {
             return Err(MdError::invalid("max_iterations", "must be at least 1"));
         }
         if !(self.initial_step.is_finite() && self.initial_step > 0.0) {
-            return Err(MdError::invalid("initial_step", "must be finite and positive"));
+            return Err(MdError::invalid(
+                "initial_step",
+                "must be finite and positive",
+            ));
         }
         Ok(())
     }
@@ -132,11 +135,9 @@ pub fn steepest_descent(
         }
         // Search direction is the (normalised) force.
         let norm = max_f.max(1e-12);
-        let direction: Vec<Vector3<f64>> =
-            ef.forces.iter().map(|f| f / norm).collect();
+        let direction: Vec<Vector3<f64>> = ef.forces.iter().map(|f| f / norm).collect();
         // Try a step; backtrack until the energy goes down.
-        let (new_ef, new_sys) =
-            line_search(system, &direction, step, ef.energy, force_fn)?;
+        let (new_ef, new_sys) = line_search(system, &direction, step, ef.energy, force_fn)?;
         if new_ef.energy < ef.energy {
             *system = new_sys;
             ef = new_ef;
@@ -174,7 +175,11 @@ fn line_search(
         if ef.energy < e0 {
             return Ok((ef, sys));
         }
-        if best.as_ref().map(|(b, _)| ef.energy < b.energy).unwrap_or(true) {
+        if best
+            .as_ref()
+            .map(|(b, _)| ef.energy < b.energy)
+            .unwrap_or(true)
+        {
             best = Some((ef, sys));
         }
         alpha *= 0.5;
@@ -221,8 +226,7 @@ pub fn conjugate_gradient(
             .sqrt()
             .max(1e-12);
         let unit: Vec<Vector3<f64>> = direction.iter().map(|d| d / dnorm).collect();
-        let (new_ef, new_sys) =
-            line_search(system, &unit, step, ef.energy, force_fn)?;
+        let (new_ef, new_sys) = line_search(system, &unit, step, ef.energy, force_fn)?;
         if new_ef.energy < ef.energy {
             *system = new_sys;
             step *= 1.1;
@@ -343,8 +347,7 @@ pub fn lbfgs(
             .max(1e-12);
         let unit: Vec<Vector3<f64>> = direction.iter().map(|d| d / dnorm).collect();
 
-        let (new_ef, new_sys) =
-            line_search(system, &unit, step, ef.energy, force_fn)?;
+        let (new_ef, new_sys) = line_search(system, &unit, step, ef.energy, force_fn)?;
         if new_ef.energy >= ef.energy {
             step *= 0.5;
             if step < 1e-10 {
@@ -361,11 +364,7 @@ pub fn lbfgs(
             .map(|(a, b)| a - b)
             .collect();
         let new_grad: Vec<Vector3<f64>> = new_ef.forces.iter().map(|f| -f).collect();
-        let y: Vec<Vector3<f64>> = new_grad
-            .iter()
-            .zip(&grad)
-            .map(|(a, b)| a - b)
-            .collect();
+        let y: Vec<Vector3<f64>> = new_grad.iter().zip(&grad).map(|(a, b)| a - b).collect();
         let sy = dot(&s, &y);
         if sy > 1e-12 {
             s_hist.push(s);
@@ -415,8 +414,7 @@ mod tests {
         )
         .unwrap();
         let term =
-            HarmonicBonds::from_system(&sys, &[BondParam::new(eq_len, 5000.0).unwrap()])
-                .unwrap();
+            HarmonicBonds::from_system(&sys, &[BondParam::new(eq_len, 5000.0).unwrap()]).unwrap();
         (sys, term)
     }
 

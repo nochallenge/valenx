@@ -73,7 +73,10 @@ pub fn sweep_api_thru_sections(
     if profiles.len() < 2 {
         return Err(OcctSurfaceError::bad_input(
             "profiles",
-            format!("need at least 2 profile wires to loft, got {}", profiles.len()),
+            format!(
+                "need at least 2 profile wires to loft, got {}",
+                profiles.len()
+            ),
         ));
     }
     for (idx, p) in profiles.iter().enumerate() {

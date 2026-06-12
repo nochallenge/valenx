@@ -21,9 +21,7 @@ pub use bitvec::FingerprintBits;
 pub use maccs::{maccs_key_count, maccs_keys};
 pub use morgan::{ecfp, ecfp_features, fcfp};
 pub use path::path_fingerprint;
-pub use similarity::{
-    cosine, dice, nearest_neighbor, tanimoto, tanimoto_distance, tversky,
-};
+pub use similarity::{cosine, dice, nearest_neighbor, tanimoto, tanimoto_distance, tversky};
 
 use crate::molecule::Molecule;
 

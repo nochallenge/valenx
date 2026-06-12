@@ -698,10 +698,7 @@ fn try_parse_structured_tolerance(body: &str) -> Option<Ap242GeometricTolerance>
         name,
         kind,
         raw_keyword: kw.to_string(),
-        value: Ap242ToleranceValue {
-            magnitude,
-            unit,
-        },
+        value: Ap242ToleranceValue { magnitude, unit },
         datums,
         modifier,
     })
@@ -734,11 +731,7 @@ fn extract_all_strings(s: &str) -> Vec<String> {
         let raw = &after[..i.min(after.len())];
         // Un-escape doubled quotes.
         out.push(raw.replace("''", "'"));
-        rest = if i < after.len() {
-            &after[i + 1..]
-        } else {
-            ""
-        };
+        rest = if i < after.len() { &after[i + 1..] } else { "" };
     }
     out
 }
@@ -870,8 +863,11 @@ pub fn append_metadata(path: &Path, md: &Ap242Metadata) -> Result<(), StepIgesEr
         let datum_args: String = if tol.datums.is_empty() {
             String::new()
         } else {
-            let labels: Vec<String> =
-                tol.datums.iter().map(|d| format!("'{}'", d.label)).collect();
+            let labels: Vec<String> = tol
+                .datums
+                .iter()
+                .map(|d| format!("'{}'", d.label))
+                .collect();
             format!(", {}", labels.join(", "))
         };
         text.push_str(&format!(
@@ -1118,7 +1114,11 @@ mod tests {
             #1 = POSITION_TOLERANCE('PosA', '', 0.1 MM, .MAXIMUM_MATERIAL_REQUIREMENT., 'A', 'B');\n\
         ";
         let md = parse_metadata(text);
-        assert_eq!(md.geometric_tolerances.len(), 1, "must recognise the structured tolerance");
+        assert_eq!(
+            md.geometric_tolerances.len(),
+            1,
+            "must recognise the structured tolerance"
+        );
         let tol = &md.geometric_tolerances[0];
         assert_eq!(tol.name, "PosA");
         assert_eq!(tol.kind, Ap242ToleranceKind::Position);
@@ -1192,15 +1192,18 @@ mod tests {
             #3 = DATUM('C');\n\
         ";
         let md = parse_metadata(text);
-        assert_eq!(md.datums, vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+        assert_eq!(
+            md.datums,
+            vec!["A".to_string(), "B".to_string(), "C".to_string()]
+        );
     }
 
     #[test]
     fn append_metadata_emits_structured_tolerances_as_real_step_entities() {
         // Write a STEP file with a known structured tolerance,
         // append_metadata it, re-parse — must recover the same tolerance.
-        let tmp = std::env::temp_dir()
-            .join(format!("valenx_ap242_pmi_rt_{}.step", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("valenx_ap242_pmi_rt_{}.step", std::process::id()));
         std::fs::write(&tmp, "ISO-10303-21;\nENDSEC;\nEND-ISO-10303-21;\n").unwrap();
         let md = Ap242Metadata {
             geometric_tolerances: vec![
@@ -1234,7 +1237,11 @@ mod tests {
         append_metadata(&tmp, &md).unwrap();
         let recovered = read_metadata(&tmp).unwrap();
         let _ = std::fs::remove_file(&tmp);
-        assert_eq!(recovered.geometric_tolerances.len(), 2, "two structured tolerances must round-trip");
+        assert_eq!(
+            recovered.geometric_tolerances.len(),
+            2,
+            "two structured tolerances must round-trip"
+        );
         // Tolerance 0 — Position with two datums + MMC modifier.
         let t0 = &recovered.geometric_tolerances[0];
         assert_eq!(t0.kind, Ap242ToleranceKind::Position);

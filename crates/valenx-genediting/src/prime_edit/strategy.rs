@@ -80,7 +80,12 @@ fn triangular(value: f64, optimum: f64, width: f64) -> f64 {
 ///
 /// `pbs` and `rt_template` are the designed RNA sequences;
 /// `rt_homology` is the downstream-homology length the caller scanned.
-pub fn length_scan_score(pbs: &[u8], rt_template: &[u8], _pbs_len: usize, rt_homology: usize) -> f64 {
+pub fn length_scan_score(
+    pbs: &[u8],
+    rt_template: &[u8],
+    _pbs_len: usize,
+    rt_homology: usize,
+) -> f64 {
     let tm = wallace_tm(pbs);
     let tm_term = triangular(tm, 30.0, 22.0);
     let rt_term = triangular(rt_homology as f64, 13.0, 12.0);

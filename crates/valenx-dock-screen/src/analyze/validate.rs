@@ -49,7 +49,11 @@ pub fn coordinate_rmsd(a: &[Vector3<f64>], b: &[Vector3<f64>]) -> Result<f64> {
     if a.len() != b.len() {
         return Err(DockScreenError::invalid(
             "coordinates",
-            format!("coordinate sets differ in length ({} vs {})", a.len(), b.len()),
+            format!(
+                "coordinate sets differ in length ({} vs {})",
+                a.len(),
+                b.len()
+            ),
         ));
     }
     if a.is_empty() {
@@ -111,10 +115,7 @@ pub struct RedockBenchmark {
 impl RedockBenchmark {
     /// Number of cases that docked successfully (regardless of RMSD).
     pub fn n_docked(&self) -> usize {
-        self.outcomes
-            .iter()
-            .filter(|o| o.failure.is_none())
-            .count()
+        self.outcomes.iter().filter(|o| o.failure.is_none()).count()
     }
 
     /// Mean top-pose RMSD over the cases that docked.
@@ -171,7 +172,13 @@ pub fn redock_success_rate(
     let mut outcomes: Vec<RedockOutcome> = Vec::with_capacity(cases.len());
     for (i, case) in cases.iter().enumerate() {
         let case_seed = seed.wrapping_add((i as u64).wrapping_mul(0x9E37_79B9));
-        outcomes.push(run_case(case, threshold, algorithm, runs_per_case, case_seed));
+        outcomes.push(run_case(
+            case,
+            threshold,
+            algorithm,
+            runs_per_case,
+            case_seed,
+        ));
     }
     let n_success = outcomes.iter().filter(|o| o.success).count();
     let success_rate = n_success as f64 / cases.len() as f64;
@@ -243,7 +250,8 @@ fn run_case(
 mod tests {
     use super::*;
 
-    const RECEPTOR: &str = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00     0.000 C
+    const RECEPTOR: &str =
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00     0.000 C
 ATOM      2  CB  ALA A   1       2.000   0.000   0.000  1.00  0.00     0.000 C
 ";
     const LIGAND: &str = "ROOT
@@ -298,10 +306,14 @@ TORSDOF 0
             reference: Pose::identity(0),
         };
         // Bad threshold.
-        assert!(
-            redock_success_rate(std::slice::from_ref(&case), 0.0, SearchAlgorithm::fast(), 1, 1)
-                .is_err()
-        );
+        assert!(redock_success_rate(
+            std::slice::from_ref(&case),
+            0.0,
+            SearchAlgorithm::fast(),
+            1,
+            1
+        )
+        .is_err());
     }
 
     #[test]
@@ -335,8 +347,7 @@ TORSDOF 0
             grid: GridBox::cubic([0.0; 3], 8.0).unwrap(),
             reference: Pose::identity(0),
         };
-        let bench =
-            redock_success_rate(&[bad_case], 2.0, SearchAlgorithm::fast(), 1, 1).unwrap();
+        let bench = redock_success_rate(&[bad_case], 2.0, SearchAlgorithm::fast(), 1, 1).unwrap();
         assert_eq!(bench.outcomes.len(), 1);
         assert!(!bench.outcomes[0].success);
         assert!(bench.outcomes[0].failure.is_some());

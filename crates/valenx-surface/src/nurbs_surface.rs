@@ -44,8 +44,14 @@ impl NurbsSurface {
         control_points: Vec<Vec<Vector3<f64>>>,
         weights: Vec<Vec<f64>>,
     ) -> Result<Self, SurfaceError> {
-        let surface =
-            Self::new_unchecked(u_degree, v_degree, u_knots, v_knots, control_points, weights);
+        let surface = Self::new_unchecked(
+            u_degree,
+            v_degree,
+            u_knots,
+            v_knots,
+            control_points,
+            weights,
+        );
         surface.validate()?;
         Ok(surface)
     }

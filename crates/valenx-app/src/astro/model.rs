@@ -715,7 +715,10 @@ mod tests {
         assert_eq!(plane_change_dv(400.0, 0.0).unwrap(), 0.0);
         let small = plane_change_dv(400.0, 15.0).unwrap();
         let large = plane_change_dv(400.0, 45.0).unwrap();
-        assert!(large > small && small > 0.0, "Δv grows with Δi: {small} → {large}");
+        assert!(
+            large > small && small > 0.0,
+            "Δv grows with Δi: {small} → {large}"
+        );
         // A non-physical altitude (below the Earth's centre) errors, not panics.
         assert!(plane_change_dv(-10_000.0, 30.0).is_err());
     }
@@ -725,8 +728,15 @@ mod tests {
         // At Earth's radius: ~7.9 km/s circular, escape = √2× that, ~84 min.
         let (v_circ, v_esc, period) = circular_orbit_basics(0.0);
         assert!((v_circ - 7910.0).abs() < 120.0, "v_circ {v_circ}");
-        assert!((v_esc - 2.0_f64.sqrt() * v_circ).abs() < 1e-6, "v_esc = √2·v_circ");
-        assert!((period / 60.0 - 84.4).abs() < 2.0, "T {} min", period / 60.0);
+        assert!(
+            (v_esc - 2.0_f64.sqrt() * v_circ).abs() < 1e-6,
+            "v_esc = √2·v_circ"
+        );
+        assert!(
+            (period / 60.0 - 84.4).abs() < 2.0,
+            "T {} min",
+            period / 60.0
+        );
         // 300 km LEO: ~7.73 km/s, ~90 min period.
         let (v300, _, t300) = circular_orbit_basics(300.0);
         assert!((v300 - 7730.0).abs() < 120.0, "v300 {v300}");
@@ -736,14 +746,16 @@ mod tests {
     #[test]
     fn bielliptic_transfer_altitudes_is_a_three_burn_budget() {
         // LEO 300 km -> GEO 35 786 km, routed via a far 250 000 km apoapsis.
-        let t = bielliptic_transfer_altitudes(300.0, 35_786.0, 250_000.0)
-            .expect("valid altitudes");
+        let t = bielliptic_transfer_altitudes(300.0, 35_786.0, 250_000.0).expect("valid altitudes");
         // Three finite, non-negative burns that sum to the reported total.
         assert!(t.delta_v1 >= 0.0 && t.delta_v2 >= 0.0 && t.delta_v3 >= 0.0);
         assert!(t.total_delta_v.is_finite());
         assert!((t.total_delta_v - (t.delta_v1 + t.delta_v2 + t.delta_v3)).abs() < 1e-6);
         // Unlike a two-burn Hohmann, the bi-elliptic uses a real third burn.
-        assert!(t.delta_v3 > 0.0, "the third (circularising) burn is non-zero");
+        assert!(
+            t.delta_v3 > 0.0,
+            "the third (circularising) burn is non-zero"
+        );
         // Coasting out past the target and back takes longer than the direct
         // Hohmann between the same two orbits.
         let h = valenx_astro::hohmann_transfer(
@@ -763,7 +775,11 @@ mod tests {
     fn elliptical_orbit_matches_a_gto_and_reduces_to_circular() {
         // A geostationary transfer orbit: 300 km perigee, 35 786 km apogee.
         let gto = elliptical_orbit(300.0, 35_786.0);
-        assert!((0.70..=0.75).contains(&gto.eccentricity), "GTO e {}", gto.eccentricity);
+        assert!(
+            (0.70..=0.75).contains(&gto.eccentricity),
+            "GTO e {}",
+            gto.eccentricity
+        );
         let hours = gto.period_s / 3600.0;
         assert!((10.0..=11.1).contains(&hours), "GTO period {hours} h");
         // Vis-viva: ~10.2 km/s at perigee, ~1.6 km/s at apogee; perigee is
@@ -784,10 +800,17 @@ mod tests {
         // Equal altitudes ⇒ a circle: e = 0, equal speeds, and both period and
         // speed agree with circular_orbit_basics at that altitude.
         let circ = elliptical_orbit(500.0, 500.0);
-        assert!(circ.eccentricity < 1e-12, "circular e {}", circ.eccentricity);
+        assert!(
+            circ.eccentricity < 1e-12,
+            "circular e {}",
+            circ.eccentricity
+        );
         assert!((circ.perigee_speed_ms - circ.apogee_speed_ms).abs() < 1e-9);
         let (v_circ, _, period) = circular_orbit_basics(500.0);
-        assert!((circ.perigee_speed_ms - v_circ).abs() < 1e-6, "circular speed");
+        assert!(
+            (circ.perigee_speed_ms - v_circ).abs() < 1e-6,
+            "circular speed"
+        );
         assert!((circ.period_s - period).abs() < 1e-3, "circular period");
         // Specific orbital energy ε = −μ/(2a) equals the vis-viva energy
         // ½v² − μ/r evaluated anywhere on the orbit — cross-check at perigee.
@@ -813,7 +836,10 @@ mod tests {
             gto.specific_angular_momentum_m2_s,
             h_peri
         );
-        assert!((h_peri - h_apo).abs() / h_peri < 1e-9, "h conserved peri↔apo");
+        assert!(
+            (h_peri - h_apo).abs() / h_peri < 1e-9,
+            "h conserved peri↔apo"
+        );
     }
 
     #[test]
@@ -825,7 +851,10 @@ mod tests {
         let syn = synodic_period(alt_a, alt_b);
         // T_syn = 1 / |1/T_a − 1/T_b|.
         let expected = 1.0 / (1.0 / t_a - 1.0 / t_b).abs();
-        assert!((syn - expected).abs() / expected < 1e-9, "syn {syn} vs {expected}");
+        assert!(
+            (syn - expected).abs() / expected < 1e-9,
+            "syn {syn} vs {expected}"
+        );
         // Always longer than the shorter of the two periods: the faster craft
         // needs more than one of its own orbits to lap the slower one.
         assert!(syn > t_a.min(t_b));
@@ -841,11 +870,17 @@ mod tests {
         // famous ~44° Hohmann phase angle, independent of absolute scale —
         // 300 km → 3795 km altitude is r2/r1 ≈ 1.524 about Earth.
         let mars_like = hohmann_phase_angle(300.0, 3795.0).to_degrees();
-        assert!((mars_like - 44.0).abs() < 2.0, "Mars-ratio phase {mars_like}°");
+        assert!(
+            (mars_like - 44.0).abs() < 2.0,
+            "Mars-ratio phase {mars_like}°"
+        );
         // LEO 300 km → GEO 35 786 km: the target leads by ~101° at departure.
         let leo_geo = hohmann_phase_angle(300.0, 35_786.0).to_degrees();
         assert!((leo_geo - 100.7).abs() < 2.0, "LEO→GEO phase {leo_geo}°");
-        assert!(hohmann_phase_angle(300.0, 35_786.0) > 0.0, "outward transfer leads");
+        assert!(
+            hohmann_phase_angle(300.0, 35_786.0) > 0.0,
+            "outward transfer leads"
+        );
         // Equal orbits need no phasing.
         assert!(hohmann_phase_angle(500.0, 500.0).abs() < 1e-9);
         // The result is always a valid wrapped angle in (−π, π].
@@ -858,9 +893,16 @@ mod tests {
         let (v_circ, _, _) = circular_orbit_basics(300.0);
         let dv = escape_delta_v_from_circular(300.0);
         // Δv = (√2 − 1)·v_circ exactly.
-        assert!((dv - (2.0_f64.sqrt() - 1.0) * v_circ).abs() < 1e-6, "Δv {dv}");
+        assert!(
+            (dv - (2.0_f64.sqrt() - 1.0) * v_circ).abs() < 1e-6,
+            "Δv {dv}"
+        );
         // From a ~300 km LEO it is ~3.2 km/s.
-        assert!((dv / 1000.0 - 3.2).abs() < 0.2, "LEO escape Δv {} km/s", dv / 1000.0);
+        assert!(
+            (dv / 1000.0 - 3.2).abs() < 0.2,
+            "LEO escape Δv {} km/s",
+            dv / 1000.0
+        );
         // Positive, and less than the circular speed itself.
         assert!(dv > 0.0 && dv < v_circ);
     }
@@ -889,7 +931,11 @@ mod tests {
         );
         // A trans-Mars v∞ ≈ 3 km/s from a 300 km LEO → the classic ~3.6 km/s TMI.
         let tmi = injection_delta_v(300.0, 3000.0);
-        assert!((tmi / 1000.0 - 3.6).abs() < 0.2, "TMI {} km/s", tmi / 1000.0);
+        assert!(
+            (tmi / 1000.0 - 3.6).abs() < 0.2,
+            "TMI {} km/s",
+            tmi / 1000.0
+        );
         // A higher required hyperbolic excess always costs more Δv.
         assert!(injection_delta_v(300.0, 4000.0) > tmi);
     }
@@ -917,7 +963,10 @@ mod tests {
         let gto = elliptical_orbit(300.0, 35_786.0);
         // At the perigee altitude the speed equals the perigee speed.
         let v_peri = orbital_speed_at_altitude(300.0, 35_786.0, 300.0).unwrap();
-        assert!((v_peri - gto.perigee_speed_ms).abs() < 1e-6, "v_peri {v_peri}");
+        assert!(
+            (v_peri - gto.perigee_speed_ms).abs() < 1e-6,
+            "v_peri {v_peri}"
+        );
         // At the apogee altitude → apogee speed.
         let v_apo = orbital_speed_at_altitude(300.0, 35_786.0, 35_786.0).unwrap();
         assert!((v_apo - gto.apogee_speed_ms).abs() < 1e-6, "v_apo {v_apo}");
@@ -925,9 +974,7 @@ mod tests {
         let v_mid = orbital_speed_at_altitude(300.0, 35_786.0, 18_000.0).unwrap();
         assert!(v_apo < v_mid && v_mid < v_peri, "mid {v_mid}");
         // The perigee/apogee inputs are order-independent.
-        assert!(
-            (orbital_speed_at_altitude(35_786.0, 300.0, 300.0).unwrap() - v_peri).abs() < 1e-6
-        );
+        assert!((orbital_speed_at_altitude(35_786.0, 300.0, 300.0).unwrap() - v_peri).abs() < 1e-6);
         // An altitude the orbit never reaches → None.
         assert!(orbital_speed_at_altitude(300.0, 35_786.0, 50_000.0).is_none());
     }
@@ -939,15 +986,25 @@ mod tests {
         assert!(time_since_perigee(300.0, 35_786.0, 0.0).abs() < 1e-6);
         // Apogee (θ=180°) → exactly half the orbital period (any eccentricity).
         let t_apo = time_since_perigee(300.0, 35_786.0, 180.0);
-        assert!((t_apo - gto.period_s / 2.0).abs() / gto.period_s < 1e-9, "apogee at T/2");
+        assert!(
+            (t_apo - gto.period_s / 2.0).abs() / gto.period_s < 1e-9,
+            "apogee at T/2"
+        );
         // A circular orbit sweeps uniformly: θ=90° → a quarter period.
         let circ = elliptical_orbit(500.0, 500.0);
         let t_q = time_since_perigee(500.0, 500.0, 90.0);
-        assert!((t_q - circ.period_s / 4.0).abs() / circ.period_s < 1e-9, "circular θ=90 → T/4");
+        assert!(
+            (t_q - circ.period_s / 4.0).abs() / circ.period_s < 1e-9,
+            "circular θ=90 → T/4"
+        );
         // On the eccentric GTO the satellite lingers near apogee: the 90°→180°
         // leg takes longer than 0°→90° (Kepler's 2nd law / areal velocity).
         let t90 = time_since_perigee(300.0, 35_786.0, 90.0);
-        assert!(t90 < t_apo - t90, "more time spent approaching apogee: {t90} vs {}", t_apo - t90);
+        assert!(
+            t90 < t_apo - t90,
+            "more time spent approaching apogee: {t90} vs {}",
+            t_apo - t90
+        );
     }
 
     #[test]

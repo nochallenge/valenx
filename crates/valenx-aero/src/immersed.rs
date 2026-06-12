@@ -52,7 +52,7 @@ use nalgebra::Vector3;
 use rayon::prelude::*;
 
 use crate::cutcell::{compute_cut_geometry, CellBox, CellGeometry, WallMethod};
-use crate::geometry::{Triangle, TriMesh};
+use crate::geometry::{TriMesh, Triangle};
 use crate::grid::Grid3;
 
 /// The role a pressure cell plays relative to the immersed body.
@@ -212,11 +212,7 @@ impl ImmersedBody {
 /// Returns the ray parameter `t` (`origin + t·dir` is the hit point)
 /// if the ray crosses the triangle at `t > eps`, else `None`. `dir`
 /// need not be normalised.
-fn ray_triangle(
-    origin: Vector3<f64>,
-    dir: Vector3<f64>,
-    tri: &Triangle,
-) -> Option<f64> {
+fn ray_triangle(origin: Vector3<f64>, dir: Vector3<f64>, tri: &Triangle) -> Option<f64> {
     const EPS: f64 = 1e-12;
     let e1 = tri.b - tri.a;
     let e2 = tri.c - tri.a;
@@ -472,8 +468,7 @@ pub fn voxelize_with(grid: &Grid3, mesh: &TriMesh, method: WallMethod) -> Immers
         // entire wall and its drag contribution.
         let small: Vec<usize> = (0..n)
             .filter(|&idx| {
-                tags[idx] == CellTag::Cut
-                    && geometry[idx].volume_fraction < SMALL_CELL_FLOOR
+                tags[idx] == CellTag::Cut && geometry[idx].volume_fraction < SMALL_CELL_FLOOR
             })
             .collect();
         for &idx in &small {
@@ -486,8 +481,12 @@ pub fn voxelize_with(grid: &Grid3, mesh: &TriMesh, method: WallMethod) -> Immers
             // with the outward wall normal (the open / fluid side) that
             // is not solid. Fall back to any fluid-like neighbour.
             let nbrs: [(i32, i32, i32); 6] = [
-                (1, 0, 0), (-1, 0, 0), (0, 1, 0),
-                (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                (1, 0, 0),
+                (-1, 0, 0),
+                (0, 1, 0),
+                (0, -1, 0),
+                (0, 0, 1),
+                (0, 0, -1),
             ];
             let mut best: Option<(usize, f64)> = None;
             for (di, dj, dk) in nbrs {
@@ -501,11 +500,9 @@ pub fn voxelize_with(grid: &Grid3, mesh: &TriMesh, method: WallMethod) -> Immers
                 {
                     continue;
                 }
-                let nidx = ni as usize
-                    + grid.nx * (nj as usize + grid.ny * nk as usize);
+                let nidx = ni as usize + grid.nx * (nj as usize + grid.ny * nk as usize);
                 // A small cell about to be merged is not a valid host.
-                if tags[nidx] == CellTag::Solid
-                    || geometry[nidx].volume_fraction < SMALL_CELL_FLOOR
+                if tags[nidx] == CellTag::Solid || geometry[nidx].volume_fraction < SMALL_CELL_FLOOR
                 {
                     continue;
                 }
@@ -694,10 +691,7 @@ mod tests {
     fn point_inside_a_box_is_classified_inside() {
         // The defining IBM correctness test: a known body, a known
         // inside point and a known outside point.
-        let body = box_body(
-            Vector3::new(-1.0, -1.0, -1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        );
+        let body = box_body(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0));
         // Centre of the box — unambiguously inside.
         assert!(point_inside(Vector3::new(0.0, 0.0, 0.0), &body));
         // Off-centre but still inside.
@@ -730,10 +724,7 @@ mod tests {
 
     #[test]
     fn distance_to_body_is_zero_on_the_surface_and_grows_away() {
-        let body = box_body(
-            Vector3::new(-1.0, -1.0, -1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        );
+        let body = box_body(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0));
         // A point on the +x face.
         let on_face = distance_to_body(Vector3::new(1.0, 0.0, 0.0), &body);
         assert!(on_face < 1e-9, "on-surface distance should be ~0");
@@ -747,10 +738,7 @@ mod tests {
         // A box body centred in a grid: the interior cells must come
         // out Solid, the cells around them Cut, the far cells Fluid.
         let grid = Grid3::new(20, 20, 20, 10.0, 10.0, 10.0, -5.0, -5.0, -5.0);
-        let body = box_body(
-            Vector3::new(-2.0, -2.0, -2.0),
-            Vector3::new(2.0, 2.0, 2.0),
-        );
+        let body = box_body(Vector3::new(-2.0, -2.0, -2.0), Vector3::new(2.0, 2.0, 2.0));
         let vb = voxelize(&grid, &body);
         let (f, c, s) = vb.tag_counts();
         assert!(s > 0, "the box must produce solid cells");
@@ -897,10 +885,7 @@ mod tests {
         // *transfer their wall* to the neighbour — the box's six faces
         // must all still carry cut-face wall area, none lost.
         let grid = Grid3::new(40, 40, 40, 10.0, 10.0, 10.0, -5.0, -5.0, -5.0);
-        let body = box_body(
-            Vector3::new(-2.0, -2.0, -2.0),
-            Vector3::new(2.0, 2.0, 2.0),
-        );
+        let body = box_body(Vector3::new(-2.0, -2.0, -2.0), Vector3::new(2.0, 2.0, 2.0));
         let vb = voxelize(&grid, &body);
         // Sum the cut-face area-vector projected onto each of the six
         // axis directions — every face of the box must contribute.
@@ -916,9 +901,21 @@ mod tests {
                         continue;
                     }
                     let av = cf.normal * cf.area;
-                    if av.x > 0.0 { proj[0] += av.x; } else { proj[1] += -av.x; }
-                    if av.y > 0.0 { proj[2] += av.y; } else { proj[3] += -av.y; }
-                    if av.z > 0.0 { proj[4] += av.z; } else { proj[5] += -av.z; }
+                    if av.x > 0.0 {
+                        proj[0] += av.x;
+                    } else {
+                        proj[1] += -av.x;
+                    }
+                    if av.y > 0.0 {
+                        proj[2] += av.y;
+                    } else {
+                        proj[3] += -av.y;
+                    }
+                    if av.z > 0.0 {
+                        proj[4] += av.z;
+                    } else {
+                        proj[5] += -av.z;
+                    }
                 }
             }
         }

@@ -401,9 +401,7 @@ fn mc_cycle(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abinitio::assemble::{
-        fragment_assembly, AssemblyOptions, AssemblyScorer,
-    };
+    use crate::abinitio::assemble::{fragment_assembly, AssemblyOptions, AssemblyScorer};
     use crate::abinitio::dope::{dope_score, DopeWeights};
     use crate::abinitio::fragments::build_fragment_library;
 

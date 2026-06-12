@@ -204,14 +204,7 @@ impl SupportKind {
     pub fn dof_mask(self) -> [Option<f64>; 6] {
         match self {
             SupportKind::Free => [None; 6],
-            SupportKind::Pinned => [
-                Some(0.0),
-                Some(0.0),
-                Some(0.0),
-                None,
-                None,
-                None,
-            ],
+            SupportKind::Pinned => [Some(0.0), Some(0.0), Some(0.0), None, None, None],
             SupportKind::Clamped => [Some(0.0); 6],
         }
     }
@@ -441,12 +434,7 @@ fn section_from_beam(cs: &crate::beam::BeamSection) -> StructuralSection {
             let b_h = short / 2.0;
             let ratio = b_h / a_h;
             let j = a_h * b_h.powi(3) * (16.0 / 3.0 - 3.36 * ratio * (1.0 - ratio.powi(4) / 12.0));
-            StructuralSection {
-                area: a,
-                iy,
-                iz,
-                j,
-            }
+            StructuralSection { area: a, iy, iz, j }
         }
         crate::beam::BeamSection::IBeam {
             width,
@@ -461,8 +449,8 @@ fn section_from_beam(cs: &crate::beam::BeamSection) -> StructuralSection {
             // for an upright I). Parallel-axis sum of the two flanges
             // (each at z ≈ ±(d/2 − t_f/2)) and the web.
             let flange_z = depth * 0.5 - flange_thickness * 0.5;
-            let iy_flange =
-                width * flange_thickness.powi(3) / 12.0 + width * flange_thickness * flange_z.powi(2);
+            let iy_flange = width * flange_thickness.powi(3) / 12.0
+                + width * flange_thickness * flange_z.powi(2);
             let iy_web = web_thickness * inner_d.powi(3) / 12.0;
             let iy = 2.0 * iy_flange + iy_web;
             // Iz about the weak axis (perpendicular to the web).
@@ -470,7 +458,8 @@ fn section_from_beam(cs: &crate::beam::BeamSection) -> StructuralSection {
             let iz_web = inner_d * web_thickness.powi(3) / 12.0;
             let iz = 2.0 * iz_flange + iz_web;
             // J ≈ Σ b·t³/3 over rectangles (open thin-walled).
-            let j = (2.0 * width * flange_thickness.powi(3) + inner_d * web_thickness.powi(3)) / 3.0;
+            let j =
+                (2.0 * width * flange_thickness.powi(3) + inner_d * web_thickness.powi(3)) / 3.0;
             StructuralSection {
                 area: a.max(1.0e-12),
                 iy: iy.max(1.0e-12),
@@ -523,12 +512,7 @@ fn section_from_column(cs: &crate::column::ColumnSection) -> StructuralSection {
             let b_h = short / 2.0;
             let ratio = b_h / a_h;
             let j = a_h * b_h.powi(3) * (16.0 / 3.0 - 3.36 * ratio * (1.0 - ratio.powi(4) / 12.0));
-            StructuralSection {
-                area: a,
-                iy,
-                iz,
-                j,
-            }
+            StructuralSection { area: a, iy, iz, j }
         }
         crate::column::ColumnSection::Circular { radius, .. } => {
             let a = std::f64::consts::PI * radius * radius;
@@ -549,14 +533,15 @@ fn section_from_column(cs: &crate::column::ColumnSection) -> StructuralSection {
             let inner_d = (depth - 2.0 * flange_thickness).max(0.0);
             let a = 2.0 * width * flange_thickness + inner_d * web_thickness;
             let flange_z = depth * 0.5 - flange_thickness * 0.5;
-            let iy_flange =
-                width * flange_thickness.powi(3) / 12.0 + width * flange_thickness * flange_z.powi(2);
+            let iy_flange = width * flange_thickness.powi(3) / 12.0
+                + width * flange_thickness * flange_z.powi(2);
             let iy_web = web_thickness * inner_d.powi(3) / 12.0;
             let iy = 2.0 * iy_flange + iy_web;
             let iz_flange = flange_thickness * width.powi(3) / 12.0;
             let iz_web = inner_d * web_thickness.powi(3) / 12.0;
             let iz = 2.0 * iz_flange + iz_web;
-            let j = (2.0 * width * flange_thickness.powi(3) + inner_d * web_thickness.powi(3)) / 3.0;
+            let j =
+                (2.0 * width * flange_thickness.powi(3) + inner_d * web_thickness.powi(3)) / 3.0;
             StructuralSection {
                 area: a.max(1.0e-12),
                 iy: iy.max(1.0e-12),
@@ -1022,7 +1007,7 @@ mod tests {
         assert!((lrfd_factored_load(10.0, 5.0) - 20.0).abs() < 1e-9); // 12 + 8
         assert!((lrfd_factored_load(10.0, 0.0) - 12.0).abs() < 1e-9); // dead only
         assert!((lrfd_factored_load(0.0, 5.0) - 8.0).abs() < 1e-9); // live only
-        // Factors are NOT swapped: 1.2·10 + 1.6·5 = 20 ≠ 1.6·10 + 1.2·5 = 22.
+                                                                    // Factors are NOT swapped: 1.2·10 + 1.6·5 = 20 ≠ 1.6·10 + 1.2·5 = 22.
         assert!((lrfd_factored_load(10.0, 5.0) - (1.6 * 10.0 + 1.2 * 5.0)).abs() > 1.0);
         // Sign preserved (uplift); non-finite → 0.
         assert!((lrfd_factored_load(-5.0, 3.0) - (-1.2)).abs() < 1e-9);
@@ -1036,7 +1021,7 @@ mod tests {
         assert!((asd_load_combination(10.0, 5.0) - 15.0).abs() < 1e-9);
         assert!((asd_load_combination(10.0, 0.0) - 10.0).abs() < 1e-9); // dead only
         assert!((asd_load_combination(0.0, 5.0) - 5.0).abs() < 1e-9); // live only
-        // Non-tautological: ASD < LRFD for the same non-negative inputs (15 < 20).
+                                                                      // Non-tautological: ASD < LRFD for the same non-negative inputs (15 < 20).
         assert!(asd_load_combination(10.0, 5.0) < lrfd_factored_load(10.0, 5.0));
         // Sign preserved (uplift); non-finite → 0.
         assert!((asd_load_combination(-5.0, 3.0) - (-2.0)).abs() < 1e-9);

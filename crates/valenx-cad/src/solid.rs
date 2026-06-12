@@ -522,9 +522,7 @@ mod tests {
         // Mirror / pattern ops downstream that translate the solid.
         let mut mesh = valenx_mesh::Mesh::new("tx");
         mesh.nodes.push(nalgebra::Vector3::new(1.0, 2.0, 3.0));
-        let s = Solid::from_mesh(mesh)
-            .translated(10.0, -1.0, 0.5)
-            .unwrap();
+        let s = Solid::from_mesh(mesh).translated(10.0, -1.0, 0.5).unwrap();
         let cached = s.cached_mesh().unwrap();
         assert!((cached.nodes[0] - nalgebra::Vector3::new(11.0, 1.0, 3.5)).norm() < 1e-12);
     }
@@ -571,9 +569,7 @@ mod tests {
             CadError::InvalidParam(_)
         ));
         // Finite still works.
-        assert!(s
-            .rotated((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 0.5)
-            .is_ok());
+        assert!(s.rotated((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 0.5).is_ok());
     }
 
     #[test]

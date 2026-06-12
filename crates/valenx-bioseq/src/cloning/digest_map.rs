@@ -231,12 +231,7 @@ mod tests {
     fn circular_single_cut_one_fragment() {
         // One EcoRI site on a circular molecule -> linearized -> 1
         // fragment the size of the whole circle.
-        let s = Seq::with_topology(
-            SeqKind::Dna,
-            "AAAAAGAATTCAAAAA",
-            Topology::Circular,
-        )
-        .unwrap();
+        let s = Seq::with_topology(SeqKind::Dna, "AAAAAGAATTCAAAAA", Topology::Circular).unwrap();
         let map = restriction_map(&s, &[enzyme_by_name("EcoRI").unwrap()]).unwrap();
         assert!(map.circular);
         assert_eq!(map.fragment_count(), 1);

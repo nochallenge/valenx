@@ -211,9 +211,8 @@ fn valence_electron_count(geometry: &MolecularGeometry) -> Result<u32> {
 /// The diagonal Hamiltonian element for a basis function — its valence
 /// ionisation potential, chosen by angular momentum.
 fn diagonal_h(f: &BasisFunction, z: u8) -> Result<f64> {
-    let entry = vsip(z).ok_or_else(|| {
-        QchemError::invalid(format!("extended Hückel has no VSIP for Z={z}"))
-    })?;
+    let entry = vsip(z)
+        .ok_or_else(|| QchemError::invalid(format!("extended Hückel has no VSIP for Z={z}")))?;
     Ok(if f.l() == 0 { entry.s } else { entry.p })
 }
 
@@ -254,10 +253,7 @@ pub fn run_extended_huckel(geometry: &MolecularGeometry) -> Result<HuckelResult>
     for mu in 0..n {
         h[(mu, mu)] = h_diag[mu];
         for nu in 0..mu {
-            let h_off = WOLFSBERG_HELMHOLZ_K
-                * s[(mu, nu)]
-                * 0.5
-                * (h_diag[mu] + h_diag[nu]);
+            let h_off = WOLFSBERG_HELMHOLZ_K * s[(mu, nu)] * 0.5 * (h_diag[mu] + h_diag[nu]);
             h[(mu, nu)] = h_off;
             h[(nu, mu)] = h_off;
         }
@@ -269,9 +265,7 @@ pub fn run_extended_huckel(geometry: &MolecularGeometry) -> Result<HuckelResult>
 
     let n_valence = valence_electron_count(geometry)? as usize;
     let n_occupied = n_valence / 2;
-    let orbital_energy_sum: f64 = (0..n_occupied.min(eps.len()))
-        .map(|i| 2.0 * eps[i])
-        .sum();
+    let orbital_energy_sum: f64 = (0..n_occupied.min(eps.len())).map(|i| 2.0 * eps[i]).sum();
 
     Ok(HuckelResult {
         orbital_energies: eps,

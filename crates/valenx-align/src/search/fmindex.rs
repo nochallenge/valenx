@@ -753,7 +753,12 @@ mod tests {
             t.push(SENTINEL);
             let mine = sa_is(&t);
             let brute = brute_sa(&t);
-            assert_eq!(mine, brute, "SA-IS mismatch on {:?}", std::str::from_utf8(text));
+            assert_eq!(
+                mine,
+                brute,
+                "SA-IS mismatch on {:?}",
+                std::str::from_utf8(text)
+            );
         }
     }
 
@@ -854,7 +859,12 @@ mod tests {
                     naive.push(start);
                 }
             }
-            assert_eq!(fm.locate(pat), naive, "mismatch for {:?}", std::str::from_utf8(pat));
+            assert_eq!(
+                fm.locate(pat),
+                naive,
+                "mismatch for {:?}",
+                std::str::from_utf8(pat)
+            );
         }
     }
 
@@ -879,7 +889,12 @@ mod tests {
         ] {
             let fm = FmIndex::build(text).unwrap();
             let recovered = fm.inverse_bwt();
-            assert_eq!(recovered, text, "inverse BWT failed on {:?}", std::str::from_utf8(text));
+            assert_eq!(
+                recovered,
+                text,
+                "inverse BWT failed on {:?}",
+                std::str::from_utf8(text)
+            );
         }
     }
 

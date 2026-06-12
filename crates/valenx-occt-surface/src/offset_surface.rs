@@ -245,9 +245,7 @@ mod tests {
         let out = offset_surface(&surf, 0.0).unwrap();
         for i in 0..surf.nu() {
             for j in 0..surf.nv() {
-                assert!(
-                    (out.control_points[i][j] - surf.control_points[i][j]).norm() < 1e-12
-                );
+                assert!((out.control_points[i][j] - surf.control_points[i][j]).norm() < 1e-12);
             }
         }
     }

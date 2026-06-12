@@ -40,11 +40,7 @@ pub fn sample_n<T: Clone>(records: &[T], n: usize, seed: u64) -> Result<Vec<T>> 
 /// This is the `samtools view -s` model: the output size is
 /// *approximately* `fraction * len`, not exact. `fraction` must lie in
 /// `[0, 1]`.
-pub fn sample_fraction<T: Clone>(
-    records: &[T],
-    fraction: f64,
-    seed: u64,
-) -> Result<Vec<T>> {
+pub fn sample_fraction<T: Clone>(records: &[T], fraction: f64, seed: u64) -> Result<Vec<T>> {
     if !(0.0..=1.0).contains(&fraction) {
         return Err(GenomicsError::invalid(
             "fraction",

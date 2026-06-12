@@ -92,11 +92,12 @@ impl RenderError {
         match self {
             RenderError::EmptyScene => ErrorCategory::Input,
             RenderError::BadParameter { .. } => ErrorCategory::Config,
-            RenderError::EngineNotImplemented { .. }
-            | RenderError::ToolNotAvailable { .. } => ErrorCategory::NotImplemented,
-            RenderError::RendererFailed { .. }
-            | RenderError::Io(_)
-            | RenderError::Ron(_) => ErrorCategory::Runtime,
+            RenderError::EngineNotImplemented { .. } | RenderError::ToolNotAvailable { .. } => {
+                ErrorCategory::NotImplemented
+            }
+            RenderError::RendererFailed { .. } | RenderError::Io(_) | RenderError::Ron(_) => {
+                ErrorCategory::Runtime
+            }
         }
     }
 }
@@ -122,10 +123,7 @@ mod tests {
                 tool: "luxcoreui",
                 detail: "exit 1".into(),
             },
-            RenderError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "missing",
-            )),
+            RenderError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "missing")),
             RenderError::Ron("bad syntax".into()),
         ]
     }
@@ -155,8 +153,7 @@ mod tests {
     #[test]
     fn category_classifies_every_variant() {
         // Drives all arms of `category()`.
-        let cats: Vec<ErrorCategory> =
-            one_of_each().iter().map(|e| e.category()).collect();
+        let cats: Vec<ErrorCategory> = one_of_each().iter().map(|e| e.category()).collect();
         assert_eq!(cats[0], ErrorCategory::Input); // EmptyScene
         assert_eq!(cats[1], ErrorCategory::Config); // BadParameter
         assert_eq!(cats[2], ErrorCategory::NotImplemented); // EngineNotImpl

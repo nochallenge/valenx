@@ -225,8 +225,7 @@ mod tests {
 
     #[test]
     fn error_trait_object() {
-        let err: Box<dyn std::error::Error> =
-            Box::new(GeneditingError::invalid("x", "y"));
+        let err: Box<dyn std::error::Error> = Box::new(GeneditingError::invalid("x", "y"));
         assert!(err.to_string().contains('x'));
     }
 }

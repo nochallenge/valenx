@@ -129,12 +129,12 @@ pub mod units;
 // --- Convenience re-exports of the most-used types --------------------
 
 pub use error::{ErrorCategory, MdError, Result};
+pub use forcefield::parameterize::{parameterize, ParameterizeOptions, Parameterized};
+pub use forcefield::typing::{AtomType, Hybridization};
 pub use forcefield::{
     AngleParam, BondParam, CombiningRule, DihedralKind, DihedralParam, ForceField, ImproperParam,
     LjParam,
 };
-pub use forcefield::parameterize::{parameterize, Parameterized, ParameterizeOptions};
-pub use forcefield::typing::{AtomType, Hybridization};
 pub use pbc::SimBox;
 pub use rng::Rng;
 pub use system::{Angle, Atom, Bond, Dihedral, Improper, System, Topology};

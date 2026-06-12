@@ -84,8 +84,12 @@ impl BiostructPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// A minimal 3-residue glycine peptide PDB — enough for the analysis +
@@ -142,13 +146,19 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         ui.selectable_value(&mut p.tool, Tool::Analyze, "Structure analysis")
             .on_hover_text("Detect secondary structure, contacts, clashes, and chains.");
         ui.selectable_value(&mut p.tool, Tool::Ramachandran, "Ramachandran")
-            .on_hover_text("Compute φ/ψ backbone dihedrals and classify into Ramachandran regions.");
+            .on_hover_text(
+                "Compute φ/ψ backbone dihedrals and classify into Ramachandran regions.",
+            );
         ui.selectable_value(&mut p.tool, Tool::Superpose, "RMSD / superpose")
             .on_hover_text("Superpose two structures via Kabsch rotation + report RMSD.");
         ui.separator();
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
     });
     ui.separator();
 
@@ -208,7 +218,12 @@ fn show_in_viewport(app: &mut ValenxApp, spacefill: bool) {
     }
 }
 
-fn structure_text_input(ui: &mut egui::Ui, id: &str, label: &str, buf: &mut String) -> Option<String> {
+fn structure_text_input(
+    ui: &mut egui::Ui,
+    id: &str,
+    label: &str,
+    buf: &mut String,
+) -> Option<String> {
     let mut err = None;
     common::section(ui, label);
     ui.horizontal(|ui| {
@@ -245,13 +260,22 @@ fn structure_text_input(ui: &mut egui::Ui, id: &str, label: &str, buf: &mut Stri
 }
 
 fn draw_single(p: &mut BiostructPanel, ui: &mut egui::Ui) {
-    if let Some(e) = structure_text_input(ui, "biostruct_input_a", "Structure (PDB / mmCIF)", &mut p.structure_a) {
+    if let Some(e) = structure_text_input(
+        ui,
+        "biostruct_input_a",
+        "Structure (PDB / mmCIF)",
+        &mut p.structure_a,
+    ) {
         p.error = Some(e);
     }
     if p.tool == Tool::Analyze {
         ui.horizontal(|ui| {
             ui.label("Clash tolerance (Å):");
-            ui.add(egui::DragValue::new(&mut p.clash_tolerance).speed(0.05).range(0.0..=2.0));
+            ui.add(
+                egui::DragValue::new(&mut p.clash_tolerance)
+                    .speed(0.05)
+                    .range(0.0..=2.0),
+            );
         });
     }
     let label = if p.tool == Tool::Analyze {
@@ -272,82 +296,92 @@ fn run_single(p: &mut BiostructPanel) {
     p.error = None;
     match read_structure(&p.structure_a, "input") {
         Ok(s) => match p.tool {
-                Tool::Analyze => match StructureReport::analyze(&s, p.clash_tolerance) {
-                    Ok(r) => {
-                        let mut out = format!(
-                            "title          : {}\nmodels         : {}\n\
+            Tool::Analyze => match StructureReport::analyze(&s, p.clash_tolerance) {
+                Ok(r) => {
+                    let mut out = format!(
+                        "title          : {}\nmodels         : {}\n\
                              chains         : {}  ({} protein, {} nucleic)\n\
                              residues       : {}\natoms          : {}\n\
                              water / ligand : {} / {}\nradius of gyr. : {:.2} Å\n\
                              mean helix     : {:.1} %\nmean sheet     : {:.1} %\n\n\
                              -- per chain --\n",
-                            r.title,
-                            r.model_count,
-                            r.chains.len(),
-                            r.protein_chain_count(),
-                            r.nucleic_chain_count(),
-                            r.residue_count,
-                            r.atom_count,
-                            r.water_count,
-                            r.ligand_count,
-                            r.radius_of_gyration,
-                            r.mean_helix_fraction() * 100.0,
-                            r.mean_sheet_fraction() * 100.0,
-                        );
-                        for ch in &r.chains {
-                            out.push_str(&format!(
-                                "  {} {:<10} {:>4} res  H {:>4.0}% E {:>4.0}% C {:>4.0}%\n",
-                                ch.id,
-                                format!("{:?}", ch.kind),
-                                ch.residue_count,
-                                ch.secondary.helix * 100.0,
-                                ch.secondary.sheet * 100.0,
-                                ch.secondary.coil * 100.0,
-                            ));
-                        }
-                        p.result = out;
-                    }
-                    Err(e) => p.error = Some(e.to_string()),
-                },
-                Tool::Ramachandran => {
-                    let mut out = String::new();
-                    for chain in &s.first_model().chains {
-                        let summary = rama_summarize(chain);
-                        if summary.total == 0 {
-                            continue;
-                        }
+                        r.title,
+                        r.model_count,
+                        r.chains.len(),
+                        r.protein_chain_count(),
+                        r.nucleic_chain_count(),
+                        r.residue_count,
+                        r.atom_count,
+                        r.water_count,
+                        r.ligand_count,
+                        r.radius_of_gyration,
+                        r.mean_helix_fraction() * 100.0,
+                        r.mean_sheet_fraction() * 100.0,
+                    );
+                    for ch in &r.chains {
                         out.push_str(&format!(
-                            "chain {} — {} phi/psi points\n  alpha-helix : {}\n  \
-                             beta-sheet  : {}\n  left-alpha  : {}\n  bridge      : {}\n  \
-                             outliers    : {}\n  allowed     : {:.1} %\n\n",
-                            chain.id,
-                            summary.total,
-                            summary.alpha,
-                            summary.beta,
-                            summary.left_alpha,
-                            summary.bridge,
-                            summary.outliers,
-                            summary.allowed_fraction() * 100.0,
+                            "  {} {:<10} {:>4} res  H {:>4.0}% E {:>4.0}% C {:>4.0}%\n",
+                            ch.id,
+                            format!("{:?}", ch.kind),
+                            ch.residue_count,
+                            ch.secondary.helix * 100.0,
+                            ch.secondary.sheet * 100.0,
+                            ch.secondary.coil * 100.0,
                         ));
-                    }
-                    if out.is_empty() {
-                        out = "no residues with a defined φ/ψ pair (need ≥ 3 \
-                               consecutive amino acids)"
-                            .to_string();
                     }
                     p.result = out;
                 }
-                Tool::Superpose => unreachable!(),
+                Err(e) => p.error = Some(e.to_string()),
             },
-            Err(e) => p.error = Some(e.to_string()),
-        }
+            Tool::Ramachandran => {
+                let mut out = String::new();
+                for chain in &s.first_model().chains {
+                    let summary = rama_summarize(chain);
+                    if summary.total == 0 {
+                        continue;
+                    }
+                    out.push_str(&format!(
+                        "chain {} — {} phi/psi points\n  alpha-helix : {}\n  \
+                             beta-sheet  : {}\n  left-alpha  : {}\n  bridge      : {}\n  \
+                             outliers    : {}\n  allowed     : {:.1} %\n\n",
+                        chain.id,
+                        summary.total,
+                        summary.alpha,
+                        summary.beta,
+                        summary.left_alpha,
+                        summary.bridge,
+                        summary.outliers,
+                        summary.allowed_fraction() * 100.0,
+                    ));
+                }
+                if out.is_empty() {
+                    out = "no residues with a defined φ/ψ pair (need ≥ 3 \
+                               consecutive amino acids)"
+                        .to_string();
+                }
+                p.result = out;
+            }
+            Tool::Superpose => unreachable!(),
+        },
+        Err(e) => p.error = Some(e.to_string()),
+    }
 }
 
 fn draw_superpose(p: &mut BiostructPanel, ui: &mut egui::Ui) {
-    if let Some(e) = structure_text_input(ui, "biostruct_input_mob", "Mobile structure", &mut p.structure_a) {
+    if let Some(e) = structure_text_input(
+        ui,
+        "biostruct_input_mob",
+        "Mobile structure",
+        &mut p.structure_a,
+    ) {
         p.error = Some(e);
     }
-    if let Some(e) = structure_text_input(ui, "biostruct_input_ref", "Reference structure", &mut p.structure_b) {
+    if let Some(e) = structure_text_input(
+        ui,
+        "biostruct_input_ref",
+        "Reference structure",
+        &mut p.structure_b,
+    ) {
         p.error = Some(e);
     }
     if common::run_button(ui, "Kabsch superpose (Cα)") {

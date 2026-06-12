@@ -84,10 +84,7 @@ pub fn pair_lj_coulomb(a: &Particle, b: &Particle) -> (f64, [f64; 3]) {
 ///
 /// Returns `(energy_hartree, qm_forces, mm_forces)`, each force list
 /// indexed like its input slice.
-pub fn classical_forces(
-    qm: &[Particle],
-    mm: &[Particle],
-) -> (f64, Vec<[f64; 3]>, Vec<[f64; 3]>) {
+pub fn classical_forces(qm: &[Particle], mm: &[Particle]) -> (f64, Vec<[f64; 3]>, Vec<[f64; 3]>) {
     let mut energy = 0.0;
     let mut f_qm = vec![[0.0; 3]; qm.len()];
     let mut f_mm = vec![[0.0; 3]; mm.len()];
@@ -153,19 +150,37 @@ mod tests {
 
     #[test]
     fn newtons_third_law_holds() {
-        let a = Particle { pos_bohr: [0.0, 0.0, 0.0], charge: 0.5, sigma_bohr: 2.0, epsilon_hartree: 0.01 };
-        let b = Particle { pos_bohr: [0.3, 0.7, 1.6], charge: -0.4, sigma_bohr: 2.5, epsilon_hartree: 0.02 };
+        let a = Particle {
+            pos_bohr: [0.0, 0.0, 0.0],
+            charge: 0.5,
+            sigma_bohr: 2.0,
+            epsilon_hartree: 0.01,
+        };
+        let b = Particle {
+            pos_bohr: [0.3, 0.7, 1.6],
+            charge: -0.4,
+            sigma_bohr: 2.5,
+            epsilon_hartree: 0.02,
+        };
         let (_, fa) = pair_lj_coulomb(&a, &b);
         let (_, fb) = pair_lj_coulomb(&b, &a);
         for d in 0..3 {
-            assert!((fa[d] + fb[d]).abs() < 1e-12, "third law dim {d}: {} vs {}", fa[d], fb[d]);
+            assert!(
+                (fa[d] + fb[d]).abs() < 1e-12,
+                "third law dim {d}: {} vs {}",
+                fa[d],
+                fb[d]
+            );
         }
     }
 
     #[test]
     fn classical_forces_excludes_qm_qm_pairs() {
         // Two QM particles, no MM → no classical energy (QM-QM is qchem's).
-        let qm = vec![charge_only([0.0; 3], 1.0), charge_only([0.0, 0.0, 2.0], 1.0)];
+        let qm = vec![
+            charge_only([0.0; 3], 1.0),
+            charge_only([0.0, 0.0, 2.0], 1.0),
+        ];
         let (e, fqm, fmm) = classical_forces(&qm, &[]);
         assert_eq!(e, 0.0);
         assert!(fqm.iter().all(|f| f == &[0.0; 3]));

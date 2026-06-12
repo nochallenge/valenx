@@ -186,12 +186,7 @@ impl TurbulenceState {
 ///
 /// k-ε: `μ_t = ρ·Cμ·k²/ε`. k-ω: `μ_t = ρ·k/ω`. The result is clamped
 /// to a non-negative finite value.
-pub fn eddy_viscosity_value(
-    model: TurbulenceModel,
-    density: f64,
-    k: f64,
-    scale: f64,
-) -> f64 {
+pub fn eddy_viscosity_value(model: TurbulenceModel, density: f64, k: f64, scale: f64) -> f64 {
     let mu = match model {
         TurbulenceModel::Laminar => 0.0,
         TurbulenceModel::KEpsilon => {
@@ -272,8 +267,7 @@ pub fn strain_rate_magnitude(
     let s13 = 0.5 * (dudz + dwdx);
     let s23 = 0.5 * (dvdz + dwdy);
     // S = √(2·Sij·Sij).
-    let sij_sij =
-        s11 * s11 + s22 * s22 + s33 * s33 + 2.0 * (s12 * s12 + s13 * s13 + s23 * s23);
+    let sij_sij = s11 * s11 + s22 * s22 + s33 * s33 + 2.0 * (s12 * s12 + s13 * s13 + s23 * s23);
     (2.0 * sij_sij).sqrt()
 }
 
@@ -352,8 +346,7 @@ pub fn advance_turbulence(
                         let kn = (k_old + dt_relax * dk).max(0.0);
                         let mut sn = s_old + dt_relax * deps;
                         // Wall-function floor on ε near the wall.
-                        let eps_wall = C_MU.powf(0.75) * kn.powf(1.5)
-                            / (0.41 * dwall).max(1e-6);
+                        let eps_wall = C_MU.powf(0.75) * kn.powf(1.5) / (0.41 * dwall).max(1e-6);
                         sn = sn.max(0.1 * eps_wall).max(1e-10);
                         new_k.set(i, j, k, kn);
                         new_scale.set(i, j, k, sn);
@@ -366,15 +359,13 @@ pub fn advance_turbulence(
                         // α ≈ β1/β* − σw1·κ²/√β*  (Menter set 1)
                         let alpha = sst.beta1 / sst.beta_star
                             - sst.sigma_w1 * 0.41 * 0.41 / sst.beta_star.sqrt();
-                        let dw = alpha * s_mag * s_mag
-                            - sst.beta1 * s_old * s_old
+                        let dw = alpha * s_mag * s_mag - sst.beta1 * s_old * s_old
                             + (nu + mu_t / density * sst.sigma_w1) * lap_s;
                         let kn = (k_old + dt_relax * dk).max(0.0);
                         let mut wn = s_old + dt_relax * dw;
                         // Menter's near-wall ω boundary value:
                         // ω_wall = 6ν/(β1·d²).
-                        let omega_wall =
-                            6.0 * nu / (sst.beta1 * dwall * dwall).max(1e-12);
+                        let omega_wall = 6.0 * nu / (sst.beta1 * dwall * dwall).max(1e-12);
                         wn = wn.clamp(1e-6, omega_wall.max(1.0));
                         new_k.set(i, j, k, kn);
                         new_scale.set(i, j, k, wn);
@@ -412,17 +403,12 @@ pub fn advance_turbulence(
                         continue;
                     }
                     // The cell-centred velocity's wall-tangential speed.
-                    let vel = nalgebra::Vector3::new(
-                        uc.at(i, j, k),
-                        vc.at(i, j, k),
-                        wc.at(i, j, k),
-                    );
+                    let vel =
+                        nalgebra::Vector3::new(uc.at(i, j, k), vc.at(i, j, k), wc.at(i, j, k));
                     let v_tan = vel - vel.dot(&cut.normal) * cut.normal;
                     let u_t = v_tan.norm();
                     let y = wall_distance.at(i, j, k).max(1e-6);
-                    let wt = crate::wallmodel::wall_turbulence(
-                        density, u_t, y, nu, mu_lam, c_mu,
-                    );
+                    let wt = crate::wallmodel::wall_turbulence(density, u_t, y, nu, mu_lam, c_mu);
                     new_k.set(i, j, k, wt.k);
                     match state.model {
                         TurbulenceModel::KEpsilon => {
@@ -466,18 +452,13 @@ pub fn advance_turbulence(
                     if !cut.has_wall() {
                         continue;
                     }
-                    let vel = nalgebra::Vector3::new(
-                        uc.at(i, j, k),
-                        vc.at(i, j, k),
-                        wc.at(i, j, k),
-                    );
+                    let vel =
+                        nalgebra::Vector3::new(uc.at(i, j, k), vc.at(i, j, k), wc.at(i, j, k));
                     let v_tan = vel - vel.dot(&cut.normal) * cut.normal;
                     let u_t = v_tan.norm();
                     let y = wall_distance.at(i, j, k).max(1e-6);
-                    wm[idx] = crate::wallmodel::wall_turbulence(
-                        density, u_t, y, nu, mu_lam, C_MU,
-                    )
-                    .mu_t;
+                    wm[idx] =
+                        crate::wallmodel::wall_turbulence(density, u_t, y, nu, mu_lam, C_MU).mu_t;
                 }
             }
         }
@@ -509,16 +490,28 @@ fn laplacian_at(f: &Field3, grid: &Grid3, i: usize, j: usize, k: usize) -> f64 {
     let mut lap = 0.0;
     let term = |a: f64, b: f64, h: f64| (a - 2.0 * b + b) / (h * h) + (b - a) * 0.0;
     let _ = term; // (kept for clarity; explicit form below)
-    // x.
-    let xp = if i + 1 < grid.nx { f.at(i + 1, j, k) } else { c };
+                  // x.
+    let xp = if i + 1 < grid.nx {
+        f.at(i + 1, j, k)
+    } else {
+        c
+    };
     let xm = if i > 0 { f.at(i - 1, j, k) } else { c };
     lap += (xp - 2.0 * c + xm) / (dx * dx);
     // y.
-    let yp = if j + 1 < grid.ny { f.at(i, j + 1, k) } else { c };
+    let yp = if j + 1 < grid.ny {
+        f.at(i, j + 1, k)
+    } else {
+        c
+    };
     let ym = if j > 0 { f.at(i, j - 1, k) } else { c };
     lap += (yp - 2.0 * c + ym) / (dy * dy);
     // z.
-    let zp = if k + 1 < grid.nz { f.at(i, j, k + 1) } else { c };
+    let zp = if k + 1 < grid.nz {
+        f.at(i, j, k + 1)
+    } else {
+        c
+    };
     let zm = if k > 0 { f.at(i, j, k - 1) } else { c };
     lap += (zp - 2.0 * c + zm) / (dz * dz);
     lap
@@ -603,7 +596,10 @@ mod tests {
         let vc = Field3::zeros(8, 8, 8);
         let wc = Field3::zeros(8, 8, 8);
         let s = strain_rate_magnitude(&uc, &vc, &wc, &grid, 4, 4, 4);
-        assert!((s - gamma).abs() < 1e-9, "shear strain rate {s} should be {gamma}");
+        assert!(
+            (s - gamma).abs() < 1e-9,
+            "shear strain rate {s} should be {gamma}"
+        );
     }
 
     #[test]
@@ -619,8 +615,7 @@ mod tests {
         let solid = vec![false; grid.cell_count()];
         for _ in 0..20 {
             advance_turbulence(
-                &mut st, &uc, &vc, &wc, &wd, &solid, &grid, 1.2, 1.8e-5, 1e-3,
-                None,
+                &mut st, &uc, &vc, &wc, &wd, &solid, &grid, 1.2, 1.8e-5, 1e-3, None,
             );
         }
         assert!(st.k.data.iter().all(|&v| v >= 0.0 && v.is_finite()));
@@ -648,8 +643,7 @@ mod tests {
         let solid = vec![false; grid.cell_count()];
         for _ in 0..30 {
             advance_turbulence(
-                &mut st, &uc, &vc, &wc, &wd, &solid, &grid, 1.225, 1.81e-5, 5e-4,
-                None,
+                &mut st, &uc, &vc, &wc, &wd, &solid, &grid, 1.225, 1.81e-5, 5e-4, None,
             );
         }
         assert!(st.k.data.iter().all(|&v| v.is_finite() && v >= 0.0));

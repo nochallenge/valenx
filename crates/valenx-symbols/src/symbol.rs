@@ -318,9 +318,6 @@ mod tests {
     fn families_partition_kinds() {
         assert_eq!(SymbolKind::Resistor.family(), SymbolFamily::Electrical);
         assert_eq!(SymbolKind::HydraulicPump.family(), SymbolFamily::Hydraulic);
-        assert_eq!(
-            SymbolKind::PneumaticValve.family(),
-            SymbolFamily::Pneumatic
-        );
+        assert_eq!(SymbolKind::PneumaticValve.family(), SymbolFamily::Pneumatic);
     }
 }

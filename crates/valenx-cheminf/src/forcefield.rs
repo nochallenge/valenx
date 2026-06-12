@@ -81,8 +81,8 @@ pub fn energy(mol: &Molecule) -> Energy {
                 continue;
             }
             let r = dist(mol, i, j).max(0.1);
-            let sigma = vdw_sigma(mol.atoms[i].atomic_number)
-                + vdw_sigma(mol.atoms[j].atomic_number);
+            let sigma =
+                vdw_sigma(mol.atoms[i].atomic_number) + vdw_sigma(mol.atoms[j].atomic_number);
             let sr6 = (sigma / r).powi(6);
             e.vdw += VDW_EPS * (sr6 * sr6 - 2.0 * sr6);
         }
@@ -316,12 +316,10 @@ fn ideal_angle(mol: &Molecule, center: usize) -> f64 {
         .bonds_on(center)
         .iter()
         .any(|&b| mol.bonds[b].order == BondOrder::Triple);
-    let multiple = mol.bonds_on(center).iter().any(|&b| {
-        matches!(
-            mol.bonds[b].order,
-            BondOrder::Double | BondOrder::Aromatic
-        )
-    });
+    let multiple = mol
+        .bonds_on(center)
+        .iter()
+        .any(|&b| matches!(mol.bonds[b].order, BondOrder::Double | BondOrder::Aromatic));
     if triple {
         std::f64::consts::PI
     } else if multiple || a.aromatic {
@@ -373,7 +371,10 @@ mod tests {
         let before = energy(&m).total();
         clean_up_geometry(&mut m, 150);
         let after = energy(&m).total();
-        assert!(after <= before, "cleanup must not raise energy: {before} -> {after}");
+        assert!(
+            after <= before,
+            "cleanup must not raise energy: {before} -> {after}"
+        );
     }
 
     #[test]

@@ -86,8 +86,7 @@ impl SysbioReport {
     /// `true` if every headline analysis succeeded (steady state
     /// converged and, when requested, FBA was feasible).
     pub fn fully_resolved(&self) -> bool {
-        self.steady_state.is_some()
-            && self.fba.as_ref().map(|f| f.feasible).unwrap_or(true)
+        self.steady_state.is_some() && self.fba.as_ref().map(|f| f.feasible).unwrap_or(true)
     }
 }
 
@@ -348,9 +347,7 @@ mod tests {
 
     #[test]
     fn sbml_round_trip_preserves_events_and_rules() {
-        use crate::model::events::{
-            AssignmentRule, EventAssignment, RateRule, SbmlEvent, VarRef,
-        };
+        use crate::model::events::{AssignmentRule, EventAssignment, RateRule, SbmlEvent, VarRef};
         use crate::model::expr::Expr;
         let mut m = Model::new("evt_rules");
         let _a = m.add_species(Species::new("A", 0.0));

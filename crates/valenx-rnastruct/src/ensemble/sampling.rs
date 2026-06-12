@@ -85,8 +85,16 @@ fn fill_inside(codes: &[u8], temperature_k: f64) -> InsideTables {
                             continue;
                         }
                         let il = energy::internal_loop_energy(
-                            codes[i], codes[j], codes[k], codes[l], left, right,
-                            codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                            codes[i],
+                            codes[j],
+                            codes[k],
+                            codes[l],
+                            left,
+                            right,
+                            codes[i + 1],
+                            codes[j - 1],
+                            codes[k - 1],
+                            codes[l + 1],
                         );
                         qbij += boltz(il) * inner;
                     }
@@ -228,9 +236,7 @@ fn traceback_q(
     for k in i..=j {
         if energy::can_pair_codes(codes[k], codes[j]) && t.qb[t.at(k, j)] > 0.0 {
             let left = if k > i { t.q[t.at(i, k - 1)] } else { 1.0 };
-            let w = left
-                * t.qb[t.at(k, j)]
-                * boltz(energy::terminal_penalty(codes[k], codes[j]));
+            let w = left * t.qb[t.at(k, j)] * boltz(energy::terminal_penalty(codes[k], codes[j]));
             cum += w;
             if r < cum + 1e-12 {
                 // base j pairs k; recurse on the left exterior and the
@@ -289,8 +295,16 @@ fn traceback_qb(
                 continue;
             }
             let il = energy::internal_loop_energy(
-                codes[i], codes[j], codes[k], codes[l], left, right,
-                codes[i + 1], codes[j - 1], codes[k - 1], codes[l + 1],
+                codes[i],
+                codes[j],
+                codes[k],
+                codes[l],
+                left,
+                right,
+                codes[i + 1],
+                codes[j - 1],
+                codes[k - 1],
+                codes[l + 1],
             );
             cum += boltz(il) * inner;
             if r < cum {

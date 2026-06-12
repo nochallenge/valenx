@@ -206,8 +206,14 @@ mod tests {
         // Non-tautological thread: the table feed reconstructs from f_z (v_f = f_z·n·z).
         assert!((fz * 10000.0 * 4.0 - 800.0).abs() < 1e-9, "v_f = f_z·n·z");
         // Inversely proportional to flute count and to rpm.
-        assert!((feed_per_tooth(800.0, 10000.0, 2.0) - 2.0 * fz).abs() < 1e-12, "∝ 1/z");
-        assert!((feed_per_tooth(800.0, 5000.0, 4.0) - 2.0 * fz).abs() < 1e-12, "∝ 1/n");
+        assert!(
+            (feed_per_tooth(800.0, 10000.0, 2.0) - 2.0 * fz).abs() < 1e-12,
+            "∝ 1/z"
+        );
+        assert!(
+            (feed_per_tooth(800.0, 5000.0, 4.0) - 2.0 * fz).abs() < 1e-12,
+            "∝ 1/n"
+        );
         // Non-physical input → 0.
         assert_eq!(feed_per_tooth(800.0, 0.0, 4.0), 0.0);
         assert_eq!(feed_per_tooth(800.0, 10000.0, 0.0), 0.0);
@@ -220,9 +226,18 @@ mod tests {
         let mrr = material_removal_rate(2.0, 10.0, 300.0);
         assert!((mrr - 6000.0).abs() < 1e-9, "MRR = a_p·a_e·v_f, got {mrr}");
         // Linear in each independent input.
-        assert!((material_removal_rate(4.0, 10.0, 300.0) - 2.0 * mrr).abs() < 1e-9, "∝ a_p");
-        assert!((material_removal_rate(2.0, 20.0, 300.0) - 2.0 * mrr).abs() < 1e-9, "∝ a_e");
-        assert!((material_removal_rate(2.0, 10.0, 600.0) - 2.0 * mrr).abs() < 1e-9, "∝ v_f");
+        assert!(
+            (material_removal_rate(4.0, 10.0, 300.0) - 2.0 * mrr).abs() < 1e-9,
+            "∝ a_p"
+        );
+        assert!(
+            (material_removal_rate(2.0, 20.0, 300.0) - 2.0 * mrr).abs() < 1e-9,
+            "∝ a_e"
+        );
+        assert!(
+            (material_removal_rate(2.0, 10.0, 600.0) - 2.0 * mrr).abs() < 1e-9,
+            "∝ v_f"
+        );
         // Non-tautological thread: MRR / v_f = a_p·a_e (the cut cross-section).
         assert!((mrr / 300.0 - 2.0 * 10.0).abs() < 1e-9, "MRR/v_f = a_p·a_e");
         // Non-physical input → 0.
@@ -237,8 +252,14 @@ mod tests {
         let ra = surface_roughness_theoretical(0.2, 0.8);
         assert!((ra - 0.0015625).abs() < 1e-9, "Ra = f²/(32·r), got {ra}");
         // ∝ feed² (half the feed → quarter the roughness); ∝ 1/nose_radius.
-        assert!((surface_roughness_theoretical(0.1, 0.8) - ra / 4.0).abs() < 1e-9, "∝ f²");
-        assert!((surface_roughness_theoretical(0.2, 1.6) - ra / 2.0).abs() < 1e-9, "∝ 1/r");
+        assert!(
+            (surface_roughness_theoretical(0.1, 0.8) - ra / 4.0).abs() < 1e-9,
+            "∝ f²"
+        );
+        assert!(
+            (surface_roughness_theoretical(0.2, 1.6) - ra / 2.0).abs() < 1e-9,
+            "∝ 1/r"
+        );
         // Non-physical input → 0.
         assert_eq!(surface_roughness_theoretical(-0.1, 0.8), 0.0);
         assert_eq!(surface_roughness_theoretical(0.2, 0.0), 0.0);

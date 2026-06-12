@@ -160,12 +160,7 @@ pub(crate) fn torsion_forces(
     b1: Vector3<f64>,
     b2: Vector3<f64>,
     b3: Vector3<f64>,
-) -> (
-    Vector3<f64>,
-    Vector3<f64>,
-    Vector3<f64>,
-    Vector3<f64>,
-) {
+) -> (Vector3<f64>, Vector3<f64>, Vector3<f64>, Vector3<f64>) {
     let n1 = b1.cross(&b2);
     let n2 = b2.cross(&b3);
     let n1sq = n1.norm_squared().max(1e-24);

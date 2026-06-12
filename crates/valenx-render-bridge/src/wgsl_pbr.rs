@@ -397,8 +397,18 @@ impl PbrMaterialUniform {
     /// occlusion multiplier, `1.0` for none).
     pub fn from_material(m: &Material, ao: f32) -> PbrMaterialUniform {
         PbrMaterialUniform {
-            base_color: [m.diffuse_color[0], m.diffuse_color[1], m.diffuse_color[2], 1.0],
-            spec_emiss: [m.specular_color[0], m.specular_color[1], m.specular_color[2], 0.0],
+            base_color: [
+                m.diffuse_color[0],
+                m.diffuse_color[1],
+                m.diffuse_color[2],
+                1.0,
+            ],
+            spec_emiss: [
+                m.specular_color[0],
+                m.specular_color[1],
+                m.specular_color[2],
+                0.0,
+            ],
             emissive: [m.emissive[0], m.emissive[1], m.emissive[2], 0.0],
             params: [
                 m.roughness.clamp(0.0, 1.0),
@@ -536,8 +546,14 @@ mod tests {
     /// points the render pass references.
     #[test]
     fn wgsl_source_declares_both_entry_points() {
-        assert!(PBR_FORWARD_WGSL.contains("fn vs_main"), "missing vertex entry");
-        assert!(PBR_FORWARD_WGSL.contains("fn fs_main"), "missing fragment entry");
+        assert!(
+            PBR_FORWARD_WGSL.contains("fn vs_main"),
+            "missing vertex entry"
+        );
+        assert!(
+            PBR_FORWARD_WGSL.contains("fn fs_main"),
+            "missing fragment entry"
+        );
         // The four bind-group entries the host must supply.
         assert!(PBR_FORWARD_WGSL.contains("@group(0) @binding(0)"));
         assert!(PBR_FORWARD_WGSL.contains("@group(0) @binding(3)"));
@@ -694,9 +710,19 @@ mod tests {
             )
         });
         // Sanity: the parsed module exposes both entry points.
-        let entries: Vec<&str> = module.entry_points.iter().map(|e| e.name.as_str()).collect();
-        assert!(entries.contains(&"vs_main"), "no vs_main entry: {entries:?}");
-        assert!(entries.contains(&"fs_main"), "no fs_main entry: {entries:?}");
+        let entries: Vec<&str> = module
+            .entry_points
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect();
+        assert!(
+            entries.contains(&"vs_main"),
+            "no vs_main entry: {entries:?}"
+        );
+        assert!(
+            entries.contains(&"fs_main"),
+            "no fs_main entry: {entries:?}"
+        );
     }
 
     /// `PBR_FORWARD_WGSL` passes the `naga` semantic validator — types,

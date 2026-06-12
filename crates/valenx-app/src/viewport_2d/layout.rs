@@ -90,18 +90,18 @@ pub fn feature_arc_span(feature_len: usize, seq_len: usize) -> f32 {
 /// ApE conventions so molecular biologists feel at home.
 pub fn feature_rgb(feature_type: &str) -> (u8, u8, u8) {
     match feature_type.to_lowercase().as_str() {
-        "cds" | "gene" => (52, 120, 246),              // blue — coding sequences
-        "promoter" => (46, 186, 64),                   // green
-        "terminator" => (220, 70, 70),                 // red
-        "rep_origin" | "origin" => (220, 140, 20),     // amber
-        "primer_bind" => (240, 200, 0),                // yellow
+        "cds" | "gene" => (52, 120, 246), // blue — coding sequences
+        "promoter" => (46, 186, 64),      // green
+        "terminator" => (220, 70, 70),    // red
+        "rep_origin" | "origin" => (220, 140, 20), // amber
+        "primer_bind" => (240, 200, 0),   // yellow
         "misc_feature" | "misc_rna" => (160, 120, 220), // lavender
-        "regulatory" => (0, 180, 180),                 // teal
-        "ltr" => (200, 100, 50),                       // burnt orange
-        "rrna" | "trna" | "ncrna" => (100, 200, 200),  // cyan
-        "intron" => (140, 140, 140),                   // grey
-        "exon" => (80, 160, 80),                       // forest green
-        _ => (130, 130, 130),                          // default grey
+        "regulatory" => (0, 180, 180),    // teal
+        "ltr" => (200, 100, 50),          // burnt orange
+        "rrna" | "trna" | "ncrna" => (100, 200, 200), // cyan
+        "intron" => (140, 140, 140),      // grey
+        "exon" => (80, 160, 80),          // forest green
+        _ => (130, 130, 130),             // default grey
     }
 }
 
@@ -163,7 +163,10 @@ mod tests {
         let bp = 300.0;
         let x = bp_to_x(bp, pan, bpp, track_left);
         let back = x_to_bp(x, pan, bpp, track_left);
-        assert!((back - bp).abs() < 1e-4, "round-trip: got {back}, expected {bp}");
+        assert!(
+            (back - bp).abs() < 1e-4,
+            "round-trip: got {back}, expected {bp}"
+        );
     }
 
     #[test]
@@ -209,7 +212,11 @@ mod tests {
         let a_full = bp_to_angle(1000, 1000);
         let a_zero = bp_to_angle(0, 1000);
         // Should differ by exactly TAU
-        assert!((a_full - a_zero - TAU).abs() < 1e-4, "got diff {}", a_full - a_zero);
+        assert!(
+            (a_full - a_zero - TAU).abs() < 1e-4,
+            "got diff {}",
+            a_full - a_zero
+        );
     }
 
     #[test]
@@ -238,7 +245,10 @@ mod tests {
     #[test]
     fn feature_rgb_promoter_is_green_dominant() {
         let (r, g, b) = feature_rgb("promoter");
-        assert!(g > r && g > b, "promoter should be green-dominant: {r},{g},{b}");
+        assert!(
+            g > r && g > b,
+            "promoter should be green-dominant: {r},{g},{b}"
+        );
     }
 
     #[test]

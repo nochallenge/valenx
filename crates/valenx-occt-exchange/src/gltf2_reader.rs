@@ -29,9 +29,9 @@
 
 use std::path::Path;
 
+use serde_json::Value;
 use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
-use serde_json::Value;
 
 use crate::error::OcctExchangeError;
 
@@ -140,8 +140,7 @@ fn parse_gltf(text: &str) -> Result<Mesh, OcctExchangeError> {
                 read_accessor_vec3(&accessors, &buffer_views, &buffers, pos_idx as usize)?;
             let base = mesh.nodes.len() as u32;
             for p in &positions {
-                mesh.nodes
-                    .push(nalgebra::Vector3::new(p[0], p[1], p[2]));
+                mesh.nodes.push(nalgebra::Vector3::new(p[0], p[1], p[2]));
             }
 
             // Index buffer (optional — absent means sequential draw).
@@ -200,15 +199,17 @@ fn decode_buffers(root: &Value) -> Result<Vec<Vec<u8>>, OcctExchangeError> {
                 "buffer has no `uri` (.glb binary chunks not yet supported)",
             )
         })?;
-        let comma = uri.find(',').filter(|_| uri.starts_with("data:")).ok_or_else(|| {
-            OcctExchangeError::parse(
-                format!("gltf buffer {i}"),
-                "buffer uri is not a base64 data URI (external .bin not yet supported)",
-            )
-        })?;
-        let decoded = base64_decode(&uri[comma + 1..]).map_err(|e| {
-            OcctExchangeError::parse(format!("gltf buffer {i}"), e)
-        })?;
+        let comma = uri
+            .find(',')
+            .filter(|_| uri.starts_with("data:"))
+            .ok_or_else(|| {
+                OcctExchangeError::parse(
+                    format!("gltf buffer {i}"),
+                    "buffer uri is not a base64 data URI (external .bin not yet supported)",
+                )
+            })?;
+        let decoded = base64_decode(&uri[comma + 1..])
+            .map_err(|e| OcctExchangeError::parse(format!("gltf buffer {i}"), e))?;
         out.push(decoded);
     }
     Ok(out)
@@ -241,9 +242,7 @@ fn accessor_bytes<'a>(
     if count > MAX_GLTF_ACCESSOR_COUNT as u64 {
         return Err(OcctExchangeError::parse(
             "gltf accessor",
-            format!(
-                "accessor count {count} exceeds the {MAX_GLTF_ACCESSOR_COUNT}-element cap"
-            ),
+            format!("accessor count {count} exceeds the {MAX_GLTF_ACCESSOR_COUNT}-element cap"),
         ));
     }
     let type_str = acc
@@ -254,13 +253,15 @@ fn accessor_bytes<'a>(
     let bv_idx = acc
         .get("bufferView")
         .and_then(Value::as_u64)
-        .ok_or_else(|| {
-            OcctExchangeError::parse("gltf accessor", "accessor without bufferView")
-        })? as usize;
+        .ok_or_else(|| OcctExchangeError::parse("gltf accessor", "accessor without bufferView"))?
+        as usize;
     let acc_offset = acc.get("byteOffset").and_then(Value::as_u64).unwrap_or(0);
 
     let bv = buffer_views.get(bv_idx).ok_or_else(|| {
-        OcctExchangeError::parse("gltf bufferView", format!("bufferView {bv_idx} out of range"))
+        OcctExchangeError::parse(
+            "gltf bufferView",
+            format!("bufferView {bv_idx} out of range"),
+        )
     })?;
     let buf_idx = bv
         .get("buffer")
@@ -390,12 +391,8 @@ fn read_component(bytes: &[u8], component_type: u64) -> Result<f64, OcctExchange
         5121 => bytes[0] as f64,
         5122 => i16::from_le_bytes([bytes[0], bytes[1]]) as f64,
         5123 => u16::from_le_bytes([bytes[0], bytes[1]]) as f64,
-        5125 => {
-            u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as f64
-        }
-        5126 => {
-            f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as f64
-        }
+        5125 => u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as f64,
+        5126 => f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as f64,
         other => {
             return Err(OcctExchangeError::parse(
                 "gltf accessor",
@@ -486,8 +483,7 @@ mod tests {
 
     /// Minimal base64 encoder, only for the round-trip test.
     fn encode_for_test(input: &[u8]) -> String {
-        const A: &[u8] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let mut out = String::new();
         for chunk in input.chunks(3) {
             let b0 = chunk[0];
@@ -537,8 +533,7 @@ mod tests {
         });
         src.recompute_stats();
 
-        let tmp = std::env::temp_dir()
-            .join(format!("valenx_gltf_rt_{}.gltf", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("valenx_gltf_rt_{}.gltf", std::process::id()));
         gltf2_writer(&src, &tmp).expect("write gltf");
         let back = gltf2_reader(&tmp).expect("read gltf");
         let _ = std::fs::remove_file(&tmp);
@@ -580,8 +575,7 @@ mod tests {
         assert_eq!(err.code(), "occt_exchange.parse");
         let msg = format!("{err}");
         assert!(
-            msg.contains("exceeds")
-                && msg.contains(&MAX_GLTF_ACCESSOR_COUNT.to_string()),
+            msg.contains("exceeds") && msg.contains(&MAX_GLTF_ACCESSOR_COUNT.to_string()),
             "msg: {msg}"
         );
 

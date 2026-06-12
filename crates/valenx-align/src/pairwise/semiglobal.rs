@@ -250,13 +250,7 @@ fn semi_global_capped(
 /// excludes it. (A strict `>` starting from `s[n][m]` would instead
 /// pin the start at the far corner and swallow the free region into the
 /// span.)
-fn find_end(
-    s: &[i32],
-    w: usize,
-    n: usize,
-    m: usize,
-    policy: EndGapPolicy,
-) -> (usize, usize, i32) {
+fn find_end(s: &[i32], w: usize, n: usize, m: usize, policy: EndGapPolicy) -> (usize, usize, i32) {
     let mut best = s[n * w + m];
     let mut bi = n;
     let mut bj = m;
@@ -293,7 +287,10 @@ mod tests {
     use crate::matrix::{GapCost, ScoringScheme, SubstitutionMatrix};
 
     fn dna(open: i32, ext: i32) -> ScoringScheme {
-        ScoringScheme::new(SubstitutionMatrix::dna_simple(1, -1), GapCost::new(open, ext))
+        ScoringScheme::new(
+            SubstitutionMatrix::dna_simple(1, -1),
+            GapCost::new(open, ext),
+        )
     }
 
     #[test]
@@ -315,7 +312,7 @@ mod tests {
         let s = dna(0, 2);
         let al = semi_global(a, b, &s, EndGapPolicy::fit()).unwrap();
         assert_eq!(al.score, 8); // query placed perfectly
-        // The query span inside the reference.
+                                 // The query span inside the reference.
         assert_eq!(al.span1, (5, 13));
     }
 
@@ -341,14 +338,17 @@ mod tests {
     fn semiglobal_over_cap_errors() {
         use crate::error::AlignError;
         let s = dna(0, 1);
-        let err =
-            semi_global_capped(b"ACGT", b"ACGTACGTACGT", &s, EndGapPolicy::overlap(), 8)
-                .unwrap_err();
+        let err = semi_global_capped(b"ACGT", b"ACGTACGTACGT", &s, EndGapPolicy::overlap(), 8)
+            .unwrap_err();
         assert!(matches!(err, AlignError::TooLarge { .. }), "got {err:?}");
-        assert!(
-            semi_global_capped(b"ACGT", b"ACGTACGTACGT", &s, EndGapPolicy::overlap(), usize::MAX)
-                .is_ok()
-        );
+        assert!(semi_global_capped(
+            b"ACGT",
+            b"ACGTACGTACGT",
+            &s,
+            EndGapPolicy::overlap(),
+            usize::MAX
+        )
+        .is_ok());
     }
 
     #[test]

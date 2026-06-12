@@ -132,8 +132,7 @@ pub fn pipe_shell(
         let resampled = resample_closed_polygon(&local3, PIPE_SHELL_RING);
         // The resampled ring is still in the (u, v, 0) local frame:
         // drop the (numerically zero) third coordinate.
-        let ring2: Vec<(f64, f64)> =
-            resampled.iter().map(|q| (q[0], q[1])).collect();
+        let ring2: Vec<(f64, f64)> = resampled.iter().map(|q| (q[0], q[1])).collect();
         profile_rings.push(ring2);
     }
     // Profile stations: evenly spaced in normalised arc length.
@@ -424,8 +423,7 @@ mod tests {
         // small → big → small. The middle of the spine must be the
         // widest part.
         let profiles = [square(0.0, 0.5), square(0.0, 3.0), square(0.0, 0.5)];
-        let spine: Vec<[f64; 3]> =
-            (0..=8).map(|k| [0.0, 0.0, k as f64]).collect();
+        let spine: Vec<[f64; 3]> = (0..=8).map(|k| [0.0, 0.0, k as f64]).collect();
         let solid = pipe_shell(&profiles, &spine, None).unwrap();
         let mesh = solid_to_mesh(&solid, 0.1).unwrap();
         let extent_at = |zlo: f64, zhi: f64| -> f64 {

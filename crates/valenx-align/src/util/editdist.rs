@@ -26,9 +26,7 @@ pub fn levenshtein(a: &[u8], b: &[u8]) -> usize {
         cur[0] = i + 1;
         for (j, &ca) in a.iter().enumerate() {
             let cost = usize::from(!ca.eq_ignore_ascii_case(&cb));
-            cur[j + 1] = (prev[j] + cost)
-                .min(prev[j + 1] + 1)
-                .min(cur[j] + 1);
+            cur[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(cur[j] + 1);
         }
         std::mem::swap(&mut prev, &mut cur);
     }

@@ -24,12 +24,7 @@ pub fn bond_angle(a: &Point3<f64>, b: &Point3<f64>, c: &Point3<f64>) -> Option<f
 
 /// Dihedral (torsion) angle of the four atoms `a–b–c–d`, in degrees,
 /// in `(-180, 180]`. Returns `None` for a degenerate geometry.
-pub fn dihedral(
-    a: &Point3<f64>,
-    b: &Point3<f64>,
-    c: &Point3<f64>,
-    d: &Point3<f64>,
-) -> Option<f64> {
+pub fn dihedral(a: &Point3<f64>, b: &Point3<f64>, c: &Point3<f64>, d: &Point3<f64>) -> Option<f64> {
     let b1 = b - a;
     let b2 = c - b;
     let b3 = d - c;

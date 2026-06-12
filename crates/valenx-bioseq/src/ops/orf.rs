@@ -78,11 +78,7 @@ impl Default for OrfOptions {
 ///
 /// Returns ORFs sorted by descending protein length (longest first).
 /// Returns [`BioseqError::Invalid`] for a protein input.
-pub fn find_orfs(
-    seq: &Seq,
-    code: &GeneticCode,
-    opts: OrfOptions,
-) -> Result<Vec<Orf>> {
+pub fn find_orfs(seq: &Seq, code: &GeneticCode, opts: OrfOptions) -> Result<Vec<Orf>> {
     if seq.kind() == SeqKind::Protein {
         return Err(BioseqError::invalid(
             "kind",
@@ -261,7 +257,10 @@ mod tests {
         // "ATGAAATAA" is "TTATTTCAT"; embed that on the forward strand.
         let dna = Seq::new(SeqKind::Dna, "GGGTTATTTCATGGG").unwrap();
         let orfs = find_orfs(&dna, &code, opts(1)).unwrap();
-        let rev: Vec<&Orf> = orfs.iter().filter(|o| o.strand == Strand::Reverse).collect();
+        let rev: Vec<&Orf> = orfs
+            .iter()
+            .filter(|o| o.strand == Strand::Reverse)
+            .collect();
         assert!(!rev.is_empty(), "expected a reverse-strand ORF");
         let o = rev[0];
         assert_eq!(o.protein.as_str(), "MK*");
@@ -274,7 +273,7 @@ mod tests {
     fn min_length_filters() {
         let code = GeneticCode::standard();
         let dna = Seq::new(SeqKind::Dna, "ATGAAATAA").unwrap(); // protein MK*
-        // protein_len = 2; require 5 -> filtered out.
+                                                                // protein_len = 2; require 5 -> filtered out.
         assert!(find_orfs(&dna, &code, opts(5)).unwrap().is_empty());
         assert_eq!(find_orfs(&dna, &code, opts(2)).unwrap().len(), 1);
     }

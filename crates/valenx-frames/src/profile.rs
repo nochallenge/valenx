@@ -197,14 +197,7 @@ pub fn cross_section_polygon(p: Profile) -> Vec<[f64; 2]> {
             // leg width `b`; origin at the lower-left corner of the
             // bounding box, then re-centred on the leg-thickness
             // intersection.
-            vec![
-                [0.0, 0.0],
-                [b, 0.0],
-                [b, t],
-                [t, t],
-                [t, h],
-                [0.0, h],
-            ]
+            vec![[0.0, 0.0], [b, 0.0], [b, t], [t, t], [t, h], [0.0, h]]
         }
         Profile::RhsRect { h, b, t } => {
             // Outer rectangle CCW. The hollow interior is not yet
@@ -281,14 +274,26 @@ mod tests {
     fn cross_section_area_exact_per_variant() {
         // I-beam {200,100,5.6,8.5}: 2·100·8.5 + 5.6·(200−17) = 2724.8.
         assert!(
-            (Profile::IBeam { h: 200.0, b: 100.0, tw: 5.6, tf: 8.5 }.cross_section_area_mm2()
+            (Profile::IBeam {
+                h: 200.0,
+                b: 100.0,
+                tw: 5.6,
+                tf: 8.5
+            }
+            .cross_section_area_mm2()
                 - 2724.8)
                 .abs()
                 < 1e-9
         );
         // RHS rect {100,50,5}: 50·100 − 40·90 = 1400.
         assert!(
-            (Profile::RhsRect { h: 100.0, b: 50.0, t: 5.0 }.cross_section_area_mm2() - 1400.0)
+            (Profile::RhsRect {
+                h: 100.0,
+                b: 50.0,
+                t: 5.0
+            }
+            .cross_section_area_mm2()
+                - 1400.0)
                 .abs()
                 < 1e-9
         );
@@ -301,18 +306,36 @@ mod tests {
         );
         // L-angle {100,80,5}: 5·100 + 5·75 = 875. T-beam {200,100,8,12}: 1200 + 1504 = 2704.
         assert!(
-            (Profile::LAngle { h: 100.0, b: 80.0, t: 5.0 }.cross_section_area_mm2() - 875.0).abs()
+            (Profile::LAngle {
+                h: 100.0,
+                b: 80.0,
+                t: 5.0
+            }
+            .cross_section_area_mm2()
+                - 875.0)
+                .abs()
                 < 1e-9
         );
         assert!(
-            (Profile::TBeam { h: 200.0, b: 100.0, tw: 8.0, tf: 12.0 }.cross_section_area_mm2()
+            (Profile::TBeam {
+                h: 200.0,
+                b: 100.0,
+                tw: 8.0,
+                tf: 12.0
+            }
+            .cross_section_area_mm2()
                 - 2704.0)
                 .abs()
                 < 1e-9
         );
         // An over-thick wall collapses to a solid section (no spurious negative hole).
         assert_eq!(
-            Profile::RhsRect { h: 100.0, b: 100.0, t: 60.0 }.cross_section_area_mm2(),
+            Profile::RhsRect {
+                h: 100.0,
+                b: 100.0,
+                t: 60.0
+            }
+            .cross_section_area_mm2(),
             10000.0
         );
     }
@@ -321,25 +344,49 @@ mod tests {
     fn cross_section_perimeter_exact_per_variant() {
         // I-beam {200,100,5.6,8.5}: 2·(2·100+200−5.6) = 788.8 (tf cancels).
         assert!(
-            (Profile::IBeam { h: 200.0, b: 100.0, tw: 5.6, tf: 8.5 }.cross_section_perimeter_mm()
+            (Profile::IBeam {
+                h: 200.0,
+                b: 100.0,
+                tw: 5.6,
+                tf: 8.5
+            }
+            .cross_section_perimeter_mm()
                 - 788.8)
                 .abs()
                 < 1e-9
         );
         // C-channel {200,100,5.6}: 2·(2·100+200−5.6) = 788.8.
         assert!(
-            (Profile::CChannel { h: 200.0, b: 100.0, tw: 5.6 }.cross_section_perimeter_mm() - 788.8)
+            (Profile::CChannel {
+                h: 200.0,
+                b: 100.0,
+                tw: 5.6
+            }
+            .cross_section_perimeter_mm()
+                - 788.8)
                 .abs()
                 < 1e-9
         );
         // L-angle {100,80,5}: 2·(80+100) = 360; RHS rect {100,50,5}: 2·(50+100) = 300.
         assert!(
-            (Profile::LAngle { h: 100.0, b: 80.0, t: 5.0 }.cross_section_perimeter_mm() - 360.0)
+            (Profile::LAngle {
+                h: 100.0,
+                b: 80.0,
+                t: 5.0
+            }
+            .cross_section_perimeter_mm()
+                - 360.0)
                 .abs()
                 < 1e-9
         );
         assert!(
-            (Profile::RhsRect { h: 100.0, b: 50.0, t: 5.0 }.cross_section_perimeter_mm() - 300.0)
+            (Profile::RhsRect {
+                h: 100.0,
+                b: 50.0,
+                t: 5.0
+            }
+            .cross_section_perimeter_mm()
+                - 300.0)
                 .abs()
                 < 1e-9
         );
@@ -352,7 +399,13 @@ mod tests {
         );
         // T-beam {200,100,8,12}: 2·(100+200) = 600.
         assert!(
-            (Profile::TBeam { h: 200.0, b: 100.0, tw: 8.0, tf: 12.0 }.cross_section_perimeter_mm()
+            (Profile::TBeam {
+                h: 200.0,
+                b: 100.0,
+                tw: 8.0,
+                tf: 12.0
+            }
+            .cross_section_perimeter_mm()
                 - 600.0)
                 .abs()
                 < 1e-9

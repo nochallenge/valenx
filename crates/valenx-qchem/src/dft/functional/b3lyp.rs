@@ -95,10 +95,8 @@ pub fn b88_exchange(rho: f64, grad_norm: f64) -> XcContribution {
     //   ∂g/∂x (fixed ρ_σ) = −β ρ_σ^{4/3} · [2x D − x² dD/dx]/D².
     //   ∂g/∂ρ_σ (fixed x) = −(4/3) β ρ_σ^{1/3} x²/D.
     let dd_dx = 6.0 * B88_BETA * (ash + x / (x * x + 1.0).sqrt());
-    let dg_dx = -B88_BETA * rs43 * (2.0 * x * denom - x2 * dd_dx)
-        / (denom * denom);
-    let dg_drhos =
-        -(4.0 / 3.0) * B88_BETA * rho_s.cbrt() * x2 / denom;
+    let dg_dx = -B88_BETA * rs43 * (2.0 * x * denom - x2 * dd_dx) / (denom * denom);
+    let dg_drhos = -(4.0 / 3.0) * B88_BETA * rho_s.cbrt() * x2 / denom;
 
     // ∂g/∂ρ = ∂g/∂ρ_σ · (∂ρ_σ/∂ρ) + ∂g/∂x · (∂x/∂ρ).
     //   ∂ρ_σ/∂ρ = 1/2.
@@ -157,8 +155,7 @@ fn lyp_energy_density(rho: f64, sigma: f64) -> f64 {
     if rho <= 1.0e-30 {
         return 0.0;
     }
-    let cf = 0.3 * (3.0 * std::f64::consts::PI * std::f64::consts::PI)
-        .powf(2.0 / 3.0);
+    let cf = 0.3 * (3.0 * std::f64::consts::PI * std::f64::consts::PI).powf(2.0 / 3.0);
     let rho_m13 = rho.powf(-1.0 / 3.0);
     let den = 1.0 + LYP_D * rho_m13;
 
@@ -185,14 +182,10 @@ fn lyp_energy_density(rho: f64, sigma: f64) -> f64 {
     let term_first = -LYP_A * rho / den;
 
     // The Thomas-Fermi-like kinetic bracket.
-    let tf = 2.0_f64.powf(11.0 / 3.0)
-        * cf
-        * (rho_a.powf(8.0 / 3.0) + rho_b.powf(8.0 / 3.0));
+    let tf = 2.0_f64.powf(11.0 / 3.0) * cf * (rho_a.powf(8.0 / 3.0) + rho_b.powf(8.0 / 3.0));
     let g_total = (47.0 / 18.0 - 7.0 * delta / 18.0) * grad2;
     let g_spin = -(5.0 / 2.0 - delta / 18.0) * (grad2_a + grad2_b);
-    let g_mix = -(delta - 11.0) / 9.0
-        * (rho_a * grad2_a + rho_b * grad2_b)
-        / rho;
+    let g_mix = -(delta - 11.0) / 9.0 * (rho_a * grad2_a + rho_b * grad2_b) / rho;
     let bracket_ab = rho_a * rho_b * (tf + g_total + g_spin + g_mix);
 
     let extra = -(2.0 / 3.0) * rho * rho * grad2
@@ -225,15 +218,13 @@ pub fn lyp_correlation(rho: f64, grad_norm: f64) -> XcContribution {
     // exact to ~1e-9 and is itself verified by the FD test against an
     // independent step).
     let hr = rho * 1.0e-7 + 1.0e-12;
-    let de_drho = (lyp_energy_density(rho + hr, sigma)
-        - lyp_energy_density(rho - hr, sigma))
-        / (2.0 * hr);
+    let de_drho =
+        (lyp_energy_density(rho + hr, sigma) - lyp_energy_density(rho - hr, sigma)) / (2.0 * hr);
 
     // ∂e_c/∂|∇ρ| = ∂e_c/∂σ · 2|∇ρ|.
     let de_dgrad = if grad_norm > 1.0e-30 {
         let hs = sigma * 1.0e-7 + 1.0e-14;
-        let de_dsigma = (lyp_energy_density(rho, sigma + hs)
-            - lyp_energy_density(rho, sigma - hs))
+        let de_dsigma = (lyp_energy_density(rho, sigma + hs) - lyp_energy_density(rho, sigma - hs))
             / (2.0 * hs);
         de_dsigma * 2.0 * grad_norm
     } else {
@@ -309,10 +300,7 @@ mod tests {
             let fm = (rho - h) * b88_exchange(rho - h, grad).energy_density;
             let fd = (fp - fm) / (2.0 * h);
             let v = b88_exchange(rho, grad).potential;
-            assert!(
-                (v - fd).abs() < 1.0e-5,
-                "ρ={rho}: v={v} vs FD={fd}"
-            );
+            assert!((v - fd).abs() < 1.0e-5, "ρ={rho}: v={v} vs FD={fd}");
         }
     }
 
@@ -327,10 +315,7 @@ mod tests {
             let fm = rho * b88_exchange(rho, grad - h).energy_density;
             let fd = (fp - fm) / (2.0 * h);
             let v = b88_exchange(rho, grad).gradient_potential;
-            assert!(
-                (v - fd).abs() < 1.0e-5,
-                "grad={grad}: v={v} vs FD={fd}"
-            );
+            assert!((v - fd).abs() < 1.0e-5, "grad={grad}: v={v} vs FD={fd}");
         }
     }
 
@@ -359,10 +344,7 @@ mod tests {
             let fm = (rho - h) * lyp_correlation(rho - h, grad).energy_density;
             let fd = (fp - fm) / (2.0 * h);
             let v = lyp_correlation(rho, grad).potential;
-            assert!(
-                (v - fd).abs() < 1.0e-4,
-                "ρ={rho}: v={v} vs FD={fd}"
-            );
+            assert!((v - fd).abs() < 1.0e-4, "ρ={rho}: v={v} vs FD={fd}");
         }
     }
 
@@ -377,10 +359,7 @@ mod tests {
             let fm = rho * lyp_correlation(rho, grad - h).energy_density;
             let fd = (fp - fm) / (2.0 * h);
             let v = lyp_correlation(rho, grad).gradient_potential;
-            assert!(
-                (v - fd).abs() < 1.0e-4,
-                "grad={grad}: v={v} vs FD={fd}"
-            );
+            assert!((v - fd).abs() < 1.0e-4, "grad={grad}: v={v} vs FD={fd}");
         }
     }
 

@@ -194,14 +194,21 @@ impl ReactiveEngine {
             });
         }
 
-        let params: Vec<MorseParam> = sys.elements.iter().map(|e| morse_param(e.symbol())).collect();
-        let masses: Vec<f64> = sys.elements.iter().map(|e| amu_to_au_mass(e.atomic_mass())).collect();
+        let params: Vec<MorseParam> = sys
+            .elements
+            .iter()
+            .map(|e| morse_param(e.symbol()))
+            .collect();
+        let masses: Vec<f64> = sys
+            .elements
+            .iter()
+            .map(|e| amu_to_au_mass(e.atomic_mass()))
+            .collect();
         let dt = fs_to_au(controls.dt_fs);
 
         let mut pos = sys.pos_bohr.clone();
-        let force_fn = |p: &[[f64; 3]]| -> Result<Vec<[f64; 3]>> {
-            Ok(reactive_energy_forces(p, &params).1)
-        };
+        let force_fn =
+            |p: &[[f64; 3]]| -> Result<Vec<[f64; 3]>> { Ok(reactive_energy_forces(p, &params).1) };
         let mut vel = init_velocities(&masses, controls.thermostat);
         let mut forces = force_fn(&pos)?;
 
@@ -224,7 +231,11 @@ impl ReactiveEngine {
 
         for step in 0..controls.n_steps {
             forces = velocity_verlet_step(&mut pos, &mut vel, &forces, &masses, dt, force_fn)?;
-            if let Thermostat::Berendsen { target_kelvin, tau_fs } = controls.thermostat {
+            if let Thermostat::Berendsen {
+                target_kelvin,
+                tau_fs,
+            } = controls.thermostat
+            {
                 berendsen_rescale(&mut vel, &masses, target_kelvin, controls.dt_fs, tau_fs);
             }
             let (pe, _) = reactive_energy_forces(&pos, &params);
@@ -274,11 +285,19 @@ mod tests {
         let re = morse_param("C").r_e;
         // Stretched (within cutoff) → attractive: atom 0 pulled +z toward atom 1.
         let (_, f) = reactive_energy_forces(&[[0.0; 3], [0.0, 0.0, re + 0.5]], &cc());
-        assert!(f[0][2] > 0.0, "stretched: atom 0 should be pulled +z, got {}", f[0][2]);
+        assert!(
+            f[0][2] > 0.0,
+            "stretched: atom 0 should be pulled +z, got {}",
+            f[0][2]
+        );
         assert!((f[0][2] + f[1][2]).abs() < 1e-12, "Newton's third law");
         // Compressed → repulsive: atom 0 pushed -z.
         let (_, fc) = reactive_energy_forces(&[[0.0; 3], [0.0, 0.0, re - 0.5]], &cc());
-        assert!(fc[0][2] < 0.0, "compressed: atom 0 should be pushed -z, got {}", fc[0][2]);
+        assert!(
+            fc[0][2] < 0.0,
+            "compressed: atom 0 should be pushed -z, got {}",
+            fc[0][2]
+        );
     }
 
     #[test]
@@ -299,7 +318,9 @@ mod tests {
             thermostat: Thermostat::Nve,
             max_cost_guard: 100_000,
         };
-        let traj = ReactiveEngine.run(&sys, &controls, &mut |_| {}).expect("reactive run");
+        let traj = ReactiveEngine
+            .run(&sys, &controls, &mut |_| {})
+            .expect("reactive run");
         assert_eq!(traj.frames.len(), 31);
         assert_eq!(traj.system.n_atoms(), 4);
         let e0 = traj.frames[0].total_hartree();

@@ -373,10 +373,7 @@ mod tests {
     #[test]
     fn detects_are_pentamer() {
         let a = analyze_utr3(b"GGGGAUUUAGGGG").unwrap();
-        assert!(a
-            .destabilizers
-            .iter()
-            .any(|d| d.kind.contains("pentamer")));
+        assert!(a.destabilizers.iter().any(|d| d.kind.contains("pentamer")));
         assert!(!a.is_clean());
     }
 

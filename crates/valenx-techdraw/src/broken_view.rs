@@ -118,10 +118,7 @@ pub struct BrokenEdges {
 /// The returned [`BrokenEdges::break_symbols`] are zigzag polylines
 /// drawn at each break's *collapsed* center, sized by the orthogonal
 /// bbox of the input.
-pub fn apply_breaks(
-    edges: &[[(f64, f64); 2]],
-    regions: &[BreakRegion],
-) -> BrokenEdges {
+pub fn apply_breaks(edges: &[[(f64, f64); 2]], regions: &[BreakRegion]) -> BrokenEdges {
     if regions.is_empty() {
         return BrokenEdges {
             edges: edges.to_vec(),
@@ -166,7 +163,7 @@ pub fn apply_breaks(
             &mut break_symbols,
             (xmin, y_at),
             (xmax, y_at),
-            6, // 6 teeth across the width — looks good at typical scales
+            6,   // 6 teeth across the width — looks good at typical scales
             1.5, // amplitude (mm)
             true,
         );
@@ -486,11 +483,7 @@ mod tests {
         let out = apply_breaks(&edges, &regions);
         // Two fragments, total length = 30 + (100 - 80) = 50.
         assert_eq!(out.edges.len(), 2);
-        let span: f64 = out
-            .edges
-            .iter()
-            .map(|s| (s[1].0 - s[0].0).abs())
-            .sum();
+        let span: f64 = out.edges.iter().map(|s| (s[1].0 - s[0].0).abs()).sum();
         assert!((span - 50.0).abs() < 1e-6, "post-break length got {span}");
         // Should emit zigzag break symbols.
         assert!(!out.break_symbols.is_empty());
@@ -507,11 +500,7 @@ mod tests {
         ];
         let out = apply_breaks(&edges, &regions);
         // Three fragments, total length = 20 + 30 + 30 = 80.
-        let span: f64 = out
-            .edges
-            .iter()
-            .map(|s| (s[1].0 - s[0].0).abs())
-            .sum();
+        let span: f64 = out.edges.iter().map(|s| (s[1].0 - s[0].0).abs()).sum();
         assert!((span - 80.0).abs() < 1e-6, "total post-break got {span}");
         assert_eq!(out.break_symbols.len() / 12, 2, "two zigzag breaks");
     }
@@ -543,11 +532,7 @@ mod tests {
         let edges = vec![[(5.0, 0.0), (5.0, 100.0)]];
         let regions = vec![BreakRegion::new(BreakAxis::Horizontal, 30.0, 80.0)];
         let out = apply_breaks(&edges, &regions);
-        let span: f64 = out
-            .edges
-            .iter()
-            .map(|s| (s[1].1 - s[0].1).abs())
-            .sum();
+        let span: f64 = out.edges.iter().map(|s| (s[1].1 - s[0].1).abs()).sum();
         assert!((span - 50.0).abs() < 1e-6);
     }
 
@@ -597,7 +582,10 @@ mod tests {
         v.generate(&long_box).unwrap();
         let (min_b, max_b) = v.bbox().unwrap();
         let orig_w = max_b[0] - min_b[0];
-        assert!((orig_w - 100.0).abs() < 1.0, "front-view width pre-break {orig_w}");
+        assert!(
+            (orig_w - 100.0).abs() < 1.0,
+            "front-view width pre-break {orig_w}"
+        );
         // Apply one vertical break of width 50 in the middle.
         let regions = vec![BreakRegion::new(BreakAxis::Vertical, 25.0, 75.0)];
         let out = apply_breaks(&v.visible_edges, &regions);
@@ -607,7 +595,10 @@ mod tests {
             post_w < orig_w * 0.6,
             "post-break width should be roughly half, got {post_w}"
         );
-        assert!(!out.break_symbols.is_empty(), "should emit zigzag break symbol");
+        assert!(
+            !out.break_symbols.is_empty(),
+            "should emit zigzag break symbol"
+        );
     }
 
     /// Dimension crossing the break + true_value: label format is

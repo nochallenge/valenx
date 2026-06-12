@@ -67,10 +67,7 @@ pub fn feat_make_draft(
     }
     let dir_len = (direction[0].powi(2) + direction[1].powi(2) + direction[2].powi(2)).sqrt();
     if dir_len < f64::EPSILON {
-        return Err(OcctSurfaceError::bad_input(
-            "direction",
-            "must be non-zero",
-        ));
+        return Err(OcctSurfaceError::bad_input("direction", "must be non-zero"));
     }
     if !angle_rad.is_finite() || angle_rad.abs() < f64::EPSILON {
         return Err(OcctSurfaceError::bad_input(
@@ -94,13 +91,7 @@ pub fn feat_make_draft(
 
 /// Shear every vertex on the release side of the neutral plane
 /// radially outward by `tan(angle) · h`.
-fn apply_draft(
-    mesh: &mut Mesh,
-    direction: [f64; 3],
-    dir_len: f64,
-    angle_rad: f64,
-    neutral_z: f64,
-) {
+fn apply_draft(mesh: &mut Mesh, direction: [f64; 3], dir_len: f64, angle_rad: f64, neutral_z: f64) {
     // Unit release direction.
     let d = [
         direction[0] / dir_len,
@@ -144,11 +135,7 @@ fn apply_draft(
         if perp_len < 1e-12 {
             continue; // on the release axis — nothing to taper
         }
-        let outward = [
-            perp[0] / perp_len,
-            perp[1] / perp_len,
-            perp[2] / perp_len,
-        ];
+        let outward = [perp[0] / perp_len, perp[1] / perp_len, perp[2] / perp_len];
         let shift = tan_a * h;
         n.x += outward[0] * shift;
         n.y += outward[1] * shift;

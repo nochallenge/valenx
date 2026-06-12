@@ -63,23 +63,17 @@ fn validate_grid(
 ) -> Result<(usize, usize), NativeSolverError> {
     if nx == 0 || ny == 0 || nz == 0 {
         return Err(NativeSolverError::InvalidParams {
-            reason: format!(
-                "subdivisions must be positive (got nx={nx}, ny={ny}, nz={nz})"
-            ),
+            reason: format!("subdivisions must be positive (got nx={nx}, ny={ny}, nz={nz})"),
         });
     }
     if !(lx.is_finite() && ly.is_finite() && lz.is_finite()) {
         return Err(NativeSolverError::InvalidParams {
-            reason: format!(
-                "box dimensions must be finite (got lx={lx}, ly={ly}, lz={lz})"
-            ),
+            reason: format!("box dimensions must be finite (got lx={lx}, ly={ly}, lz={lz})"),
         });
     }
     if !(lx > 0.0 && ly > 0.0 && lz > 0.0) {
         return Err(NativeSolverError::InvalidParams {
-            reason: format!(
-                "box dimensions must be positive (got lx={lx}, ly={ly}, lz={lz})"
-            ),
+            reason: format!("box dimensions must be positive (got lx={lx}, ly={ly}, lz={lz})"),
         });
     }
     let nx1 = nx
@@ -115,13 +109,11 @@ fn validate_grid(
     // Check the connectivity capacity (cell_count * entries_per_cell)
     // for overflow too. Pre-fix `Vec::with_capacity(nx*ny*nz*8)` would
     // wrap on 32-bit targets / huge dims and back-fill with bogus data.
-    let _conn_capacity = cell_count
-        .checked_mul(entries_per_cell)
-        .ok_or_else(|| NativeSolverError::InvalidParams {
-            reason: format!(
-                "connectivity capacity nx*ny*nz*{entries_per_cell} overflowed usize"
-            ),
-        })?;
+    let _conn_capacity = cell_count.checked_mul(entries_per_cell).ok_or_else(|| {
+        NativeSolverError::InvalidParams {
+            reason: format!("connectivity capacity nx*ny*nz*{entries_per_cell} overflowed usize"),
+        }
+    })?;
     if node_count > MAX_NODES {
         return Err(NativeSolverError::InvalidParams {
             reason: format!(
@@ -455,8 +447,7 @@ mod tests {
 
     #[test]
     fn structured_tet10_mesh_rejects_zero_subdivisions() {
-        let err =
-            structured_tet10_mesh(1.0, 1.0, 1.0, 1, 0, 1).expect_err("ny=0 must be rejected");
+        let err = structured_tet10_mesh(1.0, 1.0, 1.0, 1, 0, 1).expect_err("ny=0 must be rejected");
         let msg = format!("{err}");
         assert!(msg.contains("positive"), "msg: {msg}");
     }

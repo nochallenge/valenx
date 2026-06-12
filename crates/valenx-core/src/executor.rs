@@ -598,10 +598,7 @@ mod tests {
                 native_command: vec![
                     std::ffi::OsString::from("/bin/sh"),
                     std::ffi::OsString::from("-c"),
-                    std::ffi::OsString::from(format!(
-                        "sleep 5 && touch '{}'",
-                        marker.display()
-                    )),
+                    std::ffi::OsString::from(format!("sleep 5 && touch '{}'", marker.display())),
                 ],
                 environment: vec![],
                 estimated_runtime: None,
@@ -706,7 +703,9 @@ mod tests {
         // submit() touches both locks; if either panics the test
         // thread panics here. Post-fix both .lock() calls use
         // unwrap_or_else(into_inner) so the call completes.
-        let handle = exec.submit(&job).expect("submit must succeed despite poison");
+        let handle = exec
+            .submit(&job)
+            .expect("submit must succeed despite poison");
         // poll() also touches the children lock — same check.
         let _ = exec.poll(&handle); // status doesn't matter; we're checking it doesn't panic
         let _ = std::fs::remove_dir_all(&tmp);

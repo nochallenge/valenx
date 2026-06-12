@@ -78,8 +78,7 @@ pub fn derive_restraints(
         ));
     }
     // Map template residue index → its Cα coordinate.
-    let tmpl_ca: Vec<Option<Point3<f64>>> =
-        template_model.residues.iter().map(|r| r.ca).collect();
+    let tmpl_ca: Vec<Option<Point3<f64>>> = template_model.residues.iter().map(|r| r.ca).collect();
     // The equivalence map gives (target_index, template_index).
     let eqs = &alignment.equivalences;
     let mut restraints = Vec::new();
@@ -87,8 +86,7 @@ pub fn derive_restraints(
         for b in (a + 1)..eqs.len() {
             let (ti_a, pi_a) = eqs[a];
             let (ti_b, pi_b) = eqs[b];
-            let (Some(Some(ca_a)), Some(Some(ca_b))) =
-                (tmpl_ca.get(pi_a), tmpl_ca.get(pi_b))
+            let (Some(Some(ca_a)), Some(Some(ca_b))) = (tmpl_ca.get(pi_a), tmpl_ca.get(pi_b))
             else {
                 continue;
             };

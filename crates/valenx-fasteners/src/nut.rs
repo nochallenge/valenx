@@ -66,7 +66,10 @@ pub fn to_solid(spec: &NutSpec) -> Result<Solid, FastenerError> {
     if spec.thickness_mm <= 0.0 || spec.width_across_flats_mm <= 0.0 {
         return Err(FastenerError::BadParameter {
             name: "thickness|waf",
-            reason: format!("must be > 0, got t={} waf={}", spec.thickness_mm, spec.width_across_flats_mm),
+            reason: format!(
+                "must be > 0, got t={} waf={}",
+                spec.thickness_mm, spec.width_across_flats_mm
+            ),
         });
     }
     let mut mesh = Mesh::new(format!("nut_{}", spec.nominal));
@@ -82,24 +85,39 @@ pub fn to_solid(spec: &NutSpec) -> Result<Solid, FastenerError> {
     // Outer hex top + bottom rings.
     let outer_top = mesh.nodes.len() as u32;
     for i in 0..n_outer {
-        let theta = (i as f64 / n_outer as f64) * std::f64::consts::TAU + std::f64::consts::FRAC_PI_6;
-        mesh.nodes.push(Vector3::new(r_outer * theta.cos(), r_outer * theta.sin(), h));
+        let theta =
+            (i as f64 / n_outer as f64) * std::f64::consts::TAU + std::f64::consts::FRAC_PI_6;
+        mesh.nodes.push(Vector3::new(
+            r_outer * theta.cos(),
+            r_outer * theta.sin(),
+            h,
+        ));
     }
     let outer_bot = mesh.nodes.len() as u32;
     for i in 0..n_outer {
-        let theta = (i as f64 / n_outer as f64) * std::f64::consts::TAU + std::f64::consts::FRAC_PI_6;
-        mesh.nodes.push(Vector3::new(r_outer * theta.cos(), r_outer * theta.sin(), 0.0));
+        let theta =
+            (i as f64 / n_outer as f64) * std::f64::consts::TAU + std::f64::consts::FRAC_PI_6;
+        mesh.nodes.push(Vector3::new(
+            r_outer * theta.cos(),
+            r_outer * theta.sin(),
+            0.0,
+        ));
     }
     // Inner bore top + bottom rings.
     let bore_top = mesh.nodes.len() as u32;
     for i in 0..n_bore {
         let theta = (i as f64 / n_bore as f64) * std::f64::consts::TAU;
-        mesh.nodes.push(Vector3::new(r_bore * theta.cos(), r_bore * theta.sin(), h));
+        mesh.nodes
+            .push(Vector3::new(r_bore * theta.cos(), r_bore * theta.sin(), h));
     }
     let bore_bot = mesh.nodes.len() as u32;
     for i in 0..n_bore {
         let theta = (i as f64 / n_bore as f64) * std::f64::consts::TAU;
-        mesh.nodes.push(Vector3::new(r_bore * theta.cos(), r_bore * theta.sin(), 0.0));
+        mesh.nodes.push(Vector3::new(
+            r_bore * theta.cos(),
+            r_bore * theta.sin(),
+            0.0,
+        ));
     }
     // Outer hex side walls.
     for i in 0..n_outer {

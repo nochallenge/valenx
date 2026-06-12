@@ -9,11 +9,7 @@ use crate::mesh::Mesh;
 /// `loop1` and `loop2` are vertex-id rings of the same length. The
 /// stitched quads use the order of `loop1[i] -> loop1[i+1] ->
 /// loop2[i+1] -> loop2[i]`.
-pub fn edge_loops(
-    mesh: &Mesh,
-    loop1: &[usize],
-    loop2: &[usize],
-) -> Result<Mesh, BlenderOpError> {
+pub fn edge_loops(mesh: &Mesh, loop1: &[usize], loop2: &[usize]) -> Result<Mesh, BlenderOpError> {
     if loop1.len() != loop2.len() {
         return Err(BlenderOpError::Topology(format!(
             "loops differ in length ({} vs {})",

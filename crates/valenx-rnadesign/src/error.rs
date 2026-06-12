@@ -295,17 +295,26 @@ mod tests {
         let rs: RnaDesignError = valenx_rnastruct::RnaStructError::sequence("bad").into();
         assert!(matches!(
             rs,
-            RnaDesignError::Upstream { crate_name: "valenx-rnastruct", .. }
+            RnaDesignError::Upstream {
+                crate_name: "valenx-rnastruct",
+                ..
+            }
         ));
         let ge: RnaDesignError = valenx_genediting::GeneditingError::invalid("x", "y").into();
         assert!(matches!(
             ge,
-            RnaDesignError::Upstream { crate_name: "valenx-genediting", .. }
+            RnaDesignError::Upstream {
+                crate_name: "valenx-genediting",
+                ..
+            }
         ));
         let bs: RnaDesignError = valenx_bioseq::BioseqError::invalid("x", "y").into();
         assert!(matches!(
             bs,
-            RnaDesignError::Upstream { crate_name: "valenx-bioseq", .. }
+            RnaDesignError::Upstream {
+                crate_name: "valenx-bioseq",
+                ..
+            }
         ));
     }
 

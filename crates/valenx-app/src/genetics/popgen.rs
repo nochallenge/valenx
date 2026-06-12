@@ -127,8 +127,12 @@ impl PopgenPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 /// Compute + format the summary stats for a genotype matrix.
@@ -190,8 +194,12 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
     common::section(ui, "Engine");
     ui.horizontal(|ui| {
-        ui.radio_value(&mut p.engine, Engine::WrightFisher, "Wright-Fisher (forward)")
-            .on_hover_text("Forward-time simulator — Wright-Fisher with mutation + recombination.");
+        ui.radio_value(
+            &mut p.engine,
+            Engine::WrightFisher,
+            "Wright-Fisher (forward)",
+        )
+        .on_hover_text("Forward-time simulator — Wright-Fisher with mutation + recombination.");
         ui.radio_value(&mut p.engine, Engine::Coalescent, "Coalescent (backward)")
             .on_hover_text("Backward-time simulator — Kingman coalescent (Hudson-style).");
     });
@@ -221,8 +229,9 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 ui.add(egui::DragValue::new(&mut p.generations).range(1..=5000))
                     .on_hover_text("Generations of Wright-Fisher iteration.");
                 ui.end_row();
-                ui.label("Mutation rate")
-                    .on_hover_text("Per-site, per-generation mutation rate μ (dimensionless 0..=1).");
+                ui.label("Mutation rate").on_hover_text(
+                    "Per-site, per-generation mutation rate μ (dimensionless 0..=1).",
+                );
                 ui.add(
                     egui::DragValue::new(&mut p.mutation_rate)
                         .speed(1.0e-4)
@@ -239,8 +248,9 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 )
                 .on_hover_text("Per-pair-of-sites r.");
                 ui.end_row();
-                ui.label("Segment length")
-                    .on_hover_text("Genome segment length in base pairs (used to scale recombination).");
+                ui.label("Segment length").on_hover_text(
+                    "Genome segment length in base pairs (used to scale recombination).",
+                );
                 ui.add(egui::DragValue::new(&mut p.seq_length).range(1.0..=1.0e7))
                     .on_hover_text("Segment length (bp).");
                 ui.end_row();
@@ -261,9 +271,17 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
     ui.horizontal(|ui| {
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
-        ui.label(egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run").weak().small());
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
+        ui.label(
+            egui::RichText::new("Ctrl+Z / Ctrl+Y reverses last Run")
+                .weak()
+                .small(),
+        );
     });
 
     common::error_line(ui, &p.error);
@@ -327,8 +345,7 @@ fn run_engine(p: &mut PopgenPanel) {
             }
         }
         Engine::Coalescent => {
-            let labels: Vec<String> =
-                (0..p.pop_size).map(|i| format!("n{i}")).collect();
+            let labels: Vec<String> = (0..p.pop_size).map(|i| format!("n{i}")).collect();
             // A constant-size diploid history (Ne = N).
             let hist = PopHistory::Constant(p.pop_size as f64);
             match coalescent(&labels, &hist, p.seed) {

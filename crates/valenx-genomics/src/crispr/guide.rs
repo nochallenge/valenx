@@ -111,11 +111,7 @@ pub fn iupac_match(code: u8, base: u8) -> bool {
 
 /// `true` when `window` matches the IUPAC `motif` base-for-base.
 fn motif_matches(motif: &[u8], window: &[u8]) -> bool {
-    motif.len() == window.len()
-        && motif
-            .iter()
-            .zip(window)
-            .all(|(&c, &b)| iupac_match(c, b))
+    motif.len() == window.len() && motif.iter().zip(window).all(|(&c, &b)| iupac_match(c, b))
 }
 
 /// Strand a candidate guide was found on.
@@ -431,8 +427,7 @@ mod tests {
     #[test]
     fn guides_sorted_by_score() {
         // A target with several PAM sites.
-        let target =
-            "ACGTACGTACGTACGTACGTAGGACGTACGTACGTACGTACGTCGGACGTACGTACGTACGTACGTTGG";
+        let target = "ACGTACGTACGTACGTACGTAGGACGTACGTACGTACGTACGTCGGACGTACGTACGTACGTACGTTGG";
         let guides = scan_guides(target.as_bytes(), &PamSpec::spcas9()).unwrap();
         for w in guides.windows(2) {
             assert!(w[0].on_target_score >= w[1].on_target_score);

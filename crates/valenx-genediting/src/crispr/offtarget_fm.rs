@@ -123,7 +123,9 @@ pub struct GenomeIndex {
 impl GenomeIndex {
     /// An empty index. Add contigs with [`Self::add_contig`].
     pub fn new() -> Self {
-        GenomeIndex { contigs: Vec::new() }
+        GenomeIndex {
+            contigs: Vec::new(),
+        }
     }
 
     /// Builds the index from a list of named contigs in one shot.
@@ -467,11 +469,7 @@ fn mismatches(guide: &[u8], proto: &[u8]) -> (usize, Vec<usize>) {
 
 /// `true` when `window` matches IUPAC `motif` base-for-base.
 fn motif_matches(motif: &[u8], window: &[u8]) -> bool {
-    motif.len() == window.len()
-        && motif
-            .iter()
-            .zip(window)
-            .all(|(&c, &b)| iupac_match(c, b))
+    motif.len() == window.len() && motif.iter().zip(window).all(|(&c, &b)| iupac_match(c, b))
 }
 
 /// A compact summary of an FM-index-backed off-target scan: where the
@@ -590,13 +588,8 @@ mod tests {
         chrom[820..823].copy_from_slice(b"CGG");
 
         let genome = GenomeIndex::build(&[("chr1".to_string(), chrom)]).unwrap();
-        let hits = find_off_targets_genome(
-            b"ACGTACGTACGTACGTACGT",
-            &genome,
-            &pam_spcas9(),
-            3,
-        )
-        .unwrap();
+        let hits =
+            find_off_targets_genome(b"ACGTACGTACGTACGTACGT", &genome, &pam_spcas9(), 3).unwrap();
         assert!(hits.iter().any(|h| h.start == 200 && h.mismatches == 0));
         assert!(hits.iter().any(|h| h.start == 500 && h.mismatches == 1));
         assert!(hits.iter().any(|h| h.start == 800 && h.mismatches == 3));
@@ -683,13 +676,8 @@ mod tests {
         chrom[200..220].copy_from_slice(b"ACGTACGTACGTACGTACGT");
         chrom[220..223].copy_from_slice(b"AGG");
         let genome = GenomeIndex::build(&[("chr1".to_string(), chrom)]).unwrap();
-        let hits = find_off_targets_genome(
-            b"ACGTACGTACGTACGTACGT",
-            &genome,
-            &pam_spcas9(),
-            3,
-        )
-        .unwrap();
+        let hits =
+            find_off_targets_genome(b"ACGTACGTACGTACGTACGT", &genome, &pam_spcas9(), 3).unwrap();
         let n_at_200 = hits.iter().filter(|h| h.start == 200 && !h.reverse).count();
         assert_eq!(n_at_200, 1, "expected exactly one perfect hit");
     }
@@ -703,13 +691,7 @@ mod tests {
         chrom[500..520].copy_from_slice(b"ACGTACGTACGTACGTACGC"); // 1mm
         chrom[520..523].copy_from_slice(b"TGG");
         let genome = GenomeIndex::build(&[("chr1".to_string(), chrom)]).unwrap();
-        let report = off_target_report(
-            b"ACGTACGTACGTACGTACGT",
-            &genome,
-            &pam_spcas9(),
-            3,
-        )
-        .unwrap();
+        let report = off_target_report(b"ACGTACGTACGTACGTACGT", &genome, &pam_spcas9(), 3).unwrap();
         assert_eq!(report.perfect_hits, 1);
         assert!(report.off_target_count >= 1);
         assert!(report.specificity > 0.0 && report.specificity < 1.0);
@@ -759,16 +741,15 @@ mod tests {
     #[test]
     fn empty_genome_returns_no_hits() {
         let g = GenomeIndex::new();
-        let hits =
-            find_off_targets_genome(b"ACGTACGTACGTACGTACGT", &g, &pam_spcas9(), 3).unwrap();
+        let hits = find_off_targets_genome(b"ACGTACGTACGTACGTACGT", &g, &pam_spcas9(), 3).unwrap();
         assert!(hits.is_empty());
     }
 
     #[test]
     fn rejects_non_acgt_guide() {
         let g = GenomeIndex::build(&[("chr1".to_string(), b"ACGT".repeat(50))]).unwrap();
-        let err = find_off_targets_genome(b"ACGTACGTNNNNNNNNACGT", &g, &pam_spcas9(), 3)
-            .unwrap_err();
+        let err =
+            find_off_targets_genome(b"ACGTACGTNNNNNNNNACGT", &g, &pam_spcas9(), 3).unwrap_err();
         assert_eq!(err.code(), "genediting.invalid_target");
     }
 

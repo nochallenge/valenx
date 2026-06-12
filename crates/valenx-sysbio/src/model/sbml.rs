@@ -77,13 +77,10 @@ pub fn read_sbml(xml: &str) -> Result<(Model, SbmlReadReport)> {
                 }
             }
             "compartment" => {
-                let id = t.attr("id").ok_or_else(|| {
-                    SysbioError::parse("sbml", "<compartment> without id")
-                })?;
-                let size = t
-                    .attr("size")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(1.0);
+                let id = t
+                    .attr("id")
+                    .ok_or_else(|| SysbioError::parse("sbml", "<compartment> without id"))?;
+                let size = t.attr("size").and_then(|v| v.parse().ok()).unwrap_or(1.0);
                 model.compartments.push(Compartment {
                     id: id.to_string(),
                     size,
@@ -109,8 +106,8 @@ pub fn read_sbml(xml: &str) -> Result<(Model, SbmlReadReport)> {
                 .or_else(|| t.attr("initialConcentration"))
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0.0);
-            let constant = t.attr("constant") == Some("true")
-                || t.attr("boundaryCondition") == Some("true");
+            let constant =
+                t.attr("constant") == Some("true") || t.attr("boundaryCondition") == Some("true");
             model.species.push(Species {
                 id: id.to_string(),
                 compartment: comp,
@@ -127,10 +124,7 @@ pub fn read_sbml(xml: &str) -> Result<(Model, SbmlReadReport)> {
             let id = t
                 .attr("id")
                 .ok_or_else(|| SysbioError::parse("sbml", "<parameter> without id"))?;
-            let value = t
-                .attr("value")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(0.0);
+            let value = t.attr("value").and_then(|v| v.parse().ok()).unwrap_or(0.0);
             model.parameters.push(Parameter {
                 id: id.to_string(),
                 value,
@@ -146,7 +140,10 @@ pub fn read_sbml(xml: &str) -> Result<(Model, SbmlReadReport)> {
             .iter()
             .position(|s| s.id == sid)
             .ok_or_else(|| {
-                SysbioError::parse("sbml", format!("reaction references unknown species `{sid}`"))
+                SysbioError::parse(
+                    "sbml",
+                    format!("reaction references unknown species `{sid}`"),
+                )
             })
     };
     let mut current: Option<Reaction> = None;
@@ -309,12 +306,12 @@ pub fn read_sbml(xml: &str) -> Result<(Model, SbmlReadReport)> {
                 });
             }
             "rateRule" => {
-                let target = t.attr("sbml:target").ok_or_else(|| {
-                    SysbioError::parse("sbml", "<rateRule> missing sbml:target")
-                })?;
-                let formula_str = t.attr("sbml:expr").ok_or_else(|| {
-                    SysbioError::parse("sbml", "<rateRule> missing sbml:expr")
-                })?;
+                let target = t
+                    .attr("sbml:target")
+                    .ok_or_else(|| SysbioError::parse("sbml", "<rateRule> missing sbml:target"))?;
+                let formula_str = t
+                    .attr("sbml:expr")
+                    .ok_or_else(|| SysbioError::parse("sbml", "<rateRule> missing sbml:expr"))?;
                 let target_ref = resolve_var(target)?;
                 let formula = Expr::parse(formula_str).ok_or_else(|| {
                     SysbioError::parse(
@@ -556,11 +553,7 @@ fn target_label(model: &Model, vref: &VarRef) -> String {
 }
 
 fn emit_species_ref(out: &mut String, model: &Model, idx: usize, coeff: f64) {
-    let id = model
-        .species
-        .get(idx)
-        .map(|s| s.id.as_str())
-        .unwrap_or("?");
+    let id = model.species.get(idx).map(|s| s.id.as_str()).unwrap_or("?");
     let _ = writeln!(
         out,
         "          <speciesReference species=\"{}\" stoichiometry=\"{}\" constant=\"true\"/>",
@@ -996,10 +989,7 @@ mod tests {
         let (back, _) = read_sbml(&xml).unwrap();
         assert_eq!(back.rules.rates.len(), 1);
         assert_eq!(back.rules.assignments.len(), 1);
-        assert!(matches!(
-            back.rules.rates[0].target,
-            VarRef::Species(0)
-        ));
+        assert!(matches!(back.rules.rates[0].target, VarRef::Species(0)));
         assert!(matches!(
             back.rules.assignments[0].target,
             VarRef::Species(1)

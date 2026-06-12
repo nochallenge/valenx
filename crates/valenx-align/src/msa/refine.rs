@@ -135,7 +135,13 @@ mod tests {
 
     #[test]
     fn refine_never_lowers_score() {
-        let seqs: &[&[u8]] = &[b"ACGTACGT", b"ACGTCGT", b"ACGTACGTT", b"ACGACGT", b"ACGTACG"];
+        let seqs: &[&[u8]] = &[
+            b"ACGTACGT",
+            b"ACGTCGT",
+            b"ACGTACGTT",
+            b"ACGACGT",
+            b"ACGTACG",
+        ];
         let start = align(seqs, &dna()).unwrap();
         let start_score = start.sum_of_pairs(&dna());
         let refined = refine(&start, &dna(), RefineParams::default()).unwrap();
@@ -152,8 +158,11 @@ mod tests {
         let refined = refine(&start, &dna(), RefineParams::default()).unwrap();
         // Each row still recovers its original sequence when degapped.
         for (i, &orig) in seqs.iter().enumerate() {
-            let stripped: Vec<u8> =
-                refined.rows[i].iter().copied().filter(|&c| c != b'-').collect();
+            let stripped: Vec<u8> = refined.rows[i]
+                .iter()
+                .copied()
+                .filter(|&c| c != b'-')
+                .collect();
             assert_eq!(stripped, orig);
         }
     }

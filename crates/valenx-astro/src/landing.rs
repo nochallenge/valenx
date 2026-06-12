@@ -274,9 +274,9 @@ mod tests {
         let g = G0;
         let mass = 1.0e6;
         let thrust = (a_net + g) * mass; // gives a_net exactly at ignition
-        // A very high Isp makes the propellant mass flow negligible over
-        // the burn, so a_net stays essentially constant — the true
-        // mass-invariant limit the closed form assumes.
+                                         // A very high Isp makes the propellant mass flow negligible over
+                                         // the burn, so a_net stays essentially constant — the true
+                                         // mass-invariant limit the closed form assumes.
         let h = ignition_altitude(v, a_net).expect("can land"); // 500 m
         let sim = LandingSim {
             start_altitude: h,
@@ -289,8 +289,16 @@ mod tests {
         };
         let out = sim.run().expect("valid landing");
         // Both velocity and altitude reach zero together at the surface.
-        assert!(out.touchdown_speed < 0.01, "touchdown speed = {}", out.touchdown_speed);
-        assert!(out.arrest_altitude < 0.1, "arrest altitude = {}", out.arrest_altitude);
+        assert!(
+            out.touchdown_speed < 0.01,
+            "touchdown speed = {}",
+            out.touchdown_speed
+        );
+        assert!(
+            out.arrest_altitude < 0.1,
+            "arrest altitude = {}",
+            out.arrest_altitude
+        );
         assert!((0.0..=1.0).contains(&out.throttle));
     }
 
@@ -317,13 +325,21 @@ mod tests {
         };
         let out = sim.run().expect("valid landing");
         // Soft: arrested with near-zero residual speed.
-        assert!(out.touchdown_speed < 0.05, "touchdown speed = {}", out.touchdown_speed);
+        assert!(
+            out.touchdown_speed < 0.05,
+            "touchdown speed = {}",
+            out.touchdown_speed
+        );
         // Came to rest at or above the ground (never overshot below).
         assert!(out.arrest_altitude >= 0.0);
         // Burned a sensible, positive amount of propellant.
         assert!(out.propellant_used > 0.0);
         // Burn time is on the order of v/a_net (~13 s) — finite.
-        assert!(out.burn_time > 0.0 && out.burn_time < 60.0, "t = {}", out.burn_time);
+        assert!(
+            out.burn_time > 0.0 && out.burn_time < 60.0,
+            "t = {}",
+            out.burn_time
+        );
     }
 
     #[test]
@@ -353,10 +369,30 @@ mod tests {
             time_step: 1e-3,
         };
         assert!(base.validate().is_ok());
-        assert!(LandingSim { thrust: 0.0, ..base }.validate().is_err());
-        assert!(LandingSim { initial_mass: 0.0, ..base }.validate().is_err());
+        assert!(LandingSim {
+            thrust: 0.0,
+            ..base
+        }
+        .validate()
+        .is_err());
+        assert!(LandingSim {
+            initial_mass: 0.0,
+            ..base
+        }
+        .validate()
+        .is_err());
         assert!(LandingSim { isp: -1.0, ..base }.validate().is_err());
-        assert!(LandingSim { time_step: 1e-9, ..base }.validate().is_err()); // below floor
-        assert!(LandingSim { descent_speed: f64::NAN, ..base }.validate().is_err());
+        assert!(LandingSim {
+            time_step: 1e-9,
+            ..base
+        }
+        .validate()
+        .is_err()); // below floor
+        assert!(LandingSim {
+            descent_speed: f64::NAN,
+            ..base
+        }
+        .validate()
+        .is_err());
     }
 }

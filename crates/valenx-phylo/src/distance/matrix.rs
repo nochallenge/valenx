@@ -149,11 +149,7 @@ fn is_purine(idx: usize) -> bool {
 /// Distances that the model cannot compute (saturated p-distance,
 /// negative log argument) are clamped to a large finite value rather
 /// than `+∞`, so downstream clustering stays numerically well-behaved.
-pub fn distance_matrix(
-    msa: &Msa,
-    labels: &[String],
-    model: DistanceModel,
-) -> Result<DistMatrix> {
+pub fn distance_matrix(msa: &Msa, labels: &[String], model: DistanceModel) -> Result<DistMatrix> {
     let n = msa.depth();
     if n < 2 {
         return Err(PhyloError::invalid(
@@ -246,9 +242,12 @@ fn pairwise_distance(a: &[u8], b: &[u8], model: DistanceModel) -> f64 {
                 (-0.5 * a1.ln() - 0.25 * a2.ln()).min(DIST_CAP)
             }
         }
-        DistanceModel::TamuraNei => {
-            tamura_nei(&freq, ag as f64 / total_f, ct as f64 / total_f, transversions as f64 / total_f)
-        }
+        DistanceModel::TamuraNei => tamura_nei(
+            &freq,
+            ag as f64 / total_f,
+            ct as f64 / total_f,
+            transversions as f64 / total_f,
+        ),
     }
 }
 
@@ -411,8 +410,7 @@ mod tests {
         let b = b"GGCCAAAAAAAAAAAAAAAA";
         let p_ts: f64 = 2.0 / 20.0;
         let q_tv: f64 = 2.0 / 20.0;
-        let expected =
-            -0.5 * (1.0 - 2.0 * p_ts - q_tv).ln() - 0.25 * (1.0 - 2.0 * q_tv).ln();
+        let expected = -0.5 * (1.0 - 2.0 * p_ts - q_tv).ln() - 0.25 * (1.0 - 2.0 * q_tv).ln();
         let got = dist(a, b, DistanceModel::Kimura2P);
         assert!(
             (got - expected).abs() < 1e-9,

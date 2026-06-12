@@ -125,8 +125,12 @@ impl GenomicsPanel {
             false
         }
     }
-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
 }
 
 impl Default for GenomicsPanel {
@@ -173,8 +177,12 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Simulate short reads from a reference (Illumina-style model).");
         ui.separator();
         let (u, r) = common::undo_redo_inline(ui, p.can_undo(), p.can_redo());
-        if u { p.undo_edit(); }
-        if r { p.redo_edit(); }
+        if u {
+            p.undo_edit();
+        }
+        if r {
+            p.redo_edit();
+        }
     });
     ui.separator();
 
@@ -250,14 +258,14 @@ fn run_summary(p: &mut GenomicsPanel) {
     p.error = None;
     match p.file_kind {
         FileKind::Vcf => match VcfFile::parse(&p.file_text) {
-                Ok(vcf) => {
-                    let snvs = vcf
-                        .records
-                        .iter()
-                        .filter(|r| r.reference.len() == 1 && r.alt.iter().all(|a| a.len() == 1))
-                        .count();
-                    let stats = vcf_stats(&vcf);
-                    let mut out = format!(
+            Ok(vcf) => {
+                let snvs = vcf
+                    .records
+                    .iter()
+                    .filter(|r| r.reference.len() == 1 && r.alt.iter().all(|a| a.len() == 1))
+                    .count();
+                let stats = vcf_stats(&vcf);
+                let mut out = format!(
                         "VCF {} · {} samples · {} records\n  SNV-like      : {}\n  indel-like    : {}\n  multiallelic  : {}\n  passing       : {}\n  transitions   : {}\n  transversions : {}\n\n",
                         vcf.header.fileformat,
                         vcf.header.samples.len(),
@@ -269,44 +277,50 @@ fn run_summary(p: &mut GenomicsPanel) {
                         stats.transitions,
                         stats.transversions,
                     );
-                    for r in vcf.records.iter().take(40) {
-                        out.push_str(&format!(
-                            "  {}:{:<8} {} -> {}  qual {}\n",
-                            r.chrom,
-                            r.pos,
-                            r.reference,
-                            r.alt.join(","),
-                            r.qual.map(|q| format!("{q:.0}")).unwrap_or_else(|| ".".into()),
-                        ));
-                    }
-                    p.result = out;
+                for r in vcf.records.iter().take(40) {
+                    out.push_str(&format!(
+                        "  {}:{:<8} {} -> {}  qual {}\n",
+                        r.chrom,
+                        r.pos,
+                        r.reference,
+                        r.alt.join(","),
+                        r.qual
+                            .map(|q| format!("{q:.0}"))
+                            .unwrap_or_else(|| ".".into()),
+                    ));
                 }
-                Err(e) => p.error = Some(e.to_string()),
-            },
-            FileKind::Sam => match SamFile::parse(&p.file_text) {
-                Ok(sam) => {
-                    let mapped = sam.records.iter().filter(|r| !r.is_unmapped()).count();
-                    let mut out = format!(
+                p.result = out;
+            }
+            Err(e) => p.error = Some(e.to_string()),
+        },
+        FileKind::Sam => match SamFile::parse(&p.file_text) {
+            Ok(sam) => {
+                let mapped = sam.records.iter().filter(|r| !r.is_unmapped()).count();
+                let mut out = format!(
                         "SAM · {} reference seqs · {} records\n  mapped        : {}\n  unmapped      : {}\n\n",
                         sam.header.references.len(),
                         sam.records.len(),
                         mapped,
                         sam.records.len() - mapped,
                     );
-                    for rec in sam.records.iter().take(40) {
-                        out.push_str(&format!(
-                            "  {:<14} {} @ {:<8} mapq {:<3} {} bp\n",
-                            rec.qname,
-                            if rec.rname.is_empty() { "*" } else { &rec.rname },
-                            rec.pos,
-                            rec.mapq,
-                            rec.seq.len(),
-                        ));
-                    }
-                    p.result = out;
+                for rec in sam.records.iter().take(40) {
+                    out.push_str(&format!(
+                        "  {:<14} {} @ {:<8} mapq {:<3} {} bp\n",
+                        rec.qname,
+                        if rec.rname.is_empty() {
+                            "*"
+                        } else {
+                            &rec.rname
+                        },
+                        rec.pos,
+                        rec.mapq,
+                        rec.seq.len(),
+                    ));
                 }
-                Err(e) => p.error = Some(e.to_string()),
-            },
+                p.result = out;
+            }
+            Err(e) => p.error = Some(e.to_string()),
+        },
     }
 }
 
@@ -316,7 +330,13 @@ fn draw_variant(p: &mut GenomicsPanel, ui: &mut egui::Ui) {
         ui.label("contig:");
         ui.text_edit_singleline(&mut p.ref_name);
     });
-    common::seq_input(ui, "genomics_var_ref", "Reference sequence:", &mut p.reference, 2);
+    common::seq_input(
+        ui,
+        "genomics_var_ref",
+        "Reference sequence:",
+        &mut p.reference,
+        2,
+    );
     common::section(ui, "Aligned reads (SAM)");
     ui.add(
         egui::TextEdit::multiline(&mut p.file_text)
@@ -338,50 +358,54 @@ fn run_variant(p: &mut GenomicsPanel) {
     p.error = None;
     match SamFile::parse(&p.file_text) {
         Ok(sam) => {
-                let mut reference = Reference::new();
-                reference.add(p.ref_name.clone(), common::clean_sequence(&p.reference));
-                match build_pileup(&sam.records, &reference, 0) {
-                    Ok(columns) => {
-                        match call_variants(&columns, &CallParams::default()) {
-                            Ok(variants) => {
-                                let mut out = format!(
-                                    "{} pileup columns · {} variant call(s):\n",
-                                    columns.len(),
-                                    variants.len(),
-                                );
-                                for v in variants.iter().take(40) {
-                                    out.push_str(&format!(
-                                        "  {}:{:<8} {} -> {}  {:?}  depth {} ({:.0}% alt)  qual {:.1}\n",
-                                        v.chrom,
-                                        v.pos,
-                                        v.reference,
-                                        v.alt,
-                                        v.kind,
-                                        v.depth,
-                                        v.alt_fraction * 100.0,
-                                        v.qual,
-                                    ));
-                                }
-                                if variants.is_empty() {
-                                    out.push_str(
-                                        "  (no variants — reads may all match the \
-                                         reference, or the SAM has no mapped reads)\n",
-                                    );
-                                }
-                                p.result = out;
-                            }
-                            Err(e) => p.error = Some(e.to_string()),
+            let mut reference = Reference::new();
+            reference.add(p.ref_name.clone(), common::clean_sequence(&p.reference));
+            match build_pileup(&sam.records, &reference, 0) {
+                Ok(columns) => match call_variants(&columns, &CallParams::default()) {
+                    Ok(variants) => {
+                        let mut out = format!(
+                            "{} pileup columns · {} variant call(s):\n",
+                            columns.len(),
+                            variants.len(),
+                        );
+                        for v in variants.iter().take(40) {
+                            out.push_str(&format!(
+                                "  {}:{:<8} {} -> {}  {:?}  depth {} ({:.0}% alt)  qual {:.1}\n",
+                                v.chrom,
+                                v.pos,
+                                v.reference,
+                                v.alt,
+                                v.kind,
+                                v.depth,
+                                v.alt_fraction * 100.0,
+                                v.qual,
+                            ));
                         }
+                        if variants.is_empty() {
+                            out.push_str(
+                                "  (no variants — reads may all match the \
+                                         reference, or the SAM has no mapped reads)\n",
+                            );
+                        }
+                        p.result = out;
                     }
-                    Err(e) => p.error = Some(format!("pileup: {e}")),
-                }
+                    Err(e) => p.error = Some(e.to_string()),
+                },
+                Err(e) => p.error = Some(format!("pileup: {e}")),
             }
-            Err(e) => p.error = Some(format!("SAM parse: {e}")),
         }
+        Err(e) => p.error = Some(format!("SAM parse: {e}")),
+    }
 }
 
 fn draw_crispr(p: &mut GenomicsPanel, ui: &mut egui::Ui) {
-    common::seq_input(ui, "genomics_crispr_target", "Target DNA:", &mut p.crispr_target, 3);
+    common::seq_input(
+        ui,
+        "genomics_crispr_target",
+        "Target DNA:",
+        &mut p.crispr_target,
+        3,
+    );
     ui.horizontal(|ui| {
         ui.label("Nuclease / PAM:");
         ui.radio_value(&mut p.pam, Pam::SpCas9, "SpCas9 (NGG)");
@@ -435,7 +459,13 @@ fn run_crispr(p: &mut GenomicsPanel) {
 }
 
 fn draw_readsim(p: &mut GenomicsPanel, ui: &mut egui::Ui) {
-    common::seq_input(ui, "genomics_readsim_ref", "Reference sequence:", &mut p.reference, 3);
+    common::seq_input(
+        ui,
+        "genomics_readsim_ref",
+        "Reference sequence:",
+        &mut p.reference,
+        3,
+    );
     ui.horizontal(|ui| {
         ui.label("Reads:");
         ui.add(egui::DragValue::new(&mut p.n_reads).range(1..=100_000));
@@ -642,7 +672,10 @@ mod headless_ui_tests {
             ..GenomicsPanel::default()
         };
         run_readsim(&mut p);
-        assert!(p.error.is_some(), "read sim should error on empty reference");
+        assert!(
+            p.error.is_some(),
+            "read sim should error on empty reference"
+        );
         // Summary of malformed SAM text.
         let mut p = GenomicsPanel {
             tool: Tool::FileSummary,

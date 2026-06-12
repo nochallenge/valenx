@@ -156,7 +156,11 @@ mod tests {
         let d2 = dxf::parse(&s).expect("parse ok");
         match &d2.entities[0] {
             Entity2D::Dimension {
-                a, b, text_pos, text, ..
+                a,
+                b,
+                text_pos,
+                text,
+                ..
             } => {
                 assert_eq!(*a, [1.0, 2.0], "definition point a must survive reload");
                 assert_eq!(*b, [3.0, 4.0]);
@@ -178,7 +182,9 @@ mod tests {
         let s = dxf::serialise(&d);
         let d2 = dxf::parse(&s).expect("parse ok");
         match &d2.entities[0] {
-            Entity2D::Polyline { vertices, closed, .. } => {
+            Entity2D::Polyline {
+                vertices, closed, ..
+            } => {
                 assert_eq!(vertices.len(), 3);
                 assert!(*closed);
             }
