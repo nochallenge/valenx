@@ -1,9 +1,14 @@
 # Continuous Integration — current state
 
-> **Status (as of 2026-05-24):** All three workflows are set to
-> **manual-trigger only** (`workflow_dispatch`). Nothing fires
-> automatically on push / PR / tag / schedule. Re-enable per the
-> sections below if you decide the cost is worth it.
+> **Status (updated 2026-06-12):** `ci.yml` (the push/PR build + lint +
+> cross-platform test matrix) is **re-enabled** — it fires on every push
+> to `master`/`main` and on every PR, and the `CI OK` summary job is the
+> single status check to require in branch protection. The repo is now
+> **public**, so GitHub Actions standard runners are free and the
+> original billing concern (below) no longer applies to `ci.yml`.
+> `ci-nightly.yml` and `release.yml` remain **manual-trigger only**
+> (`workflow_dispatch`) — re-enable those per the sections below if you
+> want them (the nightly E2E suite and the release/installer pipeline).
 
 ---
 
