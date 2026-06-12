@@ -290,7 +290,7 @@ pub fn n50(lengths: &[usize]) -> usize {
 /// L50 — the assembly-fragmentation companion to [`n50`]: the number of the longest
 /// contigs needed for their cumulative length to reach at least half the grand total.
 /// N50 is the *length* at that point; L50 is the *count* (1-indexed). Returns `0` for an
-/// empty input. A count, not a transform of N50 — e.g. n50([5,5]) = 5 but l50([5,5]) = 1.
+/// empty input. A count, not a transform of N50 — e.g. `n50([5,5])` = 5 but `l50([5,5])` = 1.
 pub fn l50(lengths: &[usize]) -> usize {
     let total: usize = lengths.iter().sum();
     if total == 0 {

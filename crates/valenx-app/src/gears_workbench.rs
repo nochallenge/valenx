@@ -2,7 +2,7 @@
 //! over `valenx-gears`.
 //!
 //! Mirrors the springs / CFD / FEM workbenches: a resizable
-//! [`egui::SidePanel`] gated on [`crate::ValenxApp::show_gears_workbench`],
+//! [`egui::SidePanel`] gated on `crate::ValenxApp::show_gears_workbench`,
 //! toggled from the View menu. The form drives a [`valenx_gears::GearSpec`];
 //! the "Analyze" button computes the design scalars — circular pitch and the
 //! pitch / base / addendum / dedendum diameters — plus the meshing gear ratio

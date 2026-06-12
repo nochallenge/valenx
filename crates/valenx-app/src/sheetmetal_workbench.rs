@@ -3,7 +3,7 @@
 //!
 //! Mirrors the springs / gears / geomatics / piping / collision
 //! workbenches: a resizable [`egui::SidePanel`] gated on
-//! [`crate::ValenxApp::show_sheetmetal_workbench`], toggled from the View
+//! `crate::ValenxApp::show_sheetmetal_workbench`, toggled from the View
 //! menu. The form takes a bend's thickness, inside radius, angle, and
 //! k-factor; the "Compute" button reports the neutral-axis radius, the
 //! bend allowance (the neutral-axis arc length), and the bend deduction

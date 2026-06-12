@@ -3,7 +3,7 @@
 //!
 //! Mirrors the springs / gears / geomatics / piping / collision / sheet
 //! metal workbenches: a resizable [`egui::SidePanel`] gated on
-//! [`crate::ValenxApp::show_fields_workbench`], toggled from the View
+//! `crate::ValenxApp::show_fields_workbench`, toggled from the View
 //! menu. The form takes a whitespace/comma-separated list of numbers; the
 //! "Compute" button parses them into a scalar [`valenx_fields::Field`] and
 //! reports the central-tendency, dispersion, and shape statistics
