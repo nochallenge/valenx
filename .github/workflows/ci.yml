@@ -1,14 +1,16 @@
 name: CI
 
-# MANUAL ONLY — auto-triggers (push / pull_request) disabled on
-# 2026-05-24 after a billing surprise. To re-enable, restore the
-# `push:` and `pull_request:` blocks below the `workflow_dispatch:`
-# line (see `docs/CI.md` for the full block).
-#
-# Still runnable on demand from GitHub UI → Actions → CI → Run
-# workflow, or via: `gh workflow run ci.yml`.
+# Auto-triggers (push / pull_request) RE-ENABLED on 2026-06-12. The
+# 2026-05-24 disable was a billing precaution for a private repo; the
+# repo is now public, so GitHub Actions standard runners are free and
+# that rationale no longer applies. Also runnable on demand from the
+# GitHub UI → Actions → CI → Run workflow, or via `gh workflow run ci.yml`.
 
 on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
   workflow_dispatch:
 
 env:
