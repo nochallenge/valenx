@@ -186,4 +186,29 @@ mod tests {
         assert!(ka.lambda > 1.0);
         assert!(ka.k > 0.0 && ka.k <= 1.0);
     }
+
+    #[test]
+    fn blosum62_bit_score_and_evalue_match_published_values() {
+        // GROUND TRUTH: pins the ABSOLUTE Karlin-Altschul numbers. Every test
+        // above is relative (monotone / scaling / consistency / range); none
+        // pins a published value. With the published BLOSUM62-ungapped
+        // parameters (NCBI BLAST: λ = 0.318, K = 0.134):
+        //   bit score  S'(S) = (λ·S − ln K) / ln 2
+        //   E-value     E      = K · m · n · e^(−λS)
+        // blosum62_ungapped loads the published λ = 0.318, K = 0.134; the
+        // pinned bit-score and E-value below would both fail if either
+        // constant regressed, so they validate the parameters implicitly.
+        let ka = KarlinAltschul::blosum62_ungapped();
+
+        // S'(100) = (0.318·100 − ln 0.134)/ln 2 = 33.8099/0.693147 = 48.7774 bits.
+        let bits = ka.bit_score(100);
+        assert!((bits - 48.7774).abs() < 1e-3, "bit score {bits} != 48.7774");
+
+        // E(S=100, m=1000, n=1e6) = 0.134·1e9·e^(−31.8) = 2.07272e-6.
+        let e = ka.e_value(100, 1_000, 1_000_000);
+        assert!(
+            (e / 2.07272e-6 - 1.0).abs() < 1e-3,
+            "E-value {e:e} != 2.07272e-6 (published)"
+        );
+    }
 }
