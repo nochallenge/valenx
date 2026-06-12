@@ -44,68 +44,82 @@ impl NurbsSurface {
         control_points: Vec<Vec<Vector3<f64>>>,
         weights: Vec<Vec<f64>>,
     ) -> Result<Self, SurfaceError> {
-        if !(1..=9).contains(&u_degree) {
-            return Err(SurfaceError::BadDegree(u_degree));
+        let surface =
+            Self::new_unchecked(u_degree, v_degree, u_knots, v_knots, control_points, weights);
+        surface.validate()?;
+        Ok(surface)
+    }
+
+    /// Check the NURBS-surface invariant on an already-built surface:
+    /// valid u/v degrees, a non-empty rectangular control-point grid with
+    /// enough CPs per direction, knot-vector lengths `n + degree + 1`,
+    /// non-decreasing knots, and a weights grid matching the CP grid.
+    /// [`Self::new`] runs this at construction; a surface obtained another
+    /// way (deserialised, or via [`Self::new_unchecked`]) can re-check
+    /// itself with this before its indexing evaluation methods are used.
+    pub fn validate(&self) -> Result<(), SurfaceError> {
+        if !(1..=9).contains(&self.u_degree) {
+            return Err(SurfaceError::BadDegree(self.u_degree));
         }
-        if !(1..=9).contains(&v_degree) {
-            return Err(SurfaceError::BadDegree(v_degree));
+        if !(1..=9).contains(&self.v_degree) {
+            return Err(SurfaceError::BadDegree(self.v_degree));
         }
 
-        let nu = control_points.len();
+        let nu = self.control_points.len();
         if nu == 0 {
             return Err(SurfaceError::BadKnotVector {
                 reason: "empty control_points grid".into(),
             });
         }
-        let nv = control_points[0].len();
-        for row in &control_points {
+        let nv = self.control_points[0].len();
+        for row in &self.control_points {
             if row.len() != nv {
                 return Err(SurfaceError::BadKnotVector {
                     reason: "control_points grid is not rectangular".into(),
                 });
             }
         }
-        if nu < u_degree + 1 {
+        if nu < self.u_degree + 1 {
             return Err(SurfaceError::BadKnotVector {
                 reason: format!(
                     "need at least {} u-direction CPs for degree {}, got {}",
-                    u_degree + 1,
-                    u_degree,
+                    self.u_degree + 1,
+                    self.u_degree,
                     nu
                 ),
             });
         }
-        if nv < v_degree + 1 {
+        if nv < self.v_degree + 1 {
             return Err(SurfaceError::BadKnotVector {
                 reason: format!(
                     "need at least {} v-direction CPs for degree {}, got {}",
-                    v_degree + 1,
-                    v_degree,
+                    self.v_degree + 1,
+                    self.v_degree,
                     nv
                 ),
             });
         }
 
-        let u_expected = nu + u_degree + 1;
-        if u_knots.len() != u_expected {
+        let u_expected = nu + self.u_degree + 1;
+        if self.u_knots.len() != u_expected {
             return Err(SurfaceError::BadKnotVector {
-                reason: format!("u_knots: expected {u_expected}, got {}", u_knots.len()),
+                reason: format!("u_knots: expected {u_expected}, got {}", self.u_knots.len()),
             });
         }
-        let v_expected = nv + v_degree + 1;
-        if v_knots.len() != v_expected {
+        let v_expected = nv + self.v_degree + 1;
+        if self.v_knots.len() != v_expected {
             return Err(SurfaceError::BadKnotVector {
-                reason: format!("v_knots: expected {v_expected}, got {}", v_knots.len()),
+                reason: format!("v_knots: expected {v_expected}, got {}", self.v_knots.len()),
             });
         }
-        for w in u_knots.windows(2) {
+        for w in self.u_knots.windows(2) {
             if w[1] < w[0] {
                 return Err(SurfaceError::BadKnotVector {
                     reason: "u_knots must be non-decreasing".into(),
                 });
             }
         }
-        for w in v_knots.windows(2) {
+        for w in self.v_knots.windows(2) {
             if w[1] < w[0] {
                 return Err(SurfaceError::BadKnotVector {
                     reason: "v_knots must be non-decreasing".into(),
@@ -113,20 +127,13 @@ impl NurbsSurface {
             }
         }
 
-        if weights.len() != nu || weights.iter().any(|r| r.len() != nv) {
+        if self.weights.len() != nu || self.weights.iter().any(|r| r.len() != nv) {
             return Err(SurfaceError::BadKnotVector {
                 reason: "weights grid shape ≠ control_points grid shape".into(),
             });
         }
 
-        Ok(Self {
-            u_degree,
-            v_degree,
-            u_knots,
-            v_knots,
-            control_points,
-            weights,
-        })
+        Ok(())
     }
 
     /// Skip validation — caller asserts well-formedness.

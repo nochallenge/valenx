@@ -76,28 +76,16 @@ impl SurfaceFile {
     /// Mirrors `SketchFile::from_ron`, which validates on load.
     pub fn from_ron(s: &str) -> Result<Self, SurfaceError> {
         let file: SurfaceFile = ron::from_str(s).map_err(|e| SurfaceError::Ron(e.to_string()))?;
-        // Validate each element via its checked constructor; a degenerate
-        // one returns `SurfaceError` (BadDegree / BadKnotVector). The
-        // rebuilt values are identical to the originals (the constructor
-        // copies fields verbatim), so we only need the validation side
-        // effect and keep `file` as-is.
+        // Validate each deserialised element in place: serde bypasses the
+        // `new` constructors, so a degenerate curve/surface (e.g. a
+        // degree-3 curve with an empty knot vector) would otherwise panic
+        // the public `evaluate`/`tessellate`/`parameter_range` that index
+        // it. `validate` returns `SurfaceError` (BadDegree / BadKnotVector).
         for c in &file.curves {
-            NurbsCurve::new(
-                c.degree,
-                c.knots.clone(),
-                c.control_points.clone(),
-                c.weights.clone(),
-            )?;
+            c.validate()?;
         }
         for s in &file.surfaces {
-            NurbsSurface::new(
-                s.u_degree,
-                s.v_degree,
-                s.u_knots.clone(),
-                s.v_knots.clone(),
-                s.control_points.clone(),
-                s.weights.clone(),
-            )?;
+            s.validate()?;
         }
         Ok(file)
     }
