@@ -27,9 +27,23 @@
 //! — only the interstage structure is parameterised here.
 
 use eframe::egui;
+use egui_plot::{Line, Plot, PlotPoints};
 
 use crate::ValenxApp;
+use valenx_astro::{
+    simulate_ascent, AscentConfig, DragModel, GuidanceMode, GuidanceProgram, Stage, Vehicle,
+    WindModel,
+};
 use valenx_rocket_demo::{design_and_simulate, RocketDesign, RocketReport};
+
+/// A cached Valenx LV-1 ascent: the altitude-vs-time series for the
+/// in-panel plot, plus a one-glance summary line.
+struct Lv1Flight {
+    /// `[time_s, altitude_km]` samples for the ascent plot.
+    alt_pts: Vec<[f64; 2]>,
+    /// Multi-line summary (orbit / Δv / max-Q / peak g).
+    summary: String,
+}
 
 /// Persistent form + result state for the Rocket workbench.
 pub struct RocketWorkbenchState {
@@ -44,6 +58,9 @@ pub struct RocketWorkbenchState {
     report: Option<RocketReport>,
     /// The last pipeline error, shown in red. `None` on success.
     error: Option<String>,
+    /// Cached Valenx LV-1 full-ascent flight, for the in-panel plot. `None`
+    /// until first computed (lazily on first draw, or on the Fly button).
+    lv1: Option<Lv1Flight>,
 }
 
 impl Default for RocketWorkbenchState {
@@ -54,7 +71,89 @@ impl Default for RocketWorkbenchState {
             last_design: None,
             report: None,
             error: None,
+            lv1: None,
         }
+    }
+}
+
+/// The Valenx LV-1 launch vehicle — a from-scratch two-stage kerolox
+/// small-lift launcher (mirrors `valenx_rocket_demo::valenx_lv1`, kept
+/// here so the panel flies it directly via `valenx-astro`).
+fn lv1_vehicle() -> Vehicle {
+    Vehicle {
+        stages: vec![
+            Stage {
+                name: "LV-1 first stage (kerolox)".into(),
+                dry_mass: 6_000.0,
+                propellant_mass: 90_000.0,
+                thrust_sl: 1_500_000.0,
+                thrust_vac: 1_650_000.0,
+                isp_sl: 283.0,
+                isp_vac: 311.0,
+            },
+            Stage {
+                name: "LV-1 second stage (kerolox, vacuum)".into(),
+                dry_mass: 1_500.0,
+                propellant_mass: 12_000.0,
+                thrust_sl: 180_000.0,
+                thrust_vac: 180_000.0,
+                isp_sl: 345.0,
+                isp_vac: 345.0,
+            },
+        ],
+        payload_mass: 2_000.0,
+        reference_area: 2.5,
+        drag: DragModel::generic_launch_vehicle(),
+    }
+}
+
+/// The LV-1 ascent profile — a gravity turn tuned (20 s vertical rise,
+/// 12° pitch kick) to fly the vehicle into a bound orbit.
+fn lv1_config() -> AscentConfig {
+    AscentConfig {
+        launch_altitude_m: 0.0,
+        guidance: GuidanceProgram {
+            vertical_rise_time: 20.0,
+            pitch_kick_deg: 12.0,
+            kick_duration: 5.0,
+        },
+        time_step: 0.1,
+        max_time: 1_800.0,
+        sample_interval: 2.0,
+        mode: GuidanceMode::OpenLoopGravityTurn,
+        wind: WindModel::None,
+    }
+}
+
+/// Fly the Valenx LV-1 (via `valenx_astro::simulate_ascent`) and build the
+/// cached altitude-vs-time plot series + the summary line.
+fn fly_lv1() -> Lv1Flight {
+    match simulate_ascent(&lv1_vehicle(), &lv1_config()) {
+        Ok(r) => {
+            let alt_pts = r
+                .samples
+                .iter()
+                .map(|s| [s.time, s.altitude_m / 1000.0])
+                .collect();
+            let summary = format!(
+                "{}  ·  {:.0} × {:.0} km orbit\nΔv {:.0} m/s · max-Q {:.0} kPa · peak {:.1} g",
+                if r.reached_orbit {
+                    "✔ reached orbit"
+                } else {
+                    "✖ suborbital"
+                },
+                r.periapsis_km(),
+                r.apoapsis_km(),
+                r.ideal_delta_v,
+                r.max_dynamic_pressure / 1000.0,
+                r.max_acceleration_g,
+            );
+            Lv1Flight { alt_pts, summary }
+        }
+        Err(e) => Lv1Flight {
+            alt_pts: Vec::new(),
+            summary: format!("ascent error: {e}"),
+        },
     }
 }
 
@@ -116,6 +215,39 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    // ── Valenx LV-1 — watch it fly to orbit ───────────────
+                    ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
+                    ui.label(
+                        egui::RichText::new(
+                            "a from-scratch two-stage launcher, flown live by valenx-astro",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    let fly_clicked = ui
+                        .button(egui::RichText::new("▶ Fly the Valenx LV-1").strong())
+                        .clicked();
+                    if s.lv1.is_none() || fly_clicked {
+                        s.lv1 = Some(fly_lv1());
+                    }
+                    if let Some(f) = &s.lv1 {
+                        ui.label(egui::RichText::new(&f.summary).monospace().small());
+                        if !f.alt_pts.is_empty() {
+                            ui.label(
+                                egui::RichText::new("altitude (km) vs time (s)")
+                                    .weak()
+                                    .small(),
+                            );
+                            Plot::new("lv1_ascent_plot").height(210.0).show(ui, |pui| {
+                                pui.line(
+                                    Line::new(PlotPoints::from(f.alt_pts.clone()))
+                                        .name("altitude (km)"),
+                                );
+                            });
+                        }
+                    }
+                    ui.add_space(8.0);
+                    ui.separator();
                     ui.label(
                         egui::RichText::new(
                             "Trajectory: fixed medium-lift two-stage preset. \
@@ -309,7 +441,26 @@ mod tests {
         assert!(s.report.is_none());
         assert!(s.error.is_none());
         assert!(s.last_design.is_none());
+        assert!(s.lv1.is_none());
         assert!((s.target_sf - 1.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn lv1_flight_reaches_orbit_with_a_plottable_ascent() {
+        // The in-panel LV-1 flight produces a non-empty altitude series and
+        // a summary confirming it reaches orbit (the astro engine is
+        // validated separately in valenx-rocket-demo).
+        let f = fly_lv1();
+        assert!(!f.alt_pts.is_empty(), "ascent yields samples to plot");
+        assert!(
+            f.summary.contains("reached orbit"),
+            "summary: {}",
+            f.summary
+        );
+        // The series climbs (last sample altitude well above the first).
+        let first = f.alt_pts.first().unwrap()[1];
+        let last = f.alt_pts.last().unwrap()[1];
+        assert!(last > first + 100.0, "climbs from {first} to {last} km");
     }
 
     #[test]
