@@ -27,6 +27,7 @@
 //! multi-physics-analysis *workflow* lives in one place; it is **not** a
 //! flight-certified design tool.
 
+pub mod auto_design;
 pub mod nozzle;
 
 use valenx_astro::constants::G0;
