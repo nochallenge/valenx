@@ -77,6 +77,7 @@ pub mod pbr_forward_pass;
 pub mod piping_workbench;
 pub mod reactdyn_workbench;
 pub mod residuals;
+pub mod rocket_workbench;
 pub mod run;
 pub mod scene_overlay;
 pub mod settings;
@@ -567,6 +568,15 @@ pub struct ValenxApp {
     /// ascent simulator + the closed-form mission planners wrapping the
     /// `valenx-astro` crate. See [`crate::astro_workbench`].
     pub(crate) astro: crate::astro_workbench::AstroWorkbenchState,
+
+    /// Whether the right-side Rocket workbench panel is visible. Defaults
+    /// to `false`; flipped on from the View menu. Surfaces the
+    /// `valenx-rocket-demo` coupled design→simulate pipeline.
+    pub(crate) show_rocket_workbench: bool,
+    /// Form + result state for the Rocket workbench — the reactive
+    /// design→simulate panel wrapping `valenx-rocket-demo`. See
+    /// [`crate::rocket_workbench`].
+    pub(crate) rocket: crate::rocket_workbench::RocketWorkbenchState,
 
     /// Whether the keyboard-shortcut cheat-sheet overlay is open.
     /// Toggled by the `?` key + by Help → Keyboard shortcuts.

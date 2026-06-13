@@ -633,6 +633,27 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Rocket workbench — the coupled
+                    // design→simulate pipeline (valenx-rocket-demo): fly the
+                    // ascent to orbit, then size the interstage struts against
+                    // the trajectory's peak g-load with a live SAFE /
+                    // OVER-STRESSED verdict. Off by default.
+                    if ui
+                        .checkbox(
+                            &mut self.show_rocket_workbench,
+                            "Rocket — design → simulate",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Rocket workbench — a reactive \
+                             design→simulate loop (valenx-rocket-demo): fly the \
+                             medium-lift two-stage preset to orbit, then size the \
+                             interstage struts against the trajectory's peak g-load \
+                             with a live safety-factor verdict.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // ── Central viewport selector ─────────────────────────
                     // Lets the user swap the 3D viewport for a
                     // domain-appropriate alternative (e.g. the 2D DNA /
@@ -1178,6 +1199,12 @@ impl eframe::App for ValenxApp {
         // so egui docks it to the right (alongside the other open
         // workbenches).
         crate::astro_workbench::draw_astro_workbench(self, ctx);
+
+        // Rocket workbench (right) — the valenx-rocket-demo coupled
+        // design→simulate pipeline. A no-op unless toggled on via
+        // View → Rocket. Mounted before the CentralPanel so egui docks it
+        // to the right alongside the other workbenches.
+        crate::rocket_workbench::draw_rocket_workbench(self, ctx);
 
         // Central viewport — grabs the wgpu render state for the
         // offscreen-depth-buffered shaded path if the wgpu backend is
