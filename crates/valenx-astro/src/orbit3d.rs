@@ -545,6 +545,113 @@ impl ClassicalElements {
         }
         Some(m * period / TAU)
     }
+
+    /// The **mean anomaly** `M` from the **hyperbolic anomaly** `H` (both rad)
+    /// on an open orbit — the hyperbolic form of Kepler's equation,
+    /// `M = e·sinh H − H`.
+    ///
+    /// The hyperbolic counterpart of
+    /// [`mean_anomaly_from_eccentric`](Self::mean_anomaly_from_eccentric): on a
+    /// flyby/escape hyperbola (`e > 1`) the elliptic eccentric anomaly is
+    /// undefined and its role passes to the hyperbolic anomaly `H`, with
+    /// `sin`/`cos` replaced by `sinh`/`cosh`. The map is monotonic and odd
+    /// (`H = 0 ↦ M = 0`, periapsis); the time since periapsis follows from
+    /// `t − t_p = M/n` with the hyperbolic mean motion `n = √(μ/(−a)³)`.
+    /// Defined for a hyperbolic orbit (`e > 1`); returns `NaN` for a
+    /// closed/parabolic orbit (`e ≤ 1`) or a non-finite `H`.
+    pub fn mean_anomaly_from_hyperbolic(&self, hyperbolic_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if e <= 1.0 || !hyperbolic_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        e * hyperbolic_anomaly.sinh() - hyperbolic_anomaly
+    }
+
+    /// The **hyperbolic anomaly** `H` from the **mean anomaly** `M` (both rad)
+    /// on an open orbit — the inverse of the hyperbolic Kepler equation
+    /// `M = e·sinh H − H`, by Newton–Raphson.
+    ///
+    /// The hyperbolic counterpart of
+    /// [`eccentric_anomaly_from_mean`](Self::eccentric_anomaly_from_mean): it
+    /// turns the time-driven mean anomaly `M = n·(t − t_p)` into the geometric
+    /// hyperbolic anomaly that
+    /// [`true_anomaly_from_hyperbolic`](Self::true_anomaly_from_hyperbolic) then
+    /// converts to a position on the flyby. Newton's step
+    /// `H ← H − (e·sinh H − H − M)/(e·cosh H − 1)` converges quadratically from
+    /// the seed `H₀ = asinh(M/e)`; the derivative `e·cosh H − 1 ≥ e − 1 > 0`
+    /// never vanishes, so the iteration is stable. Defined for a hyperbolic
+    /// orbit (`e > 1`); returns `NaN` for `e ≤ 1` or a non-finite `M`.
+    pub fn hyperbolic_anomaly_from_mean(&self, mean_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if e <= 1.0 || !mean_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        let m = mean_anomaly;
+        let mut h = (m / e).asinh(); // robust seed for the hyperbolic solve
+        for _ in 0..100 {
+            let delta = (e * h.sinh() - h - m) / (e * h.cosh() - 1.0);
+            h -= delta;
+            if delta.abs() < 1e-13 {
+                break;
+            }
+        }
+        h
+    }
+
+    /// The **true anomaly** `ν` (rad) from the **hyperbolic anomaly** `H` (rad)
+    /// on an open orbit, via `tan(ν/2) = √((e+1)/(e−1))·tanh(H/2)`.
+    ///
+    /// The hyperbolic counterpart of
+    /// [`true_anomaly_from_eccentric`](Self::true_anomaly_from_eccentric). As
+    /// `H → ±∞` the body recedes to infinity and `ν` approaches the asymptote
+    /// `±ν_∞ = ±arccos(−1/e)`, so `ν` stays bounded — unlike a closed orbit it
+    /// never sweeps a full turn. `H = 0 ↦ ν = 0` (periapsis). Defined for a
+    /// hyperbolic orbit (`e > 1`); returns `NaN` for `e ≤ 1` or a non-finite
+    /// `H`.
+    pub fn true_anomaly_from_hyperbolic(&self, hyperbolic_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if e <= 1.0 || !hyperbolic_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        let factor = ((e + 1.0) / (e - 1.0)).sqrt();
+        2.0 * (factor * (hyperbolic_anomaly / 2.0).tanh()).atan()
+    }
+
+    /// The **hyperbolic anomaly** `H` (rad) from the **true anomaly** `ν` (rad)
+    /// on an open orbit — the inverse of
+    /// [`true_anomaly_from_hyperbolic`](Self::true_anomaly_from_hyperbolic),
+    /// `H = 2·atanh(√((e−1)/(e+1))·tan(ν/2))`.
+    ///
+    /// Defined only inside the asymptote cone `|ν| < ν_∞ = arccos(−1/e)`: at or
+    /// beyond the asymptote (which the body never reaches, where the `atanh`
+    /// argument is `≥ 1`) there is no finite hyperbolic anomaly and this returns
+    /// `NaN` — as it does for `e ≤ 1` or a non-finite `ν`. `ν = 0 ↦ H = 0`
+    /// (periapsis).
+    pub fn hyperbolic_anomaly_from_true(&self, true_anomaly: f64) -> f64 {
+        let e = self.eccentricity;
+        if e <= 1.0 || !true_anomaly.is_finite() {
+            return f64::NAN;
+        }
+        let arg = ((e - 1.0) / (e + 1.0)).sqrt() * (true_anomaly / 2.0).tan();
+        if arg.abs() >= 1.0 {
+            return f64::NAN; // at/beyond the asymptote — never reached
+        }
+        2.0 * arg.atanh()
+    }
+
+    /// The **true anomaly** `ν` (rad) from the **mean anomaly** `M` (rad) on an
+    /// open orbit — the full hyperbolic time→position propagation, composing the
+    /// Newton solve
+    /// [`hyperbolic_anomaly_from_mean`](Self::hyperbolic_anomaly_from_mean)
+    /// (`M → H`) with the geometry
+    /// [`true_anomaly_from_hyperbolic`](Self::true_anomaly_from_hyperbolic)
+    /// (`H → ν`). The hyperbolic counterpart of
+    /// [`true_anomaly_from_mean`](Self::true_anomaly_from_mean). Defined for a
+    /// hyperbolic orbit (`e > 1`); returns `NaN` for `e ≤ 1` or a non-finite
+    /// `M`.
+    pub fn true_anomaly_from_mean_hyperbolic(&self, mean_anomaly: f64) -> f64 {
+        self.true_anomaly_from_hyperbolic(self.hyperbolic_anomaly_from_mean(mean_anomaly))
+    }
 }
 
 /// Convert an inertial state vector to classical orbital elements.
@@ -2751,5 +2858,110 @@ mod tests {
             ..coe
         };
         assert_eq!(j2_mean_element_propagate(&hyp, span), hyp);
+    }
+
+    fn hyperbolic_coe() -> ClassicalElements {
+        ClassicalElements {
+            semi_major_axis: -(R_EARTH + 500_000.0), // a < 0 for a hyperbola
+            eccentricity: 1.5,
+            inclination: 0.3,
+            raan: 0.4,
+            arg_periapsis: 0.5,
+            true_anomaly: 0.0,
+        }
+    }
+
+    #[test]
+    fn hyperbolic_kepler_equation_round_trips() {
+        let coe = hyperbolic_coe(); // e = 1.5
+                                    // GROUND TRUTH: the forward hyperbolic Kepler equation M = e·sinh H − H.
+                                    // e=1.5, H=1.0: M = 1.5·sinh(1) − 1 = 1.5·1.17520119 − 1 = 0.76280179.
+        let m = coe.mean_anomaly_from_hyperbolic(1.0);
+        assert!(
+            (m - 0.762_801_79).abs() < 1e-7,
+            "M(H=1) = {m} != 0.76280179"
+        );
+        // The Newton inverse recovers H = 1.0.
+        assert!(
+            (coe.hyperbolic_anomaly_from_mean(m) - 1.0).abs() < 1e-10,
+            "H from M round-trip"
+        );
+        // Round-trip across a range of H, both directions.
+        for &hh in &[-3.0_f64, -1.0, -0.2, 0.0, 0.2, 1.0, 2.5, 4.0] {
+            let m = coe.mean_anomaly_from_hyperbolic(hh);
+            let back = coe.hyperbolic_anomaly_from_mean(m);
+            assert!((back - hh).abs() < 1e-9, "H={hh} → M={m} → H={back}");
+        }
+        // Periapsis is the fixed point: H = 0 ↦ M = 0.
+        assert_eq!(coe.mean_anomaly_from_hyperbolic(0.0), 0.0);
+    }
+
+    #[test]
+    fn hyperbolic_true_anomaly_conversions() {
+        let coe = hyperbolic_coe(); // e = 1.5
+                                    // GROUND TRUTH: ν = 2·atan(√((e+1)/(e−1))·tanh(H/2)). For e=1.5, H=1.0:
+                                    // √(2.5/0.5)=√5=2.23606798, tanh(0.5)=0.46211716 →
+                                    // tan(ν/2)=1.03332540 → ν = 2·atan(1.03332540) = 1.60357 rad.
+                                    // Independent cross-check via cosh H = (e+cos ν)/(1+e·cos ν): cosh(1) =
+                                    // 1.5430806 ⟹ cos ν = −0.0327707 ⟹ ν = arccos(−0.0327707) = 1.60357.
+        let nu = coe.true_anomaly_from_hyperbolic(1.0);
+        assert!((nu - 1.603_57).abs() < 1e-4, "ν(H=1) = {nu} != 1.60357");
+        // The inverse recovers H = 1.0.
+        assert!(
+            (coe.hyperbolic_anomaly_from_true(nu) - 1.0).abs() < 1e-9,
+            "H from ν round-trip"
+        );
+        // Round-trip H → ν → H over the valid range.
+        for &hh in &[-2.0_f64, -0.5, 0.0, 0.5, 1.5, 3.0] {
+            let nu = coe.true_anomaly_from_hyperbolic(hh);
+            assert!(
+                (coe.hyperbolic_anomaly_from_true(nu) - hh).abs() < 1e-9,
+                "round-trip H={hh}"
+            );
+        }
+        // Periapsis: H = 0 ↦ ν = 0.
+        assert_eq!(coe.true_anomaly_from_hyperbolic(0.0), 0.0);
+    }
+
+    #[test]
+    fn hyperbolic_true_anomaly_is_bounded_by_the_asymptote() {
+        let coe = hyperbolic_coe(); // e = 1.5
+                                    // As H → ∞, ν → ν_∞ = arccos(−1/e) = arccos(−2/3) = 2.30052 rad.
+        let nu_inf = (-1.0_f64 / 1.5).acos();
+        assert!((nu_inf - 2.300_52).abs() < 1e-4, "ν_∞ = {nu_inf}");
+        let nu_large = coe.true_anomaly_from_hyperbolic(20.0);
+        assert!(
+            nu_large < nu_inf && (nu_inf - nu_large) < 1e-6,
+            "ν approaches ν_∞ from below: {nu_large} vs {nu_inf}"
+        );
+        // A true anomaly at or beyond the asymptote is never reached → NaN.
+        assert!(coe.hyperbolic_anomaly_from_true(nu_inf).is_nan());
+        assert!(coe.hyperbolic_anomaly_from_true(nu_inf + 0.05).is_nan());
+    }
+
+    #[test]
+    fn hyperbolic_methods_compose_and_guard_non_hyperbolic() {
+        let coe = hyperbolic_coe(); // e = 1.5
+                                    // The composed M → ν equals the explicit two-step path.
+        let m = 0.5_f64;
+        let nu = coe.true_anomaly_from_mean_hyperbolic(m);
+        let two_step = coe.true_anomaly_from_hyperbolic(coe.hyperbolic_anomaly_from_mean(m));
+        assert!((nu - two_step).abs() < 1e-12);
+        // Elliptic / parabolic eccentricity → NaN for every hyperbolic method.
+        let elliptic = ClassicalElements {
+            eccentricity: 0.3,
+            ..coe
+        };
+        assert!(elliptic.mean_anomaly_from_hyperbolic(1.0).is_nan());
+        assert!(elliptic.hyperbolic_anomaly_from_mean(0.5).is_nan());
+        assert!(elliptic.true_anomaly_from_hyperbolic(1.0).is_nan());
+        assert!(elliptic.hyperbolic_anomaly_from_true(0.5).is_nan());
+        let parabolic = ClassicalElements {
+            eccentricity: 1.0,
+            ..coe
+        };
+        assert!(parabolic.hyperbolic_anomaly_from_mean(0.5).is_nan());
+        // Non-finite input → NaN.
+        assert!(coe.hyperbolic_anomaly_from_mean(f64::NAN).is_nan());
     }
 }
