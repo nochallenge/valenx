@@ -11,7 +11,10 @@
 //! an RK4 propagator with optional **J2 oblateness** — the dominant
 //! perturbation in low Earth orbit, which makes the node regress and the
 //! line of apsides rotate. The J2 secular rates are also given in closed
-//! form so the propagator can be validated against them.
+//! form so the propagator can be validated against them — and they drive an
+//! analytic *mean-element* propagator ([`j2_mean_element_propagate`]), the
+//! fast closed-form alternative to numerical integration for long-horizon
+//! prediction.
 //!
 //! Scope: this is the point-mass orbital layer (Phase 1 of the
 //! launch-vehicle roadmap). It is not a full force model — no drag,
@@ -867,6 +870,114 @@ pub fn j2_arg_periapsis_rate(coe: &ClassicalElements) -> f64 {
     };
     let si = coe.inclination.sin();
     1.5 * n * J2_EARTH * (R_EARTH / p).powi(2) * (2.0 - 2.5 * si * si)
+}
+
+/// Secular J2 rate of change of the **mean anomaly** (rad/s) — the third and
+/// final member of the classical secular trio, completing [`j2_raan_rate`]
+/// (Ω̇) and [`j2_arg_periapsis_rate`] (ω̇).
+///
+/// This is the *perturbation* J2 adds on top of the Keplerian mean motion
+/// `n = √(μ/a³)`:
+///
+/// ```text
+/// Ṁ_J2 = 1.5 · n · J2 · (R⊕/p)² · √(1−e²) · (1 − 1.5 sin²i)
+/// ```
+///
+/// with `p = a(1−e²)` (Vallado, *Fundamentals of Astrodynamics and
+/// Applications*, Eq. 9-40; equivalently the Brouwer/Kozai first-order
+/// result). Earth's equatorial bulge makes a satellite run slightly *fast*
+/// relative to the spherical-Earth prediction at low inclination and slightly
+/// *slow* near polar; the sign flips at the inclination where
+/// `1 − 1.5 sin²i = 0`, i.e. `sin²i = 2/3`, `i ≈ 54.74°` — distinct from the
+/// `i ≈ 63.43°` critical inclination that nulls ω̇ instead. The *total*
+/// secular mean-anomaly rate (the one [`j2_mean_element_propagate`] advances)
+/// is `n + Ṁ_J2`.
+///
+/// Returns `0.0` for a non-elliptic or non-physical element set (`a ≤ 0` or
+/// `p ≤ 0`), matching its sibling rates, rather than the silent `NaN`/`Inf`
+/// the raw `√(μ/a³)` / `(R⊕/p)²` would give.
+pub fn j2_mean_anomaly_rate(coe: &ClassicalElements) -> f64 {
+    let Some((n, p)) = bound_n_and_p(coe) else {
+        return 0.0;
+    };
+    let si = coe.inclination.sin();
+    let e2 = coe.eccentricity * coe.eccentricity;
+    1.5 * n * J2_EARTH * (R_EARTH / p).powi(2) * (1.0 - e2).sqrt() * (1.0 - 1.5 * si * si)
+}
+
+/// The three first-order **J2 secular rates** (rad/s) of an orbit, bundled:
+/// the nodal regression Ω̇, the apsidal rotation ω̇, and the mean-anomaly
+/// drift Ṁ_J2 (the perturbation *beyond* the Keplerian mean motion `n`).
+///
+/// Returned by [`j2_secular_rates`]; the three together are exactly what
+/// [`j2_mean_element_propagate`] integrates over time. Each component is
+/// `0.0` for a non-elliptic / non-physical element set, as the underlying
+/// rates are.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct J2SecularRates {
+    /// Right-ascension-of-ascending-node rate Ω̇ (rad/s); negative (westward)
+    /// for a prograde orbit.
+    pub raan: f64,
+    /// Argument-of-periapsis rate ω̇ (rad/s).
+    pub arg_periapsis: f64,
+    /// Mean-anomaly J2 perturbation rate Ṁ_J2 (rad/s), *in addition to* the
+    /// Keplerian mean motion `n = √(μ/a³)`.
+    pub mean_anomaly: f64,
+}
+
+/// The three secular J2 rates of an orbit — [`J2SecularRates`] — in one call,
+/// bundling [`j2_raan_rate`], [`j2_arg_periapsis_rate`] and
+/// [`j2_mean_anomaly_rate`].
+pub fn j2_secular_rates(coe: &ClassicalElements) -> J2SecularRates {
+    J2SecularRates {
+        raan: j2_raan_rate(coe),
+        arg_periapsis: j2_arg_periapsis_rate(coe),
+        mean_anomaly: j2_mean_anomaly_rate(coe),
+    }
+}
+
+/// **Analytically propagate** an orbit forward by `dt` seconds under the
+/// first-order J2 secular theory — the fast, closed-form *mean-element*
+/// alternative to the numerical RK4 [`propagate`].
+///
+/// Mean-element ("secular") propagation advances only the three angles that
+/// J2 drifts at first order, holding the size and shape (`a`, `e`, `i`) fixed:
+/// J2 induces no *secular* change in those, only short-period wobble that
+/// averages out. Concretely, with the rates from [`j2_secular_rates`]:
+///
+/// ```text
+/// Ω(t+dt) = Ω + Ω̇·dt              (nodal regression)
+/// ω(t+dt) = ω + ω̇·dt              (apsidal rotation)
+/// M(t+dt) = M + (n + Ṁ_J2)·dt     (Keplerian motion + J2 drift)
+/// ```
+///
+/// where the new true anomaly is recovered from the advanced mean anomaly via
+/// [`ClassicalElements::true_anomaly_from_mean`], and all angles are wrapped
+/// to `[0, 2π)`. This is the propagation operational tools use for long-
+/// horizon prediction, where integrating every short-period oscillation with
+/// [`propagate`] would be needless work; over many orbits the two agree on the
+/// secular drift (cross-validated in the tests against the RK4 node
+/// regression).
+///
+/// For a non-bound / non-physical element set (`a ≤ 0` or `e ≥ 1`), where the
+/// secular theory is undefined, the input is returned unchanged.
+pub fn j2_mean_element_propagate(coe: &ClassicalElements, dt: f64) -> ClassicalElements {
+    let Some((n, _)) = bound_n_and_p(coe) else {
+        return *coe;
+    };
+    let raan = (coe.raan + j2_raan_rate(coe) * dt).rem_euclid(TAU);
+    let arg_periapsis = (coe.arg_periapsis + j2_arg_periapsis_rate(coe) * dt).rem_euclid(TAU);
+    let m0 = coe.mean_anomaly_from_true(coe.true_anomaly);
+    let m1 = m0 + (n + j2_mean_anomaly_rate(coe)) * dt;
+    let true_anomaly = coe.true_anomaly_from_mean(m1).rem_euclid(TAU);
+    ClassicalElements {
+        semi_major_axis: coe.semi_major_axis,
+        eccentricity: coe.eccentricity,
+        inclination: coe.inclination,
+        raan,
+        arg_periapsis,
+        true_anomaly,
+    }
 }
 
 /// The **sun-synchronous inclination** (rad) for an orbit of semi-major axis
@@ -2498,5 +2609,147 @@ mod tests {
             true_anomaly: 0.0,
         };
         assert!(j2_raan_rate(&leo) != 0.0 && j2_raan_rate(&leo).is_finite());
+    }
+
+    #[test]
+    fn j2_mean_anomaly_rate_matches_hand_computed_value() {
+        // GROUND TRUTH: the J2 secular mean-anomaly rate for the ISS-like LEO,
+        // hand-computed from the WGS-84 constants and the published first-order
+        // formula (Vallado 4th ed. Eq. 9-40; equivalently Brouwer/Kozai):
+        //   Ṁ_J2 = 1.5 · n · J2 · (R⊕/p)² · √(1−e²) · (1 − 1.5 sin²i)
+        // For a = R⊕+420 km = 6_798_137 m, e = 0.001, i = 51.6°:
+        //   n       = √(μ/a³)        = 1.126374e-3 rad/s
+        //   (R⊕/p)² = (R⊕/a(1−e²))²  = 0.880255
+        //   √(1−e²) ≈ 0.9999995
+        //   sin²i   = sin²51.6°      = 0.614174 → (1 − 1.5·0.614174) = 0.078738
+        //   Ṁ_J2    = 1.5·1.126374e-3·1.0826267e-3·0.880255·0.9999995·0.078738
+        //           = 1.2678e-7 rad/s  (≈ +0.628 °/day).
+        // The RAAN rate of the SAME orbit is ≈ −5 °/day (the famous ISS node
+        // regression), validating the shared n / (R⊕/p)² chain independently.
+        let coe = iss_like();
+        let rate = j2_mean_anomaly_rate(&coe);
+        assert!(
+            (rate / 1.2678e-7 - 1.0).abs() < 5e-3,
+            "J2 mean-anomaly rate {rate:e} != 1.2678e-7 (hand-computed)"
+        );
+        // Positive: at i = 51.6° (below the 54.74° null) the bulge speeds it up.
+        assert!(rate > 0.0, "rate should be positive below the 54.74° null");
+    }
+
+    #[test]
+    fn j2_mean_anomaly_rate_vanishes_at_critical_inclination() {
+        // Ṁ_J2 ∝ (1 − 1.5 sin²i), which is zero at sin²i = 2/3, i.e.
+        // i = arcsin√(2/3) ≈ 54.7356° — distinct from the i ≈ 63.43° that
+        // nulls ω̇. The sign flips across it: positive below (prograde
+        // speed-up), negative above.
+        let crit = (2.0_f64 / 3.0).sqrt().asin();
+        assert!((crit.to_degrees() - 54.7356).abs() < 1e-3, "critical i");
+        let at_crit = ClassicalElements {
+            semi_major_axis: R_EARTH + 600_000.0,
+            eccentricity: 0.01,
+            inclination: crit,
+            raan: 0.0,
+            arg_periapsis: 0.0,
+            true_anomaly: 0.0,
+        };
+        assert!(
+            j2_mean_anomaly_rate(&at_crit).abs() < 1e-18,
+            "rate must vanish at the critical inclination, got {}",
+            j2_mean_anomaly_rate(&at_crit)
+        );
+        let below = ClassicalElements {
+            inclination: crit - 0.1,
+            ..at_crit
+        };
+        let above = ClassicalElements {
+            inclination: crit + 0.1,
+            ..at_crit
+        };
+        assert!(j2_mean_anomaly_rate(&below) > 0.0, "below → positive");
+        assert!(j2_mean_anomaly_rate(&above) < 0.0, "above → negative");
+    }
+
+    #[test]
+    fn j2_secular_rates_bundles_the_three_rates() {
+        // The bundle is exactly the three individual rate functions — and now
+        // carries the previously-missing mean-anomaly drift.
+        let coe = iss_like();
+        let rates = j2_secular_rates(&coe);
+        assert_eq!(rates.raan, j2_raan_rate(&coe));
+        assert_eq!(rates.arg_periapsis, j2_arg_periapsis_rate(&coe));
+        assert_eq!(rates.mean_anomaly, j2_mean_anomaly_rate(&coe));
+        // All real for this bound, inclined orbit; the node regresses west.
+        assert!(rates.raan < 0.0, "prograde node regresses");
+        assert!(rates.mean_anomaly != 0.0 && rates.mean_anomaly.is_finite());
+    }
+
+    #[test]
+    fn j2_mean_element_propagate_tracks_numerical_propagation() {
+        // Mean-element (analytic, closed-form) propagation vs the numerical
+        // RK4+J2 Cowell integrator — two independent methods that must agree
+        // on the secular nodal drift, the headline cross-validation.
+        let coe = iss_like();
+        let period = coe.period().unwrap();
+        let span = 5.0 * period;
+        let mean = j2_mean_element_propagate(&coe, span);
+
+        // Size and shape are held fixed *exactly* — J2 has no secular a/e/i drift.
+        assert_eq!(mean.semi_major_axis, coe.semi_major_axis);
+        assert_eq!(mean.eccentricity, coe.eccentricity);
+        assert_eq!(mean.inclination, coe.inclination);
+
+        // Ω and ω advance by exactly their secular rates × span.
+        let analytic_rate = j2_raan_rate(&coe);
+        let drift_mean = angle_diff(mean.raan, coe.raan);
+        assert!(
+            (drift_mean - analytic_rate * span).abs() < 1e-12,
+            "Ω advanced by Ω̇·span"
+        );
+        assert!(
+            (angle_diff(mean.arg_periapsis, coe.arg_periapsis)
+                - j2_arg_periapsis_rate(&coe) * span)
+                .abs()
+                < 1e-12,
+            "ω advanced by ω̇·span"
+        );
+
+        // CROSS-METHOD: the analytic nodal rate matches the RK4+J2 propagation
+        // of the same orbit to within 5% (mirrors the existing rate test's
+        // tolerance and denominator, so it tracks that signal exactly).
+        let dt = 1.0;
+        let steps = (span / dt).round() as u64;
+        let s_rk4 = propagate(&coe_to_rv(&coe).unwrap(), dt, steps, true).unwrap();
+        let coe_rk4 = rv_to_coe(&s_rk4).unwrap();
+        let measured_rate = angle_diff(coe_rk4.raan, coe.raan) / (steps as f64 * dt);
+        assert!(
+            analytic_rate < 0.0 && drift_mean < 0.0,
+            "both regress west: {analytic_rate} {drift_mean}"
+        );
+        let rel = (measured_rate - analytic_rate).abs() / analytic_rate.abs();
+        assert!(
+            rel < 0.05,
+            "analytic vs numerical nodal drift off by {:.1}%",
+            rel * 100.0
+        );
+
+        // Over a short step the mean anomaly advances at (n + Ṁ_J2)·dt:
+        // Keplerian motion plus the J2 secular term.
+        let step = 60.0_f64;
+        let short = j2_mean_element_propagate(&coe, step);
+        let m0 = coe.mean_anomaly_from_true(coe.true_anomaly);
+        let m1 = short.mean_anomaly_from_true(short.true_anomaly);
+        let n = TAU / period; // = √(μ/a³)
+        let expected = (n + j2_mean_anomaly_rate(&coe)) * step;
+        assert!(
+            (angle_diff(m1, m0) - expected).abs() < 1e-7,
+            "M advanced by (n + Ṁ_J2)·dt"
+        );
+
+        // A non-bound element set is a no-op (returns the input unchanged).
+        let hyp = ClassicalElements {
+            eccentricity: 1.4,
+            ..coe
+        };
+        assert_eq!(j2_mean_element_propagate(&hyp, span), hyp);
     }
 }
