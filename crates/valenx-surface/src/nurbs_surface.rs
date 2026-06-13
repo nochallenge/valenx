@@ -337,6 +337,93 @@ impl NurbsSurface {
         }
         (hu / 3.0) * (hv / 3.0) * sum
     }
+
+    /// The six **fundamental-form coefficients** `(E, F, G, L, M, N)` at
+    /// `(u, v)`, from a single consistent stencil. The first fundamental form
+    /// `E = Sᵤ·Sᵤ, F = Sᵤ·Sᵥ, G = Sᵥ·Sᵥ` (the metric) and the second
+    /// `L = Sᵤᵤ·n, M = Sᵤᵥ·n, N = Sᵥᵥ·n` (the normal-direction bending), with
+    /// `n` the unit normal. `None` at a degenerate point (parallel/zero tangents,
+    /// or a domain too small to form the stencil).
+    fn fundamental_forms(&self, u: f64, v: f64) -> Option<(f64, f64, f64, f64, f64, f64)> {
+        let (u_min, u_max) = self.u_range();
+        let (v_min, v_max) = self.v_range();
+        let hu = ((u_max - u_min) * 1e-3).max(1e-6);
+        let hv = ((v_max - v_min) * 1e-3).max(1e-6);
+        if u_max - u_min < 4.0 * hu || v_max - v_min < 4.0 * hv {
+            return None;
+        }
+        // Clamp the stencil centre so all 3×3 samples stay in the domain.
+        let uc = u.max(u_min + hu).min(u_max - hu);
+        let vc = v.max(v_min + hv).min(v_max - hv);
+        let sample = |du: f64, dv: f64| self.evaluate(uc + du, vc + dv);
+        let c = sample(0.0, 0.0);
+        let su = (sample(hu, 0.0) - sample(-hu, 0.0)) / (2.0 * hu);
+        let sv = (sample(0.0, hv) - sample(0.0, -hv)) / (2.0 * hv);
+        let suu = (sample(hu, 0.0) - 2.0 * c + sample(-hu, 0.0)) / (hu * hu);
+        let svv = (sample(0.0, hv) - 2.0 * c + sample(0.0, -hv)) / (hv * hv);
+        let suv = (sample(hu, hv) - sample(hu, -hv) - sample(-hu, hv) + sample(-hu, -hv))
+            / (4.0 * hu * hv);
+        let cross = su.cross(&sv);
+        let cross_mag = cross.norm();
+        if cross_mag < 1e-12 {
+            return None;
+        }
+        let n = cross / cross_mag;
+        Some((
+            su.dot(&su),
+            su.dot(&sv),
+            sv.dot(&sv),
+            suu.dot(&n),
+            suv.dot(&n),
+            svv.dot(&n),
+        ))
+    }
+
+    /// The **Gaussian curvature** `K = (LN − M²)/(EG − F²)` at `(u, v)` — the
+    /// product of the two principal curvatures, and the
+    /// parameterisation-independent *intrinsic* curvature.
+    ///
+    /// `K = 0` for a developable surface (a plane, cylinder or cone — anything
+    /// that unrolls flat), positive where the surface is locally dome-like
+    /// (sphere: `K = 1/r²`) and negative at a saddle. Its sign is independent
+    /// of the normal's orientation. Returns `0.0` at a degenerate point (see
+    /// [`fundamental_forms`](Self::fundamental_forms)).
+    pub fn gaussian_curvature(&self, u: f64, v: f64) -> f64 {
+        match self.fundamental_forms(u, v) {
+            Some((e, f, g, l, m, n)) => {
+                let denom = e * g - f * f;
+                if denom.abs() < 1e-30 {
+                    0.0
+                } else {
+                    (l * n - m * m) / denom
+                }
+            }
+            None => 0.0,
+        }
+    }
+
+    /// The **mean curvature** `H = (EN − 2FM + GL)/(2(EG − F²))` at `(u, v)` —
+    /// the average of the two principal curvatures.
+    ///
+    /// `H = 0` characterises a **minimal surface** (a soap film); a sphere of
+    /// radius `r` has `|H| = 1/r` and a cylinder `|H| = 1/(2r)` (its principal
+    /// curvatures are `1/r` and `0`). Unlike the Gaussian curvature its sign
+    /// flips with the normal's orientation, so compare magnitudes. Returns
+    /// `0.0` at a degenerate point (see
+    /// [`fundamental_forms`](Self::fundamental_forms)).
+    pub fn mean_curvature(&self, u: f64, v: f64) -> f64 {
+        match self.fundamental_forms(u, v) {
+            Some((e, f, g, l, m, n)) => {
+                let denom = e * g - f * f;
+                if denom.abs() < 1e-30 {
+                    0.0
+                } else {
+                    (e * n - 2.0 * f * m + g * l) / (2.0 * denom)
+                }
+            }
+            None => 0.0,
+        }
+    }
 }
 
 /// Breakpoints `[a, …interior knots in (a, b)…, b]` so each Simpson panel lies
@@ -578,5 +665,54 @@ mod tests {
         assert_eq!(s.area_between(0.5, 0.5, 0.0, 1.0), 0.0);
         assert_eq!(s.area_between(1.0, 0.0, 0.0, 1.0), 0.0);
         assert_eq!(s.area_between(0.0, 1.0, 1.0, 0.0), 0.0);
+    }
+
+    // ===== curvature: Gaussian / mean (second fundamental form) =====
+
+    #[test]
+    fn planar_surface_has_zero_curvature() {
+        // A flat patch is the trivial developable: both curvatures vanish.
+        let s = planar_unit_square_surface();
+        for &(u, v) in &[(0.3_f64, 0.4_f64), (0.5, 0.5), (0.7, 0.2)] {
+            assert!(
+                s.gaussian_curvature(u, v).abs() < 1e-6,
+                "plane K at ({u},{v})"
+            );
+            assert!(s.mean_curvature(u, v).abs() < 1e-6, "plane H at ({u},{v})");
+        }
+    }
+
+    #[test]
+    fn cylinder_is_developable_with_mean_curvature_half_inverse_radius() {
+        // GROUND TRUTH: a cylinder of radius r is developable, so its Gaussian
+        // curvature K = 0, and its mean curvature |H| = 1/(2r) everywhere (its
+        // principal curvatures are 1/r around and 0 along the axis).
+        let r = 2.0_f64;
+        let s = quarter_cylinder(r, 3.0);
+        for &(u, v) in &[(0.3_f64, 0.4_f64), (0.5, 0.5), (0.7, 0.6)] {
+            let k = s.gaussian_curvature(u, v);
+            let h = s.mean_curvature(u, v).abs();
+            assert!(k.abs() < 1e-4, "cylinder K {k} != 0 at ({u},{v})");
+            assert!(
+                (h - 1.0 / (2.0 * r)).abs() / (1.0 / (2.0 * r)) < 0.01,
+                "cylinder |H| {h} != 1/(2r) = {} at ({u},{v})",
+                1.0 / (2.0 * r)
+            );
+        }
+    }
+
+    #[test]
+    fn curvature_is_finite_and_radius_scales_mean_curvature() {
+        // |H| = 1/(2r): a 2× larger cylinder has half the mean curvature.
+        let h_small = quarter_cylinder(1.0, 2.0).mean_curvature(0.5, 0.5).abs();
+        let h_large = quarter_cylinder(2.0, 2.0).mean_curvature(0.5, 0.5).abs();
+        assert!(
+            (h_small / h_large - 2.0).abs() < 0.05,
+            "|H| should halve when r doubles: {h_small} vs {h_large}"
+        );
+        // Always finite (never NaN), including at clamped-stencil endpoints.
+        let s = quarter_cylinder(2.0, 3.0);
+        assert!(s.gaussian_curvature(0.0, 0.0).is_finite());
+        assert!(s.mean_curvature(1.0, 1.0).is_finite());
     }
 }
