@@ -654,6 +654,24 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Engine workbench — the reactive
+                    // engine design → analyze → optimize → export loop
+                    // (ideal-nozzle performance + Bartz regen-cooling).
+                    if ui
+                        .checkbox(
+                            &mut self.show_engine_workbench,
+                            "Engine — design → analyze",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Engine workbench — reactive \
+                             ideal-nozzle performance + Bartz regen-cooling, a \
+                             chamber-pressure × expansion-ratio optimizer, and a 3-D \
+                             nozzle you can export to STL.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // The Assistant activity sidebar — a live in-app feed of
                     // what the AI assistant is designing / simulating /
                     // building, read from a .jsonl activity file. On by
@@ -1220,6 +1238,10 @@ impl eframe::App for ValenxApp {
         // View → Rocket. Mounted before the CentralPanel so egui docks it
         // to the right alongside the other workbenches.
         crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+
+        // Engine workbench (right) — reactive engine design → analyze →
+        // optimize → export. A no-op unless toggled on via View → Engine.
+        crate::engine_workbench::draw_engine_workbench(self, ctx);
 
         // Assistant activity sidebar (right) — a live in-app feed of what
         // the AI assistant is building. On by default; toggle via View.
