@@ -461,7 +461,7 @@ rfd    = "0.14"
 
 # Dynamic-library loading for the plugin loader (valenx-plugin).
 # Cross-platform `dlopen` / `LoadLibrary` wrapper.
-libloading = "0.8"
+libloading = "0.9"
 
 # Rust-native BRep CAD kernel (RICOS Co. Ltd, Apache-2.0). Powers the
 # Part workbench's primitives, booleans, and tessellation in
