@@ -29,7 +29,7 @@
 use std::path::PathBuf;
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints};
+use egui_plot::{Line, Plot, PlotPoints, Points};
 
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
@@ -46,6 +46,9 @@ struct Lv1Flight {
     alt_pts: Vec<[f64; 2]>,
     /// Multi-line summary (orbit / Δv / max-Q / peak g).
     summary: String,
+    /// `[time_s, altitude_km]` of the staging + MECO flight events — drawn
+    /// as markers on the ascent plot.
+    event_pts: Vec<[f64; 2]>,
 }
 
 /// The best feasible design an ascent-optimization run found.
@@ -255,11 +258,25 @@ fn fly_lv1() -> Lv1Flight {
                 r.max_dynamic_pressure / 1000.0,
                 r.max_acceleration_g,
             );
-            Lv1Flight { alt_pts, summary }
+            let event_pts = r
+                .events
+                .iter()
+                .filter(|e| {
+                    let k = e.kind.to_ascii_lowercase();
+                    k.contains("staging") || k.contains("meco")
+                })
+                .map(|e| [e.time, e.altitude_m / 1000.0])
+                .collect();
+            Lv1Flight {
+                alt_pts,
+                summary,
+                event_pts,
+            }
         }
         Err(e) => Lv1Flight {
             alt_pts: Vec::new(),
             summary: format!("ascent error: {e}"),
+            event_pts: Vec::new(),
         },
     }
 }
@@ -371,7 +388,7 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&f.summary).monospace().small());
                         if !f.alt_pts.is_empty() {
                             ui.label(
-                                egui::RichText::new("altitude (km) vs time (s)")
+                                egui::RichText::new("altitude (km) vs time (s) · dots = staging + MECO")
                                     .weak()
                                     .small(),
                             );
@@ -380,6 +397,13 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                     Line::new(PlotPoints::from(f.alt_pts.clone()))
                                         .name("altitude (km)"),
                                 );
+                                if !f.event_pts.is_empty() {
+                                    pui.points(
+                                        Points::new(PlotPoints::from(f.event_pts.clone()))
+                                            .radius(5.0)
+                                            .name("staging / MECO"),
+                                    );
+                                }
                             });
                         }
                     }
