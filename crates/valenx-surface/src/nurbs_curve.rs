@@ -333,6 +333,51 @@ impl NurbsCurve {
         }
         total
     }
+
+    /// **Point inversion** — the parameter `u*` and point `C(u*)` on the curve
+    /// **closest** to a query point, i.e. the orthogonal projection of `query`
+    /// onto the curve.
+    ///
+    /// This is the foundational *snapping / projection* query: picking a point
+    /// on a curve nearest the cursor, trimming, or measuring a clearance.
+    /// A coarse parameter scan seeds Newton's method on the orthogonality
+    /// condition `f(u) = (C(u) − Q)·C'(u) = 0` — at the minimum the residual
+    /// `C(u*) − Q` is perpendicular to the tangent `C'(u*)`. The parameter is
+    /// kept inside the valid [`parameter_range`](Self::parameter_range), so a
+    /// query beyond an end projects onto that endpoint. Returns `(u*, C(u*))`.
+    pub fn closest_point(&self, query: Vector3<f64>) -> (f64, Vector3<f64>) {
+        let (u_min, u_max) = self.parameter_range();
+        // Coarse scan for a robust Newton seed.
+        const SAMPLES: usize = 100;
+        let mut best_u = u_min;
+        let mut best_d2 = f64::INFINITY;
+        for i in 0..=SAMPLES {
+            let u = u_min + (u_max - u_min) * (i as f64 / SAMPLES as f64);
+            let d2 = (self.evaluate(u) - query).norm_squared();
+            if d2 < best_d2 {
+                best_d2 = d2;
+                best_u = u;
+            }
+        }
+        // Newton refinement on f(u) = (C(u) − Q)·C'(u).
+        let mut u = best_u;
+        for _ in 0..30 {
+            let r = self.evaluate(u) - query;
+            let d1 = self.derivative(u, 1);
+            let d2v = self.derivative(u, 2);
+            let f = r.dot(&d1);
+            let fp = d1.norm_squared() + r.dot(&d2v);
+            if fp.abs() < 1e-30 {
+                break;
+            }
+            let step = f / fp;
+            u = (u - step).clamp(u_min, u_max);
+            if step.abs() < 1e-12 {
+                break;
+            }
+        }
+        (u, self.evaluate(u))
+    }
 }
 
 /// Free helper — exposed so `nurbs_surface` can use it without
@@ -760,5 +805,93 @@ mod tests {
             "circle start tangent {t0:?}"
         );
         assert!((t0.norm() - 1.0).abs() < 1e-9);
+    }
+
+    // ===== point inversion (closest point) =====
+
+    #[test]
+    fn closest_point_recovers_a_point_on_the_curve() {
+        let c = cubic_bezier([
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 2.0, 0.0),
+            Vector3::new(3.0, 2.0, 0.0),
+            Vector3::new(4.0, 0.0, 0.0),
+        ]);
+        let on = c.evaluate(0.37);
+        let (u, p) = c.closest_point(on);
+        assert!(
+            (p - on).norm() < 1e-6,
+            "closest to an on-curve point is itself"
+        );
+        assert!((u - 0.37).abs() < 1e-4, "parameter recovered: {u}");
+    }
+
+    #[test]
+    fn closest_point_residual_is_perpendicular_to_tangent() {
+        // GROUND TRUTH: at the closest point the residual (C(u*) − Q) is
+        // perpendicular to the tangent — the first-order optimality condition —
+        // and no nearby parameter is closer.
+        let c = cubic_bezier([
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 2.0, 0.0),
+            Vector3::new(3.0, 2.0, 0.0),
+            Vector3::new(4.0, 0.0, 0.0),
+        ]);
+        let query = Vector3::new(2.0, 3.0, 1.0); // off the curve
+        let (u, p) = c.closest_point(query);
+        let (u_min, u_max) = c.parameter_range();
+        if u > u_min + 1e-6 && u < u_max - 1e-6 {
+            let tangent = c.unit_tangent(u);
+            let residual = (p - query).normalize();
+            assert!(
+                residual.dot(&tangent).abs() < 1e-4,
+                "residual·tangent = {}",
+                residual.dot(&tangent)
+            );
+        }
+        let d = (p - query).norm();
+        for du in [-0.05_f64, 0.05] {
+            let u2 = (u + du).clamp(u_min, u_max);
+            assert!(
+                (c.evaluate(u2) - query).norm() >= d - 1e-9,
+                "{u} is a genuine minimum"
+            );
+        }
+    }
+
+    #[test]
+    fn closest_point_on_circle_is_the_radial_projection() {
+        // The closest point on a circle (centred at the origin) to an external
+        // point is its radial projection. Query at 2× the 45° point.
+        let r = 2.0_f64;
+        let c = quarter_circle(r);
+        let mid = c.evaluate(0.5); // the 45° point (r/√2, r/√2)
+        let (_, p) = c.closest_point(mid * 2.0);
+        assert!(
+            (p - mid).norm() < 1e-3,
+            "closest {p:?} != 45° point {mid:?}"
+        );
+        assert!((p.norm() - r).abs() < 1e-3, "closest lies on the circle");
+    }
+
+    #[test]
+    fn closest_point_clamps_to_an_endpoint_for_a_far_query() {
+        // Straight segment x: 0 → 3; queries beyond each end project onto it.
+        let c = cubic_bezier([
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(2.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+        ]);
+        let (u0, p0) = c.closest_point(Vector3::new(-100.0, 5.0, 0.0));
+        assert!(
+            u0.abs() < 1e-6 && p0.norm() < 1e-9,
+            "clamps to the start u=0"
+        );
+        let (u1, p1) = c.closest_point(Vector3::new(100.0, 5.0, 0.0));
+        assert!(
+            (u1 - 1.0).abs() < 1e-6 && (p1 - Vector3::new(3.0, 0.0, 0.0)).norm() < 1e-9,
+            "clamps to the end u=1"
+        );
     }
 }
