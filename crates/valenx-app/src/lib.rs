@@ -674,6 +674,9 @@ impl ValenxApp {
         // Assistant activity sidebar on by default — the desktop app
         // narrates its own work via a live feed (empty until appended to).
         app.show_assistant_panel = true;
+        // Rocket workbench on by default too, so the Valenx LV-1 ascent
+        // plot is visible at launch without hunting the View menu.
+        app.show_rocket_workbench = true;
         app.snap_to_grid = true;
         app.init_registry();
         // Restore the per-case run-history map from disk so the
