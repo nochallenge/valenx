@@ -654,6 +654,21 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // The Assistant activity sidebar — a live in-app feed of
+                    // what the AI assistant is designing / simulating /
+                    // building, read from a .jsonl activity file. On by
+                    // default so the app narrates its own work.
+                    if ui
+                        .checkbox(&mut self.show_assistant_panel, "Assistant (AI activity)")
+                        .on_hover_text(
+                            "Show / hide the right-side Assistant sidebar — a live \
+                             feed of what the AI assistant is designing / simulating / \
+                             building, read from a .jsonl activity file.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // ── Central viewport selector ─────────────────────────
                     // Lets the user swap the 3D viewport for a
                     // domain-appropriate alternative (e.g. the 2D DNA /
@@ -1205,6 +1220,10 @@ impl eframe::App for ValenxApp {
         // View → Rocket. Mounted before the CentralPanel so egui docks it
         // to the right alongside the other workbenches.
         crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+
+        // Assistant activity sidebar (right) — a live in-app feed of what
+        // the AI assistant is building. On by default; toggle via View.
+        crate::assistant_workbench::draw_assistant_workbench(self, ctx);
 
         // Central viewport — grabs the wgpu render state for the
         // offscreen-depth-buffered shaded path if the wgpu backend is

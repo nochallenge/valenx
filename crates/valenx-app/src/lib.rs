@@ -51,6 +51,7 @@ pub mod render_workbench;
 pub mod reverse_workbench;
 pub mod variant_effect_workbench;
 
+pub mod assistant_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -578,6 +579,14 @@ pub struct ValenxApp {
     /// [`crate::rocket_workbench`].
     pub(crate) rocket: crate::rocket_workbench::RocketWorkbenchState,
 
+    /// Whether the right-side Assistant activity sidebar is visible. On by
+    /// default (set in [`ValenxApp::new`]) so the app narrates its own work
+    /// via the live feed.
+    pub(crate) show_assistant_panel: bool,
+    /// State for the Assistant activity sidebar (the live `.jsonl` feed
+    /// path). See [`crate::assistant_workbench`].
+    pub(crate) assistant: crate::assistant_workbench::AssistantWorkbenchState,
+
     /// Whether the keyboard-shortcut cheat-sheet overlay is open.
     /// Toggled by the `?` key + by Help → Keyboard shortcuts.
     pub(crate) keyboard_help_open: bool,
@@ -662,6 +671,9 @@ impl ValenxApp {
         // Hidden via View menu / palette for a clean viewport.
         app.show_mesh_toolbox = true;
         app.show_browser = true;
+        // Assistant activity sidebar on by default — the desktop app
+        // narrates its own work via a live feed (empty until appended to).
+        app.show_assistant_panel = true;
         app.snap_to_grid = true;
         app.init_registry();
         // Restore the per-case run-history map from disk so the
