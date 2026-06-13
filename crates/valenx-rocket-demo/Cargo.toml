@@ -1,0 +1,20 @@
+[package]
+name        = "valenx-rocket-demo"
+description = "Worked end-to-end rocket design→simulate example: couples valenx-astro ascent-to-orbit with a valenx-fem structural check, where the trajectory's peak g-load sizes the interstage struts. Research / preliminary-design grade, not a flight-certified tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+valenx-astro = { path = "../valenx-astro" }
+valenx-fem   = { path = "../valenx-fem" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
