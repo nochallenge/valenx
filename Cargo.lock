@@ -6511,6 +6511,7 @@ dependencies = [
  "valenx-reverse",
  "valenx-rnadesign",
  "valenx-rnastruct",
+ "valenx-rocket-demo",
  "valenx-sheet-metal",
  "valenx-sketch",
  "valenx-solvespace-3d",
