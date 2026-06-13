@@ -27,8 +27,13 @@
 //! multi-physics-analysis *workflow* lives in one place; it is **not** a
 //! flight-certified design tool.
 
+pub mod nozzle;
+
 use valenx_astro::constants::G0;
-use valenx_astro::{presets, simulate_ascent, AstroError};
+use valenx_astro::{
+    presets, simulate_ascent, AscentConfig, AstroError, DragModel, GuidanceMode, GuidanceProgram,
+    Stage, Vehicle, WindModel,
+};
 use valenx_fem::beam::{axial_force_capacity, axial_stress};
 
 /// A minimal rocket design. The trajectory flies the medium-lift two-stage
@@ -84,22 +89,24 @@ pub struct RocketReport {
     pub structurally_safe: bool,
 }
 
-/// Run the end-to-end **design → simulate** pipeline for `design`.
-///
-/// 1. Flies the medium-lift two-stage preset to orbit ([`valenx_astro`]) and
-///    reads off the orbit, Δv budget, max-Q and peak g-load.
-/// 2. Couples that peak g-load into a structural check of the interstage struts
-///    ([`valenx_fem::beam`]): `F = m · a_max`, `σ = F / (N · A)`, safety factor
-///    `σ_yield / σ`.
+/// Couple an ascent — `vehicle` flown under `config` — with an interstage
+/// **strut check**: the trajectory's peak g-load becomes the inertial load
+/// the struts in `design` must carry (`F = m · a_max`), yielding the
+/// per-strut stress `σ = F / (N · A)` and the safety factor `σ_yield / σ`.
+/// Shared by [`design_and_simulate`] (the medium-lift preset) and
+/// [`fly_valenx_lv1`] (the from-scratch LV-1 launcher).
 ///
 /// # Errors
 ///
-/// Propagates [`AstroError`] if the trajectory integration rejects the inputs.
-pub fn design_and_simulate(design: &RocketDesign) -> Result<RocketReport, AstroError> {
+/// Propagates [`AstroError`] if the trajectory integration rejects the
+/// vehicle / configuration.
+pub fn simulate_coupled(
+    vehicle: &Vehicle,
+    config: &AscentConfig,
+    design: &RocketDesign,
+) -> Result<RocketReport, AstroError> {
     // --- Trajectory leg (valenx-astro) ---
-    let vehicle = presets::two_stage_medium_lift();
-    let config = presets::leo_ascent_config();
-    let flight = simulate_ascent(&vehicle, &config)?;
+    let flight = simulate_ascent(vehicle, config)?;
 
     // --- Structural leg (valenx-fem), loaded BY the trajectory result ---
     // Peak axial acceleration → inertial load the interstage must react.
@@ -129,6 +136,99 @@ pub fn design_and_simulate(design: &RocketDesign) -> Result<RocketReport, AstroE
         structural_safety_factor,
         structurally_safe: structural_safety_factor >= 1.0,
     })
+}
+
+/// Run the end-to-end **design → simulate** pipeline for `design` on the
+/// generic medium-lift two-stage preset (see [`simulate_coupled`]).
+///
+/// # Errors
+///
+/// Propagates [`AstroError`] if the trajectory integration rejects the inputs.
+pub fn design_and_simulate(design: &RocketDesign) -> Result<RocketReport, AstroError> {
+    simulate_coupled(
+        &presets::two_stage_medium_lift(),
+        &presets::leo_ascent_config(),
+        design,
+    )
+}
+
+/// **Valenx LV-1** — a from-scratch two-stage kerolox small-lift launch
+/// vehicle, designed in valenx to lift ~2 t to low Earth orbit. The stage
+/// masses are sized to a Tsiolkovsky `Δv` budget near 9.9 km/s (LEO orbital
+/// velocity ~7.8 km/s plus ~2 km/s of gravity + drag + steering losses),
+/// with a ~1.37 liftoff thrust-to-weight. Illustrative / research-grade —
+/// not flight data for any real vehicle.
+pub fn valenx_lv1() -> Vehicle {
+    Vehicle {
+        stages: vec![
+            Stage {
+                name: "LV-1 first stage (kerolox)".into(),
+                dry_mass: 6_000.0,
+                propellant_mass: 90_000.0,
+                thrust_sl: 1_500_000.0,
+                thrust_vac: 1_650_000.0,
+                isp_sl: 283.0,
+                isp_vac: 311.0,
+            },
+            Stage {
+                name: "LV-1 second stage (kerolox, vacuum)".into(),
+                dry_mass: 1_500.0,
+                propellant_mass: 12_000.0,
+                thrust_sl: 180_000.0,
+                thrust_vac: 180_000.0,
+                isp_sl: 345.0,
+                isp_vac: 345.0,
+            },
+        ],
+        payload_mass: 2_000.0,
+        // ~1.8 m diameter -> ~2.5 m² frontal area.
+        reference_area: 2.5,
+        drag: DragModel::generic_launch_vehicle(),
+    }
+}
+
+/// The Valenx LV-1's ascent profile — an open-loop gravity turn tuned to
+/// fly the vehicle into a bound orbit.
+pub fn valenx_lv1_ascent() -> AscentConfig {
+    AscentConfig {
+        launch_altitude_m: 0.0,
+        guidance: GuidanceProgram {
+            vertical_rise_time: 20.0,
+            pitch_kick_deg: 12.0,
+            kick_duration: 5.0,
+        },
+        time_step: 0.1,
+        max_time: 1_800.0,
+        sample_interval: 2.0,
+        mode: GuidanceMode::OpenLoopGravityTurn,
+        wind: WindModel::None,
+    }
+}
+
+/// The Valenx LV-1's interstage thrust structure: 8 aluminium (Al-2024-T3)
+/// struts carrying the wet upper stage + payload during first-stage burn.
+pub fn valenx_lv1_interstage() -> RocketDesign {
+    let v = valenx_lv1();
+    let upper = &v.stages[1];
+    RocketDesign {
+        supported_mass_kg: upper.dry_mass + upper.propellant_mass + v.payload_mass,
+        strut_count: 8,
+        strut_area_m2: 1.5e-3, // 15 cm² each
+        material_yield_pa: 324.0e6,
+    }
+}
+
+/// Fly the **Valenx LV-1** end to end: design → ascent → structural check.
+///
+/// # Errors
+///
+/// Propagates [`AstroError`] if the trajectory integration rejects the design.
+pub fn fly_valenx_lv1() -> Result<RocketReport, AstroError> {
+    simulate_coupled(
+        &valenx_lv1(),
+        &valenx_lv1_ascent(),
+        &valenx_lv1_interstage(),
+    )
 }
 
 impl std::fmt::Display for RocketReport {
@@ -242,5 +342,85 @@ mod tests {
         assert!(text.contains("Trajectory (valenx-astro)"));
         assert!(text.contains("Structure (valenx-fem"));
         assert!(text.contains("safety factor"));
+    }
+}
+
+#[cfg(test)]
+mod lv1_tests {
+    use super::*;
+
+    #[test]
+    fn lv1_reaches_orbit_and_is_structurally_sound() {
+        // The from-scratch LV-1 design flies to a bound orbit on its tuned
+        // gravity-turn profile, and its 8×15 cm² aluminium interstage carries
+        // the trajectory's peak g-load with margin.
+        let r = fly_valenx_lv1().unwrap();
+        assert!(
+            r.reached_orbit,
+            "LV-1 should reach orbit; periapsis {} km",
+            r.periapsis_km
+        );
+        assert!(
+            r.periapsis_km > 100.0,
+            "periapsis {} km above the Kármán line",
+            r.periapsis_km
+        );
+        assert!(
+            r.structurally_safe,
+            "interstage SF {}",
+            r.structural_safety_factor
+        );
+        assert!(r.structural_safety_factor > 1.0);
+        // The vehicle was sized to a ~9.9–10.1 km/s Tsiolkovsky LEO budget.
+        assert!(
+            (9_900.0..10_200.0).contains(&r.delta_v_budget_ms),
+            "Δv budget {} m/s",
+            r.delta_v_budget_ms
+        );
+    }
+
+    #[test]
+    fn lv1_interstage_supports_the_upper_stack() {
+        // The interstage carries the wet upper stage + payload during the
+        // first-stage burn — sized straight off the vehicle masses.
+        let v = valenx_lv1();
+        let upper = &v.stages[1];
+        let d = valenx_lv1_interstage();
+        assert!(
+            (d.supported_mass_kg - (upper.dry_mass + upper.propellant_mass + v.payload_mass)).abs()
+                < 1e-9
+        );
+    }
+
+    #[test]
+    #[ignore = "prints the LV-1 flight profile — run with --ignored --nocapture"]
+    fn dump_lv1_flight() {
+        let v = valenx_lv1();
+        let r = simulate_ascent(&v, &valenx_lv1_ascent()).unwrap();
+        println!(
+            "SUMMARY apo={:.0}km peri={:.0}km dv={:.0} maxQ={:.0}Pa peakG={:.2} outcome={:?}",
+            r.apoapsis_km(),
+            r.periapsis_km(),
+            r.ideal_delta_v,
+            r.max_dynamic_pressure,
+            r.max_acceleration_g,
+            r.outcome
+        );
+        for e in &r.events {
+            println!(
+                "EVENT t={:.1} alt={:.0}m v={:.0} {}",
+                e.time, e.altitude_m, e.speed, e.kind
+            );
+        }
+        for s in r.samples.iter().step_by(4) {
+            println!(
+                "S {:.0} {:.2} {:.0} {:.0} {:.2}",
+                s.time,
+                s.altitude_m / 1000.0,
+                s.speed_inertial,
+                s.dynamic_pressure,
+                s.acceleration_g
+            );
+        }
     }
 }
