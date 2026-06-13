@@ -97,7 +97,7 @@ pub use nernst::{
     nernst_concentration_ratio, nernst_potential_mv, nernst_slope_per_decade_mv,
     thermal_voltage_mv, ussing_flux_ratio, BODY_TEMPERATURE_K,
 };
-pub use plasticity::StdpRule;
+pub use plasticity::{StdpRule, TsodyksMarkram};
 pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{
     charge_density, charge_per_phase_uc, is_safe, max_safe_charge_density,

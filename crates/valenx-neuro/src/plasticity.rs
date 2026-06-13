@@ -1,4 +1,4 @@
-//! Spike-timing-dependent plasticity (STDP).
+//! Synaptic plasticity — long-term (STDP) and short-term (Tsodyks–Markram).
 //!
 //! Where [`crate::synapse`] gives the *conductance* a synaptic event produces,
 //! this module gives how the synaptic *weight itself* changes when pre- and
@@ -18,6 +18,11 @@
 //! the postsynaptic one (it could have helped cause it) strengthens the synapse,
 //! while the reverse order weakens it, with an influence that decays over the
 //! tens-of-milliseconds correlation windows `τ₊`, `τ₋`.
+//!
+//! [`TsodyksMarkram`] adds the complementary **short-term** plasticity — the
+//! fast, *use-dependent* depression and facilitation of synaptic strength
+//! across a spike train (Tsodyks & Markram 1997/1998), governed by a recovering
+//! resource pool `R` and a facilitating release probability `u`.
 
 /// Parameters of the **pair-based spike-timing-dependent plasticity (STDP)**
 /// rule (Bi & Poo 1998; Song, Miller & Abbott 2000). See the
@@ -94,6 +99,93 @@ impl StdpRule {
             return 0.0;
         }
         self.a_minus * self.tau_minus_s
+    }
+}
+
+/// The **Tsodyks–Markram short-term plasticity** model (Tsodyks & Markram
+/// 1997/1998): the fast, *use-dependent* change in synaptic strength across a
+/// spike train, complementing the long-term [`StdpRule`].
+///
+/// Two running state variables evolve over the train: the **available
+/// resources** `R` (depleted by each release, recovering toward 1 with
+/// `τ_rec`) and the **utilization** `u` (the release probability, incremented
+/// by each spike and decaying toward 0 with `τ_facil`). Each spike's
+/// postsynaptic amplitude is `∝ u·R`, and an isolated spike gives exactly `U`.
+/// A short `τ_facil` (or small `U`) yields net **depression** (each amplitude
+/// smaller than the last); a long `τ_facil` with fast recovery yields
+/// **facilitation** (amplitudes grow) — the two regimes that let a synapse act
+/// as a high- or low-pass filter of presynaptic rate.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TsodyksMarkram {
+    /// Baseline release probability `U ∈ (0, 1]` — the fraction of resources an
+    /// isolated spike releases (and hence the first-spike amplitude).
+    pub u: f64,
+    /// Depression recovery time constant `τ_rec` (s) — how fast the depleted
+    /// resource pool `R` refills toward 1.
+    pub tau_rec_s: f64,
+    /// Facilitation time constant `τ_facil` (s) — how long an elevated release
+    /// probability persists before decaying back down.
+    pub tau_facil_s: f64,
+}
+
+impl TsodyksMarkram {
+    fn is_valid(&self) -> bool {
+        self.u.is_finite()
+            && self.u > 0.0
+            && self.u <= 1.0
+            && self.tau_rec_s.is_finite()
+            && self.tau_rec_s > 0.0
+            && self.tau_facil_s.is_finite()
+            && self.tau_facil_s > 0.0
+    }
+
+    /// The sequence of postsynaptic **amplitudes** (`∝ u·R`, first spike `= U`)
+    /// for a presynaptic spike train at the given times (s).
+    ///
+    /// Between consecutive spikes the resources recover toward 1
+    /// (`R ← 1 − (1 − R)·e^(−Δt/τ_rec)`) and the utilization decays toward 0
+    /// (`u ← u·e^(−Δt/τ_facil)`); at each spike `u` is incremented
+    /// (`u ← u + U·(1 − u)`), the amplitude `u·R` is recorded, then `R` is
+    /// depleted (`R ← R·(1 − u)`). Negative inter-spike gaps are clamped to 0.
+    /// Returns an empty vector for non-physical parameters (`U ∉ (0,1]`,
+    /// `τ ≤ 0`, or non-finite) or any non-finite spike time.
+    pub fn response(&self, spike_times_s: &[f64]) -> Vec<f64> {
+        if !self.is_valid() || spike_times_s.iter().any(|t| !t.is_finite()) {
+            return Vec::new();
+        }
+        let mut amps = Vec::with_capacity(spike_times_s.len());
+        let mut u = 0.0_f64; // running utilization (decays toward 0)
+        let mut r = 1.0_f64; // running resources (recover toward 1)
+        let mut last: Option<f64> = None;
+        for &t in spike_times_s {
+            if let Some(prev) = last {
+                let dt = (t - prev).max(0.0);
+                u *= (-dt / self.tau_facil_s).exp();
+                r = 1.0 - (1.0 - r) * (-dt / self.tau_rec_s).exp();
+            }
+            u += self.u * (1.0 - u); // facilitation increment (u⁺)
+            amps.push(u * r); // amplitude ∝ u⁺·R⁻
+            r *= 1.0 - u; // resource depletion (R⁺)
+            last = Some(t);
+        }
+        amps
+    }
+
+    /// The **paired-pulse ratio** `EPSC₂/EPSC₁` at inter-spike interval `dt_s`
+    /// (s) — the standard one-number summary of short-term plasticity.
+    ///
+    /// `< 1` is paired-pulse **depression**, `> 1` **facilitation**. In the
+    /// pure-depression limit (`τ_facil → 0`, no `u` build-up) it is exactly
+    /// `1 − U·e^(−Δt/τ_rec)`; in the pure-facilitation limit (`τ_rec → 0`,
+    /// resources always replenished) it is `1 + (1 − U)·e^(−Δt/τ_facil)`.
+    /// Returns `NaN` for non-physical parameters or a non-finite `dt_s`.
+    pub fn paired_pulse_ratio(&self, dt_s: f64) -> f64 {
+        let amps = self.response(&[0.0, dt_s]);
+        if amps.len() == 2 && amps[0] != 0.0 {
+            amps[1] / amps[0]
+        } else {
+            f64::NAN
+        }
     }
 }
 
@@ -242,5 +334,114 @@ mod tests {
             ..r
         };
         assert_eq!(nan_amp.weight_change(0.005), 0.0);
+    }
+
+    // ===== short-term plasticity (Tsodyks–Markram) =====
+
+    #[test]
+    fn tm_first_amplitude_is_the_release_probability() {
+        let tm = TsodyksMarkram {
+            u: 0.4,
+            tau_rec_s: 0.2,
+            tau_facil_s: 0.05,
+        };
+        let a = tm.response(&[0.0]);
+        assert_eq!(a.len(), 1);
+        assert!(
+            (a[0] - 0.4).abs() < 1e-12,
+            "first amplitude = U, got {}",
+            a[0]
+        );
+    }
+
+    #[test]
+    fn tm_pure_depression_paired_pulse_matches_analytic() {
+        // GROUND TRUTH: with facilitation off (τ_facil → 0, u stays at U), the
+        // paired-pulse ratio is exactly R₂ = 1 − U·e^(−Δt/τ_rec).
+        // U=0.5, τ_rec=0.2 s, Δt=0.1 s → 1 − 0.5·e^(−0.5) = 0.696735.
+        let tm = TsodyksMarkram {
+            u: 0.5,
+            tau_rec_s: 0.2,
+            tau_facil_s: 1e-9,
+        };
+        let ppr = tm.paired_pulse_ratio(0.1);
+        let expected = 1.0 - 0.5 * (-0.5_f64).exp();
+        assert!((ppr - expected).abs() < 1e-9, "PPR {ppr} != {expected}");
+        assert!((ppr - 0.696_735).abs() < 1e-4, "PPR {ppr} != 0.696735");
+        assert!(ppr < 1.0, "depression: PPR < 1");
+    }
+
+    #[test]
+    fn tm_pure_facilitation_paired_pulse_matches_analytic() {
+        // GROUND TRUTH: with instant recovery (τ_rec → 0, R always 1), the
+        // paired-pulse ratio is exactly 1 + (1 − U)·e^(−Δt/τ_facil).
+        // U=0.2, τ_facil=0.3 s, Δt=0.05 s → 1 + 0.8·e^(−1/6) = 1.677186.
+        let tm = TsodyksMarkram {
+            u: 0.2,
+            tau_rec_s: 1e-9,
+            tau_facil_s: 0.3,
+        };
+        let ppr = tm.paired_pulse_ratio(0.05);
+        let expected = 1.0 + 0.8 * (-0.05_f64 / 0.3).exp();
+        assert!((ppr - expected).abs() < 1e-9, "PPR {ppr} != {expected}");
+        assert!((ppr - 1.677_186).abs() < 1e-4, "PPR {ppr} != 1.677186");
+        assert!(ppr > 1.0, "facilitation: PPR > 1");
+    }
+
+    #[test]
+    fn tm_depressing_train_falls_facilitating_train_rises() {
+        // A depression-dominant synapse: a regular train's amplitudes decrease.
+        let depress = TsodyksMarkram {
+            u: 0.6,
+            tau_rec_s: 0.5,
+            tau_facil_s: 1e-9,
+        };
+        let train: Vec<f64> = (0..5).map(|i| i as f64 * 0.02).collect(); // 50 Hz
+        let a = depress.response(&train);
+        for w in a.windows(2) {
+            assert!(w[1] < w[0], "depressing train should fall: {a:?}");
+        }
+        // A facilitation-dominant synapse: amplitudes grow early in the train.
+        let facil = TsodyksMarkram {
+            u: 0.05,
+            tau_rec_s: 1e-9,
+            tau_facil_s: 0.5,
+        };
+        let b = facil.response(&train);
+        assert!(
+            b[1] > b[0] && b[2] > b[1],
+            "facilitating train should rise: {b:?}"
+        );
+    }
+
+    #[test]
+    fn tm_recovers_at_long_intervals_and_guards_non_physical() {
+        let tm = TsodyksMarkram {
+            u: 0.5,
+            tau_rec_s: 0.2,
+            tau_facil_s: 0.05,
+        };
+        // Δt ≫ τ: full recovery, PPR → 1.
+        assert!(
+            (tm.paired_pulse_ratio(100.0) - 1.0).abs() < 1e-6,
+            "long-gap PPR → 1"
+        );
+        // Non-physical parameters → empty response / NaN PPR.
+        let bad_u = TsodyksMarkram {
+            u: 1.5,
+            tau_rec_s: 0.2,
+            tau_facil_s: 0.05,
+        };
+        assert!(bad_u.response(&[0.0, 0.1]).is_empty());
+        assert!(bad_u.paired_pulse_ratio(0.1).is_nan());
+        let bad_tau = TsodyksMarkram {
+            u: 0.5,
+            tau_rec_s: -1.0,
+            tau_facil_s: 0.05,
+        };
+        assert!(bad_tau.response(&[0.0]).is_empty());
+        // Non-finite spike time / interval → empty / NaN.
+        assert!(tm.response(&[0.0, f64::NAN]).is_empty());
+        assert!(tm.paired_pulse_ratio(f64::NAN).is_nan());
     }
 }
