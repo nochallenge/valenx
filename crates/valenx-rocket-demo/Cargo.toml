@@ -14,6 +14,8 @@ publish.workspace = true
 [dependencies]
 valenx-astro = { path = "../valenx-astro" }
 valenx-fem   = { path = "../valenx-fem" }
+valenx-mesh  = { path = "../valenx-mesh" }
+nalgebra     = { workspace = true }
 
 [lints.rust]
 unused_imports = "warn"
