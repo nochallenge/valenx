@@ -25,10 +25,65 @@ concurrency:
 
 jobs:
   # -------------------------------------------------------------------
+  # Change detection — lets a docs-only PR skip the compile-heavy Rust
+  # jobs (rustfmt / clippy / cross-platform test matrix / rustdoc /
+  # cargo-deny) while STILL satisfying the required `CI OK` check.
+  #
+  # A naive `paths-ignore:` is the wrong tool here: it makes the whole
+  # workflow not run, which leaves the required `CI OK` status pending
+  # forever and blocks the PR from ever merging. So instead the workflow
+  # always runs; this job decides whether any non-docs file changed; the
+  # heavy jobs are gated on that decision; the mdBook "user manual" job
+  # always runs (it validates the very docs a docs-only PR touches); and
+  # `CI OK` treats `skipped` as success. Fail-safe: anything other than a
+  # concrete docs-only change set runs the full pipeline.
+  # -------------------------------------------------------------------
+  changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          event="${{ github.event_name }}"
+          changed=""
+          if [ "$event" = "pull_request" ]; then
+            changed="$(git diff --name-only \
+              '${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}' \
+              2>/dev/null || true)"
+          elif [ "$event" = "push" ]; then
+            before='${{ github.event.before }}'
+            if [ -n "$before" ] \
+               && [ "$before" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${before}^{commit}" 2>/dev/null; then
+              changed="$(git diff --name-only "$before" '${{ github.sha }}' 2>/dev/null || true)"
+            fi
+          fi
+          echo "event=$event"
+          echo "changed files:"
+          printf '%s\n' "${changed:-<unknown — running full pipeline>}"
+          # Default to running everything. Only flip to code=false when we
+          # have a concrete, non-empty change set that is ENTIRELY markdown
+          # (**.md) or under docs/.
+          code=true
+          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE '(\.md$|^docs/)'; then
+            code=false
+          fi
+          echo "code=$code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  # -------------------------------------------------------------------
   # Fast checks — run first, fail the pipeline quickly if basics break
   # -------------------------------------------------------------------
   fmt:
     name: rustfmt
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +94,8 @@ jobs:
 
   clippy:
     name: clippy
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +110,8 @@ jobs:
   # -------------------------------------------------------------------
   test:
     name: test / ${{ matrix.os }}
-    needs: [fmt, clippy]
+    needs: [changes, fmt, clippy]
+    if: needs.changes.outputs.code != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -106,7 +164,8 @@ jobs:
   # -------------------------------------------------------------------
   docs:
     name: rustdoc
-    needs: [fmt]
+    needs: [changes, fmt]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
@@ -117,7 +176,9 @@ jobs:
       - run: cargo doc --workspace --no-deps --all-features
 
   # -------------------------------------------------------------------
-  # mdBook user manual — catches broken markdown links, bad code examples
+  # mdBook user manual — catches broken markdown links, bad code examples.
+  # Intentionally NOT gated by `changes`: this is the check that matters
+  # for a docs-only PR, so it runs on every change.
   # -------------------------------------------------------------------
   mdbook:
     name: user manual
@@ -144,7 +205,8 @@ jobs:
   # -------------------------------------------------------------------
   deny:
     name: cargo-deny
-    needs: [fmt]
+    needs: [changes, fmt]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -172,18 +234,39 @@ jobs:
   # (e.g. taiki-e/install-action) or wait for the toolchain bump.
 
   # -------------------------------------------------------------------
-  # Summary job — single required status check for branch protection
+  # Summary job — single required status check for branch protection.
+  # `if: always()` so it still reports on docs-only PRs (where the Rust
+  # jobs are skipped); skipped Rust jobs count as success here.
   # -------------------------------------------------------------------
   ci-ok:
     name: CI OK
-    needs: [fmt, clippy, test, docs, mdbook, deny]
+    needs: [changes, fmt, clippy, test, docs, mdbook, deny]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if any needed job failed, was cancelled, or was skipped
-        if: |
-          contains(needs.*.result, 'failure') ||
-          contains(needs.*.result, 'cancelled') ||
-          contains(needs.*.result, 'skipped')
-        run: exit 1
-      - run: echo "All CI jobs passed."
+      - name: Verify required jobs
+        shell: bash
+        run: |
+          changes='${{ needs.changes.result }}'
+          mdbook='${{ needs.mdbook.result }}'
+          fmt='${{ needs.fmt.result }}'
+          clippy='${{ needs.clippy.result }}'
+          test='${{ needs.test.result }}'
+          docs='${{ needs.docs.result }}'
+          deny='${{ needs.deny.result }}'
+          echo "changes=$changes mdbook=$mdbook fmt=$fmt clippy=$clippy test=$test docs=$docs deny=$deny"
+          # Jobs that run on EVERY change (including docs-only) must be green.
+          for r in "$changes" "$mdbook"; do
+            if [ "$r" != "success" ]; then
+              echo "::error::an always-run job did not succeed"; exit 1
+            fi
+          done
+          # The compile-heavy Rust jobs are gated by the `changes` job: each
+          # must be either success (code changed) or skipped (docs-only). A
+          # real failure or cancellation here fails the gate.
+          for r in "$fmt" "$clippy" "$test" "$docs" "$deny"; do
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "::error::a required Rust job did not pass (got '$r')"; exit 1
+            fi
+          done
+          echo "All required CI jobs passed (skipped Rust jobs = docs-only change)."
