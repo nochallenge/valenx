@@ -212,6 +212,147 @@ impl NurbsSurface {
             num / den
         }
     }
+
+    /// The **first partial derivative** `∂S/∂u` at `(u, v)` — the surface
+    /// tangent along the u iso-curve (the direction of travel as `u` increases
+    /// at fixed `v`).
+    ///
+    /// Central finite difference over the valid [`u_range`](Self::u_range),
+    /// with the stencil clamped (one-sided) at the domain edges so it never
+    /// evaluates out of range; 6–7 digits of accuracy, the surface analogue of
+    /// the curve's finite-difference derivative.
+    pub fn partial_u(&self, u: f64, v: f64) -> Vector3<f64> {
+        let (u_min, u_max) = self.u_range();
+        let h = ((u_max - u_min) * 1e-4).max(1e-9);
+        let u_lo = (u - h).max(u_min);
+        let u_hi = (u + h).min(u_max);
+        let d = u_hi - u_lo;
+        if d.abs() < 1e-30 {
+            return Vector3::zeros();
+        }
+        (self.evaluate(u_hi, v) - self.evaluate(u_lo, v)) / d
+    }
+
+    /// The **first partial derivative** `∂S/∂v` at `(u, v)` — the surface
+    /// tangent along the v iso-curve. Central finite difference over the valid
+    /// [`v_range`](Self::v_range), clamped at the edges (see
+    /// [`partial_u`](Self::partial_u)).
+    pub fn partial_v(&self, u: f64, v: f64) -> Vector3<f64> {
+        let (v_min, v_max) = self.v_range();
+        let k = ((v_max - v_min) * 1e-4).max(1e-9);
+        let v_lo = (v - k).max(v_min);
+        let v_hi = (v + k).min(v_max);
+        let d = v_hi - v_lo;
+        if d.abs() < 1e-30 {
+            return Vector3::zeros();
+        }
+        (self.evaluate(u, v_hi) - self.evaluate(u, v_lo)) / d
+    }
+
+    /// The **unit surface normal** at `(u, v)` — the normalised cross product
+    /// `(∂S/∂u × ∂S/∂v)/|∂S/∂u × ∂S/∂v|` of the two tangent vectors
+    /// ([`partial_u`](Self::partial_u), [`partial_v`](Self::partial_v)).
+    ///
+    /// Points to the side given by the right-hand rule of the (u, v)
+    /// parameterisation — the outward face for a counter-clockwise patch. This
+    /// is the vector shading, offsetting and ray intersection need. Returns the
+    /// zero vector at a degenerate point where the tangents are parallel or
+    /// vanish (`|∂S/∂u × ∂S/∂v| ≈ 0`, e.g. a pole of the parameterisation),
+    /// where the normal is undefined.
+    pub fn normal(&self, u: f64, v: f64) -> Vector3<f64> {
+        let cross = self.partial_u(u, v).cross(&self.partial_v(u, v));
+        let mag = cross.norm();
+        if mag < 1e-12 {
+            Vector3::zeros()
+        } else {
+            cross / mag
+        }
+    }
+
+    /// The **surface area** of the whole patch — `∫∫ |∂S/∂u × ∂S/∂v| du dv` over
+    /// the full [`u_range`](Self::u_range) × [`v_range`](Self::v_range). A
+    /// convenience for [`area_between`](Self::area_between) over the entire
+    /// domain.
+    pub fn area(&self) -> f64 {
+        let (u_min, u_max) = self.u_range();
+        let (v_min, v_max) = self.v_range();
+        self.area_between(u_min, u_max, v_min, v_max)
+    }
+
+    /// The **area of a sub-patch** `[u0, u1] × [v0, v1]` —
+    /// `∫∫ |∂S/∂u × ∂S/∂v| du dv`, the true geometric area of that region of
+    /// the surface (the cross-product magnitude is the local area-scaling of
+    /// the parameterisation, so the result is parameterisation-independent).
+    ///
+    /// Computed by 2-D composite **Simpson's rule** on the area element
+    /// `|∂S/∂u × ∂S/∂v|`, with the domain first split at every interior knot in
+    /// each direction so no panel straddles a knot (where the tangents lose
+    /// smoothness). Parameters are clamped to the valid ranges; a reversed or
+    /// degenerate box (`u1 ≤ u0` or `v1 ≤ v0`) returns `0.0`.
+    pub fn area_between(&self, u0: f64, u1: f64, v0: f64, v1: f64) -> f64 {
+        const PANELS: usize = 16; // even, per knot-span cell, each direction
+        let (u_min, u_max) = self.u_range();
+        let (v_min, v_max) = self.v_range();
+        let ua = u0.clamp(u_min, u_max);
+        let ub = u1.clamp(u_min, u_max);
+        let va = v0.clamp(v_min, v_max);
+        let vb = v1.clamp(v_min, v_max);
+        if ub <= ua || vb <= va {
+            return 0.0;
+        }
+        let u_breaks = knot_breakpoints(&self.u_knots, ua, ub);
+        let v_breaks = knot_breakpoints(&self.v_knots, va, vb);
+        let mut total = 0.0;
+        for us in u_breaks.windows(2) {
+            for vs in v_breaks.windows(2) {
+                total += self.area_cell(us[0], us[1], vs[0], vs[1], PANELS);
+            }
+        }
+        total
+    }
+
+    /// 2-D composite-Simpson area element integral over one smooth cell.
+    fn area_cell(&self, ua: f64, ub: f64, va: f64, vb: f64, n: usize) -> f64 {
+        let hu = (ub - ua) / n as f64;
+        let hv = (vb - va) / n as f64;
+        // Composite-Simpson weight for node index `i` of `n` (even) panels.
+        let weight = |i: usize| -> f64 {
+            if i == 0 || i == n {
+                1.0
+            } else if i % 2 == 1 {
+                4.0
+            } else {
+                2.0
+            }
+        };
+        let mut sum = 0.0;
+        for i in 0..=n {
+            let u = ua + hu * i as f64;
+            let wu = weight(i);
+            for j in 0..=n {
+                let v = va + hv * j as f64;
+                let area_element = self.partial_u(u, v).cross(&self.partial_v(u, v)).norm();
+                sum += wu * weight(j) * area_element;
+            }
+        }
+        (hu / 3.0) * (hv / 3.0) * sum
+    }
+}
+
+/// Breakpoints `[a, …interior knots in (a, b)…, b]` so each Simpson panel lies
+/// within one smooth knot span.
+fn knot_breakpoints(knots: &[f64], a: f64, b: f64) -> Vec<f64> {
+    let eps = 1e-12;
+    let mut breaks = vec![a];
+    let mut prev = a;
+    for &k in knots {
+        if k > a + eps && k < b - eps && k > prev + eps {
+            breaks.push(k);
+            prev = k;
+        }
+    }
+    breaks.push(b);
+    breaks
 }
 
 #[cfg(test)]
@@ -344,5 +485,98 @@ mod tests {
             assert!((p.y - v).abs() < 1e-10, "p.y={} vs v={}", p.y, v);
             assert!(p.z.abs() < 1e-10);
         }
+    }
+
+    // ===== differential geometry: partials / normal / area =====
+
+    /// A quarter cylinder of radius `r`, height `h`: the rational-quadratic
+    /// quarter circle in xy (CPs (r,0),(r,r),(0,r), weights 1,√2/2,1) extruded
+    /// linearly along z from 0 to `h`.
+    fn quarter_cylinder(r: f64, h: f64) -> NurbsSurface {
+        let w = std::f64::consts::FRAC_1_SQRT_2;
+        // control_points[i (u)][j (v)] — u is the circle, v the z extrusion.
+        let cps = vec![
+            vec![Vector3::new(r, 0.0, 0.0), Vector3::new(r, 0.0, h)],
+            vec![Vector3::new(r, r, 0.0), Vector3::new(r, r, h)],
+            vec![Vector3::new(0.0, r, 0.0), Vector3::new(0.0, r, h)],
+        ];
+        let weights = vec![vec![1.0, 1.0], vec![w, w], vec![1.0, 1.0]];
+        NurbsSurface::new(
+            2,
+            1,
+            vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+            vec![0.0, 0.0, 1.0, 1.0],
+            cps,
+            weights,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn planar_surface_normal_is_constant_and_area_is_exact() {
+        // The unit-square patch S(u,v) = (u, v, 0): tangents are the axes, the
+        // normal is +z everywhere, and the area is exactly 1.
+        let s = planar_unit_square_surface();
+        for &(u, v) in &[(0.2_f64, 0.3_f64), (0.5, 0.5), (0.8, 0.1)] {
+            let n = s.normal(u, v);
+            assert!(
+                (n - Vector3::new(0.0, 0.0, 1.0)).norm() < 1e-6,
+                "normal {n:?} at ({u},{v})"
+            );
+            assert!((n.norm() - 1.0).abs() < 1e-9);
+        }
+        assert!((s.partial_u(0.5, 0.5) - Vector3::new(1.0, 0.0, 0.0)).norm() < 1e-6);
+        assert!((s.partial_v(0.5, 0.5) - Vector3::new(0.0, 1.0, 0.0)).norm() < 1e-6);
+        assert!((s.area() - 1.0).abs() < 1e-6, "planar area {}", s.area());
+    }
+
+    #[test]
+    fn quarter_cylinder_normal_is_radial_and_area_is_lateral() {
+        // GROUND TRUTH: a quarter cylinder of radius r and height h has a radial
+        // outward unit normal (⊥ the z axis) and lateral area = (π/2)·r·h — the
+        // quarter circumference times the height, independent of the NURBS
+        // parameterization.
+        let (r, h) = (2.0_f64, 3.0_f64);
+        let s = quarter_cylinder(r, h);
+        for &(u, v) in &[(0.2_f64, 0.3_f64), (0.5, 0.5), (0.8, 0.7)] {
+            let p = s.evaluate(u, v);
+            // The surface lies on the cylinder x²+y²=r².
+            assert!(
+                ((p.x * p.x + p.y * p.y) - r * r).abs() < 1e-9,
+                "off cylinder at ({u},{v})"
+            );
+            let n = s.normal(u, v);
+            assert!((n.norm() - 1.0).abs() < 1e-9, "unit normal at ({u},{v})");
+            assert!(n.z.abs() < 1e-6, "normal ⊥ axis, n.z={}", n.z);
+            // Radial outward: parallel to the point's xy projection.
+            let radial = Vector3::new(p.x, p.y, 0.0).normalize();
+            assert!(
+                (n - radial).norm() < 1e-3,
+                "normal {n:?} vs radial {radial:?}"
+            );
+        }
+        let expected = std::f64::consts::FRAC_PI_2 * r * h; // (π/2)·r·h
+        assert!(
+            (s.area() - expected).abs() / expected < 1e-4,
+            "cylinder lateral area {} != (π/2)·r·h = {expected}",
+            s.area()
+        );
+    }
+
+    #[test]
+    fn surface_area_between_is_additive_and_clamped() {
+        let s = planar_unit_square_surface();
+        let whole = s.area(); // 1.0
+        let left = s.area_between(0.0, 0.5, 0.0, 1.0);
+        let right = s.area_between(0.5, 1.0, 0.0, 1.0);
+        assert!(
+            (left + right - whole).abs() < 1e-6,
+            "{left} + {right} != {whole}"
+        );
+        assert!((left - 0.5).abs() < 1e-6, "left-half area {left}");
+        // Degenerate and reversed boxes return 0.
+        assert_eq!(s.area_between(0.5, 0.5, 0.0, 1.0), 0.0);
+        assert_eq!(s.area_between(1.0, 0.0, 0.0, 1.0), 0.0);
+        assert_eq!(s.area_between(0.0, 1.0, 1.0, 0.0), 0.0);
     }
 }
