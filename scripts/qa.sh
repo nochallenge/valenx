@@ -45,6 +45,7 @@ PURE_CRATES=(
   valenx-aero
   valenx-cfd-native
   valenx-fem
+  valenx-rocket-demo
   valenx-pathtrace
   valenx-render-bridge
 )
