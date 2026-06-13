@@ -457,7 +457,7 @@ bytemuck  = { version = "1", features = ["derive"] }
 
 # Native file dialogs (OS-native picker on every platform). Default
 # features pick Win32 / AppKit / xdg-portal depending on platform.
-rfd    = "0.14"
+rfd    = "0.17"
 
 # Dynamic-library loading for the plugin loader (valenx-plugin).
 # Cross-platform `dlopen` / `LoadLibrary` wrapper.
