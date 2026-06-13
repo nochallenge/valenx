@@ -386,8 +386,8 @@ impl NurbsSurface {
     /// `K = 0` for a developable surface (a plane, cylinder or cone — anything
     /// that unrolls flat), positive where the surface is locally dome-like
     /// (sphere: `K = 1/r²`) and negative at a saddle. Its sign is independent
-    /// of the normal's orientation. Returns `0.0` at a degenerate point (see
-    /// [`fundamental_forms`](Self::fundamental_forms)).
+    /// of the normal's orientation. Returns `0.0` at a degenerate point
+    /// (parallel or zero tangents, or a domain too small for the stencil).
     pub fn gaussian_curvature(&self, u: f64, v: f64) -> f64 {
         match self.fundamental_forms(u, v) {
             Some((e, f, g, l, m, n)) => {
@@ -409,8 +409,8 @@ impl NurbsSurface {
     /// radius `r` has `|H| = 1/r` and a cylinder `|H| = 1/(2r)` (its principal
     /// curvatures are `1/r` and `0`). Unlike the Gaussian curvature its sign
     /// flips with the normal's orientation, so compare magnitudes. Returns
-    /// `0.0` at a degenerate point (see
-    /// [`fundamental_forms`](Self::fundamental_forms)).
+    /// `0.0` at a degenerate point (parallel or zero tangents, or a domain
+    /// too small for the stencil).
     pub fn mean_curvature(&self, u: f64, v: f64) -> f64 {
         match self.fundamental_forms(u, v) {
             Some((e, f, g, l, m, n)) => {
