@@ -51,6 +51,31 @@ struct Lv1Flight {
     event_pts: Vec<[f64; 2]>,
 }
 
+/// What the AI optimizer drives toward. Every objective keeps the same hard
+/// constraint — reach a bound orbit (periapsis > 100 km) with interstage
+/// safety factor ≥ the target — and differs only in what it then rewards.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+enum OptObjective {
+    /// Heaviest payload delivered to orbit.
+    #[default]
+    MaxPayload,
+    /// Highest apoapsis (orbital energy / reach).
+    MaxApoapsis,
+    /// Gentlest ride — lowest peak axial g-load.
+    MinPeakG,
+}
+
+impl OptObjective {
+    /// Short label for the radio + result readout.
+    fn label(self) -> &'static str {
+        match self {
+            OptObjective::MaxPayload => "max payload",
+            OptObjective::MaxApoapsis => "max apoapsis",
+            OptObjective::MinPeakG => "min peak-g",
+        }
+    }
+}
+
 /// The best feasible design an ascent-optimization run found.
 #[derive(Clone, Copy)]
 struct OptBest {
@@ -59,16 +84,24 @@ struct OptBest {
     vertical_rise_s: f64,
     periapsis_km: f64,
     apoapsis_km: f64,
+    /// Peak axial g-load over the ascent (the MinPeakG objective).
+    peak_g: f64,
     safety_factor: f64,
+    /// The optimized metric's value in its own display units (kg / km / g).
+    objective_value: f64,
 }
 
 /// Result of an ascent-optimization run: the best design plus the
 /// best-so-far convergence series for the plot.
 struct OptResult {
     best: Option<OptBest>,
+    /// The objective this run optimized — drives the readout + plot labels.
+    objective: OptObjective,
     reached_orbit: usize,
     n_evals: usize,
-    /// `[eval_index, best_payload_kg_so_far]` for the convergence plot.
+    /// `[eval_index, best_objective_value_so_far]` for the convergence plot,
+    /// in the objective's display units. `NaN` until the first feasible
+    /// design is found (filtered out before plotting).
     convergence: Vec<[f64; 2]>,
 }
 
@@ -95,6 +128,8 @@ pub struct RocketWorkbenchState {
     loaded_3d_once: bool,
     /// Last ascent-optimization run (best design + convergence), if any.
     opt: Option<OptResult>,
+    /// Which objective the AI optimizer drives toward (radio-selected).
+    opt_objective: OptObjective,
 }
 
 impl Default for RocketWorkbenchState {
@@ -109,6 +144,7 @@ impl Default for RocketWorkbenchState {
             show_3d_request: false,
             loaded_3d_once: false,
             opt: None,
+            opt_objective: OptObjective::default(),
         }
     }
 }
@@ -165,8 +201,11 @@ fn lv1_config() -> AscentConfig {
 /// Search the design space — payload × pitch-kick × vertical-rise — across
 /// `n_evals` real `valenx-astro` ascent sims, keeping only designs that
 /// reach a bound orbit with interstage safety factor ≥ `target_sf`, and
-/// maximising payload to orbit. Deterministic (seeded) so it is testable.
-fn optimize_ascent(target_sf: f64, n_evals: usize) -> OptResult {
+/// rewarding whichever `objective` is selected (heaviest payload, highest
+/// apoapsis, or gentlest peak-g ride). Deterministic (seeded) so it is
+/// testable — and the candidate sequence is identical across objectives, so
+/// each objective is a true arg-best over the same feasible set.
+fn optimize_ascent(objective: OptObjective, target_sf: f64, n_evals: usize) -> OptResult {
     // Interstage capacity: 8 Al-2024-T3 struts of 15 cm² each carry the
     // wet upper stage + payload; F = m·a_max sets the load at peak g.
     let capacity_n = 324.0e6 * 8.0 * 1.5e-3;
@@ -185,7 +224,9 @@ fn optimize_ascent(target_sf: f64, n_evals: usize) -> OptResult {
     };
 
     let mut best: Option<OptBest> = None;
-    let mut best_payload = 0.0_f64;
+    // The objective is always framed so HIGHER is better (MinPeakG negates g),
+    // so one `>` comparison drives every objective.
+    let mut best_score = f64::NEG_INFINITY;
     let mut reached_orbit = 0usize;
     let mut convergence = Vec::with_capacity(n_evals);
 
@@ -211,24 +252,42 @@ fn optimize_ascent(target_sf: f64, n_evals: usize) -> OptResult {
                 } else {
                     f64::INFINITY
                 };
-                if sf >= target_sf && payload > best_payload {
-                    best_payload = payload;
-                    best = Some(OptBest {
-                        payload_kg: payload,
-                        pitch_kick_deg: pitch,
-                        vertical_rise_s: rise,
-                        periapsis_km: r.periapsis_km(),
-                        apoapsis_km: r.apoapsis_km(),
-                        safety_factor: sf,
-                    });
+                if sf >= target_sf {
+                    // Reward — higher is better for every objective.
+                    let score = match objective {
+                        OptObjective::MaxPayload => payload,
+                        OptObjective::MaxApoapsis => r.apoapsis_km(),
+                        OptObjective::MinPeakG => -r.max_acceleration_g,
+                    };
+                    if score > best_score {
+                        best_score = score;
+                        best = Some(OptBest {
+                            payload_kg: payload,
+                            pitch_kick_deg: pitch,
+                            vertical_rise_s: rise,
+                            periapsis_km: r.periapsis_km(),
+                            apoapsis_km: r.apoapsis_km(),
+                            peak_g: r.max_acceleration_g,
+                            safety_factor: sf,
+                            objective_value: match objective {
+                                OptObjective::MaxPayload => payload,
+                                OptObjective::MaxApoapsis => r.apoapsis_km(),
+                                OptObjective::MinPeakG => r.max_acceleration_g,
+                            },
+                        });
+                    }
                 }
             }
         }
-        convergence.push([i as f64, best_payload]);
+        // Best-so-far in the objective's display units; NaN until the first
+        // feasible design (the plot filters non-finite points).
+        let display = best.map(|b| b.objective_value).unwrap_or(f64::NAN);
+        convergence.push([i as f64, display]);
     }
 
     OptResult {
         best,
+        objective,
         reached_orbit,
         n_evals,
         convergence,
@@ -407,10 +466,11 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             });
                         }
                     }
-                    // ── AI optimizer — maximize payload to orbit ──────────
+                    // ── AI optimizer — multi-objective design search ──────
                     ui.add_space(6.0);
                     ui.label(
-                        egui::RichText::new("AI optimizer — maximize payload to orbit").strong(),
+                        egui::RichText::new("AI optimizer — multi-objective design search")
+                            .strong(),
                     );
                     ui.label(
                         egui::RichText::new(
@@ -420,28 +480,44 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         .weak()
                         .small(),
                     );
+                    ui.horizontal(|ui| {
+                        ui.label("objective:");
+                        ui.radio_value(
+                            &mut s.opt_objective,
+                            OptObjective::MaxPayload,
+                            "max payload",
+                        );
+                        ui.radio_value(
+                            &mut s.opt_objective,
+                            OptObjective::MaxApoapsis,
+                            "max apoapsis",
+                        );
+                        ui.radio_value(&mut s.opt_objective, OptObjective::MinPeakG, "min peak-g");
+                    });
                     if ui
                         .button(egui::RichText::new("Run AI optimization (200 sims)").strong())
                         .on_hover_text(
                             "Flies 200 candidate designs through the real ascent engine and \
-                             converges on the heaviest payload that still reaches orbit safely.",
+                             converges on the best design for the selected objective.",
                         )
                         .clicked()
                     {
-                        s.opt = Some(optimize_ascent(s.target_sf, 200));
+                        s.opt = Some(optimize_ascent(s.opt_objective, s.target_sf, 200));
                     }
                     if let Some(o) = &s.opt {
                         match &o.best {
                             Some(b) => ui.label(
                                 egui::RichText::new(format!(
-                                    "ran {} sims · {} reached orbit\n\
-                                     best payload {:.0} kg → {:.0} × {:.0} km  (SF {:.2})\n\
-                                     @ pitch {:.1}° · rise {:.0} s",
+                                    "{}: ran {} sims · {} reached orbit\n\
+                                     payload {:.0} kg → {:.0} × {:.0} km\n\
+                                     peak {:.1} g · SF {:.2} · pitch {:.1}° · rise {:.0} s",
+                                    o.objective.label(),
                                     o.n_evals,
                                     o.reached_orbit,
                                     b.payload_kg,
                                     b.periapsis_km,
                                     b.apoapsis_km,
+                                    b.peak_g,
                                     b.safety_factor,
                                     b.pitch_kick_deg,
                                     b.vertical_rise_s,
@@ -457,17 +533,27 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 ),
                             ),
                         };
-                        if o.convergence.len() > 1 {
-                            ui.label(
-                                egui::RichText::new("best payload (kg) vs sim #")
-                                    .weak()
-                                    .small(),
-                            );
+                        // Plot best-so-far in the objective's own units —
+                        // skip the NaN evals before the first feasible design.
+                        let conv: Vec<[f64; 2]> = o
+                            .convergence
+                            .iter()
+                            .copied()
+                            .filter(|p| p[1].is_finite())
+                            .collect();
+                        if conv.len() > 1 {
+                            let (axis, series) = match o.objective {
+                                OptObjective::MaxPayload => {
+                                    ("best payload (kg) vs sim #", "best payload (kg)")
+                                }
+                                OptObjective::MaxApoapsis => {
+                                    ("best apoapsis (km) vs sim #", "best apoapsis (km)")
+                                }
+                                OptObjective::MinPeakG => ("best peak-g vs sim #", "best peak g"),
+                            };
+                            ui.label(egui::RichText::new(axis).weak().small());
                             Plot::new("lv1_opt_plot").height(170.0).show(ui, |pui| {
-                                pui.line(
-                                    Line::new(PlotPoints::from(o.convergence.clone()))
-                                        .name("best payload (kg)"),
-                                );
+                                pui.line(Line::new(PlotPoints::from(conv.clone())).name(series));
                             });
                         }
                     }
@@ -675,29 +761,90 @@ mod tests {
         assert!(s.last_design.is_none());
         assert!(s.lv1.is_none());
         assert!(s.opt.is_none());
+        assert_eq!(s.opt_objective, OptObjective::MaxPayload);
         assert!((s.target_sf - 1.5).abs() < 1e-12);
     }
 
     #[test]
     fn optimizer_finds_a_feasible_payload_with_monotone_convergence() {
-        let r = optimize_ascent(1.5, 120);
+        let r = optimize_ascent(OptObjective::MaxPayload, 1.5, 120);
         assert_eq!(r.n_evals, 120);
         assert_eq!(r.convergence.len(), 120);
+        assert_eq!(r.objective, OptObjective::MaxPayload);
         assert!(r.reached_orbit > 0, "some candidates should reach orbit");
         let b = r.best.expect("a feasible design is found");
         assert!((500.0..=8000.0).contains(&b.payload_kg));
         assert!(b.periapsis_km > 100.0, "periapsis {} km", b.periapsis_km);
         assert!(b.safety_factor >= 1.5, "SF {}", b.safety_factor);
-        // Best-so-far is monotonically non-decreasing across the search.
-        for w in r.convergence.windows(2) {
-            assert!(w[1][1] >= w[0][1] - 1e-9, "convergence is non-decreasing");
+        // Best-so-far payload is monotonically non-decreasing (ignoring the
+        // NaN entries before the first feasible design).
+        let finite: Vec<f64> = r
+            .convergence
+            .iter()
+            .map(|p| p[1])
+            .filter(|y| y.is_finite())
+            .collect();
+        for w in finite.windows(2) {
+            assert!(w[1] >= w[0] - 1e-9, "convergence is non-decreasing");
         }
         // Deterministic (seeded): a second run gives the same best payload.
-        let r2 = optimize_ascent(1.5, 120);
+        let r2 = optimize_ascent(OptObjective::MaxPayload, 1.5, 120);
         assert_eq!(
             r2.best.map(|b| b.payload_kg as u64),
             Some(b.payload_kg as u64)
         );
+    }
+
+    #[test]
+    fn each_objective_optimizes_its_own_metric() {
+        // Identical seeded candidate sequence across objectives ⇒ each best is
+        // a true arg-best over the SAME feasible set, so these comparisons are
+        // exact (modulo float epsilon), not statistical.
+        let n = 160;
+        let pay = optimize_ascent(OptObjective::MaxPayload, 1.5, n)
+            .best
+            .expect("payload feasible");
+        let apo = optimize_ascent(OptObjective::MaxApoapsis, 1.5, n)
+            .best
+            .expect("apoapsis feasible");
+        let g = optimize_ascent(OptObjective::MinPeakG, 1.5, n)
+            .best
+            .expect("min-g feasible");
+
+        // The max-payload design leads on payload; the max-apoapsis design
+        // leads on apoapsis; the min-peak-g design is the gentlest ride.
+        assert!(
+            pay.payload_kg >= apo.payload_kg - 1e-6,
+            "max-payload leads on payload: {} vs {}",
+            pay.payload_kg,
+            apo.payload_kg
+        );
+        assert!(
+            apo.apoapsis_km >= pay.apoapsis_km - 1e-6,
+            "max-apoapsis leads on apoapsis: {} vs {}",
+            apo.apoapsis_km,
+            pay.apoapsis_km
+        );
+        assert!(
+            g.peak_g <= pay.peak_g + 1e-6,
+            "min-peak-g is gentlest: {} vs {}",
+            g.peak_g,
+            pay.peak_g
+        );
+
+        // MinPeakG convergence is monotonically non-increasing (best = lowest).
+        let r = optimize_ascent(OptObjective::MinPeakG, 1.5, n);
+        assert_eq!(r.objective, OptObjective::MinPeakG);
+        let finite: Vec<f64> = r
+            .convergence
+            .iter()
+            .map(|p| p[1])
+            .filter(|y| y.is_finite())
+            .collect();
+        assert!(finite.len() > 1, "min-g run finds feasible designs");
+        for w in finite.windows(2) {
+            assert!(w[1] <= w[0] + 1e-9, "min-g convergence is non-increasing");
+        }
     }
 
     #[test]
