@@ -225,6 +225,114 @@ impl NurbsCurve {
             (self.derivative(u_hi, k - 1) - self.derivative(u_lo, k - 1)) / denom
         }
     }
+
+    /// The **unit tangent** vector at parameter `u` — the normalised first
+    /// derivative `C'(u)/|C'(u)|`, the direction of travel along the curve.
+    ///
+    /// Returns the zero vector at a singular point where `|C'(u)| ≈ 0`
+    /// (a cusp, or a momentarily stationary parameterisation), where the
+    /// tangent direction is undefined.
+    pub fn unit_tangent(&self, u: f64) -> Vector3<f64> {
+        let d = self.derivative(u, 1);
+        let n = d.norm();
+        if n < 1e-12 {
+            Vector3::zeros()
+        } else {
+            d / n
+        }
+    }
+
+    /// The **curvature** `κ(u)` at parameter `u` — the reciprocal of the
+    /// osculating-circle radius, `κ = |C'(u) × C''(u)| / |C'(u)|³`.
+    ///
+    /// This is the parameterisation-independent bending rate: a straight
+    /// segment has `κ = 0` everywhere, and a circle of radius `r` has the
+    /// constant `κ = 1/r` at every point (whatever its NURBS
+    /// parameterisation). `C'` and `C''` are taken from a single centred
+    /// 3-point stencil `C(u−h), C(u), C(u+h)` so the two are mutually
+    /// consistent; the stencil centre is clamped to keep all three samples
+    /// inside the valid [`parameter_range`](Self::parameter_range).
+    ///
+    /// Returns `0.0` at a singular point (`|C'(u)| ≈ 0`), where the osculating
+    /// circle — and hence the curvature — is undefined, and for a domain too
+    /// small to form the stencil.
+    pub fn curvature(&self, u: f64) -> f64 {
+        let (u_min, u_max) = self.parameter_range();
+        let span = u_max - u_min;
+        let h = (span * 1e-3).max(1e-6);
+        if span < 4.0 * h {
+            return 0.0;
+        }
+        let uc = u.max(u_min + h).min(u_max - h);
+        let c_minus = self.evaluate(uc - h);
+        let c_0 = self.evaluate(uc);
+        let c_plus = self.evaluate(uc + h);
+        let d1 = (c_plus - c_minus) / (2.0 * h);
+        let d2 = (c_plus - 2.0 * c_0 + c_minus) / (h * h);
+        let speed = d1.norm();
+        if speed < 1e-12 {
+            return 0.0;
+        }
+        d1.cross(&d2).norm() / speed.powi(3)
+    }
+
+    /// The **arc length** of the whole curve — the geometric length of the
+    /// traced path over its full [`parameter_range`](Self::parameter_range),
+    /// `∫ |C'(u)| du`. A convenience for
+    /// [`arc_length_between`](Self::arc_length_between)`(u_min, u_max)`.
+    pub fn arc_length(&self) -> f64 {
+        let (u_min, u_max) = self.parameter_range();
+        self.arc_length_between(u_min, u_max)
+    }
+
+    /// The **arc length between two parameters** — `∫_{u0}^{u1} |C'(u)| du`,
+    /// the geometric length of the curve segment from `u0` to `u1`.
+    ///
+    /// Computed by composite **Simpson's rule** on the speed `|C'(u)|`: the
+    /// interval is first split at every interior knot (so no panel straddles a
+    /// knot, where the speed is only `C^{p-1}`-continuous), then each smooth
+    /// span is integrated with a 64-panel composite Simpson rule (4th-order
+    /// accurate). The result is parameterisation-independent — it is the true
+    /// geometric length, not the parameter span.
+    ///
+    /// `u0`/`u1` are clamped to the valid range; a reversed or degenerate
+    /// interval (`u1 ≤ u0`) returns `0.0`.
+    pub fn arc_length_between(&self, u0: f64, u1: f64) -> f64 {
+        const PANELS_PER_SPAN: usize = 64; // even, for composite Simpson
+
+        let (u_min, u_max) = self.parameter_range();
+        let a = u0.clamp(u_min, u_max);
+        let b = u1.clamp(u_min, u_max);
+        if b <= a {
+            return 0.0;
+        }
+        // Breakpoints: a, the distinct interior knots in (a, b), then b.
+        let eps = 1e-12;
+        let mut breaks = vec![a];
+        let mut prev = a;
+        for &k in &self.knots {
+            if k > a + eps && k < b - eps && k > prev + eps {
+                breaks.push(k);
+                prev = k;
+            }
+        }
+        breaks.push(b);
+
+        let speed = |u: f64| self.derivative(u, 1).norm();
+        let mut total = 0.0;
+        for seg in breaks.windows(2) {
+            let (sa, sb) = (seg[0], seg[1]);
+            let n = PANELS_PER_SPAN;
+            let h = (sb - sa) / n as f64;
+            let mut sum = speed(sa) + speed(sb);
+            for i in 1..n {
+                let u = sa + h * i as f64;
+                sum += if i % 2 == 1 { 4.0 } else { 2.0 } * speed(u);
+            }
+            total += h / 3.0 * sum;
+        }
+        total
+    }
 }
 
 /// Free helper — exposed so `nurbs_surface` can use it without
@@ -515,5 +623,142 @@ mod tests {
         assert!((d_mid.x - 3.0).abs() < 1e-3, "d_mid.x = {}", d_mid.x);
         assert!(d_mid.y.abs() < 1e-3);
         assert!(d_mid.z.abs() < 1e-3);
+    }
+
+    // ===== differential geometry: tangent / curvature / arc length =====
+
+    /// The canonical exact-circle rational quadratic: a 90° arc of radius `r`,
+    /// CPs (r,0),(r,r),(0,r), weights (1, √2/2, 1), clamped knots
+    /// [0,0,0,1,1,1] — the EXACT quarter circle (see
+    /// `rational_quadratic_traces_exact_circle`).
+    fn quarter_circle(r: f64) -> NurbsCurve {
+        let w = std::f64::consts::FRAC_1_SQRT_2;
+        NurbsCurve::new(
+            2,
+            vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+            vec![
+                Vector3::new(r, 0.0, 0.0),
+                Vector3::new(r, r, 0.0),
+                Vector3::new(0.0, r, 0.0),
+            ],
+            vec![1.0, w, 1.0],
+        )
+        .unwrap()
+    }
+
+    fn x_line() -> NurbsCurve {
+        cubic_bezier([
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(2.0, 0.0, 0.0),
+            Vector3::new(3.0, 0.0, 0.0),
+        ])
+    }
+
+    #[test]
+    fn arc_length_of_quarter_circle_is_quarter_circumference() {
+        // GROUND TRUTH: the rational-quadratic quarter circle is the EXACT
+        // circle x²+y²=r², so its arc length is exactly a quarter of the
+        // circumference, (π/2)·r — independent of the NURBS parameterization.
+        // For r=2.5 that is π·2.5/2 = 3.9269908169872414. The composite-Simpson
+        // integral of |C'(u)| recovers it to the finite-difference floor.
+        let r = 2.5_f64;
+        let c = quarter_circle(r);
+        let expected = std::f64::consts::FRAC_PI_2 * r; // (π/2)·r
+        let len = c.arc_length();
+        assert!(
+            (len - expected).abs() < 1e-5,
+            "quarter-circle arc length {len} != {expected} = (π/2)·r"
+        );
+    }
+
+    #[test]
+    fn arc_length_of_straight_line_is_endpoint_distance() {
+        // Collinear cubic Bezier from x=0 to x=3 → C(u)=(3u,0,0), a straight
+        // segment of length exactly 3 (the integrand |C'|=3 is constant, so
+        // Simpson is exact to round-off).
+        let c = x_line();
+        assert!(
+            (c.arc_length() - 3.0).abs() < 1e-9,
+            "line length {}",
+            c.arc_length()
+        );
+        // Partial length over the first parameter-half is 1.5 (uniform here).
+        let (u0, u1) = c.parameter_range();
+        let half = c.arc_length_between(u0, 0.5 * (u0 + u1));
+        assert!((half - 1.5).abs() < 1e-9, "half-line length {half}");
+    }
+
+    #[test]
+    fn arc_length_between_is_additive_and_clamped() {
+        let c = quarter_circle(1.0);
+        let (u0, u1) = c.parameter_range();
+        let mid = 0.5 * (u0 + u1);
+        let whole = c.arc_length();
+        let part_a = c.arc_length_between(u0, mid);
+        let part_b = c.arc_length_between(mid, u1);
+        // Additivity: the two halves sum to the whole — to the integration
+        // floor, since the whole and the halves use different Simpson panel
+        // subdivisions and finite-difference sample points (~1e-7), not
+        // bit-exactly. (The straight-line case above, with constant |C'|, is
+        // exact and holds at 1e-9.)
+        assert!(
+            (part_a + part_b - whole).abs() < 1e-6,
+            "{part_a} + {part_b} != {whole}"
+        );
+        // Degenerate and reversed intervals return 0.
+        assert_eq!(c.arc_length_between(mid, mid), 0.0);
+        assert_eq!(c.arc_length_between(u1, u0), 0.0);
+    }
+
+    #[test]
+    fn curvature_of_circle_is_inverse_radius() {
+        // GROUND TRUTH: a circle of radius r has constant curvature κ = 1/r at
+        // every point, independent of parameterization. The exact rational-
+        // quadratic quarter circle of radius r=2 must read κ = 0.5 everywhere.
+        let r = 2.0_f64;
+        let c = quarter_circle(r);
+        for &u in &[0.2_f64, 0.4, 0.5, 0.6, 0.8] {
+            let k = c.curvature(u);
+            assert!(
+                (k - 1.0 / r).abs() < 1e-4,
+                "u={u}: curvature {k} != 1/r = {}",
+                1.0 / r
+            );
+        }
+    }
+
+    #[test]
+    fn curvature_of_straight_line_is_zero() {
+        // A straight segment has zero curvature everywhere (C'' = 0).
+        let c = x_line();
+        for &u in &[0.25_f64, 0.5, 0.75] {
+            assert!(
+                c.curvature(u).abs() < 1e-6,
+                "line curvature {} at u={u}",
+                c.curvature(u)
+            );
+        }
+    }
+
+    #[test]
+    fn unit_tangent_is_normalized_and_directionally_correct() {
+        // Straight line along +x → unit tangent (1,0,0) everywhere.
+        let line = x_line();
+        let t = line.unit_tangent(0.5);
+        assert!(
+            (t - Vector3::new(1.0, 0.0, 0.0)).norm() < 1e-6,
+            "line tangent {t:?}"
+        );
+        assert!((t.norm() - 1.0).abs() < 1e-9);
+        // The quarter circle starts at (r,0) sweeping CCW toward (0,r), so the
+        // tangent at the start points in +y.
+        let circ = quarter_circle(2.0);
+        let t0 = circ.unit_tangent(0.0);
+        assert!(
+            (t0 - Vector3::new(0.0, 1.0, 0.0)).norm() < 1e-3,
+            "circle start tangent {t0:?}"
+        );
+        assert!((t0.norm() - 1.0).abs() < 1e-9);
     }
 }
