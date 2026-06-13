@@ -48,6 +48,27 @@ struct Lv1Flight {
     summary: String,
 }
 
+/// The best feasible design an ascent-optimization run found.
+#[derive(Clone, Copy)]
+struct OptBest {
+    payload_kg: f64,
+    pitch_kick_deg: f64,
+    vertical_rise_s: f64,
+    periapsis_km: f64,
+    apoapsis_km: f64,
+    safety_factor: f64,
+}
+
+/// Result of an ascent-optimization run: the best design plus the
+/// best-so-far convergence series for the plot.
+struct OptResult {
+    best: Option<OptBest>,
+    reached_orbit: usize,
+    n_evals: usize,
+    /// `[eval_index, best_payload_kg_so_far]` for the convergence plot.
+    convergence: Vec<[f64; 2]>,
+}
+
 /// Persistent form + result state for the Rocket workbench.
 pub struct RocketWorkbenchState {
     /// The interstage design knobs fed to the coupled pipeline.
@@ -69,6 +90,8 @@ pub struct RocketWorkbenchState {
     show_3d_request: bool,
     /// One-time guard so the 3-D rocket auto-loads on first open only.
     loaded_3d_once: bool,
+    /// Last ascent-optimization run (best design + convergence), if any.
+    opt: Option<OptResult>,
 }
 
 impl Default for RocketWorkbenchState {
@@ -82,6 +105,7 @@ impl Default for RocketWorkbenchState {
             lv1: None,
             show_3d_request: false,
             loaded_3d_once: false,
+            opt: None,
         }
     }
 }
@@ -132,6 +156,79 @@ fn lv1_config() -> AscentConfig {
         sample_interval: 2.0,
         mode: GuidanceMode::OpenLoopGravityTurn,
         wind: WindModel::None,
+    }
+}
+
+/// Search the design space — payload × pitch-kick × vertical-rise — across
+/// `n_evals` real `valenx-astro` ascent sims, keeping only designs that
+/// reach a bound orbit with interstage safety factor ≥ `target_sf`, and
+/// maximising payload to orbit. Deterministic (seeded) so it is testable.
+fn optimize_ascent(target_sf: f64, n_evals: usize) -> OptResult {
+    // Interstage capacity: 8 Al-2024-T3 struts of 15 cm² each carry the
+    // wet upper stage + payload; F = m·a_max sets the load at peak g.
+    let capacity_n = 324.0e6 * 8.0 * 1.5e-3;
+    let upper_wet = {
+        let v = lv1_vehicle();
+        v.stages[1].dry_mass + v.stages[1].propellant_mass
+    };
+
+    // A tiny deterministic LCG so the search is reproducible (no rng dep).
+    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut unit = || {
+        seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (seed >> 33) as f64 / ((1u64 << 31) as f64)
+    };
+
+    let mut best: Option<OptBest> = None;
+    let mut best_payload = 0.0_f64;
+    let mut reached_orbit = 0usize;
+    let mut convergence = Vec::with_capacity(n_evals);
+
+    for i in 0..n_evals {
+        let payload = 500.0 + unit() * 7_500.0; // 0.5–8 t
+        let pitch = 8.0 + unit() * 10.0; // 8–18°
+        let rise = 14.0 + unit() * 31.0; // 14–45 s
+
+        let mut v = lv1_vehicle();
+        v.payload_mass = payload;
+        let mut c = lv1_config();
+        c.guidance.pitch_kick_deg = pitch;
+        c.guidance.vertical_rise_time = rise;
+        c.max_time = 900.0; // enough to insert; keeps each eval fast
+
+        if let Ok(r) = simulate_ascent(&v, &c) {
+            if r.reached_orbit && r.periapsis_km() > 100.0 {
+                reached_orbit += 1;
+                let load =
+                    (upper_wet + payload) * r.max_acceleration_g * valenx_astro::constants::G0;
+                let sf = if load > 0.0 {
+                    capacity_n / load
+                } else {
+                    f64::INFINITY
+                };
+                if sf >= target_sf && payload > best_payload {
+                    best_payload = payload;
+                    best = Some(OptBest {
+                        payload_kg: payload,
+                        pitch_kick_deg: pitch,
+                        vertical_rise_s: rise,
+                        periapsis_km: r.periapsis_km(),
+                        apoapsis_km: r.apoapsis_km(),
+                        safety_factor: sf,
+                    });
+                }
+            }
+        }
+        convergence.push([i as f64, best_payload]);
+    }
+
+    OptResult {
+        best,
+        reached_orbit,
+        n_evals,
+        convergence,
     }
 }
 
@@ -282,6 +379,70 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 pui.line(
                                     Line::new(PlotPoints::from(f.alt_pts.clone()))
                                         .name("altitude (km)"),
+                                );
+                            });
+                        }
+                    }
+                    // ── AI optimizer — maximize payload to orbit ──────────
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new("AI optimizer — maximize payload to orbit").strong(),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "searches payload × pitch-kick × vertical-rise across many real \
+                             valenx-astro sims, keeping interstage SF ≥ the target below.",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    if ui
+                        .button(egui::RichText::new("Run AI optimization (200 sims)").strong())
+                        .on_hover_text(
+                            "Flies 200 candidate designs through the real ascent engine and \
+                             converges on the heaviest payload that still reaches orbit safely.",
+                        )
+                        .clicked()
+                    {
+                        s.opt = Some(optimize_ascent(s.target_sf, 200));
+                    }
+                    if let Some(o) = &s.opt {
+                        match &o.best {
+                            Some(b) => ui.label(
+                                egui::RichText::new(format!(
+                                    "ran {} sims · {} reached orbit\n\
+                                     best payload {:.0} kg → {:.0} × {:.0} km  (SF {:.2})\n\
+                                     @ pitch {:.1}° · rise {:.0} s",
+                                    o.n_evals,
+                                    o.reached_orbit,
+                                    b.payload_kg,
+                                    b.periapsis_km,
+                                    b.apoapsis_km,
+                                    b.safety_factor,
+                                    b.pitch_kick_deg,
+                                    b.vertical_rise_s,
+                                ))
+                                .monospace()
+                                .small(),
+                            ),
+                            None => ui.colored_label(
+                                egui::Color32::from_rgb(220, 160, 60),
+                                format!(
+                                    "ran {} sims · none met SF ≥ {:.2}",
+                                    o.n_evals, s.target_sf
+                                ),
+                            ),
+                        };
+                        if o.convergence.len() > 1 {
+                            ui.label(
+                                egui::RichText::new("best payload (kg) vs sim #")
+                                    .weak()
+                                    .small(),
+                            );
+                            Plot::new("lv1_opt_plot").height(170.0).show(ui, |pui| {
+                                pui.line(
+                                    Line::new(PlotPoints::from(o.convergence.clone()))
+                                        .name("best payload (kg)"),
                                 );
                             });
                         }
@@ -489,7 +650,30 @@ mod tests {
         assert!(s.error.is_none());
         assert!(s.last_design.is_none());
         assert!(s.lv1.is_none());
+        assert!(s.opt.is_none());
         assert!((s.target_sf - 1.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn optimizer_finds_a_feasible_payload_with_monotone_convergence() {
+        let r = optimize_ascent(1.5, 120);
+        assert_eq!(r.n_evals, 120);
+        assert_eq!(r.convergence.len(), 120);
+        assert!(r.reached_orbit > 0, "some candidates should reach orbit");
+        let b = r.best.expect("a feasible design is found");
+        assert!((500.0..=8000.0).contains(&b.payload_kg));
+        assert!(b.periapsis_km > 100.0, "periapsis {} km", b.periapsis_km);
+        assert!(b.safety_factor >= 1.5, "SF {}", b.safety_factor);
+        // Best-so-far is monotonically non-decreasing across the search.
+        for w in r.convergence.windows(2) {
+            assert!(w[1][1] >= w[0][1] - 1e-9, "convergence is non-decreasing");
+        }
+        // Deterministic (seeded): a second run gives the same best payload.
+        let r2 = optimize_ascent(1.5, 120);
+        assert_eq!(
+            r2.best.map(|b| b.payload_kg as u64),
+            Some(b.payload_kg as u64)
+        );
     }
 
     #[test]
