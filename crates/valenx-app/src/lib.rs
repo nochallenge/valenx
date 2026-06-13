@@ -78,6 +78,7 @@ pub mod pbr_forward_pass;
 pub mod piping_workbench;
 pub mod reactdyn_workbench;
 pub mod residuals;
+pub mod rocket_mesh;
 pub mod rocket_workbench;
 pub mod run;
 pub mod scene_overlay;

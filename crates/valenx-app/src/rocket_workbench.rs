@@ -26,9 +26,12 @@
 //! [`valenx_rocket_demo`]). The trajectory is the fixed medium-lift preset
 //! — only the interstage structure is parameterised here.
 
+use std::path::PathBuf;
+
 use eframe::egui;
 use egui_plot::{Line, Plot, PlotPoints};
 
+use crate::types::LoadedMesh;
 use crate::ValenxApp;
 use valenx_astro::{
     simulate_ascent, AscentConfig, DragModel, GuidanceMode, GuidanceProgram, Stage, Vehicle,
@@ -61,6 +64,11 @@ pub struct RocketWorkbenchState {
     /// Cached Valenx LV-1 full-ascent flight, for the in-panel plot. `None`
     /// until first computed (lazily on first draw, or on the Fly button).
     lv1: Option<Lv1Flight>,
+    /// Deferred request to load the 3-D rocket mesh into the central
+    /// viewport (set by the button / first open; serviced after the panel).
+    show_3d_request: bool,
+    /// One-time guard so the 3-D rocket auto-loads on first open only.
+    loaded_3d_once: bool,
 }
 
 impl Default for RocketWorkbenchState {
@@ -72,6 +80,8 @@ impl Default for RocketWorkbenchState {
             report: None,
             error: None,
             lv1: None,
+            show_3d_request: false,
+            loaded_3d_once: false,
         }
     }
 }
@@ -191,6 +201,24 @@ fn recompute(s: &mut RocketWorkbenchState) {
     s.last_design = Some(s.design);
 }
 
+/// Build the 3-D Valenx LV-1 rocket mesh and load it into the central
+/// viewport (replacing any current STL / mesh) so it can be orbited.
+fn load_lv1_rocket_3d(app: &mut ValenxApp) {
+    let mesh = crate::rocket_mesh::lv1_rocket_mesh();
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    app.stl = None;
+    app.mesh = Some(LoadedMesh {
+        path: PathBuf::from("<rocket>/valenx-lv1"),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    });
+    app.frame_current_mesh();
+}
+
 /// Draw the Rocket workbench right-side panel. A no-op when the
 /// `show_rocket_workbench` toggle is off.
 pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -229,6 +257,18 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         .clicked();
                     if s.lv1.is_none() || fly_clicked {
                         s.lv1 = Some(fly_lv1());
+                    }
+                    // 3-D rocket model → central viewport (auto-loads once
+                    // on first open; the button reloads / re-frames it).
+                    let show_3d = ui
+                        .button(egui::RichText::new("Show the 3-D rocket model").strong())
+                        .on_hover_text(
+                            "Loads a 3-D model of the LV-1 into the centre viewport — orbit / zoom it.",
+                        )
+                        .clicked();
+                    if show_3d || !s.loaded_3d_once {
+                        s.loaded_3d_once = true;
+                        s.show_3d_request = true;
                     }
                     if let Some(f) = &s.lv1 {
                         ui.label(egui::RichText::new(&f.summary).monospace().small());
@@ -429,6 +469,13 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     }
                 });
         });
+
+    // Deferred (outside the panel borrow): load the 3-D rocket mesh into
+    // the central viewport when requested (the button, or first open).
+    if app.rocket.show_3d_request {
+        app.rocket.show_3d_request = false;
+        load_lv1_rocket_3d(app);
+    }
 }
 
 #[cfg(test)]
