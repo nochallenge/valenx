@@ -124,7 +124,7 @@ pub use lambert::lambert;
 pub use maneuver::{bielliptic_transfer, hohmann_transfer, Transfer};
 pub use orbit::{elements, OrbitElements};
 pub use orbit3d::{ClassicalElements, StateVector};
-pub use propulsion::{EngineDesign, EnginePerformance};
+pub use propulsion::{CoolingInputs, CoolingPerformance, EngineDesign, EnginePerformance};
 pub use radec::{geocentric_angular_rates, geocentric_equatorial, Equatorial};
 pub use result::{AscentResult, FlightEvent, Outcome, TrajectorySample};
 pub use rigidbody::{AttitudeState, Inertia};
