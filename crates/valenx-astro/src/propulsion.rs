@@ -353,6 +353,95 @@ impl EngineDesign {
     }
 }
 
+/// The best engine found by [`optimize_engine`].
+#[derive(Debug, Clone, Copy)]
+pub struct EngineOptimum {
+    /// The winning design point.
+    pub design: EngineDesign,
+    /// Its sea-level performance (the optimized objective is sea-level Isp).
+    pub sea_level: EnginePerformance,
+    /// Its vacuum performance.
+    pub vacuum: EnginePerformance,
+    /// Its cooling balance (margin ≥ the requested target).
+    pub cooling: CoolingPerformance,
+    /// Total candidates evaluated.
+    pub evaluations: usize,
+    /// How many candidates were feasible (cooling margin ≥ target).
+    pub feasible_count: usize,
+}
+
+/// Search chamber-pressure × expansion-ratio space for the engine with the
+/// highest **sea-level specific impulse** whose cooling margin stays at or
+/// above `target_margin`. A deterministic grid over `pc_range` × `eps_range`
+/// (`grid` points per axis), reusing `base` for the gas properties and throat
+/// area. Returns `None` if no candidate is feasible.
+///
+/// This is the honest "let the optimizer design the engine" loop: sea-level
+/// Isp rises with chamber pressure (more expansion before back-pressure
+/// losses), but the Bartz cooling margin falls as `p_c^0.8`, so the optimum is
+/// pushed up against the cooling limit — exactly the trade a preliminary-design
+/// tool makes. It is NOT generative-geometry / combustion-CFD optimization.
+pub fn optimize_engine(
+    base: &EngineDesign,
+    cooling: &CoolingInputs,
+    target_margin: f64,
+    pc_range: (f64, f64),
+    eps_range: (f64, f64),
+    grid: usize,
+) -> Option<EngineOptimum> {
+    let grid = grid.max(2);
+    let (pc_lo, pc_hi) = pc_range;
+    let (eps_lo, eps_hi) = eps_range;
+    let mut best: Option<EngineOptimum> = None;
+    let mut best_isp = f64::NEG_INFINITY;
+    let mut evaluations = 0usize;
+    let mut feasible_count = 0usize;
+
+    for i in 0..grid {
+        let pc = pc_lo + (i as f64 / (grid - 1) as f64) * (pc_hi - pc_lo);
+        for j in 0..grid {
+            let eps = eps_lo + (j as f64 / (grid - 1) as f64) * (eps_hi - eps_lo);
+            evaluations += 1;
+            let design = EngineDesign {
+                chamber_pressure: pc,
+                expansion_ratio: eps,
+                ..*base
+            };
+            let (Ok(sl), Ok(vac), Ok(cool)) =
+                (design.sea_level(), design.vacuum(), design.cooling(cooling))
+            else {
+                continue;
+            };
+            // Feasible = real operating point (positive thrust) whose cooling
+            // margin clears the target.
+            if !sl.isp.is_finite() || sl.thrust <= 0.0 {
+                continue;
+            }
+            if !cool.cooling_margin.is_finite() || cool.cooling_margin < target_margin {
+                continue;
+            }
+            feasible_count += 1;
+            if sl.isp > best_isp {
+                best_isp = sl.isp;
+                best = Some(EngineOptimum {
+                    design,
+                    sea_level: sl,
+                    vacuum: vac,
+                    cooling: cool,
+                    evaluations: 0,    // patched in after the search
+                    feasible_count: 0, // patched in after the search
+                });
+            }
+        }
+    }
+
+    best.map(|mut b| {
+        b.evaluations = evaluations;
+        b.feasible_count = feasible_count;
+        b
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -532,5 +621,58 @@ mod tests {
             ..kerolox()
         };
         assert!(bad.cooling(&CoolingInputs::default()).is_err());
+    }
+
+    #[test]
+    fn optimizer_finds_a_feasible_cooled_engine() {
+        let opt = optimize_engine(
+            &kerolox(),
+            &CoolingInputs::default(),
+            1.5,
+            (4.0e6, 20.0e6),
+            (8.0, 40.0),
+            24,
+        )
+        .expect("a feasible engine exists in range");
+        assert_eq!(opt.evaluations, 24 * 24);
+        assert!(opt.feasible_count > 0);
+        assert!(
+            opt.cooling.cooling_margin >= 1.5 - 1e-9,
+            "margin {}",
+            opt.cooling.cooling_margin
+        );
+        assert!(opt.sea_level.isp > 0.0 && opt.sea_level.thrust > 0.0);
+        assert!(opt.vacuum.isp > opt.sea_level.isp);
+    }
+
+    #[test]
+    fn tighter_cooling_target_forces_a_lower_chamber_pressure() {
+        // Sea-level Isp wants high p_c, but a stricter cooling margin caps how
+        // high p_c can go — so the optimum p_c drops as the target rises.
+        let base = kerolox();
+        let inp = CoolingInputs::default();
+        let lax = optimize_engine(&base, &inp, 1.2, (4.0e6, 20.0e6), (8.0, 40.0), 24).unwrap();
+        let strict = optimize_engine(&base, &inp, 2.5, (4.0e6, 20.0e6), (8.0, 40.0), 24).unwrap();
+        assert!(
+            strict.design.chamber_pressure <= lax.design.chamber_pressure,
+            "strict p_c {} should be ≤ lax p_c {}",
+            strict.design.chamber_pressure,
+            lax.design.chamber_pressure
+        );
+        assert!(strict.cooling.cooling_margin >= 2.5 - 1e-9);
+    }
+
+    #[test]
+    fn optimizer_returns_none_when_nothing_meets_the_target() {
+        // An impossibly high margin target has no feasible point.
+        let none = optimize_engine(
+            &kerolox(),
+            &CoolingInputs::default(),
+            1_000.0,
+            (18.0e6, 20.0e6),
+            (8.0, 40.0),
+            8,
+        );
+        assert!(none.is_none());
     }
 }
