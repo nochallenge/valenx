@@ -112,6 +112,33 @@ pub fn ground_track(
     Ok(out)
 }
 
+/// The **semi-major axis** (m) of a circular **repeat ground-track** orbit —
+/// one that retraces its sub-satellite path after exactly `revolutions`
+/// orbital revolutions spanning `days` Earth (sidereal) rotations.
+///
+/// This is the core sizing relation for Earth-observation and reconnaissance
+/// constellations: choosing the altitude so the track closes after a fixed
+/// cycle. The repeat condition (Keplerian — first order, ignoring the J2 nodal
+/// regression that a precise design would fold into `ω⊕`) is that the satellite
+/// completes `N` orbital periods while the Earth turns `M` times relative to the
+/// orbit plane, `N·T = M·(2π/ω⊕)`. Inverting Kepler's third law gives
+/// `a = (μ·(M/(N·ω⊕))²)^(1/3)`.
+///
+/// The famous special case `1 rev / 1 day` returns the **geostationary**
+/// radius (≈ 42 164 km). More revolutions per day means a shorter period and a
+/// lower orbit. Returns `None` if either count is zero (the relation is
+/// undefined).
+pub fn repeat_ground_track_semi_major_axis(revolutions: u32, days: u32) -> Option<f64> {
+    if revolutions == 0 || days == 0 {
+        return None;
+    }
+    let n = revolutions as f64;
+    let m = days as f64;
+    // T/(2π) = (M/N)·(1/ω⊕); a³ = μ·(T/2π)².
+    let t_over_2pi = m / (n * OMEGA_EARTH);
+    Some((crate::constants::MU_EARTH * t_over_2pi * t_over_2pi).cbrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,5 +238,58 @@ mod tests {
             "max lat {}",
             max_lat.to_degrees()
         );
+    }
+
+    // ===== repeat ground-track orbit sizing =====
+
+    #[test]
+    fn repeat_one_rev_per_sidereal_day_is_geostationary() {
+        // GROUND TRUTH: an orbit repeating after 1 revolution per 1 Earth
+        // rotation is geostationary — semi-major axis ≈ 42,164 km, the famous
+        // GEO radius (a = (μ/ω⊕²)^(1/3)).
+        let a = repeat_ground_track_semi_major_axis(1, 1).unwrap();
+        assert!(
+            (a - 4.2164e7).abs() < 1e4,
+            "1 rev/day repeat sma {a} m != geostationary 4.2164e7"
+        );
+    }
+
+    #[test]
+    fn repeat_period_satisfies_the_defining_relation() {
+        // The defining relation is exact: N orbital periods = M sidereal
+        // rotations, i.e. N·T(a) = M·(2π/ω⊕). Round-trip through Kepler's third
+        // law for several (N, M) cycles.
+        use crate::constants::MU_EARTH;
+        let sidereal_day = std::f64::consts::TAU / OMEGA_EARTH;
+        for &(n, m) in &[(15u32, 1u32), (43, 3), (14, 1), (1, 1)] {
+            let a = repeat_ground_track_semi_major_axis(n, m).unwrap();
+            let period = std::f64::consts::TAU * (a * a * a / MU_EARTH).sqrt();
+            let rel =
+                (n as f64 * period - m as f64 * sidereal_day).abs() / (m as f64 * sidereal_day);
+            assert!(
+                rel < 1e-12,
+                "(N={n},M={m}): N·T != M·sidereal-day (rel {rel:e})"
+            );
+        }
+    }
+
+    #[test]
+    fn repeat_more_revs_means_lower_orbit_and_guards() {
+        // More revolutions per day → shorter period → lower orbit.
+        let a15 = repeat_ground_track_semi_major_axis(15, 1).unwrap();
+        let a16 = repeat_ground_track_semi_major_axis(16, 1).unwrap();
+        assert!(
+            a16 < a15,
+            "16 rev/day {a16} should be lower than 15 rev/day {a15}"
+        );
+        // A ~15 rev/day repeat orbit sits a few hundred km up (LEO).
+        let alt = a15 - R_EARTH;
+        assert!(
+            (200_000.0..800_000.0).contains(&alt),
+            "15 rev/day altitude {alt} m out of LEO range"
+        );
+        // Zero revolutions or zero days is undefined.
+        assert!(repeat_ground_track_semi_major_axis(0, 1).is_none());
+        assert!(repeat_ground_track_semi_major_axis(15, 0).is_none());
     }
 }
