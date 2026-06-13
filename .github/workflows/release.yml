@@ -88,7 +88,7 @@ jobs:
         run: |
           mkdir -p dist
           cp target/debian/*.deb dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-deb
           path: dist/*.deb
@@ -123,7 +123,7 @@ jobs:
         run: |
           mkdir -p dist
           cp target/generate-rpm/*.rpm dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-rpm
           path: dist/*.rpm
@@ -257,7 +257,7 @@ jobs:
         run: |
           echo "::warning::APPLE_ID or APPLE_TEAM_ID secret not set — uploading unsigned .dmg. \
             Users will need to right-click → Open on first launch to bypass Gatekeeper."
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
           path: dist/*.dmg
@@ -339,7 +339,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item target/wix/*.msi dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-msi
           path: dist/*.msi
