@@ -358,6 +358,26 @@ fn required_area_per_strut_m2(
     }
 }
 
+/// Density of Al-2024-T3 (kg/m³) — the interstage strut material — for the
+/// lightest-interstage mass estimate.
+const AL2024_DENSITY_KG_M3: f64 = 2_780.0;
+/// Representative interstage strut length (m) used to turn the minimum
+/// load-bearing area into an estimated minimum strut mass.
+const INTERSTAGE_STRUT_LENGTH_M: f64 = 2.0;
+
+/// Minimum **total** load-bearing strut cross-section (m²) needed to reach
+/// `target_sf` against `load_n`: `A_total = SF · F / σ_yield`. This is
+/// independent of how many struts share it — the per-strut area scales as
+/// `1/N`, so the total is fixed — which is why it is the honest "lightest
+/// interstage" figure of merit. `None` for non-positive inputs.
+fn min_total_strut_area_m2(load_n: f64, yield_pa: f64, target_sf: f64) -> Option<f64> {
+    if load_n > 0.0 && yield_pa > 0.0 && target_sf > 0.0 {
+        Some(target_sf * load_n / yield_pa)
+    } else {
+        None
+    }
+}
+
 /// Run the coupled design→simulate pipeline for the current design and
 /// cache the result. Extracted from the draw closure so it is unit-testable.
 fn recompute(s: &mut RocketWorkbenchState) {
@@ -737,6 +757,37 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             };
                             ui.colored_label(col, egui::RichText::new(txt).small());
                         }
+
+                        // ── Lightest interstage ───────────────────────────
+                        // Minimum total load-bearing area to hit the target
+                        // SF (A_total = SF·F/σy — strut-count independent),
+                        // plus an estimated minimum strut mass.
+                        if let Some(a_total) = min_total_strut_area_m2(
+                            r.peak_axial_load_n,
+                            s.design.material_yield_pa,
+                            s.target_sf,
+                        ) {
+                            let mass_min =
+                                a_total * INTERSTAGE_STRUT_LENGTH_M * AL2024_DENSITY_KG_M3;
+                            ui.add_space(4.0);
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "lightest interstage @ SF {:.2}: ≥ {:.1} cm² total \
+                                     (≈ {:.0} kg · {:.1} m Al-2024 struts)",
+                                    s.target_sf,
+                                    a_total * 1.0e4,
+                                    mass_min,
+                                    INTERSTAGE_STRUT_LENGTH_M,
+                                ))
+                                .monospace()
+                                .small(),
+                            )
+                            .on_hover_text(
+                                "Minimum total load-bearing cross-section to meet the target \
+                                 safety factor — A_total = SF·F/σy, independent of strut count. \
+                                 Mass assumes solid Al-2024-T3 struts of the length shown.",
+                            );
+                        }
                     }
                 });
         });
@@ -941,6 +992,28 @@ mod tests {
             (s.report.unwrap().structural_safety_factor - target).abs() < 1e-9,
             "sizing to the required area hits the target SF"
         );
+    }
+
+    #[test]
+    fn min_total_area_is_strut_count_independent() {
+        // A_total = SF·F/σy: 2·100/10 = 20, with no N term.
+        assert_eq!(min_total_strut_area_m2(100.0, 10.0, 2.0), Some(20.0));
+        // Non-positive inputs → None (no panic, no divide-by-zero).
+        assert!(min_total_strut_area_m2(0.0, 10.0, 2.0).is_none());
+        assert!(min_total_strut_area_m2(100.0, 0.0, 2.0).is_none());
+
+        // The total equals N × the per-strut required area for every N — the
+        // per-strut formula divides by N, the total multiplies it back, so
+        // the lightest interstage is genuinely strut-count independent.
+        let (load, yield_pa, target) = (123_456.0, 324.0e6, 1.8);
+        let total = min_total_strut_area_m2(load, yield_pa, target).unwrap();
+        for n in [1usize, 4, 8, 16, 32] {
+            let per = required_area_per_strut_m2(load, yield_pa, n, target).unwrap();
+            assert!(
+                (per * n as f64 - total).abs() < 1e-12,
+                "N={n}: {per}×{n} should equal total {total}"
+            );
+        }
     }
 }
 
