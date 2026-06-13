@@ -106,7 +106,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   # -------------------------------------------------------------------
-  # Cross-platform test matrix — the real signal
+  # Linux test — the REQUIRED merge gate (it is in `ci-ok`'s `needs`).
+  # Windows + macOS run non-blocking in `test-cross` below, for signal.
   # -------------------------------------------------------------------
   test:
     name: test / ${{ matrix.os }}
@@ -115,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -152,6 +153,40 @@ jobs:
       # Run the scoped QA harness instead of `cargo test --workspace`
       # — see docs/QA.md for why a workspace-wide cargo test is forbidden
       # (file-dialog crates hang headless CI).
+      - name: Scoped QA harness (Unix)
+        if: matrix.os != 'windows-latest'
+        run: bash scripts/qa.sh --tests
+      - name: Scoped QA harness (Windows)
+        if: matrix.os == 'windows-latest'
+        run: pwsh scripts/qa.ps1 --tests
+
+  # -------------------------------------------------------------------
+  # Cross-OS test (Windows + macOS) — runs for SIGNAL but does NOT gate
+  # the merge: it is intentionally absent from `ci-ok`'s `needs`, so a
+  # green Linux test + the fast jobs let a PR merge in ~10-15 min instead
+  # of waiting on the ~1 h Windows runner. The maintainer develops on
+  # Windows and runs the scoped Windows suite locally before every push,
+  # so cross-OS regressions are caught off-CI; these legs still surface
+  # any breakage on the PR, just without blocking it.
+  # -------------------------------------------------------------------
+  test-cross:
+    name: test-cross / ${{ matrix.os }}
+    needs: [changes, fmt, clippy]
+    if: needs.changes.outputs.code != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: PyO3 link flags (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "RUSTFLAGS=$RUSTFLAGS -C link-arg=-undefined -C link-arg=dynamic_lookup" >> "$GITHUB_ENV"
+      - run: cargo build --workspace --all-targets
       - name: Scoped QA harness (Unix)
         if: matrix.os != 'windows-latest'
         run: bash scripts/qa.sh --tests
