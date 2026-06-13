@@ -60,6 +60,7 @@ pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
 pub mod draft_overlay;
+pub mod engine_workbench;
 pub mod fasteners_workbench;
 pub mod fields_workbench;
 pub mod first_run;
@@ -580,6 +581,14 @@ pub struct ValenxApp {
     /// [`crate::rocket_workbench`].
     pub(crate) rocket: crate::rocket_workbench::RocketWorkbenchState,
 
+    /// Whether the right-side Engine workbench panel is visible — the
+    /// reactive engine design → analyze → optimize → export loop. On by
+    /// default (set in [`ValenxApp::new`]).
+    pub(crate) show_engine_workbench: bool,
+    /// Form + result state for the Engine workbench. See
+    /// [`crate::engine_workbench`].
+    pub(crate) engine: crate::engine_workbench::EngineWorkbenchState,
+
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work
     /// via the live feed.
@@ -678,6 +687,9 @@ impl ValenxApp {
         // Rocket workbench on by default too, so the Valenx LV-1 ascent
         // plot is visible at launch without hunting the View menu.
         app.show_rocket_workbench = true;
+        // Engine-design workbench on by default too — design → analyze →
+        // optimize → export an engine, visible at launch.
+        app.show_engine_workbench = true;
         app.snap_to_grid = true;
         app.init_registry();
         // Restore the per-case run-history map from disk so the
