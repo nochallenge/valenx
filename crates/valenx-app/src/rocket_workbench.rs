@@ -27,6 +27,7 @@
 //! — only the interstage structure is parameterised here.
 
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 use eframe::egui;
 use egui_plot::{Line, Plot, PlotPoints, Points};
@@ -105,6 +106,37 @@ struct OptResult {
     convergence: Vec<[f64; 2]>,
 }
 
+/// A live progress snapshot from a running background optimization.
+#[derive(Clone, Copy, Default)]
+struct OptProgress {
+    /// Evaluations completed so far.
+    done: usize,
+    /// How many of those reached a bound orbit.
+    reached_orbit: usize,
+    /// Best objective value so far, in display units (`NaN` until feasible).
+    best_value: f64,
+}
+
+/// A message from the background optimizer thread to the UI.
+enum OptMsg {
+    /// A throttled progress tick.
+    Progress(OptProgress),
+    /// The finished result (sent once, last).
+    Done(OptResult),
+}
+
+/// A background optimization in flight: the UI polls `rx` each frame for
+/// progress + the final result, so thousands of sims never block the UI.
+struct OptJob {
+    rx: Receiver<OptMsg>,
+    /// The objective being optimized (fixed at spawn; for the progress label).
+    objective: OptObjective,
+    /// Total evaluations the run will perform.
+    n_evals: usize,
+    /// The most recent progress tick received.
+    last_progress: OptProgress,
+}
+
 /// Persistent form + result state for the Rocket workbench.
 pub struct RocketWorkbenchState {
     /// The interstage design knobs fed to the coupled pipeline.
@@ -130,6 +162,9 @@ pub struct RocketWorkbenchState {
     opt: Option<OptResult>,
     /// Which objective the AI optimizer drives toward (radio-selected).
     opt_objective: OptObjective,
+    /// A background optimization in flight (None when idle). Polled each
+    /// frame so the UI never blocks while thousands of sims run.
+    opt_job: Option<OptJob>,
 }
 
 impl Default for RocketWorkbenchState {
@@ -145,6 +180,7 @@ impl Default for RocketWorkbenchState {
             loaded_3d_once: false,
             opt: None,
             opt_objective: OptObjective::default(),
+            opt_job: None,
         }
     }
 }
@@ -198,14 +234,28 @@ fn lv1_config() -> AscentConfig {
     }
 }
 
+/// The no-progress convenience wrapper used by tests (the live UI uses
+/// [`spawn_opt_job`] → [`optimize_ascent_with`]).
+#[cfg(test)]
+fn optimize_ascent(objective: OptObjective, target_sf: f64, n_evals: usize) -> OptResult {
+    optimize_ascent_with(objective, target_sf, n_evals, |_, _, _| {})
+}
+
 /// Search the design space — payload × pitch-kick × vertical-rise — across
 /// `n_evals` real `valenx-astro` ascent sims, keeping only designs that
 /// reach a bound orbit with interstage safety factor ≥ `target_sf`, and
 /// rewarding whichever `objective` is selected (heaviest payload, highest
 /// apoapsis, or gentlest peak-g ride). Deterministic (seeded) so it is
 /// testable — and the candidate sequence is identical across objectives, so
-/// each objective is a true arg-best over the same feasible set.
-fn optimize_ascent(objective: OptObjective, target_sf: f64, n_evals: usize) -> OptResult {
+/// each objective is a true arg-best over the same feasible set. `on_progress`
+/// is called once per evaluation with `(evals_done, reached_orbit_count,
+/// best_objective_value_so_far)` to drive a live counter on a background run.
+fn optimize_ascent_with(
+    objective: OptObjective,
+    target_sf: f64,
+    n_evals: usize,
+    mut on_progress: impl FnMut(usize, usize, f64),
+) -> OptResult {
     // Interstage capacity: 8 Al-2024-T3 struts of 15 cm² each carry the
     // wet upper stage + payload; F = m·a_max sets the load at peak g.
     let capacity_n = 324.0e6 * 8.0 * 1.5e-3;
@@ -283,6 +333,7 @@ fn optimize_ascent(objective: OptObjective, target_sf: f64, n_evals: usize) -> O
         // feasible design (the plot filters non-finite points).
         let display = best.map(|b| b.objective_value).unwrap_or(f64::NAN);
         convergence.push([i as f64, display]);
+        on_progress(i + 1, reached_orbit, display);
     }
 
     OptResult {
@@ -291,6 +342,75 @@ fn optimize_ascent(objective: OptObjective, target_sf: f64, n_evals: usize) -> O
         reached_orbit,
         n_evals,
         convergence,
+    }
+}
+
+/// Spawn the optimizer on a background thread, streaming throttled progress
+/// and the final result back over a channel. Returns immediately; the UI
+/// polls the returned [`OptJob`] via [`poll_opt_job`] and never blocks.
+fn spawn_opt_job(objective: OptObjective, target_sf: f64, n_evals: usize) -> OptJob {
+    let (tx, rx) = std::sync::mpsc::channel::<OptMsg>();
+    std::thread::spawn(move || {
+        let prog_tx = tx.clone();
+        // Report ~1% steps (and the final tick) to keep the channel light.
+        let step = (n_evals / 100).max(1);
+        let result = optimize_ascent_with(objective, target_sf, n_evals, |done, reached, best| {
+            if done % step == 0 || done == n_evals {
+                let _ = prog_tx.send(OptMsg::Progress(OptProgress {
+                    done,
+                    reached_orbit: reached,
+                    best_value: best,
+                }));
+            }
+        });
+        let _ = tx.send(OptMsg::Done(result));
+    });
+    OptJob {
+        rx,
+        objective,
+        n_evals,
+        last_progress: OptProgress::default(),
+    }
+}
+
+/// Drain a running background optimization's channel: store the finished
+/// [`OptResult`] on the state when it arrives, otherwise return a live
+/// progress snapshot `(progress, n_evals, objective)` (requesting a repaint so
+/// the counter keeps ticking). `None` when idle or just-finished.
+fn poll_opt_job(
+    s: &mut RocketWorkbenchState,
+    ctx: &egui::Context,
+) -> Option<(OptProgress, usize, OptObjective)> {
+    let job = s.opt_job.as_mut()?;
+    let mut finished: Option<OptResult> = None;
+    let mut disconnected = false;
+    loop {
+        match job.rx.try_recv() {
+            Ok(OptMsg::Progress(p)) => job.last_progress = p,
+            Ok(OptMsg::Done(r)) => {
+                finished = Some(r);
+                break;
+            }
+            Err(TryRecvError::Empty) => break,
+            Err(TryRecvError::Disconnected) => {
+                disconnected = true;
+                break;
+            }
+        }
+    }
+    if let Some(r) = finished {
+        s.opt = Some(r);
+        s.opt_job = None;
+        None
+    } else if disconnected {
+        // The worker vanished without a result (e.g. it panicked) — clear the
+        // job so the UI doesn't sit on a stuck progress bar forever.
+        s.opt_job = None;
+        None
+    } else {
+        let snapshot = (job.last_progress, job.n_evals, job.objective);
+        ctx.request_repaint();
+        Some(snapshot)
     }
 }
 
@@ -433,6 +553,9 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             ui.separator();
 
             let s = &mut app.rocket;
+            // Poll any background optimization before drawing (non-blocking);
+            // `opt_running` is a live progress snapshot while one is in flight.
+            let opt_running = poll_opt_job(s, ui.ctx());
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
@@ -514,15 +637,47 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         );
                         ui.radio_value(&mut s.opt_objective, OptObjective::MinPeakG, "min peak-g");
                     });
-                    if ui
-                        .button(egui::RichText::new("Run AI optimization (200 sims)").strong())
-                        .on_hover_text(
-                            "Flies 200 candidate designs through the real ascent engine and \
-                             converges on the best design for the selected objective.",
+                    let busy = opt_running.is_some();
+                    let run = ui
+                        .add_enabled(
+                            !busy,
+                            egui::Button::new(
+                                egui::RichText::new("Run AI optimization (2000 sims)").strong(),
+                            ),
                         )
-                        .clicked()
-                    {
-                        s.opt = Some(optimize_ascent(s.opt_objective, s.target_sf, 200));
+                        .on_hover_text(
+                            "Flies 2000 candidate designs through the real ascent engine on a \
+                             background thread — the UI stays responsive — and converges on the \
+                             best design for the selected objective.",
+                        );
+                    if run.clicked() && !busy {
+                        s.opt_job = Some(spawn_opt_job(s.opt_objective, s.target_sf, 2_000));
+                    }
+                    if let Some((p, n, obj)) = opt_running {
+                        let frac = (p.done as f32 / n.max(1) as f32).clamp(0.0, 1.0);
+                        // Live best-so-far in the objective's units (blank until
+                        // the first feasible design is found).
+                        let best = if p.best_value.is_finite() {
+                            match obj {
+                                OptObjective::MaxPayload => {
+                                    format!(" · best {:.0} kg", p.best_value)
+                                }
+                                OptObjective::MaxApoapsis => {
+                                    format!(" · best {:.0} km", p.best_value)
+                                }
+                                OptObjective::MinPeakG => format!(" · best {:.1} g", p.best_value),
+                            }
+                        } else {
+                            String::new()
+                        };
+                        ui.add(egui::ProgressBar::new(frac).text(format!(
+                            "{} · {}/{} sims · {} orbit{}",
+                            obj.label(),
+                            p.done,
+                            n,
+                            p.reached_orbit,
+                            best,
+                        )));
                     }
                     if let Some(o) = &s.opt {
                         match &o.best {
@@ -896,6 +1051,48 @@ mod tests {
         for w in finite.windows(2) {
             assert!(w[1] <= w[0] + 1e-9, "min-g convergence is non-increasing");
         }
+    }
+
+    #[test]
+    fn progress_callback_fires_each_eval_monotonically() {
+        let mut ticks: Vec<(usize, usize)> = Vec::new();
+        let r = optimize_ascent_with(OptObjective::MaxPayload, 1.5, 80, |done, reached, _best| {
+            ticks.push((done, reached));
+        });
+        assert_eq!(ticks.len(), 80, "one progress tick per evaluation");
+        assert_eq!(ticks.first().unwrap().0, 1);
+        assert_eq!(ticks.last().unwrap().0, 80);
+        // `done` increments by one; reached_orbit only grows; the final tick's
+        // orbit count matches the result.
+        for w in ticks.windows(2) {
+            assert_eq!(w[1].0, w[0].0 + 1, "done increments by one");
+            assert!(w[1].1 >= w[0].1, "reached_orbit only grows");
+        }
+        assert_eq!(ticks.last().unwrap().1, r.reached_orbit);
+    }
+
+    #[test]
+    fn background_job_matches_synchronous_run() {
+        // The threaded optimizer is deterministic and identical to the direct
+        // call (same seed, same candidate sequence) — proves the non-blocking
+        // path changes only *when* the work runs, not *what* it computes.
+        let job = spawn_opt_job(OptObjective::MaxApoapsis, 1.5, 120);
+        let mut result = None;
+        while let Ok(msg) = job.rx.recv() {
+            if let OptMsg::Done(r) = msg {
+                result = Some(r);
+                break;
+            }
+        }
+        let bg = result.expect("background job sends a Done result");
+        let sync = optimize_ascent(OptObjective::MaxApoapsis, 1.5, 120);
+        assert_eq!(bg.objective, OptObjective::MaxApoapsis);
+        assert_eq!(
+            bg.best.map(|b| b.apoapsis_km as u64),
+            sync.best.map(|b| b.apoapsis_km as u64),
+            "threaded result equals the synchronous one"
+        );
+        assert_eq!(bg.reached_orbit, sync.reached_orbit);
     }
 
     #[test]
