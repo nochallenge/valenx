@@ -55,6 +55,24 @@ impl Default for CarDimensions {
     }
 }
 
+impl CarDimensions {
+    /// A large luxury-EV sedan with Tesla Model-S-class proportions — a long
+    /// wheelbase, a low wide stance and (paired with [`car_body_mesh`]) the
+    /// fastback roofline.
+    pub fn tesla() -> Self {
+        Self {
+            length: 4.97,
+            width: 1.96,
+            height: 1.45,
+            wheelbase: 2.96,
+            track: 1.66,
+            wheel_radius: 0.355,
+            wheel_width: 0.265,
+            ground_clearance: 0.12,
+        }
+    }
+}
+
 /// Push a quad `(a, b, c, d)` as two triangles, both windings (double-sided).
 fn push_quad(tris: &mut Vec<usize>, a: usize, b: usize, c: usize, d: usize) {
     tris.extend_from_slice(&[a, b, c, a, c, d, a, c, b, a, d, c]);
@@ -142,28 +160,37 @@ pub fn car_body_mesh(dims: &CarDimensions) -> Mesh {
     let l = dims.length;
     let w_half = dims.width / 2.0;
     let floor = dims.ground_clearance + dims.wheel_radius * 0.15;
-    let belt = floor + dims.height * 0.42;
+    let belt = floor + dims.height * 0.40;
     let roof = dims.height;
-    let hood = floor + dims.height * 0.16;
-    let tail = floor + dims.height * 0.30;
+    let hood = floor + dims.height * 0.15;
+    let tail = floor + dims.height * 0.34;
+    let nose = floor + dims.height * 0.09; // low Tesla-style nose
 
-    // Lower body side profile (closed loop): bottom edge + hood/beltline/tail.
+    // Lower body side profile (closed loop): a low nose, a long flat hood, the
+    // beltline, and a short tapered tail (subtle ducktail). Traced top edge
+    // (nose → tail) then bottom edge (rear → front) to close the loop.
     let body = [
-        (0.04 * l, floor), // front-bottom
-        (l, floor),        // rear-bottom
-        (l, tail),         // tail-top
-        (0.80 * l, belt),  // rear beltline
-        (0.30 * l, belt),  // front beltline (cowl)
-        (0.04 * l, hood),  // hood front (low nose)
+        (0.015 * l, nose),  // nose tip (low)
+        (0.10 * l, hood),   // hood front
+        (0.30 * l, belt),   // cowl / windshield base
+        (0.82 * l, belt),   // rear beltline
+        (l, tail),          // tail top
+        (l, floor + 0.02),  // rear-bottom
+        (0.015 * l, floor), // front-bottom (long front overhang)
     ];
-    extrude(&body, w_half * 0.96, &mut nodes, &mut tris);
+    extrude(&body, w_half * 0.97, &mut nodes, &mut tris);
 
-    // Inset, raked cabin (greenhouse): windshield up, roof, rear window down.
+    // Inset fastback cabin (greenhouse): a fast windshield, a gently crowned
+    // roof, and a long sloping backlight to a short decklid — the Model-S/3
+    // silhouette. Extra points keep the roofline reading smooth, not faceted.
+    let dz = roof - belt;
     let cabin = [
-        (0.34 * l, belt),
-        (0.46 * l, roof),
-        (0.68 * l, roof),
-        (0.78 * l, belt),
+        (0.30 * l, belt),             // windshield base
+        (0.40 * l, belt + 0.66 * dz), // windshield mid
+        (0.485 * l, roof),            // roof front
+        (0.575 * l, roof),            // roof crown (rear)
+        (0.72 * l, belt + 0.50 * dz), // backlight mid (long fastback)
+        (0.85 * l, belt + 0.04 * dz), // backlight base / decklid
     ];
     extrude(&cabin, w_half * 0.82, &mut nodes, &mut tris);
 
@@ -254,6 +281,34 @@ mod tests {
     }
 
     #[test]
+    fn tesla_preset_has_sedan_proportions_and_builds() {
+        let d = CarDimensions::tesla();
+        assert!((4.7..5.1).contains(&d.length), "Tesla length {}", d.length);
+        assert!((1.85..2.0).contains(&d.width), "width {}", d.width);
+        assert!((1.35..1.55).contains(&d.height), "height {}", d.height);
+        assert!(
+            d.wheelbase > 2.8 && d.wheelbase < d.length,
+            "wheelbase {}",
+            d.wheelbase
+        );
+        let m = car_mesh(&d);
+        assert!(m.nodes.len() > 100 && !m.element_blocks[0].connectivity.is_empty());
+        // The body spans the full length and the roof reaches the stated height.
+        let xmax = m
+            .nodes
+            .iter()
+            .map(|n| n.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!((d.length - 0.05..d.length + 0.05).contains(&xmax), "length");
+        let zmax = m
+            .nodes
+            .iter()
+            .map(|n| n.z)
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!((d.height - 0.05..d.height + 0.05).contains(&zmax), "roof");
+    }
+
+    #[test]
     fn body_and_wheels_split_cleanly() {
         let d = CarDimensions::default();
         let body = car_body_mesh(&d);
@@ -270,7 +325,7 @@ mod tests {
     #[ignore = "writes a path-traced car PNG to TEMP"]
     fn dump_car_png() {
         use valenx_pathtrace::{render, vec3, PtCamera, PtMaterial, RenderParams, SceneBuilder};
-        let d = CarDimensions::default();
+        let d = CarDimensions::tesla();
         let res = 480u32;
         let camera = PtCamera::look_at(
             vec3(
