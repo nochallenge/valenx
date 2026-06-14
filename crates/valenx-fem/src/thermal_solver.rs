@@ -73,11 +73,11 @@
 //!   phase change, no radiation (radiation is non-linear in `T⁴`).
 //! - **Linear conduction.** Conductivity is a single constant `k`; no
 //!   temperature-dependent `k(T)`, no anisotropy.
-//! - **Convection BCs are not modelled directly.** A film/convection
-//!   boundary `q = h·(T − T∞)` couples the flux to the unknown `T`;
-//!   v1 takes Dirichlet (fixed `T`) and Neumann (fixed flux) only. A
-//!   convection BC adds `h` to the diagonal and `h·T∞` to the load —
-//!   a bounded follow-up.
+//! - **Convection (Robin) BCs are supported** via
+//!   [`solve_steady_thermal_with_convection`]: a film boundary
+//!   `q = h·A·(T − T∞)` folds the conductance `h·A` onto the node
+//!   diagonal and `h·A·T∞` into the load. Radiation (non-linear in
+//!   `T⁴`) is still out of scope.
 //! - **Tet4 only**; needs a volume mesh (see
 //!   [`crate::native_solver::structured_box_mesh`]).
 //!
@@ -129,8 +129,8 @@ pub enum ThermalSolverError {
     InvalidLoad {
         /// 0-based node index carrying the bad value.
         node: usize,
-        /// Which input was non-finite — `"heat power"` or `"prescribed
-        /// temperature"`.
+        /// Which input was non-finite — e.g. `"heat power"`, `"prescribed
+        /// temperature"`, or a convection coefficient / ambient temperature.
         kind: &'static str,
     },
     /// No Dirichlet (fixed-temperature) boundary condition was supplied.
@@ -168,6 +168,25 @@ pub struct HeatLoad {
     pub node: usize,
     /// Heat input at the node in watts (positive = into the body).
     pub power: f64,
+}
+
+/// A single-node **convection (Robin)** boundary condition modelling a film
+/// boundary `q = h·A·(T − T∞)`: heat leaves the node in proportion to how far
+/// it sits above the ambient temperature `T∞`.
+///
+/// `h_area` is the lumped conductance `h·A` (W/K) for the node's share of the
+/// convecting surface — a distributed film coefficient `h` (W/(m²·K)) over a
+/// linear-tet face of area `A` contributes `h·A/3` to each of the face's three
+/// nodes, exactly like [`HeatLoad`]. The term folds `h·A` onto the node's
+/// matrix diagonal and `h·A·T∞` into the load.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ConvectionBc {
+    /// 0-based node index.
+    pub node: usize,
+    /// Lumped convective conductance `h·A` at the node (W/K, non-negative).
+    pub h_area: f64,
+    /// Ambient (free-stream) temperature `T∞` the node convects to.
+    pub ambient: f64,
 }
 
 /// Result of a steady-state thermal solve.
@@ -220,6 +239,30 @@ pub fn solve_steady_thermal(
     fixed: &[FixedTemperature],
     loads: &[HeatLoad],
 ) -> Result<ThermalSolution, ThermalSolverError> {
+    solve_steady_thermal_with_convection(mesh, conductivity, fixed, loads, &[])
+}
+
+/// Solve a steady-state heat-conduction problem with **convection (Robin)**
+/// boundary conditions, in addition to the Dirichlet/Neumann BCs that
+/// [`solve_steady_thermal`] handles.
+///
+/// Each [`ConvectionBc`] models a film boundary `q = h·A·(T − T∞)` by folding
+/// the conductance `h·A` onto the node's matrix diagonal and `h·A·T∞` into the
+/// load vector — the natural way a Robin term enters the FE system. A
+/// convection BC alone makes the conductivity matrix non-singular, so (unlike
+/// pure conduction) **no Dirichlet BC is required** when at least one
+/// convection BC is present.
+///
+/// # Errors
+///
+/// See [`ThermalSolverError`].
+pub fn solve_steady_thermal_with_convection(
+    mesh: &Mesh,
+    conductivity: f64,
+    fixed: &[FixedTemperature],
+    loads: &[HeatLoad],
+    convection: &[ConvectionBc],
+) -> Result<ThermalSolution, ThermalSolverError> {
     let n_nodes = mesh.nodes.len();
     if n_nodes == 0 {
         return Err(ThermalSolverError::EmptyMesh);
@@ -227,7 +270,7 @@ pub fn solve_steady_thermal(
     if !conductivity.is_finite() || conductivity <= 0.0 {
         return Err(ThermalSolverError::BadConductivity(conductivity));
     }
-    if fixed.is_empty() {
+    if fixed.is_empty() && convection.is_empty() {
         return Err(ThermalSolverError::NoDirichletBc);
     }
     let tets = tet_block(mesh).ok_or(ThermalSolverError::NoTetBlock)?;
@@ -329,7 +372,34 @@ pub fn solve_steady_thermal(
         q[fb.node] += penalty * fb.temperature;
     }
 
-    // Fold the penalty diagonal into the matrix.
+    // --- convection (Robin) BCs: q = h·A·(T − T∞) folds h·A onto the
+    // diagonal and h·A·T∞ into the load (reusing the penalty-diagonal vector
+    // as a general "extra diagonal"). ---
+    for cb in convection {
+        if cb.node >= n_nodes {
+            return Err(ThermalSolverError::BadConnectivity {
+                elem: usize::MAX,
+                node: cb.node,
+                n_nodes,
+            });
+        }
+        if !cb.h_area.is_finite() || cb.h_area < 0.0 {
+            return Err(ThermalSolverError::InvalidLoad {
+                node: cb.node,
+                kind: "convection conductance",
+            });
+        }
+        if !cb.ambient.is_finite() {
+            return Err(ThermalSolverError::InvalidLoad {
+                node: cb.node,
+                kind: "convection ambient temperature",
+            });
+        }
+        penalty_diag[cb.node] += cb.h_area;
+        q[cb.node] += cb.h_area * cb.ambient;
+    }
+
+    // Fold the (Dirichlet penalty + convection) diagonal into the matrix.
     csc = add_diagonal(&csc, &penalty_diag);
 
     // --- solve ---
@@ -762,5 +832,124 @@ mod tests {
         assert!((sol.max_temperature() - 450.0).abs() < 1e-9);
         assert!((sol.min_temperature() - 300.0).abs() < 1e-9);
         assert!((sol.max_flux_magnitude() - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn convection_bar_matches_series_resistance() {
+        // A bar: x=0 face fixed hot, x=L face convecting to ambient. The steady
+        // heat flow is the series conduction+convection resistance
+        //   q = (T_hot − T∞) / (L/(kA) + 1/(hA)),
+        // and the convecting face sits at T∞ + q/(hA).
+        let (lx, ly, lz) = (4.0, 1.0, 1.0);
+        let (nx, ny, nz) = (4, 1, 1);
+        let mesh = structured_box_mesh(lx, ly, lz, nx, ny, nz).expect("valid box");
+        let k = 50.0;
+        let area = ly * lz;
+        let (t_hot, t_inf) = (500.0, 300.0);
+        let h_area_total = 25.0; // h·A (W/K)
+
+        let mut fixed = Vec::new();
+        for j in 0..=ny {
+            for kk in 0..=nz {
+                fixed.push(FixedTemperature {
+                    node: nid(0, j, kk, nx, ny),
+                    temperature: t_hot,
+                });
+            }
+        }
+        let face: Vec<usize> = (0..=ny)
+            .flat_map(|j| (0..=nz).map(move |kk| nid(nx, j, kk, nx, ny)))
+            .collect();
+        let conv: Vec<ConvectionBc> = face
+            .iter()
+            .map(|&n| ConvectionBc {
+                node: n,
+                h_area: h_area_total / face.len() as f64,
+                ambient: t_inf,
+            })
+            .collect();
+        let sol = solve_steady_thermal_with_convection(&mesh, k, &fixed, &[], &conv).unwrap();
+
+        let r_cond = lx / (k * area);
+        let r_conv = 1.0 / h_area_total;
+        let q = (t_hot - t_inf) / (r_cond + r_conv);
+        let t_face_analytic = t_inf + q * r_conv;
+        let t_face_fe = face.iter().map(|&n| sol.temperature[n]).sum::<f64>() / face.len() as f64;
+        assert!(
+            (t_face_fe - t_face_analytic).abs() < 0.5,
+            "convecting-face T {t_face_fe} vs series-resistance {t_face_analytic}"
+        );
+        assert!(
+            (sol.temperature[nid(0, 0, 0, nx, ny)] - t_hot).abs() < 1e-2,
+            "fixed face moved"
+        );
+    }
+
+    #[test]
+    fn large_convection_coefficient_pins_face_to_ambient() {
+        // h → ∞ is the Dirichlet limit: the convecting face is pinned to T∞.
+        let (nx, ny, nz) = (4, 1, 1);
+        let mesh = structured_box_mesh(4.0, 1.0, 1.0, nx, ny, nz).expect("valid box");
+        let (t_hot, t_inf) = (500.0, 300.0);
+        let mut fixed = Vec::new();
+        for j in 0..=ny {
+            for kk in 0..=nz {
+                fixed.push(FixedTemperature {
+                    node: nid(0, j, kk, nx, ny),
+                    temperature: t_hot,
+                });
+            }
+        }
+        let face: Vec<usize> = (0..=ny)
+            .flat_map(|j| (0..=nz).map(move |kk| nid(nx, j, kk, nx, ny)))
+            .collect();
+        let conv: Vec<ConvectionBc> = face
+            .iter()
+            .map(|&n| ConvectionBc {
+                node: n,
+                h_area: 1.0e7,
+                ambient: t_inf,
+            })
+            .collect();
+        let sol = solve_steady_thermal_with_convection(&mesh, 50.0, &fixed, &[], &conv).unwrap();
+        for &n in &face {
+            assert!(
+                (sol.temperature[n] - t_inf).abs() < 0.5,
+                "node {n} T {} should be pinned to ambient {t_inf}",
+                sol.temperature[n]
+            );
+        }
+    }
+
+    #[test]
+    fn convection_alone_is_non_singular_and_conserves_heat() {
+        // No Dirichlet BC, but a convection BC regularises the system: a heated
+        // body convecting to ambient reaches a finite steady field, and at
+        // steady state all injected heat leaves by convection (heat balance).
+        let mesh = structured_box_mesh(1.0, 1.0, 1.0, 2, 2, 2).expect("valid box");
+        let n = mesh.nodes.len();
+        let h_area = 10.0;
+        let t_inf = 300.0;
+        let conv: Vec<ConvectionBc> = (0..n)
+            .map(|i| ConvectionBc {
+                node: i,
+                h_area,
+                ambient: t_inf,
+            })
+            .collect();
+        let loads = [HeatLoad {
+            node: 0,
+            power: 1000.0,
+        }];
+        // Would return NoDirichletBc without convection; here it must solve.
+        let sol = solve_steady_thermal_with_convection(&mesh, 50.0, &[], &loads, &conv).unwrap();
+        for &t in &sol.temperature {
+            assert!(t.is_finite() && t >= t_inf - 1e-6, "temperature {t}");
+        }
+        let convective_loss: f64 = (0..n).map(|i| h_area * (sol.temperature[i] - t_inf)).sum();
+        assert!(
+            (convective_loss - 1000.0).abs() < 1.0,
+            "convective loss {convective_loss} W vs injected 1000 W (heat balance)"
+        );
     }
 }
