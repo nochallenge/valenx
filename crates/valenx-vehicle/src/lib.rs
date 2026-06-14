@@ -54,6 +54,9 @@ pub use ev::{build_ev, tesla_class, Category, Component, EvAssembly, EvSpec};
 pub mod powertrain;
 pub use powertrain::{tesla, Battery, ElectricPowertrain, EvCar};
 
+pub mod ggdiagram;
+pub use ggdiagram::{GgEnvelope, GgPoint};
+
 pub mod sim;
 pub use sim::{SprintTrace, TracePoint};
 

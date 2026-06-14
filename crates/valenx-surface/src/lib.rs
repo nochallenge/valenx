@@ -66,6 +66,8 @@
 pub mod blend;
 pub mod continuity;
 pub mod coons;
+pub mod curvature_comb;
+pub mod draft_angle;
 pub mod error;
 pub mod extend;
 pub mod fit;
@@ -82,6 +84,8 @@ pub mod tessellate;
 pub mod trim;
 
 pub use continuity::{measure_edge_continuity, ContinuityReport};
+pub use curvature_comb::{curvature_comb, CurvatureComb};
+pub use draft_angle::{draft_angle, draft_report, DraftReport};
 pub use error::SurfaceError;
 pub use nurbs_curve::NurbsCurve;
 pub use nurbs_surface::NurbsSurface;
