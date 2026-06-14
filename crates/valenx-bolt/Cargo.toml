@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-bolt"
+description = "Bolted-joint analysis core for Valenx — preload from tightening torque via the nut-factor relation T = K F d, the member/bolt stiffness ratio C = kb / (kb + km), external-load sharing (the bolt sees C P, the clamped members shed (1 - C) P) and proof / tensile-stress checks against the bolt material grade. Research/educational grade: closed-form textbook (Shigley / VDI 2230 first-principles) models, NOT a clinical/medical or production engineering certification tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

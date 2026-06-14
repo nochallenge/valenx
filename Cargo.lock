@@ -4019,6 +4019,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-acidbase"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-adapter-alphafold2"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6580,6 +6588,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-bearing"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-bio"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6617,6 +6634,14 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "valenx-cgal-port",
+]
+
+[[package]]
+name = "valenx-bolt"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6731,6 +6756,14 @@ dependencies = [
  "serde_json",
  "tracing",
  "valenx-core",
+]
+
+[[package]]
+name = "valenx-creep"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6860,6 +6893,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-electrochem"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-executor-slurm"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6881,6 +6922,14 @@ dependencies = [
  "thiserror 2.0.18",
  "valenx-core",
  "valenx-fields",
+]
+
+[[package]]
+name = "valenx-fanlaws"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7002,11 +7051,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-gasdynamics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-gcad3d"
 version = "0.1.0-alpha.1"
 dependencies = [
  "nalgebra",
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-gearbox"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -7269,6 +7335,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-muscle"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-neuro"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7385,6 +7459,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-optics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-optimize"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7394,6 +7476,15 @@ dependencies = [
  "thiserror 2.0.18",
  "toml 0.8.23",
  "valenx-core",
+]
+
+[[package]]
+name = "valenx-orifice"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7499,6 +7590,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-pump"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-py"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7520,6 +7619,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-radioactivity"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-rbac"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7533,6 +7640,14 @@ name = "valenx-reactdyn"
 version = "0.1.0-alpha.1"
 dependencies = [
  "valenx-qchem",
+]
+
+[[package]]
+name = "valenx-refrigeration"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7559,6 +7674,15 @@ dependencies = [
  "valenx-cad",
  "valenx-core",
  "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-repro"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "sha2",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7661,6 +7785,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "valenx-core",
+]
+
+[[package]]
+name = "valenx-spring-design"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7778,6 +7911,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-transmissionline"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-variant-effect"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7816,6 +7958,14 @@ dependencies = [
  "png",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "valenx-weld"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

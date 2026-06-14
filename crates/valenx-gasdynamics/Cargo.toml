@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-gasdynamics"
+description = "Compressible-flow relations for Valenx — closed-form one-dimensional gas dynamics for a calorically-perfect ideal gas: isentropic stagnation ratios T0/T, p0/p, rho0/rho and the area-Mach A/A* relation, plus the stationary normal-shock jumps (downstream Mach M2, static p2/p1, T2/T1, density rho2/rho1 and stagnation p02/p01) as functions of the upstream Mach number and the specific-heat ratio gamma. Research/educational grade: textbook closed-form analytic models (Anderson, NACA Report 1135), NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form algebra. `serde` (derive) drives the data-model
+# derives so results round-trip; `thiserror` backs the validated error
+# enum. No numerics crate is needed — every relation is a direct
+# algebraic expression evaluated in f64.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
