@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-thermocouple"
+description = "Thermocouple Seebeck-EMF model — linear thermoelectric voltage EMF = S * (T_hot - T_cold), cold-junction compensation, and temperature recovery T from V, with a type-K-style sensitivity (~41 uV/C). Research/educational grade: textbook closed-form linear thermoelectric models, NOT a clinical/medical or production engineering instrument."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

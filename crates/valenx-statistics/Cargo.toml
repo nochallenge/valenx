@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-statistics"
+description = "Descriptive and inferential statistics core for Valenx — textbook closed-form estimators on `f64` slices: arithmetic mean, sample (n-1) and population (n) variance / standard deviation, median and quartiles (linear-interpolation, type-7), the standard-normal probability density and cumulative distribution (Abramowitz & Stegun 7.1.26 erf), z-scores, the one-sample t-statistic, and a normal- or known-sigma confidence interval for the mean. Research / educational grade: textbook closed-form and numerical models, NOT a clinical, medical, or production engineering statistics tool. Pure algorithms, no platform dependencies."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure algorithms — every estimator is hand-rolled over `f64` slices.
+# serde drives the small data-model derives (CI / quartile structs);
+# thiserror supplies the validated error taxonomy. No numeric or
+# platform dependencies.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
