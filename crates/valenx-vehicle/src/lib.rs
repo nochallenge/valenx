@@ -45,6 +45,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod geometry;
+pub use geometry::{car_body_mesh, car_mesh, car_wheel_mesh, CarDimensions};
+
 /// Standard gravity (m/s²).
 const G: f64 = 9.806_65;
 /// Sea-level air density (kg/m³).

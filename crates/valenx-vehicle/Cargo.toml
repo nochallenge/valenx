@@ -10,7 +10,15 @@ license.workspace      = true
 repository.workspace   = true
 
 [dependencies]
-serde = { workspace = true }
+serde       = { workspace = true }
+nalgebra    = { workspace = true }
+valenx-mesh = { path = "../valenx-mesh" }
+
+[dev-dependencies]
+# Path-traced "what does the car look like" render dump (mirrors valenx-app's
+# render dumps). Already in the workspace tree; png 0.18 is the resolved encoder.
+valenx-pathtrace = { path = "../valenx-pathtrace" }
+png              = "0.18"
 
 [lints.rust]
 unused_imports = "warn"
