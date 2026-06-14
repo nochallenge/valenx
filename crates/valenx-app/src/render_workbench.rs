@@ -362,6 +362,23 @@ mod tests {
         );
     }
 
+    /// Render the rocket at preview quality and write a PNG to TEMP — run with
+    /// `cargo test -p valenx-app --lib render_workbench::tests::dump -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "writes a path-traced rocket PNG to TEMP"]
+    fn dump_rocket_png() {
+        let (w, h, pixels) = render_rocket(460, 192, 6, 1.1).expect("rocket render");
+        let path = std::env::temp_dir().join("valenx_rocket_render.png");
+        let file = std::fs::File::create(&path).expect("create png");
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header().expect("png header");
+        writer.write_image_data(&pixels).expect("png data");
+        writer.finish().expect("png finish");
+        println!("WROTE {}", path.display());
+    }
+
     #[test]
     fn background_render_delivers_pixels() {
         // Exercise the reactive path: render_demo runs on a worker thread and
