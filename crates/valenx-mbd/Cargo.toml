@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-mbd"
+description = "Native planar (2-D) multibody-dynamics solver for Valenx — rigid bodies with mass/inertia, force elements (gravity, linear spring, damper) and holonomic constraints (revolute pins) solved as a constrained DAE via Lagrange multipliers with Baumgarte stabilization, integrated in time. Validated against analytic results (pendulum period, spring-mass frequency, energy conservation). Research / preliminary-design grade — a step toward, not an equal of, a production multibody code (Adams)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+nalgebra = { workspace = true }
+serde    = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
