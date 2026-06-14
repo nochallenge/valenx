@@ -126,6 +126,70 @@ fn render_demo(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Rend
     Ok((ldr.width as usize, ldr.height as usize, ldr.pixels))
 }
 
+/// Path-trace the **Valenx LV-1** as a "final picture": the procedural rocket
+/// mesh in a brushed-metal finish on a ground plane, lit by a big overhead
+/// light — the photoreal counterpart to the live shaded viewport.
+fn render_rocket(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> RenderOutput {
+    let res = resolution.clamp(48, 512);
+    // The rocket stands along +Z, so the camera's up is +Z; a 3/4 hero framing
+    // of the ~33-tall vehicle.
+    let camera = PtCamera::look_at(
+        vec3(42.0, 38.0, 22.0),
+        vec3(0.0, 0.0, 13.0),
+        vec3(0.0, 0.0, 1.0),
+        34f32.to_radians(),
+        res,
+        res,
+    );
+    let mut b = SceneBuilder::new(camera);
+    let body = b.add_material(PtMaterial::metal([0.80, 0.83, 0.88], 0.20));
+    let ground = b.add_material(PtMaterial::diffuse([0.30, 0.32, 0.38]));
+    let key = b.add_material(PtMaterial::emissive([9.0, 8.4, 7.2]));
+    let fill = b.add_material(PtMaterial::emissive([1.4, 1.9, 3.0]));
+
+    let rocket = crate::rocket_mesh::lv1_rocket_mesh();
+    b.add_mesh(&rocket, body);
+
+    // Ground plane at the engine-bell base.
+    let (g, z0) = (140.0, -2.8);
+    b.add_quad(
+        vec3(-g, -g, z0),
+        vec3(g, -g, z0),
+        vec3(g, g, z0),
+        vec3(-g, g, z0),
+        ground,
+    );
+    // Big overhead key light (emits downward, like the Cornell ceiling light).
+    let (lx, ly, lz) = (50.0, 50.0, 62.0);
+    b.add_quad(
+        vec3(-lx, -ly, lz),
+        vec3(lx, -ly, lz),
+        vec3(lx, ly, lz),
+        vec3(-lx, ly, lz),
+        key,
+    );
+    // Cool sky-fill backdrop so shadowed faces aren't pure black.
+    b.add_quad(
+        vec3(-140.0, 95.0, -10.0),
+        vec3(140.0, 95.0, -10.0),
+        vec3(140.0, 95.0, 85.0),
+        vec3(-140.0, 95.0, 85.0),
+        fill,
+    );
+
+    let scene = b.build();
+    let params = RenderParams {
+        samples_per_pixel: spp.clamp(1, 128),
+        max_depth: max_depth.clamp(1, 16),
+        seed: 0x5eed,
+        exposure,
+    };
+    let ldr = render(&scene, &params)
+        .map_err(|e| e.to_string())?
+        .to_ldr(exposure);
+    Ok((ldr.width as usize, ldr.height as usize, ldr.pixels))
+}
+
 /// Move a finished background render into the panel: build the egui texture on
 /// the UI thread (the worker only produced raw pixels), or surface the error.
 fn poll_render(s: &mut RenderWorkbenchState, ctx: &egui::Context) {
@@ -164,6 +228,7 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
     poll_render(&mut app.render, ctx);
     let mut do_render = false;
+    let mut do_render_rocket = false;
     egui::SidePanel::right("valenx_render_workbench")
         .resizable(true)
         .default_width(400.0)
@@ -217,6 +282,12 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             if ui.button("▶ Render (Cornell box)").clicked() {
                 do_render = true;
             }
+            if ui
+                .button(egui::RichText::new("🚀 Render the rocket (final picture)").strong())
+                .clicked()
+            {
+                do_render_rocket = true;
+            }
             if !s.status.is_empty() {
                 ui.label(egui::RichText::new(&s.status).small().weak());
             }
@@ -238,7 +309,7 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             }
         });
 
-    if do_render {
+    if do_render || do_render_rocket {
         // Clear stale per-run state up front (house style — cf. cfd_workbench),
         // so a failed render can't leave the previous success line showing next
         // to the error. The last-good texture is deliberately retained.
@@ -246,10 +317,15 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         s.status.clear();
         s.error = None;
         let (res, spp, max_depth, exposure) = (s.resolution, s.spp, s.max_depth, s.exposure);
+        let rocket = do_render_rocket;
         // Render on a worker thread; poll_render uploads the texture when it
         // finishes, so the path tracer no longer freezes the UI.
         s.job = Some(BackgroundJob::spawn(move || {
-            render_demo(res, spp, max_depth, exposure)
+            if rocket {
+                render_rocket(res, spp, max_depth, exposure)
+            } else {
+                render_demo(res, spp, max_depth, exposure)
+            }
         }));
     }
 }
@@ -268,6 +344,21 @@ mod tests {
         assert!(
             pixels.iter().any(|&p| p > 0),
             "the scene is lit (non-black pixels)"
+        );
+    }
+
+    #[test]
+    fn renders_the_rocket_lit() {
+        // The rocket "final picture" must produce a correctly-sized buffer
+        // that is actually lit — a fair number of bright pixels, not a near-
+        // black frame (which would mean the lighting/camera is wrong).
+        let (w, h, pixels) =
+            render_rocket(64, 8, 4, 1.0).expect("64² rocket render is under the pixel cap");
+        assert_eq!(pixels.len(), w * h * 3, "RGB8 buffer of the right size");
+        let bright = pixels.iter().filter(|&&p| p > 30).count();
+        assert!(
+            bright > pixels.len() / 20,
+            "rocket scene should be well lit; only {bright} bright sub-pixels"
         );
     }
 
