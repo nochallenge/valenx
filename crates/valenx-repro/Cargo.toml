@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-repro"
+description = "Reproducibility-bundle packaging for Valenx — assembles a computational study's inputs, parameters, tool/version provenance, results and SHA-256 checksums into a single tamper-evident bundle with a deterministic fingerprint, plus a templated methods/abstract scaffold. Export-only (writes no files, performs no network actions). Research / educational grade; it makes an in-silico hypothesis reproducible — it is not a substitute for wet-lab validation or peer review."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+sha2      = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

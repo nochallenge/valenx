@@ -26,6 +26,7 @@ members = [
     "crates/valenx-plugin-sdk",
     "crates/valenx-optimize",
     "crates/valenx-audit",
+    "crates/valenx-repro",
     "crates/valenx-rbac",
     "crates/valenx-sketch",
     "crates/valenx-draft",
