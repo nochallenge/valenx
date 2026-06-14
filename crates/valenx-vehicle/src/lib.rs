@@ -57,6 +57,9 @@ pub use powertrain::{tesla, Battery, ElectricPowertrain, EvCar};
 pub mod ggdiagram;
 pub use ggdiagram::{GgEnvelope, GgPoint};
 
+pub mod regen;
+pub use regen::{recoverable_braking_energy, regen_range_added_km, RegenBraking, RegenError};
+
 pub mod sim;
 pub use sim::{SprintTrace, TracePoint};
 
