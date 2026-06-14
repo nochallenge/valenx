@@ -138,6 +138,47 @@ fn add_tube(
     }
 }
 
+/// Append an off-axis parabolic engine bell (for a multi-engine cluster base),
+/// closed with an exit disk so each engine reads as solid.
+#[allow(clippy::too_many_arguments)]
+fn add_bell(
+    cx: f64,
+    cy: f64,
+    z_top: f64,
+    z_exit: f64,
+    r_throat: f64,
+    r_exit: f64,
+    seg: usize,
+    nodes: &mut Vec<Vector3<f64>>,
+    tris: &mut Vec<usize>,
+) {
+    let n = 6usize;
+    let mut prev = 0usize;
+    for i in 0..=n {
+        let t = i as f64 / n as f64;
+        let z = z_top + (z_exit - z_top) * t;
+        let r = r_throat + (r_exit - r_throat) * t * t; // parabolic flare
+        let start = nodes.len();
+        for k in 0..seg {
+            let a = k as f64 / seg as f64 * TAU;
+            nodes.push(Vector3::new(cx + r * a.cos(), cy + r * a.sin(), z));
+        }
+        if i > 0 {
+            for k in 0..seg {
+                let (a0, a1) = (prev + k, prev + (k + 1) % seg);
+                let (b0, b1) = (start + k, start + (k + 1) % seg);
+                tris.extend_from_slice(&[a0, a1, b1, a0, b1, b0]);
+            }
+        }
+        prev = start;
+    }
+    let center = nodes.len();
+    nodes.push(Vector3::new(cx, cy, z_exit));
+    for k in 0..seg {
+        tris.extend_from_slice(&[center, prev + k, prev + (k + 1) % seg]);
+    }
+}
+
 /// Build a triangulated 3-D surface mesh of the Valenx LV-1.
 pub fn lv1_rocket_mesh() -> Mesh {
     let seg = 48usize;
@@ -171,23 +212,14 @@ pub fn lv1_rocket_mesh() -> Mesh {
     }
     revolve(&profile, seg, &mut nodes, &mut tris);
 
-    // ── Curved engine bell below the engine plane (parabolic flare). ───────
-    let bell: Vec<(f64, f64)> = (0..=6)
-        .map(|i| {
-            let t = i as f64 / 6.0; // 0 at the engine plane, 1 at the exit
-            let z = -2.8 * t;
-            let r = 1.0 + 1.1 * t * t; // throat-ish 1.0 → exit ~2.1
-            (z, r)
-        })
-        .collect();
-    revolve(&bell, seg, &mut nodes, &mut tris);
-    // Close the bell exit with a disk so the base reads as a solid engine.
-    let exit_z = bell.last().unwrap().0;
-    let exit_start = nodes.len() - seg; // last revolved ring = bell exit
-    let exit_center = nodes.len();
-    nodes.push(Vector3::new(0.0, 0.0, exit_z));
-    for k in 0..seg {
-        tris.extend_from_slice(&[exit_center, exit_start + k, exit_start + (k + 1) % seg]);
+    // ── Engine cluster below the engine plane: a centre engine ringed by
+    // eight, each a parabolic bell — a modern multi-engine launcher base
+    // instead of a single nozzle. ─────────────────────────────────────────
+    add_bell(0.0, 0.0, 0.0, -2.6, 0.40, 0.85, seg, &mut nodes, &mut tris);
+    for i in 0..8 {
+        let a = i as f64 / 8.0 * TAU;
+        let (cx, cy) = (1.45 * a.cos(), 1.45 * a.sin());
+        add_bell(cx, cy, 0.2, -2.0, 0.32, 0.60, seg, &mut nodes, &mut tris);
     }
 
     // ── Four swept fins at the base — trapezoids, double-sided. ────────────
