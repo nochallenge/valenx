@@ -123,6 +123,7 @@ pub mod constraints;
 pub mod contact;
 pub mod dynamics;
 pub mod elements;
+pub mod harmonic;
 pub mod loads;
 pub mod material;
 pub mod mesh_params;
@@ -193,6 +194,7 @@ pub use dynamics::{
     NodalInitialState,
 };
 pub use elements::{Hex8, SolidElement, Tet10, Tet4};
+pub use harmonic::{solve_harmonic, HarmonicResponse};
 pub use loads::FemLoad;
 pub use material::{material_library, FemMaterial, PlasticProperties};
 pub use mesh_params::{ElementOrder, FemMeshParams};
