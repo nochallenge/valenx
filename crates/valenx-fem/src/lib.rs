@@ -136,6 +136,7 @@ pub mod plasticity;
 pub mod result;
 pub mod solver;
 pub mod thermal_solver;
+pub mod thermal_transient;
 pub mod validation;
 
 pub use analysis::{FemAnalysis, FemAnalysisError};
@@ -217,4 +218,7 @@ pub use result::{FemResult, FemResultError};
 pub use solver::FemSolverChoice;
 pub use thermal_solver::{
     solve_steady_thermal, FixedTemperature, HeatLoad, ThermalSolution, ThermalSolverError,
+};
+pub use thermal_transient::{
+    lumped_capacitance, solve_transient_thermal, TransientThermalError, TransientThermalSolution,
 };
