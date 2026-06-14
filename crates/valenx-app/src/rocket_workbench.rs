@@ -38,7 +38,7 @@ use valenx_astro::{
     simulate_ascent, AscentConfig, DragModel, GuidanceMode, GuidanceProgram, Stage, Vehicle,
     WindModel,
 };
-use valenx_rocket_demo::{design_and_simulate, RocketDesign, RocketReport};
+use valenx_rocket_demo::{auto_design, design_and_simulate, RocketDesign, RocketReport};
 
 /// A cached Valenx LV-1 ascent: the altitude-vs-time series for the
 /// in-panel plot, plus a one-glance summary line.
@@ -165,6 +165,9 @@ pub struct RocketWorkbenchState {
     /// A background optimization in flight (None when idle). Polled each
     /// frame so the UI never blocks while thousands of sims run.
     opt_job: Option<OptJob>,
+    /// Last automated end-to-end design (engine + ascent), if any — produced
+    /// by the one-click "Auto-design", where the AI does the whole search.
+    auto: Option<auto_design::BestDesign>,
 }
 
 impl Default for RocketWorkbenchState {
@@ -181,6 +184,7 @@ impl Default for RocketWorkbenchState {
             opt: None,
             opt_objective: OptObjective::default(),
             opt_job: None,
+            auto: None,
         }
     }
 }
@@ -559,6 +563,56 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    // ── Auto-design — the AI does the whole search ────────
+                    ui.label(
+                        egui::RichText::new("Auto-design — let the AI design it for you")
+                            .strong(),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "one click: optimize the engine + the trajectory together and \
+                             return the best rocket — no tuning. (You can still tune by hand \
+                             below.)",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    if ui
+                        .button(egui::RichText::new("🤖 Auto-design the best rocket").strong())
+                        .on_hover_text(
+                            "Runs the full automated search — an optimized, cooled engine plus \
+                             the best ascent — and returns the heaviest payload to orbit that \
+                             stays structurally sound.",
+                        )
+                        .clicked()
+                    {
+                        s.auto = auto_design::auto_design(600);
+                    }
+                    if let Some(d) = &s.auto {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "✦ AI design: {:.0} kg → {:.0} × {:.0} km\n\
+                                 engine {:.0} bar · ε {:.1} · vac Isp {:.0} s · cooling {:.2}\n\
+                                 pitch {:.1}° · rise {:.0} s · peak {:.1} g · interstage SF {:.2}",
+                                d.payload_kg,
+                                d.periapsis_km,
+                                d.apoapsis_km,
+                                d.engine.design.chamber_pressure / 1.0e5,
+                                d.engine.design.expansion_ratio,
+                                d.engine.vacuum.isp,
+                                d.engine.cooling.cooling_margin,
+                                d.pitch_kick_deg,
+                                d.vertical_rise_s,
+                                d.peak_g,
+                                d.structural_sf,
+                            ))
+                            .monospace()
+                            .small(),
+                        );
+                    }
+                    ui.add_space(6.0);
+                    ui.separator();
+
                     // ── Valenx LV-1 — watch it fly to orbit ───────────────
                     ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
                     ui.label(
