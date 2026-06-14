@@ -65,6 +65,7 @@
 
 pub mod blend;
 pub mod coons;
+pub mod curvature;
 pub mod error;
 pub mod extend;
 pub mod fit;
@@ -80,6 +81,7 @@ pub mod sew;
 pub mod tessellate;
 pub mod trim;
 
+pub use curvature::{local_shape, principal_curvatures, LocalShape};
 pub use error::SurfaceError;
 pub use nurbs_curve::NurbsCurve;
 pub use nurbs_surface::NurbsSurface;
