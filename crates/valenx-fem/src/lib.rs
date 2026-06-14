@@ -129,6 +129,7 @@ pub mod material;
 pub mod mesh_params;
 pub mod meshgen;
 pub mod modal_solver;
+pub mod modal_transient;
 pub mod native_solver;
 pub mod nonlinear_solver;
 pub mod ordering;
@@ -202,6 +203,9 @@ pub use mesh_params::{ElementOrder, FemMeshParams};
 pub use meshgen::{structured_hex_mesh, structured_tet10_mesh};
 pub use modal_solver::{
     solve_modal, solve_modal_mixed, ModalSolution, ModalSolverError, VibrationMode,
+};
+pub use modal_transient::{
+    modal_basis, modal_transient_response, ModalBasis, ModalTransientError, ModalTransientResponse,
 };
 pub use native_solver::{
     check_dense_dofs, solve_linear_static, solve_linear_static_mixed, structured_box_mesh,
