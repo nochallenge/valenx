@@ -5,7 +5,8 @@
 //! and dynamics otherwise route to the MuJoCo adapter). Build a mechanism from
 //! **rigid bodies** (mass + rotational inertia), **force elements** (gravity,
 //! linear springs, dampers) and **holonomic constraints** (revolute pins,
-//! rigid-distance rods/links), and [`System::step`] advances it through time.
+//! prismatic sliders, rigid-distance rods/links), and [`System::step`] advances
+//! it through time.
 //!
 //! ## The method
 //!
@@ -35,12 +36,14 @@
 //!
 //! ## Honest scope
 //!
-//! Planar (2-D), rigid bodies only, with revolute pins, rigid-distance links,
-//! springs and dampers — a real v1, **research / preliminary-design grade**. It is a step toward, not
-//! an equal of, a production multibody code (Adams): no 3-D spatial dynamics
-//! (quaternions / 3×3 inertia), no contact, friction, flexible bodies,
-//! prismatic/cylindrical/gear joints, or an implicit stiff integrator yet.
-//! Those are the documented next steps.
+//! Planar (2-D), rigid bodies only, with revolute pins, prismatic sliders,
+//! rigid-distance links, springs and dampers — a real v1, **research /
+//! preliminary-design grade**. It is a step toward, not an equal of, a
+//! production multibody code (Adams): no 3-D spatial dynamics (quaternions /
+//! 3×3 inertia), no contact, friction, flexible bodies, cylindrical/gear
+//! joints, or an implicit stiff integrator yet. The prismatic slider here is
+//! the ground variant (a body on a fixed world axis); a body-to-body prismatic
+//! and the rest are the documented next steps.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -137,6 +140,22 @@ pub enum Constraint {
         b: Anchor,
         /// The fixed separation to maintain (m).
         length: f64,
+    },
+    /// Prismatic (slider) joint pinning a body to a fixed **world axis**: it may
+    /// only translate along that axis, with its perpendicular offset and its
+    /// orientation both locked (2 scalar constraints). This is the ground
+    /// variant — the classic block-on-a-ramp slider.
+    Prismatic {
+        /// Index of the sliding body.
+        body: usize,
+        /// A point the slide axis passes through, in world coordinates (m).
+        axis_point: Vector2<f64>,
+        /// Slide-axis direction in the world; need not be unit (normalised
+        /// internally). Must be non-zero.
+        axis: Vector2<f64>,
+        /// The body orientation the joint holds fixed (rad) — a slider does not
+        /// rotate, so this is normally the body's initial angle.
+        ref_angle: f64,
     },
 }
 
@@ -238,12 +257,13 @@ impl System {
         q
     }
 
-    /// Number of scalar constraint rows (2 per pin).
+    /// Number of scalar constraint rows (each pin or prismatic joint is 2).
     fn constraint_rows(&self) -> usize {
         self.constraints
             .iter()
             .map(|c| match c {
                 Constraint::Pin(..) => 2,
+                Constraint::Prismatic { .. } => 2,
                 Constraint::Distance { .. } => 1,
             })
             .sum()
@@ -333,6 +353,33 @@ impl System {
                         - 2.0 * BAUMGARTE_ALPHA * cdot
                         - BAUMGARTE_BETA.powi(2) * c;
                     row += 1;
+                }
+                Constraint::Prismatic {
+                    body,
+                    axis_point,
+                    axis,
+                    ref_angle,
+                } => {
+                    let bd = &self.bodies[body];
+                    // Unit slide direction `u` and its world-fixed normal `nrm`.
+                    let u = axis.normalize();
+                    let nrm = perp(u);
+                    // Row 0: no perpendicular drift — C = nrm·(pos − axis_point).
+                    // Both nrm and the constraint are linear in q, so the
+                    // acceleration-level RHS is pure Baumgarte (no centripetal
+                    // term): γ = −2α·Ċ − β²·C, with Ċ = nrm·vel.
+                    let c_perp = nrm.dot(&(bd.pos - axis_point));
+                    let cdot_perp = nrm.dot(&bd.vel);
+                    cq[(row, 3 * body)] += nrm.x;
+                    cq[(row, 3 * body + 1)] += nrm.y;
+                    gamma[row] =
+                        -2.0 * BAUMGARTE_ALPHA * cdot_perp - BAUMGARTE_BETA.powi(2) * c_perp;
+                    // Row 1: no rotation — C = θ − ref_angle, Ċ = ω.
+                    let c_ang = bd.angle - ref_angle;
+                    cq[(row + 1, 3 * body + 2)] += 1.0;
+                    gamma[row + 1] =
+                        -2.0 * BAUMGARTE_ALPHA * bd.omega - BAUMGARTE_BETA.powi(2) * c_ang;
+                    row += 2;
                 }
             }
         }
@@ -665,6 +712,113 @@ mod tests {
             max_dev = max_dev.max((sep - l).abs());
         }
         assert!(max_dev < 1e-2, "rigid-link separation drifted by {max_dev}");
+    }
+
+    #[test]
+    fn prismatic_incline_accelerates_at_g_sin_theta() {
+        // A frictionless block on a ramp inclined θ above horizontal must
+        // accelerate down-slope at exactly g·sinθ — the textbook result.
+        let g = 9.81;
+        let theta = 30.0_f64.to_radians();
+        let u = Vector2::new(theta.cos(), theta.sin()); // up-slope direction
+        let mut sys = System {
+            bodies: vec![Body::new(2.0, 0.1, Vector2::zeros())],
+            forces: vec![Force::Gravity(Vector2::new(0.0, -g))],
+            constraints: vec![Constraint::Prismatic {
+                body: 0,
+                axis_point: Vector2::zeros(),
+                axis: u,
+                ref_angle: 0.0,
+            }],
+            time: 0.0,
+        };
+        let dt = 1.0e-4;
+        let n = 5_000;
+        for _ in 0..n {
+            sys.step(dt);
+        }
+        let b = &sys.bodies[0];
+        let t = n as f64 * dt;
+        let nrm = perp(u);
+        // Gravity pulls down-slope (−u), so the along-axis velocity is negative.
+        let v_along = b.vel.dot(&u);
+        let v_perp = b.vel.dot(&nrm);
+        let expected = -g * theta.sin() * t;
+        assert!(
+            (v_along - expected).abs() < 0.01 * expected.abs(),
+            "along-axis speed {v_along} vs g·sinθ·t {expected}"
+        );
+        assert!(v_perp.abs() < 1e-3, "perpendicular drift speed {v_perp}");
+        assert!(
+            b.omega.abs() < 1e-6,
+            "slider should not rotate, ω {}",
+            b.omega
+        );
+    }
+
+    #[test]
+    fn prismatic_horizontal_slider_stays_put_under_gravity() {
+        // A horizontal slider: gravity is fully carried by the joint normal
+        // (g·sin0 = 0 along the axis), so the body must not move.
+        let g = 9.81;
+        let mut sys = System {
+            bodies: vec![Body::new(1.0, 0.1, Vector2::new(0.5, 0.0))],
+            forces: vec![Force::Gravity(Vector2::new(0.0, -g))],
+            constraints: vec![Constraint::Prismatic {
+                body: 0,
+                axis_point: Vector2::zeros(),
+                axis: Vector2::new(1.0, 0.0),
+                ref_angle: 0.0,
+            }],
+            time: 0.0,
+        };
+        let start = sys.bodies[0].pos;
+        for _ in 0..5_000 {
+            sys.step(1.0e-4);
+        }
+        let b = &sys.bodies[0];
+        assert!(
+            (b.pos - start).norm() < 1e-3,
+            "slider drifted {:?}",
+            b.pos - start
+        );
+        assert!(b.vel.norm() < 1e-3, "slider gained speed {:?}", b.vel);
+    }
+
+    #[test]
+    fn prismatic_slider_coasts_at_constant_velocity() {
+        // No force along the axis → an initial glide is preserved (momentum).
+        let mut body = Body::new(1.0, 0.1, Vector2::zeros());
+        body.vel = Vector2::new(0.3, 0.0);
+        let mut sys = System {
+            bodies: vec![body],
+            forces: vec![],
+            constraints: vec![Constraint::Prismatic {
+                body: 0,
+                axis_point: Vector2::zeros(),
+                axis: Vector2::new(1.0, 0.0),
+                ref_angle: 0.0,
+            }],
+            time: 0.0,
+        };
+        for _ in 0..1_000 {
+            sys.step(1.0e-3); // 1.0 s total
+        }
+        let b = &sys.bodies[0];
+        assert!(
+            (b.vel.x - 0.3).abs() < 1e-6,
+            "axial speed changed: {}",
+            b.vel.x
+        );
+        assert!(
+            (b.pos.x - 0.3).abs() < 1e-3,
+            "x after 1 s: {} (want 0.3)",
+            b.pos.x
+        );
+        assert!(
+            b.pos.y.abs() < 1e-6 && b.vel.y.abs() < 1e-6,
+            "left the axis"
+        );
     }
 
     #[test]
