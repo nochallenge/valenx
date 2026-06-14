@@ -129,7 +129,13 @@ fn render_demo(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Rend
 /// Path-trace the **Valenx LV-1** as a "final picture": the procedural rocket
 /// mesh in a brushed-metal finish on a ground plane, lit by a big overhead
 /// light — the photoreal counterpart to the live shaded viewport.
-fn render_rocket(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> RenderOutput {
+fn render_rocket(
+    resolution: u32,
+    spp: u32,
+    max_depth: u32,
+    exposure: f32,
+    stainless: bool,
+) -> RenderOutput {
     let res = resolution.clamp(48, 512);
     // The rocket stands along +Z, so the camera's up is +Z; a 3/4 hero framing
     // of the ~33-tall vehicle.
@@ -142,7 +148,11 @@ fn render_rocket(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Re
         res,
     );
     let mut b = SceneBuilder::new(camera);
-    let body = b.add_material(PtMaterial::metal([0.92, 0.92, 0.93], 0.34));
+    let body = b.add_material(if stainless {
+        PtMaterial::metal([0.96, 0.96, 0.97], 0.07) // polished stainless steel
+    } else {
+        PtMaterial::metal([0.92, 0.92, 0.93], 0.34) // white-painted launcher
+    });
     let ground = b.add_material(PtMaterial::diffuse([0.46, 0.45, 0.43]));
     let key = b.add_material(PtMaterial::emissive([13.5, 12.6, 11.0]));
     let fill = b.add_material(PtMaterial::emissive([2.4, 2.4, 2.6]));
@@ -322,7 +332,7 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         // finishes, so the path tracer no longer freezes the UI.
         s.job = Some(BackgroundJob::spawn(move || {
             if rocket {
-                render_rocket(res, spp, max_depth, exposure)
+                render_rocket(res, spp, max_depth, exposure, false)
             } else {
                 render_demo(res, spp, max_depth, exposure)
             }
@@ -353,7 +363,7 @@ mod tests {
         // that is actually lit — a fair number of bright pixels, not a near-
         // black frame (which would mean the lighting/camera is wrong).
         let (w, h, pixels) =
-            render_rocket(64, 8, 4, 1.0).expect("64² rocket render is under the pixel cap");
+            render_rocket(64, 8, 4, 1.0, false).expect("64² rocket render is under the pixel cap");
         assert_eq!(pixels.len(), w * h * 3, "RGB8 buffer of the right size");
         let bright = pixels.iter().filter(|&&p| p > 30).count();
         assert!(
@@ -365,18 +375,20 @@ mod tests {
     /// Render the rocket at preview quality and write a PNG to TEMP — run with
     /// `cargo test -p valenx-app --lib render_workbench::tests::dump -- --ignored --nocapture`.
     #[test]
-    #[ignore = "writes a path-traced rocket PNG to TEMP"]
+    #[ignore = "writes path-traced rocket PNGs (white + stainless) to TEMP"]
     fn dump_rocket_png() {
-        let (w, h, pixels) = render_rocket(460, 192, 6, 1.1).expect("rocket render");
-        let path = std::env::temp_dir().join("valenx_rocket_render.png");
-        let file = std::fs::File::create(&path).expect("create png");
-        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
-        enc.set_color(png::ColorType::Rgb);
-        enc.set_depth(png::BitDepth::Eight);
-        let mut writer = enc.write_header().expect("png header");
-        writer.write_image_data(&pixels).expect("png data");
-        writer.finish().expect("png finish");
-        println!("WROTE {}", path.display());
+        for (name, stainless) in [("white", false), ("stainless", true)] {
+            let (w, h, pixels) = render_rocket(460, 256, 6, 1.1, stainless).expect("rocket render");
+            let path = std::env::temp_dir().join(format!("valenx_rocket_{name}.png"));
+            let file = std::fs::File::create(&path).expect("create png");
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+            enc.set_color(png::ColorType::Rgb);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut writer = enc.write_header().expect("png header");
+            writer.write_image_data(&pixels).expect("png data");
+            writer.finish().expect("png finish");
+            println!("WROTE {}", path.display());
+        }
     }
 
     #[test]
