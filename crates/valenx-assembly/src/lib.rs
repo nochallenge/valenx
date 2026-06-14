@@ -73,4 +73,4 @@ pub use mate::{Mate, MateKind};
 pub use part::{Part, PartTransform};
 pub use persist::AssemblyFile;
 pub use solver::{SolverConfig, SolverDiagnostics, SolverReport, SolverStatus};
-pub use urdf::{assembly_to_mesh, import_urdf, UrdfError, UrdfRobot};
+pub use urdf::{assembly_to_mesh, demo_hand_urdf, import_urdf, UrdfError, UrdfRobot};
