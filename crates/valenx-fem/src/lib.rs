@@ -129,6 +129,7 @@ pub mod material;
 pub mod mesh_params;
 pub mod meshgen;
 pub mod modal_solver;
+pub mod modal_transient;
 pub mod native_solver;
 pub mod nonlinear_solver;
 pub mod ordering;
@@ -203,6 +204,9 @@ pub use meshgen::{structured_hex_mesh, structured_tet10_mesh};
 pub use modal_solver::{
     solve_modal, solve_modal_mixed, ModalSolution, ModalSolverError, VibrationMode,
 };
+pub use modal_transient::{
+    modal_basis, modal_transient_response, ModalBasis, ModalTransientError, ModalTransientResponse,
+};
 pub use native_solver::{
     check_dense_dofs, solve_linear_static, solve_linear_static_mixed, structured_box_mesh,
     NativeSolution, NativeSolverError, NodalConstraint, NodalForce, MAX_DENSE_DOFS,
@@ -217,7 +221,8 @@ pub use plasticity::{
 pub use result::{FemResult, FemResultError};
 pub use solver::FemSolverChoice;
 pub use thermal_solver::{
-    solve_steady_thermal, FixedTemperature, HeatLoad, ThermalSolution, ThermalSolverError,
+    solve_steady_thermal, solve_steady_thermal_with_convection, ConvectionBc, FixedTemperature,
+    HeatLoad, ThermalSolution, ThermalSolverError,
 };
 pub use thermal_transient::{
     lumped_capacitance, solve_transient_thermal, TransientThermalError, TransientThermalSolution,
