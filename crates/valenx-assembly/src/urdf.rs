@@ -529,9 +529,65 @@ impl XmlParser {
     }
 }
 
+/// A self-contained 16-DOF anthropomorphic hand URDF (4 fingers × 4 revolute
+/// joints) — a ready demo robot for [`import_urdf`], so the importer can be
+/// exercised (e.g. the app's "Load 16-DOF robot hand") with no external file.
+pub fn demo_hand_urdf() -> String {
+    let mut s = String::from("<?xml version=\"1.0\"?>\n<robot name=\"valenx_hand_16dof\">\n");
+    s.push_str(
+        "<link name=\"palm\"><visual><geometry><box size=\"0.08 0.09 0.02\"/>\
+         </geometry></visual></link>\n",
+    );
+    let segs = [
+        ("knuckle", 0.012),
+        ("proximal", 0.045),
+        ("medial", 0.030),
+        ("distal", 0.026),
+    ];
+    for (fi, finger) in ["index", "middle", "ring", "thumb"].iter().enumerate() {
+        let y = 0.028 - fi as f64 * 0.019; // fan the fingers across the palm
+        for (seg, len) in segs {
+            s.push_str(&format!(
+                "<link name=\"{finger}_{seg}\"><visual><geometry>\
+                 <box size=\"{len} 0.015 0.015\"/></geometry></visual></link>\n"
+            ));
+        }
+        s.push_str(&format!(
+            "<joint name=\"{finger}_j0\" type=\"revolute\"><parent link=\"palm\"/>\
+             <child link=\"{finger}_knuckle\"/><origin xyz=\"0.04 {y} 0.004\"/>\
+             <axis xyz=\"0 0 1\"/></joint>\n"
+        ));
+        s.push_str(&format!(
+            "<joint name=\"{finger}_j1\" type=\"revolute\"><parent link=\"{finger}_knuckle\"/>\
+             <child link=\"{finger}_proximal\"/><origin xyz=\"0.012 0 0\"/>\
+             <axis xyz=\"0 1 0\"/></joint>\n"
+        ));
+        s.push_str(&format!(
+            "<joint name=\"{finger}_j2\" type=\"revolute\"><parent link=\"{finger}_proximal\"/>\
+             <child link=\"{finger}_medial\"/><origin xyz=\"0.045 0 0\"/>\
+             <axis xyz=\"0 1 0\"/></joint>\n"
+        ));
+        s.push_str(&format!(
+            "<joint name=\"{finger}_j3\" type=\"revolute\"><parent link=\"{finger}_medial\"/>\
+             <child link=\"{finger}_distal\"/><origin xyz=\"0.030 0 0\"/>\
+             <axis xyz=\"0 1 0\"/></joint>\n"
+        ));
+    }
+    s.push_str("</robot>\n");
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn demo_hand_imports_as_a_16dof_assembly() {
+        let r = import_urdf(&demo_hand_urdf()).expect("demo hand imports");
+        assert_eq!(r.assembly.parts.len(), 17);
+        assert_eq!(r.assembly.joints.len(), 16);
+        assert_eq!(r.name, "valenx_hand_16dof");
+    }
 
     /// Build a 16-DOF hand URDF (4 fingers × 4 revolute joints) in code, so the
     /// test owns its fixture without an external file.

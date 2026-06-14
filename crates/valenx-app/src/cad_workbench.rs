@@ -1675,6 +1675,40 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    // ── Robotics: native in-house URDF import ────────────
+                    ui.label(egui::RichText::new("Robotics — import URDF (native)").strong());
+                    if ui
+                        .button(egui::RichText::new("Load 16-DOF robot hand").strong())
+                        .clicked()
+                    {
+                        match valenx_assembly::import_urdf(&valenx_assembly::demo_hand_urdf()) {
+                            Ok(robot) => {
+                                let mesh =
+                                    valenx_assembly::assembly_to_mesh(&robot.assembly, 0.005);
+                                s.tree_status = Some(Ok(format!(
+                                    "loaded {} — {} parts, {} joints (no adapter)",
+                                    robot.name,
+                                    robot.assembly.parts.len(),
+                                    robot.assembly.joints.len(),
+                                )));
+                                s.rebuilt_mesh = Some(mesh);
+                                s.push_rebuild = true;
+                            }
+                            Err(e) => {
+                                s.tree_status = Some(Err(format!("URDF import failed: {e}")));
+                            }
+                        }
+                    }
+                    ui.label(
+                        egui::RichText::new(
+                            "parses a URDF robot natively (no adapter) into the 3-D viewport",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    ui.add_space(6.0);
+                    ui.separator();
+
                     ui.label(egui::RichText::new("Parameters (name = expression)").strong());
                     let mut remove: Option<usize> = None;
                     for (i, (name, expr)) in s.params.iter_mut().enumerate() {
