@@ -383,7 +383,7 @@ pub fn solve_steady_thermal(
 }
 
 /// First [`ElementType::Tet4`] block in the mesh, if any.
-fn tet_block(mesh: &Mesh) -> Option<&ElementBlock> {
+pub(crate) fn tet_block(mesh: &Mesh) -> Option<&ElementBlock> {
     mesh.element_blocks
         .iter()
         .find(|b| b.element_type == ElementType::Tet4)
@@ -393,7 +393,7 @@ fn tet_block(mesh: &Mesh) -> Option<&ElementBlock> {
 /// 3×4 gradient matrix `G` of a linear tet — column `a` is the
 /// constant gradient `∇Nₐ` of shape function `a`. `None` for a
 /// degenerate tet.
-fn gradient_matrix(coords: &[Vector3<f64>; 4]) -> Option<Matrix3x4<f64>> {
+pub(crate) fn gradient_matrix(coords: &[Vector3<f64>; 4]) -> Option<Matrix3x4<f64>> {
     let p0 = coords[0];
     let e1 = coords[1] - p0;
     let e2 = coords[2] - p0;
@@ -413,7 +413,7 @@ fn gradient_matrix(coords: &[Vector3<f64>; 4]) -> Option<Matrix3x4<f64>> {
 }
 
 /// Signed volume of a tet.
-fn tet_volume(coords: &[Vector3<f64>; 4]) -> f64 {
+pub(crate) fn tet_volume(coords: &[Vector3<f64>; 4]) -> f64 {
     let e1 = coords[1] - coords[0];
     let e2 = coords[2] - coords[0];
     let e3 = coords[3] - coords[0];
@@ -422,7 +422,7 @@ fn tet_volume(coords: &[Vector3<f64>; 4]) -> f64 {
 
 /// 4×4 element conductivity matrix `Kₜₑ = k·Vₑ·Gᵀ·G` for a linear tet.
 /// `None` for a degenerate tet.
-fn element_conductivity(coords: &[Vector3<f64>; 4], k: f64) -> Option<DMatrix<f64>> {
+pub(crate) fn element_conductivity(coords: &[Vector3<f64>; 4], k: f64) -> Option<DMatrix<f64>> {
     let g = gradient_matrix(coords)?;
     let vol = tet_volume(coords).abs();
     if vol < 1.0e-18 {
@@ -440,7 +440,7 @@ fn element_conductivity(coords: &[Vector3<f64>; 4], k: f64) -> Option<DMatrix<f6
 /// Diagonal entries already present are incremented; missing ones are
 /// inserted. Used to fold the Dirichlet penalty into the conductivity
 /// matrix.
-fn add_diagonal(csc: &CscMatrix<f64>, diag: &[f64]) -> CscMatrix<f64> {
+pub(crate) fn add_diagonal(csc: &CscMatrix<f64>, diag: &[f64]) -> CscMatrix<f64> {
     let n = csc.nrows();
     let mut coo = CooMatrix::<f64>::new(n, n);
     for (r, c, v) in csc.triplet_iter() {
