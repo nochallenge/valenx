@@ -133,8 +133,11 @@ pub mod native_solver;
 pub mod nonlinear_solver;
 pub mod ordering;
 pub mod plasticity;
+pub mod principal_stress;
+pub mod rayleigh;
 pub mod result;
 pub mod solver;
+pub mod stress_invariants;
 pub mod thermal_solver;
 pub mod thermal_transient;
 pub mod validation;
@@ -214,8 +217,11 @@ pub use plasticity::{
     consistent_tangent, radial_return, solve_plastic, PlasticControls, PlasticSolution,
     PlasticState, ReturnResult,
 };
+pub use principal_stress::PrincipalStress;
+pub use rayleigh::{RayleighDamping, RayleighError};
 pub use result::{FemResult, FemResultError};
 pub use solver::FemSolverChoice;
+pub use stress_invariants::StressInvariants;
 pub use thermal_solver::{
     solve_steady_thermal, FixedTemperature, HeatLoad, ThermalSolution, ThermalSolverError,
 };
