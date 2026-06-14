@@ -51,6 +51,9 @@ pub use geometry::{car_body_mesh, car_mesh, car_wheel_mesh, CarDimensions};
 pub mod ev;
 pub use ev::{build_ev, tesla_class, Category, Component, EvAssembly, EvSpec};
 
+pub mod powertrain;
+pub use powertrain::{tesla, Battery, ElectricPowertrain, EvCar};
+
 /// Standard gravity (m/s²).
 const G: f64 = 9.806_65;
 /// Sea-level air density (kg/m³).
