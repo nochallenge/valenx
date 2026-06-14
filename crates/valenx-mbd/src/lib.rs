@@ -4,8 +4,8 @@
 //! dynamics engine valenx was missing (its assembly model is kinematics-only,
 //! and dynamics otherwise route to the MuJoCo adapter). Build a mechanism from
 //! **rigid bodies** (mass + rotational inertia), **force elements** (gravity,
-//! linear springs, dampers) and **holonomic constraints** (revolute pins), and
-//! [`System::step`] advances it through time.
+//! linear springs, dampers) and **holonomic constraints** (revolute pins,
+//! rigid-distance rods/links), and [`System::step`] advances it through time.
 //!
 //! ## The method
 //!
@@ -29,13 +29,14 @@
 //!
 //! The tests check it against closed-form results: a physical pendulum's small
 //! oscillation period `2π√(I_pivot/(m g d))`, a spring–mass natural frequency
-//! `√(k/m)`, spring–mass **energy conservation**, and a double pendulum's
-//! bounded energy.
+//! `√(k/m)`, spring–mass **energy conservation**, a double pendulum's bounded
+//! energy, a rigid-rod pendulum's simple-pendulum period `2π√(L/g)`, and a
+//! spinning rigid link holding its length.
 //!
 //! ## Honest scope
 //!
-//! Planar (2-D), rigid bodies only, with revolute pins, springs and dampers —
-//! a real v1, **research / preliminary-design grade**. It is a step toward, not
+//! Planar (2-D), rigid bodies only, with revolute pins, rigid-distance links,
+//! springs and dampers — a real v1, **research / preliminary-design grade**. It is a step toward, not
 //! an equal of, a production multibody code (Adams): no 3-D spatial dynamics
 //! (quaternions / 3×3 inertia), no contact, friction, flexible bodies,
 //! prismatic/cylindrical/gear joints, or an implicit stiff integrator yet.
@@ -125,6 +126,18 @@ pub enum Constraint {
     /// constraints). A `World`–`Body` pair pins a body to the ground; a
     /// `Body`–`Body` pair is a revolute joint.
     Pin(Anchor, Anchor),
+    /// Rigid **distance** (link / rod) constraint holding `|pa − pb| = length`
+    /// between two anchors (1 scalar constraint). A `World`–`Body` pair is a
+    /// rigid rod to ground — a planar pendulum; a `Body`–`Body` pair is a rigid
+    /// link. Unlike a pin it leaves the bodies free to rotate about the anchors.
+    Distance {
+        /// First attachment.
+        a: Anchor,
+        /// Second attachment.
+        b: Anchor,
+        /// The fixed separation to maintain (m).
+        length: f64,
+    },
 }
 
 /// A multibody system: bodies, force elements, constraints and the clock.
@@ -227,7 +240,13 @@ impl System {
 
     /// Number of scalar constraint rows (2 per pin).
     fn constraint_rows(&self) -> usize {
-        self.constraints.len() * 2
+        self.constraints
+            .iter()
+            .map(|c| match c {
+                Constraint::Pin(..) => 2,
+                Constraint::Distance { .. } => 1,
+            })
+            .sum()
     }
 
     /// Assemble the constraint Jacobian `Cq`, value `C` and RHS `γ`.
@@ -236,37 +255,86 @@ impl System {
         let m = self.constraint_rows();
         let mut cq = DMatrix::zeros(m, 3 * n);
         let mut gamma = DVector::zeros(m);
-        for (k, con) in self.constraints.iter().enumerate() {
-            let Constraint::Pin(a, b) = *con;
-            let row = 2 * k;
-            let (pa, rpa, ia) = self.anchor_world(a);
-            let (pb, rpb, ib) = self.anchor_world(b);
-            let c = pa - pb; // = 0 when satisfied
-            let cdot = self.anchor_velocity(a) - self.anchor_velocity(b);
-            // Jacobian: ∂(pa−pb)/∂q.
-            if let Some(i) = ia {
-                cq[(row, 3 * i)] += 1.0;
-                cq[(row, 3 * i + 2)] += -rpa.y;
-                cq[(row + 1, 3 * i + 1)] += 1.0;
-                cq[(row + 1, 3 * i + 2)] += rpa.x;
+        let mut row = 0;
+        for con in &self.constraints {
+            match *con {
+                Constraint::Pin(a, b) => {
+                    let (pa, rpa, ia) = self.anchor_world(a);
+                    let (pb, rpb, ib) = self.anchor_world(b);
+                    let c = pa - pb; // = 0 when satisfied
+                    let cdot = self.anchor_velocity(a) - self.anchor_velocity(b);
+                    // Jacobian: ∂(pa−pb)/∂q.
+                    if let Some(i) = ia {
+                        cq[(row, 3 * i)] += 1.0;
+                        cq[(row, 3 * i + 2)] += -rpa.y;
+                        cq[(row + 1, 3 * i + 1)] += 1.0;
+                        cq[(row + 1, 3 * i + 2)] += rpa.x;
+                    }
+                    if let Some(i) = ib {
+                        cq[(row, 3 * i)] += -1.0;
+                        cq[(row, 3 * i + 2)] += rpb.y;
+                        cq[(row + 1, 3 * i + 1)] += -1.0;
+                        cq[(row + 1, 3 * i + 2)] += -rpb.x;
+                    }
+                    // γ = (ω_a²·rp_a − ω_b²·rp_b) − 2α·Ċ − β²·C (centripetal + Baumgarte).
+                    let mut centripetal = Vector2::zeros();
+                    if let Anchor::Body { index, .. } = a {
+                        centripetal += self.bodies[index].omega.powi(2) * rpa;
+                    }
+                    if let Anchor::Body { index, .. } = b {
+                        centripetal -= self.bodies[index].omega.powi(2) * rpb;
+                    }
+                    let g = centripetal - 2.0 * BAUMGARTE_ALPHA * cdot - BAUMGARTE_BETA.powi(2) * c;
+                    gamma[row] = g.x;
+                    gamma[row + 1] = g.y;
+                    row += 2;
+                }
+                Constraint::Distance { a, b, length } => {
+                    let (pa, rpa, ia) = self.anchor_world(a);
+                    let (pb, rpb, ib) = self.anchor_world(b);
+                    let d = pa - pb;
+                    let len = d.norm();
+                    if len < 1e-12 {
+                        // Coincident anchors: no defined direction — leave this
+                        // row's Jacobian zero (the constraint is unenforceable
+                        // this instant).
+                        row += 1;
+                        continue;
+                    }
+                    let dhat = d / len;
+                    let ddot = self.anchor_velocity(a) - self.anchor_velocity(b);
+                    let c = len - length; // scalar; = 0 when satisfied
+                    let cdot = dhat.dot(&ddot);
+                    // Jacobian: ∂|pa−pb|/∂q = d̂ projected onto each anchor's
+                    // position Jacobian (rows [I | perp(rp)]).
+                    if let Some(i) = ia {
+                        cq[(row, 3 * i)] += dhat.x;
+                        cq[(row, 3 * i + 1)] += dhat.y;
+                        cq[(row, 3 * i + 2)] += dhat.dot(&perp(rpa));
+                    }
+                    if let Some(i) = ib {
+                        cq[(row, 3 * i)] += -dhat.x;
+                        cq[(row, 3 * i + 1)] += -dhat.y;
+                        cq[(row, 3 * i + 2)] += -dhat.dot(&perp(rpb));
+                    }
+                    // γ = d̂·(ω_a²·rp_a − ω_b²·rp_b) − (|ḋ|² − Ċ²)/len
+                    //     − 2α·Ċ − β²·C  (centripetal on d̂, the rotating-d̂
+                    //     term, then Baumgarte).
+                    let mut centripetal = Vector2::zeros();
+                    if let Anchor::Body { index, .. } = a {
+                        centripetal += self.bodies[index].omega.powi(2) * rpa;
+                    }
+                    if let Anchor::Body { index, .. } = b {
+                        centripetal -= self.bodies[index].omega.powi(2) * rpb;
+                    }
+                    let perp_speed_sq = ddot.norm_squared() - cdot * cdot;
+                    gamma[row] = dhat.dot(&centripetal)
+                        - perp_speed_sq / len
+                        - 2.0 * BAUMGARTE_ALPHA * cdot
+                        - BAUMGARTE_BETA.powi(2) * c;
+                    row += 1;
+                }
             }
-            if let Some(i) = ib {
-                cq[(row, 3 * i)] += -1.0;
-                cq[(row, 3 * i + 2)] += rpb.y;
-                cq[(row + 1, 3 * i + 1)] += -1.0;
-                cq[(row + 1, 3 * i + 2)] += -rpb.x;
-            }
-            // γ = (ω_a²·rp_a − ω_b²·rp_b) − 2α·Ċ − β²·C  (centripetal + Baumgarte).
-            let mut centripetal = Vector2::zeros();
-            if let Anchor::Body { index, .. } = a {
-                centripetal += self.bodies[index].omega.powi(2) * rpa;
-            }
-            if let Anchor::Body { index, .. } = b {
-                centripetal -= self.bodies[index].omega.powi(2) * rpb;
-            }
-            let g = centripetal - 2.0 * BAUMGARTE_ALPHA * cdot - BAUMGARTE_BETA.powi(2) * c;
-            gamma[row] = g.x;
-            gamma[row + 1] = g.y;
         }
         (cq, gamma)
     }
@@ -522,6 +590,81 @@ mod tests {
         // little non-conservation, hence a looser tolerance than the
         // unconstrained symplectic case).
         assert!(max_dev < 0.05, "double-pendulum energy drift {max_dev}");
+    }
+
+    #[test]
+    fn distance_rod_pendulum_matches_simple_pendulum_period() {
+        // A body hung from a rigid rod (Distance) attached at its centre of
+        // mass swings as an ideal simple pendulum, period 2π√(L/g): the rod
+        // attaches at the CG (local (0,0)) so the constraint force passes
+        // through the CG → no torque, and the body's spin stays decoupled.
+        let (m, l, theta0) = (1.0, 1.0, 0.05);
+        let g = 9.81;
+        let pivot = Vector2::new(0.0, 0.0);
+        let cg = pivot + rot(theta0, Vector2::new(0.0, -l)); // = (l·sinθ₀, −l·cosθ₀)
+        let mut sys = System {
+            bodies: vec![Body::new(m, 0.05, cg)],
+            forces: vec![Force::Gravity(Vector2::new(0.0, -g))],
+            constraints: vec![Constraint::Distance {
+                a: Anchor::Body {
+                    index: 0,
+                    local: Vector2::zeros(),
+                },
+                b: Anchor::World(pivot),
+                length: l,
+            }],
+            time: 0.0,
+        };
+        let dt = 5.0e-4;
+        let mut samples = Vec::new();
+        for _ in 0..12_000 {
+            samples.push((sys.time, sys.bodies[0].pos.x)); // x swings about 0
+            sys.step(dt);
+        }
+        let measured = period_from_zero_crossings(&samples).expect("oscillation");
+        let analytic = 2.0 * PI * (l / g).sqrt();
+        assert!(
+            (measured - analytic).abs() / analytic < 0.02,
+            "period {measured} vs simple-pendulum {analytic}"
+        );
+        // The rod length is held throughout the swing.
+        let held = (sys.bodies[0].pos - pivot).norm();
+        assert!((held - l).abs() < 1e-2, "rod length drifted to {held}");
+    }
+
+    #[test]
+    fn rigid_link_preserves_distance() {
+        // Two free bodies joined by a rigid rod (Distance), given a relative
+        // transverse velocity so the pair spins about its midpoint: the
+        // separation must stay equal to the rod length (centripetal RHS works).
+        let l = 2.0;
+        let mut b0 = Body::new(1.0, 0.1, Vector2::new(0.0, 0.0));
+        let mut b1 = Body::new(1.0, 0.1, Vector2::new(l, 0.0));
+        b0.vel = Vector2::new(0.0, -0.5);
+        b1.vel = Vector2::new(0.0, 0.5);
+        let mut sys = System {
+            bodies: vec![b0, b1],
+            forces: vec![],
+            constraints: vec![Constraint::Distance {
+                a: Anchor::Body {
+                    index: 0,
+                    local: Vector2::zeros(),
+                },
+                b: Anchor::Body {
+                    index: 1,
+                    local: Vector2::zeros(),
+                },
+                length: l,
+            }],
+            time: 0.0,
+        };
+        let mut max_dev = 0.0_f64;
+        for _ in 0..20_000 {
+            sys.step(1.0e-4);
+            let sep = (sys.bodies[0].pos - sys.bodies[1].pos).norm();
+            max_dev = max_dev.max((sep - l).abs());
+        }
+        assert!(max_dev < 1e-2, "rigid-link separation drifted by {max_dev}");
     }
 
     #[test]
