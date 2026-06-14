@@ -84,6 +84,12 @@ valenx-addons        = { path = "../valenx-addons" }
 valenx-mesh-to-brep  = { path = "../valenx-mesh-to-brep" }
 valenx-fem           = { path = "../valenx-fem" }
 
+# The coupled rocket design→simulate example engine, surfaced by the
+# Rocket workbench (src/rocket_workbench.rs). Couples valenx-astro
+# (ascent) with valenx-fem (interstage structural check). Research /
+# preliminary-design grade — not a flight-certified design tool.
+valenx-rocket-demo   = { path = "../valenx-rocket-demo" }
+
 # The native 3D external-aerodynamics CFD engine,
 # surfaced in the desktop UI by the Aerodynamics / Wind Tunnel
 # workbench (src/aero_workbench.rs + src/aero/). A pure-Rust solver

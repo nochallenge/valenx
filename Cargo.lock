@@ -6511,6 +6511,7 @@ dependencies = [
  "valenx-reverse",
  "valenx-rnadesign",
  "valenx-rnastruct",
+ "valenx-rocket-demo",
  "valenx-sheet-metal",
  "valenx-sketch",
  "valenx-solvespace-3d",
@@ -7588,8 +7589,10 @@ dependencies = [
 name = "valenx-rocket-demo"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "nalgebra",
  "valenx-astro",
  "valenx-fem",
+ "valenx-mesh",
 ]
 
 [[package]]
