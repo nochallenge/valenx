@@ -64,6 +64,7 @@
 #![warn(missing_docs)]
 
 pub mod blend;
+pub mod continuity;
 pub mod coons;
 pub mod error;
 pub mod extend;
@@ -80,6 +81,7 @@ pub mod sew;
 pub mod tessellate;
 pub mod trim;
 
+pub use continuity::{measure_edge_continuity, ContinuityReport};
 pub use error::SurfaceError;
 pub use nurbs_curve::NurbsCurve;
 pub use nurbs_surface::NurbsSurface;
