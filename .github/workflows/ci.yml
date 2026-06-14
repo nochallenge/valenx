@@ -11,6 +11,11 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  schedule:
+    # Nightly (07:00 UTC) full cross-platform matrix — the safety net that
+    # lets the per-PR pipeline skip the slow Windows/macOS legs (see the
+    # `test-cross` job). Catches any cross-OS regression within a day.
+    - cron: "0 7 * * *"
   workflow_dispatch:
 
 env:
@@ -162,17 +167,20 @@ jobs:
 
   # -------------------------------------------------------------------
   # Cross-OS test (Windows + macOS) — runs for SIGNAL but does NOT gate
-  # the merge: it is intentionally absent from `ci-ok`'s `needs`, so a
-  # green Linux test + the fast jobs let a PR merge in ~10-15 min instead
-  # of waiting on the ~1 h Windows runner. The maintainer develops on
-  # Windows and runs the scoped Windows suite locally before every push,
-  # so cross-OS regressions are caught off-CI; these legs still surface
-  # any breakage on the PR, just without blocking it.
+  # the merge: it is intentionally absent from `ci-ok`'s `needs`. It runs
+  # on push-to-master, the nightly schedule and manual dispatch — NOT on
+  # pull requests. Reason: the ~1 h Windows leg used to run on every PR
+  # and, while non-blocking, it still consumed the shared runner pool and
+  # starved the fast *required* jobs (fmt/clippy/Linux-test/docs/deny),
+  # making `CI OK` queue for an hour under any PR backlog. Keeping it off
+  # the PR trigger lets per-PR `CI OK` green in minutes; the nightly run +
+  # the post-merge master run + the maintainer's local Windows suite still
+  # catch cross-OS regressions within a day.
   # -------------------------------------------------------------------
   test-cross:
     name: test-cross / ${{ matrix.os }}
     needs: [changes, fmt, clippy]
-    if: needs.changes.outputs.code != 'false'
+    if: github.event_name != 'pull_request' && needs.changes.outputs.code != 'false'
     strategy:
       fail-fast: false
       matrix:
