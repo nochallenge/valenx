@@ -140,6 +140,83 @@ pub fn lv1_rocket_mesh() -> Mesh {
     mesh
 }
 
+/// A procedurally **detailed liquid-rocket engine** — a combustion chamber, a
+/// regeneratively cooled nozzle with a fluted "tube-bundle" surface (the
+/// cooling channels that make a real engine look complex), and an injector
+/// dome. Stands along +Z, exit at `z = 0`.
+///
+/// Honest scope: a far more engine-like *procedural* model than a bare bell,
+/// but still research-grade geometry — the cooling channels are surface
+/// flutes (not a real channel network), and there is no turbopump, injector
+/// plate, gimbal or plumbing assembly. A true CAD/generative engine is the
+/// documented next step.
+pub fn detailed_engine_mesh() -> Mesh {
+    let seg = 120usize; // high resolution to resolve the cooling channels
+    let n_ch = 40.0_f64; // cooling channels around the circumference
+    let amp = 0.07_f64; // channel ridge height
+    let mut nodes: Vec<Vector3<f64>> = Vec::new();
+    let mut tris: Vec<usize> = Vec::new();
+
+    let (exit_r, throat_r, chamber_r) = (2.1_f64, 0.5_f64, 1.25_f64);
+    // Contour (z, base radius): diverging bell (exit → throat) → converging →
+    // chamber.
+    let mut contour: Vec<(f64, f64)> = Vec::new();
+    for i in 0..=10 {
+        let t = i as f64 / 10.0; // 0 at exit, 1 at throat
+        contour.push((
+            3.0 * t,
+            throat_r + (exit_r - throat_r) * (1.0 - t).powf(1.6),
+        ));
+    }
+    for i in 1..=5 {
+        let t = i as f64 / 5.0;
+        contour.push((3.0 + 1.3 * t, throat_r + (chamber_r - throat_r) * t));
+    }
+    contour.push((8.4, chamber_r));
+
+    // Fluted revolve — the regen cooling channels (radius modulated by angle).
+    let flute = |phi: f64| -> f64 {
+        let ridge = 0.5 + 0.5 * (n_ch * phi).cos();
+        ridge * ridge
+    };
+    let mut ring_start = Vec::with_capacity(contour.len());
+    for &(z, rb) in &contour {
+        ring_start.push(nodes.len());
+        for k in 0..seg {
+            let phi = k as f64 / seg as f64 * TAU;
+            let r = rb + amp * flute(phi);
+            nodes.push(Vector3::new(r * phi.cos(), r * phi.sin(), z));
+        }
+    }
+    for w in 0..contour.len() - 1 {
+        let (s0, s1) = (ring_start[w], ring_start[w + 1]);
+        for k in 0..seg {
+            let a0 = s0 + k;
+            let a1 = s0 + (k + 1) % seg;
+            let b0 = s1 + k;
+            let b1 = s1 + (k + 1) % seg;
+            tris.extend_from_slice(&[a0, a1, b1, a0, b1, b0]);
+        }
+    }
+
+    // Injector dome — a smooth hemisphere closing the top of the chamber.
+    let dome: Vec<(f64, f64)> = (0..=8)
+        .map(|i| {
+            let ang = (i as f64 / 8.0) * std::f64::consts::FRAC_PI_2;
+            (8.4 + 1.5 * ang.sin(), chamber_r * ang.cos())
+        })
+        .collect();
+    revolve(&dome, seg, &mut nodes, &mut tris);
+
+    let mut block = ElementBlock::new(ElementType::Tri3);
+    block.connectivity = tris.iter().map(|&i| i as u32).collect();
+    let mut mesh = Mesh::new("valenx-engine");
+    mesh.nodes = nodes;
+    mesh.element_blocks.push(block);
+    mesh.recompute_stats();
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
