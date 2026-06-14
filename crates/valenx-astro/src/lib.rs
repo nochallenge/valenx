@@ -133,7 +133,7 @@ pub use radec::{geocentric_angular_rates, geocentric_equatorial, Equatorial};
 pub use result::{AscentResult, FlightEvent, Outcome, TrajectorySample};
 pub use rigidbody::{AttitudeState, Inertia};
 pub use sim::{propagate_two_body, simulate_ascent};
-pub use thermochem::{combust_h2_lox, CombustionResult};
+pub use thermochem::{combust, combust_h2_lox, CombustionResult, Propellant};
 pub use vehicle::{DragModel, Stage, Vehicle};
 pub use wind::WindModel;
 
