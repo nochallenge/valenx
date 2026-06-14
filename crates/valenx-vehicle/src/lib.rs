@@ -57,6 +57,9 @@ pub use powertrain::{tesla, Battery, ElectricPowertrain, EvCar};
 pub mod ggdiagram;
 pub use ggdiagram::{GgEnvelope, GgPoint};
 
+pub mod sim;
+pub use sim::{SprintTrace, TracePoint};
+
 /// Standard gravity (m/s²).
 const G: f64 = 9.806_65;
 /// Sea-level air density (kg/m³).
