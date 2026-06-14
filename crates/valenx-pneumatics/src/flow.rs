@@ -173,9 +173,7 @@ mod tests {
     fn published_constant_matches_function() {
         // The exported constant must equal the computed value for air.
         assert!(
-            (CRITICAL_PRESSURE_RATIO_AIR - critical_pressure_ratio(GAMMA_AIR).unwrap())
-                .abs()
-                < EPS
+            (CRITICAL_PRESSURE_RATIO_AIR - critical_pressure_ratio(GAMMA_AIR).unwrap()).abs() < EPS
         );
     }
 

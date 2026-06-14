@@ -159,7 +159,10 @@ mod tests {
         // GROUND TRUTH: R = 1 - prod(1 - R_i).
         let r = parallel(&[0.9, 0.8]).unwrap();
         let expected = 1.0 - (1.0 - 0.9) * (1.0 - 0.8);
-        assert!(close(r, expected, EPS), "parallel = {r} expected {expected}");
+        assert!(
+            close(r, expected, EPS),
+            "parallel = {r} expected {expected}"
+        );
     }
 
     #[test]
@@ -260,7 +263,10 @@ mod tests {
         let n = 3;
         let one_of_n = k_out_of_n(1, n, r).unwrap();
         let parallel_eq = parallel(&[r; 3]).unwrap();
-        assert!(close(one_of_n, parallel_eq, EPS), "{one_of_n} vs {parallel_eq}");
+        assert!(
+            close(one_of_n, parallel_eq, EPS),
+            "{one_of_n} vs {parallel_eq}"
+        );
         // And that equals 1 - (1 - r)^n.
         assert!(close(one_of_n, 1.0 - (1.0 - r).powi(3), EPS));
     }
@@ -272,7 +278,10 @@ mod tests {
         let r = 0.9;
         let got = k_out_of_n(2, 3, r).unwrap();
         let expected = r * r * (3.0 - 2.0 * r);
-        assert!(close(got, expected, EPS), "2oo3 = {got} expected {expected}");
+        assert!(
+            close(got, expected, EPS),
+            "2oo3 = {got} expected {expected}"
+        );
     }
 
     #[test]
@@ -283,7 +292,10 @@ mod tests {
         let mut prev = f64::INFINITY;
         for k in 1..=n {
             let val = k_out_of_n(k, n, r).unwrap();
-            assert!(val < prev, "k_out_of_n must decrease in k: k = {k}, val = {val}");
+            assert!(
+                val < prev,
+                "k_out_of_n must decrease in k: k = {k}, val = {val}"
+            );
             prev = val;
         }
     }

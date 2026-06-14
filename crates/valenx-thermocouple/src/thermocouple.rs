@@ -372,6 +372,9 @@ mod tests {
         let tc = type_k();
         let celsius = tc.emf(125.0, 25.0).expect("valid");
         let kelvin = tc.emf(125.0 + 273.15, 25.0 + 273.15).expect("valid");
-        assert!((celsius - kelvin).abs() < EPS, "C = {celsius}, K = {kelvin}");
+        assert!(
+            (celsius - kelvin).abs() < EPS,
+            "C = {celsius}, K = {kelvin}"
+        );
     }
 }

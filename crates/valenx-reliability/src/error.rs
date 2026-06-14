@@ -108,7 +108,9 @@ impl ReliabilityError {
             ReliabilityError::NonPositiveShape { .. } => "reliability.non-positive-shape",
             ReliabilityError::NonPositiveScale { .. } => "reliability.non-positive-scale",
             ReliabilityError::NegativeTime { .. } => "reliability.negative-time",
-            ReliabilityError::ProbabilityOutOfRange { .. } => "reliability.probability-out-of-range",
+            ReliabilityError::ProbabilityOutOfRange { .. } => {
+                "reliability.probability-out-of-range"
+            }
             ReliabilityError::NotFinite { .. } => "reliability.not-finite",
             ReliabilityError::EmptySystem { .. } => "reliability.empty-system",
             ReliabilityError::InvalidKofN { .. } => "reliability.invalid-k-of-n",

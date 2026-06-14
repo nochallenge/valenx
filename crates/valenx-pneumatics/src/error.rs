@@ -178,7 +178,9 @@ mod tests {
 
     #[test]
     fn display_mentions_parameter_and_value() {
-        let msg = PneumaticsError::positive("bore", -2.0).unwrap_err().to_string();
+        let msg = PneumaticsError::positive("bore", -2.0)
+            .unwrap_err()
+            .to_string();
         assert!(msg.contains("bore"), "got: {msg}");
 
         let msg = PneumaticsError::Geometry("rod >= bore").to_string();
@@ -187,19 +189,26 @@ mod tests {
 
     #[test]
     fn error_is_a_std_error_trait_object() {
-        let err: Box<dyn std::error::Error> =
-            Box::new(PneumaticsError::Geometry("bad"));
+        let err: Box<dyn std::error::Error> = Box::new(PneumaticsError::Geometry("bad"));
         assert!(err.to_string().contains("bad"));
     }
 
     #[test]
     fn codes_are_distinct_per_variant() {
         assert_eq!(
-            PneumaticsError::NonPositive { what: "a", value: 0.0 }.code(),
+            PneumaticsError::NonPositive {
+                what: "a",
+                value: 0.0
+            }
+            .code(),
             "pneumatics.non_positive"
         );
         assert_eq!(
-            PneumaticsError::Negative { what: "a", value: -1.0 }.code(),
+            PneumaticsError::Negative {
+                what: "a",
+                value: -1.0
+            }
+            .code(),
             "pneumatics.negative"
         );
         assert_eq!(PneumaticsError::Geometry("g").code(), "pneumatics.geometry");
