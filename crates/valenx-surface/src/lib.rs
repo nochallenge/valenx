@@ -63,6 +63,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod area;
 pub mod blend;
 pub mod continuity;
 pub mod coons;
@@ -72,6 +73,7 @@ pub mod draft_angle;
 pub mod error;
 pub mod extend;
 pub mod fit;
+pub mod frenet;
 pub mod intersect;
 pub mod knot_ops;
 pub mod march_ssi;
@@ -84,11 +86,13 @@ pub mod sew;
 pub mod tessellate;
 pub mod trim;
 
+pub use area::{area_and_centroid, surface_area, AreaResult};
 pub use continuity::{measure_edge_continuity, ContinuityReport};
 pub use curvature::{local_shape, principal_curvatures, LocalShape};
 pub use curvature_comb::{curvature_comb, CurvatureComb};
 pub use draft_angle::{draft_angle, draft_report, DraftReport};
 pub use error::SurfaceError;
+pub use frenet::{frame_at, FrenetFrame};
 pub use nurbs_curve::NurbsCurve;
 pub use nurbs_surface::NurbsSurface;
 pub use sew::Edge;
