@@ -322,6 +322,82 @@ pub fn poiseuille_centerline_check(
     }
 }
 
+/// The result of a full **Poiseuille profile** comparison — how well the
+/// solver's developed channel velocity profile matches the analytic parabola
+/// `u(y) = 1.5·U·(1 − ((y − Ly/2)/(Ly/2))²)` across the whole channel height,
+/// not just at the centerline.
+#[derive(Clone, Copy, Debug)]
+pub struct PoiseuilleProfileError {
+    /// Largest profile error over the sampled heights, normalised by the
+    /// analytic peak velocity `1.5·U` (so wall samples don't blow up a
+    /// relative error).
+    pub max_error_over_peak: f64,
+    /// Mean (over the samples) of that peak-normalised error.
+    pub mean_error_over_peak: f64,
+    /// Number of interior heights sampled.
+    pub samples: usize,
+    /// SIMPLE iterations the run took.
+    pub iterations: usize,
+    /// Whether the solver reached its tolerance.
+    pub converged: bool,
+}
+
+/// Run a long, fully-developing channel flow and verify the **entire**
+/// downstream velocity profile matches the analytic parabola
+/// `u(y) = 1.5·U·(1 − ((y − Ly/2)/(Ly/2))²)` — a stronger check than the
+/// centerline-only [`poiseuille_centerline_check`], confirming the *shape*
+/// (zero at both walls, parabolic in between), not just the peak.
+///
+/// `aspect_ratio` is `lx/Ly` (6 is well-developed); `nx`, `ny` set the grid.
+/// The error at each height is normalised by the analytic peak `1.5·U`.
+pub fn poiseuille_profile_check(
+    inlet_speed: f64,
+    viscosity: f64,
+    aspect_ratio: f64,
+    nx: usize,
+    ny: usize,
+) -> PoiseuilleProfileError {
+    let ly = 1.0;
+    let lx = aspect_ratio * ly;
+    let grid = Grid::new(nx, ny, lx, ly);
+    let fluid = Fluid::new(1.0, viscosity);
+    let bcs = Boundaries::channel_flow(inlet_speed);
+    let sol = solve_simple(
+        &grid,
+        &fluid,
+        &bcs,
+        &SimpleControls {
+            max_iterations: 8000,
+            tolerance: 1e-6,
+            ..SimpleControls::default()
+        },
+    );
+    let peak = 1.5 * inlet_speed;
+    let x_sample = 0.93 * lx;
+    let dy = grid.dy();
+    let mut max_err = 0.0_f64;
+    let mut sum_err = 0.0_f64;
+    let mut count = 0usize;
+    for j in 0..ny {
+        let y = (j as f64 + 0.5) * dy; // cell-centre height
+        let u_computed = sample_u(&sol, x_sample, y);
+        // Analytic parabola: zero at y = 0 and y = Ly, peak at the centre.
+        let eta = (y - 0.5 * ly) / (0.5 * ly); // −1 at walls, 0 at centre
+        let u_analytic = peak * (1.0 - eta * eta);
+        let err = (u_computed - u_analytic).abs() / peak.abs().max(1e-30);
+        max_err = max_err.max(err);
+        sum_err += err;
+        count += 1;
+    }
+    PoiseuilleProfileError {
+        max_error_over_peak: max_err,
+        mean_error_over_peak: sum_err / count.max(1) as f64,
+        samples: count,
+        iterations: sol.iterations,
+        converged: sol.converged,
+    }
+}
+
 // ---------------------------------------------------------------------
 // Backward-facing step benchmark
 // ---------------------------------------------------------------------
@@ -784,6 +860,32 @@ mod tests {
             e.relative_error < 0.05,
             "Poiseuille rel err {} should be < 0.05",
             e.relative_error
+        );
+    }
+
+    #[test]
+    fn poiseuille_full_profile_matches_the_parabola() {
+        // Stronger than the centerline check: the entire developed profile must
+        // follow u(y) = 1.5·U·(1 − ((y − Ly/2)/(Ly/2))²) — zero at both walls,
+        // parabolic in between — not merely peak at 1.5·U_mean.
+        let e = poiseuille_profile_check(1.0, 0.05, 6.0, 60, 24);
+        println!(
+            "Poiseuille profile: max err/peak={:.4}, mean err/peak={:.4}, samples={}, iters={}, conv={}",
+            e.max_error_over_peak, e.mean_error_over_peak, e.samples, e.iterations, e.converged
+        );
+        assert!(e.converged, "Poiseuille SIMPLE must converge");
+        assert!(e.samples >= 20, "should sample the full height");
+        // A wrong shape (e.g. plug flow) would give ~0.3–0.5; the parabola
+        // matches to a few % across the height (entry-region + coarse-grid).
+        assert!(
+            e.max_error_over_peak < 0.08,
+            "max profile error/peak {} should be < 0.08",
+            e.max_error_over_peak
+        );
+        assert!(
+            e.mean_error_over_peak < 0.03,
+            "mean profile error/peak {} should be < 0.03",
+            e.mean_error_over_peak
         );
     }
 
