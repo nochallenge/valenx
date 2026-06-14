@@ -1,0 +1,30 @@
+[package]
+name        = "valenx-regnet"
+description = "Gene-regulatory-network dynamics for Valenx. A small, self-contained ODE model of transcriptional regulation: N genes, each with a basal production rate, a first-order degradation rate, and a regulatory input assembled from textbook Hill kinetics (hill_activate(x,k,n) = x^n/(k^n+x^n), hill_repress(x,k,n) = k^n/(k^n+x^n)). The governing law is dx_i/dt = production_i * regulation_i(x) - degradation_i * x_i, integrated with a fixed-step classical RK4 (a single-step function plus a simulate function returning the full trajectory). Ships two canonical motif presets — a two-gene mutual-repression toggle switch (bistable) and a three-gene cyclic-repression repressilator (sustained oscillation). State is a plain Vec<f64>; no linear-algebra dependency. Research/educational grade: textbook equations and dimensionless example rates, NOT a clinical, medical, or production tool; results are illustrative of qualitative dynamics, not quantitative predictions of any real organism."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure numerical core. `serde` derives the data-model types (network
+# parameters, simulation config, trajectory) so callers can persist a
+# run as JSON; this crate writes no files itself. `thiserror` derives
+# the validated error type. No linear-algebra or platform-specific deps
+# — the Hill functions, the RK4 integrator and the presets are all
+# hand-rolled over plain `Vec<f64>` state.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Only the tests exercise JSON round-tripping of the data model (the
+# library itself emits no JSON and writes no files); serde_json stays
+# dev-only.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

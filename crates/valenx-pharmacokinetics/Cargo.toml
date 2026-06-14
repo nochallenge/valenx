@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-pharmacokinetics"
+description = "Pharmacokinetics and pharmacodynamics for Valenx. Closed-form analytic models for drug disposition: the one-compartment IV-bolus model (elimination rate k = CL/V, concentration C(t) = dose/V·exp(-k·t), terminal half-life t½ = ln2/k, total exposure AUC = dose/CL, peak Cmax = dose/V, and time-to-threshold), the two-compartment biexponential disposition curve C(t) = A·exp(-α·t) + B·exp(-β·t) built from its macro constants, and the Emax / Hill sigmoidal dose-response E(d) = Emax·d^n / (EC50^n + d^n). Inputs (positive volume, clearance, dose, EC50, Emax, Hill coefficient) are validated through a thiserror error type. Research/educational grade: textbook PK/PD equations, NOT a clinical, medical, or production dosing tool — do not use for patient care."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure analytic library: no heavy or platform dependencies. `thiserror`
+# derives the validated-input error type; serde drives the model
+# data-model derives so callers can persist parameter sets as JSON (this
+# crate writes no files).
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

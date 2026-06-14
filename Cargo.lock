@@ -6620,6 +6620,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-bonemech"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-brlcad-csg"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6857,6 +6865,14 @@ dependencies = [
  "valenx-dock",
  "valenx-fields",
  "valenx-test-utils",
+]
+
+[[package]]
+name = "valenx-endurance"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7426,6 +7442,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-pharmacokinetics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-phylo"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7533,6 +7557,15 @@ name = "valenx-reactdyn"
 version = "0.1.0-alpha.1"
 dependencies = [
  "valenx-qchem",
+]
+
+[[package]]
+name = "valenx-regnet"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
