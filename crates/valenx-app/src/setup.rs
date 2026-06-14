@@ -19,6 +19,14 @@ pub fn run() -> anyhow::Result<()> {
     init_tracing();
     install_crash_reporter();
 
+    // Headless mode: an automation agent or CI can run batch tasks (compute,
+    // geometry export) with no window. The default — no `--headless` flag —
+    // falls through to the headed interactive GUI below.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(pos) = args.iter().position(|a| a == "--headless") {
+        return crate::headless::run_headless(&args[pos + 1..]);
+    }
+
     tracing::info!(
         target: "valenx",
         version = env!("CARGO_PKG_VERSION"),

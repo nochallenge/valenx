@@ -58,6 +58,7 @@ pub mod mate;
 pub mod part;
 pub mod persist;
 pub mod solver;
+pub mod urdf;
 
 pub use assembly::Assembly;
 pub use diagnostics::{diagnose, ConstraintState, DiagnosticsConfig, DiagnosticsReport};
@@ -72,3 +73,4 @@ pub use mate::{Mate, MateKind};
 pub use part::{Part, PartTransform};
 pub use persist::AssemblyFile;
 pub use solver::{SolverConfig, SolverDiagnostics, SolverReport, SolverStatus};
+pub use urdf::{assembly_to_mesh, demo_hand_urdf, import_urdf, UrdfError, UrdfRobot};

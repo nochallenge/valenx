@@ -43,6 +43,7 @@ pub mod cad_workbench;
 pub mod cfd_workbench;
 pub mod draft2d_workbench;
 pub mod fem_workbench;
+pub mod headless;
 pub mod hvac_workbench;
 pub mod interior_workbench;
 pub mod neuro_workbench;

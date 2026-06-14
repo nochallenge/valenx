@@ -11,7 +11,7 @@
 //! burns*.
 //!
 //! Two product systems are modelled: H/O (H₂/LOX, 6 species) and C/H/O
-//! (RP-1/LOX, 8 species, adding CO₂/CO). Minor species are expressed through
+//! (RP-1/LOX and CH₄/LOX, 8 species, adding CO₂/CO). Minor species follow from
 //! reaction equilibrium constants and the majors solved from the element +
 //! pressure balance by Newton, wrapped in a temperature bisection that
 //! enforces the adiabatic enthalpy balance.
@@ -283,6 +283,8 @@ pub enum Propellant {
     H2Lox,
     /// RP-1 (kerosene, ≈ CH₁.₉₅) / liquid oxygen.
     Rp1Lox,
+    /// Liquid methane (CH₄) / liquid oxygen — the SpaceX Raptor propellant.
+    Ch4Lox,
 }
 
 const HO_SPECIES: [Species; 6] = [H2O, H2, O2, OH, H, O];
@@ -369,6 +371,17 @@ pub fn combust(
                 equilibrium_cho(t, p, c_over_h, o_over_h).to_vec()
             })
         }
+        Propellant::Ch4Lox => {
+            // Fuel CH₄ (16.043 g/mol, ΔHf ≈ −74.6 kJ/mol). The Raptor runs
+            // methalox at MR ≈ 3.6, ~330 bar.
+            let (c_at, h_at, fuel_m, fuel_dhf) = (1.0, 4.0, 16.043, -74_600.0);
+            let n_o2 = mr * fuel_m / 31.998;
+            let c_over_h = c_at / h_at;
+            let o_over_h = 2.0 * n_o2 / h_at;
+            finish_combustion(&CHO_SPECIES, fuel_dhf, h_at, move |t| {
+                equilibrium_cho(t, p, c_over_h, o_over_h).to_vec()
+            })
+        }
     }
 }
 
@@ -443,6 +456,45 @@ mod tests {
         let rp1 = combust(Propellant::Rp1Lox, 2.7, 100.0);
         assert!(rp1.molar_mass > h2.molar_mass + 5.0);
         assert!(rp1.c_star < h2.c_star);
+    }
+
+    #[test]
+    fn methalox_raptor_propellant() {
+        // CH₄/LOX at MR 3.6, 330 bar — the Raptor's operating point. The
+        // first-order C/H/O model overpredicts the absolute flame temperature
+        // (~10 %, like RP-1), but the comparison physics is right: methalox is
+        // lighter (more H) than kerolox, so its c* is higher, and it sits below
+        // hydrolox.
+        let ch4 = combust(Propellant::Ch4Lox, 3.6, 330.0);
+        assert!(
+            (3_500.0..4_400.0).contains(&ch4.chamber_temperature),
+            "T_c = {} K",
+            ch4.chamber_temperature
+        );
+        assert!(
+            (1_650.0..2_150.0).contains(&ch4.c_star),
+            "c* = {} m/s",
+            ch4.c_star
+        );
+        assert!(
+            (16.0..26.0).contains(&ch4.molar_mass),
+            "M = {} g/mol",
+            ch4.molar_mass
+        );
+        let rp1 = combust(Propellant::Rp1Lox, 2.7, 330.0);
+        let h2 = combust(Propellant::H2Lox, 6.0, 330.0);
+        assert!(
+            ch4.c_star > rp1.c_star,
+            "methalox c* {} > kerolox {}",
+            ch4.c_star,
+            rp1.c_star
+        );
+        assert!(
+            ch4.c_star < h2.c_star,
+            "methalox c* {} < hydrolox {}",
+            ch4.c_star,
+            h2.c_star
+        );
     }
 
     #[test]

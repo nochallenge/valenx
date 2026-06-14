@@ -27,6 +27,8 @@ pub struct RenderWorkbenchState {
     texture: Option<egui::TextureHandle>,
     status: String,
     error: Option<String>,
+    /// Render the rocket in polished-stainless (vs white-painted) finish.
+    stainless: bool,
     /// A render running on a worker thread. While `Some`, the form is frozen
     /// and a spinner shows; `poll_render` uploads the texture when it finishes.
     job: Option<BackgroundJob<RenderOutput>>,
@@ -42,6 +44,7 @@ impl Default for RenderWorkbenchState {
             texture: None,
             status: String::new(),
             error: None,
+            stainless: false,
             job: None,
         }
     }
@@ -129,7 +132,13 @@ fn render_demo(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Rend
 /// Path-trace the **Valenx LV-1** as a "final picture": the procedural rocket
 /// mesh in a brushed-metal finish on a ground plane, lit by a big overhead
 /// light — the photoreal counterpart to the live shaded viewport.
-fn render_rocket(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> RenderOutput {
+pub(crate) fn render_rocket(
+    resolution: u32,
+    spp: u32,
+    max_depth: u32,
+    exposure: f32,
+    stainless: bool,
+) -> RenderOutput {
     let res = resolution.clamp(48, 512);
     // The rocket stands along +Z, so the camera's up is +Z; a 3/4 hero framing
     // of the ~33-tall vehicle.
@@ -142,7 +151,11 @@ fn render_rocket(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Re
         res,
     );
     let mut b = SceneBuilder::new(camera);
-    let body = b.add_material(PtMaterial::metal([0.92, 0.92, 0.93], 0.34));
+    let body = b.add_material(if stainless {
+        PtMaterial::metal([0.96, 0.96, 0.97], 0.07) // polished stainless steel
+    } else {
+        PtMaterial::metal([0.92, 0.92, 0.93], 0.34) // white-painted launcher
+    });
     let ground = b.add_material(PtMaterial::diffuse([0.46, 0.45, 0.43]));
     let key = b.add_material(PtMaterial::emissive([13.5, 12.6, 11.0]));
     let fill = b.add_material(PtMaterial::emissive([2.4, 2.4, 2.6]));
@@ -174,6 +187,71 @@ fn render_rocket(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Re
         vec3(140.0, 95.0, -10.0),
         vec3(140.0, 95.0, 85.0),
         vec3(-140.0, 95.0, 85.0),
+        fill,
+    );
+
+    let scene = b.build();
+    let params = RenderParams {
+        samples_per_pixel: spp.clamp(1, 128),
+        max_depth: max_depth.clamp(1, 16),
+        seed: 0x5eed,
+        exposure,
+    };
+    let ldr = render(&scene, &params)
+        .map_err(|e| e.to_string())?
+        .to_ldr(exposure);
+    Ok((ldr.width as usize, ldr.height as usize, ldr.pixels))
+}
+
+/// Path-trace the **detailed engine** (chamber, fluted cooling-channel nozzle,
+/// injector dome) close-up in a metallic finish — the "what does the engine
+/// look like" view.
+pub(crate) fn render_engine(
+    resolution: u32,
+    spp: u32,
+    max_depth: u32,
+    exposure: f32,
+) -> RenderOutput {
+    let res = resolution.clamp(48, 512);
+    // Frame the full engine including the tall powerhead (exit at z=0 up to
+    // the turbine tops near z=12.4); a 3/4 hero angle, +Z up.
+    let camera = PtCamera::look_at(
+        vec3(21.0, 18.0, 10.5),
+        vec3(0.0, 0.0, 6.0),
+        vec3(0.0, 0.0, 1.0),
+        44f32.to_radians(),
+        res,
+        res,
+    );
+    let mut b = SceneBuilder::new(camera);
+    let metal = b.add_material(PtMaterial::metal([0.86, 0.86, 0.87], 0.16));
+    let ground = b.add_material(PtMaterial::diffuse([0.34, 0.34, 0.36]));
+    let key = b.add_material(PtMaterial::emissive([14.0, 13.2, 11.6]));
+    let fill = b.add_material(PtMaterial::emissive([2.6, 2.6, 2.8]));
+
+    let engine = crate::rocket_mesh::detailed_engine_mesh();
+    b.add_mesh(&engine, metal);
+    let (g, z0) = (60.0, -0.3);
+    b.add_quad(
+        vec3(-g, -g, z0),
+        vec3(g, -g, z0),
+        vec3(g, g, z0),
+        vec3(-g, g, z0),
+        ground,
+    );
+    let (lx, ly, lz) = (25.0, 25.0, 28.0);
+    b.add_quad(
+        vec3(-lx, -ly, lz),
+        vec3(lx, -ly, lz),
+        vec3(lx, ly, lz),
+        vec3(-lx, ly, lz),
+        key,
+    );
+    b.add_quad(
+        vec3(-60.0, 45.0, -5.0),
+        vec3(60.0, 45.0, -5.0),
+        vec3(60.0, 45.0, 40.0),
+        vec3(-60.0, 45.0, 40.0),
         fill,
     );
 
@@ -229,6 +307,7 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     poll_render(&mut app.render, ctx);
     let mut do_render = false;
     let mut do_render_rocket = false;
+    let mut do_render_engine = false;
     egui::SidePanel::right("valenx_render_workbench")
         .resizable(true)
         .default_width(400.0)
@@ -288,6 +367,13 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             {
                 do_render_rocket = true;
             }
+            if ui
+                .button(egui::RichText::new("🔧 Render the engine (detail)").strong())
+                .clicked()
+            {
+                do_render_engine = true;
+            }
+            ui.checkbox(&mut s.stainless, "polished stainless finish (rocket)");
             if !s.status.is_empty() {
                 ui.label(egui::RichText::new(&s.status).small().weak());
             }
@@ -309,7 +395,7 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             }
         });
 
-    if do_render || do_render_rocket {
+    if do_render || do_render_rocket || do_render_engine {
         // Clear stale per-run state up front (house style — cf. cfd_workbench),
         // so a failed render can't leave the previous success line showing next
         // to the error. The last-good texture is deliberately retained.
@@ -317,12 +403,14 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         s.status.clear();
         s.error = None;
         let (res, spp, max_depth, exposure) = (s.resolution, s.spp, s.max_depth, s.exposure);
-        let rocket = do_render_rocket;
+        let (rocket, engine, stainless) = (do_render_rocket, do_render_engine, s.stainless);
         // Render on a worker thread; poll_render uploads the texture when it
         // finishes, so the path tracer no longer freezes the UI.
         s.job = Some(BackgroundJob::spawn(move || {
-            if rocket {
-                render_rocket(res, spp, max_depth, exposure)
+            if engine {
+                render_engine(res, spp, max_depth, exposure)
+            } else if rocket {
+                render_rocket(res, spp, max_depth, exposure, stainless)
             } else {
                 render_demo(res, spp, max_depth, exposure)
             }
@@ -353,7 +441,7 @@ mod tests {
         // that is actually lit — a fair number of bright pixels, not a near-
         // black frame (which would mean the lighting/camera is wrong).
         let (w, h, pixels) =
-            render_rocket(64, 8, 4, 1.0).expect("64² rocket render is under the pixel cap");
+            render_rocket(64, 8, 4, 1.0, false).expect("64² rocket render is under the pixel cap");
         assert_eq!(pixels.len(), w * h * 3, "RGB8 buffer of the right size");
         let bright = pixels.iter().filter(|&&p| p > 30).count();
         assert!(
@@ -365,18 +453,20 @@ mod tests {
     /// Render the rocket at preview quality and write a PNG to TEMP — run with
     /// `cargo test -p valenx-app --lib render_workbench::tests::dump -- --ignored --nocapture`.
     #[test]
-    #[ignore = "writes a path-traced rocket PNG to TEMP"]
+    #[ignore = "writes path-traced rocket PNGs (white + stainless) to TEMP"]
     fn dump_rocket_png() {
-        let (w, h, pixels) = render_rocket(460, 192, 6, 1.1).expect("rocket render");
-        let path = std::env::temp_dir().join("valenx_rocket_render.png");
-        let file = std::fs::File::create(&path).expect("create png");
-        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
-        enc.set_color(png::ColorType::Rgb);
-        enc.set_depth(png::BitDepth::Eight);
-        let mut writer = enc.write_header().expect("png header");
-        writer.write_image_data(&pixels).expect("png data");
-        writer.finish().expect("png finish");
-        println!("WROTE {}", path.display());
+        for (name, stainless) in [("white", false), ("stainless", true)] {
+            let (w, h, pixels) = render_rocket(460, 256, 6, 1.1, stainless).expect("rocket render");
+            let path = std::env::temp_dir().join(format!("valenx_rocket_{name}.png"));
+            let file = std::fs::File::create(&path).expect("create png");
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+            enc.set_color(png::ColorType::Rgb);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut writer = enc.write_header().expect("png header");
+            writer.write_image_data(&pixels).expect("png data");
+            writer.finish().expect("png finish");
+            println!("WROTE {}", path.display());
+        }
     }
 
     #[test]
@@ -400,5 +490,29 @@ mod tests {
             .expect("64² render is well under the pixel cap");
         assert_eq!(pixels.len(), w * h * 3);
         assert!(pixels.iter().any(|&p| p > 0), "the scene is lit");
+    }
+
+    #[test]
+    fn renders_the_engine_lit() {
+        let (w, h, pixels) =
+            render_engine(64, 8, 4, 1.0).expect("64² engine render is under the cap");
+        assert_eq!(pixels.len(), w * h * 3);
+        let bright = pixels.iter().filter(|&&p| p > 30).count();
+        assert!(bright > pixels.len() / 20, "engine scene should be lit");
+    }
+
+    #[test]
+    #[ignore = "writes a path-traced engine PNG to TEMP"]
+    fn dump_engine_png() {
+        let (w, h, pixels) = render_engine(480, 224, 6, 1.1).expect("engine render");
+        let path = std::env::temp_dir().join("valenx_engine.png");
+        let file = std::fs::File::create(&path).expect("create png");
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header().expect("png header");
+        writer.write_image_data(&pixels).expect("png data");
+        writer.finish().expect("png finish");
+        println!("WROTE {}", path.display());
     }
 }
