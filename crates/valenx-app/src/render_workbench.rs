@@ -208,11 +208,13 @@ fn render_rocket(
 /// look like" view.
 fn render_engine(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> RenderOutput {
     let res = resolution.clamp(48, 512);
+    // Frame the full engine including the tall powerhead (exit at z=0 up to
+    // the turbine tops near z=12.4); a 3/4 hero angle, +Z up.
     let camera = PtCamera::look_at(
-        vec3(15.0, 13.0, 7.5),
-        vec3(0.0, 0.0, 4.2),
+        vec3(21.0, 18.0, 10.5),
+        vec3(0.0, 0.0, 6.0),
         vec3(0.0, 0.0, 1.0),
-        38f32.to_radians(),
+        44f32.to_radians(),
         res,
         res,
     );

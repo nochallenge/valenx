@@ -62,6 +62,82 @@ fn revolve(
     }
 }
 
+/// Append a capped vertical cylinder centred at `(cx, cy)`, spanning `z0..z1`
+/// — a building block for the powerhead (pump bodies, preburners, manifold).
+#[allow(clippy::too_many_arguments)]
+fn add_vert_cylinder(
+    cx: f64,
+    cy: f64,
+    z0: f64,
+    z1: f64,
+    r: f64,
+    seg: usize,
+    nodes: &mut Vec<Vector3<f64>>,
+    tris: &mut Vec<usize>,
+) {
+    let base = nodes.len();
+    for &z in &[z0, z1] {
+        for k in 0..seg {
+            let a = k as f64 / seg as f64 * TAU;
+            nodes.push(Vector3::new(cx + r * a.cos(), cy + r * a.sin(), z));
+        }
+    }
+    let (r0, r1) = (base, base + seg);
+    for k in 0..seg {
+        let (a0, a1) = (r0 + k, r0 + (k + 1) % seg);
+        let (b0, b1) = (r1 + k, r1 + (k + 1) % seg);
+        tris.extend_from_slice(&[a0, a1, b1, a0, b1, b0]);
+    }
+    // End caps (fans to a centre vertex) so the cylinder reads solid.
+    let c0 = nodes.len();
+    nodes.push(Vector3::new(cx, cy, z0));
+    let c1 = nodes.len();
+    nodes.push(Vector3::new(cx, cy, z1));
+    for k in 0..seg {
+        tris.extend_from_slice(&[c0, r0 + (k + 1) % seg, r0 + k]);
+        tris.extend_from_slice(&[c1, r1 + k, r1 + (k + 1) % seg]);
+    }
+}
+
+/// Append an open tube (cylinder) between two 3-D points — the powerhead's
+/// hot-gas ducts and feed plumbing.
+fn add_tube(
+    p0: Vector3<f64>,
+    p1: Vector3<f64>,
+    r: f64,
+    seg: usize,
+    nodes: &mut Vec<Vector3<f64>>,
+    tris: &mut Vec<usize>,
+) {
+    let axis = p1 - p0;
+    let len = axis.norm();
+    if len < 1e-9 {
+        return;
+    }
+    let w = axis / len;
+    // Any vector not parallel to the axis gives a stable perpendicular frame.
+    let seed = if w.x.abs() < 0.9 {
+        Vector3::new(1.0, 0.0, 0.0)
+    } else {
+        Vector3::new(0.0, 1.0, 0.0)
+    };
+    let u = w.cross(&seed).normalize();
+    let v = w.cross(&u);
+    let base = nodes.len();
+    for p in &[p0, p1] {
+        for k in 0..seg {
+            let a = k as f64 / seg as f64 * TAU;
+            nodes.push(p + u * (r * a.cos()) + v * (r * a.sin()));
+        }
+    }
+    let (r0, r1) = (base, base + seg);
+    for k in 0..seg {
+        let (a0, a1) = (r0 + k, r0 + (k + 1) % seg);
+        let (b0, b1) = (r1 + k, r1 + (k + 1) % seg);
+        tris.extend_from_slice(&[a0, a1, b1, a0, b1, b0]);
+    }
+}
+
 /// Build a triangulated 3-D surface mesh of the Valenx LV-1.
 pub fn lv1_rocket_mesh() -> Mesh {
     let seg = 48usize;
@@ -207,6 +283,64 @@ pub fn detailed_engine_mesh() -> Mesh {
         })
         .collect();
     revolve(&dome, seg, &mut nodes, &mut tris);
+
+    // ── Powerhead: the integrated turbopump + preburner assembly that makes a
+    // full-flow staged-combustion engine (the Raptor cycle) read as a real
+    // engine and not a bare chamber — twin turbopumps, twin preburners, a
+    // central hot-gas manifold and the connecting plumbing. Procedural,
+    // illustrative geometry: it captures the powerhead's layout, not a flight
+    // turbomachine.
+    let ph = 48usize;
+    let dome_top = 8.4 + 1.5; // injector-dome peak ≈ z = 9.9
+                              // Central hot-gas manifold ring above the injector dome.
+    add_vert_cylinder(
+        0.0,
+        0.0,
+        dome_top - 0.1,
+        dome_top + 1.1,
+        1.05,
+        ph,
+        &mut nodes,
+        &mut tris,
+    );
+    // Twin turbopumps (oxidizer + fuel) offset on ±X: pump body, inlet volute,
+    // turbine housing, a hot-gas duct to the manifold and a feed line down.
+    for sx in [-1.0_f64, 1.0] {
+        let cx = sx * 1.75;
+        add_vert_cylinder(cx, 0.0, 8.6, 11.4, 0.72, ph, &mut nodes, &mut tris);
+        add_vert_cylinder(cx, 0.0, 8.45, 9.15, 0.98, ph, &mut nodes, &mut tris);
+        add_vert_cylinder(cx, 0.0, 11.4, 12.4, 0.55, ph, &mut nodes, &mut tris);
+        add_tube(
+            Vector3::new(cx, 0.0, 12.1),
+            Vector3::new(0.0, 0.0, dome_top + 0.9),
+            0.3,
+            18,
+            &mut nodes,
+            &mut tris,
+        );
+        add_tube(
+            Vector3::new(cx, 0.0, 8.7),
+            Vector3::new(sx * 0.6, 0.0, 9.1),
+            0.28,
+            18,
+            &mut nodes,
+            &mut tris,
+        );
+    }
+    // Twin preburners (oxidizer-rich + fuel-rich) offset on ±Y, each ducted up
+    // to the manifold that feeds the main injector.
+    for sy in [-1.0_f64, 1.0] {
+        let cy = sy * 1.5;
+        add_vert_cylinder(0.0, cy, 8.8, 10.9, 0.52, ph, &mut nodes, &mut tris);
+        add_tube(
+            Vector3::new(0.0, cy, 10.8),
+            Vector3::new(0.0, 0.0, dome_top + 0.7),
+            0.26,
+            18,
+            &mut nodes,
+            &mut tris,
+        );
+    }
 
     let mut block = ElementBlock::new(ElementType::Tri3);
     block.connectivity = tris.iter().map(|&i| i as u32).collect();
