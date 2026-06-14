@@ -28,6 +28,10 @@ path = "src/lib.rs"
 anyhow             = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
+# png: pure-Rust PNG encoder for headless render-to-PNG (and the
+# headless_screenshots dev test). Already resolved transitively
+# (eframe -> image 0.25 -> png 0.18), so promoting it adds no new tree.
+png                = "0.18"
 
 # Native shell. eframe pulls in winit + a glow rendering backend;
 # replacing with a wgpu backend is a feature swap, not an API
@@ -539,11 +543,6 @@ pollster = "0.3"
 # proof). Pinned to 0.20 to match the version wgpu 0.20 (via eframe)
 # already resolves in the lockfile.
 naga = { version = "0.20", features = ["wgsl-in"] }
-# png: pure-Rust PNG encoder used by the `headless_screenshots`
-# integration test to write workbench panel renders to disk. Pinned to
-# 0.18 to match the version eframe's transitive image stack
-# (eframe -> image 0.25 -> png 0.18) already resolves — no new tree.
-png = "0.18"
 
 # ===========================================================================
 # Build-script dependencies — embed-resource compiles the per-target
