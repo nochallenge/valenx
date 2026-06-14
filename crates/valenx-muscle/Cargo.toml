@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-muscle"
+description = "Native skeletal-muscle mechanics for Valenx — a Hill-type muscle model (active force-length, force-velocity, passive elasticity, pennation) plus a myostatin loss-of-function parameterization demonstrating why bigger muscle is not proportionally stronger. Validated against textbook muscle physiology. Research / educational grade; not a clinical predictor and not a production musculoskeletal suite (OpenSim)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

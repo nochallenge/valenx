@@ -126,6 +126,7 @@ members = [
     "crates/valenx-neuro",
     "crates/valenx-vehicle",
     "crates/valenx-mbd",
+    "crates/valenx-muscle",
 
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
