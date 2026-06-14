@@ -54,6 +54,9 @@ pub use ev::{build_ev, tesla_class, Category, Component, EvAssembly, EvSpec};
 pub mod powertrain;
 pub use powertrain::{tesla, Battery, ElectricPowertrain, EvCar};
 
+pub mod regen;
+pub use regen::{recoverable_braking_energy, regen_range_added_km, RegenBraking, RegenError};
+
 /// Standard gravity (m/s²).
 const G: f64 = 9.806_65;
 /// Sea-level air density (kg/m³).
