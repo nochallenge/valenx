@@ -586,7 +586,7 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         )
                         .clicked()
                     {
-                        s.auto = auto_design::auto_design(600);
+                        s.auto = auto_design::auto_design(2_000);
                     }
                     if let Some(d) = &s.auto {
                         ui.label(
@@ -597,10 +597,10 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 d.payload_kg,
                                 d.periapsis_km,
                                 d.apoapsis_km,
-                                d.engine.design.chamber_pressure / 1.0e5,
-                                d.engine.design.expansion_ratio,
-                                d.engine.vacuum.isp,
-                                d.engine.cooling.cooling_margin,
+                                d.engine.chamber_pressure / 1.0e5,
+                                d.engine.expansion_ratio,
+                                d.engine_vacuum.isp,
+                                d.engine_cooling.cooling_margin,
                                 d.pitch_kick_deg,
                                 d.vertical_rise_s,
                                 d.peak_g,
