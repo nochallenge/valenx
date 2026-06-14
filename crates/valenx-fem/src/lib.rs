@@ -123,6 +123,7 @@ pub mod constraints;
 pub mod contact;
 pub mod dynamics;
 pub mod elements;
+pub mod harmonic;
 pub mod loads;
 pub mod material;
 pub mod mesh_params;
@@ -135,6 +136,7 @@ pub mod plasticity;
 pub mod result;
 pub mod solver;
 pub mod thermal_solver;
+pub mod thermal_transient;
 pub mod validation;
 
 pub use analysis::{FemAnalysis, FemAnalysisError};
@@ -193,6 +195,7 @@ pub use dynamics::{
     NodalInitialState,
 };
 pub use elements::{Hex8, SolidElement, Tet10, Tet4};
+pub use harmonic::{solve_harmonic, HarmonicResponse};
 pub use loads::FemLoad;
 pub use material::{material_library, FemMaterial, PlasticProperties};
 pub use mesh_params::{ElementOrder, FemMeshParams};
@@ -215,4 +218,7 @@ pub use result::{FemResult, FemResultError};
 pub use solver::FemSolverChoice;
 pub use thermal_solver::{
     solve_steady_thermal, FixedTemperature, HeatLoad, ThermalSolution, ThermalSolverError,
+};
+pub use thermal_transient::{
+    lumped_capacitance, solve_transient_thermal, TransientThermalError, TransientThermalSolution,
 };
