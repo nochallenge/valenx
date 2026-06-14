@@ -633,6 +633,60 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Rocket workbench — the coupled
+                    // design→simulate pipeline (valenx-rocket-demo): fly the
+                    // ascent to orbit, then size the interstage struts against
+                    // the trajectory's peak g-load with a live SAFE /
+                    // OVER-STRESSED verdict. Off by default.
+                    if ui
+                        .checkbox(
+                            &mut self.show_rocket_workbench,
+                            "Rocket — design → simulate",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Rocket workbench — a reactive \
+                             design→simulate loop (valenx-rocket-demo): fly the \
+                             medium-lift two-stage preset to orbit, then size the \
+                             interstage struts against the trajectory's peak g-load \
+                             with a live safety-factor verdict.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Engine workbench — the reactive
+                    // engine design → analyze → optimize → export loop
+                    // (ideal-nozzle performance + Bartz regen-cooling).
+                    if ui
+                        .checkbox(
+                            &mut self.show_engine_workbench,
+                            "Engine — design → analyze",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Engine workbench — reactive \
+                             ideal-nozzle performance + Bartz regen-cooling, a \
+                             chamber-pressure × expansion-ratio optimizer, and a 3-D \
+                             nozzle you can export to STL.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // The Assistant activity sidebar — a live in-app feed of
+                    // what the AI assistant is designing / simulating /
+                    // building, read from a .jsonl activity file. On by
+                    // default so the app narrates its own work.
+                    if ui
+                        .checkbox(&mut self.show_assistant_panel, "Assistant (AI activity)")
+                        .on_hover_text(
+                            "Show / hide the right-side Assistant sidebar — a live \
+                             feed of what the AI assistant is designing / simulating / \
+                             building, read from a .jsonl activity file.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // ── Central viewport selector ─────────────────────────
                     // Lets the user swap the 3D viewport for a
                     // domain-appropriate alternative (e.g. the 2D DNA /
@@ -1178,6 +1232,20 @@ impl eframe::App for ValenxApp {
         // so egui docks it to the right (alongside the other open
         // workbenches).
         crate::astro_workbench::draw_astro_workbench(self, ctx);
+
+        // Rocket workbench (right) — the valenx-rocket-demo coupled
+        // design→simulate pipeline. A no-op unless toggled on via
+        // View → Rocket. Mounted before the CentralPanel so egui docks it
+        // to the right alongside the other workbenches.
+        crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+
+        // Engine workbench (right) — reactive engine design → analyze →
+        // optimize → export. A no-op unless toggled on via View → Engine.
+        crate::engine_workbench::draw_engine_workbench(self, ctx);
+
+        // Assistant activity sidebar (right) — a live in-app feed of what
+        // the AI assistant is building. On by default; toggle via View.
+        crate::assistant_workbench::draw_assistant_workbench(self, ctx);
 
         // Central viewport — grabs the wgpu render state for the
         // offscreen-depth-buffered shaded path if the wgpu backend is

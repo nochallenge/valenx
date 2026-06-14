@@ -110,6 +110,7 @@ pub mod rendezvous;
 pub mod result;
 pub mod rigidbody;
 pub mod sim;
+pub mod thermochem;
 pub mod vehicle;
 pub mod wind;
 pub mod windows;
@@ -124,11 +125,15 @@ pub use lambert::lambert;
 pub use maneuver::{bielliptic_transfer, hohmann_transfer, Transfer};
 pub use orbit::{elements, OrbitElements};
 pub use orbit3d::{ClassicalElements, StateVector};
-pub use propulsion::{EngineDesign, EnginePerformance};
+pub use propulsion::{
+    optimize_engine, CoolingInputs, CoolingPerformance, EngineDesign, EngineOptimum,
+    EnginePerformance,
+};
 pub use radec::{geocentric_angular_rates, geocentric_equatorial, Equatorial};
 pub use result::{AscentResult, FlightEvent, Outcome, TrajectorySample};
 pub use rigidbody::{AttitudeState, Inertia};
 pub use sim::{propagate_two_body, simulate_ascent};
+pub use thermochem::{combust, combust_h2_lox, CombustionResult, Propellant};
 pub use vehicle::{DragModel, Stage, Vehicle};
 pub use wind::WindModel;
 

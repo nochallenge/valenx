@@ -51,6 +51,7 @@ pub mod render_workbench;
 pub mod reverse_workbench;
 pub mod variant_effect_workbench;
 
+pub mod assistant_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod cam_overlay;
@@ -59,6 +60,7 @@ pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
 pub mod draft_overlay;
+pub mod engine_workbench;
 pub mod fasteners_workbench;
 pub mod fields_workbench;
 pub mod first_run;
@@ -77,6 +79,8 @@ pub mod pbr_forward_pass;
 pub mod piping_workbench;
 pub mod reactdyn_workbench;
 pub mod residuals;
+pub mod rocket_mesh;
+pub mod rocket_workbench;
 pub mod run;
 pub mod scene_overlay;
 pub mod settings;
@@ -568,6 +572,31 @@ pub struct ValenxApp {
     /// `valenx-astro` crate. See [`crate::astro_workbench`].
     pub(crate) astro: crate::astro_workbench::AstroWorkbenchState,
 
+    /// Whether the right-side Rocket workbench panel is visible. Defaults
+    /// to `false`; flipped on from the View menu. Surfaces the
+    /// `valenx-rocket-demo` coupled design→simulate pipeline.
+    pub(crate) show_rocket_workbench: bool,
+    /// Form + result state for the Rocket workbench — the reactive
+    /// design→simulate panel wrapping `valenx-rocket-demo`. See
+    /// [`crate::rocket_workbench`].
+    pub(crate) rocket: crate::rocket_workbench::RocketWorkbenchState,
+
+    /// Whether the right-side Engine workbench panel is visible — the
+    /// reactive engine design → analyze → optimize → export loop. On by
+    /// default (set in [`ValenxApp::new`]).
+    pub(crate) show_engine_workbench: bool,
+    /// Form + result state for the Engine workbench. See
+    /// [`crate::engine_workbench`].
+    pub(crate) engine: crate::engine_workbench::EngineWorkbenchState,
+
+    /// Whether the right-side Assistant activity sidebar is visible. On by
+    /// default (set in [`ValenxApp::new`]) so the app narrates its own work
+    /// via the live feed.
+    pub(crate) show_assistant_panel: bool,
+    /// State for the Assistant activity sidebar (the live `.jsonl` feed
+    /// path). See [`crate::assistant_workbench`].
+    pub(crate) assistant: crate::assistant_workbench::AssistantWorkbenchState,
+
     /// Whether the keyboard-shortcut cheat-sheet overlay is open.
     /// Toggled by the `?` key + by Help → Keyboard shortcuts.
     pub(crate) keyboard_help_open: bool,
@@ -652,6 +681,15 @@ impl ValenxApp {
         // Hidden via View menu / palette for a clean viewport.
         app.show_mesh_toolbox = true;
         app.show_browser = true;
+        // Assistant activity sidebar on by default — the desktop app
+        // narrates its own work via a live feed (empty until appended to).
+        app.show_assistant_panel = true;
+        // Rocket workbench on by default too, so the Valenx LV-1 ascent
+        // plot is visible at launch without hunting the View menu.
+        app.show_rocket_workbench = true;
+        // Engine-design workbench on by default too — design → analyze →
+        // optimize → export an engine, visible at launch.
+        app.show_engine_workbench = true;
         app.snap_to_grid = true;
         app.init_registry();
         // Restore the per-case run-history map from disk so the
