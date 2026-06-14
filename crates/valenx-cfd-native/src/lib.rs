@@ -111,6 +111,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod aero_coeffs;
 pub mod benchmark;
 pub mod error;
 pub mod grid;
@@ -120,6 +121,7 @@ pub mod solver;
 pub mod transient;
 pub mod turbulence;
 
+pub use aero_coeffs::{drag_coefficient, dynamic_pressure, lift_coefficient, reynolds};
 pub use benchmark::{
     backward_facing_step_reattachment, compare_to_ghia_cavity, poiseuille_centerline_check,
     sample_u, sample_v, BackwardStepResult, GhiaError, PoiseuilleError, GHIA_U_RE_100,
