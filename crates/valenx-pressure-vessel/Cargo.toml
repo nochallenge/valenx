@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-pressure-vessel"
+description = "Pressure-vessel stress analysis for Valenx — textbook closed-form elasticity for internally/externally pressurised vessels: thin-wall cylinder hoop (pr/t) and longitudinal (pr/2t) stress, thin-wall sphere (pr/2t), the thick-wall Lame radial and circumferential (hoop) stress distribution at any radius, axial stress and the maximum in-plane shear. Research/educational grade, built on the well-established Lame and membrane-shell equations from Roark, Timoshenko and Boresi; NOT a clinical/medical or production engineering certification tool (no code-of-record allowables, weld/fatigue/buckling checks, or ASME/PED compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Closed-form analytic stress formulae only — no linear algebra needed.
+# thiserror drives the validated error enum; serde derives the small
+# value types so results round-trip through project files / the UI.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

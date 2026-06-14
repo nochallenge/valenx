@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-fatigue"
+description = "Stress-life (S-N) fatigue calculator. Basquin power-law S-N curve (S = a N^b, and N from S), a horizontal endurance limit, Goodman and Soderberg mean-stress corrections (sa/Se + sm/Su = 1/n), and the Palmgren-Miner linear cumulative-damage sum (sum ni/Ni). Research/educational grade: textbook closed-form stress-life relations and the well-established linear damage rule, NOT a clinical, medical, or production engineering design tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public S-N / material structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

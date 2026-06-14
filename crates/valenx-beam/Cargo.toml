@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-beam"
+description = "Euler-Bernoulli beam bending for Valenx. Closed-form deflection, bending moment and stress for cantilever and simply-supported beams under point and uniformly-distributed loads (cantilever tip PL^3/(3EI); simply-supported centre PL^3/(48EI); simply-supported UDL 5wL^4/(384EI)), plus the rectangular b*h^3/12 and circular pi*d^4/64 second moments of area and the flexure stress sigma = M*c/I. Research/educational grade: textbook closed-form Euler-Bernoulli (small-deflection, linear-elastic, slender-beam) models only; NOT a clinical/medical/production structural-engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public config / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

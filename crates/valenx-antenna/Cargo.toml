@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-antenna"
+description = "Antenna-link fundamentals for Valenx — textbook closed-form models for free-space propagation and aperture gain: the Friis transmission equation Pr/Pt = Gt*Gr*(lambda/(4*pi*d))^2, aperture gain G = 4*pi*Ae/lambda^2, decibel-isotropic conversions, the lambda = c/f relation and a first-order beamwidth estimate theta ~ lambda/D. Research/educational grade: implements the standard textbook closed-form / numerical link-budget relations; NOT a clinical/medical or production engineering tool and not a substitute for full-wave electromagnetic solvers, measured antenna patterns or regulatory link analysis."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Scalar link-budget closed forms only: `thiserror` drives the validated
+# error taxonomy and `serde` derives on the small parameter structs so a
+# host (LLM/MCP surface, GUI) can round-trip antenna specs. No numerics
+# crate is needed — every relation here is an elementary closed form.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Used only by the `spec` round-trip tests to exercise the serde derives.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-thermocycle"
+description = "Thermodynamic power-cycle efficiencies in closed form: the Carnot bound (1 - Tc/Th), the air-standard Otto (1 - 1/r^(gamma-1)), Diesel (cutoff-ratio form), and Brayton / Joule (1 - 1/rp^((gamma-1)/gamma)) cycles, plus a basic ideal Rankine steam cycle from supplied enthalpies. Research / educational grade: textbook closed-form air-standard and ideal-cycle models with the usual idealisations (constant specific heats, no irreversibilities, perfect gas); NOT a clinical/medical or production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public input / report structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-opamp"
+description = "Operational-amplifier circuit models for Valenx — closed-form ideal-op-amp transfer functions for the inverting (G = -Rf/Rin), non-inverting (G = 1 + Rf/Rin), voltage-follower, and inverting-summing topologies, plus the single-pole gain-bandwidth relations (GBW = gain x bandwidth; closed-loop BW = GBW/|gain|; unity-gain BW = GBW). Research/educational grade: textbook closed-form / numerical models assuming an ideal op-amp (infinite open-loop gain, infinite input impedance, single dominant pole), NOT a clinical/medical or production electronic-engineering design tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-creep"
+description = "Creep and stress-rupture models for Valenx — the textbook Larson-Miller time-temperature parameter LMP = T*(C + log10(t_r)) (with rupture-time solve t_r = 10^(LMP/T - C)) and the Norton-Bailey secondary (steady-state) creep law epsilon_dot = A*sigma^n. Research/educational grade: closed-form / numerical engineering-mechanics models from the standard high-temperature-materials literature, NOT a clinical/medical or production engineering tool — never use it to qualify, certify, or set the service life of real load-bearing hardware."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure scalar closed-form models. serde drives the data-model derives;
+# thiserror builds the validated-constructor error taxonomy. No numeric
+# or platform dependencies — the formulas are hand-rolled.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

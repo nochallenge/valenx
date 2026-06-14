@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-buckling"
+description = "Euler column-buckling calculator. Critical load Pcr = pi^2 E I / (K L)^2 for the four classical end conditions (pinned-pinned K=1, fixed-free K=2, fixed-fixed K=0.5, fixed-pinned K=0.7), plus critical stress Pcr/A and slenderness ratio K L / r. Research/educational grade: textbook closed-form elastic (Euler) stability only — NOT a clinical/medical or production structural-engineering design tool (no inelastic/Johnson transition, eccentricity, imperfection or code safety factors)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public input / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

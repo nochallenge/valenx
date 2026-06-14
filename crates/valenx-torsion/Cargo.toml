@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-torsion"
+description = "Circular-shaft torsion calculator. Closed-form linear-elastic St. Venant torsion of solid and hollow round shafts: polar second moment of area J, surface and radial shear stress tau = T r / J, angle of twist theta = T L / (G J), and transmitted power P = T omega. Research/educational grade — textbook closed-form models for prismatic circular bars; NOT a clinical/medical or production engineering tool (no stress concentrations, plasticity, fatigue, warping of non-circular sections, or code-compliance checks)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public spec / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

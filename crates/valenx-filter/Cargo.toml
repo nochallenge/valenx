@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-filter"
+description = "Analog filter design — closed-form RC / RLC textbook models: first-order low-pass / high-pass cutoff fc = 1/(2*pi*R*C), magnitude / phase / -3 dB roll-off, and series-RLC resonance f0 = 1/(2*pi*sqrt(L*C)) with quality factor Q = (1/R)*sqrt(L/C) and bandwidth f0/Q. Research / educational grade: textbook closed-form / numerical models, NOT a clinical / medical / production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

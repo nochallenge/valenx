@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-hemodynamics"
+description = "Cardiovascular hemodynamics for Valenx — textbook closed-form circulation models: Hagen-Poiseuille volumetric flow Q = pi r^4 dP / (8 mu L) and the matching vascular resistance R = 8 mu L / (pi r^4), Ohm-analogue cardiac output CO = HR * SV and mean arterial pressure MAP = CO * SVR, a 2-element (RC) Windkessel diastolic pressure decay P(t) = P0 exp(-t / (R C)), and Poiseuille wall shear stress tau = 4 mu Q / (pi r^3). Research/educational grade: well-established closed-form physiological-flow formulas (Hagen-Poiseuille, the lumped Windkessel and the electrical circulation analogue), NOT a clinical/medical/production engineering tool — it does not model pulsatile/turbulent flow, blood-rheology non-Newtonian shear thinning, vessel-wall elasticity beyond the lumped compliance, or patient-specific anatomy, and must not be used for diagnosis or treatment."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

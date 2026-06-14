@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-refrigeration"
+description = "Vapor-compression refrigeration thermodynamics for Valenx — textbook closed-form coefficient-of-performance and single-stage cycle models. Computes the cooling COP as the evaporator refrigerating effect over the compressor work (Q_evap / W_comp), the heating COP for a heat pump as the condenser heat rejection over the compressor work (Q_cond / W_comp), the identity that the heating COP exceeds the cooling COP by exactly one (COP_heat = COP_cool + 1) from the steady-flow energy balance Q_cond = Q_evap + W_comp, the reversible Carnot cooling and heating limits Tc / (Th - Tc) and Th / (Th - Tc) from absolute reservoir temperatures, the second-law (exergetic) efficiency of a real cycle against its Carnot bound, and a four-state single-stage cycle that derives every COP and duty from the saturated/superheated enthalpies at the evaporator outlet, compressor outlet, condenser outlet and the throttle (isenthalpic expansion h4 = h3), with mass-flow scaling from a target refrigeration capacity. RESEARCH/EDUCATIONAL GRADE: textbook closed-form and idealised numerical models (ideal isentropic or fixed-efficiency compression, isenthalpic throttling, lumped reservoir temperatures); NOT a clinical/medical or production engineering tool and not a substitute for a validated refrigerant property library (CoolProp/REFPROP) or HVAC equipment selection software. Pure scalar algorithms, no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure scalar thermodynamics. `serde` drives the data-model derives for
+# cycle states and reports; `thiserror` backs the validated error type.
+# No numerics or platform dependencies — every formula is a hand-rolled
+# closed-form expression in `f64`.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
