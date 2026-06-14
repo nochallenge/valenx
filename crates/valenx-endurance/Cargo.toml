@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-endurance"
+description = "Respiration and endurance physiology for Valenx — textbook respiratory and exercise-physiology equations: O2-hemoglobin dissociation via the Hill equation, arterial oxygen content and oxygen delivery, blood-lactate vs exercise-intensity response, and a linear VO2-vs-power model. Research/educational grade: closed-form textbook equations with documented default constants, NOT a clinical, medical, or production tool — do not use for diagnosis, treatment, or any decision affecting a real person. Deps: serde, thiserror."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
