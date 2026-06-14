@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-bonemech"
+description = "Bone mechanics and damage-resistance core for Valenx — textbook structural-mechanics formulae for cortical bone modelled as a homogeneous linear-elastic beam: axial stress sigma = F/A, Hooke's-law strain epsilon = sigma/E, fracture load F_ult = sigma_ult * A, the second moment of area of a hollow circular cross-section I = (pi/64)(D_o^4 - D_i^4), Euler-Bernoulli bending stress sigma = M c / I, and an apparent-density power law sigma_ult ~ rho^2. Research/educational grade only — these are idealised closed-form equations, NOT a clinical, medical, diagnostic, or production engineering tool, and must not be used to assess real fracture risk in a person."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form mechanics. thiserror drives the validated-constructor
+# error enum; serde derives let a UI persist a Bone / cross-section spec.
+# No heavy or platform dependencies — every formula is hand-rolled.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

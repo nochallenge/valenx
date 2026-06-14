@@ -129,6 +129,10 @@ members = [
     "crates/valenx-mbd",
     "crates/valenx-muscle",
 
+    "crates/valenx-endurance",
+    "crates/valenx-bonemech",
+    "crates/valenx-regnet",
+    "crates/valenx-pharmacokinetics",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
