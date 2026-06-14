@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-projectile"
+description = "Projectile ballistics: closed-form vacuum trajectory (range = v^2*sin(2θ)/g, apex height, time of flight, range-maximising launch angle) plus a numerical trajectory with quadratic aerodynamic drag integrated by classical RK4 and a golden-section search for the drag-corrected optimal launch angle. Research/educational grade — textbook closed-form point-mass equations and a well-established explicit numerical integrator; NOT a clinical/medical or production engineering (weapons / fire-control / ballistic-certification) tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public config / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

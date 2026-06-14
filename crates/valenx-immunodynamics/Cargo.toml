@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-immunodynamics"
+description = "Within-host viral-infection dynamics for Valenx — the classic target-cell-limited model (uninfected target cells T, productively infected cells I, free virions V) integrated with a fixed-step RK4 solver. Reproduces the textbook hallmarks: the basic reproductive number R0 = beta*T0*p/(delta*c), a viral load that peaks then declines as target cells deplete, and the lowering of the viral-load peak by faster virion clearance c. Research/educational grade: a well-established closed-form / numerical model from the viral-dynamics literature (Nowak & May; Perelson), NOT a clinical, diagnostic, or production immunology tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure algorithm. serde drives the parameter / state / trajectory
+# derives so a simulation can be round-tripped to JSON; thiserror backs
+# the validated-constructor error enum. The RK4 integrator and the
+# model right-hand side are hand-rolled — no numerical dependency.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public parameter / state structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

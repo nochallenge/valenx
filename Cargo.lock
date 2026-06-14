@@ -6580,6 +6580,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-beam"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-bio"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6617,6 +6626,15 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "valenx-cgal-port",
+]
+
+[[package]]
+name = "valenx-bmr"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6776,6 +6794,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-diffusion"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-dock"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6857,6 +6883,15 @@ dependencies = [
  "valenx-dock",
  "valenx-fields",
  "valenx-test-utils",
+]
+
+[[package]]
+name = "valenx-enzymekinetics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6985,6 +7020,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-fluid-statics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-fonts"
 version = "0.1.0-alpha.1"
 
@@ -7065,6 +7109,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-heat-transfer"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-heekscad"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7073,6 +7125,14 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "valenx-core",
+]
+
+[[package]]
+name = "valenx-hemodynamics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7096,6 +7156,15 @@ dependencies = [
 [[package]]
 name = "valenx-icons"
 version = "0.1.0-alpha.1"
+
+[[package]]
+name = "valenx-immunodynamics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "valenx-inspect"
@@ -7397,6 +7466,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-osmosis"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-paramhist"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7433,6 +7510,15 @@ dependencies = [
  "serde",
  "valenx-align",
  "valenx-bioseq",
+]
+
+[[package]]
+name = "valenx-pipeflow"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7479,6 +7565,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-popdynamics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-popgen"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7496,6 +7590,15 @@ dependencies = [
  "thiserror 2.0.18",
  "valenx-core",
  "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-projectile"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7766,6 +7869,23 @@ name = "valenx-test-utils"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "valenx-thermocycle"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-thermoreg"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-threads-pro"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7775,6 +7895,15 @@ dependencies = [
  "valenx-cad",
  "valenx-feature-tree",
  "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-truss"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7805,6 +7934,15 @@ dependencies = [
  "serde",
  "valenx-mesh",
  "valenx-pathtrace",
+]
+
+[[package]]
+name = "valenx-vibration"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
