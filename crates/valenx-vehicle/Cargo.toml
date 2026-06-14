@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-vehicle"
+description = "Native ground-vehicle (car) performance dynamics for Valenx — a point-mass model (engine power limit + tire friction circle with longitudinal weight transfer + aero drag/downforce + rolling resistance) yielding 0–100, top speed, braking distance and steady-state cornering. Validated against known sports-car ballparks. Preliminary-design / research grade; not a commercial vehicle-dynamics suite (CarSim/Adams) or a driving game."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -7789,6 +7789,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-vehicle"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "valenx-viz"
 version = "0.1.0-alpha.1"
 dependencies = [
