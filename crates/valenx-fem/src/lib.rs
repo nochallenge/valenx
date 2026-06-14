@@ -217,7 +217,8 @@ pub use plasticity::{
 pub use result::{FemResult, FemResultError};
 pub use solver::FemSolverChoice;
 pub use thermal_solver::{
-    solve_steady_thermal, FixedTemperature, HeatLoad, ThermalSolution, ThermalSolverError,
+    solve_steady_thermal, solve_steady_thermal_with_convection, ConvectionBc, FixedTemperature,
+    HeatLoad, ThermalSolution, ThermalSolverError,
 };
 pub use thermal_transient::{
     lumped_capacitance, solve_transient_thermal, TransientThermalError, TransientThermalSolution,
