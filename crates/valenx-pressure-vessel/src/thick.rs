@@ -104,12 +104,7 @@ impl ThickCylinder {
     /// pressure is non-finite / non-positive, or the external pressure is
     /// non-finite / negative; and [`VesselError::Geometry`] if
     /// `r_outer <= r_inner`.
-    pub fn with_external(
-        r_inner: f64,
-        r_outer: f64,
-        p_inner: f64,
-        p_outer: f64,
-    ) -> Result<Self> {
+    pub fn with_external(r_inner: f64, r_outer: f64, p_inner: f64, p_outer: f64) -> Result<Self> {
         let r_inner = VesselError::require_positive("r_inner", r_inner)?;
         let r_outer = VesselError::require_positive("r_outer", r_outer)?;
         let p_inner = VesselError::require_positive("p_inner", p_inner)?;
@@ -343,8 +338,7 @@ mod tests {
     fn stress_sum_is_constant_through_wall() {
         // sigma_r + sigma_t = 2A everywhere -> independent of r.
         let c = ThickCylinder::new(1.0, 2.5, 60.0).unwrap();
-        let reference =
-            c.radial_stress(1.0).unwrap() + c.hoop_stress(1.0).unwrap();
+        let reference = c.radial_stress(1.0).unwrap() + c.hoop_stress(1.0).unwrap();
         for k in 0..=10 {
             let r = 1.0 + 1.5 * (k as f64) / 10.0;
             let s = c.stress_at(r).unwrap();
@@ -374,11 +368,7 @@ mod tests {
     fn stress_scales_linearly_with_pressure() {
         let a = ThickCylinder::new(1.0, 2.0, 30.0).unwrap();
         let b = ThickCylinder::new(1.0, 2.0, 60.0).unwrap();
-        assert!(
-            (b.hoop_stress(1.0).unwrap() - 2.0 * a.hoop_stress(1.0).unwrap())
-                .abs()
-                < 1e-7
-        );
+        assert!((b.hoop_stress(1.0).unwrap() - 2.0 * a.hoop_stress(1.0).unwrap()).abs() < 1e-7);
         assert!((b.max_hoop_stress() - 2.0 * a.max_hoop_stress()).abs() < 1e-6);
     }
 
@@ -402,8 +392,7 @@ mod tests {
         let p = 5.0;
         let thick = ThickCylinder::new(a, a + t, p).unwrap();
         let thin = ThinCylinder::new(p, a, t).unwrap();
-        let rel_err =
-            (thick.max_hoop_stress() - thin.hoop_stress()).abs() / thin.hoop_stress();
+        let rel_err = (thick.max_hoop_stress() - thin.hoop_stress()).abs() / thin.hoop_stress();
         // Membrane uses the inner radius; the exact Lame bore value
         // differs by O(t/a) ~ 0.25%. Require agreement to within 1%.
         assert!(

@@ -223,7 +223,11 @@ mod tests {
         // Doubling radius cuts resistance to 1/16.
         let r1 = vascular_resistance(MU0, L0, R0).expect("valid");
         let r2 = vascular_resistance(MU0, L0, 2.0 * R0).expect("valid");
-        assert!((r1 / r2 - 16.0).abs() < 1e-9, "expected 16x, got {}", r1 / r2);
+        assert!(
+            (r1 / r2 - 16.0).abs() < 1e-9,
+            "expected 16x, got {}",
+            r1 / r2
+        );
     }
 
     #[test]

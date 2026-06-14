@@ -617,7 +617,10 @@ mod tests {
         f.advance(1.0, dt, 40_000).unwrap();
         for (i, &v) in f.values().iter().enumerate() {
             let expected = i as f64; // 0,1,...,10 across the 10-unit span
-            assert!((v - expected).abs() < 1e-3, "node {i} = {v}, want {expected}");
+            assert!(
+                (v - expected).abs() < 1e-3,
+                "node {i} = {v}, want {expected}"
+            );
         }
     }
 

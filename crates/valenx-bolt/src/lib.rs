@@ -293,14 +293,20 @@ mod tests {
         // M10 coarse, P = 1.5 mm. ISO 898-1 tabulates A_t = 58.0 mm².
         // Work in millimetres so the result is in mm².
         let at = stress::tensile_stress_area(10.0, 1.5).unwrap();
-        assert!((at - 58.0).abs() < 0.3, "A_t(M10) = {at} mm², expected ≈ 58");
+        assert!(
+            (at - 58.0).abs() < 0.3,
+            "A_t(M10) = {at} mm², expected ≈ 58"
+        );
     }
 
     #[test]
     fn tensile_stress_area_matches_iso_table_m8() {
         // M8 coarse, P = 1.25 mm. ISO 898-1: A_t = 36.6 mm².
         let at = stress::tensile_stress_area(8.0, 1.25).unwrap();
-        assert!((at - 36.6).abs() < 0.3, "A_t(M8) = {at} mm², expected ≈ 36.6");
+        assert!(
+            (at - 36.6).abs() < 0.3,
+            "A_t(M8) = {at} mm², expected ≈ 36.6"
+        );
     }
 
     #[test]

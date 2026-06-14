@@ -179,8 +179,7 @@ mod tests {
     #[test]
     fn hoop_is_exactly_twice_longitudinal() {
         // The defining validation: sigma_h = 2 * sigma_l for ANY inputs.
-        for &(p, r, t) in &[(1.0, 1.0, 0.05), (7.3, 0.123, 0.004), (50.0, 9.0, 0.5)]
-        {
+        for &(p, r, t) in &[(1.0, 1.0, 0.05), (7.3, 0.123, 0.004), (50.0, 9.0, 0.5)] {
             let c = ThinCylinder::new(p, r, t).unwrap();
             assert!(
                 (c.hoop_stress() - 2.0 * c.longitudinal_stress()).abs() < EPS,
@@ -195,9 +194,7 @@ mod tests {
         let a = ThinCylinder::new(3.0, 0.4, 0.02).unwrap();
         let b = ThinCylinder::new(6.0, 0.4, 0.02).unwrap();
         assert!((b.hoop_stress() - 2.0 * a.hoop_stress()).abs() < EPS);
-        assert!(
-            (b.longitudinal_stress() - 2.0 * a.longitudinal_stress()).abs() < EPS
-        );
+        assert!((b.longitudinal_stress() - 2.0 * a.longitudinal_stress()).abs() < EPS);
     }
 
     #[test]

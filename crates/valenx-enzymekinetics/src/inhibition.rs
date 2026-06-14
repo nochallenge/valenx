@@ -280,11 +280,7 @@ impl Mixed {
     pub fn new(base: MichaelisMenten, ki: f64, ki_prime: f64) -> Result<Self> {
         let ki = require_positive("ki", ki)?;
         let ki_prime = require_positive("ki_prime", ki_prime)?;
-        Ok(Self {
-            base,
-            ki,
-            ki_prime,
-        })
+        Ok(Self { base, ki, ki_prime })
     }
 
     /// The free-enzyme inhibition constant `Ki`.

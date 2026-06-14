@@ -137,8 +137,7 @@ pub fn repeats_to_failure(blocks: &[DamageBlock]) -> Result<f64> {
     let d = miner_damage(blocks);
     if d <= 0.0 {
         return Err(FatigueError::domain(
-            "duty block accumulates zero damage; failure is never reached"
-                .to_string(),
+            "duty block accumulates zero damage; failure is never reached".to_string(),
         ));
     }
     Ok(1.0 / d)

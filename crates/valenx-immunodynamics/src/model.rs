@@ -226,7 +226,10 @@ mod tests {
         let params = Parameters::new(beta, delta, p, c).unwrap();
         let expect = beta * t0 * p / (delta * c);
         let got = params.r0(t0).unwrap();
-        assert!((got - expect).abs() < 1e-9 * expect.abs(), "got {got}, want {expect}");
+        assert!(
+            (got - expect).abs() < 1e-9 * expect.abs(),
+            "got {got}, want {expect}"
+        );
     }
 
     #[test]

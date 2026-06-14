@@ -211,8 +211,7 @@ mod tests {
 
     #[test]
     fn error_trait_object() {
-        let err: Box<dyn std::error::Error> =
-            Box::new(FluidStaticsError::invalid("x", "y"));
+        let err: Box<dyn std::error::Error> = Box::new(FluidStaticsError::invalid("x", "y"));
         assert!(err.to_string().contains('x'));
     }
 
