@@ -26,8 +26,8 @@ use eframe::egui;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 use valenx_astro::{
-    optimize_engine, CoolingInputs, CoolingPerformance, EngineDesign, EngineOptimum,
-    EnginePerformance,
+    combust, optimize_engine, solve_cycle, CoolingInputs, CoolingPerformance, CycleInputs,
+    EngineDesign, EngineOptimum, EnginePerformance, Propellant,
 };
 use valenx_rocket_demo::nozzle::nozzle_mesh;
 
@@ -50,8 +50,15 @@ pub struct EngineWorkbenchState {
     opt: Option<EngineOptimum>,
     /// Deferred request to load the 3-D nozzle into the central viewport.
     show_3d_request: bool,
+    /// Deferred request to load the detailed 3-D engine (chamber + regen
+    /// nozzle + powerhead) into the central viewport.
+    show_engine_3d_request: bool,
     /// Last STL-export outcome message (path on success, error otherwise).
     last_export: Option<String>,
+    /// Propellant for the equilibrium-combustion chamber prediction.
+    propellant: Propellant,
+    /// Oxidizer/fuel mass mixture ratio for the combustion prediction.
+    mixture_ratio: f64,
 }
 
 impl Default for EngineWorkbenchState {
@@ -70,8 +77,20 @@ impl Default for EngineWorkbenchState {
             target_margin: 1.5,
             opt: None,
             show_3d_request: false,
+            show_engine_3d_request: false,
             last_export: None,
+            propellant: Propellant::Ch4Lox,
+            mixture_ratio: 3.6,
         }
+    }
+}
+
+/// Human-readable label for a propellant in the picker.
+fn propellant_label(p: Propellant) -> &'static str {
+    match p {
+        Propellant::H2Lox => "H₂ / LOX (hydrolox)",
+        Propellant::Rp1Lox => "RP-1 / LOX (kerolox)",
+        Propellant::Ch4Lox => "CH₄ / LOX (methalox)",
     }
 }
 
@@ -96,6 +115,26 @@ fn load_nozzle_3d(app: &mut ValenxApp) {
     app.stl = None;
     app.mesh = Some(LoadedMesh {
         path: PathBuf::from("<engine>/nozzle"),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    });
+    app.frame_current_mesh();
+}
+
+/// Build the procedurally-detailed 3-D engine — combustion chamber, fluted
+/// regen-cooled nozzle, injector dome and the full powerhead (twin
+/// turbopumps, twin preburners, hot-gas manifold + plumbing) — and load it
+/// into the central viewport so it can be orbited in 3-D.
+fn load_engine_3d(app: &mut ValenxApp) {
+    let mesh = crate::rocket_mesh::detailed_engine_mesh();
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    app.stl = None;
+    app.mesh = Some(LoadedMesh {
+        path: PathBuf::from("<engine>/detailed"),
         mesh,
         quality,
         aspect_hist,
@@ -201,6 +240,56 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.add(egui::Slider::new(&mut s.target_margin, 1.0..=4.0));
                     });
 
+                    // ── Combustion chemistry (predict chamber conditions) ─
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new("Combustion — equilibrium chamber prediction").strong(),
+                    );
+                    egui::ComboBox::from_label("propellant")
+                        .selected_text(propellant_label(s.propellant))
+                        .show_ui(ui, |ui| {
+                            for p in [Propellant::H2Lox, Propellant::Rp1Lox, Propellant::Ch4Lox] {
+                                ui.selectable_value(&mut s.propellant, p, propellant_label(p));
+                            }
+                        });
+                    ui.horizontal(|ui| {
+                        ui.label("mixture ratio (O/F)");
+                        ui.add(egui::Slider::new(&mut s.mixture_ratio, 1.5..=8.0));
+                    });
+                    let comb = combust(
+                        s.propellant,
+                        s.mixture_ratio,
+                        s.design.chamber_pressure / 1.0e5,
+                    );
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "  chamber T  : {:.0} K\n  \
+                             gas γ      : {:.3}\n  \
+                             molar mass : {:.1} g/mol\n  \
+                             c*         : {:.0} m/s",
+                            comb.chamber_temperature, comb.gamma, comb.molar_mass, comb.c_star,
+                        ))
+                        .monospace()
+                        .small(),
+                    );
+                    if ui
+                        .button("Apply combustion → engine (sets T, γ, molar mass)")
+                        .clicked()
+                    {
+                        s.design.chamber_temperature = comb.chamber_temperature;
+                        s.design.gamma = comb.gamma;
+                        s.design.molar_mass = comb.molar_mass;
+                    }
+                    ui.label(
+                        egui::RichText::new(
+                            "first-order equilibrium thermochem — H₂/LOX is validated; \
+                             RP-1 / CH₄ run ~10% high vs NASA CEA.",
+                        )
+                        .weak()
+                        .small(),
+                    );
+
                     ui.add_space(4.0);
                     ui.separator();
 
@@ -268,6 +357,57 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
 
+                    // ── Staged-combustion cycle (full-flow power balance) ─
+                    ui.add_space(6.0);
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new("Staged-combustion cycle — full-flow power balance")
+                            .strong(),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "can twin turbopumps drive this chamber pressure? \
+                             (Raptor-class methalox FFSC reference)",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    let mut ci = CycleInputs::raptor_methalox();
+                    ci.chamber_pressure = s.design.chamber_pressure;
+                    let cyc = solve_cycle(&ci);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "  max chamber : {:.0} bar\n  \
+                             ox turbine  : {:.1} MW @ {:.0} K\n  \
+                             fuel turbine: {:.1} MW @ {:.0} K",
+                            cyc.max_chamber_pressure / 1.0e5,
+                            cyc.ox.turbine_power / 1.0e6,
+                            ci.ox.turbine_inlet_temperature,
+                            cyc.fuel.turbine_power / 1.0e6,
+                            ci.fuel.turbine_inlet_temperature,
+                        ))
+                        .monospace()
+                        .small(),
+                    );
+                    let (cyc_txt, cyc_col) = if cyc.closes {
+                        (
+                            format!(
+                                "✔ CYCLE CLOSES at {:.0} bar",
+                                s.design.chamber_pressure / 1.0e5
+                            ),
+                            egui::Color32::from_rgb(80, 220, 120),
+                        )
+                    } else {
+                        (
+                            format!(
+                                "✖ WON'T CLOSE · turbopumps top out at ~{:.0} bar",
+                                cyc.max_chamber_pressure / 1.0e5
+                            ),
+                            egui::Color32::from_rgb(220, 90, 90),
+                        )
+                    };
+                    ui.colored_label(cyc_col, egui::RichText::new(cyc_txt).strong());
+
                     // ── Optimizer ────────────────────────────────────────
                     ui.add_space(6.0);
                     ui.separator();
@@ -316,10 +456,16 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
 
-                    // ── 3-D nozzle + export ──────────────────────────────
+                    // ── 3-D geometry + export ────────────────────────────
                     ui.add_space(6.0);
                     ui.separator();
-                    ui.label(egui::RichText::new("Nozzle geometry").strong());
+                    ui.label(egui::RichText::new("Engine geometry").strong());
+                    if ui
+                        .button(egui::RichText::new("Show 3-D engine (powerhead)").strong())
+                        .clicked()
+                    {
+                        s.show_engine_3d_request = true;
+                    }
                     ui.horizontal(|ui| {
                         if ui.button("Show 3-D nozzle").clicked() {
                             s.show_3d_request = true;
@@ -346,6 +492,10 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if app.engine.show_3d_request {
         app.engine.show_3d_request = false;
         load_nozzle_3d(app);
+    }
+    if app.engine.show_engine_3d_request {
+        app.engine.show_engine_3d_request = false;
+        load_engine_3d(app);
     }
 }
 
@@ -393,6 +543,39 @@ mod tests {
         assert!(o.cooling.cooling_margin >= s.target_margin - 1e-9);
         assert!(o.sea_level.isp > 0.0);
     }
+
+    #[test]
+    fn combustion_prediction_is_physical_and_applies_cleanly() {
+        let mut s = EngineWorkbenchState::default();
+        assert_eq!(s.propellant, Propellant::Ch4Lox);
+        let comb = combust(
+            s.propellant,
+            s.mixture_ratio,
+            s.design.chamber_pressure / 1.0e5,
+        );
+        assert!(
+            (2_500.0..4_500.0).contains(&comb.chamber_temperature),
+            "Tc {}",
+            comb.chamber_temperature
+        );
+        // Applying the prediction into the design keeps it physical.
+        s.design.chamber_temperature = comb.chamber_temperature;
+        s.design.gamma = comb.gamma;
+        s.design.molar_mass = comb.molar_mass;
+        assert!(analyze(&s.design, &s.cooling).is_ok());
+    }
+
+    #[test]
+    fn cycle_readout_closes_at_a_modest_chamber_pressure() {
+        // The default 97-bar design is well under the Raptor-class ceiling,
+        // so the full-flow cycle must close with a healthy max-Pc headroom.
+        let s = EngineWorkbenchState::default();
+        let mut ci = CycleInputs::raptor_methalox();
+        ci.chamber_pressure = s.design.chamber_pressure;
+        let cyc = solve_cycle(&ci);
+        assert!(cyc.closes, "97 bar should close on Raptor-class hardware");
+        assert!(cyc.max_chamber_pressure / 1.0e5 > 250.0);
+    }
 }
 
 #[cfg(test)]
@@ -427,5 +610,21 @@ mod headless_ui_tests {
         app.show_engine_workbench = true;
         app.engine.design.gamma = 1.0; // invalid → error branch must render
         draw(&mut app);
+    }
+
+    #[test]
+    fn show_3d_engine_request_loads_the_powerhead_into_the_viewport() {
+        // Clicking "Show 3-D engine (powerhead)" sets the request flag; the
+        // deferred handler must load the detailed engine mesh into the central
+        // viewport and clear the flag.
+        let mut app = ValenxApp::default();
+        app.show_engine_workbench = true;
+        app.engine.show_engine_3d_request = true;
+        draw(&mut app);
+        assert!(
+            app.mesh.is_some(),
+            "detailed engine mesh loaded into viewport"
+        );
+        assert!(!app.engine.show_engine_3d_request, "request flag cleared");
     }
 }

@@ -87,6 +87,7 @@ pub mod budget;
 pub mod config;
 pub mod constants;
 pub mod dynamics;
+pub mod engine_cycle;
 pub mod error;
 pub mod flight3d;
 pub mod flight6dof;
@@ -116,6 +117,7 @@ pub mod wind;
 pub mod windows;
 
 pub use config::{AscentConfig, GuidanceMode};
+pub use engine_cycle::{solve_cycle, CycleInputs, CycleResult, ShaftInputs, ShaftResult};
 pub use error::AstroError;
 pub use flight3d::{ascent_to_orbit, Ascent3d};
 pub use flight6dof::{ControlGains, State6dof};

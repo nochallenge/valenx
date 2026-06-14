@@ -7194,6 +7194,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-mbd"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+]
+
+[[package]]
 name = "valenx-mcp"
 version = "0.1.0-alpha.1"
 dependencies = [
