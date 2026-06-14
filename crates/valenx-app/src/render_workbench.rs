@@ -142,10 +142,10 @@ fn render_rocket(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Re
         res,
     );
     let mut b = SceneBuilder::new(camera);
-    let body = b.add_material(PtMaterial::metal([0.80, 0.83, 0.88], 0.20));
-    let ground = b.add_material(PtMaterial::diffuse([0.30, 0.32, 0.38]));
-    let key = b.add_material(PtMaterial::emissive([9.0, 8.4, 7.2]));
-    let fill = b.add_material(PtMaterial::emissive([1.4, 1.9, 3.0]));
+    let body = b.add_material(PtMaterial::metal([0.92, 0.92, 0.93], 0.34));
+    let ground = b.add_material(PtMaterial::diffuse([0.46, 0.45, 0.43]));
+    let key = b.add_material(PtMaterial::emissive([13.5, 12.6, 11.0]));
+    let fill = b.add_material(PtMaterial::emissive([2.4, 2.4, 2.6]));
 
     let rocket = crate::rocket_mesh::lv1_rocket_mesh();
     b.add_mesh(&rocket, body);
