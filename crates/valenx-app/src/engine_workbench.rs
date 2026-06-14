@@ -50,6 +50,9 @@ pub struct EngineWorkbenchState {
     opt: Option<EngineOptimum>,
     /// Deferred request to load the 3-D nozzle into the central viewport.
     show_3d_request: bool,
+    /// Deferred request to load the detailed 3-D engine (chamber + regen
+    /// nozzle + powerhead) into the central viewport.
+    show_engine_3d_request: bool,
     /// Last STL-export outcome message (path on success, error otherwise).
     last_export: Option<String>,
     /// Propellant for the equilibrium-combustion chamber prediction.
@@ -74,6 +77,7 @@ impl Default for EngineWorkbenchState {
             target_margin: 1.5,
             opt: None,
             show_3d_request: false,
+            show_engine_3d_request: false,
             last_export: None,
             propellant: Propellant::Ch4Lox,
             mixture_ratio: 3.6,
@@ -111,6 +115,26 @@ fn load_nozzle_3d(app: &mut ValenxApp) {
     app.stl = None;
     app.mesh = Some(LoadedMesh {
         path: PathBuf::from("<engine>/nozzle"),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    });
+    app.frame_current_mesh();
+}
+
+/// Build the procedurally-detailed 3-D engine — combustion chamber, fluted
+/// regen-cooled nozzle, injector dome and the full powerhead (twin
+/// turbopumps, twin preburners, hot-gas manifold + plumbing) — and load it
+/// into the central viewport so it can be orbited in 3-D.
+fn load_engine_3d(app: &mut ValenxApp) {
+    let mesh = crate::rocket_mesh::detailed_engine_mesh();
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    app.stl = None;
+    app.mesh = Some(LoadedMesh {
+        path: PathBuf::from("<engine>/detailed"),
         mesh,
         quality,
         aspect_hist,
@@ -432,10 +456,16 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
 
-                    // ── 3-D nozzle + export ──────────────────────────────
+                    // ── 3-D geometry + export ────────────────────────────
                     ui.add_space(6.0);
                     ui.separator();
-                    ui.label(egui::RichText::new("Nozzle geometry").strong());
+                    ui.label(egui::RichText::new("Engine geometry").strong());
+                    if ui
+                        .button(egui::RichText::new("Show 3-D engine (powerhead)").strong())
+                        .clicked()
+                    {
+                        s.show_engine_3d_request = true;
+                    }
                     ui.horizontal(|ui| {
                         if ui.button("Show 3-D nozzle").clicked() {
                             s.show_3d_request = true;
@@ -462,6 +492,10 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if app.engine.show_3d_request {
         app.engine.show_3d_request = false;
         load_nozzle_3d(app);
+    }
+    if app.engine.show_engine_3d_request {
+        app.engine.show_engine_3d_request = false;
+        load_engine_3d(app);
     }
 }
 
@@ -576,5 +610,21 @@ mod headless_ui_tests {
         app.show_engine_workbench = true;
         app.engine.design.gamma = 1.0; // invalid → error branch must render
         draw(&mut app);
+    }
+
+    #[test]
+    fn show_3d_engine_request_loads_the_powerhead_into_the_viewport() {
+        // Clicking "Show 3-D engine (powerhead)" sets the request flag; the
+        // deferred handler must load the detailed engine mesh into the central
+        // viewport and clear the flag.
+        let mut app = ValenxApp::default();
+        app.show_engine_workbench = true;
+        app.engine.show_engine_3d_request = true;
+        draw(&mut app);
+        assert!(
+            app.mesh.is_some(),
+            "detailed engine mesh loaded into viewport"
+        );
+        assert!(!app.engine.show_engine_3d_request, "request flag cleared");
     }
 }
