@@ -132,7 +132,7 @@ fn render_demo(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> Rend
 /// Path-trace the **Valenx LV-1** as a "final picture": the procedural rocket
 /// mesh in a brushed-metal finish on a ground plane, lit by a big overhead
 /// light — the photoreal counterpart to the live shaded viewport.
-fn render_rocket(
+pub(crate) fn render_rocket(
     resolution: u32,
     spp: u32,
     max_depth: u32,
@@ -206,7 +206,12 @@ fn render_rocket(
 /// Path-trace the **detailed engine** (chamber, fluted cooling-channel nozzle,
 /// injector dome) close-up in a metallic finish — the "what does the engine
 /// look like" view.
-fn render_engine(resolution: u32, spp: u32, max_depth: u32, exposure: f32) -> RenderOutput {
+pub(crate) fn render_engine(
+    resolution: u32,
+    spp: u32,
+    max_depth: u32,
+    exposure: f32,
+) -> RenderOutput {
     let res = resolution.clamp(48, 512);
     // Frame the full engine including the tall powerhead (exit at z=0 up to
     // the turbine tops near z=12.4); a 3/4 hero angle, +Z up.

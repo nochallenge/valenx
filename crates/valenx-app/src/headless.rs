@@ -30,9 +30,12 @@ pub fn run_headless(task_args: &[String]) -> anyhow::Result<()> {
         "cycle" => print_cycle(),
         "export-engine" => export_stl(&crate::rocket_mesh::detailed_engine_mesh(), arg1)?,
         "export-rocket" => export_stl(&crate::rocket_mesh::lv1_rocket_mesh(), arg1)?,
+        "render-engine" => render_png(true, arg1)?,
+        "render-rocket" => render_png(false, arg1)?,
         other => anyhow::bail!(
             "unknown headless task `{other}` — try: info | cycle | \
-             export-engine <out.stl> | export-rocket <out.stl>"
+             export-engine <out.stl> | export-rocket <out.stl> | \
+             render-engine <out.png> | render-rocket <out.png>"
         ),
     }
     Ok(())
@@ -42,7 +45,10 @@ pub fn run_headless(task_args: &[String]) -> anyhow::Result<()> {
 fn print_info() {
     println!("valenx {} — headless mode", env!("CARGO_PKG_VERSION"));
     println!("  platform : {}", std::env::consts::OS);
-    println!("  tasks    : info | cycle | export-engine <out.stl> | export-rocket <out.stl>");
+    println!(
+        "  tasks    : info | cycle | export-engine <out.stl> | export-rocket <out.stl> | \
+         render-engine <out.png> | render-rocket <out.png>"
+    );
     println!("  headed   : run `valenx` with no --headless flag for the GUI");
 }
 
@@ -90,6 +96,27 @@ fn export_stl(mesh: &valenx_mesh::Mesh, path: Option<String>) -> anyhow::Result<
     Ok(())
 }
 
+/// Path-trace the engine or rocket headlessly and write it to a PNG — the same
+/// `valenx-pathtrace` render the GUI's Render panel produces, with no window.
+fn render_png(engine: bool, path: Option<String>) -> anyhow::Result<()> {
+    let path = path.ok_or_else(|| anyhow::anyhow!("render needs an output path, e.g. out.png"))?;
+    let (w, h, pixels) = if engine {
+        crate::render_workbench::render_engine(480, 160, 6, 1.1)
+    } else {
+        crate::render_workbench::render_rocket(480, 160, 6, 1.1, false)
+    }
+    .map_err(|e| anyhow::anyhow!("render failed: {e}"))?;
+    let file = std::fs::File::create(&path)?;
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    let mut writer = enc.write_header()?;
+    writer.write_image_data(&pixels)?;
+    writer.finish()?;
+    println!("wrote {path} ({w}x{h})");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,6 +142,7 @@ mod tests {
     #[test]
     fn missing_path_and_unknown_task_error() {
         assert!(run_headless(&["export-engine".to_string()]).is_err());
+        assert!(run_headless(&["render-engine".to_string()]).is_err());
         assert!(run_headless(&["frobnicate".to_string()]).is_err());
     }
 }
