@@ -124,6 +124,7 @@ members = [
     "crates/valenx-variant-effect",
     "crates/valenx-reactdyn",
     "crates/valenx-neuro",
+    "crates/valenx-vehicle",
 
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
