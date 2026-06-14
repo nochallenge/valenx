@@ -68,20 +68,20 @@ pub fn lv1_rocket_mesh() -> Mesh {
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
     let mut tris: Vec<usize> = Vec::new();
 
-    let r_body = 1.2_f64;
+    let r_body = 2.4_f64;
 
     // ── Body: engine skirt → stage 1 → interstage → stage 2 → fairing
     // shoulder, then a smooth tangent-ogive nose to the tip. ───────────────
     let mut profile: Vec<(f64, f64)> = vec![
-        (0.0, 0.95),    // engine plane (necked for the bell)
+        (0.0, 1.8),     // engine plane (necked for the bell)
         (1.4, r_body),  // boat-tail flare up to the body
         (16.0, r_body), // stage 1
-        (16.7, 1.1),    // interstage step-down
-        (23.0, 1.1),    // stage 2
+        (16.7, 2.2),    // interstage step-down
+        (23.0, 2.2),    // stage 2
         (23.6, r_body), // payload-fairing shoulder
     ];
     // Tangent-ogive fairing from the shoulder (r = r_body) to the tip (r = 0).
-    let (nose_z0, nose_r, nose_len) = (23.6_f64, r_body, 7.0_f64);
+    let (nose_z0, nose_r, nose_len) = (23.6_f64, r_body, 8.5_f64);
     let rho = (nose_r * nose_r + nose_len * nose_len) / (2.0 * nose_r);
     let n_nose = 14;
     for i in 1..=n_nose {
@@ -100,7 +100,7 @@ pub fn lv1_rocket_mesh() -> Mesh {
         .map(|i| {
             let t = i as f64 / 6.0; // 0 at the engine plane, 1 at the exit
             let z = -2.8 * t;
-            let r = 0.5 + 0.55 * t * t; // throat-ish 0.5 → exit ~1.05
+            let r = 1.0 + 1.1 * t * t; // throat-ish 1.0 → exit ~2.1
             (z, r)
         })
         .collect();
@@ -121,8 +121,8 @@ pub fn lv1_rocket_mesh() -> Mesh {
         let i = nodes.len();
         nodes.push(Vector3::new(cx * r_body, cy * r_body, 1.4)); // root fwd
         nodes.push(Vector3::new(cx * r_body, cy * r_body, 5.5)); // root aft-top
-        nodes.push(Vector3::new(cx * 2.6, cy * 2.6, 3.6)); // tip-top (swept out)
-        nodes.push(Vector3::new(cx * 2.6, cy * 2.6, -0.2)); // tip-aft (swept down)
+        nodes.push(Vector3::new(cx * 4.8, cy * 4.8, 3.6)); // tip-top (swept out)
+        nodes.push(Vector3::new(cx * 4.8, cy * 4.8, -0.2)); // tip-aft (swept down)
                                                             // Two triangles (root-fwd, root-top, tip-top) + (root-fwd, tip-top,
                                                             // tip-aft), emitted with both windings so the flat fin shows on both
                                                             // faces.
