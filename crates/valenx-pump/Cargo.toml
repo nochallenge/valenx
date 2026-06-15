@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-pump"
+description = "Centrifugal-pump hydraulics for Valenx — closed-form textbook models for the pump affinity laws (Q∝N, H∝N², P∝N³), the quadratic system resistance curve H = H_static + K·Q², hydraulic power P = ρ·g·Q·H, available net positive suction head NPSHa = (P_atm − P_vap)/(ρ·g) + H_s − losses, and the pump/system operating point where the two head curves intersect. Research/educational grade: textbook closed-form/numerical models; NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

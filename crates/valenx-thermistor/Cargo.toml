@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-thermistor"
+description = "Thermistor resistance-temperature modelling for Valenx — the Steinhart-Hart equation 1/T = A + B*ln(R) + C*ln(R)^3 and the single-parameter beta (B) model R = R0*exp(beta*(1/T - 1/T0)), with resistance<->temperature conversions in both directions and Kelvin throughout, plus three-point Steinhart-Hart coefficient fitting and beta calibration from two resistance/temperature pairs. Research/educational grade: textbook closed-form and numerical models only; NOT a clinical, medical, or production engineering tool and not a substitute for calibrated instrumentation or a manufacturer datasheet."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

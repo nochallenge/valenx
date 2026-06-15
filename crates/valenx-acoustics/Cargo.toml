@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-acoustics"
+description = "Textbook acoustics calculators for Valenx: sound-pressure level (SPL = 20*log10(p/p_ref), p_ref = 20 uPa), decibel addition of incoherent sources (10*log10(sum 10^(Li/10))), the Doppler frequency shift f*(c+vo)/(c-vs), the temperature-dependent speed of sound c = 331.3*sqrt(1+T/273.15), and rectangular-room standing-wave modes f = (c/2)*sqrt((nx/Lx)^2+(ny/Ly)^2+(nz/Lz)^2). Closed-form, well-established models — research/educational grade, NOT a clinical/medical or production engineering acoustics tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public spec / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

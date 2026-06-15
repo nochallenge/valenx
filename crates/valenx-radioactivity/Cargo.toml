@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-radioactivity"
+description = "Radioactive-decay kinematics for Valenx — the textbook exponential decay law and the two-member Bateman parent -> daughter chain, as closed-form analytic models. Single-nuclide physics: the decay constant lambda, half-life t_half = ln2 / lambda, mean (average) life tau = 1 / lambda, the number-vs-time law N(t) = N0 * exp(-lambda * t), the activity A = lambda * N (in becquerel) and its own decay A(t) = A0 * exp(-lambda * t), plus conversions between lambda, t_half and tau and the time to decay to an arbitrary remaining fraction. Two-nuclide chain physics: the Bateman solution for a parent that feeds a single radioactive daughter, the daughter's grow-in-then-decay transient, the activity ratio, the daughter activity maximum at t_max = ln(lambda_d / lambda_p) / (lambda_d - lambda_p), and the transient- and secular-equilibrium regimes. HONESTY: research/educational grade; textbook closed-form / numerical models (idealised first-order kinetics, a single decay mode, no branching ratios, no nuclear data tables, no measurement uncertainty); NOT a clinical/medical (dosimetry, radiotherapy, nuclear-medicine) or production engineering (reactor, shielding, criticality, waste) tool. Pure deterministic formulas, no trained-model weights and no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form physics. `serde` drives the data-model derives so a
+# `Nuclide` / `DecayChain` round-trips through any Serde format; `thiserror`
+# backs the validated-constructor error enum. No heavy or platform deps.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
