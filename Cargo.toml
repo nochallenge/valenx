@@ -249,6 +249,7 @@ members = [
     "crates/valenx-select",
     "crates/valenx-dossier",
     "crates/valenx-safety",
+    "crates/valenx-orchestrator",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
