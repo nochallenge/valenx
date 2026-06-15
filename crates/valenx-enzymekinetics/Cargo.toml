@@ -1,0 +1,29 @@
+[package]
+name        = "valenx-enzymekinetics"
+description = "Enzyme-kinetics rate laws for Valenx. Closed-form steady-state models: the Michaelis-Menten equation v = Vmax*S / (Km + S), competitive inhibition (apparent Km scaled by 1 + I/Ki), noncompetitive inhibition (apparent Vmax divided by 1 + I/Ki), uncompetitive and mixed inhibition, and the cooperative Hill equation v = Vmax*S^n / (K^n + S^n). Pure library: every rate is an algebraic textbook formula evaluated on validated parameters; it writes no files and runs no external processes. Research / educational grade — these are textbook closed-form / well-established numerical models, NOT a clinical, medical, or production engineering tool; do not use it for dosing, assay certification, or any decision affecting health or safety."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure algebra. `thiserror` derives the validated error type; serde
+# drives the parameter data-model derives so callers can persist a
+# parameter set as JSON (this crate never writes it). No numeric or
+# platform-specific deps — every rate law is a handful of floating-point
+# operations.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Only the tests exercise JSON round-tripping of the parameter structs;
+# the library itself emits no JSON and writes no files, so serde_json
+# stays dev-only.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

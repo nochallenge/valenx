@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-fft"
+description = "Discrete Fourier transform (naive O(N^2) DFT / inverse DFT) over f64 (re, im) pairs, with frequency-bin mapping, Nyquist frequency, and magnitude spectrum. No external complex-number crate. Research/educational grade: textbook closed-form / numerical models, NOT a clinical/medical or production signal-processing tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

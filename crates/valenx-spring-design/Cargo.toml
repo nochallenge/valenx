@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-spring-design"
+description = "Helical compression spring design calculator — closed-form textbook mechanics: spring rate k = G·d^4 / (8·D^3·N), Wahl-corrected torsional shear stress tau = K_w·8·F·D / (pi·d^3), axial deflection delta = F/k, and spring index C = D/d. Research/educational grade: implements standard textbook closed-form/numerical models (Shigley / Wahl); NOT a clinical/medical/production engineering tool — do not use for life-safety or load-bearing design without independent qualified verification."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public config / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-statics"
+description = "2D rigid-body statics workbench — force and moment equilibrium for coplanar point-load systems, and support reactions for a simply-supported beam (pin + roller) via the textbook lever rule. Implements the scalar moment M = r x F (z-component), the three planar equilibrium equations sum Fx = sum Fy = sum M = 0, and closed-form reaction solving. Research / educational grade: textbook closed-form / well-established numerical models from engineering-mechanics statics; NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-controls"
+description = "Linear control-systems toolkit for Valenx. Textbook closed-form second-order step-response metrics (overshoot, settling time, peak time, rise time, damped frequency), a discrete PID controller (positional and incremental forms with anti-windup and output clamping), and second-order characteristic-equation stability via the Routh-Hurwitz criterion. Research/educational grade: well-established textbook closed-form / numerical control models; NOT a clinical, safety-certified, or production control-engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public config / metric structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

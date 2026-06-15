@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-kinematics"
+description = "Planar linkage kinematics for Valenx — four-bar loop-closure (coupler and rocker angles from the crank angle via the classical vector-loop / Freudenstein solution), Grashof mobility classification (s + l <= p + q), and cam-follower displacement laws (simple-harmonic and cycloidal rise profiles). Research/educational grade: textbook closed-form planar-mechanism models from the standard machine-theory literature (Norton, Shigley, Erdman & Sandor); NOT a clinical/medical or production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

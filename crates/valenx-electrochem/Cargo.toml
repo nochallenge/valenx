@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-electrochem"
+description = "Electrochemistry core for Valenx — textbook closed-form models for galvanic / electrolytic cells: the Nernst equation E = E0 - (R T / n F) ln Q for the reduction potential of a half-reaction at arbitrary reaction quotient and temperature; standard cell potential E_cell = E_cathode - E_anode (and the spontaneity sign that follows); the thermal voltage R T / F (~0.0257 V at 298.15 K, i.e. the 0.0592 V/decade-per-n base-10 slope at 25 C); and Faraday's law of electrolysis m = (Q M) / (n F) for the mass deposited / dissolved by a given charge, with charge Q = I t. Pure hand-rolled algorithms with validated constructors — no external processes, no numerical solvers. RESEARCH / EDUCATIONAL GRADE: textbook closed-form analytic models for learning and back-of-envelope estimates; ideal-solution activities (no activity coefficients, no junction potentials, no kinetics / overpotential); NOT a clinical, medical, or production-engineering tool and not validated for safety-critical, regulatory, or industrial use."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure electrochemistry algorithms. `serde` drives the data-model derives
+# so half-reaction / cell specs can be (de)serialised; `thiserror` powers
+# the validated-constructor error taxonomy. No heavy or platform
+# dependencies — every formula (Nernst, cell potential, Faraday mass) is
+# hand-rolled around `f64` and the CODATA physical constants.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

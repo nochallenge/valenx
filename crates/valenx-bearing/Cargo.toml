@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-bearing"
+description = "Rolling-element bearing rating-life calculator. Classic ISO 281 / SKF-handbook closed-form models: basic dynamic load rating life L10 = (C/P)^p (p = 3 ball, 10/3 roller), dynamic equivalent load P = X*Fr + Y*Fa, and life in hours = L10 * 1e6 / (60*rpm). Research/educational grade: textbook closed-form models only — NOT a clinical/medical or production engineering tool, and no substitute for a manufacturer's rating software or a qualified engineer's sign-off."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public input / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

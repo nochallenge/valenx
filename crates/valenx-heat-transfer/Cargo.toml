@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-heat-transfer"
+description = "Steady 1D heat-transfer toolkit for Valenx — textbook closed-form thermal-circuit models: plane-wall conduction resistance R=L/(k*A), convection resistance R=1/(h*A), series / parallel thermal-resistance networks solved as the electrical analogue Q=ΔT/R_total, the extended-surface (fin) heat rate q=√(h*P*k*A)*θ_b*tanh(m*L) with adiabatic / convective tips and fin efficiency η∈(0,1], and the steady linear conduction temperature profile T(x) through a slab. Research/educational grade: well-established 1D textbook closed-form / lumped-resistance models (Incropera, Cengel), NOT a clinical/medical or production thermal-engineering tool. Pure deterministic algorithms, no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

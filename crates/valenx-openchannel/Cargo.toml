@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-openchannel"
+description = "Open-channel (free-surface) hydraulics for Valenx — textbook steady-uniform-flow models: Manning's equation Q = (1/n) A R^(2/3) S^(1/2) with hydraulic radius R = A/P, rectangular and trapezoidal cross-section geometry (area, wetted perimeter, top width), the Froude number Fr = v / sqrt(g y), specific energy, and critical-depth solution (Fr = 1) by bisection. Research/educational grade: textbook closed-form / numerical models, NOT a clinical/medical/production engineering tool — do not use for real hydraulic design, flood modelling, or any safety-critical decision."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form / numerical hydraulics. `serde` drives the data-model
+# derives on the channel-geometry and flow-state types; `thiserror`
+# supplies the validated error enum. No heavy or platform dependencies —
+# the Manning solver and the critical-depth bisection are hand-rolled.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-diffusion"
+description = "1-D Fickian diffusion for Valenx — Fick's first law (flux J = -D dC/dx), Fick's second law (dC/dt = D d2C/dx2) by an explicit forward-time centred-space finite-difference scheme, and the closed-form Gaussian point-source (instantaneous plane source) solution C(x,t) = M / sqrt(4 pi D t) exp(-x^2 / (4 D t)). Supports Dirichlet (fixed-concentration) and zero-flux (reflecting / no-flux Neumann) boundaries, the CFL-style explicit stability clamp dt <= dx^2 / (2 D), the steady-state linear gradient between two fixed boundaries, the analytic spreading variance var = 2 D t, and the centred-difference flux. Research / educational grade: textbook closed-form and well-established numerical models (explicit FTCS, the heat-kernel Green's function) — NOT a clinical, medical, or production engineering tool. Pure algorithms; deps serde (data-model derives) and thiserror (validated error enum)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace      = true
+
+[dependencies]
+# Pure 1-D finite-difference and closed-form diffusion algorithms — no
+# heavy or platform dependencies. `serde` drives the data-model derives
+# on the grid / field / fluid-property types; `thiserror` backs the
+# validated error enum.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

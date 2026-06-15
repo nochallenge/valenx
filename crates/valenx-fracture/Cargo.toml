@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-fracture"
+description = "Linear-elastic fracture mechanics (LEFM) — Mode-I stress-intensity factor K = Y·σ·√(πa), critical crack length, fracture stress, and Irwin plastic-zone size. Research/educational grade: textbook closed-form LEFM models (Griffith / Irwin), NOT a clinical/medical/production engineering tool — do not use for structural-integrity certification."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

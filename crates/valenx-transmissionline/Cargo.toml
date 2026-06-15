@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-transmissionline"
+description = "RF transmission-line calculator. Closed-form lossless line theory: characteristic impedance Z0 = sqrt(L/C), load reflection coefficient gamma = (ZL - Z0) / (ZL + Z0), voltage standing-wave ratio VSWR = (1 + |gamma|) / (1 - |gamma|), return loss = -20*log10|gamma|, and mismatch loss. Research/educational grade: textbook closed-form models for ideal lossless lines with real terminations; NOT a clinical/medical or production RF-engineering / EMC-compliance tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

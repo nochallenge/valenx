@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-combustion"
+description = "Combustion stoichiometry for hydrocarbon fuels CxHy in air — stoichiometric air-fuel ratio (mass and molar), equivalence ratio phi = AFR_stoich / AFR_actual with lean / rich classification, balanced product mole fractions (CO2 / H2O / N2 / excess O2), and a constant-pressure mean-cp adiabatic flame temperature from the fuel lower heating value. Research/educational grade: textbook closed-form complete-combustion stoichiometry and a single-mean-cp energy balance, NOT a clinical/medical/production engineering tool — it ignores dissociation, equilibrium chemistry, temperature-dependent cp curves, and finite-rate kinetics, so flame temperatures are first-order estimates only."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-bmr"
+description = "Basal metabolic rate and energy-balance calculator. Textbook closed-form predictive equations — Mifflin-St Jeor and Harris-Benedict (Roza revision) BMR for male and female anthropometry, total daily energy expenditure (TDEE = BMR * physical-activity factor) across the standard sedentary-to-extra-active ladder, and a first-order body-mass projection from a sustained calorie surplus or deficit using the ~7700 kcal-per-kilogram rule of thumb. Research/educational grade: these are population-fit regression formulas and a linear energy-balance approximation, NOT a clinical, medical, or production dietetics tool — individual metabolism, adaptive thermogenesis, and body-composition change are not modelled."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public config enums + report
+# structs (they derive Serialize / Deserialize).
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-straingauge"
+description = "Strain-gauge and Wheatstone-bridge calculator (research/educational grade): textbook closed-form models for gauge factor GF = (dR/R)/strain, the quarter/half/full Wheatstone bridge output ratio Vout/Vin, and uniaxial Hooke's-law stress sigma = E * strain. NOT a clinical/medical/production engineering tool — it omits transverse sensitivity, lead-wire resistance, temperature/apparent-strain compensation, gauge-factor tolerance, bridge non-linearity and excitation-driven self-heating, and must not be used to certify load-bearing structures."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public config / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

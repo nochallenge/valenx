@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-plate"
+description = "Plate-bending workbench — small-deflection (Kirchhoff-Love) closed-form models for the transverse bending of thin flat plates: flexural rigidity D = E t^3 / (12 (1 - nu^2)), uniformly-loaded circular-plate centre deflection w = k p a^4 / D, and the corresponding maximum bending stress, for clamped and simply-supported edges. Research / educational grade: textbook closed-form / numerical models, NOT a clinical / medical / production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

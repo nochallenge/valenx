@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-windturbine"
+description = "Wind-turbine aerodynamics for Valenx: closed-form actuator-disc power extraction (available wind power P = 1/2 rho A v^3, the Betz limit Cp_max = 16/27 ~ 0.593, extracted power P = 1/2 rho A v^3 Cp), the tip-speed ratio lambda = omega R / v, and a piecewise idealised power curve with cut-in / rated / cut-out regions. Research/educational grade: textbook closed-form, well-established actuator-disc momentum-theory models — NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

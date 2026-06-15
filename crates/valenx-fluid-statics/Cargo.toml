@@ -1,0 +1,27 @@
+[package]
+name        = "valenx-fluid-statics"
+description = "Fluid statics (hydrostatics) for Valenx: hydrostatic pressure P = rho*g*h, gauge vs absolute pressure, Archimedes buoyancy F = rho*g*V_disp with the floating-fraction rho_body/rho_fluid, hydrostatic force and centre of pressure on a submerged flat plate, and U-tube / differential manometer pressure differences. Research/educational grade — textbook closed-form incompressible constant-density hydrostatics and well-established analytic models; NOT a clinical/medical or production-engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+# Pure closed-form hydrostatics — no linear algebra or platform deps are
+# needed. `thiserror` derives the validated error enum; `serde` drives
+# the data-model derives on the public input / output structs.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

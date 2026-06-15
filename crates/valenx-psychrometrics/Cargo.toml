@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-psychrometrics"
+description = "Moist-air psychrometrics: saturation vapour pressure (Magnus/Tetens), relative humidity, humidity ratio w = 0.622 pv / (p - pv), dew point, and moist-air enthalpy h = 1.006 T + w (2501 + 1.86 T). Research / educational grade — textbook closed-form / well-established numerical models; NOT a clinical / medical or production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public `MoistAirState`.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

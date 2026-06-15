@@ -1,0 +1,27 @@
+[package]
+name        = "valenx-heatpump"
+description = "Heat-pump thermodynamics core for Valenx — Carnot coefficient-of-performance for heating and cooling (COP_heat = T_h / (T_h - T_c), COP_cool = T_c / (T_h - T_c)), the identity COP_heat = COP_cool + 1, second-law / Carnot-efficiency derating, and a load-versus-capacity balance-point solver for an air-source unit whose capacity falls and building load rises as outdoor temperature drops. Research / educational grade: textbook closed-form / numerical models (reversible-cycle limits and linear load / capacity lines), NOT a clinical/medical or production engineering tool — it does not size, rate, or certify real HVAC equipment."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure analytic thermodynamics — closed-form Carnot relations and a
+# bisection balance-point root-find. No heavy or platform dependencies.
+# `serde` drives the input/output struct derives; `thiserror` backs the
+# validated error enum.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Only the tests need a concrete serde format, to prove the `Serialize` /
+# `Deserialize` derives round-trip.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

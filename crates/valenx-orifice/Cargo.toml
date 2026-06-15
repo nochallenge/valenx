@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-orifice"
+description = "Differential-pressure flow-meter models for Valenx — orifice plate, Venturi tube, and flow nozzle sizing from the canonical incompressible Bernoulli relation Q = Cd*A*sqrt(2*dP / (rho*(1 - beta^4))), with the velocity-of-approach factor E = 1/sqrt(1 - beta^4), beta = d/D, forward (flow from pressure drop) and inverse (pressure drop from flow) solutions, and mass-flow conversion. Research/educational grade: textbook closed-form / numerical models only; NOT a clinical, medical, or production engineering tool — for real metering use the ISO 5167 / ASME MFC-3M standards with their Reynolds-number-dependent discharge-coefficient and expansibility correlations and accredited calibration."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# serde_json drives the (de)serialisation round-trip test for the
+# `#[derive(Serialize, Deserialize)]` meter types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-gearbox"
+description = "Gear-train kinematics: single-stage reduction ratio (teeth_out/teeth_in), inverse speed/torque transform with efficiency, compound trains (product of stage ratios), and fixed-ring planetary trains via the Willis equation (carrier ratio 1 + ring/sun). Research/educational grade: textbook closed-form rigid-body gear models; NOT a clinical/medical or production engineering tool — no tooth-bending/contact stress, backlash, thermal, lubrication, or fatigue analysis."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization checks for the public config / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

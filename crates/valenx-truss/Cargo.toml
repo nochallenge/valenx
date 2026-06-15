@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-truss"
+description = "2D pin-jointed truss statics by the method of joints — assemble the joint-equilibrium equations for a planar determinate truss (nodes with pin/roller supports, two-force members, joint point-loads) and solve the linear system with nalgebra for axial member forces (tension positive) plus support reactions. Research/educational grade: textbook closed-form linear statics on the rigid-body, small-displacement, axially-loaded two-force-member idealisation; NOT a clinical/medical or production structural-engineering tool (no member self-weight, buckling, second-order/large-displacement effects, or code-checked design)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-solarpv"
+description = "Solar photovoltaic single-diode model for Valenx — the canonical five-parameter equation I = Iph - I0*(exp(q*V/(n*k*T)) - 1) - (V + I*Rs)/Rsh with thermal-voltage helper, open-circuit voltage Voc, short-circuit current Isc, maximum-power-point tracking, fill factor FF = Pmax/(Voc*Isc), and module efficiency = Pmax/(irradiance*area). HONESTY: research/educational grade; textbook closed-form / numerical models (ideal-diode closed form plus a Newton-solved implicit I-V with series/shunt resistance), NOT a clinical/medical/production engineering tool — do not use for grid certification, financial yield guarantees, or safety-critical sizing."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

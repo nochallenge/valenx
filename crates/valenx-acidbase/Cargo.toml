@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-acidbase"
+description = "Aqueous acid-base equilibrium models for Valenx — textbook closed-form chemistry: pH = -log10[H+], pOH, the water autoionization relation pH + pOH = pKw (14.00 at 25 C), strong monoprotic acid / base pH, the weak-acid approximation [H+] ~= sqrt(Ka*C) plus an exact quadratic solver, the Henderson-Hasselbalch buffer equation pH = pKa + log10([A-]/[HA]), and Van Slyke buffer capacity. Research / educational grade: textbook closed-form and numerical models only; NOT a clinical, medical, or production engineering tool. Pure analytic algorithms, no external data."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure analytic chemistry. serde derives the small parameter structs so
+# acid / base / buffer specs round-trip through configuration; thiserror
+# drives the validated error taxonomy. No heavy or platform dependencies.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

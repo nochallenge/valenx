@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-columnsteel"
+description = "Steel-column buckling by the Euler-Johnson (AISC ASD) method — slenderness ratio KL/r, the column-slenderness transition Cc = sqrt(2 pi^2 E / Fy), the Euler critical stress Fcr = pi^2 E / (KL/r)^2 in the long-column regime versus the Johnson parabola Fcr = Fy [1 - (KL/r)^2 / (2 Cc^2)] in the short-column regime, and the allowable compressive stress. Research/educational grade: textbook closed-form/numerical models; NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

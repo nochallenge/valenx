@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-battery-ecm"
+description = "Battery equivalent-circuit model (ECM) for Valenx — a first-order Thevenin cell (open-circuit voltage minus an ohmic IR0 drop minus a single relaxing RC-pair over-potential), terminal voltage under load, state-of-charge by coulomb counting (SoC = SoC0 - integral(I)/Q), and monotonic OCV-SoC table interpolation. Research/educational grade: textbook closed-form / well-established numerical models (the standard 1-RC Thevenin lumped-parameter circuit), NOT a clinical/medical/production engineering tool — no thermal coupling, ageing, hysteresis, or measured-cell parameter identification."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form / explicit-step models. serde drives the data-model
+# derives; thiserror builds the validated-constructor error enum. No
+# heavy or platform dependencies — every formula is hand-rolled.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public cell-state structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

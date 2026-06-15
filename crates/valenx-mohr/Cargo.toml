@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-mohr"
+description = "2D plane-stress transformation and Mohr's circle. From the in-plane stress components (sx, sy, txy) it computes the principal stresses s1,s2 = (sx+sy)/2 +/- sqrt(((sx-sy)/2)^2 + txy^2), the maximum in-plane shear (s1-s2)/2, the principal orientation, and the normal/shear stress acting on a plane inclined at an arbitrary angle. Textbook closed-form mechanics-of-materials models. Research/educational grade — well-established analytic stress-transformation formulae, NOT a clinical/medical or production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public result/state structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-vibration"
+description = "Single-degree-of-freedom mass-spring-damper vibration analysis for Valenx. Closed-form textbook mechanical-vibration models: natural frequency wn = sqrt(k/m), damping ratio zeta = c/(2*sqrt(k*m)), damped frequency wd = wn*sqrt(1 - zeta^2), the under/critically/over-damped free-response x(t), steady-state harmonic resonance amplification (the magnification factor), and the logarithmic decrement that recovers zeta from a measured decay. Research/educational grade — it implements well-established closed-form linear-vibration theory (Rao / Thomson textbook equations), NOT a clinical/medical or production structural-engineering certification tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public model / response structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-rcbeam"
+description = "Reinforced-concrete beam flexure calculator for Valenx — the singly-reinforced rectangular-section Whitney equivalent-stress-block model: depth of the stress block a = As*fy / (0.85*fc'*b), nominal moment capacity Mn = As*fy*(d - a/2), reinforcement ratio rho = As / (b*d), and the design moment phi*Mn. RESEARCH / EDUCATIONAL GRADE ONLY: these are the textbook closed-form ACI-318-style flexure equations, NOT a clinical, medical, or production structural-engineering tool — do not use for real construction; verify every design against the governing code and a licensed engineer."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
