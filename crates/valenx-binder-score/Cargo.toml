@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-binder-score"
+description = "Fold a candidate binder's evidence — binding-affinity estimate, developability summary, worst safety severity — into ONE binder-quality score in [0,1] with components broken out. Monotone and weight-configurable; never emits a 'safe' verdict (always flags for human review). Research/educational selection heuristic; NOT a validated quality or safety measure."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
