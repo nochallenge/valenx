@@ -36,6 +36,7 @@ pub mod field;
 pub mod ghk;
 pub mod impedance;
 pub mod ionic;
+pub mod izhikevich;
 pub mod lif;
 pub mod membrane;
 pub mod myelinated;
@@ -87,6 +88,7 @@ pub use ionic::{
     driving_force_mv, ionic_conductance, ionic_current, ionic_power_density,
     ionic_reversal_potential,
 };
+pub use izhikevich::{simulate_spike_times, IzhikevichNeuron, IzhikevichParams};
 pub use lif::{
     lif_firing_rate, lif_interspike_interval, lif_membrane_potential, lif_rheobase_current,
     lif_steady_state_potential, lif_time_to_first_spike,
