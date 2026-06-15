@@ -7523,6 +7523,15 @@ name = "valenx-icons"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "valenx-immuno"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-immunodynamics"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7882,6 +7891,15 @@ name = "valenx-odesolver"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-offtarget"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -8399,6 +8417,15 @@ dependencies = [
 
 [[package]]
 name = "valenx-rootfind"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-safety"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
