@@ -6804,6 +6804,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-calibrate"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-cam"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -8455,6 +8464,15 @@ name = "valenx-screwthread"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-select"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
