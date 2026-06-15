@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-lrp5"
+description = "Second-target cross-reactivity demo for the biodesign pipeline: screen LRP5 (bone-density Wnt co-receptor) against its closest paralog LRP6 — the textbook specificity hazard — plus LRP4 and an unrelated GDF-8 control, using VERIFIED UniProt sequences and both valenx-offtarget similarity metrics. Real computed numbers, never fabricated; demonstrates why alignment-free k-mer Jaccard beats ungapped identity for full-length paralogs. Clears nothing as safe. Research/educational."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[[bin]]
+name = "valenx-lrp5"
+path = "src/main.rs"
+
+[dependencies]
+valenx-offtarget = { path = "../valenx-offtarget" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

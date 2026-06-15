@@ -256,6 +256,7 @@ members = [
     "crates/valenx-codon-optimize",
     "crates/valenx-epitope-map",
     "crates/valenx-binder-score",
+    "crates/valenx-lrp5",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
