@@ -7743,6 +7743,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-lrp5"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "valenx-offtarget",
+]
+
+[[package]]
 name = "valenx-macro"
 version = "0.1.0-alpha.1"
 dependencies = [

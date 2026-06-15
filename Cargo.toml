@@ -257,6 +257,7 @@ members = [
     "crates/valenx-epitope-map",
     "crates/valenx-binder-score",
     "crates/valenx-fm-registry",
+    "crates/valenx-lrp5",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
