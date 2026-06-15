@@ -87,6 +87,7 @@ pub mod budget;
 pub mod config;
 pub mod constants;
 pub mod dynamics;
+pub mod eclipse;
 pub mod engine_cycle;
 pub mod error;
 pub mod flight3d;
@@ -117,6 +118,10 @@ pub mod wind;
 pub mod windows;
 
 pub use config::{AscentConfig, GuidanceMode};
+pub use eclipse::{
+    beta_angle, eclipse_fraction, orbit_normal_eci, solar_geometry, sun_direction_eci,
+    SolarGeometry, J2000,
+};
 pub use engine_cycle::{solve_cycle, CycleInputs, CycleResult, ShaftInputs, ShaftResult};
 pub use error::AstroError;
 pub use flight3d::{ascent_to_orbit, Ascent3d};
