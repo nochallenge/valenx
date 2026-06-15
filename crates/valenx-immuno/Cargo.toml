@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-immuno"
+description = "T-cell epitope / MHC-binding immunogenicity screening via position-specific scoring matrices (the classic SYFPEITHI-style matrix method). Research/educational grade; ships only illustrative anchor motifs; NOT a validated clinical immunogenicity predictor."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
