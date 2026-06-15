@@ -7994,6 +7994,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-orchestrator"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "valenx-dossier",
+ "valenx-safety",
+ "valenx-select",
+]
+
+[[package]]
 name = "valenx-orifice"
 version = "0.1.0-alpha.1"
 dependencies = [

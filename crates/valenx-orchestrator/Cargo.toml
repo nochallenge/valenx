@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-orchestrator"
+description = "The single-command biologic-design funnel: chains candidate selection (valenx-select consensus → diversity), per-candidate safety consolidation (valenx-safety), and signed-dossier assembly (valenx-dossier) into one run. Upstream stages that need gated resources (generative model, docking engine, physics affinity) DEGRADE to an explicit 'BLOCKED: <dep>' note instead of fabricating results, and no candidate is ever marked safe — promotion to wet-lab requires human sign-off. Research/educational."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[[bin]]
+name = "valenx-orchestrator"
+path = "src/main.rs"
+
+[dependencies]
+serde           = { workspace = true }
+thiserror       = { workspace = true }
+valenx-select   = { path = "../valenx-select" }
+valenx-safety   = { path = "../valenx-safety" }
+valenx-dossier  = { path = "../valenx-dossier" }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
