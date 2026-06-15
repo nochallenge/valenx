@@ -250,6 +250,7 @@ members = [
     "crates/valenx-dossier",
     "crates/valenx-safety",
     "crates/valenx-orchestrator",
+    "crates/valenx-myostatin",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
