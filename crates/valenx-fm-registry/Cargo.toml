@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-fm-registry"
+description = "A registry of gated biomolecular & virtual-cell foundation models (Evo 2, Boltz-2, scGPT) that the design funnel would call when the resources exist: each entry carries VERIFIED metadata (task, license, upstream) and the gated dependency it needs (GPU + downloaded weights). A readiness probe reports BLOCKED when those are absent — it NEVER fabricates a prediction and this crate never runs inference itself. Research/educational connective tissue."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[[bin]]
+name = "valenx-fm-registry"
+path = "src/main.rs"
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
