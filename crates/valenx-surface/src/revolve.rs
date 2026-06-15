@@ -29,20 +29,29 @@ use crate::nurbs_surface::NurbsSurface;
 /// axis of revolution.
 const AXIS_EPS: f64 = 1e-9;
 
-/// Revolve `profile` a full 360° about the Z-axis into a NURBS surface of
-/// revolution.
+/// Revolve `profile` about the Z-axis through `angle` radians (in `(0, 2π]`)
+/// into a NURBS surface of revolution.
 ///
-/// The resulting surface has `u_degree = 2` (the around-axis circle) and
-/// `v_degree = profile.degree`; its `v` knots and per-row weight factors come
-/// from the profile, so a rational profile (an arc, a conic) is revolved exactly.
+/// The around-axis (`u`) direction is an **exact** rational arc built from
+/// `⌈angle / 90°⌉` quadratic segments of equal span (Piegl & Tiller, *The NURBS
+/// Book*, alg. A8.3): `2·narcs + 1` control points, degree 2, with the arc
+/// shoulders at radius `r / cos(Δθ/2)` and weight `cos(Δθ/2)`. The along-profile
+/// (`v`) direction reuses the profile's degree, knots and weights, so a rational
+/// profile (an arc, a conic) is revolved exactly. Only each profile point's
+/// distance from the Z-axis is swept, so the profile may lie in any half-plane
+/// containing the axis.
 ///
 /// # Errors
 ///
-/// Returns [`SurfaceError::BadBoundary`] if every profile control point lies on
-/// the axis (radius ≤ `AXIS_EPS`), so there is nothing to revolve. Propagates
-/// any [`SurfaceError`] from [`NurbsSurface::new`] (which re-validates the
-/// generated control net).
-pub fn revolve_z_full(profile: &NurbsCurve) -> Result<NurbsSurface, SurfaceError> {
+/// Returns [`SurfaceError::BadBoundary`] if `angle` is not in `(0, 2π]`, or if
+/// every profile control point lies on the axis (radius ≤ `AXIS_EPS`) so there is
+/// nothing to revolve. Propagates any [`SurfaceError`] from [`NurbsSurface::new`].
+pub fn revolve_z(profile: &NurbsCurve, angle: f64) -> Result<NurbsSurface, SurfaceError> {
+    if !(angle > 0.0 && angle <= std::f64::consts::TAU + AXIS_EPS) {
+        return Err(SurfaceError::BadBoundary(format!(
+            "revolution angle {angle} must be in (0, 2π]"
+        )));
+    }
     // A profile that lies entirely on the axis revolves to (at most) a line.
     let has_radius = profile
         .control_points
@@ -54,40 +63,44 @@ pub fn revolve_z_full(profile: &NurbsCurve) -> Result<NurbsSurface, SurfaceError
         ));
     }
 
-    // Full circle in u: 4 quadratic arcs, 9 control points, degree 2.
-    let u_degree = 2;
-    let u_knots = vec![
-        0.0, 0.0, 0.0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.0,
-    ];
+    // Split the sweep into narcs ≤ 90° quadratic arcs.
+    let narcs = (angle / std::f64::consts::FRAC_PI_2).ceil().max(1.0) as usize;
+    let d_theta = angle / narcs as f64;
+    let shoulder_w = (d_theta / 2.0).cos(); // arc shoulder weight
+    let n_u = 2 * narcs + 1; // number of u control points
+
+    // Clamped quadratic knot vector with each interior arc boundary doubled.
+    let mut u_knots = vec![0.0, 0.0, 0.0];
+    for k in 1..narcs {
+        let v = k as f64 / narcs as f64;
+        u_knots.push(v);
+        u_knots.push(v);
+    }
+    u_knots.push(1.0);
+    u_knots.push(1.0);
+    u_knots.push(1.0);
 
     let nv = profile.control_points.len();
-    let mut control_points: Vec<Vec<Vector3<f64>>> = Vec::with_capacity(9);
-    let mut weights: Vec<Vec<f64>> = Vec::with_capacity(9);
+    let mut control_points: Vec<Vec<Vector3<f64>>> = Vec::with_capacity(n_u);
+    let mut weights: Vec<Vec<f64>> = Vec::with_capacity(n_u);
 
-    for i in 0..9 {
-        // Control points sit every 45°; the odd ones are the arc "shoulders" at
-        // the corners of the circumscribing square (radius ×√2, weight √2/2).
-        let angle = f64::from(i as u32) * std::f64::consts::FRAC_PI_4;
-        let (sin_a, cos_a) = angle.sin_cos();
+    for i in 0..n_u {
+        // Even i: a corner on the circle at angle (i/2)·Δθ, radius r, weight 1.
+        // Odd  i: an arc shoulder at the half-step angle, radius r/cos(Δθ/2),
+        //         weight cos(Δθ/2).
         let shoulder = i % 2 == 1;
-        let radius_mult = if shoulder {
-            std::f64::consts::SQRT_2
-        } else {
-            1.0
-        };
-        let circle_w = if shoulder {
-            std::f64::consts::FRAC_1_SQRT_2
-        } else {
-            1.0
-        };
+        let theta = i as f64 * 0.5 * d_theta;
+        let (sin_t, cos_t) = theta.sin_cos();
+        let radius_mult = if shoulder { 1.0 / shoulder_w } else { 1.0 };
+        let circle_w = if shoulder { shoulder_w } else { 1.0 };
 
         let mut row_cp = Vec::with_capacity(nv);
         let mut row_w = Vec::with_capacity(nv);
         for (p, &wp) in profile.control_points.iter().zip(&profile.weights) {
             let radius = (p.x * p.x + p.y * p.y).sqrt();
             row_cp.push(Vector3::new(
-                radius * radius_mult * cos_a,
-                radius * radius_mult * sin_a,
+                radius * radius_mult * cos_t,
+                radius * radius_mult * sin_t,
                 p.z,
             ));
             row_w.push(circle_w * wp);
@@ -97,13 +110,24 @@ pub fn revolve_z_full(profile: &NurbsCurve) -> Result<NurbsSurface, SurfaceError
     }
 
     NurbsSurface::new(
-        u_degree,
+        2,
         profile.degree,
         u_knots,
         profile.knots.clone(),
         control_points,
         weights,
     )
+}
+
+/// Revolve `profile` a full 360° about the Z-axis — a convenience wrapper for
+/// [`revolve_z`] with `angle = 2π` (the around-axis circle is the exact
+/// nine-control-point, four-arc NURBS circle).
+///
+/// # Errors
+///
+/// As [`revolve_z`].
+pub fn revolve_z_full(profile: &NurbsCurve) -> Result<NurbsSurface, SurfaceError> {
+    revolve_z(profile, std::f64::consts::TAU)
 }
 
 #[cfg(test)]
@@ -194,5 +218,50 @@ mod tests {
         // A profile with zero radius everywhere has nothing to revolve.
         let err = revolve_z_full(&line_profile(0.0, 0.0, 0.0, 3.0)).unwrap_err();
         assert!(matches!(err, SurfaceError::BadBoundary(_)));
+    }
+
+    #[test]
+    fn partial_cylinder_area_scales_with_angle() {
+        // Revolving a vertical line through θ gives a partial cylinder whose
+        // lateral area is the arc length r·θ times the height: θ·r·h.
+        let (r, h) = (2.0, 5.0);
+        for &theta in &[std::f64::consts::FRAC_PI_2, PI, std::f64::consts::PI * 1.5] {
+            let surface = revolve_z(&line_profile(r, 0.0, r, h), theta).unwrap();
+            let area = surface_area(&surface);
+            let analytic = theta * r * h;
+            assert!(
+                (area - analytic).abs() / analytic < 0.01,
+                "θ={theta:.4}: area {area:.4} vs analytic {analytic:.4}"
+            );
+        }
+    }
+
+    #[test]
+    fn narcs_sets_the_control_point_count() {
+        // 2·⌈θ / 90°⌉ + 1 control points around the axis.
+        let line = line_profile(1.0, 0.0, 1.0, 1.0);
+        for (theta, expected) in [(1.0, 3), (2.0, 5), (4.0, 7), (std::f64::consts::TAU, 9)] {
+            let s = revolve_z(&line, theta).unwrap();
+            assert_eq!(s.control_points.len(), expected, "θ={theta:.4}");
+        }
+    }
+
+    #[test]
+    fn full_wrapper_matches_two_pi_revolve() {
+        let line = line_profile(2.0, 0.0, 2.0, 5.0);
+        let a_full = surface_area(&revolve_z_full(&line).unwrap());
+        let a_2pi = surface_area(&revolve_z(&line, std::f64::consts::TAU).unwrap());
+        assert!(
+            (a_full - a_2pi).abs() < 1e-9,
+            "full wrapper {a_full} vs revolve_z(2π) {a_2pi}"
+        );
+    }
+
+    #[test]
+    fn out_of_range_angle_is_an_error() {
+        let line = line_profile(1.0, 0.0, 1.0, 1.0);
+        assert!(revolve_z(&line, 0.0).is_err());
+        assert!(revolve_z(&line, -1.0).is_err());
+        assert!(revolve_z(&line, std::f64::consts::TAU + 0.5).is_err());
     }
 }
