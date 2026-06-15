@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-rectifier"
+description = "Diode-rectifier closed-form analysis for Valenx: half-wave and full-wave average DC output (Vdc = Vpeak/pi and 2*Vpeak/pi), RMS output, the dimensionless ripple factor r = sqrt((Vrms/Vdc)^2 - 1), and the capacitor-filter peak-to-peak ripple approximation Vr = I/(f*C). HONESTY: research/educational grade; textbook closed-form/numerical models (ideal diodes, sinusoidal mains, constant-current load); NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form formulae over scalar f64 quantities. thiserror drives
+# the validated error taxonomy; serde derives let the input/output structs
+# round-trip in project files. No numerics or platform dependencies.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Drives the Topology serde round-trip test only.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

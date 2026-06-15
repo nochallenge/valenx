@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-strainrosette"
+description = "Strain-gauge rosette reduction (rectangular 0/45/90) — recovers the Cartesian strain state (eps_x, eps_y, gamma_xy) from three gauge readings, computes principal strains + principal angle (2D strain-tensor eigenproblem), and maps to plane-stress via 2D Hooke's law. Research/educational grade: textbook closed-form strain-transformation and linear-elastic constitutive models; NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

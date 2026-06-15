@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-led"
+description = "LED series-resistor circuit calculator — closed-form DC operating point for a single LED or a series LED string driven through a current-limiting resistor (series resistor R = (Vsupply - Vf) / I, LED power Vf * I, resistor power (Vsupply - Vf) * I, series LEDs sum their forward voltages). Research/educational grade: textbook closed-form/numerical models; NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

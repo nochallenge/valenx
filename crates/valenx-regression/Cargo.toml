@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-regression"
+description = "Least-squares regression for Valenx — simple linear fit (slope, intercept) via the closed-form normal equations, the coefficient of determination R^2, residuals, polynomial regression of arbitrary degree through the nalgebra-solved normal equations, and the Pearson correlation coefficient r. Research/educational grade: textbook closed-form / numerical least-squares models; NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure numerics. nalgebra solves the polynomial normal equations via an
+# LU factorisation; thiserror drives the validated error enum; serde
+# derives (de)serialisation on the public fit/result structs.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

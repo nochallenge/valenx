@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-reliability"
+description = "Reliability-engineering math for Valenx — closed-form lifetime and system-reliability models: the exponential model (constant-hazard reliability R(t) = exp(-lambda t), MTBF = 1/lambda), the two-parameter Weibull model (R(t) = exp(-(t/eta)^beta), shape/scale hazard and mean time to failure via the gamma function), and reliability block diagrams (series R = prod(R_i), parallel R = 1 - prod(1 - R_i), and the general k-out-of-n binomial structure). Research/educational grade: textbook closed-form and numerical models for studying reliability theory; NOT a clinical, medical, or production safety/reliability-certification engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Used only to exercise the serde derives in unit tests (round-trip).
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

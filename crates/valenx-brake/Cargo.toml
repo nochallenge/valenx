@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-brake"
+description = "Brake-system textbook models — disc/caliper friction torque T = mu*F*N_pads*r_eff, band/drum (capstan) tension ratio T1/T2 = exp(mu*theta), and braking kinetic energy 0.5*m*v^2 with the equivalent deceleration distance. Research/educational grade: closed-form Coulomb-friction and rigid-body-energy formulas only; NOT a clinical/medical or production engineering tool (no thermal fade, pad wear, hydraulics, ABS, or safety-rated sizing)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-shellandtube"
+description = "Shell-and-tube heat-exchanger thermal sizing via the LMTD method. Computes the log-mean temperature difference for counter- and co-current arrangements, the required heat-transfer area A = Q / (U F LMTD), an effective (F-corrected) LMTD, and the tube count n = A / (pi d L) for a chosen tube diameter and length. Research/educational grade: textbook closed-form steady-state models (LMTD, area, tube-count) — NOT a clinical/medical or production engineering tool; real exchangers need rating-method verification, fouling/pressure-drop/vibration analysis, and code (TEMA/ASME) checks."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip tests for the public result / input structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

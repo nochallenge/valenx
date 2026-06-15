@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-inclinedplane"
+description = "Inclined-plane (ramp) simple-machine analyser — closed-form statics of a block on a frictional ramp: normal force N = W cos(theta), down-slope gravity component W sin(theta), Coulomb friction mu*N, ideal mechanical advantage 1/sin(theta), the raise/lower effort laws W(sin theta +/- mu cos theta), and the friction-angle self-locking criterion. Research/educational grade: textbook closed-form rigid-body models, NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

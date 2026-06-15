@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-insulation"
+description = "Building-envelope heat-loss models — steady-state conduction through composite walls via thermal resistance R = L/k, surface film coefficients, U-value U = 1/sum(R), and heat-loss rate Q = U*A*dT. Research/educational grade: textbook closed-form one-dimensional steady-state models; NOT a clinical/medical/production engineering tool — do not use for code-compliance energy modelling, HVAC sizing, or any safety-critical decision."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

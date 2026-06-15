@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-powerfactor"
+description = "Single-phase AC power-triangle calculator — apparent power S = V*I, real power P = S*cos(phi), reactive power Q = S*sin(phi), power factor PF = P/S, and shunt-capacitor power-factor correction Qc = P*(tan(phi1) - tan(phi2)), with leading/lagging (capacitive/inductive) bookkeeping. Research/educational grade: textbook closed-form steady-state sinusoidal models assuming a single frequency and purely sinusoidal voltage and current; NOT a clinical/medical or production engineering tool — it ignores harmonics, transients, three-phase imbalance, and real-world derating, so do not use it to size protective gear, capacitor banks, or any safety-relevant electrical installation."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

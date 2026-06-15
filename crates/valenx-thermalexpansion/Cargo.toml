@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-thermalexpansion"
+description = "Linear / areal / volumetric thermal expansion and constrained thermal stress for Valenx — the textbook closed-form models dL = alpha L dT, area coefficient ~ 2 alpha, volume coefficient ~ 3 alpha, and the fully-constrained thermal stress sigma = E alpha dT, with a small material library of representative coefficients of thermal expansion and Young's moduli. Research/educational grade: textbook closed-form / numerical models with constant coefficients over the temperature interval; NOT a clinical/medical or production engineering tool (no temperature-dependent coefficients, anisotropy, plasticity, creep, phase changes, or geometry-dependent restraint factors), so do not use it for safety-critical design."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form scalar physics. serde drives the data-model derives
+# so material parameters / results round-trip through any serde format;
+# thiserror builds the validated-constructor error taxonomy. No heavy or
+# platform-specific dependencies — every formula is hand-rolled.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

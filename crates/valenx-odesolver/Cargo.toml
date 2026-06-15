@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-odesolver"
+description = "Ordinary-differential-equation integrators for Valenx — fixed-step explicit Euler, Heun (improved Euler / RK2), and classical 4th-order Runge-Kutta (RK4) for first-order initial-value problems dy/dt = f(t, y), in both scalar and Vec-of-state (system) forms. Research/educational grade: textbook closed-form/numerical models, validated against analytic ground truth (exponential growth/decay, the harmonic oscillator); NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# thiserror: structured error taxonomy with validated constructors.
+# serde: derive Serialize/Deserialize on the public config/report types so
+# integration runs can be recorded and replayed. No numerics dependency —
+# the Euler / Heun / RK4 steppers are hand-rolled over plain f64 / Vec<f64>.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

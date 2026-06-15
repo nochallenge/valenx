@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-coil"
+description = "Inductor / solenoid coil models for Valenx. Closed-form textbook electromagnetics for the air-core (and uniform-permeability) long-solenoid regime: the ideal-solenoid inductance L = mu0 * mu_r * N^2 * A / l, the stored magnetic energy E = 0.5 * L * I^2, the inductive reactance X_L = 2 * pi * f * L, and the L/R series time constant tau = L / R. Research / educational grade: textbook closed-form / numerical models, NOT a clinical / medical / production engineering tool — the long-solenoid formula ignores end (fringing) effects, the Nagaoka correction, the proximity / skin effect, core saturation and frequency-dependent core loss. Pure algorithms, no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form electromagnetics. thiserror drives the validated
+# error taxonomy; serde drives the data-model derives. No heavy or
+# platform dependencies — every formula is a hand-rolled scalar
+# expression.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# JSON serialisation, used only by the serde round-trip unit test.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

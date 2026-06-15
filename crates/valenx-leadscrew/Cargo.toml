@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-leadscrew"
+description = "Lead-screw motion workbench — closed-form linear-stage kinematics and statics for a stepper-driven lead/ball screw: linear feed v = lead * rpm, axial thrust F = 2 * pi * eta * T / lead, microstep resolution = lead / microsteps, and the classic back-drive (self-locking) condition. Research/educational grade: textbook closed-form models (constant lead-angle screw mechanics, ideal stepper); NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

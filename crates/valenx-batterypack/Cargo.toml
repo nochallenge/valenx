@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-batterypack"
+description = "Battery-pack configuration calculator for Valenx — series / parallel (S×P) topology sizing from a single cell. Closed-form textbook relations: a series string of n identical cells gives pack voltage V = n·V_cell at the cell's capacity; m parallel strings give pack capacity Ah = m·Q_cell at the string voltage; pack energy Wh = V·Ah; constant-current C-rate I = C·Ah; total cell count = n·m. Research / educational grade: implements the standard textbook closed-form / numerical models only and is NOT a clinical, medical, or production battery-engineering / safety tool — real packs need thermal, balancing, ageing, internal-resistance, sag, and protection-circuit analysis this crate does not model."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

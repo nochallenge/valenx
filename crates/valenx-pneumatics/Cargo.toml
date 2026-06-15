@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-pneumatics"
+description = "Pneumatics (compressed-air) sizing helpers for Valenx — closed-form textbook models for single- and double-acting cylinder force (F = gauge pressure x piston area), free-air consumption (swept volume x cycles, normalised to atmospheric via the absolute compression ratio), the absolute compression ratio itself, and isentropic choked-flow detection through a nozzle / orifice via the critical pressure ratio (~0.528 for diatomic air, k = 1.4). Research/educational grade: textbook closed-form models with ideal-gas / isentropic assumptions; it ignores friction, seal drag, line losses, heat transfer and real-gas effects, and is NOT a clinical/medical or production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

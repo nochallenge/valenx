@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-chaindrive"
+description = "Roller-chain drive calculator — sprocket gear ratio, chain (link) velocity, required chain length in pitches from a two-sprocket centre distance, and output torque for a single-stage chain drive. Closed-form textbook kinematics (ratio = N2/N1, v = p·z·n, the standard chain-length approximation). Research/educational grade: textbook closed-form/numerical models, NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public spec / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

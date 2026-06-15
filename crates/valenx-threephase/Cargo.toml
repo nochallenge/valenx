@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-threephase"
+description = "Balanced three-phase AC power relations — wye (star) and delta (mesh) line/phase voltage and current conversions plus real-power computation P = sqrt(3) * V_line * I_line * cos(phi). Research/educational grade: textbook closed-form steady-state phasor models for balanced systems; NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

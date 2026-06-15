@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-resistor-network"
+description = "Linear resistor-network helpers — series and parallel equivalent resistance, voltage and current dividers, and Wheatstone-bridge balance. Research/educational grade; textbook closed-form Ohm's-law / Kirchhoff models; NOT a clinical/medical or production electrical-engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

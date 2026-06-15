@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-camdynamics"
+description = "Cam-follower kinematics — closed-form simple-harmonic (SHM) and cycloidal rise motion laws over a rise angle, returning displacement, velocity, acceleration, and jerk. Research/educational grade: textbook closed-form motion-law models (Norton, Shigley); NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

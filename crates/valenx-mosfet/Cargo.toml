@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-mosfet"
+description = "MOSFET large-signal IV models for Valenx — the textbook square-law (Shockley) level-1 drain current with cutoff / triode (linear) / saturation region detection, the transconductance gm = dId/dVgs, and validated NMOS device parameters. HONESTY: research/educational grade; implements the idealized closed-form long-channel square-law model only (no channel-length modulation, body effect, velocity saturation, subthreshold conduction, or short-channel effects) — NOT a clinical/medical or production semiconductor-engineering tool; do not use for tape-out or circuit sign-off."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

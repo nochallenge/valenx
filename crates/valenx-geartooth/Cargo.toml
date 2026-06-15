@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-geartooth"
+description = "Gear-tooth bending strength (research/educational grade): the classic Lewis bending equation sigma = Wt / (F m Y) with tabulated Lewis form factors Y(N) for 20-degree full-depth involute teeth, plus AGMA bending-stress basics (geometry factor J, dynamic / velocity factor Kv, overload and size factors). Textbook closed-form models from Shigley / AGMA 2001 — NOT a clinical, medical, or production engineering certification tool; do not use for life-critical gear rating."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

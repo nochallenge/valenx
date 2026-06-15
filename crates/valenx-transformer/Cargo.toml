@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-transformer"
+description = "Two-winding electrical transformer relations for Valenx: the turns ratio a = Np/Ns = Vp/Vs = Is/Ip, ideal power conservation (Pin = Pout), efficiency = Pout/Pin, and reflected (referred) load impedance a^2 * Zs. Research/educational grade — closed-form textbook ideal- and efficiency-model relations only; NOT a clinical, medical, or production electrical-engineering tool (no core-loss curves, leakage/magnetising reactance, saturation, thermal, or insulation modelling)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

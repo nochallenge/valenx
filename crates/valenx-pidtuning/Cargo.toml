@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-pidtuning"
+description = "PID controller tuning via the Ziegler-Nichols ultimate-gain (closed-loop) method. From a measured ultimate gain Ku and oscillation period Tu it emits the canonical textbook controller settings: P (Kp = 0.5 Ku), PI (Kp = 0.45 Ku, Ti = Tu / 1.2), and classic PID (Kp = 0.6 Ku, Ti = Tu / 2, Td = Tu / 8), plus the equivalent parallel-form gains (Ki = Kp / Ti, Kd = Kp Td). HONESTY: research/educational grade; textbook closed-form algebraic models only; NOT a clinical/medical or production engineering tuning tool — real loops need plant identification, robustness margins, and validation the closed-form rules do not provide."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form tuning algebra. `serde` drives the data-model derives
+# on the inputs (Ku, Tu) and the emitted gain sets; `thiserror` powers
+# the validated-constructor error taxonomy. No numerics or platform
+# dependencies — the Ziegler-Nichols ultimate-gain table is hand-coded
+# arithmetic.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Round-trips the serde derives in the test suite; pinned at workspace
+# level. Test-only, never compiled into the library.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

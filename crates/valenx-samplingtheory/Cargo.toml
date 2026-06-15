@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-samplingtheory"
+description = "Digital-signal-processing sampling theory for Valenx: textbook closed-form models for the Nyquist-Shannon sampling criterion (fs >= 2*fmax), aliasing / frequency-folding of components above the Nyquist frequency, uniform mid-tread quantization step size, and the ideal-quantizer signal-to-noise ratio (SNR_dB = 6.02*N + 1.76). Pure library, no I/O. HONESTY: research / educational grade; implements standard textbook closed-form and numerical models (Oppenheim & Schafer, Proakis); it is NOT a clinical, medical, or production signal-processing / instrumentation tool and its outputs must not be relied upon for safety-critical, diagnostic, or certification purposes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure algorithms, no heavy or platform-specific deps. `thiserror`
+# derives the validated error enum; serde drives the small data-model
+# derives so callers can persist analysis results as JSON (this crate
+# itself performs no I/O).
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Only the integration tests exercise JSON round-tripping of the
+# analysis bundle; the library itself performs no I/O, so serde_json
+# stays dev-only.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
