@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-epitope-map"
+description = "Linear B-cell epitope propensity by the sliding-window hydrophilicity method (Parker / Hopp-Woods style): a per-residue propensity scale averaged over a window, with hydrophilic peaks flagged as candidate surface-exposed epitopes. Research/educational; ships a Kyte-Doolittle-derived hydrophilicity scale and accepts custom scales; NOT a validated epitope predictor."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
