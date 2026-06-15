@@ -12,7 +12,13 @@
 //!    provenance and software list into one content-hashed [`RunDossier`].
 //!
 //! [`run_funnel`] is the whole pipeline; [`FunnelOutcome`] carries the dossier
-//! plus every intermediate product.
+//! plus every intermediate product. [`run_funnel_seqs`] is the sequence-driven
+//! entry point: give it candidate amino-acid sequences and a reference panel and
+//! it *runs the screens itself* — off-target identity ([`valenx_offtarget`]),
+//! T-cell epitope density ([`valenx_immuno`]), developability
+//! ([`valenx_developability`]) and linear B-cell epitopes
+//! ([`valenx_epitope_map`]) — deriving diversity features from amino-acid
+//! composition, then funnels through the same selection → safety → dossier path.
 //!
 //! ## What it does *not* do
 //!
@@ -47,6 +53,8 @@
 //!         offtarget: None,
 //!         immunogenicity: None,
 //!         crispr_offtarget_sites: None,
+//!         developability_flags: Vec::new(),
+//!         bcell_epitope_regions: None,
 //!     },
 //!     FunnelCandidate {
 //!         id: "design_B".into(),
@@ -56,6 +64,8 @@
 //!         offtarget: None,
 //!         immunogenicity: None,
 //!         crispr_offtarget_sites: None,
+//!         developability_flags: Vec::new(),
+//!         bcell_epitope_regions: None,
 //!     },
 //! ];
 //!
@@ -80,12 +90,14 @@
 
 pub mod error;
 pub mod funnel;
+pub mod seq;
 
 pub use error::OrchestratorError;
 pub use funnel::{
     run_funnel, BlockedStage, FunnelCandidate, FunnelConfig, FunnelOutcome, GatedStage,
     OfftargetEvidence,
 };
+pub use seq::{run_funnel_seqs, ScreenConfig, SeqCandidate};
 
 // Re-export the dossier type the public API returns inside [`FunnelOutcome`].
 pub use valenx_dossier::RunDossier;

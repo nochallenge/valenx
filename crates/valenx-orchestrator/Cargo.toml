@@ -16,9 +16,13 @@ path = "src/main.rs"
 [dependencies]
 serde           = { workspace = true }
 thiserror       = { workspace = true }
-valenx-select   = { path = "../valenx-select" }
-valenx-safety   = { path = "../valenx-safety" }
-valenx-dossier  = { path = "../valenx-dossier" }
+valenx-select         = { path = "../valenx-select" }
+valenx-safety         = { path = "../valenx-safety" }
+valenx-dossier        = { path = "../valenx-dossier" }
+valenx-offtarget      = { path = "../valenx-offtarget" }
+valenx-immuno         = { path = "../valenx-immuno" }
+valenx-developability = { path = "../valenx-developability" }
+valenx-epitope-map    = { path = "../valenx-epitope-map" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

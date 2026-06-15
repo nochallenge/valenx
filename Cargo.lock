@@ -8044,7 +8044,11 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "valenx-developability",
  "valenx-dossier",
+ "valenx-epitope-map",
+ "valenx-immuno",
+ "valenx-offtarget",
  "valenx-safety",
  "valenx-select",
 ]
