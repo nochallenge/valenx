@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-myostatin"
+description = "Runnable demo of the biologic-design safety gate: screen verified human myostatin (GDF-8) for off-target cross-reactivity against its TGF-beta-superfamily relatives (GDF-11, activin-A, BMP-7) with valenx-offtarget, and emit a reproducible provenance dossier. Verified UniProt sequences; illustrative sequence-similarity screen; NOT a validated specificity assay."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[[bin]]
+name = "myostatin_offtarget"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+valenx-offtarget = { path = "../valenx-offtarget" }
+valenx-repro     = { path = "../valenx-repro" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
