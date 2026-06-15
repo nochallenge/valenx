@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-select"
+description = "The candidate selection funnel — consensus re-ranking across orthogonal scoring methods (with disagreement as a low-confidence signal) and diversity-aware top-N selection (so the shortlist 'fails differently'), cutting many candidates to a defensible handful at an operator-chosen N. Research/educational selection heuristics; NOT a guarantee of wet-lab success."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
