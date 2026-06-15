@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-osmosis"
+description = "Osmosis & fluid balance — textbook colligative + transcapillary fluid-exchange models: van't Hoff osmotic pressure (Pi = i*c*R*T), the Starling equation for net filtration across a semipermeable membrane (Jv = Kf*((Pc - Pi_int) - sigma*(pi_c - pi_i))), and tonicity classification with net water-movement direction. Research/educational grade: closed-form colligative-property and well-established transcapillary-flux relations from physiology and physical-chemistry textbooks — NOT a clinical, medical, or production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

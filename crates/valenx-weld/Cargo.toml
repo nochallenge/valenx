@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-weld"
+description = "Weld-strength core for Valenx — closed-form static strength of fillet and full-penetration butt welds: effective throat (throat = 0.707 * leg for an equal-leg 45-degree fillet), average shear stress on the throat (tau = F / (throat * length)), allowable load from leg size, weld length and an allowable shear stress, and the direct normal stress of a complete-joint-penetration butt weld (sigma = F / (thickness * length)). Pure analytic textbook formulas (AWS D1.1 / AISC effective-throat convention), no external processes. HONEST SCOPE: research/educational grade; textbook closed-form models with the standard simplifying assumptions (uniform stress over the throat, concentric in-plane loading, base-metal-not-governing, no fatigue, no residual stress, no eccentricity or weld-group geometry); NOT a clinical/medical/production engineering tool and not a substitute for a qualified welding engineer or a governing structural code check."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure analytic weld-strength formulas. `thiserror` derives the error
+# enum; `serde` derives the input / report data-model types so a caller
+# can persist a weld check. No numeric or platform dependencies — every
+# formula is a hand-rolled closed form.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

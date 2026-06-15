@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-flywheel"
+description = "Flywheel energy-storage sizing — rotational kinetic energy E = 1/2 I omega^2, rotor moments of inertia (solid disk I = 1/2 m r^2, thin ring I = m r^2), governor speed-fluctuation sizing (coefficient of fluctuation Cs, usable energy dE = I omega_avg^2 Cs), and hoop / rim stress sigma = rho (omega r)^2. Research/educational grade: textbook closed-form rigid-body and thin-rim models with idealising assumptions (rigid rotor, uniform density, thin-rim stress); NOT a clinical, medical, or production engineering tool — do not use for life-safety rotor certification."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

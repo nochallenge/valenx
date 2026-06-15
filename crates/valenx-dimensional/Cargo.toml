@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-dimensional"
+description = "Dimensionless groups for fluid mechanics and heat transfer — closed-form textbook definitions of the Reynolds, Nusselt, Prandtl, Mach, Froude, Biot, and Peclet numbers, with validated constructors and regime classifiers (laminar/transitional/turbulent pipe flow, subcritical/critical/supercritical open-channel flow). Research/educational grade: textbook closed-form models with explicit consistent-SI unit conventions; NOT a clinical/medical or production engineering analysis tool — for real design work use a validated CFD/thermal solver and certified correlations."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public number wrappers.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

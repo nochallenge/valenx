@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-thermoreg"
+description = "Human thermoregulation heat-balance model for Valenx — the textbook conceptual energy balance M - W = R + C + E + S (metabolism, external work, radiation, convection, evaporation, storage). Closed-form Newton-cooling convection q = h*A*(T_skin - T_air), Stefan-Boltzmann radiation, evaporative cooling E = sweat_rate*latent_heat, and the lumped-capacitance core-temperature update dT = Q_net/(m*c). Research/educational grade: implements well-established textbook closed-form / lumped-parameter heat-transfer relations (the kind in a physiology or heat-transfer text), NOT a clinical, medical, or production engineering tool — do not use it for patient care, occupational heat-stress certification, or safety-critical decisions."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form heat-balance arithmetic. `serde` drives the
+# data-model derives so a body / environment / balance can be
+# round-tripped through a config or an MCP request; `thiserror`
+# powers the validated-constructor error enum. No numerics crate is
+# needed — every relation here is algebraic.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

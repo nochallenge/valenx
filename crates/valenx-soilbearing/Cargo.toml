@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-soilbearing"
+description = "Shallow-foundation bearing capacity via the Terzaghi general-shear equation qult = c*Nc + q*Nq + 0.5*gamma*B*Ngamma, with bearing-capacity factors (Nc, Nq, Ngamma) derived from the soil friction angle and an allowable pressure qall = qult / FS. Research/educational grade: textbook closed-form geotechnical models (Terzaghi 1943, Reissner/Prandtl, Vesic Ngamma); NOT a clinical/medical/production engineering tool and not a substitute for a licensed geotechnical engineer, a site investigation, or a governing building code."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip checks for the serde-derived value types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

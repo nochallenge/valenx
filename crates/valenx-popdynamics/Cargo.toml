@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-popdynamics"
+description = "Population & epidemic dynamics core for Valenx — textbook continuous-time models: single-species logistic growth dN/dt = rN(1 - N/K), the two-species Lotka-Volterra predator-prey system, and the classic SIR compartmental epidemic (transmission beta, recovery gamma, basic reproduction number R0 = beta/gamma), each integrated with a fixed-step classical fourth-order Runge-Kutta (RK4) solver. Research/educational grade: textbook closed-form / well-established numerical models, NOT a clinical/medical/production engineering tool — do not use for patient care, public-health policy, or outbreak forecasting."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure numerics. `thiserror` backs the validated error enum; `serde`
+# drives the data-model derives so models / states round-trip. The RK4
+# integrator and every right-hand side are hand-rolled — no other deps.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

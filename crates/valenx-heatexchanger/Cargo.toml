@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-heatexchanger"
+description = "Heat-exchanger thermal analysis for Valenx — textbook log-mean-temperature-difference (LMTD) method for counterflow and parallel-flow arrangements (Q = U*A*LMTD) and the effectiveness-NTU method (NTU = UA/Cmin, qmax = Cmin*(Th_in - Tc_in), Q = eps*qmax) with the closed-form counterflow and parallel-flow effectiveness relations. Research/educational grade: closed-form / well-established numerical heat-transfer correlations from standard textbooks (Incropera, Cengel); NOT a clinical/medical or production engineering tool — no real fluid-property tables, fouling-factor data, or pressure-drop / mechanical-rating analysis."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

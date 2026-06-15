@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-optics"
+description = "Geometric (ray) optics core for Valenx — closed-form paraxial and ray models: Snell's law of refraction n1 sin t1 = n2 sin t2 with total internal reflection and the critical angle, the thin-lens equation 1/f = 1/do + 1/di with transverse magnification m = -di/do, and the lensmaker's equation 1/f = (n-1)(1/R1 - 1/R2) for a thin lens in air. HONESTY: research/educational grade; textbook closed-form / first-order (paraxial) models only — NOT a clinical, medical, or production optical-engineering tool. No diffraction, no aberrations beyond the paraxial limit, no ray tracing through real thick-lens systems, no polarisation or Fresnel coefficients."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure scalar closed-form optics. `thiserror` builds the validated error
+# taxonomy; `serde` drives the data-model derives. No heavy or platform
+# dependencies — Snell's law, the thin-lens equation and the lensmaker's
+# equation are elementary algebra / trigonometry, hand-rolled here.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

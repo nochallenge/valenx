@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-fanlaws"
+description = "Fan and centrifugal-blower affinity laws (\"fan laws\") for Valenx: closed-form scaling of volumetric flow, pressure rise, and shaft power between two operating points of a single fan (flow ~ speed, pressure ~ speed^2, power ~ speed^3) together with density correction (pressure and power scale linearly with gas density at fixed speed) and the fundamental air-power identity P = Q * dP / efficiency. Research/educational grade: textbook closed-form similarity relations for geometrically identical fans under idealising assumptions (constant efficiency across the speed change, incompressible flow, fixed system curve); NOT a clinical/medical/production engineering tool — do not use for ventilator, HVAC code-compliance, or fan-selection sign-off without an independent qualified review."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure scalar arithmetic over the dimensionless affinity ratios; no
+# linear algebra or platform deps. thiserror drives the validated-
+# constructor error taxonomy; serde derives let the spec / point types
+# round-trip through project files.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
