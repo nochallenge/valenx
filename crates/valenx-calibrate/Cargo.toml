@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-calibrate"
+description = "Confidence calibration for predictive scores — Platt scaling, temperature scaling, isotonic regression (PAV), split-conformal intervals, plus calibration metrics (Brier, ECE, reliability diagram). Research/educational; calibration quality depends on representative held-out data; NOT a guarantee of real-world or clinical calibration."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
