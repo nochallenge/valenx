@@ -253,6 +253,7 @@ members = [
     "crates/valenx-myostatin",
     "crates/valenx-score",
     "crates/valenx-developability",
+    "crates/valenx-codon-optimize",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 

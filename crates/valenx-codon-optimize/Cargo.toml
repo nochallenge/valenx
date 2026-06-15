@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-codon-optimize"
+description = "Reverse-translate a designed protein to a synthesis-ready DNA coding sequence and score it: standard genetic code (NCBI table 1), Codon Adaptation Index (Sharp & Li 1987) against a supplied host codon-usage table, GC content, and highest-adaptiveness codon selection. Research/educational; the genetic code is canonical; host weights are caller-supplied (an illustrative set is included, NOT a specific organism's verified table)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
