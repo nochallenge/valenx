@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-hydraulics"
+description = "Hydraulic-systems analysis (research/educational grade) — textbook closed-form models for cylinder force (F = P A, bore vs. rod side), continuity flow (Q = A v), orifice/valve flow (Q = Cv sqrt(dP / SG)), and hydraulic power (Power = p Q). NOT a clinical/medical or production engineering tool: it omits fluid compressibility, line losses, transients, cavitation, and temperature effects, so do not size real hydraulic equipment from its numbers."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

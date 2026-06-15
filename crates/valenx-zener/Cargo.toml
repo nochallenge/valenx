@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-zener"
+description = "Zener-diode shunt voltage-regulator analysis — series-resistor sizing Rs = (Vin - Vz) / (Iz + Il), output clamped at Vz, zener current Iz = I_Rs - I_load, zener power Pz = Vz * Iz, and the minimum input voltage that keeps the diode in regulation. Research/educational grade: textbook closed-form ideal-zener models (constant Vz, no dynamic impedance, temperature, or tolerance modelling); NOT a clinical, medical, or production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

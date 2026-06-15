@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-leverage"
+description = "Lever-mechanics core for Valenx — first-, second-, and third-class levers with the canonical mechanical-advantage ratio MA = effort_arm / load_arm and the static moment-balance law effort * effort_arm = load * load_arm. Research/educational grade: textbook closed-form rigid-ideal-lever models (massless beam, frictionless fulcrum, point loads); NOT a clinical/medical or production engineering tool — do not size real structures, machinery, or load-bearing members from it."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-interpolation"
+description = "1-D interpolation through scattered (x, y) samples — piecewise-linear, Lagrange polynomial, and natural cubic spline, with evaluation and derivative queries. Research/educational grade: textbook closed-form and numerical models (tridiagonal Thomas solve for the spline), NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
