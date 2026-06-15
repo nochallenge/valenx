@@ -6898,6 +6898,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-codon-optimize"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-coil"
 version = "0.1.0-alpha.1"
 dependencies = [
