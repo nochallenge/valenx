@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-beltdrive"
+description = "Belt-drive analysis (research/educational grade) — textbook closed-form flat / V-belt models: speed ratio i = D_driven / D_driver, belt linear speed v = pi*D*N, the Euler / capstan tension ratio T1/T2 = exp(mu*theta), transmitted power P = (T1 - T2)*v, and centrifugal tension Tc = m*v^2. Implements the standard rigid-pulley, inextensible-belt, no-slip idealisation taught in machine-design texts. NOT a clinical/medical/production engineering tool — no fatigue life, creep, slip, thermal, or manufacturer-rating data; do not size real drives from it."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

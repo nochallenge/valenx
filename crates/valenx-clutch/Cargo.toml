@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-clutch"
+description = "Disc / plate friction-clutch torque capacity from the classic annular-friction equations: uniform-wear T = mu*F*N*(ro+ri)/2 and uniform-pressure T = (2/3)*mu*F*N*(ro^3-ri^3)/(ro^2-ri^2), plus transmissible power P = T*omega. Research/educational grade — textbook closed-form models, NOT a clinical/medical/production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public spec / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

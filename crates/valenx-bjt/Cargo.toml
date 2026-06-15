@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-bjt"
+description = "Bipolar-junction-transistor (BJT) DC biasing for Valenx — textbook large-signal models: the beta current relations (Ic = beta*Ib, Ie = (beta+1)*Ib, Ie = Ic + Ib), fixed-base and voltage-divider (four-resistor) bias networks via Thevenin reduction, the emitter-voltage drop VE = Ie*Re, and active-vs-saturation region classification from the Vce > Vce_sat condition. Research/educational grade: textbook closed-form constant-VBE / constant-beta models (Sedra-Smith, Razavi), NOT a clinical/medical/production engineering tool — it ignores the Early effect, temperature drift, second-order recombination, and SPICE Gummel-Poon physics, so do not use it to qualify real silicon."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

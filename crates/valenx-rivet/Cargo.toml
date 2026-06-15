@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-rivet"
+description = "Riveted-joint strength calculator — closed-form lap/butt rivet-group analysis: rivet shear (single/double), plate bearing, plate tension on the net section, governing failure mode, and joint efficiency vs. the solid plate, from the textbook strength-of-materials formulae. Research/educational grade: textbook closed-form models only; NOT a clinical/medical or production engineering / code-of-record structural-design tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public input / result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

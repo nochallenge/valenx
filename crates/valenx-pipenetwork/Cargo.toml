@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-pipenetwork"
+description = "Pipe-network hydraulics (Hardy-Cross) — solves looped incompressible flow networks by iterative loop-flow correction dQ = -sum(K Q|Q|) / sum(2 K |Q|), with per-pipe head loss h = K Q^2, loop-balance and node-mass-conservation checks. HONESTY: research / educational grade; textbook closed-form / numerical models (Hardy-Cross, Darcy-Weisbach / Hazen-Williams resistance), NOT a clinical / medical / production engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

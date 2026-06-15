@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-screwthread"
+description = "Power / lead screw analysis — closed-form raising and lowering torque, mechanical efficiency, lead vs. lead angle, and the self-locking criterion for a square-thread (Acme-approximated) screw. Research / educational grade: textbook closed-form Coulomb-friction models (Shigley / Budynas power-screw equations); NOT a clinical/medical or production engineering tool — do not use for safety-critical fastener, jack, or actuator certification."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
