@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-pulley"
+description = "Pulley-system mechanics for Valenx — closed-form ideal-machine models for fixed, movable, and block-and-tackle (compound) pulley arrangements: mechanical advantage from the number of rope segments supporting the load, ideal effort = load / MA, velocity ratio = MA, and a real-machine efficiency factor (0 < eta <= 1) relating ideal to actual effort and the work lost to friction. Research/educational grade: these are idealized rigid-body / massless-rope textbook closed-form models, NOT a clinical, medical, or production engineering tool — do not size real rigging, lifting gear, or load-bearing hardware from them."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form arithmetic. serde drives the data-model derives so a
+# pulley system / result round-trips to RON / JSON; thiserror supplies the
+# validated error taxonomy. No numerics crate is needed — the formulae are
+# scalar.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

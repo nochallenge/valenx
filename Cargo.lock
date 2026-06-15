@@ -6615,6 +6615,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-batterypack"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-beam"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6625,6 +6633,15 @@ dependencies = [
 
 [[package]]
 name = "valenx-bearing"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-beltdrive"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
@@ -6663,6 +6680,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-bjt"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-blender-mesh-ops"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6691,6 +6717,14 @@ dependencies = [
 
 [[package]]
 name = "valenx-bonemech"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-brake"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
@@ -6742,6 +6776,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-camdynamics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-camotics-sim"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -6751,6 +6793,14 @@ dependencies = [
  "thiserror 2.0.18",
  "valenx-cam",
  "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-capacitor"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6771,11 +6821,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-chaindrive"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-cheminf"
 version = "0.1.0-alpha.1"
 dependencies = [
  "nalgebra",
  "serde",
+]
+
+[[package]]
+name = "valenx-clutch"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-coil"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6809,6 +6887,15 @@ dependencies = [
 
 [[package]]
 name = "valenx-controls"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-conveyor"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
@@ -6863,6 +6950,15 @@ dependencies = [
  "thiserror 2.0.18",
  "valenx-core",
  "valenx-surface",
+]
+
+[[package]]
+name = "valenx-dcmotor"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7261,6 +7357,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-geartooth"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-genediting"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7357,6 +7462,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-hydraulics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-i18n"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7378,6 +7491,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-inclinedplane"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-inductionmotor"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-inspect"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7391,7 +7522,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-insulation"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-interior"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-interpolation"
 version = "0.1.0-alpha.1"
 dependencies = [
  "nalgebra",
@@ -7432,6 +7580,32 @@ dependencies = [
  "valenx-core",
  "valenx-mesh",
  "valenx-surface",
+]
+
+[[package]]
+name = "valenx-leadscrew"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-led"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-leverage"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7566,6 +7740,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-mosfet"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-muscle"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7652,6 +7834,14 @@ dependencies = [
  "valenx-surface",
  "valenx-techdraw",
  "valenx-viz",
+]
+
+[[package]]
+name = "valenx-odesolver"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7790,11 +7980,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-pidtuning"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-pipeflow"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-pipenetwork"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -7851,6 +8059,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-pneumatics"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-popdynamics"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7865,6 +8081,14 @@ dependencies = [
  "serde",
  "valenx-bioseq",
  "valenx-phylo",
+]
+
+[[package]]
+name = "valenx-powerfactor"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7905,6 +8129,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-pulley"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-pump"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7931,6 +8163,15 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "nalgebra",
  "serde",
+]
+
+[[package]]
+name = "valenx-queueing"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7967,6 +8208,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-rectifier"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-refrigeration"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7984,6 +8234,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-regression"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-reinforcement"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7992,6 +8251,15 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-reliability"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -8019,6 +8287,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-resistor-network"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-retainingwall"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-reverse"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -8030,6 +8316,16 @@ dependencies = [
  "valenx-core",
  "valenx-mesh",
  "valenx-mesh-to-brep",
+]
+
+[[package]]
+name = "valenx-rivet"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -8061,10 +8357,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-rootfind"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-salome-bridge"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-samplingtheory"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-screwthread"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-shaftdesign"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -8078,6 +8409,15 @@ dependencies = [
  "thiserror 2.0.18",
  "valenx-cad",
  "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-shellandtube"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -8147,6 +8487,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-springcombination"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-springs"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -8163,6 +8511,14 @@ name = "valenx-statics"
 version = "0.1.0-alpha.1"
 dependencies = [
  "nalgebra",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-statistics"
+version = "0.1.0-alpha.1"
+dependencies = [
  "serde",
  "thiserror 2.0.18",
 ]
@@ -8191,6 +8547,15 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-strainrosette"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -8267,10 +8632,27 @@ name = "valenx-test-utils"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "valenx-thermalexpansion"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-thermistor"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-thermocouple"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -8304,11 +8686,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-threephase"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-torsion"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-transformer"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -8381,6 +8779,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-weir"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-weld"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -8390,6 +8797,14 @@ dependencies = [
 
 [[package]]
 name = "valenx-windturbine"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-zener"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",

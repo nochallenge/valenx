@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-shaftdesign"
+description = "Solid circular shaft stress analysis — closed-form torsion (tau = 16 T / pi d^3), bending (sigma = 32 M / pi d^3), the equivalent torque sqrt(M^2 + T^2), and the maximum-shear-stress combined criterion. Research / educational grade: textbook closed-form mechanics-of-materials models, NOT a clinical / medical / production engineering tool — verify against a qualified engineer and design code before any real load-bearing use."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
