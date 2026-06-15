@@ -21,9 +21,11 @@ pub struct OfftargetEvidence {
 
 /// One candidate entering the funnel.
 ///
-/// `method_scores` and `features` drive selection; the three optional screen
-/// inputs drive safety. **An absent screen input (`None`) means the screen was
-/// not run — it is recorded as such, never treated as a clean pass.**
+/// `method_scores` and `features` drive selection; the screen inputs drive
+/// safety. **An absent optional screen input (`None`) means the screen was not
+/// run — it is recorded as such, never treated as a clean pass.** (For
+/// sequence-driven runs, [`crate::run_funnel_seqs`] fills these from the actual
+/// screens.)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FunnelCandidate {
     /// Stable candidate identifier.
@@ -42,6 +44,12 @@ pub struct FunnelCandidate {
     pub immunogenicity: Option<f64>,
     /// Predicted CRISPR off-target edit-site count, or `None` if not run.
     pub crispr_offtarget_sites: Option<u32>,
+    /// Developability liability flags (e.g. aggregation-prone region, extreme
+    /// pI). Empty means none raised; it does **not** mean the screen was skipped.
+    pub developability_flags: Vec<String>,
+    /// Count of predicted linear B-cell epitope regions, or `None` if the screen
+    /// was not run.
+    pub bcell_epitope_regions: Option<usize>,
 }
 
 /// An upstream pipeline stage that needs a gated resource (a trained model, a
@@ -334,6 +342,37 @@ fn consolidate_candidate(
         None => flags.push(not_run_flag("crispr-off-target")),
     }
 
+    // Developability liabilities (manufacturability concerns, Low severity).
+    for detail in &cand.developability_flags {
+        flags.push(RiskFlag::new(
+            "developability",
+            Severity::Low,
+            detail.clone(),
+        ));
+    }
+
+    // Predicted linear B-cell epitope regions (antibody-binding surface).
+    match cand.bcell_epitope_regions {
+        Some(n) if n >= 3 => flags.push(
+            RiskFlag::new(
+                "bcell-epitope",
+                Severity::Moderate,
+                format!("{n} predicted linear B-cell epitope region(s)"),
+            )
+            .with_evidence(n as f64),
+        ),
+        Some(n) if n >= 1 => flags.push(
+            RiskFlag::new(
+                "bcell-epitope",
+                Severity::Low,
+                format!("{n} predicted linear B-cell epitope region(s)"),
+            )
+            .with_evidence(n as f64),
+        ),
+        Some(_) => {} // zero regions: ran, nothing to flag
+        None => flags.push(not_run_flag("bcell-epitope")),
+    }
+
     Ok(consolidate(cand.id.clone(), flags)?)
 }
 
@@ -377,6 +416,8 @@ mod tests {
             offtarget: None,
             immunogenicity: None,
             crispr_offtarget_sites: None,
+            developability_flags: Vec::new(),
+            bcell_epitope_regions: None,
         }
     }
 
@@ -430,8 +471,9 @@ mod tests {
         let cands = vec![cand("a", vec![1.0], vec![0.0])];
         let out = run_funnel("unrun test", &cands, &config(1)).unwrap();
         let report = &out.reports[0];
-        // All three screens were None -> three Info "not run" flags.
-        assert_eq!(report.flags.len(), 3);
+        // All four optional screens were None/empty -> four Info "not run" flags
+        // (off-target, immunogenicity, CRISPR off-target, B-cell epitope).
+        assert_eq!(report.flags.len(), 4);
         assert!(report.flags.iter().all(|f| f.severity == Severity::Info));
         assert!(report.flags.iter().all(|f| f.detail.contains("not run")));
         // A report with only "not run" flags still demands human review.

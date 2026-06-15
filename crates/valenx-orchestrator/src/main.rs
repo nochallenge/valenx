@@ -28,6 +28,8 @@ fn main() {
             }),
             immunogenicity: Some(0.05),
             crispr_offtarget_sites: Some(0),
+            developability_flags: vec!["aggregation-prone region 12-18".into()],
+            bcell_epitope_regions: Some(4), // Moderate band
         },
         FunnelCandidate {
             id: "design_02".into(),
@@ -40,6 +42,8 @@ fn main() {
             }),
             immunogenicity: Some(0.32), // Moderate band
             crispr_offtarget_sites: Some(2),
+            developability_flags: Vec::new(),
+            bcell_epitope_regions: Some(1), // Low band
         },
         FunnelCandidate {
             id: "design_03".into(),
@@ -49,6 +53,8 @@ fn main() {
             offtarget: None, // screen not run
             immunogenicity: None,
             crispr_offtarget_sites: None,
+            developability_flags: Vec::new(),
+            bcell_epitope_regions: None,
         },
         FunnelCandidate {
             id: "design_04".into(),
@@ -58,6 +64,8 @@ fn main() {
             offtarget: None,
             immunogenicity: None,
             crispr_offtarget_sites: None,
+            developability_flags: Vec::new(),
+            bcell_epitope_regions: None,
         },
         FunnelCandidate {
             id: "design_05".into(),
@@ -67,6 +75,8 @@ fn main() {
             offtarget: None,
             immunogenicity: None,
             crispr_offtarget_sites: None,
+            developability_flags: Vec::new(),
+            bcell_epitope_regions: None,
         },
         FunnelCandidate {
             id: "design_06".into(),
@@ -76,6 +86,8 @@ fn main() {
             offtarget: None,
             immunogenicity: None,
             crispr_offtarget_sites: None,
+            developability_flags: Vec::new(),
+            bcell_epitope_regions: None,
         },
     ];
 
