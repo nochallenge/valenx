@@ -7089,6 +7089,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-dossier"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "valenx-repro",
+]
+
+[[package]]
 name = "valenx-draft"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7815,6 +7825,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-myostatin"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "valenx-offtarget",
+ "valenx-repro",
+]
+
+[[package]]
 name = "valenx-neuro"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7981,6 +7999,18 @@ dependencies = [
  "thiserror 2.0.18",
  "toml 0.8.23",
  "valenx-core",
+]
+
+[[package]]
+name = "valenx-orchestrator"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "valenx-dossier",
+ "valenx-safety",
+ "valenx-select",
 ]
 
 [[package]]
@@ -8426,6 +8456,15 @@ dependencies = [
 
 [[package]]
 name = "valenx-rootfind"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-safety"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
