@@ -7825,6 +7825,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-myostatin"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "valenx-offtarget",
+ "valenx-repro",
+]
+
+[[package]]
 name = "valenx-neuro"
 version = "0.1.0-alpha.1"
 dependencies = [
