@@ -35,6 +35,22 @@ pub enum OrchestratorError {
     /// The dossier-assembly stage ([`valenx_dossier`]) failed.
     #[error("dossier stage failed: {0}")]
     Dossier(#[from] valenx_dossier::DossierError),
+
+    /// The off-target screen ([`valenx_offtarget`]) failed.
+    #[error("off-target screen failed: {0}")]
+    OffTarget(#[from] valenx_offtarget::OffTargetError),
+
+    /// The immunogenicity screen ([`valenx_immuno`]) failed.
+    #[error("immunogenicity screen failed: {0}")]
+    Immuno(#[from] valenx_immuno::ImmunoError),
+
+    /// The developability screen ([`valenx_developability`]) failed.
+    #[error("developability screen failed: {0}")]
+    Developability(#[from] valenx_developability::DevelopabilityError),
+
+    /// The B-cell epitope screen ([`valenx_epitope_map`]) failed.
+    #[error("epitope screen failed: {0}")]
+    Epitope(#[from] valenx_epitope_map::EpitopeError),
 }
 
 impl OrchestratorError {
@@ -46,6 +62,10 @@ impl OrchestratorError {
             OrchestratorError::Select(_) => "select",
             OrchestratorError::Safety(_) => "safety",
             OrchestratorError::Dossier(_) => "dossier",
+            OrchestratorError::OffTarget(_) => "offtarget",
+            OrchestratorError::Immuno(_) => "immuno",
+            OrchestratorError::Developability(_) => "developability",
+            OrchestratorError::Epitope(_) => "epitope",
         }
     }
 }
