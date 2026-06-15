@@ -243,6 +243,8 @@ members = [
     "crates/valenx-conveyor",
     "crates/valenx-strainrosette",
     "crates/valenx-springcombination",
+    "crates/valenx-immuno",
+    "crates/valenx-offtarget",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
