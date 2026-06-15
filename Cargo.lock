@@ -7482,6 +7482,15 @@ name = "valenx-icons"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "valenx-immuno"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-immunodynamics"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7756,6 +7765,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-myostatin"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "valenx-offtarget",
+ "valenx-repro",
+]
+
+[[package]]
 name = "valenx-neuro"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -7841,6 +7858,15 @@ name = "valenx-odesolver"
 version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-offtarget"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
