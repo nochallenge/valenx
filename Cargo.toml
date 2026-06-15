@@ -246,6 +246,7 @@ members = [
     "crates/valenx-immuno",
     "crates/valenx-offtarget",
     "crates/valenx-calibrate",
+    "crates/valenx-select",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
