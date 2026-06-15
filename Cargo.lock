@@ -7369,6 +7369,15 @@ name = "valenx-icons"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "valenx-immuno"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-immunodynamics"
 version = "0.1.0-alpha.1"
 dependencies = [

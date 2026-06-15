@@ -195,6 +195,7 @@ members = [
     "crates/valenx-rcbeam",
     "crates/valenx-openchannel",
     "crates/valenx-flywheel",
+    "crates/valenx-immuno",
     "crates/valenx-test-utils",
     "crates/valenx-e2e-tests",
 
