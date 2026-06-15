@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-score"
+description = "Physics-grounded scoring primitives for ranking biologic candidates — Coulomb / Lennard-Jones / Born / generalized-Born / SASA energy terms, an MM-GBSA-style endpoint binding-energy decomposition, and a unified comparable score that fuses ipTM / pLDDT / dock score / dG into one ranked value with components broken out. Research/educational; a simplified endpoint estimator, NOT a validated affinity predictor."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
