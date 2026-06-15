@@ -258,6 +258,17 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.docked_layout, "Docked layout")
+                        .on_hover_text(
+                            "Opt-in: arrange panels as resizable, tabbable, \
+                             closable tiles (rows + columns) in the central area. \
+                             Off = classic single-viewport layout.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     ui.checkbox(&mut self.snap_to_grid, "Snap to grid")
                         .on_hover_text(
                             "Snap the viewport cursor to the nearest ground-grid \
@@ -1265,6 +1276,14 @@ impl eframe::App for ValenxApp {
         // an empty-state for the central panel.
         let show_landing = self.project.is_none() && self.stl.is_none() && self.mesh.is_none();
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Opt-in docked / tiling layout: when on, the central area is
+            // an egui_tiles tree (resizable splits, tabs, close, drag)
+            // instead of the classic body. Return early so the rest of
+            // the closure (landing page, 2D/3D viewport) is bypassed.
+            if self.docked_layout {
+                self.docking.show(ui);
+                return;
+            }
             if show_landing {
                 // CARGO_PKG_REPOSITORY inherits from
                 // [workspace.package].repository at build time, so the

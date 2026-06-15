@@ -60,6 +60,7 @@ pub mod collision_workbench;
 pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
+pub mod docking;
 pub mod draft_overlay;
 pub mod engine_workbench;
 pub mod fasteners_workbench;
@@ -167,6 +168,14 @@ pub use crate::types::{BottomTab, LoadedMesh, LoadedStl, RunHistoryEntry, SweepH
 /// Root application state.
 #[derive(Default)]
 pub struct ValenxApp {
+    /// Opt-in dockable / tiling central-panel layout (View → Docked
+    /// layout). Default-built tile tree; only painted when
+    /// [`ValenxApp::docked_layout`] is on. See [`docking`].
+    pub(crate) docking: docking::DockingState,
+    /// When true, the central panel renders the [`docking`] tile tree
+    /// (resizable splits / tabs / close / drag) instead of the classic
+    /// single-viewport layout. Default `false` (classic layout).
+    pub(crate) docked_layout: bool,
     pub(crate) project: Option<LoadedProject>,
     pub(crate) project_path: Option<PathBuf>,
     /// RBAC override block parsed from the loaded project's

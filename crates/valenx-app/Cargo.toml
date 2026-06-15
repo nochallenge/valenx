@@ -39,6 +39,7 @@ png                = "0.18"
 eframe     = { workspace = true }
 egui       = { workspace = true }
 egui_plot  = { workspace = true }
+egui_tiles = { workspace = true }
 rfd        = { workspace = true }
 bytemuck   = { workspace = true }
 # `opener` opens a URL or filesystem path in the user's default
