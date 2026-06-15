@@ -7042,6 +7042,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-developability"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-diffusion"
 version = "0.1.0-alpha.1"
 dependencies = [
