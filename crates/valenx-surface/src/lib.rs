@@ -96,6 +96,6 @@ pub use error::SurfaceError;
 pub use frenet::{frame_at, FrenetFrame};
 pub use nurbs_curve::NurbsCurve;
 pub use nurbs_surface::NurbsSurface;
-pub use revolve::revolve_z_full;
+pub use revolve::{revolve_z, revolve_z_full};
 pub use sew::Edge;
 pub use trim::{TrimSide, UvTrimParams};
