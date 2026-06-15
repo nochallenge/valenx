@@ -10,7 +10,7 @@
 //! either hosts the existing viewport / browser draw code or renders a
 //! lightweight labelled placeholder.
 //!
-//! The whole feature is gated behind [`crate::ValenxApp::docked_layout`]
+//! The whole feature is gated behind the `docked_layout` field on the app
 //! (default `false`), so the established single-viewport layout stays
 //! the default and nothing here runs unless the user ticks
 //! **View → Docked layout**.
@@ -18,9 +18,9 @@
 //! ## Shape
 //!
 //! - [`Pane`] — an enum of the views that can live in a tile. Each pane
-//!   knows its [`Pane::title`] and how to draw itself via [`Pane::ui`].
-//! - [`DockingState`] — wraps an [`egui_tiles::Tree<Pane>`] plus a
-//!   [`Behavior`] impl. [`DockingState::default`] builds a starting
+//!   knows its [`Pane::title`] and how to draw itself.
+//! - [`DockingState`] — wraps an `egui_tiles::Tree<Pane>` plus a
+//!   `Behavior` impl. [`DockingState::default`] builds a starting
 //!   layout that demonstrates a horizontal split, a vertical split, and
 //!   a tab group.
 //! - [`DockingState::show`] — one call that paints the whole tree into a
@@ -155,7 +155,7 @@ impl egui_tiles::Behavior<Pane> for Behavior {
     }
 }
 
-/// Owns the [`egui_tiles::Tree`] of [`Pane`]s plus its [`Behavior`].
+/// Owns the `egui_tiles::Tree` of [`Pane`]s plus its `Behavior`.
 ///
 /// Construct with [`DockingState::default`] for a sensible starting
 /// layout, then paint every frame with [`DockingState::show`].
