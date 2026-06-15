@@ -1,0 +1,26 @@
+[package]
+name        = "valenx-queueing"
+description = "M/M/1 queueing-theory calculator for Valenx: the single-server, Poisson-arrival, exponential-service birth-death queue, with closed-form steady-state metrics — traffic intensity rho = lambda / mu, mean number in system L = rho / (1 - rho), mean number in queue Lq = rho^2 / (1 - rho), mean time in system W = 1 / (mu - lambda), mean wait in queue Wq = rho / (mu - lambda), server utilization and idle probability, the stationary state distribution P(n) = (1 - rho) rho^n, and a Little's-law (L = lambda W) consistency check. HONESTY: research/educational grade; textbook closed-form steady-state queueing models (Kendall M/M/1, Erlang birth-death), NOT a clinical/medical/production engineering or capacity-planning tool. Pure algorithms, no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form arithmetic. serde drives the metric / parameter
+# derives so a computed result round-trips to JSON; thiserror builds the
+# validated error enum. No numerics or platform dependencies — every
+# formula is an exact rational of lambda and mu.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip test for the serializable `Metrics` / `Mm1` records.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

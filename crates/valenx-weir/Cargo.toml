@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-weir"
+description = "Weir-flow hydraulics (open-channel) — sharp-crested rectangular and triangular (V-notch) weir discharge from the textbook closed forms Q = Cd·(2/3)·√(2g)·L·H^(3/2) and Q = Cd·(8/15)·√(2g)·tan(θ/2)·H^(5/2). Research / educational grade: textbook closed-form models only; NOT a clinical, medical, or production engineering tool — not a substitute for calibrated field gauging or a validated hydraulic design code."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

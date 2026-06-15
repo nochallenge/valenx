@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-retainingwall"
+description = "Retaining-wall lateral earth-pressure (Rankine theory) — active/passive coefficients Ka = tan^2(45 - phi/2) and Kp = 1/Ka, the linear lateral pressure profile Ka*gamma*z, and the resultant thrust 0.5*Ka*gamma*H^2 acting at H/3 above the base. Research/educational grade: implements the classic textbook closed-form Rankine model for a smooth vertical wall retaining dry, cohesionless, horizontally backfilled soil; it is NOT a clinical/medical tool nor a production geotechnical-engineering or structural-design tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public input/result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

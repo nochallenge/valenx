@@ -1,0 +1,28 @@
+[package]
+name        = "valenx-rootfind"
+description = "Scalar root-finding for Valenx: the three textbook bracketing / open methods for solving f(x) = 0 over the reals — bisection (guaranteed convergence on a sign-change bracket), the Newton-Raphson method (quadratic convergence given the derivative) and the secant method (super-linear convergence with no derivative). Each solver takes any `f: Fn(f64) -> f64`, a user-supplied tolerance and an iteration cap, and returns a `Result` carrying the root, the residual and the iteration count — or a typed error for a missing bracket, a vanishing slope, a non-finite evaluation or a budget overrun. Research/educational grade: textbook closed-form / numerical models, NOT a clinical / medical / production-engineering tool. Pure deterministic algorithms — no external processes, no unsafe code."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure scalar numerics. `serde` (derive) drives the data-model derives
+# on the configuration / report structs so a solver call and its result
+# round-trip through JSON / RON; `thiserror` backs the typed error enum.
+# No heavy or platform-specific dependencies — the three solvers are
+# hand-rolled and operate on plain `f64`.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Used only by the test suite to confirm the `Root` / `Settings` /
+# `Method` structs round-trip through a real serde format.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

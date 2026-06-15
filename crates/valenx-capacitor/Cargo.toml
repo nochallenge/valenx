@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-capacitor"
+description = "Capacitor electrostatics and RC-circuit calculators for Valenx: parallel-plate capacitance C = eps0 eps_r A / d, stored energy E = 1/2 C V^2, capacitive reactance X_C = 1 / (2 pi f C), single-pole RC charge / discharge transients V(t) = V0 (1 - exp(-t/RC)), and series / parallel network combination. Research/educational grade — textbook closed-form linear-dielectric and ideal-lumped-element models only; ignores fringing fields, dielectric loss / breakdown, leakage (ESR / DCR), self-resonance and parasitics; NOT a clinical/medical or production electrical-engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form scalar formulas. thiserror drives the validated
+# error taxonomy; serde derives the small parameter / result structs so
+# specs round-trip to RON / JSON. No numeric or platform dependencies.
+thiserror = { workspace = true }
+serde     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

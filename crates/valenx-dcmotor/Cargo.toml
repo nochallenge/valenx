@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-dcmotor"
+description = "Brushed permanent-magnet DC-motor steady-state model for Valenx. Closed-form armature relations from a first-year machines textbook: back-EMF E = Ke*omega, electromagnetic torque T = Kt*I, the armature voltage balance V = I*R + Ke*omega, stall current I = V/R and stall torque, the no-load speed omega = V/Ke, the linear torque-speed line between those two operating points, and the electrical-to-mechanical efficiency T*omega/(V*I). HONESTY: research/educational grade; textbook closed-form/numerical models; NOT a clinical/medical/production engineering tool — it ignores armature inductance, brush/contact drop, magnetic saturation, armature reaction, temperature-dependent winding resistance, iron/windage/friction losses and dynamic transients, so it must not be used to size, qualify, or certify a real motor or drive."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Round-trips the `serde` derives in tests; runtime deps stay serde + thiserror.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

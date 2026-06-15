@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-inductionmotor"
+description = "Three-phase induction (asynchronous) motor steady-state kinematics for Valenx: synchronous speed Ns = 120 f / poles, fractional slip s = (Ns - Nr) / Ns, rotor electrical frequency f_r = s f, and rotor mechanical speed Nr = Ns (1 - s), with validated constructors. Research/educational grade — textbook closed-form rotating-field relations only; NOT a clinical/medical/production engineering tool (no equivalent-circuit losses, torque-slip curve, magnetic saturation, or thermal modelling)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip coverage for the `Serialize`/`Deserialize` derives.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

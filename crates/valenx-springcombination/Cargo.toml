@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-springcombination"
+description = "Linear-spring combination calculator for Valenx: textbook Hooke's-law models for springs combined in parallel (k = sum(k_i)) and in series (1/k = sum(1/k_i)), the restoring force F = k*x and the stored elastic potential energy U = 0.5*k*x^2. Research/educational grade only — closed-form / numerical models from first-year mechanics, NOT a clinical, medical, or production engineering tool; real assemblies involve preload, buckling, fatigue, manufacturing tolerance, non-linear large deflection and material creep that these ideal-spring formulas deliberately ignore."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Pure closed-form scalar mechanics — the only dependencies are serde for
+# the spec-struct derives and thiserror for the validated error taxonomy.
+# No numerics or platform crates are needed.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
