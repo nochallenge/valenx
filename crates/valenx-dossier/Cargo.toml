@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-dossier"
+description = "Assemble a biologic-design run into one signed, reproducible dossier: goal, ranked candidates with broken-out scores, calibrated confidence (or an honest BLOCKED note when no calibration ground truth exists), and safety flags — content-hashed via valenx-repro. Never marks a candidate safe; promotion to wet-lab requires human sign-off. Research/educational."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde        = { workspace = true }
+thiserror    = { workspace = true }
+valenx-repro = { path = "../valenx-repro" }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

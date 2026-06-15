@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-safety"
+description = "Consolidate a candidate's independent safety screens (off-target / cross-reactivity, immunogenicity, CRISPR off-target) into ONE per-candidate risk report: severity-ranked flags with sources and evidence, plus an aggregate. Never emits an automatic 'safe' verdict — every report requires human review. Research/educational heuristics; NOT a validated safety assessment."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

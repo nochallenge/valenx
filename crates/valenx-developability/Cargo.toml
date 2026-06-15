@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-developability"
+description = "Sequence-level developability flags for designed proteins/biologics: Kyte-Doolittle hydrophobicity (GRAVY + profile), aggregation-prone regions, net charge vs pH, and isoelectric point. Research/educational textbook biophysics (published hydropathy scale + standard pKa set); NOT a validated developability or formulation assessment."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
