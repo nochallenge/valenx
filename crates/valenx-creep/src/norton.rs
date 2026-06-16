@@ -26,7 +26,10 @@
 //!
 //! so that for fixed `A0`, `Q` and `sigma`, the creep rate rises with
 //! temperature `T`. [`NortonLaw::with_arrhenius`] builds that form and
-//! [`NortonLaw::rate_at`] evaluates the resulting rate.
+//! [`NortonLaw::rate_at`] evaluates the resulting rate. The inverse
+//! [`norton_stress_for_rate`] / [`NortonLaw::stress_for_rate`] solves
+//! the same law for the stress `sigma = (epsilon_dot / A)^(1/n)` that
+//! produces a target (e.g. allowable) creep rate.
 //!
 //! ## Honest scope
 //!
@@ -71,6 +74,43 @@ pub fn norton_creep_rate(coefficient: f64, stress: f64, exponent: f64) -> Result
     let stress = require_non_negative("stress", stress)?;
     let exponent = require_finite("exponent", exponent)?;
     Ok(coefficient * stress.powf(exponent))
+}
+
+/// Invert Norton's law for the stress that produces a target
+/// steady-state creep rate: `sigma = (epsilon_dot / A)^(1/n)`.
+///
+/// This is the inverse of [`norton_creep_rate`]: given an allowable
+/// secondary-creep rate, it returns the stress at which the law predicts
+/// exactly that rate. The coefficient `A` and the stress exponent `n`
+/// must be strictly positive (a zero coefficient or exponent has no
+/// invertible stress dependence); `target_rate` must be non-negative,
+/// and a zero rate maps to zero stress.
+///
+/// # Errors
+///
+/// Returns [`CreepError`] if `coefficient` or `exponent` is non-finite
+/// or not strictly positive, or if `target_rate` is non-finite or
+/// negative.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_creep::norton::{norton_creep_rate, norton_stress_for_rate};
+///
+/// // Round-trip: stress -> rate -> stress.
+/// let rate = norton_creep_rate(1e-12, 100.0, 5.0).unwrap();
+/// let sigma = norton_stress_for_rate(1e-12, rate, 5.0).unwrap();
+/// assert!((sigma - 100.0).abs() < 1e-6);
+/// ```
+pub fn norton_stress_for_rate(
+    coefficient: f64,
+    target_rate: f64,
+    exponent: f64,
+) -> Result<f64, CreepError> {
+    let coefficient = require_positive("coefficient", coefficient)?;
+    let target_rate = require_non_negative("target_rate", target_rate)?;
+    let exponent = require_positive("exponent", exponent)?;
+    Ok((target_rate / coefficient).powf(1.0 / exponent))
 }
 
 /// A calibrated Norton-Bailey secondary-creep law.
@@ -146,6 +186,21 @@ impl NortonLaw {
     /// Returns [`CreepError`] if `stress` is non-finite or negative.
     pub fn rate_at(&self, stress: f64) -> Result<f64, CreepError> {
         norton_creep_rate(self.coefficient, stress, self.exponent)
+    }
+
+    /// The applied stress that yields a given steady-state creep rate,
+    /// inverting `epsilon_dot = A * sigma^n` for `sigma`.
+    ///
+    /// The inverse of [`NortonLaw::rate_at`]; delegates to
+    /// [`norton_stress_for_rate`]. Requires the law's coefficient `A`
+    /// and exponent `n` to be strictly positive.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CreepError`] if the coefficient or exponent is not
+    /// strictly positive, or if `target_rate` is non-finite or negative.
+    pub fn stress_for_rate(&self, target_rate: f64) -> Result<f64, CreepError> {
+        norton_stress_for_rate(self.coefficient, target_rate, self.exponent)
     }
 }
 
@@ -243,6 +298,64 @@ mod tests {
         assert!(norton_creep_rate(-1.0, 100.0, 5.0).is_err());
         assert!(norton_creep_rate(1.0, -100.0, 5.0).is_err());
         assert!(NortonLaw::new(-1.0e-9, 5.0).is_err());
+    }
+
+    #[test]
+    fn stress_for_rate_inverts_the_forward_law() {
+        // Round-trip: stress -> rate -> stress recovers the original.
+        let (a, n) = (1e-12, 5.0);
+        let sigma0 = 100.0;
+        let rate = norton_creep_rate(a, sigma0, n).unwrap();
+        let sigma = norton_stress_for_rate(a, rate, n).unwrap();
+        assert!((sigma - sigma0).abs() / sigma0 < 1e-9, "got {sigma}");
+    }
+
+    #[test]
+    fn stress_for_rate_matches_closed_form() {
+        // sigma = (rate/A)^(1/n). A=2, rate=2000, n=3 -> (1000)^(1/3) = 10.
+        let sigma = norton_stress_for_rate(2.0, 2000.0, 3.0).unwrap();
+        assert!((sigma - 10.0).abs() < 1e-9, "got {sigma}");
+    }
+
+    #[test]
+    fn stress_for_rate_via_law_round_trips() {
+        let law = NortonLaw::new(3.5e-9, 4.0).unwrap();
+        let rate = law.rate_at(75.0).unwrap();
+        let sigma = law.stress_for_rate(rate).unwrap();
+        assert!((sigma - 75.0).abs() / 75.0 < 1e-9, "got {sigma}");
+    }
+
+    #[test]
+    fn zero_rate_maps_to_zero_stress() {
+        let sigma = norton_stress_for_rate(5.0, 0.0, 3.0).unwrap();
+        assert!(sigma.abs() < EPS, "got {sigma}");
+    }
+
+    #[test]
+    fn stress_for_rate_is_monotonic() {
+        let law = NortonLaw::new(1e-10, 5.0).unwrap();
+        let lo = law.stress_for_rate(1e-3).unwrap();
+        let hi = law.stress_for_rate(1e-1).unwrap();
+        assert!(
+            hi > lo,
+            "higher target rate needs higher stress: {hi} vs {lo}"
+        );
+    }
+
+    #[test]
+    fn stress_for_rate_rejects_bad_domain() {
+        // A zero/negative coefficient or exponent is not invertible.
+        assert!(norton_stress_for_rate(0.0, 1.0, 5.0).is_err());
+        assert!(norton_stress_for_rate(1e-10, 1.0, 0.0).is_err());
+        assert!(norton_stress_for_rate(1e-10, 1.0, -2.0).is_err());
+        // Negative or non-finite target rate.
+        assert!(norton_stress_for_rate(1e-10, -1.0, 5.0).is_err());
+        assert!(norton_stress_for_rate(1e-10, f64::NAN, 5.0).is_err());
+        // A law with a zero coefficient cannot be inverted.
+        assert!(NortonLaw::new(0.0, 5.0)
+            .unwrap()
+            .stress_for_rate(1.0)
+            .is_err());
     }
 
     #[test]
