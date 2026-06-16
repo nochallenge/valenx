@@ -114,6 +114,26 @@ impl TwoCompartment {
     pub fn auc(&self) -> f64 {
         self.a / self.alpha + self.b / self.beta
     }
+
+    /// Partial area under the concentration-time curve from time 0 to `t`,
+    /// `AUC(0→t) = (A/α)(1 - exp(-α·t)) + (B/β)(1 - exp(-β·t))` — the
+    /// cumulative exposure accrued by time `t`.
+    ///
+    /// Each exponential phase contributes its own saturating term, so this
+    /// is the integral of [`concentration`](Self::concentration) over
+    /// `[0, t]`: it is zero at `t = 0`, rises monotonically, and approaches
+    /// the total [`auc`](Self::auc) (`= A/α + B/β`) as `t → ∞`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PkError::Negative`](crate::PkError::Negative) if `t` is
+    /// negative or non-finite.
+    pub fn auc_to(&self, t: f64) -> Result<f64> {
+        let t = require_non_negative("t", t)?;
+        let dist = self.a / self.alpha * (1.0 - (-self.alpha * t).exp());
+        let elim = self.b / self.beta * (1.0 - (-self.beta * t).exp());
+        Ok(dist + elim)
+    }
 }
 
 #[cfg(test)]
@@ -210,5 +230,51 @@ mod tests {
     #[test]
     fn rejects_negative_time() {
         assert!(model().concentration(-0.5).is_err());
+    }
+
+    #[test]
+    fn partial_auc_is_zero_at_origin_and_total_at_infinity() {
+        let m = model();
+        assert!(m.auc_to(0.0).unwrap().abs() < TOL, "AUC(0→0) = 0");
+        // The terminal half-life is ln2/0.1 ≈ 6.93 h; by t = 1000 both
+        // phases are fully accrued.
+        let far = m.auc_to(1000.0).unwrap();
+        assert!((far - m.auc()).abs() < 1e-9, "AUC(0→∞) → 28, got {far}");
+    }
+
+    #[test]
+    fn partial_auc_matches_a_trapezoidal_integral_of_concentration() {
+        // Numerically integrate the biexponential over [0, T] and compare
+        // to the closed form.
+        let m = model();
+        let big_t = 90.0;
+        let n = 180_000;
+        let dt = big_t / n as f64;
+        let mut area = 0.0;
+        let mut prev = m.concentration(0.0).unwrap();
+        for i in 1..=n {
+            let c = m.concentration(i as f64 * dt).unwrap();
+            area += 0.5 * (prev + c) * dt;
+            prev = c;
+        }
+        let closed = m.auc_to(big_t).unwrap();
+        assert!(
+            (area - closed).abs() < 1e-5,
+            "trapz {area} vs closed {closed}"
+        );
+    }
+
+    #[test]
+    fn partial_auc_increases_monotonically_and_rejects_bad_time() {
+        let m = model();
+        let mut prev = -1.0;
+        for i in 0..40 {
+            let a = m.auc_to(i as f64).unwrap();
+            assert!(a > prev, "AUC(0→t) should increase: {a} after {prev}");
+            assert!(a <= m.auc() + TOL, "never exceeds the total");
+            prev = a;
+        }
+        assert!(m.auc_to(-1.0).is_err());
+        assert!(m.auc_to(f64::NAN).is_err());
     }
 }
