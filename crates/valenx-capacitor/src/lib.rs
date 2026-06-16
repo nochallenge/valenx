@@ -14,7 +14,10 @@
 //! - [`transient`] — first-order RC [charge](transient::charging_voltage) and
 //!   [discharge](transient::discharging_voltage) responses
 //!   `V(t) = V0 (1 - exp(-t/RC))` / `V0 exp(-t/RC)` with the
-//!   [time constant](transient::time_constant) `tau = R C`.
+//!   [time constant](transient::time_constant) `tau = R C`, plus their
+//!   inverses [time-to-charge](transient::time_to_charge) /
+//!   [time-to-discharge](transient::time_to_discharge) `t = R C ln(...)`
+//!   for RC-timing design.
 //! - [`network`] — ideal [`series`] and [`parallel`] combination.
 //! - [`spec`] — a small serde-serialisable [`spec::ParallelPlate`]
 //!   descriptor that ties the geometry to its derived quantities.
@@ -57,7 +60,8 @@ pub use parallel_plate::{capacitance, charge, stored_energy, VACUUM_PERMITTIVITY
 pub use reactance::{reactance, reactance_omega};
 pub use spec::ParallelPlate;
 pub use transient::{
-    charging_voltage, discharging_voltage, time_constant, CHARGE_FRACTION_ONE_TAU,
+    charging_voltage, discharging_voltage, time_constant, time_to_charge, time_to_discharge,
+    CHARGE_FRACTION_ONE_TAU,
 };
 
 #[cfg(test)]
