@@ -9,13 +9,16 @@
 //!
 //! - [`fillet`] — equal-leg fillet welds. The effective throat
 //!   `0.707 * leg` ([`fillet::FILLET_THROAT_FACTOR`]), the average
-//!   throat shear stress `tau = F / (throat * length)`, and the
-//!   allowable load `F_allow = tau_allow * throat * length`, both as a
-//!   [`fillet::FilletWeld`] value and as free functions.
+//!   throat shear stress `tau = F / (throat * length)`, the
+//!   allowable load `F_allow = tau_allow * throat * length`, and the
+//!   weld length required to carry a load at an allowable stress
+//!   ([`fillet::required_length`]) — both as a [`fillet::FilletWeld`]
+//!   value and as free functions.
 //! - [`butt`] — complete-joint-penetration butt welds. The direct
-//!   normal stress `sigma = F / (thickness * length)` and the matching
-//!   allowable load, as a [`butt::ButtWeld`] value and as free
-//!   functions.
+//!   normal stress `sigma = F / (thickness * length)`, the matching
+//!   allowable load, and the required weld length
+//!   ([`butt::required_length`]), as a [`butt::ButtWeld`] value and as
+//!   free functions.
 //! - [`error`] — the [`WeldError`] taxonomy and the shared
 //!   strictly-positive-finite input gate.
 //!

@@ -133,6 +133,30 @@ pub fn capacity(allowable_normal_stress: f64, thickness: f64, length: f64) -> Re
     ButtWeld::new(thickness, length)?.capacity(allowable_normal_stress)
 }
 
+/// Weld **length required** to carry a normal `force` at an allowable
+/// normal stress, for a CJP butt weld of effective `thickness`:
+///
+/// ```text
+/// length = force / (sigma_allow * thickness)
+/// ```
+///
+/// This is [`capacity`] solved for the length — the weld-sizing inverse.
+/// A [`ButtWeld`] built with this length carries exactly `force` at the
+/// allowable stress (its [`normal_stress`](ButtWeld::normal_stress) then
+/// equals `sigma_allow`).
+///
+/// # Errors
+///
+/// Returns [`WeldError::BadParameter`](crate::error::WeldError::BadParameter)
+/// when any of `force`, `thickness` or `allowable_normal_stress` is not a
+/// strictly positive finite number.
+pub fn required_length(force: f64, thickness: f64, allowable_normal_stress: f64) -> Result<f64> {
+    let force = require_positive("force", force)?;
+    let thickness = require_positive("thickness", thickness)?;
+    let sigma = require_positive("allowable_normal_stress", allowable_normal_stress)?;
+    Ok(force / (sigma * thickness))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +231,42 @@ mod tests {
         let w = ButtWeld::new(10.0, 100.0).unwrap();
         assert!(w.normal_stress(-1.0).is_err());
         assert!(w.capacity(f64::INFINITY).is_err());
+    }
+
+    // required_length = F / (sigma_allow * thickness). Hand calc:
+    // F=360000, t=12, sigma=150 -> 360000/(150*12) = 200 mm.
+    #[test]
+    fn required_length_matches_hand_calc() {
+        let l = required_length(360_000.0, 12.0, 150.0).expect("valid");
+        assert!((l - 200.0).abs() < 1e-9, "got: {l}");
+    }
+
+    // Inverse of capacity / normal_stress: a weld of that length carries
+    // exactly the force at the allowable stress.
+    #[test]
+    fn required_length_round_trips_capacity_and_stress() {
+        let (force, t, allow) = (300_000.0, 16.0, 160.0);
+        let l = required_length(force, t, allow).unwrap();
+        let w = ButtWeld::new(t, l).unwrap();
+        assert!((w.normal_stress(force).unwrap() - allow).abs() < 1e-9);
+        assert!((w.capacity(allow).unwrap() - force).abs() < 1e-6);
+        assert!((capacity(allow, t, l).unwrap() - force).abs() < 1e-6);
+    }
+
+    // Sizing scales with force and inversely with allowable stress.
+    #[test]
+    fn required_length_scaling() {
+        let base = required_length(100_000.0, 10.0, 150.0).unwrap();
+        let double_f = required_length(200_000.0, 10.0, 150.0).unwrap();
+        let half_allow = required_length(100_000.0, 10.0, 75.0).unwrap();
+        assert!((double_f - 2.0 * base).abs() < 1e-9);
+        assert!((half_allow - 2.0 * base).abs() < 1e-9);
+    }
+
+    #[test]
+    fn required_length_rejects_bad_inputs() {
+        assert!(required_length(0.0, 10.0, 150.0).is_err());
+        assert!(required_length(100_000.0, 10.0, -150.0).is_err());
+        assert!(required_length(f64::INFINITY, 10.0, 150.0).is_err());
     }
 }

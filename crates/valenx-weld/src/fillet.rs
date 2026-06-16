@@ -209,6 +209,31 @@ pub fn capacity(allowable_shear_stress: f64, leg: f64, length: f64) -> Result<f6
     FilletWeld::new(leg, length)?.capacity(allowable_shear_stress)
 }
 
+/// Weld run **length required** to carry a concentric `force` at an
+/// allowable shear stress, for an equal-leg fillet of leg size `leg`:
+///
+/// ```text
+/// length = force / (tau_allow * throat) = force / (tau_allow * 0.707 * leg)
+/// ```
+///
+/// This is [`capacity`] solved for the length — the weld-sizing inverse
+/// that closes the design loop. A [`FilletWeld`] built with this length
+/// carries exactly `force` at the allowable stress: its
+/// [`shear_stress`](FilletWeld::shear_stress) then equals `tau_allow` and
+/// its [`utilisation`](FilletWeld::utilisation) is `1.0`.
+///
+/// # Errors
+///
+/// Returns [`WeldError::BadParameter`](crate::error::WeldError::BadParameter)
+/// when any of `force`, `leg` or `allowable_shear_stress` is not a
+/// strictly positive finite number.
+pub fn required_length(force: f64, leg: f64, allowable_shear_stress: f64) -> Result<f64> {
+    let force = require_positive("force", force)?;
+    let leg = require_positive("leg", leg)?;
+    let tau = require_positive("allowable_shear_stress", allowable_shear_stress)?;
+    Ok(force / (tau * FILLET_THROAT_FACTOR * leg))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,5 +371,47 @@ mod tests {
         let w = FilletWeld::new(6.0, 100.0).unwrap();
         assert!(w.shear_stress(0.0).is_err());
         assert!(w.capacity(f64::NAN).is_err());
+    }
+
+    // required_length = F / (tau_allow * 0.707 * leg). Hand calc:
+    // F=50000, leg=6, tau=100 -> 50000/(100*0.707*6) = 117.8689... mm.
+    #[test]
+    fn required_length_matches_hand_calc() {
+        let l = required_length(50_000.0, 6.0, 100.0).expect("valid");
+        let expected = 50_000.0 / (100.0 * 0.707 * 6.0);
+        assert!((l - expected).abs() < 1e-9, "got: {l}");
+    }
+
+    // required_length is the inverse of capacity / shear_stress: a weld
+    // of that length carries exactly the force at the allowable stress.
+    #[test]
+    fn required_length_round_trips_capacity_and_stress() {
+        let (force, leg, allow) = (42_000.0, 8.0, 95.0);
+        let l = required_length(force, leg, allow).unwrap();
+        let w = FilletWeld::new(leg, l).unwrap();
+        assert!((w.shear_stress(force).unwrap() - allow).abs() < 1e-9);
+        assert!((w.capacity(allow).unwrap() - force).abs() < 1e-6);
+        assert!((w.utilisation(force, allow).unwrap() - 1.0).abs() < 1e-9);
+        // And the free-function capacity round-trips too.
+        assert!((capacity(allow, leg, l).unwrap() - force).abs() < 1e-6);
+    }
+
+    // Sizing scales with force and inversely with allowable stress and leg.
+    #[test]
+    fn required_length_scaling() {
+        let base = required_length(20_000.0, 6.0, 100.0).unwrap();
+        let double_f = required_length(40_000.0, 6.0, 100.0).unwrap();
+        let half_allow = required_length(20_000.0, 6.0, 50.0).unwrap();
+        let half_leg = required_length(20_000.0, 3.0, 100.0).unwrap();
+        assert!((double_f - 2.0 * base).abs() < 1e-9);
+        assert!((half_allow - 2.0 * base).abs() < 1e-9);
+        assert!((half_leg - 2.0 * base).abs() < 1e-9);
+    }
+
+    #[test]
+    fn required_length_rejects_bad_inputs() {
+        assert!(required_length(0.0, 6.0, 100.0).is_err());
+        assert!(required_length(50_000.0, -6.0, 100.0).is_err());
+        assert!(required_length(50_000.0, 6.0, f64::NAN).is_err());
     }
 }
