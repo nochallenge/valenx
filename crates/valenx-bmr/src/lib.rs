@@ -15,6 +15,10 @@
 //! - [`mifflin_st_jeor`] / [`harris_benedict`] — BMR in kcal/day, the
 //!   resting energy a body burns at complete rest. Dispatchable through
 //!   [`BmrEquation`].
+//! - [`katch_mcardle`] — a third BMR regression that depends only on
+//!   **lean body mass** (no sex term); pair it with [`lean_body_mass`]
+//!   (or the [`katch_mcardle_from_body_fat`] shortcut) to derive that
+//!   lean mass from total mass and a body-fat fraction.
 //! - [`tdee`] / [`tdee_for_level`] — **total daily energy
 //!   expenditure**, the BMR scaled by a physical-activity multiplier
 //!   ([`ActivityLevel`]) from sedentary (`1.2`) to extra-active
@@ -48,6 +52,9 @@
 //!     `+5` male / `−161` female).
 //!   - **Harris-Benedict**, in the **Roza & Shizgal (1984)** revision —
 //!     the classic equation with sex-specific intercepts and slopes.
+//!   - **Katch-McArdle** — `370 + 21.6·LBM`, regressing on lean body
+//!     mass alone, so it needs an accurate body-fat measurement instead
+//!     of height/age/sex and carries no sex term.
 //! - **TDEE** multiplies BMR by a physical-activity-level factor on the
 //!   standard sedentary → extra-active ladder. The factor is `>= 1.0`,
 //!   so TDEE is always at least the BMR and strictly greater whenever
@@ -68,7 +75,9 @@
 //! approximation** — exactly the formulas a physiology or nutrition
 //! course teaches — not a clinical, medical, or production dietetics
 //! tool. The BMR equations are regressions fit to population cohorts
-//! and carry a standard error of roughly ±10% for any individual; the
+//! and carry a standard error of roughly ±10% for any individual
+//! (Katch-McArdle is moreover only as accurate as the body-fat
+//! measurement it is fed); the
 //! mass projection ignores adaptive thermogenesis, the fat-vs-lean
 //! composition of tissue change, and water-weight swings, so real
 //! long-run weight change is sub-linear. Use the numbers to build
@@ -82,7 +91,10 @@ pub mod bmr;
 pub mod energy;
 pub mod error;
 
-pub use bmr::{harris_benedict, mifflin_st_jeor, BmrEquation, Sex};
+pub use bmr::{
+    harris_benedict, katch_mcardle, katch_mcardle_from_body_fat, lean_body_mass, mifflin_st_jeor,
+    BmrEquation, Sex,
+};
 pub use energy::{
     daily_energy_balance, mass_change_kg, tdee, tdee_for_level, ActivityLevel, EnergyBalance,
     KCAL_PER_KG,
