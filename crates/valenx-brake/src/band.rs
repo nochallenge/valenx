@@ -13,8 +13,13 @@
 //! with `theta` in **radians**. The net braking force the band exerts
 //! at the drum surface is `T1 - T2`, and the braking torque about the
 //! drum axis is `(T1 - T2) * r`.
+//!
+//! The capstan relation inverts cleanly for the wrap angle:
+//! [`wrap_angle_for_ratio`] solves `theta = ln(ratio) / mu`, the
+//! design question of how much wrap (how many turns `theta / 2*pi`) a
+//! given friction needs to reach a target tension ratio.
 
-use crate::error::{check_friction, check_non_negative, check_positive, BrakeError};
+use crate::error::{check_finite, check_friction, check_non_negative, check_positive, BrakeError};
 
 /// Tension ratio `T1 / T2 = exp(mu * theta)` of a band/drum brake.
 ///
@@ -40,6 +45,50 @@ pub fn tension_ratio(mu: f64, wrap_angle_rad: f64) -> Result<f64, BrakeError> {
     let mu = check_friction(mu)?;
     let theta = check_non_negative("wrap_angle_rad", wrap_angle_rad)?;
     Ok((mu * theta).exp())
+}
+
+/// The wrap angle `theta` (radians) needed to reach a target tension
+/// ratio, inverting the capstan equation `T1/T2 = exp(mu*theta)`:
+///
+/// ```text
+/// theta = ln(ratio) / mu
+/// ```
+///
+/// This is the classic capstan-design question — how much wrap (e.g. how
+/// many turns `theta / 2*pi` of rope around a bollard) a given friction
+/// coefficient needs to multiply tension by `ratio`. Because the ratio
+/// grows *exponentially* with wrap, the required wrap grows only
+/// *logarithmically* with the ratio. A `target_ratio` of `1` needs no
+/// wrap (`theta = 0`), and every ratio `>= 1` is reachable.
+///
+/// # Parameters
+/// - `mu` — friction coefficient, in `(0, MU_MAX]`.
+/// - `target_ratio` — desired `T1/T2`, dimensionless and `>= 1`.
+///
+/// # Errors
+/// [`BrakeError`] if `mu` is out of range, `target_ratio` is non-finite,
+/// or `target_ratio < 1` (a ratio below 1 would require a negative wrap
+/// angle, which is unphysical).
+///
+/// # Examples
+/// ```
+/// use valenx_brake::band::wrap_angle_for_ratio;
+/// // With mu = ln 2, doubling the tension (ratio = 2) needs theta = 1 rad.
+/// let theta = wrap_angle_for_ratio(std::f64::consts::LN_2, 2.0).unwrap();
+/// assert!((theta - 1.0).abs() < 1e-12);
+/// ```
+pub fn wrap_angle_for_ratio(mu: f64, target_ratio: f64) -> Result<f64, BrakeError> {
+    let mu = check_friction(mu)?;
+    let ratio = check_finite("target_ratio", target_ratio)?;
+    if ratio < 1.0 {
+        // ratio = exp(mu*theta) >= 1 for any non-negative wrap; a smaller
+        // target is unreachable. Report it as `ratio - 1` being negative.
+        return Err(BrakeError::Negative {
+            name: "target_ratio - 1",
+            value: ratio - 1.0,
+        });
+    }
+    Ok(ratio.ln() / mu)
 }
 
 /// Tight-side tension `T1` given the slack-side tension `T2`.
@@ -237,6 +286,91 @@ mod tests {
         );
         assert_eq!(
             tension_ratio(0.3, f64::INFINITY).unwrap_err().code(),
+            "brake.not_finite"
+        );
+    }
+
+    #[test]
+    fn wrap_angle_inverts_tension_ratio_both_ways() {
+        let mu = 0.3;
+        // ratio -> theta -> ratio.
+        let r0 = 2.5;
+        let theta = wrap_angle_for_ratio(mu, r0).unwrap();
+        let r_back = tension_ratio(mu, theta).unwrap();
+        assert!((r_back - r0).abs() < 1e-12, "ratio round-trip {r_back}");
+        // theta -> ratio -> theta.
+        let theta0 = PI;
+        let r = tension_ratio(mu, theta0).unwrap();
+        let theta_back = wrap_angle_for_ratio(mu, r).unwrap();
+        assert!(
+            (theta_back - theta0).abs() < 1e-12,
+            "theta round-trip {theta_back}"
+        );
+    }
+
+    #[test]
+    fn wrap_angle_hand_value() {
+        // mu*theta = ln(ratio). mu = ln 2, ratio = 2 -> theta = 1.
+        let theta = wrap_angle_for_ratio(LN_2, 2.0).unwrap();
+        assert!((theta - 1.0).abs() < EPS, "got {theta}");
+        // mu = 0.3, ratio = 2 -> theta = ln(2) / 0.3.
+        let theta2 = wrap_angle_for_ratio(0.3, 2.0).unwrap();
+        assert!((theta2 - LN_2 / 0.3).abs() < EPS, "got {theta2}");
+    }
+
+    #[test]
+    fn unit_ratio_needs_no_wrap() {
+        // ratio = 1 -> theta = 0 (ln 1 = 0), for any mu.
+        for mu in [0.1_f64, 0.5, 1.0] {
+            let theta = wrap_angle_for_ratio(mu, 1.0).unwrap();
+            assert!(theta.abs() < EPS, "mu {mu} theta {theta}");
+        }
+    }
+
+    #[test]
+    fn wrap_angle_monotonic() {
+        // Larger target ratio -> larger wrap; larger mu -> smaller wrap.
+        let a = wrap_angle_for_ratio(0.3, 2.0).unwrap();
+        let b = wrap_angle_for_ratio(0.3, 4.0).unwrap();
+        assert!(b > a, "more ratio should need more wrap: {a} {b}");
+        let lo_mu = wrap_angle_for_ratio(0.2, 3.0).unwrap();
+        let hi_mu = wrap_angle_for_ratio(0.6, 3.0).unwrap();
+        assert!(
+            hi_mu < lo_mu,
+            "more friction should need less wrap: {lo_mu} {hi_mu}"
+        );
+    }
+
+    #[test]
+    fn capstan_wrap_grows_logarithmically() {
+        // Holding ratio grows exponentially with turns, so the wrap grows
+        // only logarithmically with ratio: ratio 100 needs exactly twice
+        // the wrap of ratio 10 (since 100 = 10^2).
+        let mu = 0.25;
+        let w10 = wrap_angle_for_ratio(mu, 10.0).unwrap();
+        let w100 = wrap_angle_for_ratio(mu, 100.0).unwrap();
+        assert!((w100 - 2.0 * w10).abs() < 1e-9, "w10 {w10} w100 {w100}");
+    }
+
+    #[test]
+    fn wrap_angle_rejects_bad_inputs() {
+        // Friction out of range.
+        assert_eq!(
+            wrap_angle_for_ratio(0.0, 2.0).unwrap_err().code(),
+            "brake.friction_out_of_range"
+        );
+        // Ratio below 1 would require a negative wrap angle.
+        assert_eq!(
+            wrap_angle_for_ratio(0.3, 0.5).unwrap_err().code(),
+            "brake.negative"
+        );
+        // Non-finite ratio.
+        assert_eq!(
+            wrap_angle_for_ratio(0.3, f64::NAN).unwrap_err().code(),
+            "brake.not_finite"
+        );
+        assert_eq!(
+            wrap_angle_for_ratio(0.3, f64::INFINITY).unwrap_err().code(),
             "brake.not_finite"
         );
     }

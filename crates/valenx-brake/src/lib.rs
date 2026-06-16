@@ -21,6 +21,8 @@
 //!   slack-side tensions across a wrap angle `theta`:
 //!   `T1 / T2 = exp(mu * theta)`. The net braking force at the drum
 //!   surface is `T1 - T2`, and the braking torque is `(T1 - T2) * r`.
+//!   Its design inverse [`band::wrap_angle_for_ratio`] gives the wrap
+//!   angle (the turns around the drum) needed for a target tension ratio.
 //! - [`energy`] — the rigid-body kinetic energy a translating mass
 //!   carries, `E = 0.5 * m * v^2`, which (ignoring losses) is the heat
 //!   the brakes must absorb to bring it to rest, plus the stopping
