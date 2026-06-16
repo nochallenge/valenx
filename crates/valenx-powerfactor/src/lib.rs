@@ -10,7 +10,8 @@
 //! and reactive powers directly — this crate resolves the full power
 //! triangle and classifies the load as leading, lagging, or unity. It
 //! also sizes the shunt capacitor needed to raise a lagging load's
-//! power factor to a target value.
+//! power factor to a target value — both its reactive rating and the
+//! physical capacitance (farads) and current the capacitor must carry.
 //!
 //! ## Model
 //!
@@ -36,6 +37,15 @@
 //!   Qc = P * (tan(phi1) - tan(phi2))     [var]
 //! ```
 //!
+//! and the physical capacitance and current that rating implies at a
+//! supply voltage `V` and frequency `f` follow from the ideal-capacitor
+//! relation `Qc = 2 * pi * f * V^2 * C`:
+//!
+//! ```text
+//!   C  = Qc / (2 * pi * f * V^2)         [F]
+//!   Ic = Qc / V                          [A]
+//! ```
+//!
 //! ## Honest scope
 //!
 //! Research/educational grade. These are textbook closed-form,
@@ -54,7 +64,9 @@
 //!   [`PowerTriangle::from_vi_phase`], [`PowerTriangle::from_vi_pf`] and
 //!   [`PowerTriangle::from_p_q`].
 //! - [`Correction`] — shunt-capacitor sizing via
-//!   [`Correction::for_target_pf`] and [`Correction::for_triangle`].
+//!   [`Correction::for_target_pf`] and [`Correction::for_triangle`], with
+//!   [`Correction::capacitance_farads`] and
+//!   [`Correction::capacitor_current_a`] for the physical component value.
 //! - [`PowerError`] — the validation error taxonomy.
 
 #![forbid(unsafe_code)]
