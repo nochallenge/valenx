@@ -21,9 +21,11 @@
 //!   [`thin_lens::object_distance_for_magnification`] and
 //!   [`thin_lens::ThinLens`].
 //! - **Lensmaker** ([`lensmaker`]) — focal length from material and
-//!   surface geometry, `1/f = (n - 1)(1/R1 - 1/R2)`. See
-//!   [`lensmaker::focal_length`] and [`lensmaker::Lens`], which can hand a
-//!   [`thin_lens::ThinLens`] straight to the imaging code.
+//!   surface geometry, `1/f = (n - 1)(1/R1 - 1/R2)`, plus its design
+//!   inverse [`lensmaker::radius_for_focal_length`] (the second radius
+//!   that hits a target focal length). See [`lensmaker::focal_length`]
+//!   and [`lensmaker::Lens`], which can hand a [`thin_lens::ThinLens`]
+//!   straight to the imaging code.
 //!
 //! ## Model
 //!
@@ -58,7 +60,7 @@ pub mod refraction;
 pub mod thin_lens;
 
 pub use error::{ErrorCategory, OpticsError};
-pub use lensmaker::{focal_length, Lens};
+pub use lensmaker::{focal_length, radius_for_focal_length, Lens};
 pub use refraction::{classify_ray, critical_angle_deg, refract_angle, Interface, RayOutcome};
 pub use thin_lens::{
     image, object_distance_for_magnification, Image, ImageKind, Orientation, ThinLens,
