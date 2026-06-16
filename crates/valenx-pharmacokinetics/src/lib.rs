@@ -13,12 +13,14 @@
 //!   dose, a volume of distribution `V`, and a clearance `CL` it gives
 //!   the elimination rate `k = CL/V`, the concentration-time curve
 //!   `C(t) = dose/V·exp(-k·t)`, the half-life `ln2/k`, the total exposure
-//!   `AUC = dose/CL`, the peak `Cmax = dose/V`, and the time at which the
-//!   concentration falls to a chosen threshold.
+//!   `AUC = dose/CL`, the cumulative exposure `AUC(0→t) = AUC·(1-e^-kt)`
+//!   accrued by any time, the peak `Cmax = dose/V`, and the time at which
+//!   the concentration falls to a chosen threshold.
 //! - [`TwoCompartment`] — the biexponential disposition curve
 //!   `C(t) = A·exp(-α·t) + B·exp(-β·t)`, built directly from its four
 //!   macro constants, with intercept `C(0) = A + B`, terminal half-life
-//!   `ln2/β`, and `AUC = A/α + B/β`.
+//!   `ln2/β`, the total `AUC = A/α + B/β`, and the cumulative
+//!   `AUC(0→t)`.
 //! - [`DoseResponse`] — the Emax / Hill sigmoidal dose-response
 //!   `E(d) = Emax·d^n / (EC50^n + d^n)`.
 //!
@@ -48,8 +50,10 @@
 //! Research/educational grade: these are the closed-form **textbook
 //! PK/PD equations** for the simplest compartmental models, validated
 //! against their own analytic identities (`C(0) = dose/V`,
-//! `C(t½) = C(0)/2`, `AUC = dose/CL`, `E(EC50) = Emax/2`,
-//! two-compartment `C(0) = A + B`). It is **NOT a clinical, medical, or
+//! `C(t½) = C(0)/2`, `AUC = dose/CL`, `AUC(0→t½) = AUC/2`,
+//! `E(EC50) = Emax/2`, two-compartment `C(0) = A + B`) and against a
+//! numerical integral of the concentration curve. It is **NOT a clinical,
+//! medical, or
 //! production dosing tool**: there is no absorption / first-pass model,
 //! no non-linear (Michaelis-Menten) elimination, no inter-individual
 //! variability or population PK, no Bayesian fitting, and no
@@ -70,6 +74,10 @@
 //! let c0 = pk.concentration(0.0).unwrap();
 //! let c_half = pk.concentration(pk.half_life()).unwrap();
 //! assert!((c_half - c0 / 2.0).abs() < 1e-12);
+//!
+//! // ...and exactly half the total exposure has accrued by then.
+//! let auc_half = pk.auc_to(pk.half_life()).unwrap();
+//! assert!((auc_half - pk.auc() / 2.0).abs() < 1e-12);
 //! ```
 
 #![forbid(unsafe_code)]

@@ -123,6 +123,26 @@ impl OneCompartmentIv {
         self.dose / self.clearance
     }
 
+    /// Partial area under the concentration-time curve from time 0 to `t`,
+    /// `AUC(0→t) = AUC·(1 - exp(-k·t))` — the cumulative drug exposure
+    /// accrued by time `t`.
+    ///
+    /// This is the integral of [`concentration`](Self::concentration) over
+    /// `[0, t]`: it is zero at `t = 0`, rises monotonically, and approaches
+    /// the total [`auc`](Self::auc) as `t → ∞`. Because one half-life
+    /// removes half the area under a mono-exponential, exactly half the
+    /// total exposure has accrued by then: `AUC(0→t½) = AUC / 2`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PkError::Negative`](crate::PkError::Negative) if `t` is
+    /// negative or non-finite.
+    pub fn auc_to(&self, t: f64) -> Result<f64> {
+        let t = require_non_negative("t", t)?;
+        let k = self.elimination_rate();
+        Ok(self.auc() * (1.0 - (-k * t).exp()))
+    }
+
     /// Time at which the falling concentration first reaches the
     /// threshold `c`, i.e. the `t` solving `C(t) = c`:
     /// `t = (1/k)·ln(Cmax / c)`.
@@ -278,5 +298,63 @@ mod tests {
     fn concentration_rejects_negative_time() {
         assert!(model().concentration(-1.0).is_err());
         assert!(model().concentration(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn partial_auc_is_zero_at_origin_and_total_at_infinity() {
+        let m = model();
+        assert!(m.auc_to(0.0).unwrap().abs() < TOL, "AUC(0→0) = 0");
+        // By 50 half-lives essentially all the exposure has accrued.
+        let far = m.auc_to(50.0 * m.half_life()).unwrap();
+        assert!((far - m.auc()).abs() < 1e-9, "AUC(0→∞) → total, got {far}");
+    }
+
+    #[test]
+    fn partial_auc_at_one_half_life_is_half_the_total() {
+        // GOLD identity: a mono-exponential accrues exactly half its area
+        // in one half-life, AUC(0→t½) = AUC / 2.
+        let m = model();
+        let half = m.auc_to(m.half_life()).unwrap();
+        assert!((half - m.auc() / 2.0).abs() < TOL, "AUC(0→t½) = {half}");
+        // Two half-lives → three quarters of the total.
+        let two = m.auc_to(2.0 * m.half_life()).unwrap();
+        assert!((two - 0.75 * m.auc()).abs() < TOL, "AUC(0→2t½) = {two}");
+    }
+
+    #[test]
+    fn partial_auc_matches_a_trapezoidal_integral_of_concentration() {
+        // Numerically integrate C(t) over [0, T] and compare to the closed
+        // form. A fine step makes the trapezoid error tiny for a smooth
+        // exponential.
+        let m = model();
+        let big_t = 12.0;
+        let n = 120_000;
+        let dt = big_t / n as f64;
+        let mut area = 0.0;
+        let mut prev = m.concentration(0.0).unwrap();
+        for i in 1..=n {
+            let c = m.concentration(i as f64 * dt).unwrap();
+            area += 0.5 * (prev + c) * dt;
+            prev = c;
+        }
+        let closed = m.auc_to(big_t).unwrap();
+        assert!(
+            (area - closed).abs() < 1e-6,
+            "trapz {area} vs closed {closed}"
+        );
+    }
+
+    #[test]
+    fn partial_auc_increases_monotonically_and_rejects_bad_time() {
+        let m = model();
+        let mut prev = -1.0;
+        for i in 0..20 {
+            let a = m.auc_to(i as f64 * 0.5).unwrap();
+            assert!(a > prev, "AUC(0→t) should increase: {a} after {prev}");
+            assert!(a <= m.auc() + TOL, "never exceeds the total");
+            prev = a;
+        }
+        assert!(m.auc_to(-1.0).is_err());
+        assert!(m.auc_to(f64::NAN).is_err());
     }
 }
