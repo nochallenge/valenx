@@ -11,7 +11,9 @@
 //! ultimate period `Tu` (the period of that oscillation). From that pair
 //! this crate emits P, PI, and PID settings in both the standard
 //! time-constant form `(Kp, Ti, Td)` and the parallel independent-gain
-//! form `(Kp, Ki, Kd)`.
+//! form `(Kp, Ki, Kd)`. Two rule sets cover the same `(Ku, Tu)`: the
+//! classic, aggressive [`ZieglerNichols`] table and the more conservative
+//! [`TyreusLuyben`] table.
 //!
 //! Pipeline:
 //!
@@ -20,6 +22,8 @@
 //! - [`ZieglerNichols`] wraps the measurement and applies the rules.
 //! - [`ZieglerNichols::p`] / [`ZieglerNichols::pi`] /
 //!   [`ZieglerNichols::pid`] read off each table row as a [`Gains`].
+//! - [`TyreusLuyben::pi`] / [`TyreusLuyben::pid`] apply the more
+//!   conservative Tyreus-Luyben rules to the same measurement.
 //! - [`Gains::ki`] / [`Gains::kd`] convert to parallel form.
 //!
 //! ## Model
@@ -32,6 +36,14 @@
 //! | P          | `0.5 Ku`   | infinite   | `0`        |
 //! | PI         | `0.45 Ku`  | `Tu / 1.2` | `0`        |
 //! | PID        | `0.6 Ku`   | `Tu / 2`   | `Tu / 8`   |
+//!
+//! and the more conservative Tyreus-Luyben (1992) table over the same
+//! `(Ku, Tu)`, defined for PI and PID only:
+//!
+//! | Controller | `Kp`       | `Ti`       | `Td`        |
+//! | ---------- | ---------- | ---------- | ----------- |
+//! | PI         | `Ku / 3.2` | `2.2 Tu`   | `0`         |
+//! | PID        | `Ku / 2.2` | `2.2 Tu`   | `Tu / 6.3`  |
 //!
 //! Parallel-form gains follow from `Ki = Kp / Ti` and `Kd = Kp Td`. A
 //! P controller's infinite `Ti` makes `Ki` collapse to exactly zero; a
@@ -58,7 +70,7 @@ pub mod tuning;
 pub mod ultimate;
 
 pub use error::{ErrorCategory, PidTuningError};
-pub use tuning::{ControllerKind, Gains, ZieglerNichols};
+pub use tuning::{ControllerKind, Gains, TyreusLuyben, ZieglerNichols};
 pub use ultimate::UltimateMeasurement;
 
 #[cfg(test)]
@@ -72,6 +84,11 @@ mod tests {
     /// validation failure (tests use only valid inputs).
     fn zn(ku: f64, tu: f64) -> ZieglerNichols {
         ZieglerNichols::new(UltimateMeasurement::new(ku, tu).expect("valid measurement"))
+    }
+
+    /// Build a Tyreus-Luyben tuner from raw `(Ku, Tu)`.
+    fn tl(ku: f64, tu: f64) -> TyreusLuyben {
+        TyreusLuyben::new(UltimateMeasurement::new(ku, tu).expect("valid measurement"))
     }
 
     #[test]
@@ -291,6 +308,107 @@ mod tests {
         assert!(UltimateMeasurement::new(f64::INFINITY, 1.0).is_err());
         assert!(UltimateMeasurement::new(1.0, f64::NAN).is_err());
         assert!(UltimateMeasurement::new(1.0, f64::INFINITY).is_err());
+    }
+
+    // --- Tyreus-Luyben ---------------------------------------------------
+
+    #[test]
+    fn tyreus_luyben_pid_matches_ground_truth() {
+        // Ku=10, Tu=4: Kp=10/2.2, Ti=2.2*4=8.8, Td=4/6.3.
+        let g = tl(10.0, 4.0).pid();
+        assert_eq!(g.kind, ControllerKind::Pid);
+        assert!((g.kp() - 10.0 / 2.2).abs() < EPS, "kp {}", g.kp());
+        assert!(
+            (g.integral_time() - 2.2 * 4.0).abs() < EPS,
+            "ti {}",
+            g.integral_time()
+        );
+        assert!(
+            (g.derivative_time() - 4.0 / 6.3).abs() < EPS,
+            "td {}",
+            g.derivative_time()
+        );
+    }
+
+    #[test]
+    fn tyreus_luyben_pi_matches_ground_truth() {
+        // Ku=20, Tu=6: Kp=20/3.2=6.25, Ti=2.2*6=13.2, Td=0.
+        let g = tl(20.0, 6.0).pi();
+        assert_eq!(g.kind, ControllerKind::Pi);
+        assert!((g.kp() - 6.25).abs() < EPS, "kp {}", g.kp());
+        assert!(
+            (g.integral_time() - 2.2 * 6.0).abs() < EPS,
+            "ti {}",
+            g.integral_time()
+        );
+        assert!(
+            g.derivative_time().abs() < EPS,
+            "td {}",
+            g.derivative_time()
+        );
+    }
+
+    #[test]
+    fn tyreus_luyben_is_more_conservative_than_ziegler_nichols() {
+        // Same experiment: TL lowers Kp and lengthens Ti vs Z-N, for both
+        // PI and PID — the defining "more robust, less oscillatory" trait.
+        let (ku, tu) = (12.0, 5.0);
+        let zn_t = zn(ku, tu);
+        let tl_t = tl(ku, tu);
+        assert!(tl_t.pi().kp() < zn_t.pi().kp(), "TL PI Kp should be lower");
+        assert!(
+            tl_t.pi().integral_time() > zn_t.pi().integral_time(),
+            "TL PI Ti should be longer"
+        );
+        assert!(
+            tl_t.pid().kp() < zn_t.pid().kp(),
+            "TL PID Kp should be lower"
+        );
+        assert!(
+            tl_t.pid().integral_time() > zn_t.pid().integral_time(),
+            "TL PID Ti should be longer"
+        );
+    }
+
+    #[test]
+    fn tyreus_luyben_structure_flags_and_parallel_form() {
+        let g = tl(10.0, 4.0).pid();
+        assert!(g.kind.has_integral());
+        assert!(g.kind.has_derivative());
+        // Parallel form round-trips: Ki = Kp/Ti, Kd = Kp*Td.
+        let ti_back = g.kp() / g.ki();
+        let td_back = g.kd() / g.kp();
+        assert!((ti_back - g.integral_time()).abs() < EPS);
+        assert!((td_back - g.derivative_time()).abs() < EPS);
+        // PI has integral but no derivative action.
+        let pi = tl(10.0, 4.0).pi();
+        assert!(pi.kind.has_integral());
+        assert!(!pi.kind.has_derivative());
+        assert!(pi.kd().abs() < EPS);
+    }
+
+    #[test]
+    fn tyreus_luyben_monotonic_and_ratios() {
+        // Kp scales with Ku; the time constants do not depend on Ku.
+        let low = tl(5.0, 4.0);
+        let high = tl(15.0, 4.0);
+        assert!(high.pid().kp() > low.pid().kp());
+        assert!((high.pid().integral_time() - low.pid().integral_time()).abs() < EPS);
+        // PID Kp / PI Kp = (Ku/2.2)/(Ku/3.2) = 3.2/2.2 (Ku cancels).
+        let t = tl(7.0, 3.0);
+        assert!(
+            (t.pid().kp() / t.pi().kp() - 3.2 / 2.2).abs() < EPS,
+            "Kp ratio"
+        );
+        // Ti is identical for PI and PID (both 2.2 Tu).
+        assert!((t.pid().integral_time() - t.pi().integral_time()).abs() < EPS);
+    }
+
+    #[test]
+    fn tyreus_luyben_measurement_accessible() {
+        let t = tl(2.5, 1.5);
+        assert!((t.measurement().ultimate_gain() - 2.5).abs() < EPS);
+        assert!((t.measurement().ultimate_period() - 1.5).abs() < EPS);
     }
 
     #[test]
