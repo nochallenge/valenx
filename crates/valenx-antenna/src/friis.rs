@@ -134,6 +134,53 @@ pub fn free_space_path_loss_db(wavelength_m: f64, distance_m: f64) -> Result<f64
     Ok(10.0 * l.log10())
 }
 
+/// The maximum line-of-sight range (metres) at which a Friis link still
+/// delivers at least a target received power, inverting
+/// [`received_power`] for the distance `d`:
+///
+/// ```text
+/// d_max = (lambda / (4*pi)) * sqrt(Pt * Gt * Gr / Pr_min)
+/// ```
+///
+/// Given a transmit power `pt_w`, the two **linear** gains `gt` / `gr`,
+/// the wavelength, and a receiver sensitivity `pr_min_w` (the minimum
+/// usable received power), this is the distance at which the received
+/// power has fallen to exactly `pr_min_w`; beyond it the link drops below
+/// sensitivity. Range grows as the square root of transmit power and
+/// gain, linearly with wavelength, and as the inverse square root of the
+/// required sensitivity.
+///
+/// # Errors
+///
+/// Returns an error if `pt_w` or `pr_min_w` is not finite and strictly
+/// positive, the gains are not finite and non-negative, or
+/// `wavelength_m` is not finite and strictly positive.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_antenna::friis::{max_range_m, received_power};
+/// // The received power at d_max equals the sensitivity exactly.
+/// let d = max_range_m(5.0, 10.0, 4.0, 0.125, 1.0e-9).unwrap();
+/// let pr = received_power(5.0, 10.0, 4.0, 0.125, d).unwrap();
+/// assert!((pr - 1.0e-9).abs() / 1.0e-9 < 1e-9);
+/// ```
+pub fn max_range_m(
+    pt_w: f64,
+    gt: f64,
+    gr: f64,
+    wavelength_m: f64,
+    pr_min_w: f64,
+) -> Result<f64, AntennaError> {
+    let pt = require_positive("pt_w", pt_w)?;
+    let gt = require_non_negative_gain("gt", gt)?;
+    let gr = require_non_negative_gain("gr", gr)?;
+    let lambda = require_positive("wavelength_m", wavelength_m)?;
+    let pr_min = require_positive("pr_min_w", pr_min_w)?;
+    let d = (lambda / (4.0 * core::f64::consts::PI)) * (pt * gt * gr / pr_min).sqrt();
+    Ok(d)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,5 +301,51 @@ mod tests {
         assert!(power_ratio(1.0, 1.0, 0.1, 0.0).is_err());
         assert!(received_power(0.0, 1.0, 1.0, 0.1, 10.0).is_err());
         assert!(free_space_path_loss_db(0.1, -5.0).is_err());
+    }
+
+    #[test]
+    fn max_range_round_trips_through_received_power() {
+        // The defining property: at d_max the received power is exactly
+        // the sensitivity, so received_power inverts max_range_m.
+        let (pt, gt, gr) = (5.0, 10.0, 4.0);
+        let lambda = wavelength_from_frequency(2.4e9).unwrap();
+        let pr_min = 1.0e-9; // 1 nW.
+        let d = max_range_m(pt, gt, gr, lambda, pr_min).unwrap();
+        let pr = received_power(pt, gt, gr, lambda, d).unwrap();
+        assert!((pr - pr_min).abs() / pr_min < 1e-9, "got {pr}");
+    }
+
+    #[test]
+    fn max_range_matches_closed_form() {
+        // Isotropic, lambda = 1, Pt = 1, Pr_min = (1/4pi)^2 -> d_max = 1
+        // (the received power one metre away for unit isotropic link).
+        let pr_min = (1.0 / (4.0 * PI)).powi(2);
+        let d = max_range_m(1.0, 1.0, 1.0, 1.0, pr_min).unwrap();
+        assert!((d - 1.0).abs() < 1e-9, "got {d}");
+    }
+
+    #[test]
+    fn max_range_scaling_laws() {
+        let (gt, gr, lambda, pr) = (3.0, 6.0, 0.125, 2.0e-10);
+        let base = max_range_m(1.0, gt, gr, lambda, pr).unwrap();
+        // 4x transmit power -> 2x range (square-root law).
+        let quad_pt = max_range_m(4.0, gt, gr, lambda, pr).unwrap();
+        assert!((quad_pt / base - 2.0).abs() < 1e-9, "power scaling");
+        // 2x wavelength -> 2x range (linear).
+        let dbl_lambda = max_range_m(1.0, gt, gr, 2.0 * lambda, pr).unwrap();
+        assert!((dbl_lambda / base - 2.0).abs() < 1e-9, "wavelength scaling");
+        // 4x stricter sensitivity -> half the range.
+        let worse_rx = max_range_m(1.0, gt, gr, lambda, 4.0 * pr).unwrap();
+        assert!((worse_rx / base - 0.5).abs() < 1e-9, "sensitivity scaling");
+    }
+
+    #[test]
+    fn max_range_rejects_bad_inputs() {
+        let lambda = 0.1;
+        assert!(max_range_m(0.0, 1.0, 1.0, lambda, 1e-9).is_err()); // pt <= 0
+        assert!(max_range_m(1.0, -1.0, 1.0, lambda, 1e-9).is_err()); // negative gain
+        assert!(max_range_m(1.0, 1.0, 1.0, 0.0, 1e-9).is_err()); // lambda <= 0
+        assert!(max_range_m(1.0, 1.0, 1.0, lambda, 0.0).is_err()); // pr_min <= 0
+        assert!(max_range_m(f64::NAN, 1.0, 1.0, lambda, 1e-9).is_err()); // non-finite
     }
 }
