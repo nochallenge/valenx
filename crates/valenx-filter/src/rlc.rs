@@ -133,6 +133,43 @@ impl RlcCircuit {
     pub fn upper_cutoff_hz(&self) -> f64 {
         self.resonant_hz() + self.bandwidth_hz() / 2.0
     }
+
+    /// The **exact** lower `-3 dB` half-power frequency, in hertz.
+    ///
+    /// Unlike [`RlcCircuit::lower_cutoff_hz`] (the narrow-band
+    /// `f0 - BW/2` approximation), this solves the half-power condition
+    /// `|omega L - 1/(omega C)| = R` exactly, giving
+    ///
+    /// ```text
+    /// f_low = f0 * (sqrt(1 + 1/(2Q)^2) - 1/(2Q))
+    /// ```
+    ///
+    /// The exact pair is symmetric in the **geometric** (not arithmetic)
+    /// sense — their product is exactly `f0^2`, so `sqrt(f_low*f_high)`
+    /// is the resonant frequency — yet their difference is still exactly
+    /// the bandwidth `f0/Q`. As `Q -> infinity` this converges to the
+    /// narrow-band value.
+    #[must_use]
+    pub fn lower_cutoff_exact_hz(&self) -> f64 {
+        let inv_2q = 1.0 / (2.0 * self.quality_factor());
+        self.resonant_hz() * ((1.0 + inv_2q * inv_2q).sqrt() - inv_2q)
+    }
+
+    /// The **exact** upper `-3 dB` half-power frequency, in hertz.
+    ///
+    /// The exact counterpart of [`RlcCircuit::upper_cutoff_hz`]:
+    ///
+    /// ```text
+    /// f_high = f0 * (sqrt(1 + 1/(2Q)^2) + 1/(2Q))
+    /// ```
+    ///
+    /// See [`RlcCircuit::lower_cutoff_exact_hz`] for the geometric-symmetry
+    /// and bandwidth identities the exact pair satisfies.
+    #[must_use]
+    pub fn upper_cutoff_exact_hz(&self) -> f64 {
+        let inv_2q = 1.0 / (2.0 * self.quality_factor());
+        self.resonant_hz() * ((1.0 + inv_2q * inv_2q).sqrt() + inv_2q)
+    }
 }
 
 #[cfg(test)]
@@ -202,6 +239,62 @@ mod tests {
         // Midpoint of the two edges is f0.
         let mid = 0.5 * (c.lower_cutoff_hz() + c.upper_cutoff_hz());
         assert!((mid - f0).abs() < 1e-7);
+    }
+
+    #[test]
+    fn exact_cutoffs_match_closed_form() {
+        let c = RlcCircuit::new(10.0, 10e-3, 1e-6).unwrap(); // Q = 10
+        let f0 = c.resonant_hz();
+        let inv_2q = 1.0 / (2.0 * c.quality_factor());
+        let root = (1.0 + inv_2q * inv_2q).sqrt();
+        assert!((c.lower_cutoff_exact_hz() - f0 * (root - inv_2q)).abs() < EPS);
+        assert!((c.upper_cutoff_exact_hz() - f0 * (root + inv_2q)).abs() < EPS);
+    }
+
+    #[test]
+    fn exact_cutoffs_bandwidth_is_exact_at_any_q() {
+        // The exact edges' difference equals f0/Q exactly, at every Q —
+        // unlike where the narrow-band approximation's center drifts.
+        for &r in &[1.0, 10.0, 100.0, 500.0] {
+            let c = RlcCircuit::new(r, 10e-3, 1e-6).unwrap();
+            let bw = c.upper_cutoff_exact_hz() - c.lower_cutoff_exact_hz();
+            assert!((bw - c.bandwidth_hz()).abs() < 1e-6, "R={r}");
+        }
+    }
+
+    #[test]
+    fn exact_cutoffs_geometric_mean_is_f0() {
+        // f0 is the GEOMETRIC mean of the exact half-power edges (the band
+        // is symmetric in log frequency): f_low*f_high = f0^2 exactly,
+        // unlike the arithmetic-midpoint approximation.
+        for &r in &[1.0, 50.0, 100.0] {
+            let c = RlcCircuit::new(r, 10e-3, 1e-6).unwrap();
+            let f0 = c.resonant_hz();
+            let prod = c.lower_cutoff_exact_hz() * c.upper_cutoff_exact_hz();
+            assert!((prod - f0 * f0).abs() / (f0 * f0) < 1e-12, "R={r}");
+            assert!((prod.sqrt() - f0).abs() < 1e-6, "R={r}");
+        }
+    }
+
+    #[test]
+    fn exact_converges_to_approx_at_high_q() {
+        // As Q grows the exact edges approach the narrow-band f0 +/- BW/2.
+        let c = RlcCircuit::new(0.1, 10e-3, 1e-6).unwrap(); // Q = 1000
+        let f0 = c.resonant_hz();
+        assert!((c.lower_cutoff_exact_hz() - c.lower_cutoff_hz()).abs() / f0 < 1e-6);
+        assert!((c.upper_cutoff_exact_hz() - c.upper_cutoff_hz()).abs() / f0 < 1e-6);
+    }
+
+    #[test]
+    fn exact_edges_are_golden_ratio_at_q_one() {
+        // At Q = 1 the exact edges are f0/phi and f0*phi (golden-ratio
+        // conjugates), well away from the approximation's 0.5 f0 / 1.5 f0.
+        let c = RlcCircuit::new(100.0, 10e-3, 1e-6).unwrap(); // Q = 1
+        let f0 = c.resonant_hz();
+        assert!((c.lower_cutoff_exact_hz() / f0 - 0.618_033_988_75).abs() < 1e-6);
+        assert!((c.upper_cutoff_exact_hz() / f0 - 1.618_033_988_75).abs() < 1e-6);
+        // The exact lower edge is strictly above the narrow-band value.
+        assert!(c.lower_cutoff_exact_hz() > c.lower_cutoff_hz());
     }
 
     #[test]
