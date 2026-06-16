@@ -303,4 +303,37 @@ impl BoltedJoint {
         let p = BoltError::require_positive("external_load_n", external_load_n)?;
         Ok(self.separation_load_n() / p)
     }
+
+    /// The factor of safety against the **bolt** reaching its proof load
+    /// under a service load `P` — the bolt-overload counterpart of
+    /// [`BoltedJoint::separation_safety_factor`].
+    ///
+    /// The total bolt tension is `F + C P`; it reaches the proof load
+    /// `F_proof` when `P` grows to `(F_proof - F) / C`, so the load
+    /// factor is
+    ///
+    /// ```text
+    /// n_L = (F_proof - F) / (C P)
+    /// ```
+    ///
+    /// (Shigley's "load factor".) `n_L > 1` means the bolt still has
+    /// margin below proof at the rated load; `n_L <= 0` flags a joint
+    /// whose preload alone already meets or exceeds proof (an
+    /// over-preload design error). Obtain `F_proof` from
+    /// [`crate::stress::proof_load`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BoltError`] if `proof_load_n` or `external_load_n` is
+    /// not strictly positive (a zero load has infinite margin and no
+    /// meaningful ratio) or non-finite.
+    pub fn bolt_load_factor(
+        &self,
+        proof_load_n: f64,
+        external_load_n: f64,
+    ) -> Result<f64, BoltError> {
+        let fp = BoltError::require_positive("proof_load_n", proof_load_n)?;
+        let p = BoltError::require_positive("external_load_n", external_load_n)?;
+        Ok((fp - self.preload_n) / (self.stiffness.value() * p))
+    }
 }
