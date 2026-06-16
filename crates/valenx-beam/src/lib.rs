@@ -1,9 +1,9 @@
 //! # valenx-beam
 //!
-//! Closed-form **Euler-Bernoulli beam bending** for the two classic
-//! support cases — the **cantilever** and the **simply-supported** beam
-//! — under a concentrated **point** load or a **uniformly distributed**
-//! load (UDL).
+//! Closed-form **Euler-Bernoulli beam bending** for the three classic
+//! support cases — the **cantilever**, the **simply-supported** beam and
+//! the **fixed-fixed** (clamped-clamped) beam — under a concentrated
+//! **point** load or a **uniformly distributed** load (UDL).
 //!
 //! ## What
 //!
@@ -45,12 +45,14 @@
 //! prismatic, homogeneous, linear-elastic beam in small-deflection
 //! bending:
 //!
-//! | Support          | Load           | Max deflection        | Max moment  |
-//! |------------------|----------------|-----------------------|-------------|
-//! | Cantilever       | tip point `P`  | `P L^3 / (3 E I)`     | `P L`       |
-//! | Cantilever       | UDL `w`        | `w L^4 / (8 E I)`     | `w L^2 / 2` |
-//! | Simply-supported | centre `P`     | `P L^3 / (48 E I)`    | `P L / 4`   |
-//! | Simply-supported | UDL `w`        | `5 w L^4 / (384 E I)` | `w L^2 / 8` |
+//! | Support          | Load           | Max deflection        | Max moment   |
+//! |------------------|----------------|-----------------------|--------------|
+//! | Cantilever       | tip point `P`  | `P L^3 / (3 E I)`     | `P L`        |
+//! | Cantilever       | UDL `w`        | `w L^4 / (8 E I)`     | `w L^2 / 2`  |
+//! | Simply-supported | centre `P`     | `P L^3 / (48 E I)`    | `P L / 4`    |
+//! | Simply-supported | UDL `w`        | `5 w L^4 / (384 E I)` | `w L^2 / 8`  |
+//! | Fixed-fixed      | centre `P`     | `P L^3 / (192 E I)`   | `P L / 8`    |
+//! | Fixed-fixed      | UDL `w`        | `w L^4 / (384 E I)`   | `w L^2 / 12` |
 //!
 //! and the peak bending stress in every case is the flexure formula
 //! `sigma = M c / I`. Use one consistent unit system throughout (for
@@ -60,7 +62,7 @@
 //!
 //! Research / educational grade. These are **textbook closed-form**
 //! Euler-Bernoulli expressions — the well-established, exact solutions
-//! for the four idealised cases tabulated above — not a finite-element
+//! for the six idealised cases tabulated above — not a finite-element
 //! solver and **NOT a clinical/medical or production structural-
 //! engineering tool**. The underlying theory assumes:
 //!
@@ -69,7 +71,7 @@
 //! - slender geometry where **transverse shear is neglected**
 //!   (pure bending; no Timoshenko shear correction), and
 //! - the point load applied at the characteristic location (cantilever
-//!   tip / simply-supported mid-span).
+//!   tip / simply-supported or fixed-fixed mid-span).
 //!
 //! Stress concentrations, buckling, plasticity, dynamic / fatigue
 //! effects, support settlement, self-weight and arbitrary load
@@ -260,6 +262,77 @@ mod tests {
 
         assert!(close(r.max_deflection, expected_defl, 1e-6));
         assert!(close(r.max_moment, expected_moment, 1e-6));
+    }
+
+    // ---------------------------------------------------------------
+    // Fixed-fixed, centre point: delta = P L^3 / (192 E I), M = P L / 8.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn fixed_fixed_point_matches_textbook() {
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let i = section.second_moment_area();
+        let c = section.extreme_fibre();
+        let (p, l, e) = (1000.0, 1000.0, 200_000.0);
+        let beam = Beam::new(l, e, section).unwrap();
+        let r = beam
+            .analyze(Support::FixedFixed, Load::Point { force: p })
+            .unwrap();
+
+        let expected_defl = p * l.powi(3) / (192.0 * e * i);
+        let expected_moment = p * l / 8.0;
+        let expected_stress = expected_moment * c / i;
+
+        assert!(close(r.max_deflection, expected_defl, 1e-9));
+        assert!(close(r.max_moment, expected_moment, 1e-6));
+        assert!(close(r.max_stress, expected_stress, 1e-9));
+    }
+
+    // ---------------------------------------------------------------
+    // Fixed-fixed, UDL: delta = w L^4 / (384 E I), M = w L^2 / 12.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn fixed_fixed_udl_matches_textbook() {
+        let section = Section::circular(40.0).unwrap();
+        let i = section.second_moment_area();
+        let c = section.extreme_fibre();
+        let (w, l, e) = (5.0, 2000.0, 70_000.0);
+        let beam = Beam::new(l, e, section).unwrap();
+        let r = beam
+            .analyze(Support::FixedFixed, Load::Udl { intensity: w })
+            .unwrap();
+
+        let expected_defl = w * l.powi(4) / (384.0 * e * i);
+        let expected_moment = w * l * l / 12.0;
+        let expected_stress = expected_moment * c / i;
+
+        assert!(close(r.max_deflection, expected_defl, 1e-6));
+        assert!(close(r.max_moment, expected_moment, 1e-6));
+        assert!(close(r.max_stress, expected_stress, 1e-9));
+    }
+
+    #[test]
+    fn fixed_fixed_is_four_times_stiffer_than_simply_supported_for_centre_point() {
+        // Physical cross-check: under the same central point load the
+        // fixed-fixed deflection (P L^3 / 192 E I) is exactly 1/4 of the
+        // simply-supported one (P L^3 / 48 E I), and its peak moment
+        // (P L / 8) is half the simply-supported P L / 4.
+        let section = Section::rectangular(25.0, 25.0).unwrap();
+        let beam = Beam::new(1200.0, 200_000.0, section).unwrap();
+        let load = Load::Point { force: 800.0 };
+
+        let ss = beam.max_deflection(Support::SimplySupported, load).unwrap();
+        let ff = beam.max_deflection(Support::FixedFixed, load).unwrap();
+        assert!(close(ff, ss / 4.0, 1e-9), "ff {ff} vs ss/4 {}", ss / 4.0);
+
+        let m_ss = beam.max_moment(Support::SimplySupported, load).unwrap();
+        let m_ff = beam.max_moment(Support::FixedFixed, load).unwrap();
+        assert!(
+            close(m_ff, m_ss / 2.0, 1e-9),
+            "M ff {m_ff} vs ss/2 {}",
+            m_ss / 2.0
+        );
     }
 
     // ---------------------------------------------------------------
