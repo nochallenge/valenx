@@ -18,8 +18,10 @@
 //! - [`weak_base`] — the symmetric weak monoprotic *base* equilibrium
 //!   (`[OH-] ~= sqrt(Kb*C)`, exact quadratic, pH via `pKw - pOH`, and
 //!   fraction-protonated).
-//! - [`buffer`] — the Henderson-Hasselbalch equation and the Van Slyke
-//!   buffer capacity of a weak acid / conjugate-base buffer.
+//! - [`buffer`] — the Henderson-Hasselbalch equation, the Van Slyke
+//!   buffer capacity of a weak acid / conjugate-base buffer, and the
+//!   design inverse [`buffer::conjugate_base_for_ph`] — the conjugate-base
+//!   concentration needed to hit a target pH.
 //!
 //! ## Model
 //!
@@ -70,7 +72,7 @@ pub mod strong;
 pub mod weak;
 pub mod weak_base;
 
-pub use buffer::{buffer_capacity, henderson_hasselbalch, Buffer};
+pub use buffer::{buffer_capacity, conjugate_base_for_ph, henderson_hasselbalch, Buffer};
 pub use error::{AcidBaseError, Result};
 pub use ph::{h_from_ph, oh_from_poh, ph, ph_from_poh, poh, poh_from_ph, KW_25C, PKW_25C};
 pub use strong::{ph_strong_acid, ph_strong_base};

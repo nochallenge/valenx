@@ -12,6 +12,11 @@
 //! in equal amounts (`[A-] = [HA]`, the log term vanishes), and rises as
 //! more conjugate base is added.
 //!
+//! The relation inverts for buffer **design**: to hit a target pH at a
+//! given weak-acid concentration, the conjugate base needed is
+//! `[A-] = [HA] * 10^(pH - pKa)` ([`conjugate_base_for_ph`] /
+//! [`Buffer::for_target_ph`]).
+//!
 //! The resistance of the buffer to pH change on adding strong acid or
 //! base is the **buffer capacity** `beta = d(Cb)/d(pH)`. For a single
 //! weak-acid / conjugate-base pair the Van Slyke expression is
@@ -78,6 +83,34 @@ impl Buffer {
         Self::new(-ka.log10(), acid, base)
     }
 
+    /// Build the buffer whose conjugate-base concentration is sized to hit
+    /// a **target pH** at a given weak-acid concentration — the design
+    /// inverse of [`Buffer::ph`].
+    ///
+    /// Inverting Henderson-Hasselbalch `pH = pKa + log10([A-]/[HA])` for
+    /// the conjugate-base concentration gives
+    ///
+    /// ```text
+    /// [A-] = [HA] * 10^(pH - pKa).
+    /// ```
+    ///
+    /// The returned buffer reproduces the request: its [`Buffer::ph`]
+    /// equals `target_ph` to floating-point tolerance. Any finite
+    /// `target_ph` is reachable — a more extreme pH simply needs more (or
+    /// less) conjugate base.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AcidBaseError::DegenerateBuffer`] when `acid` is not
+    /// finite and strictly positive, or when a non-finite `pka` /
+    /// `target_ph` drives the computed `[A-]` out of the valid
+    /// (finite, strictly positive) range.
+    pub fn for_target_ph(pka: f64, acid: f64, target_ph: f64) -> Result<Self> {
+        // [A-] = [HA] * 10^(pH - pKa), the Henderson-Hasselbalch inverse.
+        let base = acid * 10f64.powf(target_ph - pka);
+        Self::new(pka, acid, base)
+    }
+
     /// pH via Henderson-Hasselbalch: `pH = pKa + log10([A-] / [HA])`.
     pub fn ph(&self) -> f64 {
         self.pka + (self.base / self.acid).log10()
@@ -118,6 +151,36 @@ impl Buffer {
 /// ```
 pub fn henderson_hasselbalch(pka: f64, acid: f64, base: f64) -> Result<f64> {
     Ok(Buffer::new(pka, acid, base)?.ph())
+}
+
+/// The conjugate-base concentration `[A-]` (mol/L) needed to bring a
+/// weak-acid buffer of concentration `acid` and acid strength `pka` to a
+/// **target pH** — the Henderson-Hasselbalch design inverse:
+///
+/// ```text
+/// [A-] = [HA] * 10^(pH - pKa).
+/// ```
+///
+/// Free-function form of [`Buffer::for_target_ph`] returning just the
+/// required conjugate-base concentration.
+///
+/// # Errors
+///
+/// Returns [`AcidBaseError::DegenerateBuffer`] when `acid` is not finite
+/// and strictly positive, or when a non-finite `pka` / `target_ph` drives
+/// the computed `[A-]` out of the valid range.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_acidbase::conjugate_base_for_ph;
+/// // To sit one pH unit above the acetic-acid pKa (4.76) at 0.1 M acid,
+/// // you need ten times as much conjugate base: [A-] = 1.0 M.
+/// let base = conjugate_base_for_ph(4.76, 0.1, 5.76).unwrap();
+/// assert!((base - 1.0).abs() < 1e-9);
+/// ```
+pub fn conjugate_base_for_ph(pka: f64, acid: f64, target_ph: f64) -> Result<f64> {
+    Ok(Buffer::for_target_ph(pka, acid, target_ph)?.base)
 }
 
 /// Van Slyke buffer capacity `beta` of a weak-acid buffer, in
@@ -246,5 +309,82 @@ mod tests {
     fn from_ka_rejects_bad_constant() {
         assert!(Buffer::from_ka(0.0, 0.1, 0.1).is_err());
         assert!(Buffer::from_ka(-1.0, 0.1, 0.1).is_err());
+    }
+
+    // --- Henderson-Hasselbalch design inverse ---------------------------
+
+    #[test]
+    fn for_target_ph_closes_the_loop() {
+        // Build a buffer sized for a target pH; it must reproduce that pH.
+        let pka = 4.76;
+        for &target in &[3.5_f64, 4.76, 6.2, 8.0] {
+            let buf = Buffer::for_target_ph(pka, 0.1, target).expect("valid");
+            assert!(
+                (buf.ph() - target).abs() < 1e-12,
+                "ph {} vs target {target}",
+                buf.ph()
+            );
+        }
+    }
+
+    #[test]
+    fn conjugate_base_inverts_henderson_hasselbalch_both_ways() {
+        let pka = 4.76;
+        let acid = 0.1;
+        // base -> pH -> base.
+        let base0 = 0.35;
+        let ph = henderson_hasselbalch(pka, acid, base0).expect("valid");
+        let base_back = conjugate_base_for_ph(pka, acid, ph).expect("valid");
+        assert!(
+            (base_back - base0).abs() < 1e-12,
+            "base round-trip {base_back}"
+        );
+        // pH -> base -> pH.
+        let target = 5.3;
+        let base = conjugate_base_for_ph(pka, acid, target).expect("valid");
+        let ph_back = henderson_hasselbalch(pka, acid, base).expect("valid");
+        assert!((ph_back - target).abs() < 1e-12, "pH round-trip {ph_back}");
+    }
+
+    #[test]
+    fn conjugate_base_hand_values() {
+        // target pH = pKa -> equal amounts ([A-] = [HA]).
+        let at_pka = conjugate_base_for_ph(4.0, 0.1, 4.0).expect("valid");
+        assert!((at_pka - 0.1).abs() < 1e-12, "got {at_pka}");
+        // one unit above pKa -> 10x the acid.
+        let one_up = conjugate_base_for_ph(4.0, 0.1, 5.0).expect("valid");
+        assert!((one_up - 1.0).abs() < 1e-12, "got {one_up}");
+        // one unit below pKa -> 1/10 the acid.
+        let one_down = conjugate_base_for_ph(4.0, 0.1, 3.0).expect("valid");
+        assert!((one_down - 0.01).abs() < 1e-12, "got {one_down}");
+    }
+
+    #[test]
+    fn higher_target_ph_needs_more_conjugate_base() {
+        let lo = conjugate_base_for_ph(4.76, 0.1, 4.5).expect("valid");
+        let hi = conjugate_base_for_ph(4.76, 0.1, 6.0).expect("valid");
+        assert!(hi > lo, "higher pH should need more base: {hi} vs {lo}");
+    }
+
+    #[test]
+    fn for_target_ph_and_free_fn_agree() {
+        let buf = Buffer::for_target_ph(4.76, 0.2, 5.5).expect("valid");
+        let base = conjugate_base_for_ph(4.76, 0.2, 5.5).expect("valid");
+        assert!((buf.base - base).abs() < 1e-15);
+    }
+
+    #[test]
+    fn for_target_ph_rejects_bad_inputs() {
+        // Non-positive / non-finite acid.
+        assert!(conjugate_base_for_ph(4.76, 0.0, 5.0).is_err());
+        assert!(conjugate_base_for_ph(4.76, -0.1, 5.0).is_err());
+        assert!(conjugate_base_for_ph(4.76, f64::NAN, 5.0).is_err());
+        // Non-finite pKa / target pH drive the computed [A-] out of range.
+        assert!(conjugate_base_for_ph(f64::NAN, 0.1, 5.0).is_err());
+        assert!(conjugate_base_for_ph(4.76, 0.1, f64::INFINITY).is_err());
+        assert!(matches!(
+            Buffer::for_target_ph(4.76, 0.0, 5.0).unwrap_err(),
+            AcidBaseError::DegenerateBuffer { .. }
+        ));
     }
 }
