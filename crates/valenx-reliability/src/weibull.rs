@@ -16,7 +16,10 @@
 //! - unreliability `F(t) = 1 - exp(-(t / eta)^beta)`,
 //! - density       `f(t) = (beta / eta) (t / eta)^(beta - 1) exp(-(t / eta)^beta)`,
 //! - hazard        `h(t) = (beta / eta) (t / eta)^(beta - 1)`,
-//! - mean life     `MTTF = eta * Gamma(1 + 1 / beta)`.
+//! - mean life     `MTTF = eta * Gamma(1 + 1 / beta)`,
+//! - conditional   `R(m | age) = R(age + m) / R(age)` — the mission
+//!   reliability of an already-aged part, which (unlike the exponential)
+//!   depends on `age` whenever `beta != 1`.
 //!
 //! The scale `eta` is the *characteristic life*: `R(eta) = exp(-1) = 1/e`
 //! for every shape, so about 63.2% of items have failed by `t = eta`
@@ -144,6 +147,42 @@ impl Weibull {
     pub fn time_for_reliability(&self, target: f64) -> Result<f64, ReliabilityError> {
         let target = crate::error::require_probability(target)?;
         Ok(self.scale * (-target.ln()).powf(1.0 / self.shape))
+    }
+
+    /// The **conditional (mission) reliability** of a component that has
+    /// already survived to `age`: the probability it survives an
+    /// *additional* `mission` time,
+    ///
+    /// ```text
+    /// R(mission | age) = R(age + mission) / R(age)
+    ///                  = exp( (age/eta)^beta - ((age+mission)/eta)^beta ).
+    /// ```
+    ///
+    /// Unlike the memoryless [exponential](crate::exponential), the Weibull
+    /// is **not** memoryless for `beta != 1`: a wear-out part (`beta > 1`)
+    /// that has already aged is *less* reliable for the same mission than a
+    /// fresh one, while an infant-mortality part (`beta < 1`) that has
+    /// survived burn-in is *more* reliable. At `beta = 1` the dependence on
+    /// `age` drops out and this reduces to the unconditional
+    /// [`reliability`](Self::reliability) of the mission alone.
+    ///
+    /// `age = 0` returns `R(mission)` (a fresh component) and `mission = 0`
+    /// returns `1`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReliabilityError::NegativeTime`] if `age` or `mission` is
+    /// negative (or [`ReliabilityError::NotFinite`] if either is not
+    /// finite).
+    pub fn conditional_reliability(&self, age: f64, mission: f64) -> Result<f64, ReliabilityError> {
+        let age = require_time(age)?;
+        let mission = require_time(mission)?;
+        // R(age+mission)/R(age) = exp((age/eta)^beta - ((age+mission)/eta)^beta);
+        // forming the difference in the exponent avoids a 0/0 in the deep
+        // tail where both survivals have underflowed to 0.
+        let aged = (age / self.scale).powf(self.shape);
+        let total = ((age + mission) / self.scale).powf(self.shape);
+        Ok((aged - total).exp())
     }
 }
 
@@ -424,6 +463,99 @@ mod tests {
                 "recurrence fails at x = {x}"
             );
         }
+    }
+
+    // --- Conditional (mission) reliability ------------------------------
+
+    #[test]
+    fn conditional_reliability_matches_definition() {
+        // R(mission | age) = R(age + mission) / R(age).
+        let w = Weibull::new(2.5, 8.0).unwrap();
+        for &(age, mission) in &[(0.0_f64, 3.0_f64), (4.0, 2.0), (10.0, 5.0)] {
+            let cond = w.conditional_reliability(age, mission).unwrap();
+            let expected = w.reliability(age + mission).unwrap() / w.reliability(age).unwrap();
+            assert!(close(cond, expected, EPS), "cond {cond} vs {expected}");
+        }
+    }
+
+    #[test]
+    fn conditional_at_zero_age_is_unconditional_reliability() {
+        // A fresh component: R(mission | 0) = R(mission).
+        let w = Weibull::new(1.7, 5.0).unwrap();
+        for k in 0..=10 {
+            let m = k as f64 * 0.6;
+            let cond = w.conditional_reliability(0.0, m).unwrap();
+            assert!(close(cond, w.reliability(m).unwrap(), EPS), "at m = {m}");
+        }
+    }
+
+    #[test]
+    fn conditional_zero_mission_is_one() {
+        let w = Weibull::new(3.0, 4.0).unwrap();
+        for &age in &[0.0_f64, 1.0, 9.0] {
+            assert!(close(
+                w.conditional_reliability(age, 0.0).unwrap(),
+                1.0,
+                EPS
+            ));
+        }
+    }
+
+    #[test]
+    fn wear_out_aging_lowers_mission_reliability() {
+        // beta > 1: an aged part is LESS reliable for a mission than a
+        // fresh one; beta < 1 (burn-in): an aged part is MORE reliable.
+        let mission = 2.0;
+        let wear = Weibull::new(2.5, 6.0).unwrap();
+        let fresh_w = wear.conditional_reliability(0.0, mission).unwrap();
+        let aged_w = wear.conditional_reliability(5.0, mission).unwrap();
+        assert!(
+            aged_w < fresh_w,
+            "wear-out: aged {aged_w} should be < fresh {fresh_w}"
+        );
+
+        let burn = Weibull::new(0.5, 6.0).unwrap();
+        let fresh_b = burn.conditional_reliability(0.0, mission).unwrap();
+        let aged_b = burn.conditional_reliability(5.0, mission).unwrap();
+        assert!(
+            aged_b > fresh_b,
+            "burn-in: aged {aged_b} should be > fresh {fresh_b}"
+        );
+    }
+
+    #[test]
+    fn beta_one_conditional_is_memoryless_like_the_exponential() {
+        // GROUND TRUTH: at beta = 1 the Weibull is memoryless, so the
+        // conditional mission reliability is independent of age and equals
+        // an exponential with lambda = 1/eta.
+        let eta = 7.0;
+        let w = Weibull::new(1.0, eta).unwrap();
+        let e = Exponential::new(1.0 / eta).unwrap();
+        let mission = 3.0;
+        for &age in &[0.0_f64, 2.0, 11.0] {
+            let cond = w.conditional_reliability(age, mission).unwrap();
+            assert!(
+                close(cond, w.reliability(mission).unwrap(), EPS),
+                "memoryless at age {age}"
+            );
+            assert!(
+                close(cond, e.reliability(mission).unwrap(), EPS),
+                "vs exponential at age {age}"
+            );
+        }
+    }
+
+    #[test]
+    fn conditional_reliability_rejects_negative_time() {
+        let w = Weibull::new(2.0, 1.0).unwrap();
+        assert!(matches!(
+            w.conditional_reliability(-1.0, 1.0),
+            Err(ReliabilityError::NegativeTime { .. })
+        ));
+        assert!(matches!(
+            w.conditional_reliability(1.0, -1.0),
+            Err(ReliabilityError::NegativeTime { .. })
+        ));
     }
 
     #[test]
