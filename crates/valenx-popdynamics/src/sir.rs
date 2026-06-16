@@ -23,6 +23,10 @@
 //! - The **basic reproduction number** `R0 = beta / gamma`: the
 //!   expected number of secondary infections one infectious individual
 //!   causes in a fully susceptible population.
+//! - The **herd-immunity threshold** `HIT = 1 - 1/R0`
+//!   ([`Sir::herd_immunity_threshold`]): the immune fraction needed to
+//!   drive the effective reproduction number below 1 (reported as `0`
+//!   when `R0 <= 1`).
 //! - Since `dI/dt = I (beta S/N - gamma)`, an epidemic *grows* at the
 //!   start (`S ~ N`) iff `beta - gamma > 0`, i.e. iff `R0 > 1`. The
 //!   [`tests`](self) verify both the `R0` identity and this
@@ -115,6 +119,22 @@ impl Sir {
         self.beta / self.gamma
     }
 
+    /// The **herd-immunity threshold** `HIT = 1 - 1/R0`, the fraction of
+    /// the population that must be immune for the effective reproduction
+    /// number `R0 * S/N` to fall below 1, so an introduced infection
+    /// cannot grow.
+    ///
+    /// Equivalently `(R0 - 1)/R0`. It is `0` at the epidemic threshold
+    /// `R0 = 1` and rises toward `1` as `R0 -> infinity`. For `R0 <= 1`
+    /// the disease cannot sustain even in a fully susceptible population,
+    /// so no immunity is required and the threshold is reported as `0`
+    /// (the raw `1 - 1/R0` would be non-positive). It is the immunity
+    /// counterpart of the `R0 > 1` grows/dies threshold above: `HIT > 0`
+    /// exactly when `R0 > 1`.
+    pub fn herd_immunity_threshold(&self) -> f64 {
+        (1.0 - 1.0 / self.r0()).max(0.0)
+    }
+
     /// The three time-derivatives `[dS/dt, dI/dt, dR/dt]` at a given
     /// state, using the conserved total `N = S + I + R`.
     ///
@@ -169,6 +189,58 @@ mod tests {
         assert!((m.r0() - 3.0).abs() < 1e-12, "R0={}", m.r0());
         let m = Sir::new(0.25, 0.5).unwrap();
         assert!((m.r0() - 0.5).abs() < 1e-12, "R0={}", m.r0());
+    }
+
+    #[test]
+    fn herd_immunity_threshold_closed_form() {
+        // VALIDATE: HIT = 1 - 1/R0.
+        let m = Sir::new(0.8, 0.2).unwrap(); // R0 = 4
+        assert!((m.r0() - 4.0).abs() < 1e-12);
+        assert!((m.herd_immunity_threshold() - 0.75).abs() < 1e-12);
+        let m = Sir::new(0.4, 0.2).unwrap(); // R0 = 2
+        assert!((m.herd_immunity_threshold() - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn herd_immunity_matches_r0_minus_one_over_r0() {
+        // Independent algebraic form (R0 - 1)/R0.
+        for &(beta, gamma) in &[(0.6, 0.2), (0.9, 0.3), (1.5, 0.25)] {
+            let m = Sir::new(beta, gamma).unwrap();
+            let r0 = m.r0();
+            assert!((m.herd_immunity_threshold() - (r0 - 1.0) / r0).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn herd_immunity_is_zero_at_and_below_threshold() {
+        // R0 = 1 (beta = gamma): no immunity needed.
+        let m = Sir::new(0.2, 0.2).unwrap();
+        assert!((m.r0() - 1.0).abs() < 1e-12);
+        assert!(m.herd_immunity_threshold().abs() < 1e-12);
+        // R0 < 1: clamped to 0 (raw 1 - 1/R0 would be negative).
+        let m = Sir::new(0.1, 0.2).unwrap(); // R0 = 0.5
+        assert!(m.r0() < 1.0);
+        assert!(m.herd_immunity_threshold().abs() < 1e-12);
+        // beta = 0 => R0 = 0 => HIT = 0 (no transmission, and no NaN).
+        let m = Sir::new(0.0, 0.2).unwrap();
+        let hit = m.herd_immunity_threshold();
+        assert!(hit.abs() < 1e-12 && hit.is_finite(), "HIT={hit}");
+    }
+
+    #[test]
+    fn herd_immunity_increases_with_r0_and_stays_in_unit_interval() {
+        // For R0 > 1, HIT strictly increases toward 1 (never reaching it),
+        // and HIT > 0 exactly when R0 > 1 (the growth threshold).
+        let gamma = 0.2;
+        let mut prev = -1.0;
+        for beta in [0.25, 0.4, 0.8, 2.0, 10.0] {
+            let m = Sir::new(beta, gamma).unwrap();
+            let hit = m.herd_immunity_threshold();
+            assert!(hit > prev, "HIT should increase with R0: {hit} !> {prev}");
+            assert!((0.0..1.0).contains(&hit), "HIT out of [0,1): {hit}");
+            assert_eq!(hit > 0.0, m.r0() > 1.0);
+            prev = hit;
+        }
     }
 
     #[test]
