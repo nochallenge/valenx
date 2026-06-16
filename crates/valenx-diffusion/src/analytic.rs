@@ -34,7 +34,9 @@
 //!
 //! [`gaussian_point_source`] evaluates `C(x, t)`,
 //! [`gaussian_variance`] returns `2 D t`, and [`gaussian_std`] returns
-//! its square root.
+//! its square root. The inverses [`time_to_reach_variance`] /
+//! [`time_to_reach_std`] answer the design question — how long until the
+//! spread reaches a prescribed width.
 
 use crate::error::{DiffusionError, Result};
 use std::f64::consts::PI;
@@ -188,6 +190,81 @@ pub fn gaussian_variance(d: f64, t: f64) -> Result<f64> {
 /// ```
 pub fn gaussian_std(d: f64, t: f64) -> Result<f64> {
     Ok(gaussian_variance(d, t)?.sqrt())
+}
+
+/// The time for the point-source spreading to reach a given spatial
+/// **variance**, inverting `var = 2 D t`:
+///
+/// ```text
+///   t = target_variance / (2 D).
+/// ```
+///
+/// The practical design question — how long until a tracer has spread to
+/// a prescribed width — answered in closed form.
+///
+/// # Errors
+///
+/// [`DiffusionError::BadParameter`] if `d` is not strictly positive, or if
+/// `target_variance` is negative or non-finite (`0` is allowed and returns
+/// `0`).
+///
+/// # Examples
+///
+/// ```
+/// use valenx_diffusion::{gaussian_variance, time_to_reach_variance};
+///
+/// // Reaching variance 4 with D = 0.5 takes t = 4 / (2*0.5) = 4.
+/// let t = time_to_reach_variance(0.5, 4.0).unwrap();
+/// assert!((t - 4.0).abs() < 1e-12);
+/// // ... which the forward law reproduces.
+/// assert!((gaussian_variance(0.5, t).unwrap() - 4.0).abs() < 1e-12);
+/// ```
+pub fn time_to_reach_variance(d: f64, target_variance: f64) -> Result<f64> {
+    check_diffusivity(d)?;
+    if !target_variance.is_finite() || target_variance < 0.0 {
+        return Err(DiffusionError::bad_parameter(
+            "target_variance",
+            "must be finite and non-negative",
+        ));
+    }
+    Ok(target_variance / (2.0 * d))
+}
+
+/// The time for the RMS spread (standard deviation) to reach `target_std`,
+/// inverting `std = sqrt(2 D t)`:
+///
+/// ```text
+///   t = target_std^2 / (2 D).
+/// ```
+///
+/// Because the spread grows as the square root of time, the time scales as
+/// the *square* of the target distance — diffusing twice as far takes four
+/// times as long.
+///
+/// # Errors
+///
+/// [`DiffusionError::BadParameter`] if `d` is not strictly positive, or if
+/// `target_std` is negative or non-finite (`0` is allowed and returns `0`).
+///
+/// # Examples
+///
+/// ```
+/// use valenx_diffusion::{gaussian_std, time_to_reach_std};
+///
+/// // Reaching an RMS spread of 2 with D = 0.5 takes t = 4 / (2*0.5) = 4.
+/// let t = time_to_reach_std(0.5, 2.0).unwrap();
+/// assert!((t - 4.0).abs() < 1e-12);
+/// assert!((gaussian_std(0.5, t).unwrap() - 2.0).abs() < 1e-12);
+/// ```
+pub fn time_to_reach_std(d: f64, target_std: f64) -> Result<f64> {
+    check_diffusivity(d)?;
+    if !target_std.is_finite() || target_std < 0.0 {
+        return Err(DiffusionError::bad_parameter(
+            "target_std",
+            "must be finite and non-negative",
+        ));
+    }
+    Ok(target_std * target_std / (2.0 * d))
 }
 
 // --- internal validators -------------------------------------------------
@@ -344,6 +421,54 @@ mod tests {
         let s = gaussian_std(d, t).unwrap();
         let v = gaussian_variance(d, t).unwrap();
         assert!((s * s - v).abs() < EPS, "s={s} v={v}");
+    }
+
+    #[test]
+    fn time_to_reach_variance_inverts_the_forward_law() {
+        let d = 0.3;
+        // Forward then inverse recovers the time.
+        for &t in &[0.0, 1.0, 5.0, 12.5] {
+            let v = gaussian_variance(d, t).unwrap();
+            let back = time_to_reach_variance(d, v).unwrap();
+            assert!((back - t).abs() < EPS, "t={t} -> v={v} -> {back}");
+        }
+        // Inverse then forward recovers the variance.
+        for &v in &[0.0, 2.0, 9.0] {
+            let t = time_to_reach_variance(d, v).unwrap();
+            assert!((gaussian_variance(d, t).unwrap() - v).abs() < EPS, "v={v}");
+        }
+    }
+
+    #[test]
+    fn time_to_reach_std_inverts_and_scales_with_distance_squared() {
+        let d = 0.5;
+        // Inverts the std law: D=0.5, sigma=2 -> t = 4/(2*0.5) = 4.
+        let t = time_to_reach_std(d, 2.0).unwrap();
+        assert!((t - 4.0).abs() < EPS, "t = {t}");
+        assert!((gaussian_std(d, t).unwrap() - 2.0).abs() < EPS);
+        // Diffusing twice as far takes four times as long.
+        let t1 = time_to_reach_std(d, 1.0).unwrap();
+        let t2 = time_to_reach_std(d, 2.0).unwrap();
+        assert!((t2 - 4.0 * t1).abs() < EPS, "{t1} {t2}");
+        // Consistent with the variance form (var = std^2).
+        let sigma = 1.7;
+        assert!(
+            (time_to_reach_std(d, sigma).unwrap()
+                - time_to_reach_variance(d, sigma * sigma).unwrap())
+            .abs()
+                < EPS
+        );
+    }
+
+    #[test]
+    fn inverse_time_rejects_bad_parameters() {
+        assert!(time_to_reach_variance(0.0, 1.0).is_err());
+        assert!(time_to_reach_variance(1.0, -1.0).is_err());
+        assert!(time_to_reach_std(-1.0, 1.0).is_err());
+        assert!(time_to_reach_std(1.0, f64::NAN).is_err());
+        // Zero target -> zero time.
+        assert!(time_to_reach_variance(1.0, 0.0).unwrap().abs() < EPS);
+        assert!(time_to_reach_std(1.0, 0.0).unwrap().abs() < EPS);
     }
 
     #[test]
