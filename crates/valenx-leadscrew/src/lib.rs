@@ -18,7 +18,9 @@
 //!   for a given microsteps-per-revolution count.
 //! - [`LeadScrew::back_drive`] — whether the screw self-locks under a
 //!   nut/thread friction coefficient, plus the
-//!   [`LeadScrew::critical_friction`] boundary.
+//!   [`LeadScrew::critical_friction`] boundary and the ideal raising
+//!   [`LeadScrew::screw_efficiency`] `eta = tan(lambda)/tan(lambda + phi)`
+//!   that friction implies (below `0.5` whenever the screw self-locks).
 //!
 //! ```
 //! use valenx_leadscrew::LeadScrew;
@@ -53,7 +55,10 @@
 //! - **Back-drive.** With lead angle `lambda = atan(lead / (pi * d_m))`
 //!   and friction angle `phi = atan(mu)`, the screw **self-locks** when
 //!   `mu >= tan(lambda)` (equivalently `lambda <= phi`) and is
-//!   **back-drivable** otherwise.
+//!   **back-drivable** otherwise. The same two angles give the ideal
+//!   raising efficiency `eta = tan(lambda) / tan(lambda + phi)` — the
+//!   friction-derived value of the lumped `eta` above, necessarily below
+//!   `0.5` whenever the screw self-locks.
 //!
 //! ## Honest scope
 //!
