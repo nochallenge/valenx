@@ -17,6 +17,12 @@
 //!   positive** (so a negative number is a member in compression), and
 //! - the support reactions, each resolved to global `(fx, fy)`.
 //!
+//! Before solving you can classify the structure by the Maxwell counting
+//! rule: [`Truss::static_determinacy_number`] returns the signed
+//! `(m + r) - 2N`, and [`Truss::determinacy`] sorts its sign into the
+//! [`Determinacy`] cases — mechanism (deficient), determinate, or
+//! indeterminate (redundant).
+//!
 //! It is the in-process counterpart to a hand worked-example or a
 //! teaching FE tool: no meshing, no external solver, runs anywhere the
 //! crate compiles.
@@ -74,10 +80,12 @@
 //! geometry / topology in [`model`]; the solved quantities in [`result`].
 //!
 //! Determinacy is enforced in two layers: the counting condition
-//! `m + r = 2N` ([`Truss::is_count_determinate`]) up front, and rank
-//! (catching count-balanced *mechanisms*) by the invertibility test on
-//! the assembled matrix — a singular system returns
-//! [`TrussError::Singular`] rather than a garbage force state.
+//! `m + r = 2N` ([`Truss::is_count_determinate`], refined by the signed
+//! [`Truss::static_determinacy_number`] and its [`Determinacy`]
+//! classification) up front, and rank (catching count-balanced
+//! *mechanisms*) by the invertibility test on the assembled matrix — a
+//! singular system returns [`TrussError::Singular`] rather than a garbage
+//! force state.
 //!
 //! ## Honest scope
 //!
@@ -123,6 +131,6 @@ pub mod result;
 pub mod solver;
 
 pub use error::{ErrorCategory, TrussError};
-pub use model::{Load, Member, Node, Support, Truss};
+pub use model::{Determinacy, Load, Member, Node, Support, Truss};
 pub use result::{AxialState, MemberForce, Reaction, TrussSolution};
 pub use solver::solve;
