@@ -13,8 +13,10 @@
 //!   magnitude and phase of the low-pass (output across `C`) or
 //!   high-pass (output across `R`) response at any frequency.
 //! - [`rlc::RlcCircuit`] — a series **RLC** resonant circuit. Gives the
-//!   resonant frequency, the quality factor `Q`, and the `-3 dB`
-//!   bandwidth.
+//!   resonant frequency, the quality factor `Q`, the `-3 dB` bandwidth,
+//!   and both the narrow-band and the **exact** half-power band-edge
+//!   frequencies (whose geometric mean is exactly the resonant
+//!   frequency).
 //!
 //! Both return a [`response::Response`] (magnitude + phase) where a
 //! per-frequency answer is wanted, and both reject non-physical inputs
@@ -66,10 +68,12 @@
 //! - Only **first-order RC** and **series-RLC** topologies are modelled.
 //!   There is no cascading, no active (op-amp) filters, and no
 //!   higher-order Butterworth / Chebyshev / elliptic synthesis.
-//! - The RLC `-3 dB` edge frequencies use the symmetric narrow-band
-//!   approximation `f0 +/- BW/2`, which is exact only in the
-//!   high-`Q` limit. The resonant frequency, `Q`, and bandwidth
-//!   themselves are exact.
+//! - The RLC `lower_cutoff_hz` / `upper_cutoff_hz` edge frequencies use
+//!   the symmetric narrow-band approximation `f0 +/- BW/2`, which is
+//!   exact only in the high-`Q` limit. The `*_exact_hz` variants instead
+//!   solve the half-power condition exactly (their geometric mean is
+//!   `f0`, their difference the bandwidth, at any `Q`). The resonant
+//!   frequency, `Q`, and bandwidth themselves are exact.
 //!
 //! Within those bounds every number is the genuine analytic result and
 //! is checked against the closed-form formula in the test suite.
