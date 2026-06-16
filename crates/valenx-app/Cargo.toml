@@ -134,6 +134,7 @@ valenx-fasteners     = { path = "../valenx-fasteners" }
 # Native structural cross-section properties — surfaced by the Frames
 # workbench (src/frames_workbench.rs).
 valenx-frames        = { path = "../valenx-frames" }
+valenx-gasdynamics   = { path = "../valenx-gasdynamics" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem

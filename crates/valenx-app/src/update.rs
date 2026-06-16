@@ -518,6 +518,21 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Gas Dynamics workbench — 1-D
+                    // compressible-flow relations (valenx-gasdynamics). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_gasdynamics_workbench, "Gas Dynamics")
+                        .on_hover_text(
+                            "Show / hide the right-side Gas Dynamics workbench — 1-D \
+                             compressible-flow relations for a perfect gas: isentropic \
+                             stagnation + area-Mach ratios, normal-shock jumps, \
+                             Prandtl-Meyer expansion, and Fanno / Rayleigh flow, computed \
+                             in-process by valenx-gasdynamics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
@@ -1196,6 +1211,10 @@ impl eframe::App for ValenxApp {
         // Frames Workbench (right) — structural cross-section properties on
         // valenx-frames. A no-op unless toggled on via View → Frames.
         crate::frames_workbench::draw_frames_workbench(self, ctx);
+
+        // Gas Dynamics workbench (right) — 1-D compressible-flow relations on
+        // valenx-gasdynamics. A no-op unless toggled on via View → Gas Dynamics.
+        crate::gasdynamics_workbench::draw_gasdynamics_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
