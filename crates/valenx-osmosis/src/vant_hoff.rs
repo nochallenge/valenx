@@ -234,6 +234,68 @@ pub fn osmolarity_from_pressure_atm(
     Ok(pressure_atm / (R_L_ATM * temperature_k))
 }
 
+/// Determine a solute's **molar mass** from a measured osmotic pressure
+/// — the classic membrane-osmometry method for sizing a macromolecule
+/// (polymer, protein) too large to weigh out mole-by-mole.
+///
+/// Writing the molar concentration as the mass concentration over the
+/// molar mass, `c = rho / M`, in the van't Hoff law `Pi = i * c * R * T`
+/// and solving for `M` gives
+///
+/// ```text
+/// M = i * rho * R_L_ATM * T / Pi
+/// ```
+///
+/// with `rho` the mass concentration in `g/L`, `Pi` in atmospheres, `T`
+/// in kelvin, and the result in `g/mol`. For a non-dissociating
+/// macromolecule pass `vant_hoff_i = 1`. This is the exact inverse of
+/// the forward law solved for `M`: feeding the result back as
+/// `c = rho / M` reproduces `Pi`.
+///
+/// # Errors
+///
+/// Returns [`OsmosisError::InvalidParameter`] if `pressure_atm` is not
+/// finite and strictly positive (a molar mass cannot be inferred from a
+/// zero or absent pressure), if `mass_concentration_g_per_l` is not
+/// finite and strictly positive, if `vant_hoff_i` is not finite and
+/// `>= 1`, or if `temperature_k` is not finite and strictly positive.
+pub fn molar_mass_from_pressure_atm(
+    pressure_atm: f64,
+    mass_concentration_g_per_l: f64,
+    vant_hoff_i: f64,
+    temperature_k: f64,
+) -> Result<f64, OsmosisError> {
+    if !pressure_atm.is_finite() || pressure_atm <= 0.0 {
+        return Err(OsmosisError::invalid(
+            "pressure_atm",
+            pressure_atm,
+            "must be finite and > 0",
+        ));
+    }
+    if !mass_concentration_g_per_l.is_finite() || mass_concentration_g_per_l <= 0.0 {
+        return Err(OsmosisError::invalid(
+            "mass_concentration_g_per_l",
+            mass_concentration_g_per_l,
+            "must be finite and > 0",
+        ));
+    }
+    if !vant_hoff_i.is_finite() || vant_hoff_i < 1.0 {
+        return Err(OsmosisError::invalid(
+            "vant_hoff_i",
+            vant_hoff_i,
+            "must be finite and >= 1",
+        ));
+    }
+    if !temperature_k.is_finite() || temperature_k <= 0.0 {
+        return Err(OsmosisError::invalid(
+            "temperature_k",
+            temperature_k,
+            "must be finite and > 0",
+        ));
+    }
+    Ok(vant_hoff_i * mass_concentration_g_per_l * R_L_ATM * temperature_k / pressure_atm)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,5 +446,83 @@ mod tests {
         assert!(osmolarity_from_pressure_atm(-1.0, 300.0).is_err());
         assert!(osmolarity_from_pressure_atm(1.0, 0.0).is_err());
         assert!(osmolarity_from_pressure_atm(f64::NAN, 300.0).is_err());
+    }
+
+    // ---- Molar mass from osmotic pressure (membrane osmometry) ------
+
+    #[test]
+    fn molar_mass_round_trips_through_the_forward_law() {
+        // Pick a molar mass, make a solution at a known mass
+        // concentration, compute its osmotic pressure, then recover the
+        // mass. The last case exercises the dissociation factor i > 1.
+        for &(m_true, rho, i) in &[
+            (50_000.0, 10.0, 1.0),
+            (1_800.0, 25.0, 1.0),
+            (12_000.0, 8.0, 2.0),
+        ] {
+            let t = 298.15;
+            let c = rho / m_true; // molar concentration, mol/L
+            let pi = Solution::new(c, i, t).unwrap().osmotic_pressure_atm();
+            let m = molar_mass_from_pressure_atm(pi, rho, i, t).unwrap();
+            assert!(
+                (m - m_true).abs() / m_true < 1e-9,
+                "recovered M = {m}, expected {m_true}"
+            );
+        }
+    }
+
+    #[test]
+    fn molar_mass_matches_hand_formula() {
+        // M = i * rho * R * T / Pi, recomputed independently.
+        let m = molar_mass_from_pressure_atm(0.5, 20.0, 1.0, 300.0).unwrap();
+        let expected = 1.0 * 20.0 * R_L_ATM * 300.0 / 0.5;
+        assert!((m - expected).abs() < EPS, "M = {m} vs {expected}");
+    }
+
+    #[test]
+    fn molar_mass_equals_mass_concentration_over_molarity() {
+        // Derivable identity: M = i * rho / (i*c), where the osmolarity
+        // i*c is exactly what osmolarity_from_pressure_atm recovers.
+        let (rho, i, t, pi) = (12.0, 1.0, 310.0, 0.03);
+        let m = molar_mass_from_pressure_atm(pi, rho, i, t).unwrap();
+        let osmolarity = osmolarity_from_pressure_atm(pi, t).unwrap();
+        let via_osmolarity = i * rho / osmolarity;
+        assert!(
+            (m - via_osmolarity).abs() / m < 1e-12,
+            "M {m} vs {via_osmolarity}"
+        );
+    }
+
+    #[test]
+    fn molar_mass_scales_linearly_with_mass_concentration() {
+        // At fixed Pi, T, i: M is proportional to the mass concentration.
+        let base = molar_mass_from_pressure_atm(0.2, 5.0, 1.0, 300.0).unwrap();
+        let double = molar_mass_from_pressure_atm(0.2, 10.0, 1.0, 300.0).unwrap();
+        assert!(
+            (double - 2.0 * base).abs() / base < 1e-12,
+            "double = {double}"
+        );
+    }
+
+    #[test]
+    fn molar_mass_scales_inversely_with_pressure() {
+        // At fixed rho, T, i: a higher osmotic pressure implies a smaller
+        // (more numerous) solute, so M is proportional to 1/Pi.
+        let low = molar_mass_from_pressure_atm(0.1, 8.0, 1.0, 300.0).unwrap();
+        let high = molar_mass_from_pressure_atm(0.2, 8.0, 1.0, 300.0).unwrap();
+        assert!(
+            (high - low / 2.0).abs() / low < 1e-12,
+            "high = {high}, low = {low}"
+        );
+    }
+
+    #[test]
+    fn molar_mass_rejects_bad_inputs() {
+        assert!(molar_mass_from_pressure_atm(0.0, 10.0, 1.0, 300.0).is_err()); // Pi = 0
+        assert!(molar_mass_from_pressure_atm(-1.0, 10.0, 1.0, 300.0).is_err());
+        assert!(molar_mass_from_pressure_atm(0.5, 0.0, 1.0, 300.0).is_err()); // rho = 0
+        assert!(molar_mass_from_pressure_atm(0.5, 10.0, 0.5, 300.0).is_err()); // i < 1
+        assert!(molar_mass_from_pressure_atm(0.5, 10.0, 1.0, 0.0).is_err()); // T = 0
+        assert!(molar_mass_from_pressure_atm(f64::NAN, 10.0, 1.0, 300.0).is_err());
     }
 }

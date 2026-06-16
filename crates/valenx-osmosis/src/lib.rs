@@ -12,8 +12,11 @@
 //!
 //! 1. Van't Hoff osmotic pressure ([`vant_hoff`]). The colligative law
 //!    `Pi = i * c * R * T` for a dilute solution, the osmolarity
-//!    `i * c`, results in atmospheres and pascals, and the inverse
-//!    (osmolarity from a measured pressure). See [`vant_hoff::Solution`].
+//!    `i * c`, results in atmospheres and pascals, and two inverses —
+//!    the osmolarity from a measured pressure, and the solute **molar
+//!    mass** (membrane osmometry) via
+//!    [`vant_hoff::molar_mass_from_pressure_atm`]. See
+//!    [`vant_hoff::Solution`].
 //! 2. Starling filtration ([`starling`]). The transcapillary flux
 //!    `Jv = Kf * ((Pc - Pi) - sigma * (pi_c - pi_i))`, decomposed into
 //!    its net hydrostatic gradient, net oncotic gradient, net driving
@@ -36,7 +39,11 @@
 //! with concentration in `mol/L` yields atmospheres,
 //! [`vant_hoff::R_SI`] with concentration in `mol/m^3` yields pascals.
 //! Pressure is therefore exactly proportional to both the particle
-//! concentration `i * c` and the absolute temperature `T`.
+//! concentration `i * c` and the absolute temperature `T`. Because the
+//! molar concentration is the mass concentration over the molar mass
+//! (`c = rho / M`), a measured pressure also yields the solute's molar
+//! mass, `M = i * rho * R * T / Pi` — the basis of membrane osmometry
+//! for sizing macromolecules.
 //!
 //! Transcapillary flow follows Starling's equation: the difference
 //! between the net hydrostatic pressure pushing fluid out of a
@@ -101,8 +108,8 @@ pub use error::{ErrorCategory, OsmosisError};
 pub use starling::{FluxDirection, StarlingParams};
 pub use tonicity::{classify as classify_tonicity, Tonicity, WaterMovement};
 pub use vant_hoff::{
-    osmolarity_from_pressure_atm, osmotic_pressure_atm, Solution, ATM_IN_PA, CELSIUS_ZERO_K,
-    R_L_ATM, R_SI,
+    molar_mass_from_pressure_atm, osmolarity_from_pressure_atm, osmotic_pressure_atm, Solution,
+    ATM_IN_PA, CELSIUS_ZERO_K, R_L_ATM, R_SI,
 };
 
 #[cfg(test)]
