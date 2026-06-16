@@ -15,6 +15,11 @@
 //! - [`impedance`] — reflected (referred) load impedance
 //!   `Zp = a^2 * Zs`, its inverse, and the impedance-matching ratio
 //!   `a = sqrt(Zsource / Zload)`.
+//! - [`emf`] — the transformer EMF equation
+//!   `E_rms = sqrt(2)*pi*f*N*Phi_max` (the exact form of the textbook
+//!   `4.44 f N Phi`), its inverses for the required turns and the peak
+//!   core flux, and the per-turn EMF [`volts_per_turn`] that is common to
+//!   both windings.
 //! - [`error`] — the [`TransformerError`] taxonomy with stable
 //!   [`code`](TransformerError::code) / [`category`](TransformerError::category)
 //!   accessors.
@@ -30,9 +35,14 @@
 //! Ip / Is = 1 / a      (current scales inversely)
 //! Pin = Vp Ip = Vs Is = Pout      (lossless: apparent power conserved)
 //! Zp  = a^2 Zs         (a load reflects by the square of the ratio)
+//! E   = sqrt(2) pi f N Phi_max    (RMS EMF a winding induces from flux)
 //! ```
 //!
-//! A real transformer is modelled only to the extent of a single
+//! The EMF equation grounds the turns ratio rather than assuming it:
+//! both windings link the same peak mutual flux `Phi_max` at the same
+//! frequency `f`, so their per-turn EMF is identical and
+//! `Ep / Es = Np / Ns = a` falls out. A real transformer is modelled
+//! only to the extent of a single
 //! user-supplied efficiency `eta`, giving `Pout = eta Pin` and
 //! `Ploss = (1 - eta) Pin`. Every public function validates its inputs
 //! and returns [`Result<_, TransformerError>`](Result); float results
@@ -46,9 +56,11 @@
 //! NOT a clinical, medical, or production electrical-engineering tool.
 //! In particular this crate does not model: magnetising and leakage
 //! reactance, winding resistance, core hysteresis / eddy-current loss
-//! curves, saturation, frequency dependence, phase / complex two-port
-//! behaviour, thermal rise, or insulation and safety margins. Do not
-//! size real hardware from it.
+//! curves, saturation, the frequency-dependence of those losses, phase /
+//! complex two-port behaviour, thermal rise, or insulation and safety
+//! margins. The [`emf`] equation assumes an ideal single-frequency
+//! sinusoidal mutual flux with no saturation. Do not size real hardware
+//! from it.
 //!
 //! ## Example
 //!
@@ -77,11 +89,13 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod emf;
 pub mod error;
 pub mod impedance;
 pub mod power;
 pub mod ratio;
 
+pub use emf::{induced_emf_rms, peak_flux_for_emf, turns_for_emf, volts_per_turn, FORM_FACTOR};
 pub use error::{ErrorCategory, TransformerError};
 pub use power::{apparent_power, ideal_output_power, Efficiency};
 pub use ratio::TurnsRatio;
