@@ -1,7 +1,7 @@
 //! Basal-metabolic-rate predictive equations.
 //!
-//! Two population-fit regressions, each a closed-form linear function
-//! of body mass, height, age and biological sex:
+//! Three population-fit regressions. Two are closed-form linear
+//! functions of body mass, height, age and biological sex:
 //!
 //! - **Mifflin-St Jeor (1990)** — the modern default; validates against
 //!   indirect calorimetry better than older equations for the general
@@ -10,8 +10,15 @@
 //!   the classic equation, retained for comparison and because many
 //!   nutrition references still quote it.
 //!
-//! Both take SI anthropometry (kilograms, centimetres, years) and
-//! return basal metabolic rate in **kilocalories per day**.
+//! The third regresses on body composition instead:
+//!
+//! - **Katch-McArdle** — `370 + 21.6·LBM`, a function of lean body mass
+//!   alone, so it carries no sex term and needs an accurate body-fat
+//!   measurement rather than height and age.
+//!
+//! The first two take SI anthropometry (kilograms, centimetres, years);
+//! Katch-McArdle takes lean mass in kilograms. All three return basal
+//! metabolic rate in **kilocalories per day**.
 //!
 //! # Worked example
 //!
@@ -131,6 +138,114 @@ pub fn harris_benedict(sex: Sex, mass_kg: f64, height_cm: f64, age_years: f64) -
     Ok(bmr)
 }
 
+/// Validate a body-fat fraction: finite and in the half-open `[0, 1)`.
+///
+/// A fraction of `1.0` (or more) would leave zero or negative lean
+/// mass, so the upper bound is strict; `0.0` (all-lean) is accepted as
+/// the limiting case.
+///
+/// # Errors
+///
+/// [`BmrError::NotFinite`] if `value` is `NaN` or infinite;
+/// [`BmrError::OutOfRange`] if `value` is negative or `>= 1.0`.
+fn validate_body_fat_fraction(value: f64) -> Result<f64> {
+    if !value.is_finite() {
+        return Err(BmrError::NotFinite {
+            name: "body_fat_fraction",
+            value,
+        });
+    }
+    if !(0.0..1.0).contains(&value) {
+        return Err(BmrError::OutOfRange {
+            name: "body_fat_fraction",
+            value,
+            reason: "must be in [0, 1) so lean mass stays positive",
+        });
+    }
+    Ok(value)
+}
+
+/// Lean body mass (kg) from total body mass and a body-fat fraction.
+///
+/// ```text
+/// LBM = mass · (1 − body_fat_fraction)
+/// ```
+///
+/// `mass_kg` must be finite and strictly positive; `body_fat_fraction`
+/// must be finite and in the half-open `[0, 1)`. The result is the
+/// fat-free mass that drives the [`katch_mcardle`] equation.
+///
+/// ```
+/// use valenx_bmr::lean_body_mass;
+///
+/// // 80 kg at 20% body fat -> 64 kg of lean tissue.
+/// let lbm = lean_body_mass(80.0, 0.20).unwrap();
+/// assert!((lbm - 64.0).abs() < 1e-9);
+/// ```
+///
+/// # Errors
+///
+/// [`BmrError::OutOfRange`] / [`BmrError::NotFinite`] if `mass_kg` is
+/// non-positive or non-finite, or `body_fat_fraction` is outside
+/// `[0, 1)` or non-finite.
+pub fn lean_body_mass(mass_kg: f64, body_fat_fraction: f64) -> Result<f64> {
+    let mass_kg = BmrError::require_positive("mass_kg", mass_kg)?;
+    let body_fat_fraction = validate_body_fat_fraction(body_fat_fraction)?;
+    Ok(mass_kg * (1.0 - body_fat_fraction))
+}
+
+/// Katch-McArdle basal metabolic rate, in kcal/day.
+///
+/// Unlike [`mifflin_st_jeor`] and [`harris_benedict`], which regress on
+/// mass, height, age and sex, this equation depends only on **lean body
+/// mass** — the metabolically active tissue — and so carries no sex
+/// term:
+///
+/// ```text
+/// BMR = 370 + 21.6 · lean_body_mass(kg)
+/// ```
+///
+/// When an accurate body-composition measurement is available this is
+/// often the most individual-specific of the three, because it removes
+/// the confounding effect of fat mass (which is far less metabolically
+/// active). It is deliberately **not** a [`BmrEquation`] variant: that
+/// enum is parameterised by anthropometry, whereas Katch-McArdle is
+/// parameterised by body composition.
+///
+/// ```
+/// use valenx_bmr::katch_mcardle;
+///
+/// // 60 kg of lean mass: 370 + 21.6·60 = 1666 kcal/day.
+/// let bmr = katch_mcardle(60.0).unwrap();
+/// assert!((bmr - 1666.0).abs() < 1e-9);
+/// ```
+///
+/// # Errors
+///
+/// [`BmrError::OutOfRange`] / [`BmrError::NotFinite`] if
+/// `lean_body_mass_kg` is non-positive or non-finite.
+pub fn katch_mcardle(lean_body_mass_kg: f64) -> Result<f64> {
+    let lbm = BmrError::require_positive("lean_body_mass_kg", lean_body_mass_kg)?;
+    Ok(370.0 + 21.6 * lbm)
+}
+
+/// Katch-McArdle BMR from total mass and a body-fat fraction, in
+/// kcal/day.
+///
+/// Convenience wrapper that computes [`lean_body_mass`] from `mass_kg`
+/// and `body_fat_fraction` and feeds it to [`katch_mcardle`] in a single
+/// call.
+///
+/// # Errors
+///
+/// Propagates the validation errors of [`lean_body_mass`] — a
+/// non-positive / non-finite `mass_kg`, or a `body_fat_fraction`
+/// outside `[0, 1)` or non-finite.
+pub fn katch_mcardle_from_body_fat(mass_kg: f64, body_fat_fraction: f64) -> Result<f64> {
+    let lbm = lean_body_mass(mass_kg, body_fat_fraction)?;
+    katch_mcardle(lbm)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,6 +347,66 @@ mod tests {
         assert!(mifflin_st_jeor(Sex::Male, 80.0, 180.0, 0.0).is_err());
         assert!(harris_benedict(Sex::Female, f64::NAN, 165.0, 35.0).is_err());
         assert!(harris_benedict(Sex::Female, 60.0, f64::INFINITY, 35.0).is_err());
+    }
+
+    #[test]
+    fn katch_mcardle_known_value() {
+        // Canonical closed form: 60 kg lean -> 370 + 21.6*60
+        //   = 370 + 1296 = 1666 kcal/day.
+        let bmr = katch_mcardle(60.0).unwrap();
+        assert!((bmr - 1666.0).abs() < EPS, "got {bmr}");
+    }
+
+    #[test]
+    fn lean_body_mass_from_fraction() {
+        // 80 kg at 20% body fat -> 64 kg lean.
+        let lbm = lean_body_mass(80.0, 0.20).unwrap();
+        assert!((lbm - 64.0).abs() < EPS, "got {lbm}");
+        // Zero body fat (limiting case): the whole mass is lean.
+        let all_lean = lean_body_mass(80.0, 0.0).unwrap();
+        assert!((all_lean - 80.0).abs() < EPS, "got {all_lean}");
+    }
+
+    #[test]
+    fn katch_from_body_fat_matches_two_step() {
+        let one = katch_mcardle_from_body_fat(80.0, 0.20).unwrap();
+        let two = katch_mcardle(lean_body_mass(80.0, 0.20).unwrap()).unwrap();
+        assert!((one - two).abs() < EPS, "one {one} vs two {two}");
+        // 64 kg lean -> 370 + 21.6*64 = 1752.4.
+        assert!((one - 1752.4).abs() < 1e-6, "got {one}");
+    }
+
+    #[test]
+    fn katch_agrees_with_mifflin_for_typical_male() {
+        // Independent cross-check: for an 80 kg, 180 cm, 30 y male at a
+        // typical ~18% body fat, the lean-mass equation and the
+        // anthropometric one should land within ~10% of each other.
+        let mifflin = mifflin_st_jeor(Sex::Male, 80.0, 180.0, 30.0).unwrap();
+        let katch = katch_mcardle_from_body_fat(80.0, 0.18).unwrap();
+        let rel = (mifflin - katch).abs() / mifflin;
+        assert!(
+            rel < 0.10,
+            "Mifflin {mifflin} vs Katch {katch} differ by {rel}"
+        );
+    }
+
+    #[test]
+    fn katch_mcardle_increases_with_lean_mass() {
+        let lean = katch_mcardle(55.0).unwrap();
+        let more_muscle = katch_mcardle(70.0).unwrap();
+        assert!(more_muscle > lean, "more lean mass should raise BMR");
+    }
+
+    #[test]
+    fn katch_mcardle_rejects_bad_inputs() {
+        assert!(katch_mcardle(0.0).is_err());
+        assert!(katch_mcardle(-5.0).is_err());
+        assert!(katch_mcardle(f64::NAN).is_err());
+        // body_fat_fraction must be in the half-open [0, 1).
+        assert!(lean_body_mass(80.0, 1.0).is_err());
+        assert!(lean_body_mass(80.0, -0.1).is_err());
+        assert!(lean_body_mass(80.0, f64::INFINITY).is_err());
+        assert!(lean_body_mass(0.0, 0.2).is_err());
     }
 
     #[test]
