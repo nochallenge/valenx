@@ -33,6 +33,7 @@ pub mod donnan;
 pub mod engine;
 pub mod error;
 pub mod field;
+pub mod fitzhugh_nagumo;
 pub mod ghk;
 pub mod impedance;
 pub mod ionic;
@@ -82,6 +83,7 @@ pub use donnan::{donnan_osmotic_pressure_pa, donnan_potential_mv, donnan_ratio};
 pub use engine::{recruitment_curve, stimulate, Axon, Recruitment, Scene};
 pub use error::{NeuroError, Result};
 pub use field::{analytic_point_source_mv, ExtracellularField, TissueGrid};
+pub use fitzhugh_nagumo::{FitzHughNagumo, FitzHughNagumoParams};
 pub use ghk::{ghk_current_density, ghk_potential_mv, GhkIon};
 pub use impedance::{Cpe, ElectrodeImpedance};
 pub use ionic::{
