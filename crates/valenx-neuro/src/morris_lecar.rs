@@ -235,6 +235,9 @@ mod tests {
         // (depolarisation block): the K current can no longer repolarise, so
         // firing ceases — a real Morris–Lecar property, not monotone f-I.
         let blocked = count_spikes(p, 150.0, 0.05, 1000.0, 0.0);
-        assert!(blocked <= 2, "I=150 should depolarisation-block, got {blocked}");
+        assert!(
+            blocked <= 2,
+            "I=150 should depolarisation-block, got {blocked}"
+        );
     }
 }
