@@ -18,7 +18,10 @@
 //! [`ZenerRegulator::resistor_current_a`] gives `I_Rs = (Vin - Vz)/Rs`,
 //! [`ZenerRegulator::output_voltage_v`] clamps the output at `Vz`,
 //! [`ZenerRegulator::zener_current_a`] applies `Iz = I_Rs - I_load`,
-//! [`ZenerRegulator::zener_power_w`] applies `Pz = Vz * Iz`, and
+//! [`ZenerRegulator::zener_power_w`] applies `Pz = Vz * Iz`,
+//! [`ZenerRegulator::resistor_power_w`] gives `P_Rs = I_Rs^2 * Rs`,
+//! [`ZenerRegulator::regulator_efficiency`] reports the conversion
+//! efficiency `eta = P_load / (Vin * I_Rs)`, and
 //! [`ZenerRegulator::min_input_voltage_v`] gives the lowest supply that
 //! still keeps the diode conducting. [`ZenerRegulator::operating_point`]
 //! bundles the whole state into one [`OperatingPoint`].

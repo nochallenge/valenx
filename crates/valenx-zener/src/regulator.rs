@@ -148,6 +148,36 @@ impl ZenerRegulator {
         Ok(i_rs * i_rs * self.series_resistor_ohm)
     }
 
+    /// Power-conversion **efficiency** at this operating point: the
+    /// fraction of the power drawn from the supply that reaches the load,
+    ///
+    /// `eta = P_load / P_source = (Vz * I_load) / (Vin * I_Rs)`.
+    ///
+    /// By the energy balance `Vin * I_Rs = P_Rs + Pz + P_load` this is
+    /// `P_load / (P_Rs + Pz + P_load)`. A shunt regulator is intrinsically
+    /// lossy — the resistor and the diode always burn power — so when the
+    /// device is in regulation `eta` lies in `[0, 1)`: it is `0` at no
+    /// load (every watt is wasted in `Rs` and the diode) and climbs toward
+    /// (but never reaches) `1` as the load takes a larger share of `I_Rs`.
+    /// Reported as `0` outside regulation (no headroom, `I_Rs = 0`, or an
+    /// overload that has pulled the diode current non-positive), where the
+    /// shunt is not regulating and the figure is not meaningful.
+    ///
+    /// # Errors
+    /// Returns [`ZenerError::BadParameter`] if `vin_v` is not finite or
+    /// `i_load_a` is negative / non-finite.
+    pub fn regulator_efficiency(&self, vin_v: f64, i_load_a: f64) -> Result<f64, ZenerError> {
+        let i_load_a = require_non_negative("i_load_a", i_load_a)?;
+        let i_rs = self.resistor_current_a(vin_v)?;
+        let iz = i_rs - i_load_a;
+        if !(i_rs > 0.0 && iz > 0.0) {
+            return Ok(0.0);
+        }
+        let p_source = vin_v * i_rs;
+        let p_load = self.zener_voltage_v * i_load_a;
+        Ok(p_load / p_source)
+    }
+
     /// Minimum supply voltage that still keeps the diode in regulation
     /// at the given worst-case operating point.
     ///
@@ -469,6 +499,77 @@ mod tests {
         let p_load = reg.output_voltage_v(vin, il).unwrap() * il;
         let sum = p_rs + pz + p_load;
         assert!((p_source - sum).abs() < 1e-9, "source={p_source} sum={sum}");
+    }
+
+    // --- regulator efficiency eta = P_load / P_source ---------------
+
+    #[test]
+    fn efficiency_matches_closed_form() {
+        // reg(Vz=5, Rs=500), Vin=15, Il=8 mA. I_Rs=20 mA, in regulation.
+        // eta = (5*0.008)/(15*0.020) = 0.04/0.3 = 0.13333...
+        let reg = ZenerRegulator::new(5.0, 500.0).unwrap();
+        let eta = reg.regulator_efficiency(15.0, 0.008).unwrap();
+        assert!((eta - 0.04 / 0.3).abs() < EPS, "eta = {eta}");
+    }
+
+    #[test]
+    fn efficiency_equals_load_over_energy_balance_sum() {
+        // eta = P_load / (P_Rs + Pz + P_load), the energy-balance form.
+        let reg = ZenerRegulator::new(5.1, 276.0).unwrap();
+        let vin = 12.0;
+        let il = 0.015;
+        let p_rs = reg.resistor_power_w(vin).unwrap();
+        let pz = reg.zener_power_w(vin, il).unwrap();
+        let p_load = reg.output_voltage_v(vin, il).unwrap() * il;
+        let eta = reg.regulator_efficiency(vin, il).unwrap();
+        assert!(
+            (eta - p_load / (p_rs + pz + p_load)).abs() < 1e-12,
+            "eta = {eta}"
+        );
+    }
+
+    #[test]
+    fn efficiency_is_zero_at_no_load() {
+        // In regulation (all I_Rs through the diode) but no load: no
+        // useful power delivered, so eta = 0.
+        let reg = ZenerRegulator::new(5.0, 500.0).unwrap();
+        let eta = reg.regulator_efficiency(15.0, 0.0).unwrap();
+        assert!(eta.abs() < EPS, "eta = {eta}");
+    }
+
+    #[test]
+    fn efficiency_in_unit_interval_and_rises_with_load() {
+        // While in regulation eta lies in [0,1) and increases with load.
+        let reg = ZenerRegulator::new(5.0, 500.0).unwrap();
+        let vin = 15.0; // I_Rs = 20 mA
+        let mut prev = -1.0;
+        for &il in &[0.0, 0.004, 0.008, 0.012, 0.018] {
+            let eta = reg.regulator_efficiency(vin, il).unwrap();
+            assert!((0.0..1.0).contains(&eta), "eta out of [0,1): {eta}");
+            assert!(eta > prev, "eta should rise with load: {eta} !> {prev}");
+            prev = eta;
+        }
+    }
+
+    #[test]
+    fn efficiency_is_zero_out_of_regulation() {
+        let reg = ZenerRegulator::new(5.0, 500.0).unwrap();
+        // Overload: Il=30 mA > I_Rs=20 mA -> diode dropped out -> 0.
+        let eta_overload = reg.regulator_efficiency(15.0, 0.030).unwrap();
+        assert!(eta_overload.abs() < EPS, "eta = {eta_overload}");
+        // No headroom: Vin <= Vz -> I_Rs = 0 -> 0 (and no 0/0 NaN).
+        let eta_nohead = reg.regulator_efficiency(4.0, 0.010).unwrap();
+        assert!(
+            eta_nohead.abs() < EPS && eta_nohead.is_finite(),
+            "eta = {eta_nohead}"
+        );
+    }
+
+    #[test]
+    fn efficiency_rejects_bad_inputs() {
+        let reg = ZenerRegulator::new(5.0, 500.0).unwrap();
+        assert!(reg.regulator_efficiency(f64::NAN, 0.010).is_err());
+        assert!(reg.regulator_efficiency(15.0, -0.001).is_err());
     }
 
     // --- operating_point bundle -------------------------------------
