@@ -67,6 +67,7 @@ pub mod fasteners_workbench;
 pub mod fields_workbench;
 pub mod first_run;
 pub mod frames_workbench;
+pub mod gasdynamics_workbench;
 pub mod gears_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
@@ -501,6 +502,15 @@ pub struct ValenxApp {
     /// cross-section properties wrapping `valenx-frames`. See
     /// [`crate::frames_workbench`].
     pub(crate) frames: crate::frames_workbench::FramesWorkbenchState,
+
+    /// Whether the right-side Gas Dynamics workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_gasdynamics_workbench: bool,
+    /// Form + result state for the Gas Dynamics workbench — 1-D
+    /// compressible-flow relations wrapping `valenx-gasdynamics`. See
+    /// [`crate::gasdynamics_workbench`].
+    pub(crate) gasdynamics: crate::gasdynamics_workbench::GasDynamicsWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.

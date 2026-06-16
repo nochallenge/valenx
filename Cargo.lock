@@ -6550,6 +6550,7 @@ dependencies = [
  "valenx-first-run",
  "valenx-fonts",
  "valenx-frames",
+ "valenx-gasdynamics",
  "valenx-gears",
  "valenx-genediting",
  "valenx-genomics",
