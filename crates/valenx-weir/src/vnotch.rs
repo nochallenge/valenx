@@ -146,4 +146,78 @@ impl VNotchWeir {
             * self.half_angle_tangent()
             * h.powf(2.5))
     }
+
+    /// Upstream head `H` (metres) that passes a given discharge
+    /// `discharge_m3_s` (m³·s⁻¹) — the inverse of
+    /// [`discharge`](VNotchWeir::discharge), i.e. the weir's rating curve
+    /// read backwards:
+    ///
+    /// ```text
+    ///   H = ( Q / (Cd · (8/15) · √(2 g) · tan(θ/2)) )^(2/5)
+    /// ```
+    ///
+    /// This turns the forward flow meter into a sizing / set-point tool:
+    /// given a target flow it returns the head the notch will sit at. It
+    /// round-trips exactly with [`discharge`](VNotchWeir::discharge).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`WeirError`] if `discharge_m3_s` is not a finite,
+    /// strictly-positive number.
+    pub fn head_for_discharge(&self, discharge_m3_s: f64) -> Result<f64, WeirError> {
+        let q = require_positive("discharge", discharge_m3_s)?;
+        let k = self.discharge_coefficient
+            * VNOTCH_COEFFICIENT
+            * (2.0 * self.gravity).sqrt()
+            * self.half_angle_tangent();
+        Ok((q / k).powf(2.0 / 5.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPS: f64 = 1e-9;
+
+    // head_for_discharge is the exact inverse of discharge: H -> Q -> H.
+    #[test]
+    fn head_for_discharge_inverts_discharge() {
+        let weir = VNotchWeir::ninety_degree(0.58).unwrap();
+        for &h in &[0.02, 0.10, 0.25, 0.5, 0.9] {
+            let q = weir.discharge(h).unwrap();
+            let back = weir.head_for_discharge(q).unwrap();
+            assert!((back - h).abs() < 1e-9, "H={h} -> Q -> {back}");
+        }
+    }
+
+    // ...and Q -> H -> Q round-trips, for a non-90° notch too.
+    #[test]
+    fn discharge_inverts_head_for_discharge() {
+        let weir = VNotchWeir::new(PI / 3.0, 0.6).unwrap(); // 60° notch
+        for &q in &[0.001, 0.01, 0.1, 0.5] {
+            let h = weir.head_for_discharge(q).unwrap();
+            let back = weir.discharge(h).unwrap();
+            assert!((back - q).abs() / q < 1e-12, "Q={q} -> H -> {back}");
+        }
+    }
+
+    #[test]
+    fn head_for_discharge_matches_closed_form() {
+        let weir = VNotchWeir::ninety_degree(0.58).unwrap();
+        let q = 0.05;
+        // tan(45°) = 1 for a 90° notch.
+        let k = 0.58 * VNOTCH_COEFFICIENT * (2.0 * G_STANDARD).sqrt() * 1.0;
+        let expected = (q / k).powf(2.0 / 5.0);
+        let h = weir.head_for_discharge(q).unwrap();
+        assert!((h - expected).abs() < EPS, "got {h}");
+    }
+
+    #[test]
+    fn head_for_discharge_rejects_bad_inputs() {
+        let weir = VNotchWeir::ninety_degree(0.58).unwrap();
+        assert!(weir.head_for_discharge(0.0).is_err());
+        assert!(weir.head_for_discharge(-1.0).is_err());
+        assert!(weir.head_for_discharge(f64::INFINITY).is_err());
+    }
 }
