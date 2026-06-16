@@ -16,6 +16,11 @@
 //! - acceleration `a(theta) = d2s/dtheta2`,
 //! - jerk `j(theta) = d3s/dtheta3`.
 //!
+//! It also exposes the peak follower velocity and acceleration over the
+//! whole rise ([`RiseProfile::peak_velocity`] /
+//! [`RiseProfile::peak_acceleration`]) — the dimensionless kinematic
+//! coefficients `Cv` / `Ca` used to compare cam laws.
+//!
 //! Two textbook motion laws are provided:
 //!
 //! - [`MotionLaw::SimpleHarmonic`] — simple-harmonic motion (SHM), and
@@ -49,6 +54,14 @@
 //! - `j = (4 pi^2 L / beta^3) cos(2 pi x)`
 //!
 //! where `L` is the lift and `beta` the rise angle.
+//!
+//! The velocity peaks at mid-rise and the acceleration at each law's
+//! characteristic location (the ends for SHM, the quarter points for
+//! cycloidal). Dividing those peak magnitudes by `L/beta` and
+//! `L/beta^2` gives the standard dimensionless velocity / acceleration
+//! coefficients: `Cv = pi/2`, `Ca = pi^2/2` for SHM, and `Cv = 2`,
+//! `Ca = 2 pi` for cycloidal — the larger cycloidal `Ca` being the
+//! inertial-load cost of its smoother ends.
 //!
 //! The two laws differ in smoothness at the segment ends. SHM leaves a
 //! finite, non-zero acceleration at both ends (a step in acceleration

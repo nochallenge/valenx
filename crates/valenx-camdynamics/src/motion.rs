@@ -182,6 +182,52 @@ impl RiseProfile {
             })
             .collect())
     }
+
+    /// The peak follower velocity magnitude over the rise,
+    /// `max |v(theta)|` for `theta` in `[0, beta]`, in `length / radian`.
+    ///
+    /// For both supported laws the velocity peaks at mid-rise
+    /// (`x = 1/2`), with the closed-form maxima
+    ///
+    /// ```text
+    /// SHM:       v_max = pi L / (2 beta)
+    /// cycloidal: v_max = 2 L / beta
+    /// ```
+    ///
+    /// Dividing by `L / beta` gives the dimensionless velocity
+    /// coefficient `Cv` tabulated to compare cam laws (`pi/2` for SHM,
+    /// `2` for cycloidal).
+    pub fn peak_velocity(&self) -> f64 {
+        let coeff = match self.law {
+            MotionLaw::SimpleHarmonic => PI / 2.0,
+            MotionLaw::Cycloidal => 2.0,
+        };
+        coeff * self.lift / self.beta
+    }
+
+    /// The peak follower acceleration magnitude over the rise,
+    /// `max |a(theta)|` for `theta` in `[0, beta]`, in
+    /// `length / radian^2`.
+    ///
+    /// The peak location is law-specific — the rise ends for SHM, the
+    /// quarter points for cycloidal — with the closed-form maxima
+    ///
+    /// ```text
+    /// SHM:       a_max = pi^2 L / (2 beta^2)
+    /// cycloidal: a_max = 2 pi L / beta^2
+    /// ```
+    ///
+    /// Dividing by `L / beta^2` gives the dimensionless acceleration
+    /// coefficient `Ca` (`pi^2/2 ~ 4.93` for SHM, `2 pi ~ 6.28` for
+    /// cycloidal); the larger cycloidal value is the price its
+    /// end-smoothness pays in peak inertial load.
+    pub fn peak_acceleration(&self) -> f64 {
+        let coeff = match self.law {
+            MotionLaw::SimpleHarmonic => PI * PI / 2.0,
+            MotionLaw::Cycloidal => 2.0 * PI,
+        };
+        coeff * self.lift / (self.beta * self.beta)
+    }
 }
 
 #[cfg(test)]
@@ -506,5 +552,85 @@ mod tests {
             );
             assert!(w[0].velocity >= -EPS, "negative velocity {}", w[0].velocity);
         }
+    }
+
+    // ---- peak kinematic coefficients -------------------------------------
+
+    #[test]
+    fn peak_velocity_matches_midrise_value() {
+        // Both laws peak in velocity at mid-rise, so peak_velocity must
+        // equal at(beta/2).velocity and the closed-form coefficients.
+        let (lift, beta) = (30.0, 1.1);
+        for law in [MotionLaw::SimpleHarmonic, MotionLaw::Cycloidal] {
+            let p = RiseProfile::new(lift, beta, law).unwrap();
+            close(p.peak_velocity(), p.at(beta / 2.0).velocity);
+        }
+        let shm = RiseProfile::new(lift, beta, MotionLaw::SimpleHarmonic).unwrap();
+        close(shm.peak_velocity(), PI * lift / (2.0 * beta));
+        let cyc = RiseProfile::new(lift, beta, MotionLaw::Cycloidal).unwrap();
+        close(cyc.peak_velocity(), 2.0 * lift / beta);
+    }
+
+    #[test]
+    fn peak_acceleration_matches_known_locations() {
+        let (lift, beta) = (18.0, 0.8);
+        // SHM peaks at the ends (x=0); cycloidal at the quarter point.
+        let shm = RiseProfile::new(lift, beta, MotionLaw::SimpleHarmonic).unwrap();
+        close(shm.peak_acceleration(), shm.at(0.0).acceleration.abs());
+        close(
+            shm.peak_acceleration(),
+            PI * PI * lift / (2.0 * beta * beta),
+        );
+        let cyc = RiseProfile::new(lift, beta, MotionLaw::Cycloidal).unwrap();
+        close(
+            cyc.peak_acceleration(),
+            cyc.at(beta / 4.0).acceleration.abs(),
+        );
+        close(cyc.peak_acceleration(), 2.0 * PI * lift / (beta * beta));
+    }
+
+    #[test]
+    fn peaks_are_true_maxima_over_the_rise() {
+        // No sampled point may exceed the claimed peak (within tolerance).
+        let (lift, beta) = (25.0, 1.3);
+        for law in [MotionLaw::SimpleHarmonic, MotionLaw::Cycloidal] {
+            let p = RiseProfile::new(lift, beta, law).unwrap();
+            let (vmax, amax) = (p.peak_velocity(), p.peak_acceleration());
+            for s in p.sample(401).unwrap() {
+                assert!(
+                    s.velocity.abs() <= vmax + 1e-6,
+                    "{} v exceeds peak at theta {}",
+                    law.name(),
+                    s.theta
+                );
+                assert!(
+                    s.acceleration.abs() <= amax + 1e-6,
+                    "{} a exceeds peak at theta {}",
+                    law.name(),
+                    s.theta
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn kinematic_coefficients_match_textbook() {
+        // Dimensionless Cv = v_max*beta/L and Ca = a_max*beta^2/L.
+        let (lift, beta) = (10.0, 1.0);
+        let shm = RiseProfile::new(lift, beta, MotionLaw::SimpleHarmonic).unwrap();
+        close(shm.peak_velocity() * beta / lift, PI / 2.0);
+        close(shm.peak_acceleration() * beta * beta / lift, PI * PI / 2.0);
+        let cyc = RiseProfile::new(lift, beta, MotionLaw::Cycloidal).unwrap();
+        close(cyc.peak_velocity() * beta / lift, 2.0);
+        close(cyc.peak_acceleration() * beta * beta / lift, 2.0 * PI);
+        // Cycloidal pays for its end-smoothness with a higher peak accel.
+        assert!(cyc.peak_acceleration() > shm.peak_acceleration());
+    }
+
+    #[test]
+    fn peaks_zero_for_flat_profile() {
+        let p = RiseProfile::new(0.0, 1.5, MotionLaw::Cycloidal).unwrap();
+        close(p.peak_velocity(), 0.0);
+        close(p.peak_acceleration(), 0.0);
     }
 }
