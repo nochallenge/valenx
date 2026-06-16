@@ -13,6 +13,9 @@
 //! - [`StressState::principal_stresses`] — the principal stresses
 //!   `s1 >= s2`.
 //! - [`StressState::max_shear`] — the maximum in-plane shear stress.
+//! - [`StressState::absolute_max_shear`] — the absolute (out-of-plane)
+//!   maximum shear stress, accounting for the zero third principal
+//!   stress of a plane-stress state (the Tresca-governing value).
 //! - [`StressState::principal_angle`] — the orientation (radians) of
 //!   the plane carrying `s1`.
 //! - [`StressState::stress_on_plane`] — the normal and shear stress on
@@ -58,17 +61,28 @@
 //! so the sum `sx' + sy'` is invariant (`= sx + sy = s1 + s2`) and every
 //! transformed `(sx', txy')` pair lies on Mohr's circle.
 //!
+//! Treating the plane-stress state as 3D with a zero out-of-plane
+//! principal stress (`s3 = 0`), the absolute maximum shear is
+//!
+//! ```text
+//! tau_abs = (max(s1, s2, 0) - min(s1, s2, 0)) / 2,
+//! ```
+//!
+//! which equals the in-plane `(s1 - s2)/2` only when `s1` and `s2`
+//! straddle zero, and otherwise exceeds it.
+//!
 //! ## Honest scope
 //!
 //! Research/educational grade. These are the textbook closed-form,
 //! well-established stress-transformation formulae of plane-stress
 //! mechanics of materials — the same relations taught in any
 //! strength-of-materials course. The crate covers the **2D in-plane**
-//! case only: it does not compute the full 3D principal-stress problem,
-//! out-of-plane (absolute) maximum shear, failure-criterion checks,
-//! plasticity, or stress-concentration factors. It is NOT a clinical,
-//! medical, or production engineering tool and must not be used as the
-//! sole basis for safety-critical design.
+//! case plus the plane-stress absolute maximum shear (which uses the
+//! zero out-of-plane principal stress); it does not compute the full 3D
+//! principal-stress problem for a general triaxial state, failure-
+//! criterion checks, plasticity, or stress-concentration factors. It is
+//! NOT a clinical, medical, or production engineering tool and must not
+//! be used as the sole basis for safety-critical design.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
