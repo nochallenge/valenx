@@ -114,4 +114,77 @@ impl RectangularWeir {
             * self.crest_length_m
             * h.powf(1.5))
     }
+
+    /// Upstream head `H` (metres) that passes a given discharge
+    /// `discharge_m3_s` (m³·s⁻¹) — the inverse of
+    /// [`discharge`](RectangularWeir::discharge), i.e. the weir's rating
+    /// curve read backwards:
+    ///
+    /// ```text
+    ///   H = ( Q / (Cd · (2/3) · √(2 g) · L) )^(2/3)
+    /// ```
+    ///
+    /// This turns the forward flow meter into a sizing / set-point tool:
+    /// given a target flow it returns the head the weir will sit at. It
+    /// round-trips exactly with [`discharge`](RectangularWeir::discharge).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`WeirError`] if `discharge_m3_s` is not a finite,
+    /// strictly-positive number.
+    pub fn head_for_discharge(&self, discharge_m3_s: f64) -> Result<f64, WeirError> {
+        let q = require_positive("discharge", discharge_m3_s)?;
+        let k = self.discharge_coefficient
+            * RECT_COEFFICIENT
+            * (2.0 * self.gravity).sqrt()
+            * self.crest_length_m;
+        Ok((q / k).powf(2.0 / 3.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPS: f64 = 1e-9;
+
+    // head_for_discharge is the exact inverse of discharge: H -> Q -> H.
+    #[test]
+    fn head_for_discharge_inverts_discharge() {
+        let weir = RectangularWeir::new(2.0, 0.62).unwrap();
+        for &h in &[0.05, 0.15, 0.30, 0.75, 1.2] {
+            let q = weir.discharge(h).unwrap();
+            let back = weir.head_for_discharge(q).unwrap();
+            assert!((back - h).abs() < 1e-9, "H={h} -> Q -> {back}");
+        }
+    }
+
+    // ...and Q -> H -> Q round-trips too.
+    #[test]
+    fn discharge_inverts_head_for_discharge() {
+        let weir = RectangularWeir::new(1.5, 0.6).unwrap();
+        for &q in &[0.01, 0.1, 0.5, 2.0] {
+            let h = weir.head_for_discharge(q).unwrap();
+            let back = weir.discharge(h).unwrap();
+            assert!((back - q).abs() / q < 1e-12, "Q={q} -> H -> {back}");
+        }
+    }
+
+    #[test]
+    fn head_for_discharge_matches_closed_form() {
+        let weir = RectangularWeir::new(2.0, 0.62).unwrap();
+        let q = 0.4;
+        let k = 0.62 * RECT_COEFFICIENT * (2.0 * G_STANDARD).sqrt() * 2.0;
+        let expected = (q / k).powf(2.0 / 3.0);
+        let h = weir.head_for_discharge(q).unwrap();
+        assert!((h - expected).abs() < EPS, "got {h}");
+    }
+
+    #[test]
+    fn head_for_discharge_rejects_bad_inputs() {
+        let weir = RectangularWeir::new(2.0, 0.62).unwrap();
+        assert!(weir.head_for_discharge(0.0).is_err());
+        assert!(weir.head_for_discharge(-1.0).is_err());
+        assert!(weir.head_for_discharge(f64::NAN).is_err());
+    }
 }
