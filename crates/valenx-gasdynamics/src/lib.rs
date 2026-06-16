@@ -71,6 +71,7 @@ pub mod isentropic;
 pub mod normal_shock;
 pub mod oblique_shock;
 pub mod prandtl_meyer;
+pub mod rayleigh;
 
 pub use error::{ErrorCategory, GasError, Result};
 pub use fanno::{fanno_state, FannoState};
@@ -85,6 +86,7 @@ pub use oblique_shock::{
 pub use prandtl_meyer::{
     mach_after_expansion, mach_from_prandtl_meyer, nu_max, prandtl_meyer_angle,
 };
+pub use rayleigh::{rayleigh_state, RayleighState};
 
 #[cfg(test)]
 mod tests {
