@@ -216,6 +216,36 @@ pub fn wahl_factor(c: f64) -> f64 {
     (4.0 * c - 1.0) / (4.0 * c - 4.0) + 0.615 / c
 }
 
+/// Wahl-corrected torsional shear stress in the wire of an axially
+/// loaded (compression or extension) helical spring, in N/mm² (= MPa):
+///
+/// `τ = K_w · 8 · F · D / (π · d³)`
+///
+/// where `F` is the axial force (N, `axial_force_n`), `D` the mean coil
+/// diameter (mm), `d` the wire diameter (mm), and `K_w` the
+/// [`wahl_factor`] for the spring index `C = D/d` ([`spring_index`]).
+/// The Wahl factor lifts the nominal direct-plus-torsional shear to
+/// account for coil curvature, so this stress is strictly above the
+/// uncorrected `8·F·D/(π·d³)`. Pair it with [`stiffness_n_per_mm`]
+/// (force ↔ deflection) for a full first-cut compression-spring check.
+///
+/// Returns `0.0` for a non-finite or non-positive `axial_force_n` or
+/// wire diameter, and for a degenerate spring index `C ≤ 1` where
+/// [`wahl_factor`] is undefined (its `0.0` sentinel is propagated).
+pub fn shear_stress_mpa(spec: &SpringSpec, axial_force_n: f64) -> f64 {
+    let d = spec.wire_diameter_mm;
+    if !axial_force_n.is_finite() || axial_force_n <= 0.0 || !d.is_finite() || d <= 0.0 {
+        return 0.0;
+    }
+    let kw = wahl_factor(spring_index(spec));
+    if kw <= 0.0 {
+        // wahl_factor's 0.0 sentinel: spring index C <= 1, so the
+        // curvature correction (and hence this stress) is undefined.
+        return 0.0;
+    }
+    kw * 8.0 * axial_force_n * spec.mean_coil_diameter_mm / (std::f64::consts::PI * d.powi(3))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,5 +422,41 @@ mod tests {
         assert_eq!(wahl_factor(1.0), 0.0);
         assert_eq!(wahl_factor(0.5), 0.0);
         assert_eq!(wahl_factor(f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn shear_stress_matches_wahl_closed_form() {
+        // default_compression: d=1 mm, D=10 mm → C=10 → K_w=1.144833.
+        // τ = K_w·8·F·D/(π·d³); with F=10 N → 291.53 N/mm².
+        let spec = SpringSpec::default_compression();
+        let tau = shear_stress_mpa(&spec, 10.0);
+        // Independently recomputed closed-form ground truth.
+        let kw_ref = (4.0 * 10.0 - 1.0) / (4.0 * 10.0 - 4.0) + 0.615 / 10.0;
+        let expected = kw_ref * 8.0 * 10.0 * 10.0 / (std::f64::consts::PI * 1.0_f64.powi(3));
+        assert!((tau - expected).abs() < 1e-9, "got {tau} vs {expected}");
+        // Against the literal published value ≈291.5 N/mm².
+        assert!((tau - 291.53).abs() < 0.1, "got {tau}, expected ≈291.5");
+    }
+
+    #[test]
+    fn shear_stress_scales_and_guards() {
+        let spec = SpringSpec::default_compression();
+        let base = shear_stress_mpa(&spec, 10.0);
+        // Linear in the axial force.
+        let double = shear_stress_mpa(&spec, 20.0);
+        assert!((double / base - 2.0).abs() < 1e-9, "force scaling");
+        // Strictly above the uncorrected direct-shear stress 8·F·D/(π·d³).
+        let uncorrected = 8.0 * 10.0 * spec.mean_coil_diameter_mm
+            / (std::f64::consts::PI * spec.wire_diameter_mm.powi(3));
+        assert!(base > uncorrected, "Wahl correction must raise stress");
+        // Guards: non-positive / non-finite force → 0.
+        assert_eq!(shear_stress_mpa(&spec, 0.0), 0.0);
+        assert_eq!(shear_stress_mpa(&spec, -5.0), 0.0);
+        assert_eq!(shear_stress_mpa(&spec, f64::NAN), 0.0);
+        // Degenerate geometry: C = 1 (coil dia == wire dia) → wahl
+        // undefined → 0.
+        let mut degen = SpringSpec::default_compression();
+        degen.mean_coil_diameter_mm = degen.wire_diameter_mm;
+        assert_eq!(shear_stress_mpa(&degen, 10.0), 0.0);
     }
 }
