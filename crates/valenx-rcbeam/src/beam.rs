@@ -265,6 +265,78 @@ impl BeamSection {
     pub fn is_under_reinforced(&self, beta1: f64, steel_modulus: f64) -> Result<bool, RcBeamError> {
         Ok(self.reinforcement_ratio() < self.balanced_ratio(beta1, steel_modulus)?)
     }
+
+    /// The tension-steel area `As` required to reach a target **nominal**
+    /// moment `Mn` — the design inverse of [`nominal_moment`](Self::nominal_moment).
+    ///
+    /// Substituting the stress-block depth `a = As*fy/(0.85*fc'*b)` into
+    /// `Mn = As*fy*(d - a/2)` makes `Mn` a quadratic in `As`; the
+    /// physically meaningful (under-reinforced) root is
+    ///
+    /// ```text
+    /// As = (0.85*fc'*b / fy) * (d - sqrt(d^2 - 2*Mn/(0.85*fc'*b)))
+    /// ```
+    ///
+    /// the standard ACI singly-reinforced sizing formula. `target_moment`
+    /// is the nominal moment in the same consistent unit system as the
+    /// other arguments (SI: `b`, `d` in mm, `fc'`, `fy` in MPa, `Mn` in
+    /// N·mm, giving `As` in mm^2). To size from a *design* moment `Mu`,
+    /// pass `Mu / phi`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RcBeamError::NonFinite`] / [`RcBeamError::NonPositive`]
+    /// for any non-finite or non-positive argument, and
+    /// [`RcBeamError::MomentExceedsCapacity`] when `target_moment` is
+    /// larger than the section can carry singly-reinforced (the
+    /// discriminant goes negative at `Mn > 0.85*fc'*b*d^2/2`, the `a = d`
+    /// limit).
+    pub fn required_steel_area(
+        width: f64,
+        effective_depth: f64,
+        fc_prime: f64,
+        fy: f64,
+        target_moment: f64,
+    ) -> Result<f64, RcBeamError> {
+        let b = RcBeamError::require_positive("b", width)?;
+        let d = RcBeamError::require_positive("d", effective_depth)?;
+        let fc = RcBeamError::require_positive("fc", fc_prime)?;
+        let fy = RcBeamError::require_positive("fy", fy)?;
+        let mn = RcBeamError::require_positive("target_moment", target_moment)?;
+        let cap = STRESS_BLOCK_INTENSITY * fc * b; // 0.85 * fc' * b
+        let discriminant = d * d - 2.0 * mn / cap;
+        if discriminant < 0.0 {
+            return Err(RcBeamError::MomentExceedsCapacity {
+                target_moment: mn,
+                max_moment: cap * d * d / 2.0,
+            });
+        }
+        Ok((cap / fy) * (d - discriminant.sqrt()))
+    }
+
+    /// Build the [`BeamSection`] whose tension steel is sized for a target
+    /// **nominal** moment `Mn`, via [`required_steel_area`](Self::required_steel_area).
+    ///
+    /// The returned section reproduces the target: its
+    /// [`nominal_moment`](Self::nominal_moment) equals `target_moment`
+    /// (to floating-point tolerance), closing the design loop.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the errors of
+    /// [`required_steel_area`](Self::required_steel_area) and
+    /// [`new`](Self::new).
+    pub fn for_nominal_moment(
+        width: f64,
+        effective_depth: f64,
+        fc_prime: f64,
+        fy: f64,
+        target_moment: f64,
+    ) -> Result<Self, RcBeamError> {
+        let area_steel =
+            Self::required_steel_area(width, effective_depth, fc_prime, fy, target_moment)?;
+        Self::new(width, effective_depth, fc_prime, fy, area_steel)
+    }
 }
 
 #[cfg(test)]
@@ -458,6 +530,82 @@ mod tests {
         assert!(
             !heavy.is_under_reinforced(0.85, 200_000.0).unwrap(),
             "rho=0.0333 > rho_b~0.0304 must NOT be under-reinforced"
+        );
+    }
+
+    // ----- Required steel area (design inverse) -----------------------
+
+    /// Sizing the steel for the worked section's own nominal moment
+    /// recovers its tension-steel area (As = 1500 mm^2): a forward ->
+    /// inverse round trip.
+    #[test]
+    fn required_steel_area_recovers_worked_section() {
+        let beam = worked();
+        let mn = beam.nominal_moment().unwrap();
+        let as_req = BeamSection::required_steel_area(300.0, 500.0, 30.0, 420.0, mn).unwrap();
+        assert!((as_req - 1500.0).abs() < 1e-6, "As = {as_req}");
+    }
+
+    /// Independent As -> Mn -> As round trip on a different section.
+    #[test]
+    fn required_steel_area_round_trips_independent_section() {
+        let beam = BeamSection::new(250.0, 450.0, 25.0, 400.0, 2000.0).unwrap();
+        let mn = beam.nominal_moment().unwrap();
+        let as_req = BeamSection::required_steel_area(250.0, 450.0, 25.0, 400.0, mn).unwrap();
+        assert!((as_req - 2000.0).abs() < 1e-6, "As = {as_req}");
+    }
+
+    /// Closed-form ground truth plus the design-loop closure: the steel
+    /// area matches the ACI formula and a section built with it
+    /// reproduces the target moment.
+    #[test]
+    fn required_steel_area_hand_value_and_closure() {
+        // b=250, d=450, fc'=25, fy=400, target Mn = 150e6 N·mm.
+        let as_req = BeamSection::required_steel_area(250.0, 450.0, 25.0, 400.0, 150.0e6).unwrap();
+        let cap = 0.85 * 25.0 * 250.0; // 5312.5
+        let disc = 450.0_f64.powi(2) - 2.0 * 150.0e6 / cap;
+        let expected = (cap / 400.0) * (450.0 - disc.sqrt());
+        assert!(
+            (as_req - expected).abs() < 1e-9,
+            "As = {as_req}, expected {expected}"
+        );
+        // Ballpark: ~901 mm^2.
+        assert!((as_req - 901.4).abs() < 0.5, "As = {as_req}");
+        // Closure: a section sized this way carries exactly the target.
+        let sized = BeamSection::for_nominal_moment(250.0, 450.0, 25.0, 400.0, 150.0e6).unwrap();
+        assert!((sized.area_steel - as_req).abs() < 1e-9);
+        assert!((sized.nominal_moment().unwrap() - 150.0e6).abs() < EPS);
+    }
+
+    /// More required moment needs more tension steel.
+    #[test]
+    fn required_steel_area_grows_with_target() {
+        let lo = BeamSection::required_steel_area(300.0, 500.0, 30.0, 420.0, 100.0e6).unwrap();
+        let hi = BeamSection::required_steel_area(300.0, 500.0, 30.0, 420.0, 300.0e6).unwrap();
+        assert!(hi > lo, "more moment should need more steel: {hi} vs {lo}");
+    }
+
+    /// A target beyond the singly-reinforced limit is rejected, while one
+    /// just below it succeeds.
+    #[test]
+    fn required_steel_area_rejects_overlarge_target() {
+        // Max singly-reinforced Mn = 0.85*fc'*b*d^2/2.
+        let max = 0.85 * 30.0 * 300.0 * 500.0_f64.powi(2) / 2.0;
+        let err =
+            BeamSection::required_steel_area(300.0, 500.0, 30.0, 420.0, max * 1.01).unwrap_err();
+        assert_eq!(err.code(), "rcbeam.moment-exceeds-capacity");
+        assert!(BeamSection::required_steel_area(300.0, 500.0, 30.0, 420.0, max * 0.99).is_ok());
+    }
+
+    #[test]
+    fn required_steel_area_rejects_bad_inputs() {
+        assert!(BeamSection::required_steel_area(0.0, 500.0, 30.0, 420.0, 1.0e8).is_err());
+        assert!(BeamSection::required_steel_area(300.0, -1.0, 30.0, 420.0, 1.0e8).is_err());
+        assert!(BeamSection::required_steel_area(300.0, 500.0, f64::NAN, 420.0, 1.0e8).is_err());
+        assert!(BeamSection::required_steel_area(300.0, 500.0, 30.0, 0.0, 1.0e8).is_err());
+        assert!(BeamSection::required_steel_area(300.0, 500.0, 30.0, 420.0, 0.0).is_err());
+        assert!(
+            BeamSection::required_steel_area(300.0, 500.0, 30.0, 420.0, f64::INFINITY).is_err()
         );
     }
 

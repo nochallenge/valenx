@@ -56,6 +56,23 @@ pub enum RcBeamError {
         /// Effective depth `d`.
         d: f64,
     },
+
+    /// The target moment is larger than the section can carry as a
+    /// singly-reinforced, tension-controlled member.
+    ///
+    /// Sizing the tension steel for this moment would need a stress block
+    /// at or beyond the effective depth (a negative discriminant in the
+    /// design quadratic). The remedy — a deeper or wider section, stronger
+    /// concrete, or compression steel — is outside this singly-reinforced
+    /// model, so the request is rejected rather than approximated.
+    #[error("target moment {target_moment} exceeds the singly-reinforced capacity {max_moment}")]
+    MomentExceedsCapacity {
+        /// The requested nominal moment.
+        target_moment: f64,
+        /// The largest nominal moment reachable singly-reinforced (at the
+        /// `a = d` limit), `0.85 * fc' * b * d^2 / 2`.
+        max_moment: f64,
+    },
 }
 
 /// Coarse error category, for routing / telemetry.
@@ -96,6 +113,7 @@ impl RcBeamError {
             RcBeamError::NonFinite { .. } => "rcbeam.non-finite",
             RcBeamError::PhiOutOfRange { .. } => "rcbeam.phi-out-of-range",
             RcBeamError::StressBlockExceedsDepth { .. } => "rcbeam.stress-block-exceeds-depth",
+            RcBeamError::MomentExceedsCapacity { .. } => "rcbeam.moment-exceeds-capacity",
         }
     }
 
@@ -105,7 +123,8 @@ impl RcBeamError {
             RcBeamError::NonPositive { .. }
             | RcBeamError::NonFinite { .. }
             | RcBeamError::PhiOutOfRange { .. } => ErrorCategory::Input,
-            RcBeamError::StressBlockExceedsDepth { .. } => ErrorCategory::Algorithm,
+            RcBeamError::StressBlockExceedsDepth { .. }
+            | RcBeamError::MomentExceedsCapacity { .. } => ErrorCategory::Algorithm,
         }
     }
 }
