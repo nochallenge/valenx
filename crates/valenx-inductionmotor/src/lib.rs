@@ -19,6 +19,12 @@
 //! ([`sync_speed_rpm`], [`slip`], [`rotor_frequency_hz`],
 //! [`rotor_speed_rpm`]) for ad-hoc use without building an aggregate.
 //!
+//! From a caller-supplied **air-gap power** it also gives the slip-derived
+//! **power split** — the rotor copper loss [`rotor_copper_loss_w`]
+//! (`s * Pag`) and the developed mechanical power
+//! [`developed_mechanical_power_w`] (`(1 - s) * Pag`) — the energy
+//! partition that gives slip its physical meaning.
+//!
 //! ## Model
 //!
 //! All four quantities follow directly from the speed of the rotating
@@ -30,6 +36,8 @@
 //! s   = (Ns - Nr) / Ns       (fractional slip, dimensionless)
 //! f_r = s * f                (rotor / slip frequency, Hz)
 //! Nr  = Ns * (1 - s)         (rotor mechanical speed, rev/min)
+//! P_cu   = s * Pag           (rotor copper loss, W)
+//! P_mech = (1 - s) * Pag     (developed mechanical power, W)
 //! ```
 //!
 //! The `120` is `60 s/min` (hertz to rev/min) times the two poles per
@@ -46,10 +54,14 @@
 //! **textbook closed-form** rotating-field speed and slip relations of
 //! an idealised machine. It is **NOT** a clinical/medical/production
 //! engineering tool and must not be used to size, select, certify, or
-//! protect real motors or drives. In particular it deliberately omits
-//! the per-phase equivalent circuit, the torque-slip and current-slip
-//! curves, copper / iron / friction-windage losses, efficiency and
-//! power factor, magnetic saturation and skin effect, starting and
+//! protect real motors or drives. From a **caller-supplied** air-gap
+//! power it does give the slip-derived power split (rotor copper loss
+//! `s * Pag`, developed mechanical power `(1 - s) * Pag`), which follows
+//! from slip and energy conservation alone. It still deliberately omits
+//! the per-phase equivalent circuit — so it cannot compute the air-gap
+//! power, the torque-slip, or the current-slip curves itself — along with
+//! stator copper / iron / friction-windage losses, **overall** efficiency
+//! and power factor, magnetic saturation and skin effect, starting and
 //! locked-rotor behaviour, and any thermal, mechanical, or
 //! variable-frequency-drive dynamics. Results are exact for the
 //! algebraic model above and nothing more.
@@ -62,5 +74,6 @@ pub mod motor;
 
 pub use error::{ErrorCategory, InductionMotorError};
 pub use motor::{
-    rotor_frequency_hz, rotor_speed_rpm, slip, sync_speed_rpm, InductionMotor, SYNC_SPEED_CONSTANT,
+    developed_mechanical_power_w, rotor_copper_loss_w, rotor_frequency_hz, rotor_speed_rpm, slip,
+    sync_speed_rpm, InductionMotor, SYNC_SPEED_CONSTANT,
 };
