@@ -11,7 +11,9 @@
 //!   closed-form time of flight, horizontal [`range`](VacuumShot::range),
 //!   apex height and time-to-apex. Helpers
 //!   [`optimal_vacuum_angle_rad`] and [`max_vacuum_range`] give the
-//!   range-maximising 45° launch and the resulting `v0²/g` peak range.
+//!   range-maximising 45° launch and the resulting `v0²/g` peak range,
+//!   and [`vacuum_angles_for_range`] inverts the range relation to the
+//!   two (complementary) launch angles that reach a target range.
 //! - **Quadratic-drag motion** ([`drag`]) — a [`DragShot`] integrates the
 //!   gravity-plus-quadratic-drag equations of motion with classical
 //!   fourth-order Runge–Kutta ([`DragShot::integrate`]) and reports the
@@ -31,7 +33,9 @@
 //!
 //! Ground-truth relations the tests pin down:
 //!
-//! - `R = v0²·sin(2θ)/g`, maximised at `θ = 45°` with `R_max = v0²/g`.
+//! - `R = v0²·sin(2θ)/g`, maximised at `θ = 45°` with `R_max = v0²/g`;
+//!   inverting it, a sub-maximal target range is reached by two
+//!   complementary angles `½·arcsin(Rg/v0²)` and its complement.
 //! - `H = v0²·sin²(θ)/(2g)` for the apex.
 //! - With drag, `R < R_vacuum` at the same angle, and the optimal angle
 //!   is `< 45°`.
@@ -68,7 +72,10 @@ pub mod vacuum;
 
 pub use drag::{optimal_drag_angle, DragShot, OptimalAngle, OptimizeConfig, Trajectory};
 pub use error::{ProjectileError, Result};
-pub use vacuum::{max_vacuum_range, optimal_vacuum_angle_rad, VacuumShot, STANDARD_GRAVITY};
+pub use vacuum::{
+    max_vacuum_range, optimal_vacuum_angle_rad, vacuum_angles_for_range, VacuumShot,
+    STANDARD_GRAVITY,
+};
 
 #[cfg(test)]
 mod tests {
