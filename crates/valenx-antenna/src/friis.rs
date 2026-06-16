@@ -181,6 +181,53 @@ pub fn max_range_m(
     Ok(d)
 }
 
+/// The transmit power (watts) needed to deliver a target received power
+/// across a Friis link of known length — the link-budget sizing inverse
+/// of [`received_power`] solved for `Pt`:
+///
+/// ```text
+/// Pt = Pr_min * (4*pi*d / lambda)^2 / (Gt * Gr) = Pr_min / power_ratio
+/// ```
+///
+/// Given the receiver sensitivity `pr_min_w`, the two **linear** gains,
+/// the wavelength and the link distance `distance_m`, this is the transmit
+/// power at which the received power equals exactly `pr_min_w`. It scales
+/// with the free-space path loss (as `d^2` and `1/lambda^2`) and inversely
+/// with the gain product, mirroring the way [`max_range_m`] inverts the
+/// same link for distance instead of power.
+///
+/// # Errors
+///
+/// Returns an error if `pr_min_w`, `wavelength_m` or `distance_m` is not
+/// finite and strictly positive, if `gt` or `gr` is not finite and
+/// non-negative, or if the gain product is zero (a link with `Gt*Gr = 0`
+/// radiates nothing toward the receiver, so no finite transmit power can
+/// close it).
+///
+/// # Examples
+///
+/// ```
+/// use valenx_antenna::friis::{received_power, required_transmit_power};
+/// // Size the transmit power, then confirm the link delivers exactly the
+/// // target sensitivity at that power.
+/// let pt = required_transmit_power(1.0e-9, 10.0, 4.0, 0.125, 1_500.0).unwrap();
+/// let pr = received_power(pt, 10.0, 4.0, 0.125, 1_500.0).unwrap();
+/// assert!((pr - 1.0e-9).abs() / 1.0e-9 < 1e-9);
+/// ```
+pub fn required_transmit_power(
+    pr_min_w: f64,
+    gt: f64,
+    gr: f64,
+    wavelength_m: f64,
+    distance_m: f64,
+) -> Result<f64, AntennaError> {
+    let pr_min = require_positive("pr_min_w", pr_min_w)?;
+    let ratio = power_ratio(gt, gr, wavelength_m, distance_m)?;
+    // The ratio is zero only when a gain is zero; such a link cannot close.
+    let ratio = require_positive("power_ratio", ratio)?;
+    Ok(pr_min / ratio)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,5 +394,82 @@ mod tests {
         assert!(max_range_m(1.0, 1.0, 1.0, 0.0, 1e-9).is_err()); // lambda <= 0
         assert!(max_range_m(1.0, 1.0, 1.0, lambda, 0.0).is_err()); // pr_min <= 0
         assert!(max_range_m(f64::NAN, 1.0, 1.0, lambda, 1e-9).is_err()); // non-finite
+    }
+
+    #[test]
+    fn required_transmit_power_round_trips_received_power() {
+        // forward∘inverse: size Pt for a target Pr, confirm received_power
+        // reproduces it; then the reverse direction.
+        let (gt, gr) = (10.0, 4.0);
+        let lambda = wavelength_from_frequency(2.4e9).unwrap();
+        let d = 1_500.0;
+        let pr_target = 2.0e-9;
+        let pt = required_transmit_power(pr_target, gt, gr, lambda, d).unwrap();
+        let pr = received_power(pt, gt, gr, lambda, d).unwrap();
+        assert!((pr - pr_target).abs() / pr_target < 1e-9, "got {pr}");
+        // Pt -> Pr -> Pt.
+        let pt0 = 7.5;
+        let pr0 = received_power(pt0, gt, gr, lambda, d).unwrap();
+        let pt_back = required_transmit_power(pr0, gt, gr, lambda, d).unwrap();
+        assert!((pt_back - pt0).abs() / pt0 < 1e-9, "got {pt_back}");
+    }
+
+    #[test]
+    fn required_transmit_power_matches_closed_form() {
+        // Pt = Pr_min * FSPL / (Gt*Gr).
+        let (gt, gr) = (3.0, 6.0);
+        let lambda = 0.125;
+        let d = 800.0;
+        let pr_min = 1.0e-10;
+        let pt = required_transmit_power(pr_min, gt, gr, lambda, d).unwrap();
+        let fspl = free_space_path_loss(lambda, d).unwrap();
+        let expected = pr_min * fspl / (gt * gr);
+        assert!(
+            (pt - expected).abs() / expected < 1e-12,
+            "got {pt} vs {expected}"
+        );
+    }
+
+    #[test]
+    fn required_transmit_power_consistent_with_max_range() {
+        // The two inverses agree: at d = max_range_m(pt, ...), the transmit
+        // power required to reach pr_min is exactly pt again.
+        let (gt, gr) = (8.0, 5.0);
+        let lambda = wavelength_from_frequency(900.0e6).unwrap();
+        let pr_min = 5.0e-10;
+        let pt = 12.0;
+        let d_max = max_range_m(pt, gt, gr, lambda, pr_min).unwrap();
+        let pt_back = required_transmit_power(pr_min, gt, gr, lambda, d_max).unwrap();
+        assert!((pt_back - pt).abs() / pt < 1e-9, "got {pt_back}");
+    }
+
+    #[test]
+    fn required_transmit_power_scaling_laws() {
+        let (gt, gr, lambda, pr) = (4.0, 2.0, 0.1, 1.0e-9);
+        let base = required_transmit_power(pr, gt, gr, lambda, 100.0).unwrap();
+        // 2x distance -> 4x power (d^2).
+        let dbl_d = required_transmit_power(pr, gt, gr, lambda, 200.0).unwrap();
+        assert!((dbl_d / base - 4.0).abs() < 1e-9, "distance scaling");
+        // 2x wavelength -> 1/4 power (1/lambda^2).
+        let dbl_l = required_transmit_power(pr, gt, gr, 2.0 * lambda, 100.0).unwrap();
+        assert!((dbl_l / base - 0.25).abs() < 1e-9, "wavelength scaling");
+        // 2x sensitivity floor -> 2x power (linear in Pr_min).
+        let dbl_pr = required_transmit_power(2.0 * pr, gt, gr, lambda, 100.0).unwrap();
+        assert!((dbl_pr / base - 2.0).abs() < 1e-9, "sensitivity scaling");
+        // 2x gain product -> half power.
+        let dbl_g = required_transmit_power(pr, 8.0, gr, lambda, 100.0).unwrap();
+        assert!((dbl_g / base - 0.5).abs() < 1e-9, "gain scaling");
+    }
+
+    #[test]
+    fn required_transmit_power_rejects_bad_inputs() {
+        let lambda = 0.1;
+        assert!(required_transmit_power(0.0, 1.0, 1.0, lambda, 10.0).is_err()); // pr_min <= 0
+        assert!(required_transmit_power(1e-9, -1.0, 1.0, lambda, 10.0).is_err()); // negative gain
+        assert!(required_transmit_power(1e-9, 1.0, 1.0, 0.0, 10.0).is_err()); // lambda <= 0
+        assert!(required_transmit_power(1e-9, 1.0, 1.0, lambda, 0.0).is_err()); // d <= 0
+        assert!(required_transmit_power(1e-9, 0.0, 1.0, lambda, 10.0).is_err()); // zero gain product
+        assert!(required_transmit_power(f64::NAN, 1.0, 1.0, lambda, 10.0).is_err());
+        // non-finite
     }
 }
