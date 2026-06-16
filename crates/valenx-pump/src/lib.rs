@@ -17,7 +17,9 @@
 //! - **Affinity laws** ([`affinity`]) — how a fixed-geometry pump scales
 //!   with shaft speed: flow `Q ∝ N`, head `H ∝ N²`, shaft power
 //!   `P ∝ N³`. Run a measured duty point ([`affinity::DutyPoint`]) to a
-//!   new speed with [`affinity::scale_to_speed`].
+//!   new speed with [`affinity::scale_to_speed`], and read off the
+//!   speed-independent [`affinity::dimensionless_specific_speed`]
+//!   `Ω_s = ω·√Q/(g·H)^¾` that classifies the impeller type.
 //! - **System curve** ([`system`]) — the resistance the piping presents,
 //!   `H = H_static + K·Q²`: a fixed static lift plus a velocity-head loss
 //!   that grows with the square of flow ([`system::SystemCurve`]).
@@ -69,6 +71,9 @@
 //!   the standard [`G`] = 9.80665 m/s².
 //! - **Affinity (fixed geometry, same fluid):**
 //!   `Q₂/Q₁ = N₂/N₁`, `H₂/H₁ = (N₂/N₁)²`, `P₂/P₁ = (N₂/N₁)³`.
+//! - **Specific speed:** `Ω_s = ω·√Q / (g·H)^(3/4)` with `ω` in rad/s —
+//!   the dimensionless impeller-shape parameter, invariant under the
+//!   affinity laws above (the `N·N^½/N^(3/2)` factors cancel).
 //! - **System curve:** `H_sys(Q) = H_static + K·Q²` with resistance
 //!   coefficient `K ≥ 0` (units m·s²/m⁶) and static head `H_static`
 //!   (which may be negative for a flooded-suction / downhill system).
