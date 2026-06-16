@@ -141,6 +141,70 @@ pub fn rotor_speed_rpm(sync_rpm: f64, slip: f64) -> Result<f64, InductionMotorEr
     Ok(sync_rpm * (1.0 - slip))
 }
 
+/// Rotor copper (`I^2 R`) loss as a fraction of the air-gap power:
+/// `P_rotor_cu = s * P_airgap`.
+///
+/// The air-gap power `P_airgap` is the power transferred across the air gap
+/// into the rotor; energy conservation splits it into the rotor copper loss
+/// `s * P_airgap` and the developed mechanical power `(1 - s) * P_airgap`
+/// ([`developed_mechanical_power_w`]). This split is a pure consequence of
+/// the slip — it needs no equivalent-circuit parameters — and is the
+/// relation that gives slip its energetic meaning: at standstill (`s = 1`)
+/// all air-gap power is lost in the rotor; at synchronous speed (`s = 0`)
+/// none is.
+///
+/// # Errors
+///
+/// Returns [`InductionMotorError::InvalidSlip`] if `slip` is not finite or
+/// outside the motoring range `[0, 1]`, or
+/// [`InductionMotorError::InvalidPower`] if `air_gap_power_w` is not finite
+/// or negative.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_inductionmotor::rotor_copper_loss_w;
+/// // 10 kW across the gap at 3 % slip wastes 300 W in the rotor.
+/// let p_cu = rotor_copper_loss_w(0.03, 10_000.0).unwrap();
+/// assert!((p_cu - 300.0).abs() < 1e-9);
+/// ```
+pub fn rotor_copper_loss_w(slip: f64, air_gap_power_w: f64) -> Result<f64, InductionMotorError> {
+    let s = validate_motoring_slip(slip)?;
+    let pag = validate_power(air_gap_power_w)?;
+    Ok(s * pag)
+}
+
+/// Developed (gross) mechanical power as a fraction of the air-gap power:
+/// `P_mech = (1 - s) * P_airgap`.
+///
+/// The complement of [`rotor_copper_loss_w`] in the air-gap power split
+/// `P_airgap = P_rotor_cu + P_mech`. This is the *developed* (gross)
+/// mechanical power — before friction and windage — and is not the shaft
+/// output; it does not account for stator or iron losses.
+///
+/// # Errors
+///
+/// Returns [`InductionMotorError::InvalidSlip`] if `slip` is not finite or
+/// outside `[0, 1]`, or [`InductionMotorError::InvalidPower`] if
+/// `air_gap_power_w` is not finite or negative.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_inductionmotor::developed_mechanical_power_w;
+/// // 10 kW across the gap at 3 % slip develops 9.7 kW of mechanical power.
+/// let p_mech = developed_mechanical_power_w(0.03, 10_000.0).unwrap();
+/// assert!((p_mech - 9_700.0).abs() < 1e-9);
+/// ```
+pub fn developed_mechanical_power_w(
+    slip: f64,
+    air_gap_power_w: f64,
+) -> Result<f64, InductionMotorError> {
+    let s = validate_motoring_slip(slip)?;
+    let pag = validate_power(air_gap_power_w)?;
+    Ok((1.0 - s) * pag)
+}
+
 fn validate_frequency(freq_hz: f64) -> Result<(), InductionMotorError> {
     if !freq_hz.is_finite() || freq_hz <= 0.0 {
         return Err(InductionMotorError::InvalidFrequency { hz: freq_hz });
@@ -153,6 +217,24 @@ fn validate_poles(poles: u32) -> Result<(), InductionMotorError> {
         return Err(InductionMotorError::InvalidPoles { poles });
     }
     Ok(())
+}
+
+/// Validate a motoring slip: finite and within `[0, 1]`.
+fn validate_motoring_slip(slip: f64) -> Result<f64, InductionMotorError> {
+    if !slip.is_finite() || !(0.0..=1.0).contains(&slip) {
+        return Err(InductionMotorError::InvalidSlip { slip });
+    }
+    Ok(slip)
+}
+
+/// Validate an air-gap power: finite and non-negative.
+fn validate_power(air_gap_power_w: f64) -> Result<f64, InductionMotorError> {
+    if !air_gap_power_w.is_finite() || air_gap_power_w < 0.0 {
+        return Err(InductionMotorError::InvalidPower {
+            watts: air_gap_power_w,
+        });
+    }
+    Ok(air_gap_power_w)
 }
 
 /// A fully specified three-phase induction-motor operating point.
@@ -303,6 +385,33 @@ impl InductionMotor {
     /// in rev/min (`Ns - Nr = s Ns`).
     pub fn slip_speed_rpm(&self) -> f64 {
         self.sync_rpm - self.rotor_rpm
+    }
+
+    /// Rotor copper (`I^2 R`) loss for a given air-gap power,
+    /// `P_rotor_cu = s * P_airgap` (see [`rotor_copper_loss_w`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InductionMotorError::InvalidPower`] if `air_gap_power_w`
+    /// is not finite or negative. (The slip was validated at construction.)
+    pub fn rotor_copper_loss_w(&self, air_gap_power_w: f64) -> Result<f64, InductionMotorError> {
+        let pag = validate_power(air_gap_power_w)?;
+        Ok(self.slip * pag)
+    }
+
+    /// Developed (gross) mechanical power for a given air-gap power,
+    /// `P_mech = (1 - s) * P_airgap` (see [`developed_mechanical_power_w`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InductionMotorError::InvalidPower`] if `air_gap_power_w`
+    /// is not finite or negative.
+    pub fn developed_mechanical_power_w(
+        &self,
+        air_gap_power_w: f64,
+    ) -> Result<f64, InductionMotorError> {
+        let pag = validate_power(air_gap_power_w)?;
+        Ok((1.0 - self.slip) * pag)
     }
 }
 
@@ -581,5 +690,112 @@ mod tests {
         let json = serde_json::to_string(&m).unwrap();
         let back: InductionMotor = serde_json::from_str(&json).unwrap();
         assert_eq!(m, back);
+    }
+
+    // -- air-gap power split: Pag = P_cu + P_mech, P_cu = s Pag -------
+
+    #[test]
+    fn power_split_hand_values() {
+        // 10 kW air-gap power at 3 % slip: 300 W rotor loss, 9.7 kW mech.
+        let p_cu = rotor_copper_loss_w(0.03, 10_000.0).unwrap();
+        let p_mech = developed_mechanical_power_w(0.03, 10_000.0).unwrap();
+        assert!((p_cu - 300.0).abs() < EPS, "p_cu = {p_cu}");
+        assert!((p_mech - 9_700.0).abs() < EPS, "p_mech = {p_mech}");
+    }
+
+    #[test]
+    fn power_split_sums_to_air_gap_power() {
+        // Energy conservation: P_cu + P_mech == Pag for any s in [0, 1].
+        let pag = 7_500.0;
+        for &s in &[0.0_f64, 0.02, 0.1, 0.5, 1.0] {
+            let p_cu = rotor_copper_loss_w(s, pag).unwrap();
+            let p_mech = developed_mechanical_power_w(s, pag).unwrap();
+            assert!((p_cu + p_mech - pag).abs() < EPS, "sum at s = {s}");
+        }
+    }
+
+    #[test]
+    fn power_split_limits() {
+        let pag = 5_000.0;
+        // Synchronous speed (s = 0): no rotor loss, all power mechanical.
+        assert!(rotor_copper_loss_w(0.0, pag).unwrap().abs() < EPS);
+        assert!((developed_mechanical_power_w(0.0, pag).unwrap() - pag).abs() < EPS);
+        // Standstill (s = 1): all power lost in the rotor, none mechanical.
+        assert!((rotor_copper_loss_w(1.0, pag).unwrap() - pag).abs() < EPS);
+        assert!(developed_mechanical_power_w(1.0, pag).unwrap().abs() < EPS);
+    }
+
+    #[test]
+    fn power_split_fractions_track_slip() {
+        // P_cu/Pag = s and P_mech/Pag = 1 - s; more slip -> more rotor loss.
+        let pag = 4_000.0;
+        let lo = rotor_copper_loss_w(0.02, pag).unwrap();
+        let hi = rotor_copper_loss_w(0.08, pag).unwrap();
+        assert!(hi > lo, "more slip should waste more: {hi} vs {lo}");
+        for &s in &[0.01_f64, 0.05, 0.25] {
+            assert!((rotor_copper_loss_w(s, pag).unwrap() / pag - s).abs() < EPS);
+            assert!((developed_mechanical_power_w(s, pag).unwrap() / pag - (1.0 - s)).abs() < EPS);
+        }
+    }
+
+    #[test]
+    fn power_split_zero_air_gap_power_is_zero() {
+        assert!(rotor_copper_loss_w(0.3, 0.0).unwrap().abs() < EPS);
+        assert!(developed_mechanical_power_w(0.3, 0.0).unwrap().abs() < EPS);
+    }
+
+    #[test]
+    fn motor_power_methods_match_free_functions() {
+        let m = InductionMotor::new(60.0, 4, 1746.0).unwrap(); // s = 0.03
+        let pag = 12_000.0;
+        assert!(
+            (m.rotor_copper_loss_w(pag).unwrap() - rotor_copper_loss_w(m.slip(), pag).unwrap())
+                .abs()
+                < EPS
+        );
+        assert!(
+            (m.developed_mechanical_power_w(pag).unwrap()
+                - developed_mechanical_power_w(m.slip(), pag).unwrap())
+            .abs()
+                < EPS
+        );
+        // On the motor, the two pieces still sum to the air-gap power.
+        assert!(
+            (m.rotor_copper_loss_w(pag).unwrap() + m.developed_mechanical_power_w(pag).unwrap()
+                - pag)
+                .abs()
+                < EPS
+        );
+    }
+
+    #[test]
+    fn power_split_rejects_bad_inputs() {
+        // Bad slip.
+        assert!(matches!(
+            rotor_copper_loss_w(-0.1, 1000.0),
+            Err(InductionMotorError::InvalidSlip { .. })
+        ));
+        assert!(matches!(
+            developed_mechanical_power_w(1.5, 1000.0),
+            Err(InductionMotorError::InvalidSlip { .. })
+        ));
+        assert!(matches!(
+            rotor_copper_loss_w(f64::NAN, 1000.0),
+            Err(InductionMotorError::InvalidSlip { .. })
+        ));
+        // Bad power.
+        assert!(matches!(
+            rotor_copper_loss_w(0.03, -1.0),
+            Err(InductionMotorError::InvalidPower { .. })
+        ));
+        assert!(matches!(
+            developed_mechanical_power_w(0.03, f64::INFINITY),
+            Err(InductionMotorError::InvalidPower { .. })
+        ));
+        let m = InductionMotor::new(60.0, 4, 1746.0).unwrap();
+        assert!(matches!(
+            m.rotor_copper_loss_w(f64::NAN),
+            Err(InductionMotorError::InvalidPower { .. })
+        ));
     }
 }
