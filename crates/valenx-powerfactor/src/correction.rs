@@ -14,7 +14,9 @@
 //! `Q2 = P * tan(phi2) = Q1 - Qc`, and the apparent power drops from
 //! `S1 = P / cos(phi1)` to `S2 = P / cos(phi2)`. The lower apparent
 //! power (and hence lower current) is the practical motivation for
-//! correction.
+//! correction. At a supply voltage `V` and frequency `f` the var rating
+//! becomes a physical capacitance `C = Qc / (2 * pi * f * V^2)` carrying
+//! current `Ic = Qc / V`.
 //!
 //! ## Scope reminder
 //!
@@ -160,6 +162,49 @@ impl Correction {
             });
         }
         Correction::for_target_pf(triangle.real_w, triangle.power_factor, power_factor_target)
+    }
+
+    /// The physical shunt capacitance, in farads, that delivers the
+    /// required [`capacitor_var`](Self::capacitor_var) reactive rating at
+    /// a supply RMS voltage `voltage_v` and frequency `frequency_hz`:
+    ///
+    /// ```text
+    ///   C = Qc / (2 * pi * f * V^2)
+    /// ```
+    ///
+    /// A capacitor of value `C` across `V` at `f` draws reactive power
+    /// `Qc = V^2 / Xc = 2 * pi * f * V^2 * C`; inverting that turns the var
+    /// rating the correction returns into the component value an engineer
+    /// actually specifies. Capacitance scales inversely with the square of
+    /// the voltage, which is why high-voltage banks need far less
+    /// capacitance for the same vars.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PowerError::NonPositive`] (or [`PowerError::NotFinite`])
+    /// if `voltage_v` or `frequency_hz` is not finite and strictly
+    /// positive.
+    pub fn capacitance_farads(&self, voltage_v: f64, frequency_hz: f64) -> Result<f64, PowerError> {
+        let v = PowerError::positive("voltage_v", voltage_v)?;
+        let f = PowerError::positive("frequency_hz", frequency_hz)?;
+        Ok(self.capacitor_var / (2.0 * std::f64::consts::PI * f * v * v))
+    }
+
+    /// The RMS current the shunt capacitor carries, in amperes, at supply
+    /// voltage `voltage_v`: `Ic = Qc / V`.
+    ///
+    /// This is the current rating the capacitor and its switchgear must
+    /// withstand. It is consistent with
+    /// [`capacitance_farads`](Self::capacitance_farads) through
+    /// `Ic = 2 * pi * f * V * C`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PowerError::NonPositive`] (or [`PowerError::NotFinite`])
+    /// if `voltage_v` is not finite and strictly positive.
+    pub fn capacitor_current_a(&self, voltage_v: f64) -> Result<f64, PowerError> {
+        let v = PowerError::positive("voltage_v", voltage_v)?;
+        Ok(self.capacitor_var / v)
     }
 }
 
@@ -313,6 +358,89 @@ mod tests {
         assert!(matches!(
             Correction::for_triangle(&unity, 0.99),
             Err(PowerError::NoCorrectionNeeded { .. })
+        ));
+    }
+
+    // --- physical capacitor sizing ----------------------------------------
+
+    #[test]
+    fn capacitance_matches_qc_over_omega_v_squared() {
+        // 10 kW, 0.8 -> 0.95 at 230 V, 50 Hz. C = Qc / (2 pi f V^2).
+        let c = Correction::for_target_pf(10_000.0, 0.8, 0.95).unwrap();
+        let (v, f) = (230.0, 50.0);
+        let cap = c.capacitance_farads(v, f).unwrap();
+        let expected = c.capacitor_var / (2.0 * std::f64::consts::PI * f * v * v);
+        assert!((cap - expected).abs() < 1e-18, "C {cap} vs {expected}");
+        // Ground-truth magnitude: ~2.535e-4 F (≈ 253 uF).
+        assert!((cap - 2.535e-4).abs() < 2e-6, "C ~ 253 uF, got {cap}");
+    }
+
+    #[test]
+    fn capacitance_reproduces_qc_round_trip() {
+        // GOLD: a capacitor of C farads across V at f draws exactly
+        // Qc = 2 pi f V^2 C reactive power, recovering capacitor_var.
+        let c = Correction::for_target_pf(7500.0, 0.65, 0.92).unwrap();
+        let (v, f) = (400.0, 60.0);
+        let cap = c.capacitance_farads(v, f).unwrap();
+        let qc_back = 2.0 * std::f64::consts::PI * f * v * v * cap;
+        assert!(
+            (qc_back - c.capacitor_var).abs() < 1e-6,
+            "Qc round-trip {qc_back} vs {}",
+            c.capacitor_var
+        );
+    }
+
+    #[test]
+    fn capacitor_current_is_qc_over_v_and_matches_capacitance() {
+        let c = Correction::for_target_pf(10_000.0, 0.8, 0.95).unwrap();
+        let (v, f) = (230.0, 50.0);
+        let ic = c.capacitor_current_a(v).unwrap();
+        assert!((ic - c.capacitor_var / v).abs() < EPS, "Ic = Qc/V");
+        // Consistent with the capacitance: Ic = 2 pi f V C.
+        let cap = c.capacitance_farads(v, f).unwrap();
+        let ic_via_c = 2.0 * std::f64::consts::PI * f * v * cap;
+        assert!((ic - ic_via_c).abs() < 1e-9, "Ic via C: {ic} vs {ic_via_c}");
+    }
+
+    #[test]
+    fn capacitance_scales_inversely_with_voltage_squared_and_frequency() {
+        let c = Correction::for_target_pf(5000.0, 0.7, 0.95).unwrap();
+        let base = c.capacitance_farads(230.0, 50.0).unwrap();
+        // Double the voltage -> a quarter of the capacitance.
+        let hv = c.capacitance_farads(460.0, 50.0).unwrap();
+        assert!((hv - base / 4.0).abs() < 1e-15, "C ~ 1/V^2");
+        // Double the frequency -> half the capacitance.
+        let hf = c.capacitance_farads(230.0, 100.0).unwrap();
+        assert!((hf - base / 2.0).abs() < 1e-15, "C ~ 1/f");
+    }
+
+    #[test]
+    fn capacitance_and_current_reject_bad_inputs() {
+        let c = Correction::for_target_pf(5000.0, 0.7, 0.95).unwrap();
+        assert!(matches!(
+            c.capacitance_farads(0.0, 50.0),
+            Err(PowerError::NonPositive {
+                name: "voltage_v",
+                ..
+            })
+        ));
+        assert!(matches!(
+            c.capacitance_farads(230.0, -50.0),
+            Err(PowerError::NonPositive {
+                name: "frequency_hz",
+                ..
+            })
+        ));
+        assert!(matches!(
+            c.capacitance_farads(f64::NAN, 50.0),
+            Err(PowerError::NotFinite { .. })
+        ));
+        assert!(matches!(
+            c.capacitor_current_a(0.0),
+            Err(PowerError::NonPositive {
+                name: "voltage_v",
+                ..
+            })
         ));
     }
 }
