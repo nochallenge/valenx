@@ -17,6 +17,14 @@
 //! - plus [`Column::effective_length`] (`K L`) and
 //!   [`Column::radius_of_gyration`] (`r = sqrt(I / A)`).
 //!
+//! For real (non-ideal) columns it also provides the **J. B. Johnson
+//! parabola** for short / intermediate members — given a material yield
+//! strength `sigma_y`: [`Column::transition_slenderness`] (the Euler /
+//! Johnson cross-over `C_c`), [`Column::johnson_critical_stress`], and the
+//! combined [`Column::design_critical_stress`] /
+//! [`Column::design_critical_load`] that pick the correct regime by
+//! slenderness so the result never exceeds `sigma_y`.
+//!
 //! ```
 //! use valenx_buckling::{Column, EndCondition};
 //!
@@ -77,10 +85,12 @@
 //! structural-engineering design tool.** In particular it deliberately
 //! does *not* model:
 //!
-//! - **Inelastic / intermediate columns** — no yield cap and no
-//!   Johnson (parabolic) or tangent-modulus transition, so for a stocky
-//!   column the reported elastic `sigma_cr` can exceed the material
-//!   yield strength, where a real column would crush or yield first.
+//! - **Inelastic / intermediate columns beyond Johnson** — the J. B.
+//!   Johnson parabola *is* provided (via [`Column::design_critical_stress`])
+//!   to cap the stocky-column stress at yield, but the more refined
+//!   tangent-modulus / CRC (Engesser–Shanley) and Ramberg–Osgood inelastic
+//!   models are not; the bare [`Column::critical_stress`] is still the pure
+//!   elastic Euler value and can exceed yield if used on its own.
 //! - **Imperfections** — initial crookedness, load eccentricity, and
 //!   residual stresses (the Perry-Robertson / real-column knockdowns)
 //!   are ignored; the column is treated as perfectly straight and
