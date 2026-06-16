@@ -14,6 +14,11 @@
 //! balanced ratio `rho_b`, whether the section is under-reinforced
 //! (ductile), and the design strength `phi*Mn`.
 //!
+//! It also runs the **design direction**:
+//! [`BeamSection::required_steel_area`] inverts the capacity equation to
+//! the tension-steel area `As` needed for a target nominal moment, and
+//! [`BeamSection::for_nominal_moment`] returns the sized section directly.
+//!
 //! The single public type is [`BeamSection`]; the [`error`] module
 //! carries the [`RcBeamError`] taxonomy.
 //!
