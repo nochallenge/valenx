@@ -55,6 +55,17 @@ pub enum InductionMotorError {
         /// The rejected fractional slip.
         slip: f64,
     },
+
+    /// The supplied air-gap power was not finite or was negative.
+    ///
+    /// Air-gap power (the power crossing into the rotor) is non-negative
+    /// for ordinary motoring; `NaN`, infinity, and negative values are
+    /// rejected by the power-split helpers.
+    #[error("invalid air-gap power {watts} W: must be finite and >= 0")]
+    InvalidPower {
+        /// The rejected air-gap power in watts.
+        watts: f64,
+    },
 }
 
 /// Coarse classification of an [`InductionMotorError`], useful for
@@ -80,6 +91,7 @@ impl InductionMotorError {
             InductionMotorError::InvalidRotorSpeed { .. } => "inductionmotor.invalid_rotor_speed",
             InductionMotorError::SlipOutOfRange { .. } => "inductionmotor.slip_out_of_range",
             InductionMotorError::InvalidSlip { .. } => "inductionmotor.invalid_slip",
+            InductionMotorError::InvalidPower { .. } => "inductionmotor.invalid_power",
         }
     }
 
@@ -89,7 +101,8 @@ impl InductionMotorError {
             InductionMotorError::InvalidPoles { .. }
             | InductionMotorError::InvalidFrequency { .. }
             | InductionMotorError::InvalidRotorSpeed { .. }
-            | InductionMotorError::InvalidSlip { .. } => ErrorCategory::Input,
+            | InductionMotorError::InvalidSlip { .. }
+            | InductionMotorError::InvalidPower { .. } => ErrorCategory::Input,
             InductionMotorError::SlipOutOfRange { .. } => ErrorCategory::Domain,
         }
     }
