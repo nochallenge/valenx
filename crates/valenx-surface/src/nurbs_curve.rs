@@ -378,6 +378,52 @@ impl NurbsCurve {
         }
         (u, self.evaluate(u))
     }
+
+    /// The parameter `u` at which the arc length from the curve start equals
+    /// `target` (clamped to `[0, arc_length()]`) — the inverse of
+    /// [`arc_length_between`](Self::arc_length_between) from the start, found by
+    /// bisection (arc length is monotone increasing in `u`).
+    ///
+    /// This is the basis of **arc-length (constant-speed) reparameterisation**:
+    /// spacing points evenly *by distance*, or traversing a path at uniform
+    /// speed regardless of how the control points and weights bunch the
+    /// parameter.
+    pub fn parameter_at_arc_length(&self, target: f64) -> f64 {
+        let (u_min, u_max) = self.parameter_range();
+        let total = self.arc_length();
+        let t = target.clamp(0.0, total);
+        if total <= 0.0 || t <= 0.0 {
+            return u_min;
+        }
+        if t >= total {
+            return u_max;
+        }
+        let mut lo = u_min;
+        let mut hi = u_max;
+        for _ in 0..60 {
+            let mid = 0.5 * (lo + hi);
+            if self.arc_length_between(u_min, mid) < t {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        0.5 * (lo + hi)
+    }
+
+    /// The parameter `u` at arc-length `fraction` of the way along the curve
+    /// (`fraction` clamped to `[0, 1]`; `0` = start, `1` = end).
+    pub fn parameter_at_arc_fraction(&self, fraction: f64) -> f64 {
+        self.parameter_at_arc_length(fraction.clamp(0.0, 1.0) * self.arc_length())
+    }
+
+    /// The point `C(u)` at arc-length `fraction` along the curve — the building
+    /// block for **even, distance-based sampling**, unlike
+    /// [`evaluate`](Self::evaluate) which samples in the curve's own (possibly
+    /// non-uniform) parameter.
+    pub fn point_at_arc_fraction(&self, fraction: f64) -> Vector3<f64> {
+        self.evaluate(self.parameter_at_arc_fraction(fraction))
+    }
 }
 
 /// Free helper — exposed so `nurbs_surface` can use it without
@@ -892,6 +938,82 @@ mod tests {
         assert!(
             (u1 - 1.0).abs() < 1e-6 && (p1 - Vector3::new(3.0, 0.0, 0.0)).norm() < 1e-9,
             "clamps to the end u=1"
+        );
+    }
+}
+
+#[cfg(test)]
+mod arc_param_tests {
+    use super::*;
+
+    fn line(a: Vector3<f64>, b: Vector3<f64>) -> NurbsCurve {
+        NurbsCurve::new(1, vec![0.0, 0.0, 1.0, 1.0], vec![a, b], vec![1.0, 1.0]).unwrap()
+    }
+
+    /// Standard rational quadratic quarter circle from `(r,0)` to `(0,r)`,
+    /// centred at the origin in the xy-plane (an exact circle).
+    fn quarter_circle(r: f64) -> NurbsCurve {
+        let s = std::f64::consts::FRAC_1_SQRT_2;
+        NurbsCurve::new(
+            2,
+            vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+            vec![
+                Vector3::new(r, 0.0, 0.0),
+                Vector3::new(r, r, 0.0),
+                Vector3::new(0.0, r, 0.0),
+            ],
+            vec![1.0, s, 1.0],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn line_reparam_is_proportional_to_distance() {
+        let c = line(Vector3::new(1.0, 2.0, 3.0), Vector3::new(7.0, 2.0, 3.0)); // length 6
+        assert!((c.arc_length() - 6.0).abs() < 1e-9);
+        // Half the distance is the geometric midpoint; ends map to endpoints.
+        assert!((c.point_at_arc_fraction(0.5) - Vector3::new(4.0, 2.0, 3.0)).norm() < 1e-6);
+        assert!((c.point_at_arc_fraction(0.0) - Vector3::new(1.0, 2.0, 3.0)).norm() < 1e-9);
+        assert!((c.point_at_arc_fraction(1.0) - Vector3::new(7.0, 2.0, 3.0)).norm() < 1e-9);
+    }
+
+    #[test]
+    fn arc_fraction_recovers_the_arc_length() {
+        let c = quarter_circle(2.0);
+        let (u0, _) = c.parameter_range();
+        let total = c.arc_length();
+        for &f in &[0.2, 0.5, 0.75] {
+            let u = c.parameter_at_arc_fraction(f);
+            let len = c.arc_length_between(u0, u);
+            assert!(
+                (len - f * total).abs() < 1e-4 * total,
+                "f={f}: arc length {len} vs target {}",
+                f * total
+            );
+        }
+    }
+
+    #[test]
+    fn quarter_circle_arc_fraction_hits_the_angular_point() {
+        // On an exact circle, arc-fraction f sits at angle f·90°. The rational
+        // NURBS quarter circle is NOT uniformly parameterised, so this genuinely
+        // exercises the reparameterisation (and differs from raw `evaluate`).
+        let r = 2.0;
+        let c = quarter_circle(r);
+        assert!((c.arc_length() - r * std::f64::consts::FRAC_PI_2).abs() < 1e-6);
+        for &(f, deg) in &[(0.25_f64, 22.5_f64), (0.5, 45.0), (0.75, 67.5)] {
+            let p = c.point_at_arc_fraction(f);
+            let ang = deg.to_radians();
+            let expected = Vector3::new(r * ang.cos(), r * ang.sin(), 0.0);
+            assert!((p - expected).norm() < 2e-3, "f={f}: {p:?} vs {expected:?}");
+            assert!((p.norm() - r).abs() < 1e-6, "should stay on the circle");
+        }
+        // The arc-length point differs from the raw-parameter point at f=0.25.
+        let by_arc = c.point_at_arc_fraction(0.25);
+        let by_param = c.evaluate(0.25);
+        assert!(
+            (by_arc - by_param).norm() > 1e-2,
+            "reparameterisation should differ from evaluate"
         );
     }
 }
