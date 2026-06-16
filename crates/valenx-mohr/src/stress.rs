@@ -116,6 +116,23 @@ impl StressState {
         self.radius()
     }
 
+    /// The absolute maximum shear stress, accounting for the zero
+    /// out-of-plane principal stress of a plane-stress state:
+    /// `tau_abs = (max(s1, s2, 0) - min(s1, s2, 0)) / 2`.
+    ///
+    /// In plane stress the third principal stress is `s3 = 0`. The
+    /// in-plane [`max_shear`](StressState::max_shear) `(s1 - s2) / 2` is
+    /// the true maximum only when `s1` and `s2` straddle zero; when both
+    /// principals share a sign the largest shear acts on an out-of-plane
+    /// plane involving `s3 = 0`, giving `s1 / 2` (both tensile) or
+    /// `|s2| / 2` (both compressive). This is the shear the Tresca yield
+    /// criterion compares against, and it is never smaller than the
+    /// in-plane maximum.
+    pub fn absolute_max_shear(&self) -> f64 {
+        let p = self.principal_stresses();
+        0.5 * (p.s1.max(0.0) - p.s2.min(0.0))
+    }
+
     /// The principal angle `theta_p` (radians), measured
     /// counter-clockwise from the `x` axis to the normal of the plane
     /// carrying the maximum principal stress `s1`.
@@ -390,5 +407,69 @@ mod tests {
         let pj = serde_json::to_string(&p).unwrap();
         let pback: PrincipalStresses = serde_json::from_str(&pj).unwrap();
         assert_eq!(p, pback);
+    }
+
+    #[test]
+    fn absolute_shear_equals_in_plane_when_principals_straddle_zero() {
+        // Hibbeler case: s1 ~ 116.4, s2 ~ -46.4 straddle zero, so the
+        // out-of-plane s3 = 0 lies between them and tau_abs == in-plane.
+        let s = StressState::new(-20.0, 90.0, 60.0).unwrap();
+        assert!(s.principal_stresses().s1 > 0.0 && s.principal_stresses().s2 < 0.0);
+        assert!((s.absolute_max_shear() - s.max_shear()).abs() < EPS);
+    }
+
+    #[test]
+    fn biaxial_tension_has_zero_in_plane_but_nonzero_absolute_shear() {
+        // GOLD case: sx = sy = 80, txy = 0 -> s1 = s2 = 80, so the
+        // in-plane shear is zero, yet the absolute shear is 80/2 = 40
+        // (the plane involving the out-of-plane s3 = 0).
+        let s = StressState::new(80.0, 80.0, 0.0).unwrap();
+        assert!(s.max_shear().abs() < EPS, "in-plane shear should vanish");
+        assert!(
+            (s.absolute_max_shear() - 40.0).abs() < EPS,
+            "tau_abs = s1/2"
+        );
+    }
+
+    #[test]
+    fn both_principals_same_sign_exceed_in_plane_shear() {
+        // Both tensile: tau_abs = s1/2 > in-plane (s1 - s2)/2.
+        let tens = StressState::new(100.0, 40.0, 0.0).unwrap();
+        assert!((tens.absolute_max_shear() - 50.0).abs() < EPS); // 100/2
+        assert!(tens.absolute_max_shear() > tens.max_shear()); // 50 > 30
+                                                               // Both compressive: tau_abs = |s2|/2.
+        let comp = StressState::new(-100.0, -40.0, 0.0).unwrap();
+        assert!((comp.absolute_max_shear() - 50.0).abs() < EPS); // |-100|/2
+        assert!(comp.absolute_max_shear() > comp.max_shear());
+    }
+
+    #[test]
+    fn absolute_shear_never_below_in_plane_and_matches_closed_form() {
+        // tau_abs >= in-plane max for any state, and equals the explicit
+        // (max - min)/2 over {s1, s2, 0}.
+        let cases = [
+            (10.0, 4.0, 3.0),
+            (-20.0, 90.0, 60.0),
+            (0.0, 0.0, 7.5),
+            (-5.0, -12.0, -2.0),
+            (50.0, 0.0, 0.0),
+            (80.0, 80.0, 0.0),
+        ];
+        for (sx, sy, txy) in cases {
+            let s = StressState::new(sx, sy, txy).unwrap();
+            let p = s.principal_stresses();
+            let hi = p.s1.max(p.s2).max(0.0);
+            let lo = p.s1.min(p.s2).min(0.0);
+            let expected = 0.5 * (hi - lo);
+            assert!(
+                (s.absolute_max_shear() - expected).abs() < EPS,
+                "({sx},{sy},{txy}): tau_abs {} vs {expected}",
+                s.absolute_max_shear()
+            );
+            assert!(
+                s.absolute_max_shear() >= s.max_shear() - EPS,
+                "({sx},{sy},{txy}): tau_abs below in-plane"
+            );
+        }
     }
 }
