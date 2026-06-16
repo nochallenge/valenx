@@ -17,8 +17,9 @@
 //!   conserved quantity that pins each trajectory to a closed orbit.
 //! - **SIR epidemic** ([`sir`]) — the Kermack-McKendrick [`Sir`]
 //!   compartmental model with transmission `beta`, recovery `gamma`,
-//!   and the basic reproduction number
-//!   [`R0 = beta/gamma`](Sir::r0).
+//!   the basic reproduction number [`R0 = beta/gamma`](Sir::r0), and the
+//!   herd-immunity threshold
+//!   [`HIT = 1 - 1/R0`](Sir::herd_immunity_threshold).
 //! - **RK4 integrator** ([`rk4`]) — the shared fixed-step
 //!   [`integrate`] routine (and a single-step [`rk4_step`]) on a
 //!   fixed-length state vector.
