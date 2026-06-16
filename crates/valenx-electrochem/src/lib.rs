@@ -14,8 +14,11 @@
 //! reaction quotient from a measured potential (the basis of a
 //! potentiometric sensor).
 //! The [`cell`] module gives the cell potential
-//! `E_cell = E_cathode - E_anode` from two reduction potentials, plus the
-//! spontaneity sign that follows. The [`faraday`] module gives Faraday's
+//! `E_cell = E_cathode - E_anode` from two reduction potentials, the
+//! spontaneity sign that follows, and the equilibrium constant
+//! `K = exp(n F E0_cell / (R T))` that the standard cell potential implies
+//! (the `ΔG° = -n F E0_cell = -R T ln K` bridge between electrochemistry
+//! and thermodynamics). The [`faraday`] module gives Faraday's
 //! law of electrolysis `m = (Q M) / (n F)` for the mass moved by a charge,
 //! with `Q = I t` for a constant current.
 //!
@@ -60,7 +63,7 @@ pub mod error;
 pub mod faraday;
 pub mod nernst;
 
-pub use cell::{cell_potential, spontaneity, Cell, Spontaneity};
+pub use cell::{cell_potential, equilibrium_constant, spontaneity, Cell, Spontaneity};
 pub use constants::{
     FARADAY_C_PER_MOL, GAS_CONSTANT_J_PER_MOL_K, STANDARD_TEMPERATURE_K, ZERO_CELSIUS_IN_KELVIN,
 };
