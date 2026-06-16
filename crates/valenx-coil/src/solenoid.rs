@@ -24,6 +24,8 @@
 //! E   = 0.5 * L * I^2          (energy stored in the field, joules)
 //! X_L = 2 * pi * f * L         (inductive reactance, ohms)
 //! tau = L / R                  (series-RL time constant, seconds)
+//! i(t) energising = (V/R)(1 - exp(-t/tau))   (rising current, amperes)
+//! i(t) decaying   = I0 * exp(-t/tau)         (source-free decay)
 //! ```
 //!
 //! ## Honest scope
@@ -204,6 +206,95 @@ pub fn reactance_ohms(inductance: f64, frequency: f64) -> Result<f64, CoilError>
 pub fn time_constant_seconds(inductance: f64, resistance: f64) -> Result<f64, CoilError> {
     let resistance = require_positive("R", resistance)?;
     Ok(inductance / resistance)
+}
+
+/// Validate a non-negative, finite time. `t = 0` is admissible.
+fn require_time(time: f64) -> Result<f64, CoilError> {
+    if !time.is_finite() {
+        return Err(CoilError::NotFinite {
+            name: "t",
+            value: time,
+        });
+    }
+    if time < 0.0 {
+        return Err(CoilError::NonPositive {
+            name: "t",
+            value: time,
+        });
+    }
+    Ok(time)
+}
+
+/// The current in a switched series-RL circuit **energising** from a DC
+/// source `v_source` (volts) through resistance `resistance` (ohms) with
+/// the coil's `inductance` (henries), at time `time` (seconds):
+///
+/// ```text
+/// i(t) = (V / R) * (1 - exp(-t * R / L)).
+/// ```
+///
+/// The current rises from `0` toward the steady value `V/R` with the
+/// time constant `tau = L/R`; after one time constant it has reached
+/// `1 - 1/e ≈ 63.2 %` of the final value. This is the inductive dual of
+/// the capacitor's RC charging voltage.
+///
+/// # Errors
+///
+/// Returns [`CoilError::NotFinite`] if `v_source` or `time` is non-finite,
+/// [`CoilError::NonPositive`] if `time` is negative or if `resistance` /
+/// `inductance` is not strictly positive.
+pub fn rising_current(
+    v_source: f64,
+    resistance: f64,
+    inductance: f64,
+    time: f64,
+) -> Result<f64, CoilError> {
+    if !v_source.is_finite() {
+        return Err(CoilError::NotFinite {
+            name: "V",
+            value: v_source,
+        });
+    }
+    let r = require_positive("R", resistance)?;
+    let l = require_positive("L", inductance)?;
+    let t = require_time(time)?;
+    Ok((v_source / r) * (1.0 - (-t * r / l).exp()))
+}
+
+/// The current in a source-free series-RL circuit **decaying** from an
+/// initial current `initial_current` (amperes) through resistance
+/// `resistance` (ohms) with `inductance` (henries), at time `time`
+/// (seconds):
+///
+/// ```text
+/// i(t) = I0 * exp(-t * R / L).
+/// ```
+///
+/// The current falls from `I0` toward zero with the time constant
+/// `tau = L/R`; after one time constant it has fallen to `1/e ≈ 36.8 %`
+/// of `I0`. The dual of the capacitor's RC discharge.
+///
+/// # Errors
+///
+/// Returns [`CoilError::NotFinite`] if `initial_current` or `time` is
+/// non-finite, [`CoilError::NonPositive`] if `time` is negative or if
+/// `resistance` / `inductance` is not strictly positive.
+pub fn decaying_current(
+    initial_current: f64,
+    resistance: f64,
+    inductance: f64,
+    time: f64,
+) -> Result<f64, CoilError> {
+    if !initial_current.is_finite() {
+        return Err(CoilError::NotFinite {
+            name: "I0",
+            value: initial_current,
+        });
+    }
+    let r = require_positive("R", resistance)?;
+    let l = require_positive("L", inductance)?;
+    let t = require_time(time)?;
+    Ok(initial_current * (-t * r / l).exp())
 }
 
 #[cfg(test)]
@@ -432,5 +523,65 @@ mod tests {
         let json = serde_json::to_string(&coil).unwrap();
         let back: Solenoid = serde_json::from_str(&json).unwrap();
         assert_eq!(coil, back);
+    }
+
+    /// Rising RL current reaches 63.2% of V/R after one time constant, with
+    /// the exponent using tau = L/R, and starts at 0 / approaches V/R.
+    #[test]
+    fn rising_current_one_tau_and_limits() {
+        let (v, r, l) = (10.0, 5.0, 0.01); // tau = L/R = 0.002 s, V/R = 2 A
+        let tau = time_constant_seconds(l, r).unwrap();
+        let at_tau = rising_current(v, r, l, tau).unwrap();
+        let expected = (v / r) * (1.0 - (-1.0f64).exp());
+        assert!((at_tau - expected).abs() < EPS, "i(tau) = {at_tau}");
+        // Starts from zero.
+        assert!(rising_current(v, r, l, 0.0).unwrap().abs() < EPS);
+        // Approaches the steady current V/R: at 6 tau it is within ~0.5 %
+        // and strictly below the asymptote (beyond ~37 tau the exponential
+        // underflows to exactly V/R in f64).
+        let near = rising_current(v, r, l, 6.0 * tau).unwrap();
+        assert!(near < v / r, "must approach from below");
+        assert!((near - v / r).abs() < 0.01, "within ~0.5% at 6 tau");
+    }
+
+    /// Decaying RL current falls to 1/e of I0 after one time constant, and
+    /// starts at I0.
+    #[test]
+    fn decaying_current_one_tau_and_start() {
+        let (i0, r, l) = (2.0, 5.0, 0.01);
+        let tau = time_constant_seconds(l, r).unwrap();
+        let at_tau = decaying_current(i0, r, l, tau).unwrap();
+        assert!(
+            (at_tau - i0 * (-1.0f64).exp()).abs() < EPS,
+            "i(tau) = {at_tau}"
+        );
+        assert!((decaying_current(i0, r, l, 0.0).unwrap() - i0).abs() < EPS);
+    }
+
+    /// The rising and decaying currents are complementary about the steady
+    /// value: (V/R - rising) equals a decay from V/R.
+    #[test]
+    fn rise_and_decay_are_complementary() {
+        let (v, r, l) = (12.0, 4.0, 0.02);
+        let i_inf = v / r;
+        for &t in &[0.0, 1.0e-3, 5.0e-3, 2.0e-2] {
+            let rise = rising_current(v, r, l, t).unwrap();
+            let decay = decaying_current(i_inf, r, l, t).unwrap();
+            assert!(
+                (i_inf - rise - decay).abs() < 1.0e-12,
+                "t={t}: {rise} {decay}"
+            );
+        }
+    }
+
+    /// RL transient rejects bad resistance / inductance / time / source.
+    #[test]
+    fn rl_transient_rejects_bad_inputs() {
+        assert!(rising_current(10.0, 0.0, 0.01, 0.001).is_err()); // R = 0
+        assert!(rising_current(10.0, 5.0, 0.0, 0.001).is_err()); // L = 0
+        assert!(rising_current(10.0, 5.0, 0.01, -1.0).is_err()); // t < 0
+        assert!(rising_current(f64::NAN, 5.0, 0.01, 0.001).is_err()); // V NaN
+        assert!(decaying_current(2.0, -5.0, 0.01, 0.001).is_err()); // R < 0
+        assert!(decaying_current(f64::INFINITY, 5.0, 0.01, 0.001).is_err()); // I0 inf
     }
 }

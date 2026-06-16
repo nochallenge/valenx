@@ -14,6 +14,8 @@
 //! - [`reactance_ohms`] — the inductive reactance `X_L = 2 * pi * f * L`.
 //! - [`time_constant_seconds`] — the series-RL time constant
 //!   `tau = L / R`.
+//! - [`rising_current`] / [`decaying_current`] — the series-RL transient
+//!   `i(t) = (V/R)(1 - e^{-t/tau})` / `I0 e^{-t/tau}`.
 //! - [`VACUUM_PERMEABILITY`] — the constant `mu0 = 4 * pi * 1e-7 H/m`.
 //!
 //! Every fallible function returns [`Result<_, CoilError>`](CoilError),
@@ -67,5 +69,6 @@ pub mod solenoid;
 
 pub use error::{CoilError, ErrorCategory};
 pub use solenoid::{
-    energy_joules, reactance_ohms, time_constant_seconds, Solenoid, VACUUM_PERMEABILITY,
+    decaying_current, energy_joules, reactance_ohms, rising_current, time_constant_seconds,
+    Solenoid, VACUUM_PERMEABILITY,
 };
