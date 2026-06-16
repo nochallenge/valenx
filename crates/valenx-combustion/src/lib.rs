@@ -14,6 +14,9 @@
 //!   stoichiometric air-fuel ratio on a mass and a molar basis.
 //! - [`stoich::equivalence_ratio`] / [`stoich::afr_from_phi`] —
 //!   `phi = AFR_stoich / AFR_actual` and its inverse.
+//! - [`stoich::percent_theoretical_air`] /
+//!   [`stoich::percent_excess_air`] — the engineering air-side
+//!   descriptors `100/phi` and `100(1 - phi)/phi`.
 //! - [`stoich::classify`] — lean (`phi < 1`) / stoichiometric
 //!   (`phi == 1`) / rich (`phi > 1`).
 //! - [`stoich::product_moles`] — the balanced product mole table
@@ -33,7 +36,9 @@
 //!
 //! The stoichiometric mass air-fuel ratio is
 //! `a (M_O2 + 3.76 M_N2) / M_fuel`; the equivalence ratio rescales the
-//! actual air supply. The adiabatic flame temperature comes from a
+//! actual air supply. The same mixture is equivalently described by the
+//! percent theoretical air `100/phi` or percent excess air
+//! `100(1 - phi)/phi` (negative — an air deficiency — when rich). The adiabatic flame temperature comes from a
 //! first-law balance, `T_ad = T_in + LHV * M_fuel / (n_products *
 //! cp_molar)`, where all of the released chemical energy heats the
 //! product gas through a single constant mean molar heat capacity.
@@ -67,7 +72,8 @@ pub use flame::{
 pub use fuel::Fuel;
 pub use stoich::{
     afr_from_phi, afr_stoich_mass, afr_stoich_molar, air_mean_molar_mass, classify,
-    equivalence_ratio, product_moles, Mixture, ProductMoles,
+    equivalence_ratio, percent_excess_air, percent_theoretical_air, product_moles, Mixture,
+    ProductMoles,
 };
 
 #[cfg(test)]
@@ -214,6 +220,75 @@ mod tests {
         assert!(equivalence_ratio(&Fuel::methane(), f64::NAN).is_err());
         assert!(equivalence_ratio(&Fuel::methane(), f64::INFINITY).is_err());
         assert!(equivalence_ratio(&Fuel::methane(), -5.0).is_err());
+    }
+
+    // --- Percent theoretical / excess air -------------------------------
+
+    #[test]
+    fn theoretical_air_is_hundred_at_stoichiometric() {
+        assert!((percent_theoretical_air(1.0).unwrap() - 100.0).abs() < EPS);
+        assert!(percent_excess_air(1.0).unwrap().abs() < EPS);
+    }
+
+    #[test]
+    fn theoretical_and_excess_air_closed_form() {
+        // phi = 0.5 (double the air): 200% theoretical, 100% excess.
+        assert!((percent_theoretical_air(0.5).unwrap() - 200.0).abs() < EPS);
+        assert!((percent_excess_air(0.5).unwrap() - 100.0).abs() < EPS);
+        // phi = 0.8: 125% theoretical, 25% excess.
+        assert!((percent_theoretical_air(0.8).unwrap() - 125.0).abs() < 1e-9);
+        assert!((percent_excess_air(0.8).unwrap() - 25.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn theoretical_air_is_excess_plus_hundred() {
+        // Exact identity at any phi (lean, stoichiometric, and rich).
+        for &phi in &[0.4, 0.7, 1.0, 1.5, 2.0] {
+            let th = percent_theoretical_air(phi).unwrap();
+            let ex = percent_excess_air(phi).unwrap();
+            assert!((th - (ex + 100.0)).abs() < 1e-9, "identity at phi={phi}");
+        }
+    }
+
+    #[test]
+    fn rich_mixture_has_air_deficiency() {
+        // phi = 2 (half the air): 50% theoretical, -50% excess.
+        assert!((percent_theoretical_air(2.0).unwrap() - 50.0).abs() < EPS);
+        assert!((percent_excess_air(2.0).unwrap() + 50.0).abs() < EPS);
+    }
+
+    #[test]
+    fn excess_air_consistent_with_afr() {
+        // AFR_actual = AFR_stoich * (1 + excess/100): tie the excess-air
+        // representation back to the actual air-fuel ratio.
+        let fuel = Fuel::octane();
+        let phi = 0.75;
+        let ex = percent_excess_air(phi).unwrap();
+        let afr_actual = afr_from_phi(&fuel, phi).unwrap();
+        let afr_stoich = afr_stoich_mass(&fuel);
+        assert!(
+            (afr_actual - afr_stoich * (1.0 + ex / 100.0)).abs() < 1e-9,
+            "AFR vs excess-air mismatch"
+        );
+    }
+
+    #[test]
+    fn more_excess_air_means_leaner() {
+        // Lower phi (leaner) -> more excess air.
+        let lean = percent_excess_air(0.5).unwrap();
+        let near = percent_excess_air(0.9).unwrap();
+        assert!(
+            lean > near,
+            "leaner should have more excess air: {lean} vs {near}"
+        );
+    }
+
+    #[test]
+    fn air_descriptors_reject_nonpositive_phi() {
+        assert!(percent_theoretical_air(0.0).is_err());
+        assert!(percent_excess_air(-1.0).is_err());
+        assert!(percent_theoretical_air(f64::NAN).is_err());
+        assert!(percent_excess_air(f64::INFINITY).is_err());
     }
 
     // --- Classification -------------------------------------------------

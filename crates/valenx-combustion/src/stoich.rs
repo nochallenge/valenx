@@ -83,6 +83,41 @@ pub fn afr_from_phi(fuel: &Fuel, phi: f64) -> Result<f64, CombustionError> {
     Ok(afr_stoich_mass(fuel) / phi)
 }
 
+/// Percent **theoretical air** supplied at equivalence ratio `phi`:
+/// `100 / phi` (percent).
+///
+/// This is the combustion-engineering way of stating mixture strength on
+/// the air side. `100%` is stoichiometric; a lean mixture (`phi < 1`)
+/// supplies more than `100%` theoretical air, and a rich mixture
+/// (`phi > 1`) less than `100%` (an air deficiency).
+///
+/// # Errors
+///
+/// Returns [`CombustionError::BadParameter`] when `phi` is not strictly
+/// positive (or non-finite).
+pub fn percent_theoretical_air(phi: f64) -> Result<f64, CombustionError> {
+    CombustionError::require_positive("phi", phi, "equivalence ratio must be strictly positive")?;
+    Ok(100.0 / phi)
+}
+
+/// Percent **excess air** supplied at equivalence ratio `phi`:
+/// `100 * (1 - phi) / phi` (percent), i.e. [`percent_theoretical_air`]
+/// minus `100`.
+///
+/// `0%` at stoichiometric, positive for a lean mixture (`phi < 1`), and
+/// negative — an air deficiency — for a rich mixture (`phi > 1`). It ties
+/// back to the air-fuel ratio through
+/// `AFR_actual = AFR_stoich * (1 + excess_air/100)`.
+///
+/// # Errors
+///
+/// Returns [`CombustionError::BadParameter`] when `phi` is not strictly
+/// positive (or non-finite).
+pub fn percent_excess_air(phi: f64) -> Result<f64, CombustionError> {
+    CombustionError::require_positive("phi", phi, "equivalence ratio must be strictly positive")?;
+    Ok(100.0 * (1.0 - phi) / phi)
+}
+
 /// Classify a mixture from its equivalence ratio `phi`.
 ///
 /// Values within `tol` of `1.0` are reported as
