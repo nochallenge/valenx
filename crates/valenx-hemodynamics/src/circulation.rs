@@ -103,6 +103,81 @@ pub fn systemic_vascular_resistance(
     Ok(map / co)
 }
 
+/// Mean arterial pressure including the central venous pressure offset:
+/// `MAP = CO * SVR + CVP`.
+///
+/// The full Ohm-analogue relation drives flow with the *gradient*
+/// `MAP - CVP = CO * SVR`, so the venous return pressure adds directly to
+/// the arterial pressure. With `central_venous_pressure = 0` this reduces
+/// to [`mean_arterial_pressure`]; the central venous pressure is normally
+/// a small positive value but may be negative (e.g. intrathoracic), so it
+/// is only required to be finite.
+///
+/// # Errors
+///
+/// Returns [`HemodynamicsError::Negative`] / [`HemodynamicsError::NotFinite`]
+/// if `cardiac_output` or `systemic_vascular_resistance` is negative or
+/// non-finite, or [`HemodynamicsError::NotFinite`] if
+/// `central_venous_pressure` is not finite.
+pub fn mean_arterial_pressure_with_cvp(
+    cardiac_output: f64,
+    systemic_vascular_resistance: f64,
+    central_venous_pressure: f64,
+) -> Result<f64, HemodynamicsError> {
+    let co = require_non_negative("cardiac_output", cardiac_output)?;
+    let svr = require_non_negative("systemic_vascular_resistance", systemic_vascular_resistance)?;
+    if !central_venous_pressure.is_finite() {
+        return Err(HemodynamicsError::NotFinite {
+            name: "central_venous_pressure",
+            value: central_venous_pressure,
+        });
+    }
+    Ok(co * svr + central_venous_pressure)
+}
+
+/// Systemic vascular resistance from the full pressure gradient:
+/// `SVR = (MAP - CVP) / CO`.
+///
+/// The inverse of [`mean_arterial_pressure_with_cvp`], using the true
+/// driving gradient across the systemic bed rather than the arterial
+/// pressure alone; with `central_venous_pressure = 0` it reduces to
+/// [`systemic_vascular_resistance`]. The gradient `MAP - CVP` must be
+/// non-negative — a mean arterial pressure below the venous pressure
+/// would imply reversed flow, which this resistance model does not
+/// represent.
+///
+/// # Errors
+///
+/// Returns [`HemodynamicsError::NonPositive`] if `cardiac_output` is not
+/// strictly positive (division by zero), [`HemodynamicsError::NotFinite`]
+/// if `mean_arterial_pressure` or `central_venous_pressure` is not finite,
+/// and [`HemodynamicsError::Negative`] if the gradient `MAP - CVP` is
+/// negative.
+pub fn systemic_vascular_resistance_with_cvp(
+    mean_arterial_pressure: f64,
+    central_venous_pressure: f64,
+    cardiac_output: f64,
+) -> Result<f64, HemodynamicsError> {
+    if !mean_arterial_pressure.is_finite() {
+        return Err(HemodynamicsError::NotFinite {
+            name: "mean_arterial_pressure",
+            value: mean_arterial_pressure,
+        });
+    }
+    if !central_venous_pressure.is_finite() {
+        return Err(HemodynamicsError::NotFinite {
+            name: "central_venous_pressure",
+            value: central_venous_pressure,
+        });
+    }
+    let co = require_positive("cardiac_output", cardiac_output)?;
+    let gradient = require_non_negative(
+        "mean_arterial_pressure - central_venous_pressure",
+        mean_arterial_pressure - central_venous_pressure,
+    )?;
+    Ok(gradient / co)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,5 +256,72 @@ mod tests {
         // SVR requires a strictly-positive CO (no divide-by-zero).
         assert!(systemic_vascular_resistance(100.0, 0.0).is_err());
         assert!(systemic_vascular_resistance(-1.0, 5.0).is_err());
+    }
+
+    #[test]
+    fn cvp_forms_reduce_to_zero_reference_at_cvp_zero() {
+        // GOLD: with CVP = 0 the offset relations match the existing
+        // zero-reference forms exactly.
+        let (co, svr) = (9.0e-5, 1.2e8);
+        let map0 = mean_arterial_pressure(co, svr).expect("valid");
+        let map_cvp0 = mean_arterial_pressure_with_cvp(co, svr, 0.0).expect("valid");
+        assert!((map_cvp0 - map0).abs() < 1e-9 * map0);
+
+        let svr0 = systemic_vascular_resistance(map0, co).expect("valid");
+        let svr_cvp0 = systemic_vascular_resistance_with_cvp(map0, 0.0, co).expect("valid");
+        assert!((svr_cvp0 - svr0).abs() < 1e-3 * svr0);
+    }
+
+    #[test]
+    fn cvp_offset_raises_map_by_exactly_cvp() {
+        // MAP_with_cvp - MAP = CVP, and the driving gradient is CO*SVR.
+        let (co, svr, cvp) = (9.0e-5, 1.2e8, 500.0);
+        let map0 = mean_arterial_pressure(co, svr).expect("valid");
+        let map = mean_arterial_pressure_with_cvp(co, svr, cvp).expect("valid");
+        assert!((map - map0 - cvp).abs() < 1e-6, "offset != CVP");
+        // The gradient MAP - CVP recovers the pure CO*SVR product.
+        assert!(((map - cvp) - co * svr).abs() < 1e-6, "gradient != CO*SVR");
+    }
+
+    #[test]
+    fn cvp_resistance_inverts_cvp_pressure() {
+        // GOLD round-trip: SVR_with_cvp(MAP_with_cvp(...)) == SVR.
+        let (co, svr, cvp) = (9.0e-5, 1.2e8, 700.0);
+        let map = mean_arterial_pressure_with_cvp(co, svr, cvp).expect("valid");
+        let svr_back = systemic_vascular_resistance_with_cvp(map, cvp, co).expect("valid");
+        assert!(
+            (svr_back - svr).abs() < 1e-3 * svr,
+            "svr={svr}, back={svr_back}"
+        );
+    }
+
+    #[test]
+    fn negative_cvp_is_allowed_and_lowers_map() {
+        // A negative (sub-atmospheric) CVP lowers the arterial pressure.
+        let (co, svr) = (9.0e-5, 1.2e8);
+        let map0 = mean_arterial_pressure(co, svr).expect("valid");
+        let map = mean_arterial_pressure_with_cvp(co, svr, -300.0).expect("valid");
+        assert!((map - (map0 - 300.0)).abs() < 1e-6, "negative CVP offset");
+        assert!(map < map0);
+    }
+
+    #[test]
+    fn cvp_resistance_rejects_gradient_below_zero_and_bad_inputs() {
+        // MAP below CVP -> negative gradient -> rejected.
+        assert!(matches!(
+            systemic_vascular_resistance_with_cvp(500.0, 800.0, 9.0e-5),
+            Err(HemodynamicsError::Negative { .. })
+        ));
+        // Zero CO is a divide-by-zero.
+        assert!(systemic_vascular_resistance_with_cvp(10_000.0, 500.0, 0.0).is_err());
+        // Non-finite CVP rejected on both forms.
+        assert!(matches!(
+            mean_arterial_pressure_with_cvp(9.0e-5, 1.2e8, f64::NAN),
+            Err(HemodynamicsError::NotFinite {
+                name: "central_venous_pressure",
+                ..
+            })
+        ));
+        assert!(systemic_vascular_resistance_with_cvp(10_000.0, f64::INFINITY, 9.0e-5).is_err());
     }
 }

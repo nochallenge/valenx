@@ -18,7 +18,11 @@
 //! - **Whole-circulation lumped relations** ([`circulation`]) — cardiac
 //!   output [`circulation::cardiac_output`], mean arterial pressure
 //!   [`circulation::mean_arterial_pressure`] and the inverse
-//!   [`circulation::systemic_vascular_resistance`].
+//!   [`circulation::systemic_vascular_resistance`], plus the
+//!   central-venous-pressure-aware forms
+//!   [`circulation::mean_arterial_pressure_with_cvp`] and
+//!   [`circulation::systemic_vascular_resistance_with_cvp`] that carry the
+//!   `MAP - CVP` driving gradient.
 //! - **Windkessel decay** ([`windkessel`]) — the 2-element (RC)
 //!   diastolic pressure relaxation [`windkessel::windkessel_pressure`]
 //!   and its [`windkessel::time_constant`].
@@ -41,6 +45,7 @@
 //! ```text
 //! CO  = HR * SV                           (cardiac output)
 //! MAP = CO * SVR                          (mean arterial pressure)
+//! MAP - CVP = CO * SVR                    (with the venous-pressure offset)
 //! ```
 //!
 //! And the 2-element Windkessel diastolic decay, with the time constant
@@ -113,7 +118,10 @@ pub mod error;
 pub mod flow;
 pub mod windkessel;
 
-pub use circulation::{cardiac_output, mean_arterial_pressure, systemic_vascular_resistance};
+pub use circulation::{
+    cardiac_output, mean_arterial_pressure, mean_arterial_pressure_with_cvp,
+    systemic_vascular_resistance, systemic_vascular_resistance_with_cvp,
+};
 pub use error::{ErrorCategory, HemodynamicsError};
 pub use flow::{flow_from_resistance, poiseuille_flow, vascular_resistance, wall_shear_stress};
 pub use windkessel::{time_constant, windkessel_pressure};
