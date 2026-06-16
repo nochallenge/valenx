@@ -132,6 +132,20 @@ impl Shaft {
             } => PI * (outer_diameter.powi(4) - inner_diameter.powi(4)) / 32.0,
         }
     }
+
+    /// Polar (torsion) section modulus `Z_p = J / r_outer`, the section
+    /// property that turns a torque straight into the surface shear stress,
+    /// `tau_max = T / Z_p`.
+    ///
+    /// For a solid bar this is `Z_p = pi d^3 / 16`; for a tube
+    /// `Z_p = pi (D^4 - d^4) / (16 D)`. Unlike `J` (length to the fourth)
+    /// it carries units of length cubed, and it is the natural quantity for
+    /// sizing a shaft to an allowable shear stress — see
+    /// [`crate::response::allowable_torque`]. Always strictly positive
+    /// because the constructors reject degenerate sections.
+    pub fn polar_section_modulus(&self) -> f64 {
+        self.polar_moment() / self.outer_radius()
+    }
 }
 
 #[cfg(test)]
@@ -185,6 +199,48 @@ mod tests {
         let hollow = Shaft::hollow(8.0, 6.0).unwrap();
         assert!((hollow.outer_radius() - 4.0).abs() < EPS);
         assert!((hollow.inner_radius() - 3.0).abs() < EPS);
+    }
+
+    #[test]
+    fn solid_section_modulus_matches_pi_d3_over_16() {
+        let d = 40.0_f64;
+        let shaft = Shaft::solid(d).unwrap();
+        let expected = PI * d.powi(3) / 16.0;
+        assert!(
+            (shaft.polar_section_modulus() - expected).abs() < EPS * expected,
+            "Zp got {}",
+            shaft.polar_section_modulus()
+        );
+    }
+
+    #[test]
+    fn hollow_section_modulus_matches_pi_big4_minus_small4_over_16d() {
+        let big = 60.0_f64;
+        let small = 40.0_f64;
+        let shaft = Shaft::hollow(big, small).unwrap();
+        let expected = PI * (big.powi(4) - small.powi(4)) / (16.0 * big);
+        assert!((shaft.polar_section_modulus() - expected).abs() < EPS * expected);
+    }
+
+    #[test]
+    fn section_modulus_is_polar_moment_over_outer_radius() {
+        // The defining relation Z_p = J / r_outer, for both section kinds.
+        for shaft in [
+            Shaft::solid(33.0).unwrap(),
+            Shaft::hollow(50.0, 30.0).unwrap(),
+        ] {
+            let expected = shaft.polar_moment() / shaft.outer_radius();
+            assert!((shaft.polar_section_modulus() - expected).abs() < EPS * expected);
+        }
+    }
+
+    #[test]
+    fn doubling_solid_diameter_multiplies_section_modulus_by_eight() {
+        // Z_p scales as d^3, so 2x diameter gives 2^3 = 8x Z_p.
+        let base = Shaft::solid(10.0).unwrap();
+        let doubled = Shaft::solid(20.0).unwrap();
+        let ratio = doubled.polar_section_modulus() / base.polar_section_modulus();
+        assert!((ratio - 8.0).abs() < EPS);
     }
 
     #[test]

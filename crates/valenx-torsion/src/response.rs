@@ -78,6 +78,29 @@ pub fn max_shear_stress(shaft: &Shaft, torque: f64) -> Result<f64, TorsionError>
     Ok(torque * shaft.outer_radius() / shaft.polar_moment())
 }
 
+/// The largest torque the shaft may carry before the surface shear stress
+/// reaches `allowable_shear_stress`, inverting [`max_shear_stress`]:
+///
+/// ```text
+/// T_allow = tau_allow * J / r_outer = tau_allow * Z_p
+/// ```
+///
+/// This is the design form of the stress relation: choose an allowable
+/// shear stress (a material limit divided by a safety factor) and read off
+/// the torque capacity of the section through its polar section modulus
+/// [`Shaft::polar_section_modulus`]. Feeding the result back through
+/// [`max_shear_stress`] recovers `allowable_shear_stress` exactly.
+///
+/// # Errors
+///
+/// Returns [`TorsionError::NonPositive`] if `allowable_shear_stress` is not
+/// finite and strictly positive.
+pub fn allowable_torque(shaft: &Shaft, allowable_shear_stress: f64) -> Result<f64, TorsionError> {
+    let allowable_shear_stress =
+        require_positive("allowable_shear_stress", allowable_shear_stress)?;
+    Ok(allowable_shear_stress * shaft.polar_section_modulus())
+}
+
 /// Angle of twist `theta = T L / (G J)` over a length `L` of shaft.
 ///
 /// The result is in radians (when inputs are in consistent units). Twist
@@ -250,6 +273,65 @@ mod tests {
         assert!(matches!(
             shear_stress_at(&shaft, 100.0, 26.0),
             Err(TorsionError::RadiusOutOfRange { .. })
+        ));
+    }
+
+    #[test]
+    fn allowable_torque_matches_tau_times_section_modulus() {
+        // T_allow = tau_allow * Z_p, cross-checked against an independent
+        // computation for a 40 mm solid shaft at 60 MPa-equivalent units.
+        let shaft = Shaft::solid(40.0).unwrap();
+        let tau_allow = 60.0;
+        let t = allowable_torque(&shaft, tau_allow).unwrap();
+        let expected = tau_allow * shaft.polar_section_modulus();
+        assert!(close(t, expected), "got {t}, expected {expected}");
+    }
+
+    #[test]
+    fn allowable_torque_inverts_max_shear_stress() {
+        // GOLD round-trip: the surface stress at the allowable torque is
+        // exactly the allowable stress, for both solid and hollow sections.
+        for shaft in [
+            Shaft::solid(28.0).unwrap(),
+            Shaft::hollow(50.0, 30.0).unwrap(),
+        ] {
+            let tau_allow = 85.0;
+            let t = allowable_torque(&shaft, tau_allow).unwrap();
+            let tau_back = max_shear_stress(&shaft, t).unwrap();
+            assert!(close(tau_back, tau_allow), "tau round-trip {tau_back}");
+        }
+    }
+
+    #[test]
+    fn max_shear_stress_equals_torque_over_section_modulus() {
+        // tau_max = T / Z_p, the dual of the allowable-torque relation.
+        let shaft = Shaft::hollow(45.0, 25.0).unwrap();
+        let t = 1_500.0;
+        let got = max_shear_stress(&shaft, t).unwrap();
+        assert!(close(got, t / shaft.polar_section_modulus()), "got {got}");
+    }
+
+    #[test]
+    fn allowable_torque_is_proportional_to_allowable_stress() {
+        let shaft = Shaft::solid(24.0).unwrap();
+        let lo = allowable_torque(&shaft, 50.0).unwrap();
+        let hi = allowable_torque(&shaft, 150.0).unwrap();
+        assert!(close(hi, 3.0 * lo), "{hi} vs {}", 3.0 * lo);
+    }
+
+    #[test]
+    fn allowable_torque_rejects_non_positive_stress() {
+        let shaft = Shaft::solid(10.0).unwrap();
+        assert!(matches!(
+            allowable_torque(&shaft, 0.0),
+            Err(TorsionError::NonPositive {
+                name: "allowable_shear_stress",
+                ..
+            })
+        ));
+        assert!(matches!(
+            allowable_torque(&shaft, f64::NAN),
+            Err(TorsionError::NonPositive { .. })
         ));
     }
 
