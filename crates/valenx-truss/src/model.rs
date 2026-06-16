@@ -191,6 +191,29 @@ pub struct Truss {
     pub members: Vec<Member>,
 }
 
+/// Maxwell static-determinacy classification of a planar pin-jointed
+/// truss, from the counting rule `m + r` versus `2N`.
+///
+/// This refines [`Truss::is_count_determinate`] (which only tests the
+/// determinate case) into the three physically distinct outcomes. It is
+/// a *counting* classification: a [`Determinacy::Determinate`] truss can
+/// still be a geometric mechanism, which the solver catches as
+/// [`crate::TrussError::Singular`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Determinacy {
+    /// `m + r < 2N`: too few members/reactions — an under-constrained
+    /// **mechanism** with one or more rigid-body freedoms, not solvable
+    /// by statics alone.
+    Mechanism,
+    /// `m + r == 2N`: statically **determinate** — the necessary count
+    /// condition the method of joints requires.
+    Determinate,
+    /// `m + r > 2N`: statically **indeterminate** (redundant) — more
+    /// unknowns than joint-equilibrium equations; resolving the forces
+    /// needs member stiffnesses, which this crate does not model.
+    Indeterminate,
+}
+
 impl Truss {
     /// An empty truss.
     #[must_use]
@@ -276,6 +299,30 @@ impl Truss {
     #[must_use]
     pub fn is_count_determinate(&self) -> bool {
         self.unknown_count() == self.equation_count()
+    }
+
+    /// Signed Maxwell determinacy number `(m + r) - 2N`.
+    ///
+    /// Negative means a **mechanism** (deficient: that many rigid-body
+    /// freedoms remain), zero means statically **determinate**, and a
+    /// positive value is the **degree of static indeterminacy** (the
+    /// number of redundant members/reactions). This is the signed refine-
+    /// ment of [`Truss::is_count_determinate`], which only tests for zero.
+    #[must_use]
+    pub fn static_determinacy_number(&self) -> isize {
+        self.unknown_count() as isize - self.equation_count() as isize
+    }
+
+    /// Classify the truss by the Maxwell counting rule into a
+    /// [`Determinacy`] case (mechanism, determinate, or indeterminate),
+    /// the sign of [`Truss::static_determinacy_number`].
+    #[must_use]
+    pub fn determinacy(&self) -> Determinacy {
+        match self.static_determinacy_number().cmp(&0) {
+            std::cmp::Ordering::Less => Determinacy::Mechanism,
+            std::cmp::Ordering::Equal => Determinacy::Determinate,
+            std::cmp::Ordering::Greater => Determinacy::Indeterminate,
+        }
     }
 
     /// Geometry of a member: `(dx, dy, length)` from node `a` to node
@@ -401,5 +448,93 @@ mod tests {
         assert_eq!(t.unknown_count(), 6);
         assert_eq!(t.equation_count(), 6);
         assert!(t.is_count_determinate());
+    }
+
+    #[test]
+    fn determinacy_classifies_a_determinate_truss() {
+        // Canonical triangle: pin + horizontal roller, 3 members.
+        // m + r = 3 + 3 = 6 = 2N. Determinate, number 0.
+        let mut t = Truss::new();
+        t.add_node(Node::new(0.0, 0.0).unwrap().with_support(Support::Pin));
+        t.add_node(
+            Node::new(4.0, 0.0)
+                .unwrap()
+                .with_support(Support::horizontal_roller()),
+        );
+        t.add_node(Node::new(2.0, 3.0).unwrap());
+        t.add_member(Member::new(0, 1)).unwrap();
+        t.add_member(Member::new(1, 2)).unwrap();
+        t.add_member(Member::new(2, 0)).unwrap();
+        assert_eq!(t.static_determinacy_number(), 0);
+        assert_eq!(t.determinacy(), Determinacy::Determinate);
+        assert!(t.is_count_determinate());
+    }
+
+    #[test]
+    fn determinacy_detects_a_mechanism() {
+        // The same triangle but with only a single pin (r = 2):
+        // m + r = 5 < 6. Number -1, an under-constrained mechanism.
+        let mut t = Truss::new();
+        t.add_node(Node::new(0.0, 0.0).unwrap().with_support(Support::Pin));
+        t.add_node(Node::new(4.0, 0.0).unwrap());
+        t.add_node(Node::new(2.0, 3.0).unwrap());
+        t.add_member(Member::new(0, 1)).unwrap();
+        t.add_member(Member::new(1, 2)).unwrap();
+        t.add_member(Member::new(2, 0)).unwrap();
+        assert_eq!(t.static_determinacy_number(), -1);
+        assert_eq!(t.determinacy(), Determinacy::Mechanism);
+        assert!(!t.is_count_determinate());
+    }
+
+    #[test]
+    fn determinacy_detects_an_indeterminate_truss() {
+        // The triangle over-supported with two pins (r = 4):
+        // m + r = 7 > 6. Number +1, one degree of static indeterminacy.
+        let mut t = Truss::new();
+        t.add_node(Node::new(0.0, 0.0).unwrap().with_support(Support::Pin));
+        t.add_node(Node::new(4.0, 0.0).unwrap().with_support(Support::Pin));
+        t.add_node(Node::new(2.0, 3.0).unwrap());
+        t.add_member(Member::new(0, 1)).unwrap();
+        t.add_member(Member::new(1, 2)).unwrap();
+        t.add_member(Member::new(2, 0)).unwrap();
+        assert_eq!(t.static_determinacy_number(), 1);
+        assert_eq!(t.determinacy(), Determinacy::Indeterminate);
+        assert!(!t.is_count_determinate());
+    }
+
+    #[test]
+    fn determinacy_number_is_the_maxwell_count_and_agrees_with_the_boolean() {
+        // Across all three cases the number equals (m + r) - 2N exactly,
+        // and is_count_determinate <=> number == 0 <=> Determinate.
+        let build = |supports: &[Option<Support>; 3]| {
+            let coords = [(0.0, 0.0), (4.0, 0.0), (2.0, 3.0)];
+            let mut t = Truss::new();
+            for (i, &(x, y)) in coords.iter().enumerate() {
+                let mut node = Node::new(x, y).unwrap();
+                if let Some(s) = supports[i] {
+                    node = node.with_support(s);
+                }
+                t.add_node(node);
+            }
+            t.add_member(Member::new(0, 1)).unwrap();
+            t.add_member(Member::new(1, 2)).unwrap();
+            t.add_member(Member::new(2, 0)).unwrap();
+            t
+        };
+        let cases = [
+            [Some(Support::Pin), Some(Support::horizontal_roller()), None],
+            [Some(Support::Pin), None, None],
+            [Some(Support::Pin), Some(Support::Pin), None],
+        ];
+        for supports in &cases {
+            let t = build(supports);
+            let maxwell = t.unknown_count() as isize - t.equation_count() as isize;
+            assert_eq!(t.static_determinacy_number(), maxwell);
+            assert_eq!(t.is_count_determinate(), t.static_determinacy_number() == 0);
+            assert_eq!(
+                t.is_count_determinate(),
+                t.determinacy() == Determinacy::Determinate
+            );
+        }
     }
 }
