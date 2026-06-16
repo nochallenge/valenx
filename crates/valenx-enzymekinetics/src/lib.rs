@@ -8,8 +8,11 @@
 //!
 //! - **Michaelis-Menten** ([`MichaelisMenten`], module
 //!   [`michaelis_menten`]) — the single-substrate rate law
-//!   `v = Vmax * S / (Km + S)`, plus the dimensionless saturation
-//!   `S / (Km + S)`.
+//!   `v = Vmax * S / (Km + S)`, the dimensionless saturation
+//!   `S / (Km + S)`, and the closed-form **integrated** equation
+//!   `Vmax*t = Km*ln(s0/s) + (s0 - s)`
+//!   ([`MichaelisMenten::time_to_deplete`]) for the substrate-depletion
+//!   progress curve.
 //! - **Reversible inhibition** ([`inhibition`]) — [`Competitive`]
 //!   (apparent `Km` scaled by `1 + I/Ki`), [`Noncompetitive`] (apparent
 //!   `Vmax` divided by `1 + I/Ki`), [`Uncompetitive`] (both scaled by
@@ -62,9 +65,12 @@
 //!
 //! Deliberate limitations:
 //!
-//! - **Initial rates only.** Every formula is the steady-state *initial*
-//!   velocity. There is no time integration, no substrate depletion, no
-//!   product accumulation, and no progress-curve fitting.
+//! - **Initial rates, plus the closed-form integrated MM curve.** The
+//!   rate laws are steady-state *initial* velocities; the one progress
+//!   curve provided is the exact analytic integrated Michaelis-Menten
+//!   equation ([`MichaelisMenten::time_to_deplete`]). There is no
+//!   *numerical* time integration, no product accumulation, and no
+//!   progress-curve *fitting*.
 //! - **Idealised mechanism.** Single substrate, irreversible product
 //!   release, free-ligand ≈ total-ligand (the standard `[S], [I] ≫ [E]`
 //!   assumption), and a phenomenological Hill coefficient rather than an
