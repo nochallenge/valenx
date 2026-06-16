@@ -203,3 +203,64 @@ impl ZieglerNichols {
         }
     }
 }
+
+/// Tyreus-Luyben ultimate-gain rules over a validated measurement.
+///
+/// A more conservative alternative to [`ZieglerNichols`] that uses the
+/// *same* closed-loop `(Ku, Tu)` experiment but a different table
+/// (Tyreus & Luyben, 1992):
+///
+/// | Controller | `Kp`        | `Ti`       | `Td`        |
+/// | ---------- | ----------- | ---------- | ----------- |
+/// | PI         | `Ku / 3.2`  | `2.2 Tu`   | `0`         |
+/// | PID        | `Ku / 2.2`  | `2.2 Tu`   | `Tu / 6.3`  |
+///
+/// Compared with Ziegler-Nichols it **lowers the proportional gain and
+/// lengthens the integral time**, trading Z-N's aggressive
+/// quarter-amplitude-decay response for a more robust, less oscillatory
+/// one — the reason it is preferred for the integrating / lag-dominant
+/// loops common in process control. It is defined for the **PI and PID**
+/// structures only; there is no proportional-only Tyreus-Luyben rule, so
+/// (unlike [`ZieglerNichols`]) this type exposes no `p()` accessor.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TyreusLuyben {
+    measurement: UltimateMeasurement,
+}
+
+impl TyreusLuyben {
+    /// Wrap a validated measurement in the Tyreus-Luyben tuner.
+    pub fn new(measurement: UltimateMeasurement) -> Self {
+        Self { measurement }
+    }
+
+    /// The measurement these rules are derived from.
+    pub fn measurement(&self) -> UltimateMeasurement {
+        self.measurement
+    }
+
+    /// PI settings: `Kp = Ku / 3.2`, `Ti = 2.2 Tu`.
+    ///
+    /// `Td` is `0`.
+    pub fn pi(&self) -> Gains {
+        let ku = self.measurement.ultimate_gain();
+        let tu = self.measurement.ultimate_period();
+        Gains {
+            kind: ControllerKind::Pi,
+            kp: ku / 3.2,
+            ti: 2.2 * tu,
+            td: 0.0,
+        }
+    }
+
+    /// PID settings: `Kp = Ku / 2.2`, `Ti = 2.2 Tu`, `Td = Tu / 6.3`.
+    pub fn pid(&self) -> Gains {
+        let ku = self.measurement.ultimate_gain();
+        let tu = self.measurement.ultimate_period();
+        Gains {
+            kind: ControllerKind::Pid,
+            kp: ku / 2.2,
+            ti: 2.2 * tu,
+            td: tu / 6.3,
+        }
+    }
+}
