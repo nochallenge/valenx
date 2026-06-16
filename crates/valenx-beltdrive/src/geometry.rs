@@ -41,6 +41,20 @@
 //! ```text
 //! L = 2*C*cos(alpha) + R_sml*theta_sml + R_lrg*theta_lrg.
 //! ```
+//!
+//! ## Crossed-belt wrap geometry
+//!
+//! A crossed belt figure-eights so the shafts counter-rotate; both pulleys
+//! then wrap by the *same* angle, set by the **sum** of the radii:
+//!
+//! ```text
+//! gamma = asin((R_small + R_large) / C)
+//! theta = pi + 2 * gamma        (on both pulleys)
+//! L     = 2*C*cos(gamma) + (R_small + R_large) * theta
+//! ```
+//!
+//! ([`wrap_angle_crossed`], [`belt_length_crossed`]). A crossed belt is
+//! always a little longer than the open belt of the same geometry.
 
 use crate::error::BeltError;
 use std::f64::consts::PI;
@@ -177,6 +191,69 @@ pub fn belt_length_open(
     let alpha = (PI - theta_small) / 2.0;
     let tangent = 2.0 * center_distance * alpha.cos();
     Ok(tangent + rs * theta_small + rl * theta_large)
+}
+
+/// Angle of wrap on **each** pulley of a **crossed**-belt drive (the belt
+/// figure-eights so the shafts counter-rotate), in radians.
+///
+/// Unlike the open belt, a crossed belt wraps both pulleys by the *same*
+/// angle, which is always greater than `pi`:
+///
+/// ```text
+/// gamma = asin((r_small + r_large) / C)
+/// theta = pi + 2*gamma   (on both pulleys)
+/// ```
+///
+/// Note the wrap is set by the **sum** of the radii (vs the *difference*
+/// for the open belt), so a crossed belt needs `C > r_small + r_large`.
+///
+/// # Errors
+///
+/// Returns [`BeltError::BadParameter`] for non-positive radii or centre
+/// distance, and [`BeltError::DegenerateGeometry`] if
+/// `r_small + r_large >= C` (the belt would have to pass through the
+/// pulleys).
+pub fn wrap_angle_crossed(
+    r_small: f64,
+    r_large: f64,
+    center_distance: f64,
+) -> Result<f64, BeltError> {
+    require_positive("r_small", r_small)?;
+    require_positive("r_large", r_large)?;
+    require_positive("center_distance", center_distance)?;
+
+    let sum = r_small + r_large;
+    if sum >= center_distance {
+        return Err(BeltError::DegenerateGeometry(format!(
+            "centre distance {center_distance} too small for radius sum {sum}"
+        )));
+    }
+    let gamma = (sum / center_distance).asin();
+    Ok(PI + 2.0 * gamma)
+}
+
+/// Total belt length of a **crossed**-belt drive,
+/// `L = 2*C*cos(gamma) + (r_small + r_large) * theta`, with
+/// `theta = pi + 2*gamma` the common wrap angle.
+///
+/// The exact geometric length (two crossing tangents plus the two equal
+/// wrapped arcs). For the same pulleys and centre distance a crossed belt
+/// is always longer than the [open](belt_length_open) one (by `~4 r1 r2 /
+/// C`), which is why reversing rotation costs a little extra belt.
+///
+/// # Errors
+///
+/// Same conditions as [`wrap_angle_crossed`].
+pub fn belt_length_crossed(
+    r_small: f64,
+    r_large: f64,
+    center_distance: f64,
+) -> Result<f64, BeltError> {
+    let theta = wrap_angle_crossed(r_small, r_large, center_distance)?;
+    // gamma recovered from the wrap: theta = pi + 2*gamma.
+    let gamma = (theta - PI) / 2.0;
+    let tangent = 2.0 * center_distance * gamma.cos();
+    Ok(tangent + (r_small + r_large) * theta)
 }
 
 /// Validate that `value` is finite and strictly greater than zero.
@@ -330,5 +407,48 @@ mod tests {
         // The belt must be longer than two straight centre spans.
         let l = belt_length_open(0.05, 0.15, 0.6).unwrap();
         assert!(l > 2.0 * 0.6, "length {l} not above 2*C");
+    }
+
+    #[test]
+    fn crossed_wrap_exceeds_pi_and_matches_closed_form() {
+        // r_small + r_large = 0.3, C = 0.6 -> gamma = asin(0.5) = 30 deg,
+        // theta = pi + 2*(pi/6) = 4*pi/3.
+        let theta = wrap_angle_crossed(0.1, 0.2, 0.6).unwrap();
+        let gamma = (0.5f64).asin();
+        assert!((theta - (PI + 2.0 * gamma)).abs() < EPS, "theta {theta}");
+        assert!(theta > PI, "crossed wrap must exceed pi");
+    }
+
+    #[test]
+    fn crossed_belt_is_longer_than_open_for_same_geometry() {
+        // Reversing rotation (crossed) costs ~4 r1 r2 / C extra belt.
+        let (rs, rl, c) = (0.05, 0.15, 0.6);
+        let open = belt_length_open(rs, rl, c).unwrap();
+        let crossed = belt_length_crossed(rs, rl, c).unwrap();
+        assert!(
+            crossed > open,
+            "crossed {crossed} should exceed open {open}"
+        );
+        // The exact difference matches the textbook ~4 r1 r2 / C to leading
+        // order (loose bound covers the higher-order terms).
+        assert!((crossed - open - 4.0 * rs * rl / c).abs() < 1e-3);
+    }
+
+    #[test]
+    fn crossed_equal_pulleys_length_matches_construction() {
+        // R = 0.05, C = 0.5: gamma = asin(0.2), L = 2C cos(gamma) + 2R*theta.
+        let l = belt_length_crossed(0.05, 0.05, 0.5).unwrap();
+        let gamma = (0.2f64).asin();
+        let expected = 2.0 * 0.5 * gamma.cos() + 0.1 * (PI + 2.0 * gamma);
+        assert!((l - expected).abs() < EPS, "length {l} vs {expected}");
+        assert!(l > 2.0 * 0.5, "crossed belt below 2*C");
+    }
+
+    #[test]
+    fn crossed_rejects_center_distance_below_radius_sum() {
+        // r_small + r_large = 0.2 but C = 0.15 < 0.2 -> degenerate.
+        let err = wrap_angle_crossed(0.05, 0.15, 0.15).unwrap_err();
+        assert_eq!(err.code(), "beltdrive.degenerate_geometry");
+        assert!(belt_length_crossed(0.05, 0.15, 0.15).is_err());
     }
 }

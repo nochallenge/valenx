@@ -14,6 +14,8 @@
 //! - the belt linear speed `v = pi * D * N` ([`geometry::belt_speed`]),
 //! - open-belt wrap angles and exact belt length
 //!   ([`geometry::wrap_angles_open`], [`geometry::belt_length_open`]),
+//!   and the crossed-belt (counter-rotating) geometry
+//!   ([`geometry::wrap_angle_crossed`], [`geometry::belt_length_crossed`]),
 //! - the Euler / capstan tension ratio `T1 / T2 = exp(mu * theta)`
 //!   ([`friction::tension_ratio`]), including the V-belt
 //!   `mu_eff = mu / sin(beta)` amplification
