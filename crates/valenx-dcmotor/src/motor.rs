@@ -195,6 +195,73 @@ impl DcMotor {
             efficiency,
         })
     }
+
+    /// Shaft speed at which the motor delivers its maximum mechanical
+    /// output power: exactly half the no-load speed, `omega = V/(2*Ke)`,
+    /// rad/s.
+    ///
+    /// On the straight torque-speed line the output power `P = T*omega`
+    /// is a downward parabola, so it peaks at the midpoint of the line —
+    /// half the [`no_load_speed`](DcMotor::no_load_speed) and half the
+    /// stall torque.
+    ///
+    /// # Errors
+    ///
+    /// [`DcMotorError::NotFinite`] if `voltage_v` is not finite.
+    pub fn max_power_speed(&self, voltage_v: f64) -> Result<f64, DcMotorError> {
+        DcMotorError::require_finite("voltage_v", voltage_v)?;
+        Ok(voltage_v / (2.0 * self.ke_v_s_per_rad))
+    }
+
+    /// Shaft torque at the maximum-power operating point: half the stall
+    /// torque, `T = Kt*V/(2*R)`, N*m.
+    ///
+    /// # Errors
+    ///
+    /// [`DcMotorError::NotFinite`] if `voltage_v` is not finite.
+    pub fn max_power_torque(&self, voltage_v: f64) -> Result<f64, DcMotorError> {
+        DcMotorError::require_finite("voltage_v", voltage_v)?;
+        Ok(self.kt_nm_per_a * voltage_v / (2.0 * self.resistance_ohm))
+    }
+
+    /// Maximum mechanical output power at terminal voltage `v`, watts.
+    ///
+    /// It occurs at the midpoint of the torque-speed line, where
+    /// `T = T_stall/2` and `omega = omega_nl/2`, giving
+    ///
+    /// `P_max = T_stall * omega_nl / 4 = Kt * V^2 / (4 * R * Ke)`.
+    ///
+    /// For a coherent motor (`Kt == Ke`) this reduces to the
+    /// maximum-power-transfer value `V^2 / (4 R)`, drawn at half the
+    /// stall current with the back-EMF equal to half the terminal
+    /// voltage (so the ideal motor is exactly 50% efficient there).
+    ///
+    /// # Errors
+    ///
+    /// [`DcMotorError::NotFinite`] if `voltage_v` is not finite.
+    pub fn max_output_power(&self, voltage_v: f64) -> Result<f64, DcMotorError> {
+        DcMotorError::require_finite("voltage_v", voltage_v)?;
+        Ok(self.kt_nm_per_a * voltage_v * voltage_v
+            / (4.0 * self.resistance_ohm * self.ke_v_s_per_rad))
+    }
+
+    /// The full steady-state [`OperatingPoint`] at the maximum-power
+    /// speed.
+    ///
+    /// Convenience wrapper that evaluates
+    /// [`operating_point`](DcMotor::operating_point) at
+    /// [`max_power_speed`](DcMotor::max_power_speed); its
+    /// `mechanical_power_w` equals
+    /// [`max_output_power`](DcMotor::max_output_power), and for a
+    /// coherent motor its efficiency is exactly `0.5`.
+    ///
+    /// # Errors
+    ///
+    /// [`DcMotorError::NotFinite`] if `voltage_v` is not finite.
+    pub fn max_power_point(&self, voltage_v: f64) -> Result<OperatingPoint, DcMotorError> {
+        let omega = self.max_power_speed(voltage_v)?;
+        self.operating_point(voltage_v, omega)
+    }
 }
 
 /// A solved steady-state operating point.
@@ -475,5 +542,86 @@ mod tests {
         let json = serde_json::to_string(&m).unwrap();
         let back: DcMotor = serde_json::from_str(&json).unwrap();
         assert_eq!(m, back);
+    }
+
+    #[test]
+    fn max_power_is_quarter_stall_torque_times_no_load_speed() {
+        let m = motor();
+        let v = 12.0;
+        let p_max = m.max_output_power(v).unwrap();
+        let stall_t = m.stall_torque(v).unwrap();
+        let omega_nl = m.no_load_speed(v).unwrap();
+        // P_max = T_stall * omega_nl / 4.
+        assert!(
+            (p_max - stall_t * omega_nl / 4.0).abs() < EPS,
+            "got {p_max}"
+        );
+        // For this motor: 0.3 * 240 / 4 = 18 W.
+        assert!((p_max - 18.0).abs() < 1e-9, "got {p_max}");
+    }
+
+    #[test]
+    fn max_power_equals_v_squared_over_4r_for_coherent_motor() {
+        // Maximum-power-transfer theorem: with Kt == Ke, P_max = V^2/(4R).
+        let m = motor(); // Kt == Ke
+        let v = 12.0;
+        let p_max = m.max_output_power(v).unwrap();
+        assert!(
+            (p_max - v * v / (4.0 * m.resistance_ohm)).abs() < EPS,
+            "got {p_max}"
+        );
+    }
+
+    #[test]
+    fn max_power_occurs_at_line_midpoint() {
+        let m = motor();
+        let v = 12.0;
+        // Speed = half no-load, torque = half stall.
+        let w_mp = m.max_power_speed(v).unwrap();
+        let t_mp = m.max_power_torque(v).unwrap();
+        assert!((w_mp - m.no_load_speed(v).unwrap() / 2.0).abs() < EPS);
+        assert!((t_mp - m.stall_torque(v).unwrap() / 2.0).abs() < EPS);
+        // And the (T, omega) pair lies on the torque-speed line.
+        assert!((m.speed_at_torque(v, t_mp).unwrap() - w_mp).abs() < 1e-9);
+    }
+
+    #[test]
+    fn max_power_point_matches_and_is_half_efficient() {
+        let m = motor(); // coherent
+        let v = 12.0;
+        let op = m.max_power_point(v).unwrap();
+        // Its mechanical power equals max_output_power.
+        assert!((op.mechanical_power_w - m.max_output_power(v).unwrap()).abs() < 1e-9);
+        // Speed and torque are the midpoint values.
+        assert!((op.omega_rad_s - m.max_power_speed(v).unwrap()).abs() < EPS);
+        assert!((op.torque_nm - m.max_power_torque(v).unwrap()).abs() < EPS);
+        // At maximum power transfer the ideal motor is exactly 50% efficient.
+        assert!((op.efficiency - 0.5).abs() < 1e-12, "eff {}", op.efficiency);
+    }
+
+    #[test]
+    fn max_power_is_the_true_maximum_along_the_line() {
+        let m = motor();
+        let v = 12.0;
+        let p_max = m.max_output_power(v).unwrap();
+        let omega_nl = m.no_load_speed(v).unwrap();
+        // No sampled point on the line may exceed the claimed peak power.
+        for k in 0..=100 {
+            let omega = omega_nl * (k as f64 / 100.0);
+            let p = m.operating_point(v, omega).unwrap().mechanical_power_w;
+            assert!(
+                p <= p_max + 1e-9,
+                "p {p} exceeds p_max {p_max} at omega {omega}"
+            );
+        }
+    }
+
+    #[test]
+    fn max_power_methods_reject_non_finite_voltage() {
+        let m = motor();
+        assert!(m.max_power_speed(f64::NAN).is_err());
+        assert!(m.max_power_torque(f64::INFINITY).is_err());
+        assert!(m.max_output_power(f64::NAN).is_err());
+        assert!(m.max_power_point(f64::NAN).is_err());
     }
 }

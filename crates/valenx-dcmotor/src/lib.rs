@@ -10,8 +10,11 @@
 //! armature voltage balance `V = I*R + Ke*omega`, the stall current
 //! `I = V/R` and stall torque `T = Kt*V/R` (`omega = 0`), the ideal
 //! no-load speed `omega = V/Ke` (`T = 0`), the linear torque-speed line
-//! joining the no-load and stall points, and the electrical / mechanical
-//! power split with efficiency `T*omega/(V*I)`.
+//! joining the no-load and stall points, the maximum-power operating
+//! point at the midpoint of that line
+//! (`P_max = Kt*V^2/(4*R*Ke)`, at half the stall torque and half the
+//! no-load speed), and the electrical / mechanical power split with
+//! efficiency `T*omega/(V*I)`.
 //!
 //! The public surface is [`DcMotor`] (the validated parameter set and
 //! all evaluators), [`OperatingPoint`] (a solved point with its power
@@ -28,9 +31,13 @@
 //! `omega = V/Ke - (R / (Kt*Ke)) * T`
 //!
 //! whose intercepts are the no-load speed `V/Ke` and the stall torque
-//! `Kt*V/R`. In coherent SI units `Kt` and `Ke` are numerically equal,
-//! so the back-EMF power `E*I` equals the mechanical power `T*omega` and
-//! the only loss is armature copper loss `I^2 R`. These are the
+//! `Kt*V/R`. Output power `P = T*omega` is therefore a parabola along
+//! that line and peaks at its midpoint, where `P_max = Kt*V^2/(4*R*Ke)`;
+//! for a coherent motor that is the maximum-power-transfer value
+//! `V^2/(4R)` at exactly 50% efficiency. In coherent SI units `Kt` and
+//! `Ke` are numerically equal, so the back-EMF power `E*I` equals the
+//! mechanical power `T*omega` and the only loss is armature copper loss
+//! `I^2 R`. These are the
 //! relations in any introductory electric-machines text (e.g. Fitzgerald
 //! and Kingsley, *Electric Machinery*).
 //!
