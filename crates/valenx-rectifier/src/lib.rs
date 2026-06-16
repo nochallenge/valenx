@@ -13,6 +13,10 @@
 //!   [`rectifier::full_wave_vrms`] = `Vpeak/sqrt(2)`,
 //! - the dimensionless [`rectifier::ripple_factor`]
 //!   `r = sqrt((Vrms/Vdc)^2 - 1)`,
+//! - the [`rectifier::form_factor`] `FF = Vrms/Vdc` and
+//!   [`rectifier::rectification_efficiency`] `eta = (Vdc/Vrms)^2`, the two
+//!   remaining standard figures of merit (tied to the ripple factor by
+//!   `r = sqrt(FF^2 - 1)` and `eta = 1/FF^2`),
 //! - the capacitor-input-filter peak-to-peak ripple
 //!   [`rectifier::capacitor_ripple_pp`] `Vr = I/(f*C)`.
 //!
@@ -24,8 +28,10 @@
 //! The input is the ideal sinusoid `v(t) = Vpeak * sin(omega t)`. Diodes
 //! are ideal switches (zero forward voltage drop, zero reverse leakage,
 //! instantaneous turn-on). Averages and RMS values come from analytic
-//! integration over one mains period; the ripple factor is their exact
-//! algebraic combination. The capacitor-filter formula `Vr = I/(f*C)` is
+//! integration over one mains period; the ripple factor, form factor,
+//! and rectification efficiency are all exact algebraic combinations of
+//! the same `Vrms/Vdc` ratio, linked by `FF = sqrt(1 + r^2)` and
+//! `eta = 1/FF^2`. The capacitor-filter formula `Vr = I/(f*C)` is
 //! the standard linear-discharge approximation: a constant-current load
 //! `I` discharges the reservoir capacitor `C` between conduction pulses
 //! arriving at frequency `f` (the mains frequency for a half-wave
@@ -51,6 +57,7 @@ pub mod rectifier;
 
 pub use error::{ErrorCategory, RectifierError};
 pub use rectifier::{
-    capacitor_ripple_pp, capacitor_ripple_pp_for, full_wave_vdc, full_wave_vrms, half_wave_vdc,
-    half_wave_vrms, ripple_factor, ripple_factor_from, vdc, vrms, Topology,
+    capacitor_ripple_pp, capacitor_ripple_pp_for, form_factor, form_factor_from, full_wave_vdc,
+    full_wave_vrms, half_wave_vdc, half_wave_vrms, rectification_efficiency,
+    rectification_efficiency_from, ripple_factor, ripple_factor_from, vdc, vrms, Topology,
 };

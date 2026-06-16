@@ -186,6 +186,88 @@ pub fn ripple_factor(topology: Topology) -> Result<f64, RectifierError> {
     ripple_factor_from(v_rms, v_dc)
 }
 
+/// Form factor from an RMS / DC pair.
+///
+/// `FF = Vrms / Vdc`.
+///
+/// The form factor measures how far a rectified waveform departs from
+/// pure DC: it is `1` for ideal smooth DC and grows as the output gets
+/// rougher. It is the companion ratio to the [`ripple_factor`], tied to
+/// it exactly by `r = sqrt(FF^2 - 1)` and `FF = sqrt(r^2 + 1)`, and is
+/// independent of `Vpeak` for an ideal rectifier.
+///
+/// # Errors
+///
+/// Returns [`RectifierError`] if either argument is not finite, if `v_dc`
+/// is not strictly positive, or if `v_rms` is negative.
+pub fn form_factor_from(v_rms: f64, v_dc: f64) -> Result<f64, RectifierError> {
+    let v_rms = RectifierError::non_negative("v_rms", v_rms)?;
+    let v_dc = RectifierError::positive("v_dc", v_dc)?;
+    Ok(v_rms / v_dc)
+}
+
+/// Form factor of an ideal rectifier of the given [`Topology`].
+///
+/// Convenience wrapper that computes [`vrms`] and [`vdc`] for a probe
+/// `Vpeak` and feeds them to [`form_factor_from`]. Because the factor is
+/// independent of `Vpeak`, the constant `1.0` is used internally.
+///
+/// The closed-form values are `FF_half = pi/2 ~= 1.571` and
+/// `FF_full = pi/(2*sqrt(2)) ~= 1.111`, so a full-wave output is far
+/// closer to smooth DC than a half-wave one.
+///
+/// # Errors
+///
+/// Returns the [`RectifierError`] type for signature symmetry with the
+/// rest of the module; never fails for the internal probe value.
+pub fn form_factor(topology: Topology) -> Result<f64, RectifierError> {
+    let v_peak = 1.0;
+    let v_rms = vrms(topology, v_peak)?;
+    let v_dc = vdc(topology, v_peak)?;
+    form_factor_from(v_rms, v_dc)
+}
+
+/// Rectification efficiency from an RMS / DC pair.
+///
+/// `eta = (Vdc / Vrms)^2`.
+///
+/// The ratio of the DC output power `Vdc^2 / R` to the total power
+/// `Vrms^2 / R` delivered to a resistive load — the fraction of the load
+/// power that is useful DC. It is the reciprocal of the squared form
+/// factor (`eta = 1 / FF^2 = 1 / (1 + r^2)`), independent of `Vpeak`, and
+/// lies in `(0, 1]`.
+///
+/// # Errors
+///
+/// Returns [`RectifierError`] if either argument is not finite, if
+/// `v_rms` is not strictly positive, or if `v_dc` is negative.
+pub fn rectification_efficiency_from(v_rms: f64, v_dc: f64) -> Result<f64, RectifierError> {
+    let v_rms = RectifierError::positive("v_rms", v_rms)?;
+    let v_dc = RectifierError::non_negative("v_dc", v_dc)?;
+    let ratio = v_dc / v_rms;
+    Ok(ratio * ratio)
+}
+
+/// Rectification efficiency of an ideal rectifier of the given
+/// [`Topology`].
+///
+/// Convenience wrapper feeding [`vrms`] and [`vdc`] for a probe `Vpeak`
+/// to [`rectification_efficiency_from`]. The famous closed-form values
+/// are `eta_half = 4/pi^2 ~= 0.406` (40.6%) and
+/// `eta_full = 8/pi^2 ~= 0.811` (81.1%): a full-wave rectifier delivers
+/// twice the useful DC-power fraction of a half-wave one.
+///
+/// # Errors
+///
+/// Returns the [`RectifierError`] type for signature symmetry; never
+/// fails for the internal probe value.
+pub fn rectification_efficiency(topology: Topology) -> Result<f64, RectifierError> {
+    let v_peak = 1.0;
+    let v_rms = vrms(topology, v_peak)?;
+    let v_dc = vdc(topology, v_peak)?;
+    rectification_efficiency_from(v_rms, v_dc)
+}
+
 /// Peak-to-peak ripple voltage of a capacitor-input filter.
 ///
 /// `Vr = I / (f * C)`.
@@ -362,6 +444,108 @@ mod tests {
         // of returning NaN from a negative radicand.
         let r = ripple_factor_from(1.0, 2.0).expect("valid inputs");
         assert!(r.abs() < EPS, "got {r}");
+    }
+
+    // ---- Form factor and rectification efficiency -----------------------
+
+    #[test]
+    fn form_factor_half_wave_is_pi_over_two() {
+        let ff = form_factor(Topology::HalfWave).expect("valid");
+        // Closed form FF_half = pi/2 ~= 1.5708 (the standard value).
+        assert!((ff - PI / 2.0).abs() < EPS, "got {ff}");
+        assert!((ff - std::f64::consts::FRAC_PI_2).abs() < EPS, "got {ff}");
+    }
+
+    #[test]
+    fn form_factor_full_wave_is_pi_over_two_root_two() {
+        let ff = form_factor(Topology::FullWave).expect("valid");
+        let expected = PI / (2.0 * std::f64::consts::SQRT_2);
+        assert!((ff - expected).abs() < EPS, "got {ff}");
+        assert!((ff - 1.110_720_734_539_591).abs() < 1e-9, "got {ff}");
+    }
+
+    #[test]
+    fn rectification_efficiency_half_wave_is_about_40_percent() {
+        let eta = rectification_efficiency(Topology::HalfWave).expect("valid");
+        assert!((eta - 4.0 / (PI * PI)).abs() < EPS, "got {eta}");
+        // Standard textbook value ~0.406 (40.6%).
+        assert!((eta - 0.405_284_734_569_351).abs() < 1e-9, "got {eta}");
+    }
+
+    #[test]
+    fn rectification_efficiency_full_wave_is_about_81_percent() {
+        let eta = rectification_efficiency(Topology::FullWave).expect("valid");
+        assert!((eta - 8.0 / (PI * PI)).abs() < EPS, "got {eta}");
+        // Standard textbook value ~0.811 (81.1%), exactly twice the
+        // half-wave figure.
+        assert!((eta - 0.810_569_469_138_702).abs() < 1e-9, "got {eta}");
+    }
+
+    #[test]
+    fn form_factor_and_ripple_factor_satisfy_the_identity() {
+        // r = sqrt(FF^2 - 1), i.e. FF = sqrt(r^2 + 1), for both topologies.
+        for t in [Topology::HalfWave, Topology::FullWave] {
+            let ff = form_factor(t).unwrap();
+            let r = ripple_factor(t).unwrap();
+            assert!((r - (ff * ff - 1.0).sqrt()).abs() < EPS, "{t:?}: r vs FF");
+            assert!(((r * r + 1.0).sqrt() - ff).abs() < EPS, "{t:?}: FF vs r");
+        }
+    }
+
+    #[test]
+    fn efficiency_is_reciprocal_of_squared_form_factor() {
+        // eta = 1 / FF^2 = 1 / (1 + r^2).
+        for t in [Topology::HalfWave, Topology::FullWave] {
+            let eta = rectification_efficiency(t).unwrap();
+            let ff = form_factor(t).unwrap();
+            let r = ripple_factor(t).unwrap();
+            assert!((eta - 1.0 / (ff * ff)).abs() < EPS, "{t:?}: eta vs 1/FF^2");
+            assert!(
+                (eta - 1.0 / (1.0 + r * r)).abs() < EPS,
+                "{t:?}: eta vs 1/(1+r^2)"
+            );
+        }
+    }
+
+    #[test]
+    fn full_wave_is_smoother_and_more_efficient_than_half_wave() {
+        // Lower form factor (closer to 1) and higher efficiency.
+        assert!(
+            form_factor(Topology::FullWave).unwrap() < form_factor(Topology::HalfWave).unwrap()
+        );
+        assert!(
+            rectification_efficiency(Topology::FullWave).unwrap()
+                > rectification_efficiency(Topology::HalfWave).unwrap()
+        );
+    }
+
+    #[test]
+    fn efficiency_lies_in_zero_to_one() {
+        for t in [Topology::HalfWave, Topology::FullWave] {
+            let eta = rectification_efficiency(t).unwrap();
+            assert!(eta > 0.0 && eta <= 1.0, "{t:?}: eta = {eta}");
+        }
+    }
+
+    #[test]
+    fn form_factor_is_independent_of_peak() {
+        let small =
+            form_factor_from(half_wave_vrms(1.0).unwrap(), half_wave_vdc(1.0).unwrap()).unwrap();
+        let big = form_factor_from(
+            half_wave_vrms(1.0e6).unwrap(),
+            half_wave_vdc(1.0e6).unwrap(),
+        )
+        .unwrap();
+        assert!((small - big).abs() < EPS, "small={small} big={big}");
+    }
+
+    #[test]
+    fn form_factor_and_efficiency_reject_bad_inputs() {
+        assert!(form_factor_from(1.0, 0.0).is_err()); // zero dc (denominator)
+        assert!(form_factor_from(-1.0, 1.0).is_err()); // negative rms
+        assert!(rectification_efficiency_from(0.0, 1.0).is_err()); // zero rms (denominator)
+        assert!(rectification_efficiency_from(1.0, -1.0).is_err()); // negative dc
+        assert!(rectification_efficiency_from(f64::NAN, 1.0).is_err()); // non-finite
     }
 
     // ---- Capacitor-filter ripple ----------------------------------------
