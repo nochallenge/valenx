@@ -16,7 +16,9 @@
 //!   the derived quantities `Cr`, `NTU`, `qmax`, the closed-form
 //!   [`ntu::effectiveness`], the duty [`ntu::duty`] = `eps * qmax`, and
 //!   a one-call [`ntu::solve`] that also returns the implied outlet
-//!   temperatures from each stream's energy balance.
+//!   temperatures from each stream's energy balance. The inverse
+//!   *sizing* direction is [`ntu::ntu_from_effectiveness`]: the `NTU`
+//!   (hence `UA = NTU * Cmin`) needed to reach a target effectiveness.
 //!
 //! ## Model
 //!
@@ -47,6 +49,13 @@
 //!               eps = NTU / (1 + NTU),                                 Cr = 1
 //! parallel:     eps = (1 - exp(-NTU (1 + Cr))) / (1 + Cr)
 //! ```
+//!
+//! These invert in closed form for sizing — given a target `eps`, the
+//! required `NTU` is `ln((1 - eps Cr)/(1 - eps))/(1 - Cr)` (counterflow,
+//! `Cr < 1`), `eps/(1 - eps)` (counterflow, `Cr = 1`), or
+//! `-ln(1 - eps (1 + Cr))/(1 + Cr)` (parallel), defined only below each
+//! arrangement's limiting effectiveness (`1` counterflow,
+//! `1/(1 + Cr)` parallel).
 //!
 //! Both reduce to `eps = 1 - exp(-NTU)` at `Cr = 0` (a phase-changing
 //! stream, `Cmax -> inf`). For identical terminal temperatures the

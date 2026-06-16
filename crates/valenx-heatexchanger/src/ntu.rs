@@ -201,6 +201,74 @@ fn parallel_effectiveness(ntu: f64, cr: f64) -> f64 {
     (1.0 - (-ntu * (1.0 + cr)).exp()) / (1.0 + cr)
 }
 
+/// The `NTU` required to reach a target effectiveness `eps` at capacity
+/// ratio `cr` and flow arrangement — the exact inverse of
+/// [`effectiveness_from_ntu`], i.e. the *sizing* direction of the
+/// effectiveness-NTU method (the required conductance is then
+/// `UA = NTU * Cmin`).
+///
+/// The closed-form inversions (Incropera, Table 11.5) are
+///
+/// ```text
+/// counterflow, Cr < 1:  NTU = ln((1 - eps Cr) / (1 - eps)) / (1 - Cr)
+/// counterflow, Cr = 1:  NTU = eps / (1 - eps)
+/// parallel:             NTU = -ln(1 - eps (1 + Cr)) / (1 + Cr)
+/// ```
+///
+/// (the counterflow `Cr < 1` form already covers `Cr = 0`, giving the
+/// shared `NTU = -ln(1 - eps)`). A finite `NTU` only exists below the
+/// arrangement's limiting effectiveness — `1` for counterflow and
+/// `1 / (1 + Cr)` for parallel flow — so a target at or above that limit
+/// is rejected rather than returning an infinity.
+///
+/// # Errors
+///
+/// Returns [`HeatExchangerError::BadParameter`] if `eps` is negative or
+/// non-finite, if `cr` is outside `[0, 1]`, or if `eps` is at or above
+/// the maximum effectiveness the arrangement can reach as `NTU -> inf`.
+pub fn ntu_from_effectiveness(
+    eps: f64,
+    cr: f64,
+    arrangement: FlowArrangement,
+) -> Result<f64, HeatExchangerError> {
+    if !(eps.is_finite() && eps >= 0.0) {
+        return Err(HeatExchangerError::BadParameter {
+            name: "eps",
+            reason: format!("effectiveness must be finite and >= 0, got {eps}"),
+        });
+    }
+    if !(cr.is_finite() && (0.0..=1.0).contains(&cr)) {
+        return Err(HeatExchangerError::BadParameter {
+            name: "cr",
+            reason: format!("capacity ratio must be in [0, 1], got {cr}"),
+        });
+    }
+    let eps_max = match arrangement {
+        FlowArrangement::Counterflow => 1.0,
+        FlowArrangement::ParallelFlow => 1.0 / (1.0 + cr),
+    };
+    if eps >= eps_max {
+        return Err(HeatExchangerError::BadParameter {
+            name: "eps",
+            reason: format!(
+                "effectiveness {eps} is unreachable for {arrangement:?} at Cr = {cr}; \
+                 the limit as NTU -> inf is {eps_max}"
+            ),
+        });
+    }
+    let ntu = match arrangement {
+        FlowArrangement::Counterflow => {
+            if (1.0 - cr).abs() <= 1e-12 {
+                eps / (1.0 - eps)
+            } else {
+                ((1.0 - eps * cr) / (1.0 - eps)).ln() / (1.0 - cr)
+            }
+        }
+        FlowArrangement::ParallelFlow => -(1.0 - eps * (1.0 + cr)).ln() / (1.0 + cr),
+    };
+    Ok(ntu)
+}
+
 /// Effectiveness for a validated [`NtuProblem`].
 ///
 /// # Errors
@@ -512,5 +580,102 @@ mod tests {
                 assert!(eps.abs() < 1e-12, "eps={eps} at cr={cr}, {arr:?}");
             }
         }
+    }
+
+    #[test]
+    fn ntu_from_effectiveness_inverts_effectiveness_from_ntu() {
+        // GOLD identity: forward then inverse recovers NTU exactly, swept
+        // over both arrangements, a range of NTU, and Cr including the
+        // 0 and 1 limits.
+        for arr in [FlowArrangement::Counterflow, FlowArrangement::ParallelFlow] {
+            for &cr in &[0.0, 0.3, 0.6, 1.0] {
+                for &ntu in &[0.25, 0.5, 1.0, 2.0, 4.0, 7.0] {
+                    let eps = effectiveness_from_ntu(ntu, cr, arr).unwrap();
+                    let back = ntu_from_effectiveness(eps, cr, arr).unwrap();
+                    assert!(
+                        (back - ntu).abs() < 1e-9 * ntu.max(1.0),
+                        "round-trip NTU {back} vs {ntu} at cr={cr}, {arr:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ntu_from_effectiveness_matches_closed_forms() {
+        // Counterflow NTU = 1.5, Cr = 0.5 -> eps = 0.690783..., inverts
+        // back to 1.5.
+        let arr = FlowArrangement::Counterflow;
+        let eps = effectiveness_from_ntu(1.5, 0.5, arr).unwrap();
+        assert!((ntu_from_effectiveness(eps, 0.5, arr).unwrap() - 1.5).abs() < 1e-9);
+
+        // Parallel NTU = 1.5, Cr = 0.5 -> eps = 0.596400..., inverts to 1.5.
+        let arr = FlowArrangement::ParallelFlow;
+        let epsp = effectiveness_from_ntu(1.5, 0.5, arr).unwrap();
+        assert!((ntu_from_effectiveness(epsp, 0.5, arr).unwrap() - 1.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn cr_zero_inverse_is_minus_ln_one_minus_eps() {
+        // At Cr = 0 both arrangements invert to NTU = -ln(1 - eps).
+        for arr in [FlowArrangement::Counterflow, FlowArrangement::ParallelFlow] {
+            for &eps in &[0.1, 0.5, 0.9, 0.99] {
+                let ntu = ntu_from_effectiveness(eps, 0.0, arr).unwrap();
+                let expected = -(1.0 - eps).ln();
+                assert!(
+                    (ntu - expected).abs() < 1e-12,
+                    "ntu={ntu} at eps={eps}, {arr:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn counterflow_cr_one_inverse_is_eps_over_one_minus_eps() {
+        // Cr = 1 counterflow: eps = NTU/(1+NTU) inverts to NTU = eps/(1-eps).
+        let arr = FlowArrangement::Counterflow;
+        let ntu = ntu_from_effectiveness(0.8, 1.0, arr).unwrap();
+        assert!((ntu - 4.0).abs() < 1e-12, "ntu={ntu}"); // 0.8 / 0.2
+    }
+
+    #[test]
+    fn zero_effectiveness_needs_zero_ntu() {
+        for arr in [FlowArrangement::Counterflow, FlowArrangement::ParallelFlow] {
+            for &cr in &[0.0, 0.5, 1.0] {
+                let ntu = ntu_from_effectiveness(0.0, cr, arr).unwrap();
+                assert!(ntu.abs() < 1e-12, "ntu={ntu} at cr={cr}, {arr:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn inverse_matches_a_solved_problem() {
+        // Solve a real problem for its effectiveness, then confirm the
+        // inverse recovers the problem's own NTU.
+        for arr in [FlowArrangement::Counterflow, FlowArrangement::ParallelFlow] {
+            let p = NtuProblem::new(2000.0, 1000.0, 1500.0, 100.0, 20.0).unwrap();
+            let r = solve(&p, arr).unwrap();
+            let ntu = ntu_from_effectiveness(r.effectiveness, p.capacity_ratio(), arr).unwrap();
+            assert!((ntu - p.ntu()).abs() < 1e-9, "ntu={ntu} vs {}", p.ntu());
+        }
+    }
+
+    #[test]
+    fn inverse_rejects_unreachable_effectiveness() {
+        // Parallel limit is 1/(1+Cr): at Cr = 0.5 that is 0.6667, so 0.8
+        // is unreachable.
+        assert!(ntu_from_effectiveness(0.8, 0.5, FlowArrangement::ParallelFlow).is_err());
+        // Counterflow can approach 1 but never reach it.
+        assert!(ntu_from_effectiveness(1.0, 0.5, FlowArrangement::Counterflow).is_err());
+        // Just below the parallel limit is fine.
+        assert!(ntu_from_effectiveness(0.66, 0.5, FlowArrangement::ParallelFlow).is_ok());
+    }
+
+    #[test]
+    fn inverse_rejects_bad_domain() {
+        assert!(ntu_from_effectiveness(-0.1, 0.5, FlowArrangement::Counterflow).is_err());
+        assert!(ntu_from_effectiveness(f64::NAN, 0.5, FlowArrangement::Counterflow).is_err());
+        assert!(ntu_from_effectiveness(0.5, 1.5, FlowArrangement::Counterflow).is_err());
+        assert!(ntu_from_effectiveness(0.5, -0.1, FlowArrangement::ParallelFlow).is_err());
     }
 }
