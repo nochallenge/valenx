@@ -24,6 +24,11 @@
 //!   `f = (c/2)*sqrt((nx/Lx)^2+(ny/Ly)^2+(nz/Lz)^2)`, classifies each
 //!   mode as axial / tangential / oblique, and enumerates the low-end
 //!   modal stack.
+//! - **Reverberation time** ([`reverberation`]) — the statistical
+//!   diffuse-field `RT60`: [`reverberation::sabine_reverberation_time`]
+//!   (`24 ln10 * V / (c*A)`, the textbook `~0.161 V/A`),
+//!   [`reverberation::eyring_reverberation_time`] for absorptive rooms,
+//!   and the [`reverberation::total_absorption`] helper `A = sum S_i a_i`.
 //!
 //! ## Model
 //!
@@ -75,6 +80,7 @@
 
 pub mod doppler;
 pub mod error;
+pub mod reverberation;
 pub mod room;
 pub mod spl;
 
@@ -90,6 +96,8 @@ pub use spl::{
 pub use doppler::{doppler_shift, speed_of_sound, C0};
 
 pub use room::{ModeKind, RoomDimensions, RoomMode};
+
+pub use reverberation::{eyring_reverberation_time, sabine_reverberation_time, total_absorption};
 
 #[cfg(test)]
 mod tests {
