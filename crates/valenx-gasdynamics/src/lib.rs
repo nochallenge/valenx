@@ -66,12 +66,14 @@
 #![warn(missing_docs)]
 
 pub mod error;
+pub mod fanno;
 pub mod isentropic;
 pub mod normal_shock;
 pub mod oblique_shock;
 pub mod prandtl_meyer;
 
 pub use error::{ErrorCategory, GasError, Result};
+pub use fanno::{fanno_state, FannoState};
 pub use isentropic::{
     area_mach_ratio, density_ratio, pressure_ratio, stagnation_ratios, temperature_ratio,
     StagnationRatios,
