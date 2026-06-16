@@ -88,6 +88,44 @@ impl MichaelisMenten {
         let s = require_non_negative("s", s)?;
         Ok(s / (self.km + s))
     }
+
+    /// Time for the substrate to fall from an initial level `s0` to a lower
+    /// level `s`, from the closed-form **integrated Michaelis-Menten
+    /// equation**:
+    ///
+    /// ```text
+    /// Vmax * t = Km * ln(s0 / s) + (s0 - s)
+    /// ```
+    ///
+    /// the exact analytic integral of the depletion ODE `dS/dt = -v(S)`. In
+    /// the first-order limit `Km >> S` it reduces to
+    /// `t ≈ (Km/Vmax)*ln(s0/s)` (exponential decay); in the zero-order limit
+    /// `Km << S` to `t ≈ (s0 - s)/Vmax` (constant-rate turnover at `Vmax`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`KineticsError`](crate::KineticsError) if `s0` or `s` is not
+    /// finite and strictly positive, if `s > s0` (the substrate cannot rise
+    /// during depletion), or if `Vmax = 0` (a dead enzyme never turns over).
+    pub fn time_to_deplete(&self, s0: f64, s: f64) -> Result<f64> {
+        let s0 = require_positive("s0", s0)?;
+        let s = require_positive("s", s)?;
+        if s > s0 {
+            return Err(crate::error::KineticsError::out_of_domain(
+                "s",
+                s,
+                "must not exceed the initial concentration s0",
+            ));
+        }
+        if self.vmax <= 0.0 {
+            return Err(crate::error::KineticsError::out_of_domain(
+                "vmax",
+                self.vmax,
+                "must be > 0 for substrate depletion to occur",
+            ));
+        }
+        Ok((self.km * (s0 / s).ln() + (s0 - s)) / self.vmax)
+    }
 }
 
 #[cfg(test)]
@@ -195,5 +233,62 @@ mod tests {
         let json = serde_json::to_string(&mm).expect("serialize");
         let back: MichaelisMenten = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(mm, back);
+    }
+
+    /// Integrated MM: no elapsed time when the substrate has not moved, and a
+    /// specific worked value. Vmax=2, Km=1, s0=10, s=5:
+    /// t = (1*ln2 + 5)/2 = (0.693147 + 5)/2 = 2.846574.
+    #[test]
+    fn integrated_equation_zero_and_known_value() {
+        let mm = MichaelisMenten::new(2.0, 1.0).expect("valid");
+        assert!(mm.time_to_deplete(10.0, 10.0).expect("valid").abs() < EPS);
+        let t = mm.time_to_deplete(10.0, 5.0).expect("valid");
+        let want = (1.0 * 2.0_f64.ln() + 5.0) / 2.0;
+        assert!((t - want).abs() < EPS, "t = {t}, want {want}");
+    }
+
+    /// First-order limit (Km >> S): t -> (Km/Vmax)*ln(s0/s).
+    #[test]
+    fn integrated_equation_first_order_limit() {
+        let mm = MichaelisMenten::new(2.0, 1.0e6).expect("valid");
+        let t = mm.time_to_deplete(10.0, 5.0).expect("valid");
+        let approx = (1.0e6 / 2.0) * 2.0_f64.ln();
+        assert!((t - approx).abs() / approx < 1e-4, "t {t} vs {approx}");
+    }
+
+    /// Zero-order limit (Km << S): t -> (s0 - s)/Vmax.
+    #[test]
+    fn integrated_equation_zero_order_limit() {
+        let mm = MichaelisMenten::new(2.0, 1.0e-6).expect("valid");
+        let t = mm.time_to_deplete(10.0, 5.0).expect("valid");
+        let approx = (10.0 - 5.0) / 2.0;
+        assert!((t - approx).abs() / approx < 1e-4, "t {t} vs {approx}");
+    }
+
+    /// The initial depletion slope matches the Michaelis-Menten initial rate:
+    /// for a tiny depletion delta, t ≈ delta / v(s0).
+    #[test]
+    fn integrated_equation_initial_slope_is_the_initial_rate() {
+        let mm = MichaelisMenten::new(2.0, 1.0).expect("valid");
+        let s0 = 10.0;
+        let delta = 1.0e-3;
+        let t = mm.time_to_deplete(s0, s0 - delta).expect("valid");
+        let v0 = mm.velocity(s0).expect("valid"); // 2*10/11 = 1.81818
+        let expected = delta / v0;
+        assert!(
+            (t - expected).abs() / expected < 1e-3,
+            "t {t} vs {expected}"
+        );
+    }
+
+    #[test]
+    fn integrated_equation_rejects_bad_inputs() {
+        let mm = MichaelisMenten::new(2.0, 1.0).expect("valid");
+        assert!(mm.time_to_deplete(10.0, 20.0).is_err()); // s > s0
+        assert!(mm.time_to_deplete(0.0, 1.0).is_err()); // s0 <= 0
+        assert!(mm.time_to_deplete(10.0, 0.0).is_err()); // s <= 0
+                                                         // A dead enzyme (Vmax = 0) never depletes its substrate.
+        let dead = MichaelisMenten::new(0.0, 1.0).expect("valid");
+        assert!(dead.time_to_deplete(10.0, 5.0).is_err());
     }
 }
