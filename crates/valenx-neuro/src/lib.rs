@@ -44,6 +44,7 @@ pub mod morris_lecar;
 pub mod myelinated;
 pub mod nernst;
 pub mod plasticity;
+pub mod qif;
 pub mod recording;
 pub mod safety;
 pub mod steering;
@@ -104,6 +105,7 @@ pub use nernst::{
     thermal_voltage_mv, ussing_flux_ratio, BODY_TEMPERATURE_K,
 };
 pub use plasticity::{StdpRule, TsodyksMarkram};
+pub use qif::{qif_firing_rate, qif_fixed_points, qif_spike_times, QifNeuron, QifParams};
 pub use recording::{ExtracellularRecorder, Recording};
 pub use safety::{
     charge_density, charge_per_phase_uc, is_safe, max_safe_charge_density,
