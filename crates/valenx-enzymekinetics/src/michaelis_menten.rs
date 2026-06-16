@@ -89,6 +89,35 @@ impl MichaelisMenten {
         Ok(s / (self.km + s))
     }
 
+    /// The substrate concentration needed to reach a target velocity `v`,
+    /// inverting the rate law: `S = Km * v / (Vmax - v)`.
+    ///
+    /// This is the design direction of Michaelis-Menten — "what `[S]`
+    /// gives this velocity?". A finite answer only exists for
+    /// `0 <= v < Vmax`, since `Vmax` is approached only as `S -> ∞`; a
+    /// target at or above `Vmax` is rejected rather than returning an
+    /// infinity. By construction `substrate_for_velocity(Vmax/2) == Km`
+    /// and feeding the result back through [`velocity`](Self::velocity)
+    /// recovers `v`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`KineticsError`](crate::KineticsError) if `v` is negative
+    /// or non-finite, or if `v >= Vmax` (unreachable at any finite
+    /// substrate; this also rejects every `v` for a dead `Vmax = 0`
+    /// enzyme).
+    pub fn substrate_for_velocity(&self, v: f64) -> Result<f64> {
+        let v = require_non_negative("v", v)?;
+        if v >= self.vmax {
+            return Err(crate::error::KineticsError::out_of_domain(
+                "v",
+                v,
+                "velocity must be below Vmax; Vmax is only approached as S -> infinity",
+            ));
+        }
+        Ok(self.km * v / (self.vmax - v))
+    }
+
     /// Time for the substrate to fall from an initial level `s0` to a lower
     /// level `s`, from the closed-form **integrated Michaelis-Menten
     /// equation**:
@@ -290,5 +319,62 @@ mod tests {
                                                          // A dead enzyme (Vmax = 0) never depletes its substrate.
         let dead = MichaelisMenten::new(0.0, 1.0).expect("valid");
         assert!(dead.time_to_deplete(10.0, 5.0).is_err());
+    }
+
+    /// substrate_for_velocity inverts velocity exactly (the GOLD
+    /// round-trip), across a sweep of target velocities below Vmax.
+    #[test]
+    fn substrate_for_velocity_inverts_velocity() {
+        let mm = MichaelisMenten::new(7.3, 0.45).expect("valid");
+        for frac in [0.0, 0.1, 0.25, 0.5, 0.8, 0.99] {
+            let v_target = frac * 7.3;
+            let s = mm.substrate_for_velocity(v_target).expect("v < Vmax");
+            let v_back = mm.velocity(s).expect("valid s");
+            assert!(
+                (v_back - v_target).abs() < 1e-9 * 7.3_f64.max(1.0),
+                "round-trip v {v_back} vs {v_target} at frac={frac}"
+            );
+        }
+    }
+
+    /// The defining property in inverse form: half Vmax needs exactly Km.
+    #[test]
+    fn half_vmax_needs_km_substrate() {
+        let mm = MichaelisMenten::new(7.3, 0.45).expect("valid");
+        let s = mm.substrate_for_velocity(7.3 / 2.0).expect("valid");
+        assert!((s - 0.45).abs() < EPS, "S(Vmax/2) = {s}, want Km = 0.45");
+        // Zero velocity needs zero substrate.
+        assert!(mm.substrate_for_velocity(0.0).expect("valid").abs() < EPS);
+    }
+
+    /// Closed-form value and monotonic increase in the target velocity.
+    #[test]
+    fn substrate_for_velocity_closed_form_and_monotonic() {
+        // Vmax=2, Km=1, v=1.5 -> S = 1*1.5/(2-1.5) = 3 (inverts known_value).
+        let mm = MichaelisMenten::new(2.0, 1.0).expect("valid");
+        let s = mm.substrate_for_velocity(1.5).expect("valid");
+        assert!((s - 3.0).abs() < EPS, "S = {s}");
+        let mut prev = -1.0;
+        for k in 0..20 {
+            let v = (k as f64) * 0.09 + 0.001; // up to ~1.71 < Vmax = 2
+            let cur = mm.substrate_for_velocity(v).expect("valid");
+            assert!(
+                cur > prev,
+                "S not increasing with v at v={v}: {cur} <= {prev}"
+            );
+            prev = cur;
+        }
+    }
+
+    #[test]
+    fn substrate_for_velocity_rejects_unreachable_and_bad() {
+        let mm = MichaelisMenten::new(2.0, 1.0).expect("valid");
+        assert!(mm.substrate_for_velocity(2.0).is_err()); // v == Vmax
+        assert!(mm.substrate_for_velocity(2.5).is_err()); // v > Vmax
+        assert!(mm.substrate_for_velocity(-0.1).is_err());
+        assert!(mm.substrate_for_velocity(f64::NAN).is_err());
+        // Dead enzyme: no velocity is reachable.
+        let dead = MichaelisMenten::new(0.0, 1.0).expect("valid");
+        assert!(dead.substrate_for_velocity(0.0).is_err());
     }
 }
