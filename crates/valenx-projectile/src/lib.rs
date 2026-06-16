@@ -124,6 +124,27 @@ mod tests {
         let traj = shot.integrate(1e-3, 5_000_000).unwrap();
         let tj = serde_json::to_string(&traj).unwrap();
         let traj_back: Trajectory = serde_json::from_str(&tj).unwrap();
-        assert_eq!(traj, traj_back);
+        // serde_json's default float parser is not guaranteed bit-exact
+        // (the `float_roundtrip` feature is off), so a numerically
+        // integrated field can come back off by ~1 ULP — platform
+        // dependent. Compare the float fields within a tight tolerance
+        // rather than asserting bit-identical equality; the step count,
+        // being integral, must match exactly.
+        let tol = 1e-9;
+        let close = |a: f64, b: f64| (a - b).abs() <= tol * a.abs().max(1.0);
+        assert!(close(traj.range, traj_back.range), "range round-trip");
+        assert!(
+            close(traj.time_of_flight, traj_back.time_of_flight),
+            "time_of_flight round-trip"
+        );
+        assert!(
+            close(traj.apex_height, traj_back.apex_height),
+            "apex_height round-trip"
+        );
+        assert!(
+            close(traj.apex_time, traj_back.apex_time),
+            "apex_time round-trip"
+        );
+        assert_eq!(traj.steps, traj_back.steps, "step count round-trip");
     }
 }
