@@ -17,7 +17,10 @@
 //!   spans infant mortality (`beta < 1`), constant hazard (`beta = 1`,
 //!   which reduces exactly to the exponential), and wear-out
 //!   (`beta > 1`); the mean life `eta * Gamma(1 + 1 / beta)` is
-//!   evaluated through a Lanczos [`gamma`] approximation.
+//!   evaluated through a Lanczos [`gamma`] approximation. Its
+//!   [`conditional_reliability`](Weibull::conditional_reliability) gives
+//!   the mission reliability of an already-aged part — non-memoryless for
+//!   `beta != 1`.
 //! - [`system`] — reliability block diagrams: a [`system::series`]
 //!   chain `prod(R_i)`, a [`system::parallel`] (active-redundant) block
 //!   `1 - prod(1 - R_i)`, and the general [`system::k_out_of_n`]
@@ -51,7 +54,8 @@
 //! - Weibull: `R = exp(-(t / eta)^beta)`,
 //!   `h = (beta / eta) (t / eta)^(beta - 1)`, `f = h R`,
 //!   `MTTF = eta Gamma(1 + 1 / beta)`, quantile
-//!   `t = eta (-ln(target))^(1 / beta)`.
+//!   `t = eta (-ln(target))^(1 / beta)`, conditional mission reliability
+//!   `R(m | age) = R(age + m) / R(age)`.
 //! - Systems (independent components): series `prod(R_i)`, parallel
 //!   `1 - prod(1 - R_i)`, `k`-of-`n`
 //!   `sum_{j=k}^{n} C(n, j) r^j (1 - r)^(n - j)`.
