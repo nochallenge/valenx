@@ -14,7 +14,9 @@
 //! governor-sizing form `dE = I omega_avg^2 Cs` driven by a target
 //! coefficient of fluctuation `Cs`. (4) A first-order **rim (hoop)
 //! stress** estimate `sigma = rho (omega r)^2 = rho v^2` for a thin
-//! rotating ring.
+//! rotating ring, and its inverse — the **burst rim speed**
+//! `v_max = sqrt(sigma_allow/rho)` and angular speed that cap a rim-type
+//! flywheel.
 //!
 //! All quantities use SI base units: kilograms, metres, radians per
 //! second, joules, pascals. Helpers convert revolutions per minute to
@@ -75,8 +77,9 @@
 //! [`usable_energy`], and [`flywheel_inertia_for_energy`] give
 //! geometry-independent forms of the core relations;
 //! [`coefficient_of_fluctuation`] and [`energy_fluctuation`] cover
-//! governor sizing; and [`rim_stress`], [`rim_speed`], [`rpm_to_rad_s`],
-//! [`rad_s_to_rpm`] are the stress and unit helpers. [`FlywheelError`]
+//! governor sizing; [`rim_stress`], [`rim_speed`], [`max_rim_speed`] and
+//! [`burst_angular_speed`] are the stress / burst-speed helpers; and
+//! [`rpm_to_rad_s`] / [`rad_s_to_rpm`] convert units. [`FlywheelError`]
 //! and [`ErrorCategory`] form the error taxonomy.
 
 #![forbid(unsafe_code)]
@@ -95,4 +98,4 @@ pub use energy::{
 pub use error::{ErrorCategory, FlywheelError};
 pub use flywheel::Flywheel;
 pub use rotor::Rotor;
-pub use stress::{rim_speed, rim_stress};
+pub use stress::{burst_angular_speed, max_rim_speed, rim_speed, rim_stress};
