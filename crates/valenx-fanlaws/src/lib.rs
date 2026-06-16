@@ -13,6 +13,9 @@
 //!
 //! - [`scale_flow`], [`scale_pressure`], [`scale_power`] — scale a
 //!   single quantity between two speeds.
+//! - [`scale_flow_for_diameter`], [`scale_pressure_for_diameter`],
+//!   [`scale_power_for_diameter`] — the size ("diameter") laws between two
+//!   geometrically similar fans at the same speed.
 //! - [`correct_pressure_for_density`], [`correct_power_for_density`] —
 //!   density correction at fixed speed.
 //! - [`OperatingPoint`] + [`scale_operating_point`] — apply the full
@@ -33,6 +36,10 @@
 //! air power: P_air  = Q * dP
 //! shaft:     P_shaft = Q * dP / eta,  eta in (0, 1]
 //! ```
+//!
+//! and, between two geometrically similar fans of diameter ratio
+//! `s = d2 / d1` at the same speed and density, the size laws
+//! `Q2 = Q1 * s^3`, `P2 = P1 * s^2`, `W2 = W1 * s^5`.
 //!
 //! The affinity exponents (1, 2, 3) follow from dimensional similarity:
 //! flow scales with tip speed, pressure with the dynamic head
@@ -65,8 +72,9 @@ pub mod error;
 pub mod power;
 
 pub use affinity::{
-    correct_power_for_density, correct_pressure_for_density, scale_flow, scale_operating_point,
-    scale_power, scale_pressure, OperatingPoint,
+    correct_power_for_density, correct_pressure_for_density, scale_flow, scale_flow_for_diameter,
+    scale_operating_point, scale_power, scale_power_for_diameter, scale_pressure,
+    scale_pressure_for_diameter, OperatingPoint,
 };
 pub use error::{ErrorCategory, FanLawError};
 pub use power::{air_power, implied_efficiency, shaft_power, Efficiency};

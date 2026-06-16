@@ -22,6 +22,17 @@
 //! W2 / W1 = rho2 / rho1
 //! ```
 //!
+//! For two **geometrically similar** fans of different impeller diameter
+//! `d1` and `d2` running at the same speed and density, the same
+//! similarity argument gives the size ("diameter") laws — flow tracks
+//! swept volume, pressure the dynamic head, and power their product:
+//!
+//! ```text
+//! Q2 / Q1 = (d2 / d1)^3
+//! P2 / P1 = (d2 / d1)^2
+//! W2 / W1 = (d2 / d1)^5
+//! ```
+//!
 //! ## Honest scope
 //!
 //! These are idealised similarity relations. They assume the fan
@@ -175,6 +186,70 @@ pub fn correct_power_for_density(w1: f64, rho1: f64, rho2: f64) -> Result<f64, F
     let rho1 = require_positive("rho1", rho1)?;
     let rho2 = require_positive("rho2", rho2)?;
     Ok(w1 * (rho2 / rho1))
+}
+
+/// Scale the **flow** between two *geometrically similar* fans of
+/// impeller diameter `d1` and `d2`, at the same speed and density.
+///
+/// Volumetric flow scales with the cube of size (it tracks swept volume):
+/// `q2 = q1 * (d2 / d1)^3`.
+///
+/// These are the rigorous geometric-similarity laws (the constant-speed,
+/// constant-density slice of `Q ∝ N D^3`, `dP ∝ N^2 D^2`, `W ∝ N^3 D^5`),
+/// **not** the empirical impeller-trim approximation (`Q ∝ D`,
+/// `dP ∝ D^2`, `W ∝ D^3`) used when a single casing's wheel is machined
+/// down — those are a different, non-similar case.
+///
+/// # Errors
+///
+/// Returns [`FanLawError`] if `q1` is negative or non-finite, or if
+/// either diameter is not strictly positive.
+pub fn scale_flow_for_diameter(q1: f64, d1: f64, d2: f64) -> Result<f64, FanLawError> {
+    use crate::error::require_non_negative;
+    let q1 = require_non_negative("q1", q1)?;
+    let d1 = require_positive("d1", d1)?;
+    let d2 = require_positive("d2", d2)?;
+    let r = d2 / d1;
+    Ok(q1 * r * r * r)
+}
+
+/// Scale the **pressure rise** between two geometrically similar fans of
+/// impeller diameter `d1` and `d2`, at the same speed and density.
+///
+/// Pressure tracks the dynamic head `(N D)^2`, so at fixed speed it grows
+/// with the square of size: `p2 = p1 * (d2 / d1)^2`.
+///
+/// # Errors
+///
+/// Returns [`FanLawError`] if `p1` is negative or non-finite, or if
+/// either diameter is not strictly positive.
+pub fn scale_pressure_for_diameter(p1: f64, d1: f64, d2: f64) -> Result<f64, FanLawError> {
+    use crate::error::require_non_negative;
+    let p1 = require_non_negative("p1", p1)?;
+    let d1 = require_positive("d1", d1)?;
+    let d2 = require_positive("d2", d2)?;
+    let r = d2 / d1;
+    Ok(p1 * r * r)
+}
+
+/// Scale the **shaft power** between two geometrically similar fans of
+/// impeller diameter `d1` and `d2`, at the same speed and density.
+///
+/// Power is the product of flow (`∝ D^3`) and pressure (`∝ D^2`), so at
+/// fixed speed it grows with the fifth power of size:
+/// `w2 = w1 * (d2 / d1)^5`.
+///
+/// # Errors
+///
+/// Returns [`FanLawError`] if `w1` is negative or non-finite, or if
+/// either diameter is not strictly positive.
+pub fn scale_power_for_diameter(w1: f64, d1: f64, d2: f64) -> Result<f64, FanLawError> {
+    use crate::error::require_non_negative;
+    let w1 = require_non_negative("w1", w1)?;
+    let d1 = require_positive("d1", d1)?;
+    let d2 = require_positive("d2", d2)?;
+    let r = d2 / d1;
+    Ok(w1 * r * r * r * r * r)
 }
 
 /// Apply the full affinity transform to an [`OperatingPoint`]: change
@@ -347,5 +422,39 @@ mod tests {
         assert!(correct_pressure_for_density(1.0, 0.0, 1.0).is_err());
         assert!(OperatingPoint::new(1.0, 1.0, 1.0, 0.0, 1.2).is_err());
         assert!(OperatingPoint::new(-1.0, 1.0, 1.0, 1.0, 1.2).is_err());
+    }
+
+    #[test]
+    fn doubling_diameter_cubes_flow_squares_pressure_and_powers_to_the_fifth() {
+        // Geometric-similarity ground truth at d2/d1 = 2:
+        //   Q -> 8Q, dP -> 4dP, W -> 32W.
+        let (d1, d2) = (0.5, 1.0);
+        assert!((scale_flow_for_diameter(10.0, d1, d2).unwrap() - 80.0).abs() < EPS);
+        assert!((scale_pressure_for_diameter(50.0, d1, d2).unwrap() - 200.0).abs() < EPS);
+        assert!((scale_power_for_diameter(3.0, d1, d2).unwrap() - 96.0).abs() < EPS);
+    }
+
+    #[test]
+    fn diameter_laws_follow_the_3_2_5_exponents_over_a_sweep() {
+        let (q1, p1, w1, d1) = (12.0, 240.0, 5.0, 0.4);
+        for k in [0.5_f64, 0.75, 1.0, 1.6, 2.5] {
+            let d2 = k * d1;
+            let q2 = scale_flow_for_diameter(q1, d1, d2).unwrap();
+            let p2 = scale_pressure_for_diameter(p1, d1, d2).unwrap();
+            let w2 = scale_power_for_diameter(w1, d1, d2).unwrap();
+            assert!((q2 - q1 * k.powi(3)).abs() < 1e-7, "k={k}: flow {q2}");
+            assert!((p2 - p1 * k.powi(2)).abs() < 1e-7, "k={k}: pressure {p2}");
+            assert!((w2 - w1 * k.powi(5)).abs() < 1e-7, "k={k}: power {w2}");
+        }
+        // Same diameter is a no-op.
+        assert!((scale_flow_for_diameter(7.0, 0.3, 0.3).unwrap() - 7.0).abs() < EPS);
+    }
+
+    #[test]
+    fn diameter_laws_reject_non_positive_diameter() {
+        assert!(scale_flow_for_diameter(1.0, 0.0, 0.5).is_err());
+        assert!(scale_pressure_for_diameter(1.0, 0.5, -0.2).is_err());
+        assert!(scale_power_for_diameter(-1.0, 0.5, 0.6).is_err());
+        assert!(scale_power_for_diameter(1.0, 0.5, f64::NAN).is_err());
     }
 }
