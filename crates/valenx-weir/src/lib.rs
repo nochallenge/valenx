@@ -20,7 +20,10 @@
 //!   `θ`, with `Q ∝ H^(5/2)`.
 //!
 //! Each type is built through a validated constructor (see
-//! [`error::WeirError`]) and evaluated with `.discharge(head_m)`.
+//! [`error::WeirError`]) and evaluated with `.discharge(head_m)`. The
+//! rating curve also reads backwards with `.head_for_discharge(q)` — the
+//! exact inverse that turns the meter into a sizing / set-point tool
+//! (the head a target flow will produce).
 //!
 //! ```
 //! use valenx_weir::{RectangularWeir, VNotchWeir};
