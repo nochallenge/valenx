@@ -24,7 +24,8 @@
 //! - **Resonance & decay** ([`metrics`]) — the harmonic
 //!   [`magnification_factor`], the resonant peak location
 //!   ([`resonant_frequency_ratio`]) and height ([`peak_magnification`]),
-//!   and the [`logarithmic_decrement`] together with its exact inverse
+//!   the [`transmissibility`] that governs vibration isolation, and the
+//!   [`logarithmic_decrement`] together with its exact inverse
 //!   [`damping_ratio_from_decrement`] and the data-driven
 //!   [`decrement_from_peaks`].
 //!
@@ -101,6 +102,7 @@ pub use error::{ErrorCategory, VibrationError};
 pub use metrics::{
     damping_ratio_from_decrement, decrement_from_peaks, logarithmic_decrement,
     magnification_at_resonance, magnification_factor, peak_magnification, resonant_frequency_ratio,
+    transmissibility,
 };
 pub use model::{DampingRegime, SdofSystem};
 pub use response::FreeResponse;

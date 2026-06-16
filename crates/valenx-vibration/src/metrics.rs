@@ -18,6 +18,20 @@
 //! where `M_peak = 1 / (2*zeta*sqrt(1 - zeta^2))`. At resonance proper
 //! (`r = 1`), `M = 1/(2*zeta)`.
 //!
+//! ## Transmissibility
+//!
+//! The related **transmissibility** is the fraction of force (or base
+//! motion) transmitted through the mount,
+//!
+//! ```text
+//! T(r, zeta) = sqrt( (1 + (2*zeta*r)^2) / ((1 - r^2)^2 + (2*zeta*r)^2) )
+//!            = M(r, zeta) * sqrt(1 + (2*zeta*r)^2).
+//! ```
+//!
+//! Isolation (`T < 1`) begins only beyond `r = sqrt(2)`, where every
+//! curve crosses `T = 1` independent of damping; past that point more
+//! damping *raises* `T` — the well-known isolator trade-off.
+//!
 //! ## Logarithmic decrement
 //!
 //! For an *underdamped* free decay, the ratio of two displacement peaks
@@ -69,6 +83,43 @@ pub fn magnification_factor(
     let r2 = r * r;
     let denom_sq = (1.0 - r2) * (1.0 - r2) + (2.0 * zeta * r) * (2.0 * zeta * r);
     Ok(1.0 / denom_sq.sqrt())
+}
+
+/// Steady-state **transmissibility** `T(r, zeta)` — the ratio of the
+/// force transmitted to the support (or, equivalently, the base-motion
+/// transmitted to the mass) relative to the input, for a harmonically
+/// driven SDOF system:
+///
+/// ```text
+/// T(r, zeta) = sqrt( (1 + (2*zeta*r)^2) / ((1 - r^2)^2 + (2*zeta*r)^2) )
+/// ```
+///
+/// It is the [`magnification_factor`] multiplied by `sqrt(1 + (2 zeta
+/// r)^2)`. Vibration isolation (`T < 1`) is achieved only for
+/// `r > sqrt(2)`; below that the support sees *more* than the input.
+/// Every curve passes through `T = 1` at `r = sqrt(2)` regardless of
+/// damping, and above that crossover **more** damping *worsens* isolation
+/// even though it tames the resonant peak — the classic isolator
+/// trade-off.
+///
+/// # Errors
+///
+/// Returns [`VibrationError::BadParameter`] if `frequency_ratio` is
+/// negative or non-finite. (`r = 0` gives `T = 1`; the undamped
+/// resonance `r = 1, zeta = 0` is `+inf`, returned as-is.)
+pub fn transmissibility(system: &SdofSystem, frequency_ratio: f64) -> Result<f64, VibrationError> {
+    if !frequency_ratio.is_finite() || frequency_ratio < 0.0 {
+        return Err(VibrationError::BadParameter {
+            name: "frequency_ratio",
+            reason: format!("must be finite and non-negative, got {frequency_ratio}"),
+        });
+    }
+    let zeta = system.damping_ratio();
+    let r = frequency_ratio;
+    let r2 = r * r;
+    let two_zeta_r_sq = (2.0 * zeta * r) * (2.0 * zeta * r);
+    let denom = (1.0 - r2) * (1.0 - r2) + two_zeta_r_sq;
+    Ok(((1.0 + two_zeta_r_sq) / denom).sqrt())
 }
 
 /// The frequency ratio `r_peak = sqrt(1 - 2*zeta^2)` at which the
@@ -369,6 +420,69 @@ mod tests {
         let sys = SdofSystem::from_modal(10.0, 0.1).expect("valid");
         assert!(magnification_factor(&sys, -0.5).is_err());
         assert!(magnification_factor(&sys, f64::NAN).is_err());
+    }
+
+    #[test]
+    fn transmissibility_unity_at_root_two_for_all_damping() {
+        // Famous result: every transmissibility curve passes through T = 1
+        // at r = sqrt(2), regardless of damping.
+        let r = 2.0_f64.sqrt();
+        for zeta in [0.0_f64, 0.05, 0.2, 0.5, 1.0, 2.0] {
+            let sys = SdofSystem::from_modal(10.0, zeta).expect("valid");
+            let t = transmissibility(&sys, r).expect("ok");
+            assert!((t - 1.0).abs() < 1e-12, "zeta = {zeta}, T = {t}");
+        }
+    }
+
+    #[test]
+    fn transmissibility_equals_magnification_times_factor() {
+        // T = M * sqrt(1 + (2 zeta r)^2).
+        let sys = SdofSystem::from_modal(10.0, 0.15).expect("valid");
+        let zeta = sys.damping_ratio();
+        for &r in &[0.3_f64, 0.8, 1.0, 1.5, 3.0] {
+            let m = magnification_factor(&sys, r).expect("ok");
+            let t = transmissibility(&sys, r).expect("ok");
+            let expected = m * (1.0 + (2.0 * zeta * r).powi(2)).sqrt();
+            assert!((t - expected).abs() < 1e-9, "r = {r}");
+        }
+    }
+
+    #[test]
+    fn transmissibility_static_is_one() {
+        let sys = SdofSystem::from_modal(10.0, 0.3).expect("valid");
+        assert!((transmissibility(&sys, 0.0).expect("ok") - 1.0).abs() < EPS);
+    }
+
+    #[test]
+    fn isolation_only_above_root_two() {
+        // T < 1 (isolation) for r > sqrt(2); T > 1 below it.
+        let sys = SdofSystem::from_modal(10.0, 0.1).expect("valid");
+        assert!(transmissibility(&sys, 3.0).expect("ok") < 1.0);
+        assert!(transmissibility(&sys, 1.0).expect("ok") > 1.0);
+    }
+
+    #[test]
+    fn damping_worsens_isolation_above_root_two() {
+        // Above sqrt(2), more damping raises T (worse isolation), even
+        // though it lowers the resonant peak (the isolator trade-off).
+        let light = SdofSystem::from_modal(10.0, 0.05).expect("valid");
+        let heavy = SdofSystem::from_modal(10.0, 0.5).expect("valid");
+        let r_iso = 4.0;
+        assert!(
+            transmissibility(&heavy, r_iso).expect("ok")
+                > transmissibility(&light, r_iso).expect("ok")
+        );
+        // ...but at resonance more damping helps (lower T).
+        assert!(
+            transmissibility(&heavy, 1.0).expect("ok") < transmissibility(&light, 1.0).expect("ok")
+        );
+    }
+
+    #[test]
+    fn transmissibility_rejects_bad_frequency_ratio() {
+        let sys = SdofSystem::from_modal(10.0, 0.1).expect("valid");
+        assert!(transmissibility(&sys, -0.5).is_err());
+        assert!(transmissibility(&sys, f64::NAN).is_err());
     }
 
     #[test]
