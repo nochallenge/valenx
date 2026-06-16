@@ -12,9 +12,12 @@
 //!   relation `pH + pOH = pKw`.
 //! - [`strong`] — pH and pOH of strong (fully dissociating) monoprotic
 //!   acids and bases.
-//! - [`weak`] — the weak monoprotic acid / base equilibrium, both the
-//!   classic `[H+] ~= sqrt(Ka*C)` approximation and the exact quadratic
-//!   solution, plus fraction-dissociated.
+//! - [`weak`] — the weak monoprotic *acid* equilibrium, both the classic
+//!   `[H+] ~= sqrt(Ka*C)` approximation and the exact quadratic solution,
+//!   plus fraction-dissociated.
+//! - [`weak_base`] — the symmetric weak monoprotic *base* equilibrium
+//!   (`[OH-] ~= sqrt(Kb*C)`, exact quadratic, pH via `pKw - pOH`, and
+//!   fraction-protonated).
 //! - [`buffer`] — the Henderson-Hasselbalch equation and the Van Slyke
 //!   buffer capacity of a weak acid / conjugate-base buffer.
 //!
@@ -65,9 +68,13 @@ pub mod error;
 pub mod ph;
 pub mod strong;
 pub mod weak;
+pub mod weak_base;
 
 pub use buffer::{buffer_capacity, henderson_hasselbalch, Buffer};
 pub use error::{AcidBaseError, Result};
 pub use ph::{h_from_ph, oh_from_poh, ph, ph_from_poh, poh, poh_from_ph, KW_25C, PKW_25C};
 pub use strong::{ph_strong_acid, ph_strong_base};
 pub use weak::{fraction_dissociated, ph_weak_acid, ph_weak_acid_exact, WeakAcid};
+pub use weak_base::{
+    fraction_protonated, ph_weak_base, poh_weak_base, poh_weak_base_exact, WeakBase,
+};
