@@ -195,6 +195,31 @@ impl BetaModel {
         }
         Ok(1.0 / inv_t)
     }
+
+    /// Temperature coefficient of resistance `alpha = (1/R) dR/dT` at
+    /// absolute temperature `t_kelvin`, in inverse kelvin (`1/K`).
+    ///
+    /// Differentiating `R(T) = R0 * exp(beta (1/T - 1/T0))` gives the
+    /// closed form
+    ///
+    /// ```text
+    /// alpha(T) = (1/R) dR/dT = -beta / T^2
+    /// ```
+    ///
+    /// which is independent of the reference point `(R0, T0)`. For an NTC
+    /// thermistor (`beta > 0`) it is negative — resistance falls as
+    /// temperature rises — and its magnitude shrinks as `1/T^2`. Multiply
+    /// by 100 for the familiar `%/K` figure quoted on datasheets (about
+    /// `-4.4 %/K` near room temperature for a `beta = 3950 K` part).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ThermistorError::BadParameter`] if `t_kelvin` is not a
+    /// strictly positive, finite absolute temperature.
+    pub fn temperature_coefficient_at(&self, t_kelvin: f64) -> Result<f64, ThermistorError> {
+        let t = check_temperature("t_kelvin", t_kelvin)?;
+        Ok(-self.beta / (t * t))
+    }
 }
 
 #[cfg(test)]
@@ -281,5 +306,79 @@ mod tests {
         assert!(BetaModel::new(10_000.0, 0.0, 3950.0).is_err());
         assert!(BetaModel::new(10_000.0, 298.15, 0.0).is_err());
         assert!(BetaModel::new(10_000.0, 298.15, f64::NAN).is_err());
+    }
+
+    #[test]
+    fn temperature_coefficient_closed_form_and_sign() {
+        let m = ntc_10k(); // beta = 3950, T0 = 298.15
+                           // alpha(T0) = -beta / T0^2.
+        let alpha = m.temperature_coefficient_at(298.15).unwrap();
+        let expected = -3950.0 / (298.15 * 298.15);
+        assert!(
+            (alpha - expected).abs() < 1e-12,
+            "alpha {alpha} vs {expected}"
+        );
+        // NTC: negative, about -4.4 %/K near room temperature.
+        assert!(alpha < 0.0);
+        assert!(
+            (alpha * 100.0 - (-4.443)).abs() < 1e-2,
+            "%/K = {}",
+            alpha * 100.0
+        );
+    }
+
+    #[test]
+    fn temperature_coefficient_matches_numerical_derivative() {
+        // alpha = (1/R) dR/dT, validated against a central difference of
+        // resistance_at — ties the closed form to the actual curve.
+        let m = ntc_10k();
+        let h = 1e-3;
+        for t in [273.15_f64, 298.15, 323.15, 350.0] {
+            let r = m.resistance_at(t).unwrap();
+            let r_plus = m.resistance_at(t + h).unwrap();
+            let r_minus = m.resistance_at(t - h).unwrap();
+            let numeric = (r_plus - r_minus) / (2.0 * h) / r;
+            let analytic = m.temperature_coefficient_at(t).unwrap();
+            assert!(
+                (analytic - numeric).abs() / numeric.abs() < 1e-6,
+                "at {t}: analytic {analytic} vs numeric {numeric}"
+            );
+        }
+    }
+
+    #[test]
+    fn temperature_coefficient_magnitude_shrinks_with_temperature() {
+        // |alpha| = beta / T^2 decreases as T rises, so alpha (negative)
+        // increases monotonically toward zero.
+        let m = ntc_10k();
+        let mut prev = f64::NEG_INFINITY;
+        for t in [260.0_f64, 280.0, 300.0, 320.0, 340.0] {
+            let a = m.temperature_coefficient_at(t).unwrap();
+            assert!(a > prev, "alpha should increase toward 0: {a} !> {prev}");
+            prev = a;
+        }
+    }
+
+    #[test]
+    fn temperature_coefficient_independent_of_reference_point() {
+        // alpha = -beta/T^2 depends only on beta and T, not on (R0, T0).
+        let a = BetaModel::new(10_000.0, 298.15, 3950.0).unwrap();
+        let b = BetaModel::new(47_000.0, 310.15, 3950.0).unwrap();
+        for t in [280.0_f64, 300.0, 330.0] {
+            let ca = a.temperature_coefficient_at(t).unwrap();
+            let cb = b.temperature_coefficient_at(t).unwrap();
+            assert!(
+                (ca - cb).abs() < 1e-12,
+                "alpha differs at {t}: {ca} vs {cb}"
+            );
+        }
+    }
+
+    #[test]
+    fn temperature_coefficient_rejects_bad_temperature() {
+        let m = ntc_10k();
+        assert!(m.temperature_coefficient_at(0.0).is_err());
+        assert!(m.temperature_coefficient_at(-1.0).is_err());
+        assert!(m.temperature_coefficient_at(f64::NAN).is_err());
     }
 }

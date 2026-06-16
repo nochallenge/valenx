@@ -269,6 +269,41 @@ impl SteinhartHart {
         }
         finite_exp(x)
     }
+
+    /// Temperature coefficient of resistance `alpha = (1/R) dR/dT` at
+    /// absolute temperature `t_kelvin`, in inverse kelvin (`1/K`).
+    ///
+    /// Differentiating `1/T = A + B ln(R) + C ln(R)^3` and inverting
+    /// gives the closed form
+    ///
+    /// ```text
+    /// alpha(T) = (1/R) dR/dT = -1 / ( T^2 (B + 3 C ln(R)^2) )
+    /// ```
+    ///
+    /// evaluated at the resistance the model predicts for `T`. For a
+    /// physical NTC (`B, C > 0`) the bracket is positive, so `alpha` is
+    /// negative; multiply by 100 for the datasheet `%/K`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ThermistorError::BadParameter`] if `t_kelvin` is out of
+    /// domain, propagates any error from the internal
+    /// resistance-from-temperature evaluation, or returns
+    /// [`ThermistorError::NonFinite`] if the curve's slope is stationary
+    /// (`B + 3 C ln(R)^2 == 0`), where the coefficient diverges.
+    pub fn temperature_coefficient_at(&self, t_kelvin: f64) -> Result<f64, ThermistorError> {
+        let t = check_temperature("t_kelvin", t_kelvin)?;
+        let r = self.resistance_at(t)?;
+        let ln_r = r.ln();
+        let slope = self.b + 3.0 * self.c * ln_r.powi(2);
+        let alpha = -1.0 / (t * t * slope);
+        if !alpha.is_finite() {
+            return Err(ThermistorError::NonFinite(
+                "Steinhart-Hart temperature coefficient diverges where dT/dR is stationary",
+            ));
+        }
+        Ok(alpha)
+    }
 }
 
 /// Relative threshold below which the Steinhart-Hart cubic term is
@@ -483,5 +518,48 @@ mod tests {
         let m = [[2.0, 0.0, 1.0], [3.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
         // Expand: det = 3 (computed by hand).
         assert!((det3(&m) - 3.0).abs() < 1e-12, "got {}", det3(&m));
+    }
+
+    #[test]
+    fn temperature_coefficient_matches_numerical_derivative() {
+        // alpha = (1/R) dR/dT for Steinhart-Hart, validated against a
+        // central difference of resistance_at across the working range.
+        let m = reference();
+        let h = 1e-3;
+        for t in [273.15_f64, 298.15, 323.15, 348.15] {
+            let r = m.resistance_at(t).unwrap();
+            let r_plus = m.resistance_at(t + h).unwrap();
+            let r_minus = m.resistance_at(t - h).unwrap();
+            let numeric = (r_plus - r_minus) / (2.0 * h) / r;
+            let analytic = m.temperature_coefficient_at(t).unwrap();
+            assert!(
+                (analytic - numeric).abs() / numeric.abs() < 1e-6,
+                "at {t}: analytic {analytic} vs numeric {numeric}"
+            );
+        }
+    }
+
+    #[test]
+    fn temperature_coefficient_closed_form_and_sign() {
+        // Recompute -1/(T^2 (B + 3C ln(R)^2)) independently and check the
+        // sign is negative for the reference NTC.
+        let m = reference();
+        let t = 298.15;
+        let r = m.resistance_at(t).unwrap();
+        let ln_r = r.ln();
+        let expected = -1.0 / (t * t * (m.b() + 3.0 * m.c() * ln_r * ln_r));
+        let alpha = m.temperature_coefficient_at(t).unwrap();
+        assert!(
+            (alpha - expected).abs() < 1e-15,
+            "alpha {alpha} vs {expected}"
+        );
+        assert!(alpha < 0.0, "NTC alpha must be negative, got {alpha}");
+    }
+
+    #[test]
+    fn temperature_coefficient_rejects_bad_temperature() {
+        let m = reference();
+        assert!(m.temperature_coefficient_at(0.0).is_err());
+        assert!(m.temperature_coefficient_at(f64::INFINITY).is_err());
     }
 }

@@ -17,6 +17,13 @@
 //!   [`SteinhartHart::fit_three_point`] to solve `(A, B, C)` from three
 //!   measured `(R, T)` pairs.
 //!
+//! Both models also report the **temperature coefficient of resistance**
+//! `alpha = (1/R) dR/dT` (in `1/K`) at a given temperature
+//! ([`BetaModel::temperature_coefficient_at`],
+//! [`SteinhartHart::temperature_coefficient_at`]) — the thermistor's
+//! sensitivity figure of merit, conventionally quoted as a few percent
+//! per kelvin (negative for an NTC).
+//!
 //! The [`units`] module converts between kelvin (used by every physics
 //! function here) and degrees Celsius.
 //!
@@ -30,6 +37,12 @@
 //! NTC behaviour (resistance falls as temperature rises) when their
 //! parameters are physical, and the resistance/temperature conversions
 //! in each model are exact inverses of one another.
+//!
+//! The temperature coefficient of resistance is the logarithmic slope of
+//! each curve, `alpha = (1/R) dR/dT`: it is `-beta / T^2` for the beta
+//! model and `-1 / (T^2 (B + 3 C ln(R)^2))` for Steinhart-Hart. Both are
+//! negative for a physical NTC and are validated against a
+//! central-difference of the resistance curve.
 //!
 //! ```
 //! use valenx_thermistor::{BetaModel, units::celsius_to_kelvin};
