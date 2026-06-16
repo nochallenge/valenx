@@ -11,7 +11,9 @@
 //! 1. [`saturation`] — the Magnus / Tetens [`saturation_pressure`] of
 //!    water and its exact closed-form inverse, [`dew_point`].
 //! 2. [`moist_air`] — [`relative_humidity`] and its inverse, the
-//!    [`humidity_ratio`] `w = 0.622 pv / (p - pv)`, and the
+//!    [`humidity_ratio`] `w = 0.622 pv / (p - pv)`, the
+//!    [`saturation_humidity_ratio`] `ws` and the
+//!    [`degree_of_saturation`] `mu = w / ws`, and the
 //!    [`moist_air_enthalpy`] `h = 1.006 T + w (2501 + 1.86 T)`.
 //! 3. [`state`] — [`MoistAirState`], a serde-serialisable point that
 //!    derives every quantity above consistently from one specification.
@@ -29,7 +31,11 @@
 //! Celsius, whose analytic inverse gives the dew point. Relative
 //! humidity is `RH = pv / psat(T)`. The humidity ratio comes from the
 //! ideal-gas partial-pressure balance with the water-to-air molar-mass
-//! ratio `0.622`. The specific enthalpy per kilogram of dry air uses
+//! ratio `0.622`; evaluating it at the saturation pressure gives the
+//! saturation humidity ratio `ws`, and the degree of saturation
+//! `mu = w / ws = RH (p - psat) / (p - pv)` is the humidity-ratio
+//! analogue of relative humidity (always `<= RH`). The specific enthalpy
+//! per kilogram of dry air uses
 //! constant specific heats and the `0 degC` latent heat of
 //! vaporisation. Each module documents its own equation and references
 //! in detail.
@@ -74,8 +80,8 @@ pub mod state;
 
 pub use error::{ErrorCategory, PsychroError, Result};
 pub use moist_air::{
-    humidity_ratio, moist_air_enthalpy, relative_humidity, vapour_pressure_from_rh,
-    STANDARD_PRESSURE_PA,
+    degree_of_saturation, humidity_ratio, moist_air_enthalpy, relative_humidity,
+    saturation_humidity_ratio, vapour_pressure_from_rh, STANDARD_PRESSURE_PA,
 };
 pub use saturation::{dew_point, saturation_pressure};
 pub use state::MoistAirState;

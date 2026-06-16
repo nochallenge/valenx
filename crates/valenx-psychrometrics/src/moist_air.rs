@@ -173,6 +173,60 @@ pub fn humidity_ratio(pv_pa: f64, p_pa: f64) -> Result<f64> {
     Ok(RATIO_MW * pv_pa / (p_pa - pv_pa))
 }
 
+/// Saturation humidity ratio `ws` (kg water / kg dry air): the humidity
+/// ratio of *saturated* air at dry-bulb temperature `t_c` and total
+/// pressure `p_pa`,
+///
+/// `ws = 0.622 * psat(T) / (p - psat(T))`.
+///
+/// This is the ceiling the actual [`humidity_ratio`] approaches as the
+/// air saturates (`RH -> 1`); it is [`humidity_ratio`] evaluated at the
+/// [`saturation_pressure`].
+///
+/// # Errors
+///
+/// Returns [`PsychroError::BadParameter`] for a non-positive total
+/// pressure or a `t_c` rejected by [`saturation_pressure`], and
+/// [`PsychroError::Unphysical`] if the saturation pressure meets or
+/// exceeds the total pressure (saturated air cannot exist — the air is
+/// at or above its boiling point for that pressure).
+pub fn saturation_humidity_ratio(t_c: f64, p_pa: f64) -> Result<f64> {
+    let psat = saturation_pressure(t_c)?;
+    humidity_ratio(psat, p_pa)
+}
+
+/// Degree of saturation `mu = w / ws` (dimensionless): the actual
+/// humidity ratio `w` as a fraction of the [`saturation_humidity_ratio`]
+/// at the same dry-bulb temperature and total pressure.
+///
+/// Also called the *percentage humidity*, it is the humidity-ratio analogue
+/// of relative humidity and is always slightly *below* the relative
+/// humidity for unsaturated air: with `RH = pv / psat`,
+///
+/// ```text
+/// mu = RH * (p - psat) / (p - RH * psat) <= RH,
+/// ```
+/// with equality only at `RH = 0` and `RH = 1`.
+///
+/// For physical sub-saturated air `mu` lies in `[0, 1]`; a value above
+/// one signals a supersaturated input `w > ws`.
+///
+/// # Errors
+///
+/// Returns [`PsychroError::BadParameter`] if `w` is negative or
+/// non-finite, and propagates the errors of
+/// [`saturation_humidity_ratio`].
+pub fn degree_of_saturation(w: f64, t_c: f64, p_pa: f64) -> Result<f64> {
+    if !w.is_finite() || w < 0.0 {
+        return Err(PsychroError::bad_parameter(
+            "w",
+            "humidity ratio must be a non-negative, finite value",
+        ));
+    }
+    let ws = saturation_humidity_ratio(t_c, p_pa)?;
+    Ok(w / ws)
+}
+
 /// Specific enthalpy of moist air, in kilojoules per kilogram of dry
 /// air, for a dry-bulb temperature `t_c` (degrees Celsius) and a
 /// humidity ratio `w` (kg/kg).
@@ -322,5 +376,68 @@ mod tests {
     fn rejects_nonpositive_total_pressure() {
         assert!(humidity_ratio(1000.0, 0.0).is_err());
         assert!(humidity_ratio(1000.0, -1.0).is_err());
+    }
+
+    #[test]
+    fn saturation_humidity_ratio_known_value() {
+        // 25 degC, one atm -> ws ~= 0.0201 kg/kg (textbook).
+        let p = STANDARD_PRESSURE_PA;
+        let ws = saturation_humidity_ratio(25.0, p).unwrap();
+        let psat = saturation_pressure(25.0).unwrap();
+        assert!((ws - humidity_ratio(psat, p).unwrap()).abs() < 1e-15);
+        assert!((ws - 0.0201).abs() < 5e-4, "ws = {ws}");
+    }
+
+    #[test]
+    fn actual_w_never_exceeds_saturation_and_equals_it_at_rh_one() {
+        // For RH <= 1 the actual humidity ratio stays at or below ws, and
+        // reaches it exactly at saturation.
+        let (t, p) = (30.0, STANDARD_PRESSURE_PA);
+        let ws = saturation_humidity_ratio(t, p).unwrap();
+        for rh in [0.0, 0.25, 0.5, 0.8, 1.0] {
+            let pv = vapour_pressure_from_rh(rh, t).unwrap();
+            let w = humidity_ratio(pv, p).unwrap();
+            assert!(w <= ws + 1e-12, "w {w} > ws {ws} at rh={rh}");
+            if (rh - 1.0).abs() < 1e-12 {
+                assert!((w - ws).abs() < 1e-12, "w != ws at saturation");
+            }
+        }
+    }
+
+    #[test]
+    fn degree_of_saturation_matches_closed_form_and_stays_below_rh() {
+        // GOLD identity: mu = RH (p - psat) / (p - pv), and mu <= RH with
+        // equality only at the endpoints.
+        let (t, p) = (35.0, STANDARD_PRESSURE_PA);
+        let psat = saturation_pressure(t).unwrap();
+        for rh in [0.1, 0.4, 0.7, 0.95] {
+            let pv = vapour_pressure_from_rh(rh, t).unwrap();
+            let w = humidity_ratio(pv, p).unwrap();
+            let mu = degree_of_saturation(w, t, p).unwrap();
+            let expected = rh * (p - psat) / (p - pv);
+            assert!(
+                (mu - expected).abs() < 1e-12,
+                "mu {mu} vs {expected} at rh={rh}"
+            );
+            assert!(mu < rh, "mu {mu} should be below RH {rh}");
+            assert!(mu > 0.0 && mu < 1.0);
+        }
+    }
+
+    #[test]
+    fn degree_of_saturation_endpoints() {
+        let (t, p) = (20.0, STANDARD_PRESSURE_PA);
+        // RH = 0 -> mu = 0.
+        assert!(degree_of_saturation(0.0, t, p).unwrap().abs() < 1e-12);
+        // RH = 1 -> w = ws -> mu = 1.
+        let ws = saturation_humidity_ratio(t, p).unwrap();
+        assert!((degree_of_saturation(ws, t, p).unwrap() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn degree_of_saturation_rejects_negative_w() {
+        assert!(degree_of_saturation(-0.001, 20.0, STANDARD_PRESSURE_PA).is_err());
+        // Non-positive total pressure propagates from ws.
+        assert!(degree_of_saturation(0.01, 20.0, 0.0).is_err());
     }
 }
