@@ -37,6 +37,16 @@
 //!
 //! Mass flow follows from the density: `mdot = rho * Q`.
 //!
+//! Only part of the measured differential is lost for good; the jet
+//! re-expands downstream and recovers the rest. The permanently
+//! unrecovered fraction of a square-edged orifice plate is the ISO 5167-2
+//! ratio
+//!
+//! ```text
+//! dOmega / dP = ( sqrt(1 - beta^4 (1 - Cd^2)) - Cd beta^2 )
+//!             / ( sqrt(1 - beta^4 (1 - Cd^2)) + Cd beta^2 ).
+//! ```
+//!
 //! # Honest scope
 //!
 //! This is a research / educational implementation of the *closed-form*
@@ -46,8 +56,10 @@
 //! Reader-Harris / Gallagher `Cd` correlation, the thermal-expansion
 //! corrections, or the installation / tapping requirements of ISO 5167
 //! or ASME MFC-3M, and it is not a substitute for an accredited flow
-//! calibration. Use it to learn how a dP meter scales, not to bill
-//! custody-transfer gas.
+//! calibration. The permanent-loss relation is the square-edged
+//! orifice-plate form and overestimates the loss of nozzles and Venturis,
+//! which recover pressure in their diffusers. Use it to learn how a dP
+//! meter scales, not to bill custody-transfer gas.
 
 use crate::error::{require_non_negative, require_positive, OrificeError};
 use serde::{Deserialize, Serialize};
@@ -320,6 +332,62 @@ impl Meter {
         let ratio = flow_rate / (self.discharge_coefficient * area);
         let dp = 0.5 * density * (1.0 - beta4) * ratio * ratio;
         Ok(dp)
+    }
+
+    /// The permanent (unrecovered) pressure-loss ratio `dOmega / dP` of a
+    /// square-edged orifice plate — the ISO 5167-2 relation
+    ///
+    /// ```text
+    /// dOmega / dP = ( sqrt(1 - beta^4 (1 - Cd^2)) - Cd beta^2 )
+    ///             / ( sqrt(1 - beta^4 (1 - Cd^2)) + Cd beta^2 )
+    /// ```
+    ///
+    /// (dimensionless, in `(0, 1)`). The differential `dP` is what the
+    /// transmitter measures across the plate; only this fraction of it is
+    /// *permanently* lost downstream — the pumping penalty the meter
+    /// imposes — the remainder being recovered as the jet re-expands.
+    /// The ratio falls monotonically from one as `beta -> 0` (a tiny bore
+    /// nearly blocks the pipe) toward zero as `beta -> 1` (almost no
+    /// constriction). In the lossless limit `Cd = 1` it collapses to the
+    /// clean form `(1 - beta^2) / (1 + beta^2)`.
+    ///
+    /// This is the square-edged **orifice-plate** relation. A flow nozzle
+    /// or Venturi recovers pressure in its smooth diffuser and so loses
+    /// substantially less than this predicts; applying it to those meter
+    /// kinds overestimates the permanent loss.
+    #[must_use]
+    pub fn permanent_pressure_loss_ratio(self) -> f64 {
+        let beta2 = self.geometry.beta() * self.geometry.beta();
+        let beta4 = beta2 * beta2;
+        let cd = self.discharge_coefficient;
+        let root = (1.0 - beta4 * (1.0 - cd * cd)).sqrt();
+        let cd_beta2 = cd * beta2;
+        (root - cd_beta2) / (root + cd_beta2)
+    }
+
+    /// The absolute permanent (unrecovered) pressure loss `dOmega` (Pa)
+    /// for a volumetric flow rate `Q` (m^3/s) at fluid density `rho`
+    /// (kg/m^3): `dOmega = (dOmega / dP) * dP`, combining
+    /// [`permanent_pressure_loss_ratio`](Meter::permanent_pressure_loss_ratio)
+    /// with the differential [`pressure_drop`](Meter::pressure_drop) that
+    /// flow produces. Because the ratio is below one, the permanent loss
+    /// is always strictly less than the measured differential.
+    ///
+    /// As with the ratio, this is the square-edged orifice-plate relation
+    /// — see
+    /// [`permanent_pressure_loss_ratio`](Meter::permanent_pressure_loss_ratio).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OrificeError::NonPositive`] if `rho <= 0` (or not finite)
+    /// and [`OrificeError::Negative`] if `Q < 0` (or not finite).
+    pub fn permanent_pressure_loss(
+        self,
+        density: f64,
+        flow_rate: f64,
+    ) -> Result<f64, OrificeError> {
+        let dp = self.pressure_drop(density, flow_rate)?;
+        Ok(self.permanent_pressure_loss_ratio() * dp)
     }
 }
 
@@ -695,5 +763,108 @@ mod tests {
         let json = serde_json::to_string(&m).expect("serialize");
         let back: Meter = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(m, back);
+    }
+
+    // --- permanent pressure loss ------------------------------------------
+
+    #[test]
+    fn permanent_loss_ratio_matches_iso_closed_form() {
+        // beta = 0.5, Cd = 0.61. Recompute the ISO 5167-2 ratio
+        // independently and confirm the method agrees, then sanity-check
+        // the magnitude (a beta=0.5 orifice loses roughly 70-75% of dP).
+        let m = meter(0.05, 0.10, 0.61);
+        let beta2 = 0.25_f64;
+        let beta4 = beta2 * beta2;
+        let cd = 0.61_f64;
+        let root = (1.0 - beta4 * (1.0 - cd * cd)).sqrt();
+        let expected = (root - cd * beta2) / (root + cd * beta2);
+        let r = m.permanent_pressure_loss_ratio();
+        assert!((r - expected).abs() < EPS, "ratio {r} vs {expected}");
+        assert!(r > 0.70 && r < 0.75, "beta=0.5 orifice loss ~0.73, got {r}");
+    }
+
+    #[test]
+    fn permanent_loss_ratio_cd_one_is_clean_identity() {
+        // GOLD identity: at Cd = 1 the ratio collapses to the exact
+        // closed form (1 - beta^2) / (1 + beta^2).
+        for &(d, big_d) in &[(0.02, 0.10), (0.05, 0.10), (0.08, 0.10)] {
+            let m = Meter::new(geom(d, big_d), 1.0).unwrap();
+            let beta2 = m.geometry().beta() * m.geometry().beta();
+            let expected = (1.0 - beta2) / (1.0 + beta2);
+            let r = m.permanent_pressure_loss_ratio();
+            assert!(
+                (r - expected).abs() < EPS,
+                "Cd=1 identity: {r} vs {expected}"
+            );
+        }
+        // beta = 0.5, Cd = 1 -> (1 - 0.25)/(1 + 0.25) = 0.6 exactly.
+        let m = Meter::new(geom(0.05, 0.10), 1.0).unwrap();
+        assert!((m.permanent_pressure_loss_ratio() - 0.6).abs() < EPS);
+    }
+
+    #[test]
+    fn permanent_loss_ratio_is_bounded_and_decreasing_in_beta() {
+        // The ratio lies in (0, 1) and falls monotonically as beta rises
+        // (less constriction -> less permanent loss).
+        let cd = 0.61;
+        let small = meter(0.02, 0.10, cd).permanent_pressure_loss_ratio(); // beta 0.2
+        let mid = meter(0.05, 0.10, cd).permanent_pressure_loss_ratio(); // beta 0.5
+        let large = meter(0.09, 0.10, cd).permanent_pressure_loss_ratio(); // beta 0.9
+        for r in [small, mid, large] {
+            assert!(r > 0.0 && r < 1.0, "ratio in (0,1), got {r}");
+        }
+        assert!(small > mid, "loss falls with beta: {small} > {mid}");
+        assert!(mid > large, "loss falls with beta: {mid} > {large}");
+    }
+
+    #[test]
+    fn permanent_loss_tends_to_zero_as_beta_tends_to_one() {
+        // A throat almost as large as the pipe permanently loses almost
+        // nothing.
+        let r = meter(0.0999, 0.10, 0.61).permanent_pressure_loss_ratio();
+        assert!(r < 0.05, "near-open meter loses little, got {r}");
+    }
+
+    #[test]
+    fn permanent_loss_is_a_fraction_of_the_differential() {
+        // dOmega = ratio * dP, always strictly below the measured dP.
+        let m = meter(0.05, 0.10, 0.61);
+        let ratio = m.permanent_pressure_loss_ratio();
+        for &q in &[1.0e-3, 0.01, 0.05] {
+            let dp = m.pressure_drop(1000.0, q).unwrap();
+            let loss = m.permanent_pressure_loss(1000.0, q).unwrap();
+            assert!(
+                (loss - ratio * dp).abs() < 1e-9 * dp.max(1.0),
+                "dOmega = ratio * dP: {loss} vs {}",
+                ratio * dp
+            );
+            assert!(loss < dp, "permanent loss {loss} < differential {dp}");
+            assert!(loss > 0.0, "positive loss for positive flow");
+        }
+    }
+
+    #[test]
+    fn permanent_loss_zero_flow_is_zero() {
+        let m = meter(0.05, 0.10, 0.61);
+        assert!(m.permanent_pressure_loss(1000.0, 0.0).unwrap().abs() < EPS);
+    }
+
+    #[test]
+    fn permanent_loss_rejects_bad_fluid_inputs() {
+        let m = meter(0.05, 0.10, 0.61);
+        assert!(matches!(
+            m.permanent_pressure_loss(0.0, 1.0).unwrap_err(),
+            OrificeError::NonPositive {
+                name: "density",
+                ..
+            }
+        ));
+        assert!(matches!(
+            m.permanent_pressure_loss(1000.0, -1.0).unwrap_err(),
+            OrificeError::Negative {
+                name: "flow_rate",
+                ..
+            }
+        ));
     }
 }
