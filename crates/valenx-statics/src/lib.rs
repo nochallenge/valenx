@@ -19,7 +19,8 @@
 //!   test of `sum Fx = sum Fy = sum M = 0`.
 //! - **Beam reactions** ([`beam`]) — a [`SimpleBeam`] (pin + roller)
 //!   carrying [`PointLoad`]s, solved in closed form to its
-//!   [`Reactions`].
+//!   [`Reactions`], plus the single equivalent [`beam::LoadResultant`]
+//!   of its vertical loads (magnitude `sum P` at the load centroid).
 //!
 //! ```
 //! use valenx_statics::SimpleBeam;
@@ -107,7 +108,7 @@ pub mod equilibrium;
 pub mod error;
 pub mod force;
 
-pub use beam::{PointLoad, Reactions, SimpleBeam};
+pub use beam::{LoadResultant, PointLoad, Reactions, SimpleBeam};
 pub use equilibrium::ForceSystem;
 pub use error::{ErrorCategory, Result, StaticsError};
 pub use force::{moment_z, AppliedForce};

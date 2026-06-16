@@ -108,6 +108,20 @@ impl Reactions {
     }
 }
 
+/// The single equivalent force of a beam's vertical loads.
+///
+/// A set of parallel vertical point loads reduces to one **resultant**:
+/// a downward force equal to their sum, acting through their centroid (the
+/// load's "centre of gravity"). Returned by
+/// [`SimpleBeam::vertical_load_resultant`].
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LoadResultant {
+    /// Total downward magnitude `sum P_i` (positive = downward).
+    pub down: f64,
+    /// Line of action `x_bar = sum P_i x_i / sum P_i`, the load centroid.
+    pub position: f64,
+}
+
 /// A simply-supported beam: a pin at `support_a` and a roller at
 /// `support_b`, carrying any number of [`PointLoad`]s.
 ///
@@ -271,6 +285,31 @@ impl SimpleBeam {
             r.roller_vertical,
         ));
         sys
+    }
+
+    /// The single equivalent (resultant) of all the beam's vertical loads:
+    /// a downward force `sum P_i` acting through the load centroid
+    /// `x_bar = sum P_i x_i / sum P_i`.
+    ///
+    /// Replacing the whole load set with this one force leaves the support
+    /// [`Reactions`] unchanged, because both the total vertical load and
+    /// its moment about any point are preserved — the defining property of
+    /// a force-system resultant.
+    ///
+    /// Returns `None` when the net vertical load is zero (`sum P_i = 0`):
+    /// the loads then form a couple or cancel, and there is no single line
+    /// of action.
+    #[must_use]
+    pub fn vertical_load_resultant(&self) -> Option<LoadResultant> {
+        let total = self.total_down();
+        if total == 0.0 {
+            return None;
+        }
+        let moment: f64 = self.loads.iter().map(|l| l.down * l.position).sum();
+        Some(LoadResultant {
+            down: total,
+            position: moment / total,
+        })
     }
 }
 
@@ -444,5 +483,77 @@ mod tests {
     fn span_is_distance_between_supports() {
         let beam = SimpleBeam::new(2.0, 9.5).unwrap();
         assert!((beam.span() - 7.5).abs() < EPS);
+    }
+
+    // -- vertical load resultant -------------------------------------
+
+    #[test]
+    fn single_load_resultant_is_that_load() {
+        let mut beam = SimpleBeam::new(0.0, 10.0).unwrap();
+        beam.add_vertical(3.7, 42.0).unwrap();
+        let res = beam.vertical_load_resultant().unwrap();
+        assert!((res.down - 42.0).abs() < EPS, "down {}", res.down);
+        assert!((res.position - 3.7).abs() < EPS, "x_bar {}", res.position);
+    }
+
+    #[test]
+    fn resultant_centroid_matches_formula() {
+        // x_bar = sum(P_i x_i) / sum(P_i): (40*2 + 60*7) / 100 = 500/100 = 5.
+        let mut beam = SimpleBeam::new(0.0, 10.0).unwrap();
+        beam.add_vertical(2.0, 40.0).unwrap();
+        beam.add_vertical(7.0, 60.0).unwrap();
+        let res = beam.vertical_load_resultant().unwrap();
+        assert!((res.down - 100.0).abs() < EPS, "down {}", res.down);
+        assert!((res.position - 5.0).abs() < EPS, "x_bar {}", res.position);
+    }
+
+    #[test]
+    fn two_equal_loads_resultant_at_midpoint() {
+        let mut beam = SimpleBeam::new(0.0, 12.0).unwrap();
+        beam.add_vertical(3.0, 25.0).unwrap();
+        beam.add_vertical(9.0, 25.0).unwrap();
+        let res = beam.vertical_load_resultant().unwrap();
+        assert!((res.position - 6.0).abs() < EPS, "x_bar {}", res.position);
+    }
+
+    #[test]
+    fn resultant_reproduces_the_same_reactions() {
+        // The defining property: a beam carrying just the resultant load
+        // has identical support reactions to the full load set.
+        let mut beam = SimpleBeam::new(1.0, 9.0).unwrap();
+        beam.add_vertical(2.0, 30.0).unwrap();
+        beam.add_vertical(5.0, 50.0).unwrap();
+        beam.add_vertical(8.0, 20.0).unwrap();
+        let full = beam.reactions();
+        let res = beam.vertical_load_resultant().unwrap();
+
+        let mut equiv = SimpleBeam::new(1.0, 9.0).unwrap();
+        equiv.add_vertical(res.position, res.down).unwrap();
+        let single = equiv.reactions();
+
+        assert!(
+            (single.pin_vertical - full.pin_vertical).abs() < EPS,
+            "pin {} vs {}",
+            single.pin_vertical,
+            full.pin_vertical
+        );
+        assert!(
+            (single.roller_vertical - full.roller_vertical).abs() < EPS,
+            "roller {} vs {}",
+            single.roller_vertical,
+            full.roller_vertical
+        );
+    }
+
+    #[test]
+    fn zero_net_vertical_load_has_no_resultant() {
+        // No loads at all.
+        let empty = SimpleBeam::new(0.0, 5.0).unwrap();
+        assert!(empty.vertical_load_resultant().is_none());
+        // A balanced up/down pair (net zero) is a couple — no resultant.
+        let mut couple = SimpleBeam::new(0.0, 5.0).unwrap();
+        couple.add_vertical(1.0, 40.0).unwrap();
+        couple.add_vertical(4.0, -40.0).unwrap();
+        assert!(couple.vertical_load_resultant().is_none());
     }
 }
