@@ -6,8 +6,8 @@
 //!
 //! ## What
 //!
-//! Three textbook quantities, exactly as written in ISO 281 and the
-//! SKF General Catalogue, wired together with validated inputs:
+//! Four textbook quantities, exactly as written in ISO 281 / ISO 76 and
+//! the SKF General Catalogue, wired together with validated inputs:
 //!
 //! - The **dynamic equivalent load** [`EquivalentLoad`] collapses a
 //!   combined radial + axial load into the single number the life
@@ -20,6 +20,9 @@
 //! - That revolution life converts to **operating hours** at a shaft
 //!   speed via [`RatingLife::life_hours`]:
 //!   `L10h = L10 · 1e6 / (60 · n)`.
+//! - The **static safety factor** [`StaticEquivalentLoad`] guards a slow
+//!   or stationary bearing against brinelling (ISO 76):
+//!   `s0 = C0 / P0` with `P0 = max(X0·Fr + Y0·Fa, Fr)`.
 //!
 //! ```
 //! use valenx_bearing::{BearingType, EquivalentLoad, RatingLife};
@@ -72,9 +75,10 @@
 //!   reliability factor `a1` for survival probabilities other than
 //!   90 %, and no life-modification factor `aISO` for lubrication,
 //!   contamination and the fatigue load limit `Cu`;
-//! - **selection of the `X` / `Y` / `e` factors**, the static load
-//!   safety `s0 = C0 / P0`, the limiting / reference speed, friction,
-//!   heat, or lubricant film thickness;
+//! - **selection of the `X` / `Y` / `X0` / `Y0` / `e` factors** (the
+//!   static safety factor `s0 = C0 / P0` itself *is* provided, but you
+//!   still supply the `X0` / `Y0` table values), the limiting / reference
+//!   speed, friction, heat, or lubricant film thickness;
 //! - any **temperature, misalignment, preload, or mounting** effects.
 //!
 //! Use it to learn and to sanity-check, not to certify a design.
@@ -86,11 +90,13 @@ pub mod bearing;
 pub mod error;
 pub mod life;
 pub mod load;
+pub mod static_load;
 
 pub use bearing::BearingType;
 pub use error::{BearingError, ErrorCategory};
 pub use life::{l10_million_revs, life_hours_from_revs, RatingLife};
 pub use load::EquivalentLoad;
+pub use static_load::{static_safety_factor, StaticEquivalentLoad};
 
 #[cfg(test)]
 mod tests {
