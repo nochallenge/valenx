@@ -70,6 +70,7 @@ pub mod fanno;
 pub mod isentropic;
 pub mod normal_shock;
 pub mod oblique_shock;
+pub mod pitot;
 pub mod prandtl_meyer;
 pub mod rayleigh;
 
@@ -83,6 +84,7 @@ pub use normal_shock::{normal_shock, NormalShock};
 pub use oblique_shock::{
     deflection_angle, max_deflection_angle, oblique_shock, shock_angle, ObliqueShock,
 };
+pub use pitot::{mach_from_pitot_ratio, rayleigh_pitot_ratio};
 pub use prandtl_meyer::{
     mach_after_expansion, mach_from_prandtl_meyer, nu_max, prandtl_meyer_angle,
 };
