@@ -99,6 +99,38 @@ fn solve_base_loop(
     }
 }
 
+/// The DC bias **stability factor** `S(ICO) = ∂Ic/∂Ico` for an
+/// emitter-degenerated base loop with effective base resistance `rb`
+/// (the Thevenin `Rth` for a divider) and emitter resistance `re`.
+///
+/// Differentiating the base-loop solution with respect to the reverse
+/// saturation ("leakage") current `Ico` gives the standard Boylestad
+/// result
+///
+/// > `S = (beta + 1) * (rb + re) / (rb + (beta + 1) * re)`,
+///
+/// equal to the algebraically identical `(1 + beta) / (1 + beta * re /
+/// (re + rb))`. It is purely a property of the network and the gain —
+/// it does not depend on `Vcc` or the Q-point — and is bounded by
+/// `1 <= S <= beta + 1`: it collapses to `beta + 1` for a bare fixed
+/// bias (`re = 0`, the worst case) and to `1` for an ideal emitter bias
+/// (`rb = 0`, the best case).
+///
+/// `rb`, `re` are assumed validated non-negative and `beta > 0`; the
+/// only degenerate input is `rb == re == 0`, for which the factor is the
+/// indeterminate `0 / 0` and an error is returned.
+fn stability_factor_s_ico(beta: f64, rb: f64, re: f64) -> Result<f64, BjtError> {
+    let denom = rb + (beta + 1.0) * re;
+    if denom == 0.0 {
+        return Err(BjtError::bad_parameter(
+            "rb+re",
+            "stability factor S(ICO) is undefined when both the base and emitter resistance are zero",
+            0.0,
+        ));
+    }
+    Ok((beta + 1.0) * (rb + re) / denom)
+}
+
 /// Validate a resistance argument (`>= 0`, finite).
 fn check_resistance(name: &'static str, value: f64) -> Result<(), BjtError> {
     if !value.is_finite() || value < 0.0 {
@@ -164,6 +196,23 @@ impl FixedBias {
     /// forward-biases.
     pub fn solve(&self, device: &Transistor) -> Result<OperatingPoint, BjtError> {
         solve_base_loop(device, self.vcc, self.vcc, self.rb, self.rc, self.re)
+    }
+
+    /// The DC bias stability factor `S(ICO) = ∂Ic/∂Ico` of this network
+    /// with `device` installed.
+    ///
+    /// For a fixed bias the effective base resistance is simply `Rb`, so
+    /// `S = (beta + 1)(Rb + Re) / (Rb + (beta + 1) Re)`. With no emitter
+    /// resistor (`Re = 0`) this is the textbook worst case
+    /// `S = beta + 1`. See the [crate-level docs](crate) for the
+    /// derivation and the `1 <= S <= beta + 1` bounds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BjtError::BadParameter`] only for the degenerate network
+    /// with `Rb == Re == 0`, where the factor is indeterminate.
+    pub fn stability_factor(&self, device: &Transistor) -> Result<f64, BjtError> {
+        stability_factor_s_ico(device.beta, self.rb, self.re)
     }
 }
 
@@ -241,6 +290,24 @@ impl DividerBias {
     pub fn solve(&self, device: &Transistor) -> Result<OperatingPoint, BjtError> {
         let (vth, rth) = self.thevenin();
         solve_base_loop(device, self.vcc, vth, rth, self.rc, self.re)
+    }
+
+    /// The DC bias stability factor `S(ICO) = ∂Ic/∂Ico` of this network
+    /// with `device` installed.
+    ///
+    /// The effective base resistance is the Thevenin `Rth = R1 || R2`, so
+    /// `S = (beta + 1)(Rth + Re) / (Rth + (beta + 1) Re)`. A "stiff"
+    /// divider (`(beta + 1) Re >> Rth`) drives `S` toward its ideal lower
+    /// bound of `1`. See the [crate-level docs](crate) for the derivation
+    /// and the `1 <= S <= beta + 1` bounds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BjtError::BadParameter`] only for the degenerate network
+    /// with `Rth == Re == 0` (i.e. `R1 == 0` and `Re == 0`).
+    pub fn stability_factor(&self, device: &Transistor) -> Result<f64, BjtError> {
+        let (_, rth) = self.thevenin();
+        stability_factor_s_ico(device.beta, rth, self.re)
     }
 }
 
@@ -496,6 +563,99 @@ mod tests {
     #[test]
     fn nonfinite_supply_rejected() {
         let err = FixedBias::new(f64::NAN, 1_000.0, 1_000.0, 0.0).unwrap_err();
+        assert_eq!(err.code(), "bjt.bad_parameter");
+    }
+
+    // ---- bias stability factor S(ICO) -------------------------------
+
+    /// Tolerance for the dimensionless stability factor.
+    const EPS_S: f64 = 1e-9;
+
+    #[test]
+    fn stability_factor_divider_matches_hand_calc() {
+        // Same network as `divider_bias_active_point_matches_hand_calc`:
+        // Rth = 7.5k, Re = 1k, beta = 99.
+        let q = Transistor::new(99.0, 0.7, 0.2).unwrap();
+        let bias = DividerBias::new(7.0, 30_000.0, 10_000.0, 2_000.0, 1_000.0).unwrap();
+        let (_, rth) = bias.thevenin();
+        assert!(approx(rth, 7_500.0, EPS_V));
+
+        // S = (beta+1)(Rth+Re)/(Rth+(beta+1)Re)
+        //   = 100 * 8500 / 107500 = 7.906976744...
+        let s = bias.stability_factor(&q).unwrap();
+        let s_hand = 100.0 * (7_500.0 + 1_000.0) / (7_500.0 + 100.0 * 1_000.0);
+        assert!(approx(s, s_hand, EPS_S), "S hand-calc, got {s}");
+
+        // Independent algebraic form S = (1+beta)/(1 + beta*Re/(Re+Rth)).
+        let s_alt = (1.0 + 99.0) / (1.0 + 99.0 * 1_000.0 / (1_000.0 + 7_500.0));
+        assert!(approx(s, s_alt, EPS_S), "S alt-form, got {s} vs {s_alt}");
+    }
+
+    #[test]
+    fn stability_factor_fixed_bias_no_emitter_is_beta_plus_one() {
+        // GOLD limiting case: Re = 0 -> S = beta + 1 (the worst case),
+        // independent of Rb.
+        let q = Transistor::silicon(100.0).unwrap();
+        let bias = FixedBias::new(12.0, 240_000.0, 2_200.0, 0.0).unwrap();
+        let s = bias.stability_factor(&q).unwrap();
+        assert!(approx(s, 101.0, EPS_S), "S = beta+1 = 101, got {s}");
+    }
+
+    #[test]
+    fn stability_factor_ideal_emitter_bias_is_one() {
+        // GOLD limiting case: Rb = 0 -> S = 1 exactly (best case),
+        // independent of beta and Re.
+        let q = Transistor::silicon(250.0).unwrap();
+        let bias = FixedBias::new(9.0, 0.0, 1_500.0, 470.0).unwrap();
+        let s = bias.stability_factor(&q).unwrap();
+        assert!(approx(s, 1.0, EPS_S), "S = 1, got {s}");
+    }
+
+    #[test]
+    fn stability_factor_is_bounded_by_one_and_beta_plus_one() {
+        // 1 <= S <= beta+1 for every valid network.
+        let q = Transistor::silicon(150.0).unwrap();
+        let upper = q.beta + 1.0;
+        for &rth in &[1.0, 1_000.0, 10_000.0, 100_000.0] {
+            for &re in &[0.0, 100.0, 1_000.0, 10_000.0] {
+                // R1 = R2 = 2*rth -> Rth = R1||R2 = rth.
+                let bias = DividerBias::new(10.0, 2.0 * rth, 2.0 * rth, 1_000.0, re).unwrap();
+                let (_, got_rth) = bias.thevenin();
+                assert!(approx(got_rth, rth, 1e-6));
+                let s = bias.stability_factor(&q).unwrap();
+                assert!(
+                    ((1.0 - EPS_S)..=(upper + EPS_S)).contains(&s),
+                    "S out of [1, beta+1]: rth={rth}, re={re}, S={s}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn stability_factor_decreases_with_emitter_resistance() {
+        // Emitter degeneration monotonically improves stability (drives
+        // S strictly down toward 1) at fixed Rb.
+        let q = Transistor::silicon(100.0).unwrap();
+        let res = [0.0, 100.0, 470.0, 1_000.0, 4_700.0, 22_000.0];
+        let mut prev = f64::INFINITY;
+        for &re in &res {
+            let bias = FixedBias::new(12.0, 47_000.0, 2_200.0, re).unwrap();
+            let s = bias.stability_factor(&q).unwrap();
+            assert!(
+                s < prev,
+                "S should strictly decrease with Re: {s} !< {prev}"
+            );
+            assert!(s >= 1.0 - EPS_S, "S >= 1, got {s}");
+            prev = s;
+        }
+    }
+
+    #[test]
+    fn stability_factor_degenerate_network_rejected() {
+        // Rb = 0 and Re = 0 -> indeterminate 0/0.
+        let q = Transistor::silicon(100.0).unwrap();
+        let bias = FixedBias::new(5.0, 0.0, 1_000.0, 0.0).unwrap();
+        let err = bias.stability_factor(&q).unwrap_err();
         assert_eq!(err.code(), "bjt.bad_parameter");
     }
 
