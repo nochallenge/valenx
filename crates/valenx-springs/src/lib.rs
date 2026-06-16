@@ -22,6 +22,9 @@
 //!   [`springs::shear_stress_mpa`] — the coil index `C = D/d`, its Wahl
 //!   curvature-correction factor, and the resulting wire shear stress
 //!   `τ = K_w · 8 F D / (π d^3)` under an axial load.
+//! - [`springs::deflection_mm`] / [`springs::stored_energy_nmm`] — the
+//!   Hooke load response `δ = F / k` and the stored strain energy
+//!   `U = ½ F δ = ½ F² / k`.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -33,6 +36,6 @@ pub mod springs;
 pub use error::{ErrorCategory, SpringsError};
 pub use spec::{EndTreatment, SpringKind, SpringSpec};
 pub use springs::{
-    compression_centerline, extension_centerline, shear_stress_mpa, spring_index,
-    stiffness_n_per_mm, to_solid, torsion_centerline, wahl_factor,
+    compression_centerline, deflection_mm, extension_centerline, shear_stress_mpa, spring_index,
+    stiffness_n_per_mm, stored_energy_nmm, to_solid, torsion_centerline, wahl_factor,
 };
