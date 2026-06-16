@@ -241,6 +241,75 @@ impl Column {
     pub fn slenderness_ratio(&self) -> f64 {
         self.effective_length() / self.radius_of_gyration()
     }
+
+    /// **Transition (critical) slenderness ratio**
+    /// `C_c = sqrt(2 pi^2 E / sigma_y)`, the slenderness separating long
+    /// (Euler) from intermediate/short (Johnson) columns.
+    ///
+    /// At `C_c` the Euler hyperbola and the J. B. Johnson parabola meet
+    /// tangentially, both giving `sigma_cr = sigma_y / 2`. A column more
+    /// slender than `C_c` buckles elastically (use [`critical_stress`]); a
+    /// stockier one fails inelastically (use [`johnson_critical_stress`]).
+    ///
+    /// [`critical_stress`]: Column::critical_stress
+    /// [`johnson_critical_stress`]: Column::johnson_critical_stress
+    ///
+    /// # Errors
+    /// [`BucklingError::NonPositive`] if `yield_strength` is not finite and
+    /// strictly positive.
+    pub fn transition_slenderness(&self, yield_strength: f64) -> Result<f64, BucklingError> {
+        let sy = BucklingError::require_positive("yield_strength", yield_strength)?;
+        Ok((2.0 * std::f64::consts::PI.powi(2) * self.youngs_modulus / sy).sqrt())
+    }
+
+    /// **J. B. Johnson parabola critical stress**
+    /// `sigma_cr = sigma_y * [1 - sigma_y (K L / r)^2 / (4 pi^2 E)]`.
+    ///
+    /// The inelastic short/intermediate-column failure stress: a downward
+    /// parabola in slenderness starting at the yield strength `sigma_y` for
+    /// a zero-length column and tangent to the Euler curve at the
+    /// [transition slenderness](Column::transition_slenderness). It is the
+    /// physically meaningful branch for slenderness `<= C_c`; above that use
+    /// the Euler [`critical_stress`](Column::critical_stress).
+    ///
+    /// # Errors
+    /// [`BucklingError::NonPositive`] if `yield_strength` is not finite and
+    /// strictly positive.
+    pub fn johnson_critical_stress(&self, yield_strength: f64) -> Result<f64, BucklingError> {
+        let sy = BucklingError::require_positive("yield_strength", yield_strength)?;
+        let slenderness = self.slenderness_ratio();
+        let e = self.youngs_modulus;
+        Ok(sy * (1.0 - sy * slenderness * slenderness / (4.0 * std::f64::consts::PI.powi(2) * e)))
+    }
+
+    /// **Design critical stress** combining the two regimes by slenderness:
+    /// the Euler elastic stress for long columns (slenderness `>= C_c`) and
+    /// the Johnson parabola for intermediate/short columns (slenderness
+    /// `< C_c`). Unlike the bare Euler [`critical_stress`](Column::critical_stress)
+    /// it never exceeds the yield strength, so it is realistic across the
+    /// whole slenderness range.
+    ///
+    /// # Errors
+    /// [`BucklingError::NonPositive`] if `yield_strength` is not finite and
+    /// strictly positive.
+    pub fn design_critical_stress(&self, yield_strength: f64) -> Result<f64, BucklingError> {
+        let cc = self.transition_slenderness(yield_strength)?;
+        if self.slenderness_ratio() >= cc {
+            Ok(self.critical_stress())
+        } else {
+            self.johnson_critical_stress(yield_strength)
+        }
+    }
+
+    /// **Design critical load** `sigma_cr * A`, using the combined
+    /// Euler/Johnson [`design_critical_stress`](Column::design_critical_stress).
+    ///
+    /// # Errors
+    /// [`BucklingError::NonPositive`] if `yield_strength` is not finite and
+    /// strictly positive.
+    pub fn design_critical_load(&self, yield_strength: f64) -> Result<f64, BucklingError> {
+        Ok(self.design_critical_stress(yield_strength)? * self.area)
+    }
 }
 
 #[cfg(test)]
@@ -430,5 +499,86 @@ mod tests {
         let back: Column = serde_json::from_str(&json).unwrap();
         assert_eq!(col, back);
         assert!((col.critical_load() - back.critical_load()).abs() < EPS);
+    }
+
+    // -----------------------------------------------------------------
+    // Johnson parabola / inelastic intermediate-column transition.
+    // -----------------------------------------------------------------
+
+    /// At the transition slenderness `C_c = sqrt(2 pi^2 E / sigma_y)` the
+    /// Euler and Johnson branches meet tangentially at `sigma_y / 2`.
+    #[test]
+    fn euler_and_johnson_agree_at_the_transition() {
+        let (e, sy) = (200.0e9, 250.0e6);
+        let cc = (2.0 * PI.powi(2) * e / sy).sqrt();
+        // Pinned, I = A = 1 -> r = 1, so slenderness = K L / r = L = C_c.
+        let col = Column::new(e, 1.0, cc, 1.0, EndCondition::PinnedPinned).unwrap();
+        assert!((col.slenderness_ratio() - cc).abs() < 1e-9 * cc);
+        assert!((col.transition_slenderness(sy).unwrap() - cc).abs() < 1e-9 * cc);
+
+        let half = sy / 2.0;
+        assert!((col.critical_stress() - half).abs() < 1e-3 * half, "euler");
+        assert!(
+            (col.johnson_critical_stress(sy).unwrap() - half).abs() < 1e-3 * half,
+            "johnson"
+        );
+        assert!(
+            (col.design_critical_stress(sy).unwrap() - half).abs() < 1e-3 * half,
+            "design"
+        );
+    }
+
+    /// A stocky column (slenderness << C_c): the bare Euler stress is
+    /// absurdly above yield, but the Johnson-based design stress caps just
+    /// below `sigma_y`, which is what `design_critical_stress` returns.
+    #[test]
+    fn stocky_column_design_is_capped_near_yield() {
+        let (e, sy) = (200.0e9, 250.0e6);
+        let col = Column::new(e, 1.0, 1.0, 1.0, EndCondition::PinnedPinned).unwrap(); // slenderness 1
+        assert!(col.slenderness_ratio() < col.transition_slenderness(sy).unwrap());
+        let design = col.design_critical_stress(sy).unwrap();
+        assert!(design < sy && design > 0.999 * sy, "design {design}");
+        // Bare Euler for this stub is wildly unphysical (>> yield).
+        assert!(col.critical_stress() > 10.0 * sy);
+        // design uses the Johnson branch here.
+        assert!((design - col.johnson_critical_stress(sy).unwrap()).abs() < EPS * design);
+    }
+
+    /// A slender column (slenderness > C_c): the design stress is exactly
+    /// the elastic Euler value (Johnson does not apply) and sits below
+    /// `sigma_y / 2`.
+    #[test]
+    fn slender_column_design_equals_euler() {
+        let (e, sy) = (200.0e9, 250.0e6);
+        let col = Column::new(e, 1.0, 200.0, 1.0, EndCondition::PinnedPinned).unwrap(); // slenderness 200
+        assert!(col.slenderness_ratio() > col.transition_slenderness(sy).unwrap());
+        let design = col.design_critical_stress(sy).unwrap();
+        assert!((design - col.critical_stress()).abs() < EPS * design.max(1.0));
+        assert!(design < sy / 2.0);
+    }
+
+    /// The Johnson stress matches its closed form, and the design load is
+    /// the design stress times the area.
+    #[test]
+    fn johnson_formula_and_design_load() {
+        let (e, sy) = (70.0e9, 95.0e6); // aluminium-ish
+        let col = Column::new(e, 4.0e-6, 1.2, 3.0e-3, EndCondition::FixedFixed).unwrap();
+        let s = col.slenderness_ratio();
+        let expected = sy * (1.0 - sy * s * s / (4.0 * PI.powi(2) * e));
+        assert!((col.johnson_critical_stress(sy).unwrap() - expected).abs() < EPS * expected.abs());
+        let dl = col.design_critical_load(sy).unwrap();
+        let expect_dl = col.design_critical_stress(sy).unwrap() * col.area;
+        assert!((dl - expect_dl).abs() < EPS * dl.abs());
+    }
+
+    /// Every yield-strength-taking method rejects a non-positive / non-finite
+    /// `sigma_y`.
+    #[test]
+    fn yield_strength_methods_reject_bad_input() {
+        let col = Column::new(1.0, 1.0, 1.0, 1.0, EndCondition::PinnedPinned).unwrap();
+        assert!(col.transition_slenderness(0.0).is_err());
+        assert!(col.johnson_critical_stress(-1.0).is_err());
+        assert!(col.design_critical_stress(f64::NAN).is_err());
+        assert!(col.design_critical_load(f64::INFINITY).is_err());
     }
 }
