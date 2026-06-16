@@ -9,8 +9,10 @@
 //! - **Michaelis-Menten** ([`MichaelisMenten`], module
 //!   [`michaelis_menten`]) — the single-substrate rate law
 //!   `v = Vmax * S / (Km + S)`, the dimensionless saturation
-//!   `S / (Km + S)`, and the closed-form **integrated** equation
-//!   `Vmax*t = Km*ln(s0/s) + (s0 - s)`
+//!   `S / (Km + S)`, its inverse the substrate-for-velocity
+//!   `S = Km*v/(Vmax - v)`
+//!   ([`MichaelisMenten::substrate_for_velocity`]), and the closed-form
+//!   **integrated** equation `Vmax*t = Km*ln(s0/s) + (s0 - s)`
 //!   ([`MichaelisMenten::time_to_deplete`]) for the substrate-depletion
 //!   progress curve.
 //! - **Reversible inhibition** ([`inhibition`]) — [`Competitive`]
@@ -51,8 +53,9 @@
 //! `Km` only, noncompetitive moves `Vmax` only, uncompetitive moves both
 //! by the same factor) follow directly and are pinned by the unit tests,
 //! along with `v(Km) = Vmax/2`, saturation `v -> Vmax` as `S -> ∞`,
-//! strict monotonicity in `S`, and the `n = 1` Hill-to-Michaelis-Menten
-//! reduction.
+//! strict monotonicity in `S`, the `n = 1` Hill-to-Michaelis-Menten
+//! reduction, and the exact inversion `S = Km*v/(Vmax - v)` (defined for
+//! `v < Vmax`) that round-trips the Michaelis-Menten rate law.
 //!
 //! ## Honest scope
 //!
