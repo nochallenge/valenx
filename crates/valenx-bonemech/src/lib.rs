@@ -23,7 +23,10 @@
 //!     `I = (pi / 64)(D_o^4 - D_i^4)` (mm^4),
 //!   - [`section_modulus_mm3`] — `S = I / c` (mm^3),
 //!   - [`bending_stress_mpa`] — Euler-Bernoulli flexure
-//!     `sigma = M c / I` (MPa).
+//!     `sigma = M c / I` (MPa),
+//!   - [`bending_moment_for_stress`] — its inverse `M = sigma I / c`
+//!     (N mm); feeding the ultimate stress gives the bending fracture
+//!     moment, the flexural counterpart of the axial fracture load.
 //! - Density scaling ([`density`]):
 //!   - [`PowerLaw`] / [`strength_from_density`] — the Carter-Hayes
 //!     apparent-density power law `sigma_ult ~ rho^exponent`
@@ -71,7 +74,10 @@ pub mod section;
 pub use bone::{Bone, CORTICAL_MODULUS_GPA, CORTICAL_ULTIMATE_STRESS_MPA};
 pub use density::{strength_from_density, PowerLaw, DEFAULT_DENSITY_EXPONENT};
 pub use error::{BoneError, ErrorCategory, Result};
-pub use section::{bending_stress_mpa, second_moment_hollow_circle_mm4, section_modulus_mm3};
+pub use section::{
+    bending_moment_for_stress, bending_stress_mpa, second_moment_hollow_circle_mm4,
+    section_modulus_mm3,
+};
 
 #[cfg(test)]
 mod tests {

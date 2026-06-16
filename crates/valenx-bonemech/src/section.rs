@@ -35,7 +35,9 @@
 //! `I = (pi / 64) * D^4`. Euler-Bernoulli beam theory then gives the
 //! peak normal stress at a fibre a distance `c` from the neutral axis as
 //! `sigma = M c / I`; for a symmetric tube the maximum is at the outer
-//! surface, `c = D_o / 2`.
+//! surface, `c = D_o / 2`. The relation inverts to `M = sigma I / c`, so
+//! feeding the tissue's ultimate stress gives the bending fracture
+//! moment of the section.
 
 use crate::error::{BoneError, Result};
 use std::f64::consts::PI;
@@ -157,6 +159,52 @@ pub fn bending_stress_mpa(moment_nmm: f64, c_mm: f64, i_mm4: f64) -> Result<f64>
     Ok(moment_nmm * c_mm / i_mm4)
 }
 
+/// The bending moment that produces a given extreme-fibre stress, in
+/// N mm — the inverse of [`bending_stress_mpa`]:
+///
+/// ```text
+/// M = sigma * I / c = sigma * S
+/// ```
+///
+/// Feeding the tissue's ultimate stress yields the **bending fracture
+/// moment** of the section — the flexural counterpart of an axial
+/// fracture load. The stress may be signed; the sign carries through to
+/// the moment.
+///
+/// # Errors
+///
+/// Returns [`BoneError::Invalid`] if `stress_mpa` is non-finite, if
+/// `c_mm <= 0`, or if `i_mm4 <= 0` (or either is non-finite).
+///
+/// # Examples
+///
+/// ```
+/// use valenx_bonemech::{bending_stress_mpa, bending_moment_for_stress};
+/// // Round-trip: moment -> stress -> moment.
+/// let (c, i) = (5.0, 1000.0);
+/// let sigma = bending_stress_mpa(20_000.0, c, i).unwrap();
+/// let m = bending_moment_for_stress(sigma, c, i).unwrap();
+/// assert!((m - 20_000.0).abs() < 1e-6);
+/// ```
+pub fn bending_moment_for_stress(stress_mpa: f64, c_mm: f64, i_mm4: f64) -> Result<f64> {
+    if !stress_mpa.is_finite() {
+        return Err(BoneError::invalid("stress_mpa", "stress must be finite"));
+    }
+    if !c_mm.is_finite() || c_mm <= 0.0 {
+        return Err(BoneError::invalid(
+            "c_mm",
+            "extreme-fibre distance must be positive and finite",
+        ));
+    }
+    if !i_mm4.is_finite() || i_mm4 <= 0.0 {
+        return Err(BoneError::invalid(
+            "i_mm4",
+            "second moment of area must be positive and finite",
+        ));
+    }
+    Ok(stress_mpa * i_mm4 / c_mm)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,5 +295,69 @@ mod tests {
         // Zero moment is allowed and yields zero stress.
         let sigma = bending_stress_mpa(0.0, 5.0, 1000.0).unwrap();
         assert!(sigma.abs() < 1e-12, "got {sigma}");
+    }
+
+    /// The moment-for-stress inverse round-trips with the flexure formula.
+    #[test]
+    fn moment_for_stress_inverts_bending_stress() {
+        let i = second_moment_hollow_circle_mm4(20.0, 12.0).unwrap();
+        let c = 10.0;
+        let m0 = 75_000.0;
+        let sigma = bending_stress_mpa(m0, c, i).unwrap();
+        let m = bending_moment_for_stress(sigma, c, i).unwrap();
+        assert!((m - m0).abs() / m0 < 1e-12, "got {m}");
+    }
+
+    /// Closed form: sigma=100 MPa, c=5 mm, I=1000 mm^4 -> M=20000 N mm.
+    #[test]
+    fn moment_for_stress_closed_form() {
+        let m = bending_moment_for_stress(100.0, 5.0, 1000.0).unwrap();
+        assert!((m - 20_000.0).abs() < 1e-9, "got {m}");
+    }
+
+    /// M = sigma * S, tying the inverse to the section modulus.
+    #[test]
+    fn moment_for_stress_equals_stress_times_section_modulus() {
+        let i = second_moment_hollow_circle_mm4(27.0, 17.0).unwrap();
+        let c = 13.5;
+        let s = section_modulus_mm3(i, c).unwrap();
+        let sigma = 150.0;
+        let m = bending_moment_for_stress(sigma, c, i).unwrap();
+        assert!(
+            (m - sigma * s).abs() < 1e-6,
+            "M {m} vs sigma*S {}",
+            sigma * s
+        );
+    }
+
+    /// Feeding the ultimate stress gives a fracture moment that, fed back
+    /// through the flexure formula, reproduces the ultimate stress exactly.
+    #[test]
+    fn fracture_moment_brings_outer_fibre_to_ultimate() {
+        let i = second_moment_hollow_circle_mm4(27.0, 17.0).unwrap();
+        let c = 13.5;
+        let sigma_ult = crate::CORTICAL_ULTIMATE_STRESS_MPA;
+        let m_frac = bending_moment_for_stress(sigma_ult, c, i).unwrap();
+        let sigma_back = bending_stress_mpa(m_frac, c, i).unwrap();
+        assert!((sigma_back - sigma_ult).abs() < 1e-9, "got {sigma_back}");
+    }
+
+    /// A negative stress yields a sign-flipped moment.
+    #[test]
+    fn moment_for_stress_sign_carries() {
+        let pos = bending_moment_for_stress(120.0, 5.0, 1000.0).unwrap();
+        let neg = bending_moment_for_stress(-120.0, 5.0, 1000.0).unwrap();
+        assert!(
+            (pos + neg).abs() < 1e-9,
+            "expected opposite signs: {pos}, {neg}"
+        );
+    }
+
+    #[test]
+    fn moment_for_stress_rejects_bad_inputs() {
+        assert!(bending_moment_for_stress(f64::NAN, 5.0, 1000.0).is_err());
+        assert!(bending_moment_for_stress(100.0, 0.0, 1000.0).is_err());
+        assert!(bending_moment_for_stress(100.0, -1.0, 1000.0).is_err());
+        assert!(bending_moment_for_stress(100.0, 5.0, 0.0).is_err());
     }
 }
