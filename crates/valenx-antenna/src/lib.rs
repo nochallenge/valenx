@@ -19,8 +19,10 @@
 //! [`gain::to_dbi`] / [`gain::from_dbi`] (`G_dBi = 10*log10(G)`).
 //!
 //! The [`friis`] module provides the Friis transmission equation
-//! `Pr/Pt = Gt*Gr*(lambda/(4*pi*d))^2`, received power, and free-space
-//! path loss in linear and dB form.
+//! `Pr/Pt = Gt*Gr*(lambda/(4*pi*d))^2`, received power, free-space
+//! path loss in linear and dB form, and the inverse maximum-range solve
+//! [`friis::max_range_m`] — the distance at which the received power
+//! falls to a target receiver sensitivity.
 //!
 //! The [`beamwidth`] module provides the `theta ~ lambda / D` rule of
 //! thumb, a `k`-weighted variant for common aperture tapers, and a
@@ -42,6 +44,7 @@
 //! decibels:     G_dBi = 10 * log10(G)
 //! beamwidth:    theta ~ k * lambda / D
 //! path loss:    FSPL  = (4*pi*d / lambda)^2
+//! max range:    d_max = (lambda/(4*pi)) * sqrt(Pt*Gt*Gr / Pr_min)
 //! ```
 //!
 //! Gains carried through the API are **linear** power ratios relative
@@ -89,7 +92,8 @@ pub use beamwidth::{
 };
 pub use error::{AntennaError, ErrorCategory};
 pub use friis::{
-    free_space_factor, free_space_path_loss, free_space_path_loss_db, power_ratio, received_power,
+    free_space_factor, free_space_path_loss, free_space_path_loss_db, max_range_m, power_ratio,
+    received_power,
 };
 pub use gain::{aperture_from_gain, effective_aperture, from_dbi, gain_from_aperture, to_dbi};
 pub use spec::{power_w_to_dbm, LinkResult, LinkSpec};
