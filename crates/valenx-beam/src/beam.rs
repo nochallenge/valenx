@@ -20,16 +20,19 @@
 //! - [`BeamResult::max_moment`] and [`BeamResult::max_stress`] are
 //!   likewise reported as magnitudes.
 //!
-//! # The four cases
+//! # The six cases
 //!
-//! | Support            | Load                | Max deflection        | Max moment |
-//! |--------------------|---------------------|-----------------------|------------|
-//! | Cantilever         | tip point `P`       | `P L^3 / (3 E I)`     | `P L`      |
-//! | Cantilever         | UDL `w`             | `w L^4 / (8 E I)`     | `w L^2 / 2`|
-//! | Simply-supported   | centre point `P`    | `P L^3 / (48 E I)`    | `P L / 4`  |
-//! | Simply-supported   | UDL `w`             | `5 w L^4 / (384 E I)` | `w L^2 / 8`|
+//! | Support            | Load                | Max deflection        | Max moment   |
+//! |--------------------|---------------------|-----------------------|--------------|
+//! | Cantilever         | tip point `P`       | `P L^3 / (3 E I)`     | `P L`        |
+//! | Cantilever         | UDL `w`             | `w L^4 / (8 E I)`     | `w L^2 / 2`  |
+//! | Simply-supported   | centre point `P`    | `P L^3 / (48 E I)`    | `P L / 4`    |
+//! | Simply-supported   | UDL `w`             | `5 w L^4 / (384 E I)` | `w L^2 / 8`  |
+//! | Fixed-fixed        | centre point `P`    | `P L^3 / (192 E I)`   | `P L / 8`    |
+//! | Fixed-fixed        | UDL `w`             | `w L^4 / (384 E I)`   | `w L^2 / 12` |
 //!
-//! The peak bending stress is `sigma = M c / I` in every case, with `c`
+//! The fixed-fixed (clamped-clamped) maximum moment is the end moment;
+//! the peak bending stress is `sigma = M c / I` in every case, with `c`
 //! the section's extreme-fibre distance.
 
 use crate::error::BeamError;
@@ -43,14 +46,18 @@ pub enum Support {
     Cantilever,
     /// Pin / roller supported at both ends (statically determinate).
     SimplySupported,
+    /// Built in (fixed / clamped) at *both* ends — statically
+    /// indeterminate, and far stiffer than the simply-supported case
+    /// (the end moments of fixity carry part of the load).
+    FixedFixed,
 }
 
 /// The applied load.
 ///
 /// `Point` is applied at the *characteristic* location for the support
 /// type (the free tip of a cantilever, or mid-span of a
-/// simply-supported beam); `Udl` is a uniformly distributed load `w`
-/// (force per unit length) along the whole span.
+/// simply-supported or fixed-fixed beam); `Udl` is a uniformly
+/// distributed load `w` (force per unit length) along the whole span.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Load {
     /// Concentrated point load `P` (force).
@@ -138,7 +145,9 @@ impl Beam {
     /// Closed forms (see the [module docs](crate::beam)):
     /// cantilever point `P L^3 / (3 E I)`, cantilever UDL
     /// `w L^4 / (8 E I)`, simply-supported centre point
-    /// `P L^3 / (48 E I)`, simply-supported UDL `5 w L^4 / (384 E I)`.
+    /// `P L^3 / (48 E I)`, simply-supported UDL `5 w L^4 / (384 E I)`,
+    /// fixed-fixed centre point `P L^3 / (192 E I)`, fixed-fixed UDL
+    /// `w L^4 / (384 E I)`.
     ///
     /// # Errors
     /// Returns [`BeamError::BadParameter`] if the load magnitude is not
@@ -163,6 +172,14 @@ impl Beam {
                 let w = BeamError::require_positive("intensity", intensity)?;
                 5.0 * w * l.powi(4) / (384.0 * ei)
             }
+            (Support::FixedFixed, Load::Point { force }) => {
+                let p = BeamError::require_positive("force", force)?;
+                p * l.powi(3) / (192.0 * ei)
+            }
+            (Support::FixedFixed, Load::Udl { intensity }) => {
+                let w = BeamError::require_positive("intensity", intensity)?;
+                w * l.powi(4) / (384.0 * ei)
+            }
         };
         Ok(deflection)
     }
@@ -173,7 +190,8 @@ impl Beam {
     /// Closed forms: cantilever point `P L` (at the root), cantilever
     /// UDL `w L^2 / 2` (at the root), simply-supported centre point
     /// `P L / 4` (at mid-span), simply-supported UDL `w L^2 / 8` (at
-    /// mid-span).
+    /// mid-span), fixed-fixed centre point `P L / 8` (at the ends),
+    /// fixed-fixed UDL `w L^2 / 12` (at the ends).
     ///
     /// # Errors
     /// Returns [`BeamError::BadParameter`] if the load magnitude is not
@@ -196,6 +214,18 @@ impl Beam {
             (Support::SimplySupported, Load::Udl { intensity }) => {
                 let w = BeamError::require_positive("intensity", intensity)?;
                 w * l * l / 8.0
+            }
+            (Support::FixedFixed, Load::Point { force }) => {
+                // Peak |M| is at the built-in ends, P L / 8 (the centre
+                // moment is also P L / 8 but of opposite sign).
+                let p = BeamError::require_positive("force", force)?;
+                p * l / 8.0
+            }
+            (Support::FixedFixed, Load::Udl { intensity }) => {
+                // Peak |M| is at the built-in ends, w L^2 / 12 (the centre
+                // moment is w L^2 / 24).
+                let w = BeamError::require_positive("intensity", intensity)?;
+                w * l * l / 12.0
             }
         };
         Ok(moment)
