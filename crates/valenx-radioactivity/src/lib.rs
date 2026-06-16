@@ -12,8 +12,10 @@
 //!   constant `lambda`. Gives the half-life, the mean (average) life, the
 //!   number-remaining-vs-time law `N(t) = N0 * exp(-lambda * t)`, the
 //!   activity `A = lambda * N` and its own decay `A(t) = A0 *
-//!   exp(-lambda * t)`, and the time to reach an arbitrary remaining
-//!   fraction. Constructible from any one of `lambda`, the half-life, or
+//!   exp(-lambda * t)`, the time to reach an arbitrary remaining
+//!   fraction, and the number of decays over a time interval (the
+//!   time-integral of activity, i.e. the cumulated-disintegration
+//!   count). Constructible from any one of `lambda`, the half-life, or
 //!   the mean life.
 //! - [`DecayChain`] — a parent nuclide feeding a single radioactive
 //!   daughter. Gives both populations and activities over time from the
@@ -30,7 +32,9 @@
 //! - Single nuclide: `N(t) = N0 * exp(-lambda * t)`; half-life
 //!   `t_half = ln(2) / lambda`; mean life `tau = 1 / lambda =
 //!   t_half / ln(2)`; activity `A = lambda * N`, decaying as
-//!   `A(t) = A0 * exp(-lambda * t)`.
+//!   `A(t) = A0 * exp(-lambda * t)`. The number of decays in an interval
+//!   is `N(t1) - N(t2)` — the time-integral of the activity, which over
+//!   all time totals the initial population `N0`.
 //! - Parent -> daughter (Bateman, with initial daughter `Nd0`):
 //!
 //!   ```text

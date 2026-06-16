@@ -17,6 +17,8 @@
 //!   becquerel (one decay per second). Because activity is just `lambda`
 //!   times the population, it obeys the same exponential law,
 //!   `A(t) = A0 * exp(-lambda * t)`.
+//! - Number of decays in `[t1, t2]`: `N(t1) - N(t2)`, the time-integral
+//!   of the activity, tending to the whole sample `N0` over all time.
 //!
 //! The [`Nuclide`] type stores `lambda` and exposes these as methods,
 //! with constructors that accept whichever of `lambda`, `t_half` or `tau`
@@ -189,6 +191,40 @@ impl Nuclide {
         }
         Ok(-fraction.ln() / self.lambda)
     }
+
+    /// The number of nuclei that decay in the time interval
+    /// `[t_start, t_end]`, given an initial population `n0`:
+    ///
+    /// ```text
+    /// D = N0 * (exp(-lambda * t_start) - exp(-lambda * t_end))
+    ///   = N(t_start) - N(t_end)
+    /// ```
+    ///
+    /// Because the activity is the decay rate `A = -dN/dt`, this equals
+    /// the time-integral of the activity over the interval — the number
+    /// of disintegrations that underlies a cumulated-activity / dose
+    /// estimate. Over `[0, infinity)` it tends to the whole initial
+    /// population `n0` (every nucleus eventually decays).
+    ///
+    /// # Errors
+    ///
+    /// [`RadioactivityError::NonPositive`] if `n0` is not strictly
+    /// positive, or if either time is negative or non-finite;
+    /// [`RadioactivityError::OutOfRange`] if `t_end < t_start` (the
+    /// interval would run backwards).
+    pub fn decays_in_interval(&self, n0: f64, t_start: f64, t_end: f64) -> Result<f64> {
+        let n0 = RadioactivityError::require_positive("n0", n0)?;
+        let t_start = RadioactivityError::require_non_negative("t_start", t_start)?;
+        let t_end = RadioactivityError::require_non_negative("t_end", t_end)?;
+        if t_end < t_start {
+            return Err(RadioactivityError::OutOfRange {
+                what: "t_end",
+                value: t_end,
+                interval: "[t_start, infinity)",
+            });
+        }
+        Ok(n0 * ((-self.lambda * t_start).exp() - (-self.lambda * t_end).exp()))
+    }
 }
 
 #[cfg(test)]
@@ -343,6 +379,84 @@ mod tests {
         );
         // fraction == 1 means zero elapsed time.
         assert!(close(nuc.time_to_fraction(1.0).unwrap(), 0.0, 1e-15));
+    }
+
+    #[test]
+    fn decays_in_interval_equals_population_drop() {
+        // D = N(t_start) - N(t_end), tying the integral to the number law.
+        let nuc = Nuclide::from_half_life(8.0).unwrap();
+        let n0 = 1.0e9;
+        let (t1, t2) = (2.0, 17.0);
+        let d = nuc.decays_in_interval(n0, t1, t2).unwrap();
+        let drop = nuc.remaining(n0, t1).unwrap() - nuc.remaining(n0, t2).unwrap();
+        assert!(close(d, drop, 1e-3), "D = {d}, drop = {drop}");
+    }
+
+    #[test]
+    fn half_the_sample_decays_in_the_first_half_life() {
+        // From 0 to one half-life, exactly N0/2 nuclei decay.
+        let nuc = Nuclide::from_half_life(5.0).unwrap();
+        let n0 = 1.0e6;
+        let d = nuc.decays_in_interval(n0, 0.0, nuc.half_life()).unwrap();
+        assert!(close(d, n0 / 2.0, 1e-6), "D = {d}");
+    }
+
+    #[test]
+    fn all_nuclei_decay_over_long_time() {
+        // Over ~100 half-lives essentially the whole population decays.
+        let nuc = Nuclide::from_half_life(2.0).unwrap();
+        let n0 = 4096.0;
+        let d = nuc.decays_in_interval(n0, 0.0, 200.0).unwrap();
+        assert!(close(d, n0, 1e-6), "D = {d} should approach n0 = {n0}");
+    }
+
+    #[test]
+    fn decays_in_interval_is_additive() {
+        // Consecutive intervals sum: D(t0,t1) + D(t1,t2) == D(t0,t2).
+        let nuc = Nuclide::from_decay_constant(0.3).unwrap();
+        let n0 = 5.0e7;
+        let a = nuc.decays_in_interval(n0, 0.0, 3.0).unwrap();
+        let b = nuc.decays_in_interval(n0, 3.0, 9.0).unwrap();
+        let whole = nuc.decays_in_interval(n0, 0.0, 9.0).unwrap();
+        assert!(close(a + b, whole, 1e-3), "{a} + {b} != {whole}");
+    }
+
+    #[test]
+    fn zero_width_interval_has_no_decays() {
+        let nuc = Nuclide::from_half_life(1.0).unwrap();
+        let d = nuc.decays_in_interval(1.0e6, 4.0, 4.0).unwrap();
+        assert!(close(d, 0.0, 1e-9), "D = {d}");
+    }
+
+    #[test]
+    fn decays_in_interval_matches_numerical_activity_integral() {
+        // D must equal the trapezoidal integral of activity over [t1, t2],
+        // confirming it is the time-integral of the decay rate.
+        let nuc = Nuclide::from_half_life(6.0).unwrap();
+        let n0 = 1.0e8;
+        let (t1, t2) = (1.0, 13.0);
+        let analytic = nuc.decays_in_interval(n0, t1, t2).unwrap();
+        let steps = 20_000;
+        let h = (t2 - t1) / steps as f64;
+        let mut integral = 0.0;
+        for i in 0..steps {
+            let ta = t1 + i as f64 * h;
+            let tb = ta + h;
+            let aa = nuc.activity_at(n0, ta).unwrap();
+            let ab = nuc.activity_at(n0, tb).unwrap();
+            integral += 0.5 * (aa + ab) * h;
+        }
+        let rel = (analytic - integral).abs() / analytic;
+        assert!(rel < 1e-6, "analytic {analytic} vs numerical {integral}");
+    }
+
+    #[test]
+    fn decays_in_interval_rejects_bad_inputs() {
+        let nuc = Nuclide::from_half_life(1.0).unwrap();
+        assert!(nuc.decays_in_interval(0.0, 0.0, 1.0).is_err()); // n0 <= 0
+        assert!(nuc.decays_in_interval(1.0, -1.0, 1.0).is_err()); // t_start < 0
+        assert!(nuc.decays_in_interval(1.0, 0.0, f64::NAN).is_err()); // non-finite
+        assert!(nuc.decays_in_interval(1.0, 5.0, 2.0).is_err()); // t_end < t_start
     }
 
     #[test]
