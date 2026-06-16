@@ -6,6 +6,8 @@
 //! distance `do` in front of it. This module solves for the image
 //! distance `di`, the transverse magnification `m`, and classifies the
 //! image (real vs. virtual, upright vs. inverted, magnified vs. reduced).
+//! It also inverts the magnification relation: given a target `m`, it
+//! returns the object distance `do = f (m - 1) / m` that produces it.
 //!
 //! ## Model
 //!
@@ -175,6 +177,18 @@ impl ThinLens {
     pub fn image(&self, object_distance: f64) -> Result<Image, OpticsError> {
         image(self.focal_length, object_distance)
     }
+
+    /// The object distance that yields a target transverse magnification
+    /// `m` through this lens. See
+    /// [`object_distance_for_magnification`].
+    ///
+    /// # Errors
+    ///
+    /// Propagates the errors of
+    /// [`object_distance_for_magnification`].
+    pub fn object_distance_for_magnification(&self, m: f64) -> Result<f64, OpticsError> {
+        object_distance_for_magnification(self.focal_length, m)
+    }
 }
 
 /// Solve the thin-lens equation for the image of a real object.
@@ -259,6 +273,71 @@ pub fn image(f: f64, object_distance: f64) -> Result<Image, OpticsError> {
         kind,
         orientation,
     })
+}
+
+/// The object distance that yields a target transverse magnification `m`
+/// through a thin lens of focal length `f`, inverting the magnification
+/// relation of [`image`]:
+///
+/// ```text
+/// do = f * (m - 1) / m
+/// ```
+///
+/// derived from `m = -di/do` and `1/f = 1/do + 1/di`. This answers the
+/// standard "where do I place the object for this magnification?"
+/// question — `m = -1` for a 1:1 real (inverted) image, `m = -0.5` for a
+/// reduced real image, `m = 2` for a 2x upright magnifying-glass view.
+///
+/// # Errors
+///
+/// - [`OpticsError::InvalidParameter`] if `f` is non-finite, `f` is
+///   exactly zero, or `m` is non-finite or zero (`m -> 0` needs an object
+///   at infinity).
+/// - [`OpticsError::SingularGeometry`] if the required object distance is
+///   not strictly positive — the target magnification is unreachable with
+///   a real object for this lens (e.g. `m` in `(0, 1)` for a converging
+///   lens, or `m = 1`, which needs `do = 0`).
+///
+/// # Examples
+///
+/// ```
+/// use valenx_optics::thin_lens::{image, object_distance_for_magnification};
+/// // For a 1:1 macro (m = -1) on a +10 lens, place the object at 2f.
+/// let d = object_distance_for_magnification(10.0, -1.0).unwrap();
+/// assert!((d - 20.0).abs() < 1e-9);
+/// // ...and imaging from there indeed gives m = -1.
+/// assert!((image(10.0, d).unwrap().magnification + 1.0).abs() < 1e-9);
+/// ```
+pub fn object_distance_for_magnification(f: f64, m: f64) -> Result<f64, OpticsError> {
+    if !f.is_finite() {
+        return Err(OpticsError::InvalidParameter {
+            name: "f",
+            value: f,
+            reason: "focal length must be finite",
+        });
+    }
+    if f == 0.0 {
+        return Err(OpticsError::SingularGeometry {
+            reason: "focal length of zero has undefined (infinite) optical power",
+        });
+    }
+    if !m.is_finite() || m == 0.0 {
+        return Err(OpticsError::InvalidParameter {
+            name: "m",
+            value: m,
+            reason:
+                "magnification must be finite and non-zero (m -> 0 needs an object at infinity)",
+        });
+    }
+
+    let object_distance = f * (m - 1.0) / m;
+    if object_distance <= 0.0 {
+        return Err(OpticsError::SingularGeometry {
+            reason:
+                "target magnification is unreachable with a real object (do <= 0) for this lens",
+        });
+    }
+    Ok(object_distance)
 }
 
 #[cfg(test)]
@@ -429,5 +508,61 @@ mod tests {
         let err = ThinLens::new(0.0).unwrap_err();
         assert_eq!(err.code(), "optics.singular_geometry");
         assert!(ThinLens::new(f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn object_distance_for_magnification_round_trips() {
+        // Solve for do at a target m, then image() must reproduce m.
+        let f = 10.0;
+        for &m in &[-2.0_f64, -1.0, -0.5, 3.0] {
+            let do_ = object_distance_for_magnification(f, m).unwrap();
+            assert!(do_ > 0.0, "do should be a real object, got {do_}");
+            let img = image(f, do_).unwrap();
+            assert!(
+                (img.magnification - m).abs() < 1e-9,
+                "m {m} got {}",
+                img.magnification
+            );
+        }
+    }
+
+    #[test]
+    fn object_distance_for_magnification_known_values() {
+        // m = -1 (1:1) -> 2f; m = -0.5 (camera) -> 3f; m = 2 (loupe) -> f/2.
+        assert!((object_distance_for_magnification(10.0, -1.0).unwrap() - 20.0).abs() < EPS);
+        assert!((object_distance_for_magnification(10.0, -0.5).unwrap() - 30.0).abs() < EPS);
+        assert!((object_distance_for_magnification(10.0, 2.0).unwrap() - 5.0).abs() < EPS);
+    }
+
+    #[test]
+    fn diverging_magnification_inverse() {
+        // Diverging lens: only 0 < m < 1 is reachable. f=-10, m=0.5 -> do=10.
+        let do_ = object_distance_for_magnification(-10.0, 0.5).unwrap();
+        assert!((do_ - 10.0).abs() < EPS, "do = {do_}");
+        assert!((image(-10.0, do_).unwrap().magnification - 0.5).abs() < EPS);
+    }
+
+    #[test]
+    fn unreachable_magnification_is_rejected() {
+        // Converging + m in (0,1) needs do <= 0 (no real object); m = 1
+        // needs do = 0.
+        assert!(object_distance_for_magnification(10.0, 0.5).is_err());
+        assert!(object_distance_for_magnification(10.0, 1.0).is_err());
+    }
+
+    #[test]
+    fn object_distance_for_magnification_rejects_bad_inputs() {
+        assert!(object_distance_for_magnification(0.0, -1.0).is_err()); // f == 0
+        assert!(object_distance_for_magnification(f64::NAN, -1.0).is_err());
+        assert!(object_distance_for_magnification(10.0, 0.0).is_err()); // m == 0
+        assert!(object_distance_for_magnification(10.0, f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn thin_lens_magnification_inverse_matches_free_function() {
+        let l = ThinLens::new(12.0).unwrap();
+        let a = l.object_distance_for_magnification(-0.5).unwrap();
+        let b = object_distance_for_magnification(12.0, -0.5).unwrap();
+        assert!((a - b).abs() < EPS);
     }
 }

@@ -14,9 +14,12 @@
 //!   [`refraction::critical_angle_deg`], [`refraction::classify_ray`] and
 //!   [`refraction::Interface`].
 //! - **Thin lens** ([`thin_lens`]) — the Gaussian equation
-//!   `1/f = 1/do + 1/di` with magnification `m = -di / do`, and image
-//!   classification (real/virtual, upright/inverted, magnified/reduced).
-//!   See [`thin_lens::image`] and [`thin_lens::ThinLens`].
+//!   `1/f = 1/do + 1/di` with magnification `m = -di / do`, image
+//!   classification (real/virtual, upright/inverted, magnified/reduced),
+//!   and the inverse `do = f(m - 1)/m` for the object distance that gives
+//!   a target magnification. See [`thin_lens::image`],
+//!   [`thin_lens::object_distance_for_magnification`] and
+//!   [`thin_lens::ThinLens`].
 //! - **Lensmaker** ([`lensmaker`]) — focal length from material and
 //!   surface geometry, `1/f = (n - 1)(1/R1 - 1/R2)`. See
 //!   [`lensmaker::focal_length`] and [`lensmaker::Lens`], which can hand a
@@ -57,7 +60,9 @@ pub mod thin_lens;
 pub use error::{ErrorCategory, OpticsError};
 pub use lensmaker::{focal_length, Lens};
 pub use refraction::{classify_ray, critical_angle_deg, refract_angle, Interface, RayOutcome};
-pub use thin_lens::{image, Image, ImageKind, Orientation, ThinLens};
+pub use thin_lens::{
+    image, object_distance_for_magnification, Image, ImageKind, Orientation, ThinLens,
+};
 
 #[cfg(test)]
 mod integration_tests {
