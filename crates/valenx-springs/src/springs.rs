@@ -246,6 +246,51 @@ pub fn shear_stress_mpa(spec: &SpringSpec, axial_force_n: f64) -> f64 {
     kw * 8.0 * axial_force_n * spec.mean_coil_diameter_mm / (std::f64::consts::PI * d.powi(3))
 }
 
+/// Axial **deflection** of the spring under an axial load, in mm —
+/// Hooke's law `delta = F / k` with the stiffness `k` from
+/// [`stiffness_n_per_mm`].
+///
+/// This is the load-response companion the [`shear_stress_mpa`] docs
+/// point at: stiffness gives the force-deflection slope, and this is the
+/// deflection it produces. `F = k * delta` round-trips it back to the
+/// applied force.
+///
+/// Returns `0.0` (the crate's sentinel convention, matching the other
+/// scalar helpers) for a non-finite or negative `axial_force_n`, or for a
+/// degenerate spec whose stiffness is non-finite or non-positive.
+pub fn deflection_mm(spec: &SpringSpec, axial_force_n: f64) -> f64 {
+    if !axial_force_n.is_finite() || axial_force_n < 0.0 {
+        return 0.0;
+    }
+    let k = stiffness_n_per_mm(spec);
+    if !k.is_finite() || k <= 0.0 {
+        return 0.0;
+    }
+    axial_force_n / k
+}
+
+/// Elastic **strain energy** stored in the spring at an axial load, in
+/// N·mm (= mJ): the work done compressing a linear spring,
+///
+/// `U = 1/2 * F * delta = 1/2 * F^2 / k`
+///
+/// (equivalently `1/2 * k * delta^2`), with `delta` the
+/// [`deflection_mm`] and `k` the [`stiffness_n_per_mm`]. It is the area
+/// under the linear force-deflection line.
+///
+/// Returns `0.0` for a non-finite or negative `axial_force_n`, or for a
+/// degenerate spec whose stiffness is non-finite or non-positive.
+pub fn stored_energy_nmm(spec: &SpringSpec, axial_force_n: f64) -> f64 {
+    if !axial_force_n.is_finite() || axial_force_n < 0.0 {
+        return 0.0;
+    }
+    let k = stiffness_n_per_mm(spec);
+    if !k.is_finite() || k <= 0.0 {
+        return 0.0;
+    }
+    0.5 * axial_force_n * axial_force_n / k
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,5 +503,60 @@ mod tests {
         let mut degen = SpringSpec::default_compression();
         degen.mean_coil_diameter_mm = degen.wire_diameter_mm;
         assert_eq!(shear_stress_mpa(&degen, 10.0), 0.0);
+    }
+
+    #[test]
+    fn deflection_is_force_over_stiffness_and_round_trips() {
+        // Hooke: delta = F / k, and k * delta == F.
+        let spec = SpringSpec::default_compression();
+        let k = stiffness_n_per_mm(&spec); // ~1.2390625 N/mm
+        let f = 10.0_f64;
+        let delta = deflection_mm(&spec, f);
+        assert!((delta - f / k).abs() < 1e-9, "delta = {delta}");
+        // Hand value: 10 / 1.2390625 ~= 8.0707 mm.
+        assert!((delta - 8.070_707).abs() < 1e-3, "delta = {delta}");
+        // Round-trip back to the force.
+        assert!((k * delta - f).abs() < 1e-9, "k*delta = {}", k * delta);
+    }
+
+    #[test]
+    fn stored_energy_matches_both_forms() {
+        // U = 1/2 F delta = 1/2 F^2 / k = 1/2 k delta^2.
+        let spec = SpringSpec::default_compression();
+        let k = stiffness_n_per_mm(&spec);
+        let f = 10.0_f64;
+        let delta = deflection_mm(&spec, f);
+        let u = stored_energy_nmm(&spec, f);
+        assert!((u - 0.5 * f * delta).abs() < 1e-9, "u vs 1/2 F delta");
+        assert!((u - 0.5 * f * f / k).abs() < 1e-9, "u vs 1/2 F^2/k");
+        assert!(
+            (u - 0.5 * k * delta * delta).abs() < 1e-9,
+            "u vs 1/2 k delta^2"
+        );
+    }
+
+    #[test]
+    fn deflection_linear_energy_quadratic_in_force() {
+        let spec = SpringSpec::default_compression();
+        let d1 = deflection_mm(&spec, 5.0);
+        let d2 = deflection_mm(&spec, 10.0);
+        assert!((d2 / d1 - 2.0).abs() < 1e-9, "deflection linear in F");
+        let u1 = stored_energy_nmm(&spec, 5.0);
+        let u2 = stored_energy_nmm(&spec, 10.0);
+        assert!((u2 / u1 - 4.0).abs() < 1e-9, "energy quadratic in F");
+    }
+
+    #[test]
+    fn deflection_and_energy_guards() {
+        let spec = SpringSpec::default_compression();
+        // Zero force -> zero deflection and zero energy.
+        assert_eq!(deflection_mm(&spec, 0.0), 0.0);
+        assert_eq!(stored_energy_nmm(&spec, 0.0), 0.0);
+        // Negative / non-finite force -> 0.0 sentinel, never NaN.
+        assert_eq!(deflection_mm(&spec, -5.0), 0.0);
+        assert_eq!(stored_energy_nmm(&spec, -5.0), 0.0);
+        assert_eq!(deflection_mm(&spec, f64::NAN), 0.0);
+        let e = stored_energy_nmm(&spec, f64::INFINITY);
+        assert!(e == 0.0 && e.is_finite(), "energy guard, got {e}");
     }
 }
