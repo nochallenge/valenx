@@ -99,6 +99,52 @@ impl LedCircuit {
         })
     }
 
+    /// Build a circuit from a **chosen series resistor** instead of a
+    /// target current — the inverse of the design equation,
+    /// `I = (Vs - Vf) / R`.
+    ///
+    /// Use this when you have already picked a resistor (e.g. a standard
+    /// E-series value) and want the current it actually sets. It
+    /// round-trips with [`LedCircuit::resistor_ohm`]: constructing from a
+    /// resistor and reading the resistor back returns the same value (and
+    /// likewise current ↔ resistor).
+    ///
+    /// # Errors
+    ///
+    /// Returns the same per-parameter domain errors as
+    /// [`LedCircuit::new`] for `supply_v` / `forward_v`,
+    /// [`LedError::NonPositive`] / [`LedError::NotFinite`] for
+    /// `resistor_ohm`, and [`LedError::InsufficientHeadroom`] when
+    /// `supply_v <= forward_v`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use valenx_led::circuit::LedCircuit;
+    ///
+    /// // 5 V supply, 2 V LED, a 150 ohm resistor -> 20 mA.
+    /// let c = LedCircuit::from_resistor(5.0, 2.0, 150.0).unwrap();
+    /// assert!((c.current_a - 0.020).abs() < 1e-9);
+    /// ```
+    pub fn from_resistor(
+        supply_v: f64,
+        forward_v: f64,
+        resistor_ohm: f64,
+    ) -> Result<Self, LedError> {
+        let supply_v = require_positive("supply_v", supply_v)?;
+        let forward_v = require_non_negative("forward_v", forward_v)?;
+        let resistor_ohm = require_positive("resistor_ohm", resistor_ohm)?;
+        let headroom = supply_v - forward_v;
+        if headroom <= 0.0 {
+            return Err(LedError::InsufficientHeadroom {
+                supply_v,
+                forward_v,
+                headroom,
+            });
+        }
+        Self::new(supply_v, forward_v, headroom / resistor_ohm)
+    }
+
     /// Total forward-voltage drop across the LED portion of the loop, in
     /// volts.
     ///
@@ -231,6 +277,43 @@ impl LedString {
             supply_v,
             current_a,
         })
+    }
+
+    /// Build a string from a **chosen series resistor** instead of a
+    /// target current — the inverse of the design equation,
+    /// `I = (Vs - n * Vf) / R`.
+    ///
+    /// The string analogue of [`LedCircuit::from_resistor`]: given the
+    /// resistor you have, it returns the current the string will carry.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`LedString::new`] for `count` /
+    /// `forward_v_each` / `supply_v`, a domain error for `resistor_ohm`,
+    /// and [`LedError::InsufficientHeadroom`] when the supply does not
+    /// exceed the summed forward voltage `count * forward_v_each`.
+    pub fn from_resistor(
+        count: usize,
+        forward_v_each: f64,
+        supply_v: f64,
+        resistor_ohm: f64,
+    ) -> Result<Self, LedError> {
+        if count == 0 {
+            return Err(LedError::EmptyString { count });
+        }
+        let forward_v_each = require_non_negative("forward_v_each", forward_v_each)?;
+        let supply_v = require_positive("supply_v", supply_v)?;
+        let resistor_ohm = require_positive("resistor_ohm", resistor_ohm)?;
+        let total_forward = forward_v_each * count as f64;
+        let headroom = supply_v - total_forward;
+        if headroom <= 0.0 {
+            return Err(LedError::InsufficientHeadroom {
+                supply_v,
+                forward_v: total_forward,
+                headroom,
+            });
+        }
+        Self::new(count, forward_v_each, supply_v, headroom / resistor_ohm)
     }
 
     /// Summed forward voltage of the whole string, in volts:
@@ -457,6 +540,79 @@ mod tests {
         assert!(hi_i.resistor_ohm() < lo_i.resistor_ohm());
         // Specifically R scales as 1/I: R(0.010)/R(0.030) == 3.
         assert!((lo_i.resistor_ohm() / hi_i.resistor_ohm() - 3.0).abs() < EPS);
+    }
+
+    // -- from_resistor: the resistor -> current inverse constructor -----
+
+    #[test]
+    fn from_resistor_matches_closed_form() {
+        // 5 V, 2 V LED, 150 ohm -> I = (5 - 2)/150 = 20 mA.
+        let c = LedCircuit::from_resistor(5.0, 2.0, 150.0).unwrap();
+        assert!((c.current_a - 0.020).abs() < EPS, "I = {}", c.current_a);
+        // ...and the resistor reads straight back.
+        assert!((c.resistor_ohm() - 150.0).abs() < EPS);
+    }
+
+    #[test]
+    fn from_resistor_inverts_new_across_sweep() {
+        // Design R from a target current, then rebuild from that R: the
+        // recovered circuit must match the original current and resistor.
+        for &vs in &[3.3_f64, 5.0, 12.0, 24.0] {
+            for &vf in &[1.8_f64, 2.0, 3.2] {
+                for &i in &[0.005_f64, 0.020, 0.040] {
+                    if vs <= vf {
+                        continue;
+                    }
+                    let designed = LedCircuit::new(vs, vf, i).unwrap();
+                    let rebuilt =
+                        LedCircuit::from_resistor(vs, vf, designed.resistor_ohm()).unwrap();
+                    assert!((rebuilt.current_a - i).abs() < EPS, "I at vs={vs} vf={vf}");
+                    assert!((rebuilt.resistor_ohm() - designed.resistor_ohm()).abs() < EPS);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn string_from_resistor_matches_closed_form_and_round_trips() {
+        // 3 x 3.2 V on 12 V, 120 ohm -> I = (12 - 9.6)/120 = 20 mA.
+        let s = LedString::from_resistor(3, 3.2, 12.0, 120.0).unwrap();
+        assert!((s.current_a - 0.020).abs() < EPS, "I = {}", s.current_a);
+        assert!((s.resistor_ohm() - 120.0).abs() < EPS);
+        // Round-trip against the design constructor.
+        let designed = LedString::new(4, 2.0, 12.0, 0.030).unwrap();
+        let rebuilt = LedString::from_resistor(4, 2.0, 12.0, designed.resistor_ohm()).unwrap();
+        assert!((rebuilt.current_a - 0.030).abs() < EPS);
+    }
+
+    #[test]
+    fn from_resistor_rejects_bad_inputs() {
+        // No headroom (Vs == Vf).
+        assert!(matches!(
+            LedCircuit::from_resistor(2.0, 2.0, 150.0).unwrap_err(),
+            LedError::InsufficientHeadroom { .. }
+        ));
+        // Non-positive / non-finite resistor.
+        assert!(matches!(
+            LedCircuit::from_resistor(5.0, 2.0, 0.0).unwrap_err(),
+            LedError::NonPositive {
+                name: "resistor_ohm",
+                ..
+            }
+        ));
+        assert!(matches!(
+            LedCircuit::from_resistor(5.0, 2.0, f64::NAN).unwrap_err(),
+            LedError::NotFinite { .. }
+        ));
+        // String: empty count and no headroom.
+        assert!(matches!(
+            LedString::from_resistor(0, 2.0, 5.0, 150.0).unwrap_err(),
+            LedError::EmptyString { count: 0 }
+        ));
+        assert!(matches!(
+            LedString::from_resistor(4, 3.2, 12.0, 100.0).unwrap_err(),
+            LedError::InsufficientHeadroom { .. }
+        ));
     }
 
     // -- boundary / validation ------------------------------------------

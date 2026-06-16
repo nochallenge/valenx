@@ -8,9 +8,11 @@
 //!
 //! Given a supply voltage, an LED forward voltage, and a target LED
 //! current, this crate computes the series resistor that sets that current
-//! and the resulting power split between the LED and the resistor. It covers
-//! a single LED ([`circuit::LedCircuit`]) and `n` identical LEDs wired in
-//! series ([`circuit::LedString`]), where the forward voltages add.
+//! and the resulting power split between the LED and the resistor — or,
+//! conversely, builds the circuit from a chosen resistor and reports the
+//! current it sets (`from_resistor`). It covers a single LED
+//! ([`circuit::LedCircuit`]) and `n` identical LEDs wired in series
+//! ([`circuit::LedString`]), where the forward voltages add.
 //!
 //! ## Model
 //!
@@ -30,7 +32,9 @@
 //! current and their forward voltages sum. The LED is represented with the
 //! constant-voltage-drop diode model: `Vf` is a fixed parameter rather than a
 //! current- or temperature-dependent function. The current is set entirely by
-//! the resistor; `I = (Vs - Vf) / R` is the inverse of the design equation.
+//! the resistor; `I = (Vs - Vf) / R` is the inverse of the design equation,
+//! exposed by [`circuit::LedCircuit::from_resistor`] /
+//! [`circuit::LedString::from_resistor`].
 //!
 //! ## Honest scope
 //!
