@@ -100,6 +100,67 @@ pub fn pressure_drop(
     Ok(f * (length / diameter) * rho * velocity * velocity / 2.0)
 }
 
+/// Mean **wall shear stress** `tau_w = f * rho * v^2 / 8` (Pa).
+///
+/// The Darcy friction factor `f` is defined so the shear the flow exerts
+/// on the pipe wall is `tau_w = (f / 8) rho v^2`. Equivalently it is the
+/// force balance over a length `L` of pipe, `tau_w = dP * D / (4 L)`,
+/// with `dP` the Darcy-Weisbach [`pressure_drop`]: the pressure force on
+/// the cross-section `dP * (pi D^2 / 4)` is carried by the wall shear
+/// `tau_w * (pi D L)`. It is therefore a *local* quantity, independent of
+/// pipe length and diameter at a fixed friction factor.
+///
+/// `friction_factor`, `rho` and `velocity` must be finite and strictly
+/// positive.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_pipeflow::headloss::wall_shear_stress;
+///
+/// // f=0.02, rho=1000, v=2: tau = 0.02 * 1000 * 4 / 8 = 10 Pa.
+/// let tau = wall_shear_stress(0.02, 1000.0, 2.0).unwrap();
+/// assert!((tau - 10.0).abs() < 1e-9);
+/// ```
+pub fn wall_shear_stress(
+    friction_factor: f64,
+    rho: f64,
+    velocity: f64,
+) -> Result<f64, PipeFlowError> {
+    let f = require_positive("friction_factor", friction_factor)?;
+    let rho = require_positive("rho", rho)?;
+    let velocity = require_positive("velocity", velocity)?;
+    Ok(f * rho * velocity * velocity / 8.0)
+}
+
+/// **Friction velocity** `u* = sqrt(tau_w / rho) = v * sqrt(f / 8)` (m/s).
+///
+/// The velocity scale of the near-wall turbulence, built from the
+/// [`wall_shear_stress`] `tau_w`; it sets the wall units (`y+`, `u+`) of
+/// the law of the wall. Equivalently `u* = v sqrt(f / 8)` straight from
+/// the Darcy friction factor.
+///
+/// `friction_factor`, `rho` and `velocity` must be finite and strictly
+/// positive.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_pipeflow::headloss::friction_velocity;
+///
+/// // f=0.02, rho=1000, v=2: u* = 2 * sqrt(0.02/8) = 0.1 m/s.
+/// let u_star = friction_velocity(0.02, 1000.0, 2.0).unwrap();
+/// assert!((u_star - 0.1).abs() < 1e-9);
+/// ```
+pub fn friction_velocity(
+    friction_factor: f64,
+    rho: f64,
+    velocity: f64,
+) -> Result<f64, PipeFlowError> {
+    let tau = wall_shear_stress(friction_factor, rho, velocity)?;
+    Ok((tau / rho).sqrt())
+}
+
 /// The fully solved state of a straight pipe run: Reynolds number,
 /// friction factor + regime, head loss and pressure drop. Returned by
 /// [`solve_pipe`].
@@ -244,6 +305,73 @@ mod tests {
         let l2 = pressure_drop(0.02, 200.0, 0.1, 2.0, 1000.0).unwrap();
         assert!((v2 - 4.0 * base).abs() < 1e-6);
         assert!((l2 - 2.0 * base).abs() < 1e-6);
+    }
+
+    /// Wall shear stress against a hand-computed reference value.
+    #[test]
+    fn wall_shear_stress_matches_hand_calculation() {
+        // f=0.02, rho=1000, v=2: tau = 0.02 * 1000 * 4 / 8 = 10 Pa.
+        let tau = wall_shear_stress(0.02, 1000.0, 2.0).unwrap();
+        assert!((tau - 10.0).abs() < 1e-9, "tau={tau}");
+    }
+
+    /// The momentum balance `tau_w = dP * D / (4 L)` ties the wall shear
+    /// to the Darcy-Weisbach pressure drop exactly, for any `L` and `D`.
+    #[test]
+    fn wall_shear_equals_pressure_drop_force_balance() {
+        let (f, rho, v) = (0.025, 998.0, 1.5);
+        for &(l, d) in &[(50.0, 0.08), (100.0, 0.1), (10.0, 0.025)] {
+            let tau = wall_shear_stress(f, rho, v).unwrap();
+            let dp = pressure_drop(f, l, d, v, rho).unwrap();
+            assert!(
+                (tau - dp * d / (4.0 * l)).abs() < 1e-9,
+                "tau={tau}, dP*D/4L={}",
+                dp * d / (4.0 * l)
+            );
+        }
+    }
+
+    /// Wall shear scales with the square of velocity (`f`, `rho` fixed).
+    #[test]
+    fn wall_shear_scales_with_velocity_squared() {
+        let base = wall_shear_stress(0.02, 1000.0, 2.0).unwrap();
+        let doubled = wall_shear_stress(0.02, 1000.0, 4.0).unwrap();
+        assert!(
+            (doubled - 4.0 * base).abs() < 1e-9,
+            "base={base}, doubled={doubled}"
+        );
+    }
+
+    /// Friction velocity against the hand value and both defining
+    /// identities `u* = sqrt(tau_w/rho)` and `u* = v sqrt(f/8)`.
+    #[test]
+    fn friction_velocity_matches_definitions() {
+        let (f, rho, v) = (0.02, 1000.0, 2.0);
+        let u_star = friction_velocity(f, rho, v).unwrap();
+        // u* = v sqrt(f/8) = 2 * sqrt(0.0025) = 0.1 m/s.
+        assert!((u_star - 0.1).abs() < 1e-12, "u*={u_star}");
+        let tau = wall_shear_stress(f, rho, v).unwrap();
+        assert!((u_star - (tau / rho).sqrt()).abs() < 1e-12);
+        assert!((u_star - v * (f / 8.0).sqrt()).abs() < 1e-12);
+    }
+
+    /// Friction velocity is independent of density (`rho` cancels in
+    /// `u* = v sqrt(f/8)`).
+    #[test]
+    fn friction_velocity_is_independent_of_density() {
+        let a = friction_velocity(0.03, 1000.0, 2.5).unwrap();
+        let b = friction_velocity(0.03, 13_600.0, 2.5).unwrap(); // mercury
+        assert!((a - b).abs() < 1e-12, "a={a}, b={b}");
+    }
+
+    /// Bad inputs are rejected by both wall-friction functions.
+    #[test]
+    fn wall_friction_rejects_bad_inputs() {
+        assert!(wall_shear_stress(0.0, 1000.0, 2.0).is_err()); // f
+        assert!(wall_shear_stress(0.02, -1.0, 2.0).is_err()); // rho
+        assert!(wall_shear_stress(0.02, 1000.0, 0.0).is_err()); // v
+        assert!(friction_velocity(0.02, f64::NAN, 2.0).is_err()); // non-finite
+        assert!(friction_velocity(0.02, 1000.0, -2.0).is_err()); // v
     }
 
     /// Bad inputs are rejected.

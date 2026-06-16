@@ -18,8 +18,11 @@
 //!   equation). [`friction::friction_factor`] dispatches on the regime.
 //! - [`headloss`] — the Darcy-Weisbach head loss
 //!   `h_f = f (L/D) v^2 / (2 g)`, the matching pressure drop
-//!   `dP = rho g h_f`, and an end-to-end [`headloss::solve_pipe`] that
-//!   runs the whole chain from physical inputs.
+//!   `dP = rho g h_f`, the **wall shear stress** `tau_w = f rho v^2 / 8`
+//!   and the **friction velocity** `u* = sqrt(tau_w/rho)`
+//!   ([`headloss::wall_shear_stress`], [`headloss::friction_velocity`]),
+//!   and an end-to-end [`headloss::solve_pipe`] that runs the whole chain
+//!   from physical inputs.
 //!
 //! ```
 //! use valenx_pipeflow::headloss::solve_pipe;
@@ -51,6 +54,8 @@
 //!   1/sqrt(f) = -1.8 log10[ (eps/D / 3.7)^1.11 + 6.9/Re ]    (Haaland)
 //!   h_f  = f * (L / D) * v^2 / (2 g)                  (Darcy-Weisbach)
 //!   dP   = rho * g * h_f = f * (L/D) * rho * v^2 / 2  (pressure drop)
+//!   tau_w = f * rho * v^2 / 8 = dP * D / (4 L)        (wall shear)
+//!   u*    = sqrt(tau_w / rho) = v * sqrt(f / 8)       (friction velocity)
 //! ```
 //!
 //! The Haaland correlation (Haaland, 1983) is the explicit algebraic
@@ -106,7 +111,10 @@ pub use error::{ErrorCategory, PipeFlowError};
 pub use friction::{
     friction_factor, haaland_friction_factor, laminar_friction_factor, FrictionResult,
 };
-pub use headloss::{head_loss, head_loss_g, pressure_drop, solve_pipe, PipeFlowResult, G_STANDARD};
+pub use headloss::{
+    friction_velocity, head_loss, head_loss_g, pressure_drop, solve_pipe, wall_shear_stress,
+    PipeFlowResult, G_STANDARD,
+};
 pub use reynolds::{
     classify_flow, reynolds_number, reynolds_number_kinematic, FlowRegime, RE_LAMINAR_UPPER,
     RE_TURBULENT_LOWER,
