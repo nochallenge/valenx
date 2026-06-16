@@ -128,9 +128,98 @@ pub fn free_thermal_strain(alpha: LinearCoefficient, delta_t: f64) -> Result<f64
     Ok(alpha.per_kelvin() * delta_t)
 }
 
+/// The temperature rise that first closes a free-expansion `gap` (metres)
+/// for a bar of length `length` (metres) and linear coefficient `alpha`,
+/// inverting the free expansion `dL = alpha * L0 * dT`:
+///
+/// ```text
+/// dT_gap = gap / (alpha * L0)
+/// ```
+///
+/// Below this rise the bar grows freely into the gap and carries no
+/// stress; at and above it the gap is closed and further heating is
+/// resisted (see [`gap_constrained_thermal_stress`]). A zero gap closes
+/// at `dT_gap = 0`.
+///
+/// # Errors
+///
+/// Returns [`ThermalError::NonPositive`] if `length` is not strictly
+/// positive or if `gap` is negative, and [`ThermalError::NonFinite`] if
+/// either is not finite. `alpha` is validated by its newtype.
+pub fn gap_closure_temperature(
+    alpha: LinearCoefficient,
+    length: f64,
+    gap: f64,
+) -> Result<f64, ThermalError> {
+    let length = require_positive("length", length)?;
+    let gap = require_finite("gap", gap)?;
+    if gap < 0.0 {
+        return Err(ThermalError::NonPositive {
+            name: "gap",
+            value: gap,
+        });
+    }
+    Ok(gap / (alpha.per_kelvin() * length))
+}
+
+/// The thermal stress in a bar that expands freely until it closes a
+/// `gap` (metres) to a rigid wall, then is constrained — the classic
+/// "bar with a gap" problem:
+///
+/// ```text
+/// sigma = E * max(alpha * dT - gap / L0, 0)
+/// ```
+///
+/// The bar of length `length` first takes up the gap (its free expansion
+/// `alpha * L0 * dT` growing to `gap`); only the *excess* strain
+/// `alpha * dT - gap / L0` beyond that is suppressed by the wall, and
+/// Hooke's law turns it into a compressive stress. The result is
+/// therefore non-negative: it is exactly zero while the gap is still open
+/// (`alpha * dT <= gap / L0`, including the
+/// [closure temperature](gap_closure_temperature)) and, because a gap can
+/// only resist *growth* into the wall, also zero under any cooling
+/// (`dT < 0`). This is the one difference from
+/// [`constrained_thermal_stress`], which (modelling a bar held at both
+/// ends) goes into tension on cooling.
+///
+/// Two exact identities tie it back to the fully-constrained case: a zero
+/// gap reproduces `constrained_thermal_stress` for heating, and once the
+/// gap is closed the stress equals the fully-constrained stress of the
+/// *excess* temperature, `sigma(dT) = E * alpha * (dT - dT_gap)`.
+///
+/// # Errors
+///
+/// Returns [`ThermalError::NonPositive`] if `length` is not strictly
+/// positive or if `gap` is negative, and [`ThermalError::NonFinite`] if
+/// `delta_t`, `length`, or `gap` is not finite. `alpha` and
+/// `youngs_modulus` are validated by their newtypes.
+pub fn gap_constrained_thermal_stress(
+    youngs_modulus: YoungsModulus,
+    alpha: LinearCoefficient,
+    length: f64,
+    delta_t: f64,
+    gap: f64,
+) -> Result<f64, ThermalError> {
+    let length = require_positive("length", length)?;
+    let delta_t = require_finite("delta_t", delta_t)?;
+    let gap = require_finite("gap", gap)?;
+    if gap < 0.0 {
+        return Err(ThermalError::NonPositive {
+            name: "gap",
+            value: gap,
+        });
+    }
+    // Free thermal strain minus the gap expressed as a strain; the wall
+    // only resists growth into it, so a still-open gap or any cooling
+    // gives zero.
+    let excess_strain = (alpha.per_kelvin() * delta_t - gap / length).max(0.0);
+    Ok(youngs_modulus.pascals() * excess_strain)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expansion::linear_expansion;
 
     const EPS_STRAIN: f64 = 1e-12;
     /// Stresses are O(1e6)-O(1e8) Pa here, so an absolute tolerance scaled
@@ -276,5 +365,135 @@ mod tests {
         ));
         // from_gpa scales by 1e9.
         assert!((YoungsModulus::from_gpa(70.0).unwrap().pascals() - 70.0e9).abs() < 1.0);
+    }
+
+    // --- bar with a gap ---------------------------------------------------
+
+    #[test]
+    fn gap_closure_temperature_matches_inverse_of_free_expansion() {
+        // alpha = 12e-6 /K, L0 = 2 m, gap = 1 mm -> dT_gap = 41.6667 K.
+        let alpha = steel_alpha();
+        let dt_gap = gap_closure_temperature(alpha, 2.0, 1.0e-3).unwrap();
+        let expected = 1.0e-3 / (12.0e-6 * 2.0);
+        assert!(
+            (dt_gap - expected).abs() < 1e-9,
+            "dT_gap {dt_gap} vs {expected}"
+        );
+        assert!(
+            (dt_gap - 41.666_666_666_666_664).abs() < 1e-9,
+            "dT_gap {dt_gap}"
+        );
+        // At exactly dT_gap the free expansion equals the gap.
+        let dl = linear_expansion(alpha, 2.0, dt_gap).unwrap();
+        assert!((dl - 1.0e-3).abs() < 1e-15, "free expansion closes the gap");
+        // A zero gap closes immediately.
+        assert!(gap_closure_temperature(alpha, 2.0, 0.0).unwrap().abs() < 1e-12);
+    }
+
+    #[test]
+    fn zero_gap_reproduces_full_constraint_when_heating() {
+        // GOLD identity: gap = 0 -> gap stress equals the fully-constrained
+        // stress for any heating dT.
+        let e = steel_e();
+        let alpha = steel_alpha();
+        for &dt in &[5.0, 40.0, 120.0] {
+            let gap = gap_constrained_thermal_stress(e, alpha, 1.5, dt, 0.0).unwrap();
+            let full = constrained_thermal_stress(e, alpha, dt).unwrap();
+            assert!((gap - full).abs() < EPS_STRESS, "g=0 != full at dT={dt}");
+        }
+    }
+
+    #[test]
+    fn closed_gap_stress_equals_constraint_of_excess_temperature() {
+        // Once the gap is closed the stress equals the fully-constrained
+        // stress of the temperature beyond closure: sigma = E alpha (dT - dT_gap).
+        let e = steel_e();
+        let alpha = steel_alpha();
+        let (l0, gap, dt) = (2.0, 1.0e-3, 80.0);
+        let dt_gap = gap_closure_temperature(alpha, l0, gap).unwrap();
+        let sigma = gap_constrained_thermal_stress(e, alpha, l0, dt, gap).unwrap();
+        let via_excess = constrained_thermal_stress(e, alpha, dt - dt_gap).unwrap();
+        assert!((sigma - via_excess).abs() < EPS_STRESS, "excess identity");
+        // Independent closed form: E (alpha dT - gap/L0)
+        //   = 200e9 (12e-6*80 - 1e-3/2) = 200e9 * 4.6e-4 = 92 MPa.
+        assert!(
+            (sigma - 92.0e6).abs() < EPS_STRESS,
+            "sigma = {sigma}, want 92 MPa"
+        );
+    }
+
+    #[test]
+    fn no_stress_until_the_gap_closes() {
+        let e = steel_e();
+        let alpha = steel_alpha();
+        let (l0, gap) = (2.0, 1.0e-3);
+        let dt_gap = gap_closure_temperature(alpha, l0, gap).unwrap();
+        // Below closure: free expansion still inside the gap -> zero stress.
+        let below = gap_constrained_thermal_stress(e, alpha, l0, 0.9 * dt_gap, gap).unwrap();
+        assert!(below.abs() < EPS_STRESS, "stress below closure: {below}");
+        // Exactly at closure: just touching, still zero.
+        let at = gap_constrained_thermal_stress(e, alpha, l0, dt_gap, gap).unwrap();
+        assert!(at.abs() < EPS_STRESS, "stress at closure: {at}");
+        // Just above closure: positive (compressive).
+        let above = gap_constrained_thermal_stress(e, alpha, l0, 1.01 * dt_gap, gap).unwrap();
+        assert!(above > 0.0, "stress just above closure: {above}");
+    }
+
+    #[test]
+    fn cooling_a_gapped_bar_gives_zero_stress() {
+        // A one-sided gap resists only growth, so cooling never stresses
+        // the bar -- even with a zero gap (unlike the both-ends-fixed
+        // constrained case, which would go into tension).
+        let e = steel_e();
+        let alpha = steel_alpha();
+        let cold = gap_constrained_thermal_stress(e, alpha, 2.0, -60.0, 1.0e-3).unwrap();
+        assert!(cold.abs() < EPS_STRESS, "cooling with gap: {cold}");
+        let cold0 = gap_constrained_thermal_stress(e, alpha, 2.0, -60.0, 0.0).unwrap();
+        assert!(cold0.abs() < EPS_STRESS, "cooling with zero gap: {cold0}");
+        // The both-ends-fixed model, by contrast, is in tension here.
+        assert!(constrained_thermal_stress(e, alpha, -60.0).unwrap() < 0.0);
+    }
+
+    #[test]
+    fn stress_rises_with_heating_and_falls_with_a_wider_gap() {
+        let e = steel_e();
+        let alpha = steel_alpha();
+        let (l0, gap) = (2.0, 1.0e-3);
+        // Monotonic increase past closure.
+        let s60 = gap_constrained_thermal_stress(e, alpha, l0, 60.0, gap).unwrap();
+        let s90 = gap_constrained_thermal_stress(e, alpha, l0, 90.0, gap).unwrap();
+        assert!(s90 > s60 && s60 > 0.0, "stress grows with heating");
+        // A wider gap closes later, so less stress at the same dT.
+        let wide = gap_constrained_thermal_stress(e, alpha, l0, 90.0, 2.0e-3).unwrap();
+        assert!(wide < s90, "wider gap -> lower stress: {wide} < {s90}");
+    }
+
+    #[test]
+    fn gap_stress_rejects_bad_inputs() {
+        let e = steel_e();
+        let alpha = steel_alpha();
+        assert!(matches!(
+            gap_constrained_thermal_stress(e, alpha, 0.0, 50.0, 1.0e-3),
+            Err(ThermalError::NonPositive { name: "length", .. })
+        ));
+        assert!(matches!(
+            gap_constrained_thermal_stress(e, alpha, 2.0, 50.0, -1.0e-3),
+            Err(ThermalError::NonPositive { name: "gap", .. })
+        ));
+        assert!(matches!(
+            gap_constrained_thermal_stress(e, alpha, 2.0, f64::NAN, 1.0e-3),
+            Err(ThermalError::NonFinite {
+                name: "delta_t",
+                ..
+            })
+        ));
+        assert!(matches!(
+            gap_closure_temperature(alpha, -2.0, 1.0e-3),
+            Err(ThermalError::NonPositive { name: "length", .. })
+        ));
+        assert!(matches!(
+            gap_closure_temperature(alpha, 2.0, f64::INFINITY),
+            Err(ThermalError::NonFinite { name: "gap", .. })
+        ));
     }
 }

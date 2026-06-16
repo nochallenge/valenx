@@ -22,16 +22,19 @@
 //! Final-dimension helpers ([`linear_final_length`], [`area_final`],
 //! [`volume_final`]), a partial-restraint stress
 //! ([`constrained_thermal_stress_restrained`]), the free thermal strain
-//! ([`free_thermal_strain`]), and a small library of representative
-//! material properties ([`materials`]) round it out. Inputs flow through
+//! ([`free_thermal_strain`]), the "bar with a gap" pair — the
+//! [`gap_closure_temperature`] at which a heated bar takes up an
+//! expansion gap and the [`gap_constrained_thermal_stress`] that builds
+//! once it does — and a small library of representative material
+//! properties ([`materials`]) round it out. Inputs flow through
 //! validated newtypes ([`LinearCoefficient`], [`YoungsModulus`]) and
 //! validated constructors, so a value that exists is always physically
 //! admissible.
 //!
 //! ```
 //! use valenx_thermalexpansion::{
-//!     constrained_thermal_stress, linear_expansion, LinearCoefficient,
-//!     YoungsModulus,
+//!     constrained_thermal_stress, gap_constrained_thermal_stress,
+//!     linear_expansion, LinearCoefficient, YoungsModulus,
 //! };
 //!
 //! // A 2 m steel bar heated by 50 K.
@@ -43,6 +46,11 @@
 //! let e = YoungsModulus::from_gpa(200.0).unwrap();
 //! let sigma = constrained_thermal_stress(e, alpha, 50.0).unwrap();
 //! assert!((sigma - 120.0e6).abs() < 1e-3); // 120 MPa
+//!
+//! // Leave a 1 mm gap to the wall: only the growth past 1 mm is resisted,
+//! // so the stress is far lower than the fully-held bar.
+//! let sigma_gap = gap_constrained_thermal_stress(e, alpha, 2.0, 50.0, 1.0e-3).unwrap();
+//! assert!(sigma_gap > 0.0 && sigma_gap < sigma); // 20 MPa here
 //! ```
 //!
 //! ## Model
@@ -56,8 +64,10 @@
 //! solids over ordinary temperature swings. The constrained stress is
 //! Hooke's law applied to the suppressed free strain: a held bar that
 //! wanted to grow by `eps = alpha dT` is forced to strain `-eps`, giving
-//! `sigma = E alpha dT`. Coefficients are treated as **constant** over the
-//! interval `dT`.
+//! `sigma = E alpha dT`. With a gap `g` to a rigid wall only the strain
+//! beyond the gap, `alpha dT - g / L0`, is suppressed, giving
+//! `sigma = E max(alpha dT - g / L0, 0)` — zero until the gap closes.
+//! Coefficients are treated as **constant** over the interval `dT`.
 //!
 //! ## Honest scope
 //!
@@ -76,7 +86,9 @@
 //! - **Idealised restraint.** [`constrained_thermal_stress`] is the
 //!   perfectly-rigid (restraint = 1) limit; real supports have finite
 //!   stiffness. A geometry-independent factor is available, but it is not
-//!   a substitute for a structural FEA of the actual joint.
+//!   a substitute for a structural FEA of the actual joint. The
+//!   [`gap_constrained_thermal_stress`] model likewise assumes a rigid,
+//!   one-sided wall that resists only growth into the gap.
 //! - The bundled material numbers are rounded, representative,
 //!   room-temperature figures for teaching — not certified design data.
 //!
@@ -103,7 +115,7 @@ pub use materials::{lookup, Material, LIBRARY};
 #[doc(inline)]
 pub use stress::{
     constrained_thermal_stress, constrained_thermal_stress_restrained, free_thermal_strain,
-    YoungsModulus,
+    gap_closure_temperature, gap_constrained_thermal_stress, YoungsModulus,
 };
 
 #[cfg(test)]
