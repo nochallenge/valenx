@@ -12,7 +12,8 @@
 //! 3. [`VoltageFollower`] — the `Rf = 0` unity-gain buffer, `G = 1`.
 //! 4. [`SummingAmplifier`] — `Vout = -Rf · Σ(Vᵢ / Rᵢ)`.
 //! 5. [`Gbw`] — gain-bandwidth product, closed-loop bandwidth
-//!    (`GBW / |gain|`) and unity-gain bandwidth (`= GBW`).
+//!    (`GBW / |gain|`), its dual the maximum gain for a required
+//!    bandwidth (`GBW / bandwidth`), and unity-gain bandwidth (`= GBW`).
 //!
 //! Every numeric constructor validates its inputs and returns
 //! [`OpAmpError`] rather than panicking.
