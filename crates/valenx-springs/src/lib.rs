@@ -18,6 +18,10 @@
 //!   [`valenx_cad::Solid::Mesh`].
 //! - [`springs::stiffness_n_per_mm`] — axial stiffness from
 //!   `k = G d^4 / (8 D^3 n)`.
+//! - [`springs::spring_index`] / [`springs::wahl_factor`] /
+//!   [`springs::shear_stress_mpa`] — the coil index `C = D/d`, its Wahl
+//!   curvature-correction factor, and the resulting wire shear stress
+//!   `τ = K_w · 8 F D / (π d^3)` under an axial load.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -29,6 +33,6 @@ pub mod springs;
 pub use error::{ErrorCategory, SpringsError};
 pub use spec::{EndTreatment, SpringKind, SpringSpec};
 pub use springs::{
-    compression_centerline, extension_centerline, spring_index, stiffness_n_per_mm, to_solid,
-    torsion_centerline, wahl_factor,
+    compression_centerline, extension_centerline, shear_stress_mpa, spring_index,
+    stiffness_n_per_mm, to_solid, torsion_centerline, wahl_factor,
 };
