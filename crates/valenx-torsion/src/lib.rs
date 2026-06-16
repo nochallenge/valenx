@@ -9,9 +9,12 @@
 //! Describe a round shaft as a [`Shaft`] (solid bar or hollow tube),
 //! apply a torque, and read back the engineering answers:
 //!
-//! - the polar second moment of area [`Shaft::polar_moment`] `J`,
+//! - the polar second moment of area [`Shaft::polar_moment`] `J` and the
+//!   polar section modulus [`Shaft::polar_section_modulus`] `Z_p = J / r`,
 //! - the shear stress [`shear_stress_at`] anywhere across the section and
 //!   its maximum [`max_shear_stress`] at the surface,
+//! - the [`allowable_torque`] a section may carry at an allowable shear
+//!   stress (the design inverse of [`max_shear_stress`]),
 //! - the [`angle_of_twist`] over a length of shaft, and
 //! - the [`power`] transmitted at a given angular speed.
 //!
@@ -43,8 +46,10 @@
 //! ```text
 //! J        = pi * d^4 / 32                (solid)
 //! J        = pi * (D^4 - d^4) / 32        (hollow)
+//! Z_p      = J / (d / 2)                  (polar section modulus)
 //! tau(r)   = T * r / J                    (shear stress, linear in r)
-//! tau_max  = T * (d / 2) / J             (at the outer surface)
+//! tau_max  = T * (d / 2) / J = T / Z_p    (at the outer surface)
+//! T_allow  = tau_allow * Z_p              (torque at an allowable stress)
 //! theta    = T * L / (G * J)             (angle of twist)
 //! P        = T * omega                    (transmitted power)
 //! ```
@@ -87,5 +92,7 @@ pub mod shaft;
 
 pub use analysis::{TorsionCase, TorsionResult};
 pub use error::{ErrorCategory, TorsionError};
-pub use response::{angle_of_twist, max_shear_stress, power, shear_stress_at, torsional_rigidity};
+pub use response::{
+    allowable_torque, angle_of_twist, max_shear_stress, power, shear_stress_at, torsional_rigidity,
+};
 pub use shaft::Shaft;
