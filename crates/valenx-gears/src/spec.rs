@@ -77,6 +77,16 @@ impl GearSpec {
     pub fn dedendum_diameter_mm(&self) -> f64 {
         (self.pitch_diameter_mm() - 2.5 * self.module_mm).max(0.0)
     }
+
+    /// Base pitch `p_b = π·m·cos(α)` (mm) — the spacing of involute tooth
+    /// flanks measured along the base circle, equal to the circular pitch
+    /// `π·m` reduced by `cos(pressure angle)`. It is the pitch that governs
+    /// how successive teeth hand off contact, and so sets the
+    /// [`contact_ratio`]. Returns `0.0` for a non-positive / non-finite
+    /// module (inherited from [`circular_pitch_mm`]).
+    pub fn base_pitch_mm(&self) -> f64 {
+        circular_pitch_mm(self.module_mm) * self.pressure_angle_deg.to_radians().cos()
+    }
 }
 
 impl Default for GearSpec {
@@ -103,6 +113,55 @@ pub fn gear_ratio(driven_teeth: u32, driver_teeth: u32) -> f64 {
         return 0.0;
     }
     driven_teeth as f64 / driver_teeth as f64
+}
+
+/// Transverse **contact ratio** `mₚ` of a meshing spur-gear pair at standard
+/// center distance — the average number of tooth pairs sharing the load.
+///
+/// ```text
+/// mₚ = [ √(ra1² − rb1²) + √(ra2² − rb2²) − C·sin(α) ] / p_b
+/// ```
+///
+/// where `ra` is the addendum (outside) radius, `rb` the base radius, `C` the
+/// center distance `(d1 + d2)/2`, `α` the pressure angle and `p_b` the
+/// [base pitch](GearSpec::base_pitch_mm). The numerator is the length of the
+/// active line of action; dividing by the base pitch counts how many tooth
+/// engagements span it. A pair **must** have `mₚ > 1` for continuous
+/// transmission (always at least one tooth in contact); typical standard
+/// spur pairs sit around `1.4–1.8`.
+///
+/// Two involute gears mesh only at a **common module and pressure angle**;
+/// this returns `0.0` (the crate's invalid-input sentinel, as with
+/// [`circular_pitch_mm`] / [`gear_ratio`]) when they differ or when the
+/// module is non-positive / non-finite.
+pub fn contact_ratio(pinion: &GearSpec, gear: &GearSpec) -> f64 {
+    let m = pinion.module_mm;
+    if !m.is_finite()
+        || m <= 0.0
+        || (pinion.module_mm - gear.module_mm).abs() > 1e-9
+        || (pinion.pressure_angle_deg - gear.pressure_angle_deg).abs() > 1e-9
+    {
+        return 0.0;
+    }
+    let pb = pinion.base_pitch_mm();
+    if pb <= 0.0 {
+        return 0.0;
+    }
+    let phi = pinion.pressure_angle_deg.to_radians();
+    let (ra1, rb1) = (
+        pinion.addendum_diameter_mm() / 2.0,
+        pinion.base_diameter_mm() / 2.0,
+    );
+    let (ra2, rb2) = (
+        gear.addendum_diameter_mm() / 2.0,
+        gear.base_diameter_mm() / 2.0,
+    );
+    // Standard center distance C = (d1 + d2)/2.
+    let c = (pinion.pitch_diameter_mm() + gear.pitch_diameter_mm()) / 2.0;
+    let active_line = (ra1 * ra1 - rb1 * rb1).max(0.0).sqrt()
+        + (ra2 * ra2 - rb2 * rb2).max(0.0).sqrt()
+        - c * phi.sin();
+    active_line / pb
 }
 
 #[cfg(test)]
@@ -138,11 +197,11 @@ mod tests {
         // Base pitch p_b = π·m·cos(α) — the spacing of involute flanks
         // measured on the base circle. For module m=2 mm, α=20°:
         //   p_b = π·2·cos(20°) = 5.90430 mm.
-        // The crate exposes no base-pitch fn, but base pitch = (base-circle
-        // circumference)/teeth = π·base_diameter/N, and base_diameter and the
-        // circular pitch p = π·m are both public. Compute p_b two equivalent
-        // ways from the real API and pin BOTH to the exact closed form (tol
-        // 1e-3 mm, a tight bound for this exact trig form).
+        // Base pitch is exposed by `base_pitch_mm()`, and can also be derived
+        // two other ways: base pitch = (base-circle circumference)/teeth =
+        // π·base_diameter/N, and base pitch = circular pitch × cos(α). Compute
+        // p_b all three ways from the real API and pin each to the exact
+        // closed form (tol 1e-3 mm, a tight bound for this exact trig form).
         let mut g = GearSpec::standard_spur(20);
         g.module_mm = 2.0; // 20° pressure angle is the standard_spur default
         let expected = std::f64::consts::PI * 2.0 * 20.0_f64.to_radians().cos(); // 5.90430 mm
@@ -165,8 +224,55 @@ mod tests {
             "base pitch via circular pitch {pb_via_cp} mm vs closed form {expected} mm"
         );
 
+        // Route 3: the dedicated base_pitch_mm() accessor agrees with both.
+        assert!(
+            (g.base_pitch_mm() - expected).abs() < 1e-3,
+            "base_pitch_mm() {} mm vs closed form {expected} mm",
+            g.base_pitch_mm()
+        );
+
         // Base pitch is strictly less than circular pitch (cos α < 1).
         assert!(pb_via_cp < circular_pitch_mm(g.module_mm));
+    }
+
+    #[test]
+    fn contact_ratio_of_two_standard_20_tooth_gears() {
+        // Two identical 20-tooth, module-1, 20° spur gears at standard center
+        // distance. Hand computation:
+        //   r=10, rb=10·cos20°=9.39693, ra=11, C=20, p_b=π·cos20°=2.952155
+        //   mp = [2·√(11²−9.39693²) − 20·sin20°] / 2.952155
+        //      = [2·5.71819 − 6.84040] / 2.952155 = 1.55681
+        let g = GearSpec::standard_spur(20); // module 1, 20° by default
+        let mp = contact_ratio(&g, &g);
+        assert!((mp - 1.556_81).abs() < 1e-4, "contact ratio {mp}");
+        // A meshing pair must keep at least one tooth pair engaged.
+        assert!(mp > 1.0);
+    }
+
+    #[test]
+    fn contact_ratio_rises_with_tooth_count_and_rejects_mismatch() {
+        // More teeth -> longer line of action -> higher contact ratio.
+        let small = GearSpec::standard_spur(18);
+        let big = GearSpec::standard_spur(60);
+        let mp_small = contact_ratio(&small, &small);
+        let mp_big = contact_ratio(&big, &big);
+        assert!(mp_big > mp_small, "{mp_big} should exceed {mp_small}");
+        assert!(mp_big > 1.0 && mp_small > 1.0);
+
+        // Gears that cannot mesh (different module, or different pressure
+        // angle) return the 0.0 sentinel.
+        let mut other_module = GearSpec::standard_spur(20);
+        other_module.module_mm = 2.0;
+        assert_eq!(
+            contact_ratio(&GearSpec::standard_spur(20), &other_module),
+            0.0
+        );
+        let mut other_angle = GearSpec::standard_spur(20);
+        other_angle.pressure_angle_deg = 25.0;
+        assert_eq!(
+            contact_ratio(&GearSpec::standard_spur(20), &other_angle),
+            0.0
+        );
     }
 
     #[test]
