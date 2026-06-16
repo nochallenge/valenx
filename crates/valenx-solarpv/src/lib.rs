@@ -22,7 +22,10 @@
 //!   ([`max_power_point`]);
 //! - the **fill factor** `FF = Pmax / (Voc * Isc)` ([`fill_factor`]);
 //! - the **module efficiency** `eta = Pmax / (irradiance * area)`
-//!   ([`efficiency`]).
+//!   ([`efficiency`]);
+//! - the **load-line operating point** `(V, I)` where a resistive load
+//!   `I = V / R` meets the I-V curve ([`operating_point_at_load`]) — the
+//!   maximum power point is its matched-load (`R = Vmp / Imp`) special case.
 //!
 //! ## Model
 //!
@@ -73,7 +76,9 @@ pub use constants::{
 };
 pub use diode::SingleDiode;
 pub use error::{ErrorCategory, Result, SolarPvError};
-pub use performance::{efficiency, fill_factor, max_power_point, MaxPowerPoint};
+pub use performance::{
+    efficiency, fill_factor, max_power_point, operating_point_at_load, LoadPoint, MaxPowerPoint,
+};
 
 #[cfg(test)]
 mod tests {

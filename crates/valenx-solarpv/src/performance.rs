@@ -9,7 +9,10 @@
 //!   curve-squareness measure that for good cells sits in roughly
 //!   `0.7 - 0.85`;
 //! - the **module efficiency** `eta = Pmax / (irradiance * area)`, the
-//!   fraction of incident optical power converted to electrical power.
+//!   fraction of incident optical power converted to electrical power;
+//! - the **load-line operating point**: the `(V, I)` where a resistive
+//!   load `I = V / R` meets the I-V curve ([`operating_point_at_load`]),
+//!   of which the maximum power point is the special case `R = Vmp / Imp`.
 
 use crate::diode::SingleDiode;
 use crate::error::{Result, SolarPvError};
@@ -26,6 +29,23 @@ pub struct MaxPowerPoint {
     pub i_mp: f64,
     /// Maximum power `Pmax = Vmp * Imp`, in watts.
     pub p_max: f64,
+}
+
+/// The operating point a resistive load imposes on a cell.
+///
+/// Produced by [`operating_point_at_load`]: the `(V, I)` where the load
+/// line `I = V / R` crosses the cell's I-V curve, together with the
+/// delivered power and the load resistance that set it.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LoadPoint {
+    /// Terminal voltage at the load-line intersection, in volts.
+    pub v_v: f64,
+    /// Terminal current at the load-line intersection, in amperes.
+    pub i_a: f64,
+    /// Delivered power `P = V * I`, in watts.
+    pub p_w: f64,
+    /// The load resistance that produced this point, in ohms.
+    pub load_ohms: f64,
 }
 
 /// Locate the maximum power point of `cell` by a coarse scan over
@@ -181,6 +201,69 @@ pub fn efficiency(
     Ok(mpp.p_max / incident_power_w)
 }
 
+/// The operating point a resistive load of `load_ohms` imposes on `cell`:
+/// the `(V, I)` where the load line `I = V / R` crosses the I-V curve.
+///
+/// On the power-producing branch `0 <= V <= Voc` the cell current `I(V)`
+/// falls monotonically from `Isc` (at `V = 0`) to `0` (at `Voc`) while the
+/// load line `V / R` rises from `0`, so the two meet at exactly one point;
+/// it is found by bisection on `I(V) - V / R`. A large `R` pushes the
+/// operating point toward open circuit (`V -> Voc`), a small `R` toward
+/// short circuit (`V -> 0`, `I -> Isc`), and the *matched* load
+/// `R = Vmp / Imp` lands on the [maximum power point](max_power_point).
+///
+/// # Errors
+///
+/// Returns [`SolarPvError::Invalid`] if `load_ohms` is not finite and
+/// strictly positive. Propagates any error from [`SingleDiode::voc`] or
+/// [`SingleDiode::current_at`].
+pub fn operating_point_at_load(cell: &SingleDiode, load_ohms: f64) -> Result<LoadPoint> {
+    if !load_ohms.is_finite() || load_ohms <= 0.0 {
+        return Err(SolarPvError::invalid(
+            "load_ohms",
+            format!("load resistance must be finite and > 0, got {load_ohms}"),
+        ));
+    }
+    let voc = cell.voc()?;
+    if voc <= 0.0 {
+        // Dark / degenerate cell: the only operating point is the origin.
+        return Ok(LoadPoint {
+            v_v: 0.0,
+            i_a: cell.current_at(0.0)?,
+            p_w: 0.0,
+            load_ohms,
+        });
+    }
+
+    // g(V) = I(V) - V / R is monotone decreasing on [0, Voc], with
+    // g(0) = Isc > 0 and g(Voc) = -Voc / R < 0, so it has a unique root.
+    let mut a = 0.0;
+    let mut b = voc;
+    const MAX_ITERS: u32 = 200;
+    const TOL: f64 = 1e-12;
+    let mut mid = 0.5 * (a + b);
+    for _ in 0..MAX_ITERS {
+        mid = 0.5 * (a + b);
+        let g = cell.current_at(mid)? - mid / load_ohms;
+        if g.abs() <= TOL || (b - a) <= TOL {
+            break;
+        }
+        if g > 0.0 {
+            a = mid; // root lies at higher voltage
+        } else {
+            b = mid;
+        }
+    }
+    let v = mid;
+    let i = cell.current_at(v)?;
+    Ok(LoadPoint {
+        v_v: v,
+        i_a: i,
+        p_w: v * i,
+        load_ohms,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,5 +402,102 @@ mod tests {
         let dark = SingleDiode::ideal(0.0, 1e-9, 1.0, 300.0).unwrap();
         // Voc = 0 -> Voc*Isc = 0 -> undefined.
         assert!(fill_factor(&dark, 100).is_err());
+    }
+
+    // -- load-line operating point -----------------------------------
+
+    #[test]
+    fn matched_load_lands_on_the_mpp() {
+        // The matched load R = Vmp/Imp must put the operating point at the
+        // MPP — a cross-check against max_power_point.
+        let c = si_cell();
+        let mpp = max_power_point(&c, 800).unwrap();
+        let r_mpp = mpp.v_mp / mpp.i_mp;
+        let lp = operating_point_at_load(&c, r_mpp).unwrap();
+        assert!(
+            (lp.v_v - mpp.v_mp).abs() < 1e-6,
+            "v {} vs {}",
+            lp.v_v,
+            mpp.v_mp
+        );
+        assert!(
+            (lp.i_a - mpp.i_mp).abs() < 1e-6,
+            "i {} vs {}",
+            lp.i_a,
+            mpp.i_mp
+        );
+        assert!(
+            (lp.p_w - mpp.p_max).abs() < 1e-6,
+            "p {} vs {}",
+            lp.p_w,
+            mpp.p_max
+        );
+    }
+
+    #[test]
+    fn operating_point_lies_on_curve_and_load_line() {
+        // The returned point satisfies BOTH I == I(V) and I == V / R.
+        let c = si_cell();
+        for &r in &[0.05_f64, 0.1, 0.2, 0.5, 2.0] {
+            let lp = operating_point_at_load(&c, r).unwrap();
+            // On the I-V curve.
+            assert!(
+                (lp.i_a - c.current_at(lp.v_v).unwrap()).abs() < 1e-9,
+                "off curve at R={r}"
+            );
+            // On the load line.
+            assert!((lp.i_a - lp.v_v / r).abs() < 1e-6, "off load line at R={r}");
+            // Power consistency: P == V*I == V^2/R.
+            assert!((lp.p_w - lp.v_v * lp.i_a).abs() < 1e-12);
+            assert!((lp.p_w - lp.v_v * lp.v_v / r).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn small_load_is_near_short_circuit_large_load_near_open_circuit() {
+        let c = si_cell();
+        let voc = c.voc().unwrap();
+        let isc = c.isc().unwrap();
+        // Tiny load: V near 0, I near Isc.
+        let small = operating_point_at_load(&c, 1e-3).unwrap();
+        assert!(small.v_v < 0.05 * voc, "small-R V = {}", small.v_v);
+        assert!(
+            (small.i_a - isc).abs() < 0.05 * isc,
+            "small-R I = {}",
+            small.i_a
+        );
+        // Large load: V near Voc, I near 0.
+        let large = operating_point_at_load(&c, 1e4).unwrap();
+        assert!(large.v_v > 0.95 * voc, "large-R V = {}", large.v_v);
+        assert!(large.i_a < 0.05 * isc, "large-R I = {}", large.i_a);
+    }
+
+    #[test]
+    fn higher_load_raises_voltage_and_lowers_current() {
+        // Walking up R moves the operating point along the curve toward Voc.
+        let c = si_cell();
+        let lo = operating_point_at_load(&c, 0.1).unwrap();
+        let hi = operating_point_at_load(&c, 1.0).unwrap();
+        assert!(
+            hi.v_v > lo.v_v,
+            "V should rise with R: {} vs {}",
+            hi.v_v,
+            lo.v_v
+        );
+        assert!(
+            hi.i_a < lo.i_a,
+            "I should fall with R: {} vs {}",
+            hi.i_a,
+            lo.i_a
+        );
+    }
+
+    #[test]
+    fn operating_point_at_load_rejects_bad_resistance() {
+        let c = si_cell();
+        assert!(operating_point_at_load(&c, 0.0).is_err());
+        assert!(operating_point_at_load(&c, -1.0).is_err());
+        assert!(operating_point_at_load(&c, f64::NAN).is_err());
+        assert!(operating_point_at_load(&c, f64::INFINITY).is_err());
     }
 }
