@@ -40,6 +40,7 @@ pub mod ionic;
 pub mod izhikevich;
 pub mod lif;
 pub mod membrane;
+pub mod morris_lecar;
 pub mod myelinated;
 pub mod nernst;
 pub mod plasticity;
@@ -96,6 +97,7 @@ pub use lif::{
     lif_steady_state_potential, lif_time_to_first_spike,
 };
 pub use membrane::{HhMembrane, ImplicitCable, Membrane};
+pub use morris_lecar::{MorrisLecar, MorrisLecarParams};
 pub use myelinated::MyelinatedFiber;
 pub use nernst::{
     nernst_concentration_ratio, nernst_potential_mv, nernst_slope_per_decade_mv,
