@@ -188,6 +188,33 @@ impl BalancedLoad {
     pub fn total_power(&self) -> f64 {
         SQRT_3 * self.line_voltage() * self.line_current() * self.power_factor
     }
+
+    /// Total apparent power `S = sqrt(3) * V_line * I_line` (volt-amperes).
+    ///
+    /// The power-factor-independent hypotenuse of the power triangle
+    /// `S^2 = P^2 + Q^2`; it sets the volt-ampere rating the supply must
+    /// carry and, for a balanced load, equals three times the per-element
+    /// `V_phase * I_phase`.
+    #[must_use]
+    pub fn apparent_power(&self) -> f64 {
+        SQRT_3 * self.line_voltage() * self.line_current()
+    }
+
+    /// Total reactive power magnitude
+    /// `|Q| = sqrt(3) * V_line * I_line * sqrt(1 - pf^2)` (var), the third
+    /// side of the power triangle `S^2 = P^2 + Q^2`.
+    ///
+    /// This is the *magnitude*: the power factor fixes `|sin(phi)|` but
+    /// not its sign, so the lagging (inductive) versus leading
+    /// (capacitive) distinction is not represented — see
+    /// [`reactive_power_from_line`].
+    #[must_use]
+    pub fn reactive_power(&self) -> f64 {
+        let sin_phi = (1.0 - self.power_factor * self.power_factor)
+            .max(0.0)
+            .sqrt();
+        SQRT_3 * self.line_voltage() * self.line_current() * sin_phi
+    }
 }
 
 /// Total real power of a balanced three-phase load directly from line
@@ -211,6 +238,52 @@ pub fn power_from_line(
     let i_line = require_positive("i_line", i_line)?;
     let power_factor = require_power_factor(power_factor)?;
     Ok(SQRT_3 * v_line * i_line * power_factor)
+}
+
+/// Total apparent power of a balanced three-phase load directly from line
+/// quantities: `S = sqrt(3) * V_line * I_line` (volt-amperes).
+///
+/// The magnitude of the complex power, independent of the power factor;
+/// it is the hypotenuse of the power triangle `S^2 = P^2 + Q^2` (see
+/// [`power_from_line`] and [`reactive_power_from_line`]) and sets the
+/// volt-ampere rating a supply must carry.
+///
+/// # Errors
+///
+/// Returns [`ThreePhaseError::NonPositive`] / [`ThreePhaseError::NotFinite`]
+/// if `v_line` or `i_line` is not finite-positive.
+pub fn apparent_power_from_line(v_line: f64, i_line: f64) -> Result<f64, ThreePhaseError> {
+    let v_line = require_positive("v_line", v_line)?;
+    let i_line = require_positive("i_line", i_line)?;
+    Ok(SQRT_3 * v_line * i_line)
+}
+
+/// Total reactive power magnitude of a balanced three-phase load from
+/// line quantities: `|Q| = sqrt(3) * V_line * I_line * sin(phi)`, with
+/// `sin(phi) = sqrt(1 - pf^2)` (volt-amperes reactive).
+///
+/// This returns the *magnitude* `|Q|`: the power factor `cos(phi)` fixes
+/// `|sin(phi)|` but not its sign, so whether the load is lagging
+/// (inductive, `Q > 0`) or leading (capacitive, `Q < 0`) must be tracked
+/// separately. Together with the real power [`power_from_line`] it
+/// completes the power triangle `S^2 = P^2 + Q^2`.
+///
+/// # Errors
+///
+/// Returns [`ThreePhaseError::NonPositive`] / [`ThreePhaseError::NotFinite`]
+/// if `v_line` or `i_line` is not finite-positive, and
+/// [`ThreePhaseError::PowerFactorOutOfRange`] if `power_factor` is outside
+/// `[-1, 1]`.
+pub fn reactive_power_from_line(
+    v_line: f64,
+    i_line: f64,
+    power_factor: f64,
+) -> Result<f64, ThreePhaseError> {
+    let v_line = require_positive("v_line", v_line)?;
+    let i_line = require_positive("i_line", i_line)?;
+    let power_factor = require_power_factor(power_factor)?;
+    let sin_phi = (1.0 - power_factor * power_factor).max(0.0).sqrt();
+    Ok(SQRT_3 * v_line * i_line * sin_phi)
 }
 
 #[cfg(test)]
@@ -410,5 +483,92 @@ mod tests {
         assert!(power_from_line(400.0, 10.0, 1.0).is_ok());
         assert!(power_from_line(400.0, 10.0, -1.0).is_ok());
         assert!(BalancedLoad::new(Connection::Wye, 230.0, 10.0, 0.0).is_ok());
+    }
+
+    #[test]
+    fn apparent_power_is_sqrt3_vi() {
+        // 400 V line, 10 A line -> S = sqrt(3)*400*10 = 6928.20... VA.
+        let s = apparent_power_from_line(400.0, 10.0).unwrap();
+        assert!((s - SQRT_3 * 400.0 * 10.0).abs() < EPS, "got {s}");
+        assert!((s - 6_928.203_230_3).abs() < 1e-6, "got {s}");
+    }
+
+    #[test]
+    fn power_triangle_closes() {
+        // GOLD identity: S^2 = P^2 + Q^2 across a sweep of power factors.
+        let (v, i) = (400.0, 10.0);
+        for &pf in &[0.0, 0.5, 0.8, 0.95, 1.0] {
+            let p = power_from_line(v, i, pf).unwrap();
+            let q = reactive_power_from_line(v, i, pf).unwrap();
+            let s = apparent_power_from_line(v, i).unwrap();
+            assert!(
+                (s * s - (p * p + q * q)).abs() < 1e-6 * s * s,
+                "S^2 != P^2 + Q^2 at pf={pf}"
+            );
+            // P = S*pf and Q = S*sqrt(1-pf^2).
+            assert!((p - s * pf).abs() < 1e-9 * s, "P != S*pf at pf={pf}");
+            assert!(
+                (q - s * (1.0 - pf * pf).sqrt()).abs() < 1e-9 * s,
+                "Q != S*sin at pf={pf}"
+            );
+            // Apparent power never below the real power magnitude.
+            assert!(s >= p.abs() - 1e-9, "S < |P| at pf={pf}");
+        }
+    }
+
+    #[test]
+    fn reactive_power_limits() {
+        let (v, i) = (400.0, 10.0);
+        // Unity PF: purely real, zero reactive.
+        assert!(reactive_power_from_line(v, i, 1.0).unwrap().abs() < EPS);
+        // Zero PF: purely reactive, Q == S.
+        let q = reactive_power_from_line(v, i, 0.0).unwrap();
+        let s = apparent_power_from_line(v, i).unwrap();
+        assert!((q - s).abs() < 1e-9, "Q != S at pf=0");
+        // Sign of pf does not change |Q| (cos is even).
+        let q_lead = reactive_power_from_line(v, i, -0.8).unwrap();
+        let q_lag = reactive_power_from_line(v, i, 0.8).unwrap();
+        assert!(
+            (q_lead - q_lag).abs() < EPS,
+            "|Q| should not depend on pf sign"
+        );
+    }
+
+    #[test]
+    fn balanced_load_power_triangle_matches_free_functions() {
+        // The struct methods and the line-based free functions agree, and
+        // the triangle closes, for both wirings.
+        for conn in [Connection::Wye, Connection::Delta] {
+            let load = BalancedLoad::new(conn, 230.0, 9.0, 0.85).unwrap();
+            let s_fn = apparent_power_from_line(load.line_voltage(), load.line_current()).unwrap();
+            let q_fn =
+                reactive_power_from_line(load.line_voltage(), load.line_current(), 0.85).unwrap();
+            assert!(
+                (load.apparent_power() - s_fn).abs() < 1e-6,
+                "{conn:?}: S mismatch"
+            );
+            assert!(
+                (load.reactive_power() - q_fn).abs() < 1e-6,
+                "{conn:?}: Q mismatch"
+            );
+            let p = load.total_power();
+            let s = load.apparent_power();
+            let q = load.reactive_power();
+            assert!(
+                (s * s - (p * p + q * q)).abs() < 1e-3 * s * s,
+                "{conn:?}: triangle does not close"
+            );
+        }
+    }
+
+    #[test]
+    fn apparent_and_reactive_reject_bad_inputs() {
+        assert!(apparent_power_from_line(0.0, 10.0).is_err());
+        assert!(apparent_power_from_line(400.0, -1.0).is_err());
+        assert!(matches!(
+            reactive_power_from_line(400.0, 10.0, 1.5),
+            Err(ThreePhaseError::PowerFactorOutOfRange { .. })
+        ));
+        assert!(reactive_power_from_line(f64::NAN, 10.0, 0.8).is_err());
     }
 }
