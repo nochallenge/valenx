@@ -12,8 +12,14 @@
 //! The relation is linear in `F`, `n_pads` and `r_eff`, so it inverts
 //! cleanly: [`clamp_force_for_torque`] and [`effective_radius_for_torque`]
 //! solve for the clamp force or radius that yields a target torque.
+//!
+//! The effective radius itself can be derived from the annular pad
+//! geometry under the two standard contact assumptions:
+//! [`effective_radius_uniform_wear`] (a worn, bedded-in brake,
+//! `(r_i + r_o)/2`) and [`effective_radius_uniform_pressure`] (a fresh
+//! pad, `(2/3)(r_o^3 - r_i^3)/(r_o^2 - r_i^2)`).
 
-use crate::error::{check_count, check_friction, check_positive, BrakeError};
+use crate::error::{check_count, check_friction, check_non_negative, check_positive, BrakeError};
 
 /// Retarding torque of a disc / caliper brake, in newton-metres.
 ///
@@ -126,6 +132,93 @@ pub fn effective_radius_for_torque(
     Ok(t / (mu * f * f64::from(n)))
 }
 
+/// Effective friction radius of an annular pad under the **uniform-wear**
+/// assumption, in metres.
+///
+/// As a brake beds in, the contact pressure redistributes so that the
+/// product `p * r` is constant (the pad wears fastest where it slides
+/// fastest). Integrating the friction torque under that assumption puts
+/// the effective radius at the arithmetic mean of the pad's inner and
+/// outer radii:
+///
+/// ```text
+/// r_eff = (r_inner + r_outer) / 2
+/// ```
+///
+/// This is the smaller of the two standard estimates and the one usually
+/// used for a worn, in-service brake. Feed the result to [`disc_torque`]
+/// as `r_eff_m`.
+///
+/// # Parameters
+/// - `r_inner_m` — inner pad radius, in metres (>= 0).
+/// - `r_outer_m` — outer pad radius, in metres (> 0, and > `r_inner_m`).
+///
+/// # Errors
+/// [`BrakeError`] if either radius is non-finite, `r_inner_m` is
+/// negative, `r_outer_m` is non-positive, or `r_outer_m <= r_inner_m`
+/// (a degenerate annulus).
+///
+/// # Examples
+/// ```
+/// use valenx_brake::disc::effective_radius_uniform_wear;
+/// // Pad from 100 mm to 140 mm -> mean radius 120 mm.
+/// let r = effective_radius_uniform_wear(0.10, 0.14).unwrap();
+/// assert!((r - 0.12).abs() < 1e-12);
+/// ```
+pub fn effective_radius_uniform_wear(r_inner_m: f64, r_outer_m: f64) -> Result<f64, BrakeError> {
+    let r_i = check_non_negative("r_inner_m", r_inner_m)?;
+    let r_o = check_positive("r_outer_m", r_outer_m)?;
+    // A non-degenerate annulus needs the outer radius to exceed the inner.
+    check_positive("r_outer_m - r_inner_m", r_o - r_i)?;
+    Ok(0.5 * (r_i + r_o))
+}
+
+/// Effective friction radius of an annular pad under the
+/// **uniform-pressure** assumption, in metres.
+///
+/// For a fresh pad pressing with uniform contact pressure, integrating
+/// the friction torque `r * (p * 2*pi*r dr)` over the annulus and
+/// dividing by the total clamp force gives
+///
+/// ```text
+/// r_eff = (2/3) * (r_outer^3 - r_inner^3) / (r_outer^2 - r_inner^2)
+/// ```
+///
+/// This is the larger of the two standard estimates and applies to a new
+/// brake before it has worn in; it always exceeds the uniform-wear value
+/// [`effective_radius_uniform_wear`] by exactly
+/// `(r_outer - r_inner)^2 / (6*(r_outer + r_inner))`. Feed the result to
+/// [`disc_torque`] as `r_eff_m`.
+///
+/// # Parameters
+/// - `r_inner_m` — inner pad radius, in metres (>= 0).
+/// - `r_outer_m` — outer pad radius, in metres (> 0, and > `r_inner_m`).
+///
+/// # Errors
+/// [`BrakeError`] if either radius is non-finite, `r_inner_m` is
+/// negative, `r_outer_m` is non-positive, or `r_outer_m <= r_inner_m`
+/// (a degenerate annulus).
+///
+/// # Examples
+/// ```
+/// use valenx_brake::disc::effective_radius_uniform_pressure;
+/// // Solid disc (r_inner = 0): r_eff = (2/3)*r_outer.
+/// let r = effective_radius_uniform_pressure(0.0, 0.15).unwrap();
+/// assert!((r - 0.1).abs() < 1e-12);
+/// ```
+pub fn effective_radius_uniform_pressure(
+    r_inner_m: f64,
+    r_outer_m: f64,
+) -> Result<f64, BrakeError> {
+    let r_i = check_non_negative("r_inner_m", r_inner_m)?;
+    let r_o = check_positive("r_outer_m", r_outer_m)?;
+    // A non-degenerate annulus needs the outer radius to exceed the inner.
+    check_positive("r_outer_m - r_inner_m", r_o - r_i)?;
+    let num = r_o.powi(3) - r_i.powi(3);
+    let den = r_o.powi(2) - r_i.powi(2);
+    Ok((2.0 / 3.0) * num / den)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,6 +314,104 @@ mod tests {
         assert_eq!(
             disc_torque(0.4, f64::NAN, 2, 0.12).unwrap_err().category(),
             ErrorCategory::Input
+        );
+    }
+
+    #[test]
+    fn uniform_wear_is_mean_radius() {
+        // (0.10 + 0.14) / 2 = 0.12 m.
+        let r = effective_radius_uniform_wear(0.10, 0.14).unwrap();
+        assert!((r - 0.12).abs() < EPS, "got {r}");
+    }
+
+    #[test]
+    fn uniform_pressure_closed_form() {
+        // (2/3)·(0.14³ − 0.10³)/(0.14² − 0.10²)
+        //   = (2/3)·0.001744/0.0096 = 0.121111… m.
+        let r = effective_radius_uniform_pressure(0.10, 0.14).unwrap();
+        let num = 0.14_f64.powi(3) - 0.10_f64.powi(3);
+        let den = 0.14_f64.powi(2) - 0.10_f64.powi(2);
+        let expected = (2.0 / 3.0) * num / den;
+        assert!((r - expected).abs() < EPS, "got {r} vs {expected}");
+        assert!((r - 0.121_111_111).abs() < 1e-6, "got {r}");
+    }
+
+    #[test]
+    fn pressure_exceeds_wear_by_exact_gap() {
+        // Derivable identity: r_p − r_w = (r_o − r_i)² / (6·(r_o + r_i)),
+        // strictly positive for any proper annulus. A fresh (uniform
+        // pressure) brake has a larger effective radius than a worn one.
+        let (r_i, r_o) = (0.10, 0.14);
+        let r_w = effective_radius_uniform_wear(r_i, r_o).unwrap();
+        let r_p = effective_radius_uniform_pressure(r_i, r_o).unwrap();
+        assert!(r_p > r_w, "pressure {r_p} should exceed wear {r_w}");
+        let gap = (r_o - r_i).powi(2) / (6.0 * (r_o + r_i));
+        assert!((r_p - r_w - gap).abs() < EPS, "gap mismatch");
+    }
+
+    #[test]
+    fn solid_disc_limits() {
+        // r_inner = 0: wear → r_o/2, pressure → (2/3)·r_o.
+        let r_o = 0.15;
+        let r_w = effective_radius_uniform_wear(0.0, r_o).unwrap();
+        let r_p = effective_radius_uniform_pressure(0.0, r_o).unwrap();
+        assert!((r_w - r_o / 2.0).abs() < EPS, "wear {r_w}");
+        assert!((r_p - (2.0 / 3.0) * r_o).abs() < EPS, "pressure {r_p}");
+    }
+
+    #[test]
+    fn thin_annulus_both_approach_mean() {
+        // As the band narrows (r_i → r_o) both estimates collapse onto the
+        // common radius (the (r_o−r_i)² gap vanishes).
+        let (r_i, r_o) = (0.1399, 0.1400);
+        let r_w = effective_radius_uniform_wear(r_i, r_o).unwrap();
+        let r_p = effective_radius_uniform_pressure(r_i, r_o).unwrap();
+        assert!((r_p - r_w).abs() < 1e-7, "w {r_w} p {r_p}");
+    }
+
+    #[test]
+    fn effective_radius_feeds_disc_torque() {
+        // The computed r_eff is a valid input to disc_torque.
+        let r = effective_radius_uniform_wear(0.10, 0.14).unwrap();
+        let t = disc_torque(0.4, 8_000.0, 2, r).unwrap();
+        assert!((t - 0.4 * 8_000.0 * 2.0 * 0.12).abs() < 1e-6, "got {t}");
+    }
+
+    #[test]
+    fn effective_radius_rejects_bad_annulus() {
+        // Outer must strictly exceed inner.
+        assert_eq!(
+            effective_radius_uniform_wear(0.14, 0.10)
+                .unwrap_err()
+                .code(),
+            "brake.non_positive"
+        );
+        assert_eq!(
+            effective_radius_uniform_pressure(0.12, 0.12)
+                .unwrap_err()
+                .code(),
+            "brake.non_positive"
+        );
+        // Negative inner radius.
+        assert_eq!(
+            effective_radius_uniform_wear(-0.01, 0.14)
+                .unwrap_err()
+                .code(),
+            "brake.negative"
+        );
+        // Non-positive outer radius.
+        assert_eq!(
+            effective_radius_uniform_pressure(0.0, 0.0)
+                .unwrap_err()
+                .code(),
+            "brake.non_positive"
+        );
+        // Non-finite input.
+        assert_eq!(
+            effective_radius_uniform_wear(f64::NAN, 0.14)
+                .unwrap_err()
+                .code(),
+            "brake.not_finite"
         );
     }
 }

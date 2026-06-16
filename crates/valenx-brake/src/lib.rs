@@ -14,7 +14,8 @@
 //!   by `n_pads` friction faces at an effective radius `r_eff`, giving
 //!   the retarding torque `T = mu * F * n_pads * r_eff`. Helpers invert
 //!   the relation to recover the clamp force or the radius needed for a
-//!   target torque.
+//!   target torque, and derive `r_eff` from the annular pad geometry
+//!   under the uniform-wear or uniform-pressure assumption.
 //! - [`band`] — a band / drum (capstan) brake. The belt friction
 //!   ("capstan" / Euler–Eytelwein) equation relates the tight-side and
 //!   slack-side tensions across a wrap angle `theta`:
