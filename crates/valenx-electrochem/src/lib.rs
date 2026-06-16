@@ -9,7 +9,10 @@
 //! Three classical results, each with a free-function form and a small
 //! validated struct. The [`nernst`] module gives the Nernst equation
 //! `E = E0 - (R T / (n F)) ln Q` for the reduction potential of a
-//! half-reaction at arbitrary reaction quotient `Q` and temperature `T`.
+//! half-reaction at arbitrary reaction quotient `Q` and temperature `T`,
+//! plus its inverse `Q = exp((E0 - E) n F / (R T))` recovering the
+//! reaction quotient from a measured potential (the basis of a
+//! potentiometric sensor).
 //! The [`cell`] module gives the cell potential
 //! `E_cell = E_cathode - E_anode` from two reduction potentials, plus the
 //! spontaneity sign that follows. The [`faraday`] module gives Faraday's
@@ -66,6 +69,6 @@ pub use faraday::{
     charge_from_current, mass_from_charge, mass_from_current, moles_from_charge, Electrolysis,
 };
 pub use nernst::{
-    nernst_potential, nernst_slope_per_decade, thermal_voltage, thermal_voltage_standard,
-    HalfReaction,
+    nernst_potential, nernst_quotient, nernst_slope_per_decade, thermal_voltage,
+    thermal_voltage_standard, HalfReaction,
 };
