@@ -68,6 +68,7 @@
 pub mod error;
 pub mod isentropic;
 pub mod normal_shock;
+pub mod oblique_shock;
 pub mod prandtl_meyer;
 
 pub use error::{ErrorCategory, GasError, Result};
@@ -76,6 +77,9 @@ pub use isentropic::{
     StagnationRatios,
 };
 pub use normal_shock::{normal_shock, NormalShock};
+pub use oblique_shock::{
+    deflection_angle, max_deflection_angle, oblique_shock, shock_angle, ObliqueShock,
+};
 pub use prandtl_meyer::{
     mach_after_expansion, mach_from_prandtl_meyer, nu_max, prandtl_meyer_angle,
 };
