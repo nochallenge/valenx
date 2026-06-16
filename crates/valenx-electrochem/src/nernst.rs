@@ -19,6 +19,11 @@
 //! dimensionless reaction quotient written reduced-over-oxidised in the
 //! same direction as the half-reaction.
 //!
+//! The relation inverts cleanly: given a measured potential `E`, the
+//! reaction quotient is `Q = exp((E0 - E) n F / (R T))`
+//! ([`HalfReaction::quotient_from_potential`] / [`nernst_quotient`]) —
+//! the basis of a potentiometric (ion-selective or pH) sensor.
+//!
 //! ## Honest scope
 //!
 //! `Q` is built from ideal activities (concentrations / partial pressures
@@ -174,6 +179,29 @@ impl HalfReaction {
         let prefactor = self.thermal_voltage() / self.electrons;
         Ok(self.e_standard_v - prefactor * q.ln())
     }
+
+    /// The reaction quotient `Q` that produces a measured electrode
+    /// potential `E`, inverting [`HalfReaction::potential`]:
+    ///
+    /// ```text
+    /// Q = exp((E0 - E) * n F / (R T)) = exp((E0 - E) / (R T / (n F)))
+    /// ```
+    ///
+    /// This is how a potentiometric sensor (an ion-selective or pH
+    /// electrode) reads a concentration ratio back from a voltage. At
+    /// `E == E0` it returns `Q = 1`; a potential below `E0` gives `Q > 1`
+    /// and one above gives `Q < 1`. The result is always strictly
+    /// positive.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ElectrochemError::NonFinite`] if `potential_v` is not
+    /// finite.
+    pub fn quotient_from_potential(&self, potential_v: f64) -> Result<f64, ElectrochemError> {
+        let e = require_finite(potential_v, "potential_v")?;
+        let prefactor = self.thermal_voltage() / self.electrons;
+        Ok(((self.e_standard_v - e) / prefactor).exp())
+    }
 }
 
 /// Free-function form of the Nernst equation.
@@ -194,6 +222,27 @@ pub fn nernst_potential(
     q: f64,
 ) -> Result<f64, ElectrochemError> {
     HalfReaction::new(e_standard_v, electrons, temperature_k)?.potential(q)
+}
+
+/// Free-function inverse Nernst: the reaction quotient `Q` for a measured
+/// electrode potential `E`.
+///
+/// Inverts [`nernst_potential`]: `Q = exp((E0 - E) n F / (R T))`.
+/// Equivalent to building a [`HalfReaction`] and calling
+/// [`HalfReaction::quotient_from_potential`].
+///
+/// # Errors
+///
+/// Returns [`ElectrochemError::NonFinite`] if `e_standard_v` or
+/// `potential_v` is not finite, or [`ElectrochemError::BadParameter`] if
+/// `electrons <= 0` or `temperature_k <= 0`.
+pub fn nernst_quotient(
+    e_standard_v: f64,
+    electrons: f64,
+    temperature_k: f64,
+    potential_v: f64,
+) -> Result<f64, ElectrochemError> {
+    HalfReaction::new(e_standard_v, electrons, temperature_k)?.quotient_from_potential(potential_v)
 }
 
 #[cfg(test)]
@@ -344,6 +393,73 @@ mod tests {
         let nf = HalfReaction::new(f64::NAN, 2.0, 298.15).unwrap_err();
         assert_eq!(nf.code(), "electrochem.non_finite");
         assert_eq!(nf.category(), ErrorCategory::Numeric);
+    }
+
+    #[test]
+    fn quotient_inverts_potential() {
+        // Round-trip both directions at a non-trivial operating point.
+        let hr = HalfReaction::new(0.34, 2.0, 298.15).unwrap();
+        // Q -> E -> Q.
+        let q0 = 37.0;
+        let e = hr.potential(q0).unwrap();
+        let q_back = hr.quotient_from_potential(e).unwrap();
+        assert!((q_back - q0).abs() / q0 < 1e-9, "Q round-trip: {q_back}");
+        // E -> Q -> E.
+        let e_meas = 0.21;
+        let q = hr.quotient_from_potential(e_meas).unwrap();
+        let e_back = hr.potential(q).unwrap();
+        assert!((e_back - e_meas).abs() < EPS, "E round-trip: {e_back}");
+    }
+
+    #[test]
+    fn quotient_is_one_at_standard_potential() {
+        let hr = HalfReaction::at_standard_temperature(0.799, 1.0).unwrap();
+        let q = hr.quotient_from_potential(0.799).unwrap();
+        assert!((q - 1.0).abs() < 1e-9, "Q at E0 should be 1, got {q}");
+    }
+
+    #[test]
+    fn one_decade_offsets_give_quotient_ten_and_tenth() {
+        // E = E0 - slope_per_decade => Q = 10 exactly; +slope => Q = 0.1.
+        let hr = HalfReaction::at_standard_temperature(0.0, 1.0).unwrap();
+        let slope = nernst_slope_per_decade(1.0, STANDARD_TEMPERATURE_K).unwrap();
+        let q_lo = hr.quotient_from_potential(-slope).unwrap();
+        assert!(
+            (q_lo - 10.0).abs() < 1e-6,
+            "one decade below E0 -> Q=10: {q_lo}"
+        );
+        let q_hi = hr.quotient_from_potential(slope).unwrap();
+        assert!(
+            (q_hi - 0.1).abs() < 1e-7,
+            "one decade above E0 -> Q=0.1: {q_hi}"
+        );
+    }
+
+    #[test]
+    fn potential_below_e0_gives_quotient_above_one() {
+        let hr = HalfReaction::at_standard_temperature(0.34, 2.0).unwrap();
+        assert!(hr.quotient_from_potential(0.30).unwrap() > 1.0);
+        assert!(hr.quotient_from_potential(0.40).unwrap() < 1.0);
+    }
+
+    #[test]
+    fn quotient_free_function_agrees_with_struct() {
+        let via_struct = HalfReaction::new(0.34, 2.0, 298.15)
+            .unwrap()
+            .quotient_from_potential(0.25)
+            .unwrap();
+        let via_free = nernst_quotient(0.34, 2.0, 298.15, 0.25).unwrap();
+        assert!((via_struct - via_free).abs() < EPS);
+    }
+
+    #[test]
+    fn quotient_rejects_non_finite_and_bad_construction() {
+        let hr = HalfReaction::at_standard_temperature(0.0, 1.0).unwrap();
+        assert!(hr.quotient_from_potential(f64::NAN).is_err());
+        assert!(hr.quotient_from_potential(f64::INFINITY).is_err());
+        // The free function also validates the construction inputs.
+        assert!(nernst_quotient(0.0, 0.0, 298.15, 0.1).is_err()); // n = 0
+        assert!(nernst_quotient(f64::NAN, 1.0, 298.15, 0.1).is_err()); // bad E0
     }
 
     #[test]
