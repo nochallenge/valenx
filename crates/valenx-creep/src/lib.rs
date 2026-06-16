@@ -19,7 +19,9 @@
 //!   at a service temperature (and a temperature solve).
 //! - [`norton`] — the **Norton-Bailey** steady-state creep law
 //!   `epsilon_dot = A * sigma^n`, with an optional Arrhenius
-//!   temperature dependence `A = A0 * exp(-Q / (R T))`.
+//!   temperature dependence `A = A0 * exp(-Q / (R T))`, plus the inverse
+//!   solve `sigma = (epsilon_dot / A)^(1/n)` for the stress that yields
+//!   a target creep rate.
 //!
 //! Every fallible entry point validates its inputs and returns a typed
 //! [`CreepError`] rather than a silent `NaN`.
@@ -79,7 +81,7 @@ pub use error::{CreepError, ErrorCategory};
 pub use larson_miller::{
     larson_miller_parameter, rupture_temperature_k, rupture_time_hours, RupturePoint, DEFAULT_C,
 };
-pub use norton::{norton_creep_rate, NortonLaw, GAS_CONSTANT_J_PER_MOL_K};
+pub use norton::{norton_creep_rate, norton_stress_for_rate, NortonLaw, GAS_CONSTANT_J_PER_MOL_K};
 
 #[cfg(test)]
 mod tests {
