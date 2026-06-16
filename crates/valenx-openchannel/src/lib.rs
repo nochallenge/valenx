@@ -14,8 +14,9 @@
 //!   `v = (1/n) R^(2/3) S^(1/2)` and discharge `Q = v A`, plus a
 //!   normal-depth solver that inverts `Q(y)`.
 //! - The Froude number ([`froude`]) `Fr = v / sqrt(g D)`, flow-regime
-//!   classification, specific energy `E = y + v^2 / (2 g)`, and the
-//!   critical-depth solution (`Fr = 1`).
+//!   classification, specific energy `E = y + v^2 / (2 g)`, the
+//!   critical-depth solution (`Fr = 1`), and the hydraulic-jump sequent
+//!   (conjugate) depth from the Bélanger equation.
 //!
 //! ## Model
 //!
@@ -28,6 +29,8 @@
 //! - Froude: `Fr = v / sqrt(g D)`, with `D = A / T` the hydraulic depth.
 //! - Specific energy: `E = y + v^2 / (2 g)`, minimised at critical depth.
 //! - Critical flow: `Q^2 T = g A^3` (i.e. `Fr = 1`).
+//! - Hydraulic jump (rectangular): the Bélanger sequent-depth relation
+//!   `y2 = (y1/2)(sqrt(1 + 8 Fr1^2) - 1)`, conjugate to `y1`.
 //!
 //! Inputs and outputs are SI throughout (metres, m³/s, m/s); the
 //! US-customary `1.49` Manning factor is intentionally not used. The
@@ -55,7 +58,7 @@ pub mod manning;
 
 pub use error::OpenChannelError;
 pub use froude::{
-    classify_regime, critical_depth, froude_for_discharge, froude_number,
+    classify_regime, critical_depth, froude_for_discharge, froude_number, sequent_depth,
     specific_energy_for_discharge_m, specific_energy_m, FlowRegime, GRAVITY_M_S2,
 };
 pub use geometry::Channel;

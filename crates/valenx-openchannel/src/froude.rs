@@ -207,6 +207,34 @@ pub fn critical_depth(
     Ok(0.5 * (lo + hi))
 }
 
+/// Sequent (conjugate) depth of a hydraulic jump in a **rectangular**
+/// channel, from the Bélanger momentum equation:
+///
+/// `y2 = (y1 / 2) * (sqrt(1 + 8 * Fr1^2) - 1)`
+///
+/// where `upstream_depth_m` is the upstream flow depth `y1` and
+/// `upstream_froude` the upstream Froude number `Fr1`. A physical jump
+/// runs from a supercritical state (`Fr1 > 1`, giving `y2 > y1` — the
+/// flow deepens and slows) toward subcritical; at `Fr1 = 1` the two
+/// depths coincide (`y2 = y1`, no jump). The two depths are *conjugate*:
+/// feeding the downstream state back through the same relation recovers
+/// `y1`.
+///
+/// This is the rectangular (constant-width) closed form, which follows
+/// from equating the specific force on either side of the jump;
+/// trapezoidal or other sections need the full momentum-function balance
+/// and are not covered here.
+///
+/// # Errors
+///
+/// Returns [`OpenChannelError`] if `upstream_depth_m` or `upstream_froude`
+/// is not finite and strictly positive.
+pub fn sequent_depth(upstream_depth_m: f64, upstream_froude: f64) -> Result<f64, OpenChannelError> {
+    let y1 = OpenChannelError::non_positive("upstream_depth_m", upstream_depth_m)?;
+    let fr1 = OpenChannelError::non_positive("upstream_froude", upstream_froude)?;
+    Ok(0.5 * y1 * ((1.0 + 8.0 * fr1 * fr1).sqrt() - 1.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,5 +342,65 @@ mod tests {
         assert!(specific_energy_m(1.0, 2.0, -9.81).is_err());
         assert!(critical_depth(&ch, -1.0, GRAVITY_M_S2, 10.0).is_err());
         assert!(classify_regime(1.0, -1e-6).is_err());
+    }
+
+    #[test]
+    fn sequent_depth_matches_belanger_closed_form() {
+        // y1 = 0.5 m, Fr1 = 3 -> y2 = 0.5 * 0.5 * (sqrt(73) - 1).
+        let y2 = sequent_depth(0.5, 3.0).unwrap();
+        let expected = 0.5 * 0.5 * ((1.0 + 8.0 * 9.0_f64).sqrt() - 1.0);
+        assert!((y2 - expected).abs() < EPS, "y2 = {y2}, want {expected}");
+        // Supercritical upstream deepens the flow.
+        assert!(y2 > 0.5, "jump should deepen: {y2}");
+    }
+
+    #[test]
+    fn no_jump_at_critical_froude() {
+        // GOLD: Fr1 = 1 is the conjugate of itself, so y2 == y1.
+        let y2 = sequent_depth(1.3, 1.0).unwrap();
+        assert!((y2 - 1.3).abs() < EPS, "y2 = {y2} should equal y1 at Fr=1");
+        // Subcritical upstream gives a shallower (supercritical) conjugate.
+        let y2_sub = sequent_depth(1.3, 0.5).unwrap();
+        assert!(
+            y2_sub < 1.3,
+            "subcritical conjugate should be shallower: {y2_sub}"
+        );
+    }
+
+    #[test]
+    fn sequent_depth_is_conjugate_reciprocal() {
+        // GOLD reciprocity: from continuity (q = V*y const) the downstream
+        // Froude is Fr2 = Fr1 * (y1/y2)^(3/2), and the Bélanger relation
+        // applied to the downstream state returns y1.
+        for &fr1 in &[1.5, 2.0, 4.0, 6.0] {
+            let y1 = 0.8;
+            let y2 = sequent_depth(y1, fr1).unwrap();
+            let fr2 = fr1 * (y1 / y2).powf(1.5);
+            assert!(fr2 < 1.0, "downstream of a jump must be subcritical: {fr2}");
+            let y1_back = sequent_depth(y2, fr2).unwrap();
+            assert!(
+                (y1_back - y1).abs() < 1e-9,
+                "conjugate round-trip {y1_back} vs {y1} at Fr1={fr1}"
+            );
+        }
+    }
+
+    #[test]
+    fn sequent_depth_increases_with_upstream_froude() {
+        let mut prev = 0.0;
+        for k in 1..20 {
+            let fr1 = 1.0 + k as f64 * 0.25;
+            let y2 = sequent_depth(0.6, fr1).unwrap();
+            assert!(y2 > prev, "y2 not increasing at Fr1={fr1}: {y2} <= {prev}");
+            prev = y2;
+        }
+    }
+
+    #[test]
+    fn sequent_depth_rejects_bad_inputs() {
+        assert!(sequent_depth(0.0, 3.0).is_err());
+        assert!(sequent_depth(-1.0, 3.0).is_err());
+        assert!(sequent_depth(0.5, 0.0).is_err());
+        assert!(sequent_depth(0.5, f64::NAN).is_err());
     }
 }
