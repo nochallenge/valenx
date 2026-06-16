@@ -17,7 +17,8 @@
 //!   caps the curve so low stresses return [`Life::Infinite`].
 //!   [`SnCurve::from_two_points`] fits the curve to two measured points.
 //! - **Mean-stress correction** ([`mean_stress`]). A [`Material`] plus a
-//!   [`MeanStressCriterion`] (Goodman or Soderberg) gives the allowable
+//!   [`MeanStressCriterion`] (the Goodman or Soderberg straight line, or
+//!   the Gerber parabola) gives the allowable
 //!   alternating stress at a given mean stress
 //!   ([`Material::allowable_alternating`]) and the factor of safety for
 //!   an operating point ([`Material::factor_of_safety`]).
@@ -74,9 +75,10 @@
 //! cross-checking, but **not** a clinical, medical, or production
 //! engineering design tool. In particular the crate does **not**:
 //!
-//! - model strain-life / low-cycle fatigue (Coffin-Manson), the Gerber,
-//!   Morrow, or Smith-Watson-Topper mean-stress corrections, or the
-//!   first-cycle yield line `sa + sm <= Sy`;
+//! - model strain-life / low-cycle fatigue (Coffin-Manson), the Morrow
+//!   or Smith-Watson-Topper mean-stress corrections, or the first-cycle
+//!   yield line `sa + sm <= Sy` (the Goodman, Soderberg, and Gerber
+//!   constant-life criteria *are* provided);
 //! - apply Marin surface / size / loading / temperature / reliability
 //!   knock-down factors — the caller supplies an already-corrected curve
 //!   and endurance limit;
