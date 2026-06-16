@@ -1,4 +1,4 @@
-//! Mean-stress corrections: Goodman and Soderberg.
+//! Mean-stress corrections: Goodman, Soderberg, and Gerber.
 //!
 //! ## Model
 //!
@@ -12,15 +12,20 @@
 //! static strength on the `sm` axis:
 //!
 //! ```text
-//! Goodman:    sa/Se + sm/Su = 1/n
-//! Soderberg:  sa/Se + sm/Sy = 1/n
+//! Goodman:    sa/Se + sm/Su      = 1/n      (straight line to Su)
+//! Soderberg:  sa/Se + sm/Sy      = 1/n      (straight line to Sy)
+//! Gerber:     n*sa/Se + (n*sm/Su)^2 = 1     (parabola to Su)
 //! ```
 //!
 //! - `Se` is the (corrected) endurance limit / target fatigue strength.
-//! - `Su` is the ultimate tensile strength (Goodman intercept).
+//! - `Su` is the ultimate tensile strength (Goodman / Gerber intercept).
 //! - `Sy` is the yield strength (Soderberg intercept — more
 //!   conservative, never permits yielding).
 //! - `n` is the design factor of safety (`n = 1` is the failure line).
+//! - **Gerber** shares Goodman's `Su` intercept but bows above the
+//!   straight line, so for the same mean stress it permits a higher
+//!   alternating stress — the least conservative of the three and the
+//!   best fit to ductile-material test data.
 //!
 //! Reading the line two ways:
 //!
@@ -33,11 +38,11 @@
 //!
 //! ## Honest scope
 //!
-//! These are the textbook straight-line constant-life criteria. The
-//! crate does not implement the Gerber parabola, Morrow, or
-//! Smith-Watson-Topper corrections, and it does not check the separate
-//! first-cycle yield line `sa + sm <= Sy`. Research/educational grade,
-//! not a production design tool.
+//! These are the textbook constant-life criteria — the Goodman and
+//! Soderberg straight lines plus the Gerber parabola. The crate does not
+//! implement the Morrow or Smith-Watson-Topper corrections, and it does
+//! not check the separate first-cycle yield line `sa + sm <= Sy`.
+//! Research/educational grade, not a production design tool.
 
 use crate::error::{FatigueError, Result};
 use serde::{Deserialize, Serialize};
@@ -56,6 +61,12 @@ pub enum MeanStressCriterion {
     /// Soderberg line — intercepts the mean-stress axis at the yield
     /// strength `Sy` (more conservative; precludes yielding).
     Soderberg,
+    /// Gerber **parabola** — `sa/Se + (sm/Su)² = 1/n`, intercepting the
+    /// mean-stress axis at the ultimate strength `Su` like Goodman but
+    /// bowing *above* the Goodman line, so it permits a higher alternating
+    /// stress at the same mean. It is the best fit to experimental data for
+    /// ductile materials and the least conservative of the three.
+    Gerber,
 }
 
 /// The material strengths a mean-stress correction needs.
@@ -111,10 +122,10 @@ impl Material {
     }
 
     /// The static-strength intercept on the mean-stress axis for a given
-    /// criterion: `Su` for Goodman, `Sy` for Soderberg.
+    /// criterion: `Su` for Goodman and Gerber, `Sy` for Soderberg.
     fn static_intercept(&self, criterion: MeanStressCriterion) -> f64 {
         match criterion {
-            MeanStressCriterion::Goodman => self.ultimate_strength,
+            MeanStressCriterion::Goodman | MeanStressCriterion::Gerber => self.ultimate_strength,
             MeanStressCriterion::Soderberg => self.yield_strength,
         }
     }
@@ -122,10 +133,14 @@ impl Material {
     /// The allowable alternating stress amplitude at a given mean stress
     /// and design factor of safety.
     ///
-    /// Solves `sa/Se + sm/S0 = 1/n` for `sa`, giving
-    /// `sa = (Se / n) * (1 - n * sm / S0)`. With `n = 1` and `sm = 0`
-    /// this returns exactly the endurance limit `Se`; with `sm = S0` (the
-    /// static intercept) it returns `0`.
+    /// For the straight-line criteria solves `sa/Se + sm/S0 = 1/n`, giving
+    /// `sa = (Se / n) * (1 - n * sm / S0)`; for [`Gerber`] it solves the
+    /// parabola `n*sa/Se + (n*sm/Su)^2 = 1`, giving
+    /// `sa = (Se / n) * (1 - (n * sm / Su)^2)`. With `n = 1` and `sm = 0`
+    /// every criterion returns exactly the endurance limit `Se`; with
+    /// `sm = S0` (the static intercept) it returns `0`.
+    ///
+    /// [`Gerber`]: MeanStressCriterion::Gerber
     ///
     /// # Errors
     ///
@@ -153,7 +168,14 @@ impl Material {
             ));
         }
         let s0 = self.static_intercept(criterion);
-        let sa = (self.endurance_limit / design_factor) * (1.0 - design_factor * mean_stress / s0);
+        let sa = match criterion {
+            // Gerber is parabolic in the mean term: n*sa/Se + (n*sm/Su)^2 = 1.
+            MeanStressCriterion::Gerber => {
+                let r = design_factor * mean_stress / s0;
+                (self.endurance_limit / design_factor) * (1.0 - r * r)
+            }
+            _ => (self.endurance_limit / design_factor) * (1.0 - design_factor * mean_stress / s0),
+        };
         if sa < 0.0 {
             return Err(FatigueError::domain(format!(
                 "mean stress {mean_stress} meets or exceeds the static line \
@@ -166,9 +188,11 @@ impl Material {
 
     /// The factor of safety for an applied operating point `(sa, sm)`.
     ///
-    /// Evaluates `n = 1 / (sa/Se + sm/S0)`. A result `n >= 1` means the
-    /// point lies on or inside the constant-life line; `n < 1` means it
-    /// lies outside (predicted failure).
+    /// For the straight-line criteria evaluates `n = 1 / (sa/Se + sm/S0)`;
+    /// for [`Gerber`](MeanStressCriterion::Gerber) it takes the positive
+    /// root of the quadratic `(sm/Su)^2 n^2 + (sa/Se) n - 1 = 0`. A result
+    /// `n >= 1` means the point lies on or inside the constant-life line;
+    /// `n < 1` means it lies outside (predicted failure).
     ///
     /// # Errors
     ///
@@ -194,8 +218,22 @@ impl Material {
             ));
         }
         let s0 = self.static_intercept(criterion);
-        let demand = alternating_stress / self.endurance_limit + mean_stress / s0;
-        Ok(1.0 / demand)
+        let n = match criterion {
+            // Gerber: solve n*sa/Se + (n*sm/Su)^2 = 1, a quadratic
+            // B n^2 + A n - 1 = 0 with A = sa/Se, B = (sm/Su)^2; take the
+            // positive root. At zero mean it degenerates to n = Se/sa.
+            MeanStressCriterion::Gerber => {
+                if mean_stress > 0.0 {
+                    let a = alternating_stress / self.endurance_limit;
+                    let b = (mean_stress / s0).powi(2);
+                    (-a + (a * a + 4.0 * b).sqrt()) / (2.0 * b)
+                } else {
+                    self.endurance_limit / alternating_stress
+                }
+            }
+            _ => 1.0 / (alternating_stress / self.endurance_limit + mean_stress / s0),
+        };
+        Ok(n)
     }
 }
 
@@ -373,5 +411,82 @@ mod tests {
         assert!(m
             .factor_of_safety(MeanStressCriterion::Goodman, 100.0, -1.0)
             .is_err());
+    }
+
+    // --- Gerber parabola -------------------------------------------------
+
+    /// Gerber shares the two anchor points: sa = Se at sm = 0 and sa = 0
+    /// at sm = Su; and at sm = Su/2 the parabola gives sa = Se*(1 - 1/4).
+    #[test]
+    fn gerber_anchor_points_and_midpoint() {
+        let m = steel();
+        close(
+            m.allowable_alternating(MeanStressCriterion::Gerber, 0.0, 1.0)
+                .unwrap(),
+            m.endurance_limit,
+        );
+        close(
+            m.allowable_alternating(MeanStressCriterion::Gerber, m.ultimate_strength, 1.0)
+                .unwrap(),
+            0.0,
+        );
+        // sm = Su/2 = 250 -> sa = 200*(1 - 0.25) = 150.
+        close(
+            m.allowable_alternating(MeanStressCriterion::Gerber, m.ultimate_strength / 2.0, 1.0)
+                .unwrap(),
+            0.75 * m.endurance_limit,
+        );
+    }
+
+    /// The Gerber parabola lies above the Goodman line: for the same mean
+    /// stress it permits a higher (less conservative) alternating stress.
+    #[test]
+    fn gerber_is_less_conservative_than_goodman() {
+        let m = steel();
+        for &sm in &[50.0, 150.0, 300.0, 450.0] {
+            let g = m
+                .allowable_alternating(MeanStressCriterion::Goodman, sm, 1.0)
+                .unwrap();
+            let gerber = m
+                .allowable_alternating(MeanStressCriterion::Gerber, sm, 1.0)
+                .unwrap();
+            assert!(
+                gerber > g,
+                "Gerber {gerber} should exceed Goodman {g} at sm={sm}"
+            );
+            assert!(gerber <= m.endurance_limit);
+        }
+    }
+
+    /// Factor of safety inverts the Gerber allowable: a point produced at
+    /// n = 1 reports n = 1, and a point produced at n = 2 reports n = 2.
+    #[test]
+    fn gerber_factor_of_safety_round_trips() {
+        let m = steel();
+        for &(sm, nd) in &[(250.0, 1.0), (150.0, 1.0), (100.0, 2.0), (300.0, 1.5)] {
+            let sa = m
+                .allowable_alternating(MeanStressCriterion::Gerber, sm, nd)
+                .unwrap();
+            let n = m
+                .factor_of_safety(MeanStressCriterion::Gerber, sa, sm)
+                .unwrap();
+            close(n, nd);
+        }
+    }
+
+    /// At zero mean the Gerber factor of safety reduces to Se/sa.
+    #[test]
+    fn gerber_pure_alternating_factor_of_safety() {
+        let m = steel();
+        close(
+            m.factor_of_safety(MeanStressCriterion::Gerber, m.endurance_limit, 0.0)
+                .unwrap(),
+            1.0,
+        );
+        close(
+            m.factor_of_safety(MeanStressCriterion::Gerber, m.endurance_limit / 2.0, 0.0)
+                .unwrap(),
+            2.0,
+        );
     }
 }
