@@ -25,6 +25,22 @@
 //! where `n` is the rotational speed in revolutions per minute. The
 //! `1e6` converts *millions* of revolutions to revolutions and the
 //! `60` converts revolutions-per-minute to revolutions-per-hour.
+//!
+//! ## Selecting a bearing (the inverse)
+//!
+//! Design usually runs the other way: you know the load `P` and the life
+//! you need, and you must choose a bearing whose rating `C` delivers it.
+//! Inverting `L10 = (C / P)^p` gives the **required basic dynamic load
+//! rating**
+//!
+//! ```text
+//! C = P · L10^(1/p)
+//! ```
+//!
+//! ([`required_dynamic_load_rating`]); pick any catalogue bearing whose
+//! rating is at least this large. [`required_dynamic_load_rating_for_hours`]
+//! folds in the hours-to-revolutions conversion so you can size straight
+//! from a target service life in hours at a shaft speed.
 
 use serde::{Deserialize, Serialize};
 
@@ -197,4 +213,78 @@ pub fn life_hours_from_revs(l10_million_revs: f64, rpm: f64) -> Result<f64, Bear
     let l10 = require_positive("l10_million_revs", l10_million_revs)?;
     let rpm = require_positive("rpm", rpm)?;
     Ok(l10 * REVS_PER_MILLION / (MINUTES_PER_HOUR * rpm))
+}
+
+/// The basic dynamic load rating `C` a bearing must have to reach a target
+/// basic rating life under a given load — the inverse of
+/// [`l10_million_revs`] and the heart of bearing *selection*.
+///
+/// Inverting `L10 = (C / P)^p` for `C` gives
+///
+/// ```text
+/// C = P · L10^(1/p)
+/// ```
+///
+/// where `equivalent_load` is the dynamic equivalent load `P` (newtons),
+/// `target_l10_million_revs` is the wanted life in millions of
+/// revolutions, and the exponent `p` comes from `bearing_type`. Choose any
+/// catalogue bearing whose basic dynamic load rating is at least the
+/// returned value.
+///
+/// # Errors
+///
+/// Returns [`BearingError`] when `equivalent_load` or
+/// `target_l10_million_revs` is `NaN`, infinite, or not greater than zero.
+///
+/// ```
+/// use valenx_bearing::{required_dynamic_load_rating, BearingType};
+/// // Ball (p = 3): to last 125 Mrev under P = 10 kN you need
+/// // C = 10_000 · 125^(1/3) = 10_000 · 5 = 50 kN.
+/// let c = required_dynamic_load_rating(10_000.0, 125.0, BearingType::Ball).unwrap();
+/// assert!((c - 50_000.0).abs() < 1e-6);
+/// ```
+pub fn required_dynamic_load_rating(
+    equivalent_load: f64,
+    target_l10_million_revs: f64,
+    bearing_type: BearingType,
+) -> Result<f64, BearingError> {
+    let equivalent_load = require_positive("equivalent_load", equivalent_load)?;
+    let target = require_positive("target_l10_million_revs", target_l10_million_revs)?;
+    let exponent = bearing_type.life_exponent();
+    Ok(equivalent_load * target.powf(1.0 / exponent))
+}
+
+/// The basic dynamic load rating `C` a bearing must have to reach a target
+/// service life in **operating hours** at a shaft speed, under a given
+/// load.
+///
+/// Folds the hours-to-revolutions conversion
+/// `L10 = L10h · 60 · n / 1e6` into [`required_dynamic_load_rating`], so
+/// you can size directly from the figure of merit maintenance planners
+/// actually quote. `equivalent_load` is `P` (newtons),
+/// `target_life_hours` the wanted life in hours, and `rpm` the shaft
+/// speed in revolutions per minute.
+///
+/// # Errors
+///
+/// Returns [`BearingError`] when `equivalent_load`, `target_life_hours`,
+/// or `rpm` is `NaN`, infinite, or not greater than zero.
+///
+/// ```
+/// use valenx_bearing::{required_dynamic_load_rating_for_hours, BearingType};
+/// // Ball, P = 10 kN: 1388.9 h at 1500 rpm is 125 Mrev, needing C = 50 kN.
+/// let c = required_dynamic_load_rating_for_hours(10_000.0, 1_388.888_889, 1500.0, BearingType::Ball)
+///     .unwrap();
+/// assert!((c - 50_000.0).abs() < 1e-3);
+/// ```
+pub fn required_dynamic_load_rating_for_hours(
+    equivalent_load: f64,
+    target_life_hours: f64,
+    rpm: f64,
+    bearing_type: BearingType,
+) -> Result<f64, BearingError> {
+    let hours = require_positive("target_life_hours", target_life_hours)?;
+    let rpm = require_positive("rpm", rpm)?;
+    let target_l10 = hours * MINUTES_PER_HOUR * rpm / REVS_PER_MILLION;
+    required_dynamic_load_rating(equivalent_load, target_l10, bearing_type)
 }
