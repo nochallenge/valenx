@@ -12,9 +12,12 @@
 //!   current conversions in both directions.
 //! - [`BalancedLoad`] — a validated load (connection plus per-element
 //!   voltage, current, and power factor) that derives line quantities,
-//!   per-phase power, and total power.
-//! - [`power_from_line`] — total real power directly from line-to-line
-//!   voltage, line current, and power factor.
+//!   per-phase power, and the full power triangle (real, apparent, and
+//!   reactive).
+//! - [`power_from_line`] — total real power `P` directly from
+//!   line-to-line voltage, line current, and power factor, with
+//!   [`apparent_power_from_line`] (`S`) and [`reactive_power_from_line`]
+//!   (`|Q|`) completing the power triangle `S^2 = P^2 + Q^2`.
 //! - [`SQRT_3`] — the `sqrt(3)` line-to-phase conversion constant.
 //!
 //! ## Model
@@ -28,9 +31,16 @@
 //! - Real power: `P = sqrt(3) * V_line * I_line * cos(phi)`, which for a
 //!   balanced load is identically three times the per-phase power
 //!   `V_phase * I_phase * cos(phi)`.
+//! - Apparent power `S = sqrt(3) * V_line * I_line` and reactive-power
+//!   magnitude `|Q| = sqrt(3) * V_line * I_line * sin(phi)` with
+//!   `sin(phi) = sqrt(1 - cos^2(phi))`, the other two sides of the power
+//!   triangle `S^2 = P^2 + Q^2`.
 //!
 //! The angle `phi` is the displacement between phase voltage and phase
-//! current; `cos(phi)` is the power factor, constrained to `[-1, 1]`.
+//! current; `cos(phi)` is the power factor, constrained to `[-1, 1]`. The
+//! power factor fixes `|sin(phi)|` but not its sign, so reactive power is
+//! reported as a magnitude (the lagging/leading distinction is not
+//! tracked).
 //!
 //! ## Honest scope
 //!
@@ -50,4 +60,7 @@ pub mod error;
 pub mod threephase;
 
 pub use error::{ErrorCategory, ThreePhaseError};
-pub use threephase::{power_from_line, BalancedLoad, Connection, SQRT_3};
+pub use threephase::{
+    apparent_power_from_line, power_from_line, reactive_power_from_line, BalancedLoad, Connection,
+    SQRT_3,
+};
