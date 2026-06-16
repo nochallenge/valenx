@@ -19,7 +19,9 @@
 //!   [`BoltedJoint::clamping_force_n`] (`F - (1 - C) P`).
 //! - **Separation** — [`BoltedJoint::separation_load_n`] (`F / (1 - C)`),
 //!   [`BoltedJoint::stays_clamped`] and
-//!   [`BoltedJoint::separation_safety_factor`].
+//!   [`BoltedJoint::separation_safety_factor`]; the dual
+//!   [`BoltedJoint::bolt_load_factor`] (`(F_proof - F) / (C P)`) guards
+//!   the other failure mode — the bolt itself reaching proof.
 //! - **Strength** — [`stress`] turns an ISO-metric thread into a
 //!   tensile-stress area `A_t` and, with a [`material::BoltMaterial`]
 //!   grade, into proof / tensile loads and axial stress.
@@ -39,6 +41,10 @@
 //!   `C P` and relieves the member clamp by `(1 - C) P`.
 //! - **Separation:** the members stay together while `F - (1 - C) P > 0`,
 //!   i.e. up to `P_sep = F / (1 - C)`.
+//! - **Bolt overload:** the bolt tension `F + C P` reaches the proof
+//!   load `F_proof` at `P = (F_proof - F) / C`, giving the load factor
+//!   `n_L = (F_proof - F) / (C P)` — the strength-side dual of the
+//!   separation margin.
 //! - **Stress area:** `A_t = (pi/4)(d - 0.938_194 P)^2` for ISO metric
 //!   threads; loads are strength × `A_t`, stress is force / `A_t`.
 //!
@@ -284,6 +290,66 @@ mod tests {
         // n > 1 ⇔ stays clamped.
         assert!(n > 1.0);
         assert!(joint.stays_clamped(p).unwrap());
+    }
+
+    // --- Bolt-overload load factor (dual of separation) -------------
+
+    #[test]
+    fn bolt_load_factor_matches_shigley_formula() {
+        // M10 8.8: preload 20 kN, C = 0.25, proof load 34.8 kN, P = 6 kN.
+        // n_L = (34800 - 20000) / (0.25 * 6000) = 14800/1500 = 9.8667.
+        let c = StiffnessRatio::new(0.25).unwrap();
+        let joint = BoltedJoint::with_preload(20_000.0, 0.01, c).unwrap();
+        let n = joint.bolt_load_factor(34_800.0, 6_000.0).unwrap();
+        let expected = (34_800.0 - 20_000.0) / (0.25 * 6_000.0);
+        assert!((n - expected).abs() < EPS * expected, "got {n}");
+        assert!((n - 9.866_666_667).abs() < 1e-6, "got {n}");
+    }
+
+    #[test]
+    fn at_the_load_factor_the_bolt_reaches_proof() {
+        // Defining property: scaling P by n_L brings the total bolt load
+        // exactly to the proof load.
+        let c = StiffnessRatio::new(0.3).unwrap();
+        let joint = BoltedJoint::with_preload(18_000.0, 0.01, c).unwrap();
+        let (fp, p) = (40_000.0, 5_000.0);
+        let n = joint.bolt_load_factor(fp, p).unwrap();
+        let bolt_at_scaled = joint.bolt_load_n(n * p).unwrap();
+        assert!(
+            (bolt_at_scaled - fp).abs() < 1e-6,
+            "bolt {bolt_at_scaled} vs proof {fp}"
+        );
+    }
+
+    #[test]
+    fn bolt_load_factor_decreases_with_load() {
+        let c = StiffnessRatio::new(0.25).unwrap();
+        let joint = BoltedJoint::with_preload(20_000.0, 0.01, c).unwrap();
+        let lo = joint.bolt_load_factor(34_800.0, 4_000.0).unwrap();
+        let hi = joint.bolt_load_factor(34_800.0, 8_000.0).unwrap();
+        assert!(
+            lo > hi,
+            "more load should lower the bolt margin: {lo} vs {hi}"
+        );
+    }
+
+    #[test]
+    fn over_preload_gives_non_positive_bolt_margin() {
+        // If the preload already meets the proof load there is no margin.
+        let c = StiffnessRatio::new(0.25).unwrap();
+        let joint = BoltedJoint::with_preload(35_000.0, 0.01, c).unwrap();
+        let n = joint.bolt_load_factor(34_800.0, 5_000.0).unwrap();
+        assert!(n < 0.0, "over-preloaded joint should report no margin: {n}");
+    }
+
+    #[test]
+    fn bolt_load_factor_rejects_bad_inputs() {
+        let c = StiffnessRatio::new(0.25).unwrap();
+        let joint = BoltedJoint::with_preload(20_000.0, 0.01, c).unwrap();
+        assert!(joint.bolt_load_factor(0.0, 5_000.0).is_err()); // proof <= 0
+        assert!(joint.bolt_load_factor(34_800.0, 0.0).is_err()); // P <= 0
+        assert!(joint.bolt_load_factor(f64::NAN, 5_000.0).is_err()); // non-finite
+        assert!(joint.bolt_load_factor(34_800.0, -1.0).is_err()); // negative P
     }
 
     // --- Tensile-stress area & strength -----------------------------
