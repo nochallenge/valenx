@@ -23,6 +23,11 @@
 //! - The **static safety factor** [`StaticEquivalentLoad`] guards a slow
 //!   or stationary bearing against brinelling (ISO 76):
 //!   `s0 = C0 / P0` with `P0 = max(X0·Fr + Y0·Fa, Fr)`.
+//! - The **required dynamic load rating** inverts the load-life relation
+//!   for bearing *selection*: [`required_dynamic_load_rating`] gives the
+//!   `C = P · L10^(1/p)` a bearing must have to reach a target life, and
+//!   [`required_dynamic_load_rating_for_hours`] sizes straight from a
+//!   target life in hours at a shaft speed.
 //!
 //! ```
 //! use valenx_bearing::{BearingType, EquivalentLoad, RatingLife};
@@ -94,7 +99,10 @@ pub mod static_load;
 
 pub use bearing::BearingType;
 pub use error::{BearingError, ErrorCategory};
-pub use life::{l10_million_revs, life_hours_from_revs, RatingLife};
+pub use life::{
+    l10_million_revs, life_hours_from_revs, required_dynamic_load_rating,
+    required_dynamic_load_rating_for_hours, RatingLife,
+};
 pub use load::EquivalentLoad;
 pub use static_load::{static_safety_factor, StaticEquivalentLoad};
 
@@ -263,6 +271,121 @@ mod tests {
         assert!((BearingType::Roller.life_exponent() - 10.0 / 3.0).abs() < EPS);
         // The roller exponent is the larger of the two.
         assert!(BearingType::Roller.life_exponent() > BearingType::Ball.life_exponent());
+    }
+
+    // ----- Required dynamic load rating (selection inverse) -----------
+
+    #[test]
+    fn required_rating_hand_values() {
+        // Ball (p = 3): C = 10_000 · 125^(1/3) = 10_000 · 5 = 50_000 N.
+        let cb = required_dynamic_load_rating(10_000.0, 125.0, BearingType::Ball).unwrap();
+        assert!((cb - 50_000.0).abs() < 1e-6, "ball C = {cb}");
+        // Roller (p = 10/3): target = 2^(10/3) -> C = 10_000 · 2 = 20_000 N.
+        let target = 2.0_f64.powf(10.0 / 3.0);
+        let cr = required_dynamic_load_rating(10_000.0, target, BearingType::Roller).unwrap();
+        assert!((cr - 20_000.0).abs() < 1e-6, "roller C = {cr}");
+    }
+
+    #[test]
+    fn required_rating_inverts_l10_both_directions() {
+        for bt in [BearingType::Ball, BearingType::Roller] {
+            // forward C -> L10 -> required C recovers C.
+            let (c, p) = (48_000.0, 9_280.0);
+            let l10 = l10_million_revs(c, p, bt).unwrap();
+            let c_back = required_dynamic_load_rating(p, l10, bt).unwrap();
+            assert!(
+                (c_back / c - 1.0).abs() < 1e-9,
+                "C round-trip {c_back} vs {c} for {bt:?}"
+            );
+            // inverse target -> required C -> L10 recovers the target.
+            let target = 200.0;
+            let c_req = required_dynamic_load_rating(p, target, bt).unwrap();
+            let l10_back = l10_million_revs(c_req, p, bt).unwrap();
+            assert!(
+                (l10_back / target - 1.0).abs() < 1e-9,
+                "L10 round-trip {l10_back} vs {target} for {bt:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn required_rating_sizing_closure() {
+        // Size C for a target life, build a bearing with exactly that
+        // rating, and confirm its life equals the target.
+        let (p, target) = (7_500.0, 90.0);
+        for bt in [BearingType::Ball, BearingType::Roller] {
+            let c_req = required_dynamic_load_rating(p, target, bt).unwrap();
+            let life = RatingLife::new(c_req, p, bt).unwrap();
+            assert!(
+                (life.l10_million_revs() / target - 1.0).abs() < 1e-9,
+                "sized life {} vs target {target} for {bt:?}",
+                life.l10_million_revs()
+            );
+        }
+    }
+
+    #[test]
+    fn required_rating_for_hours_matches_revs_path() {
+        // 1388.888... h at 1500 rpm is 125 Mrev; ball, P = 10 kN -> C = 50 kN.
+        let c = required_dynamic_load_rating_for_hours(
+            10_000.0,
+            1_388.888_888_888_889,
+            1500.0,
+            BearingType::Ball,
+        )
+        .unwrap();
+        assert!((c - 50_000.0).abs() < 1e-3, "C = {c}");
+        // Must equal the revs route with the hand-converted target L10.
+        let target_l10 = 1_388.888_888_888_889 * 60.0 * 1500.0 / 1.0e6;
+        let via_revs =
+            required_dynamic_load_rating(10_000.0, target_l10, BearingType::Ball).unwrap();
+        assert!((c - via_revs).abs() < 1e-9);
+        // Closure: a bearing with this C reaches ~1388.9 h at 1500 rpm.
+        let life = RatingLife::new(c, 10_000.0, BearingType::Ball).unwrap();
+        assert!((life.life_hours(1500.0).unwrap() - 1_388.888_888_888_889).abs() < 1e-3);
+    }
+
+    #[test]
+    fn required_rating_grows_with_target_and_load() {
+        let bt = BearingType::Ball;
+        // More life under the same load needs a bigger bearing.
+        let lo = required_dynamic_load_rating(10_000.0, 100.0, bt).unwrap();
+        let hi = required_dynamic_load_rating(10_000.0, 200.0, bt).unwrap();
+        assert!(hi > lo, "more life should need more C: {hi} vs {lo}");
+        // A heavier load for the same life needs a proportionally bigger
+        // bearing: C is linear in P.
+        let light = required_dynamic_load_rating(5_000.0, 100.0, bt).unwrap();
+        let heavy = required_dynamic_load_rating(10_000.0, 100.0, bt).unwrap();
+        assert!(
+            (heavy / light - 2.0).abs() < 1e-9,
+            "C linear in P: {heavy} vs {light}"
+        );
+    }
+
+    #[test]
+    fn required_rating_rejects_bad_inputs() {
+        assert!(required_dynamic_load_rating(0.0, 100.0, BearingType::Ball).is_err());
+        assert!(required_dynamic_load_rating(-1.0, 100.0, BearingType::Ball).is_err());
+        assert!(required_dynamic_load_rating(10_000.0, 0.0, BearingType::Ball).is_err());
+        assert!(required_dynamic_load_rating(10_000.0, -5.0, BearingType::Ball).is_err());
+        assert!(required_dynamic_load_rating(f64::NAN, 100.0, BearingType::Ball).is_err());
+        assert!(required_dynamic_load_rating(10_000.0, f64::INFINITY, BearingType::Ball).is_err());
+        // The hours variant also guards hours and rpm.
+        assert!(
+            required_dynamic_load_rating_for_hours(10_000.0, 0.0, 1500.0, BearingType::Ball)
+                .is_err()
+        );
+        assert!(
+            required_dynamic_load_rating_for_hours(10_000.0, 1000.0, 0.0, BearingType::Ball)
+                .is_err()
+        );
+        assert!(required_dynamic_load_rating_for_hours(
+            10_000.0,
+            1000.0,
+            f64::NAN,
+            BearingType::Ball
+        )
+        .is_err());
     }
 
     // ----- Validation / error behaviour -------------------------------
