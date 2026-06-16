@@ -139,6 +139,40 @@ pub fn scale_power(power_w: f64, base_speed: f64, new_speed: f64) -> Result<f64,
     Ok(power_w * r * r * r)
 }
 
+/// The dimensionless **specific speed**
+/// `Omega_s = omega * sqrt(Q) / (g H)^(3/4)`, the speed-independent shape
+/// parameter that classifies a pump's impeller type.
+///
+/// Unlike the affinity laws (where only a speed *ratio* enters),
+/// `angular_speed_rad_s` must be an absolute shaft speed in **radians per
+/// second**; `flow_m3s` and `head_m` are the flow and head at the duty
+/// point (conventionally the best-efficiency point). Using the standard
+/// gravity [`G`](crate::G) gives the universal dimensionless form — very
+/// roughly, `Omega_s < 1` is a radial / centrifugal impeller, `~1-3`
+/// mixed-flow, and `> 3` axial.
+///
+/// It is the **invariant of the affinity laws**: scaling a duty point to a
+/// new speed (`Q ∝ N`, `H ∝ N²`, so `Omega_s` picks up
+/// `N · N^(1/2) / N^(3/2) = 1`) leaves `Omega_s` unchanged. That is
+/// exactly why it characterises the pump *family* rather than the
+/// operating point — see [`scale_to_speed`].
+///
+/// # Errors
+///
+/// Returns [`PumpError::BadParameter`] if `angular_speed_rad_s` or
+/// `head_m` is not finite and strictly positive (the head is a
+/// denominator), or if `flow_m3s` is not finite and non-negative.
+pub fn dimensionless_specific_speed(
+    angular_speed_rad_s: f64,
+    flow_m3s: f64,
+    head_m: f64,
+) -> Result<f64, PumpError> {
+    let omega = require_positive("angular_speed_rad_s", angular_speed_rad_s)?;
+    let flow = require_non_negative("flow_m3s", flow_m3s)?;
+    let head = require_positive("head_m", head_m)?;
+    Ok(omega * flow.sqrt() / (crate::G * head).powf(0.75))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +244,73 @@ mod tests {
     fn rejects_non_finite_inputs() {
         assert!(DutyPoint::new(1000.0, f64::NAN, 1.0, 1.0).is_err());
         assert!(DutyPoint::new(1000.0, 0.01, f64::INFINITY, 1.0).is_err());
+    }
+
+    #[test]
+    fn specific_speed_matches_closed_form() {
+        // omega = 150 rad/s, Q = 0.05 m^3/s, H = 30 m.
+        let ns = dimensionless_specific_speed(150.0, 0.05, 30.0).unwrap();
+        let expected = 150.0 * 0.05_f64.sqrt() / (crate::G * 30.0).powf(0.75);
+        assert!((ns - expected).abs() < 1e-12, "Ns {ns} vs {expected}");
+        // Plausible band for a radial/centrifugal impeller.
+        assert!(ns > 0.1 && ns < 1.0, "Ns {ns} out of expected band");
+    }
+
+    #[test]
+    fn specific_speed_is_invariant_under_the_affinity_laws() {
+        // GOLD identity: Q ∝ N, H ∝ N² leave Omega_s unchanged. Check both
+        // directly and through scale_to_speed (treating speed as rad/s).
+        let (omega, q, h) = (120.0, 0.04, 25.0);
+        let base = dimensionless_specific_speed(omega, q, h).unwrap();
+        for &k in &[0.5, 1.5, 2.0, 3.0] {
+            // Direct: scale the inputs by the affinity exponents.
+            let direct = dimensionless_specific_speed(k * omega, k * q, k * k * h).unwrap();
+            assert!(
+                (direct - base).abs() < 1e-12,
+                "direct invariance broke at k={k}"
+            );
+            // Through the affinity module's own scaling.
+            let dp = DutyPoint::new(omega, q, h, 1000.0).unwrap();
+            let scaled = scale_to_speed(&dp, k * omega).unwrap();
+            let via_affinity =
+                dimensionless_specific_speed(scaled.speed, scaled.flow_m3s, scaled.head_m).unwrap();
+            assert!(
+                (via_affinity - base).abs() < 1e-12,
+                "affinity invariance broke at k={k}"
+            );
+        }
+    }
+
+    #[test]
+    fn specific_speed_scaling_laws() {
+        let base = dimensionless_specific_speed(100.0, 0.04, 16.0).unwrap();
+        // Linear in omega.
+        let twice_omega = dimensionless_specific_speed(200.0, 0.04, 16.0).unwrap();
+        assert!((twice_omega - 2.0 * base).abs() < 1e-12, "Ns ~ omega");
+        // sqrt in flow: 4x Q -> 2x Ns.
+        let quad_q = dimensionless_specific_speed(100.0, 0.16, 16.0).unwrap();
+        assert!((quad_q - 2.0 * base).abs() < 1e-12, "Ns ~ sqrt(Q)");
+        // H^(-3/4): 16x head -> Ns / 8 (16^0.75 = 8).
+        let big_h = dimensionless_specific_speed(100.0, 0.04, 256.0).unwrap();
+        assert!((big_h - base / 8.0).abs() < 1e-12, "Ns ~ H^-0.75");
+    }
+
+    #[test]
+    fn specific_speed_zero_flow_is_zero() {
+        assert!(
+            dimensionless_specific_speed(150.0, 0.0, 30.0)
+                .unwrap()
+                .abs()
+                < 1e-15
+        );
+    }
+
+    #[test]
+    fn specific_speed_rejects_bad_inputs() {
+        assert!(dimensionless_specific_speed(0.0, 0.05, 30.0).is_err());
+        assert!(dimensionless_specific_speed(150.0, -0.05, 30.0).is_err());
+        assert!(dimensionless_specific_speed(150.0, 0.05, 0.0).is_err());
+        assert!(dimensionless_specific_speed(f64::NAN, 0.05, 30.0).is_err());
+        assert!(dimensionless_specific_speed(150.0, 0.05, f64::INFINITY).is_err());
     }
 }
