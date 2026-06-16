@@ -200,6 +200,53 @@ pub fn focal_length(n: f64, r1: f64, r2: f64) -> Result<f64, OpticsError> {
     Ok(1.0 / inv_f)
 }
 
+/// Design inverse of the lensmaker's equation: the **second surface
+/// radius** `R2` that gives a target `focal_length`, for a material of
+/// index `n` and a chosen first-surface radius `r1`.
+///
+/// Solving `1/f = (n - 1)(1/R1 - 1/R2)` for `R2`:
+///
+/// ```text
+/// 1/R2 = 1/R1 - 1 / ((n - 1) * f)
+/// ```
+///
+/// When that curvature works out to zero the back surface is flat and
+/// [`f64::INFINITY`] is returned (a plano lens). It round-trips with
+/// [`focal_length`]: feeding the returned `R2` back reproduces `f`. For a
+/// symmetric biconvex lens (`R1 = R`, `R2 = -R`) this reduces to the
+/// textbook `R = 2 (n - 1) f`.
+///
+/// # Errors
+///
+/// - [`OpticsError::InvalidParameter`] if `n` is non-finite, non-positive,
+///   or equal to 1; if `focal_length` is non-finite or zero; or if `r1`
+///   is `NaN` or exactly zero.
+pub fn radius_for_focal_length(n: f64, focal_length: f64, r1: f64) -> Result<f64, OpticsError> {
+    let n = validate_index("n", n)?;
+    if (n - 1.0).abs() < f64::EPSILON {
+        return Err(OpticsError::InvalidParameter {
+            name: "n",
+            value: n,
+            reason: "index of 1 (matching the surrounding air) gives no refraction",
+        });
+    }
+    if !focal_length.is_finite() || focal_length == 0.0 {
+        return Err(OpticsError::InvalidParameter {
+            name: "focal_length",
+            value: focal_length,
+            reason: "target focal length must be finite and non-zero",
+        });
+    }
+    let r1 = validate_radius("r1", r1)?;
+    let inv_r2 = curvature(r1) - 1.0 / ((n - 1.0) * focal_length);
+    if inv_r2 == 0.0 {
+        // The chosen R1 already delivers the target power: the back
+        // surface is flat.
+        return Ok(f64::INFINITY);
+    }
+    Ok(1.0 / inv_r2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,5 +356,60 @@ mod tests {
             img.magnification
         );
         assert_eq!(img.kind, ImageKind::Real);
+    }
+
+    // -- radius_for_focal_length: the lensmaker design inverse ----------
+
+    #[test]
+    fn radius_inverse_round_trips_focal_length() {
+        // For a grid of (n, f, r1), the returned R2 must reproduce f.
+        for &n in &[1.5_f64, 1.6, 1.8] {
+            for &f in &[0.05_f64, 0.10, -0.20, 0.5] {
+                for &r1 in &[0.08_f64, 0.15, -0.12, f64::INFINITY] {
+                    let r2 = radius_for_focal_length(n, f, r1).unwrap();
+                    let f_back = focal_length(n, r1, r2).unwrap();
+                    assert!(
+                        (f_back - f).abs() < 1e-9,
+                        "n={n} f={f} r1={r1} -> r2={r2} -> f_back={f_back}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn symmetric_biconvex_radius_matches_textbook() {
+        // Symmetric design: R1 = +R should yield R2 = -R, with the
+        // textbook |R| = 2 (n - 1) f. n=1.5, f=0.10 -> R = 0.10.
+        let r2 = radius_for_focal_length(1.5, 0.10, 0.10).unwrap();
+        assert!((r2 - (-0.10)).abs() < EPS, "R2 = {r2}");
+        // And |R| = 2 (n-1) f reproduces the front radius magnitude.
+        assert!((0.10_f64 - 2.0 * (1.5 - 1.0) * 0.10).abs() < EPS);
+    }
+
+    #[test]
+    fn flat_back_surface_when_front_supplies_all_power() {
+        // R1 = (n-1) f makes the front surface alone hit the target power,
+        // so the back is flat (infinite radius) -> a plano-convex lens.
+        let r2 = radius_for_focal_length(1.5, 0.10, 0.05).unwrap();
+        assert!(r2.is_infinite(), "R2 = {r2}");
+        // Round-trips: plano-convex with R1=0.05 has f = 0.10.
+        assert!((focal_length(1.5, 0.05, r2).unwrap() - 0.10).abs() < EPS);
+    }
+
+    #[test]
+    fn flat_front_yields_curved_back() {
+        // R1 = infinity (flat front): all power from the back surface.
+        let r2 = radius_for_focal_length(1.5, 0.10, f64::INFINITY).unwrap();
+        assert!((r2 - (-0.05)).abs() < EPS, "R2 = {r2}");
+        assert!((focal_length(1.5, f64::INFINITY, r2).unwrap() - 0.10).abs() < EPS);
+    }
+
+    #[test]
+    fn radius_inverse_rejects_bad_inputs() {
+        assert!(radius_for_focal_length(1.0, 0.10, 0.10).is_err()); // n = 1
+        assert!(radius_for_focal_length(1.5, 0.0, 0.10).is_err()); // f = 0
+        assert!(radius_for_focal_length(1.5, f64::NAN, 0.10).is_err()); // f NaN
+        assert!(radius_for_focal_length(1.5, 0.10, 0.0).is_err()); // r1 = 0
     }
 }
