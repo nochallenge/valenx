@@ -49,7 +49,9 @@
 //! - [`error`] — the [`TlError`] taxonomy and validated constructors.
 //! - [`mod@line`] — the [`Line`] and `Z0 = sqrt(L / C)`.
 //! - [`reflection`] — [`Load`], [`Reflection`], and the figures of
-//!   merit, plus the [`load_from_gamma`] inverse.
+//!   merit, plus the [`load_from_gamma`] inverse and the
+//!   [`gamma_magnitude_from_vswr`] bench inverse `|gamma| = (S-1)/(S+1)`
+//!   that recovers the reflection magnitude from a measured VSWR.
 //!
 //! ## Honest scope
 //!
@@ -81,7 +83,7 @@ pub mod reflection;
 
 pub use error::TlError;
 pub use line::Line;
-pub use reflection::{load_from_gamma, Load, Reflection};
+pub use reflection::{gamma_magnitude_from_vswr, load_from_gamma, Load, Reflection};
 
 #[cfg(test)]
 mod tests {
@@ -404,6 +406,54 @@ mod tests {
                 name: "z0_ohms",
                 ..
             })
+        ));
+    }
+
+    // ----- inverse: gamma_magnitude_from_vswr -------------------------------
+
+    #[test]
+    fn gamma_magnitude_from_vswr_round_trips_with_vswr() {
+        // inverse ∘ forward: |gamma| -> VSWR -> |gamma|.
+        for g in [0.0_f64, 1.0 / 3.0, 0.5, 0.9] {
+            let s = Reflection::from_gamma(g).unwrap().vswr().unwrap();
+            let back = gamma_magnitude_from_vswr(s).unwrap();
+            assert!(close(back, g), "g={g} -> S={s} -> {back}");
+        }
+        // forward ∘ inverse: VSWR -> |gamma| -> VSWR.
+        for s in [1.0_f64, 1.5, 2.0, 10.0] {
+            let mag = gamma_magnitude_from_vswr(s).unwrap();
+            let s_back = Reflection::from_gamma(mag).unwrap().vswr().unwrap();
+            assert!(close(s_back, s), "S={s} -> mag={mag} -> {s_back}");
+        }
+    }
+
+    #[test]
+    fn gamma_magnitude_from_vswr_known_value() {
+        // VSWR = 2 ⇒ |gamma| = 1/3 (the 100 Ω on 50 Ω case); VSWR = 1 ⇒ 0.
+        assert!(close(gamma_magnitude_from_vswr(2.0).unwrap(), 1.0 / 3.0));
+        assert!(close(gamma_magnitude_from_vswr(1.0).unwrap(), 0.0));
+    }
+
+    #[test]
+    fn gamma_magnitude_from_vswr_matches_line_measurement() {
+        // Cross-check vs the full line->load->reflection path: 100 Ω on a
+        // 50 Ω line gives VSWR 2, whose inverse recovers the same
+        // |gamma| = 1/3 the forward reflection reports.
+        let line = Line::from_z0(50.0).unwrap();
+        let r = line.reflection(Load::resistive(100.0).unwrap());
+        let mag = gamma_magnitude_from_vswr(r.vswr().unwrap()).unwrap();
+        assert!(close(mag, r.gamma_magnitude()));
+    }
+
+    #[test]
+    fn gamma_magnitude_from_vswr_rejects_below_one_and_non_finite() {
+        assert!(matches!(
+            gamma_magnitude_from_vswr(0.5),
+            Err(TlError::VswrBelowOne { .. })
+        ));
+        assert!(matches!(
+            gamma_magnitude_from_vswr(f64::NAN),
+            Err(TlError::NotFinite { name: "vswr", .. })
         ));
     }
 

@@ -31,7 +31,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{ensure_non_negative, ensure_positive, TlError};
+use crate::error::{ensure_finite, ensure_non_negative, ensure_positive, TlError};
 use crate::line::Line;
 
 /// A purely resistive termination presented to a transmission line.
@@ -326,4 +326,47 @@ pub fn load_from_gamma(z0_ohms: f64, gamma: f64) -> Result<f64, TlError> {
         return Err(TlError::GammaOutOfRange { value: gamma });
     }
     Ok(z0 * (1.0 + gamma) / (1.0 - gamma))
+}
+
+/// Recover the reflection magnitude `|gamma|` from a measured voltage
+/// standing-wave ratio — the inverse of
+/// `VSWR = (1 + |gamma|) / (1 - |gamma|)`.
+///
+/// Solving for the magnitude gives
+///
+/// ```text
+/// |gamma| = (VSWR - 1) / (VSWR + 1)
+/// ```
+///
+/// A VSWR meter or slotted line reads the standing-wave ratio `S`
+/// directly; this converts it back to the reflection-coefficient
+/// magnitude in `[0, 1)`, and hence — via `|gamma|^2` — to the
+/// reflected-power fraction. The *sign* of `gamma` is not recoverable from
+/// VSWR alone (a short and an open both give the same ratio), so only the
+/// magnitude is returned; pair it with [`Reflection::from_gamma`] if the
+/// sign is known.
+///
+/// `vswr` must be finite and `>= 1` (the lossless-line minimum, attained
+/// only at a perfect match).
+///
+/// # Errors
+///
+/// Returns [`TlError::NotFinite`] if `vswr` is not finite, or
+/// [`TlError::VswrBelowOne`] if `vswr < 1`.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_transmissionline::gamma_magnitude_from_vswr;
+///
+/// // VSWR = 2 ⇒ |gamma| = 1/3.
+/// let mag = gamma_magnitude_from_vswr(2.0).unwrap();
+/// assert!((mag - 1.0 / 3.0).abs() < 1e-12);
+/// ```
+pub fn gamma_magnitude_from_vswr(vswr: f64) -> Result<f64, TlError> {
+    let vswr = ensure_finite("vswr", vswr)?;
+    if vswr < 1.0 {
+        return Err(TlError::VswrBelowOne { value: vswr });
+    }
+    Ok((vswr - 1.0) / (vswr + 1.0))
 }
