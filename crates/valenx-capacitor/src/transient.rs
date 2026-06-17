@@ -146,6 +146,54 @@ pub fn discharging_voltage(
     Ok(v0 * (-t / tau).exp())
 }
 
+/// Current through the series resistor during an RC transient, in amperes:
+///
+/// ```text
+/// I(t) = (V0 / R) * exp(-t / (R * C))
+/// ```
+///
+/// This single exponential is the current for **both** charge and
+/// discharge: while charging it is the resistor current
+/// `I = (V0 - V_C) / R` (the source drives whatever the capacitor has not
+/// yet taken up), and while discharging it is `I = V_C / R` (the capacitor
+/// drives the resistor) — the magnitudes coincide because both share the
+/// same time constant `tau = R C`. It starts at `V0 / R` and decays to zero,
+/// and carries the sign of `V0`. The companion to
+/// [`charging_voltage`] / [`discharging_voltage`].
+///
+/// # Parameters
+///
+/// - `v0_v` — source / initial voltage `V0`, in volts. Any finite value
+///   (the current takes its sign).
+/// - `resistance_ohm` — series resistance `R`, in ohms. Must be `> 0`.
+/// - `capacitance_f` — capacitance `C`, in farads. Must be `> 0`.
+/// - `time_s` — elapsed time `t`, in seconds. Must be `>= 0`.
+///
+/// # Errors
+///
+/// Returns [`CapacitorError::InvalidParameter`] if `v0_v` is non-finite,
+/// if `resistance_ohm` or `capacitance_f` is not strictly positive, or if
+/// `time_s` is negative.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_capacitor::transient::resistor_current;
+///
+/// // At t = 0 the resistor sees the full source: I = V0 / R = 5 mA here.
+/// let i = resistor_current(5.0, 1.0e3, 1.0e-6, 0.0).unwrap();
+/// assert!((i - 5.0e-3).abs() < 1e-12);
+/// ```
+pub fn resistor_current(
+    v0_v: f64,
+    resistance_ohm: f64,
+    capacitance_f: f64,
+    time_s: f64,
+) -> Result<f64> {
+    let (v0, t, tau) = validate_transient(v0_v, resistance_ohm, capacitance_f, time_s)?;
+    Ok((v0 / resistance_ohm) * (-t / tau).exp())
+}
+
 /// Time (seconds) for a *charging* capacitor to first reach a target
 /// voltage `target_voltage_v`, the inverse of [`charging_voltage`].
 ///
@@ -330,5 +378,73 @@ mod inverse_tests {
         // Bad R / C propagate from time_constant.
         assert!(time_to_charge(5.0, 0.0, C, 2.0).is_err());
         assert!(time_to_discharge(5.0, R, -1.0, 2.0).is_err());
+    }
+}
+
+#[cfg(test)]
+mod current_tests {
+    use super::*;
+
+    // 1 kohm, 1 uF -> tau = 1 ms.
+    const R: f64 = 1.0e3;
+    const C: f64 = 1.0e-6;
+    const TAU: f64 = 1.0e-3;
+
+    /// At t = 0 the resistor sees the full source: I = V0 / R.
+    #[test]
+    fn initial_current_is_v0_over_r() {
+        let i = resistor_current(5.0, R, C, 0.0).unwrap();
+        assert!((i - 5.0 / R).abs() < 1e-15, "i = {i}");
+    }
+
+    /// After one time constant the current has fallen to V0/R * 1/e.
+    #[test]
+    fn current_at_one_tau_is_one_over_e_of_initial() {
+        let i0 = resistor_current(5.0, R, C, 0.0).unwrap();
+        let i = resistor_current(5.0, R, C, TAU).unwrap();
+        assert!((i - i0 * (-1.0_f64).exp()).abs() < 1e-12, "i = {i}");
+    }
+
+    /// Ohm's law on the resistor while charging: I = (V0 - V_C) / R, where
+    /// V_C is the charging voltage.
+    #[test]
+    fn current_matches_charging_voltage_via_ohms_law() {
+        let v0 = 12.0;
+        for &t in &[0.0_f64, 1.0e-4, 5.0e-4, 1.0e-3, 3.0e-3] {
+            let vc = charging_voltage(v0, R, C, t).unwrap();
+            let i = resistor_current(v0, R, C, t).unwrap();
+            assert!((i - (v0 - vc) / R).abs() < 1e-12, "t {t}: i {i}");
+        }
+    }
+
+    /// Ohm's law on the resistor while discharging: I = V_C / R, where V_C
+    /// is the discharging voltage.
+    #[test]
+    fn current_matches_discharging_voltage_via_ohms_law() {
+        let v0 = 12.0;
+        for &t in &[0.0_f64, 1.0e-4, 5.0e-4, 1.0e-3, 3.0e-3] {
+            let vc = discharging_voltage(v0, R, C, t).unwrap();
+            let i = resistor_current(v0, R, C, t).unwrap();
+            assert!((i - vc / R).abs() < 1e-12, "t {t}: i {i}");
+        }
+    }
+
+    /// The current decays monotonically and carries the sign of V0.
+    #[test]
+    fn current_decays_and_tracks_sign() {
+        let early = resistor_current(5.0, R, C, 1.0e-4).unwrap();
+        let late = resistor_current(5.0, R, C, 2.0e-3).unwrap();
+        assert!(early > late && late > 0.0, "early {early}, late {late}");
+        // Negative source -> negative current of the same magnitude.
+        let neg = resistor_current(-5.0, R, C, 1.0e-4).unwrap();
+        assert!((neg + early).abs() < 1e-15, "neg = {neg}");
+    }
+
+    #[test]
+    fn rejects_bad_rc_and_negative_time() {
+        assert!(resistor_current(5.0, 0.0, C, 1.0e-3).is_err());
+        assert!(resistor_current(5.0, R, -1.0, 1.0e-3).is_err());
+        assert!(resistor_current(5.0, R, C, -1.0e-3).is_err());
+        assert!(resistor_current(f64::NAN, R, C, 1.0e-3).is_err());
     }
 }
