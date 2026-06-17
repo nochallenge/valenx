@@ -267,6 +267,54 @@ pub fn time_to_reach_std(d: f64, target_std: f64) -> Result<f64> {
     Ok(target_std * target_std / (2.0 * d))
 }
 
+/// The distance from the source at which the instantaneous point-source
+/// profile has fallen to a given **fraction of its peak** — the spatial
+/// inverse of [`gaussian_point_source`].
+///
+/// Since `C(x, t) / C(0, t) = exp(-x^2 / (4 D t))`, setting that ratio to
+/// `fraction` and solving for the non-negative distance gives
+///
+/// ```text
+///   x = sqrt( 4 D t * ln(1 / fraction) ).
+/// ```
+///
+/// It answers "how far out has the tracer reached the `fraction` contour?"
+/// At `fraction = 1` it is `0` (the peak sits at the origin); at the
+/// special value `fraction = exp(-1/2)` it returns exactly the RMS spread
+/// [`gaussian_std`] (`sqrt(2 D t)`); and as `fraction -> 0` it grows
+/// without bound. By symmetry the same concentration also occurs at `-x`.
+/// This complements the temporal inverses [`time_to_reach_variance`] /
+/// [`time_to_reach_std`] with a spatial one.
+///
+/// # Errors
+///
+/// [`DiffusionError::BadParameter`] if `d` is not strictly positive, if
+/// `t` is not strictly positive, or if `fraction` is not finite and in
+/// `(0, 1]`.
+///
+/// # Examples
+///
+/// ```
+/// use valenx_diffusion::{distance_for_concentration_fraction, gaussian_std};
+///
+/// // The exp(-1/2) contour sits exactly one standard deviation out.
+/// let (d, t) = (1.5, 2.0);
+/// let x = distance_for_concentration_fraction(d, t, (-0.5_f64).exp()).unwrap();
+/// assert!((x - gaussian_std(d, t).unwrap()).abs() < 1e-12);
+/// ```
+pub fn distance_for_concentration_fraction(d: f64, t: f64, fraction: f64) -> Result<f64> {
+    check_diffusivity(d)?;
+    check_time_positive(t)?;
+    if !fraction.is_finite() || fraction <= 0.0 || fraction > 1.0 {
+        return Err(DiffusionError::bad_parameter(
+            "fraction",
+            "must be finite and in (0, 1]",
+        ));
+    }
+    let ln_inv = (1.0 / fraction).ln();
+    Ok((4.0 * d * t * ln_inv).sqrt())
+}
+
 // --- internal validators -------------------------------------------------
 
 /// Reject a non-positive or non-finite diffusion coefficient.
@@ -469,6 +517,52 @@ mod tests {
         // Zero target -> zero time.
         assert!(time_to_reach_variance(1.0, 0.0).unwrap().abs() < EPS);
         assert!(time_to_reach_std(1.0, 0.0).unwrap().abs() < EPS);
+    }
+
+    #[test]
+    fn distance_for_fraction_round_trips_through_the_profile() {
+        // The distance to a fraction f, fed back into the profile, recovers
+        // exactly that fraction of the peak.
+        let (mass, d, t) = (3.0, 1.2, 2.5);
+        let peak = gaussian_point_source(mass, d, 0.0, t).unwrap();
+        for &f in &[1.0_f64, 0.8, 0.5, 0.1, 0.01] {
+            let x = distance_for_concentration_fraction(d, t, f).unwrap();
+            let ratio = gaussian_point_source(mass, d, x, t).unwrap() / peak;
+            assert!((ratio - f).abs() < 1e-12, "f={f} -> x={x} -> ratio={ratio}");
+        }
+    }
+
+    #[test]
+    fn distance_for_one_over_sqrt_e_fraction_is_one_sigma() {
+        // The exp(-1/2) contour is exactly one standard deviation out.
+        let (d, t) = (1.5, 2.0);
+        let x = distance_for_concentration_fraction(d, t, (-0.5_f64).exp()).unwrap();
+        assert!((x - gaussian_std(d, t).unwrap()).abs() < EPS, "x={x}");
+    }
+
+    #[test]
+    fn distance_for_full_fraction_is_zero_and_grows_as_fraction_falls() {
+        let (d, t) = (0.7, 3.0);
+        // The peak (fraction 1) sits at the origin.
+        assert!(
+            distance_for_concentration_fraction(d, t, 1.0)
+                .unwrap()
+                .abs()
+                < EPS
+        );
+        // A lower target fraction lies farther out.
+        let near = distance_for_concentration_fraction(d, t, 0.5).unwrap();
+        let far = distance_for_concentration_fraction(d, t, 0.1).unwrap();
+        assert!(far > near && near > 0.0, "near={near} far={far}");
+    }
+
+    #[test]
+    fn distance_for_fraction_rejects_bad_parameters() {
+        assert!(distance_for_concentration_fraction(0.0, 1.0, 0.5).is_err()); // D
+        assert!(distance_for_concentration_fraction(1.0, 0.0, 0.5).is_err()); // t = 0
+        assert!(distance_for_concentration_fraction(1.0, 1.0, 0.0).is_err()); // fraction 0
+        assert!(distance_for_concentration_fraction(1.0, 1.0, 1.5).is_err()); // > 1
+        assert!(distance_for_concentration_fraction(1.0, 1.0, f64::NAN).is_err());
     }
 
     #[test]
