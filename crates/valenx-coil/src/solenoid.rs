@@ -166,6 +166,49 @@ impl Solenoid {
     pub fn time_constant_seconds(&self, resistance: f64) -> Result<f64, CoilError> {
         time_constant_seconds(self.inductance_henries(), resistance)
     }
+
+    /// The (fractional) number of turns `N` needed to reach a target
+    /// self-inductance for a given geometry and core — the coil-winding
+    /// design inverse of [`Solenoid::inductance_henries`].
+    ///
+    /// Inverting `L = mu0 mu_r N^2 A / l` gives
+    ///
+    /// ```text
+    /// N = sqrt( L * l / (mu0 * mu_r * A) ).
+    /// ```
+    ///
+    /// The result is the exact real turn count; round it up to a whole turn
+    /// in practice. Building a [`Solenoid::new`] at this `N` (same `A`, `l`,
+    /// `mu_r`) reproduces the target inductance. A higher-permeability core
+    /// or shorter winding needs fewer turns.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`CoilError`] if `target_henries`, `area` or `length` is not
+    /// strictly positive and finite, or if `relative_permeability` is below 1
+    /// or non-finite.
+    pub fn turns_for_inductance(
+        target_henries: f64,
+        area: f64,
+        length: f64,
+        relative_permeability: f64,
+    ) -> Result<f64, CoilError> {
+        let l_target = require_positive("L", target_henries)?;
+        let area = require_positive("A", area)?;
+        let length = require_positive("l", length)?;
+        if !relative_permeability.is_finite() {
+            return Err(CoilError::NotFinite {
+                name: "mu_r",
+                value: relative_permeability,
+            });
+        }
+        if relative_permeability < 1.0 {
+            return Err(CoilError::BadPermeability {
+                value: relative_permeability,
+            });
+        }
+        Ok((l_target * length / (VACUUM_PERMEABILITY * relative_permeability * area)).sqrt())
+    }
 }
 
 /// The magnetic energy `E = 0.5 * L * I^2` stored in an inductor, in
@@ -583,5 +626,50 @@ mod tests {
         assert!(rising_current(f64::NAN, 5.0, 0.01, 0.001).is_err()); // V NaN
         assert!(decaying_current(2.0, -5.0, 0.01, 0.001).is_err()); // R < 0
         assert!(decaying_current(f64::INFINITY, 5.0, 0.01, 0.001).is_err()); // I0 inf
+    }
+
+    /// turns_for_inductance inverts inductance_henries both ways: size N for
+    /// a target L and recover L, and recover a coil's own N from its L.
+    #[test]
+    fn turns_for_inductance_inverts_inductance() {
+        let (a, l, mu_r) = (2.5e-4, 0.09, 12.0);
+        let target = 3.0e-4;
+        let n = Solenoid::turns_for_inductance(target, a, l, mu_r).unwrap();
+        let coil = Solenoid::new(n, a, l, mu_r).unwrap();
+        assert!((coil.inductance_henries() - target).abs() < 1.0e-9 * target);
+        // Forward: a coil's own turn count is recovered from its inductance.
+        let known = Solenoid::new(137.0, a, l, mu_r).unwrap();
+        let n_back =
+            Solenoid::turns_for_inductance(known.inductance_henries(), a, l, mu_r).unwrap();
+        assert!((n_back - 137.0).abs() < 1.0e-9, "n_back = {n_back}");
+    }
+
+    /// Ground truth: air core A=1e-4, l=0.1, target L = 4 pi e-6 -> N = 100
+    /// (the inverse of the inductance ground-truth case).
+    #[test]
+    fn turns_for_inductance_ground_truth() {
+        let target = 4.0 * std::f64::consts::PI * 1.0e-6;
+        let n = Solenoid::turns_for_inductance(target, 1.0e-4, 0.1, 1.0).unwrap();
+        assert!((n - 100.0).abs() < 1.0e-9, "n = {n}");
+    }
+
+    /// Turns grow as sqrt(L) (4x L -> 2x turns); a permeable core needs fewer.
+    #[test]
+    fn turns_for_inductance_scales_and_permeability() {
+        let (a, l) = (1.0e-4, 0.1);
+        let lo = Solenoid::turns_for_inductance(1.0e-5, a, l, 1.0).unwrap();
+        let hi = Solenoid::turns_for_inductance(4.0e-5, a, l, 1.0).unwrap();
+        assert!((hi / lo - 2.0).abs() < 1.0e-9, "lo={lo} hi={hi}");
+        let cored = Solenoid::turns_for_inductance(1.0e-5, a, l, 100.0).unwrap();
+        assert!(cored < lo, "cored {cored} should be below air {lo}");
+    }
+
+    #[test]
+    fn turns_for_inductance_rejects_bad_inputs() {
+        assert!(Solenoid::turns_for_inductance(0.0, 1.0e-4, 0.1, 1.0).is_err()); // L
+        assert!(Solenoid::turns_for_inductance(1.0e-5, 0.0, 0.1, 1.0).is_err()); // A
+        assert!(Solenoid::turns_for_inductance(1.0e-5, 1.0e-4, 0.0, 1.0).is_err()); // l
+        assert!(Solenoid::turns_for_inductance(1.0e-5, 1.0e-4, 0.1, 0.5).is_err()); // mu_r<1
+        assert!(Solenoid::turns_for_inductance(f64::NAN, 1.0e-4, 0.1, 1.0).is_err());
     }
 }
