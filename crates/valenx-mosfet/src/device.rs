@@ -239,6 +239,49 @@ impl Mosfet {
             gm: self.gm(vgs)?,
         })
     }
+
+    /// Gate **overdrive** `vov = vgs − vth` (V) needed to carry a target
+    /// saturation drain current — the design inverse of the saturation
+    /// branch of [`drain_current`](Mosfet::drain_current).
+    ///
+    /// Inverting `Id = ½ · k · vov²` gives `vov = sqrt(2 · Id / k)`. A
+    /// zero target maps to zero overdrive (the cutoff edge `vgs = vth`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MosfetError::Domain`] if `target_id` is non-finite, and
+    /// [`MosfetError::Invalid`] if it is negative (an NMOS drain current
+    /// is non-negative).
+    pub fn overdrive_for_saturation_current(&self, target_id: f64) -> Result<f64> {
+        if !target_id.is_finite() {
+            return Err(MosfetError::domain("target_id", "must be finite"));
+        }
+        if target_id < 0.0 {
+            return Err(MosfetError::invalid(
+                "target_id",
+                format!("drain current must be >= 0, got {target_id}"),
+            ));
+        }
+        Ok((2.0 * target_id / self.k).sqrt())
+    }
+
+    /// Gate-to-source voltage `vgs` (V) that biases the device to a target
+    /// saturation drain current — the analog-design inverse that picks the
+    /// bias for a desired current.
+    ///
+    /// `vgs = vth + sqrt(2 · Id / k)`, i.e. the threshold plus the
+    /// [overdrive](Mosfet::overdrive_for_saturation_current) the current
+    /// demands. Holding `vds ≥ vgs − vth` keeps the device in saturation,
+    /// where feeding this `vgs` back into
+    /// [`drain_current`](Mosfet::drain_current) reproduces `target_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MosfetError::Domain`] if `target_id` is non-finite, and
+    /// [`MosfetError::Invalid`] if it is negative.
+    pub fn vgs_for_saturation_current(&self, target_id: f64) -> Result<f64> {
+        Ok(self.vth + self.overdrive_for_saturation_current(target_id)?)
+    }
 }
 
 /// Reject non-finite bias voltages with a [`MosfetError::Domain`].
@@ -517,5 +560,82 @@ mod tests {
         assert_eq!(Region::Cutoff.label(), "cutoff");
         assert_eq!(Region::Triode.label(), "triode");
         assert_eq!(Region::Saturation.label(), "saturation");
+    }
+
+    // ---- VALIDATE: saturation bias-design inverse -------------------
+
+    #[test]
+    fn vgs_for_saturation_current_inverts_drain_current() {
+        let m = Mosfet::new(1.0e-3, 1.0).expect("valid");
+        let target = 2.0e-3;
+        let vgs = m.vgs_for_saturation_current(target).expect("finite");
+        // Bias well into saturation (large vds) and recover the target.
+        assert_eq!(m.region(vgs, 50.0).expect("finite"), Region::Saturation);
+        assert_close(
+            m.drain_current(vgs, 50.0).expect("finite"),
+            target,
+            "round-trip Id",
+        );
+    }
+
+    #[test]
+    fn overdrive_for_saturation_current_matches_hand_value() {
+        // k = 2, Id = 9 => vov = sqrt(2*9/2) = 3; vgs = vth + 3 = 4.
+        let m = Mosfet::new(2.0, 1.0).expect("valid");
+        let vov = m.overdrive_for_saturation_current(9.0).expect("finite");
+        assert_close(vov, 3.0, "vov hand value");
+        let vgs = m.vgs_for_saturation_current(9.0).expect("finite");
+        assert_close(vgs, 4.0, "vgs hand value");
+        // The forward overdrive() recovers the same vov from that vgs.
+        assert_close(
+            m.overdrive(vgs).expect("finite"),
+            vov,
+            "overdrive round-trip",
+        );
+    }
+
+    #[test]
+    fn saturation_bias_inverse_is_consistent_with_gm() {
+        // gm at the computed bias equals sqrt(2*k*Id), the gm-Id identity.
+        let m = Mosfet::new(1.2e-3, 0.7).expect("valid");
+        let target = 0.6e-3;
+        let vgs = m.vgs_for_saturation_current(target).expect("finite");
+        let gm = m.gm(vgs).expect("finite");
+        let expected = (2.0 * m.k() * target).sqrt();
+        assert_close(gm, expected, "gm = sqrt(2 k Id)");
+    }
+
+    #[test]
+    fn zero_target_current_biases_at_threshold() {
+        let m = Mosfet::nmos(); // vth = 1
+        assert_close(
+            m.overdrive_for_saturation_current(0.0).expect("finite"),
+            0.0,
+            "vov at Id=0",
+        );
+        assert_close(
+            m.vgs_for_saturation_current(0.0).expect("finite"),
+            m.vth(),
+            "vgs at Id=0",
+        );
+    }
+
+    #[test]
+    fn saturation_bias_inverse_rejects_bad_target() {
+        let m = Mosfet::nmos();
+        assert!(matches!(
+            m.vgs_for_saturation_current(-1.0e-3),
+            Err(MosfetError::Invalid {
+                what: "target_id",
+                ..
+            })
+        ));
+        assert!(matches!(
+            m.overdrive_for_saturation_current(f64::NAN),
+            Err(MosfetError::Domain {
+                what: "target_id",
+                ..
+            })
+        ));
     }
 }
