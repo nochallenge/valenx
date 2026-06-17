@@ -21,7 +21,10 @@
 //!   [`BoltedJoint::stays_clamped`] and
 //!   [`BoltedJoint::separation_safety_factor`]; the dual
 //!   [`BoltedJoint::bolt_load_factor`] (`(F_proof - F) / (C P)`) guards
-//!   the other failure mode — the bolt itself reaching proof.
+//!   the other failure mode — the bolt itself reaching proof. The
+//!   design-direction inverse [`BoltedJoint::preload_for_separation_load`]
+//!   (`F = n P (1 - C)`) sizes the preload for a target service load and
+//!   separation factor of safety.
 //! - **Strength** — [`stress`] turns an ISO-metric thread into a
 //!   tensile-stress area `A_t` and, with a [`material::BoltMaterial`]
 //!   grade, into proof / tensile loads and axial stress.
@@ -290,6 +293,45 @@ mod tests {
         // n > 1 ⇔ stays clamped.
         assert!(n > 1.0);
         assert!(joint.stays_clamped(p).unwrap());
+    }
+
+    // --- Sizing inverse: preload for a target separation FoS --------
+
+    #[test]
+    fn preload_for_separation_inverts_the_separation_relations() {
+        // Size F for a target service load and FoS, then a joint at that
+        // preload reports exactly that FoS and separates at n*P.
+        let c = StiffnessRatio::new(0.3).unwrap();
+        let p = 5_000.0;
+        let n = 2.0;
+        let f = BoltedJoint::preload_for_separation_load(p, n, c).unwrap();
+        let joint = BoltedJoint::with_preload(f, 0.01, c).unwrap();
+        assert!((joint.separation_safety_factor(p).unwrap() - n).abs() < EPS * n);
+        assert!((joint.separation_load_n() - n * p).abs() < EPS * n * p);
+    }
+
+    #[test]
+    fn preload_for_separation_unit_factor_separates_at_the_load() {
+        let c = StiffnessRatio::new(0.25).unwrap();
+        let p = 8_000.0;
+        let f = BoltedJoint::preload_for_separation_load(p, 1.0, c).unwrap();
+        // F = P*(1-C), and the joint then separates exactly at P.
+        assert!((f - p * c.member_fraction()).abs() < EPS * f);
+        let joint = BoltedJoint::with_preload(f, 0.012, c).unwrap();
+        assert!((joint.separation_load_n() - p).abs() < EPS * p);
+    }
+
+    #[test]
+    fn preload_for_separation_scales_and_rejects_bad_inputs() {
+        let c = StiffnessRatio::new(0.2).unwrap();
+        let lo = BoltedJoint::preload_for_separation_load(1_000.0, 1.5, c).unwrap();
+        let hi_load = BoltedJoint::preload_for_separation_load(2_000.0, 1.5, c).unwrap();
+        let hi_fos = BoltedJoint::preload_for_separation_load(1_000.0, 3.0, c).unwrap();
+        assert!(hi_load > lo, "larger load -> larger preload");
+        assert!(hi_fos > lo, "larger FoS -> larger preload");
+        assert!(BoltedJoint::preload_for_separation_load(0.0, 2.0, c).is_err());
+        assert!(BoltedJoint::preload_for_separation_load(1_000.0, 0.0, c).is_err());
+        assert!(BoltedJoint::preload_for_separation_load(f64::NAN, 2.0, c).is_err());
     }
 
     // --- Bolt-overload load factor (dual of separation) -------------
