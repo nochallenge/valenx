@@ -22,9 +22,11 @@
 //!   (heat-kernel) solution
 //!   `C(x, t) = M / sqrt(4 pi D t) * exp(-x^2 / (4 D t))`
 //!   ([`gaussian_point_source`]), whose spreading variance is the exact
-//!   `2 D t` ([`gaussian_variance`]), and the inverse time-to-spread
+//!   `2 D t` ([`gaussian_variance`]), the inverse time-to-spread
 //!   `t = var / (2 D)` ([`time_to_reach_variance`] /
-//!   [`time_to_reach_std`]).
+//!   [`time_to_reach_std`]), and the spatial inverse
+//!   `x = sqrt(4 D t ln(1/f))` giving the distance to a chosen
+//!   peak-fraction contour ([`distance_for_concentration_fraction`]).
 //!
 //! Plus the **steady state** between two fixed walls — the linear
 //! gradient that solves `d2C/dx2 = 0` and the uniform flux it carries
@@ -105,8 +107,8 @@ pub mod explicit;
 pub mod steady;
 
 pub use analytic::{
-    first_law_flux, flux_central, gaussian_point_source, gaussian_std, gaussian_variance,
-    time_to_reach_std, time_to_reach_variance,
+    distance_for_concentration_fraction, first_law_flux, flux_central, gaussian_point_source,
+    gaussian_std, gaussian_variance, time_to_reach_std, time_to_reach_variance,
 };
 pub use error::{DiffusionError, ErrorCategory, Result};
 pub use explicit::{is_stable_dt, max_stable_dt, Boundary, Field, Grid};
