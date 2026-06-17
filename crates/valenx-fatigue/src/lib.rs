@@ -20,8 +20,11 @@
 //!   [`MeanStressCriterion`] (the Goodman or Soderberg straight line, or
 //!   the Gerber parabola) gives the allowable
 //!   alternating stress at a given mean stress
-//!   ([`Material::allowable_alternating`]) and the factor of safety for
-//!   an operating point ([`Material::factor_of_safety`]).
+//!   ([`Material::allowable_alternating`]), the factor of safety for
+//!   an operating point ([`Material::factor_of_safety`]), and the
+//!   **equivalent completely-reversed stress**
+//!   ([`Material::equivalent_reversed_stress`]) — the zero-mean stress to
+//!   feed into the S-N curve to predict finite life under a non-zero mean.
 //! - **Cumulative damage** ([`damage`]). [`miner_damage`] sums the
 //!   Palmgren-Miner fractions `sum n_i/N_i` over a list of
 //!   [`DamageBlock`]s; [`has_failed`] tests for `D >= 1`,
