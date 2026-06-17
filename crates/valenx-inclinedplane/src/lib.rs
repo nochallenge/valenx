@@ -19,7 +19,12 @@
 //!   `F_down = W (sin(theta) - mu cos(theta))`;
 //! - whether the ramp is *self-locking* — the block will not slide
 //!   under gravity alone — which happens exactly when the friction
-//!   angle `phi = atan(mu)` is at least the slope angle `theta`.
+//!   angle `phi = atan(mu)` is at least the slope angle `theta`;
+//! - the *actual* mechanical advantage `AMA = W / F_up`, the load-to-
+//!   effort ratio really achieved against friction;
+//! - the *efficiency* `eta = sin(theta) / (sin(theta) + mu cos(theta))`
+//!   — the actual MA over the ideal MA — which is `1` only when
+//!   frictionless and at most `1/2` whenever the ramp is self-locking.
 //!
 //! ## Model
 //!
