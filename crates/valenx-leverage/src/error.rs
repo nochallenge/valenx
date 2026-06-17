@@ -35,6 +35,21 @@ pub enum LeverError {
         /// The offending value, echoed for diagnostics.
         value: f64,
     },
+
+    /// A displacement (the linear travel of the effort or load point) was
+    /// not finite (NaN or infinite).
+    ///
+    /// Displacements may be zero (no motion) or signed (either direction
+    /// of swing), but must be finite for the kinematic arm ratio to be
+    /// meaningful.
+    #[error("non-finite displacement `{name}`: expected a finite value, got {value}")]
+    NonFiniteDisplacement {
+        /// Which displacement was rejected (`"effort_displacement"` or
+        /// `"load_displacement"`).
+        name: &'static str,
+        /// The offending value, echoed for diagnostics.
+        value: f64,
+    },
 }
 
 /// Coarse classification of a [`LeverError`].
@@ -57,6 +72,7 @@ impl LeverError {
         match self {
             LeverError::NonPositiveArm { .. } => "leverage.non-positive-arm",
             LeverError::NonFiniteForce { .. } => "leverage.non-finite-force",
+            LeverError::NonFiniteDisplacement { .. } => "leverage.non-finite-displacement",
         }
     }
 
@@ -68,9 +84,9 @@ impl LeverError {
     /// added later.
     pub fn category(&self) -> ErrorCategory {
         match self {
-            LeverError::NonPositiveArm { .. } | LeverError::NonFiniteForce { .. } => {
-                ErrorCategory::Input
-            }
+            LeverError::NonPositiveArm { .. }
+            | LeverError::NonFiniteForce { .. }
+            | LeverError::NonFiniteDisplacement { .. } => ErrorCategory::Input,
         }
     }
 }
@@ -96,6 +112,19 @@ pub(crate) fn validate_force(name: &'static str, value: f64) -> Result<f64, Leve
         Ok(value)
     } else {
         Err(LeverError::NonFiniteForce { name, value })
+    }
+}
+
+/// Validate that a displacement is finite (zero and signed values are
+/// allowed).
+///
+/// Returns the value unchanged on success; otherwise a
+/// [`LeverError::NonFiniteDisplacement`] tagged with `name`.
+pub(crate) fn validate_displacement(name: &'static str, value: f64) -> Result<f64, LeverError> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(LeverError::NonFiniteDisplacement { name, value })
     }
 }
 

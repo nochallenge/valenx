@@ -18,7 +18,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{validate_arm, validate_force, LeverError};
+use crate::error::{validate_arm, validate_displacement, validate_force, LeverError};
 
 /// The three classes of lever, distinguished by the relative ordering
 /// of the fulcrum, the effort, and the load along the beam.
@@ -170,6 +170,43 @@ impl Lever {
             load,
             moment: load * self.load_arm,
         })
+    }
+
+    /// Distance the **load** point travels when the effort point moves
+    /// `effort_displacement`, as the ideal lever rotates through a small
+    /// angle about the fulcrum.
+    ///
+    /// Both ends sweep the same angle, so travel scales with arm length:
+    /// `load_displacement = effort_displacement * load_arm / effort_arm
+    /// = effort_displacement / MA`. The load therefore moves *less* than
+    /// the effort exactly when the lever multiplies force (`MA > 1`) —
+    /// the force-for-distance trade-off, and the kinematic companion to
+    /// [`balance_load`](Lever::balance_load).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LeverError::NonFiniteDisplacement`] if
+    /// `effort_displacement` is not finite.
+    pub fn load_displacement(&self, effort_displacement: f64) -> Result<f64, LeverError> {
+        let d = validate_displacement("effort_displacement", effort_displacement)?;
+        Ok(d / self.mechanical_advantage())
+    }
+
+    /// Distance the **effort** point must travel to move the load by
+    /// `load_displacement` — the inverse of
+    /// [`load_displacement`](Lever::load_displacement).
+    ///
+    /// `effort_displacement = load_displacement * effort_arm / load_arm
+    /// = load_displacement * MA`. A force-multiplying lever (`MA > 1`)
+    /// demands the effort sweep a *longer* path than the load it drives.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LeverError::NonFiniteDisplacement`] if `load_displacement`
+    /// is not finite.
+    pub fn effort_displacement(&self, load_displacement: f64) -> Result<f64, LeverError> {
+        let d = validate_displacement("load_displacement", load_displacement)?;
+        Ok(d * self.mechanical_advantage())
     }
 
     /// Net moment (torque) about the fulcrum for an arbitrary
@@ -364,5 +401,74 @@ mod tests {
         assert_eq!(LeverClass::First.label(), "first");
         assert_eq!(LeverClass::Second.label(), "second");
         assert_eq!(LeverClass::Third.label(), "third");
+    }
+
+    // ---------------------------------------------------------------
+    // Kinematics: displacement (velocity-ratio) companion.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn load_moves_less_than_effort_when_force_is_multiplied() {
+        // MA = 4: a force-multiplying lever moves the load 1/4 as far.
+        let lever = Lever::new(8.0, 2.0).unwrap();
+        let load_d = lever.load_displacement(1.0).unwrap();
+        assert!((load_d - 0.25).abs() < EPS);
+        // effort_displacement is the exact inverse.
+        assert!((lever.effort_displacement(load_d).unwrap() - 1.0).abs() < EPS);
+    }
+
+    #[test]
+    fn displacement_round_trips_both_directions() {
+        let lever = Lever::new(3.3, 1.1).unwrap();
+        let e = 2.5;
+        let l = lever.load_displacement(e).unwrap();
+        assert!((lever.effort_displacement(l).unwrap() - e).abs() < EPS);
+        let l2 = 7.0;
+        let e2 = lever.effort_displacement(l2).unwrap();
+        assert!((lever.load_displacement(e2).unwrap() - l2).abs() < EPS);
+    }
+
+    #[test]
+    fn ideal_lever_conserves_work() {
+        // Energy cross-check tying the kinematic methods to the force
+        // ones: work done by the effort over its travel equals work done
+        // on the load over its (shorter) travel — what you gain in force
+        // you pay back in distance.
+        let lever = Lever::new(6.0, 1.5).unwrap(); // MA = 4
+        let effort = 30.0;
+        let effort_travel = 0.8;
+        let b = lever.balance_load(effort).unwrap();
+        let load_travel = lever.load_displacement(effort_travel).unwrap();
+        assert!((effort * effort_travel - b.load * load_travel).abs() < EPS);
+    }
+
+    #[test]
+    fn displacement_ratio_equals_mechanical_advantage() {
+        // The effort/load travel ratio is exactly the mechanical
+        // advantage (ideal velocity ratio = MA, i.e. 100% efficiency).
+        let lever = Lever::new(20.0, 80.0).unwrap(); // MA = 0.25 (class three)
+        let load_d = lever.load_displacement(1.0).unwrap();
+        assert!((1.0 / load_d - lever.mechanical_advantage()).abs() < EPS);
+        // A class-three lever (MA < 1) moves the load FARTHER than the effort.
+        assert!(load_d > 1.0);
+    }
+
+    #[test]
+    fn displacement_rejects_non_finite() {
+        let lever = Lever::new(2.0, 1.0).unwrap();
+        assert!(matches!(
+            lever.load_displacement(f64::NAN),
+            Err(LeverError::NonFiniteDisplacement {
+                name: "effort_displacement",
+                ..
+            })
+        ));
+        assert!(matches!(
+            lever.effort_displacement(f64::INFINITY),
+            Err(LeverError::NonFiniteDisplacement {
+                name: "load_displacement",
+                ..
+            })
+        ));
     }
 }
