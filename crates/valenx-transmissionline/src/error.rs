@@ -64,6 +64,18 @@ pub enum TlError {
         /// The rejected magnitude.
         value: f64,
     },
+
+    /// A voltage standing-wave ratio below the physical minimum of `1`
+    /// was supplied to a constructor that expects a VSWR.
+    ///
+    /// For any passive termination on a lossless line `VSWR >= 1` (it
+    /// equals `1` only at a perfect match); a ratio below unity has no
+    /// physical meaning and cannot be inverted to a valid `|gamma|`.
+    #[error("VSWR must be >= 1, got {value}")]
+    VswrBelowOne {
+        /// The rejected standing-wave ratio.
+        value: f64,
+    },
 }
 
 impl TlError {
@@ -77,6 +89,7 @@ impl TlError {
             TlError::Negative { .. } => "transmissionline.negative",
             TlError::NotFinite { .. } => "transmissionline.not-finite",
             TlError::GammaOutOfRange { .. } => "transmissionline.gamma-out-of-range",
+            TlError::VswrBelowOne { .. } => "transmissionline.vswr-below-one",
         }
     }
 }
