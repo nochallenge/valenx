@@ -336,4 +336,37 @@ impl BoltedJoint {
         let p = BoltError::require_positive("external_load_n", external_load_n)?;
         Ok((fp - self.preload_n) / (self.stiffness.value() * p))
     }
+
+    /// The minimum preload `F` needed to keep the joint clamped under a
+    /// service load `external_load_n` with a chosen separation factor of
+    /// safety — the design-direction inverse of
+    /// [`BoltedJoint::separation_load_n`] /
+    /// [`BoltedJoint::separation_safety_factor`].
+    ///
+    /// Requiring the separation load `P_sep = F / (1 - C)` to be at least
+    /// `safety_factor` times the service load `P` gives
+    ///
+    /// ```text
+    /// F = safety_factor * P * (1 - C).
+    /// ```
+    ///
+    /// This is an associated (sizing) function: call it before you have a
+    /// joint, then build one at the returned preload with
+    /// [`BoltedJoint::with_preload`] — the result reports exactly this
+    /// separation factor of safety at `external_load_n`. With
+    /// `safety_factor = 1` the joint separates right at the service load.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BoltError`] if `external_load_n` or `safety_factor` is not
+    /// strictly positive / finite.
+    pub fn preload_for_separation_load(
+        external_load_n: f64,
+        safety_factor: f64,
+        stiffness: StiffnessRatio,
+    ) -> Result<f64, BoltError> {
+        let p = BoltError::require_positive("external_load_n", external_load_n)?;
+        let n = BoltError::require_positive("safety_factor", safety_factor)?;
+        Ok(n * p * stiffness.member_fraction())
+    }
 }
