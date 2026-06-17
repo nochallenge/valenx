@@ -174,6 +174,32 @@ impl Ramp {
         self.friction_angle_rad() >= self.geometry.angle_rad()
     }
 
+    /// The **actual mechanical advantage** when raising the load,
+    /// `AMA = W / F_up = 1 / (sin(theta) + mu cos(theta))`.
+    ///
+    /// The load-to-effort ratio actually achieved against friction. It
+    /// equals the ideal [`IdealRamp::ideal_mechanical_advantage`]
+    /// (`1 / sin(theta)`) only in the frictionless limit `mu = 0`; any
+    /// friction lowers it. Independent of the block weight, since both `W`
+    /// and `F_up` scale with it.
+    pub fn actual_mechanical_advantage(&self) -> f64 {
+        self.weight / self.effort_to_raise()
+    }
+
+    /// The **efficiency** of the ramp when raising the load,
+    /// `eta = sin(theta) / (sin(theta) + mu cos(theta))` — the ratio of the
+    /// frictionless effort to the actual effort, equivalently the actual
+    /// mechanical advantage over the ideal one. Lies in `(0, 1]`.
+    ///
+    /// `eta = 1` exactly when frictionless (`mu = 0`); any friction makes
+    /// it strictly less. A self-locking ramp ([`Ramp::is_self_locking`])
+    /// always has `eta <= 1/2` — the classic result that a machine which
+    /// holds its own load under friction wastes at least half its input
+    /// work.
+    pub fn efficiency(&self) -> f64 {
+        self.slope_force() / self.effort_to_raise()
+    }
+
     /// Compute every static quantity in one pass.
     pub fn forces(&self) -> RampForces {
         RampForces {
@@ -328,6 +354,73 @@ mod tests {
     fn friction_angle_is_atan_mu() {
         let ramp = ramp_30deg();
         assert!((ramp.friction_angle_rad() - 0.2_f64.atan()).abs() < EPS);
+    }
+
+    #[test]
+    fn efficiency_and_ama_hand_values() {
+        let ramp = ramp_30deg();
+        // denom = sin30 + mu cos30 = 0.5 + 0.2*sqrt(3)/2 = 0.6732050808...
+        let denom = 0.5 + 0.2 * (3.0_f64).sqrt() / 2.0;
+        // eta = sin30 / denom = 0.7427813527...
+        assert!((ramp.efficiency() - 0.5 / denom).abs() < EPS);
+        // AMA = W / F_up = 1 / denom = 1.4855627054...
+        assert!((ramp.actual_mechanical_advantage() - 1.0 / denom).abs() < EPS);
+    }
+
+    #[test]
+    fn frictionless_efficiency_is_one_and_ama_equals_ideal() {
+        // mu = 0: no friction wasted, so efficiency is exactly 1 and the
+        // actual MA collapses onto the ideal geometric MA (1/sin30 = 2).
+        let ramp = Ramp::new(std::f64::consts::FRAC_PI_6, 0.0, 100.0).unwrap();
+        assert!((ramp.efficiency() - 1.0).abs() < EPS);
+        let ima = ramp.geometry().ideal_mechanical_advantage();
+        assert!((ramp.actual_mechanical_advantage() - ima).abs() < EPS);
+        assert!((ramp.actual_mechanical_advantage() - 2.0).abs() < EPS);
+    }
+
+    #[test]
+    fn efficiency_equals_actual_over_ideal_ma() {
+        // The defining identity linking the two: eta = AMA / IMA.
+        let ramp = ramp_30deg();
+        let ima = ramp.geometry().ideal_mechanical_advantage();
+        let ratio = ramp.actual_mechanical_advantage() / ima;
+        assert!((ramp.efficiency() - ratio).abs() < EPS);
+    }
+
+    #[test]
+    fn efficiency_and_ama_independent_of_weight() {
+        // Both are pure ratios, so scaling the load leaves them fixed.
+        let light = Ramp::new(std::f64::consts::FRAC_PI_6, 0.2, 5.0).unwrap();
+        let heavy = Ramp::new(std::f64::consts::FRAC_PI_6, 0.2, 5000.0).unwrap();
+        assert!((light.efficiency() - heavy.efficiency()).abs() < EPS);
+        assert!(
+            (light.actual_mechanical_advantage() - heavy.actual_mechanical_advantage()).abs() < EPS
+        );
+    }
+
+    #[test]
+    fn self_locking_efficiency_at_most_one_half() {
+        // Classic result: a self-locking machine has eta <= 1/2, while a
+        // freely-sliding ramp exceeds 1/2.
+        let locking = Ramp::new(20.0_f64.to_radians(), 0.5, 100.0).unwrap();
+        assert!(locking.is_self_locking());
+        assert!(
+            locking.efficiency() <= 0.5,
+            "eta = {}",
+            locking.efficiency()
+        );
+        let free = Ramp::new(40.0_f64.to_radians(), 0.5, 100.0).unwrap();
+        assert!(!free.is_self_locking());
+        assert!(free.efficiency() > 0.5, "eta = {}", free.efficiency());
+    }
+
+    #[test]
+    fn more_friction_lowers_efficiency_and_ama() {
+        let theta = std::f64::consts::FRAC_PI_6;
+        let low = Ramp::new(theta, 0.1, 100.0).unwrap();
+        let high = Ramp::new(theta, 0.4, 100.0).unwrap();
+        assert!(high.efficiency() < low.efficiency());
+        assert!(high.actual_mechanical_advantage() < low.actual_mechanical_advantage());
     }
 
     #[test]
