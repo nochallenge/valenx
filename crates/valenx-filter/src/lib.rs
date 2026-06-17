@@ -11,7 +11,10 @@
 //! - [`rc::RcFilter`] — a first-order **RC** section (a resistor and a
 //!   capacitor). Gives the cutoff frequency, and the linear / decibel
 //!   magnitude and phase of the low-pass (output across `C`) or
-//!   high-pass (output across `R`) response at any frequency.
+//!   high-pass (output across `R`) response at any frequency, plus the
+//!   design inverses [`RcFilter::capacitance_for_cutoff`] /
+//!   [`RcFilter::resistance_for_cutoff`] that size a component for a
+//!   target corner frequency.
 //! - [`rlc::RlcCircuit`] — a series **RLC** resonant circuit. Gives the
 //!   resonant frequency, the quality factor `Q`, the `-3 dB` bandwidth,
 //!   and both the narrow-band and the **exact** half-power band-edge

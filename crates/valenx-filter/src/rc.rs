@@ -124,6 +124,42 @@ impl RcFilter {
         1.0 / (2.0 * PI * self.resistance_ohm * self.capacitance_f)
     }
 
+    /// The capacitance `C` (farads) that places the cutoff at `cutoff_hz`
+    /// for a chosen resistance `R` — the RC design inverse of
+    /// [`RcFilter::cutoff_hz`].
+    ///
+    /// Inverting `fc = 1 / (2 pi R C)` gives `C = 1 / (2 pi R fc)`. Building
+    /// an [`RcFilter`] at this `C` (same `R`) reproduces `cutoff_hz`. The
+    /// cutoff is independent of the [`RcKind`], so this sizes either a
+    /// low-pass or a high-pass section.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::FilterError::InvalidComponent`] if `resistance_ohm`
+    /// or `cutoff_hz` is not a strictly-positive finite number.
+    pub fn capacitance_for_cutoff(resistance_ohm: f64, cutoff_hz: f64) -> Result<f64> {
+        let r = check_component("R", resistance_ohm)?;
+        let fc = check_component("cutoff_hz", cutoff_hz)?;
+        Ok(1.0 / (2.0 * PI * r * fc))
+    }
+
+    /// The resistance `R` (ohms) that places the cutoff at `cutoff_hz` for a
+    /// chosen capacitance `C` — the RC design inverse of
+    /// [`RcFilter::cutoff_hz`].
+    ///
+    /// Inverting `fc = 1 / (2 pi R C)` gives `R = 1 / (2 pi C fc)`. Building
+    /// an [`RcFilter`] at this `R` (same `C`) reproduces `cutoff_hz`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::FilterError::InvalidComponent`] if `capacitance_f`
+    /// or `cutoff_hz` is not a strictly-positive finite number.
+    pub fn resistance_for_cutoff(capacitance_f: f64, cutoff_hz: f64) -> Result<f64> {
+        let c = check_component("C", capacitance_f)?;
+        let fc = check_component("cutoff_hz", cutoff_hz)?;
+        Ok(1.0 / (2.0 * PI * c * fc))
+    }
+
     /// The time constant `tau = R * C`, in seconds.
     ///
     /// Related to the cutoff by `fc = 1 / (2 * pi * tau)`.
@@ -340,5 +376,53 @@ mod tests {
             f.phase_rad(f64::NAN),
             Err(FilterError::InvalidFrequency { .. })
         ));
+    }
+
+    #[test]
+    fn capacitance_for_cutoff_round_trips() {
+        // Inverse of the cutoff ground-truth: R = 1 kOhm, fc ~ 159.155 Hz
+        // -> C = 1 uF; building at that C reproduces the cutoff.
+        let r = 1_000.0;
+        let fc_target = 159.154_943_091_895_34;
+        let c = RcFilter::capacitance_for_cutoff(r, fc_target).unwrap();
+        assert!((c - 1e-6).abs() < 1e-15, "c = {c}");
+        let filter = RcFilter::low_pass(r, c).unwrap();
+        assert!((filter.cutoff_hz() - fc_target).abs() < 1e-9 * fc_target);
+    }
+
+    #[test]
+    fn resistance_for_cutoff_round_trips() {
+        let c = 4.7e-9;
+        let fc_target = 2_000.0;
+        let r = RcFilter::resistance_for_cutoff(c, fc_target).unwrap();
+        let filter = RcFilter::high_pass(r, c).unwrap();
+        assert!(
+            (filter.cutoff_hz() - fc_target).abs() < 1e-9 * fc_target,
+            "r = {r}"
+        );
+    }
+
+    #[test]
+    fn cutoff_sizing_inverts_a_filter() {
+        // Either sized component, fed the filter's own cutoff, recovers the
+        // filter's own value.
+        let filter = RcFilter::low_pass(3_300.0, 2.2e-9).unwrap();
+        let fc = filter.cutoff_hz();
+        let c = RcFilter::capacitance_for_cutoff(filter.resistance_ohm(), fc).unwrap();
+        let r = RcFilter::resistance_for_cutoff(filter.capacitance_f(), fc).unwrap();
+        assert!((c - filter.capacitance_f()).abs() < 1e-12 * filter.capacitance_f());
+        assert!((r - filter.resistance_ohm()).abs() < 1e-9 * filter.resistance_ohm());
+    }
+
+    #[test]
+    fn cutoff_sizing_scales_and_rejects_bad() {
+        // Higher cutoff -> proportionally smaller capacitance.
+        let lo = RcFilter::capacitance_for_cutoff(1_000.0, 100.0).unwrap();
+        let hi = RcFilter::capacitance_for_cutoff(1_000.0, 1_000.0).unwrap();
+        assert!((lo / hi - 10.0).abs() < 1e-9 && hi < lo);
+        assert!(RcFilter::capacitance_for_cutoff(0.0, 100.0).is_err());
+        assert!(RcFilter::capacitance_for_cutoff(1_000.0, 0.0).is_err());
+        assert!(RcFilter::resistance_for_cutoff(1e-6, -1.0).is_err());
+        assert!(RcFilter::capacitance_for_cutoff(f64::NAN, 100.0).is_err());
     }
 }
