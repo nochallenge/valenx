@@ -182,4 +182,34 @@ impl CircularPlate {
             EdgeSupport::SimplySupported => 3.0 * (3.0 + nu) / 8.0 * scale,
         }
     }
+
+    /// The maximum uniform pressure this plate can carry before its peak
+    /// bending stress reaches `allowable_stress` — the design inverse of
+    /// [`CircularPlate::max_bending_stress`].
+    ///
+    /// Because the bending stress is linear in pressure
+    /// (`sigma_max = c p (a/t)^2`), the admissible pressure is the allowable
+    /// stress divided by this plate's (constant) stress-per-unit-pressure:
+    ///
+    /// ```text
+    /// p_allow = allowable_stress / (c (a/t)^2) .
+    /// ```
+    ///
+    /// Rebuilding the plate at `p_allow` (same material and geometry) makes
+    /// its [`max_bending_stress`](CircularPlate::max_bending_stress) equal
+    /// exactly `allowable_stress`. Deflection is not considered here — for a
+    /// stiffness-governed design also check [`center_deflection`].
+    ///
+    /// [`center_deflection`]: CircularPlate::center_deflection
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlateError::InvalidParameter`] if `allowable_stress` is not
+    /// finite and strictly positive.
+    pub fn max_pressure_for_stress(&self, allowable_stress: f64) -> Result<f64, PlateError> {
+        let s_allow = require_positive("allowable_stress", allowable_stress)?;
+        // sigma_max is linear in p (and the plate's own pressure is > 0 and
+        // its stress > 0), so stress-per-unit-pressure is a finite constant.
+        Ok(s_allow * self.pressure / self.max_bending_stress())
+    }
 }
