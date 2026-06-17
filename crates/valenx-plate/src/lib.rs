@@ -14,6 +14,9 @@
 //!   circular plate ([`CircularPlate::center_deflection`]);
 //! - the **maximum bending stress** in that plate
 //!   ([`CircularPlate::max_bending_stress`]);
+//! - the **allowable pressure** for a target stress
+//!   ([`CircularPlate::max_pressure_for_stress`]) — the design inverse of
+//!   the bending stress, `p_allow = allowable_stress / (c (a/t)^2)`;
 //!
 //! for both clamped and simply-supported rims ([`EdgeSupport`]).
 //!
@@ -331,6 +334,54 @@ mod tests {
             .unwrap()
             .max_bending_stress();
         assert!(approx_rel(s_soft, s_stiff, 1e-12), "{s_soft} vs {s_stiff}");
+    }
+
+    // -- allowable pressure (design inverse of the bending stress) ---------
+
+    #[test]
+    fn max_pressure_for_stress_inverts_max_bending_stress() {
+        let steel = PlateMaterial::new(200.0e9, 0.3, 0.005).unwrap();
+        let plate = CircularPlate::new(steel, 0.25, 20.0e3, EdgeSupport::Clamped).unwrap();
+        // Feeding the plate's own peak stress back recovers its own pressure.
+        let s = plate.max_bending_stress();
+        let p = plate.max_pressure_for_stress(s).unwrap();
+        assert!(approx_rel(p, plate.pressure, 1e-12), "p={p}");
+    }
+
+    #[test]
+    fn plate_rebuilt_at_allowable_pressure_hits_the_stress() {
+        // Size the pressure for a target stress, rebuild at it, and confirm
+        // the forward stress equals the target — for both edge supports.
+        let allow = 80.0e6; // 80 MPa
+        for support in [EdgeSupport::Clamped, EdgeSupport::SimplySupported] {
+            let steel = PlateMaterial::new(200.0e9, 0.3, 0.006).unwrap();
+            let plate = CircularPlate::new(steel, 0.3, 15.0e3, support).unwrap();
+            let p_allow = plate.max_pressure_for_stress(allow).unwrap();
+            let sized = CircularPlate::new(steel, 0.3, p_allow, support).unwrap();
+            assert!(approx_rel(sized.max_bending_stress(), allow, 1e-9));
+        }
+    }
+
+    #[test]
+    fn max_pressure_for_stress_hand_value_clamped() {
+        // Clamped: sigma = 0.75 p (a/t)^2. a=0.25, t=0.005 -> a/t=50, so
+        // stress/p = 0.75*2500 = 1875 and p_allow = sigma_allow / 1875.
+        let steel = PlateMaterial::new(200.0e9, 0.3, 0.005).unwrap();
+        let plate = CircularPlate::new(steel, 0.25, 20.0e3, EdgeSupport::Clamped).unwrap();
+        let p = plate.max_pressure_for_stress(150.0e6).unwrap();
+        assert!(approx_rel(p, 150.0e6 / 1875.0, 1e-9), "p={p}");
+    }
+
+    #[test]
+    fn max_pressure_for_stress_scales_and_rejects_bad() {
+        let steel = PlateMaterial::new(200.0e9, 0.3, 0.005).unwrap();
+        let plate = CircularPlate::new(steel, 0.25, 20.0e3, EdgeSupport::Clamped).unwrap();
+        let lo = plate.max_pressure_for_stress(100.0e6).unwrap();
+        let hi = plate.max_pressure_for_stress(200.0e6).unwrap();
+        assert!(approx_rel(hi, 2.0 * lo, 1e-12) && hi > lo);
+        assert!(plate.max_pressure_for_stress(0.0).is_err());
+        assert!(plate.max_pressure_for_stress(-1.0).is_err());
+        assert!(plate.max_pressure_for_stress(f64::NAN).is_err());
     }
 
     // -- validation / errors ----------------------------------------------
