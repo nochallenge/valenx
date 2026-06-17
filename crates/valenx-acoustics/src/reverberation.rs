@@ -112,6 +112,41 @@ pub fn sabine_reverberation_time(
     Ok(REVERB_CONST * v / (speed_of_sound * a))
 }
 
+/// **Required total absorption** to hit a target Sabine reverberation time —
+/// the exact inverse of [`sabine_reverberation_time`]:
+///
+/// ```text
+/// A = 24 ln(10) · V / (c · RT60)
+/// ```
+///
+/// in sabins (m²). This is the room-treatment sizing question: choose the
+/// reverberation time you want (`target_rt60`, e.g. ~0.8 s for a classroom,
+/// ~2 s for a concert hall) and read off how many sabins of absorption to
+/// install in a room of volume `volume` (m³) at speed of sound
+/// `speed_of_sound` (m/s). Feeding the result back into
+/// [`sabine_reverberation_time`] reproduces `target_rt60`.
+///
+/// # Errors
+///
+/// [`AcousticsError::InvalidDimension`] if `volume` or `target_rt60` is not
+/// finite and strictly positive; [`AcousticsError::InvalidSpeedOfSound`] if
+/// `speed_of_sound` is not finite and strictly positive.
+pub fn absorption_for_reverberation_time(
+    volume: f64,
+    target_rt60: f64,
+    speed_of_sound: f64,
+) -> Result<f64> {
+    let v = check_positive("volume", volume)?;
+    let rt = check_positive("target_rt60", target_rt60)?;
+    if !speed_of_sound.is_finite() || speed_of_sound <= 0.0 {
+        return Err(AcousticsError::InvalidSpeedOfSound {
+            name: "speed_of_sound",
+            value: speed_of_sound,
+        });
+    }
+    Ok(REVERB_CONST * v / (speed_of_sound * rt))
+}
+
 /// **Eyring–Norris** reverberation time
 /// `RT60 = 24 ln(10) · V / (−c · S · ln(1 − ᾱ))` (seconds) for a room of
 /// volume `volume` (m³), total surface area `surface_area` (m²), mean
@@ -181,6 +216,39 @@ mod tests {
         // Double the volume -> double the time.
         let bigger = sabine_reverberation_time(300.0, 30.0, c).unwrap();
         assert!(close(bigger, base * 2.0, 1e-9));
+    }
+
+    #[test]
+    fn absorption_inverse_round_trips_with_sabine() {
+        let c = 343.0;
+        // inverse -> forward: size A for a target RT60, Sabine reproduces it.
+        let target = 0.8;
+        let a = absorption_for_reverberation_time(200.0, target, c).unwrap();
+        let rt = sabine_reverberation_time(200.0, a, c).unwrap();
+        assert!(close(rt, target, 1e-9), "rt {rt} vs target {target}");
+        // forward -> inverse: A recovered from the RT60 it produces.
+        let a0 = 35.0;
+        let rt0 = sabine_reverberation_time(180.0, a0, c).unwrap();
+        let a_back = absorption_for_reverberation_time(180.0, rt0, c).unwrap();
+        assert!(close(a_back, a0, 1e-9), "A {a_back} vs {a0}");
+    }
+
+    #[test]
+    fn absorption_for_target_matches_textbook_coefficient() {
+        // Inverse of the textbook forward case: V=200, RT60=0.805 s -> A ~ 40
+        // sabins (0.161 V / RT60 = 0.161*200/0.805 = 40.0).
+        let c = speed_of_sound(20.0).unwrap();
+        let a = absorption_for_reverberation_time(200.0, 0.805, c).unwrap();
+        assert!(close(a, REVERB_CONST * 200.0 / (c * 0.805), 1e-12));
+        assert!(close(a, 40.0, 0.2), "A = {a}");
+    }
+
+    #[test]
+    fn absorption_inverse_rejects_bad_inputs() {
+        let c = 343.0;
+        assert!(absorption_for_reverberation_time(0.0, 0.8, c).is_err()); // volume
+        assert!(absorption_for_reverberation_time(200.0, 0.0, c).is_err()); // rt60
+        assert!(absorption_for_reverberation_time(200.0, 0.8, 0.0).is_err()); // c
     }
 
     #[test]
