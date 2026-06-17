@@ -24,6 +24,11 @@
 //! - [`little_residual`](Mm1::little_residual) — the `L - lambda W`
 //!   Little's-law self-consistency residual.
 //!
+//! Plus the capacity-sizing inverse
+//! [`service_rate_for_mean_response_time`](Mm1::service_rate_for_mean_response_time)
+//! (`mu = lambda + 1 / W`), the service rate a single server needs to hit
+//! a target mean response time at a given arrival rate.
+//!
 //! ```
 //! use valenx_queueing::Mm1;
 //!
