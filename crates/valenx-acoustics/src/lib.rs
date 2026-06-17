@@ -28,7 +28,10 @@
 //!   diffuse-field `RT60`: [`reverberation::sabine_reverberation_time`]
 //!   (`24 ln10 * V / (c*A)`, the textbook `~0.161 V/A`),
 //!   [`reverberation::eyring_reverberation_time`] for absorptive rooms,
-//!   and the [`reverberation::total_absorption`] helper `A = sum S_i a_i`.
+//!   the [`reverberation::total_absorption`] helper `A = sum S_i a_i`, and
+//!   the room-treatment inverse
+//!   [`reverberation::absorption_for_reverberation_time`] that sizes the
+//!   absorption `A = 24 ln10 * V / (c*RT60)` needed for a target `RT60`.
 //!
 //! ## Model
 //!
@@ -97,7 +100,10 @@ pub use doppler::{doppler_shift, speed_of_sound, C0};
 
 pub use room::{ModeKind, RoomDimensions, RoomMode};
 
-pub use reverberation::{eyring_reverberation_time, sabine_reverberation_time, total_absorption};
+pub use reverberation::{
+    absorption_for_reverberation_time, eyring_reverberation_time, sabine_reverberation_time,
+    total_absorption,
+};
 
 #[cfg(test)]
 mod tests {
