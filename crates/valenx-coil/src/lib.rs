@@ -10,6 +10,9 @@
 //!   [`Solenoid::new`] or [`Solenoid::air_core`].
 //! - [`Solenoid::inductance_henries`] — the self-inductance
 //!   `L = mu0 * mu_r * N^2 * A / l`.
+//! - [`Solenoid::turns_for_inductance`] — the winding-design inverse,
+//!   `N = sqrt(L * l / (mu0 * mu_r * A))`, sizing the turn count for a
+//!   target inductance.
 //! - [`energy_joules`] — the stored magnetic energy `E = 0.5 * L * I^2`.
 //! - [`reactance_ohms`] — the inductive reactance `X_L = 2 * pi * f * L`.
 //! - [`time_constant_seconds`] — the series-RL time constant
