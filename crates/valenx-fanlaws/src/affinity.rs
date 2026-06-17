@@ -152,6 +152,58 @@ pub fn scale_power(w1: f64, n1: f64, n2: f64) -> Result<f64, FanLawError> {
     Ok(w1 * r * r * r)
 }
 
+/// Solve for the **speed** that scales the flow from `q1` to a target
+/// `target_q` — the inverse of [`scale_flow`].
+///
+/// Flow is linear in speed (`q2 = q1 * n2 / n1`), so the speed needed to
+/// reach `target_q` is `n2 = n1 * (target_q / q1)`.
+///
+/// # Errors
+///
+/// Returns [`FanLawError`] if any of `q1`, `n1`, or `target_q` is not
+/// finite and strictly positive — the reference flow and the target
+/// appear in a ratio, so neither may be zero.
+pub fn speed_for_flow(q1: f64, n1: f64, target_q: f64) -> Result<f64, FanLawError> {
+    let q1 = require_positive("q1", q1)?;
+    let n1 = require_positive("n1", n1)?;
+    let target_q = require_positive("target_q", target_q)?;
+    Ok(n1 * (target_q / q1))
+}
+
+/// Solve for the **speed** that scales the pressure rise from `p1` to a
+/// target `target_p` at fixed density — the inverse of [`scale_pressure`].
+///
+/// Pressure grows with the square of speed (`p2 = p1 * (n2 / n1)^2`), so
+/// `n2 = n1 * sqrt(target_p / p1)`.
+///
+/// # Errors
+///
+/// Returns [`FanLawError`] if any of `p1`, `n1`, or `target_p` is not
+/// finite and strictly positive.
+pub fn speed_for_pressure(p1: f64, n1: f64, target_p: f64) -> Result<f64, FanLawError> {
+    let p1 = require_positive("p1", p1)?;
+    let n1 = require_positive("n1", n1)?;
+    let target_p = require_positive("target_p", target_p)?;
+    Ok(n1 * (target_p / p1).sqrt())
+}
+
+/// Solve for the **speed** that scales the shaft power from `w1` to a
+/// target `target_w` at fixed density — the inverse of [`scale_power`].
+///
+/// Power grows with the cube of speed (`w2 = w1 * (n2 / n1)^3`), so
+/// `n2 = n1 * cbrt(target_w / w1)`.
+///
+/// # Errors
+///
+/// Returns [`FanLawError`] if any of `w1`, `n1`, or `target_w` is not
+/// finite and strictly positive.
+pub fn speed_for_power(w1: f64, n1: f64, target_w: f64) -> Result<f64, FanLawError> {
+    let w1 = require_positive("w1", w1)?;
+    let n1 = require_positive("n1", n1)?;
+    let target_w = require_positive("target_w", target_w)?;
+    Ok(n1 * (target_w / w1).cbrt())
+}
+
 /// Density correction for **pressure** at fixed speed: a fan develops
 /// pressure in proportion to the gas density, so moving the same fan in
 /// denser air raises the pressure rise linearly.
@@ -456,5 +508,79 @@ mod tests {
         assert!(scale_pressure_for_diameter(1.0, 0.5, -0.2).is_err());
         assert!(scale_power_for_diameter(-1.0, 0.5, 0.6).is_err());
         assert!(scale_power_for_diameter(1.0, 0.5, f64::NAN).is_err());
+    }
+
+    // ---------------------------------------------------------------
+    // Inverse speed laws: solve for the speed that hits a target.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn speed_for_flow_inverts_scale_flow() {
+        let (q1, n1) = (10.0, 1000.0);
+        // Doubling the flow needs double the speed (linear law).
+        let n2 = speed_for_flow(q1, n1, 20.0).unwrap();
+        assert!((n2 - 2000.0).abs() < EPS);
+        // Round-trip: the solved speed reproduces the target flow.
+        assert!((scale_flow(q1, n1, n2).unwrap() - 20.0).abs() < EPS);
+        // Forward-then-inverse on an arbitrary speed returns that speed.
+        let n_fwd = 1450.0;
+        let q2 = scale_flow(q1, n1, n_fwd).unwrap();
+        assert!((speed_for_flow(q1, n1, q2).unwrap() - n_fwd).abs() < 1e-6);
+    }
+
+    #[test]
+    fn speed_for_pressure_inverts_scale_pressure() {
+        let (p1, n1) = (50.0, 1200.0);
+        // Doubling pressure needs sqrt(2) times the speed.
+        let n2 = speed_for_pressure(p1, n1, 100.0).unwrap();
+        assert!((n2 - n1 * 2.0_f64.sqrt()).abs() < 1e-6);
+        // Round-trip back to the target pressure.
+        assert!((scale_pressure(p1, n1, n2).unwrap() - 100.0).abs() < 1e-7);
+        // Forward-then-inverse recovers the speed.
+        let n_fwd = 900.0;
+        let p2 = scale_pressure(p1, n1, n_fwd).unwrap();
+        assert!((speed_for_pressure(p1, n1, p2).unwrap() - n_fwd).abs() < 1e-6);
+    }
+
+    #[test]
+    fn speed_for_power_inverts_scale_power() {
+        let (w1, n1) = (3.0, 1000.0);
+        // Doubling power needs cbrt(2) times the speed.
+        let n2 = speed_for_power(w1, n1, 6.0).unwrap();
+        assert!((n2 - n1 * 2.0_f64.cbrt()).abs() < 1e-6);
+        // Round-trip back to the target power.
+        assert!((scale_power(w1, n1, n2).unwrap() - 6.0).abs() < 1e-6);
+        // Forward-then-inverse recovers the speed.
+        let n_fwd = 1750.0;
+        let w2 = scale_power(w1, n1, n_fwd).unwrap();
+        assert!((speed_for_power(w1, n1, w2).unwrap() - n_fwd).abs() < 1e-6);
+    }
+
+    #[test]
+    fn speed_inverses_agree_on_a_consistent_operating_point() {
+        // On a single similarity ray every quantity scales by the same
+        // speed ratio, so all three inverses recover the identical speed.
+        let (q1, p1, w1, n1) = (12.0, 240.0, 5.0, 1100.0);
+        let n2 = 1650.0; // r = 1.5
+        let q2 = scale_flow(q1, n1, n2).unwrap();
+        let p2 = scale_pressure(p1, n1, n2).unwrap();
+        let w2 = scale_power(w1, n1, n2).unwrap();
+        assert!((speed_for_flow(q1, n1, q2).unwrap() - n2).abs() < 1e-6);
+        assert!((speed_for_pressure(p1, n1, p2).unwrap() - n2).abs() < 1e-6);
+        assert!((speed_for_power(w1, n1, w2).unwrap() - n2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn speed_inverses_reject_non_positive_inputs() {
+        // A zero reference quantity would divide by zero -> rejected.
+        assert!(speed_for_flow(0.0, 1000.0, 10.0).is_err());
+        assert!(speed_for_pressure(0.0, 1000.0, 10.0).is_err());
+        assert!(speed_for_power(0.0, 1000.0, 10.0).is_err());
+        // A non-positive or non-finite target is rejected.
+        assert!(speed_for_flow(10.0, 1000.0, 0.0).is_err());
+        assert!(speed_for_pressure(10.0, 1000.0, -5.0).is_err());
+        assert!(speed_for_power(10.0, 1000.0, f64::NAN).is_err());
+        // A non-positive reference speed is rejected.
+        assert!(speed_for_flow(10.0, 0.0, 20.0).is_err());
     }
 }

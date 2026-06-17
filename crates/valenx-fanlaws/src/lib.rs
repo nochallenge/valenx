@@ -13,6 +13,10 @@
 //!
 //! - [`scale_flow`], [`scale_pressure`], [`scale_power`] — scale a
 //!   single quantity between two speeds.
+//! - [`speed_for_flow`], [`speed_for_pressure`], [`speed_for_power`] —
+//!   the inverse: the impeller speed needed to reach a target flow,
+//!   pressure, or power from a known operating point (fan / VFD
+//!   selection).
 //! - [`scale_flow_for_diameter`], [`scale_pressure_for_diameter`],
 //!   [`scale_power_for_diameter`] — the size ("diameter") laws between two
 //!   geometrically similar fans at the same speed.
@@ -40,6 +44,10 @@
 //! and, between two geometrically similar fans of diameter ratio
 //! `s = d2 / d1` at the same speed and density, the size laws
 //! `Q2 = Q1 * s^3`, `P2 = P1 * s^2`, `W2 = W1 * s^5`.
+//!
+//! Each speed law also runs backwards: given a target flow, pressure, or
+//! power, the required speed is `n2 = n1 * (Q2 / Q1)`,
+//! `n2 = n1 * sqrt(P2 / P1)`, or `n2 = n1 * cbrt(W2 / W1)` respectively.
 //!
 //! The affinity exponents (1, 2, 3) follow from dimensional similarity:
 //! flow scales with tip speed, pressure with the dynamic head
@@ -74,7 +82,8 @@ pub mod power;
 pub use affinity::{
     correct_power_for_density, correct_pressure_for_density, scale_flow, scale_flow_for_diameter,
     scale_operating_point, scale_power, scale_power_for_diameter, scale_pressure,
-    scale_pressure_for_diameter, OperatingPoint,
+    scale_pressure_for_diameter, speed_for_flow, speed_for_power, speed_for_pressure,
+    OperatingPoint,
 };
 pub use error::{ErrorCategory, FanLawError};
 pub use power::{air_power, implied_efficiency, shaft_power, Efficiency};
