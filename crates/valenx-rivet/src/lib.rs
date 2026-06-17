@@ -17,6 +17,10 @@
 //! failure load, the governing [`FailureMode`], the governing strength
 //! and the efficiency.
 //!
+//! To rate a joint against a known service load, [`Joint::factor_of_safety`]
+//! and [`Joint::utilization`] give the governing-strength-to-load margin
+//! and its reciprocal demand-to-capacity ratio.
+//!
 //! ```
 //! use valenx_rivet::{Allowables, Joint, Plate, RivetGroup};
 //!
@@ -56,6 +60,11 @@
 //! **efficiency** is `η = P / P_solid` against the solid plate
 //! `P_solid = w · t · σ_t`. Because drilling holes can only remove
 //! material, `η` is always strictly less than one.
+//!
+//! Against an applied service load `P_applied`, the **factor of safety**
+//! is `FoS = P / P_applied` (and the **utilization** `P_applied / P` its
+//! reciprocal): `FoS > 1` carries the load with margin, `= 1` sits exactly
+//! at capacity, `< 1` is overstressed.
 //!
 //! ## Honest scope
 //!
@@ -456,5 +465,87 @@ mod tests {
         assert!((r.strength - back.strength).abs() < EPS_N);
         assert!((r.efficiency - back.efficiency).abs() < EPS);
         assert_eq!(r.mode, back.mode);
+    }
+
+    // -- Rating: factor of safety / utilization vs an applied load --------
+
+    #[test]
+    fn factor_of_safety_is_strength_over_load() {
+        let group = RivetGroup::new(0.020, 3, 1, 1).unwrap();
+        let plate = Plate::new(0.150, 0.010).unwrap();
+        let j = Joint::new(group, plate, allow());
+        let strength = j.analyze().unwrap().strength;
+        let load = strength / 2.0; // loaded to half the governing capacity
+        let fos = j.factor_of_safety(load).unwrap();
+        assert!((fos - 2.0).abs() < EPS, "FoS {fos} should be 2");
+        // FoS * load reproduces the governing strength.
+        assert!((fos * load - strength).abs() < EPS_N);
+    }
+
+    #[test]
+    fn factor_of_safety_is_unity_at_capacity() {
+        let group = RivetGroup::new(0.020, 3, 1, 1).unwrap();
+        let plate = Plate::new(0.150, 0.010).unwrap();
+        let j = Joint::new(group, plate, allow());
+        let strength = j.analyze().unwrap().strength;
+        let fos = j.factor_of_safety(strength).unwrap();
+        assert!(
+            (fos - 1.0).abs() < EPS,
+            "FoS at capacity should be 1, got {fos}"
+        );
+    }
+
+    #[test]
+    fn utilization_is_reciprocal_of_factor_of_safety() {
+        let group = RivetGroup::new(0.016, 4, 2, 2).unwrap();
+        let plate = Plate::new(0.300, 0.012).unwrap();
+        let j = Joint::new(group, plate, allow());
+        let load = 50.0e3;
+        let fos = j.factor_of_safety(load).unwrap();
+        let util = j.utilization(load).unwrap();
+        assert!((fos * util - 1.0).abs() < EPS, "FoS*util should be 1");
+        // utilization < 1 exactly when FoS > 1 (the joint is adequate).
+        assert_eq!(util < 1.0, fos > 1.0);
+    }
+
+    #[test]
+    fn factor_of_safety_scales_inversely_with_load() {
+        let group = RivetGroup::new(0.020, 3, 1, 1).unwrap();
+        let plate = Plate::new(0.150, 0.010).unwrap();
+        let j = Joint::new(group, plate, allow());
+        let f1 = j.factor_of_safety(20.0e3).unwrap();
+        let f2 = j.factor_of_safety(40.0e3).unwrap();
+        assert!(
+            (f1 - 2.0 * f2).abs() < EPS,
+            "doubling the load halves the FoS"
+        );
+    }
+
+    #[test]
+    fn rating_rejects_bad_load_and_propagates_net_section_error() {
+        let group = RivetGroup::new(0.020, 3, 1, 1).unwrap();
+        let plate = Plate::new(0.150, 0.010).unwrap();
+        let j = Joint::new(group, plate, allow());
+        assert!(matches!(
+            j.factor_of_safety(0.0),
+            Err(RivetError::NotPositive {
+                name: "applied_load",
+                ..
+            })
+        ));
+        assert!(matches!(
+            j.utilization(f64::NAN),
+            Err(RivetError::NotPositive { .. })
+        ));
+        // A joint whose net section is gone propagates the tension error.
+        let bad = Joint::new(
+            RivetGroup::new(0.030, 5, 1, 1).unwrap(),
+            Plate::new(0.150, 0.010).unwrap(),
+            allow(),
+        );
+        assert!(matches!(
+            bad.factor_of_safety(10.0e3),
+            Err(RivetError::NetSectionNonPositive { .. })
+        ));
     }
 }

@@ -288,6 +288,44 @@ impl Joint {
             efficiency,
         })
     }
+
+    /// Factor of safety of the joint against an applied service load:
+    /// the governing strength divided by `applied_load`.
+    ///
+    /// `FoS = analyze().strength / applied_load`. A value `> 1` means the
+    /// joint carries the load with margin, `= 1` means it is stressed
+    /// exactly to its governing capacity, and `< 1` means the load
+    /// exceeds capacity. This is the rating dual of
+    /// [`analyze`](Joint::analyze), which gives the capacity but never
+    /// compares it to a demand.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RivetError::NotPositive`] if `applied_load` is not finite
+    /// and strictly positive, or [`RivetError::NetSectionNonPositive`]
+    /// (via [`analyze`](Joint::analyze)) if the net section is
+    /// non-positive.
+    pub fn factor_of_safety(&self, applied_load: f64) -> Result<f64> {
+        let load = RivetError::require_positive("applied_load", applied_load)?;
+        Ok(self.analyze()?.strength / load)
+    }
+
+    /// Utilization (demand-to-capacity ratio) of the joint under an
+    /// applied service load: `applied_load / strength`, the reciprocal of
+    /// [`factor_of_safety`](Joint::factor_of_safety).
+    ///
+    /// A value `<= 1` means the joint is adequate (the load is within the
+    /// governing capacity); `> 1` means it is overstressed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RivetError::NotPositive`] if `applied_load` is not finite
+    /// and strictly positive, or [`RivetError::NetSectionNonPositive`] if
+    /// the net section is non-positive.
+    pub fn utilization(&self, applied_load: f64) -> Result<f64> {
+        let load = RivetError::require_positive("applied_load", applied_load)?;
+        Ok(load / self.analyze()?.strength)
+    }
 }
 
 /// The full result of analysing a [`Joint`].
