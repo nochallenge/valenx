@@ -144,6 +144,42 @@ impl PowerLaw {
         let ratio = apparent_density / self.reference_density;
         Ok(self.reference_strength_mpa * ratio.powf(self.exponent))
     }
+
+    /// Apparent density `rho` (in the reference-density units) that the law
+    /// predicts for a target ultimate stress — the inverse of
+    /// [`strength`](PowerLaw::strength).
+    ///
+    /// Inverting `sigma = sigma_ref * (rho / rho_ref)^exponent` gives
+    ///
+    /// ```text
+    /// rho = rho_ref * (sigma / sigma_ref)^(1 / exponent)
+    /// ```
+    ///
+    /// A zero target maps to zero density (for any positive exponent).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BoneError::Invalid`] if `target_strength_mpa` is negative
+    /// or non-finite, or if the law's `exponent` is zero — a flat law has
+    /// no density dependence, so the density cannot be recovered from the
+    /// strength.
+    pub fn density_for_strength(&self, target_strength_mpa: f64) -> Result<f64> {
+        if !target_strength_mpa.is_finite() || target_strength_mpa < 0.0 {
+            return Err(BoneError::invalid(
+                "target_strength_mpa",
+                "target ultimate stress must be non-negative and finite",
+            ));
+        }
+        if self.exponent <= 0.0 {
+            return Err(BoneError::invalid(
+                "exponent",
+                "strength is independent of density when the exponent is zero, \
+                 so the density cannot be recovered",
+            ));
+        }
+        let ratio = target_strength_mpa / self.reference_strength_mpa;
+        Ok(self.reference_density * ratio.powf(1.0 / self.exponent))
+    }
 }
 
 /// Predicted ultimate stress from apparent density via a power law, in
@@ -274,5 +310,63 @@ mod tests {
         assert!(law.strength(-0.1).is_err());
         assert!(law.strength(f64::INFINITY).is_err());
         assert!(strength_from_density(1.0, -1.0, 150.0, 2.0).is_err());
+    }
+
+    /// The inverse recovers the density that produces a target strength,
+    /// in both directions, for the squared law.
+    #[test]
+    fn density_for_strength_inverts_strength() {
+        let law = PowerLaw::carter_hayes(1.9, 150.0).unwrap();
+        // Forward then inverse returns the original density.
+        for &rho in &[0.5, 1.0, 1.9, 2.4] {
+            let sigma = law.strength(rho).unwrap();
+            let back = law.density_for_strength(sigma).unwrap();
+            assert!((back - rho).abs() < 1e-9, "rho {rho} -> {back}");
+        }
+        // Inverse then forward returns the original strength.
+        for &sigma in &[40.0, 150.0, 600.0] {
+            let rho = law.density_for_strength(sigma).unwrap();
+            let fwd = law.strength(rho).unwrap();
+            assert!((fwd - sigma).abs() < 1e-7, "sigma {sigma} -> {fwd}");
+        }
+    }
+
+    /// Hand value and the reference-point fixed point.
+    #[test]
+    fn density_for_strength_matches_hand_value() {
+        // Squared law anchored at (1.0, 100.0): sigma 400 -> rho
+        // 1 * (400/100)^(1/2) = 2.
+        let law = PowerLaw::carter_hayes(1.0, 100.0).unwrap();
+        let rho = law.density_for_strength(400.0).unwrap();
+        assert!((rho - 2.0).abs() < 1e-9, "got {rho}");
+        // At the reference strength the inverse returns the reference density.
+        let at_ref = law.density_for_strength(100.0).unwrap();
+        assert!((at_ref - 1.0).abs() < 1e-9, "got {at_ref}");
+    }
+
+    /// Zero target maps to zero density; bad targets and a flat (zero
+    /// exponent) law are rejected.
+    #[test]
+    fn density_for_strength_handles_zero_and_rejects_bad_input() {
+        let law = PowerLaw::carter_hayes(1.8, 160.0).unwrap();
+        // Zero target strength -> zero density (for a positive exponent).
+        assert!(law.density_for_strength(0.0).unwrap().abs() < 1e-12);
+        // Negative or non-finite target is rejected.
+        assert!(law.density_for_strength(-1.0).is_err());
+        assert!(law.density_for_strength(f64::NAN).is_err());
+        // A zero-exponent law has no density dependence, so the inverse is
+        // undefined.
+        let flat = PowerLaw::new(1.8, 160.0, 0.0).unwrap();
+        assert!(flat.density_for_strength(160.0).is_err());
+    }
+
+    /// The inverse works for a non-squared (cubic) exponent.
+    #[test]
+    fn density_for_strength_works_for_cubic_exponent() {
+        // Cubic law: ratio 2 -> 8x strength, so inverting 8x recovers
+        // ratio 2.
+        let law = PowerLaw::new(1.0, 50.0, 3.0).unwrap();
+        let rho = law.density_for_strength(400.0).unwrap();
+        assert!((rho - 2.0).abs() < 1e-9, "got {rho}");
     }
 }
