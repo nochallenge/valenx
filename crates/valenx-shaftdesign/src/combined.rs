@@ -17,6 +17,8 @@
 //! shortcuts that turn a combined load into a single equivalent load
 //! reusing the pure-torsion / pure-bending modulus.
 
+use std::f64::consts::PI;
+
 use crate::bending::bending_stress_section;
 use crate::error::ShaftError;
 use crate::section::ShaftSection;
@@ -78,6 +80,66 @@ pub fn max_normal_stress(section: &ShaftSection) -> f64 {
     let sigma = bending_stress_section(section);
     let tau = shear_stress_section(section);
     0.5 * sigma + (0.5 * sigma).hypot(tau)
+}
+
+/// The minimum shaft diameter whose combined maximum **shear** stress
+/// (Tresca) does not exceed `allowable_shear` under bending moment `M` and
+/// torque `T` — the ASME equivalent-torque sizing inverse of
+/// [`max_shear_stress`].
+///
+/// Inverting `tau_max = 16 T_e / (pi d^3)` with the [`equivalent_torque`]
+/// `T_e = sqrt(M^2 + T^2)` gives
+///
+/// ```text
+/// d = ( 16 T_e / (pi * allowable_shear) )^(1/3).
+/// ```
+///
+/// A [`ShaftSection`] built at this diameter (same `M`, `T`) has a
+/// [`max_shear_stress`] equal to `allowable_shear`.
+///
+/// # Errors
+///
+/// [`ShaftError::NotFinite`] if either load is not finite;
+/// [`ShaftError::NonPositive`] if `allowable_shear` is not strictly
+/// positive.
+pub fn diameter_for_shear_stress(
+    bending_moment: f64,
+    torque: f64,
+    allowable_shear: f64,
+) -> Result<f64, ShaftError> {
+    let te = equivalent_torque(bending_moment, torque)?;
+    let tau = ShaftError::require_positive("allowable_shear", allowable_shear)?;
+    Ok((16.0 * te / (PI * tau)).cbrt())
+}
+
+/// The minimum shaft diameter whose combined maximum **normal** (principal)
+/// stress does not exceed `allowable_normal` under bending moment `M` and
+/// torque `T` — the equivalent-bending-moment sizing inverse of
+/// [`max_normal_stress`].
+///
+/// Inverting `sigma_1 = 32 M_e / (pi d^3)` with the
+/// [`equivalent_bending_moment`] `M_e` gives
+///
+/// ```text
+/// d = ( 32 M_e / (pi * allowable_normal) )^(1/3).
+/// ```
+///
+/// A [`ShaftSection`] built at this diameter (same `M`, `T`) has a
+/// [`max_normal_stress`] equal to `allowable_normal`.
+///
+/// # Errors
+///
+/// [`ShaftError::NotFinite`] if either load is not finite;
+/// [`ShaftError::NonPositive`] if `allowable_normal` is not strictly
+/// positive.
+pub fn diameter_for_normal_stress(
+    bending_moment: f64,
+    torque: f64,
+    allowable_normal: f64,
+) -> Result<f64, ShaftError> {
+    let me = equivalent_bending_moment(bending_moment, torque)?;
+    let sigma = ShaftError::require_positive("allowable_normal", allowable_normal)?;
+    Ok((32.0 * me / (PI * sigma)).cbrt())
 }
 
 #[cfg(test)]
@@ -228,5 +290,50 @@ mod tests {
         assert!(equivalent_torque(f64::NAN, 1.0).is_err());
         assert!(equivalent_torque(1.0, f64::INFINITY).is_err());
         assert!(equivalent_bending_moment(f64::NAN, 1.0).is_err());
+    }
+
+    #[test]
+    fn diameter_for_shear_stress_hits_the_allowable() {
+        // Size d for a target Tresca shear, rebuild, confirm forward==target.
+        let (m, t) = (600.0, 800.0);
+        let tau_allow = 40.0e6; // 40 MPa
+        let d = diameter_for_shear_stress(m, t, tau_allow).unwrap();
+        let section = ShaftSection::new(d, m, t).unwrap();
+        assert!(
+            (max_shear_stress(&section) - tau_allow).abs() < 1e-6 * tau_allow,
+            "d={d}"
+        );
+    }
+
+    #[test]
+    fn diameter_for_normal_stress_hits_the_allowable() {
+        let (m, t) = (600.0, 800.0);
+        let sigma_allow = 100.0e6; // 100 MPa
+        let d = diameter_for_normal_stress(m, t, sigma_allow).unwrap();
+        let section = ShaftSection::new(d, m, t).unwrap();
+        assert!(
+            (max_normal_stress(&section) - sigma_allow).abs() < 1e-6 * sigma_allow,
+            "d={d}"
+        );
+    }
+
+    #[test]
+    fn diameter_for_shear_round_trips_through_a_section() {
+        // A section's own peak shear, fed back, recovers its own diameter.
+        let section = ShaftSection::new(0.05, 600.0, 800.0).unwrap();
+        let tau = max_shear_stress(&section);
+        let d = diameter_for_shear_stress(section.bending_moment, section.torque, tau).unwrap();
+        assert!((d - section.diameter).abs() < 1e-9, "d={d}");
+    }
+
+    #[test]
+    fn diameter_shrinks_with_higher_allowable_and_rejects_bad() {
+        let lo = diameter_for_shear_stress(600.0, 800.0, 20.0e6).unwrap();
+        let hi = diameter_for_shear_stress(600.0, 800.0, 160.0e6).unwrap();
+        // tau ~ 1/d^3 so d ~ tau^(-1/3); 8x allowable -> half the diameter.
+        assert!((lo / hi - 2.0).abs() < 1e-9 && hi < lo, "lo={lo} hi={hi}");
+        assert!(diameter_for_shear_stress(600.0, 800.0, 0.0).is_err());
+        assert!(diameter_for_normal_stress(600.0, 800.0, -1.0).is_err());
+        assert!(diameter_for_shear_stress(f64::NAN, 800.0, 40.0e6).is_err());
     }
 }
