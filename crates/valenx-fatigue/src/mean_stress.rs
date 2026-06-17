@@ -235,6 +235,64 @@ impl Material {
         };
         Ok(n)
     }
+
+    /// The **equivalent completely-reversed stress** `sigma_ar` for an
+    /// operating point `(sa, sm)` under the chosen criterion: the
+    /// fully-reversed (zero-mean) alternating stress that is equally
+    /// damaging. This is the value to feed into a fully-reversed S-N curve
+    /// ([`SnCurve::cycles_to_failure`](crate::SnCurve::cycles_to_failure))
+    /// to predict finite life under a non-zero mean stress — the bridge
+    /// between the mean-stress correction and the stress-life curve.
+    ///
+    /// Straight-line (Goodman / Soderberg): `sigma_ar = sa / (1 - sm/S0)`;
+    /// Gerber parabola: `sigma_ar = sa / (1 - (sm/Su)^2)`, where `S0` is
+    /// `Su` (Goodman / Gerber) or `Sy` (Soderberg). At zero mean stress it
+    /// returns `sa` unchanged; a tensile mean raises it (mean stress is
+    /// damaging); and it equals the endurance limit `Se` exactly when the
+    /// point lies on the `n = 1` constant-life line.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FatigueError::Invalid`] if `alternating_stress` is not
+    /// strictly positive / finite or `mean_stress` is negative /
+    /// non-finite, and [`FatigueError::Domain`] if the mean stress meets or
+    /// exceeds the static intercept (the knockdown factor is `<= 0`, so no
+    /// finite reversed equivalent exists).
+    pub fn equivalent_reversed_stress(
+        &self,
+        criterion: MeanStressCriterion,
+        alternating_stress: f64,
+        mean_stress: f64,
+    ) -> Result<f64> {
+        if !alternating_stress.is_finite() || alternating_stress <= 0.0 {
+            return Err(FatigueError::invalid(
+                "alternating_stress",
+                format!("must be finite and > 0, got {alternating_stress}"),
+            ));
+        }
+        if !mean_stress.is_finite() || mean_stress < 0.0 {
+            return Err(FatigueError::invalid(
+                "mean_stress",
+                format!("must be finite and >= 0, got {mean_stress}"),
+            ));
+        }
+        let s0 = self.static_intercept(criterion);
+        let knockdown = match criterion {
+            MeanStressCriterion::Gerber => {
+                let r = mean_stress / self.ultimate_strength;
+                1.0 - r * r
+            }
+            _ => 1.0 - mean_stress / s0,
+        };
+        if knockdown <= 0.0 {
+            return Err(FatigueError::domain(format!(
+                "mean stress {mean_stress} meets or exceeds the static \
+                 intercept {s0}; no finite completely-reversed equivalent \
+                 stress exists"
+            )));
+        }
+        Ok(alternating_stress / knockdown)
+    }
 }
 
 #[cfg(test)]
@@ -487,6 +545,113 @@ mod tests {
             m.factor_of_safety(MeanStressCriterion::Gerber, m.endurance_limit / 2.0, 0.0)
                 .unwrap(),
             2.0,
+        );
+    }
+
+    // --- equivalent completely-reversed stress ---------------------------
+
+    const ALL_CRITERIA: [MeanStressCriterion; 3] = [
+        MeanStressCriterion::Goodman,
+        MeanStressCriterion::Soderberg,
+        MeanStressCriterion::Gerber,
+    ];
+
+    /// Zero mean stress leaves the alternating stress unchanged for every
+    /// criterion: sigma_ar = sa.
+    #[test]
+    fn equivalent_reversed_at_zero_mean_is_alternating() {
+        let m = steel();
+        for c in ALL_CRITERIA {
+            close(m.equivalent_reversed_stress(c, 120.0, 0.0).unwrap(), 120.0);
+        }
+    }
+
+    /// A point on the n = 1 constant-life line maps to sigma_ar = Se, for
+    /// every criterion — the defining link to allowable_alternating.
+    #[test]
+    fn equivalent_reversed_on_line_equals_endurance_limit() {
+        let m = steel();
+        for c in ALL_CRITERIA {
+            for &sm in &[0.0_f64, 100.0, 200.0] {
+                let sa = m.allowable_alternating(c, sm, 1.0).unwrap();
+                close(
+                    m.equivalent_reversed_stress(c, sa, sm).unwrap(),
+                    m.endurance_limit,
+                );
+            }
+        }
+    }
+
+    /// sigma_ar = Se * sa / allowable_alternating(sm, n=1): the equivalent
+    /// reversed stress scales linearly with sa relative to the on-line
+    /// allowable. Holds for all three criteria.
+    #[test]
+    fn equivalent_reversed_matches_allowable_ratio() {
+        let m = steel();
+        let sm = 120.0;
+        let sa = 90.0;
+        for c in ALL_CRITERIA {
+            let allow = m.allowable_alternating(c, sm, 1.0).unwrap();
+            let expected = m.endurance_limit * sa / allow;
+            close(m.equivalent_reversed_stress(c, sa, sm).unwrap(), expected);
+        }
+    }
+
+    /// A tensile mean stress raises the equivalent reversed stress above
+    /// the raw alternating stress (mean stress is damaging), and Soderberg
+    /// (Sy intercept) is more conservative than Goodman (Su intercept).
+    #[test]
+    fn equivalent_reversed_increases_with_mean_and_soderberg_is_higher() {
+        let m = steel();
+        let sa = 100.0;
+        let sm = 150.0;
+        let g = m
+            .equivalent_reversed_stress(MeanStressCriterion::Goodman, sa, sm)
+            .unwrap();
+        let s = m
+            .equivalent_reversed_stress(MeanStressCriterion::Soderberg, sa, sm)
+            .unwrap();
+        assert!(g > sa, "Goodman sigma_ar {g} should exceed sa {sa}");
+        assert!(s > g, "Soderberg {s} should exceed Goodman {g}");
+    }
+
+    /// Mean stress at/over the static intercept has no finite reversed
+    /// equivalent; bad sa / sm are rejected.
+    #[test]
+    fn equivalent_reversed_rejects_bad_inputs() {
+        let m = steel();
+        // sm = Su (Goodman intercept) -> knockdown 0 -> Domain.
+        assert!(m
+            .equivalent_reversed_stress(MeanStressCriterion::Goodman, 100.0, m.ultimate_strength)
+            .is_err());
+        assert!(m
+            .equivalent_reversed_stress(MeanStressCriterion::Goodman, 0.0, 100.0)
+            .is_err());
+        assert!(m
+            .equivalent_reversed_stress(MeanStressCriterion::Goodman, 100.0, -1.0)
+            .is_err());
+    }
+
+    /// End-to-end with the S-N curve: a non-zero mean stress shortens the
+    /// predicted life. Convert (sa, sm) to sigma_ar, then read the Basquin
+    /// life — it is shorter than the pure-alternating life at the same sa.
+    #[test]
+    fn equivalent_reversed_shortens_predicted_life() {
+        use crate::sn::SnCurve;
+        let m = steel();
+        // Basquin fit through (1e3, 0.9*Su=450) and (1e6, Se=200).
+        let curve = SnCurve::from_two_points(1.0e3, 450.0, 1.0e6, 200.0).unwrap();
+        let sa = 180.0;
+        let sm = 150.0;
+        let ar = m
+            .equivalent_reversed_stress(MeanStressCriterion::Goodman, sa, sm)
+            .unwrap();
+        assert!(ar > sa);
+        let life_mean = curve.cycles_to_failure_unbounded(ar).unwrap();
+        let life_pure = curve.cycles_to_failure_unbounded(sa).unwrap();
+        assert!(
+            life_mean < life_pure,
+            "mean-stress life {life_mean} should be below pure-alternating {life_pure}"
         );
     }
 }
