@@ -202,6 +202,48 @@ impl NortonLaw {
     pub fn stress_for_rate(&self, target_rate: f64) -> Result<f64, CreepError> {
         norton_stress_for_rate(self.coefficient, target_rate, self.exponent)
     }
+
+    /// The **accumulated secondary-creep strain** after a time `time` under
+    /// a constant `stress`: the time integral of the (constant) steady-state
+    /// rate, `epsilon = epsilon_dot * time = A * sigma^n * time`.
+    ///
+    /// This is the secondary-stage strain only — it ignores the primary
+    /// transient and the tertiary acceleration (the crate's stated scope),
+    /// so it is the linear-in-time accumulation along the minimum-rate line.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CreepError`] if `stress` is non-finite or negative, or if
+    /// `time` is non-finite or negative.
+    pub fn accumulated_strain(&self, stress: f64, time: f64) -> Result<f64, CreepError> {
+        let time = require_non_negative("time", time)?;
+        let rate = self.rate_at(stress)?;
+        Ok(rate * time)
+    }
+
+    /// The time for the accumulated secondary-creep strain to reach
+    /// `strain_limit` under a constant `stress` — the inverse of
+    /// [`NortonLaw::accumulated_strain`], `t = strain_limit / (A sigma^n)`.
+    ///
+    /// The classic creep design question ("time to 1 % strain"). A zero
+    /// strain limit returns `0`; a zero creep rate (zero stress, or a zero
+    /// coefficient) returns `+infinity`, the correct "never reached" answer
+    /// for a positive strain limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CreepError`] if `stress` is non-finite or negative, or if
+    /// `strain_limit` is non-finite or negative.
+    pub fn time_to_strain(&self, stress: f64, strain_limit: f64) -> Result<f64, CreepError> {
+        let strain_limit = require_non_negative("strain_limit", strain_limit)?;
+        let rate = self.rate_at(stress)?;
+        if strain_limit == 0.0 {
+            return Ok(0.0);
+        }
+        // rate == 0 (zero stress / coefficient) => strain never reached;
+        // strain_limit / 0.0 == +infinity, the correct infinite life.
+        Ok(strain_limit / rate)
+    }
 }
 
 #[cfg(test)]
@@ -364,5 +406,55 @@ mod tests {
         assert!(norton_creep_rate(1.0, 100.0, f64::INFINITY).is_err());
         assert!(NortonLaw::with_arrhenius(1.0, 1.0, 0.0, 5.0).is_err());
         assert!(NortonLaw::with_arrhenius(1.0, -1.0, 800.0, 5.0).is_err());
+    }
+
+    #[test]
+    fn accumulated_strain_is_rate_times_time() {
+        let law = NortonLaw::new(2.0, 3.0).unwrap();
+        let stress = 10.0;
+        let rate = law.rate_at(stress).unwrap(); // 2 * 10^3 = 2000
+        let eps = law.accumulated_strain(stress, 5.0).unwrap();
+        assert!((eps - rate * 5.0).abs() < 1e-6 * (rate * 5.0), "eps {eps}");
+        // Linear in time: doubling the time doubles the strain; t=0 -> 0.
+        let eps2 = law.accumulated_strain(stress, 10.0).unwrap();
+        assert!((eps2 - 2.0 * eps).abs() < 1e-6 * eps);
+        assert!(law.accumulated_strain(stress, 0.0).unwrap().abs() < EPS);
+    }
+
+    #[test]
+    fn time_to_strain_inverts_accumulated_strain() {
+        let law = NortonLaw::new(1e-10, 5.0).unwrap();
+        let stress = 120.0;
+        // time -> strain -> time round-trips.
+        for &t in &[1.0_f64, 100.0, 1.0e4] {
+            let eps = law.accumulated_strain(stress, t).unwrap();
+            let back = law.time_to_strain(stress, eps).unwrap();
+            assert!((back - t).abs() < 1e-6 * t, "t {t} -> eps {eps} -> {back}");
+        }
+        // strain -> time -> strain round-trips at a 1% strain limit.
+        let eps_limit = 0.01;
+        let t = law.time_to_strain(stress, eps_limit).unwrap();
+        assert!((law.accumulated_strain(stress, t).unwrap() - eps_limit).abs() < 1e-12);
+    }
+
+    #[test]
+    fn time_to_strain_hand_value_and_limits() {
+        // rate = 2 * 10^3 = 2000 per unit time; 1% strain in 0.01/2000.
+        let law = NortonLaw::new(2.0, 3.0).unwrap();
+        let t = law.time_to_strain(10.0, 0.01).unwrap();
+        assert!((t - 0.01 / 2000.0).abs() < 1e-15, "t {t}");
+        // Zero strain limit -> zero time.
+        assert!(law.time_to_strain(10.0, 0.0).unwrap().abs() < EPS);
+        // Zero stress -> zero rate -> infinite life for a positive strain.
+        assert!(law.time_to_strain(0.0, 0.01).unwrap().is_infinite());
+    }
+
+    #[test]
+    fn strain_and_time_reject_bad_inputs() {
+        let law = NortonLaw::new(1e-10, 5.0).unwrap();
+        assert!(law.accumulated_strain(100.0, -1.0).is_err()); // time < 0
+        assert!(law.accumulated_strain(-1.0, 1.0).is_err()); // stress < 0
+        assert!(law.time_to_strain(100.0, -0.01).is_err()); // strain < 0
+        assert!(law.time_to_strain(100.0, f64::NAN).is_err());
     }
 }
