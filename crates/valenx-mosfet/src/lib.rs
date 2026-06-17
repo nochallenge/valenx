@@ -17,6 +17,12 @@
 //! - all three at once as an [`OperatingPoint`]
 //!   ([`Mosfet::operating_point`]).
 //!
+//! Going the other way, the **bias-design inverse**
+//! [`Mosfet::vgs_for_saturation_current`] (and its
+//! [`Mosfet::overdrive_for_saturation_current`] core) returns the gate
+//! voltage that carries a target saturation drain current,
+//! `vov = sqrt(2·Id/k)`.
+//!
 //! ## Model
 //!
 //! With gate overdrive `vov = vgs − vth`:
@@ -27,6 +33,8 @@
 //! - **Saturation** (`vds ≥ vov`): `Id = ½ · k · vov²`.
 //! - **Transconductance** (saturation): `gm = k · vov` (and `0` in
 //!   cutoff, where `Id ≡ 0`).
+//! - **Saturation bias inverse**: `vov = sqrt(2 · Id / k)`,
+//!   `vgs = vth + vov` — the gate bias for a target saturation `Id`.
 //!
 //! The triode and saturation expressions are continuous at the
 //! pinch-off boundary `vds = vov`. Here `k = μ_n · C_ox · W / L` is the
