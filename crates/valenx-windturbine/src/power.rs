@@ -170,6 +170,49 @@ pub fn betz_power(air_density: f64, area: f64, wind_speed: f64) -> Result<f64, W
     Ok(avail * BETZ_LIMIT)
 }
 
+/// The rotor radius `R` (m) whose swept disc captures a target shaft power
+/// at a design wind speed and power coefficient — the turbine-sizing
+/// inverse of [`extracted_power`] (with [`swept_area`]).
+///
+/// Inverting `P = 1/2 * rho * (pi R^2) * v^3 * Cp` for the radius gives
+///
+/// ```text
+/// R = sqrt( 2 P / (rho * pi * v^3 * Cp) ).
+/// ```
+///
+/// Building a [`swept_area`] at this radius and feeding it to
+/// [`extracted_power`] (same `rho`, `v`, `Cp`) reproduces `target_power`.
+///
+/// # Errors
+///
+/// [`WindTurbineError::AboveBetz`] if `cp` exceeds the Betz limit;
+/// [`WindTurbineError::BadParameter`] if `target_power`, `air_density`,
+/// `wind_speed`, or `cp` is not strictly positive and finite (a zero `Cp`
+/// or wind speed would demand an infinite rotor).
+pub fn rotor_radius_for_power(
+    target_power: f64,
+    air_density: f64,
+    wind_speed: f64,
+    cp: f64,
+) -> Result<f64, WindTurbineError> {
+    validate_cp(cp)?;
+    for (name, value) in [
+        ("target_power", target_power),
+        ("air_density", air_density),
+        ("wind_speed", wind_speed),
+        ("cp", cp),
+    ] {
+        if !value.is_finite() || value <= 0.0 {
+            return Err(WindTurbineError::BadParameter {
+                name,
+                reason: "must be > 0".to_string(),
+            });
+        }
+    }
+    let area = 2.0 * target_power / (air_density * wind_speed.powi(3) * cp);
+    Ok((area / std::f64::consts::PI).sqrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,5 +357,38 @@ mod tests {
     fn extracted_propagates_above_betz() {
         let e = extracted_power(1.225, 20.0, 8.0, 0.7).unwrap_err();
         assert_eq!(e.code(), "windturbine.above_betz");
+    }
+
+    #[test]
+    fn rotor_radius_for_power_round_trips_through_extracted() {
+        // Size R for a target power, build the disc, recover the power.
+        let (rho, v, cp) = (1.225, 12.0, 0.45);
+        let target = 2.0e6; // 2 MW
+        let r = rotor_radius_for_power(target, rho, v, cp).unwrap();
+        let area = swept_area(r).unwrap();
+        let p = extracted_power(rho, area, v, cp).unwrap();
+        assert!((p - target).abs() < 1e-6 * target, "r={r} p={p}");
+    }
+
+    #[test]
+    fn rotor_radius_for_power_hand_value() {
+        // P = 0.5 * 1 * A * 3^3 * 0.5 with A = 2 gives P = 13.5 W, so the
+        // radius is sqrt(2/pi).
+        let r = rotor_radius_for_power(13.5, 1.0, 3.0, 0.5).unwrap();
+        let expected = (2.0_f64 / std::f64::consts::PI).sqrt();
+        assert!((r - expected).abs() < 1e-9, "r={r}");
+    }
+
+    #[test]
+    fn rotor_radius_scales_and_rejects_bad() {
+        let base = rotor_radius_for_power(1.0e6, 1.225, 10.0, 0.4).unwrap();
+        // R ~ sqrt(P): 4x power -> 2x radius.
+        let quad = rotor_radius_for_power(4.0e6, 1.225, 10.0, 0.4).unwrap();
+        assert!((quad / base - 2.0).abs() < 1e-9, "base={base} quad={quad}");
+        assert!(rotor_radius_for_power(0.0, 1.225, 10.0, 0.4).is_err()); // P
+        assert!(rotor_radius_for_power(1.0e6, 1.225, 0.0, 0.4).is_err()); // v
+        assert!(rotor_radius_for_power(1.0e6, 1.225, 10.0, 0.0).is_err()); // cp = 0
+        assert!(rotor_radius_for_power(1.0e6, 1.225, 10.0, 0.7).is_err()); // > Betz
+        assert!(rotor_radius_for_power(f64::NAN, 1.225, 10.0, 0.4).is_err());
     }
 }
