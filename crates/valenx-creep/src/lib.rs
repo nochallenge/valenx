@@ -19,9 +19,13 @@
 //!   at a service temperature (and a temperature solve).
 //! - [`norton`] — the **Norton-Bailey** steady-state creep law
 //!   `epsilon_dot = A * sigma^n`, with an optional Arrhenius
-//!   temperature dependence `A = A0 * exp(-Q / (R T))`, plus the inverse
+//!   temperature dependence `A = A0 * exp(-Q / (R T))`, the inverse
 //!   solve `sigma = (epsilon_dot / A)^(1/n)` for the stress that yields
-//!   a target creep rate.
+//!   a target creep rate, and the time-integral companions
+//!   [`accumulated_strain`](norton::NortonLaw::accumulated_strain)
+//!   `epsilon = epsilon_dot * t` and its inverse
+//!   [`time_to_strain`](norton::NortonLaw::time_to_strain) (the
+//!   "time to 1% strain" design question).
 //!
 //! Every fallible entry point validates its inputs and returns a typed
 //! [`CreepError`] rather than a silent `NaN`.
