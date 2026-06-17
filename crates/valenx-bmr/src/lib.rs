@@ -25,7 +25,9 @@
 //!   (`1.9`).
 //! - [`daily_energy_balance`] and [`mass_change_kg`] — the daily
 //!   `intake − TDEE` balance and the body-mass change a sustained
-//!   balance implies, bundled together by [`EnergyBalance`].
+//!   balance implies, bundled together by [`EnergyBalance`]; the inverse
+//!   [`days_to_mass_change`] answers the "time to goal" question (and
+//!   reports `+infinity` for an unreachable target).
 //!
 //! ```
 //! use valenx_bmr::{ActivityLevel, EnergyBalance, Sex, mifflin_st_jeor, tdee_for_level};
@@ -96,7 +98,7 @@ pub use bmr::{
     BmrEquation, Sex,
 };
 pub use energy::{
-    daily_energy_balance, mass_change_kg, tdee, tdee_for_level, ActivityLevel, EnergyBalance,
-    KCAL_PER_KG,
+    daily_energy_balance, days_to_mass_change, mass_change_kg, tdee, tdee_for_level, ActivityLevel,
+    EnergyBalance, KCAL_PER_KG,
 };
 pub use error::{BmrError, ErrorCategory, Result};
