@@ -182,6 +182,41 @@ pub fn mass_change_kg(daily_balance_kcal: f64, days: f64) -> Result<f64> {
     Ok(balance * days / KCAL_PER_KG)
 }
 
+/// The number of days for a *sustained* daily energy balance to project a
+/// target body-mass change — the inverse of [`mass_change_kg`]:
+///
+/// ```text
+/// days = target_change_kg · KCAL_PER_KG / balance_kcal_per_day.
+/// ```
+///
+/// The everyday "time to goal" question. A zero target needs zero days;
+/// an **unreachable** target returns `+infinity` rather than a nonsense
+/// negative time — that covers maintenance (`balance == 0`, which never
+/// moves the mass) and a goal that runs *against* the balance's direction
+/// (e.g. a gain target on a deficit). Feeding the result back into
+/// [`mass_change_kg`] reproduces `target_change_kg` for any reachable goal.
+///
+/// # Errors
+///
+/// [`BmrError::NotFinite`] if `daily_balance_kcal` or `target_change_kg`
+/// is non-finite.
+pub fn days_to_mass_change(daily_balance_kcal: f64, target_change_kg: f64) -> Result<f64> {
+    let balance = BmrError::require_finite("daily_balance_kcal", daily_balance_kcal)?;
+    let target = BmrError::require_finite("target_change_kg", target_change_kg)?;
+    if target == 0.0 {
+        return Ok(0.0); // already at the target
+    }
+    // Maintenance (zero balance) never moves the mass; a non-zero target is
+    // unreachable -> an infinite time.
+    if balance == 0.0 {
+        return Ok(f64::INFINITY);
+    }
+    let days = target * KCAL_PER_KG / balance;
+    // A negative time means the goal is opposite to the balance's
+    // direction (e.g. a gain target on a deficit): never reached.
+    Ok(if days < 0.0 { f64::INFINITY } else { days })
+}
+
 /// A complete, validated energy-balance snapshot for one person.
 ///
 /// Produced by [`EnergyBalance::new`]; bundles the BMR, the chosen
@@ -240,6 +275,19 @@ impl EnergyBalance {
     /// [`BmrError::OutOfRange`] if `days` is negative.
     pub fn projected_mass_change_kg(&self, days: f64) -> Result<f64> {
         mass_change_kg(self.daily_balance_kcal, days)
+    }
+
+    /// The number of days for this balance to project a target body-mass
+    /// change — the inverse of [`EnergyBalance::projected_mass_change_kg`].
+    /// Returns `+infinity` for an unreachable target (maintenance, or a
+    /// goal opposite to this balance's direction). See
+    /// [`days_to_mass_change`].
+    ///
+    /// # Errors
+    ///
+    /// [`BmrError::NotFinite`] if `target_change_kg` is non-finite.
+    pub fn days_to_mass_change(&self, target_change_kg: f64) -> Result<f64> {
+        days_to_mass_change(self.daily_balance_kcal, target_change_kg)
     }
 }
 
@@ -394,6 +442,54 @@ mod tests {
         assert!(!eb.is_surplus());
         let dm = eb.projected_mass_change_kg(60.0).unwrap();
         assert!(dm < 0.0, "deficit should project a loss, got {dm}");
+    }
+
+    #[test]
+    fn days_to_mass_change_inverts_mass_change() {
+        // Forward then inverse recovers the days for a reachable goal.
+        let balance = -600.0; // deficit
+        for &days in &[1.0_f64, 30.0, 100.0] {
+            let target = mass_change_kg(balance, days).unwrap();
+            let back = days_to_mass_change(balance, target).unwrap();
+            assert!((back - days).abs() < 1e-9 * days, "days {days} -> {back}");
+        }
+        // ... and inverse then forward recovers the target.
+        let target = -2.0; // lose 2 kg
+        let d = days_to_mass_change(balance, target).unwrap();
+        assert!((mass_change_kg(balance, d).unwrap() - target).abs() < 1e-9);
+    }
+
+    #[test]
+    fn days_to_mass_change_hand_value_and_zero() {
+        // Inverse of the +500 kcal / ~1.948 kg forward case: ~30 days.
+        let d = days_to_mass_change(500.0, 500.0 * 30.0 / KCAL_PER_KG).unwrap();
+        assert!((d - 30.0).abs() < 1e-9, "d = {d}");
+        // A zero target needs zero days.
+        assert!(days_to_mass_change(500.0, 0.0).unwrap().abs() < EPS);
+    }
+
+    #[test]
+    fn days_to_mass_change_unreachable_is_infinite() {
+        // Maintenance never reaches a non-zero target.
+        assert!(days_to_mass_change(0.0, 1.0).unwrap().is_infinite());
+        // A surplus never reaches a loss target (wrong direction).
+        assert!(days_to_mass_change(500.0, -1.0).unwrap().is_infinite());
+        // A deficit never reaches a gain target.
+        assert!(days_to_mass_change(-500.0, 1.0).unwrap().is_infinite());
+        // Non-finite inputs are rejected.
+        assert!(days_to_mass_change(f64::NAN, 1.0).is_err());
+        assert!(days_to_mass_change(500.0, f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn energy_balance_days_to_mass_change_round_trips() {
+        let eb = EnergyBalance::new(1780.0, 1.2, 1500.0).unwrap(); // deficit
+        let target = -3.0;
+        let d = eb.days_to_mass_change(target).unwrap();
+        assert!(
+            (eb.projected_mass_change_kg(d).unwrap() - target).abs() < 1e-9,
+            "d={d}"
+        );
     }
 
     #[test]
