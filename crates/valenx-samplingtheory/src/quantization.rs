@@ -146,6 +146,40 @@ pub fn enob_from_snr_db(snr_db: f64) -> Result<f64> {
     Ok((snr_db - SNR_OFFSET_DB) / DB_PER_BIT)
 }
 
+/// The minimum integer quantizer bit depth whose ideal SNR is at least
+/// `target_snr_db` — the ADC-sizing inverse of [`ideal_snr_db`].
+///
+/// Inverting `SNR_dB = 6.02 N + 1.76` and rounding **up** gives
+///
+/// ```text
+/// N = ceil( (target_snr_db - 1.76) / 6.02 ).
+/// ```
+///
+/// the fewest bits that meet or exceed the target. A quantizer needs at
+/// least one bit, so a target at or below the 1-bit SNR (`7.78 dB`)
+/// returns `1`. Feeding the result to [`ideal_snr_db`] always yields at
+/// least `target_snr_db`, while one fewer bit falls short.
+///
+/// # Errors
+///
+/// Returns [`SamplingError::Invalid`] if `target_snr_db` is not finite, or
+/// if it exceeds the SNR achievable by a 63-bit quantizer (the
+/// representable maximum, see [`validate_bits`]).
+pub fn bits_for_target_snr(target_snr_db: f64) -> Result<u32> {
+    let enob = enob_from_snr_db(target_snr_db)?;
+    // Round the fractional ENOB up to the next whole bit (a tiny epsilon
+    // keeps a target equal to an exact N-bit SNR mapping to N, not N+1),
+    // and never below the one-bit minimum.
+    let bits = (enob - 1e-9).ceil().max(1.0);
+    if bits >= 64.0 {
+        return Err(SamplingError::invalid(
+            "target_snr_db",
+            "exceeds the SNR achievable by a 63-bit quantizer",
+        ));
+    }
+    Ok(bits as u32)
+}
+
 /// Quantize a single sample with an ideal uniform mid-tread quantizer.
 ///
 /// The input `sample` must lie within the symmetric full-scale interval
@@ -296,6 +330,43 @@ mod tests {
         // An SNR equal to the bare offset implies zero effective bits.
         let enob = enob_from_snr_db(SNR_OFFSET_DB).unwrap();
         assert!(enob.abs() < EPS, "got {enob}");
+    }
+
+    #[test]
+    fn bits_for_target_snr_inverts_ideal_snr() {
+        // The exact N-bit SNR is met by exactly N bits.
+        for n in 1..=20u32 {
+            let snr = ideal_snr_db(n).unwrap();
+            assert_eq!(bits_for_target_snr(snr).unwrap(), n, "n={n}");
+        }
+    }
+
+    #[test]
+    fn bits_for_target_snr_is_the_minimum_that_meets_the_target() {
+        // 98 dB needs 16 bits (16-bit gives 98.08 >= 98; 15-bit gives 92.06).
+        let need = bits_for_target_snr(98.0).unwrap();
+        assert_eq!(need, 16);
+        assert!(ideal_snr_db(need).unwrap() >= 98.0);
+        assert!(ideal_snr_db(need - 1).unwrap() < 98.0);
+        // General two-sided property at assorted targets.
+        for &target in &[10.0_f64, 50.0, 90.0, 120.0, 200.0] {
+            let n = bits_for_target_snr(target).unwrap();
+            assert!(ideal_snr_db(n).unwrap() >= target, "n={n} target={target}");
+            if n > 1 {
+                assert!(ideal_snr_db(n - 1).unwrap() < target, "n-1 should miss");
+            }
+        }
+    }
+
+    #[test]
+    fn bits_for_target_snr_clamps_low_and_rejects_extremes() {
+        // A target at or below the 1-bit SNR still needs at least one bit.
+        assert_eq!(bits_for_target_snr(7.78).unwrap(), 1);
+        assert_eq!(bits_for_target_snr(1.0).unwrap(), 1);
+        assert_eq!(bits_for_target_snr(-50.0).unwrap(), 1);
+        // Non-finite is rejected; an unrepresentably high SNR is rejected.
+        assert!(bits_for_target_snr(f64::NAN).is_err());
+        assert!(bits_for_target_snr(1.0e6).is_err());
     }
 
     #[test]
