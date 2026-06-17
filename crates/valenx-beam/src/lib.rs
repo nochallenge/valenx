@@ -15,6 +15,12 @@
 //! - the **maximum bending moment**, and
 //! - the **peak bending stress** they imply.
 //!
+//! The load-capacity inverse [`Beam::allowable_load`] runs the stress
+//! calculation backwards: given an allowable bending stress and the
+//! [`LoadKind`] (point or distributed), it returns the largest [`Load`]
+//! the beam can carry — the textbook "safe load" — sized so that
+//! feeding it back into [`Beam::analyze`] reproduces the stress limit.
+//!
 //! Cross-sections are reduced to the only two scalars bending cares
 //! about: the second moment of area `I` and the extreme-fibre distance
 //! `c`. Two textbook closed forms ship out of the box — a solid
@@ -85,7 +91,7 @@ pub mod beam;
 pub mod error;
 pub mod section;
 
-pub use beam::{Beam, BeamResult, Load, Support};
+pub use beam::{Beam, BeamResult, Load, LoadKind, Support};
 pub use error::{BeamError, ErrorCategory};
 pub use section::Section;
 
@@ -575,5 +581,157 @@ mod tests {
         let json = serde_json::to_string(&beam).unwrap();
         let back: Beam = serde_json::from_str(&json).unwrap();
         assert_eq!(beam, back);
+    }
+
+    // ---------------------------------------------------------------
+    // Load-capacity inverse: allowable_load (the "safe load").
+    // ---------------------------------------------------------------
+
+    /// Magnitude of a load regardless of which variant it is.
+    fn load_magnitude(load: Load) -> f64 {
+        match load {
+            Load::Point { force } => force,
+            Load::Udl { intensity } => intensity,
+        }
+    }
+
+    #[test]
+    fn allowable_load_inverts_analyze_stress_for_every_case() {
+        // For each of the six (support, kind) combinations, the load
+        // returned at a given stress limit must, when analysed, produce
+        // exactly that peak bending stress.
+        let section = Section::rectangular(40.0, 60.0).unwrap();
+        let beam = Beam::new(1500.0, 200_000.0, section).unwrap();
+        let sigma = 120.0_f64; // allowable bending stress (MPa)
+
+        for &support in &[
+            Support::Cantilever,
+            Support::SimplySupported,
+            Support::FixedFixed,
+        ] {
+            for &kind in &[LoadKind::Point, LoadKind::Udl] {
+                let load = beam.allowable_load(support, kind, sigma).unwrap();
+                let stress = beam.analyze(support, load).unwrap().max_stress;
+                assert!(
+                    close(stress, sigma, 1e-6),
+                    "support {support:?} kind {kind:?}: stress {stress} vs sigma {sigma}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn allowable_load_returns_the_requested_kind() {
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let beam = Beam::new(1000.0, 200_000.0, section).unwrap();
+        assert!(matches!(
+            beam.allowable_load(Support::Cantilever, LoadKind::Point, 100.0)
+                .unwrap(),
+            Load::Point { .. }
+        ));
+        assert!(matches!(
+            beam.allowable_load(Support::Cantilever, LoadKind::Udl, 100.0)
+                .unwrap(),
+            Load::Udl { .. }
+        ));
+    }
+
+    #[test]
+    fn allowable_load_matches_hand_formula() {
+        // S = b h^2 / 6 = 20 * 900 / 6 = 3000 mm^3; M_allow = sigma S.
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let s = section.section_modulus().unwrap();
+        let l = 1000.0_f64;
+        let beam = Beam::new(l, 200_000.0, section).unwrap();
+        let sigma = 150.0_f64;
+        let m_allow = sigma * s;
+
+        // Cantilever point: P_allow = M_allow / L.
+        let p_cant = load_magnitude(
+            beam.allowable_load(Support::Cantilever, LoadKind::Point, sigma)
+                .unwrap(),
+        );
+        assert!(close(p_cant, m_allow / l, 1e-9));
+
+        // Simply-supported UDL: w_allow = 8 M_allow / L^2.
+        let w_ss = load_magnitude(
+            beam.allowable_load(Support::SimplySupported, LoadKind::Udl, sigma)
+                .unwrap(),
+        );
+        assert!(close(w_ss, 8.0 * m_allow / (l * l), 1e-9));
+
+        // Fixed-fixed point: P_allow = 8 M_allow / L.
+        let p_ff = load_magnitude(
+            beam.allowable_load(Support::FixedFixed, LoadKind::Point, sigma)
+                .unwrap(),
+        );
+        assert!(close(p_ff, 8.0 * m_allow / l, 1e-9));
+    }
+
+    #[test]
+    fn allowable_load_scales_with_stress_and_stiffness_ordering() {
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let beam = Beam::new(1000.0, 200_000.0, section).unwrap();
+
+        // Linear in the allowable stress: doubling sigma doubles the load.
+        let p1 = load_magnitude(
+            beam.allowable_load(Support::SimplySupported, LoadKind::Point, 100.0)
+                .unwrap(),
+        );
+        let p2 = load_magnitude(
+            beam.allowable_load(Support::SimplySupported, LoadKind::Point, 200.0)
+                .unwrap(),
+        );
+        assert!(close(p2, 2.0 * p1, 1e-9));
+
+        // Known case ratio: a fixed-fixed beam carries exactly twice the
+        // centre point load of a simply-supported one at the same stress
+        // limit (peak moment P L / 8 vs P L / 4).
+        let ff = load_magnitude(
+            beam.allowable_load(Support::FixedFixed, LoadKind::Point, 100.0)
+                .unwrap(),
+        );
+        assert!(close(ff, 2.0 * p1, 1e-9));
+
+        // A deeper section (larger section modulus) carries more.
+        let deep = Beam::new(1000.0, 200_000.0, Section::rectangular(20.0, 60.0).unwrap()).unwrap();
+        let p_deep = load_magnitude(
+            deep.allowable_load(Support::SimplySupported, LoadKind::Point, 100.0)
+                .unwrap(),
+        );
+        assert!(p_deep > p1);
+    }
+
+    #[test]
+    fn allowable_load_rejects_bad_stress_and_degenerate_section() {
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let beam = Beam::new(1000.0, 200_000.0, section).unwrap();
+        assert!(beam
+            .allowable_load(Support::Cantilever, LoadKind::Point, 0.0)
+            .is_err());
+        assert!(beam
+            .allowable_load(Support::Cantilever, LoadKind::Point, -5.0)
+            .is_err());
+        assert!(beam
+            .allowable_load(Support::Cantilever, LoadKind::Point, f64::NAN)
+            .is_err());
+        assert!(beam
+            .allowable_load(Support::Cantilever, LoadKind::Point, f64::INFINITY)
+            .is_err());
+
+        // A hand-constructed zero-height section has no section modulus.
+        let degenerate = Beam::new(
+            1000.0,
+            200_000.0,
+            Section::Rectangular {
+                width: 10.0,
+                height: 0.0,
+            },
+        )
+        .unwrap();
+        let err = degenerate
+            .allowable_load(Support::Cantilever, LoadKind::Point, 100.0)
+            .unwrap_err();
+        assert_eq!(err.code(), "beam.degenerate-section");
     }
 }
