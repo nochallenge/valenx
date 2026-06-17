@@ -24,8 +24,10 @@
 //! - **Quantization** ([`quantization`]) — the step size
 //!   `q = range / 2^bits` ([`quantization::quant_step`]), the ideal SNR
 //!   `6.02 * N + 1.76` ([`quantization::ideal_snr_db`]), its inverse
-//!   ([`quantization::enob_from_snr_db`]), a single-sample mid-tread
-//!   quantizer ([`quantization::quantize`]), and a serializable
+//!   ([`quantization::enob_from_snr_db`]), the ADC-sizing inverse
+//!   `N = ceil((SNR - 1.76) / 6.02)` for the minimum bits meeting a target
+//!   SNR ([`quantization::bits_for_target_snr`]), a single-sample
+//!   mid-tread quantizer ([`quantization::quantize`]), and a serializable
 //!   [`quantization::QuantizationAnalysis`] bundle.
 //! - **Errors** ([`error`]) — a validated [`error::SamplingError`] enum
 //!   with stable [`code`](error::SamplingError::code) and
