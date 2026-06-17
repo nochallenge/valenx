@@ -15,6 +15,9 @@
 //! - [`Lever::mechanical_advantage`] — the ratio `effort_arm / load_arm`.
 //! - [`Lever::balance_load`] / [`Lever::balance_effort`] — solve the
 //!   balance law for the unknown force.
+//! - [`Lever::load_displacement`] / [`Lever::effort_displacement`] — the
+//!   kinematic companion: how far the load travels for a given effort
+//!   travel and back, the force-for-distance trade-off.
 //! - [`Lever::net_moment`] / [`Lever::is_balanced`] — equilibrium check
 //!   for an arbitrary effort/load pair.
 //!
@@ -35,6 +38,11 @@
 //! `MA > 1` multiplies force (second-class levers always; first-class
 //! when the fulcrum sits nearer the load); `MA < 1` divides it, trading
 //! force for distance and speed (third-class levers always).
+//!
+//! Because the beam is rigid and both ends sweep the same angle, the
+//! effort and load travels share the arm ratio, so the displacement
+//! ratio equals `MA` and the ideal machine conserves work exactly:
+//! `effort * effort_travel = load * load_travel`.
 //!
 //! ## Honest scope
 //!
