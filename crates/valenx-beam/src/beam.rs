@@ -72,6 +72,22 @@ pub enum Load {
     },
 }
 
+/// The *kind* of load — concentrated or distributed — without a
+/// magnitude.
+///
+/// Mirrors the two [`Load`] variants but carries no value: it selects
+/// point-vs-distributed for the load-capacity inverse
+/// [`Beam::allowable_load`], which solves for the magnitude itself.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LoadKind {
+    /// A concentrated point load at the characteristic location
+    /// (mirrors [`Load::Point`]).
+    Point,
+    /// A uniformly distributed load along the whole span (mirrors
+    /// [`Load::Udl`]).
+    Udl,
+}
+
 /// A prismatic, homogeneous, linear-elastic beam.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Beam {
@@ -250,5 +266,60 @@ impl Beam {
         }
         let c = self.section.extreme_fibre();
         Ok(moment * c / i)
+    }
+
+    /// The largest load this beam can carry before its peak bending
+    /// stress reaches `allowable_stress` — the load-capacity
+    /// ("safe load") inverse of [`analyze`](Beam::analyze).
+    ///
+    /// The most a beam can be bent at the stress limit is the allowable
+    /// moment `M_allow = allowable_stress * S`, with `S = I / c` the
+    /// elastic [section modulus](Section::section_modulus). Inverting
+    /// the moment-from-load relation of [`max_moment`](Beam::max_moment)
+    /// then gives the allowable load magnitude:
+    ///
+    /// | Support          | Point `P_allow`  | Distributed `w_allow` |
+    /// |------------------|------------------|-----------------------|
+    /// | Cantilever       | `M_allow / L`    | `2 M_allow / L^2`     |
+    /// | Simply-supported | `4 M_allow / L`  | `8 M_allow / L^2`     |
+    /// | Fixed-fixed      | `8 M_allow / L`  | `12 M_allow / L^2`    |
+    ///
+    /// The answer is returned as a [`Load`] of the requested `kind`, so
+    /// feeding it straight back into [`analyze`](Beam::analyze)
+    /// reproduces `allowable_stress` as the peak bending stress.
+    ///
+    /// # Errors
+    /// Returns [`BeamError::BadParameter`] if `allowable_stress` is not
+    /// finite and strictly positive, or [`BeamError::DegenerateSection`]
+    /// if the section's extreme-fibre distance vanishes (so the section
+    /// modulus is undefined).
+    pub fn allowable_load(
+        &self,
+        support: Support,
+        kind: LoadKind,
+        allowable_stress: f64,
+    ) -> Result<Load, BeamError> {
+        let sigma = BeamError::require_positive("allowable_stress", allowable_stress)?;
+        let m_allow = sigma * self.section.section_modulus()?;
+        let l = self.length;
+        let load = match (support, kind) {
+            (Support::Cantilever, LoadKind::Point) => Load::Point { force: m_allow / l },
+            (Support::Cantilever, LoadKind::Udl) => Load::Udl {
+                intensity: 2.0 * m_allow / (l * l),
+            },
+            (Support::SimplySupported, LoadKind::Point) => Load::Point {
+                force: 4.0 * m_allow / l,
+            },
+            (Support::SimplySupported, LoadKind::Udl) => Load::Udl {
+                intensity: 8.0 * m_allow / (l * l),
+            },
+            (Support::FixedFixed, LoadKind::Point) => Load::Point {
+                force: 8.0 * m_allow / l,
+            },
+            (Support::FixedFixed, LoadKind::Udl) => Load::Udl {
+                intensity: 12.0 * m_allow / (l * l),
+            },
+        };
+        Ok(load)
     }
 }
