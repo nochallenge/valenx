@@ -21,7 +21,8 @@
 //! - [`CorrectionFactor`] — a validated `F` in `(0, 1]` and the
 //!   `F`-corrected effective driving temperature.
 //! - [`SizingInput`] / [`size`] / [`SizingResult`] — the area solve
-//!   `A = Q / (U F LMTD)`.
+//!   `A = Q / (U F LMTD)`, with the rating dual [`duty_from_area`]
+//!   `Q = U A F LMTD` for "what duty does this exchanger deliver?".
 //! - [`TubeGeometry`] — a tube `(d, L)` and the per-tube area
 //!   `pi d L`, feeding the whole-bundle [`SizingResult::tube_count`].
 //!
@@ -96,7 +97,7 @@ pub mod sizing;
 pub use correction::CorrectionFactor;
 pub use error::{ErrorCategory, HxError};
 pub use lmtd::{lmtd, TerminalDeltas};
-pub use sizing::{size, SizingInput, SizingResult, TubeGeometry};
+pub use sizing::{duty_from_area, size, SizingInput, SizingResult, TubeGeometry};
 
 #[cfg(test)]
 mod tests {
@@ -235,6 +236,53 @@ mod tests {
         assert!(high_u.area_m2 < low_u.area_m2);
         // Inverse in U: tripling U thirds the area.
         assert!((low_u.area_m2 / high_u.area_m2 - 3.0).abs() < EPS);
+    }
+
+    // ---- Rating dual: duty_from_area ---------------------------------
+
+    #[test]
+    fn duty_from_area_inverts_size() {
+        // size gives the area for a duty; duty_from_area gives the duty
+        // back from that area at the same conditions.
+        let deltas = TerminalDeltas::new(45.0, 12.0).unwrap();
+        let input = SizingInput::new(250_000.0, 850.0, 0.78, deltas).unwrap();
+        let r = size(&input);
+        let q = duty_from_area(r.area_m2, input.u_w_per_m2k, input.correction, deltas).unwrap();
+        assert!(
+            (q - input.duty_w).abs() < 1e-6 * input.duty_w,
+            "q {q} vs {}",
+            input.duty_w
+        );
+    }
+
+    #[test]
+    fn duty_from_area_matches_energy_balance() {
+        // U=500, A=10, F=0.9, deltas(30,10): LMTD=20/ln3, Q = U*A*F*LMTD.
+        let deltas = TerminalDeltas::new(30.0, 10.0).unwrap();
+        let f = CorrectionFactor::new(0.9).unwrap();
+        let q = duty_from_area(10.0, 500.0, f, deltas).unwrap();
+        let lmtd = 20.0 / 3.0_f64.ln();
+        assert!((q - 500.0 * 10.0 * 0.9 * lmtd).abs() < 1e-6, "q = {q}");
+    }
+
+    #[test]
+    fn duty_scales_with_area_and_u() {
+        let deltas = TerminalDeltas::new(25.0, 15.0).unwrap();
+        let f = CorrectionFactor::new(1.0).unwrap();
+        let base = duty_from_area(5.0, 400.0, f, deltas).unwrap();
+        let double_a = duty_from_area(10.0, 400.0, f, deltas).unwrap();
+        let double_u = duty_from_area(5.0, 800.0, f, deltas).unwrap();
+        assert!((double_a - 2.0 * base).abs() < EPS * base);
+        assert!((double_u - 2.0 * base).abs() < EPS * base);
+    }
+
+    #[test]
+    fn duty_from_area_rejects_bad_inputs() {
+        let deltas = TerminalDeltas::new(30.0, 10.0).unwrap();
+        let f = CorrectionFactor::new(0.9).unwrap();
+        assert!(duty_from_area(0.0, 500.0, f, deltas).is_err());
+        assert!(duty_from_area(10.0, 0.0, f, deltas).is_err());
+        assert!(duty_from_area(f64::NAN, 500.0, f, deltas).is_err());
     }
 
     // ---- Correction factor F -----------------------------------------

@@ -174,3 +174,43 @@ pub fn size(input: &SizingInput) -> SizingResult {
         area_m2,
     }
 }
+
+/// Rate an existing exchanger: the thermal duty `Q` a surface of
+/// `area_m2` transfers under the given `U`, correction factor and terminal
+/// temperatures — the rating dual of [`size`], inverting
+/// `A = Q / (U F LMTD)` back to
+///
+/// ```text
+/// Q = U * A * F * LMTD .
+/// ```
+///
+/// Use it to ask "what duty does this exchanger deliver?" rather than "how
+/// much area do I need?"; feeding the area from [`size`] straight back in
+/// reproduces the original duty.
+///
+/// # Errors
+///
+/// Returns [`HxError::BadParameter`] if `area_m2` or `u_w_per_m2k` is not
+/// finite and strictly positive.
+///
+/// ```
+/// use valenx_shellandtube::{duty_from_area, size, CorrectionFactor, SizingInput, TerminalDeltas};
+///
+/// let deltas = TerminalDeltas::new(30.0, 10.0).unwrap();
+/// let input = SizingInput::new(100_000.0, 500.0, 0.9, deltas).unwrap();
+/// let area = size(&input).area_m2;
+/// // Rating the sized area at the same conditions recovers the duty.
+/// let q = duty_from_area(area, 500.0, CorrectionFactor::new(0.9).unwrap(), deltas).unwrap();
+/// assert!((q - 100_000.0).abs() < 1e-6);
+/// ```
+pub fn duty_from_area(
+    area_m2: f64,
+    u_w_per_m2k: f64,
+    correction: CorrectionFactor,
+    deltas: TerminalDeltas,
+) -> Result<f64, HxError> {
+    let area_m2 = HxError::require_positive("area_m2", area_m2)?;
+    let u_w_per_m2k = HxError::require_positive("u_w_per_m2k", u_w_per_m2k)?;
+    let effective_lmtd_k = correction.effective_lmtd(deltas.lmtd());
+    Ok(u_w_per_m2k * area_m2 * effective_lmtd_k)
+}
