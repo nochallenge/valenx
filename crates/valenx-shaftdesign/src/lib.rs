@@ -26,6 +26,11 @@
 //! - [`combined::max_normal_stress`] — the combined maximum (principal)
 //!   normal stress `sigma_1 = sigma/2 + sqrt((sigma/2)^2 + tau^2)`,
 //!   equal to `32 M_e / (pi d^3)`.
+//! - [`combined::diameter_for_shear_stress`] /
+//!   [`combined::diameter_for_normal_stress`] — the ASME sizing inverses,
+//!   `d = (16 T_e / (pi tau_allow))^(1/3)` and
+//!   `d = (32 M_e / (pi sigma_allow))^(1/3)`, the diameter that keeps the
+//!   combined shear / normal stress within an allowable value.
 //!
 //! Section properties — [`ShaftSection::polar_section_modulus`] and
 //! [`ShaftSection::section_modulus`] — are exposed for reuse.
@@ -76,7 +81,8 @@ pub mod torsion;
 
 pub use bending::bending_stress;
 pub use combined::{
-    equivalent_bending_moment, equivalent_torque, max_normal_stress, max_shear_stress,
+    diameter_for_normal_stress, diameter_for_shear_stress, equivalent_bending_moment,
+    equivalent_torque, max_normal_stress, max_shear_stress,
 };
 pub use error::{ErrorCategory, ShaftError};
 pub use section::ShaftSection;
