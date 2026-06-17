@@ -101,6 +101,37 @@ impl Mm1 {
         Ok(Mm1 { lambda, mu })
     }
 
+    /// The service rate `mu` a single server must sustain so the mean time
+    /// in system (response time) [`W`](Self::w) equals `target_w` at an
+    /// arrival rate `arrival_rate` — the capacity-sizing inverse of
+    /// [`Mm1::w`].
+    ///
+    /// Inverting `W = 1 / (mu - lambda)` gives `mu = lambda + 1 / target_w`.
+    /// Because `target_w > 0` the result always exceeds `lambda`, so a queue
+    /// built with it is always stable and its [`w`](Self::w) reproduces
+    /// `target_w`. A tighter (smaller) target response time demands a higher
+    /// service rate.
+    ///
+    /// # Errors
+    ///
+    /// [`QueueingError::Invalid`] if `arrival_rate` or `target_w` is not
+    /// finite and strictly positive.
+    pub fn service_rate_for_mean_response_time(arrival_rate: f64, target_w: f64) -> Result<f64> {
+        if !arrival_rate.is_finite() || arrival_rate <= 0.0 {
+            return Err(QueueingError::invalid(
+                "arrival_rate",
+                format!("arrival rate must be finite and > 0, got {arrival_rate}"),
+            ));
+        }
+        if !target_w.is_finite() || target_w <= 0.0 {
+            return Err(QueueingError::invalid(
+                "target_w",
+                format!("target response time must be finite and > 0, got {target_w}"),
+            ));
+        }
+        Ok(arrival_rate + 1.0 / target_w)
+    }
+
     /// The arrival rate `lambda` this queue was built with.
     pub fn lambda(&self) -> f64 {
         self.lambda
@@ -527,5 +558,40 @@ mod tests {
         let q = Mm1::new(2.0, 3.0).unwrap();
         let err = q.state_probability_i(-1).unwrap_err();
         assert_eq!(err.code(), "queueing.domain");
+    }
+
+    // --- Capacity sizing: service rate for a target response time -------
+
+    #[test]
+    fn service_rate_for_response_time_inverts_w() {
+        // Inverse of the headline example: lambda = 2, W = 1 -> mu = 3.
+        let mu = Mm1::service_rate_for_mean_response_time(2.0, 1.0).unwrap();
+        close(mu, 3.0, EPS);
+        // Round-trip over a sweep: build the queue and recover the target W.
+        for &(lambda, w) in &[(2.0_f64, 1.0), (5.0, 0.25), (1.0, 4.0), (10.0, 0.05)] {
+            let mu = Mm1::service_rate_for_mean_response_time(lambda, w).unwrap();
+            let q = Mm1::new(lambda, mu).unwrap();
+            close(q.w(), w, 1e-12 * w.max(1.0));
+        }
+    }
+
+    #[test]
+    fn service_rate_for_response_time_is_always_stable_and_monotone() {
+        // mu = lambda + 1/W > lambda, so the queue is always constructible.
+        let mu = Mm1::service_rate_for_mean_response_time(100.0, 1e-3).unwrap();
+        assert!(mu > 100.0);
+        assert!(Mm1::new(100.0, mu).is_ok());
+        // A tighter (smaller) target response time demands a higher rate.
+        let slow = Mm1::service_rate_for_mean_response_time(5.0, 2.0).unwrap();
+        let fast = Mm1::service_rate_for_mean_response_time(5.0, 0.5).unwrap();
+        assert!(fast > slow, "fast {fast} should exceed slow {slow}");
+    }
+
+    #[test]
+    fn service_rate_for_response_time_rejects_bad_inputs() {
+        assert!(Mm1::service_rate_for_mean_response_time(0.0, 1.0).is_err()); // lambda
+        assert!(Mm1::service_rate_for_mean_response_time(2.0, 0.0).is_err()); // W
+        assert!(Mm1::service_rate_for_mean_response_time(-1.0, 1.0).is_err());
+        assert!(Mm1::service_rate_for_mean_response_time(2.0, f64::NAN).is_err());
     }
 }
