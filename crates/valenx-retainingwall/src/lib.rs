@@ -14,7 +14,11 @@
 //!   which grows linearly with depth;
 //! - the **resultant thrust** per unit length of wall,
 //!   `P = 1/2 * K * gamma * H^2`, together with its **line of action** at
-//!   `H/3` above the base.
+//!   `H/3` above the base;
+//! - the **inverse** of that thrust — the wall height
+//!   `H = sqrt(2 P / (K gamma))` that produces a target resultant
+//!   ([`SoilProfile::height_for_active_thrust`] /
+//!   [`SoilProfile::height_for_passive_thrust`]).
 //!
 //! ```
 //! use valenx_retainingwall::SoilProfile;
@@ -43,8 +47,10 @@
 //! stress is hydrostatic in the soil, `sigma_v = gamma * z`, so the
 //! lateral pressure profile is the triangle `K * gamma * z`, and its
 //! resultant is the triangle's area `1/2 * K * gamma * H^2` acting at the
-//! centroid `H/3` above the base. See [`rankine`] for the full
-//! derivation and the [`rankine::SoilProfile`] API.
+//! centroid `H/3` above the base. Inverting the resultant gives the wall
+//! height for a target thrust, `H = sqrt(2 P / (K gamma))`. See
+//! [`rankine`] for the full derivation and the [`rankine::SoilProfile`]
+//! API.
 //!
 //! ## Honest scope
 //!

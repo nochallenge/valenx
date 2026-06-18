@@ -40,6 +40,17 @@ pub enum RetainingWallError {
         value: f64,
     },
 
+    /// A target lateral thrust was negative.
+    ///
+    /// Thrust magnitudes are non-negative — a zero thrust corresponds to a
+    /// zero-height wall — so a negative target has no real wall height.
+    #[error("thrust value = {value} must be non-negative")]
+    NegativeThrust {
+        /// The offending thrust (caller's force-per-length units, e.g.
+        /// kN/m).
+        value: f64,
+    },
+
     /// A supplied quantity was not a finite number (NaN or infinite).
     #[error("value `{name}` must be finite, got {value}")]
     NonFinite {
@@ -72,6 +83,7 @@ impl RetainingWallError {
                 "retainingwall.non_positive_unit_weight"
             }
             RetainingWallError::NegativeDepth { .. } => "retainingwall.negative_depth",
+            RetainingWallError::NegativeThrust { .. } => "retainingwall.negative_thrust",
             RetainingWallError::NonFinite { .. } => "retainingwall.non_finite",
         }
     }
@@ -86,6 +98,7 @@ impl RetainingWallError {
             RetainingWallError::FrictionAngleOutOfRange { .. }
             | RetainingWallError::NonPositiveUnitWeight { .. }
             | RetainingWallError::NegativeDepth { .. }
+            | RetainingWallError::NegativeThrust { .. }
             | RetainingWallError::NonFinite { .. } => ErrorCategory::Input,
         }
     }

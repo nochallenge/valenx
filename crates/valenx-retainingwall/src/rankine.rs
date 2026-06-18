@@ -175,6 +175,17 @@ impl SoilProfile {
             Ok(v)
         }
     }
+
+    /// Validate a target thrust: must be finite and non-negative.
+    #[inline]
+    fn validated_thrust(&self, value: f64) -> Result<f64, RetainingWallError> {
+        let v = require_finite("thrust", value)?;
+        if v < 0.0 {
+            Err(RetainingWallError::NegativeThrust { value: v })
+        } else {
+            Ok(v)
+        }
+    }
 }
 
 /// The integrated lateral-thrust result for a wall of a given height,
@@ -226,6 +237,44 @@ impl SoilProfile {
             resultant: 0.5 * self.kp() * self.gamma * h * h,
             line_of_action: h / 3.0,
         })
+    }
+
+    /// The wall height whose **active** thrust equals a target resultant
+    /// `thrust` — the inverse of [`active_thrust`](SoilProfile::active_thrust).
+    ///
+    /// Inverting `Pa = 1/2 * Ka * gamma * H^2` gives
+    ///
+    /// ```text
+    /// H = sqrt(2 * Pa / (Ka * gamma)).
+    /// ```
+    ///
+    /// `Ka * gamma` is strictly positive for any valid profile, so the
+    /// height is always defined; a zero target maps to a zero-height wall.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RetainingWallError::NonFinite`] if `thrust` is not finite,
+    /// or [`RetainingWallError::NegativeThrust`] if `thrust < 0`.
+    pub fn height_for_active_thrust(&self, thrust: f64) -> Result<f64, RetainingWallError> {
+        let p = self.validated_thrust(thrust)?;
+        Ok((2.0 * p / (self.ka() * self.gamma)).sqrt())
+    }
+
+    /// The wall height whose **passive** thrust equals a target resultant
+    /// `thrust` — the inverse of
+    /// [`passive_thrust`](SoilProfile::passive_thrust).
+    ///
+    /// `H = sqrt(2 * Pp / (Kp * gamma))`. As with the active case
+    /// `Kp * gamma > 0`, so the height is always defined and a zero target
+    /// maps to a zero-height wall.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RetainingWallError::NonFinite`] if `thrust` is not finite,
+    /// or [`RetainingWallError::NegativeThrust`] if `thrust < 0`.
+    pub fn height_for_passive_thrust(&self, thrust: f64) -> Result<f64, RetainingWallError> {
+        let p = self.validated_thrust(thrust)?;
+        Ok((2.0 * p / (self.kp() * self.gamma)).sqrt())
     }
 }
 
@@ -482,5 +531,60 @@ mod tests {
         let json = serde_json::to_string(&t).expect("serialize");
         let back: Thrust = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(t, back);
+    }
+
+    // --- Inverse: wall height for a target thrust ----------------------
+
+    #[test]
+    fn height_for_active_thrust_inverts_active_thrust() {
+        // phi = 30 (Ka = 1/3), gamma = 18: a 75 kN/m thrust needs H = 5 m.
+        let s = soil(30.0, 18.0);
+        let h = s.height_for_active_thrust(75.0).expect("valid");
+        assert!((h - 5.0).abs() < EPS, "got {h}");
+        // Round-trip: that height reproduces the target thrust.
+        assert!((s.active_thrust(h).expect("valid").resultant - 75.0).abs() < EPS);
+    }
+
+    #[test]
+    fn height_for_passive_thrust_inverts_passive_thrust() {
+        // phi = 30 (Kp = 3), gamma = 18: a 675 kN/m passive thrust -> H = 5.
+        let s = soil(30.0, 18.0);
+        let h = s.height_for_passive_thrust(675.0).expect("valid");
+        assert!((h - 5.0).abs() < EPS, "got {h}");
+        assert!((s.passive_thrust(h).expect("valid").resultant - 675.0).abs() < EPS);
+    }
+
+    #[test]
+    fn height_for_thrust_round_trips_a_sweep() {
+        let s = soil(35.0, 19.0);
+        for &target in &[0.0_f64, 12.5, 80.0, 400.0] {
+            let h = s.height_for_active_thrust(target).expect("valid");
+            assert!(
+                (s.active_thrust(h).expect("valid").resultant - target).abs() < 1e-6,
+                "active target {target} did not round-trip"
+            );
+            let hp = s.height_for_passive_thrust(target).expect("valid");
+            assert!(
+                (s.passive_thrust(hp).expect("valid").resultant - target).abs() < 1e-6,
+                "passive target {target} did not round-trip"
+            );
+        }
+    }
+
+    #[test]
+    fn height_for_thrust_rejects_negative_and_non_finite() {
+        let s = soil(30.0, 18.0);
+        assert_eq!(
+            s.height_for_active_thrust(-1.0)
+                .expect_err("negative thrust")
+                .code(),
+            "retainingwall.negative_thrust"
+        );
+        assert_eq!(
+            s.height_for_passive_thrust(f64::NAN)
+                .expect_err("nan thrust")
+                .code(),
+            "retainingwall.non_finite"
+        );
     }
 }
