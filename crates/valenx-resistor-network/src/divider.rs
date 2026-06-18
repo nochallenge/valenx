@@ -52,6 +52,48 @@ pub fn voltage_divider(vin: f64, r1: f64, r2: f64) -> Result<f64, ResistorError>
     Ok(vin * r2 / (r1 + r2))
 }
 
+/// The bottom resistor `R2` that makes a voltage divider produce a
+/// target output `vout` from source `vin` and top resistor `r1` — the
+/// inverse of [`voltage_divider`].
+///
+/// Inverting `vout = vin * R2 / (R1 + R2)` gives
+///
+/// ```text
+/// R2 = r1 * vout / (vin - vout).
+/// ```
+///
+/// `r1` must be finite and strictly positive and `vin` / `vout` finite.
+/// The target must be reachable with a real positive resistor — a
+/// divider can only attenuate toward the source, so `vout` must lie
+/// strictly between `0` and `vin`. An unreachable target makes the
+/// required `R2` non-positive or non-finite and is rejected.
+///
+/// # Errors
+///
+/// - [`ResistorError::NonPositive`] / [`ResistorError::NonFinite`] if
+///   `r1` is out of domain, or `vin` / `vout` is non-finite.
+/// - [`ResistorError::NonPositive`] / [`ResistorError::NonFinite`] on
+///   `"r2"` if the target is unreachable (outside the open interval
+///   between `0` and `vin`, or equal to `vin`).
+///
+/// # Examples
+///
+/// ```
+/// use valenx_resistor_network::divider::{resistor2_for_voltage, voltage_divider};
+/// // To drop 9 V to 6 V with a 1k top resistor, R2 = 2k.
+/// let r2 = resistor2_for_voltage(9.0, 1000.0, 6.0).unwrap();
+/// assert!((r2 - 2000.0).abs() < 1e-9);
+/// // Feeding it back reproduces the target.
+/// assert!((voltage_divider(9.0, 1000.0, r2).unwrap() - 6.0).abs() < 1e-9);
+/// ```
+pub fn resistor2_for_voltage(vin: f64, r1: f64, vout: f64) -> Result<f64, ResistorError> {
+    let r1 = check_positive("r1", r1)?;
+    let vin = check_finite("vin", vin)?;
+    let vout = check_finite("vout", vout)?;
+    let r2 = r1 * vout / (vin - vout);
+    check_positive("r2", r2)
+}
+
 /// Current through branch `r1` of a two-branch current divider.
 ///
 /// Returns `I1 = i_in * r2 / (r1 + r2)` — the *opposite* resistor
@@ -206,5 +248,49 @@ mod tests {
             Err(ResistorError::NonFinite { name, .. }) => assert_eq!(name, "i_in"),
             other => panic!("expected NonFinite, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn resistor2_for_voltage_inverts_voltage_divider() {
+        // Hand value: 9 V -> 6 V with a 1k top resistor needs R2 = 2k.
+        let r2 = resistor2_for_voltage(9.0, 1000.0, 6.0).expect("valid");
+        assert!((r2 - 2000.0).abs() < EPS, "got {r2}");
+        // Round-trip: feeding R2 back reproduces the target voltage.
+        let v = voltage_divider(9.0, 1000.0, r2).expect("valid");
+        assert!((v - 6.0).abs() < EPS, "got {v}");
+    }
+
+    #[test]
+    fn resistor2_for_voltage_round_trips_a_sweep() {
+        let vin = 12.0;
+        let r1 = 1500.0;
+        for &vout in &[0.5, 3.0, 6.0, 9.0, 11.5] {
+            let r2 = resistor2_for_voltage(vin, r1, vout).expect("valid");
+            assert!(
+                (voltage_divider(vin, r1, r2).expect("valid") - vout).abs() < EPS,
+                "vout {vout} did not round-trip"
+            );
+        }
+    }
+
+    #[test]
+    fn resistor2_for_voltage_rejects_unreachable_target() {
+        // vout >= vin cannot be reached by attenuation (R2 would be
+        // infinite or negative).
+        assert!(resistor2_for_voltage(10.0, 1000.0, 10.0).is_err()); // == vin
+        assert!(resistor2_for_voltage(10.0, 1000.0, 12.0).is_err()); // > vin
+                                                                     // A target with the wrong sign for a positive source is unreachable.
+        assert!(resistor2_for_voltage(10.0, 1000.0, -1.0).is_err());
+        // Bad r1 / non-finite source are still rejected.
+        assert!(resistor2_for_voltage(10.0, 0.0, 5.0).is_err());
+        assert!(resistor2_for_voltage(f64::NAN, 1000.0, 5.0).is_err());
+    }
+
+    #[test]
+    fn resistor2_for_voltage_works_for_reversed_source() {
+        // Reversed source vin = -10 V, target -4 V (between -10 and 0).
+        let r2 = resistor2_for_voltage(-10.0, 1000.0, -4.0).expect("valid");
+        assert!(r2 > 0.0, "R2 must be positive, got {r2}");
+        assert!((voltage_divider(-10.0, 1000.0, r2).expect("valid") - (-4.0)).abs() < EPS);
     }
 }
