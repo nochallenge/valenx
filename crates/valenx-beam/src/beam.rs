@@ -322,4 +322,61 @@ impl Beam {
         };
         Ok(load)
     }
+
+    /// The largest load this beam can carry before its peak deflection
+    /// reaches `allowable_deflection` — the serviceability (stiffness)
+    /// counterpart of [`allowable_load`](Beam::allowable_load), inverting
+    /// [`max_deflection`](Beam::max_deflection) instead of the stress.
+    ///
+    /// Each deflection closed form `delta = k * (load) * L^n / (E I)` is
+    /// solved for the load:
+    ///
+    /// | Support          | Point `P_allow`             | Distributed `w_allow`        |
+    /// |------------------|-----------------------------|------------------------------|
+    /// | Cantilever       | `3 E I d / L^3`             | `8 E I d / L^4`              |
+    /// | Simply-supported | `48 E I d / L^3`            | `384 E I d / (5 L^4)`        |
+    /// | Fixed-fixed      | `192 E I d / L^3`           | `384 E I d / L^4`            |
+    ///
+    /// (`d = allowable_deflection`, `E I` the
+    /// [flexural rigidity](Beam::flexural_rigidity)). The answer is a
+    /// [`Load`] of the requested `kind`, so feeding it back into
+    /// [`max_deflection`](Beam::max_deflection) reproduces
+    /// `allowable_deflection`. A real design takes the smaller of this and
+    /// [`allowable_load`](Beam::allowable_load) (stress-governed) as the
+    /// governing safe load.
+    ///
+    /// # Errors
+    /// Returns [`BeamError::BadParameter`] if `allowable_deflection` is not
+    /// finite and strictly positive.
+    pub fn deflection_limited_load(
+        &self,
+        support: Support,
+        kind: LoadKind,
+        allowable_deflection: f64,
+    ) -> Result<Load, BeamError> {
+        let d = BeamError::require_positive("allowable_deflection", allowable_deflection)?;
+        let ei = self.flexural_rigidity();
+        let l = self.length;
+        let load = match (support, kind) {
+            (Support::Cantilever, LoadKind::Point) => Load::Point {
+                force: 3.0 * ei * d / l.powi(3),
+            },
+            (Support::Cantilever, LoadKind::Udl) => Load::Udl {
+                intensity: 8.0 * ei * d / l.powi(4),
+            },
+            (Support::SimplySupported, LoadKind::Point) => Load::Point {
+                force: 48.0 * ei * d / l.powi(3),
+            },
+            (Support::SimplySupported, LoadKind::Udl) => Load::Udl {
+                intensity: 384.0 * ei * d / (5.0 * l.powi(4)),
+            },
+            (Support::FixedFixed, LoadKind::Point) => Load::Point {
+                force: 192.0 * ei * d / l.powi(3),
+            },
+            (Support::FixedFixed, LoadKind::Udl) => Load::Udl {
+                intensity: 384.0 * ei * d / l.powi(4),
+            },
+        };
+        Ok(load)
+    }
 }
