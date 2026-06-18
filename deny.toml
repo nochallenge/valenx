@@ -36,6 +36,19 @@ ignore = [
     # pyo3 0.25 upgrade as a follow-up.
     "RUSTSEC-2026-0176",
     "RUSTSEC-2026-0177",
+    # instant 0.1.13 — RUSTSEC-2024-0384, unmaintained (not a
+    # vulnerability). Pulled only by accesskit_unix (the Linux AT-SPI
+    # accessibility backend) via futures-lite -> fastrand -> instant; the
+    # advisory states no safe upgrade is available. The accesskit feature
+    # (screen-reader + UI-automation support, enabled for valenx-app) is
+    # worth keeping, and this is a deep transitive dep we cannot bump
+    # directly. Drops when accesskit_unix's async stack updates.
+    "RUSTSEC-2024-0384",
+    # derivative 2.x — RUSTSEC-2024-0388, unmaintained (not a
+    # vulnerability). Same accesskit_unix / zbus / atspi Linux a11y stack
+    # as instant above; a proc-macro derive with no drop-in upgrade in
+    # that dependency tree. Drops with the same accesskit_unix update.
+    "RUSTSEC-2024-0388",
 ]
 
 [licenses]
