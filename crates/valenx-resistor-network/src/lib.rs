@@ -13,7 +13,9 @@
 //! - [`combination::series`] / [`combination::parallel`] /
 //!   [`combination::parallel_pair`] — equivalent resistance of
 //!   resistors in series or parallel.
-//! - [`divider::voltage_divider`] — `Vout = Vin * R2 / (R1 + R2)`.
+//! - [`divider::voltage_divider`] — `Vout = Vin * R2 / (R1 + R2)`, and
+//!   its inverse [`divider::resistor2_for_voltage`] — the bottom resistor
+//!   `R2 = R1 * Vout / (Vin - Vout)` that yields a target output.
 //! - [`divider::current_divider_i1`] /
 //!   [`divider::current_divider_i2`] — the two-branch current split.
 //! - [`bridge::is_balanced`] / [`bridge::detector_voltage`] /
@@ -30,7 +32,8 @@
 //!
 //! - Series: `R_eq = sum(Ri)`.
 //! - Parallel: `1 / R_eq = sum(1/Ri)`.
-//! - Voltage divider: `Vout = Vin * R2 / (R1 + R2)`.
+//! - Voltage divider: `Vout = Vin * R2 / (R1 + R2)`, inverted as
+//!   `R2 = R1 * Vout / (Vin - Vout)`.
 //! - Current divider: `I1 = I_in * R2 / (R1 + R2)`.
 //! - Wheatstone balance: `R1 / R2 = R3 / R4`.
 //!
@@ -76,6 +79,6 @@ pub mod network;
 
 pub use bridge::{balancing_r4, detector_voltage, is_balanced, DEFAULT_BALANCE_TOL};
 pub use combination::{parallel, parallel_pair, series};
-pub use divider::{current_divider_i1, current_divider_i2, voltage_divider};
+pub use divider::{current_divider_i1, current_divider_i2, resistor2_for_voltage, voltage_divider};
 pub use error::{ErrorCategory, ResistorError};
 pub use network::Combination;
