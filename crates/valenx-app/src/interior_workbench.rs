@@ -73,13 +73,13 @@ pub fn draw_interior_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(440.0)
         .width_range(360.0..=760.0)
         .show(ctx, |ui| {
-            ui.heading("Interior Design");
-            ui.label(
-                egui::RichText::new("floor plan + furniture · valenx-interior")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Interior Design",
+                "floor plan + furniture · valenx-interior",
+            ) {
+                app.show_interior_workbench = false;
+            }
             let s = &mut app.interior;
             ui.label(egui::RichText::new("Furniture").strong());
             ui.horizontal_wrapped(|ui| {

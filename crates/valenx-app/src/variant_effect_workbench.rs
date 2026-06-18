@@ -73,13 +73,13 @@ pub fn draw_variant_effect_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(340.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Variant Effect");
-            ui.label(
-                egui::RichText::new("HGVS variant parser · valenx-variant-effect")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Variant Effect",
+                "HGVS variant parser · valenx-variant-effect",
+            ) {
+                app.show_variant_effect_workbench = false;
+            }
             let s = &mut app.variant_effect;
             ui.label(egui::RichText::new("Variants (one per line)").strong());
             ui.add(
