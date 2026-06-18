@@ -6591,6 +6591,7 @@ dependencies = [
  "valenx-sysbio",
  "valenx-techdraw",
  "valenx-variant-effect",
+ "valenx-vehicle",
  "valenx-viz",
  "whoami",
 ]

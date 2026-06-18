@@ -659,6 +659,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Car workbench — vehicle dynamics
+                    // (top speed, 0-100 / 0-200 km/h, braking, skidpad) over
+                    // valenx-vehicle. Off by default.
+                    if ui
+                        .checkbox(&mut self.show_car_workbench, "Car")
+                        .on_hover_text(
+                            "Show / hide the right-side Car workbench — a design → \
+                             simulate panel: top speed, 0-100 / 0-200 km/h, braking \
+                             distance, and skidpad grip over valenx-vehicle.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Rocket workbench — the coupled
                     // design→simulate pipeline (valenx-rocket-demo): fly the
                     // ascent to orbit, then size the interstage struts against
@@ -1277,6 +1291,10 @@ impl eframe::App for ValenxApp {
         // Engine workbench (right) — reactive engine design → analyze →
         // optimize → export. A no-op unless toggled on via View → Engine.
         crate::engine_workbench::draw_engine_workbench(self, ctx);
+
+        // Car workbench (right) — vehicle dynamics design → simulate over
+        // valenx-vehicle. A no-op unless toggled on via View → Car.
+        crate::car_workbench::draw_car_workbench(self, ctx);
 
         // Assistant activity sidebar (right) — a live in-app feed of what
         // the AI assistant is building. On by default; toggle via View.
