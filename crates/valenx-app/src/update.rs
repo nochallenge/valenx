@@ -43,6 +43,21 @@ impl eframe::App for ValenxApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(50));
         }
 
+        // Automation / front-end testing: when the VALENX_AUTOMATION env var
+        // is set, keep frames ticking (~10 fps) even when the app is
+        // otherwise idle. egui only pushes the accessibility tree and
+        // processes queued UI-Automation actions (AccessKit Invoke / Toggle
+        // from an external test driver) on a live frame, so without this an
+        // idle window leaves a stale tree and dropped actions. Read once and
+        // cached; zero effect on the normal interactive build.
+        {
+            use std::sync::OnceLock;
+            static AUTOMATION: OnceLock<bool> = OnceLock::new();
+            if *AUTOMATION.get_or_init(|| std::env::var_os("VALENX_AUTOMATION").is_some()) {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            }
+        }
+
         // Drag-and-drop
         let dropped = ctx.input(|i| i.raw.dropped_files.clone());
         for f in dropped {
