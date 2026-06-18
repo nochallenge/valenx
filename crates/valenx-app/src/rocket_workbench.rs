@@ -84,6 +84,47 @@ impl OptObjective {
     }
 }
 
+/// Which trajectory channel the LV-1 ascent plot draws against time. The
+/// scrubber readout always lists every quantity; this only selects the curve.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum PlotQuantity {
+    /// Geometric altitude (km).
+    #[default]
+    Altitude,
+    /// Speed relative to the rotating atmosphere (m/s).
+    Speed,
+    /// Mach number relative to the local air.
+    Mach,
+    /// Dynamic pressure (kPa).
+    DynPressure,
+    /// Sensed (non-gravitational) acceleration (g).
+    AccelG,
+}
+
+impl PlotQuantity {
+    /// This channel's value for one sample, in the plotted display units.
+    fn value(self, s: &TrajectorySample) -> f64 {
+        match self {
+            PlotQuantity::Altitude => s.altitude_m / 1000.0,
+            PlotQuantity::Speed => s.speed_relative,
+            PlotQuantity::Mach => s.mach,
+            PlotQuantity::DynPressure => s.dynamic_pressure / 1000.0,
+            PlotQuantity::AccelG => s.acceleration_g,
+        }
+    }
+
+    /// The plot series / y-axis label, including units.
+    fn axis_label(self) -> &'static str {
+        match self {
+            PlotQuantity::Altitude => "altitude (km)",
+            PlotQuantity::Speed => "airspeed (m/s)",
+            PlotQuantity::Mach => "Mach",
+            PlotQuantity::DynPressure => "dynamic pressure (kPa)",
+            PlotQuantity::AccelG => "sensed accel (g)",
+        }
+    }
+}
+
 /// The best feasible design an ascent-optimization run found.
 #[derive(Clone, Copy)]
 struct OptBest {
@@ -178,6 +219,8 @@ pub struct RocketWorkbenchState {
     /// Playback-scrubber position (mission-elapsed seconds) for the LV-1
     /// ascent inspector. Clamped to the current flight's `t_max` each draw.
     scrub_t: f64,
+    /// Which trajectory channel the ascent plot draws against time.
+    plot_y: PlotQuantity,
 }
 
 impl Default for RocketWorkbenchState {
@@ -196,6 +239,7 @@ impl Default for RocketWorkbenchState {
             opt_job: None,
             auto: None,
             scrub_t: 0.0,
+            plot_y: PlotQuantity::default(),
         }
     }
 }
@@ -706,10 +750,22 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         s.scrub_t = s.scrub_t.clamp(0.0, t_max);
 
                         if has_plot {
+                            // Pick which telemetry channel the plot draws; the
+                            // numeric readout below always shows every quantity.
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(egui::RichText::new("plot:").small());
+                                ui.radio_value(&mut s.plot_y, PlotQuantity::Altitude, "alt");
+                                ui.radio_value(&mut s.plot_y, PlotQuantity::Speed, "speed");
+                                ui.radio_value(&mut s.plot_y, PlotQuantity::Mach, "Mach");
+                                ui.radio_value(&mut s.plot_y, PlotQuantity::DynPressure, "q");
+                                ui.radio_value(&mut s.plot_y, PlotQuantity::AccelG, "g");
+                            });
+                            let q = s.plot_y;
                             ui.label(
-                                egui::RichText::new(
-                                    "altitude (km) vs time (s) · dots = staging + MECO · drag to scrub",
-                                )
+                                egui::RichText::new(format!(
+                                    "{} vs time (s) · dots = staging + MECO · drag to scrub",
+                                    q.axis_label()
+                                ))
                                 .weak()
                                 .small(),
                             );
@@ -746,15 +802,29 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 );
                             }
 
-                            let now_pt = scrub.map(|p| [p.time, p.altitude_m / 1000.0]);
+                            // Line + event + now markers all follow the selected
+                            // channel, derived from the one retained sample series.
+                            let line_pts: Vec<[f64; 2]> = if q == PlotQuantity::Altitude {
+                                f.alt_pts.clone()
+                            } else {
+                                f.samples
+                                    .iter()
+                                    .map(|smp| [smp.time, q.value(smp)])
+                                    .collect()
+                            };
+                            let event_pts: Vec<[f64; 2]> = f
+                                .event_pts
+                                .iter()
+                                .filter_map(|ep| {
+                                    sample_at(&f.samples, ep[0]).map(|smp| [ep[0], q.value(&smp)])
+                                })
+                                .collect();
+                            let now_pt = scrub.map(|p| [p.time, q.value(&p)]);
                             Plot::new("lv1_ascent_plot").height(210.0).show(ui, |pui| {
-                                pui.line(
-                                    Line::new(PlotPoints::from(f.alt_pts.clone()))
-                                        .name("altitude (km)"),
-                                );
-                                if !f.event_pts.is_empty() {
+                                pui.line(Line::new(PlotPoints::from(line_pts)).name(q.axis_label()));
+                                if !event_pts.is_empty() {
                                     pui.points(
-                                        Points::new(PlotPoints::from(f.event_pts.clone()))
+                                        Points::new(PlotPoints::from(event_pts))
                                             .radius(5.0)
                                             .name("staging / MECO"),
                                     );
@@ -1336,6 +1406,28 @@ mod tests {
     }
 
     #[test]
+    fn plot_quantity_value_picks_the_right_channel_in_display_units() {
+        let s = TrajectorySample {
+            time: 1.0,
+            altitude_m: 2000.0,
+            downrange_m: 0.0,
+            speed_inertial: 0.0,
+            speed_relative: 300.0,
+            mach: 0.9,
+            mass: 0.0,
+            dynamic_pressure: 25_000.0,
+            acceleration_g: 3.0,
+        };
+        // Altitude and dynamic pressure are converted to km / kPa; the rest
+        // are passed through in their native units.
+        assert!((PlotQuantity::Altitude.value(&s) - 2.0).abs() < 1e-9);
+        assert!((PlotQuantity::Speed.value(&s) - 300.0).abs() < 1e-9);
+        assert!((PlotQuantity::Mach.value(&s) - 0.9).abs() < 1e-9);
+        assert!((PlotQuantity::DynPressure.value(&s) - 25.0).abs() < 1e-9);
+        assert!((PlotQuantity::AccelG.value(&s) - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn recompute_default_reaches_orbit_and_is_safe() {
         let mut s = RocketWorkbenchState::default();
         recompute(&mut s);
@@ -1497,6 +1589,24 @@ mod headless_ui_tests {
         let t_max = app.rocket.lv1.as_ref().map(|f| f.t_max).unwrap_or(0.0);
         app.rocket.scrub_t = t_max * 0.5;
         draw_workbench(&mut app);
+        assert!(app.rocket.lv1.is_some());
+    }
+
+    #[test]
+    fn workbench_draws_each_plot_channel_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_rocket_workbench = true;
+        draw_workbench(&mut app); // first draw computes the flight
+        for q in [
+            PlotQuantity::Altitude,
+            PlotQuantity::Speed,
+            PlotQuantity::Mach,
+            PlotQuantity::DynPressure,
+            PlotQuantity::AccelG,
+        ] {
+            app.rocket.plot_y = q;
+            draw_workbench(&mut app);
+        }
         assert!(app.rocket.lv1.is_some());
     }
 }
