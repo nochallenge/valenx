@@ -8363,6 +8363,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-recipes"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-rectifier"
 version = "0.1.0-alpha.1"
 dependencies = [
