@@ -40,6 +40,7 @@ pub mod aero_workbench;
 pub mod animate_workbench;
 pub(crate) mod background;
 pub mod cad_workbench;
+pub mod car_workbench;
 pub mod cfd_workbench;
 pub mod draft2d_workbench;
 pub mod fem_workbench;
@@ -609,6 +610,14 @@ pub struct ValenxApp {
     /// Form + result state for the Engine workbench. See
     /// [`crate::engine_workbench`].
     pub(crate) engine: crate::engine_workbench::EngineWorkbenchState,
+
+    /// Whether the right-side Car workbench panel is visible. Defaults to
+    /// `false`; toggled from the View menu. Wraps `valenx-vehicle`'s
+    /// performance model. See [`crate::car_workbench`].
+    pub(crate) show_car_workbench: bool,
+    /// Form + result state for the Car workbench (design → simulate over
+    /// `valenx-vehicle`).
+    pub(crate) car: crate::car_workbench::CarWorkbenchState,
 
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work

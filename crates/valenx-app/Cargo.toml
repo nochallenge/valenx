@@ -95,6 +95,10 @@ valenx-fem           = { path = "../valenx-fem" }
 # preliminary-design grade — not a flight-certified design tool.
 valenx-rocket-demo   = { path = "../valenx-rocket-demo" }
 
+# The Car workbench (src/car_workbench.rs) — vehicle dynamics
+# (acceleration, top speed, braking, skidpad) over valenx-vehicle.
+valenx-vehicle       = { path = "../valenx-vehicle" }
+
 # The native 3D external-aerodynamics CFD engine,
 # surfaced in the desktop UI by the Aerodynamics / Wind Tunnel
 # workbench (src/aero_workbench.rs + src/aero/). A pure-Rust solver
