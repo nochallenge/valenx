@@ -30,7 +30,10 @@
 //! - Density scaling ([`density`]):
 //!   - [`PowerLaw`] / [`strength_from_density`] — the Carter-Hayes
 //!     apparent-density power law `sigma_ult ~ rho^exponent`
-//!     (default exponent 2).
+//!     (default exponent 2),
+//!   - [`PowerLaw::density_for_strength`] — its inverse, the apparent
+//!     density needed to reach a target ultimate stress
+//!     `rho = rho_ref (sigma / sigma_ref)^(1 / exponent)`.
 //!
 //! ## Model
 //!
