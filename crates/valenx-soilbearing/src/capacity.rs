@@ -169,3 +169,41 @@ pub fn allowable_from_ultimate(
     }
     Ok(q_ultimate / factor_of_safety)
 }
+
+/// Ultimate line load the continuous strip footing carries per unit
+/// length: the ultimate bearing *pressure* times the footing width.
+///
+/// ```text
+/// Q_ult = qult * B
+/// ```
+///
+/// This bridges the bearing *pressure* of [`ultimate_bearing_capacity`]
+/// to the total *load* the footing supports. Infallible: both `soil` and
+/// `footing` are already validated by their constructors. Units follow
+/// the inputs — a stress times a length, e.g. `kPa * m = kN/m` (force per
+/// unit run of footing).
+pub fn ultimate_line_load(soil: &SoilProperties, footing: &Footing) -> f64 {
+    ultimate_bearing_capacity(soil, footing) * footing.width()
+}
+
+/// Allowable line load the strip footing carries per unit length at a
+/// factor of safety `factor_of_safety`:
+///
+/// ```text
+/// Q_all = qall * B = Q_ult / FS.
+/// ```
+///
+/// The load counterpart of the allowable bearing pressure from
+/// [`bearing_capacity`].
+///
+/// # Errors
+///
+/// Same validation as [`allowable_from_ultimate`]: `factor_of_safety`
+/// must be finite and strictly greater than `1`.
+pub fn allowable_line_load(
+    soil: &SoilProperties,
+    footing: &Footing,
+    factor_of_safety: f64,
+) -> Result<f64, SoilBearingError> {
+    allowable_from_ultimate(ultimate_line_load(soil, footing), factor_of_safety)
+}

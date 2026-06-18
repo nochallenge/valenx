@@ -14,7 +14,10 @@
 //!   ([`ultimate_bearing_capacity`]); and
 //! - the allowable bearing pressure `qall = qult / FS` together with a
 //!   term-by-term breakdown ([`bearing_capacity`] returning a
-//!   [`BearingResult`]).
+//!   [`BearingResult`]); and
+//! - the ultimate and allowable **line loads** the strip footing carries
+//!   per unit length, `Q = q * B` ([`ultimate_line_load`],
+//!   [`allowable_line_load`]).
 //!
 //! Inputs are wrapped in validated value types ([`SoilProperties`],
 //! [`Footing`]) whose constructors reject out-of-domain numbers, so the
@@ -47,6 +50,10 @@
 //!
 //! The allowable pressure applies a global factor of safety:
 //! `qall = qult / FS`.
+//!
+//! Multiplying a bearing pressure by the footing width gives the load the
+//! continuous footing carries per unit run: `Q_ult = qult * B` and
+//! `Q_all = qall * B = Q_ult / FS`.
 //!
 //! Units are the caller's responsibility but must be self-consistent. A
 //! convenient SI system is metres for `B` and `Df`, kN/m^3 for `gamma`,
@@ -83,7 +90,8 @@ pub mod footing;
 pub mod soil;
 
 pub use capacity::{
-    allowable_from_ultimate, bearing_capacity, ultimate_bearing_capacity, BearingResult,
+    allowable_from_ultimate, allowable_line_load, bearing_capacity, ultimate_bearing_capacity,
+    ultimate_line_load, BearingResult,
 };
 pub use error::SoilBearingError;
 pub use factors::BearingFactors;
@@ -418,5 +426,59 @@ mod tests {
         let json = serde_json::to_string(&soil).unwrap();
         let back: SoilProperties = serde_json::from_str(&json).unwrap();
         assert_eq!(soil, back);
+    }
+
+    // --- Line load = bearing pressure * footing width ------------------
+
+    #[test]
+    fn ultimate_line_load_is_pressure_times_width() {
+        let soil = SoilProperties::new(28.0, 15.0, 18.0).unwrap();
+        let footing = Footing::new(1.8, 0.9).unwrap();
+        let qult = ultimate_bearing_capacity(&soil, &footing);
+        let q_line = ultimate_line_load(&soil, &footing);
+        assert!(
+            (q_line - qult * footing.width()).abs() < EPS,
+            "line load {q_line} != qult*B {}",
+            qult * footing.width()
+        );
+    }
+
+    #[test]
+    fn allowable_line_load_is_ultimate_over_fs_and_matches_pressure_result() {
+        let soil = SoilProperties::new(30.0, 10.0, 18.0).unwrap();
+        let footing = Footing::new(2.0, 1.0).unwrap();
+        let fs = 3.0;
+        let q_all_line = allowable_line_load(&soil, &footing, fs).unwrap();
+        // Q_all = Q_ult / FS.
+        let q_ult_line = ultimate_line_load(&soil, &footing);
+        assert!(
+            (q_all_line - q_ult_line / fs).abs() < EPS,
+            "got {q_all_line}"
+        );
+        // And it equals the allowable PRESSURE times the footing width.
+        let r = bearing_capacity(&soil, &footing, fs).unwrap();
+        assert!(
+            (q_all_line - r.q_allowable * footing.width()).abs() < EPS,
+            "line {q_all_line} != qall*B {}",
+            r.q_allowable * footing.width()
+        );
+    }
+
+    #[test]
+    fn wider_footing_carries_more_line_load() {
+        // Q_ult = (A + 0.5 gamma Ngamma B) * B is strictly increasing in
+        // B: a wider footing carries more total load.
+        let soil = SoilProperties::new(32.0, 5.0, 18.5).unwrap();
+        let narrow = Footing::new(1.0, 1.0).unwrap();
+        let wide = Footing::new(3.0, 1.0).unwrap();
+        assert!(ultimate_line_load(&soil, &narrow) < ultimate_line_load(&soil, &wide));
+    }
+
+    #[test]
+    fn line_load_rejects_bad_factor_of_safety() {
+        let soil = SoilProperties::new(30.0, 5.0, 18.0).unwrap();
+        let footing = Footing::new(2.0, 1.0).unwrap();
+        assert!(allowable_line_load(&soil, &footing, 1.0).is_err());
+        assert!(allowable_line_load(&soil, &footing, f64::NAN).is_err());
     }
 }
