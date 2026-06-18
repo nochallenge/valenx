@@ -11,7 +11,9 @@
 //! - [`reynolds`] — the Reynolds number `Re = rho v D / mu` and the
 //!   classification of the flow into [`reynolds::FlowRegime::Laminar`] /
 //!   [`reynolds::FlowRegime::Transitional`] / [`reynolds::FlowRegime::Turbulent`]
-//!   at the standard `2300` / `4000` thresholds.
+//!   at the standard `2300` / `4000` thresholds, plus the inverse
+//!   [`reynolds::velocity_for_reynolds`] — the velocity `v = Re mu / (rho D)`
+//!   for a target Reynolds number (e.g. the critical transition velocity).
 //! - [`friction`] — the Darcy friction factor: the exact laminar
 //!   `f = 64/Re`, and the explicit **Haaland** correlation for turbulent
 //!   flow (an algebraic stand-in for the implicit Colebrook-White
@@ -50,6 +52,7 @@
 //!
 //! ```text
 //!   Re   = rho * v * D / mu                                  (Reynolds)
+//!   v    = Re * mu / (rho * D)                  (velocity for a target Re)
 //!   f    = 64 / Re                              (laminar, Re < 2300)
 //!   1/sqrt(f) = -1.8 log10[ (eps/D / 3.7)^1.11 + 6.9/Re ]    (Haaland)
 //!   h_f  = f * (L / D) * v^2 / (2 g)                  (Darcy-Weisbach)
@@ -116,8 +119,8 @@ pub use headloss::{
     PipeFlowResult, G_STANDARD,
 };
 pub use reynolds::{
-    classify_flow, reynolds_number, reynolds_number_kinematic, FlowRegime, RE_LAMINAR_UPPER,
-    RE_TURBULENT_LOWER,
+    classify_flow, reynolds_number, reynolds_number_kinematic, velocity_for_reynolds,
+    velocity_for_reynolds_kinematic, FlowRegime, RE_LAMINAR_UPPER, RE_TURBULENT_LOWER,
 };
 
 #[cfg(test)]

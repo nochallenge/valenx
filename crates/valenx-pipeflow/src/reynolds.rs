@@ -119,6 +119,52 @@ pub fn reynolds_number_kinematic(
     Ok(velocity * diameter / nu)
 }
 
+/// Velocity that produces a target Reynolds number — the inverse of
+/// [`reynolds_number`].
+///
+/// Inverting `Re = rho * v * D / mu` gives `v = Re * mu / (rho * D)`.
+/// Passing [`RE_LAMINAR_UPPER`] (or [`RE_TURBULENT_LOWER`]) yields the
+/// critical velocity at which the flow leaves the laminar (or enters the
+/// turbulent) regime for the given fluid and pipe.
+///
+/// # Errors
+///
+/// Returns [`PipeFlowError`] if `rho`, `diameter`, `viscosity` or
+/// `reynolds` is not finite and strictly positive.
+pub fn velocity_for_reynolds(
+    rho: f64,
+    diameter: f64,
+    viscosity: f64,
+    reynolds: f64,
+) -> Result<f64, PipeFlowError> {
+    let rho = require_positive("rho", rho)?;
+    let diameter = require_positive("diameter", diameter)?;
+    let viscosity = require_positive("viscosity", viscosity)?;
+    let reynolds = require_positive("reynolds", reynolds)?;
+    Ok(reynolds * viscosity / (rho * diameter))
+}
+
+/// Velocity that produces a target Reynolds number from the *kinematic*
+/// viscosity `nu = mu / rho` — the inverse of
+/// [`reynolds_number_kinematic`].
+///
+/// `v = Re * nu / D`.
+///
+/// # Errors
+///
+/// Returns [`PipeFlowError`] if `diameter`, `kinematic_viscosity` or
+/// `reynolds` is not finite and strictly positive.
+pub fn velocity_for_reynolds_kinematic(
+    diameter: f64,
+    kinematic_viscosity: f64,
+    reynolds: f64,
+) -> Result<f64, PipeFlowError> {
+    let diameter = require_positive("diameter", diameter)?;
+    let nu = require_positive("kinematic_viscosity", kinematic_viscosity)?;
+    let reynolds = require_positive("reynolds", reynolds)?;
+    Ok(reynolds * nu / diameter)
+}
+
 /// Classify the flow regime directly from the flow conditions, computing
 /// the Reynolds number internally. Equivalent to
 /// `FlowRegime::classify(reynolds_number(..)?)`.
@@ -217,5 +263,67 @@ mod tests {
         let direct = classify_flow(1000.0, 5.0, 0.1, 1e-3).unwrap();
         assert_eq!(direct, FlowRegime::classify(re));
         assert_eq!(direct, FlowRegime::Turbulent);
+    }
+
+    /// `velocity_for_reynolds` inverts `reynolds_number`.
+    #[test]
+    fn velocity_for_reynolds_inverts_reynolds_number() {
+        // rho=1000, D=0.1, mu=1e-3, Re=1e5 -> v = 1.0 m/s.
+        let v = velocity_for_reynolds(1000.0, 0.1, 1.0e-3, 1.0e5).unwrap();
+        assert!((v - 1.0).abs() < 1e-9, "got {v}");
+        // Round-trip back through reynolds_number.
+        assert!((reynolds_number(1000.0, v, 0.1, 1.0e-3).unwrap() - 1.0e5).abs() < 1e-6);
+    }
+
+    /// Forward-then-inverse recovers the original velocity across a sweep.
+    #[test]
+    fn velocity_for_reynolds_round_trips_a_sweep() {
+        let (rho, d, mu) = (998.0, 0.05, 1.002e-3);
+        for &v0 in &[0.1_f64, 0.5, 2.0, 7.0] {
+            let re = reynolds_number(rho, v0, d, mu).unwrap();
+            let v = velocity_for_reynolds(rho, d, mu, re).unwrap();
+            assert!(
+                (v - v0).abs() < 1e-9,
+                "v0 {v0} did not round-trip (got {v})"
+            );
+        }
+    }
+
+    /// The kinematic inverse agrees with the dynamic one and round-trips.
+    #[test]
+    fn velocity_for_reynolds_kinematic_agrees_with_dynamic() {
+        let (rho, d, mu) = (998.0, 0.05, 1.002e-3);
+        let nu = mu / rho;
+        let re = 5000.0;
+        let v_dyn = velocity_for_reynolds(rho, d, mu, re).unwrap();
+        let v_kin = velocity_for_reynolds_kinematic(d, nu, re).unwrap();
+        assert!((v_dyn - v_kin).abs() < 1e-9, "dyn {v_dyn} vs kin {v_kin}");
+        assert!((reynolds_number_kinematic(v_kin, d, nu).unwrap() - re).abs() < 1e-6);
+    }
+
+    /// The velocity at `RE_LAMINAR_UPPER` is the laminar/transitional
+    /// boundary: at it the flow is transitional, just below it laminar.
+    #[test]
+    fn velocity_at_laminar_ceiling_is_the_transition_velocity() {
+        let (rho, d, mu) = (1000.0, 0.02, 1.0e-3);
+        let v_crit = velocity_for_reynolds(rho, d, mu, RE_LAMINAR_UPPER).unwrap();
+        assert_eq!(
+            classify_flow(rho, v_crit, d, mu).unwrap(),
+            FlowRegime::Transitional
+        );
+        assert_eq!(
+            classify_flow(rho, v_crit * 0.99, d, mu).unwrap(),
+            FlowRegime::Laminar
+        );
+    }
+
+    /// Non-positive / non-finite inputs (including the target Re) are
+    /// rejected.
+    #[test]
+    fn velocity_for_reynolds_rejects_bad_inputs() {
+        assert!(velocity_for_reynolds(0.0, 0.1, 1e-3, 1000.0).is_err());
+        assert!(velocity_for_reynolds(1000.0, 0.1, 1e-3, 0.0).is_err());
+        assert!(velocity_for_reynolds(1000.0, 0.1, 1e-3, f64::NAN).is_err());
+        assert!(velocity_for_reynolds_kinematic(0.0, 1e-6, 1000.0).is_err());
     }
 }
