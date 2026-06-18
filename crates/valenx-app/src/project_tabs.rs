@@ -458,4 +458,103 @@ mod tests {
         assert!(!app.show_rocket_workbench);
         assert!(!app.show_cad_workbench);
     }
+
+    /// How many project workbench panels are currently shown.
+    fn count_shown(app: &ValenxApp) -> usize {
+        [
+            app.show_rocket_workbench,
+            app.show_engine_workbench,
+            app.show_astro_workbench,
+            app.show_aero_workbench,
+            app.show_gasdynamics_workbench,
+            app.show_cfd_workbench,
+            app.show_fem_workbench,
+            app.show_reactdyn_workbench,
+            app.show_fields_workbench,
+            app.show_cad_workbench,
+            app.show_mesh_toolbox,
+            app.show_sheetmetal_workbench,
+            app.show_reverse_workbench,
+            app.show_draft2d_workbench,
+            app.show_render_workbench,
+            app.show_animate_workbench,
+            app.show_springs_workbench,
+            app.show_gears_workbench,
+            app.show_fasteners_workbench,
+            app.show_frames_workbench,
+            app.show_collision_workbench,
+            app.show_piping_workbench,
+            app.show_hvac_workbench,
+            app.show_reinforcement_workbench,
+            app.show_interior_workbench,
+            app.show_geomatics_workbench,
+            app.show_genetics_workbench,
+            app.show_neuro_workbench,
+            app.show_variant_effect_workbench,
+        ]
+        .into_iter()
+        .filter(|&b| b)
+        .count()
+    }
+
+    /// Render, once in a headless context, the workbench panel that a tab
+    /// of `kind` owns.
+    fn draw_kind(kind: TabKind, app: &mut ValenxApp) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| match kind {
+            TabKind::Rocket => crate::rocket_workbench::draw_rocket_workbench(app, ctx),
+            TabKind::Engine => crate::engine_workbench::draw_engine_workbench(app, ctx),
+            TabKind::Astro => crate::astro_workbench::draw_astro_workbench(app, ctx),
+            TabKind::Aero => crate::aero_workbench::draw_aero_workbench(app, ctx),
+            TabKind::Gasdynamics => {
+                crate::gasdynamics_workbench::draw_gasdynamics_workbench(app, ctx)
+            }
+            TabKind::Cfd => crate::cfd_workbench::draw_cfd_workbench(app, ctx),
+            TabKind::Fem => crate::fem_workbench::draw_fem_workbench(app, ctx),
+            TabKind::Reactdyn => crate::reactdyn_workbench::draw_reactdyn_workbench(app, ctx),
+            TabKind::Fields => crate::fields_workbench::draw_fields_workbench(app, ctx),
+            TabKind::Cad => crate::cad_workbench::draw_cad_workbench(app, ctx),
+            TabKind::MeshToolbox => crate::mesh_toolbox::draw_mesh_toolbox(app, ctx),
+            TabKind::Sheetmetal => crate::sheetmetal_workbench::draw_sheetmetal_workbench(app, ctx),
+            TabKind::Reverse => crate::reverse_workbench::draw_reverse_workbench(app, ctx),
+            TabKind::Draft2d => crate::draft2d_workbench::draw_draft2d_workbench(app, ctx),
+            TabKind::Render => crate::render_workbench::draw_render_workbench(app, ctx),
+            TabKind::Animate => crate::animate_workbench::draw_animate_workbench(app, ctx),
+            TabKind::Springs => crate::springs_workbench::draw_springs_workbench(app, ctx),
+            TabKind::Gears => crate::gears_workbench::draw_gears_workbench(app, ctx),
+            TabKind::Fasteners => crate::fasteners_workbench::draw_fasteners_workbench(app, ctx),
+            TabKind::Frames => crate::frames_workbench::draw_frames_workbench(app, ctx),
+            TabKind::Collision => crate::collision_workbench::draw_collision_workbench(app, ctx),
+            TabKind::Piping => crate::piping_workbench::draw_piping_workbench(app, ctx),
+            TabKind::Hvac => crate::hvac_workbench::draw_hvac_workbench(app, ctx),
+            TabKind::Reinforcement => {
+                crate::reinforcement_workbench::draw_reinforcement_workbench(app, ctx)
+            }
+            TabKind::Interior => crate::interior_workbench::draw_interior_workbench(app, ctx),
+            TabKind::Geomatics => crate::geomatics_workbench::draw_geomatics_workbench(app, ctx),
+            TabKind::Genetics => crate::genetics_workbench::draw_genetics_workbench(app, ctx),
+            TabKind::Neuro => crate::neuro_workbench::draw_neuro_workbench(app, ctx),
+            TabKind::VariantEffect => {
+                crate::variant_effect_workbench::draw_variant_effect_workbench(app, ctx)
+            }
+        });
+    }
+
+    #[test]
+    fn every_tab_kind_activates_exactly_one_workbench_and_renders() {
+        // The tab system's core promise: opening a tab of any kind activates
+        // exactly that kind's workbench (no leaks, no flags left set) and the
+        // workbench renders without panicking (no unreachable stub).
+        for kind in TabKind::ALL {
+            let mut app = ValenxApp::default();
+            app.tab_bar.open(kind);
+            sync_active(&mut app);
+            assert_eq!(
+                count_shown(&app),
+                1,
+                "{kind:?} should show exactly one workbench"
+            );
+            draw_kind(kind, &mut app);
+        }
+    }
 }
