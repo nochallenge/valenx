@@ -92,13 +92,13 @@ pub fn draw_frames_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Frames");
-            ui.label(
-                egui::RichText::new("structural cross-section properties · valenx-frames")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Frames",
+                "structural cross-section properties · valenx-frames",
+            ) {
+                app.show_frames_workbench = false;
+            }
 
             let s = &mut app.frames;
             egui::ScrollArea::vertical()
