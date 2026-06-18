@@ -213,6 +213,52 @@ pub fn rotor_radius_for_power(
     Ok((area / std::f64::consts::PI).sqrt())
 }
 
+/// The free-stream wind speed `v` (m/s) at which a fixed disc captures a
+/// target shaft power — the operating-speed inverse of
+/// [`extracted_power`], complementary to the rotor-sizing
+/// [`rotor_radius_for_power`].
+///
+/// Inverting `P = 1/2 * rho * A * v^3 * Cp` for the speed gives the
+/// cube-root law
+///
+/// ```text
+/// v = cbrt( 2 P / (rho * A * Cp) ).
+/// ```
+///
+/// This is the "rated wind speed" a machine of swept area `area` needs to
+/// reach `target_power` at power coefficient `cp`. Feeding the result
+/// back into [`extracted_power`] (same `rho`, `area`, `Cp`) reproduces
+/// `target_power`.
+///
+/// # Errors
+///
+/// [`WindTurbineError::AboveBetz`] if `cp` exceeds the Betz limit;
+/// [`WindTurbineError::BadParameter`] if `target_power`, `air_density`,
+/// `area`, or `cp` is not strictly positive and finite (a zero `Cp`,
+/// area, or density would demand an infinite wind speed).
+pub fn wind_speed_for_power(
+    target_power: f64,
+    air_density: f64,
+    area: f64,
+    cp: f64,
+) -> Result<f64, WindTurbineError> {
+    validate_cp(cp)?;
+    for (name, value) in [
+        ("target_power", target_power),
+        ("air_density", air_density),
+        ("area", area),
+        ("cp", cp),
+    ] {
+        if !value.is_finite() || value <= 0.0 {
+            return Err(WindTurbineError::BadParameter {
+                name,
+                reason: "must be > 0".to_string(),
+            });
+        }
+    }
+    Ok((2.0 * target_power / (air_density * area * cp)).cbrt())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,5 +436,59 @@ mod tests {
         assert!(rotor_radius_for_power(1.0e6, 1.225, 10.0, 0.0).is_err()); // cp = 0
         assert!(rotor_radius_for_power(1.0e6, 1.225, 10.0, 0.7).is_err()); // > Betz
         assert!(rotor_radius_for_power(f64::NAN, 1.225, 10.0, 0.4).is_err());
+    }
+
+    #[test]
+    fn wind_speed_for_power_round_trips_through_extracted() {
+        // Find v for a target power on a fixed disc, recover the power.
+        let (rho, area, cp) = (1.225, 30.0, 0.45);
+        let target = 5.0e5;
+        let v = wind_speed_for_power(target, rho, area, cp).unwrap();
+        let p = extracted_power(rho, area, v, cp).unwrap();
+        assert!((p - target).abs() < 1e-6 * target, "v={v} p={p}");
+    }
+
+    #[test]
+    fn wind_speed_for_power_hand_value() {
+        // P = 0.5 * 1 * 2 * v^3 * 0.5 = 13.5 W  =>  v = cbrt(27) = 3.
+        let v = wind_speed_for_power(13.5, 1.0, 2.0, 0.5).unwrap();
+        assert!((v - 3.0).abs() < 1e-9, "v={v}");
+    }
+
+    #[test]
+    fn wind_speed_for_power_scales_as_cube_root() {
+        // v ~ cbrt(P): 8x power -> 2x speed.
+        let base = wind_speed_for_power(1.0e5, 1.225, 30.0, 0.4).unwrap();
+        let eight = wind_speed_for_power(8.0e5, 1.225, 30.0, 0.4).unwrap();
+        assert!(
+            (eight / base - 2.0).abs() < 1e-9,
+            "base={base} eight={eight}"
+        );
+    }
+
+    #[test]
+    fn wind_speed_and_rotor_radius_inverses_are_consistent() {
+        // Cross-check the two inverses of the same P law: size R for
+        // (P, rho, v, Cp), then the wind speed for that disc reproduces v.
+        let (rho, v, cp, target) = (1.225, 11.0, 0.42, 1.5e6);
+        let r = rotor_radius_for_power(target, rho, v, cp).unwrap();
+        let area = swept_area(r).unwrap();
+        let v_back = wind_speed_for_power(target, rho, area, cp).unwrap();
+        assert!((v_back - v).abs() < 1e-6, "v={v} v_back={v_back}");
+    }
+
+    #[test]
+    fn wind_speed_for_power_rejects_bad() {
+        assert!(wind_speed_for_power(0.0, 1.225, 30.0, 0.4).is_err()); // P
+        assert!(wind_speed_for_power(1.0e5, 0.0, 30.0, 0.4).is_err()); // rho
+        assert!(wind_speed_for_power(1.0e5, 1.225, 0.0, 0.4).is_err()); // area
+        assert!(wind_speed_for_power(1.0e5, 1.225, 30.0, 0.0).is_err()); // cp = 0
+        assert_eq!(
+            wind_speed_for_power(1.0e5, 1.225, 30.0, 0.7)
+                .unwrap_err()
+                .code(),
+            "windturbine.above_betz"
+        );
+        assert!(wind_speed_for_power(f64::NAN, 1.225, 30.0, 0.4).is_err());
     }
 }

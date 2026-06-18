@@ -16,7 +16,9 @@
 //!   power coefficient `Cp` validated against the Betz limit, plus the
 //!   sizing inverse [`power::rotor_radius_for_power`]
 //!   (`R = sqrt(2 P / (rho pi v^3 Cp))`) that sizes the rotor for a
-//!   target shaft power.
+//!   target shaft power, and the complementary operating-speed inverse
+//!   [`power::wind_speed_for_power`] (`v = cbrt(2 P / (rho A Cp))`) — the
+//!   rated wind speed a fixed disc needs for that power.
 //! - [`tsr`] — the tip-speed ratio [`tsr::tip_speed_ratio`]
 //!   (`lambda = omega R / v`), plus rad/s ↔ rev/min converters.
 //! - [`curve`] — the idealised [`curve::PowerCurve`] with cut-in,
@@ -76,6 +78,6 @@ pub use curve::{PowerCurve, Region};
 pub use error::{ErrorCategory, WindTurbineError};
 pub use power::{
     available_power, betz_power, extracted_power, rotor_radius_for_power, swept_area, validate_cp,
-    AIR_DENSITY_SEA_LEVEL, BETZ_LIMIT,
+    wind_speed_for_power, AIR_DENSITY_SEA_LEVEL, BETZ_LIMIT,
 };
 pub use tsr::{rad_per_s_to_rpm, rpm_to_rad_per_s, tip_speed, tip_speed_ratio};
