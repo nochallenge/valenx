@@ -69,6 +69,7 @@ members = [
     "crates/valenx-reinforcement",
     "crates/valenx-sheet-metal",
     "crates/valenx-geomatics",
+    "crates/valenx-marine",
     "crates/valenx-fasteners",
     "crates/valenx-symbols",
     "crates/valenx-frames",

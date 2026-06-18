@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-marine"
+description = "Box-form ship/boat hull hydrostatics: floating displacement (Archimedes, Delta = rho*Cb*L*B*T) and initial transverse stability (KB, BM = I_T/nabla, GM = KB+BM-KG), plus the inverse equilibrium draft for a given mass. Research/educational grade: classic small-angle wall-sided hydrostatics on an even keel in calm water; NOT a substitute for a licensed naval architect or class-approved stability software, and not for design, construction, or any decision affecting safety."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip checks for the serde-derived value types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
