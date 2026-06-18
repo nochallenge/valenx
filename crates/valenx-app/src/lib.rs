@@ -80,6 +80,7 @@ pub mod new_project_dialog;
 pub mod panel_help;
 pub mod pbr_forward_pass;
 pub mod piping_workbench;
+pub mod project_tabs;
 pub mod reactdyn_workbench;
 pub mod residuals;
 pub mod rocket_mesh;
@@ -668,6 +669,10 @@ pub struct ValenxApp {
     /// user first enables the Genetics Workbench (and can be overridden
     /// at any time from **View → Central viewport**).
     pub(crate) active_viewport: crate::viewport_kind::ViewportKind,
+
+    /// Open project tabs (Chrome-style) plus the active index. Drives
+    /// which workbench the tab strip shows. See [`crate::project_tabs`].
+    pub(crate) tab_bar: crate::project_tabs::TabBar,
 
     /// Persistent state for the 2D DNA / plasmid viewport. Survives
     /// viewport-kind switches so pan, zoom, and sub-view selection are

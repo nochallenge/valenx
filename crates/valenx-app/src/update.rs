@@ -1044,6 +1044,11 @@ impl eframe::App for ValenxApp {
             });
         });
 
+        // Project tabs (Chrome-style) — a slim strip just below the
+        // ribbon. Each tab is a project workbench the user switches
+        // between; additive, so it's empty until the user opens a tab.
+        crate::project_tabs::draw_tab_strip(self, ctx);
+
         // Status bar with progress bar if running
         egui::TopBottomPanel::bottom("valenx_status").show(ctx, |ui| {
             ui.horizontal(|ui| {
