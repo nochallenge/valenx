@@ -9,16 +9,22 @@
 //! the coil pitch, and the developed wire length — and renders them as a
 //! monospace readout.
 
+use std::f64::consts::TAU;
+use std::path::PathBuf;
+
 use eframe::egui;
 
 use nalgebra::Vector3;
 
+use valenx_mesh::element::{ElementBlock, ElementType};
+use valenx_mesh::Mesh;
 use valenx_springs::{
     compression_centerline, extension_centerline, spring_index, stiffness_n_per_mm,
     torsion_centerline, wahl_factor, SpringKind, SpringSpec,
 };
 use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
+use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
 /// Persistent form + result state for the Springs Workbench.
@@ -39,6 +45,10 @@ pub struct SpringsWorkbenchState {
     result: String,
     /// Validation / compute error, if any.
     error: Option<String>,
+    /// Deferred request to build the spring's 3-D solid and load it into
+    /// the central viewport (set by the "Show 3-D spring" button; serviced
+    /// after the panel draws, like the Rocket workbench's 3-D model).
+    show_3d_request: bool,
 }
 
 impl Default for SpringsWorkbenchState {
@@ -53,6 +63,7 @@ impl Default for SpringsWorkbenchState {
             shear_modulus_mpa: 79_300.0,
             result: String::new(),
             error: None,
+            show_3d_request: false,
         }
     }
 }
@@ -132,6 +143,15 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     {
                         run_springs(s);
                     }
+                    if ui
+                        .button(egui::RichText::new("▶ Show 3-D spring").strong())
+                        .on_hover_text(
+                            "Build the wire as a solid 3-D tube and load it into the central viewport to orbit",
+                        )
+                        .clicked()
+                    {
+                        s.show_3d_request = true;
+                    }
 
                     if let Some(e) = &s.error {
                         ui.add_space(4.0);
@@ -152,6 +172,14 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     }
                 });
         });
+
+    // Serviced after the panel draws (the `&mut app.springs` borrow taken in
+    // the closure above is released here): build the spring's 3-D solid and
+    // load it into the central viewport, like the Rocket workbench's model.
+    if app.springs.show_3d_request {
+        app.springs.show_3d_request = false;
+        load_spring_3d(app);
+    }
 }
 
 /// Build a [`SpringSpec`] from the current form and return the selected
@@ -184,6 +212,107 @@ fn preview_centerline(s: &SpringsWorkbenchState) -> Option<Vec<Vector3<f64>>> {
         SpringKind::Torsion => torsion_centerline(&spec),
     };
     pts.ok().filter(|v| v.len() >= 2)
+}
+
+/// Sweep a circular wire cross-section (radius = wire diameter / 2) along
+/// the spring's centreline to build a watertight 3-D tube and return it as
+/// a triangle [`Mesh`]. `None` for an invalid spec (mirrors
+/// `preview_centerline`). At each centreline point the cross-section is laid
+/// out in the tangent frame `n1 = tangent x reference`, `n2 = tangent x n1`,
+/// with `reference` switched from +Z to +X near the poles so the basis never
+/// degenerates. Consecutive rings are joined by quad side-walls (two
+/// triangles each) and the two open ends are closed with triangle-fan caps.
+fn spring_solid_mesh(s: &SpringsWorkbenchState) -> Option<Mesh> {
+    let path = preview_centerline(s)?;
+    let r = s.wire_diameter_mm / 2.0;
+    let seg = 12usize;
+
+    let up = Vector3::new(0.0, 0.0, 1.0);
+    let alt = Vector3::new(1.0, 0.0, 0.0);
+
+    let mut nodes: Vec<Vector3<f64>> = Vec::with_capacity(path.len() * seg + 2);
+    let mut tris: Vec<usize> = Vec::new();
+
+    // One ring of `seg` vertices around each centreline point, in the plane
+    // perpendicular to the local tangent.
+    for i in 0..path.len() {
+        let raw = if i + 1 < path.len() {
+            path[i + 1] - path[i]
+        } else {
+            path[i] - path[i - 1]
+        };
+        let tan = if raw.norm() > 1e-12 {
+            raw.normalize()
+        } else {
+            up
+        };
+        // Reference axis not (nearly) parallel to the tangent, so the
+        // cross-section basis stays well-conditioned.
+        let reference = if tan.dot(&up).abs() < 0.9 { up } else { alt };
+        let n1 = tan.cross(&reference).normalize();
+        let n2 = tan.cross(&n1).normalize();
+        for j in 0..seg {
+            let theta = j as f64 / seg as f64 * TAU;
+            nodes.push(path[i] + (n1 * theta.cos() + n2 * theta.sin()) * r);
+        }
+    }
+
+    // Side walls: connect ring i to ring i+1 with two triangles per segment.
+    for i in 0..path.len() - 1 {
+        let a = i * seg;
+        let b = (i + 1) * seg;
+        for j in 0..seg {
+            let jn = (j + 1) % seg;
+            tris.extend_from_slice(&[a + j, b + j, b + jn, a + j, b + jn, a + jn]);
+        }
+    }
+
+    // End caps: a triangle fan from each end ring's centre point.
+    let first_center = nodes.len();
+    nodes.push(path[0]);
+    for j in 0..seg {
+        let jn = (j + 1) % seg;
+        tris.extend_from_slice(&[first_center, jn, j]);
+    }
+    let last_ring = (path.len() - 1) * seg;
+    let last_center = nodes.len();
+    nodes.push(path[path.len() - 1]);
+    for j in 0..seg {
+        let jn = (j + 1) % seg;
+        tris.extend_from_slice(&[last_center, last_ring + j, last_ring + jn]);
+    }
+
+    let mut block = ElementBlock::new(ElementType::Tri3);
+    block.connectivity = tris.iter().map(|&i| i as u32).collect();
+    let mut mesh = Mesh::new("valenx-spring");
+    mesh.nodes = nodes;
+    mesh.element_blocks.push(block);
+    mesh.recompute_stats();
+    Some(mesh)
+}
+
+/// Build the spring's 3-D wire solid and load it into the central viewport
+/// (replacing any current STL / mesh) so it can be orbited — mirrors the
+/// Rocket workbench's `load_lv1_rocket_3d`. On an invalid spec, surfaces a
+/// form error instead of loading anything.
+fn load_spring_3d(app: &mut ValenxApp) {
+    let Some(mesh) = spring_solid_mesh(&app.springs) else {
+        app.springs.error =
+            Some("spring parameters are invalid — cannot build the 3-D solid".into());
+        return;
+    };
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    app.stl = None;
+    app.mesh = Some(LoadedMesh {
+        path: PathBuf::from("<spring>/valenx-springs"),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    });
+    app.frame_current_mesh();
 }
 
 /// Draw a centreline polyline as an isometric wireframe in a fixed-height
@@ -394,6 +523,36 @@ mod tests {
             ..Default::default()
         };
         assert!(preview_centerline(&s).is_none());
+    }
+
+    #[test]
+    fn spring_solid_mesh_for_default_is_a_nonempty_solid() {
+        let s = SpringsWorkbenchState::default();
+        let mesh = spring_solid_mesh(&s).expect("default spec yields a 3-D solid");
+        // A swept tube: one ring of vertices per centreline point plus two
+        // cap centres, and a populated triangle block.
+        assert!(mesh.nodes.len() > 12, "expected a multi-ring tube");
+        assert!(
+            mesh.element_blocks
+                .iter()
+                .any(|b| !b.connectivity.is_empty()),
+            "expected at least one triangle"
+        );
+        // The connectivity is whole triangles (3 indices each), all in range.
+        let n = mesh.nodes.len() as u32;
+        for b in &mesh.element_blocks {
+            assert_eq!(b.connectivity.len() % 3, 0);
+            assert!(b.connectivity.iter().all(|&i| i < n));
+        }
+    }
+
+    #[test]
+    fn spring_solid_mesh_none_for_invalid_spec() {
+        let s = SpringsWorkbenchState {
+            mean_coil_diameter_mm: 0.5,
+            ..Default::default()
+        };
+        assert!(spring_solid_mesh(&s).is_none());
     }
 }
 
