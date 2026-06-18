@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-recipes"
+description = "Reusable design-recipe library for Valenx: save any workbench's generated design (a rocket, an engine, a CAD part, ...) as a named, domain-tagged JSON 'recipe' on disk and load it back, so AI-generated designs persist across sessions and can be reused or composed modularly. A recipe is a portable envelope — name, domain tag, ISO-8601 creation timestamp, and a free-form serde_json spec payload — plus a small filesystem-backed store (save / list / load with slugged filenames). HONESTY: a storage + serialization layer only; it does not generate, validate, or simulate designs — that stays with the originating workbench. Pure std + serde, no external processes."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# serde derives the Recipe envelope; serde_json carries the free-form
+# design `spec` payload and is the on-disk format; thiserror builds the
+# validated error enum. No numerics or platform dependencies.
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
