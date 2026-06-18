@@ -57,6 +57,17 @@ fn check_load(load: f64) -> Result<()> {
     Ok(())
 }
 
+/// Validate that an effort magnitude is finite and non-negative.
+fn check_effort(effort: f64) -> Result<()> {
+    if !effort.is_finite() {
+        return Err(PulleyError::invalid("effort", "must be a finite number"));
+    }
+    if effort < 0.0 {
+        return Err(PulleyError::invalid("effort", "must be non-negative"));
+    }
+    Ok(())
+}
+
 /// Validate that an efficiency lies in the half-open interval `(0, 1]`.
 fn check_efficiency(eta: f64) -> Result<()> {
     if !eta.is_finite() {
@@ -123,6 +134,42 @@ pub fn real_effort(system: PulleySystem, load: f64, eta: f64) -> Result<f64> {
 pub fn actual_mechanical_advantage(system: PulleySystem, eta: f64) -> Result<f64> {
     check_efficiency(eta)?;
     Ok(system.ideal_mechanical_advantage() * eta)
+}
+
+/// The load an ideal (friction-free) machine raises with a given
+/// `effort` — the inverse of [`ideal_effort`]:
+///
+/// ```text
+/// load = effort * MA.
+/// ```
+///
+/// # Errors
+///
+/// Returns [`PulleyError::Invalid`] if `effort` is negative or non-finite.
+pub fn ideal_load_from_effort(system: PulleySystem, effort: f64) -> Result<f64> {
+    check_effort(effort)?;
+    Ok(effort * system.ideal_mechanical_advantage())
+}
+
+/// The load a real machine of efficiency `eta` in `(0, 1]` raises with a
+/// given `effort` — the inverse of [`real_effort`]:
+///
+/// ```text
+/// load = effort * MA * eta.
+/// ```
+///
+/// Because `eta <= 1`, a given effort raises *less* load than the ideal
+/// machine would — friction wastes part of the pull — and the two agree
+/// only at `eta = 1`.
+///
+/// # Errors
+///
+/// Returns [`PulleyError::Invalid`] if `effort` is negative / non-finite
+/// or if `eta` is outside `(0, 1]`.
+pub fn load_from_effort(system: PulleySystem, effort: f64, eta: f64) -> Result<f64> {
+    check_effort(effort)?;
+    check_efficiency(eta)?;
+    Ok(effort * system.ideal_mechanical_advantage() * eta)
 }
 
 /// Efficiency recovered from a *measured* actual effort:
@@ -459,6 +506,75 @@ mod tests {
         );
         assert_eq!(
             output_work(10.0, -1.0).unwrap_err().code(),
+            "pulley.invalid"
+        );
+    }
+
+    /// `load_from_effort` inverts `real_effort` in both directions, and
+    /// matches the hand value.
+    #[test]
+    fn load_from_effort_inverts_real_effort() {
+        let p = PulleySystem::block_and_tackle(4).unwrap();
+        let eta = 0.9;
+        // Hand value: a 300 N pull, MA 4, eta 0.9 raises 1080 N.
+        let raised = load_from_effort(p, 300.0, eta).unwrap();
+        assert!((raised - 1080.0).abs() < EPS, "got {raised}");
+        // Inverse-then-forward: the effort that raises `raised` is 300.
+        assert!((real_effort(p, raised, eta).unwrap() - 300.0).abs() < EPS);
+        // Forward-then-inverse: a known load round-trips through its effort.
+        let load = 1200.0;
+        let f = real_effort(p, load, eta).unwrap();
+        assert!((load_from_effort(p, f, eta).unwrap() - load).abs() < EPS);
+    }
+
+    /// `ideal_load_from_effort` inverts `ideal_effort`, with a hand value.
+    #[test]
+    fn ideal_load_from_effort_inverts_ideal_effort() {
+        let p = PulleySystem::block_and_tackle(4).unwrap();
+        // 300 N pull, MA 4 -> 1200 N raised (no friction).
+        assert!((ideal_load_from_effort(p, 300.0).unwrap() - 1200.0).abs() < EPS);
+        // Round-trip against ideal_effort across the canonical systems.
+        for sys in [PulleySystem::fixed(), PulleySystem::movable(), p] {
+            let load = 640.0;
+            let f = ideal_effort(sys, load).unwrap();
+            assert!((ideal_load_from_effort(sys, f).unwrap() - load).abs() < EPS);
+        }
+    }
+
+    /// A real machine raises `eta` times the ideal load for the same
+    /// effort (friction wastes part of the pull); equal at `eta = 1`.
+    #[test]
+    fn real_load_is_efficiency_times_ideal_load() {
+        let p = PulleySystem::block_and_tackle(6).unwrap();
+        let effort = 200.0;
+        let ideal = ideal_load_from_effort(p, effort).unwrap();
+        let real = load_from_effort(p, effort, 0.75).unwrap();
+        assert!((real - 0.75 * ideal).abs() < EPS, "got {real}");
+        assert!(real < ideal);
+        // eta = 1 -> the real load equals the ideal load.
+        assert!((load_from_effort(p, effort, 1.0).unwrap() - ideal).abs() < EPS);
+    }
+
+    /// Zero effort raises zero load; bad effort / efficiency are rejected.
+    #[test]
+    fn load_from_effort_handles_zero_and_rejects_bad_input() {
+        let p = PulleySystem::movable();
+        assert!(load_from_effort(p, 0.0, 0.5).unwrap().abs() < EPS);
+        assert!(ideal_load_from_effort(p, 0.0).unwrap().abs() < EPS);
+        assert_eq!(
+            ideal_load_from_effort(p, -1.0).unwrap_err().code(),
+            "pulley.invalid"
+        );
+        assert_eq!(
+            load_from_effort(p, f64::NAN, 0.5).unwrap_err().code(),
+            "pulley.invalid"
+        );
+        assert_eq!(
+            load_from_effort(p, 10.0, 0.0).unwrap_err().code(),
+            "pulley.invalid"
+        );
+        assert_eq!(
+            load_from_effort(p, 10.0, 1.5).unwrap_err().code(),
             "pulley.invalid"
         );
     }

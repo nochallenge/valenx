@@ -14,7 +14,9 @@
 //!   [`system::PulleySystem::velocity_ratio`] — the ideal mechanical
 //!   advantage `MA = n` and the equal velocity ratio `VR = n`.
 //! - [`mechanics`] — [`mechanics::ideal_effort`],
-//!   [`mechanics::real_effort`],
+//!   [`mechanics::real_effort`], their load inverses
+//!   [`mechanics::ideal_load_from_effort`] /
+//!   [`mechanics::load_from_effort`],
 //!   [`mechanics::actual_mechanical_advantage`],
 //!   [`mechanics::efficiency_from_effort`],
 //!   [`mechanics::effort_distance`], [`mechanics::output_work`],
@@ -46,6 +48,9 @@
 //! `F = W / (MA * eta)`, and the work lost over one lift is
 //! `W_out (1 / eta - 1)`.
 //!
+//! Read backwards, a given effort raises `W = F * MA * eta` (`F * MA` for
+//! the ideal machine) — with friction the same pull lifts less.
+//!
 //! ## Honest scope
 //!
 //! Research / educational grade. These are idealized rigid-body textbook
@@ -66,8 +71,8 @@ pub mod system;
 
 pub use error::{ErrorCategory, PulleyError, Result};
 pub use mechanics::{
-    actual_mechanical_advantage, efficiency_from_effort, effort_distance, ideal_effort, input_work,
-    output_work, real_effort, work_lost,
+    actual_mechanical_advantage, efficiency_from_effort, effort_distance, ideal_effort,
+    ideal_load_from_effort, input_work, load_from_effort, output_work, real_effort, work_lost,
 };
 pub use system::{PulleyKind, PulleySystem};
 
