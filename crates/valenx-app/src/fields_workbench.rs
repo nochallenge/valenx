@@ -71,13 +71,13 @@ pub fn draw_fields_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Field Statistics");
-            ui.label(
-                egui::RichText::new("descriptive statistics · valenx-fields")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Field Statistics",
+                "descriptive statistics · valenx-fields",
+            ) {
+                app.show_fields_workbench = false;
+            }
 
             let s = &mut app.fields;
             egui::ScrollArea::vertical()
