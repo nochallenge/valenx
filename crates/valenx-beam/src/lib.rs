@@ -20,6 +20,9 @@
 //! [`LoadKind`] (point or distributed), it returns the largest [`Load`]
 //! the beam can carry — the textbook "safe load" — sized so that
 //! feeding it back into [`Beam::analyze`] reproduces the stress limit.
+//! Its serviceability counterpart [`Beam::deflection_limited_load`] does
+//! the same against a deflection limit (`P = d E I / (k L^3)`); the
+//! governing safe load is the smaller of the two.
 //!
 //! Cross-sections are reduced to the only two scalars bending cares
 //! about: the second moment of area `I` and the extreme-fibre distance
@@ -733,5 +736,82 @@ mod tests {
             .allowable_load(Support::Cantilever, LoadKind::Point, 100.0)
             .unwrap_err();
         assert_eq!(err.code(), "beam.degenerate-section");
+    }
+
+    // ---------------------------------------------------------------
+    // Deflection-limited load: the serviceability load-capacity inverse.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn deflection_limited_load_inverts_max_deflection_for_every_case() {
+        // For each (support, kind), the load returned at a deflection
+        // limit must, when analysed, produce exactly that deflection.
+        let section = Section::rectangular(40.0, 60.0).unwrap();
+        let beam = Beam::new(1500.0, 200_000.0, section).unwrap();
+        let target = 2.5_f64; // allowable deflection
+
+        for &support in &[
+            Support::Cantilever,
+            Support::SimplySupported,
+            Support::FixedFixed,
+        ] {
+            for &kind in &[LoadKind::Point, LoadKind::Udl] {
+                let load = beam.deflection_limited_load(support, kind, target).unwrap();
+                let d = beam.max_deflection(support, load).unwrap();
+                assert!(
+                    close(d, target, 1e-6),
+                    "support {support:?} kind {kind:?}: deflection {d} vs target {target}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn deflection_limited_load_matches_hand_value() {
+        // Cantilever point, rect 20x30 (I = 45000), E = 200000, L = 1000
+        // -> EI = 9e9; a 1 mm tip limit allows P = 3 EI / L^3 = 27 N.
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let beam = Beam::new(1000.0, 200_000.0, section).unwrap();
+        let p = load_magnitude(
+            beam.deflection_limited_load(Support::Cantilever, LoadKind::Point, 1.0)
+                .unwrap(),
+        );
+        assert!(close(p, 27.0, 1e-9), "got {p}");
+    }
+
+    #[test]
+    fn deflection_limited_load_returns_kind_and_scales_linearly() {
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let beam = Beam::new(1000.0, 200_000.0, section).unwrap();
+        assert!(matches!(
+            beam.deflection_limited_load(Support::SimplySupported, LoadKind::Udl, 1.0)
+                .unwrap(),
+            Load::Udl { .. }
+        ));
+        // Linear in the allowable deflection: doubling it doubles the load.
+        let p1 = load_magnitude(
+            beam.deflection_limited_load(Support::SimplySupported, LoadKind::Point, 1.0)
+                .unwrap(),
+        );
+        let p2 = load_magnitude(
+            beam.deflection_limited_load(Support::SimplySupported, LoadKind::Point, 2.0)
+                .unwrap(),
+        );
+        assert!(close(p2, 2.0 * p1, 1e-9));
+    }
+
+    #[test]
+    fn deflection_limited_load_rejects_bad_deflection() {
+        let section = Section::rectangular(20.0, 30.0).unwrap();
+        let beam = Beam::new(1000.0, 200_000.0, section).unwrap();
+        assert!(beam
+            .deflection_limited_load(Support::Cantilever, LoadKind::Point, 0.0)
+            .is_err());
+        assert!(beam
+            .deflection_limited_load(Support::Cantilever, LoadKind::Point, -1.0)
+            .is_err());
+        assert!(beam
+            .deflection_limited_load(Support::Cantilever, LoadKind::Point, f64::NAN)
+            .is_err());
     }
 }
