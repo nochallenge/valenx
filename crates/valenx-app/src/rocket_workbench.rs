@@ -35,8 +35,8 @@ use egui_plot::{Line, Plot, PlotPoints, Points};
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 use valenx_astro::{
-    simulate_ascent, AscentConfig, DragModel, GuidanceMode, GuidanceProgram, Stage, Vehicle,
-    WindModel,
+    simulate_ascent, AscentConfig, DragModel, GuidanceMode, GuidanceProgram, Stage,
+    TrajectorySample, Vehicle, WindModel,
 };
 use valenx_rocket_demo::{auto_design, design_and_simulate, RocketDesign, RocketReport};
 
@@ -50,6 +50,13 @@ struct Lv1Flight {
     /// `[time_s, altitude_km]` of the staging + MECO flight events — drawn
     /// as markers on the ascent plot.
     event_pts: Vec<[f64; 2]>,
+    /// Full per-instant trajectory state, retained so the playback scrubber
+    /// can report altitude / speed / Mach / dynamic pressure / g-load at any
+    /// mission time without re-flying the ascent.
+    samples: Vec<TrajectorySample>,
+    /// Mission-elapsed time of the final sample (s) — the scrubber's upper
+    /// bound. Zero for a failed ascent (empty `samples`).
+    t_max: f64,
 }
 
 /// What the AI optimizer drives toward. Every objective keeps the same hard
@@ -168,6 +175,9 @@ pub struct RocketWorkbenchState {
     /// Last automated end-to-end design (engine + ascent), if any — produced
     /// by the one-click "Auto-design", where the AI does the whole search.
     auto: Option<auto_design::BestDesign>,
+    /// Playback-scrubber position (mission-elapsed seconds) for the LV-1
+    /// ascent inspector. Clamped to the current flight's `t_max` each draw.
+    scrub_t: f64,
 }
 
 impl Default for RocketWorkbenchState {
@@ -185,6 +195,7 @@ impl Default for RocketWorkbenchState {
             opt_objective: OptObjective::default(),
             opt_job: None,
             auto: None,
+            scrub_t: 0.0,
         }
     }
 }
@@ -450,18 +461,62 @@ fn fly_lv1() -> Lv1Flight {
                 })
                 .map(|e| [e.time, e.altitude_m / 1000.0])
                 .collect();
+            let t_max = r.samples.last().map(|s| s.time).unwrap_or(0.0);
+            let samples = r.samples;
             Lv1Flight {
                 alt_pts,
                 summary,
                 event_pts,
+                samples,
+                t_max,
             }
         }
         Err(e) => Lv1Flight {
             alt_pts: Vec::new(),
             summary: format!("ascent error: {e}"),
             event_pts: Vec::new(),
+            samples: Vec::new(),
+            t_max: 0.0,
         },
     }
+}
+
+/// Linearly interpolate the recorded trajectory state at mission time `t`
+/// (seconds). `t` is clamped to the sampled window: before the first sample
+/// it returns the first, after the last it returns the last. Returns `None`
+/// only when there are no samples (a failed ascent). Each field is
+/// interpolated linearly between the two bracketing samples — exact enough
+/// for the densely down-sampled ascent series the inspector scrubs over.
+fn sample_at(samples: &[TrajectorySample], t: f64) -> Option<TrajectorySample> {
+    let first = samples.first()?;
+    let last = samples.last()?;
+    if t <= first.time {
+        return Some(*first);
+    }
+    if t >= last.time {
+        return Some(*last);
+    }
+    let hi = samples
+        .iter()
+        .position(|s| s.time >= t)
+        .unwrap_or(samples.len() - 1)
+        .max(1);
+    let a = &samples[hi - 1];
+    let b = &samples[hi];
+    let span = b.time - a.time;
+    let frac = if span > 0.0 { (t - a.time) / span } else { 0.0 };
+    let lerp = |x: f64, y: f64| x + (y - x) * frac;
+    Some(TrajectorySample {
+        time: t,
+        altitude_m: lerp(a.altitude_m, b.altitude_m),
+        downrange_m: lerp(a.downrange_m, b.downrange_m),
+        speed_inertial: lerp(a.speed_inertial, b.speed_inertial),
+        speed_relative: lerp(a.speed_relative, b.speed_relative),
+        mach: lerp(a.mach, b.mach),
+        mass: lerp(a.mass, b.mass),
+        dynamic_pressure: lerp(a.dynamic_pressure, b.dynamic_pressure),
+        acceleration_g: lerp(a.acceleration_g, b.acceleration_g),
+    })
 }
 
 /// Minimum per-strut cross-sectional area (m²) needed to reach `target_sf`
@@ -640,14 +695,58 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         s.loaded_3d_once = true;
                         s.show_3d_request = true;
                     }
-                    if let Some(f) = &s.lv1 {
-                        ui.label(egui::RichText::new(&f.summary).monospace().small());
-                        if !f.alt_pts.is_empty() {
+                    if s.lv1.is_some() {
+                        // Summary + flight window (immutable view, released before
+                        // the scrubber borrows `scrub_t` mutably below).
+                        let (t_max, has_plot) = {
+                            let f = s.lv1.as_ref().unwrap();
+                            ui.label(egui::RichText::new(&f.summary).monospace().small());
+                            (f.t_max.max(0.0), !f.alt_pts.is_empty())
+                        };
+                        s.scrub_t = s.scrub_t.clamp(0.0, t_max);
+
+                        if has_plot {
                             ui.label(
-                                egui::RichText::new("altitude (km) vs time (s) · dots = staging + MECO")
-                                    .weak()
-                                    .small(),
+                                egui::RichText::new(
+                                    "altitude (km) vs time (s) · dots = staging + MECO · drag to scrub",
+                                )
+                                .weak()
+                                .small(),
                             );
+
+                            // ▶ Playback scrubber — drag through the flight and
+                            // read the full vehicle state at that instant.
+                            if t_max > 0.0 {
+                                ui.add(
+                                    egui::Slider::new(&mut s.scrub_t, 0.0..=t_max)
+                                        .text("▶ playback · t (s)"),
+                                );
+                            }
+
+                            let f = s.lv1.as_ref().unwrap();
+                            let scrub = sample_at(&f.samples, s.scrub_t);
+                            if let Some(p) = scrub {
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "t {:>6.1} s   alt {:>7.2} km   downrange {:>7.2} km\n\
+                                         v_rel {:>6.0} m/s   v_inert {:>6.0} m/s   Mach {:>5.2}\n\
+                                         q {:>6.1} kPa   accel {:>5.2} g   mass {:>7.2} t",
+                                        p.time,
+                                        p.altitude_m / 1000.0,
+                                        p.downrange_m / 1000.0,
+                                        p.speed_relative,
+                                        p.speed_inertial,
+                                        p.mach,
+                                        p.dynamic_pressure / 1000.0,
+                                        p.acceleration_g,
+                                        p.mass / 1000.0,
+                                    ))
+                                    .monospace()
+                                    .small(),
+                                );
+                            }
+
+                            let now_pt = scrub.map(|p| [p.time, p.altitude_m / 1000.0]);
                             Plot::new("lv1_ascent_plot").height(210.0).show(ui, |pui| {
                                 pui.line(
                                     Line::new(PlotPoints::from(f.alt_pts.clone()))
@@ -658,6 +757,14 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         Points::new(PlotPoints::from(f.event_pts.clone()))
                                             .radius(5.0)
                                             .name("staging / MECO"),
+                                    );
+                                }
+                                if let Some(pt) = now_pt {
+                                    pui.points(
+                                        Points::new(PlotPoints::from(vec![pt]))
+                                            .radius(7.0)
+                                            .color(egui::Color32::from_rgb(255, 196, 0))
+                                            .name("now"),
                                     );
                                 }
                             });
@@ -1168,6 +1275,67 @@ mod tests {
     }
 
     #[test]
+    fn sample_at_clamps_and_interpolates() {
+        let s = |time: f64, altitude_m: f64, dynamic_pressure: f64| TrajectorySample {
+            time,
+            altitude_m,
+            downrange_m: 0.0,
+            speed_inertial: 0.0,
+            speed_relative: 0.0,
+            mach: 0.0,
+            mass: 0.0,
+            dynamic_pressure,
+            acceleration_g: 0.0,
+        };
+        let samples = vec![
+            s(0.0, 0.0, 10.0),
+            s(10.0, 1000.0, 50.0),
+            s(20.0, 4000.0, 30.0),
+        ];
+        // Empty input → None.
+        assert!(sample_at(&[], 1.0).is_none());
+        // Before the window clamps to the first sample, after it to the last.
+        assert!(sample_at(&samples, -5.0).unwrap().altitude_m.abs() < 1e-12);
+        assert!((sample_at(&samples, 99.0).unwrap().altitude_m - 4000.0).abs() < 1e-9);
+        // Midway between the first two samples is the linear midpoint.
+        let mid = sample_at(&samples, 5.0).unwrap();
+        assert!((mid.time - 5.0).abs() < 1e-9);
+        assert!(
+            (mid.altitude_m - 500.0).abs() < 1e-9,
+            "alt {}",
+            mid.altitude_m
+        );
+        assert!(
+            (mid.dynamic_pressure - 30.0).abs() < 1e-9,
+            "q {}",
+            mid.dynamic_pressure
+        );
+        // Landing exactly on a recorded sample returns that sample's state.
+        let on = sample_at(&samples, 20.0).unwrap();
+        assert!((on.altitude_m - 4000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn fly_lv1_keeps_full_samples_for_the_scrubber() {
+        let f = fly_lv1();
+        assert!(
+            !f.samples.is_empty(),
+            "the scrubber needs the per-instant series"
+        );
+        assert!(f.t_max > 0.0, "t_max {}", f.t_max);
+        // The scrubbed state at the end matches the last recorded sample.
+        let last = *f.samples.last().unwrap();
+        let at_end = sample_at(&f.samples, f.t_max).unwrap();
+        assert!((at_end.altitude_m - last.altitude_m).abs() < 1e-6);
+        // Mid-flight the vehicle is actually moving.
+        let mid = sample_at(&f.samples, f.t_max * 0.5).unwrap();
+        assert!(
+            mid.speed_relative > 0.0 || mid.speed_inertial > 0.0,
+            "should be moving mid-flight"
+        );
+    }
+
+    #[test]
     fn recompute_default_reaches_orbit_and_is_safe() {
         let mut s = RocketWorkbenchState::default();
         recompute(&mut s);
@@ -1317,5 +1485,18 @@ mod headless_ui_tests {
         app.show_rocket_workbench = true;
         app.rocket.error = Some("trajectory error: bad case".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn workbench_draws_with_scrubber_set_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_rocket_workbench = true;
+        // First draw computes + caches the LV-1 flight.
+        draw_workbench(&mut app);
+        // Scrub to mid-flight and redraw — the readout + "now" marker render.
+        let t_max = app.rocket.lv1.as_ref().map(|f| f.t_max).unwrap_or(0.0);
+        app.rocket.scrub_t = t_max * 0.5;
+        draw_workbench(&mut app);
+        assert!(app.rocket.lv1.is_some());
     }
 }
