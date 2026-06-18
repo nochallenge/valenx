@@ -452,13 +452,13 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(370.0)
         .width_range(320.0..=600.0)
         .show(ctx, |ui| {
-            ui.heading("Reaction Dynamics");
-            ui.label(
-                egui::RichText::new("native ab-initio MD · valenx-reactdyn")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Reaction Dynamics",
+                "native ab-initio MD · valenx-reactdyn",
+            ) {
+                app.show_reactdyn_workbench = false;
+            }
             let s = &mut app.reactdyn;
             let running = s.run.is_some();
 
