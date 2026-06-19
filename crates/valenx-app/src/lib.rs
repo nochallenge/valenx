@@ -89,6 +89,7 @@ pub mod panel_help;
 pub mod pbr_forward_pass;
 pub mod piping_workbench;
 pub mod project_tabs;
+pub mod pump_workbench;
 pub mod rail_workbench;
 pub mod reactdyn_workbench;
 pub mod residuals;
@@ -659,6 +660,13 @@ pub struct ValenxApp {
     /// State for the Reverse-Engineering workbench, wrapping `valenx-reverse`.
     /// See [`crate::reverse_workbench`].
     pub(crate) reverse: crate::reverse_workbench::ReverseWorkbenchState,
+
+    /// Whether the right-side Pump workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_pump_workbench: bool,
+    /// State for the Pump workbench, wrapping `valenx-pump`. See
+    /// [`crate::pump_workbench`].
+    pub(crate) pump: crate::pump_workbench::PumpWorkbenchState,
 
     /// Whether the right-side Interior-Design workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
