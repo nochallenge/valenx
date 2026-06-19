@@ -449,6 +449,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Drone Workbench — native
+                    // multirotor hover performance (valenx-drone). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_drone_workbench, "Drone / Multirotor")
+                        .on_hover_text(
+                            "Show / hide the right-side Drone Workbench — native multirotor \
+                             hover performance: disk loading, induced velocity, ideal / actual \
+                             hover power, thrust-to-weight, and battery endurance, computed \
+                             in-process by valenx-drone.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Geomatics Workbench — native
                     // geodesic calculations (valenx-geomatics). Off by default.
                     if ui
@@ -1234,6 +1248,10 @@ impl eframe::App for ValenxApp {
         // Gears Workbench (right) — native involute-gear design on
         // valenx-gears. A no-op unless toggled on via View → Gears.
         crate::gears_workbench::draw_gears_workbench(self, ctx);
+
+        // Drone Workbench (right) — native multirotor hover performance on
+        // valenx-drone. A no-op unless toggled on via View → Drone / Multirotor.
+        crate::drone_workbench::draw_drone_workbench(self, ctx);
 
         // Geomatics Workbench (right) — native geodesic calculations on
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
