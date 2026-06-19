@@ -422,6 +422,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Marine / Hull Workbench — native
+                    // box-form hull hydrostatics (valenx-marine). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_marine_workbench, "Marine / Hull")
+                        .on_hover_text(
+                            "Show / hide the right-side Marine / Hull Workbench — box-form hull \
+                             hydrostatics: displacement, the centre of buoyancy KB, the metacentric \
+                             radius BM and the metacentric height GM with a stability verdict, plus a \
+                             3-D hull solid, computed in-process by valenx-marine.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Gears Workbench — native
                     // involute-gear design (valenx-gears). Off by default.
                     if ui
@@ -1212,6 +1226,10 @@ impl eframe::App for ValenxApp {
         // Springs Workbench (right) — native helical-spring design on
         // valenx-springs. A no-op unless toggled on via View → Springs.
         crate::springs_workbench::draw_springs_workbench(self, ctx);
+
+        // Marine / Hull Workbench (right) — native box-form hull
+        // hydrostatics on valenx-marine. A no-op unless toggled on.
+        crate::marine_workbench::draw_marine_workbench(self, ctx);
 
         // Gears Workbench (right) — native involute-gear design on
         // valenx-gears. A no-op unless toggled on via View → Gears.

@@ -76,6 +76,7 @@ pub mod geomatics_workbench;
 pub mod keyboard_help;
 pub mod landing_page;
 pub mod log_panel;
+pub mod marine_workbench;
 pub mod mesh_toolbox;
 pub mod new_project_dialog;
 pub mod panel_help;
@@ -435,6 +436,14 @@ pub struct ValenxApp {
     /// Form + result state for the Springs Workbench — native helical-spring
     /// design wrapping `valenx-springs`. See [`crate::springs_workbench`].
     pub(crate) springs: crate::springs_workbench::SpringsWorkbenchState,
+
+    /// Whether the right-side Marine / Hull Workbench is visible. Off by
+    /// default; toggled from the View menu.
+    pub(crate) show_marine_workbench: bool,
+    /// Form + result state for the Marine / Hull Workbench — native
+    /// box-form hull hydrostatics wrapping `valenx-marine`. See
+    /// [`crate::marine_workbench`].
+    pub(crate) marine: crate::marine_workbench::MarineWorkbenchState,
 
     /// Whether the right-side Gears Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
