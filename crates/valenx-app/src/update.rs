@@ -713,6 +713,185 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Combustion workbench (valenx-combustion).
+                    if ui
+                        .checkbox(&mut self.show_combustion_workbench, "Combustion")
+                        .on_hover_text(
+                            "Show / hide the Combustion Workbench — native hydrocarbon air-fuel \
+                             stoichiometry, equivalence ratio, product moles and adiabatic flame \
+                             temperature, computed in-process by valenx-combustion.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Flywheel workbench (valenx-flywheel).
+                    if ui
+                        .checkbox(&mut self.show_flywheel_workbench, "Flywheel")
+                        .on_hover_text(
+                            "Show / hide the Flywheel Workbench — native rotor inertia, stored \
+                             kinetic energy, usable energy, rim speed and hoop stress, computed \
+                             in-process by valenx-flywheel.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Fracture Mechanics workbench (valenx-fracture).
+                    if ui
+                        .checkbox(&mut self.show_fracture_workbench, "Fracture Mechanics")
+                        .on_hover_text(
+                            "Show / hide the Fracture Mechanics Workbench — native Mode-I LEFM: \
+                             stress intensity K, critical crack length, fracture stress and \
+                             plastic-zone radius, computed in-process by valenx-fracture.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Hydraulics workbench (valenx-hydraulics).
+                    if ui
+                        .checkbox(&mut self.show_hydraulics_workbench, "Hydraulics")
+                        .on_hover_text(
+                            "Show / hide the Hydraulics Workbench — native cylinder / circuit \
+                             force (p·A), flow (A·v), hydraulic power and valve flow, computed \
+                             in-process by valenx-hydraulics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Inclined Plane workbench (valenx-inclinedplane).
+                    if ui
+                        .checkbox(&mut self.show_inclinedplane_workbench, "Inclined Plane")
+                        .on_hover_text(
+                            "Show / hide the Inclined Plane Workbench — native ramp statics: \
+                             mechanical advantage, normal / slope / friction forces, effort and \
+                             self-locking, computed in-process by valenx-inclinedplane.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Insulation workbench (valenx-insulation).
+                    if ui
+                        .checkbox(&mut self.show_insulation_workbench, "Insulation")
+                        .on_hover_text(
+                            "Show / hide the Insulation Workbench — native composite-wall R-value, \
+                             U-value and steady heat loss, computed in-process by valenx-insulation.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Lead Screw workbench (valenx-leadscrew).
+                    if ui
+                        .checkbox(&mut self.show_leadscrew_workbench, "Lead Screw")
+                        .on_hover_text(
+                            "Show / hide the Lead Screw Workbench — native power-screw lead angle, \
+                             linear speed, thrust / torque, resolution and self-locking, computed \
+                             in-process by valenx-leadscrew.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Lever workbench (valenx-leverage).
+                    if ui
+                        .checkbox(&mut self.show_leverage_workbench, "Lever")
+                        .on_hover_text(
+                            "Show / hide the Lever Workbench — native lever mechanical advantage, \
+                             class, balancing force and displacement, computed in-process by \
+                             valenx-leverage.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Mohr's Circle workbench (valenx-mohr).
+                    if ui
+                        .checkbox(&mut self.show_mohr_workbench, "Mohr's Circle")
+                        .on_hover_text(
+                            "Show / hide the Mohr's Circle Workbench — native 2-D stress \
+                             transformation: principal stresses, max shear, principal angle and \
+                             stress on a plane, computed in-process by valenx-mohr.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side MOSFET workbench (valenx-mosfet).
+                    if ui
+                        .checkbox(&mut self.show_mosfet_workbench, "MOSFET")
+                        .on_hover_text(
+                            "Show / hide the MOSFET Workbench — native square-law NMOS bias: \
+                             overdrive, operating region, drain current and transconductance, \
+                             computed in-process by valenx-mosfet.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Optics workbench (valenx-optics).
+                    if ui
+                        .checkbox(&mut self.show_optics_workbench, "Optics")
+                        .on_hover_text(
+                            "Show / hide the Optics Workbench — native geometric optics: lensmaker \
+                             focal length, Snell refraction / TIR and thin-lens imaging, computed \
+                             in-process by valenx-optics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Orifice Meter workbench (valenx-orifice).
+                    if ui
+                        .checkbox(&mut self.show_orifice_workbench, "Orifice Meter")
+                        .on_hover_text(
+                            "Show / hide the Orifice Meter Workbench — native differential-pressure \
+                             flow metering: beta ratio, discharge coefficient, volumetric / mass \
+                             flow and permanent loss, computed in-process by valenx-orifice.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Pressure Vessel workbench (valenx-pressure-vessel).
+                    if ui
+                        .checkbox(&mut self.show_pressurevessel_workbench, "Pressure Vessel")
+                        .on_hover_text(
+                            "Show / hide the Pressure Vessel Workbench — native thin / thick-wall \
+                             hoop, longitudinal, shear and von Mises stresses for cylinders and \
+                             spheres, computed in-process by valenx-pressure-vessel.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Torsion workbench (valenx-torsion).
+                    if ui
+                        .checkbox(&mut self.show_torsion_workbench, "Torsion")
+                        .on_hover_text(
+                            "Show / hide the Torsion Workbench — native circular-shaft torsion: \
+                             polar moment, shear stress, allowable torque, angle of twist and \
+                             power, computed in-process by valenx-torsion.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Refrigeration workbench (valenx-refrigeration).
+                    if ui
+                        .checkbox(&mut self.show_refrigeration_workbench, "Refrigeration")
+                        .on_hover_text(
+                            "Show / hide the Refrigeration Workbench — native vapor-compression \
+                             cycle COP, Carnot bound and second-law efficiency, computed in-process \
+                             by valenx-refrigeration.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side DC Motor Workbench — native
                     // brushed-DC-motor performance (valenx-dcmotor). Off by default.
                     if ui
@@ -1626,6 +1805,23 @@ impl eframe::App for ValenxApp {
         // point-performance on valenx-fixedwing. A no-op unless toggled on via
         // View → Fixed-Wing / Aircraft.
         crate::fixedwing_workbench::draw_fixedwing_workbench(self, ctx);
+
+        // Science / engineering batch (right) — each a no-op unless toggled via View.
+        crate::combustion_workbench::draw_combustion_workbench(self, ctx);
+        crate::flywheel_workbench::draw_flywheel_workbench(self, ctx);
+        crate::fracture_workbench::draw_fracture_workbench(self, ctx);
+        crate::hydraulics_workbench::draw_hydraulics_workbench(self, ctx);
+        crate::inclinedplane_workbench::draw_inclinedplane_workbench(self, ctx);
+        crate::insulation_workbench::draw_insulation_workbench(self, ctx);
+        crate::leadscrew_workbench::draw_leadscrew_workbench(self, ctx);
+        crate::leverage_workbench::draw_leverage_workbench(self, ctx);
+        crate::mohr_workbench::draw_mohr_workbench(self, ctx);
+        crate::mosfet_workbench::draw_mosfet_workbench(self, ctx);
+        crate::optics_workbench::draw_optics_workbench(self, ctx);
+        crate::orifice_workbench::draw_orifice_workbench(self, ctx);
+        crate::pressurevessel_workbench::draw_pressurevessel_workbench(self, ctx);
+        crate::torsion_workbench::draw_torsion_workbench(self, ctx);
+        crate::refrigeration_workbench::draw_refrigeration_workbench(self, ctx);
 
         // Frames Workbench (right) — structural cross-section properties on
         // valenx-frames. A no-op unless toggled on via View → Frames.
