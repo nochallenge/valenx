@@ -233,6 +233,17 @@ valenx-heatexchanger = { path = "../valenx-heatexchanger" }
 # Native planar four-bar / cam mechanism kinematics — surfaced by the
 # Four-Bar Linkage workbench (src/fourbar_workbench.rs).
 valenx-kinematics    = { path = "../valenx-kinematics" }
+# Mechanical + civil batch compute crates — surfaced by the shaftdesign /
+# screwthread / pulley / springdesign / springcombination / vibration /
+# rivet / soilbearing _workbench.rs panels.
+valenx-shaftdesign       = { path = "../valenx-shaftdesign" }
+valenx-screwthread       = { path = "../valenx-screwthread" }
+valenx-pulley            = { path = "../valenx-pulley" }
+valenx-spring-design     = { path = "../valenx-spring-design" }
+valenx-springcombination = { path = "../valenx-springcombination" }
+valenx-vibration         = { path = "../valenx-vibration" }
+valenx-rivet             = { path = "../valenx-rivet" }
+valenx-soilbearing       = { path = "../valenx-soilbearing" }
 # Native pipe-section sizing — surfaced by the Piping workbench
 # (src/piping_workbench.rs).
 valenx-piping        = { path = "../valenx-piping" }
@@ -257,9 +268,25 @@ valenx-columnsteel   = { path = "../valenx-columnsteel" }
 # Native two-stage compound gear-train analysis — surfaced by the Gearbox
 # workbench (src/gearbox_workbench.rs).
 valenx-gearbox       = { path = "../valenx-gearbox" }
+# Science batch 5 compute crates — surfaced by the camdynamics / batteryecm /
+# diffusion / dimensional / fft _workbench.rs panels.
+valenx-camdynamics   = { path = "../valenx-camdynamics" }
+valenx-battery-ecm   = { path = "../valenx-battery-ecm" }
+valenx-diffusion     = { path = "../valenx-diffusion" }
+valenx-dimensional   = { path = "../valenx-dimensional" }
+valenx-fft           = { path = "../valenx-fft" }
 # Native AABB geometry + collision tests — surfaced by the Collision
 # workbench (src/collision_workbench.rs).
 valenx-collision     = { path = "../valenx-collision" }
+# Science / engineering workbench batch 4 (each surfaced by its src/*_workbench.rs).
+valenx-statics       = { path = "../valenx-statics" }
+valenx-projectile    = { path = "../valenx-projectile" }
+valenx-conveyor      = { path = "../valenx-conveyor" }
+valenx-fluid-statics = { path = "../valenx-fluid-statics" }
+valenx-plate         = { path = "../valenx-plate" }
+valenx-strainrosette = { path = "../valenx-strainrosette" }
+valenx-transformer   = { path = "../valenx-transformer" }
+valenx-threephase    = { path = "../valenx-threephase" }
 # Native composite-wall 1-D heat loss — surfaced by the Heat Transfer
 # workbench (src/heattransfer_workbench.rs).
 valenx-heat-transfer = { path = "../valenx-heat-transfer" }

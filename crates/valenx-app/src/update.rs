@@ -908,6 +908,90 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Mechanical + civil batch workbenches. Each off by default.
+                    if ui
+                        .checkbox(&mut self.show_shaftdesign_workbench, "Shaft Design")
+                        .on_hover_text(
+                            "Show / hide the right-side Shaft Design Workbench — native \
+                             combined bending + torsion shaft sizing (valenx-shaftdesign).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_screwthread_workbench, "Power Screw")
+                        .on_hover_text(
+                            "Show / hide the right-side Power Screw Workbench — native \
+                             square-thread lead-screw torque + efficiency (valenx-screwthread).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_pulley_workbench, "Pulley System")
+                        .on_hover_text(
+                            "Show / hide the right-side Pulley System Workbench — native \
+                             block-and-tackle mechanical advantage (valenx-pulley).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_springdesign_workbench, "Spring Design")
+                        .on_hover_text(
+                            "Show / hide the right-side Spring Design Workbench — native \
+                             helical compression spring (Wahl, rate, stress) (valenx-spring-design).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_springcombination_workbench,
+                            "Spring Combination",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Spring Combination Workbench — native \
+                             series / parallel spring networks (valenx-springcombination).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_vibration_workbench, "Vibration (SDOF)")
+                        .on_hover_text(
+                            "Show / hide the right-side Vibration Workbench — native single-DOF \
+                             forced-vibration response (valenx-vibration).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_rivet_workbench, "Riveted Joint")
+                        .on_hover_text(
+                            "Show / hide the right-side Riveted Joint Workbench — native \
+                             rivet-joint strength + failure mode (valenx-rivet).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_soilbearing_workbench, "Soil Bearing")
+                        .on_hover_text(
+                            "Show / hide the right-side Soil Bearing Workbench — native \
+                             Terzaghi strip-footing bearing capacity (valenx-soilbearing).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Piping Workbench — native
                     // pipe-section sizing (valenx-piping). Off by default.
                     if ui
@@ -1015,6 +1099,100 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Statics workbench (valenx-statics).
+                    if ui
+                        .checkbox(&mut self.show_statics_workbench, "Statics")
+                        .on_hover_text(
+                            "Show / hide the Statics Workbench — native simply-supported beam \
+                             reactions (ΣF=0, ΣM=0), computed in-process by valenx-statics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Projectile workbench (valenx-projectile).
+                    if ui
+                        .checkbox(&mut self.show_projectile_workbench, "Projectile")
+                        .on_hover_text(
+                            "Show / hide the Projectile Workbench — native ballistic trajectory \
+                             (vacuum range / apex / time-of-flight + drag), computed in-process \
+                             by valenx-projectile.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Conveyor workbench (valenx-conveyor).
+                    if ui
+                        .checkbox(&mut self.show_conveyor_workbench, "Conveyor")
+                        .on_hover_text(
+                            "Show / hide the Conveyor Workbench — native belt-conveyor mass flow, \
+                             capacity and lift / drive power, computed in-process by valenx-conveyor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Fluid Statics workbench (valenx-fluid-statics).
+                    if ui
+                        .checkbox(&mut self.show_fluidstatics_workbench, "Fluid Statics")
+                        .on_hover_text(
+                            "Show / hide the Fluid Statics Workbench — native hydrostatic pressure \
+                             and submerged-plate resultant force / centre of pressure, computed \
+                             in-process by valenx-fluid-statics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Plate Bending workbench (valenx-plate).
+                    if ui
+                        .checkbox(&mut self.show_plate_workbench, "Plate Bending")
+                        .on_hover_text(
+                            "Show / hide the Plate Bending Workbench — native thin circular-plate \
+                             flexural rigidity, centre deflection and max bending stress, computed \
+                             in-process by valenx-plate.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Strain Rosette workbench (valenx-strainrosette).
+                    if ui
+                        .checkbox(&mut self.show_strainrosette_workbench, "Strain Rosette")
+                        .on_hover_text(
+                            "Show / hide the Strain Rosette Workbench — native 0/45/90 rosette \
+                             reduction to Cartesian + principal strains and plane-stress, computed \
+                             in-process by valenx-strainrosette.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Transformer workbench (valenx-transformer).
+                    if ui
+                        .checkbox(&mut self.show_transformer_workbench, "Transformer")
+                        .on_hover_text(
+                            "Show / hide the Transformer Workbench — native ideal two-winding \
+                             turns-ratio, EMF equation and efficiency, computed in-process by \
+                             valenx-transformer.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Three-Phase workbench (valenx-threephase).
+                    if ui
+                        .checkbox(&mut self.show_threephase_workbench, "Three-Phase")
+                        .on_hover_text(
+                            "Show / hide the Three-Phase Workbench — native balanced wye / delta \
+                             line-phase voltages / currents and the power triangle, computed \
+                             in-process by valenx-threephase.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Truss Workbench — native planar
                     // pin-jointed Warren truss analysis (valenx-truss). Off by default.
                     if ui
@@ -1080,6 +1258,60 @@ impl eframe::App for ValenxApp {
                              compound gear train: overall ratio, efficiency, output speed and \
                              torque and the input / output power, computed in-process by \
                              valenx-gearbox.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Science batch 5 workbenches. Each off by default.
+                    if ui
+                        .checkbox(&mut self.show_camdynamics_workbench, "Cam Dynamics")
+                        .on_hover_text(
+                            "Show / hide the right-side Cam Dynamics Workbench — native \
+                             cam-follower rise kinematics (valenx-camdynamics).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_batteryecm_workbench, "Battery ECM")
+                        .on_hover_text(
+                            "Show / hide the right-side Battery ECM Workbench — native \
+                             first-order Thevenin cell terminal voltage (valenx-battery-ecm).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_diffusion_workbench, "Diffusion")
+                        .on_hover_text(
+                            "Show / hide the right-side Diffusion Workbench — native Fickian \
+                             flux + Gaussian spread (valenx-diffusion).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_dimensional_workbench,
+                            "Dimensionless Numbers",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Dimensionless Numbers Workbench — native \
+                             similitude groups + regime classifiers (valenx-dimensional).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_fft_workbench, "FFT / Spectrum")
+                        .on_hover_text(
+                            "Show / hide the right-side FFT / Spectrum Workbench — native DFT \
+                             of a synthesized test tone (valenx-fft).",
                         )
                         .changed()
                     {
@@ -2256,6 +2488,16 @@ impl eframe::App for ValenxApp {
         // kinematics on valenx-kinematics. A no-op unless toggled via View → Four-Bar Linkage.
         crate::fourbar_workbench::draw_fourbar_workbench(self, ctx);
 
+        // Mechanical + civil batch workbenches. Each a no-op unless toggled via View.
+        crate::shaftdesign_workbench::draw_shaftdesign_workbench(self, ctx);
+        crate::screwthread_workbench::draw_screwthread_workbench(self, ctx);
+        crate::pulley_workbench::draw_pulley_workbench(self, ctx);
+        crate::springdesign_workbench::draw_springdesign_workbench(self, ctx);
+        crate::springcombination_workbench::draw_springcombination_workbench(self, ctx);
+        crate::vibration_workbench::draw_vibration_workbench(self, ctx);
+        crate::rivet_workbench::draw_rivet_workbench(self, ctx);
+        crate::soilbearing_workbench::draw_soilbearing_workbench(self, ctx);
+
         // Piping Workbench (right) — native pipe-section sizing on
         // valenx-piping. A no-op unless toggled on via View → Piping.
         crate::piping_workbench::draw_piping_workbench(self, ctx);
@@ -2288,6 +2530,16 @@ impl eframe::App for ValenxApp {
         // on valenx-collision. A no-op unless toggled on via View → Collision.
         crate::collision_workbench::draw_collision_workbench(self, ctx);
 
+        // Science / engineering batch 4 (right) — each a no-op unless toggled via View.
+        crate::statics_workbench::draw_statics_workbench(self, ctx);
+        crate::projectile_workbench::draw_projectile_workbench(self, ctx);
+        crate::conveyor_workbench::draw_conveyor_workbench(self, ctx);
+        crate::fluidstatics_workbench::draw_fluidstatics_workbench(self, ctx);
+        crate::plate_workbench::draw_plate_workbench(self, ctx);
+        crate::strainrosette_workbench::draw_strainrosette_workbench(self, ctx);
+        crate::transformer_workbench::draw_transformer_workbench(self, ctx);
+        crate::threephase_workbench::draw_threephase_workbench(self, ctx);
+
         // Solar PV Workbench (right) — native single-diode photovoltaic cell
         // performance on valenx-solarpv. A no-op unless toggled via View → Solar PV.
         crate::solarpv_workbench::draw_solarpv_workbench(self, ctx);
@@ -2308,6 +2560,13 @@ impl eframe::App for ValenxApp {
         // Gearbox workbench (right) — two-stage compound gear-train analysis
         // on valenx-gearbox. Off unless toggled via View.
         crate::gearbox_workbench::draw_gearbox_workbench(self, ctx);
+
+        // Science batch 5 workbenches. Each a no-op unless toggled via View.
+        crate::camdynamics_workbench::draw_camdynamics_workbench(self, ctx);
+        crate::batteryecm_workbench::draw_batteryecm_workbench(self, ctx);
+        crate::diffusion_workbench::draw_diffusion_workbench(self, ctx);
+        crate::dimensional_workbench::draw_dimensional_workbench(self, ctx);
+        crate::fft_workbench::draw_fft_workbench(self, ctx);
 
         // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
         // valenx-fasteners. A no-op unless toggled on via View → Fasteners.
