@@ -235,6 +235,7 @@ impl eframe::App for ValenxApp {
                     }
                 });
                 ui.menu_button(cat.lookup("menu.view"), |ui| {
+                    crate::menu_ui::scrollable_menu(ui, |ui| {
                     if ui
                         .radio(
                             self.shading == ShadingMode::Shaded,
@@ -571,6 +572,71 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Capacitor workbench — native
+                    // parallel-plate electrostatics (valenx-capacitor).
+                    if ui
+                        .checkbox(&mut self.show_capacitor_workbench, "Capacitor")
+                        .on_hover_text(
+                            "Show / hide the right-side Capacitor Workbench — native \
+                             parallel-plate capacitance (εr·ε0·A/d), stored energy, charge and \
+                             capacitive reactance, computed in-process by valenx-capacitor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Fan Laws workbench — native fan /
+                    // blower affinity-law scaling (valenx-fanlaws).
+                    if ui
+                        .checkbox(&mut self.show_fanlaws_workbench, "Fan Laws")
+                        .on_hover_text(
+                            "Show / hide the right-side Fan Laws Workbench — native fan / blower \
+                             affinity-law scaling (flow ~ N, pressure ~ N^2, power ~ N^3) to a new \
+                             speed, computed in-process by valenx-fanlaws.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Creep workbench — native
+                    // high-temperature creep / rupture (valenx-creep).
+                    if ui
+                        .checkbox(&mut self.show_creep_workbench, "Creep")
+                        .on_hover_text(
+                            "Show / hide the right-side Creep Workbench — native high-temperature \
+                             creep: Larson-Miller rupture life and the Norton-Bailey secondary \
+                             creep rate, computed in-process by valenx-creep.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Electrochemistry workbench — native
+                    // Nernst / Faraday cell analysis (valenx-electrochem).
+                    if ui
+                        .checkbox(&mut self.show_electrochem_workbench, "Electrochemistry")
+                        .on_hover_text(
+                            "Show / hide the right-side Electrochemistry Workbench — native Nernst \
+                             cell potential and Faraday electrolysis (mass deposited), computed \
+                             in-process by valenx-electrochem.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Enzyme Kinetics workbench — native
+                    // Michaelis-Menten rate laws (valenx-enzymekinetics).
+                    if ui
+                        .checkbox(&mut self.show_enzymekinetics_workbench, "Enzyme Kinetics")
+                        .on_hover_text(
+                            "Show / hide the right-side Enzyme Kinetics Workbench — native \
+                             Michaelis-Menten and reversible-inhibition initial-rate laws, \
+                             computed in-process by valenx-enzymekinetics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Gears Workbench — native
                     // involute-gear design (valenx-gears). Off by default.
                     if ui
@@ -579,6 +645,54 @@ impl eframe::App for ValenxApp {
                             "Show / hide the right-side Gears Workbench — native involute-gear \
                              design: circular pitch, the pitch / base / addendum / dedendum \
                              diameters, and the meshing gear ratio, computed in-process by valenx-gears.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Pneumatics workbench (valenx-pneumatics).
+                    if ui
+                        .checkbox(&mut self.show_pneumatics_workbench, "Pneumatics")
+                        .on_hover_text(
+                            "Show / hide the Pneumatics Workbench — native pneumatic cylinder \
+                             force, compression ratio, choked-flow check and free-air consumption, \
+                             computed in-process by valenx-pneumatics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Psychrometrics workbench (valenx-psychrometrics).
+                    if ui
+                        .checkbox(&mut self.show_psychrometrics_workbench, "Psychrometrics")
+                        .on_hover_text(
+                            "Show / hide the Psychrometrics Workbench — native moist-air state: \
+                             humidity ratio, dew point, degree of saturation and enthalpy, \
+                             computed in-process by valenx-psychrometrics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Thermistor workbench (valenx-thermistor).
+                    if ui
+                        .checkbox(&mut self.show_thermistor_workbench, "Thermistor")
+                        .on_hover_text(
+                            "Show / hide the Thermistor Workbench — native NTC resistance \
+                             ↔ temperature (Beta and Steinhart-Hart models) and temperature \
+                             coefficient, computed in-process by valenx-thermistor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Strain Gauge workbench (valenx-straingauge).
+                    if ui
+                        .checkbox(&mut self.show_straingauge_workbench, "Strain Gauge")
+                        .on_hover_text(
+                            "Show / hide the Strain Gauge Workbench — native Wheatstone-bridge \
+                             gauge factor → bridge output and stress for quarter / half / full \
+                             bridges, computed in-process by valenx-straingauge.",
                         )
                         .changed()
                     {
@@ -593,6 +707,73 @@ impl eframe::App for ValenxApp {
                              hover performance: disk loading, induced velocity, ideal / actual \
                              hover power, thrust-to-weight, and battery endurance, computed \
                              in-process by valenx-drone.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Acoustics workbench — native room
+                    // reverberation + SPL (valenx-acoustics).
+                    if ui
+                        .checkbox(&mut self.show_acoustics_workbench, "Acoustics")
+                        .on_hover_text(
+                            "Show / hide the right-side Acoustics Workbench — native \
+                             rectangular-room reverberation (Sabine / Eyring RT60), lowest room \
+                             mode and free-field SPL distance drop, computed in-process by \
+                             valenx-acoustics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Acid-Base workbench — native aqueous
+                    // pH / buffer equilibria (valenx-acidbase).
+                    if ui
+                        .checkbox(&mut self.show_acidbase_workbench, "Acid-Base")
+                        .on_hover_text(
+                            "Show / hide the right-side Acid-Base Workbench — native aqueous pH \
+                             for strong / weak acids and bases plus Henderson-Hasselbalch \
+                             buffers, computed in-process by valenx-acidbase.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side BJT workbench — native bipolar
+                    // transistor DC bias (valenx-bjt).
+                    if ui
+                        .checkbox(&mut self.show_bjt_workbench, "BJT")
+                        .on_hover_text(
+                            "Show / hide the right-side BJT Workbench — native bipolar-junction \
+                             transistor DC bias Q-point (currents, Vce, region, stability factor) \
+                             for divider / fixed-base networks, computed in-process by valenx-bjt.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side BMR / TDEE workbench — native resting
+                    // + daily energy expenditure (valenx-bmr).
+                    if ui
+                        .checkbox(&mut self.show_bmr_workbench, "BMR / TDEE")
+                        .on_hover_text(
+                            "Show / hide the right-side BMR / TDEE Workbench — native basal \
+                             metabolic rate (Mifflin-St Jeor / Harris-Benedict) and total daily \
+                             energy expenditure, computed in-process by valenx-bmr.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Bolted Joint workbench — native
+                    // preloaded joint mechanics (valenx-bolt).
+                    if ui
+                        .checkbox(&mut self.show_bolt_workbench, "Bolted Joint")
+                        .on_hover_text(
+                            "Show / hide the right-side Bolted Joint Workbench — native preloaded \
+                             bolted-joint mechanics: preload from torque, bolt / member load \
+                             sharing, separation and overload safety, computed in-process by \
+                             valenx-bolt.",
                         )
                         .changed()
                     {
@@ -1410,6 +1591,7 @@ impl eframe::App for ValenxApp {
                         self.active_viewport = ViewportKind::Viewport2dDna;
                         ui.close_menu();
                     }
+                    });
                 });
                 ui.menu_button(cat.lookup("menu.run"), |ui| {
                     let running = self.run_handle.is_some();
@@ -1516,18 +1698,22 @@ impl eframe::App for ValenxApp {
                             .unwrap_or("uncategorised");
                         by_category.entry(category).or_default().push(entry);
                     }
-                    for (cat_name, mut entries) in by_category {
-                        entries.sort_by_key(|e| e.adapter.info().display_name);
-                        ui.menu_button(cat_name.to_uppercase(), |ui| {
-                            for entry in entries {
-                                let info = entry.adapter.info();
-                                if ui.button(info.display_name).clicked() {
-                                    pending_new_case = Some(info.id.to_string());
-                                    ui.close_menu();
-                                }
-                            }
-                        });
-                    }
+                    crate::menu_ui::scrollable_menu(ui, |ui| {
+                        for (cat_name, mut entries) in by_category {
+                            entries.sort_by_key(|e| e.adapter.info().display_name);
+                            ui.menu_button(cat_name.to_uppercase(), |ui| {
+                                crate::menu_ui::scrollable_menu(ui, |ui| {
+                                    for entry in entries {
+                                        let info = entry.adapter.info();
+                                        if ui.button(info.display_name).clicked() {
+                                            pending_new_case = Some(info.id.to_string());
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                    });
                 });
                 if let Some(id) = pending_new_case.take() {
                     self.new_case_for_adapter(&id);
@@ -1896,13 +2082,69 @@ impl eframe::App for ValenxApp {
         // hydrostatics on valenx-marine. A no-op unless toggled on.
         crate::marine_workbench::draw_marine_workbench(self, ctx);
 
+        // Capacitor workbench (right) — parallel-plate electrostatics on
+        // valenx-capacitor. Off unless toggled via View.
+        crate::capacitor_workbench::draw_capacitor_workbench(self, ctx);
+
+        // Fan Laws workbench (right) — fan / blower affinity-law scaling on
+        // valenx-fanlaws. Off unless toggled via View.
+        crate::fanlaws_workbench::draw_fanlaws_workbench(self, ctx);
+
+        // Creep workbench (right) — Larson-Miller / Norton creep on
+        // valenx-creep. Off unless toggled via View.
+        crate::creep_workbench::draw_creep_workbench(self, ctx);
+
+        // Electrochemistry workbench (right) — Nernst / Faraday cell analysis
+        // on valenx-electrochem. Off unless toggled via View.
+        crate::electrochem_workbench::draw_electrochem_workbench(self, ctx);
+
+        // Enzyme Kinetics workbench (right) — Michaelis-Menten rate laws on
+        // valenx-enzymekinetics. Off unless toggled via View.
+        crate::enzymekinetics_workbench::draw_enzymekinetics_workbench(self, ctx);
+
         // Gears Workbench (right) — native involute-gear design on
         // valenx-gears. A no-op unless toggled on via View → Gears.
         crate::gears_workbench::draw_gears_workbench(self, ctx);
 
+        // Pneumatics workbench (right) — cylinder force / consumption on
+        // valenx-pneumatics. Off unless toggled via View.
+        crate::pneumatics_workbench::draw_pneumatics_workbench(self, ctx);
+
+        // Psychrometrics workbench (right) — moist-air state on
+        // valenx-psychrometrics. Off unless toggled via View.
+        crate::psychrometrics_workbench::draw_psychrometrics_workbench(self, ctx);
+
+        // Thermistor workbench (right) — NTC R<->T on valenx-thermistor.
+        // Off unless toggled via View.
+        crate::thermistor_workbench::draw_thermistor_workbench(self, ctx);
+
+        // Strain Gauge workbench (right) — Wheatstone-bridge output on
+        // valenx-straingauge. Off unless toggled via View.
+        crate::straingauge_workbench::draw_straingauge_workbench(self, ctx);
+
         // Drone Workbench (right) — native multirotor hover performance on
         // valenx-drone. A no-op unless toggled on via View → Drone / Multirotor.
         crate::drone_workbench::draw_drone_workbench(self, ctx);
+
+        // Acoustics workbench (right) — room reverberation + SPL on
+        // valenx-acoustics. Off unless toggled via View.
+        crate::acoustics_workbench::draw_acoustics_workbench(self, ctx);
+
+        // Acid-Base workbench (right) — aqueous pH / buffer equilibria on
+        // valenx-acidbase. Off unless toggled via View.
+        crate::acidbase_workbench::draw_acidbase_workbench(self, ctx);
+
+        // BJT workbench (right) — bipolar-transistor DC bias on valenx-bjt.
+        // Off unless toggled via View.
+        crate::bjt_workbench::draw_bjt_workbench(self, ctx);
+
+        // BMR / TDEE workbench (right) — energy expenditure on valenx-bmr.
+        // Off unless toggled via View.
+        crate::bmr_workbench::draw_bmr_workbench(self, ctx);
+
+        // Bolted Joint workbench (right) — preloaded joint mechanics on
+        // valenx-bolt. Off unless toggled via View.
+        crate::bolt_workbench::draw_bolt_workbench(self, ctx);
 
         // Geomatics Workbench (right) — native geodesic calculations on
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.

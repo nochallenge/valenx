@@ -59,15 +59,21 @@ pub mod reverse_workbench;
 pub mod variant_effect_workbench;
 pub mod windturbine_workbench;
 
+pub mod acidbase_workbench;
+pub mod acoustics_workbench;
 pub mod assistant_workbench;
 pub mod astro;
 pub mod astro_workbench;
 pub mod bearing_workbench;
 pub mod beltdrive_workbench;
+pub mod bjt_workbench;
+pub mod bmr_workbench;
+pub mod bolt_workbench;
 pub mod bonemech_workbench;
 pub mod brake_workbench;
 pub mod buckling_workbench;
 pub mod cam_overlay;
+pub mod capacitor_workbench;
 pub mod chaindrive_workbench;
 pub mod clutch_workbench;
 pub mod coil_workbench;
@@ -77,11 +83,15 @@ pub mod combustion_workbench;
 pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
+pub mod creep_workbench;
 pub mod dcmotor_workbench;
 pub mod docking;
 pub mod draft_overlay;
 pub mod drone_workbench;
+pub mod electrochem_workbench;
 pub mod engine_workbench;
+pub mod enzymekinetics_workbench;
+pub mod fanlaws_workbench;
 pub mod fasteners_workbench;
 pub mod fatigue_workbench;
 pub mod fields_workbench;
@@ -109,6 +119,7 @@ pub mod leadscrew_workbench;
 pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
+pub(crate) mod menu_ui;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
 pub mod mosfet_workbench;
@@ -121,8 +132,10 @@ pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+pub mod pneumatics_workbench;
 pub mod pressurevessel_workbench;
 pub mod project_tabs;
+pub mod psychrometrics_workbench;
 pub mod pump_workbench;
 pub mod rail_workbench;
 pub mod rcbeam_workbench;
@@ -140,8 +153,10 @@ pub mod shortcuts;
 pub mod sketch_overlay;
 pub mod solarpv_workbench;
 pub mod springs_workbench;
+pub mod straingauge_workbench;
 pub mod theme;
 pub mod thermalexpansion_workbench;
+pub mod thermistor_workbench;
 pub mod tooltips;
 pub mod torsion_workbench;
 pub mod truss_workbench;
@@ -563,6 +578,41 @@ pub struct ValenxApp {
     /// [`crate::marine_workbench`].
     pub(crate) marine: crate::marine_workbench::MarineWorkbenchState,
 
+    /// Whether the right-side Capacitor workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_capacitor_workbench: bool,
+    /// State for the Capacitor workbench, wrapping `valenx-capacitor`. See
+    /// [`crate::capacitor_workbench`].
+    pub(crate) capacitor: crate::capacitor_workbench::CapacitorWorkbenchState,
+
+    /// Whether the right-side Fan Laws workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_fanlaws_workbench: bool,
+    /// State for the Fan Laws workbench, wrapping `valenx-fanlaws`. See
+    /// [`crate::fanlaws_workbench`].
+    pub(crate) fanlaws: crate::fanlaws_workbench::FanLawsWorkbenchState,
+
+    /// Whether the right-side Creep workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_creep_workbench: bool,
+    /// State for the Creep workbench, wrapping `valenx-creep`. See
+    /// [`crate::creep_workbench`].
+    pub(crate) creep: crate::creep_workbench::CreepWorkbenchState,
+
+    /// Whether the right-side Electrochemistry workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_electrochem_workbench: bool,
+    /// State for the Electrochemistry workbench, wrapping `valenx-electrochem`.
+    /// See [`crate::electrochem_workbench`].
+    pub(crate) electrochem: crate::electrochem_workbench::ElectrochemWorkbenchState,
+
+    /// Whether the right-side Enzyme Kinetics workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_enzymekinetics_workbench: bool,
+    /// State for the Enzyme Kinetics workbench, wrapping
+    /// `valenx-enzymekinetics`. See [`crate::enzymekinetics_workbench`].
+    pub(crate) enzymekinetics: crate::enzymekinetics_workbench::EnzymeKineticsWorkbenchState,
+
     /// Whether the right-side Gears Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
@@ -571,6 +621,26 @@ pub struct ValenxApp {
     /// design wrapping `valenx-gears`. See [`crate::gears_workbench`].
     pub(crate) gears: crate::gears_workbench::GearsWorkbenchState,
 
+    /// Whether the right-side Pneumatics workbench is visible (View menu).
+    pub(crate) show_pneumatics_workbench: bool,
+    /// State for the Pneumatics workbench. See [`crate::pneumatics_workbench`].
+    pub(crate) pneumatics: crate::pneumatics_workbench::PneumaticsWorkbenchState,
+
+    /// Whether the right-side Psychrometrics workbench is visible (View menu).
+    pub(crate) show_psychrometrics_workbench: bool,
+    /// State for the Psychrometrics workbench. See [`crate::psychrometrics_workbench`].
+    pub(crate) psychrometrics: crate::psychrometrics_workbench::PsychrometricsWorkbenchState,
+
+    /// Whether the right-side Thermistor workbench is visible (View menu).
+    pub(crate) show_thermistor_workbench: bool,
+    /// State for the Thermistor workbench. See [`crate::thermistor_workbench`].
+    pub(crate) thermistor: crate::thermistor_workbench::ThermistorWorkbenchState,
+
+    /// Whether the right-side Strain Gauge workbench is visible (View menu).
+    pub(crate) show_straingauge_workbench: bool,
+    /// State for the Strain Gauge workbench. See [`crate::straingauge_workbench`].
+    pub(crate) straingauge: crate::straingauge_workbench::StrainGaugeWorkbenchState,
+
     /// Whether the right-side Drone Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
@@ -578,6 +648,41 @@ pub struct ValenxApp {
     /// Form + result state for the Drone Workbench — native multirotor
     /// hover performance wrapping `valenx-drone`. See [`crate::drone_workbench`].
     pub(crate) drone: crate::drone_workbench::DroneWorkbenchState,
+
+    /// Whether the right-side Acoustics workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_acoustics_workbench: bool,
+    /// State for the Acoustics workbench, wrapping `valenx-acoustics`. See
+    /// [`crate::acoustics_workbench`].
+    pub(crate) acoustics: crate::acoustics_workbench::AcousticsWorkbenchState,
+
+    /// Whether the right-side Acid-Base workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_acidbase_workbench: bool,
+    /// State for the Acid-Base workbench, wrapping `valenx-acidbase`. See
+    /// [`crate::acidbase_workbench`].
+    pub(crate) acidbase: crate::acidbase_workbench::AcidBaseWorkbenchState,
+
+    /// Whether the right-side BJT workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_bjt_workbench: bool,
+    /// State for the BJT workbench, wrapping `valenx-bjt`. See
+    /// [`crate::bjt_workbench`].
+    pub(crate) bjt: crate::bjt_workbench::BjtWorkbenchState,
+
+    /// Whether the right-side BMR / TDEE workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_bmr_workbench: bool,
+    /// State for the BMR / TDEE workbench, wrapping `valenx-bmr`. See
+    /// [`crate::bmr_workbench`].
+    pub(crate) bmr: crate::bmr_workbench::BmrWorkbenchState,
+
+    /// Whether the right-side Bolted Joint workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_bolt_workbench: bool,
+    /// State for the Bolted Joint workbench, wrapping `valenx-bolt`. See
+    /// [`crate::bolt_workbench`].
+    pub(crate) bolt: crate::bolt_workbench::BoltWorkbenchState,
 
     /// Whether the right-side Geomatics Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
