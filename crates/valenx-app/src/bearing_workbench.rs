@@ -8,9 +8,13 @@
 //! rolling-element type and the shaft speed; "Analyze" forms the dynamic
 //! equivalent load `P = X·Fr + Y·Fa`, evaluates the ISO 281 basic rating
 //! life `L10 = (C / P)^p` and converts it to operating hours
-//! `L10h = L10 · 1e6 / (60 · n)`, and "Show 3-D bearing" loads a
-//! representative bearing solid (outer ring, inner ring and rolling
-//! elements) into the central viewport.
+//! `L10h = L10 · 1e6 / (60 · n)`. Alongside the dynamic fatigue life it
+//! also reports the ISO 76 *static* check — the static equivalent load
+//! `P0 = max(X0·Fr + Y0·Fa, Fr)` and the static safety factor
+//! `s0 = C0 / P0`, which guards a slow or stationary bearing against
+//! brinelling. "Show 3-D bearing" loads a representative bearing solid
+//! (outer ring, inner ring and rolling elements) into the central
+//! viewport.
 
 use std::f64::consts::TAU;
 use std::path::PathBuf;
@@ -18,7 +22,7 @@ use std::path::PathBuf;
 use eframe::egui;
 use nalgebra::Vector3;
 
-use valenx_bearing::{BearingType, EquivalentLoad, RatingLife};
+use valenx_bearing::{BearingType, EquivalentLoad, RatingLife, StaticEquivalentLoad};
 use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
@@ -37,6 +41,13 @@ pub struct BearingWorkbenchState {
     x_factor: f64,
     /// Dimensionless axial load factor `Y`.
     y_factor: f64,
+    /// Basic static load rating `C0` (newtons), for the ISO 76 static
+    /// safety factor `s0 = C0 / P0`.
+    static_load_rating_n: f64,
+    /// Dimensionless static radial load factor `X0`.
+    x0_factor: f64,
+    /// Dimensionless static axial load factor `Y0`.
+    y0_factor: f64,
     /// Rolling-element type, which fixes the load-life exponent `p`.
     bearing_type: BearingType,
     /// Shaft speed `n` (revolutions per minute).
@@ -56,12 +67,20 @@ impl Default for BearingWorkbenchState {
         // Fr = 5 kN radial with no thrust (radial-only: X = 1, Y = 0), so
         // P = 5 kN and L10 = (25/5)^3 = 125 Mrev; at 1500 rpm that is
         // ~1388.9 h.
+        //
+        // Static side (ISO 76): C0 = 15 kN basic static rating with the
+        // usual ball factors X0 = 0.6, Y0 = 0.5. With Fa = 0 the formula
+        // gives X0*Fr = 3 kN, below Fr, so the ISO 76 floor takes P0 = Fr
+        // = 5 kN and the static safety factor is s0 = 15/5 = 3.0.
         Self {
             dynamic_load_rating_n: 25_000.0,
             radial_n: 5_000.0,
             axial_n: 0.0,
             x_factor: 1.0,
             y_factor: 0.0,
+            static_load_rating_n: 15_000.0,
+            x0_factor: 0.6,
+            y0_factor: 0.5,
             bearing_type: BearingType::Ball,
             rpm: 1500.0,
             result: String::new(),
@@ -136,6 +155,23 @@ pub fn draw_bearing_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("shaft speed (rpm)");
                         ui.add(egui::DragValue::new(&mut s.rpm).speed(10.0));
+                    });
+
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new("Static (ISO 76)").strong());
+                    ui.horizontal(|ui| {
+                        ui.label("static rating C0 (N)");
+                        ui.add(
+                            egui::DragValue::new(&mut s.static_load_rating_n).speed(100.0),
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("factor X0");
+                        ui.add(egui::DragValue::new(&mut s.x0_factor).speed(0.01));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("factor Y0");
+                        ui.add(egui::DragValue::new(&mut s.y0_factor).speed(0.01));
                     });
 
                     ui.add_space(6.0);
@@ -213,6 +249,17 @@ fn compute(s: &BearingWorkbenchState) -> Result<String, String> {
         BearingType::Roller => "roller",
     };
 
+    // ISO 76 static check: the static equivalent load
+    // P0 = max(X0*Fr + Y0*Fa, Fr) and the static safety factor
+    // s0 = C0 / P0, which guards a slow / stationary bearing against
+    // brinelling rather than rolling-contact fatigue.
+    let static_load = StaticEquivalentLoad::new(s.radial_n, s.axial_n, s.x0_factor, s.y0_factor)
+        .map_err(|e| e.to_string())?;
+    let p0 = static_load.value();
+    let s0 = static_load
+        .safety_factor(s.static_load_rating_n)
+        .map_err(|e| e.to_string())?;
+
     Ok(format!(
         "dynamic rating C: {:.0} N\n\
          element type    : {} (p = {:.3})\n\
@@ -223,7 +270,11 @@ fn compute(s: &BearingWorkbenchState) -> Result<String, String> {
          equiv load P    : {:.0} N\n\
          C / P ratio     : {:.3}\n\
          L10 (basic life): {:.1} Mrev\n\
-         L10h (hours)    : {:.0} h",
+         L10h (hours)    : {:.0} h\n\n\
+         static rating C0: {:.0} N\n\
+         factors X0 / Y0 : {:.2} / {:.2}\n\
+         static load P0  : {:.0} N\n\
+         static safety s0: {:.2}",
         s.dynamic_load_rating_n,
         type_name,
         exponent,
@@ -236,6 +287,11 @@ fn compute(s: &BearingWorkbenchState) -> Result<String, String> {
         s.dynamic_load_rating_n / p,
         l10,
         hours,
+        s.static_load_rating_n,
+        s.x0_factor,
+        s.y0_factor,
+        p0,
+        s0,
     ))
 }
 
@@ -448,6 +504,44 @@ mod tests {
         };
         run_bearing(&mut s);
         assert!(s.error.is_some());
+    }
+
+    #[test]
+    fn analyze_reports_iso76_static_safety_factor() {
+        // Ground truth (defaults): static side is Fr = 5000 N, Fa = 0,
+        // X0 = 0.6, Y0 = 0.5, C0 = 15000 N. The ISO 76 static equivalent
+        // load is P0 = max(0.6*5000 + 0.5*0, 5000) = max(3000, 5000)
+        // = 5000 N (the formula falls below Fr, so the floor applies), and
+        // the static safety factor is s0 = C0 / P0 = 15000 / 5000 = 3.00.
+        let mut s = BearingWorkbenchState::default();
+        run_bearing(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default bearing should analyze: {:?}",
+            s.error
+        );
+        assert!(s.result.contains("static load P0  : 5000 N"));
+        assert!(s.result.contains("static safety s0: 3.00"));
+    }
+
+    #[test]
+    fn static_equivalent_load_uses_formula_above_floor() {
+        // Ground truth: with a real thrust the formula clears Fr. Fr =
+        // 2000 N, Fa = 10000 N, X0 = 0.6, Y0 = 0.5 give P0 = 0.6*2000 +
+        // 0.5*10000 = 1200 + 5000 = 6200 N (> Fr = 2000, so used directly),
+        // and with C0 = 31000 N the static safety factor is
+        // s0 = 31000 / 6200 = 5.00.
+        let s = BearingWorkbenchState {
+            radial_n: 2_000.0,
+            axial_n: 10_000.0,
+            x0_factor: 0.6,
+            y0_factor: 0.5,
+            static_load_rating_n: 31_000.0,
+            ..Default::default()
+        };
+        let out = compute(&s).expect("valid bearing");
+        assert!(out.contains("static load P0  : 6200 N"));
+        assert!(out.contains("static safety s0: 5.00"));
     }
 
     #[test]
