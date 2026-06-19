@@ -101,6 +101,9 @@ pub mod fixedwing_workbench;
 pub mod fluidstatics_workbench;
 pub mod flywheel_workbench;
 pub mod fourbar_workbench;
+// Mechanical + civil batch — surface valenx-shaftdesign, -screwthread,
+// -pulley, -spring-design, -springcombination, -vibration, -rivet,
+// -soilbearing as reactive right-side workbenches.
 pub mod fracture_workbench;
 pub mod frames_workbench;
 pub mod gasdynamics_workbench;
@@ -147,22 +150,29 @@ pub mod pressurevessel_workbench;
 pub mod project_tabs;
 pub mod projectile_workbench;
 pub mod psychrometrics_workbench;
+pub mod pulley_workbench;
 pub mod pump_workbench;
 pub mod rail_workbench;
 pub mod rcbeam_workbench;
 pub mod reactdyn_workbench;
 pub mod refrigeration_workbench;
 pub mod residuals;
+pub mod rivet_workbench;
 pub mod rocket_mesh;
 pub mod rocket_workbench;
 pub mod run;
 pub mod scene_overlay;
+pub mod screwthread_workbench;
 pub mod settings;
 pub mod setup;
+pub mod shaftdesign_workbench;
 pub mod sheetmetal_workbench;
 pub mod shortcuts;
 pub mod sketch_overlay;
+pub mod soilbearing_workbench;
 pub mod solarpv_workbench;
+pub mod springcombination_workbench;
+pub mod springdesign_workbench;
 pub mod springs_workbench;
 pub mod statics_workbench;
 pub mod straingauge_workbench;
@@ -177,6 +187,7 @@ pub mod transformer_workbench;
 pub mod truss_workbench;
 pub mod types;
 pub mod undo;
+pub mod vibration_workbench;
 pub mod viewport;
 pub mod viewport_2d;
 pub mod viewport_kind;
@@ -723,6 +734,48 @@ pub struct ValenxApp {
     /// four-bar mechanism kinematics wrapping `valenx-kinematics`. See
     /// [`crate::fourbar_workbench`].
     pub(crate) fourbar: crate::fourbar_workbench::FourBarWorkbenchState,
+
+    /// Whether the right-side Shaft Design workbench is visible (View menu). Off by default.
+    pub(crate) show_shaftdesign_workbench: bool,
+    /// State for the Shaft Design workbench — combined bending + torsion shaft
+    /// sizing on `valenx-shaftdesign`. See [`crate::shaftdesign_workbench`].
+    pub(crate) shaftdesign: crate::shaftdesign_workbench::ShaftDesignWorkbenchState,
+    /// Whether the right-side Power Screw workbench is visible (View menu). Off by default.
+    pub(crate) show_screwthread_workbench: bool,
+    /// State for the Power Screw workbench — square-thread lead-screw torque on
+    /// `valenx-screwthread`. See [`crate::screwthread_workbench`].
+    pub(crate) screwthread: crate::screwthread_workbench::ScrewThreadWorkbenchState,
+    /// Whether the right-side Pulley System workbench is visible (View menu). Off by default.
+    pub(crate) show_pulley_workbench: bool,
+    /// State for the Pulley System workbench — block-and-tackle mechanical
+    /// advantage on `valenx-pulley`. See [`crate::pulley_workbench`].
+    pub(crate) pulley: crate::pulley_workbench::PulleyWorkbenchState,
+    /// Whether the right-side Spring Design workbench is visible (View menu). Off by default.
+    pub(crate) show_springdesign_workbench: bool,
+    /// State for the Spring Design workbench — helical compression spring on
+    /// `valenx-spring-design`. See [`crate::springdesign_workbench`].
+    pub(crate) springdesign: crate::springdesign_workbench::SpringDesignWorkbenchState,
+    /// Whether the right-side Spring Combination workbench is visible (View menu). Off by default.
+    pub(crate) show_springcombination_workbench: bool,
+    /// State for the Spring Combination workbench — series / parallel spring
+    /// networks on `valenx-springcombination`. See [`crate::springcombination_workbench`].
+    pub(crate) springcombination:
+        crate::springcombination_workbench::SpringCombinationWorkbenchState,
+    /// Whether the right-side Vibration workbench is visible (View menu). Off by default.
+    pub(crate) show_vibration_workbench: bool,
+    /// State for the Vibration workbench — single-DOF forced-vibration response
+    /// on `valenx-vibration`. See [`crate::vibration_workbench`].
+    pub(crate) vibration: crate::vibration_workbench::VibrationWorkbenchState,
+    /// Whether the right-side Riveted Joint workbench is visible (View menu). Off by default.
+    pub(crate) show_rivet_workbench: bool,
+    /// State for the Riveted Joint workbench — rivet-joint strength + failure
+    /// mode on `valenx-rivet`. See [`crate::rivet_workbench`].
+    pub(crate) rivet: crate::rivet_workbench::RivetWorkbenchState,
+    /// Whether the right-side Soil Bearing workbench is visible (View menu). Off by default.
+    pub(crate) show_soilbearing_workbench: bool,
+    /// State for the Soil Bearing workbench — Terzaghi strip-footing bearing
+    /// capacity on `valenx-soilbearing`. See [`crate::soilbearing_workbench`].
+    pub(crate) soilbearing: crate::soilbearing_workbench::SoilBearingWorkbenchState,
 
     /// Whether the right-side Piping Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

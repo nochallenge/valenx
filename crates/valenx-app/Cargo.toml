@@ -222,6 +222,17 @@ valenx-heatexchanger = { path = "../valenx-heatexchanger" }
 # Native planar four-bar / cam mechanism kinematics — surfaced by the
 # Four-Bar Linkage workbench (src/fourbar_workbench.rs).
 valenx-kinematics    = { path = "../valenx-kinematics" }
+# Mechanical + civil batch compute crates — surfaced by the shaftdesign /
+# screwthread / pulley / springdesign / springcombination / vibration /
+# rivet / soilbearing _workbench.rs panels.
+valenx-shaftdesign       = { path = "../valenx-shaftdesign" }
+valenx-screwthread       = { path = "../valenx-screwthread" }
+valenx-pulley            = { path = "../valenx-pulley" }
+valenx-spring-design     = { path = "../valenx-spring-design" }
+valenx-springcombination = { path = "../valenx-springcombination" }
+valenx-vibration         = { path = "../valenx-vibration" }
+valenx-rivet             = { path = "../valenx-rivet" }
+valenx-soilbearing       = { path = "../valenx-soilbearing" }
 # Native pipe-section sizing — surfaced by the Piping workbench
 # (src/piping_workbench.rs).
 valenx-piping        = { path = "../valenx-piping" }
