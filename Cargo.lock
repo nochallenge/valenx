@@ -6975,6 +6975,7 @@ dependencies = [
  "valenx-variant-effect",
  "valenx-vehicle",
  "valenx-viz",
+ "valenx-windturbine",
  "whoami",
 ]
 

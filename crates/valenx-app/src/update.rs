@@ -617,6 +617,18 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     if ui
+                        .checkbox(&mut self.show_windturbine_workbench, "Wind Turbine")
+                        .on_hover_text(
+                            "Show / hide the right-side Wind Turbine workbench — native \
+                             actuator-disc power: swept area, wind / Betz / Cp-extracted power, \
+                             the cut-in / rated / cut-out power curve, capacity factor and \
+                             tip-speed ratio, computed in-process by valenx-windturbine.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
                         .checkbox(&mut self.show_cad_workbench, "Parametric CAD")
                         .on_hover_text(
                             "Show / hide the right-side Parametric-CAD workbench — named \
@@ -1326,6 +1338,10 @@ impl eframe::App for ValenxApp {
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
         crate::neuro_workbench::draw_neuro_workbench(self, ctx);
+
+        // Wind Turbine workbench (right) — native actuator-disc wind-turbine
+        // power on valenx-windturbine. A no-op unless toggled via View → Wind Turbine.
+        crate::windturbine_workbench::draw_windturbine_workbench(self, ctx);
 
         // Parametric-CAD workbench (right) — named parameters driving sketch
         // geometry on valenx-solvespace-3d. Off unless toggled via View.
