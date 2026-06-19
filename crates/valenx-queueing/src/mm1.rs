@@ -132,6 +132,51 @@ impl Mm1 {
         Ok(arrival_rate + 1.0 / target_w)
     }
 
+    /// The arrival rate `lambda` a single server of rate `service_rate`
+    /// can accept while holding the mean time in system
+    /// [`W`](Self::w) at `target_w` — the load-sizing inverse of
+    /// [`Mm1::w`], complementary to
+    /// [`service_rate_for_mean_response_time`](Self::service_rate_for_mean_response_time).
+    ///
+    /// Inverting `W = 1 / (mu - lambda)` for the arrival rate gives
+    /// `lambda = mu - 1 / target_w`. A queue built with it always
+    /// reproduces `target_w` and is stable (`lambda < mu`). A more
+    /// tolerant (larger) `target_w` admits a higher arrival rate.
+    ///
+    /// # Errors
+    ///
+    /// [`QueueingError::Invalid`] if `service_rate` or `target_w` is not
+    /// finite and strictly positive, or if `target_w` is at or below the
+    /// no-wait service time `1 / mu` (which would demand a non-positive
+    /// arrival rate — no load can be served faster than the bare service
+    /// time).
+    pub fn arrival_rate_for_mean_response_time(service_rate: f64, target_w: f64) -> Result<f64> {
+        if !service_rate.is_finite() || service_rate <= 0.0 {
+            return Err(QueueingError::invalid(
+                "service_rate",
+                format!("service rate must be finite and > 0, got {service_rate}"),
+            ));
+        }
+        if !target_w.is_finite() || target_w <= 0.0 {
+            return Err(QueueingError::invalid(
+                "target_w",
+                format!("target response time must be finite and > 0, got {target_w}"),
+            ));
+        }
+        let lambda = service_rate - 1.0 / target_w;
+        if lambda <= 0.0 {
+            return Err(QueueingError::invalid(
+                "target_w",
+                format!(
+                    "target response time {target_w} is unreachable: it must exceed the \
+                     no-wait service time 1/mu = {}",
+                    1.0 / service_rate
+                ),
+            ));
+        }
+        Ok(lambda)
+    }
+
     /// The arrival rate `lambda` this queue was built with.
     pub fn lambda(&self) -> f64 {
         self.lambda
@@ -593,5 +638,56 @@ mod tests {
         assert!(Mm1::service_rate_for_mean_response_time(2.0, 0.0).is_err()); // W
         assert!(Mm1::service_rate_for_mean_response_time(-1.0, 1.0).is_err());
         assert!(Mm1::service_rate_for_mean_response_time(2.0, f64::NAN).is_err());
+    }
+
+    // --- Load sizing: arrival rate for a target response time ----------
+
+    #[test]
+    fn arrival_rate_for_response_time_inverts_w() {
+        // Inverse of the headline example: mu = 3, W = 1 -> lambda = 2.
+        let lambda = Mm1::arrival_rate_for_mean_response_time(3.0, 1.0).unwrap();
+        close(lambda, 2.0, EPS);
+        // Round-trip over a sweep: build the queue and recover the target W.
+        for &(mu, w) in &[(3.0_f64, 1.0), (10.0, 0.2), (2.0, 5.0), (100.0, 0.02)] {
+            let lambda = Mm1::arrival_rate_for_mean_response_time(mu, w).unwrap();
+            let q = Mm1::new(lambda, mu).unwrap();
+            close(q.w(), w, 1e-12 * w.max(1.0));
+        }
+    }
+
+    #[test]
+    fn arrival_and_service_inverses_are_consistent() {
+        // The two inverses of W = 1/(mu - lambda) compose: sizing mu for
+        // (lambda, W) then the arrival rate for (mu, W) recovers lambda.
+        let (lambda, w) = (5.0, 0.25);
+        let mu = Mm1::service_rate_for_mean_response_time(lambda, w).unwrap();
+        let lambda_back = Mm1::arrival_rate_for_mean_response_time(mu, w).unwrap();
+        close(lambda_back, lambda, EPS);
+    }
+
+    #[test]
+    fn arrival_rate_for_response_time_more_tolerant_admits_more_load() {
+        // A larger (more tolerant) target W admits a higher arrival rate,
+        // but it always stays below mu for stability.
+        let mu = 10.0;
+        let tight = Mm1::arrival_rate_for_mean_response_time(mu, 0.2).unwrap();
+        let loose = Mm1::arrival_rate_for_mean_response_time(mu, 1.0).unwrap();
+        assert!(loose > tight, "loose {loose} should exceed tight {tight}");
+        assert!(loose < mu, "arrival rate must stay below mu for stability");
+    }
+
+    #[test]
+    fn arrival_rate_for_response_time_rejects_unreachable_and_bad() {
+        // W at or below 1/mu is unreachable (would need lambda <= 0).
+        assert_eq!(
+            Mm1::arrival_rate_for_mean_response_time(3.0, 1.0 / 3.0)
+                .unwrap_err()
+                .code(),
+            "queueing.invalid"
+        );
+        assert!(Mm1::arrival_rate_for_mean_response_time(3.0, 0.1).is_err()); // < 1/mu
+        assert!(Mm1::arrival_rate_for_mean_response_time(0.0, 1.0).is_err()); // mu
+        assert!(Mm1::arrival_rate_for_mean_response_time(3.0, 0.0).is_err()); // W
+        assert!(Mm1::arrival_rate_for_mean_response_time(3.0, f64::NAN).is_err());
     }
 }
