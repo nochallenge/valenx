@@ -18,6 +18,7 @@ use nalgebra::Vector3;
 
 use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
+use valenx_pump::affinity::dimensionless_specific_speed;
 use valenx_pump::npsh::{available_npsh_m, is_cavitation_free, npsh_margin_m, SuctionConditions};
 use valenx_pump::operating::{operating_point, PumpCurve};
 use valenx_pump::power::{hydraulic_power_w, shaft_power_w};
@@ -41,6 +42,9 @@ pub struct PumpWorkbenchState {
     density_kg_m3: f64,
     /// Pump efficiency `eta` in (0, 1].
     efficiency: f64,
+    /// Shaft angular speed `omega` (rad/s) used for the dimensionless
+    /// specific speed `Omega_s` (the impeller-shape classifier).
+    angular_speed_rad_s: f64,
     /// Surface (atmospheric) pressure over the suction source (Pa).
     atmospheric_pa: f64,
     /// Liquid vapour pressure at the pumping temperature (Pa).
@@ -72,6 +76,7 @@ impl Default for PumpWorkbenchState {
             resistance_k: 4000.0,
             density_kg_m3: 1000.0,
             efficiency: 0.75,
+            angular_speed_rad_s: 150.0,
             atmospheric_pa: 101_325.0,
             vapor_pressure_pa: 2_340.0,
             static_suction_head_m: 2.0,
@@ -138,6 +143,10 @@ pub fn draw_pump_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("efficiency η");
                         ui.add(egui::DragValue::new(&mut s.efficiency).speed(0.01));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("shaft speed ω (rad/s)");
+                        ui.add(egui::DragValue::new(&mut s.angular_speed_rad_s).speed(1.0));
                     });
 
                     ui.add_space(4.0);
@@ -223,6 +232,19 @@ fn compute(s: &PumpWorkbenchState) -> Result<String, String> {
     let p_shaft = shaft_power_w(s.density_kg_m3, op.flow_m3s, op.head_m, s.efficiency)
         .map_err(|e| e.to_string())?;
 
+    // Dimensionless specific speed Omega_s at the duty point — the
+    // speed-independent impeller-shape classifier (radial < 1, mixed-flow
+    // ~1-3, axial > 3).
+    let omega_s = dimensionless_specific_speed(s.angular_speed_rad_s, op.flow_m3s, op.head_m)
+        .map_err(|e| e.to_string())?;
+    let impeller = if omega_s < 1.0 {
+        "radial / centrifugal"
+    } else if omega_s < 3.0 {
+        "mixed-flow"
+    } else {
+        "axial"
+    };
+
     let suction = SuctionConditions::new(
         s.atmospheric_pa,
         s.vapor_pressure_pa,
@@ -242,6 +264,7 @@ fn compute(s: &PumpWorkbenchState) -> Result<String, String> {
          operating H*    : {:.2} m\n\
          hydraulic power : {:.2} kW\n\
          shaft power     : {:.2} kW  (η {:.0} %)\n\n\
+         specific speed Ωs: {omega_s:.3}  ({impeller})\n\n\
          NPSH available  : {:.2} m\n\
          NPSH required   : {:.2} m\n\
          NPSH margin     : {:.2} m\n\
@@ -511,6 +534,44 @@ mod tests {
         assert!(s.result.contains("NPSH margin"));
         // Default duty: Q* = sqrt((50-10)/(1000+4000)) ≈ 0.0894 m³/s.
         assert!(s.result.contains("0.0894"));
+    }
+
+    #[test]
+    fn analyze_reports_specific_speed_with_ground_truth() {
+        // The dimensionless specific speed Ωs = ω·√Q* / (g·H*)^(3/4) at the
+        // default duty point, hand-computed independently of the crate:
+        //   Q* = sqrt((50-10)/(1000+4000)) = sqrt(0.008),
+        //   H* = 10 + 4000·Q*² = 42 m,  ω = 150 rad/s (the State default),
+        //   g  = 9.806_65 m/s².
+        // => Ωs = 150·√(√0.008) / (9.806_65·42)^0.75 ≈ 0.490_666… → "0.491".
+        let mut s = PumpWorkbenchState::default();
+        run_pump(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default pump should analyze: {:?}",
+            s.error
+        );
+
+        let g = 9.806_65_f64;
+        let q_star = (1.0_f64 * (40.0 / 5000.0)).sqrt(); // sqrt(0.008)
+        let h_star = 10.0 + 4000.0 * q_star * q_star; // 42 m
+        let omega = 150.0_f64; // State default angular_speed_rad_s
+        let expected = omega * q_star.sqrt() / (g * h_star).powf(0.75);
+        // Ground-truth value lands at ~0.4907, which formats to 0.491.
+        assert!(
+            (expected - 0.490_666).abs() < 1e-4,
+            "hand-computed Ωs {expected} drifted"
+        );
+
+        // The readout must surface Ωs at {:.3} precision with the radial
+        // (centrifugal) impeller classification.
+        assert!(s.result.contains("specific speed Ωs"));
+        assert!(
+            s.result.contains("0.491"),
+            "expected Ωs 0.491 in readout, got:\n{}",
+            s.result
+        );
+        assert!(s.result.contains("radial / centrifugal"));
     }
 
     #[test]
