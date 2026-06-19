@@ -39,6 +39,7 @@ pub mod aero;
 pub mod aero_workbench;
 pub mod animate_workbench;
 pub(crate) mod background;
+pub mod beam_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
@@ -63,6 +64,7 @@ pub mod collision_workbench;
 pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
+pub mod dcmotor_workbench;
 pub mod docking;
 pub mod draft_overlay;
 pub mod drone_workbench;
@@ -103,6 +105,7 @@ pub mod sketch_overlay;
 pub mod solarpv_workbench;
 pub mod springs_workbench;
 pub mod theme;
+pub mod thermalexpansion_workbench;
 pub mod tooltips;
 pub mod types;
 pub mod undo;
@@ -566,6 +569,15 @@ pub struct ValenxApp {
     /// [`crate::frames_workbench`].
     pub(crate) frames: crate::frames_workbench::FramesWorkbenchState,
 
+    /// Whether the right-side DC Motor Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_dcmotor_workbench: bool,
+    /// Form + result state for the DC Motor Workbench — native brushed-DC-
+    /// motor performance wrapping `valenx-dcmotor`. See
+    /// [`crate::dcmotor_workbench`].
+    pub(crate) dcmotor: crate::dcmotor_workbench::DcMotorWorkbenchState,
+
     /// Whether the right-side Gas Dynamics workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
@@ -574,6 +586,15 @@ pub struct ValenxApp {
     /// compressible-flow relations wrapping `valenx-gasdynamics`. See
     /// [`crate::gasdynamics_workbench`].
     pub(crate) gasdynamics: crate::gasdynamics_workbench::GasDynamicsWorkbenchState,
+
+    /// Whether the right-side Thermal Expansion workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_thermalexpansion_workbench: bool,
+    /// Form + result state for the Thermal Expansion workbench — linear
+    /// expansion + constrained stress wrapping `valenx-thermalexpansion`. See
+    /// [`crate::thermalexpansion_workbench`].
+    pub(crate) thermalexpansion: crate::thermalexpansion_workbench::ThermalExpansionWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
@@ -625,6 +646,13 @@ pub struct ValenxApp {
     /// State for the HVAC workbench, wrapping `valenx-hvac`. See
     /// [`crate::hvac_workbench`].
     pub(crate) hvac: crate::hvac_workbench::HvacWorkbenchState,
+
+    /// Whether the right-side Beam Workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_beam_workbench: bool,
+    /// State for the Beam Workbench, wrapping `valenx-beam`. See
+    /// [`crate::beam_workbench`].
+    pub(crate) beam: crate::beam_workbench::BeamWorkbenchState,
 
     /// Whether the right-side Reverse-Engineering workbench is visible.
     /// Defaults to `false`; flipped on from the View menu.
