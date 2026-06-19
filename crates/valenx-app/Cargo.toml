@@ -129,6 +129,9 @@ valenx-drone         = { path = "../valenx-drone" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
+# Native planar four-bar / cam mechanism kinematics — surfaced by the
+# Four-Bar Linkage workbench (src/fourbar_workbench.rs).
+valenx-kinematics    = { path = "../valenx-kinematics" }
 # Native pipe-section sizing — surfaced by the Piping workbench
 # (src/piping_workbench.rs).
 valenx-piping        = { path = "../valenx-piping" }
@@ -156,7 +159,13 @@ valenx-fixedwing     = { path = "../valenx-fixedwing" }
 # Native structural cross-section properties — surfaced by the Frames
 # workbench (src/frames_workbench.rs).
 valenx-frames        = { path = "../valenx-frames" }
+# Native brushed-DC-motor performance — surfaced by the DC Motor
+# workbench (src/dcmotor_workbench.rs).
+valenx-dcmotor       = { path = "../valenx-dcmotor" }
 valenx-gasdynamics   = { path = "../valenx-gasdynamics" }
+# Native linear thermal expansion + constrained stress — surfaced by the
+# Thermal Expansion workbench (src/thermalexpansion_workbench.rs).
+valenx-thermalexpansion = { path = "../valenx-thermalexpansion" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
@@ -170,6 +179,7 @@ valenx-librecad-2d = { path = "../valenx-librecad-2d" }
 valenx-reinforcement = { path = "../valenx-reinforcement" }
 valenx-pathtrace = { path = "../valenx-pathtrace" }
 valenx-hvac = { path = "../valenx-hvac" }
+valenx-beam = { path = "../valenx-beam" }
 valenx-reverse = { path = "../valenx-reverse" }
 valenx-interior = { path = "../valenx-interior" }
 valenx-animate = { path = "../valenx-animate" }
