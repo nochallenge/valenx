@@ -129,6 +129,21 @@ valenx-reactdyn      = { path = "../valenx-reactdyn" }
 # Native helical-spring design — surfaced by the Springs workbench
 # (src/springs_workbench.rs).
 valenx-springs       = { path = "../valenx-springs" }
+# Native rolling-bearing ISO 281 rating life — surfaced by the Bearing
+# workbench (src/bearing_workbench.rs).
+valenx-bearing       = { path = "../valenx-bearing" }
+# Native flat-belt drive analysis — surfaced by the Belt Drive workbench
+# (src/beltdrive_workbench.rs).
+valenx-beltdrive     = { path = "../valenx-beltdrive" }
+# Native Euler / Johnson column buckling — surfaced by the Buckling
+# workbench (src/buckling_workbench.rs).
+valenx-buckling      = { path = "../valenx-buckling" }
+# Native disc-brake torque + stop dynamics — surfaced by the Brake
+# workbench (src/brake_workbench.rs).
+valenx-brake         = { path = "../valenx-brake" }
+# Native high-cycle stress-life fatigue — surfaced by the Fatigue
+# workbench (src/fatigue_workbench.rs).
+valenx-fatigue       = { path = "../valenx-fatigue" }
 # Native spur-gear tooth bending strength — surfaced by the Gear Tooth
 # workbench (src/geartooth_workbench.rs).
 valenx-geartooth     = { path = "../valenx-geartooth" }
@@ -207,6 +222,22 @@ valenx-fasteners     = { path = "../valenx-fasteners" }
 # Native fixed-wing aircraft point-performance — surfaced by the
 # Fixed-Wing workbench (src/fixedwing_workbench.rs).
 valenx-fixedwing     = { path = "../valenx-fixedwing" }
+# Science / engineering workbench batch (each surfaced by its src/*_workbench.rs).
+valenx-combustion       = { path = "../valenx-combustion" }
+valenx-flywheel         = { path = "../valenx-flywheel" }
+valenx-fracture         = { path = "../valenx-fracture" }
+valenx-hydraulics       = { path = "../valenx-hydraulics" }
+valenx-inclinedplane    = { path = "../valenx-inclinedplane" }
+valenx-insulation       = { path = "../valenx-insulation" }
+valenx-leadscrew        = { path = "../valenx-leadscrew" }
+valenx-leverage         = { path = "../valenx-leverage" }
+valenx-mohr             = { path = "../valenx-mohr" }
+valenx-mosfet           = { path = "../valenx-mosfet" }
+valenx-optics           = { path = "../valenx-optics" }
+valenx-orifice          = { path = "../valenx-orifice" }
+valenx-pressure-vessel  = { path = "../valenx-pressure-vessel" }
+valenx-torsion          = { path = "../valenx-torsion" }
+valenx-refrigeration    = { path = "../valenx-refrigeration" }
 # Native structural cross-section properties — surfaced by the Frames
 # workbench (src/frames_workbench.rs).
 valenx-frames        = { path = "../valenx-frames" }
