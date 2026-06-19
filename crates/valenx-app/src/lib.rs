@@ -84,6 +84,7 @@ pub mod panel_help;
 pub mod pbr_forward_pass;
 pub mod piping_workbench;
 pub mod project_tabs;
+pub mod rail_workbench;
 pub mod reactdyn_workbench;
 pub mod residuals;
 pub mod rocket_mesh;
@@ -478,6 +479,15 @@ pub struct ValenxApp {
     /// Form + result state for the Piping Workbench — native pipe-section
     /// sizing wrapping `valenx-piping`. See [`crate::piping_workbench`].
     pub(crate) piping: crate::piping_workbench::PipingWorkbenchState,
+
+    /// Whether the right-side Rail / Train Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_rail_workbench: bool,
+    /// Form + result state for the Rail / Train Workbench — native train
+    /// resistance + tractive effort wrapping `valenx-rail`. See
+    /// [`crate::rail_workbench`].
+    pub(crate) rail: crate::rail_workbench::RailWorkbenchState,
 
     /// Whether the right-side Collision Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
