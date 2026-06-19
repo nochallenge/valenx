@@ -191,6 +191,16 @@ fn compute(s: &MosfetWorkbenchState) -> Result<String, String> {
     } else {
         "no"
     };
+    // Transconductance efficiency gm/Id (1/V): the canonical analog-design
+    // figure of merit, computed from the two quantities `operating_point`
+    // returns (`gm` and `id`). In saturation it equals the textbook
+    // identity 2/vov; it is undefined where the device carries no current
+    // (cutoff, Id = 0), where we report it as not applicable.
+    let gm_over_id = if op.id > 0.0 {
+        format!("{:.4} 1/V", op.gm / op.id)
+    } else {
+        "n/a (Id = 0)".to_string()
+    };
 
     Ok(format!(
         "k / vth         : {:.3e} A/V² / {:.3} V\n\
@@ -200,6 +210,7 @@ fn compute(s: &MosfetWorkbenchState) -> Result<String, String> {
          target region   : {} (reached: {})\n\
          drain current Id: {:.4e} A\n\
          transconduct gm : {:.4e} S\n\
+         gm/Id efficiency: {}\n\
          vgs for this Id : {:.4} V",
         s.k_a_per_v2,
         s.vth_v,
@@ -211,6 +222,7 @@ fn compute(s: &MosfetWorkbenchState) -> Result<String, String> {
         hits_target,
         op.id,
         op.gm,
+        gm_over_id,
         vgs_for_id,
     ))
 }
@@ -394,6 +406,61 @@ mod tests {
         assert!((op.id - hand_id).abs() < 1e-15);
         assert!((hand_id - 1.0e-3).abs() < 1e-15);
         assert!((op.gm - 1.0e-3).abs() < 1e-15);
+    }
+
+    #[test]
+    fn gm_over_id_efficiency_matches_two_over_overdrive() {
+        // Ground truth: in saturation the transconductance efficiency is
+        // gm/Id = (k·vov) / (½·k·vov²) = 2/vov, independent of k. The
+        // default NMOS biases at vov = vgs - vth = 3 - 1 = 2 V, so the
+        // readout efficiency is 2/2 = 1.0000 1/V.
+        let mut s = MosfetWorkbenchState::default();
+        run_mosfet(&mut s);
+        assert!(s.error.is_none(), "default should analyze: {:?}", s.error);
+        assert!(
+            s.result.contains("gm/Id efficiency: 1.0000 1/V"),
+            "missing gm/Id line: {}",
+            s.result
+        );
+        // Re-derive the hand value straight from the crate outputs and the
+        // 2/vov identity, then confirm the same number appears formatted.
+        let m = Mosfet::new(0.5e-3, 1.0).expect("valid");
+        let op = m.operating_point(3.0, 5.0).expect("finite");
+        assert_eq!(op.region, Region::Saturation);
+        let vov: f64 = 3.0 - 1.0;
+        let efficiency = op.gm / op.id;
+        assert!(
+            (efficiency - 2.0 / vov).abs() < 1e-12,
+            "gm/Id should equal 2/vov: {efficiency} vs {}",
+            2.0 / vov
+        );
+        assert!(
+            (efficiency - 1.0).abs() < 1e-12,
+            "gm/Id should be 1.0 for the default bias: {efficiency}"
+        );
+    }
+
+    #[test]
+    fn gm_over_id_is_not_applicable_in_cutoff() {
+        // Below threshold the device carries no current (Id = 0), so the
+        // efficiency is undefined and the readout flags it rather than
+        // printing a non-finite ratio.
+        let mut s = MosfetWorkbenchState {
+            vgs_v: 0.5, // vov = 0.5 - 1.0 < 0 => cutoff
+            ..Default::default()
+        };
+        run_mosfet(&mut s);
+        assert!(s.error.is_none(), "cutoff should analyze: {:?}", s.error);
+        assert!(
+            s.result.contains("region          : cutoff"),
+            "{}",
+            s.result
+        );
+        assert!(
+            s.result.contains("gm/Id efficiency: n/a (Id = 0)"),
+            "cutoff efficiency should be n/a: {}",
+            s.result
+        );
     }
 
     #[test]
