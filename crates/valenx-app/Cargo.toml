@@ -129,6 +129,9 @@ valenx-drone         = { path = "../valenx-drone" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
+# Native effectiveness-NTU heat-exchanger analysis — surfaced by the Heat
+# Exchanger workbench (src/heatexchanger_workbench.rs).
+valenx-heatexchanger = { path = "../valenx-heatexchanger" }
 # Native planar four-bar / cam mechanism kinematics — surfaced by the
 # Four-Bar Linkage workbench (src/fourbar_workbench.rs).
 valenx-kinematics    = { path = "../valenx-kinematics" }
