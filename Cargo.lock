@@ -6906,6 +6906,7 @@ dependencies = [
  "valenx-assembly",
  "valenx-astro",
  "valenx-audit",
+ "valenx-batterypack",
  "valenx-bio",
  "valenx-bioseq",
  "valenx-biostruct",

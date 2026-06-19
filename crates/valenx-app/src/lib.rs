@@ -39,6 +39,7 @@ pub mod aero;
 pub mod aero_workbench;
 pub mod animate_workbench;
 pub(crate) mod background;
+pub mod batterypack_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
@@ -671,6 +672,13 @@ pub struct ValenxApp {
     /// design→simulate panel wrapping `valenx-rocket-demo`. See
     /// [`crate::rocket_workbench`].
     pub(crate) rocket: crate::rocket_workbench::RocketWorkbenchState,
+
+    /// Whether the right-side Battery Pack workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_batterypack_workbench: bool,
+    /// State for the Battery Pack workbench, wrapping `valenx-batterypack`.
+    /// See [`crate::batterypack_workbench`].
+    pub(crate) batterypack: crate::batterypack_workbench::BatteryPackWorkbenchState,
 
     /// Whether the right-side Engine workbench panel is visible — the
     /// reactive engine design → analyze → optimize → export loop. On by

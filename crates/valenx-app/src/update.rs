@@ -741,6 +741,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Battery Pack workbench — native
+                    // series / parallel pack sizing (valenx-batterypack).
+                    if ui
+                        .checkbox(&mut self.show_batterypack_workbench, "Battery Pack")
+                        .on_hover_text(
+                            "Show / hide the right-side Battery Pack Workbench — native \
+                             series / parallel pack sizing: pack voltage, capacity, energy, \
+                             cell count, discharge current and runtime at a C-rate, computed \
+                             in-process by valenx-batterypack.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_variant_effect_workbench, "Variant Effect")
                         .on_hover_text(
@@ -1427,6 +1441,10 @@ impl eframe::App for ValenxApp {
         // View → Rocket. Mounted before the CentralPanel so egui docks it
         // to the right alongside the other workbenches.
         crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+
+        // Battery Pack workbench (right) — series / parallel pack sizing on
+        // valenx-batterypack. Off unless toggled via View.
+        crate::batterypack_workbench::draw_batterypack_workbench(self, ctx);
 
         // Engine workbench (right) — reactive engine design → analyze →
         // optimize → export. A no-op unless toggled on via View → Engine.
