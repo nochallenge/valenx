@@ -156,6 +156,9 @@ valenx-gasdynamics   = { path = "../valenx-gasdynamics" }
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
 # (FEM extracellular field + bioheat) and valenx-mesh; pure-Rust solver.
 valenx-neuro         = { path = "../valenx-neuro" }
+# Native wind-turbine power performance — surfaced by the Wind Turbine
+# workbench (src/windturbine_workbench.rs).
+valenx-windturbine   = { path = "../valenx-windturbine" }
 valenx-solvespace-3d = { path = "../valenx-solvespace-3d" }
 valenx-librecad-2d = { path = "../valenx-librecad-2d" }
 valenx-reinforcement = { path = "../valenx-reinforcement" }

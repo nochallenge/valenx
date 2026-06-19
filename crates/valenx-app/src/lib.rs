@@ -52,6 +52,7 @@ pub mod reinforcement_workbench;
 pub mod render_workbench;
 pub mod reverse_workbench;
 pub mod variant_effect_workbench;
+pub mod windturbine_workbench;
 
 pub mod assistant_workbench;
 pub mod astro;
@@ -559,6 +560,15 @@ pub struct ValenxApp {
     /// Form + result state for the Neural-Interface workbench, wrapping
     /// `valenx-neuro`. See [`crate::neuro_workbench`].
     pub(crate) neuro: crate::neuro_workbench::NeuroWorkbenchState,
+
+    /// Whether the right-side Wind Turbine workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_windturbine_workbench: bool,
+    /// Form + result state for the Wind Turbine workbench — native
+    /// actuator-disc wind-turbine power wrapping `valenx-windturbine`. See
+    /// [`crate::windturbine_workbench`].
+    pub(crate) windturbine: crate::windturbine_workbench::WindTurbineWorkbenchState,
 
     /// Whether the right-side Parametric-CAD workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
