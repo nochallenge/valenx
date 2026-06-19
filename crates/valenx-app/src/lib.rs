@@ -62,6 +62,10 @@ pub mod windturbine_workbench;
 pub mod assistant_workbench;
 pub mod astro;
 pub mod astro_workbench;
+pub mod bearing_workbench;
+pub mod beltdrive_workbench;
+pub mod brake_workbench;
+pub mod buckling_workbench;
 pub mod cam_overlay;
 pub mod collision_workbench;
 pub mod commands;
@@ -73,6 +77,7 @@ pub mod draft_overlay;
 pub mod drone_workbench;
 pub mod engine_workbench;
 pub mod fasteners_workbench;
+pub mod fatigue_workbench;
 pub mod fields_workbench;
 pub mod first_run;
 pub mod fixedwing_workbench;
@@ -466,6 +471,41 @@ pub struct ValenxApp {
     /// Form + result state for the Springs Workbench — native helical-spring
     /// design wrapping `valenx-springs`. See [`crate::springs_workbench`].
     pub(crate) springs: crate::springs_workbench::SpringsWorkbenchState,
+
+    /// Whether the right-side Bearing workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_bearing_workbench: bool,
+    /// State for the Bearing workbench, wrapping `valenx-bearing`. See
+    /// [`crate::bearing_workbench`].
+    pub(crate) bearing: crate::bearing_workbench::BearingWorkbenchState,
+
+    /// Whether the right-side Belt Drive workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_beltdrive_workbench: bool,
+    /// State for the Belt Drive workbench, wrapping `valenx-beltdrive`. See
+    /// [`crate::beltdrive_workbench`].
+    pub(crate) beltdrive: crate::beltdrive_workbench::BeltDriveWorkbenchState,
+
+    /// Whether the right-side Buckling workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_buckling_workbench: bool,
+    /// State for the Buckling workbench, wrapping `valenx-buckling`. See
+    /// [`crate::buckling_workbench`].
+    pub(crate) buckling: crate::buckling_workbench::BucklingWorkbenchState,
+
+    /// Whether the right-side Brake workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_brake_workbench: bool,
+    /// State for the Brake workbench, wrapping `valenx-brake`. See
+    /// [`crate::brake_workbench`].
+    pub(crate) brake: crate::brake_workbench::BrakeWorkbenchState,
+
+    /// Whether the right-side Fatigue workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_fatigue_workbench: bool,
+    /// State for the Fatigue workbench, wrapping `valenx-fatigue`. See
+    /// [`crate::fatigue_workbench`].
+    pub(crate) fatigue: crate::fatigue_workbench::FatigueWorkbenchState,
 
     /// Whether the right-side Gear Tooth workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.

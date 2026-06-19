@@ -436,6 +436,73 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Bearing workbench — native rolling
+                    // bearing ISO 281 rating life (valenx-bearing).
+                    if ui
+                        .checkbox(&mut self.show_bearing_workbench, "Bearing")
+                        .on_hover_text(
+                            "Show / hide the right-side Bearing Workbench — native rolling-bearing \
+                             ISO 281 basic rating life: dynamic equivalent load → L10 in \
+                             revolutions and hours, computed in-process by valenx-bearing.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Belt Drive workbench — native flat-belt
+                    // drive analysis (valenx-beltdrive).
+                    if ui
+                        .checkbox(&mut self.show_beltdrive_workbench, "Belt Drive")
+                        .on_hover_text(
+                            "Show / hide the right-side Belt Drive Workbench — native open \
+                             flat-belt drive: speed ratio, belt speed, wrap angles, capstan \
+                             tension ratio and transmissible power, computed in-process by \
+                             valenx-beltdrive.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Buckling workbench — native Euler /
+                    // Johnson column buckling (valenx-buckling).
+                    if ui
+                        .checkbox(&mut self.show_buckling_workbench, "Buckling")
+                        .on_hover_text(
+                            "Show / hide the right-side Buckling Workbench — native Euler / Johnson \
+                             column buckling: critical load, critical stress, slenderness and the \
+                             design load for the end condition, computed in-process by \
+                             valenx-buckling.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Brake workbench — native disc-brake
+                    // torque and stop dynamics (valenx-brake).
+                    if ui
+                        .checkbox(&mut self.show_brake_workbench, "Brake")
+                        .on_hover_text(
+                            "Show / hide the right-side Brake Workbench — native disc-brake \
+                             friction torque from clamp force and effective radius, plus the stop \
+                             energy / distance / time, computed in-process by valenx-brake.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Fatigue workbench — native high-cycle
+                    // stress-life analysis (valenx-fatigue).
+                    if ui
+                        .checkbox(&mut self.show_fatigue_workbench, "Fatigue")
+                        .on_hover_text(
+                            "Show / hide the right-side Fatigue Workbench — native high-cycle \
+                             stress-life: Goodman / Soderberg / Gerber mean-stress factor of \
+                             safety and S-N life, computed in-process by valenx-fatigue.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Gear Tooth workbench — native
                     // spur-gear tooth bending strength (valenx-geartooth).
                     if ui
@@ -1544,6 +1611,26 @@ impl eframe::App for ValenxApp {
         // Springs Workbench (right) — native helical-spring design on
         // valenx-springs. A no-op unless toggled on via View → Springs.
         crate::springs_workbench::draw_springs_workbench(self, ctx);
+
+        // Bearing workbench (right) — rolling-bearing ISO 281 rating life on
+        // valenx-bearing. Off unless toggled via View.
+        crate::bearing_workbench::draw_bearing_workbench(self, ctx);
+
+        // Belt Drive workbench (right) — flat-belt drive analysis on
+        // valenx-beltdrive. Off unless toggled via View.
+        crate::beltdrive_workbench::draw_beltdrive_workbench(self, ctx);
+
+        // Buckling workbench (right) — Euler / Johnson column buckling on
+        // valenx-buckling. Off unless toggled via View.
+        crate::buckling_workbench::draw_buckling_workbench(self, ctx);
+
+        // Brake workbench (right) — disc-brake torque + stop dynamics on
+        // valenx-brake. Off unless toggled via View.
+        crate::brake_workbench::draw_brake_workbench(self, ctx);
+
+        // Fatigue workbench (right) — high-cycle stress-life on valenx-fatigue.
+        // Off unless toggled via View.
+        crate::fatigue_workbench::draw_fatigue_workbench(self, ctx);
 
         // Gear Tooth workbench (right) — spur-gear tooth bending strength on
         // valenx-geartooth. Off unless toggled via View.
