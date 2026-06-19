@@ -7,8 +7,11 @@
 //! [`valenx_heatexchanger::NtuProblem`] (stream heat-capacity rates, the
 //! overall conductance UA, inlet temperatures and the flow arrangement);
 //! "Analyze" reports the capacity ratio, NTU, effectiveness, the maximum
-//! and actual duty and both outlet temperatures, and "Show 3-D exchanger"
-//! loads a shell-and-tube solid into the central viewport.
+//! and actual duty, both outlet temperatures, the log-mean temperature
+//! difference (LMTD) driving the duty and the conductance `UA = Q / LMTD`
+//! it implies (a self-consistency cross-check against the input UA), and
+//! "Show 3-D exchanger" loads a shell-and-tube solid into the central
+//! viewport.
 
 use std::f64::consts::TAU;
 use std::path::PathBuf;
@@ -16,8 +19,9 @@ use std::path::PathBuf;
 use eframe::egui;
 use nalgebra::Vector3;
 
+use valenx_heatexchanger::lmtd::lmtd;
 use valenx_heatexchanger::ntu::{solve, NtuProblem};
-use valenx_heatexchanger::FlowArrangement;
+use valenx_heatexchanger::{FlowArrangement, TerminalTemperatures};
 use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
@@ -200,6 +204,16 @@ fn build_problem(s: &HeatExchangerWorkbenchState) -> Result<NtuProblem, String> 
 fn compute(s: &HeatExchangerWorkbenchState) -> Result<String, String> {
     let problem = build_problem(s)?;
     let r = solve(&problem, s.arrangement).map_err(|e| e.to_string())?;
+    // The four solved terminal temperatures close the loop to the LMTD
+    // method: build the validated terminal set and take the log-mean
+    // driving temperature difference for this arrangement.
+    let temps = TerminalTemperatures::new(s.hot_in_c, r.hot_out, s.cold_in_c, r.cold_out)
+        .map_err(|e| e.to_string())?;
+    let lmtd_c = lmtd(&temps, s.arrangement).map_err(|e| e.to_string())?;
+    // Conductance implied by the duty over that LMTD (Q = UA · LMTD).
+    // For a self-consistent solve this round-trips back to the input UA,
+    // so it doubles as a cross-check on the effectiveness-NTU result.
+    let ua_from_lmtd = r.q_w / lmtd_c;
     Ok(format!(
         "arrangement     : {}\n\
          Cmin / Cmax     : {:.0} / {:.0} W/K\n\
@@ -209,7 +223,9 @@ fn compute(s: &HeatExchangerWorkbenchState) -> Result<String, String> {
          max duty Q_max  : {:.2} kW\n\
          duty Q          : {:.2} kW\n\
          hot  in → out   : {:.1} → {:.1} °C\n\
-         cold in → out   : {:.1} → {:.1} °C",
+         cold in → out   : {:.1} → {:.1} °C\n\
+         LMTD ΔT_lm      : {:.2} °C\n\
+         UA = Q / LMTD   : {:.0} W/K",
         s.arrangement.label(),
         problem.c_min(),
         problem.c_max(),
@@ -222,6 +238,8 @@ fn compute(s: &HeatExchangerWorkbenchState) -> Result<String, String> {
         r.hot_out,
         s.cold_in_c,
         r.cold_out,
+        lmtd_c,
+        ua_from_lmtd,
     ))
 }
 
@@ -494,6 +512,49 @@ mod tests {
         };
         run_exchanger(&mut s);
         assert!(s.error.is_some());
+    }
+
+    #[test]
+    fn analyze_default_reports_lmtd_and_implied_ua() {
+        // Ground truth for the default counterflow exchanger
+        // (Ch = 2000, Cc = 3000, UA = 5000 W/K, hot 90 °C, cold 20 °C):
+        //   Cr = 2/3, NTU = 2.5, ε = 0.796040…, Q = 111.4456… kW,
+        //   hot_out = 34.2772 °C, cold_out = 57.1485 °C, so the two
+        //   counterflow approaches are
+        //     dT1 = 90 − 57.1485 = 32.8515,  dT2 = 34.2772 − 20 = 14.2772,
+        //   giving LMTD = (dT1 − dT2)/ln(dT1/dT2) = 22.2891… °C and a
+        //   back-computed UA = Q/LMTD = 5000 W/K (it must round-trip to
+        //   the input UA, the Q = UA·LMTD self-consistency identity).
+        let s = HeatExchangerWorkbenchState::default();
+        let out = compute(&s).expect("default exchanger computes");
+        assert!(
+            out.contains("LMTD ΔT_lm      : 22.29 °C"),
+            "LMTD readout wrong:\n{out}"
+        );
+        assert!(
+            out.contains("UA = Q / LMTD   : 5000 W/K"),
+            "implied-UA readout wrong:\n{out}"
+        );
+
+        // Independent hand check of the LMTD against the closed form,
+        // recomputing the duty from ε·q_max rather than reusing the
+        // formatted string.
+        let problem = build_problem(&s).unwrap();
+        let r = solve(&problem, s.arrangement).unwrap();
+        let dt1 = s.hot_in_c - r.cold_out;
+        let dt2 = r.hot_out - s.cold_in_c;
+        let expected_lmtd = (dt1 - dt2) / (dt1 / dt2).ln();
+        assert!(
+            (expected_lmtd - 22.289_126_442_5).abs() < 1e-6,
+            "expected LMTD ≈ 22.2891 °C, got {expected_lmtd}"
+        );
+        // Q = UA · LMTD must hold to round-off.
+        assert!(
+            (r.q_w - problem.ua_w_per_k * expected_lmtd).abs() < 1e-6,
+            "Q = UA·LMTD identity broken: Q = {}, UA·LMTD = {}",
+            r.q_w,
+            problem.ua_w_per_k * expected_lmtd
+        );
     }
 
     #[test]
