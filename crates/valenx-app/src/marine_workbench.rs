@@ -6,7 +6,7 @@
 //! The form drives a [`valenx_marine::Hull`]; "Analyze" reports the
 //! displacement, the centre of buoyancy `KB`, the transverse metacentric
 //! radius `BM` and the metacentric height `GM` with a STABLE / UNSTABLE
-//! verdict, and "Show 3-D hull" loads a box-hull solid into the central
+//! verdict, and "Show 3-D hull" loads a raked-bow hull solid into the central
 //! viewport (shaded, orbitable).
 
 use std::path::PathBuf;
@@ -73,15 +73,13 @@ pub fn draw_marine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Marine / Hull");
-            ui.label(
-                egui::RichText::new(
-                    "native box-form hull hydrostatics + stability · valenx-marine",
-                )
-                .weak()
-                .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Marine / Hull",
+                "native box-form hull hydrostatics + stability · valenx-marine",
+            ) {
+                app.show_marine_workbench = false;
+            }
 
             let s = &mut app.marine;
             egui::ScrollArea::vertical()
@@ -141,7 +139,7 @@ pub fn draw_marine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     if ui
                         .button(egui::RichText::new("▶ Show 3-D hull").strong())
                         .on_hover_text(
-                            "Build the box-form hull as a 3-D solid and load it into the central viewport to orbit",
+                            "Build the hull as a 3-D solid and load it into the central viewport to orbit",
                         )
                         .clicked()
                     {
@@ -226,38 +224,63 @@ fn run_marine(s: &mut MarineWorkbenchState) {
     }
 }
 
-/// Build a box-form hull as a triangle [`Mesh`] — length along x, beam
-/// along y, draft from keel `z = 0` up to the waterline `z = T` — with
-/// outward-facing triangles (12 tris, 6 faces). `None` for an invalid hull.
+/// Build a representative ship hull as a triangle [`Mesh`] — a raked, pointed
+/// bow forward (+x) tapering from the full midship / stern box section to a
+/// stem at the waterline, with the keel forefoot set slightly aft of the
+/// raked stem head. Length runs along x, beam along y, draft from the keel
+/// `z = 0` up to the waterline `z = T`. Faces are emitted double-sided so the
+/// shaded pass lights the hull from any orbit angle. The solid is a
+/// representative hull *form*; the reported hydrostatics still use the
+/// box-form `Cb` model from `valenx-marine`. `None` for an invalid hull.
 fn hull_solid_mesh(s: &MarineWorkbenchState) -> Option<Mesh> {
     let hull = build_hull(s).ok()?;
     let (hl, hb, t) = (hull.length_m / 2.0, hull.beam_m / 2.0, hull.draft_m);
+    // The full box section runs from the stern aft to `mx`; forward of that
+    // the hull tapers in plan to the centreline bow. The keel forefoot
+    // (`bkx`) sits aft of the raked stem head at the waterline (`hl`).
+    let mx = hl * 0.15;
+    let bkx = hl * 0.82;
     let nodes = vec![
-        Vector3::new(-hl, -hb, 0.0), // 0 keel
-        Vector3::new(hl, -hb, 0.0),  // 1
-        Vector3::new(hl, hb, 0.0),   // 2
-        Vector3::new(-hl, hb, 0.0),  // 3
-        Vector3::new(-hl, -hb, t),   // 4 waterline
-        Vector3::new(hl, -hb, t),    // 5
-        Vector3::new(hl, hb, t),     // 6
-        Vector3::new(-hl, hb, t),    // 7
+        Vector3::new(-hl, -hb, 0.0), // 0 stern keel port
+        Vector3::new(-hl, hb, 0.0),  // 1 stern keel stbd
+        Vector3::new(-hl, hb, t),    // 2 stern deck stbd
+        Vector3::new(-hl, -hb, t),   // 3 stern deck port
+        Vector3::new(mx, -hb, 0.0),  // 4 mid keel port
+        Vector3::new(mx, hb, 0.0),   // 5 mid keel stbd
+        Vector3::new(mx, hb, t),     // 6 mid deck stbd
+        Vector3::new(mx, -hb, t),    // 7 mid deck port
+        Vector3::new(bkx, 0.0, 0.0), // 8 bow keel forefoot
+        Vector3::new(hl, 0.0, t),    // 9 raked stem head (waterline)
     ];
-    // 12 outward-facing triangles (right-hand rule normals point outward).
-    let tris: [usize; 36] = [
-        1, 2, 6, 1, 6, 5, // +x (bow)
-        0, 4, 7, 0, 7, 3, // -x (stern)
-        3, 7, 6, 3, 6, 2, // +y (port)
-        0, 1, 5, 0, 5, 4, // -y (starboard)
-        4, 5, 6, 4, 6, 7, // +z (deck / waterline)
-        0, 3, 2, 0, 2, 1, // -z (keel)
-    ];
+    let mut tris: Vec<u32> = Vec::new();
+    push_quad_ds(&mut tris, 0, 1, 2, 3); // transom (stern)
+    push_quad_ds(&mut tris, 0, 1, 5, 4); // bottom, stern -> mid
+    push_quad_ds(&mut tris, 3, 7, 6, 2); // deck, stern -> mid
+    push_quad_ds(&mut tris, 0, 4, 7, 3); // port side, stern -> mid
+    push_quad_ds(&mut tris, 1, 5, 6, 2); // stbd side, stern -> mid
+    push_quad_ds(&mut tris, 4, 7, 9, 8); // port bow panel
+    push_quad_ds(&mut tris, 5, 6, 9, 8); // stbd bow panel
+    push_tri_ds(&mut tris, 4, 5, 8); // bottom forefoot wedge
+    push_tri_ds(&mut tris, 7, 6, 9); // foredeck wedge to the stem
     let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
+    block.connectivity = tris;
     let mut mesh = Mesh::new("valenx-marine-hull");
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
     Some(mesh)
+}
+
+/// Append a double-sided quad `a-b-c-d` (both windings) to `tris`.
+fn push_quad_ds(tris: &mut Vec<u32>, a: usize, b: usize, c: usize, d: usize) {
+    let (a, b, c, d) = (a as u32, b as u32, c as u32, d as u32);
+    tris.extend_from_slice(&[a, b, c, a, c, d, a, c, b, a, d, c]);
+}
+
+/// Append a double-sided triangle `a-b-c` (both windings) to `tris`.
+fn push_tri_ds(tris: &mut Vec<u32>, a: usize, b: usize, c: usize) {
+    let (a, b, c) = (a as u32, b as u32, c as u32);
+    tris.extend_from_slice(&[a, b, c, a, c, b]);
 }
 
 /// Build the 3-D hull solid and load it into the central viewport
@@ -328,10 +351,10 @@ mod tests {
     }
 
     #[test]
-    fn hull_mesh_for_default_is_a_nonempty_box() {
+    fn hull_mesh_for_default_is_a_nonempty_hull() {
         let s = MarineWorkbenchState::default();
         let mesh = hull_solid_mesh(&s).expect("default hull yields a solid");
-        assert_eq!(mesh.nodes.len(), 8);
+        assert_eq!(mesh.nodes.len(), 10);
         let n = mesh.nodes.len() as u32;
         for blk in &mesh.element_blocks {
             assert!(!blk.connectivity.is_empty());
