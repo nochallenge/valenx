@@ -822,6 +822,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Heat Exchanger workbench — native
+                    // effectiveness-NTU exchanger analysis (valenx-heatexchanger).
+                    if ui
+                        .checkbox(&mut self.show_heatexchanger_workbench, "Heat Exchanger")
+                        .on_hover_text(
+                            "Show / hide the right-side Heat Exchanger Workbench — native \
+                             effectiveness-NTU analysis: capacity ratio, NTU, effectiveness, \
+                             duty and both outlet temperatures for counter- or parallel-flow, \
+                             computed in-process by valenx-heatexchanger.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Car workbench — vehicle dynamics
                     // (top speed, 0-100 / 0-200 km/h, braking, skidpad) over
                     // valenx-vehicle. Off by default.
@@ -1499,6 +1513,10 @@ impl eframe::App for ValenxApp {
         // Engine workbench (right) — reactive engine design → analyze →
         // optimize → export. A no-op unless toggled on via View → Engine.
         crate::engine_workbench::draw_engine_workbench(self, ctx);
+
+        // Heat Exchanger workbench (right) — effectiveness-NTU analysis on
+        // valenx-heatexchanger. Off unless toggled via View.
+        crate::heatexchanger_workbench::draw_heatexchanger_workbench(self, ctx);
 
         // Car workbench (right) — vehicle dynamics design → simulate over
         // valenx-vehicle. A no-op unless toggled on via View → Car.
