@@ -6916,6 +6916,7 @@ dependencies = [
  "valenx-collision",
  "valenx-core",
  "valenx-crash-reporter",
+ "valenx-dcmotor",
  "valenx-design-tokens",
  "valenx-dock",
  "valenx-dock-screen",

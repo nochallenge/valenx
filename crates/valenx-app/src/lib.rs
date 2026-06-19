@@ -61,6 +61,7 @@ pub mod collision_workbench;
 pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
+pub mod dcmotor_workbench;
 pub mod docking;
 pub mod draft_overlay;
 pub mod drone_workbench;
@@ -543,6 +544,15 @@ pub struct ValenxApp {
     /// cross-section properties wrapping `valenx-frames`. See
     /// [`crate::frames_workbench`].
     pub(crate) frames: crate::frames_workbench::FramesWorkbenchState,
+
+    /// Whether the right-side DC Motor Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_dcmotor_workbench: bool,
+    /// Form + result state for the DC Motor Workbench — native brushed-DC-
+    /// motor performance wrapping `valenx-dcmotor`. See
+    /// [`crate::dcmotor_workbench`].
+    pub(crate) dcmotor: crate::dcmotor_workbench::DcMotorWorkbenchState,
 
     /// Whether the right-side Gas Dynamics workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

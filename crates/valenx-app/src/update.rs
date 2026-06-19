@@ -575,6 +575,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side DC Motor Workbench — native
+                    // brushed-DC-motor performance (valenx-dcmotor). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_dcmotor_workbench, "DC Motor")
+                        .on_hover_text(
+                            "Show / hide the right-side DC Motor Workbench — native brushed-DC-\
+                             motor performance: stall torque / current, no-load speed, peak \
+                             output power, and the operating-point current / torque / power / \
+                             efficiency, computed in-process by valenx-dcmotor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Frames Workbench — structural
                     // cross-section properties (valenx-frames). Off by default.
                     if ui
@@ -1318,6 +1332,10 @@ impl eframe::App for ValenxApp {
         // Frames Workbench (right) — structural cross-section properties on
         // valenx-frames. A no-op unless toggled on via View → Frames.
         crate::frames_workbench::draw_frames_workbench(self, ctx);
+
+        // DC Motor Workbench (right) — native brushed-DC-motor performance on
+        // valenx-dcmotor. A no-op unless toggled on via View → DC Motor.
+        crate::dcmotor_workbench::draw_dcmotor_workbench(self, ctx);
 
         // Gas Dynamics workbench (right) — 1-D compressible-flow relations on
         // valenx-gasdynamics. A no-op unless toggled on via View → Gas Dynamics.
