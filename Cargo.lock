@@ -6972,6 +6972,7 @@ dependencies = [
  "valenx-surface",
  "valenx-sysbio",
  "valenx-techdraw",
+ "valenx-thermalexpansion",
  "valenx-variant-effect",
  "valenx-vehicle",
  "valenx-viz",

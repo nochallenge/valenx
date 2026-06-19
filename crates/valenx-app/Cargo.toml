@@ -151,6 +151,9 @@ valenx-fixedwing     = { path = "../valenx-fixedwing" }
 # workbench (src/frames_workbench.rs).
 valenx-frames        = { path = "../valenx-frames" }
 valenx-gasdynamics   = { path = "../valenx-gasdynamics" }
+# Native linear thermal expansion + constrained stress — surfaced by the
+# Thermal Expansion workbench (src/thermalexpansion_workbench.rs).
+valenx-thermalexpansion = { path = "../valenx-thermalexpansion" }
 
 # The native neural-interface / BCI stimulation suite, surfaced by the
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
