@@ -38,7 +38,9 @@
 pub mod aero;
 pub mod aero_workbench;
 pub mod animate_workbench;
+pub mod antenna_workbench;
 pub(crate) mod background;
+pub mod batterypack_workbench;
 pub mod beam_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
@@ -48,6 +50,7 @@ pub mod fem_workbench;
 pub mod headless;
 pub mod heatpump_workbench;
 pub mod hvac_workbench;
+pub mod inductionmotor_workbench;
 pub mod interior_workbench;
 pub mod neuro_workbench;
 pub mod reinforcement_workbench;
@@ -76,10 +79,13 @@ pub mod fixedwing_workbench;
 pub mod fourbar_workbench;
 pub mod frames_workbench;
 pub mod gasdynamics_workbench;
+pub mod gearbox_workbench;
 pub mod gears_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
 pub mod geomatics_workbench;
+pub mod heatexchanger_workbench;
+pub mod heattransfer_workbench;
 pub mod keyboard_help;
 pub mod landing_page;
 pub mod log_panel;
@@ -88,8 +94,10 @@ pub mod mesh_toolbox;
 pub mod new_project_dialog;
 pub mod panel_help;
 pub mod pbr_forward_pass;
+pub mod pipeflow_workbench;
 pub mod piping_workbench;
 pub mod project_tabs;
+pub mod pump_workbench;
 pub mod rail_workbench;
 pub mod reactdyn_workbench;
 pub mod residuals;
@@ -107,6 +115,7 @@ pub mod springs_workbench;
 pub mod theme;
 pub mod thermalexpansion_workbench;
 pub mod tooltips;
+pub mod truss_workbench;
 pub mod types;
 pub mod undo;
 pub mod viewport;
@@ -421,6 +430,13 @@ pub struct ValenxApp {
     /// [`crate::fem_workbench`].
     pub(crate) fem: crate::fem_workbench::FemWorkbenchState,
 
+    /// Whether the right-side Induction Motor workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_inductionmotor_workbench: bool,
+    /// State for the Induction Motor workbench, wrapping
+    /// `valenx-inductionmotor`. See [`crate::inductionmotor_workbench`].
+    pub(crate) inductionmotor: crate::inductionmotor_workbench::InductionMotorWorkbenchState,
+
     /// Whether the right-side CFD Workbench panel is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the
     /// other workbenches — egui docks them side by side.
@@ -480,6 +496,13 @@ pub struct ValenxApp {
     /// [`crate::geomatics_workbench`].
     pub(crate) geomatics: crate::geomatics_workbench::GeomaticsWorkbenchState,
 
+    /// Whether the right-side Heat Transfer workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_heattransfer_workbench: bool,
+    /// State for the Heat Transfer workbench, wrapping `valenx-heat-transfer`.
+    /// See [`crate::heattransfer_workbench`].
+    pub(crate) heattransfer: crate::heattransfer_workbench::HeatTransferWorkbenchState,
+
     /// Whether the right-side Four-Bar Linkage Workbench is visible.
     /// Defaults to `false`; flipped on from the View menu. Independent of the
     /// other workbenches — egui docks them side by side.
@@ -533,6 +556,15 @@ pub struct ValenxApp {
     /// [`crate::sheetmetal_workbench`].
     pub(crate) sheetmetal: crate::sheetmetal_workbench::SheetmetalWorkbenchState,
 
+    /// Whether the right-side Truss Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_truss_workbench: bool,
+    /// Form + result state for the Truss Workbench — native planar
+    /// pin-jointed truss analysis wrapping `valenx-truss`. See
+    /// [`crate::truss_workbench`].
+    pub(crate) truss: crate::truss_workbench::TrussWorkbenchState,
+
     /// Whether the right-side Field Statistics Workbench is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
@@ -541,6 +573,13 @@ pub struct ValenxApp {
     /// statistics over a pasted number list, via `valenx-fields`. See
     /// [`crate::fields_workbench`].
     pub(crate) fields: crate::fields_workbench::FieldsWorkbenchState,
+
+    /// Whether the right-side Gearbox workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_gearbox_workbench: bool,
+    /// State for the Gearbox workbench, wrapping `valenx-gearbox`. See
+    /// [`crate::gearbox_workbench`].
+    pub(crate) gearbox: crate::gearbox_workbench::GearboxWorkbenchState,
 
     /// Whether the right-side Fasteners Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
@@ -619,6 +658,13 @@ pub struct ValenxApp {
     /// `valenx-solvespace-3d`. See [`crate::cad_workbench`].
     pub(crate) cad: crate::cad_workbench::CadWorkbenchState,
 
+    /// Whether the right-side Antenna workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_antenna_workbench: bool,
+    /// State for the Antenna workbench, wrapping `valenx-antenna`. See
+    /// [`crate::antenna_workbench`].
+    pub(crate) antenna: crate::antenna_workbench::AntennaWorkbenchState,
+
     /// Whether the right-side 2D Drafting workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
     pub(crate) show_draft2d_workbench: bool,
@@ -661,6 +707,13 @@ pub struct ValenxApp {
     /// See [`crate::reverse_workbench`].
     pub(crate) reverse: crate::reverse_workbench::ReverseWorkbenchState,
 
+    /// Whether the right-side Pump workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_pump_workbench: bool,
+    /// State for the Pump workbench, wrapping `valenx-pump`. See
+    /// [`crate::pump_workbench`].
+    pub(crate) pump: crate::pump_workbench::PumpWorkbenchState,
+
     /// Whether the right-side Interior-Design workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
     pub(crate) show_interior_workbench: bool,
@@ -699,6 +752,13 @@ pub struct ValenxApp {
     /// `valenx-astro` crate. See [`crate::astro_workbench`].
     pub(crate) astro: crate::astro_workbench::AstroWorkbenchState,
 
+    /// Whether the right-side Pipe Flow workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_pipeflow_workbench: bool,
+    /// State for the Pipe Flow workbench, wrapping `valenx-pipeflow`. See
+    /// [`crate::pipeflow_workbench`].
+    pub(crate) pipeflow: crate::pipeflow_workbench::PipeFlowWorkbenchState,
+
     /// Whether the right-side Rocket workbench panel is visible. Defaults
     /// to `false`; flipped on from the View menu. Surfaces the
     /// `valenx-rocket-demo` coupled design→simulate pipeline.
@@ -708,6 +768,13 @@ pub struct ValenxApp {
     /// [`crate::rocket_workbench`].
     pub(crate) rocket: crate::rocket_workbench::RocketWorkbenchState,
 
+    /// Whether the right-side Battery Pack workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_batterypack_workbench: bool,
+    /// State for the Battery Pack workbench, wrapping `valenx-batterypack`.
+    /// See [`crate::batterypack_workbench`].
+    pub(crate) batterypack: crate::batterypack_workbench::BatteryPackWorkbenchState,
+
     /// Whether the right-side Engine workbench panel is visible — the
     /// reactive engine design → analyze → optimize → export loop. On by
     /// default (set in [`ValenxApp::new`]).
@@ -715,6 +782,13 @@ pub struct ValenxApp {
     /// Form + result state for the Engine workbench. See
     /// [`crate::engine_workbench`].
     pub(crate) engine: crate::engine_workbench::EngineWorkbenchState,
+
+    /// Whether the right-side Heat Exchanger workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_heatexchanger_workbench: bool,
+    /// State for the Heat Exchanger workbench, wrapping `valenx-heatexchanger`.
+    /// See [`crate::heatexchanger_workbench`].
+    pub(crate) heatexchanger: crate::heatexchanger_workbench::HeatExchangerWorkbenchState,
 
     /// Whether the right-side Car workbench panel is visible. Defaults to
     /// `false`; toggled from the View menu. Wraps `valenx-vehicle`'s

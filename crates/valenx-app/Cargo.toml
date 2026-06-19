@@ -99,16 +99,28 @@ valenx-rocket-demo   = { path = "../valenx-rocket-demo" }
 # (acceleration, top speed, braking, skidpad) over valenx-vehicle.
 valenx-vehicle       = { path = "../valenx-vehicle" }
 
+# Native series / parallel battery-pack sizing — surfaced by the Battery
+# Pack workbench (src/batterypack_workbench.rs).
+valenx-batterypack   = { path = "../valenx-batterypack" }
+
 # The native 3D external-aerodynamics CFD engine,
 # surfaced in the desktop UI by the Aerodynamics / Wind Tunnel
 # workbench (src/aero_workbench.rs + src/aero/). A pure-Rust solver
 # library; the workbench calls its real API directly (no subprocess).
 valenx-aero          = { path = "../valenx-aero" }
 
+# Native 3-phase induction-motor slip / power — surfaced by the Induction
+# Motor workbench (src/inductionmotor_workbench.rs).
+valenx-inductionmotor = { path = "../valenx-inductionmotor" }
+
 # The native 2-D incompressible laminar CFD engine (SIMPLE), surfaced in
 # the desktop UI by the CFD Workbench (src/cfd_workbench.rs). A pure-Rust
 # solver library; the workbench calls its real API directly (no subprocess).
 valenx-cfd-native    = { path = "../valenx-cfd-native" }
+
+# Native Darcy-Weisbach pipe-flow analysis — surfaced by the Pipe Flow
+# workbench (src/pipeflow_workbench.rs).
+valenx-pipeflow      = { path = "../valenx-pipeflow" }
 
 # The native reaction-dynamics engine (Born-Oppenheimer ab-initio MD),
 # surfaced by the Reaction Dynamics workbench (src/reactdyn_workbench.rs).
@@ -129,9 +141,15 @@ valenx-gears         = { path = "../valenx-gears" }
 # Native multirotor hover performance — surfaced by the Drone workbench
 # (src/drone_workbench.rs).
 valenx-drone         = { path = "../valenx-drone" }
+# Native parabolic-dish gain / beamwidth — surfaced by the Antenna
+# workbench (src/antenna_workbench.rs).
+valenx-antenna       = { path = "../valenx-antenna" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
+# Native effectiveness-NTU heat-exchanger analysis — surfaced by the Heat
+# Exchanger workbench (src/heatexchanger_workbench.rs).
+valenx-heatexchanger = { path = "../valenx-heatexchanger" }
 # Native planar four-bar / cam mechanism kinematics — surfaced by the
 # Four-Bar Linkage workbench (src/fourbar_workbench.rs).
 valenx-kinematics    = { path = "../valenx-kinematics" }
@@ -141,15 +159,24 @@ valenx-piping        = { path = "../valenx-piping" }
 # Native train running resistance + tractive effort — surfaced by the Rail
 # workbench (src/rail_workbench.rs).
 valenx-rail          = { path = "../valenx-rail" }
+# Native two-stage compound gear-train analysis — surfaced by the Gearbox
+# workbench (src/gearbox_workbench.rs).
+valenx-gearbox       = { path = "../valenx-gearbox" }
 # Native AABB geometry + collision tests — surfaced by the Collision
 # workbench (src/collision_workbench.rs).
 valenx-collision     = { path = "../valenx-collision" }
+# Native composite-wall 1-D heat loss — surfaced by the Heat Transfer
+# workbench (src/heattransfer_workbench.rs).
+valenx-heat-transfer = { path = "../valenx-heat-transfer" }
 # Native single-diode photovoltaic cell performance — surfaced by the
 # Solar PV workbench (src/solarpv_workbench.rs).
 valenx-solarpv       = { path = "../valenx-solarpv" }
 # Native sheet-metal bend allowance / deduction — surfaced by the Sheet
 # Metal workbench (src/sheetmetal_workbench.rs).
 valenx-sheet-metal   = { path = "../valenx-sheet-metal" }
+# Native planar pin-jointed truss analysis — surfaced by the Truss
+# workbench (src/truss_workbench.rs).
+valenx-truss         = { path = "../valenx-truss" }
 # Native ISO 4017 hex-bolt dimensions — surfaced by the Fasteners
 # workbench (src/fasteners_workbench.rs).
 valenx-fasteners     = { path = "../valenx-fasteners" }
@@ -183,6 +210,7 @@ valenx-beam = { path = "../valenx-beam" }
 valenx-reverse = { path = "../valenx-reverse" }
 valenx-interior = { path = "../valenx-interior" }
 valenx-animate = { path = "../valenx-animate" }
+valenx-pump = { path = "../valenx-pump" }
 valenx-variant-effect = { path = "../valenx-variant-effect" }
 
 # The native launch-vehicle ascent + trajectory simulator, surfaced in

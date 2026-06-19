@@ -377,6 +377,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Induction Motor workbench — native
+                    // 3-phase induction-motor slip / power (valenx-inductionmotor).
+                    if ui
+                        .checkbox(&mut self.show_inductionmotor_workbench, "Induction Motor")
+                        .on_hover_text(
+                            "Show / hide the right-side Induction Motor Workbench — native \
+                             3-phase induction machine: synchronous speed, slip, rotor \
+                             frequency and the air-gap power split into rotor copper loss and \
+                             mechanical power, computed in-process by valenx-inductionmotor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side CFD Workbench — native 2-D
                     // incompressible laminar CFD (SIMPLE): the lid-driven
                     // cavity + developing channel-flow cases on
@@ -477,6 +491,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Heat Transfer workbench — native
+                    // composite-wall 1-D heat loss (valenx-heat-transfer).
+                    if ui
+                        .checkbox(&mut self.show_heattransfer_workbench, "Heat Transfer")
+                        .on_hover_text(
+                            "Show / hide the right-side Heat Transfer Workbench — native \
+                             composite-wall heat loss: series conduction + convective-film \
+                             resistances, total resistance, heat-loss rate and the overall \
+                             U-value, computed in-process by valenx-heat-transfer.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Four-Bar Linkage Workbench — native
                     // planar mechanism kinematics (valenx-kinematics). Off by default.
                     if ui
@@ -533,6 +561,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Truss Workbench — native planar
+                    // pin-jointed Warren truss analysis (valenx-truss). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_truss_workbench, "Truss")
+                        .on_hover_text(
+                            "Show / hide the right-side Truss Workbench — native planar \
+                             pin-jointed Warren truss: determinacy, support reactions, and the \
+                             peak tension / compression members by the method of joints, computed \
+                             in-process by valenx-truss.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Solar PV Workbench — native
                     // single-diode photovoltaic cell performance (valenx-solarpv).
                     if ui
@@ -570,6 +612,20 @@ impl eframe::App for ValenxApp {
                              statistics (mean, median, variance, std dev, rms, skewness, excess \
                              kurtosis, coefficient of variation, min/max) over a pasted list of \
                              numbers, computed in-process by valenx-fields.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Gearbox workbench — native two-stage
+                    // compound gear-train analysis (valenx-gearbox).
+                    if ui
+                        .checkbox(&mut self.show_gearbox_workbench, "Gearbox")
+                        .on_hover_text(
+                            "Show / hide the right-side Gearbox Workbench — native two-stage \
+                             compound gear train: overall ratio, efficiency, output speed and \
+                             torque and the input / output power, computed in-process by \
+                             valenx-gearbox.",
                         )
                         .changed()
                     {
@@ -695,6 +751,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Antenna workbench — native parabolic
+                    // dish gain / beamwidth (valenx-antenna).
+                    if ui
+                        .checkbox(&mut self.show_antenna_workbench, "Antenna")
+                        .on_hover_text(
+                            "Show / hide the right-side Antenna Workbench — native parabolic \
+                             dish: wavelength, effective aperture, gain (linear and dBi) and a \
+                             half-power beamwidth estimate, computed in-process by \
+                             valenx-antenna.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_draft2d_workbench, "2D Drafting")
                         .on_hover_text(
@@ -762,6 +832,18 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     if ui
+                        .checkbox(&mut self.show_pump_workbench, "Pump")
+                        .on_hover_text(
+                            "Show / hide the right-side Pump Workbench — native centrifugal \
+                             pump duty point (pump curve ∩ system curve), hydraulic and shaft \
+                             power, and the NPSH cavitation margin, computed in-process by \
+                             valenx-pump.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
                         .checkbox(&mut self.show_interior_workbench, "Interior Design")
                         .on_hover_text(
                             "Show / hide the right-side Interior-Design workbench — a 2D \
@@ -795,12 +877,40 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Battery Pack workbench — native
+                    // series / parallel pack sizing (valenx-batterypack).
+                    if ui
+                        .checkbox(&mut self.show_batterypack_workbench, "Battery Pack")
+                        .on_hover_text(
+                            "Show / hide the right-side Battery Pack Workbench — native \
+                             series / parallel pack sizing: pack voltage, capacity, energy, \
+                             cell count, discharge current and runtime at a C-rate, computed \
+                             in-process by valenx-batterypack.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_variant_effect_workbench, "Variant Effect")
                         .on_hover_text(
                             "Show / hide the right-side Variant-Effect workbench — an HGVS \
                              variant parser (protein / coding substitutions), on \
                              valenx-variant-effect.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Pipe Flow workbench — native
+                    // Darcy-Weisbach pipe-flow analysis (valenx-pipeflow).
+                    if ui
+                        .checkbox(&mut self.show_pipeflow_workbench, "Pipe Flow")
+                        .on_hover_text(
+                            "Show / hide the right-side Pipe Flow Workbench — native \
+                             Darcy-Weisbach analysis: Reynolds number, flow regime, friction \
+                             factor, head loss and pressure drop for a straight pipe run, \
+                             computed in-process by valenx-pipeflow.",
                         )
                         .changed()
                     {
@@ -819,6 +929,20 @@ impl eframe::App for ValenxApp {
                              budget, max-Q, staging timeline + flight-profile chart) \
                              plus Hohmann / hoverslam / rendezvous / launch-azimuth \
                              planners.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Heat Exchanger workbench — native
+                    // effectiveness-NTU exchanger analysis (valenx-heatexchanger).
+                    if ui
+                        .checkbox(&mut self.show_heatexchanger_workbench, "Heat Exchanger")
+                        .on_hover_text(
+                            "Show / hide the right-side Heat Exchanger Workbench — native \
+                             effectiveness-NTU analysis: capacity ratio, NTU, effectiveness, \
+                             duty and both outlet temperatures for counter- or parallel-flow, \
+                             computed in-process by valenx-heatexchanger.",
                         )
                         .changed()
                     {
@@ -1347,6 +1471,10 @@ impl eframe::App for ValenxApp {
         // docks it to the right (alongside the other open workbenches).
         crate::fem_workbench::draw_fem_workbench(self, ctx);
 
+        // Induction Motor workbench (right) — 3-phase induction-motor slip /
+        // power on valenx-inductionmotor. Off unless toggled via View.
+        crate::inductionmotor_workbench::draw_inductionmotor_workbench(self, ctx);
+
         // CFD Workbench (right) — native 2-D incompressible laminar CFD
         // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via
         // View → CFD Workbench. Mounted before the CentralPanel so egui
@@ -1379,6 +1507,10 @@ impl eframe::App for ValenxApp {
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
         crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
 
+        // Heat Transfer workbench (right) — composite-wall 1-D heat loss on
+        // valenx-heat-transfer. Off unless toggled via View.
+        crate::heattransfer_workbench::draw_heattransfer_workbench(self, ctx);
+
         // Four-Bar Linkage Workbench (right) — native planar mechanism
         // kinematics on valenx-kinematics. A no-op unless toggled via View → Four-Bar Linkage.
         crate::fourbar_workbench::draw_fourbar_workbench(self, ctx);
@@ -1403,10 +1535,18 @@ impl eframe::App for ValenxApp {
         // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.
         crate::sheetmetal_workbench::draw_sheetmetal_workbench(self, ctx);
 
+        // Truss Workbench (right) — native planar pin-jointed truss analysis
+        // on valenx-truss. A no-op unless toggled on via View → Truss.
+        crate::truss_workbench::draw_truss_workbench(self, ctx);
+
         // Field Statistics Workbench (right) — descriptive statistics over a
         // pasted number list on valenx-fields. A no-op unless toggled on via
         // View → Field Statistics.
         crate::fields_workbench::draw_fields_workbench(self, ctx);
+
+        // Gearbox workbench (right) — two-stage compound gear-train analysis
+        // on valenx-gearbox. Off unless toggled via View.
+        crate::gearbox_workbench::draw_gearbox_workbench(self, ctx);
 
         // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
         // valenx-fasteners. A no-op unless toggled on via View → Fasteners.
@@ -1445,6 +1585,10 @@ impl eframe::App for ValenxApp {
         // geometry on valenx-solvespace-3d. Off unless toggled via View.
         crate::cad_workbench::draw_cad_workbench(self, ctx);
 
+        // Antenna workbench (right) — parabolic-dish gain / beamwidth on
+        // valenx-antenna. Off unless toggled via View.
+        crate::antenna_workbench::draw_antenna_workbench(self, ctx);
+
         // 2D Drafting workbench (right) — LibreCAD-style 2D canvas on
         // valenx-librecad-2d. Off unless toggled via View.
         crate::draft2d_workbench::draw_draft2d_workbench(self, ctx);
@@ -1469,6 +1613,10 @@ impl eframe::App for ValenxApp {
         // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
         crate::reverse_workbench::draw_reverse_workbench(self, ctx);
 
+        // Pump workbench (right) — centrifugal-pump duty point + NPSH on
+        // valenx-pump. Off unless toggled via View.
+        crate::pump_workbench::draw_pump_workbench(self, ctx);
+
         // Interior-Design workbench (right) — 2D floor plan + furniture on
         // valenx-interior. Off unless toggled via View.
         crate::interior_workbench::draw_interior_workbench(self, ctx);
@@ -1492,15 +1640,27 @@ impl eframe::App for ValenxApp {
         // workbenches).
         crate::astro_workbench::draw_astro_workbench(self, ctx);
 
+        // Pipe Flow workbench (right) — Darcy-Weisbach pipe-flow analysis
+        // on valenx-pipeflow. Off unless toggled via View.
+        crate::pipeflow_workbench::draw_pipeflow_workbench(self, ctx);
+
         // Rocket workbench (right) — the valenx-rocket-demo coupled
         // design→simulate pipeline. A no-op unless toggled on via
         // View → Rocket. Mounted before the CentralPanel so egui docks it
         // to the right alongside the other workbenches.
         crate::rocket_workbench::draw_rocket_workbench(self, ctx);
 
+        // Battery Pack workbench (right) — series / parallel pack sizing on
+        // valenx-batterypack. Off unless toggled via View.
+        crate::batterypack_workbench::draw_batterypack_workbench(self, ctx);
+
         // Engine workbench (right) — reactive engine design → analyze →
         // optimize → export. A no-op unless toggled on via View → Engine.
         crate::engine_workbench::draw_engine_workbench(self, ctx);
+
+        // Heat Exchanger workbench (right) — effectiveness-NTU analysis on
+        // valenx-heatexchanger. Off unless toggled via View.
+        crate::heatexchanger_workbench::draw_heatexchanger_workbench(self, ctx);
 
         // Car workbench (right) — vehicle dynamics design → simulate over
         // valenx-vehicle. A no-op unless toggled on via View → Car.
