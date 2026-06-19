@@ -62,13 +62,18 @@ pub mod windturbine_workbench;
 pub mod assistant_workbench;
 pub mod astro;
 pub mod astro_workbench;
+pub mod bearing_workbench;
+pub mod beltdrive_workbench;
 pub mod bonemech_workbench;
+pub mod brake_workbench;
+pub mod buckling_workbench;
 pub mod cam_overlay;
 pub mod chaindrive_workbench;
 pub mod clutch_workbench;
 pub mod coil_workbench;
 pub mod collision_workbench;
 pub mod columnsteel_workbench;
+pub mod combustion_workbench;
 pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
@@ -78,33 +83,51 @@ pub mod draft_overlay;
 pub mod drone_workbench;
 pub mod engine_workbench;
 pub mod fasteners_workbench;
+pub mod fatigue_workbench;
 pub mod fields_workbench;
 pub mod first_run;
 pub mod fixedwing_workbench;
+pub mod flywheel_workbench;
 pub mod fourbar_workbench;
+pub mod fracture_workbench;
 pub mod frames_workbench;
 pub mod gasdynamics_workbench;
 pub mod gearbox_workbench;
 pub mod gears_workbench;
+pub mod geartooth_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
 pub mod geomatics_workbench;
 pub mod heatexchanger_workbench;
 pub mod heattransfer_workbench;
+pub mod hydraulics_workbench;
+pub mod inclinedplane_workbench;
+pub mod insulation_workbench;
 pub mod keyboard_help;
 pub mod landing_page;
+pub mod leadscrew_workbench;
+pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
 pub mod mesh_toolbox;
+pub mod mohr_workbench;
+pub mod mosfet_workbench;
 pub mod new_project_dialog;
+pub mod optics_workbench;
+pub mod orifice_workbench;
 pub mod panel_help;
 pub mod pbr_forward_pass;
+pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
+pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+pub mod pressurevessel_workbench;
 pub mod project_tabs;
 pub mod pump_workbench;
 pub mod rail_workbench;
+pub mod rcbeam_workbench;
 pub mod reactdyn_workbench;
+pub mod refrigeration_workbench;
 pub mod residuals;
 pub mod rocket_mesh;
 pub mod rocket_workbench;
@@ -120,6 +143,7 @@ pub mod springs_workbench;
 pub mod theme;
 pub mod thermalexpansion_workbench;
 pub mod tooltips;
+pub mod torsion_workbench;
 pub mod truss_workbench;
 pub mod types;
 pub mod undo;
@@ -468,6 +492,69 @@ pub struct ValenxApp {
     /// design wrapping `valenx-springs`. See [`crate::springs_workbench`].
     pub(crate) springs: crate::springs_workbench::SpringsWorkbenchState,
 
+    /// Whether the right-side Bearing workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_bearing_workbench: bool,
+    /// State for the Bearing workbench, wrapping `valenx-bearing`. See
+    /// [`crate::bearing_workbench`].
+    pub(crate) bearing: crate::bearing_workbench::BearingWorkbenchState,
+
+    /// Whether the right-side Belt Drive workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_beltdrive_workbench: bool,
+    /// State for the Belt Drive workbench, wrapping `valenx-beltdrive`. See
+    /// [`crate::beltdrive_workbench`].
+    pub(crate) beltdrive: crate::beltdrive_workbench::BeltDriveWorkbenchState,
+
+    /// Whether the right-side Buckling workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_buckling_workbench: bool,
+    /// State for the Buckling workbench, wrapping `valenx-buckling`. See
+    /// [`crate::buckling_workbench`].
+    pub(crate) buckling: crate::buckling_workbench::BucklingWorkbenchState,
+
+    /// Whether the right-side Brake workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_brake_workbench: bool,
+    /// State for the Brake workbench, wrapping `valenx-brake`. See
+    /// [`crate::brake_workbench`].
+    pub(crate) brake: crate::brake_workbench::BrakeWorkbenchState,
+
+    /// Whether the right-side Fatigue workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_fatigue_workbench: bool,
+    /// State for the Fatigue workbench, wrapping `valenx-fatigue`. See
+    /// [`crate::fatigue_workbench`].
+    pub(crate) fatigue: crate::fatigue_workbench::FatigueWorkbenchState,
+
+    /// Whether the right-side Gear Tooth workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_geartooth_workbench: bool,
+    /// State for the Gear Tooth workbench, wrapping `valenx-geartooth`. See
+    /// [`crate::geartooth_workbench`].
+    pub(crate) geartooth: crate::geartooth_workbench::GeartoothWorkbenchState,
+
+    /// Whether the right-side Pharmacokinetics workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_pharmacokinetics_workbench: bool,
+    /// State for the Pharmacokinetics workbench, wrapping
+    /// `valenx-pharmacokinetics`. See [`crate::pharmacokinetics_workbench`].
+    pub(crate) pharmacokinetics: crate::pharmacokinetics_workbench::PharmacokineticsWorkbenchState,
+
+    /// Whether the right-side Pipe Network workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_pipenetwork_workbench: bool,
+    /// State for the Pipe Network workbench, wrapping `valenx-pipenetwork`.
+    /// See [`crate::pipenetwork_workbench`].
+    pub(crate) pipenetwork: crate::pipenetwork_workbench::PipeNetworkWorkbenchState,
+
+    /// Whether the right-side RC Beam workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_rcbeam_workbench: bool,
+    /// State for the RC Beam workbench, wrapping `valenx-rcbeam`. See
+    /// [`crate::rcbeam_workbench`].
+    pub(crate) rcbeam: crate::rcbeam_workbench::RcBeamWorkbenchState,
+
     /// Whether the right-side Marine / Hull Workbench is visible. Off by
     /// default; toggled from the View menu.
     pub(crate) show_marine_workbench: bool,
@@ -638,6 +725,81 @@ pub struct ValenxApp {
     /// preliminary aircraft point-performance wrapping `valenx-fixedwing`.
     /// See [`crate::fixedwing_workbench`].
     pub(crate) fixedwing: crate::fixedwing_workbench::FixedWingWorkbenchState,
+
+    /// Whether the right-side Combustion workbench is visible (View menu).
+    pub(crate) show_combustion_workbench: bool,
+    /// State for the Combustion workbench. See [`crate::combustion_workbench`].
+    pub(crate) combustion: crate::combustion_workbench::CombustionWorkbenchState,
+
+    /// Whether the right-side Flywheel workbench is visible (View menu).
+    pub(crate) show_flywheel_workbench: bool,
+    /// State for the Flywheel workbench. See [`crate::flywheel_workbench`].
+    pub(crate) flywheel: crate::flywheel_workbench::FlywheelWorkbenchState,
+
+    /// Whether the right-side Fracture Mechanics workbench is visible (View menu).
+    pub(crate) show_fracture_workbench: bool,
+    /// State for the Fracture workbench. See [`crate::fracture_workbench`].
+    pub(crate) fracture: crate::fracture_workbench::FractureWorkbenchState,
+
+    /// Whether the right-side Hydraulics workbench is visible (View menu).
+    pub(crate) show_hydraulics_workbench: bool,
+    /// State for the Hydraulics workbench. See [`crate::hydraulics_workbench`].
+    pub(crate) hydraulics: crate::hydraulics_workbench::HydraulicsWorkbenchState,
+
+    /// Whether the right-side Inclined Plane workbench is visible (View menu).
+    pub(crate) show_inclinedplane_workbench: bool,
+    /// State for the Inclined Plane workbench. See [`crate::inclinedplane_workbench`].
+    pub(crate) inclinedplane: crate::inclinedplane_workbench::InclinedPlaneWorkbenchState,
+
+    /// Whether the right-side Insulation workbench is visible (View menu).
+    pub(crate) show_insulation_workbench: bool,
+    /// State for the Insulation workbench. See [`crate::insulation_workbench`].
+    pub(crate) insulation: crate::insulation_workbench::InsulationWorkbenchState,
+
+    /// Whether the right-side Lead Screw workbench is visible (View menu).
+    pub(crate) show_leadscrew_workbench: bool,
+    /// State for the Lead Screw workbench. See [`crate::leadscrew_workbench`].
+    pub(crate) leadscrew: crate::leadscrew_workbench::LeadscrewWorkbenchState,
+
+    /// Whether the right-side Lever workbench is visible (View menu).
+    pub(crate) show_leverage_workbench: bool,
+    /// State for the Lever workbench. See [`crate::leverage_workbench`].
+    pub(crate) leverage: crate::leverage_workbench::LeverageWorkbenchState,
+
+    /// Whether the right-side Mohr's Circle workbench is visible (View menu).
+    pub(crate) show_mohr_workbench: bool,
+    /// State for the Mohr's Circle workbench. See [`crate::mohr_workbench`].
+    pub(crate) mohr: crate::mohr_workbench::MohrWorkbenchState,
+
+    /// Whether the right-side MOSFET workbench is visible (View menu).
+    pub(crate) show_mosfet_workbench: bool,
+    /// State for the MOSFET workbench. See [`crate::mosfet_workbench`].
+    pub(crate) mosfet: crate::mosfet_workbench::MosfetWorkbenchState,
+
+    /// Whether the right-side Optics workbench is visible (View menu).
+    pub(crate) show_optics_workbench: bool,
+    /// State for the Optics workbench. See [`crate::optics_workbench`].
+    pub(crate) optics: crate::optics_workbench::OpticsWorkbenchState,
+
+    /// Whether the right-side Orifice Meter workbench is visible (View menu).
+    pub(crate) show_orifice_workbench: bool,
+    /// State for the Orifice Meter workbench. See [`crate::orifice_workbench`].
+    pub(crate) orifice: crate::orifice_workbench::OrificeWorkbenchState,
+
+    /// Whether the right-side Pressure Vessel workbench is visible (View menu).
+    pub(crate) show_pressurevessel_workbench: bool,
+    /// State for the Pressure Vessel workbench. See [`crate::pressurevessel_workbench`].
+    pub(crate) pressurevessel: crate::pressurevessel_workbench::PressureVesselWorkbenchState,
+
+    /// Whether the right-side Torsion workbench is visible (View menu).
+    pub(crate) show_torsion_workbench: bool,
+    /// State for the Torsion workbench. See [`crate::torsion_workbench`].
+    pub(crate) torsion: crate::torsion_workbench::TorsionWorkbenchState,
+
+    /// Whether the right-side Refrigeration workbench is visible (View menu).
+    pub(crate) show_refrigeration_workbench: bool,
+    /// State for the Refrigeration workbench. See [`crate::refrigeration_workbench`].
+    pub(crate) refrigeration: crate::refrigeration_workbench::RefrigerationWorkbenchState,
 
     /// Whether the right-side Frames Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
