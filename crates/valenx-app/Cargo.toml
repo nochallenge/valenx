@@ -228,6 +228,21 @@ valenx-piping        = { path = "../valenx-piping" }
 # Native train running resistance + tractive effort — surfaced by the Rail
 # workbench (src/rail_workbench.rs).
 valenx-rail          = { path = "../valenx-rail" }
+# Native long-bone bending / axial stress + density-scaled strength — surfaced
+# by the Bone Mechanics workbench (src/bonemech_workbench.rs).
+valenx-bonemech      = { path = "../valenx-bonemech" }
+# Native single-stage roller-chain drive kinematics — surfaced by the Chain
+# Drive workbench (src/chaindrive_workbench.rs).
+valenx-chaindrive    = { path = "../valenx-chaindrive" }
+# Native dry friction-clutch torque capacity — surfaced by the Clutch
+# workbench (src/clutch_workbench.rs).
+valenx-clutch        = { path = "../valenx-clutch" }
+# Native long-solenoid field / inductance / reactance — surfaced by the
+# Solenoid Coil workbench (src/coil_workbench.rs).
+valenx-coil          = { path = "../valenx-coil" }
+# Native Euler-Johnson (AISC-ASD) steel-column buckling — surfaced by the
+# Steel Column workbench (src/columnsteel_workbench.rs).
+valenx-columnsteel   = { path = "../valenx-columnsteel" }
 # Native two-stage compound gear-train analysis — surfaced by the Gearbox
 # workbench (src/gearbox_workbench.rs).
 valenx-gearbox       = { path = "../valenx-gearbox" }
