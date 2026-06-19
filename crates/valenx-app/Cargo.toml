@@ -231,6 +231,13 @@ valenx-rail          = { path = "../valenx-rail" }
 # Native two-stage compound gear-train analysis — surfaced by the Gearbox
 # workbench (src/gearbox_workbench.rs).
 valenx-gearbox       = { path = "../valenx-gearbox" }
+# Science batch 5 compute crates — surfaced by the camdynamics / batteryecm /
+# diffusion / dimensional / fft _workbench.rs panels.
+valenx-camdynamics   = { path = "../valenx-camdynamics" }
+valenx-battery-ecm   = { path = "../valenx-battery-ecm" }
+valenx-diffusion     = { path = "../valenx-diffusion" }
+valenx-dimensional   = { path = "../valenx-dimensional" }
+valenx-fft           = { path = "../valenx-fft" }
 # Native AABB geometry + collision tests — surfaced by the Collision
 # workbench (src/collision_workbench.rs).
 valenx-collision     = { path = "../valenx-collision" }
