@@ -104,13 +104,13 @@ pub fn draw_car_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(380.0)
         .width_range(330.0..=620.0)
         .show(ctx, |ui| {
-            ui.heading("Car — design → simulate");
-            ui.label(
-                egui::RichText::new("point-mass longitudinal + friction-circle · valenx-vehicle")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Car — design → simulate",
+                "point-mass longitudinal + friction-circle · valenx-vehicle",
+            ) {
+                app.show_car_workbench = false;
+            }
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {

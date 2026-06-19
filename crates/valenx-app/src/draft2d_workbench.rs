@@ -77,13 +77,10 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(440.0)
         .width_range(360.0..=760.0)
         .show(ctx, |ui| {
-            ui.heading("2D Drafting");
-            ui.label(
-                egui::RichText::new("LibreCAD-style · valenx-librecad-2d")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(ui, "2D Drafting", "LibreCAD-style · valenx-librecad-2d")
+            {
+                app.show_draft2d_workbench = false;
+            }
             let s = &mut app.draft2d;
 
             ui.horizontal(|ui| {
