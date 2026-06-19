@@ -104,6 +104,7 @@ pub mod leadscrew_workbench;
 pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
+pub(crate) mod menu_ui;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
 pub mod mosfet_workbench;

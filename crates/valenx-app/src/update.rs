@@ -235,6 +235,7 @@ impl eframe::App for ValenxApp {
                     }
                 });
                 ui.menu_button(cat.lookup("menu.view"), |ui| {
+                    crate::menu_ui::scrollable_menu(ui, |ui| {
                     if ui
                         .radio(
                             self.shading == ShadingMode::Shaded,
@@ -1345,6 +1346,7 @@ impl eframe::App for ValenxApp {
                         self.active_viewport = ViewportKind::Viewport2dDna;
                         ui.close_menu();
                     }
+                    });
                 });
                 ui.menu_button(cat.lookup("menu.run"), |ui| {
                     let running = self.run_handle.is_some();
@@ -1451,18 +1453,22 @@ impl eframe::App for ValenxApp {
                             .unwrap_or("uncategorised");
                         by_category.entry(category).or_default().push(entry);
                     }
-                    for (cat_name, mut entries) in by_category {
-                        entries.sort_by_key(|e| e.adapter.info().display_name);
-                        ui.menu_button(cat_name.to_uppercase(), |ui| {
-                            for entry in entries {
-                                let info = entry.adapter.info();
-                                if ui.button(info.display_name).clicked() {
-                                    pending_new_case = Some(info.id.to_string());
-                                    ui.close_menu();
-                                }
-                            }
-                        });
-                    }
+                    crate::menu_ui::scrollable_menu(ui, |ui| {
+                        for (cat_name, mut entries) in by_category {
+                            entries.sort_by_key(|e| e.adapter.info().display_name);
+                            ui.menu_button(cat_name.to_uppercase(), |ui| {
+                                crate::menu_ui::scrollable_menu(ui, |ui| {
+                                    for entry in entries {
+                                        let info = entry.adapter.info();
+                                        if ui.button(info.display_name).clicked() {
+                                            pending_new_case = Some(info.id.to_string());
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                    });
                 });
                 if let Some(id) = pending_new_case.take() {
                     self.new_case_for_adapter(&id);
