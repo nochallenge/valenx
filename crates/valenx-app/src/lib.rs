@@ -67,16 +67,21 @@ pub mod beltdrive_workbench;
 pub mod brake_workbench;
 pub mod buckling_workbench;
 pub mod cam_overlay;
+pub mod capacitor_workbench;
 pub mod collision_workbench;
 pub mod combustion_workbench;
 pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
+pub mod creep_workbench;
 pub mod dcmotor_workbench;
 pub mod docking;
 pub mod draft_overlay;
 pub mod drone_workbench;
+pub mod electrochem_workbench;
 pub mod engine_workbench;
+pub mod enzymekinetics_workbench;
+pub mod fanlaws_workbench;
 pub mod fasteners_workbench;
 pub mod fatigue_workbench;
 pub mod fields_workbench;
@@ -558,6 +563,41 @@ pub struct ValenxApp {
     /// box-form hull hydrostatics wrapping `valenx-marine`. See
     /// [`crate::marine_workbench`].
     pub(crate) marine: crate::marine_workbench::MarineWorkbenchState,
+
+    /// Whether the right-side Capacitor workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_capacitor_workbench: bool,
+    /// State for the Capacitor workbench, wrapping `valenx-capacitor`. See
+    /// [`crate::capacitor_workbench`].
+    pub(crate) capacitor: crate::capacitor_workbench::CapacitorWorkbenchState,
+
+    /// Whether the right-side Fan Laws workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_fanlaws_workbench: bool,
+    /// State for the Fan Laws workbench, wrapping `valenx-fanlaws`. See
+    /// [`crate::fanlaws_workbench`].
+    pub(crate) fanlaws: crate::fanlaws_workbench::FanLawsWorkbenchState,
+
+    /// Whether the right-side Creep workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_creep_workbench: bool,
+    /// State for the Creep workbench, wrapping `valenx-creep`. See
+    /// [`crate::creep_workbench`].
+    pub(crate) creep: crate::creep_workbench::CreepWorkbenchState,
+
+    /// Whether the right-side Electrochemistry workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_electrochem_workbench: bool,
+    /// State for the Electrochemistry workbench, wrapping `valenx-electrochem`.
+    /// See [`crate::electrochem_workbench`].
+    pub(crate) electrochem: crate::electrochem_workbench::ElectrochemWorkbenchState,
+
+    /// Whether the right-side Enzyme Kinetics workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_enzymekinetics_workbench: bool,
+    /// State for the Enzyme Kinetics workbench, wrapping
+    /// `valenx-enzymekinetics`. See [`crate::enzymekinetics_workbench`].
+    pub(crate) enzymekinetics: crate::enzymekinetics_workbench::EnzymeKineticsWorkbenchState,
 
     /// Whether the right-side Gears Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
