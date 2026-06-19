@@ -503,6 +503,60 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Gear Tooth workbench — native
+                    // spur-gear tooth bending strength (valenx-geartooth).
+                    if ui
+                        .checkbox(&mut self.show_geartooth_workbench, "Gear Tooth")
+                        .on_hover_text(
+                            "Show / hide the right-side Gear Tooth Workbench — native spur-gear \
+                             tooth bending strength (Lewis equation + AGMA refinement), computed \
+                             in-process by valenx-geartooth.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Pharmacokinetics workbench — native
+                    // one-compartment IV dosing (valenx-pharmacokinetics).
+                    if ui
+                        .checkbox(&mut self.show_pharmacokinetics_workbench, "Pharmacokinetics")
+                        .on_hover_text(
+                            "Show / hide the right-side Pharmacokinetics Workbench — native \
+                             one-compartment IV-bolus dosing: elimination rate, half-life, Cmax, \
+                             AUC and concentration-time, computed in-process by \
+                             valenx-pharmacokinetics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Pipe Network workbench — native
+                    // Hardy-Cross flow balancing (valenx-pipenetwork).
+                    if ui
+                        .checkbox(&mut self.show_pipenetwork_workbench, "Pipe Network")
+                        .on_hover_text(
+                            "Show / hide the right-side Pipe Network Workbench — native \
+                             pipe-network flow balancing (Hardy-Cross loop solve) for the loop \
+                             flows and head losses, computed in-process by valenx-pipenetwork.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side RC Beam workbench — native reinforced
+                    // concrete beam flexure (valenx-rcbeam).
+                    if ui
+                        .checkbox(&mut self.show_rcbeam_workbench, "RC Beam")
+                        .on_hover_text(
+                            "Show / hide the right-side RC Beam Workbench — native singly- \
+                             reinforced concrete beam flexure (Whitney stress block): stress-block \
+                             depth, lever arm, nominal and design moment, computed in-process by \
+                             valenx-rcbeam.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Marine / Hull Workbench — native
                     // box-form hull hydrostatics (valenx-marine). Off by default.
                     if ui
@@ -915,6 +969,20 @@ impl eframe::App for ValenxApp {
                         .on_hover_text(
                             "Show / hide the right-side Interior-Design workbench — a 2D \
                              floor plan with a furniture palette, on valenx-interior.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Heat Pump workbench — native
+                    // Carnot COP + second-law derating (valenx-heatpump).
+                    if ui
+                        .checkbox(&mut self.show_heatpump_workbench, "Heat Pump")
+                        .on_hover_text(
+                            "Show / hide the right-side Heat Pump Workbench — native Carnot \
+                             COP: temperature lift, the ideal heating / cooling COP and the \
+                             real-machine COPs after a Carnot-fraction derating, computed \
+                             in-process by valenx-heatpump.",
                         )
                         .changed()
                     {
@@ -1564,6 +1632,22 @@ impl eframe::App for ValenxApp {
         // Off unless toggled via View.
         crate::fatigue_workbench::draw_fatigue_workbench(self, ctx);
 
+        // Gear Tooth workbench (right) — spur-gear tooth bending strength on
+        // valenx-geartooth. Off unless toggled via View.
+        crate::geartooth_workbench::draw_geartooth_workbench(self, ctx);
+
+        // Pharmacokinetics workbench (right) — one-compartment IV dosing on
+        // valenx-pharmacokinetics. Off unless toggled via View.
+        crate::pharmacokinetics_workbench::draw_pharmacokinetics_workbench(self, ctx);
+
+        // Pipe Network workbench (right) — Hardy-Cross flow balancing on
+        // valenx-pipenetwork. Off unless toggled via View.
+        crate::pipenetwork_workbench::draw_pipenetwork_workbench(self, ctx);
+
+        // RC Beam workbench (right) — reinforced-concrete beam flexure on
+        // valenx-rcbeam. Off unless toggled via View.
+        crate::rcbeam_workbench::draw_rcbeam_workbench(self, ctx);
+
         // Marine / Hull Workbench (right) — native box-form hull
         // hydrostatics on valenx-marine. A no-op unless toggled on.
         crate::marine_workbench::draw_marine_workbench(self, ctx);
@@ -1701,6 +1785,10 @@ impl eframe::App for ValenxApp {
         // Variant-Effect workbench (right) — HGVS variant parser on
         // valenx-variant-effect. Off unless toggled via View.
         crate::variant_effect_workbench::draw_variant_effect_workbench(self, ctx);
+
+        // Heat Pump workbench (right) — Carnot COP + second-law derating on
+        // valenx-heatpump. Off unless toggled via View.
+        crate::heatpump_workbench::draw_heatpump_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled

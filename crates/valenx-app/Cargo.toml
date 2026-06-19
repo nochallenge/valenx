@@ -144,9 +144,24 @@ valenx-brake         = { path = "../valenx-brake" }
 # Native high-cycle stress-life fatigue — surfaced by the Fatigue
 # workbench (src/fatigue_workbench.rs).
 valenx-fatigue       = { path = "../valenx-fatigue" }
+# Native spur-gear tooth bending strength — surfaced by the Gear Tooth
+# workbench (src/geartooth_workbench.rs).
+valenx-geartooth     = { path = "../valenx-geartooth" }
+# Native one-compartment pharmacokinetics — surfaced by the Pharmacokinetics
+# workbench (src/pharmacokinetics_workbench.rs).
+valenx-pharmacokinetics = { path = "../valenx-pharmacokinetics" }
+# Native Hardy-Cross pipe-network balancing — surfaced by the Pipe Network
+# workbench (src/pipenetwork_workbench.rs).
+valenx-pipenetwork   = { path = "../valenx-pipenetwork" }
+# Native reinforced-concrete beam flexure — surfaced by the RC Beam
+# workbench (src/rcbeam_workbench.rs).
+valenx-rcbeam        = { path = "../valenx-rcbeam" }
 # Native box-form hull hydrostatics — surfaced by the Marine workbench
 # (src/marine_workbench.rs).
 valenx-marine        = { path = "../valenx-marine" }
+# Native Carnot heat-pump COP + derating — surfaced by the Heat Pump
+# workbench (src/heatpump_workbench.rs).
+valenx-heatpump      = { path = "../valenx-heatpump" }
 # Native involute-gear design — surfaced by the Gears workbench
 # (src/gears_workbench.rs).
 valenx-gears         = { path = "../valenx-gears" }
