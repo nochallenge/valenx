@@ -6940,6 +6940,7 @@ dependencies = [
  "valenx-interior",
  "valenx-librecad-2d",
  "valenx-macro",
+ "valenx-marine",
  "valenx-md",
  "valenx-mesh",
  "valenx-mesh-to-brep",
