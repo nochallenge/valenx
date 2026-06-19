@@ -117,6 +117,9 @@ valenx-reactdyn      = { path = "../valenx-reactdyn" }
 # Native helical-spring design — surfaced by the Springs workbench
 # (src/springs_workbench.rs).
 valenx-springs       = { path = "../valenx-springs" }
+# Native box-form hull hydrostatics — surfaced by the Marine workbench
+# (src/marine_workbench.rs).
+valenx-marine        = { path = "../valenx-marine" }
 # Native involute-gear design — surfaced by the Gears workbench
 # (src/gears_workbench.rs).
 valenx-gears         = { path = "../valenx-gears" }
