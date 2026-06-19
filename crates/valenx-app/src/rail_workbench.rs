@@ -337,25 +337,27 @@ fn train_solid_mesh(s: &RailWorkbenchState) -> Option<Mesh> {
     let _train = build_train(s).ok()?;
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
     let mut tris: Vec<usize> = Vec::new();
-    // Car body.
+    // Car body — a chunky boxcar (length:height ~3:1 so it reads as a 3-D
+    // solid rather than an edge-on slab).
     push_box(
         &mut nodes,
         &mut tris,
-        Vector3::new(0.0, 0.0, 2.6),
-        Vector3::new(10.0, 1.5, 1.6),
+        Vector3::new(0.0, 0.0, 3.0),
+        Vector3::new(6.5, 1.9, 2.2),
     );
-    // Underframe / chassis (slightly longer, narrower, thin).
+    // Underframe / chassis (slightly longer, narrower, thin) over the bogies.
     push_box(
         &mut nodes,
         &mut tris,
-        Vector3::new(0.0, 0.0, 1.1),
-        Vector3::new(10.5, 1.2, 0.3),
+        Vector3::new(0.0, 0.0, 1.3),
+        Vector3::new(7.0, 1.5, 0.35),
     );
-    // Eight wheels: four axles, two wheels each, axes cross-track.
-    let rw = 0.8;
-    let hw = 0.25;
-    for &x in &[-8.5, -6.0, 6.0, 8.5] {
-        for &y in &[-1.25, 1.25] {
+    // Eight wheels: four axles, two wheels each, axes cross-track, sitting on
+    // the rail plane (z = 0).
+    let rw = 1.0;
+    let hw = 0.3;
+    for &x in &[-5.0, -3.0, 3.0, 5.0] {
+        for &y in &[-1.5, 1.5] {
             push_wheel(&mut nodes, &mut tris, Vector3::new(x, y, rw), rw, hw, 16);
         }
     }
