@@ -249,6 +249,15 @@ valenx-gearbox       = { path = "../valenx-gearbox" }
 # Native AABB geometry + collision tests — surfaced by the Collision
 # workbench (src/collision_workbench.rs).
 valenx-collision     = { path = "../valenx-collision" }
+# Science / engineering workbench batch 4 (each surfaced by its src/*_workbench.rs).
+valenx-statics       = { path = "../valenx-statics" }
+valenx-projectile    = { path = "../valenx-projectile" }
+valenx-conveyor      = { path = "../valenx-conveyor" }
+valenx-fluid-statics = { path = "../valenx-fluid-statics" }
+valenx-plate         = { path = "../valenx-plate" }
+valenx-strainrosette = { path = "../valenx-strainrosette" }
+valenx-transformer   = { path = "../valenx-transformer" }
+valenx-threephase    = { path = "../valenx-threephase" }
 # Native composite-wall 1-D heat loss — surfaced by the Heat Transfer
 # workbench (src/heattransfer_workbench.rs).
 valenx-heat-transfer = { path = "../valenx-heat-transfer" }

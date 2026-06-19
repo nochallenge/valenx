@@ -81,6 +81,7 @@ pub mod collision_workbench;
 pub mod columnsteel_workbench;
 pub mod combustion_workbench;
 pub mod commands;
+pub mod conveyor_workbench;
 #[cfg(test)]
 mod coverage_ui_tests;
 pub mod creep_workbench;
@@ -97,6 +98,7 @@ pub mod fatigue_workbench;
 pub mod fields_workbench;
 pub mod first_run;
 pub mod fixedwing_workbench;
+pub mod fluidstatics_workbench;
 pub mod flywheel_workbench;
 pub mod fourbar_workbench;
 pub mod fracture_workbench;
@@ -132,9 +134,11 @@ pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+pub mod plate_workbench;
 pub mod pneumatics_workbench;
 pub mod pressurevessel_workbench;
 pub mod project_tabs;
+pub mod projectile_workbench;
 pub mod psychrometrics_workbench;
 pub mod pump_workbench;
 pub mod rail_workbench;
@@ -153,12 +157,16 @@ pub mod shortcuts;
 pub mod sketch_overlay;
 pub mod solarpv_workbench;
 pub mod springs_workbench;
+pub mod statics_workbench;
 pub mod straingauge_workbench;
+pub mod strainrosette_workbench;
 pub mod theme;
 pub mod thermalexpansion_workbench;
 pub mod thermistor_workbench;
+pub mod threephase_workbench;
 pub mod tooltips;
 pub mod torsion_workbench;
+pub mod transformer_workbench;
 pub mod truss_workbench;
 pub mod types;
 pub mod undo;
@@ -769,6 +777,46 @@ pub struct ValenxApp {
     /// geometry + overlap tests wrapping `valenx-collision`. See
     /// [`crate::collision_workbench`].
     pub(crate) collision: crate::collision_workbench::CollisionWorkbenchState,
+
+    /// Whether the right-side Statics workbench is visible (View menu).
+    pub(crate) show_statics_workbench: bool,
+    /// State for the Statics workbench. See [`crate::statics_workbench`].
+    pub(crate) statics: crate::statics_workbench::StaticsWorkbenchState,
+
+    /// Whether the right-side Projectile workbench is visible (View menu).
+    pub(crate) show_projectile_workbench: bool,
+    /// State for the Projectile workbench. See [`crate::projectile_workbench`].
+    pub(crate) projectile: crate::projectile_workbench::ProjectileWorkbenchState,
+
+    /// Whether the right-side Conveyor workbench is visible (View menu).
+    pub(crate) show_conveyor_workbench: bool,
+    /// State for the Conveyor workbench. See [`crate::conveyor_workbench`].
+    pub(crate) conveyor: crate::conveyor_workbench::ConveyorWorkbenchState,
+
+    /// Whether the right-side Fluid Statics workbench is visible (View menu).
+    pub(crate) show_fluidstatics_workbench: bool,
+    /// State for the Fluid Statics workbench. See [`crate::fluidstatics_workbench`].
+    pub(crate) fluidstatics: crate::fluidstatics_workbench::FluidStaticsWorkbenchState,
+
+    /// Whether the right-side Plate Bending workbench is visible (View menu).
+    pub(crate) show_plate_workbench: bool,
+    /// State for the Plate Bending workbench. See [`crate::plate_workbench`].
+    pub(crate) plate: crate::plate_workbench::PlateWorkbenchState,
+
+    /// Whether the right-side Strain Rosette workbench is visible (View menu).
+    pub(crate) show_strainrosette_workbench: bool,
+    /// State for the Strain Rosette workbench. See [`crate::strainrosette_workbench`].
+    pub(crate) strainrosette: crate::strainrosette_workbench::StrainRosetteWorkbenchState,
+
+    /// Whether the right-side Transformer workbench is visible (View menu).
+    pub(crate) show_transformer_workbench: bool,
+    /// State for the Transformer workbench. See [`crate::transformer_workbench`].
+    pub(crate) transformer: crate::transformer_workbench::TransformerWorkbenchState,
+
+    /// Whether the right-side Three-Phase workbench is visible (View menu).
+    pub(crate) show_threephase_workbench: bool,
+    /// State for the Three-Phase workbench. See [`crate::threephase_workbench`].
+    pub(crate) threephase: crate::threephase_workbench::ThreePhaseWorkbenchState,
 
     /// Whether the right-side Solar PV Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
