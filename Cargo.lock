@@ -6936,6 +6936,7 @@ dependencies = [
  "valenx-genomics",
  "valenx-geo",
  "valenx-geomatics",
+ "valenx-heatpump",
  "valenx-hvac",
  "valenx-i18n",
  "valenx-icons",

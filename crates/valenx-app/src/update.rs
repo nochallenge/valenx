@@ -731,6 +731,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Heat Pump workbench — native
+                    // Carnot COP + second-law derating (valenx-heatpump).
+                    if ui
+                        .checkbox(&mut self.show_heatpump_workbench, "Heat Pump")
+                        .on_hover_text(
+                            "Show / hide the right-side Heat Pump Workbench — native Carnot \
+                             COP: temperature lift, the ideal heating / cooling COP and the \
+                             real-machine COPs after a Carnot-fraction derating, computed \
+                             in-process by valenx-heatpump.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_animate_workbench, "Animation")
                         .on_hover_text(
@@ -1414,6 +1428,10 @@ impl eframe::App for ValenxApp {
         // Variant-Effect workbench (right) — HGVS variant parser on
         // valenx-variant-effect. Off unless toggled via View.
         crate::variant_effect_workbench::draw_variant_effect_workbench(self, ctx);
+
+        // Heat Pump workbench (right) — Carnot COP + second-law derating on
+        // valenx-heatpump. Off unless toggled via View.
+        crate::heatpump_workbench::draw_heatpump_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled

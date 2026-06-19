@@ -120,6 +120,9 @@ valenx-springs       = { path = "../valenx-springs" }
 # Native box-form hull hydrostatics — surfaced by the Marine workbench
 # (src/marine_workbench.rs).
 valenx-marine        = { path = "../valenx-marine" }
+# Native Carnot heat-pump COP + derating — surfaced by the Heat Pump
+# workbench (src/heatpump_workbench.rs).
+valenx-heatpump      = { path = "../valenx-heatpump" }
 # Native involute-gear design — surfaced by the Gears workbench
 # (src/gears_workbench.rs).
 valenx-gears         = { path = "../valenx-gears" }

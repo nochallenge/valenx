@@ -45,6 +45,7 @@ pub mod cfd_workbench;
 pub mod draft2d_workbench;
 pub mod fem_workbench;
 pub mod headless;
+pub mod heatpump_workbench;
 pub mod hvac_workbench;
 pub mod interior_workbench;
 pub mod neuro_workbench;
@@ -652,6 +653,13 @@ pub struct ValenxApp {
     /// State for the Variant-Effect workbench, wrapping `valenx-variant-effect`.
     /// See [`crate::variant_effect_workbench`].
     pub(crate) variant_effect: crate::variant_effect_workbench::VariantEffectWorkbenchState,
+
+    /// Whether the right-side Heat Pump workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_heatpump_workbench: bool,
+    /// State for the Heat Pump workbench, wrapping `valenx-heatpump`. See
+    /// [`crate::heatpump_workbench`].
+    pub(crate) heatpump: crate::heatpump_workbench::HeatPumpWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).
