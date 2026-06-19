@@ -477,6 +477,73 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Acoustics workbench — native room
+                    // reverberation + SPL (valenx-acoustics).
+                    if ui
+                        .checkbox(&mut self.show_acoustics_workbench, "Acoustics")
+                        .on_hover_text(
+                            "Show / hide the right-side Acoustics Workbench — native \
+                             rectangular-room reverberation (Sabine / Eyring RT60), lowest room \
+                             mode and free-field SPL distance drop, computed in-process by \
+                             valenx-acoustics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Acid-Base workbench — native aqueous
+                    // pH / buffer equilibria (valenx-acidbase).
+                    if ui
+                        .checkbox(&mut self.show_acidbase_workbench, "Acid-Base")
+                        .on_hover_text(
+                            "Show / hide the right-side Acid-Base Workbench — native aqueous pH \
+                             for strong / weak acids and bases plus Henderson-Hasselbalch \
+                             buffers, computed in-process by valenx-acidbase.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side BJT workbench — native bipolar
+                    // transistor DC bias (valenx-bjt).
+                    if ui
+                        .checkbox(&mut self.show_bjt_workbench, "BJT")
+                        .on_hover_text(
+                            "Show / hide the right-side BJT Workbench — native bipolar-junction \
+                             transistor DC bias Q-point (currents, Vce, region, stability factor) \
+                             for divider / fixed-base networks, computed in-process by valenx-bjt.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side BMR / TDEE workbench — native resting
+                    // + daily energy expenditure (valenx-bmr).
+                    if ui
+                        .checkbox(&mut self.show_bmr_workbench, "BMR / TDEE")
+                        .on_hover_text(
+                            "Show / hide the right-side BMR / TDEE Workbench — native basal \
+                             metabolic rate (Mifflin-St Jeor / Harris-Benedict) and total daily \
+                             energy expenditure, computed in-process by valenx-bmr.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Bolted Joint workbench — native
+                    // preloaded joint mechanics (valenx-bolt).
+                    if ui
+                        .checkbox(&mut self.show_bolt_workbench, "Bolted Joint")
+                        .on_hover_text(
+                            "Show / hide the right-side Bolted Joint Workbench — native preloaded \
+                             bolted-joint mechanics: preload from torque, bolt / member load \
+                             sharing, separation and overload safety, computed in-process by \
+                             valenx-bolt.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Geomatics Workbench — native
                     // geodesic calculations (valenx-geomatics). Off by default.
                     if ui
@@ -1488,6 +1555,26 @@ impl eframe::App for ValenxApp {
         // Drone Workbench (right) — native multirotor hover performance on
         // valenx-drone. A no-op unless toggled on via View → Drone / Multirotor.
         crate::drone_workbench::draw_drone_workbench(self, ctx);
+
+        // Acoustics workbench (right) — room reverberation + SPL on
+        // valenx-acoustics. Off unless toggled via View.
+        crate::acoustics_workbench::draw_acoustics_workbench(self, ctx);
+
+        // Acid-Base workbench (right) — aqueous pH / buffer equilibria on
+        // valenx-acidbase. Off unless toggled via View.
+        crate::acidbase_workbench::draw_acidbase_workbench(self, ctx);
+
+        // BJT workbench (right) — bipolar-transistor DC bias on valenx-bjt.
+        // Off unless toggled via View.
+        crate::bjt_workbench::draw_bjt_workbench(self, ctx);
+
+        // BMR / TDEE workbench (right) — energy expenditure on valenx-bmr.
+        // Off unless toggled via View.
+        crate::bmr_workbench::draw_bmr_workbench(self, ctx);
+
+        // Bolted Joint workbench (right) — preloaded joint mechanics on
+        // valenx-bolt. Off unless toggled via View.
+        crate::bolt_workbench::draw_bolt_workbench(self, ctx);
 
         // Geomatics Workbench (right) — native geodesic calculations on
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.

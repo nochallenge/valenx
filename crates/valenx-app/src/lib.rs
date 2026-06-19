@@ -58,9 +58,14 @@ pub mod reverse_workbench;
 pub mod variant_effect_workbench;
 pub mod windturbine_workbench;
 
+pub mod acidbase_workbench;
+pub mod acoustics_workbench;
 pub mod assistant_workbench;
 pub mod astro;
 pub mod astro_workbench;
+pub mod bjt_workbench;
+pub mod bmr_workbench;
+pub mod bolt_workbench;
 pub mod cam_overlay;
 pub mod collision_workbench;
 pub mod commands;
@@ -485,6 +490,41 @@ pub struct ValenxApp {
     /// Form + result state for the Drone Workbench — native multirotor
     /// hover performance wrapping `valenx-drone`. See [`crate::drone_workbench`].
     pub(crate) drone: crate::drone_workbench::DroneWorkbenchState,
+
+    /// Whether the right-side Acoustics workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_acoustics_workbench: bool,
+    /// State for the Acoustics workbench, wrapping `valenx-acoustics`. See
+    /// [`crate::acoustics_workbench`].
+    pub(crate) acoustics: crate::acoustics_workbench::AcousticsWorkbenchState,
+
+    /// Whether the right-side Acid-Base workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_acidbase_workbench: bool,
+    /// State for the Acid-Base workbench, wrapping `valenx-acidbase`. See
+    /// [`crate::acidbase_workbench`].
+    pub(crate) acidbase: crate::acidbase_workbench::AcidBaseWorkbenchState,
+
+    /// Whether the right-side BJT workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_bjt_workbench: bool,
+    /// State for the BJT workbench, wrapping `valenx-bjt`. See
+    /// [`crate::bjt_workbench`].
+    pub(crate) bjt: crate::bjt_workbench::BjtWorkbenchState,
+
+    /// Whether the right-side BMR / TDEE workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_bmr_workbench: bool,
+    /// State for the BMR / TDEE workbench, wrapping `valenx-bmr`. See
+    /// [`crate::bmr_workbench`].
+    pub(crate) bmr: crate::bmr_workbench::BmrWorkbenchState,
+
+    /// Whether the right-side Bolted Joint workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_bolt_workbench: bool,
+    /// State for the Bolted Joint workbench, wrapping `valenx-bolt`. See
+    /// [`crate::bolt_workbench`].
+    pub(crate) bolt: crate::bolt_workbench::BoltWorkbenchState,
 
     /// Whether the right-side Geomatics Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
