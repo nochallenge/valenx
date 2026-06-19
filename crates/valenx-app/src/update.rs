@@ -603,6 +603,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side DC Motor Workbench — native
+                    // brushed-DC-motor performance (valenx-dcmotor). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_dcmotor_workbench, "DC Motor")
+                        .on_hover_text(
+                            "Show / hide the right-side DC Motor Workbench — native brushed-DC-\
+                             motor performance: stall torque / current, no-load speed, peak \
+                             output power, and the operating-point current / torque / power / \
+                             efficiency, computed in-process by valenx-dcmotor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Frames Workbench — structural
                     // cross-section properties (valenx-frames). Off by default.
                     if ui
@@ -695,6 +709,18 @@ impl eframe::App for ValenxApp {
                             "Show / hide the right-side Path-Traced Render workbench — a \
                              global-illumination Cornell-box render displayed as an image, \
                              on the native valenx-pathtrace CPU path tracer.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_beam_workbench, "Beam")
+                        .on_hover_text(
+                            "Show / hide the right-side Beam Workbench — native Euler-Bernoulli \
+                             beam bending: peak deflection, bending moment and bending stress for \
+                             a cantilever / simply-supported / fixed-fixed beam under a point or \
+                             distributed load, computed in-process by valenx-beam.",
                         )
                         .changed()
                     {
@@ -1367,6 +1393,10 @@ impl eframe::App for ValenxApp {
         // valenx-frames. A no-op unless toggled on via View → Frames.
         crate::frames_workbench::draw_frames_workbench(self, ctx);
 
+        // DC Motor Workbench (right) — native brushed-DC-motor performance on
+        // valenx-dcmotor. A no-op unless toggled on via View → DC Motor.
+        crate::dcmotor_workbench::draw_dcmotor_workbench(self, ctx);
+
         // Gas Dynamics workbench (right) — 1-D compressible-flow relations on
         // valenx-gasdynamics. A no-op unless toggled on via View → Gas Dynamics.
         crate::gasdynamics_workbench::draw_gasdynamics_workbench(self, ctx);
@@ -1398,6 +1428,10 @@ impl eframe::App for ValenxApp {
         // HVAC workbench (right) — duct sizing + pressure drop on valenx-hvac.
         // Off unless toggled via View.
         crate::hvac_workbench::draw_hvac_workbench(self, ctx);
+
+        // Beam Workbench (right) — native Euler-Bernoulli beam bending on
+        // valenx-beam. A no-op unless toggled on via View → Beam.
+        crate::beam_workbench::draw_beam_workbench(self, ctx);
 
         // Reverse-Engineering workbench (right) — point-cloud reconstruction
         // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
