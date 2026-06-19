@@ -752,6 +752,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Pipe Flow workbench — native
+                    // Darcy-Weisbach pipe-flow analysis (valenx-pipeflow).
+                    if ui
+                        .checkbox(&mut self.show_pipeflow_workbench, "Pipe Flow")
+                        .on_hover_text(
+                            "Show / hide the right-side Pipe Flow Workbench — native \
+                             Darcy-Weisbach analysis: Reynolds number, flow regime, friction \
+                             factor, head loss and pressure drop for a straight pipe run, \
+                             computed in-process by valenx-pipeflow.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Astro / Launch workbench —
                     // the native launch-vehicle ascent + trajectory
                     // simulator (fly a rocket to orbit) plus the
@@ -1421,6 +1435,10 @@ impl eframe::App for ValenxApp {
         // so egui docks it to the right (alongside the other open
         // workbenches).
         crate::astro_workbench::draw_astro_workbench(self, ctx);
+
+        // Pipe Flow workbench (right) — Darcy-Weisbach pipe-flow analysis
+        // on valenx-pipeflow. Off unless toggled via View.
+        crate::pipeflow_workbench::draw_pipeflow_workbench(self, ctx);
 
         // Rocket workbench (right) — the valenx-rocket-demo coupled
         // design→simulate pipeline. A no-op unless toggled on via
