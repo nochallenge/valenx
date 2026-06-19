@@ -377,6 +377,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Induction Motor workbench — native
+                    // 3-phase induction-motor slip / power (valenx-inductionmotor).
+                    if ui
+                        .checkbox(&mut self.show_inductionmotor_workbench, "Induction Motor")
+                        .on_hover_text(
+                            "Show / hide the right-side Induction Motor Workbench — native \
+                             3-phase induction machine: synchronous speed, slip, rotor \
+                             frequency and the air-gap power split into rotor copper loss and \
+                             mechanical power, computed in-process by valenx-inductionmotor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side CFD Workbench — native 2-D
                     // incompressible laminar CFD (SIMPLE): the lid-driven
                     // cavity + developing channel-flow cases on
@@ -1332,6 +1346,10 @@ impl eframe::App for ValenxApp {
         // View → FEM Workbench. Mounted before the CentralPanel so egui
         // docks it to the right (alongside the other open workbenches).
         crate::fem_workbench::draw_fem_workbench(self, ctx);
+
+        // Induction Motor workbench (right) — 3-phase induction-motor slip /
+        // power on valenx-inductionmotor. Off unless toggled via View.
+        crate::inductionmotor_workbench::draw_inductionmotor_workbench(self, ctx);
 
         // CFD Workbench (right) — native 2-D incompressible laminar CFD
         // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via

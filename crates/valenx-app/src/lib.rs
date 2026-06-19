@@ -47,6 +47,7 @@ pub mod draft2d_workbench;
 pub mod fem_workbench;
 pub mod headless;
 pub mod hvac_workbench;
+pub mod inductionmotor_workbench;
 pub mod interior_workbench;
 pub mod neuro_workbench;
 pub mod reinforcement_workbench;
@@ -419,6 +420,13 @@ pub struct ValenxApp {
     /// in-process solvers (no external solver, no input deck). See
     /// [`crate::fem_workbench`].
     pub(crate) fem: crate::fem_workbench::FemWorkbenchState,
+
+    /// Whether the right-side Induction Motor workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_inductionmotor_workbench: bool,
+    /// State for the Induction Motor workbench, wrapping
+    /// `valenx-inductionmotor`. See [`crate::inductionmotor_workbench`].
+    pub(crate) inductionmotor: crate::inductionmotor_workbench::InductionMotorWorkbenchState,
 
     /// Whether the right-side CFD Workbench panel is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the
