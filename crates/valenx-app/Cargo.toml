@@ -129,6 +129,33 @@ valenx-reactdyn      = { path = "../valenx-reactdyn" }
 # Native helical-spring design — surfaced by the Springs workbench
 # (src/springs_workbench.rs).
 valenx-springs       = { path = "../valenx-springs" }
+# Native rolling-bearing ISO 281 rating life — surfaced by the Bearing
+# workbench (src/bearing_workbench.rs).
+valenx-bearing       = { path = "../valenx-bearing" }
+# Native flat-belt drive analysis — surfaced by the Belt Drive workbench
+# (src/beltdrive_workbench.rs).
+valenx-beltdrive     = { path = "../valenx-beltdrive" }
+# Native Euler / Johnson column buckling — surfaced by the Buckling
+# workbench (src/buckling_workbench.rs).
+valenx-buckling      = { path = "../valenx-buckling" }
+# Native disc-brake torque + stop dynamics — surfaced by the Brake
+# workbench (src/brake_workbench.rs).
+valenx-brake         = { path = "../valenx-brake" }
+# Native high-cycle stress-life fatigue — surfaced by the Fatigue
+# workbench (src/fatigue_workbench.rs).
+valenx-fatigue       = { path = "../valenx-fatigue" }
+# Native spur-gear tooth bending strength — surfaced by the Gear Tooth
+# workbench (src/geartooth_workbench.rs).
+valenx-geartooth     = { path = "../valenx-geartooth" }
+# Native one-compartment pharmacokinetics — surfaced by the Pharmacokinetics
+# workbench (src/pharmacokinetics_workbench.rs).
+valenx-pharmacokinetics = { path = "../valenx-pharmacokinetics" }
+# Native Hardy-Cross pipe-network balancing — surfaced by the Pipe Network
+# workbench (src/pipenetwork_workbench.rs).
+valenx-pipenetwork   = { path = "../valenx-pipenetwork" }
+# Native reinforced-concrete beam flexure — surfaced by the RC Beam
+# workbench (src/rcbeam_workbench.rs).
+valenx-rcbeam        = { path = "../valenx-rcbeam" }
 # Native box-form hull hydrostatics — surfaced by the Marine workbench
 # (src/marine_workbench.rs).
 valenx-marine        = { path = "../valenx-marine" }
@@ -147,6 +174,9 @@ valenx-electrochem   = { path = "../valenx-electrochem" }
 # Native Michaelis-Menten enzyme kinetics — surfaced by the Enzyme
 # Kinetics workbench (src/enzymekinetics_workbench.rs).
 valenx-enzymekinetics = { path = "../valenx-enzymekinetics" }
+# Native Carnot heat-pump COP + derating — surfaced by the Heat Pump
+# workbench (src/heatpump_workbench.rs).
+valenx-heatpump      = { path = "../valenx-heatpump" }
 # Native involute-gear design — surfaced by the Gears workbench
 # (src/gears_workbench.rs).
 valenx-gears         = { path = "../valenx-gears" }

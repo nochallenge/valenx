@@ -436,6 +436,127 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Bearing workbench — native rolling
+                    // bearing ISO 281 rating life (valenx-bearing).
+                    if ui
+                        .checkbox(&mut self.show_bearing_workbench, "Bearing")
+                        .on_hover_text(
+                            "Show / hide the right-side Bearing Workbench — native rolling-bearing \
+                             ISO 281 basic rating life: dynamic equivalent load → L10 in \
+                             revolutions and hours, computed in-process by valenx-bearing.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Belt Drive workbench — native flat-belt
+                    // drive analysis (valenx-beltdrive).
+                    if ui
+                        .checkbox(&mut self.show_beltdrive_workbench, "Belt Drive")
+                        .on_hover_text(
+                            "Show / hide the right-side Belt Drive Workbench — native open \
+                             flat-belt drive: speed ratio, belt speed, wrap angles, capstan \
+                             tension ratio and transmissible power, computed in-process by \
+                             valenx-beltdrive.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Buckling workbench — native Euler /
+                    // Johnson column buckling (valenx-buckling).
+                    if ui
+                        .checkbox(&mut self.show_buckling_workbench, "Buckling")
+                        .on_hover_text(
+                            "Show / hide the right-side Buckling Workbench — native Euler / Johnson \
+                             column buckling: critical load, critical stress, slenderness and the \
+                             design load for the end condition, computed in-process by \
+                             valenx-buckling.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Brake workbench — native disc-brake
+                    // torque and stop dynamics (valenx-brake).
+                    if ui
+                        .checkbox(&mut self.show_brake_workbench, "Brake")
+                        .on_hover_text(
+                            "Show / hide the right-side Brake Workbench — native disc-brake \
+                             friction torque from clamp force and effective radius, plus the stop \
+                             energy / distance / time, computed in-process by valenx-brake.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Fatigue workbench — native high-cycle
+                    // stress-life analysis (valenx-fatigue).
+                    if ui
+                        .checkbox(&mut self.show_fatigue_workbench, "Fatigue")
+                        .on_hover_text(
+                            "Show / hide the right-side Fatigue Workbench — native high-cycle \
+                             stress-life: Goodman / Soderberg / Gerber mean-stress factor of \
+                             safety and S-N life, computed in-process by valenx-fatigue.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Gear Tooth workbench — native
+                    // spur-gear tooth bending strength (valenx-geartooth).
+                    if ui
+                        .checkbox(&mut self.show_geartooth_workbench, "Gear Tooth")
+                        .on_hover_text(
+                            "Show / hide the right-side Gear Tooth Workbench — native spur-gear \
+                             tooth bending strength (Lewis equation + AGMA refinement), computed \
+                             in-process by valenx-geartooth.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Pharmacokinetics workbench — native
+                    // one-compartment IV dosing (valenx-pharmacokinetics).
+                    if ui
+                        .checkbox(&mut self.show_pharmacokinetics_workbench, "Pharmacokinetics")
+                        .on_hover_text(
+                            "Show / hide the right-side Pharmacokinetics Workbench — native \
+                             one-compartment IV-bolus dosing: elimination rate, half-life, Cmax, \
+                             AUC and concentration-time, computed in-process by \
+                             valenx-pharmacokinetics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Pipe Network workbench — native
+                    // Hardy-Cross flow balancing (valenx-pipenetwork).
+                    if ui
+                        .checkbox(&mut self.show_pipenetwork_workbench, "Pipe Network")
+                        .on_hover_text(
+                            "Show / hide the right-side Pipe Network Workbench — native \
+                             pipe-network flow balancing (Hardy-Cross loop solve) for the loop \
+                             flows and head losses, computed in-process by valenx-pipenetwork.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side RC Beam workbench — native reinforced
+                    // concrete beam flexure (valenx-rcbeam).
+                    if ui
+                        .checkbox(&mut self.show_rcbeam_workbench, "RC Beam")
+                        .on_hover_text(
+                            "Show / hide the right-side RC Beam Workbench — native singly- \
+                             reinforced concrete beam flexure (Whitney stress block): stress-block \
+                             depth, lever arm, nominal and design moment, computed in-process by \
+                             valenx-rcbeam.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Marine / Hull Workbench — native
                     // box-form hull hydrostatics (valenx-marine). Off by default.
                     if ui
@@ -913,6 +1034,20 @@ impl eframe::App for ValenxApp {
                         .on_hover_text(
                             "Show / hide the right-side Interior-Design workbench — a 2D \
                              floor plan with a furniture palette, on valenx-interior.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Heat Pump workbench — native
+                    // Carnot COP + second-law derating (valenx-heatpump).
+                    if ui
+                        .checkbox(&mut self.show_heatpump_workbench, "Heat Pump")
+                        .on_hover_text(
+                            "Show / hide the right-side Heat Pump Workbench — native Carnot \
+                             COP: temperature lift, the ideal heating / cooling COP and the \
+                             real-machine COPs after a Carnot-fraction derating, computed \
+                             in-process by valenx-heatpump.",
                         )
                         .changed()
                     {
@@ -1542,6 +1677,42 @@ impl eframe::App for ValenxApp {
         // valenx-springs. A no-op unless toggled on via View → Springs.
         crate::springs_workbench::draw_springs_workbench(self, ctx);
 
+        // Bearing workbench (right) — rolling-bearing ISO 281 rating life on
+        // valenx-bearing. Off unless toggled via View.
+        crate::bearing_workbench::draw_bearing_workbench(self, ctx);
+
+        // Belt Drive workbench (right) — flat-belt drive analysis on
+        // valenx-beltdrive. Off unless toggled via View.
+        crate::beltdrive_workbench::draw_beltdrive_workbench(self, ctx);
+
+        // Buckling workbench (right) — Euler / Johnson column buckling on
+        // valenx-buckling. Off unless toggled via View.
+        crate::buckling_workbench::draw_buckling_workbench(self, ctx);
+
+        // Brake workbench (right) — disc-brake torque + stop dynamics on
+        // valenx-brake. Off unless toggled via View.
+        crate::brake_workbench::draw_brake_workbench(self, ctx);
+
+        // Fatigue workbench (right) — high-cycle stress-life on valenx-fatigue.
+        // Off unless toggled via View.
+        crate::fatigue_workbench::draw_fatigue_workbench(self, ctx);
+
+        // Gear Tooth workbench (right) — spur-gear tooth bending strength on
+        // valenx-geartooth. Off unless toggled via View.
+        crate::geartooth_workbench::draw_geartooth_workbench(self, ctx);
+
+        // Pharmacokinetics workbench (right) — one-compartment IV dosing on
+        // valenx-pharmacokinetics. Off unless toggled via View.
+        crate::pharmacokinetics_workbench::draw_pharmacokinetics_workbench(self, ctx);
+
+        // Pipe Network workbench (right) — Hardy-Cross flow balancing on
+        // valenx-pipenetwork. Off unless toggled via View.
+        crate::pipenetwork_workbench::draw_pipenetwork_workbench(self, ctx);
+
+        // RC Beam workbench (right) — reinforced-concrete beam flexure on
+        // valenx-rcbeam. Off unless toggled via View.
+        crate::rcbeam_workbench::draw_rcbeam_workbench(self, ctx);
+
         // Marine / Hull Workbench (right) — native box-form hull
         // hydrostatics on valenx-marine. A no-op unless toggled on.
         crate::marine_workbench::draw_marine_workbench(self, ctx);
@@ -1699,6 +1870,10 @@ impl eframe::App for ValenxApp {
         // Variant-Effect workbench (right) — HGVS variant parser on
         // valenx-variant-effect. Off unless toggled via View.
         crate::variant_effect_workbench::draw_variant_effect_workbench(self, ctx);
+
+        // Heat Pump workbench (right) — Carnot COP + second-law derating on
+        // valenx-heatpump. Off unless toggled via View.
+        crate::heatpump_workbench::draw_heatpump_workbench(self, ctx);
 
         // Astro / Launch workbench (right) — the valenx-astro launch
         // ascent simulator + mission planners. A no-op unless toggled
