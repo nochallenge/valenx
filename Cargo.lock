@@ -6902,6 +6902,7 @@ dependencies = [
  "valenx-aero",
  "valenx-align",
  "valenx-animate",
+ "valenx-antenna",
  "valenx-arch",
  "valenx-assembly",
  "valenx-astro",
