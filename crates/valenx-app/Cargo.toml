@@ -216,6 +216,17 @@ valenx-antenna       = { path = "../valenx-antenna" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
+# EE / DSP compute crates — surfaced by the electronics-batch workbenches
+# (opamp/led/thermocouple/transmissionline/powerfactor/resistornetwork/
+# rectifier/filter _workbench.rs).
+valenx-opamp             = { path = "../valenx-opamp" }
+valenx-led               = { path = "../valenx-led" }
+valenx-thermocouple      = { path = "../valenx-thermocouple" }
+valenx-transmissionline  = { path = "../valenx-transmissionline" }
+valenx-powerfactor       = { path = "../valenx-powerfactor" }
+valenx-resistor-network  = { path = "../valenx-resistor-network" }
+valenx-rectifier         = { path = "../valenx-rectifier" }
+valenx-filter            = { path = "../valenx-filter" }
 # Native effectiveness-NTU heat-exchanger analysis — surfaced by the Heat
 # Exchanger workbench (src/heatexchanger_workbench.rs).
 valenx-heatexchanger = { path = "../valenx-heatexchanger" }
