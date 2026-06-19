@@ -225,6 +225,19 @@ valenx-kinematics    = { path = "../valenx-kinematics" }
 # Native pipe-section sizing — surfaced by the Piping workbench
 # (src/piping_workbench.rs).
 valenx-piping        = { path = "../valenx-piping" }
+# Science / bio / civil batch compute crates — surfaced by the retainingwall /
+# openchannel / weir / thermocycle / queueing / radioactivity / osmosis /
+# thermoreg / hemodynamics / popdynamics _workbench.rs panels.
+valenx-retainingwall = { path = "../valenx-retainingwall" }
+valenx-openchannel   = { path = "../valenx-openchannel" }
+valenx-weir          = { path = "../valenx-weir" }
+valenx-thermocycle   = { path = "../valenx-thermocycle" }
+valenx-queueing      = { path = "../valenx-queueing" }
+valenx-radioactivity = { path = "../valenx-radioactivity" }
+valenx-osmosis       = { path = "../valenx-osmosis" }
+valenx-thermoreg     = { path = "../valenx-thermoreg" }
+valenx-hemodynamics  = { path = "../valenx-hemodynamics" }
+valenx-popdynamics   = { path = "../valenx-popdynamics" }
 # Native train running resistance + tractive effort — surfaced by the Rail
 # workbench (src/rail_workbench.rs).
 valenx-rail          = { path = "../valenx-rail" }

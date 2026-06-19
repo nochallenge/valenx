@@ -127,16 +127,26 @@ pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+// Science / bio / civil batch — surface valenx-retainingwall, -openchannel,
+// -weir, -thermocycle, -queueing, -radioactivity, -osmosis, -thermoreg,
+// -hemodynamics, -popdynamics as reactive right-side workbenches.
+pub mod hemodynamics_workbench;
+pub mod openchannel_workbench;
+pub mod osmosis_workbench;
 pub mod pneumatics_workbench;
+pub mod popdynamics_workbench;
 pub mod pressurevessel_workbench;
 pub mod project_tabs;
 pub mod psychrometrics_workbench;
 pub mod pump_workbench;
+pub mod queueing_workbench;
+pub mod radioactivity_workbench;
 pub mod rail_workbench;
 pub mod rcbeam_workbench;
 pub mod reactdyn_workbench;
 pub mod refrigeration_workbench;
 pub mod residuals;
+pub mod retainingwall_workbench;
 pub mod rocket_mesh;
 pub mod rocket_workbench;
 pub mod run;
@@ -152,6 +162,8 @@ pub mod straingauge_workbench;
 pub mod theme;
 pub mod thermalexpansion_workbench;
 pub mod thermistor_workbench;
+pub mod thermocycle_workbench;
+pub mod thermoreg_workbench;
 pub mod tooltips;
 pub mod torsion_workbench;
 pub mod truss_workbench;
@@ -160,6 +172,7 @@ pub mod undo;
 pub mod viewport;
 pub mod viewport_2d;
 pub mod viewport_kind;
+pub mod weir_workbench;
 pub mod welcome_tour;
 pub mod wgpu_renderer;
 pub mod workbench_ui;
@@ -711,6 +724,57 @@ pub struct ValenxApp {
     /// Form + result state for the Piping Workbench — native pipe-section
     /// sizing wrapping `valenx-piping`. See [`crate::piping_workbench`].
     pub(crate) piping: crate::piping_workbench::PipingWorkbenchState,
+
+    /// Whether the right-side Retaining Wall workbench is visible (View menu). Off by default.
+    pub(crate) show_retainingwall_workbench: bool,
+    /// State for the Retaining Wall workbench — Rankine earth pressure on
+    /// `valenx-retainingwall`. See [`crate::retainingwall_workbench`].
+    pub(crate) retainingwall: crate::retainingwall_workbench::RetainingWallWorkbenchState,
+    /// Whether the right-side Open Channel workbench is visible (View menu). Off by default.
+    pub(crate) show_openchannel_workbench: bool,
+    /// State for the Open Channel workbench — Manning flow + Froude on
+    /// `valenx-openchannel`. See [`crate::openchannel_workbench`].
+    pub(crate) openchannel: crate::openchannel_workbench::OpenChannelWorkbenchState,
+    /// Whether the right-side Weir Flow workbench is visible (View menu). Off by default.
+    pub(crate) show_weir_workbench: bool,
+    /// State for the Weir Flow workbench — sharp-crested weir discharge on
+    /// `valenx-weir`. See [`crate::weir_workbench`].
+    pub(crate) weir: crate::weir_workbench::WeirWorkbenchState,
+    /// Whether the right-side Thermodynamic Cycle workbench is visible (View menu). Off by default.
+    pub(crate) show_thermocycle_workbench: bool,
+    /// State for the Thermodynamic Cycle workbench — ideal-cycle efficiency on
+    /// `valenx-thermocycle`. See [`crate::thermocycle_workbench`].
+    pub(crate) thermocycle: crate::thermocycle_workbench::ThermoCycleWorkbenchState,
+    /// Whether the right-side Queueing workbench is visible (View menu). Off by default.
+    pub(crate) show_queueing_workbench: bool,
+    /// State for the Queueing workbench — M/M/1 steady-state metrics on
+    /// `valenx-queueing`. See [`crate::queueing_workbench`].
+    pub(crate) queueing: crate::queueing_workbench::QueueingWorkbenchState,
+    /// Whether the right-side Radioactive Decay workbench is visible (View menu). Off by default.
+    pub(crate) show_radioactivity_workbench: bool,
+    /// State for the Radioactive Decay workbench — single-nuclide decay on
+    /// `valenx-radioactivity`. See [`crate::radioactivity_workbench`].
+    pub(crate) radioactivity: crate::radioactivity_workbench::RadioactivityWorkbenchState,
+    /// Whether the right-side Osmosis workbench is visible (View menu). Off by default.
+    pub(crate) show_osmosis_workbench: bool,
+    /// State for the Osmosis workbench — van't Hoff + Starling on
+    /// `valenx-osmosis`. See [`crate::osmosis_workbench`].
+    pub(crate) osmosis: crate::osmosis_workbench::OsmosisWorkbenchState,
+    /// Whether the right-side Thermoregulation workbench is visible (View menu). Off by default.
+    pub(crate) show_thermoreg_workbench: bool,
+    /// State for the Thermoregulation workbench — single-node heat balance on
+    /// `valenx-thermoreg`. See [`crate::thermoreg_workbench`].
+    pub(crate) thermoreg: crate::thermoreg_workbench::ThermoRegWorkbenchState,
+    /// Whether the right-side Hemodynamics workbench is visible (View menu). Off by default.
+    pub(crate) show_hemodynamics_workbench: bool,
+    /// State for the Hemodynamics workbench — cardiac output / Poiseuille /
+    /// Windkessel on `valenx-hemodynamics`. See [`crate::hemodynamics_workbench`].
+    pub(crate) hemodynamics: crate::hemodynamics_workbench::HemodynamicsWorkbenchState,
+    /// Whether the right-side Population Dynamics workbench is visible (View menu). Off by default.
+    pub(crate) show_popdynamics_workbench: bool,
+    /// State for the Population Dynamics workbench — SIR / logistic /
+    /// Lotka-Volterra on `valenx-popdynamics`. See [`crate::popdynamics_workbench`].
+    pub(crate) popdynamics: crate::popdynamics_workbench::PopDynamicsWorkbenchState,
 
     /// Whether the right-side Rail / Train Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

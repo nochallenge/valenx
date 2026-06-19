@@ -835,6 +835,116 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Science / bio / civil batch workbenches. Each off by default.
+                    if ui
+                        .checkbox(&mut self.show_retainingwall_workbench, "Retaining Wall")
+                        .on_hover_text(
+                            "Show / hide the right-side Retaining Wall Workbench — native \
+                             Rankine lateral earth pressure + thrust (valenx-retainingwall).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_openchannel_workbench, "Open Channel")
+                        .on_hover_text(
+                            "Show / hide the right-side Open Channel Workbench — native \
+                             Manning uniform flow + Froude regime (valenx-openchannel).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_weir_workbench, "Weir Flow")
+                        .on_hover_text(
+                            "Show / hide the right-side Weir Flow Workbench — native \
+                             sharp-crested rectangular / V-notch discharge (valenx-weir).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_thermocycle_workbench,
+                            "Thermodynamic Cycle",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Thermodynamic Cycle Workbench — native \
+                             ideal Carnot / Otto / Diesel / Brayton / Rankine efficiency (valenx-thermocycle).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_queueing_workbench, "Queueing (M/M/1)")
+                        .on_hover_text(
+                            "Show / hide the right-side Queueing Workbench — native \
+                             M/M/1 steady-state queue metrics (valenx-queueing).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_radioactivity_workbench,
+                            "Radioactive Decay",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Radioactive Decay Workbench — native \
+                             single-nuclide exponential decay + activity (valenx-radioactivity).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_osmosis_workbench, "Osmosis / Starling")
+                        .on_hover_text(
+                            "Show / hide the right-side Osmosis Workbench — native van't Hoff \
+                             osmotic pressure + Starling filtration (valenx-osmosis).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_thermoreg_workbench, "Thermoregulation")
+                        .on_hover_text(
+                            "Show / hide the right-side Thermoregulation Workbench — native \
+                             single-node human heat balance (valenx-thermoreg).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_hemodynamics_workbench, "Hemodynamics")
+                        .on_hover_text(
+                            "Show / hide the right-side Hemodynamics Workbench — native \
+                             cardiac output, Poiseuille flow, Windkessel (valenx-hemodynamics).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_popdynamics_workbench,
+                            "Population Dynamics",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Population Dynamics Workbench — native \
+                             SIR / logistic / Lotka-Volterra closed forms (valenx-popdynamics).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Rail / Train Workbench — native
                     // train resistance + tractive effort (valenx-rail). Off by default.
                     if ui
@@ -2096,6 +2206,18 @@ impl eframe::App for ValenxApp {
         // Piping Workbench (right) — native pipe-section sizing on
         // valenx-piping. A no-op unless toggled on via View → Piping.
         crate::piping_workbench::draw_piping_workbench(self, ctx);
+
+        // Science / bio / civil batch workbenches. Each a no-op unless toggled via View.
+        crate::retainingwall_workbench::draw_retainingwall_workbench(self, ctx);
+        crate::openchannel_workbench::draw_openchannel_workbench(self, ctx);
+        crate::weir_workbench::draw_weir_workbench(self, ctx);
+        crate::thermocycle_workbench::draw_thermocycle_workbench(self, ctx);
+        crate::queueing_workbench::draw_queueing_workbench(self, ctx);
+        crate::radioactivity_workbench::draw_radioactivity_workbench(self, ctx);
+        crate::osmosis_workbench::draw_osmosis_workbench(self, ctx);
+        crate::thermoreg_workbench::draw_thermoreg_workbench(self, ctx);
+        crate::hemodynamics_workbench::draw_hemodynamics_workbench(self, ctx);
+        crate::popdynamics_workbench::draw_popdynamics_workbench(self, ctx);
 
         // Rail / Train Workbench (right) — native train resistance + tractive
         // effort on valenx-rail. A no-op unless toggled on via View → Rail / Train.
