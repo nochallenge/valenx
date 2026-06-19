@@ -491,6 +491,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Heat Transfer workbench — native
+                    // composite-wall 1-D heat loss (valenx-heat-transfer).
+                    if ui
+                        .checkbox(&mut self.show_heattransfer_workbench, "Heat Transfer")
+                        .on_hover_text(
+                            "Show / hide the right-side Heat Transfer Workbench — native \
+                             composite-wall heat loss: series conduction + convective-film \
+                             resistances, total resistance, heat-loss rate and the overall \
+                             U-value, computed in-process by valenx-heat-transfer.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Four-Bar Linkage Workbench — native
                     // planar mechanism kinematics (valenx-kinematics). Off by default.
                     if ui
@@ -1478,6 +1492,10 @@ impl eframe::App for ValenxApp {
         // Geomatics Workbench (right) — native geodesic calculations on
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
         crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
+
+        // Heat Transfer workbench (right) — composite-wall 1-D heat loss on
+        // valenx-heat-transfer. Off unless toggled via View.
+        crate::heattransfer_workbench::draw_heattransfer_workbench(self, ctx);
 
         // Four-Bar Linkage Workbench (right) — native planar mechanism
         // kinematics on valenx-kinematics. A no-op unless toggled via View → Four-Bar Linkage.
