@@ -91,6 +91,7 @@ pub mod keyboard_help;
 pub mod landing_page;
 pub mod log_panel;
 pub mod marine_workbench;
+pub(crate) mod menu_ui;
 pub mod mesh_toolbox;
 pub mod new_project_dialog;
 pub mod panel_help;
