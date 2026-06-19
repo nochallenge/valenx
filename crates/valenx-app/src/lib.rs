@@ -80,6 +80,7 @@ pub mod gears_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
 pub mod geomatics_workbench;
+pub mod heatexchanger_workbench;
 pub mod keyboard_help;
 pub mod landing_page;
 pub mod log_panel;
@@ -723,6 +724,13 @@ pub struct ValenxApp {
     /// Form + result state for the Engine workbench. See
     /// [`crate::engine_workbench`].
     pub(crate) engine: crate::engine_workbench::EngineWorkbenchState,
+
+    /// Whether the right-side Heat Exchanger workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_heatexchanger_workbench: bool,
+    /// State for the Heat Exchanger workbench, wrapping `valenx-heatexchanger`.
+    /// See [`crate::heatexchanger_workbench`].
+    pub(crate) heatexchanger: crate::heatexchanger_workbench::HeatExchangerWorkbenchState,
 
     /// Whether the right-side Car workbench panel is visible. Defaults to
     /// `false`; toggled from the View menu. Wraps `valenx-vehicle`'s
