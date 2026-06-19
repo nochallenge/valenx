@@ -193,7 +193,9 @@ fn material(s: &FatigueWorkbenchState) -> Result<Material, String> {
 /// domain error to a display string. Extracted so it is unit-testable.
 ///
 /// Reports the factor of safety against the chosen constant-life line,
-/// the equivalent completely-reversed stress, and the Basquin S-N life:
+/// the equivalent completely-reversed stress, the allowable alternating
+/// stress at the operating mean stress (the Haigh-diagram `n = 1` ceiling,
+/// with the operating-point margin below it), and the Basquin S-N life:
 /// the curve is fit through `(1e3, 0.9 Su)` and the fatigue-limit point
 /// `(1e6, Se)`, then capped at `Se`, so an equivalent reversed stress at
 /// or below the endurance limit reads as infinite life.
@@ -207,6 +209,14 @@ fn compute(s: &FatigueWorkbenchState) -> Result<String, String> {
     let sigma_ar = mat
         .equivalent_reversed_stress(crit, s.sigma_a, s.sigma_m)
         .map_err(|e| e.to_string())?;
+    // The Haigh-diagram allowable alternating stress at this mean stress on
+    // the n = 1 constant-life line: the largest σa the part tolerates at σm
+    // before it reaches the failure line. The operating σa headroom below it
+    // is the alternating-stress design margin.
+    let sigma_a_allow = mat
+        .allowable_alternating(crit, s.sigma_m, 1.0)
+        .map_err(|e| e.to_string())?;
+    let sigma_a_margin = sigma_a_allow - s.sigma_a;
 
     // Basquin S-N curve through (1e3, 0.9*Su) and (1e6, Se), capped at the
     // endurance limit Se.
@@ -241,6 +251,7 @@ fn compute(s: &FatigueWorkbenchState) -> Result<String, String> {
          σa / σm         : {sa:.1} / {sm:.1} MPa\n\n\
          factor of safety: {n:.2}  ({verdict})\n\
          equiv reversed  : {sigma_ar:.1} MPa\n\
+         allow σa @ σm   : {sigma_a_allow:.1} MPa  (margin {sigma_a_margin:+.1})\n\
          S-N life        : {life_str}\n\
          (power-law life): {life_unbounded:.3e} cycles",
         se = s.endurance_limit,
@@ -440,12 +451,17 @@ mod tests {
         );
         assert!(s.result.contains("factor of safety"));
         assert!(s.result.contains("equiv reversed"));
+        assert!(s.result.contains("allow σa @ σm"));
         assert!(s.result.contains("S-N life"));
         // Goodman n = 1/(120/200 + 80/500) = 1/0.76 ~ 1.32, inside -> SAFE.
         assert!(s.result.contains("1.32"));
         assert!(s.result.contains("SAFE"));
         // Equivalent reversed sigma_ar = 120/(1 - 80/500) = 142.857 ~ 142.9.
         assert!(s.result.contains("142.9"));
+        // Allowable alternating at sm=80 on the Goodman n=1 line:
+        // sa = Se*(1 - sm/Su) = 200*(1 - 80/500) = 200*0.84 = 168.0, with
+        // the operating margin 168.0 - 120.0 = +48.0 MPa of headroom.
+        assert!(s.result.contains("168.0 MPa  (margin +48.0)"));
         // 142.9 MPa is below Se = 200 -> the capped S-N curve is infinite.
         assert!(s.result.contains("infinite"));
     }
@@ -473,6 +489,28 @@ mod tests {
         let expected = 1.0 / (120.0 / 200.0 + 80.0 / 500.0);
         assert!((n - expected).abs() < 1e-9);
         assert!((n - 1.3157894736842106).abs() < 1e-9);
+    }
+
+    #[test]
+    fn allowable_alternating_matches_hand_value_and_readout() {
+        // Ground truth (Haigh diagram, Goodman n = 1): the allowable
+        // alternating stress at a mean stress sm is sa = Se*(1 - sm/Su).
+        // For Se=200, Su=500, sm=80: sa = 200*(1 - 80/500) = 200*0.84 = 168.
+        let mat = Material::new(200.0, 350.0, 500.0).unwrap();
+        let allow = mat
+            .allowable_alternating(MeanStressCriterion::Goodman, 80.0, 1.0)
+            .unwrap();
+        let expected = 200.0 * (1.0 - 80.0 / 500.0);
+        assert!((allow - expected).abs() < 1e-9);
+        assert!((allow - 168.0).abs() < 1e-9);
+        // And the operating margin below it: 168 - 120 = 48 MPa of headroom.
+        let margin = allow - 120.0;
+        assert!((margin - 48.0).abs() < 1e-9);
+        // The default workbench point shares these numbers; the readout
+        // must format them at .1 precision with a signed margin.
+        let s = FatigueWorkbenchState::default();
+        let r = compute(&s).expect("default point analyzes");
+        assert!(r.contains("allow σa @ σm   : 168.0 MPa  (margin +48.0)"));
     }
 
     #[test]
