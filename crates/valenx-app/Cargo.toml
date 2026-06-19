@@ -129,6 +129,18 @@ valenx-reactdyn      = { path = "../valenx-reactdyn" }
 # Native helical-spring design — surfaced by the Springs workbench
 # (src/springs_workbench.rs).
 valenx-springs       = { path = "../valenx-springs" }
+# Native spur-gear tooth bending strength — surfaced by the Gear Tooth
+# workbench (src/geartooth_workbench.rs).
+valenx-geartooth     = { path = "../valenx-geartooth" }
+# Native one-compartment pharmacokinetics — surfaced by the Pharmacokinetics
+# workbench (src/pharmacokinetics_workbench.rs).
+valenx-pharmacokinetics = { path = "../valenx-pharmacokinetics" }
+# Native Hardy-Cross pipe-network balancing — surfaced by the Pipe Network
+# workbench (src/pipenetwork_workbench.rs).
+valenx-pipenetwork   = { path = "../valenx-pipenetwork" }
+# Native reinforced-concrete beam flexure — surfaced by the RC Beam
+# workbench (src/rcbeam_workbench.rs).
+valenx-rcbeam        = { path = "../valenx-rcbeam" }
 # Native box-form hull hydrostatics — surfaced by the Marine workbench
 # (src/marine_workbench.rs).
 valenx-marine        = { path = "../valenx-marine" }
