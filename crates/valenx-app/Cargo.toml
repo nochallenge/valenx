@@ -183,6 +183,21 @@ valenx-gears         = { path = "../valenx-gears" }
 # Native multirotor hover performance — surfaced by the Drone workbench
 # (src/drone_workbench.rs).
 valenx-drone         = { path = "../valenx-drone" }
+# Native rectangular-room reverberation + SPL — surfaced by the Acoustics
+# workbench (src/acoustics_workbench.rs).
+valenx-acoustics     = { path = "../valenx-acoustics" }
+# Native aqueous pH / buffer equilibria — surfaced by the Acid-Base
+# workbench (src/acidbase_workbench.rs).
+valenx-acidbase      = { path = "../valenx-acidbase" }
+# Native BJT DC bias Q-point — surfaced by the BJT workbench
+# (src/bjt_workbench.rs).
+valenx-bjt           = { path = "../valenx-bjt" }
+# Native BMR / TDEE energy expenditure — surfaced by the BMR / TDEE
+# workbench (src/bmr_workbench.rs).
+valenx-bmr           = { path = "../valenx-bmr" }
+# Native preloaded bolted-joint mechanics — surfaced by the Bolted Joint
+# workbench (src/bolt_workbench.rs).
+valenx-bolt          = { path = "../valenx-bolt" }
 # Native parabolic-dish gain / beamwidth — surfaced by the Antenna
 # workbench (src/antenna_workbench.rs).
 valenx-antenna       = { path = "../valenx-antenna" }
