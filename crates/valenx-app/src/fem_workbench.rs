@@ -125,13 +125,13 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("FEM Workbench");
-            ui.label(
-                egui::RichText::new("native finite-element analysis · valenx-fem")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "FEM Workbench",
+                "native finite-element analysis · valenx-fem",
+            ) {
+                app.show_fem_workbench = false;
+            }
             let s = &mut app.fem;
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])

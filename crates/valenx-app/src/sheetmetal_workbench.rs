@@ -60,13 +60,13 @@ pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Sheet Metal");
-            ui.label(
-                egui::RichText::new("native bend allowance / deduction · valenx-sheet-metal")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Sheet Metal",
+                "native bend allowance / deduction · valenx-sheet-metal",
+            ) {
+                app.show_sheetmetal_workbench = false;
+            }
 
             let s = &mut app.sheetmetal;
             egui::ScrollArea::vertical()

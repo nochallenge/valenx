@@ -154,13 +154,13 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("CFD Workbench");
-            ui.label(
-                egui::RichText::new("native 2-D incompressible CFD · valenx-cfd-native")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "CFD Workbench",
+                "native 2-D incompressible CFD · valenx-cfd-native",
+            ) {
+                app.show_cfd_workbench = false;
+            }
             let s = &mut app.cfd;
             let running = s.job.is_some();
             if running {

@@ -103,6 +103,7 @@ pub mod viewport_2d;
 pub mod viewport_kind;
 pub mod welcome_tour;
 pub mod wgpu_renderer;
+pub mod workbench_ui;
 
 // Concern-focused helper modules — what used to be a single
 // `helpers.rs` bag-of-everything (1422 LOC, 36 fns spanning 8+

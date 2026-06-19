@@ -63,13 +63,13 @@ pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Piping");
-            ui.label(
-                egui::RichText::new("native pipe-section sizing · valenx-piping")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Piping",
+                "native pipe-section sizing · valenx-piping",
+            ) {
+                app.show_piping_workbench = false;
+            }
 
             let s = &mut app.piping;
             egui::ScrollArea::vertical()

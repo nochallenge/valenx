@@ -58,13 +58,9 @@ pub fn draw_animate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(380.0)
         .width_range(320.0..=720.0)
         .show(ctx, |ui| {
-            ui.heading("Animation");
-            ui.label(
-                egui::RichText::new("keyframe timeline · valenx-animate")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(ui, "Animation", "keyframe timeline · valenx-animate") {
+                app.show_animate_workbench = false;
+            }
             let s = &mut app.animate;
             let mut tw = s.tween;
             egui::ComboBox::from_label("easing")

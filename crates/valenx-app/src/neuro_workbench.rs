@@ -213,13 +213,13 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(380.0)
         .width_range(320.0..=640.0)
         .show(ctx, |ui| {
-            ui.heading("Neural Interface");
-            ui.label(
-                egui::RichText::new("native BCI stimulation · valenx-neuro")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Neural Interface",
+                "native BCI stimulation · valenx-neuro",
+            ) {
+                app.show_neuro_workbench = false;
+            }
             let s = &mut app.neuro;
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])

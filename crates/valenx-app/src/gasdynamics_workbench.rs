@@ -198,13 +198,13 @@ pub fn draw_gasdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Gas Dynamics");
-            ui.label(
-                egui::RichText::new("1-D compressible-flow relations · valenx-gasdynamics")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Gas Dynamics",
+                "1-D compressible-flow relations · valenx-gasdynamics",
+            ) {
+                app.show_gasdynamics_workbench = false;
+            }
 
             let s = &mut app.gasdynamics;
             egui::ScrollArea::vertical()

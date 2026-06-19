@@ -119,13 +119,13 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(330.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Reverse Engineering");
-            ui.label(
-                egui::RichText::new("point cloud → mesh · valenx-reverse")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Reverse Engineering",
+                "point cloud → mesh · valenx-reverse",
+            ) {
+                app.show_reverse_workbench = false;
+            }
             let s = &mut app.reverse;
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut s.shape, Shape::Sphere, "Sphere");

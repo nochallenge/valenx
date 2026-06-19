@@ -61,13 +61,13 @@ pub fn draw_collision_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Collision");
-            ui.label(
-                egui::RichText::new("native AABB geometry + overlap test · valenx-collision")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Collision",
+                "native AABB geometry + overlap test · valenx-collision",
+            ) {
+                app.show_collision_workbench = false;
+            }
 
             let s = &mut app.collision;
             egui::ScrollArea::vertical()

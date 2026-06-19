@@ -69,13 +69,13 @@ pub fn draw_geomatics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Geomatics");
-            ui.label(
-                egui::RichText::new("native geodesic calculations · valenx-geomatics")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Geomatics",
+                "native geodesic calculations · valenx-geomatics",
+            ) {
+                app.show_geomatics_workbench = false;
+            }
 
             let s = &mut app.geomatics;
             egui::ScrollArea::vertical()

@@ -647,13 +647,13 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(380.0)
         .width_range(330.0..=620.0)
         .show(ctx, |ui| {
-            ui.heading("Rocket — design → simulate");
-            ui.label(
-                egui::RichText::new("coupled ascent + structural check · valenx-rocket-demo")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Rocket — design → simulate",
+                "coupled ascent + structural check · valenx-rocket-demo",
+            ) {
+                app.show_rocket_workbench = false;
+            }
 
             let s = &mut app.rocket;
             // Poll any background optimization before drawing (non-blocking);

@@ -94,13 +94,13 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(340.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Concrete Reinforcement");
-            ui.label(
-                egui::RichText::new("rebar cages · valenx-reinforcement")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Concrete Reinforcement",
+                "rebar cages · valenx-reinforcement",
+            ) {
+                app.show_reinforcement_workbench = false;
+            }
             let s = &mut app.reinforcement;
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut s.section, Section::Beam, "Beam");

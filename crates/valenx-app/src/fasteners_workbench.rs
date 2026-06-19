@@ -48,13 +48,13 @@ pub fn draw_fasteners_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(360.0)
         .width_range(300.0..=560.0)
         .show(ctx, |ui| {
-            ui.heading("Fasteners");
-            ui.label(
-                egui::RichText::new("ISO 4017 hex-bolt dimensions · valenx-fasteners")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Fasteners",
+                "ISO 4017 hex-bolt dimensions · valenx-fasteners",
+            ) {
+                app.show_fasteners_workbench = false;
+            }
 
             let s = &mut app.fasteners;
             egui::ScrollArea::vertical()

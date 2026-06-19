@@ -313,13 +313,13 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         .default_width(400.0)
         .width_range(340.0..=760.0)
         .show(ctx, |ui| {
-            ui.heading("Path-Traced Render");
-            ui.label(
-                egui::RichText::new("global illumination · valenx-pathtrace")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
+            if crate::workbench_ui::header(
+                ui,
+                "Path-Traced Render",
+                "global illumination · valenx-pathtrace",
+            ) {
+                app.show_render_workbench = false;
+            }
             let s = &mut app.render;
             let running = s.job.is_some();
             if running {
