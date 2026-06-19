@@ -491,6 +491,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Rail / Train Workbench — native
+                    // train resistance + tractive effort (valenx-rail). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_rail_workbench, "Rail / Train")
+                        .on_hover_text(
+                            "Show / hide the right-side Rail / Train Workbench — native train \
+                             running resistance (Davis A + B·v + C·v²), grade resistance, net \
+                             tractive force, acceleration, drawbar power, and the constant-effort \
+                             balancing speed, computed in-process by valenx-rail.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Collision Workbench — native AABB
                     // geometry + overlap tests (valenx-collision). Off by default.
                     if ui
@@ -1260,6 +1274,10 @@ impl eframe::App for ValenxApp {
         // Piping Workbench (right) — native pipe-section sizing on
         // valenx-piping. A no-op unless toggled on via View → Piping.
         crate::piping_workbench::draw_piping_workbench(self, ctx);
+
+        // Rail / Train Workbench (right) — native train resistance + tractive
+        // effort on valenx-rail. A no-op unless toggled on via View → Rail / Train.
+        crate::rail_workbench::draw_rail_workbench(self, ctx);
 
         // Collision Workbench (right) — native AABB geometry + overlap tests
         // on valenx-collision. A no-op unless toggled on via View → Collision.
