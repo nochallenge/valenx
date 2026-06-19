@@ -63,6 +63,7 @@ pub mod commands;
 mod coverage_ui_tests;
 pub mod docking;
 pub mod draft_overlay;
+pub mod drone_workbench;
 pub mod engine_workbench;
 pub mod fasteners_workbench;
 pub mod fields_workbench;
@@ -443,6 +444,14 @@ pub struct ValenxApp {
     /// Form + result state for the Gears Workbench — native involute-gear
     /// design wrapping `valenx-gears`. See [`crate::gears_workbench`].
     pub(crate) gears: crate::gears_workbench::GearsWorkbenchState,
+
+    /// Whether the right-side Drone Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_drone_workbench: bool,
+    /// Form + result state for the Drone Workbench — native multirotor
+    /// hover performance wrapping `valenx-drone`. See [`crate::drone_workbench`].
+    pub(crate) drone: crate::drone_workbench::DroneWorkbenchState,
 
     /// Whether the right-side Geomatics Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

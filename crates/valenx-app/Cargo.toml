@@ -120,6 +120,9 @@ valenx-springs       = { path = "../valenx-springs" }
 # Native involute-gear design — surfaced by the Gears workbench
 # (src/gears_workbench.rs).
 valenx-gears         = { path = "../valenx-gears" }
+# Native multirotor hover performance — surfaced by the Drone workbench
+# (src/drone_workbench.rs).
+valenx-drone         = { path = "../valenx-drone" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
