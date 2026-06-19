@@ -62,8 +62,13 @@ pub mod windturbine_workbench;
 pub mod assistant_workbench;
 pub mod astro;
 pub mod astro_workbench;
+pub mod bonemech_workbench;
 pub mod cam_overlay;
+pub mod chaindrive_workbench;
+pub mod clutch_workbench;
+pub mod coil_workbench;
 pub mod collision_workbench;
+pub mod columnsteel_workbench;
 pub mod commands;
 #[cfg(test)]
 mod coverage_ui_tests;
@@ -528,6 +533,41 @@ pub struct ValenxApp {
     /// resistance + tractive effort wrapping `valenx-rail`. See
     /// [`crate::rail_workbench`].
     pub(crate) rail: crate::rail_workbench::RailWorkbenchState,
+
+    /// Whether the right-side Bone Mechanics workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_bonemech_workbench: bool,
+    /// State for the Bone Mechanics workbench, wrapping `valenx-bonemech`. See
+    /// [`crate::bonemech_workbench`].
+    pub(crate) bonemech: crate::bonemech_workbench::BonemechWorkbenchState,
+
+    /// Whether the right-side Chain Drive workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_chaindrive_workbench: bool,
+    /// State for the Chain Drive workbench, wrapping `valenx-chaindrive`. See
+    /// [`crate::chaindrive_workbench`].
+    pub(crate) chaindrive: crate::chaindrive_workbench::ChainDriveWorkbenchState,
+
+    /// Whether the right-side Clutch workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_clutch_workbench: bool,
+    /// State for the Clutch workbench, wrapping `valenx-clutch`. See
+    /// [`crate::clutch_workbench`].
+    pub(crate) clutch: crate::clutch_workbench::ClutchWorkbenchState,
+
+    /// Whether the right-side Solenoid Coil workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_coil_workbench: bool,
+    /// State for the Solenoid Coil workbench, wrapping `valenx-coil`. See
+    /// [`crate::coil_workbench`].
+    pub(crate) coil: crate::coil_workbench::CoilWorkbenchState,
+
+    /// Whether the right-side Steel Column workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_columnsteel_workbench: bool,
+    /// State for the Steel Column workbench, wrapping `valenx-columnsteel`. See
+    /// [`crate::columnsteel_workbench`].
+    pub(crate) columnsteel: crate::columnsteel_workbench::ColumnSteelWorkbenchState,
 
     /// Whether the right-side Collision Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

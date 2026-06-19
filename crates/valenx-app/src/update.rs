@@ -547,6 +547,71 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Bone Mechanics workbench — native
+                    // long-bone stress / strength (valenx-bonemech).
+                    if ui
+                        .checkbox(&mut self.show_bonemech_workbench, "Bone Mechanics")
+                        .on_hover_text(
+                            "Show / hide the right-side Bone Mechanics Workbench — native \
+                             long-bone hollow-shaft bending / axial stress and density-scaled \
+                             strength, computed in-process by valenx-bonemech.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Chain Drive workbench — native
+                    // roller-chain kinematics (valenx-chaindrive).
+                    if ui
+                        .checkbox(&mut self.show_chaindrive_workbench, "Chain Drive")
+                        .on_hover_text(
+                            "Show / hide the right-side Chain Drive Workbench — native \
+                             single-stage roller-chain kinematics (speed ratio, chain velocity, \
+                             output torque, chain length), computed in-process by valenx-chaindrive.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Clutch workbench — native friction
+                    // clutch torque capacity (valenx-clutch).
+                    if ui
+                        .checkbox(&mut self.show_clutch_workbench, "Clutch")
+                        .on_hover_text(
+                            "Show / hide the right-side Clutch Workbench — native dry \
+                             friction-clutch torque capacity (uniform-wear vs uniform-pressure) \
+                             and transmissible power, computed in-process by valenx-clutch.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Solenoid Coil workbench — native
+                    // long-solenoid field / inductance (valenx-coil).
+                    if ui
+                        .checkbox(&mut self.show_coil_workbench, "Solenoid Coil")
+                        .on_hover_text(
+                            "Show / hide the right-side Solenoid Coil Workbench — native \
+                             long-solenoid axial field, inductance and reactance, computed \
+                             in-process by valenx-coil.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Steel Column workbench — native
+                    // Euler-Johnson axial buckling (valenx-columnsteel).
+                    if ui
+                        .checkbox(&mut self.show_columnsteel_workbench, "Steel Column")
+                        .on_hover_text(
+                            "Show / hide the right-side Steel Column Workbench — native \
+                             Euler-Johnson (AISC-ASD) axial buckling: slenderness, critical \
+                             stress and allowable load, computed in-process by valenx-columnsteel.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Collision Workbench — native AABB
                     // geometry + overlap tests (valenx-collision). Off by default.
                     if ui
@@ -1522,6 +1587,26 @@ impl eframe::App for ValenxApp {
         // Rail / Train Workbench (right) — native train resistance + tractive
         // effort on valenx-rail. A no-op unless toggled on via View → Rail / Train.
         crate::rail_workbench::draw_rail_workbench(self, ctx);
+
+        // Bone Mechanics workbench (right) — long-bone stress / strength on
+        // valenx-bonemech. Off unless toggled via View.
+        crate::bonemech_workbench::draw_bonemech_workbench(self, ctx);
+
+        // Chain Drive workbench (right) — roller-chain kinematics on
+        // valenx-chaindrive. Off unless toggled via View.
+        crate::chaindrive_workbench::draw_chaindrive_workbench(self, ctx);
+
+        // Clutch workbench (right) — friction-clutch torque capacity on
+        // valenx-clutch. Off unless toggled via View.
+        crate::clutch_workbench::draw_clutch_workbench(self, ctx);
+
+        // Solenoid Coil workbench (right) — long-solenoid field / inductance
+        // on valenx-coil. Off unless toggled via View.
+        crate::coil_workbench::draw_coil_workbench(self, ctx);
+
+        // Steel Column workbench (right) — Euler-Johnson axial buckling on
+        // valenx-columnsteel. Off unless toggled via View.
+        crate::columnsteel_workbench::draw_columnsteel_workbench(self, ctx);
 
         // Collision Workbench (right) — native AABB geometry + overlap tests
         // on valenx-collision. A no-op unless toggled on via View → Collision.
