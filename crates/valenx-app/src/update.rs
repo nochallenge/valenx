@@ -821,6 +821,90 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Mechanical + civil batch workbenches. Each off by default.
+                    if ui
+                        .checkbox(&mut self.show_shaftdesign_workbench, "Shaft Design")
+                        .on_hover_text(
+                            "Show / hide the right-side Shaft Design Workbench — native \
+                             combined bending + torsion shaft sizing (valenx-shaftdesign).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_screwthread_workbench, "Power Screw")
+                        .on_hover_text(
+                            "Show / hide the right-side Power Screw Workbench — native \
+                             square-thread lead-screw torque + efficiency (valenx-screwthread).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_pulley_workbench, "Pulley System")
+                        .on_hover_text(
+                            "Show / hide the right-side Pulley System Workbench — native \
+                             block-and-tackle mechanical advantage (valenx-pulley).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_springdesign_workbench, "Spring Design")
+                        .on_hover_text(
+                            "Show / hide the right-side Spring Design Workbench — native \
+                             helical compression spring (Wahl, rate, stress) (valenx-spring-design).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_springcombination_workbench,
+                            "Spring Combination",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Spring Combination Workbench — native \
+                             series / parallel spring networks (valenx-springcombination).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_vibration_workbench, "Vibration (SDOF)")
+                        .on_hover_text(
+                            "Show / hide the right-side Vibration Workbench — native single-DOF \
+                             forced-vibration response (valenx-vibration).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_rivet_workbench, "Riveted Joint")
+                        .on_hover_text(
+                            "Show / hide the right-side Riveted Joint Workbench — native \
+                             rivet-joint strength + failure mode (valenx-rivet).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_soilbearing_workbench, "Soil Bearing")
+                        .on_hover_text(
+                            "Show / hide the right-side Soil Bearing Workbench — native \
+                             Terzaghi strip-footing bearing capacity (valenx-soilbearing).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Piping Workbench — native
                     // pipe-section sizing (valenx-piping). Off by default.
                     if ui
@@ -2092,6 +2176,16 @@ impl eframe::App for ValenxApp {
         // Four-Bar Linkage Workbench (right) — native planar mechanism
         // kinematics on valenx-kinematics. A no-op unless toggled via View → Four-Bar Linkage.
         crate::fourbar_workbench::draw_fourbar_workbench(self, ctx);
+
+        // Mechanical + civil batch workbenches. Each a no-op unless toggled via View.
+        crate::shaftdesign_workbench::draw_shaftdesign_workbench(self, ctx);
+        crate::screwthread_workbench::draw_screwthread_workbench(self, ctx);
+        crate::pulley_workbench::draw_pulley_workbench(self, ctx);
+        crate::springdesign_workbench::draw_springdesign_workbench(self, ctx);
+        crate::springcombination_workbench::draw_springcombination_workbench(self, ctx);
+        crate::vibration_workbench::draw_vibration_workbench(self, ctx);
+        crate::rivet_workbench::draw_rivet_workbench(self, ctx);
+        crate::soilbearing_workbench::draw_soilbearing_workbench(self, ctx);
 
         // Piping Workbench (right) — native pipe-section sizing on
         // valenx-piping. A no-op unless toggled on via View → Piping.
