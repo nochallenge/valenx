@@ -38,6 +38,7 @@
 pub mod aero;
 pub mod aero_workbench;
 pub mod animate_workbench;
+pub mod antenna_workbench;
 pub(crate) mod background;
 pub mod beam_workbench;
 pub mod cad_workbench;
@@ -619,6 +620,13 @@ pub struct ValenxApp {
     /// Form + result state for the Parametric-CAD workbench, wrapping
     /// `valenx-solvespace-3d`. See [`crate::cad_workbench`].
     pub(crate) cad: crate::cad_workbench::CadWorkbenchState,
+
+    /// Whether the right-side Antenna workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_antenna_workbench: bool,
+    /// State for the Antenna workbench, wrapping `valenx-antenna`. See
+    /// [`crate::antenna_workbench`].
+    pub(crate) antenna: crate::antenna_workbench::AntennaWorkbenchState,
 
     /// Whether the right-side 2D Drafting workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.

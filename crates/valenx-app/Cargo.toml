@@ -126,6 +126,9 @@ valenx-gears         = { path = "../valenx-gears" }
 # Native multirotor hover performance — surfaced by the Drone workbench
 # (src/drone_workbench.rs).
 valenx-drone         = { path = "../valenx-drone" }
+# Native parabolic-dish gain / beamwidth — surfaced by the Antenna
+# workbench (src/antenna_workbench.rs).
+valenx-antenna       = { path = "../valenx-antenna" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
