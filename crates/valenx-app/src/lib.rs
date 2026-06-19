@@ -81,6 +81,7 @@ pub mod genetics;
 pub mod genetics_workbench;
 pub mod geomatics_workbench;
 pub mod heatexchanger_workbench;
+pub mod heattransfer_workbench;
 pub mod keyboard_help;
 pub mod landing_page;
 pub mod log_panel;
@@ -482,6 +483,13 @@ pub struct ValenxApp {
     /// calculations wrapping `valenx-geomatics`. See
     /// [`crate::geomatics_workbench`].
     pub(crate) geomatics: crate::geomatics_workbench::GeomaticsWorkbenchState,
+
+    /// Whether the right-side Heat Transfer workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_heattransfer_workbench: bool,
+    /// State for the Heat Transfer workbench, wrapping `valenx-heat-transfer`.
+    /// See [`crate::heattransfer_workbench`].
+    pub(crate) heattransfer: crate::heattransfer_workbench::HeatTransferWorkbenchState,
 
     /// Whether the right-side Four-Bar Linkage Workbench is visible.
     /// Defaults to `false`; flipped on from the View menu. Independent of the
