@@ -6943,6 +6943,7 @@ dependencies = [
  "valenx-geomatics",
  "valenx-heat-transfer",
  "valenx-heatexchanger",
+ "valenx-heatpump",
  "valenx-hvac",
  "valenx-i18n",
  "valenx-icons",
