@@ -99,6 +99,10 @@ valenx-rocket-demo   = { path = "../valenx-rocket-demo" }
 # (acceleration, top speed, braking, skidpad) over valenx-vehicle.
 valenx-vehicle       = { path = "../valenx-vehicle" }
 
+# Native series / parallel battery-pack sizing — surfaced by the Battery
+# Pack workbench (src/batterypack_workbench.rs).
+valenx-batterypack   = { path = "../valenx-batterypack" }
+
 # The native 3D external-aerodynamics CFD engine,
 # surfaced in the desktop UI by the Aerodynamics / Wind Tunnel
 # workbench (src/aero_workbench.rs + src/aero/). A pure-Rust solver
