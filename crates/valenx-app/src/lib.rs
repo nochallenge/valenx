@@ -99,7 +99,9 @@ pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+pub mod pneumatics_workbench;
 pub mod project_tabs;
+pub mod psychrometrics_workbench;
 pub mod pump_workbench;
 pub mod rail_workbench;
 pub mod rcbeam_workbench;
@@ -116,8 +118,10 @@ pub mod shortcuts;
 pub mod sketch_overlay;
 pub mod solarpv_workbench;
 pub mod springs_workbench;
+pub mod straingauge_workbench;
 pub mod theme;
 pub mod thermalexpansion_workbench;
+pub mod thermistor_workbench;
 pub mod tooltips;
 pub mod truss_workbench;
 pub mod types;
@@ -510,6 +514,26 @@ pub struct ValenxApp {
     /// Form + result state for the Gears Workbench — native involute-gear
     /// design wrapping `valenx-gears`. See [`crate::gears_workbench`].
     pub(crate) gears: crate::gears_workbench::GearsWorkbenchState,
+
+    /// Whether the right-side Pneumatics workbench is visible (View menu).
+    pub(crate) show_pneumatics_workbench: bool,
+    /// State for the Pneumatics workbench. See [`crate::pneumatics_workbench`].
+    pub(crate) pneumatics: crate::pneumatics_workbench::PneumaticsWorkbenchState,
+
+    /// Whether the right-side Psychrometrics workbench is visible (View menu).
+    pub(crate) show_psychrometrics_workbench: bool,
+    /// State for the Psychrometrics workbench. See [`crate::psychrometrics_workbench`].
+    pub(crate) psychrometrics: crate::psychrometrics_workbench::PsychrometricsWorkbenchState,
+
+    /// Whether the right-side Thermistor workbench is visible (View menu).
+    pub(crate) show_thermistor_workbench: bool,
+    /// State for the Thermistor workbench. See [`crate::thermistor_workbench`].
+    pub(crate) thermistor: crate::thermistor_workbench::ThermistorWorkbenchState,
+
+    /// Whether the right-side Strain Gauge workbench is visible (View menu).
+    pub(crate) show_straingauge_workbench: bool,
+    /// State for the Strain Gauge workbench. See [`crate::straingauge_workbench`].
+    pub(crate) straingauge: crate::straingauge_workbench::StrainGaugeWorkbenchState,
 
     /// Whether the right-side Drone Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

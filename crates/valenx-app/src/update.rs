@@ -517,6 +517,54 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Pneumatics workbench (valenx-pneumatics).
+                    if ui
+                        .checkbox(&mut self.show_pneumatics_workbench, "Pneumatics")
+                        .on_hover_text(
+                            "Show / hide the Pneumatics Workbench — native pneumatic cylinder \
+                             force, compression ratio, choked-flow check and free-air consumption, \
+                             computed in-process by valenx-pneumatics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Psychrometrics workbench (valenx-psychrometrics).
+                    if ui
+                        .checkbox(&mut self.show_psychrometrics_workbench, "Psychrometrics")
+                        .on_hover_text(
+                            "Show / hide the Psychrometrics Workbench — native moist-air state: \
+                             humidity ratio, dew point, degree of saturation and enthalpy, \
+                             computed in-process by valenx-psychrometrics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Thermistor workbench (valenx-thermistor).
+                    if ui
+                        .checkbox(&mut self.show_thermistor_workbench, "Thermistor")
+                        .on_hover_text(
+                            "Show / hide the Thermistor Workbench — native NTC resistance \
+                             ↔ temperature (Beta and Steinhart-Hart models) and temperature \
+                             coefficient, computed in-process by valenx-thermistor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Strain Gauge workbench (valenx-straingauge).
+                    if ui
+                        .checkbox(&mut self.show_straingauge_workbench, "Strain Gauge")
+                        .on_hover_text(
+                            "Show / hide the Strain Gauge Workbench — native Wheatstone-bridge \
+                             gauge factor → bridge output and stress for quarter / half / full \
+                             bridges, computed in-process by valenx-straingauge.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Drone Workbench — native
                     // multirotor hover performance (valenx-drone). Off by default.
                     if ui
@@ -1568,6 +1616,22 @@ impl eframe::App for ValenxApp {
         // Gears Workbench (right) — native involute-gear design on
         // valenx-gears. A no-op unless toggled on via View → Gears.
         crate::gears_workbench::draw_gears_workbench(self, ctx);
+
+        // Pneumatics workbench (right) — cylinder force / consumption on
+        // valenx-pneumatics. Off unless toggled via View.
+        crate::pneumatics_workbench::draw_pneumatics_workbench(self, ctx);
+
+        // Psychrometrics workbench (right) — moist-air state on
+        // valenx-psychrometrics. Off unless toggled via View.
+        crate::psychrometrics_workbench::draw_psychrometrics_workbench(self, ctx);
+
+        // Thermistor workbench (right) — NTC R<->T on valenx-thermistor.
+        // Off unless toggled via View.
+        crate::thermistor_workbench::draw_thermistor_workbench(self, ctx);
+
+        // Strain Gauge workbench (right) — Wheatstone-bridge output on
+        // valenx-straingauge. Off unless toggled via View.
+        crate::straingauge_workbench::draw_straingauge_workbench(self, ctx);
 
         // Drone Workbench (right) — native multirotor hover performance on
         // valenx-drone. A no-op unless toggled on via View → Drone / Multirotor.
