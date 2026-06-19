@@ -737,6 +737,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Antenna workbench — native parabolic
+                    // dish gain / beamwidth (valenx-antenna).
+                    if ui
+                        .checkbox(&mut self.show_antenna_workbench, "Antenna")
+                        .on_hover_text(
+                            "Show / hide the right-side Antenna Workbench — native parabolic \
+                             dish: wavelength, effective aperture, gain (linear and dBi) and a \
+                             half-power beamwidth estimate, computed in-process by \
+                             valenx-antenna.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     if ui
                         .checkbox(&mut self.show_draft2d_workbench, "2D Drafting")
                         .on_hover_text(
@@ -1538,6 +1552,10 @@ impl eframe::App for ValenxApp {
         // Parametric-CAD workbench (right) — named parameters driving sketch
         // geometry on valenx-solvespace-3d. Off unless toggled via View.
         crate::cad_workbench::draw_cad_workbench(self, ctx);
+
+        // Antenna workbench (right) — parabolic-dish gain / beamwidth on
+        // valenx-antenna. Off unless toggled via View.
+        crate::antenna_workbench::draw_antenna_workbench(self, ctx);
 
         // 2D Drafting workbench (right) — LibreCAD-style 2D canvas on
         // valenx-librecad-2d. Off unless toggled via View.
