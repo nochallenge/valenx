@@ -519,6 +519,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Fixed-Wing / Aircraft Workbench —
+                    // native preliminary aircraft performance (valenx-fixedwing).
+                    if ui
+                        .checkbox(&mut self.show_fixedwing_workbench, "Fixed-Wing / Aircraft")
+                        .on_hover_text(
+                            "Show / hide the right-side Fixed-Wing / Aircraft Workbench — native \
+                             preliminary point-performance: wing loading, stall speed, cruise \
+                             lift / drag, the best lift-to-drag ratio and the still-air glide \
+                             range, computed in-process by valenx-fixedwing.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Frames Workbench — structural
                     // cross-section properties (valenx-frames). Off by default.
                     if ui
@@ -1241,6 +1255,11 @@ impl eframe::App for ValenxApp {
         // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
         // valenx-fasteners. A no-op unless toggled on via View → Fasteners.
         crate::fasteners_workbench::draw_fasteners_workbench(self, ctx);
+
+        // Fixed-Wing / Aircraft Workbench (right) — native preliminary aircraft
+        // point-performance on valenx-fixedwing. A no-op unless toggled on via
+        // View → Fixed-Wing / Aircraft.
+        crate::fixedwing_workbench::draw_fixedwing_workbench(self, ctx);
 
         // Frames Workbench (right) — structural cross-section properties on
         // valenx-frames. A no-op unless toggled on via View → Frames.

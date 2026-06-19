@@ -135,6 +135,9 @@ valenx-sheet-metal   = { path = "../valenx-sheet-metal" }
 # Native ISO 4017 hex-bolt dimensions — surfaced by the Fasteners
 # workbench (src/fasteners_workbench.rs).
 valenx-fasteners     = { path = "../valenx-fasteners" }
+# Native fixed-wing aircraft point-performance — surfaced by the
+# Fixed-Wing workbench (src/fixedwing_workbench.rs).
+valenx-fixedwing     = { path = "../valenx-fixedwing" }
 # Native structural cross-section properties — surfaced by the Frames
 # workbench (src/frames_workbench.rs).
 valenx-frames        = { path = "../valenx-frames" }

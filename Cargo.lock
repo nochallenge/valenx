@@ -6926,6 +6926,7 @@ dependencies = [
  "valenx-fem",
  "valenx-fields",
  "valenx-first-run",
+ "valenx-fixedwing",
  "valenx-fonts",
  "valenx-frames",
  "valenx-gasdynamics",
