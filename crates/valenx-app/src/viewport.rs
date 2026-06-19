@@ -8,6 +8,11 @@
 //!   `egui::Mesh` + painter's-algorithm depth sort.
 //! - **Wireframe**: three line segments per triangle, no culling.
 //!
+//! Loaded canonical meshes built from surface elements (Tri3 / Quad4 —
+//! the procedural CAD models such as springs, rockets and engines)
+//! render through the same shaded path as STLs. Volumetric meshes, and
+//! any mesh carrying a field overlay, keep the element-wireframe view.
+//!
 //! Both paths share `valenx-viz::projection`, so when the real
 //! `wgpu` render pass arrives it only has to replace the rasteriser;
 //! the camera and projection math are already test-covered.
@@ -22,7 +27,9 @@
 use eframe::egui;
 use eframe::egui_wgpu;
 use valenx_mesh::{ElementType, Mesh};
-use valenx_viz::{project_point, project_triangle, OrbitCamera, ScreenPoint, StlTriangle};
+use valenx_viz::{
+    project_point, project_triangle, OrbitCamera, ScreenPoint, StlTriangle, TriangleMesh,
+};
 
 use crate::wgpu_renderer::{
     inv_mvp_from_camera, mvp_from_camera, triangles_to_vertices, WgpuRenderer,
@@ -174,18 +181,37 @@ pub fn show(ui: &mut egui::Ui, mut state: ViewportState<'_>) {
     // depth-buffered offscreen pass. In Shaded mode with an STL the same
     // pass also draws the shaded mesh, so geometry correctly occludes the
     // grid. Empty slice => grid only.
-    let shaded_stl = match state.shading {
-        ShadingMode::Shaded => state.stl,
-        ShadingMode::Wireframe => None,
+    // The shaded wgpu pass draws the ground grid + axes ALWAYS, plus an
+    // optional shaded surface: the STL when one's loaded (Shaded mode),
+    // otherwise a canonical-mesh surface (Shaded mode, no field overlay)
+    // so loaded meshes — springs, rockets, engines — render as solids
+    // instead of bare wireframe. The mesh surface is owned so its
+    // vertices outlive the draw call.
+    let mesh_surface = match (state.mesh, state.shading, state.field_overlay) {
+        (Some(m), ShadingMode::Shaded, None) if state.stl.is_none() => {
+            mesh_to_triangle_surface(&m.mesh)
+        }
+        _ => None,
     };
     let wgpu_drew = if let Some(ctx) = state.wgpu.as_mut() {
-        match shaded_stl {
-            Some(stl) => draw_shaded_wgpu(&painter, rect, state.camera, stl, ctx),
-            None => render_wgpu_scene(&painter, rect, state.camera, ctx, &[]),
+        if let Some(stl) = state
+            .stl
+            .filter(|_| matches!(state.shading, ShadingMode::Shaded))
+        {
+            draw_shaded_wgpu(&painter, rect, state.camera, stl, ctx)
+        } else if let Some(surf) = mesh_surface.as_ref() {
+            let vertices = triangles_to_vertices(surf);
+            render_wgpu_scene(&painter, rect, state.camera, ctx, &vertices)
+        } else {
+            render_wgpu_scene(&painter, rect, state.camera, ctx, &[])
         }
     } else {
         false
     };
+    // True when the GPU drew the mesh (not STL) surface as a shaded
+    // solid: the mesh block below then skips its wireframe so the solid
+    // reads clean.
+    let mesh_shaded = mesh_surface.is_some() && wgpu_drew;
 
     if let Some(stl) = state.stl {
         match state.shading {
@@ -208,8 +234,13 @@ pub fn show(ui: &mut egui::Ui, mut state: ViewportState<'_>) {
         // definition.
         if let Some(field) = state.field_overlay {
             draw_mesh_filled_field(&painter, rect, state.camera, mesh, field);
+            draw_mesh_wireframe(&painter, rect, state.camera, mesh, state.field_overlay);
+        } else if !mesh_shaded {
+            // Wireframe mode, no wgpu backend, or a mesh with no
+            // extractable surface (volumetric elements): fall back to the
+            // element wireframe. When the shaded solid drew, leave it clean.
+            draw_mesh_wireframe(&painter, rect, state.camera, mesh, None);
         }
-        draw_mesh_wireframe(&painter, rect, state.camera, mesh, state.field_overlay);
     }
     // Cut-plane cross-section overlay. Drawn after the geometry so
     // the bright slice line sits on top of both the shaded shell and
@@ -408,6 +439,55 @@ fn render_wgpu_scene(
     let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
     painter.image(texture_id, rect, uv, egui::Color32::WHITE);
     true
+}
+
+/// Build a renderable triangle **surface** from a canonical mesh's
+/// surface elements — Tri3 directly, Quad4 split into two triangles —
+/// with per-face normals, so loaded meshes can be drawn as shaded solids
+/// through the same wgpu pass as STLs. Volumetric element types (Tet4,
+/// Hex8, ...) are skipped: those keep the wireframe path. `None` when no
+/// surface triangle could be produced.
+fn mesh_to_triangle_surface(mesh: &Mesh) -> Option<TriangleMesh> {
+    let nodes = &mesh.nodes;
+    let tri = |a: u32, b: u32, c: u32| -> Option<StlTriangle> {
+        let p = nodes.get(a as usize)?;
+        let q = nodes.get(b as usize)?;
+        let r = nodes.get(c as usize)?;
+        let v = |x: &nalgebra::Vector3<f64>| [x.x as f32, x.y as f32, x.z as f32];
+        let mut t = StlTriangle {
+            normal: [0.0, 0.0, 1.0],
+            vertices: [v(p), v(q), v(r)],
+        };
+        t.normal = t.computed_normal();
+        Some(t)
+    };
+    let mut tris: Vec<StlTriangle> = Vec::new();
+    for block in &mesh.element_blocks {
+        let conn = &block.connectivity;
+        match block.element_type {
+            ElementType::Tri3 => {
+                for f in conn.chunks_exact(3) {
+                    tris.extend(tri(f[0], f[1], f[2]));
+                }
+            }
+            ElementType::Quad4 => {
+                for q in conn.chunks_exact(4) {
+                    tris.extend(tri(q[0], q[1], q[2]));
+                    tris.extend(tri(q[0], q[2], q[3]));
+                }
+            }
+            _ => {}
+        }
+    }
+    if tris.is_empty() {
+        None
+    } else {
+        Some(TriangleMesh {
+            format: None,
+            name: None,
+            triangles: tris,
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1287,6 +1367,64 @@ mod tests {
         use valenx_mesh::Mesh;
         let m = Mesh::new("empty");
         assert_eq!(total_cell_count(&m), 0);
+    }
+
+    #[test]
+    fn mesh_surface_from_tris_keeps_every_triangle() {
+        use nalgebra::Vector3;
+        use valenx_mesh::{ElementBlock, ElementType, Mesh};
+        let mut m = Mesh::new("two-tris");
+        m.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(1.0, 1.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+        ];
+        let mut tris = ElementBlock::new(ElementType::Tri3);
+        tris.connectivity = vec![0, 1, 2, 0, 2, 3];
+        m.element_blocks = vec![tris];
+        let surf = mesh_to_triangle_surface(&m).expect("tri mesh yields a surface");
+        assert_eq!(surf.triangles.len(), 2);
+        // Flat square in the z = 0 plane → unit +/-z face normals.
+        for t in &surf.triangles {
+            assert!(
+                (t.normal[2].abs() - 1.0).abs() < 1e-5,
+                "expected an axial normal, got {:?}",
+                t.normal
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_surface_splits_each_quad_into_two_triangles() {
+        use nalgebra::Vector3;
+        use valenx_mesh::{ElementBlock, ElementType, Mesh};
+        let mut m = Mesh::new("one-quad");
+        m.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(1.0, 1.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+        ];
+        let mut quads = ElementBlock::new(ElementType::Quad4);
+        quads.connectivity = vec![0, 1, 2, 3];
+        m.element_blocks = vec![quads];
+        let surf = mesh_to_triangle_surface(&m).expect("quad mesh yields a surface");
+        assert_eq!(surf.triangles.len(), 2);
+    }
+
+    #[test]
+    fn mesh_surface_is_none_for_volumetric_and_empty() {
+        use valenx_mesh::{ElementBlock, ElementType, Mesh};
+        // Volumetric elements emit no direct surface here → wireframe path.
+        let mut m = Mesh::new("tets");
+        m.nodes = vec![nalgebra::Vector3::zeros(); 4];
+        let mut tets = ElementBlock::new(ElementType::Tet4);
+        tets.connectivity = vec![0, 1, 2, 3];
+        m.element_blocks = vec![tets];
+        assert!(mesh_to_triangle_surface(&m).is_none());
+        // Empty mesh → None.
+        assert!(mesh_to_triangle_surface(&Mesh::new("empty")).is_none());
     }
 
     #[test]
