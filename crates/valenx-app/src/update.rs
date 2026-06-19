@@ -477,6 +477,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Four-Bar Linkage Workbench — native
+                    // planar mechanism kinematics (valenx-kinematics). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_fourbar_workbench, "Four-Bar Linkage")
+                        .on_hover_text(
+                            "Show / hide the right-side Four-Bar Linkage Workbench — native planar \
+                             four-bar kinematics: Grashof classification and, at a crank angle, the \
+                             solved pin positions, coupler / rocker angles and transmission angle, \
+                             computed in-process by valenx-kinematics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Piping Workbench — native
                     // pipe-section sizing (valenx-piping). Off by default.
                     if ui
@@ -1310,6 +1324,10 @@ impl eframe::App for ValenxApp {
         // Geomatics Workbench (right) — native geodesic calculations on
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
         crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
+
+        // Four-Bar Linkage Workbench (right) — native planar mechanism
+        // kinematics on valenx-kinematics. A no-op unless toggled via View → Four-Bar Linkage.
+        crate::fourbar_workbench::draw_fourbar_workbench(self, ctx);
 
         // Piping Workbench (right) — native pipe-section sizing on
         // valenx-piping. A no-op unless toggled on via View → Piping.

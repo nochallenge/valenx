@@ -70,6 +70,7 @@ pub mod fasteners_workbench;
 pub mod fields_workbench;
 pub mod first_run;
 pub mod fixedwing_workbench;
+pub mod fourbar_workbench;
 pub mod frames_workbench;
 pub mod gasdynamics_workbench;
 pub mod gears_workbench;
@@ -474,6 +475,15 @@ pub struct ValenxApp {
     /// calculations wrapping `valenx-geomatics`. See
     /// [`crate::geomatics_workbench`].
     pub(crate) geomatics: crate::geomatics_workbench::GeomaticsWorkbenchState,
+
+    /// Whether the right-side Four-Bar Linkage Workbench is visible.
+    /// Defaults to `false`; flipped on from the View menu. Independent of the
+    /// other workbenches — egui docks them side by side.
+    pub(crate) show_fourbar_workbench: bool,
+    /// Form + result state for the Four-Bar Linkage Workbench — native planar
+    /// four-bar mechanism kinematics wrapping `valenx-kinematics`. See
+    /// [`crate::fourbar_workbench`].
+    pub(crate) fourbar: crate::fourbar_workbench::FourBarWorkbenchState,
 
     /// Whether the right-side Piping Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

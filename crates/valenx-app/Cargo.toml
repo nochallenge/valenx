@@ -129,6 +129,9 @@ valenx-drone         = { path = "../valenx-drone" }
 # Native geodesic / surveying calculations — surfaced by the Geomatics
 # workbench (src/geomatics_workbench.rs).
 valenx-geomatics     = { path = "../valenx-geomatics" }
+# Native planar four-bar / cam mechanism kinematics — surfaced by the
+# Four-Bar Linkage workbench (src/fourbar_workbench.rs).
+valenx-kinematics    = { path = "../valenx-kinematics" }
 # Native pipe-section sizing — surfaced by the Piping workbench
 # (src/piping_workbench.rs).
 valenx-piping        = { path = "../valenx-piping" }
