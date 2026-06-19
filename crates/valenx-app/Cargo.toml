@@ -159,6 +159,21 @@ valenx-rcbeam        = { path = "../valenx-rcbeam" }
 # Native box-form hull hydrostatics — surfaced by the Marine workbench
 # (src/marine_workbench.rs).
 valenx-marine        = { path = "../valenx-marine" }
+# Native parallel-plate capacitor electrostatics — surfaced by the
+# Capacitor workbench (src/capacitor_workbench.rs).
+valenx-capacitor     = { path = "../valenx-capacitor" }
+# Native fan / blower affinity laws — surfaced by the Fan Laws workbench
+# (src/fanlaws_workbench.rs).
+valenx-fanlaws       = { path = "../valenx-fanlaws" }
+# Native high-temperature creep / stress-rupture — surfaced by the Creep
+# workbench (src/creep_workbench.rs).
+valenx-creep         = { path = "../valenx-creep" }
+# Native Nernst / Faraday electrochemistry — surfaced by the
+# Electrochemistry workbench (src/electrochem_workbench.rs).
+valenx-electrochem   = { path = "../valenx-electrochem" }
+# Native Michaelis-Menten enzyme kinetics — surfaced by the Enzyme
+# Kinetics workbench (src/enzymekinetics_workbench.rs).
+valenx-enzymekinetics = { path = "../valenx-enzymekinetics" }
 # Native Carnot heat-pump COP + derating — surfaced by the Heat Pump
 # workbench (src/heatpump_workbench.rs).
 valenx-heatpump      = { path = "../valenx-heatpump" }
