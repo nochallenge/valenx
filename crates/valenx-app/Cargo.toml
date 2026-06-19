@@ -110,6 +110,10 @@ valenx-aero          = { path = "../valenx-aero" }
 # solver library; the workbench calls its real API directly (no subprocess).
 valenx-cfd-native    = { path = "../valenx-cfd-native" }
 
+# Native Darcy-Weisbach pipe-flow analysis — surfaced by the Pipe Flow
+# workbench (src/pipeflow_workbench.rs).
+valenx-pipeflow      = { path = "../valenx-pipeflow" }
+
 # The native reaction-dynamics engine (Born-Oppenheimer ab-initio MD),
 # surfaced by the Reaction Dynamics workbench (src/reactdyn_workbench.rs).
 # Depends on valenx-qchem for the single-point energies its forces use.

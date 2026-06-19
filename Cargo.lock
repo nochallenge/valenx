@@ -6954,6 +6954,7 @@ dependencies = [
  "valenx-optimize",
  "valenx-pathtrace",
  "valenx-phylo",
+ "valenx-pipeflow",
  "valenx-piping",
  "valenx-popgen",
  "valenx-pump",

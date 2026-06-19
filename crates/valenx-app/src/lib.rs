@@ -88,6 +88,7 @@ pub mod mesh_toolbox;
 pub mod new_project_dialog;
 pub mod panel_help;
 pub mod pbr_forward_pass;
+pub mod pipeflow_workbench;
 pub mod piping_workbench;
 pub mod project_tabs;
 pub mod pump_workbench;
@@ -699,6 +700,13 @@ pub struct ValenxApp {
     /// ascent simulator + the closed-form mission planners wrapping the
     /// `valenx-astro` crate. See [`crate::astro_workbench`].
     pub(crate) astro: crate::astro_workbench::AstroWorkbenchState,
+
+    /// Whether the right-side Pipe Flow workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_pipeflow_workbench: bool,
+    /// State for the Pipe Flow workbench, wrapping `valenx-pipeflow`. See
+    /// [`crate::pipeflow_workbench`].
+    pub(crate) pipeflow: crate::pipeflow_workbench::PipeFlowWorkbenchState,
 
     /// Whether the right-side Rocket workbench panel is visible. Defaults
     /// to `false`; flipped on from the View menu. Surfaces the
