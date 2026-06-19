@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-fixedwing"
+description = "Fixed-wing aircraft preliminary performance: lift L = 0.5*rho*V^2*S*CL, wing loading, stall speed Vs = sqrt(2W/(rho*S*CLmax)), the parabolic drag polar CD = CD0 + CL^2/(pi*AR*e), maximum lift-to-drag (L/D)max = 0.5*sqrt(pi*AR*e/CD0) at CL_opt = sqrt(pi*AR*e*CD0), best glide ratio and still-air glide range. Research/educational grade: first-order steady-level / glide point-performance from a parabolic polar; NOT flight-grade, omits compressibility, Reynolds and CL-dependent CD0, propulsion, weight/CG and stability/control, and is not a substitute for certified flight-performance analysis. (Distinct from valenx-aero, which is CFD / wind-tunnel.)"
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip checks for the serde-derived value types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
