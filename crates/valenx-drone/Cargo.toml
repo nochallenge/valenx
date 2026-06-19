@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-drone"
+description = "Multirotor (drone / quadcopter) hover performance via momentum / actuator-disk theory: total disk area, disk loading, hover induced velocity vi = sqrt(T/(2*rho*A)), ideal hover power P = T^1.5 / sqrt(2*rho*A), actual power via the rotor figure of merit, thrust-to-weight, and hover endurance from battery energy. Research/educational grade: ideal hover momentum theory only; NOT flight-grade, omits forward flight, blade-element aerodynamics, ESC/motor/propeller efficiency curves, and is not a substitute for real flight-performance analysis or certification."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip checks for the serde-derived value types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
