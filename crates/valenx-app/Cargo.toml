@@ -109,6 +109,10 @@ valenx-batterypack   = { path = "../valenx-batterypack" }
 # library; the workbench calls its real API directly (no subprocess).
 valenx-aero          = { path = "../valenx-aero" }
 
+# Native 3-phase induction-motor slip / power — surfaced by the Induction
+# Motor workbench (src/inductionmotor_workbench.rs).
+valenx-inductionmotor = { path = "../valenx-inductionmotor" }
+
 # The native 2-D incompressible laminar CFD engine (SIMPLE), surfaced in
 # the desktop UI by the CFD Workbench (src/cfd_workbench.rs). A pure-Rust
 # solver library; the workbench calls its real API directly (no subprocess).
