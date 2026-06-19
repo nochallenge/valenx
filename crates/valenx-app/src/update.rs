@@ -450,6 +450,71 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Capacitor workbench — native
+                    // parallel-plate electrostatics (valenx-capacitor).
+                    if ui
+                        .checkbox(&mut self.show_capacitor_workbench, "Capacitor")
+                        .on_hover_text(
+                            "Show / hide the right-side Capacitor Workbench — native \
+                             parallel-plate capacitance (εr·ε0·A/d), stored energy, charge and \
+                             capacitive reactance, computed in-process by valenx-capacitor.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Fan Laws workbench — native fan /
+                    // blower affinity-law scaling (valenx-fanlaws).
+                    if ui
+                        .checkbox(&mut self.show_fanlaws_workbench, "Fan Laws")
+                        .on_hover_text(
+                            "Show / hide the right-side Fan Laws Workbench — native fan / blower \
+                             affinity-law scaling (flow ~ N, pressure ~ N^2, power ~ N^3) to a new \
+                             speed, computed in-process by valenx-fanlaws.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Creep workbench — native
+                    // high-temperature creep / rupture (valenx-creep).
+                    if ui
+                        .checkbox(&mut self.show_creep_workbench, "Creep")
+                        .on_hover_text(
+                            "Show / hide the right-side Creep Workbench — native high-temperature \
+                             creep: Larson-Miller rupture life and the Norton-Bailey secondary \
+                             creep rate, computed in-process by valenx-creep.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Electrochemistry workbench — native
+                    // Nernst / Faraday cell analysis (valenx-electrochem).
+                    if ui
+                        .checkbox(&mut self.show_electrochem_workbench, "Electrochemistry")
+                        .on_hover_text(
+                            "Show / hide the right-side Electrochemistry Workbench — native Nernst \
+                             cell potential and Faraday electrolysis (mass deposited), computed \
+                             in-process by valenx-electrochem.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Enzyme Kinetics workbench — native
+                    // Michaelis-Menten rate laws (valenx-enzymekinetics).
+                    if ui
+                        .checkbox(&mut self.show_enzymekinetics_workbench, "Enzyme Kinetics")
+                        .on_hover_text(
+                            "Show / hide the right-side Enzyme Kinetics Workbench — native \
+                             Michaelis-Menten and reversible-inhibition initial-rate laws, \
+                             computed in-process by valenx-enzymekinetics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Gears Workbench — native
                     // involute-gear design (valenx-gears). Off by default.
                     if ui
@@ -1480,6 +1545,26 @@ impl eframe::App for ValenxApp {
         // Marine / Hull Workbench (right) — native box-form hull
         // hydrostatics on valenx-marine. A no-op unless toggled on.
         crate::marine_workbench::draw_marine_workbench(self, ctx);
+
+        // Capacitor workbench (right) — parallel-plate electrostatics on
+        // valenx-capacitor. Off unless toggled via View.
+        crate::capacitor_workbench::draw_capacitor_workbench(self, ctx);
+
+        // Fan Laws workbench (right) — fan / blower affinity-law scaling on
+        // valenx-fanlaws. Off unless toggled via View.
+        crate::fanlaws_workbench::draw_fanlaws_workbench(self, ctx);
+
+        // Creep workbench (right) — Larson-Miller / Norton creep on
+        // valenx-creep. Off unless toggled via View.
+        crate::creep_workbench::draw_creep_workbench(self, ctx);
+
+        // Electrochemistry workbench (right) — Nernst / Faraday cell analysis
+        // on valenx-electrochem. Off unless toggled via View.
+        crate::electrochem_workbench::draw_electrochem_workbench(self, ctx);
+
+        // Enzyme Kinetics workbench (right) — Michaelis-Menten rate laws on
+        // valenx-enzymekinetics. Off unless toggled via View.
+        crate::enzymekinetics_workbench::draw_enzymekinetics_workbench(self, ctx);
 
         // Gears Workbench (right) — native involute-gear design on
         // valenx-gears. A no-op unless toggled on via View → Gears.
