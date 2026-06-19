@@ -164,6 +164,7 @@ valenx-librecad-2d = { path = "../valenx-librecad-2d" }
 valenx-reinforcement = { path = "../valenx-reinforcement" }
 valenx-pathtrace = { path = "../valenx-pathtrace" }
 valenx-hvac = { path = "../valenx-hvac" }
+valenx-beam = { path = "../valenx-beam" }
 valenx-reverse = { path = "../valenx-reverse" }
 valenx-interior = { path = "../valenx-interior" }
 valenx-animate = { path = "../valenx-animate" }

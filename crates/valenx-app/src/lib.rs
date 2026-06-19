@@ -39,6 +39,7 @@ pub mod aero;
 pub mod aero_workbench;
 pub mod animate_workbench;
 pub(crate) mod background;
+pub mod beam_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
@@ -604,6 +605,13 @@ pub struct ValenxApp {
     /// State for the HVAC workbench, wrapping `valenx-hvac`. See
     /// [`crate::hvac_workbench`].
     pub(crate) hvac: crate::hvac_workbench::HvacWorkbenchState,
+
+    /// Whether the right-side Beam Workbench is visible. Defaults to `false`;
+    /// flipped on from the View menu.
+    pub(crate) show_beam_workbench: bool,
+    /// State for the Beam Workbench, wrapping `valenx-beam`. See
+    /// [`crate::beam_workbench`].
+    pub(crate) beam: crate::beam_workbench::BeamWorkbenchState,
 
     /// Whether the right-side Reverse-Engineering workbench is visible.
     /// Defaults to `false`; flipped on from the View menu.

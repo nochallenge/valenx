@@ -675,6 +675,18 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     if ui
+                        .checkbox(&mut self.show_beam_workbench, "Beam")
+                        .on_hover_text(
+                            "Show / hide the right-side Beam Workbench — native Euler-Bernoulli \
+                             beam bending: peak deflection, bending moment and bending stress for \
+                             a cantilever / simply-supported / fixed-fixed beam under a point or \
+                             distributed load, computed in-process by valenx-beam.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
                         .checkbox(&mut self.show_hvac_workbench, "HVAC")
                         .on_hover_text(
                             "Show / hide the right-side HVAC workbench — duct sizing and \
@@ -1364,6 +1376,10 @@ impl eframe::App for ValenxApp {
         // HVAC workbench (right) — duct sizing + pressure drop on valenx-hvac.
         // Off unless toggled via View.
         crate::hvac_workbench::draw_hvac_workbench(self, ctx);
+
+        // Beam Workbench (right) — native Euler-Bernoulli beam bending on
+        // valenx-beam. A no-op unless toggled on via View → Beam.
+        crate::beam_workbench::draw_beam_workbench(self, ctx);
 
         // Reverse-Engineering workbench (right) — point-cloud reconstruction
         // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
