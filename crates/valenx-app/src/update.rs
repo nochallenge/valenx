@@ -678,6 +678,93 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // EE / DSP workbenches (electronics batch). Each off by default.
+                    if ui
+                        .checkbox(&mut self.show_opamp_workbench, "Op-Amp")
+                        .on_hover_text(
+                            "Show / hide the right-side Op-Amp Workbench — native ideal \
+                             closed-loop gain and bandwidth (valenx-opamp).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_led_workbench, "LED")
+                        .on_hover_text(
+                            "Show / hide the right-side LED Workbench — native series \
+                             current-limiting resistor sizing (valenx-led).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_thermocouple_workbench, "Thermocouple")
+                        .on_hover_text(
+                            "Show / hide the right-side Thermocouple Workbench — native \
+                             Seebeck EMF + cold-junction compensation (valenx-thermocouple).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_transmissionline_workbench,
+                            "Transmission Line",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Transmission Line Workbench — native \
+                             lossless reflection / VSWR (valenx-transmissionline).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_powerfactor_workbench, "Power Factor")
+                        .on_hover_text(
+                            "Show / hide the right-side Power Factor Workbench — native AC \
+                             power triangle + shunt-capacitor correction (valenx-powerfactor).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_resistornetwork_workbench,
+                            "Resistor Network",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Resistor Network Workbench — native \
+                             series / parallel / divider analysis (valenx-resistor-network).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_rectifier_workbench, "Rectifier")
+                        .on_hover_text(
+                            "Show / hide the right-side Rectifier Workbench — native ideal \
+                             rectifier figures + capacitor-filter ripple (valenx-rectifier).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_filter_workbench, "RC / RLC Filter")
+                        .on_hover_text(
+                            "Show / hide the right-side Filter Workbench — native RC / series-RLC \
+                             analog filter response (valenx-filter).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Heat Transfer workbench — native
                     // composite-wall 1-D heat loss (valenx-heat-transfer).
                     if ui
@@ -1933,6 +2020,17 @@ impl eframe::App for ValenxApp {
         // Geomatics Workbench (right) — native geodesic calculations on
         // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
         crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
+
+        // EE / DSP workbenches (electronics batch). Each a no-op unless toggled
+        // on via the View menu.
+        crate::opamp_workbench::draw_opamp_workbench(self, ctx);
+        crate::led_workbench::draw_led_workbench(self, ctx);
+        crate::thermocouple_workbench::draw_thermocouple_workbench(self, ctx);
+        crate::transmissionline_workbench::draw_transmissionline_workbench(self, ctx);
+        crate::powerfactor_workbench::draw_powerfactor_workbench(self, ctx);
+        crate::resistornetwork_workbench::draw_resistornetwork_workbench(self, ctx);
+        crate::rectifier_workbench::draw_rectifier_workbench(self, ctx);
+        crate::filter_workbench::draw_filter_workbench(self, ctx);
 
         // Heat Transfer workbench (right) — composite-wall 1-D heat loss on
         // valenx-heat-transfer. Off unless toggled via View.

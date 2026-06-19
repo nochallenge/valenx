@@ -98,6 +98,10 @@ pub mod geartooth_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
 pub mod geomatics_workbench;
+// EE / DSP workbenches (electronics batch) — surface valenx-opamp, -led,
+// -thermocouple, -transmissionline, -powerfactor, -resistor-network,
+// -rectifier, -filter as reactive right-side workbenches.
+pub mod filter_workbench;
 pub mod heatexchanger_workbench;
 pub mod heattransfer_workbench;
 pub mod hydraulics_workbench;
@@ -106,6 +110,7 @@ pub mod insulation_workbench;
 pub mod keyboard_help;
 pub mod landing_page;
 pub mod leadscrew_workbench;
+pub mod led_workbench;
 pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
@@ -114,6 +119,7 @@ pub mod mesh_toolbox;
 pub mod mohr_workbench;
 pub mod mosfet_workbench;
 pub mod new_project_dialog;
+pub mod opamp_workbench;
 pub mod optics_workbench;
 pub mod orifice_workbench;
 pub mod panel_help;
@@ -122,14 +128,17 @@ pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+pub mod powerfactor_workbench;
 pub mod pressurevessel_workbench;
 pub mod project_tabs;
 pub mod pump_workbench;
 pub mod rail_workbench;
 pub mod rcbeam_workbench;
 pub mod reactdyn_workbench;
+pub mod rectifier_workbench;
 pub mod refrigeration_workbench;
 pub mod residuals;
+pub mod resistornetwork_workbench;
 pub mod rocket_mesh;
 pub mod rocket_workbench;
 pub mod run;
@@ -143,8 +152,10 @@ pub mod solarpv_workbench;
 pub mod springs_workbench;
 pub mod theme;
 pub mod thermalexpansion_workbench;
+pub mod thermocouple_workbench;
 pub mod tooltips;
 pub mod torsion_workbench;
+pub mod transmissionline_workbench;
 pub mod truss_workbench;
 pub mod types;
 pub mod undo;
@@ -623,6 +634,47 @@ pub struct ValenxApp {
     /// calculations wrapping `valenx-geomatics`. See
     /// [`crate::geomatics_workbench`].
     pub(crate) geomatics: crate::geomatics_workbench::GeomaticsWorkbenchState,
+
+    /// Whether the right-side Op-Amp workbench is visible (View menu). Off by default.
+    pub(crate) show_opamp_workbench: bool,
+    /// Form + result state for the Op-Amp workbench — ideal closed-loop gain /
+    /// bandwidth on `valenx-opamp`. See [`crate::opamp_workbench`].
+    pub(crate) opamp: crate::opamp_workbench::OpAmpWorkbenchState,
+    /// Whether the right-side LED workbench is visible (View menu). Off by default.
+    pub(crate) show_led_workbench: bool,
+    /// Form + result state for the LED workbench — series resistor sizing on
+    /// `valenx-led`. See [`crate::led_workbench`].
+    pub(crate) led: crate::led_workbench::LedWorkbenchState,
+    /// Whether the right-side Thermocouple workbench is visible (View menu). Off by default.
+    pub(crate) show_thermocouple_workbench: bool,
+    /// Form + result state for the Thermocouple workbench — Seebeck EMF on
+    /// `valenx-thermocouple`. See [`crate::thermocouple_workbench`].
+    pub(crate) thermocouple: crate::thermocouple_workbench::ThermocoupleWorkbenchState,
+    /// Whether the right-side Transmission Line workbench is visible (View menu). Off by default.
+    pub(crate) show_transmissionline_workbench: bool,
+    /// Form + result state for the Transmission Line workbench — reflection / VSWR
+    /// on `valenx-transmissionline`. See [`crate::transmissionline_workbench`].
+    pub(crate) transmissionline: crate::transmissionline_workbench::TransmissionLineWorkbenchState,
+    /// Whether the right-side Power Factor workbench is visible (View menu). Off by default.
+    pub(crate) show_powerfactor_workbench: bool,
+    /// Form + result state for the Power Factor workbench — AC power triangle +
+    /// correction on `valenx-powerfactor`. See [`crate::powerfactor_workbench`].
+    pub(crate) powerfactor: crate::powerfactor_workbench::PowerFactorWorkbenchState,
+    /// Whether the right-side Resistor Network workbench is visible (View menu). Off by default.
+    pub(crate) show_resistornetwork_workbench: bool,
+    /// Form + result state for the Resistor Network workbench — series / parallel /
+    /// divider on `valenx-resistor-network`. See [`crate::resistornetwork_workbench`].
+    pub(crate) resistornetwork: crate::resistornetwork_workbench::ResistorNetworkWorkbenchState,
+    /// Whether the right-side Rectifier workbench is visible (View menu). Off by default.
+    pub(crate) show_rectifier_workbench: bool,
+    /// Form + result state for the Rectifier workbench — rectifier figures + ripple
+    /// on `valenx-rectifier`. See [`crate::rectifier_workbench`].
+    pub(crate) rectifier: crate::rectifier_workbench::RectifierWorkbenchState,
+    /// Whether the right-side Filter workbench is visible (View menu). Off by default.
+    pub(crate) show_filter_workbench: bool,
+    /// Form + result state for the Filter workbench — RC / RLC response on
+    /// `valenx-filter`. See [`crate::filter_workbench`].
+    pub(crate) filter: crate::filter_workbench::FilterWorkbenchState,
 
     /// Whether the right-side Heat Transfer workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
