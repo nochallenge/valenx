@@ -100,6 +100,7 @@ pub mod sketch_overlay;
 pub mod springs_workbench;
 pub mod theme;
 pub mod tooltips;
+pub mod truss_workbench;
 pub mod types;
 pub mod undo;
 pub mod viewport;
@@ -507,6 +508,15 @@ pub struct ValenxApp {
     /// allowance / deduction wrapping `valenx-sheet-metal`. See
     /// [`crate::sheetmetal_workbench`].
     pub(crate) sheetmetal: crate::sheetmetal_workbench::SheetmetalWorkbenchState,
+
+    /// Whether the right-side Truss Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_truss_workbench: bool,
+    /// Form + result state for the Truss Workbench — native planar
+    /// pin-jointed truss analysis wrapping `valenx-truss`. See
+    /// [`crate::truss_workbench`].
+    pub(crate) truss: crate::truss_workbench::TrussWorkbenchState,
 
     /// Whether the right-side Field Statistics Workbench is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the other

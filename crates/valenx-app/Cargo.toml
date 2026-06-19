@@ -141,6 +141,9 @@ valenx-collision     = { path = "../valenx-collision" }
 # Native sheet-metal bend allowance / deduction — surfaced by the Sheet
 # Metal workbench (src/sheetmetal_workbench.rs).
 valenx-sheet-metal   = { path = "../valenx-sheet-metal" }
+# Native planar pin-jointed truss analysis — surfaced by the Truss
+# workbench (src/truss_workbench.rs).
+valenx-truss         = { path = "../valenx-truss" }
 # Native ISO 4017 hex-bolt dimensions — surfaced by the Fasteners
 # workbench (src/fasteners_workbench.rs).
 valenx-fasteners     = { path = "../valenx-fasteners" }

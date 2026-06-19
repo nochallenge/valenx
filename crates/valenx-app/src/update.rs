@@ -519,6 +519,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Truss Workbench — native planar
+                    // pin-jointed Warren truss analysis (valenx-truss). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_truss_workbench, "Truss")
+                        .on_hover_text(
+                            "Show / hide the right-side Truss Workbench — native planar \
+                             pin-jointed Warren truss: determinacy, support reactions, and the \
+                             peak tension / compression members by the method of joints, computed \
+                             in-process by valenx-truss.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Sheet Metal Workbench — native bend
                     // allowance / deduction (valenx-sheet-metal). Off by default.
                     if ui
@@ -1300,6 +1314,10 @@ impl eframe::App for ValenxApp {
         // Sheet Metal Workbench (right) — native bend allowance / deduction
         // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.
         crate::sheetmetal_workbench::draw_sheetmetal_workbench(self, ctx);
+
+        // Truss Workbench (right) — native planar pin-jointed truss analysis
+        // on valenx-truss. A no-op unless toggled on via View → Truss.
+        crate::truss_workbench::draw_truss_workbench(self, ctx);
 
         // Field Statistics Workbench (right) — descriptive statistics over a
         // pasted number list on valenx-fields. A no-op unless toggled on via
