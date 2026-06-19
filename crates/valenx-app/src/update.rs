@@ -533,6 +533,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Solar PV Workbench — native
+                    // single-diode photovoltaic cell performance (valenx-solarpv).
+                    if ui
+                        .checkbox(&mut self.show_solarpv_workbench, "Solar PV")
+                        .on_hover_text(
+                            "Show / hide the right-side Solar PV Workbench — native single-diode \
+                             cell performance: short-circuit current, open-circuit voltage, the \
+                             maximum-power point, fill factor and conversion efficiency, computed \
+                             in-process by valenx-solarpv.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Sheet Metal Workbench — native bend
                     // allowance / deduction (valenx-sheet-metal). Off by default.
                     if ui
@@ -625,6 +639,18 @@ impl eframe::App for ValenxApp {
                              BCI stimulation: an electrode's extracellular field drives \
                              Hodgkin-Huxley axons (recruitment, bioheat, electrode impedance), \
                              solved in-process by valenx-neuro.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_windturbine_workbench, "Wind Turbine")
+                        .on_hover_text(
+                            "Show / hide the right-side Wind Turbine workbench — native \
+                             actuator-disc power: swept area, wind / Betz / Cp-extracted power, \
+                             the cut-in / rated / cut-out power curve, capacity factor and \
+                             tip-speed ratio, computed in-process by valenx-windturbine.",
                         )
                         .changed()
                     {
@@ -1311,6 +1337,10 @@ impl eframe::App for ValenxApp {
         // on valenx-collision. A no-op unless toggled on via View → Collision.
         crate::collision_workbench::draw_collision_workbench(self, ctx);
 
+        // Solar PV Workbench (right) — native single-diode photovoltaic cell
+        // performance on valenx-solarpv. A no-op unless toggled via View → Solar PV.
+        crate::solarpv_workbench::draw_solarpv_workbench(self, ctx);
+
         // Sheet Metal Workbench (right) — native bend allowance / deduction
         // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.
         crate::sheetmetal_workbench::draw_sheetmetal_workbench(self, ctx);
@@ -1344,6 +1374,10 @@ impl eframe::App for ValenxApp {
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
         crate::neuro_workbench::draw_neuro_workbench(self, ctx);
+
+        // Wind Turbine workbench (right) — native actuator-disc wind-turbine
+        // power on valenx-windturbine. A no-op unless toggled via View → Wind Turbine.
+        crate::windturbine_workbench::draw_windturbine_workbench(self, ctx);
 
         // Parametric-CAD workbench (right) — named parameters driving sketch
         // geometry on valenx-solvespace-3d. Off unless toggled via View.

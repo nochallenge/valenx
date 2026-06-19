@@ -52,6 +52,7 @@ pub mod reinforcement_workbench;
 pub mod render_workbench;
 pub mod reverse_workbench;
 pub mod variant_effect_workbench;
+pub mod windturbine_workbench;
 
 pub mod assistant_workbench;
 pub mod astro;
@@ -97,6 +98,7 @@ pub mod setup;
 pub mod sheetmetal_workbench;
 pub mod shortcuts;
 pub mod sketch_overlay;
+pub mod solarpv_workbench;
 pub mod springs_workbench;
 pub mod theme;
 pub mod tooltips;
@@ -500,6 +502,15 @@ pub struct ValenxApp {
     /// [`crate::collision_workbench`].
     pub(crate) collision: crate::collision_workbench::CollisionWorkbenchState,
 
+    /// Whether the right-side Solar PV Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_solarpv_workbench: bool,
+    /// Form + result state for the Solar PV Workbench — native single-diode
+    /// photovoltaic cell performance wrapping `valenx-solarpv`. See
+    /// [`crate::solarpv_workbench`].
+    pub(crate) solarpv: crate::solarpv_workbench::SolarPvWorkbenchState,
+
     /// Whether the right-side Sheet Metal Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
@@ -569,6 +580,15 @@ pub struct ValenxApp {
     /// Form + result state for the Neural-Interface workbench, wrapping
     /// `valenx-neuro`. See [`crate::neuro_workbench`].
     pub(crate) neuro: crate::neuro_workbench::NeuroWorkbenchState,
+
+    /// Whether the right-side Wind Turbine workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_windturbine_workbench: bool,
+    /// Form + result state for the Wind Turbine workbench — native
+    /// actuator-disc wind-turbine power wrapping `valenx-windturbine`. See
+    /// [`crate::windturbine_workbench`].
+    pub(crate) windturbine: crate::windturbine_workbench::WindTurbineWorkbenchState,
 
     /// Whether the right-side Parametric-CAD workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.

@@ -138,6 +138,9 @@ valenx-rail          = { path = "../valenx-rail" }
 # Native AABB geometry + collision tests — surfaced by the Collision
 # workbench (src/collision_workbench.rs).
 valenx-collision     = { path = "../valenx-collision" }
+# Native single-diode photovoltaic cell performance — surfaced by the
+# Solar PV workbench (src/solarpv_workbench.rs).
+valenx-solarpv       = { path = "../valenx-solarpv" }
 # Native sheet-metal bend allowance / deduction — surfaced by the Sheet
 # Metal workbench (src/sheetmetal_workbench.rs).
 valenx-sheet-metal   = { path = "../valenx-sheet-metal" }
@@ -159,6 +162,9 @@ valenx-gasdynamics   = { path = "../valenx-gasdynamics" }
 # Neural Interface workbench (src/neuro_workbench.rs). Reuses valenx-fem
 # (FEM extracellular field + bioheat) and valenx-mesh; pure-Rust solver.
 valenx-neuro         = { path = "../valenx-neuro" }
+# Native wind-turbine power performance — surfaced by the Wind Turbine
+# workbench (src/windturbine_workbench.rs).
+valenx-windturbine   = { path = "../valenx-windturbine" }
 valenx-solvespace-3d = { path = "../valenx-solvespace-3d" }
 valenx-librecad-2d = { path = "../valenx-librecad-2d" }
 valenx-reinforcement = { path = "../valenx-reinforcement" }
