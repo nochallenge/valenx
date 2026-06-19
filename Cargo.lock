@@ -6956,6 +6956,7 @@ dependencies = [
  "valenx-phylo",
  "valenx-piping",
  "valenx-popgen",
+ "valenx-pump",
  "valenx-qchem",
  "valenx-rail",
  "valenx-rbac",

@@ -776,6 +776,18 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     if ui
+                        .checkbox(&mut self.show_pump_workbench, "Pump")
+                        .on_hover_text(
+                            "Show / hide the right-side Pump Workbench — native centrifugal \
+                             pump duty point (pump curve ∩ system curve), hydraulic and shaft \
+                             power, and the NPSH cavitation margin, computed in-process by \
+                             valenx-pump.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
                         .checkbox(&mut self.show_interior_workbench, "Interior Design")
                         .on_hover_text(
                             "Show / hide the right-side Interior-Design workbench — a 2D \
@@ -1472,6 +1484,10 @@ impl eframe::App for ValenxApp {
         // Reverse-Engineering workbench (right) — point-cloud reconstruction
         // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
         crate::reverse_workbench::draw_reverse_workbench(self, ctx);
+
+        // Pump workbench (right) — centrifugal-pump duty point + NPSH on
+        // valenx-pump. Off unless toggled via View.
+        crate::pump_workbench::draw_pump_workbench(self, ctx);
 
         // Interior-Design workbench (right) — 2D floor plan + furniture on
         // valenx-interior. Off unless toggled via View.

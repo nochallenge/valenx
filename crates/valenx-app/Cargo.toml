@@ -184,6 +184,7 @@ valenx-beam = { path = "../valenx-beam" }
 valenx-reverse = { path = "../valenx-reverse" }
 valenx-interior = { path = "../valenx-interior" }
 valenx-animate = { path = "../valenx-animate" }
+valenx-pump = { path = "../valenx-pump" }
 valenx-variant-effect = { path = "../valenx-variant-effect" }
 
 # The native launch-vehicle ascent + trajectory simulator, surfaced in
