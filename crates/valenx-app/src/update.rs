@@ -603,6 +603,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Gearbox workbench — native two-stage
+                    // compound gear-train analysis (valenx-gearbox).
+                    if ui
+                        .checkbox(&mut self.show_gearbox_workbench, "Gearbox")
+                        .on_hover_text(
+                            "Show / hide the right-side Gearbox Workbench — native two-stage \
+                             compound gear train: overall ratio, efficiency, output speed and \
+                             torque and the input / output power, computed in-process by \
+                             valenx-gearbox.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Fasteners Workbench — ISO 4017 hex-bolt
                     // dimensions (valenx-fasteners). Off by default.
                     if ui
@@ -1483,6 +1497,10 @@ impl eframe::App for ValenxApp {
         // pasted number list on valenx-fields. A no-op unless toggled on via
         // View → Field Statistics.
         crate::fields_workbench::draw_fields_workbench(self, ctx);
+
+        // Gearbox workbench (right) — two-stage compound gear-train analysis
+        // on valenx-gearbox. Off unless toggled via View.
+        crate::gearbox_workbench::draw_gearbox_workbench(self, ctx);
 
         // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
         // valenx-fasteners. A no-op unless toggled on via View → Fasteners.

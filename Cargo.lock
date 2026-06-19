@@ -6934,6 +6934,7 @@ dependencies = [
  "valenx-fonts",
  "valenx-frames",
  "valenx-gasdynamics",
+ "valenx-gearbox",
  "valenx-gears",
  "valenx-genediting",
  "valenx-genomics",
