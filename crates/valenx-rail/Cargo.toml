@@ -1,0 +1,22 @@
+[package]
+name        = "valenx-rail"
+description = "Rail-vehicle (train) running resistance and tractive performance: the Davis equation R(v) = A + B*v + C*v^2, grade resistance m*g*grade, net tractive force TE - R - grade, acceleration, drawbar power, the maximum startable grade, and the constant-tractive-effort balancing speed. Research/educational grade: lumped Davis resistance with a constant-tractive-effort model (real locomotives are power-limited and TE falls with speed); NOT a substitute for railway traction simulation, signalling/timetable tools, or certified rolling-stock engineering."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip checks for the serde-derived value types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
