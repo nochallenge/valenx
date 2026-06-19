@@ -8,8 +8,9 @@
 //! bias topologies — four-resistor voltage divider or single-resistor
 //! fixed base — and "Analyze" solves the base loop for the quiescent
 //! operating point: the base / collector / emitter currents, the
-//! collector-emitter voltage, the bias stability factor `S(ICO)`, and the
-//! operating region (active / saturation / cut-off). "Show 3-D
+//! collector-emitter voltage, the common-base current gain `alpha`, the
+//! collector power dissipation `Pd`, the bias stability factor `S(ICO)`,
+//! and the operating region (active / saturation / cut-off). "Show 3-D
 //! transistor" loads a representative TO-92-style package (a flat-faced
 //! half-cylinder body with three leads) into the central viewport.
 //!
@@ -270,6 +271,19 @@ fn compute(s: &BjtWorkbenchState) -> Result<String, String> {
         Topology::FixedBase => "fixed base",
     };
 
+    // Common-base current gain alpha = Ic / Ie, the dual of the
+    // forward gain beta (alpha = beta / (beta + 1), always < 1). Derived
+    // here from the solved Q-point currents rather than refitting beta, so
+    // it stays exact even in saturation where Ic is set by the resistors.
+    // Ie is the emitter current of a conducting device, so it is strictly
+    // positive whenever the solve succeeded.
+    let alpha = op.ic / op.ie;
+    // Collector power dissipation Pd = Vce * Ic (W), the quiescent heat the
+    // device must shed — the figure checked against its rated dissipation /
+    // safe-operating-area. Reported in milliwatts to match the small-signal
+    // currents above.
+    let pd_mw = op.vce * op.ic * 1.0e3;
+
     Ok(format!(
         "topology        : {topo}\n\
          gain β / VBE    : {:.0} / {:.2} V\n\
@@ -277,8 +291,10 @@ fn compute(s: &BjtWorkbenchState) -> Result<String, String> {
          base current Ib : {:.3} µA\n\
          coll current Ic : {:.3} mA\n\
          emit current Ie : {:.3} mA\n\
+         CB gain α       : {alpha:.4}\n\
          emitter VE      : {:.3} V\n\
          Vce             : {:.3} V\n\
+         power Pd        : {pd_mw:.3} mW\n\
          stability S(ICO): {:.2}\n\
          region          : {region}",
         s.beta,
@@ -473,6 +489,47 @@ mod tests {
         );
         // And Ie = Ic + Ib closes the node.
         assert!((op.ie - (op.ic + op.ib)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn ground_truth_alpha_and_power_dissipation() {
+        // GROUND TRUTH (common-base gain): alpha = Ic/Ie, which for the
+        // active-region beta relations equals beta/(beta+1). With the
+        // default beta = 100 this is 100/101 = 0.990099..., formatted to
+        // four places as "0.9901".
+        //
+        // GROUND TRUTH (collector power): Pd = Vce * Ic. The default stiff
+        // divider solves to Ic ≈ 1.28634 mA and Vce ≈ 7.87086 V, so
+        // Pd ≈ 7.87086 V * 1.28634 mA ≈ 10.12 mW, formatted to three
+        // places as "10.125".
+        let s = BjtWorkbenchState::default();
+        let (op, _) = solve(&s).expect("default divider solves");
+
+        // Hand-check the alpha = beta/(beta+1) identity from the solved
+        // currents (exact ratio, no formatting).
+        let alpha_expected = s.beta / (s.beta + 1.0);
+        assert!(
+            (op.ic / op.ie - alpha_expected).abs() < 1e-12,
+            "alpha = Ic/Ie = beta/(beta+1), got {}",
+            op.ic / op.ie
+        );
+        // Hand-check the power dissipation against Vce * Ic (W),
+        // independently of the crate (Pd ≈ 1.0125e-2 W).
+        let pd_w = op.vce * op.ic;
+        let one = 1.0_f64;
+        assert!(
+            (pd_w - 1.0125e-2).abs() < 1e-5 * one,
+            "Pd = Vce*Ic ≈ 10.12 mW, got {pd_w} W"
+        );
+
+        // And confirm both land in the formatted readout at the workbench's
+        // exact display precision.
+        let out = compute(&s).expect("default divider formats");
+        assert!(out.contains("CB gain α       : 0.9901"), "readout: {out}");
+        assert!(
+            out.contains("power Pd        : 10.125 mW"),
+            "readout: {out}"
+        );
     }
 
     #[test]
