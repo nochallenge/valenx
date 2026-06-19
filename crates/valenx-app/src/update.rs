@@ -631,6 +631,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Thermal Expansion workbench — linear
+                    // expansion + constrained stress (valenx-thermalexpansion). Off by default.
+                    if ui
+                        .checkbox(&mut self.show_thermalexpansion_workbench, "Thermal Expansion")
+                        .on_hover_text(
+                            "Show / hide the right-side Thermal Expansion workbench — linear / \
+                             areal / volumetric expansion, the length change and free thermal \
+                             strain, and the fully-constrained thermal stress E·α·ΔT, computed \
+                             in-process by valenx-thermalexpansion.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Gas Dynamics workbench — 1-D
                     // compressible-flow relations (valenx-gasdynamics). Off by default.
                     if ui
@@ -1400,6 +1414,10 @@ impl eframe::App for ValenxApp {
         // Gas Dynamics workbench (right) — 1-D compressible-flow relations on
         // valenx-gasdynamics. A no-op unless toggled on via View → Gas Dynamics.
         crate::gasdynamics_workbench::draw_gasdynamics_workbench(self, ctx);
+
+        // Thermal Expansion workbench (right) — linear expansion + constrained
+        // stress on valenx-thermalexpansion. A no-op unless toggled via View → Thermal Expansion.
+        crate::thermalexpansion_workbench::draw_thermalexpansion_workbench(self, ctx);
 
         // Neural-Interface workbench (right) — native BCI stimulation on
         // valenx-neuro. A no-op unless toggled on via View → Neural Interface.

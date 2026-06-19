@@ -104,6 +104,7 @@ pub mod sketch_overlay;
 pub mod solarpv_workbench;
 pub mod springs_workbench;
 pub mod theme;
+pub mod thermalexpansion_workbench;
 pub mod tooltips;
 pub mod types;
 pub mod undo;
@@ -584,6 +585,15 @@ pub struct ValenxApp {
     /// compressible-flow relations wrapping `valenx-gasdynamics`. See
     /// [`crate::gasdynamics_workbench`].
     pub(crate) gasdynamics: crate::gasdynamics_workbench::GasDynamicsWorkbenchState,
+
+    /// Whether the right-side Thermal Expansion workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_thermalexpansion_workbench: bool,
+    /// Form + result state for the Thermal Expansion workbench — linear
+    /// expansion + constrained stress wrapping `valenx-thermalexpansion`. See
+    /// [`crate::thermalexpansion_workbench`].
+    pub(crate) thermalexpansion: crate::thermalexpansion_workbench::ThermalExpansionWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
