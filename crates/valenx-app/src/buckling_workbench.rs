@@ -7,9 +7,10 @@
 //! modulus, smallest second moment of area, length, cross-sectional area),
 //! one of the four classical end conditions, and a material yield strength;
 //! "Analyze" computes the Euler critical load `P_cr = pi^2 E I / (K L)^2`,
-//! the critical stress, the slenderness ratio and the combined
-//! Euler/Johnson design stress and load, and "Show 3-D column" loads a
-//! representative slender column solid into the central viewport.
+//! the bare Euler critical stress, the J. B. Johnson parabola stress, the
+//! slenderness ratio and the combined Euler/Johnson design stress and load,
+//! and "Show 3-D column" loads a representative slender column solid into
+//! the central viewport.
 
 use std::path::PathBuf;
 
@@ -234,6 +235,9 @@ fn compute(s: &BucklingWorkbenchState) -> Result<String, String> {
     let cc = col
         .transition_slenderness(s.yield_strength_pa)
         .map_err(|e| e.to_string())?;
+    let johnson_stress = col
+        .johnson_critical_stress(s.yield_strength_pa)
+        .map_err(|e| e.to_string())?;
     let design_stress = col
         .design_critical_stress(s.yield_strength_pa)
         .map_err(|e| e.to_string())?;
@@ -254,7 +258,8 @@ fn compute(s: &BucklingWorkbenchState) -> Result<String, String> {
          effective KL    : {:.3} m\n\
          radius of gyr r : {:.3} mm\n\n\
          critical load   : {:.4} MN\n\
-         critical stress : {:.2} MPa\n\
+         Euler stress σcr: {:.2} MPa\n\
+         Johnson stress  : {:.2} MPa\n\
          slenderness KL/r: {:.1}\n\
          transition C_c  : {:.1}\n\
          regime          : {}\n\
@@ -271,6 +276,7 @@ fn compute(s: &BucklingWorkbenchState) -> Result<String, String> {
         col.radius_of_gyration() * 1.0e3,
         p_cr / 1.0e6,
         sigma_cr / 1.0e6,
+        johnson_stress / 1.0e6,
         slenderness,
         cc,
         regime,
@@ -406,7 +412,7 @@ mod tests {
             s.error
         );
         assert!(s.result.contains("critical load"));
-        assert!(s.result.contains("critical stress"));
+        assert!(s.result.contains("Euler stress"));
         assert!(s.result.contains("slenderness"));
         // 3 m pinned-pinned 50 mm steel round: P_cr ~ 1.0767 MN.
         assert!(s.result.contains("1.0767"));
@@ -443,6 +449,40 @@ mod tests {
         assert!(
             (col.critical_stress() - expected_pcr / s.area_m2).abs()
                 < 1.0e-6 * (expected_pcr / s.area_m2).abs()
+        );
+    }
+
+    #[test]
+    fn ground_truth_johnson_parabola_stress() {
+        // Ground truth: the J. B. Johnson parabola stress
+        //   sigma = sy * [1 - sy (K L / r)^2 / (4 pi^2 E)]
+        // hand-computed for the default 3 m pinned-pinned 50 mm steel round.
+        let mut s = BucklingWorkbenchState::default();
+        let col = build_column(&s).expect("default column is valid");
+        let r = (s.second_moment_area_m4 / s.area_m2).sqrt(); // ~0.039527 m
+        let lambda = (col.factor_k() * col.length) / r; // K=1, L=3 -> ~75.898
+        let expected = s.yield_strength_pa
+            * (1.0_f64
+                - s.yield_strength_pa * lambda * lambda / (4.0 * PI.powi(2) * s.youngs_modulus_pa));
+        // ~204.40 MPa: the crate's johnson_critical_stress matches the formula.
+        let got = col
+            .johnson_critical_stress(s.yield_strength_pa)
+            .expect("default yield strength is positive");
+        assert!(
+            (got - expected).abs() < 1.0e-6 * expected.abs(),
+            "Johnson stress {got} vs hand-computed {expected}"
+        );
+        // The readout surfaces it, formatted to 2 dp in MPa: 204.40.
+        run_buckling(&mut s);
+        assert!(
+            s.result.contains("Johnson stress"),
+            "readout should label the Johnson parabola stress: {}",
+            s.result
+        );
+        assert!(
+            s.result.contains("204.40"),
+            "Johnson parabola stress should read ~204.40 MPa: {}",
+            s.result
         );
     }
 
