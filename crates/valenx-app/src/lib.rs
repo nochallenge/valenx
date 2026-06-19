@@ -68,6 +68,7 @@ pub mod engine_workbench;
 pub mod fasteners_workbench;
 pub mod fields_workbench;
 pub mod first_run;
+pub mod fixedwing_workbench;
 pub mod frames_workbench;
 pub mod gasdynamics_workbench;
 pub mod gears_workbench;
@@ -524,6 +525,15 @@ pub struct ValenxApp {
     /// dimensions wrapping `valenx-fasteners`. See
     /// [`crate::fasteners_workbench`].
     pub(crate) fasteners: crate::fasteners_workbench::FastenersWorkbenchState,
+
+    /// Whether the right-side Fixed-Wing / Aircraft Workbench is visible.
+    /// Defaults to `false`; flipped on from the View menu. Independent of the
+    /// other workbenches — egui docks them side by side.
+    pub(crate) show_fixedwing_workbench: bool,
+    /// Form + result state for the Fixed-Wing / Aircraft Workbench — native
+    /// preliminary aircraft point-performance wrapping `valenx-fixedwing`.
+    /// See [`crate::fixedwing_workbench`].
+    pub(crate) fixedwing: crate::fixedwing_workbench::FixedWingWorkbenchState,
 
     /// Whether the right-side Frames Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
