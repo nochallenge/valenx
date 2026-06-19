@@ -519,6 +519,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Solar PV Workbench — native
+                    // single-diode photovoltaic cell performance (valenx-solarpv).
+                    if ui
+                        .checkbox(&mut self.show_solarpv_workbench, "Solar PV")
+                        .on_hover_text(
+                            "Show / hide the right-side Solar PV Workbench — native single-diode \
+                             cell performance: short-circuit current, open-circuit voltage, the \
+                             maximum-power point, fill factor and conversion efficiency, computed \
+                             in-process by valenx-solarpv.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Sheet Metal Workbench — native bend
                     // allowance / deduction (valenx-sheet-metal). Off by default.
                     if ui
@@ -1282,6 +1296,10 @@ impl eframe::App for ValenxApp {
         // Collision Workbench (right) — native AABB geometry + overlap tests
         // on valenx-collision. A no-op unless toggled on via View → Collision.
         crate::collision_workbench::draw_collision_workbench(self, ctx);
+
+        // Solar PV Workbench (right) — native single-diode photovoltaic cell
+        // performance on valenx-solarpv. A no-op unless toggled via View → Solar PV.
+        crate::solarpv_workbench::draw_solarpv_workbench(self, ctx);
 
         // Sheet Metal Workbench (right) — native bend allowance / deduction
         // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.

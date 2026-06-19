@@ -96,6 +96,7 @@ pub mod setup;
 pub mod sheetmetal_workbench;
 pub mod shortcuts;
 pub mod sketch_overlay;
+pub mod solarpv_workbench;
 pub mod springs_workbench;
 pub mod theme;
 pub mod tooltips;
@@ -497,6 +498,15 @@ pub struct ValenxApp {
     /// geometry + overlap tests wrapping `valenx-collision`. See
     /// [`crate::collision_workbench`].
     pub(crate) collision: crate::collision_workbench::CollisionWorkbenchState,
+
+    /// Whether the right-side Solar PV Workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub(crate) show_solarpv_workbench: bool,
+    /// Form + result state for the Solar PV Workbench — native single-diode
+    /// photovoltaic cell performance wrapping `valenx-solarpv`. See
+    /// [`crate::solarpv_workbench`].
+    pub(crate) solarpv: crate::solarpv_workbench::SolarPvWorkbenchState,
 
     /// Whether the right-side Sheet Metal Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
