@@ -6943,6 +6943,7 @@ dependencies = [
  "valenx-hvac",
  "valenx-i18n",
  "valenx-icons",
+ "valenx-inductionmotor",
  "valenx-interior",
  "valenx-kinematics",
  "valenx-librecad-2d",
