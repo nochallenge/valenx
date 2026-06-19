@@ -6964,6 +6964,7 @@ dependencies = [
  "valenx-rocket-demo",
  "valenx-sheet-metal",
  "valenx-sketch",
+ "valenx-solarpv",
  "valenx-solvespace-3d",
  "valenx-spreadsheet",
  "valenx-springs",
