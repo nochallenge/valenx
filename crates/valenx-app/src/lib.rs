@@ -75,6 +75,7 @@ pub mod fixedwing_workbench;
 pub mod fourbar_workbench;
 pub mod frames_workbench;
 pub mod gasdynamics_workbench;
+pub mod gearbox_workbench;
 pub mod gears_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
@@ -541,6 +542,13 @@ pub struct ValenxApp {
     /// statistics over a pasted number list, via `valenx-fields`. See
     /// [`crate::fields_workbench`].
     pub(crate) fields: crate::fields_workbench::FieldsWorkbenchState,
+
+    /// Whether the right-side Gearbox workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_gearbox_workbench: bool,
+    /// State for the Gearbox workbench, wrapping `valenx-gearbox`. See
+    /// [`crate::gearbox_workbench`].
+    pub(crate) gearbox: crate::gearbox_workbench::GearboxWorkbenchState,
 
     /// Whether the right-side Fasteners Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

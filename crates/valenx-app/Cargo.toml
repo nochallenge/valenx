@@ -138,6 +138,9 @@ valenx-piping        = { path = "../valenx-piping" }
 # Native train running resistance + tractive effort — surfaced by the Rail
 # workbench (src/rail_workbench.rs).
 valenx-rail          = { path = "../valenx-rail" }
+# Native two-stage compound gear-train analysis — surfaced by the Gearbox
+# workbench (src/gearbox_workbench.rs).
+valenx-gearbox       = { path = "../valenx-gearbox" }
 # Native AABB geometry + collision tests — surfaced by the Collision
 # workbench (src/collision_workbench.rs).
 valenx-collision     = { path = "../valenx-collision" }
