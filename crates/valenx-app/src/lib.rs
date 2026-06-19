@@ -105,6 +105,13 @@ pub mod fracture_workbench;
 pub mod frames_workbench;
 pub mod gasdynamics_workbench;
 pub mod gearbox_workbench;
+// Science batch 5 — surface valenx-camdynamics, -battery-ecm, -diffusion,
+// -dimensional, -fft as reactive right-side workbenches.
+pub mod batteryecm_workbench;
+pub mod camdynamics_workbench;
+pub mod diffusion_workbench;
+pub mod dimensional_workbench;
+pub mod fft_workbench;
 pub mod gears_workbench;
 pub mod geartooth_workbench;
 pub mod genetics;
@@ -860,6 +867,32 @@ pub struct ValenxApp {
     /// State for the Gearbox workbench, wrapping `valenx-gearbox`. See
     /// [`crate::gearbox_workbench`].
     pub(crate) gearbox: crate::gearbox_workbench::GearboxWorkbenchState,
+
+    /// Whether the right-side Cam Dynamics workbench is visible (View menu). Off by default.
+    pub(crate) show_camdynamics_workbench: bool,
+    /// State for the Cam Dynamics workbench — cam-follower rise kinematics on
+    /// `valenx-camdynamics`. See [`crate::camdynamics_workbench`].
+    pub(crate) camdynamics: crate::camdynamics_workbench::CamDynamicsWorkbenchState,
+    /// Whether the right-side Battery ECM workbench is visible (View menu). Off by default.
+    pub(crate) show_batteryecm_workbench: bool,
+    /// State for the Battery ECM workbench — first-order Thevenin terminal voltage
+    /// on `valenx-battery-ecm`. See [`crate::batteryecm_workbench`].
+    pub(crate) batteryecm: crate::batteryecm_workbench::BatteryEcmWorkbenchState,
+    /// Whether the right-side Diffusion workbench is visible (View menu). Off by default.
+    pub(crate) show_diffusion_workbench: bool,
+    /// State for the Diffusion workbench — Fickian flux + Gaussian spread on
+    /// `valenx-diffusion`. See [`crate::diffusion_workbench`].
+    pub(crate) diffusion: crate::diffusion_workbench::DiffusionWorkbenchState,
+    /// Whether the right-side Dimensionless Numbers workbench is visible (View menu). Off by default.
+    pub(crate) show_dimensional_workbench: bool,
+    /// State for the Dimensionless Numbers workbench — similitude groups +
+    /// regime classifiers on `valenx-dimensional`. See [`crate::dimensional_workbench`].
+    pub(crate) dimensional: crate::dimensional_workbench::DimensionalWorkbenchState,
+    /// Whether the right-side FFT / Spectrum workbench is visible (View menu). Off by default.
+    pub(crate) show_fft_workbench: bool,
+    /// State for the FFT / Spectrum workbench — DFT of a synthesized tone on
+    /// `valenx-fft`. See [`crate::fft_workbench`].
+    pub(crate) fft: crate::fft_workbench::FftWorkbenchState,
 
     /// Whether the right-side Fasteners Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other

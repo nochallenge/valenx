@@ -1092,6 +1092,60 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Science batch 5 workbenches. Each off by default.
+                    if ui
+                        .checkbox(&mut self.show_camdynamics_workbench, "Cam Dynamics")
+                        .on_hover_text(
+                            "Show / hide the right-side Cam Dynamics Workbench — native \
+                             cam-follower rise kinematics (valenx-camdynamics).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_batteryecm_workbench, "Battery ECM")
+                        .on_hover_text(
+                            "Show / hide the right-side Battery ECM Workbench — native \
+                             first-order Thevenin cell terminal voltage (valenx-battery-ecm).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_diffusion_workbench, "Diffusion")
+                        .on_hover_text(
+                            "Show / hide the right-side Diffusion Workbench — native Fickian \
+                             flux + Gaussian spread (valenx-diffusion).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.show_dimensional_workbench,
+                            "Dimensionless Numbers",
+                        )
+                        .on_hover_text(
+                            "Show / hide the right-side Dimensionless Numbers Workbench — native \
+                             similitude groups + regime classifiers (valenx-dimensional).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.show_fft_workbench, "FFT / Spectrum")
+                        .on_hover_text(
+                            "Show / hide the right-side FFT / Spectrum Workbench — native DFT \
+                             of a synthesized test tone (valenx-fft).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Fasteners Workbench — ISO 4017 hex-bolt
                     // dimensions (valenx-fasteners). Off by default.
                     if ui
@@ -2314,6 +2368,13 @@ impl eframe::App for ValenxApp {
         // Gearbox workbench (right) — two-stage compound gear-train analysis
         // on valenx-gearbox. Off unless toggled via View.
         crate::gearbox_workbench::draw_gearbox_workbench(self, ctx);
+
+        // Science batch 5 workbenches. Each a no-op unless toggled via View.
+        crate::camdynamics_workbench::draw_camdynamics_workbench(self, ctx);
+        crate::batteryecm_workbench::draw_batteryecm_workbench(self, ctx);
+        crate::diffusion_workbench::draw_diffusion_workbench(self, ctx);
+        crate::dimensional_workbench::draw_dimensional_workbench(self, ctx);
+        crate::fft_workbench::draw_fft_workbench(self, ctx);
 
         // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
         // valenx-fasteners. A no-op unless toggled on via View → Fasteners.
