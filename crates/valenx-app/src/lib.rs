@@ -80,6 +80,7 @@ pub mod frames_workbench;
 pub mod gasdynamics_workbench;
 pub mod gearbox_workbench;
 pub mod gears_workbench;
+pub mod geartooth_workbench;
 pub mod genetics;
 pub mod genetics_workbench;
 pub mod geomatics_workbench;
@@ -93,11 +94,14 @@ pub mod mesh_toolbox;
 pub mod new_project_dialog;
 pub mod panel_help;
 pub mod pbr_forward_pass;
+pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
+pub mod pipenetwork_workbench;
 pub mod piping_workbench;
 pub mod project_tabs;
 pub mod pump_workbench;
 pub mod rail_workbench;
+pub mod rcbeam_workbench;
 pub mod reactdyn_workbench;
 pub mod residuals;
 pub mod rocket_mesh;
@@ -461,6 +465,34 @@ pub struct ValenxApp {
     /// Form + result state for the Springs Workbench — native helical-spring
     /// design wrapping `valenx-springs`. See [`crate::springs_workbench`].
     pub(crate) springs: crate::springs_workbench::SpringsWorkbenchState,
+
+    /// Whether the right-side Gear Tooth workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_geartooth_workbench: bool,
+    /// State for the Gear Tooth workbench, wrapping `valenx-geartooth`. See
+    /// [`crate::geartooth_workbench`].
+    pub(crate) geartooth: crate::geartooth_workbench::GeartoothWorkbenchState,
+
+    /// Whether the right-side Pharmacokinetics workbench is visible. Defaults
+    /// to `false`; flipped on from the View menu.
+    pub(crate) show_pharmacokinetics_workbench: bool,
+    /// State for the Pharmacokinetics workbench, wrapping
+    /// `valenx-pharmacokinetics`. See [`crate::pharmacokinetics_workbench`].
+    pub(crate) pharmacokinetics: crate::pharmacokinetics_workbench::PharmacokineticsWorkbenchState,
+
+    /// Whether the right-side Pipe Network workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_pipenetwork_workbench: bool,
+    /// State for the Pipe Network workbench, wrapping `valenx-pipenetwork`.
+    /// See [`crate::pipenetwork_workbench`].
+    pub(crate) pipenetwork: crate::pipenetwork_workbench::PipeNetworkWorkbenchState,
+
+    /// Whether the right-side RC Beam workbench is visible. Defaults to
+    /// `false`; flipped on from the View menu.
+    pub(crate) show_rcbeam_workbench: bool,
+    /// State for the RC Beam workbench, wrapping `valenx-rcbeam`. See
+    /// [`crate::rcbeam_workbench`].
+    pub(crate) rcbeam: crate::rcbeam_workbench::RcBeamWorkbenchState,
 
     /// Whether the right-side Marine / Hull Workbench is visible. Off by
     /// default; toggled from the View menu.
