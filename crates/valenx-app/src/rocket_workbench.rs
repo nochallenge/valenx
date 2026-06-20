@@ -642,18 +642,18 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_rocket_workbench")
-        .resizable(true)
-        .default_width(380.0)
-        .width_range(330.0..=620.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Rocket — design → simulate",
-                "coupled ascent + structural check · valenx-rocket-demo",
-            ) {
-                app.show_rocket_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_rocket_workbench",
+        "Rocket — design → simulate",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("coupled ascent + structural check · valenx-rocket-demo")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.rocket;
             // Poll any background optimization before drawing (non-blocking);
@@ -1176,7 +1176,11 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_rocket_workbench = false;
+    }
 
     // Deferred (outside the panel borrow): load the 3-D rocket mesh into
     // the central viewport when requested (the button, or first open).

@@ -211,6 +211,14 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                         ui.separator();
                     }
+                    // Interactive cue: if the newest message is the user's, show
+                    // a "responding" indicator until a reply lands in the feed.
+                    if entries.last().map(|e| e.kind.as_str()) == Some("user") {
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new("Claude is responding...").weak().italics(),
+                        );
+                    }
                 });
         },
     );
