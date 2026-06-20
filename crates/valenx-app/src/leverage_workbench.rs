@@ -31,6 +31,9 @@ pub struct LeverageWorkbenchState {
     load_arm_m: f64,
     /// Applied effort force (N).
     effort_n: f64,
+    /// A target load to size the lever against, in the inverse direction:
+    /// the readout reports the effort required to balance it (N, ≥ 0).
+    target_load_n: f64,
     /// Travel of the effort point as the beam swings (m).
     effort_travel_m: f64,
     /// The declared lever class (a labelling aid; the analysis also infers
@@ -49,11 +52,14 @@ impl Default for LeverageWorkbenchState {
     fn default() -> Self {
         // A crowbar-style force multiplier: a 1.2 m effort arm over a
         // 0.3 m load arm gives MA = 4, so a 150 N effort balances a 600 N
-        // load, and a 0.40 m effort swing moves the load 0.10 m.
+        // load, and a 0.40 m effort swing moves the load 0.10 m. Sizing the
+        // inverse direction, holding a 1000 N target load needs 250 N of
+        // effort (1000 / MA).
         Self {
             effort_arm_m: 1.2,
             load_arm_m: 0.3,
             effort_n: 150.0,
+            target_load_n: 1000.0,
             effort_travel_m: 0.4,
             declared_class: LeverClass::Second,
             result: String::new(),
@@ -102,6 +108,13 @@ pub fn draw_leverage_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("effort (N)");
                         ui.add(egui::DragValue::new(&mut s.effort_n).speed(1.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("target load (N)");
+                        ui.add(egui::DragValue::new(&mut s.target_load_n).speed(1.0))
+                            .on_hover_text(
+                                "A load to size the lever against: the readout reports the effort required to balance it",
+                            );
                     });
                     ui.horizontal(|ui| {
                         ui.label("effort travel (m)");
@@ -179,6 +192,12 @@ fn compute(s: &LeverageWorkbenchState) -> Result<String, String> {
     let ma = lever.mechanical_advantage();
     let inferred = lever.class();
     let bal = lever.balance_load(s.effort_n).map_err(|e| e.to_string())?;
+    // Inverse sizing: the effort required to balance the target load
+    // (`required = target_load / MA`). The kinematic dual of the forward
+    // `balance_load` above, answering "what effort do I need to hold this?"
+    let req = lever
+        .balance_effort(s.target_load_n)
+        .map_err(|e| e.to_string())?;
     let load_travel = lever
         .load_displacement(s.effort_travel_m)
         .map_err(|e| e.to_string())?;
@@ -199,6 +218,8 @@ fn compute(s: &LeverageWorkbenchState) -> Result<String, String> {
          effort applied   : {:.2} N\n\
          balanced load    : {:.2} N\n\
          moment           : {:.3} N·m\n\n\
+         target load      : {:.2} N\n\
+         required effort  : {:.2} N\n\n\
          effort travel    : {:.3} m\n\
          load travel      : {:.3} m\n\n\
          net moment       : {:.3e} N·m\n\
@@ -211,6 +232,8 @@ fn compute(s: &LeverageWorkbenchState) -> Result<String, String> {
         bal.effort,
         bal.load,
         bal.moment,
+        req.load,
+        req.effort,
         s.effort_travel_m,
         load_travel,
         net,
@@ -400,6 +423,33 @@ mod tests {
         // The reported pair is in static balance.
         assert!(s.result.contains("balanced"));
         assert!(s.result.contains(": true"));
+    }
+
+    #[test]
+    fn analyze_reports_required_effort_for_target_load() {
+        // Ground truth: required effort = target_load / MA. With the default
+        // arms MA = 1.2 / 0.3 = 4, so holding a 1000 N target load needs
+        // 1000 / 4 = 250 N of effort — the inverse-direction sizing the
+        // forward `balanced load` line does not give.
+        let s = LeverageWorkbenchState::default();
+        let lever = lever(&s).expect("default arms are valid");
+        let ma = lever.mechanical_advantage();
+        let req = lever.balance_effort(s.target_load_n).unwrap();
+        assert!(
+            (req.effort - s.target_load_n / ma).abs() < 1e-9,
+            "required effort {req_effort} must equal target_load / MA",
+            req_effort = req.effort
+        );
+        let expected = s.target_load_n / ma;
+        assert!(
+            (expected - 250.0).abs() < 1e-9,
+            "hand-computed required effort is 250 N, got {expected}"
+        );
+        // The readout surfaces the target load and the required effort, both
+        // at 2-dp: 1000.00 N target -> 250.00 N effort.
+        let out = compute(&s).expect("default lever computes");
+        assert!(out.contains("required effort  : 250.00 N"), "got:\n{out}");
+        assert!(out.contains("target load      : 1000.00 N"), "got:\n{out}");
     }
 
     #[test]
