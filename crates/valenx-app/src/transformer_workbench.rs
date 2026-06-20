@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use eframe::egui;
 use nalgebra::Vector3;
 
+use valenx_transformer::impedance::reflect_to_primary;
 use valenx_transformer::{apparent_power, induced_emf_rms, volts_per_turn, Efficiency, TurnsRatio};
 
 use valenx_mesh::element::{ElementBlock, ElementType};
@@ -57,6 +58,9 @@ pub struct TransformerWorkbenchState {
     peak_flux_wb: f64,
     /// Efficiency `eta` in `(0, 1]` deriving the real output and loss.
     efficiency: f64,
+    /// Secondary-side load impedance magnitude `Zs` (Ω), reflected to the
+    /// primary as `Zp = a^2 * Zs` (`reflect_to_primary`).
+    load_secondary_ohm: f64,
     /// Formatted performance readout (empty until the first analyze).
     result: String,
     /// Validation / compute error, if any.
@@ -71,7 +75,8 @@ impl Default for TransformerWorkbenchState {
         // A 230 -> 23 V step-down distribution-style winding: Np/Ns =
         // 240/24 = a = 10, so Vs = 23 V and Is = 20 A from a 2 A primary.
         // 460 VA in at eta = 0.97 delivers 446.2 W. At 50 Hz a 0.0043 Wb
-        // peak core flux develops ~229 V on the 240-turn primary.
+        // peak core flux develops ~229 V on the 240-turn primary. An 8 Ω
+        // secondary load reflects to a^2 * 8 = 800 Ω at the primary.
         Self {
             spec: WindingSpec::Turns,
             turns_primary: 240.0,
@@ -82,6 +87,7 @@ impl Default for TransformerWorkbenchState {
             frequency_hz: 50.0,
             peak_flux_wb: 0.0043,
             efficiency: 0.97,
+            load_secondary_ohm: 8.0,
             result: String::new(),
             error: None,
             show_3d_request: false,
@@ -144,6 +150,11 @@ pub fn draw_transformer_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("efficiency η");
                         ui.add(egui::DragValue::new(&mut s.efficiency).speed(0.005));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("load Zs (Ω)")
+                            .on_hover_text("secondary-side load impedance, reflected to the primary as Zp = a²·Zs");
+                        ui.add(egui::DragValue::new(&mut s.load_secondary_ohm).speed(0.5));
                     });
 
                     ui.add_space(4.0);
@@ -248,6 +259,11 @@ fn compute(s: &TransformerWorkbenchState) -> Result<String, String> {
     let pout = eta.output_power(pin).map_err(|e| e.to_string())?;
     let ploss = eta.power_loss(pin).map_err(|e| e.to_string())?;
 
+    // Reflected (referred) load impedance: a secondary load Zs appears at
+    // the primary terminals as Zp = a^2 * Zs.
+    let zs_load = s.load_secondary_ohm;
+    let zp_reflected = reflect_to_primary(&ratio, zs_load).map_err(|e| e.to_string())?;
+
     // Transformer EMF equation E = sqrt(2)*pi*f*N*Phi on each winding.
     let np = s.turns_primary;
     let ns = s.turns_secondary;
@@ -267,7 +283,9 @@ fn compute(s: &TransformerWorkbenchState) -> Result<String, String> {
          input power     : {pin:.2} VA\n\
          efficiency η    : {eta_val:.3}\n\
          output power    : {pout:.2} W\n\
-         power loss      : {ploss:.2} W\n\n\
+         power loss      : {ploss:.2} W\n\
+         load Zs         : {zs_load:.3} Ω\n\
+         reflected Zp    : {zp_reflected:.3} Ω  (a²·Zs)\n\n\
          winding turns   : Np {np:.0} / Ns {ns:.0}\n\
          frequency       : {f:.1} Hz\n\
          peak flux Φ     : {phi:.4} Wb\n\
@@ -496,6 +514,9 @@ mod tests {
         assert!(s.result.contains("13.80"));
         // EMF on the 240-turn primary at 50 Hz, 0.0043 Wb -> ~229.25 V.
         assert!(s.result.contains("229.25"));
+        // An 8 Ω secondary load reflects to a²·Zs = 100·8 = 800 Ω.
+        assert!(s.result.contains("8.000 Ω"));
+        assert!(s.result.contains("800.000 Ω"));
     }
 
     #[test]
@@ -527,6 +548,48 @@ mod tests {
         let emf_hand: f64 = 4.442_882_938_158_366_f64 * f * np * phi;
         let de: f64 = emf_crate - emf_hand;
         assert!(de.abs() < 1e-9, "EMF got {emf_crate}, hand {emf_hand}");
+    }
+
+    #[test]
+    fn ground_truth_reflected_impedance_is_a_squared_times_load() {
+        // Reflected (referred) load law: Zp = a^2 * Zs. With a step-up
+        // ratio a = 0.5 and a 16 Ω secondary load, hand-computed
+        // Zp = 0.5^2 * 16 = 0.25 * 16 = 4.0 Ω — a step-up makes the load
+        // look *smaller* from the primary.
+        let s = TransformerWorkbenchState {
+            spec: WindingSpec::Ratio,
+            ratio_a: 0.5,
+            load_secondary_ohm: 16.0,
+            ..Default::default()
+        };
+        let out = compute(&s).expect("step-up config analyzes");
+
+        let a = 0.5_f64;
+        let zs = 16.0_f64;
+        let zp_hand: f64 = a * a * zs; // = 4.0 Ω
+        assert!(
+            (zp_hand - 4.0_f64).abs() < 1e-12,
+            "hand Zp should be 4 Ω, got {zp_hand}"
+        );
+
+        // The crate's own reflect_to_primary must agree with the hand value.
+        let ratio = TurnsRatio::new(a).unwrap();
+        let zp_crate = reflect_to_primary(&ratio, zs).unwrap();
+        assert!(
+            (zp_crate - zp_hand).abs() < 1e-12,
+            "crate Zp {zp_crate} != hand {zp_hand}"
+        );
+
+        // And the formatted readout must surface that exact reflected value.
+        assert!(
+            out.contains("reflected Zp    : 4.000 Ω"),
+            "readout missing reflected impedance line:\n{out}"
+        );
+        // The load echo line should show the 16 Ω secondary load.
+        assert!(
+            out.contains("load Zs         : 16.000 Ω"),
+            "readout missing load line:\n{out}"
+        );
     }
 
     #[test]
