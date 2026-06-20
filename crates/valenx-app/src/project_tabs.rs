@@ -818,6 +818,10 @@ struct StripIntent {
     commit_rename: Option<(usize, String)>,
     /// Begin an inline rename of the tab at this index.
     begin_rename: Option<usize>,
+    /// Open a paired "Workbench + Agent" unit (an empty workspace tile + a
+    /// Claude chat tile) in the dockable region via
+    /// [`ValenxApp::add_workbench_agent_pair`].
+    open_wb_agent: bool,
 }
 
 /// Draw the project-tab strip (a slim panel just below the ribbon) and
@@ -837,6 +841,19 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                 .clicked()
             {
                 intent.open_blank = true;
+            }
+
+            // Paired "Workbench + Agent" unit — an empty workspace tile + a
+            // Claude chat tile dropped into the dockable region (turns the
+            // dockable layout on). Previously only reachable from the View
+            // menu; surfaced here so it's one click from the tab strip.
+            // Plain ASCII label so no font-glyph "tofu" box.
+            if ui
+                .button("+ Workbench+Agent")
+                .on_hover_text("Open a workspace + agent-chat pair")
+                .clicked()
+            {
+                intent.open_wb_agent = true;
             }
 
             // Secondary: start a tab pre-bound to a workbench template. The
@@ -1131,6 +1148,12 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         app.tab_bar.open_blank();
         install_active_doc(app);
     }
+    if intent.open_wb_agent {
+        // Drop a paired Workspace + Agent unit into the dockable region
+        // (this also turns the dockable layout on). Independent of the
+        // project-tab document state, so no tab/doc reconcile is needed.
+        app.add_workbench_agent_pair();
+    }
 }
 
 #[cfg(test)]
@@ -1408,6 +1431,25 @@ mod tests {
             app.mesh.is_some(),
             "the scene survives an un-confirmed close"
         );
+    }
+
+    #[test]
+    fn open_wb_agent_intent_launches_a_workbench_agent_pair() {
+        // The tab strip's "+ Workbench+Agent" button routes through
+        // `StripIntent::open_wb_agent`, which must enable the dock and add a
+        // paired workspace/agent unit (counter bumps from 0 → 1).
+        let mut app = ValenxApp::default();
+        assert_eq!(app.wb_agent_counter, 0);
+        assert!(!app.dock_enabled);
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_wb_agent: true,
+                ..Default::default()
+            },
+        );
+        assert!(app.dock_enabled, "the pair launcher turns the dock on");
+        assert_eq!(app.wb_agent_counter, 1, "one Workbench+Agent unit added");
     }
 
     #[test]
@@ -1770,6 +1812,17 @@ mod headless_ui_tests {
             "no button was clicked, so the confirm stays open"
         );
         assert_eq!(app.tab_bar.tabs.len(), 1, "nothing closed without confirm");
+    }
+
+    #[test]
+    fn strip_with_wb_agent_button_draws_without_launching() {
+        // The "+ Workbench+Agent" button renders on the strip; with no
+        // synthesised click it must NOT fire the launcher (dock stays off,
+        // counter stays 0).
+        let mut app = ValenxApp::default();
+        draw_strip(&mut app);
+        assert!(!app.dock_enabled, "no click → the dock stays off");
+        assert_eq!(app.wb_agent_counter, 0, "no click → no unit launched");
     }
 
     #[test]

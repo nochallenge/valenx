@@ -194,8 +194,11 @@ pub(crate) fn assistant_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .color(egui::Color32::from_rgb(80, 200, 140)),
     );
     ui.separator();
-    // Chat input pinned to the bottom; the feed scrolls above it.
-    egui::TopBottomPanel::bottom("valenx_assistant_input").show_inside(ui, |ui| {
+    // Chat input pinned to the bottom; the feed scrolls above it. The panel
+    // id is scoped to the host `ui` so multiple Assistant bodies (e.g. six
+    // "Agent N" dock tiles) each get a unique TopBottomPanel id instead of
+    // colliding on one shared string.
+    egui::TopBottomPanel::bottom(ui.id().with("valenx_assistant_input")).show_inside(ui, |ui| {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             let resp = ui.add(
