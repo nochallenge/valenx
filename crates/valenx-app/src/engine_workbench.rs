@@ -155,344 +155,21 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_engine_workbench",
         "Engine — design → analyze",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new(
-                    "ideal-nozzle performance + Bartz regen-cooling · valenx-astro",
-                )
-                .weak()
-                .small(),
-            );
-            ui.separator();
-
-            let s = &mut app.engine;
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    // ── Design knobs ─────────────────────────────────────
-                    ui.label(egui::RichText::new("Design point").strong());
-                    ui.horizontal(|ui| {
-                        ui.label("chamber pressure");
-                        let mut bar = s.design.chamber_pressure / 1.0e5;
-                        if ui
-                            .add(
-                                egui::DragValue::new(&mut bar)
-                                    .speed(1.0)
-                                    .range(1.0..=400.0)
-                                    .suffix(" bar"),
-                            )
-                            .changed()
-                        {
-                            s.design.chamber_pressure = bar * 1.0e5;
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("chamber temp");
-                        ui.add(
-                            egui::DragValue::new(&mut s.design.chamber_temperature)
-                                .speed(10.0)
-                                .range(1_000.0..=4_500.0)
-                                .suffix(" K"),
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("gas γ");
-                        ui.add(
-                            egui::DragValue::new(&mut s.design.gamma)
-                                .speed(0.005)
-                                .range(1.05..=1.40),
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("molar mass");
-                        ui.add(
-                            egui::DragValue::new(&mut s.design.molar_mass)
-                                .speed(0.2)
-                                .range(5.0..=40.0)
-                                .suffix(" g/mol"),
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("throat area");
-                        let mut cm2 = s.design.throat_area * 1.0e4;
-                        if ui
-                            .add(
-                                egui::DragValue::new(&mut cm2)
-                                    .speed(1.0)
-                                    .range(1.0..=5_000.0)
-                                    .suffix(" cm²"),
-                            )
-                            .changed()
-                        {
-                            s.design.throat_area = cm2 * 1.0e-4;
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("expansion ratio ε");
-                        ui.add(
-                            egui::DragValue::new(&mut s.design.expansion_ratio)
-                                .speed(0.5)
-                                .range(1.0..=200.0),
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("target cooling margin");
-                        ui.add(egui::Slider::new(&mut s.target_margin, 1.0..=4.0));
-                    });
-
-                    // ── Combustion chemistry (predict chamber conditions) ─
-                    ui.add_space(4.0);
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new("Combustion — equilibrium chamber prediction").strong(),
-                    );
-                    egui::ComboBox::from_label("propellant")
-                        .selected_text(propellant_label(s.propellant))
-                        .show_ui(ui, |ui| {
-                            for p in [Propellant::H2Lox, Propellant::Rp1Lox, Propellant::Ch4Lox] {
-                                ui.selectable_value(&mut s.propellant, p, propellant_label(p));
-                            }
-                        });
-                    ui.horizontal(|ui| {
-                        ui.label("mixture ratio (O/F)");
-                        ui.add(egui::Slider::new(&mut s.mixture_ratio, 1.5..=8.0));
-                    });
-                    let comb = combust(
-                        s.propellant,
-                        s.mixture_ratio,
-                        s.design.chamber_pressure / 1.0e5,
-                    );
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "  chamber T  : {:.0} K\n  \
-                             gas γ      : {:.3}\n  \
-                             molar mass : {:.1} g/mol\n  \
-                             c*         : {:.0} m/s",
-                            comb.chamber_temperature, comb.gamma, comb.molar_mass, comb.c_star,
-                        ))
-                        .monospace()
-                        .small(),
-                    );
-                    if ui
-                        .button("Apply combustion → engine (sets T, γ, molar mass)")
-                        .clicked()
-                    {
-                        s.design.chamber_temperature = comb.chamber_temperature;
-                        s.design.gamma = comb.gamma;
-                        s.design.molar_mass = comb.molar_mass;
-                    }
-                    ui.label(
-                        egui::RichText::new(
-                            "first-order equilibrium thermochem — H₂/LOX is validated; \
-                             RP-1 / CH₄ run ~10% high vs NASA CEA.",
-                        )
-                        .weak()
-                        .small(),
-                    );
-
-                    ui.add_space(4.0);
-                    ui.separator();
-
-                    // ── Live analysis ────────────────────────────────────
-                    match analyze(&s.design, &s.cooling) {
-                        Ok(r) => {
-                            ui.label(egui::RichText::new("Performance — ideal nozzle").strong());
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "  vac thrust : {:.0} kN\n  \
-                                     vac Isp    : {:.0} s\n  \
-                                     SL  thrust : {:.0} kN\n  \
-                                     SL  Isp    : {:.0} s\n  \
-                                     c*         : {:.0} m/s\n  \
-                                     exit Mach  : {:.2}",
-                                    r.vacuum.thrust / 1.0e3,
-                                    r.vacuum.isp,
-                                    r.sea_level.thrust / 1.0e3,
-                                    r.sea_level.isp,
-                                    r.vacuum.c_star,
-                                    r.vacuum.exit_mach,
-                                ))
-                                .monospace()
-                                .small(),
-                            );
-
-                            ui.add_space(4.0);
-                            ui.label(egui::RichText::new("Cooling — Bartz regen balance").strong());
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "  throat flux : {:.1} MW/m²\n  \
-                                     coolant ΔT  : {:.0} K\n  \
-                                     margin      : {:.2}  (target {:.2})",
-                                    r.cooling.throat_heat_flux / 1.0e6,
-                                    r.cooling.coolant_temperature_rise,
-                                    r.cooling.cooling_margin,
-                                    s.target_margin,
-                                ))
-                                .monospace()
-                                .small(),
-                            );
-                            let ok = r.cooling.cooling_margin >= s.target_margin;
-                            let (txt, col) = if ok {
-                                (
-                                    format!(
-                                        "✔ COOLED  ·  {:.0}% margin over target",
-                                        (r.cooling.cooling_margin / s.target_margin - 1.0) * 100.0
-                                    ),
-                                    egui::Color32::from_rgb(80, 220, 120),
-                                )
-                            } else {
-                                (
-                                    "✖ OVER-FLUX  ·  raise ε / lower chamber pressure".to_string(),
-                                    egui::Color32::from_rgb(220, 90, 90),
-                                )
-                            };
-                            ui.add_space(2.0);
-                            ui.colored_label(col, egui::RichText::new(txt).strong());
-                        }
-                        Err(e) => {
-                            ui.colored_label(
-                                egui::Color32::from_rgb(220, 90, 90),
-                                format!("invalid design: {e}"),
-                            );
-                        }
-                    }
-
-                    // ── Staged-combustion cycle (full-flow power balance) ─
-                    ui.add_space(6.0);
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new("Staged-combustion cycle — full-flow power balance")
-                            .strong(),
-                    );
-                    ui.label(
-                        egui::RichText::new(
-                            "can twin turbopumps drive this chamber pressure? \
-                             (Raptor-class methalox FFSC reference)",
-                        )
-                        .weak()
-                        .small(),
-                    );
-                    let mut ci = CycleInputs::raptor_methalox();
-                    ci.chamber_pressure = s.design.chamber_pressure;
-                    let cyc = solve_cycle(&ci);
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "  max chamber : {:.0} bar\n  \
-                             ox turbine  : {:.1} MW @ {:.0} K\n  \
-                             fuel turbine: {:.1} MW @ {:.0} K",
-                            cyc.max_chamber_pressure / 1.0e5,
-                            cyc.ox.turbine_power / 1.0e6,
-                            ci.ox.turbine_inlet_temperature,
-                            cyc.fuel.turbine_power / 1.0e6,
-                            ci.fuel.turbine_inlet_temperature,
-                        ))
-                        .monospace()
-                        .small(),
-                    );
-                    let (cyc_txt, cyc_col) = if cyc.closes {
-                        (
-                            format!(
-                                "✔ CYCLE CLOSES at {:.0} bar",
-                                s.design.chamber_pressure / 1.0e5
-                            ),
-                            egui::Color32::from_rgb(80, 220, 120),
-                        )
-                    } else {
-                        (
-                            format!(
-                                "✖ WON'T CLOSE · turbopumps top out at ~{:.0} bar",
-                                cyc.max_chamber_pressure / 1.0e5
-                            ),
-                            egui::Color32::from_rgb(220, 90, 90),
-                        )
-                    };
-                    ui.colored_label(cyc_col, egui::RichText::new(cyc_txt).strong());
-
-                    // ── Optimizer ────────────────────────────────────────
-                    ui.add_space(6.0);
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new("AI optimizer — max sea-level Isp vs cooling").strong(),
-                    );
-                    ui.label(
-                        egui::RichText::new(
-                            "searches chamber pressure × expansion ratio for the highest \
-                             sea-level Isp whose cooling margin clears the target.",
-                        )
-                        .weak()
-                        .small(),
-                    );
-                    if ui
-                        .button(egui::RichText::new("Run engine optimizer").strong())
-                        .clicked()
-                    {
-                        s.opt = optimize_engine(
-                            &s.design,
-                            &s.cooling,
-                            s.target_margin,
-                            (1.0e6, 30.0e6),
-                            (2.0, 120.0),
-                            28,
-                        );
-                    }
-                    if let Some(o) = s.opt {
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "best: {:.0} bar · ε {:.1} → SL Isp {:.0} s\n\
-                                 margin {:.2} · ran {} sims ({} feasible)",
-                                o.design.chamber_pressure / 1.0e5,
-                                o.design.expansion_ratio,
-                                o.sea_level.isp,
-                                o.cooling.cooling_margin,
-                                o.evaluations,
-                                o.feasible_count,
-                            ))
-                            .monospace()
-                            .small(),
-                        );
-                        if ui.button("Apply optimized design").clicked() {
-                            s.design.chamber_pressure = o.design.chamber_pressure;
-                            s.design.expansion_ratio = o.design.expansion_ratio;
-                        }
-                    }
-
-                    // ── 3-D geometry + export ────────────────────────────
-                    ui.add_space(6.0);
-                    ui.separator();
-                    ui.label(egui::RichText::new("Engine geometry").strong());
-                    if ui
-                        .button(egui::RichText::new("Show 3-D engine (powerhead)").strong())
-                        .clicked()
-                    {
-                        s.show_engine_3d_request = true;
-                    }
-                    ui.horizontal(|ui| {
-                        if ui.button("Show 3-D nozzle").clicked() {
-                            s.show_3d_request = true;
-                        }
-                        if ui.button("Export nozzle STL").clicked() {
-                            let mesh =
-                                nozzle_mesh(s.design.throat_area, s.design.expansion_ratio, 64);
-                            let path = std::env::temp_dir().join("valenx_nozzle.stl");
-                            s.last_export =
-                                Some(match valenx_mesh::write_stl_binary(&mesh, &path) {
-                                    Ok(()) => format!("exported → {}", path.display()),
-                                    Err(e) => format!("export error: {e}"),
-                                });
-                        }
-                    });
-                    if let Some(msg) = &s.last_export {
-                        ui.label(egui::RichText::new(msg).weak().small());
-                    }
-                });
-        },
+        engine_workbench_body,
     );
     if close {
         app.show_engine_workbench = false;
     }
 
-    // Deferred (outside the panel borrow): load the 3-D nozzle into the
-    // central viewport when requested.
+    drain_deferred(app);
+}
+
+/// Drain the Engine workbench's deferred requests (outside any panel
+/// borrow): load the 3-D nozzle / detailed powerhead into the central
+/// viewport when the body set the request flag. Called by both
+/// [`draw_engine_workbench`] and the dockable layout
+/// ([`crate::dock_layout`]) so the 3-D buttons work in either host.
+pub(crate) fn drain_deferred(app: &mut ValenxApp) {
     if app.engine.show_3d_request {
         app.engine.show_3d_request = false;
         load_nozzle_3d(app);
@@ -501,6 +178,335 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         app.engine.show_engine_3d_request = false;
         load_engine_3d(app);
     }
+}
+
+/// The Engine workbench body — design knobs, live analysis, the staged-
+/// combustion cycle readout, the optimizer, and the 3-D / export controls.
+/// Extracted from [`draw_engine_workbench`] so it can be hosted *either* by
+/// the classic right-side [`crate::workbench_chrome::workbench_shell`] *or*
+/// by the opt-in dockable tile layout ([`crate::dock_layout`]) — no
+/// duplicated logic.
+pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("ideal-nozzle performance + Bartz regen-cooling · valenx-astro")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+
+    let s = &mut app.engine;
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ── Design knobs ─────────────────────────────────────
+            ui.label(egui::RichText::new("Design point").strong());
+            ui.horizontal(|ui| {
+                ui.label("chamber pressure");
+                let mut bar = s.design.chamber_pressure / 1.0e5;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut bar)
+                            .speed(1.0)
+                            .range(1.0..=400.0)
+                            .suffix(" bar"),
+                    )
+                    .changed()
+                {
+                    s.design.chamber_pressure = bar * 1.0e5;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("chamber temp");
+                ui.add(
+                    egui::DragValue::new(&mut s.design.chamber_temperature)
+                        .speed(10.0)
+                        .range(1_000.0..=4_500.0)
+                        .suffix(" K"),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("gas γ");
+                ui.add(
+                    egui::DragValue::new(&mut s.design.gamma)
+                        .speed(0.005)
+                        .range(1.05..=1.40),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("molar mass");
+                ui.add(
+                    egui::DragValue::new(&mut s.design.molar_mass)
+                        .speed(0.2)
+                        .range(5.0..=40.0)
+                        .suffix(" g/mol"),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("throat area");
+                let mut cm2 = s.design.throat_area * 1.0e4;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut cm2)
+                            .speed(1.0)
+                            .range(1.0..=5_000.0)
+                            .suffix(" cm²"),
+                    )
+                    .changed()
+                {
+                    s.design.throat_area = cm2 * 1.0e-4;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("expansion ratio ε");
+                ui.add(
+                    egui::DragValue::new(&mut s.design.expansion_ratio)
+                        .speed(0.5)
+                        .range(1.0..=200.0),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("target cooling margin");
+                ui.add(egui::Slider::new(&mut s.target_margin, 1.0..=4.0));
+            });
+
+            // ── Combustion chemistry (predict chamber conditions) ─
+            ui.add_space(4.0);
+            ui.separator();
+            ui.label(egui::RichText::new("Combustion — equilibrium chamber prediction").strong());
+            egui::ComboBox::from_label("propellant")
+                .selected_text(propellant_label(s.propellant))
+                .show_ui(ui, |ui| {
+                    for p in [Propellant::H2Lox, Propellant::Rp1Lox, Propellant::Ch4Lox] {
+                        ui.selectable_value(&mut s.propellant, p, propellant_label(p));
+                    }
+                });
+            ui.horizontal(|ui| {
+                ui.label("mixture ratio (O/F)");
+                ui.add(egui::Slider::new(&mut s.mixture_ratio, 1.5..=8.0));
+            });
+            let comb = combust(
+                s.propellant,
+                s.mixture_ratio,
+                s.design.chamber_pressure / 1.0e5,
+            );
+            ui.label(
+                egui::RichText::new(format!(
+                    "  chamber T  : {:.0} K\n  \
+                             gas γ      : {:.3}\n  \
+                             molar mass : {:.1} g/mol\n  \
+                             c*         : {:.0} m/s",
+                    comb.chamber_temperature, comb.gamma, comb.molar_mass, comb.c_star,
+                ))
+                .monospace()
+                .small(),
+            );
+            if ui
+                .button("Apply combustion → engine (sets T, γ, molar mass)")
+                .clicked()
+            {
+                s.design.chamber_temperature = comb.chamber_temperature;
+                s.design.gamma = comb.gamma;
+                s.design.molar_mass = comb.molar_mass;
+            }
+            ui.label(
+                egui::RichText::new(
+                    "first-order equilibrium thermochem — H₂/LOX is validated; \
+                             RP-1 / CH₄ run ~10% high vs NASA CEA.",
+                )
+                .weak()
+                .small(),
+            );
+
+            ui.add_space(4.0);
+            ui.separator();
+
+            // ── Live analysis ────────────────────────────────────
+            match analyze(&s.design, &s.cooling) {
+                Ok(r) => {
+                    ui.label(egui::RichText::new("Performance — ideal nozzle").strong());
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "  vac thrust : {:.0} kN\n  \
+                                     vac Isp    : {:.0} s\n  \
+                                     SL  thrust : {:.0} kN\n  \
+                                     SL  Isp    : {:.0} s\n  \
+                                     c*         : {:.0} m/s\n  \
+                                     exit Mach  : {:.2}",
+                            r.vacuum.thrust / 1.0e3,
+                            r.vacuum.isp,
+                            r.sea_level.thrust / 1.0e3,
+                            r.sea_level.isp,
+                            r.vacuum.c_star,
+                            r.vacuum.exit_mach,
+                        ))
+                        .monospace()
+                        .small(),
+                    );
+
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new("Cooling — Bartz regen balance").strong());
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "  throat flux : {:.1} MW/m²\n  \
+                                     coolant ΔT  : {:.0} K\n  \
+                                     margin      : {:.2}  (target {:.2})",
+                            r.cooling.throat_heat_flux / 1.0e6,
+                            r.cooling.coolant_temperature_rise,
+                            r.cooling.cooling_margin,
+                            s.target_margin,
+                        ))
+                        .monospace()
+                        .small(),
+                    );
+                    let ok = r.cooling.cooling_margin >= s.target_margin;
+                    let (txt, col) = if ok {
+                        (
+                            format!(
+                                "✔ COOLED  ·  {:.0}% margin over target",
+                                (r.cooling.cooling_margin / s.target_margin - 1.0) * 100.0
+                            ),
+                            egui::Color32::from_rgb(80, 220, 120),
+                        )
+                    } else {
+                        (
+                            "✖ OVER-FLUX  ·  raise ε / lower chamber pressure".to_string(),
+                            egui::Color32::from_rgb(220, 90, 90),
+                        )
+                    };
+                    ui.add_space(2.0);
+                    ui.colored_label(col, egui::RichText::new(txt).strong());
+                }
+                Err(e) => {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(220, 90, 90),
+                        format!("invalid design: {e}"),
+                    );
+                }
+            }
+
+            // ── Staged-combustion cycle (full-flow power balance) ─
+            ui.add_space(6.0);
+            ui.separator();
+            ui.label(
+                egui::RichText::new("Staged-combustion cycle — full-flow power balance").strong(),
+            );
+            ui.label(
+                egui::RichText::new(
+                    "can twin turbopumps drive this chamber pressure? \
+                             (Raptor-class methalox FFSC reference)",
+                )
+                .weak()
+                .small(),
+            );
+            let mut ci = CycleInputs::raptor_methalox();
+            ci.chamber_pressure = s.design.chamber_pressure;
+            let cyc = solve_cycle(&ci);
+            ui.label(
+                egui::RichText::new(format!(
+                    "  max chamber : {:.0} bar\n  \
+                             ox turbine  : {:.1} MW @ {:.0} K\n  \
+                             fuel turbine: {:.1} MW @ {:.0} K",
+                    cyc.max_chamber_pressure / 1.0e5,
+                    cyc.ox.turbine_power / 1.0e6,
+                    ci.ox.turbine_inlet_temperature,
+                    cyc.fuel.turbine_power / 1.0e6,
+                    ci.fuel.turbine_inlet_temperature,
+                ))
+                .monospace()
+                .small(),
+            );
+            let (cyc_txt, cyc_col) = if cyc.closes {
+                (
+                    format!(
+                        "✔ CYCLE CLOSES at {:.0} bar",
+                        s.design.chamber_pressure / 1.0e5
+                    ),
+                    egui::Color32::from_rgb(80, 220, 120),
+                )
+            } else {
+                (
+                    format!(
+                        "✖ WON'T CLOSE · turbopumps top out at ~{:.0} bar",
+                        cyc.max_chamber_pressure / 1.0e5
+                    ),
+                    egui::Color32::from_rgb(220, 90, 90),
+                )
+            };
+            ui.colored_label(cyc_col, egui::RichText::new(cyc_txt).strong());
+
+            // ── Optimizer ────────────────────────────────────────
+            ui.add_space(6.0);
+            ui.separator();
+            ui.label(egui::RichText::new("AI optimizer — max sea-level Isp vs cooling").strong());
+            ui.label(
+                egui::RichText::new(
+                    "searches chamber pressure × expansion ratio for the highest \
+                             sea-level Isp whose cooling margin clears the target.",
+                )
+                .weak()
+                .small(),
+            );
+            if ui
+                .button(egui::RichText::new("Run engine optimizer").strong())
+                .clicked()
+            {
+                s.opt = optimize_engine(
+                    &s.design,
+                    &s.cooling,
+                    s.target_margin,
+                    (1.0e6, 30.0e6),
+                    (2.0, 120.0),
+                    28,
+                );
+            }
+            if let Some(o) = s.opt {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "best: {:.0} bar · ε {:.1} → SL Isp {:.0} s\n\
+                                 margin {:.2} · ran {} sims ({} feasible)",
+                        o.design.chamber_pressure / 1.0e5,
+                        o.design.expansion_ratio,
+                        o.sea_level.isp,
+                        o.cooling.cooling_margin,
+                        o.evaluations,
+                        o.feasible_count,
+                    ))
+                    .monospace()
+                    .small(),
+                );
+                if ui.button("Apply optimized design").clicked() {
+                    s.design.chamber_pressure = o.design.chamber_pressure;
+                    s.design.expansion_ratio = o.design.expansion_ratio;
+                }
+            }
+
+            // ── 3-D geometry + export ────────────────────────────
+            ui.add_space(6.0);
+            ui.separator();
+            ui.label(egui::RichText::new("Engine geometry").strong());
+            if ui
+                .button(egui::RichText::new("Show 3-D engine (powerhead)").strong())
+                .clicked()
+            {
+                s.show_engine_3d_request = true;
+            }
+            ui.horizontal(|ui| {
+                if ui.button("Show 3-D nozzle").clicked() {
+                    s.show_3d_request = true;
+                }
+                if ui.button("Export nozzle STL").clicked() {
+                    let mesh = nozzle_mesh(s.design.throat_area, s.design.expansion_ratio, 64);
+                    let path = std::env::temp_dir().join("valenx_nozzle.stl");
+                    s.last_export = Some(match valenx_mesh::write_stl_binary(&mesh, &path) {
+                        Ok(()) => format!("exported → {}", path.display()),
+                        Err(e) => format!("export error: {e}"),
+                    });
+                }
+            });
+            if let Some(msg) = &s.last_export {
+                ui.label(egui::RichText::new(msg).weak().small());
+            }
+        });
 }
 
 #[cfg(test)]

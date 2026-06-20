@@ -154,19 +154,33 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_cfd_workbench",
         "CFD Workbench",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new("native 2-D incompressible CFD · valenx-cfd-native")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
-            let s = &mut app.cfd;
-            let running = s.job.is_some();
-            if running {
-                ui.ctx().request_repaint();
-            }
-            egui::ScrollArea::vertical()
+        cfd_workbench_body,
+    );
+    if close {
+        app.show_cfd_workbench = false;
+    }
+}
+
+/// The CFD workbench body — case picker, grid, fluid props, run controls,
+/// residual/convergence plots, and the centreline-profile plot. Extracted
+/// from [`draw_cfd_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]). Re-runs the non-blocking
+/// background-job poll up front so the dock path stays live too.
+pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    poll_cfd(&mut app.cfd);
+    ui.label(
+        egui::RichText::new("native 2-D incompressible CFD · valenx-cfd-native")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+    let s = &mut app.cfd;
+    let running = s.job.is_some();
+    if running {
+        ui.ctx().request_repaint();
+    }
+    egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     if running {
@@ -304,11 +318,6 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             });
                     }
                 });
-        },
-    );
-    if close {
-        app.show_cfd_workbench = false;
-    }
 }
 
 /// Free-stream dynamic pressure `q = ½ ρ U²` (Pa) — the pressure scale that

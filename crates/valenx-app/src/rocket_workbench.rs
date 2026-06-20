@@ -647,547 +647,547 @@ pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_rocket_workbench",
         "Rocket — design → simulate",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new("coupled ascent + structural check · valenx-rocket-demo")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
-
-            let s = &mut app.rocket;
-            // Poll any background optimization before drawing (non-blocking);
-            // `opt_running` is a live progress snapshot while one is in flight.
-            let opt_running = poll_opt_job(s, ui.ctx());
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    // ── Auto-design — the AI does the whole search ────────
-                    ui.label(
-                        egui::RichText::new("Auto-design — let the AI design it for you")
-                            .strong(),
-                    );
-                    ui.label(
-                        egui::RichText::new(
-                            "one click: optimize the engine + the trajectory together and \
-                             return the best rocket — no tuning. (You can still tune by hand \
-                             below.)",
-                        )
-                        .weak()
-                        .small(),
-                    );
-                    if ui
-                        .button(egui::RichText::new("🤖 Auto-design the best rocket").strong())
-                        .on_hover_text(
-                            "Runs the full automated search — an optimized, cooled engine plus \
-                             the best ascent — and returns the heaviest payload to orbit that \
-                             stays structurally sound.",
-                        )
-                        .clicked()
-                    {
-                        s.auto = auto_design::auto_design(2_000);
-                    }
-                    if let Some(d) = &s.auto {
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "✦ AI design: {:.0} kg → {:.0} × {:.0} km\n\
-                                 engine {:.0} bar · ε {:.1} · vac Isp {:.0} s · cooling {:.2}\n\
-                                 pitch {:.1}° · rise {:.0} s · peak {:.1} g · interstage SF {:.2}",
-                                d.payload_kg,
-                                d.periapsis_km,
-                                d.apoapsis_km,
-                                d.engine.chamber_pressure / 1.0e5,
-                                d.engine.expansion_ratio,
-                                d.engine_vacuum.isp,
-                                d.engine_cooling.cooling_margin,
-                                d.pitch_kick_deg,
-                                d.vertical_rise_s,
-                                d.peak_g,
-                                d.structural_sf,
-                            ))
-                            .monospace()
-                            .small(),
-                        );
-                    }
-                    ui.add_space(6.0);
-                    ui.separator();
-
-                    // ── Valenx LV-1 — watch it fly to orbit ───────────────
-                    ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
-                    ui.label(
-                        egui::RichText::new(
-                            "a from-scratch two-stage launcher, flown live by valenx-astro",
-                        )
-                        .weak()
-                        .small(),
-                    );
-                    let fly_clicked = ui
-                        .button(egui::RichText::new("▶ Fly the Valenx LV-1").strong())
-                        .clicked();
-                    if s.lv1.is_none() || fly_clicked {
-                        s.lv1 = Some(fly_lv1());
-                    }
-                    // 3-D rocket model → central viewport (auto-loads once
-                    // on first open; the button reloads / re-frames it).
-                    let show_3d = ui
-                        .button(egui::RichText::new("Show the 3-D rocket model").strong())
-                        .on_hover_text(
-                            "Loads a 3-D model of the LV-1 into the centre viewport — orbit / zoom it.",
-                        )
-                        .clicked();
-                    if show_3d || !s.loaded_3d_once {
-                        s.loaded_3d_once = true;
-                        s.show_3d_request = true;
-                    }
-                    if s.lv1.is_some() {
-                        // Summary + flight window (immutable view, released before
-                        // the scrubber borrows `scrub_t` mutably below).
-                        let (t_max, has_plot) = {
-                            let f = s.lv1.as_ref().unwrap();
-                            ui.label(egui::RichText::new(&f.summary).monospace().small());
-                            (f.t_max.max(0.0), !f.alt_pts.is_empty())
-                        };
-                        s.scrub_t = s.scrub_t.clamp(0.0, t_max);
-
-                        if has_plot {
-                            // Pick which telemetry channel the plot draws; the
-                            // numeric readout below always shows every quantity.
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(egui::RichText::new("plot:").small());
-                                ui.radio_value(&mut s.plot_y, PlotQuantity::Altitude, "alt");
-                                ui.radio_value(&mut s.plot_y, PlotQuantity::Speed, "speed");
-                                ui.radio_value(&mut s.plot_y, PlotQuantity::Mach, "Mach");
-                                ui.radio_value(&mut s.plot_y, PlotQuantity::DynPressure, "q");
-                                ui.radio_value(&mut s.plot_y, PlotQuantity::AccelG, "g");
-                            });
-                            let q = s.plot_y;
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{} vs time (s) · dots = staging + MECO · drag to scrub",
-                                    q.axis_label()
-                                ))
-                                .weak()
-                                .small(),
-                            );
-
-                            // ▶ Playback scrubber — drag through the flight and
-                            // read the full vehicle state at that instant.
-                            if t_max > 0.0 {
-                                ui.add(
-                                    egui::Slider::new(&mut s.scrub_t, 0.0..=t_max)
-                                        .text("▶ playback · t (s)"),
-                                );
-                            }
-
-                            let f = s.lv1.as_ref().unwrap();
-                            let scrub = sample_at(&f.samples, s.scrub_t);
-                            if let Some(p) = scrub {
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "t {:>6.1} s   alt {:>7.2} km   downrange {:>7.2} km\n\
-                                         v_rel {:>6.0} m/s   v_inert {:>6.0} m/s   Mach {:>5.2}\n\
-                                         q {:>6.1} kPa   accel {:>5.2} g   mass {:>7.2} t",
-                                        p.time,
-                                        p.altitude_m / 1000.0,
-                                        p.downrange_m / 1000.0,
-                                        p.speed_relative,
-                                        p.speed_inertial,
-                                        p.mach,
-                                        p.dynamic_pressure / 1000.0,
-                                        p.acceleration_g,
-                                        p.mass / 1000.0,
-                                    ))
-                                    .monospace()
-                                    .small(),
-                                );
-                            }
-
-                            // Line + event + now markers all follow the selected
-                            // channel, derived from the one retained sample series.
-                            let line_pts: Vec<[f64; 2]> = if q == PlotQuantity::Altitude {
-                                f.alt_pts.clone()
-                            } else {
-                                f.samples
-                                    .iter()
-                                    .map(|smp| [smp.time, q.value(smp)])
-                                    .collect()
-                            };
-                            let event_pts: Vec<[f64; 2]> = f
-                                .event_pts
-                                .iter()
-                                .filter_map(|ep| {
-                                    sample_at(&f.samples, ep[0]).map(|smp| [ep[0], q.value(&smp)])
-                                })
-                                .collect();
-                            let now_pt = scrub.map(|p| [p.time, q.value(&p)]);
-                            Plot::new("lv1_ascent_plot").height(210.0).show(ui, |pui| {
-                                pui.line(Line::new(PlotPoints::from(line_pts)).name(q.axis_label()));
-                                if !event_pts.is_empty() {
-                                    pui.points(
-                                        Points::new(PlotPoints::from(event_pts))
-                                            .radius(5.0)
-                                            .name("staging / MECO"),
-                                    );
-                                }
-                                if let Some(pt) = now_pt {
-                                    pui.points(
-                                        Points::new(PlotPoints::from(vec![pt]))
-                                            .radius(7.0)
-                                            .color(egui::Color32::from_rgb(255, 196, 0))
-                                            .name("now"),
-                                    );
-                                }
-                            });
-                        }
-                    }
-                    // ── AI optimizer — multi-objective design search ──────
-                    ui.add_space(6.0);
-                    ui.label(
-                        egui::RichText::new("AI optimizer — multi-objective design search")
-                            .strong(),
-                    );
-                    ui.label(
-                        egui::RichText::new(
-                            "searches payload × pitch-kick × vertical-rise across many real \
-                             valenx-astro sims, keeping interstage SF ≥ the target below.",
-                        )
-                        .weak()
-                        .small(),
-                    );
-                    ui.horizontal(|ui| {
-                        ui.label("objective:");
-                        ui.radio_value(
-                            &mut s.opt_objective,
-                            OptObjective::MaxPayload,
-                            "max payload",
-                        );
-                        ui.radio_value(
-                            &mut s.opt_objective,
-                            OptObjective::MaxApoapsis,
-                            "max apoapsis",
-                        );
-                        ui.radio_value(&mut s.opt_objective, OptObjective::MinPeakG, "min peak-g");
-                    });
-                    let busy = opt_running.is_some();
-                    let run = ui
-                        .add_enabled(
-                            !busy,
-                            egui::Button::new(
-                                egui::RichText::new("Run AI optimization (2000 sims)").strong(),
-                            ),
-                        )
-                        .on_hover_text(
-                            "Flies 2000 candidate designs through the real ascent engine on a \
-                             background thread — the UI stays responsive — and converges on the \
-                             best design for the selected objective.",
-                        );
-                    if run.clicked() && !busy {
-                        s.opt_job = Some(spawn_opt_job(s.opt_objective, s.target_sf, 2_000));
-                    }
-                    if let Some((p, n, obj)) = opt_running {
-                        let frac = (p.done as f32 / n.max(1) as f32).clamp(0.0, 1.0);
-                        // Live best-so-far in the objective's units (blank until
-                        // the first feasible design is found).
-                        let best = if p.best_value.is_finite() {
-                            match obj {
-                                OptObjective::MaxPayload => {
-                                    format!(" · best {:.0} kg", p.best_value)
-                                }
-                                OptObjective::MaxApoapsis => {
-                                    format!(" · best {:.0} km", p.best_value)
-                                }
-                                OptObjective::MinPeakG => format!(" · best {:.1} g", p.best_value),
-                            }
-                        } else {
-                            String::new()
-                        };
-                        ui.add(egui::ProgressBar::new(frac).text(format!(
-                            "{} · {}/{} sims · {} orbit{}",
-                            obj.label(),
-                            p.done,
-                            n,
-                            p.reached_orbit,
-                            best,
-                        )));
-                    }
-                    if let Some(o) = &s.opt {
-                        match &o.best {
-                            Some(b) => ui.label(
-                                egui::RichText::new(format!(
-                                    "{}: ran {} sims · {} reached orbit\n\
-                                     payload {:.0} kg → {:.0} × {:.0} km\n\
-                                     peak {:.1} g · SF {:.2} · pitch {:.1}° · rise {:.0} s",
-                                    o.objective.label(),
-                                    o.n_evals,
-                                    o.reached_orbit,
-                                    b.payload_kg,
-                                    b.periapsis_km,
-                                    b.apoapsis_km,
-                                    b.peak_g,
-                                    b.safety_factor,
-                                    b.pitch_kick_deg,
-                                    b.vertical_rise_s,
-                                ))
-                                .monospace()
-                                .small(),
-                            ),
-                            None => ui.colored_label(
-                                egui::Color32::from_rgb(220, 160, 60),
-                                format!(
-                                    "ran {} sims · none met SF ≥ {:.2}",
-                                    o.n_evals, s.target_sf
-                                ),
-                            ),
-                        };
-                        // Plot best-so-far in the objective's own units —
-                        // skip the NaN evals before the first feasible design.
-                        let conv: Vec<[f64; 2]> = o
-                            .convergence
-                            .iter()
-                            .copied()
-                            .filter(|p| p[1].is_finite())
-                            .collect();
-                        if conv.len() > 1 {
-                            let (axis, series) = match o.objective {
-                                OptObjective::MaxPayload => {
-                                    ("best payload (kg) vs sim #", "best payload (kg)")
-                                }
-                                OptObjective::MaxApoapsis => {
-                                    ("best apoapsis (km) vs sim #", "best apoapsis (km)")
-                                }
-                                OptObjective::MinPeakG => ("best peak-g vs sim #", "best peak g"),
-                            };
-                            ui.label(egui::RichText::new(axis).weak().small());
-                            Plot::new("lv1_opt_plot").height(170.0).show(ui, |pui| {
-                                pui.line(Line::new(PlotPoints::from(conv.clone())).name(series));
-                            });
-                        }
-                    }
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new(
-                            "Trajectory: fixed medium-lift two-stage preset. \
-                             Edit the interstage struts below — the panel re-flies \
-                             the ascent and re-checks the structure live.",
-                        )
-                        .weak()
-                        .small(),
-                    );
-
-                    ui.add_space(4.0);
-                    ui.label(egui::RichText::new("Interstage structure").strong());
-                    ui.horizontal(|ui| {
-                        ui.label("supported mass");
-                        ui.add(
-                            egui::DragValue::new(&mut s.design.supported_mass_kg)
-                                .speed(100.0)
-                                .range(100.0..=200_000.0)
-                                .suffix(" kg"),
-                        )
-                        .on_hover_text("Upper stage + payload carried by the interstage.");
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("strut count N");
-                        ui.add(
-                            egui::DragValue::new(&mut s.design.strut_count)
-                                .speed(0.2)
-                                .range(1..=64),
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("strut area A");
-                        // Edit in cm² for usability; store in m². Only write back
-                        // on an actual edit so the reactive dirty-check below stays
-                        // stable (no per-frame float drift).
-                        let mut area_cm2 = s.design.strut_area_m2 * 1.0e4;
-                        if ui
-                            .add(
-                                egui::DragValue::new(&mut area_cm2)
-                                    .speed(0.1)
-                                    .range(0.01..=2000.0)
-                                    .suffix(" cm²"),
-                            )
-                            .changed()
-                        {
-                            s.design.strut_area_m2 = area_cm2 * 1.0e-4;
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("material yield σy");
-                        let mut yield_mpa = s.design.material_yield_pa / 1.0e6;
-                        if ui
-                            .add(
-                                egui::DragValue::new(&mut yield_mpa)
-                                    .speed(5.0)
-                                    .range(1.0..=2000.0)
-                                    .suffix(" MPa"),
-                            )
-                            .on_hover_text("≈ 324 MPa for Al-2024-T3.")
-                            .changed()
-                        {
-                            s.design.material_yield_pa = yield_mpa * 1.0e6;
-                        }
-                    });
-
-                    // ── Reactive recompute ────────────────────────────────
-                    // Re-fly + re-check whenever the design changed (and on the
-                    // first draw, when `last_design` is None).
-                    if s.last_design != Some(s.design) {
-                        recompute(s);
-                    }
-
-                    if let Some(e) = &s.error {
-                        ui.add_space(4.0);
-                        ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
-                    }
-
-                    if let Some(r) = s.report {
-                        ui.separator();
-                        ui.label(egui::RichText::new("Trajectory — valenx-astro").strong());
-                        let orbit = if r.reached_orbit {
-                            "reached orbit"
-                        } else {
-                            "no stable orbit"
-                        };
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "  {orbit}\n  \
-                                 apoapsis  : {:.0} km\n  \
-                                 periapsis : {:.0} km\n  \
-                                 Δv budget : {:.0} m/s\n  \
-                                 max-Q     : {:.1} kPa\n  \
-                                 peak g    : {:.1} g",
-                                r.apoapsis_km,
-                                r.periapsis_km,
-                                r.delta_v_budget_ms,
-                                r.max_q_pa / 1000.0,
-                                r.max_acceleration_g,
-                            ))
-                            .monospace()
-                            .small(),
-                        );
-
-                        ui.add_space(4.0);
-                        ui.label(
-                            egui::RichText::new("Structure — valenx-fem (loaded by peak g)")
-                                .strong(),
-                        );
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "  peak axial load : {:.0} kN\n  \
-                                 strut stress    : {:.0} MPa\n  \
-                                 safety factor   : {:.2}",
-                                r.peak_axial_load_n / 1000.0,
-                                r.strut_stress_pa / 1.0e6,
-                                r.structural_safety_factor,
-                            ))
-                            .monospace()
-                            .small(),
-                        );
-
-                        // Live verdict banner — margin of safety = SF − 1.
-                        let ms_pct = (r.structural_safety_factor - 1.0) * 100.0;
-                        let (txt, col) = if r.structurally_safe {
-                            (
-                                format!("✔ SAFE  ·  margin of safety {ms_pct:+.0}%"),
-                                egui::Color32::from_rgb(80, 220, 120),
-                            )
-                        } else {
-                            (
-                                format!("✖ OVER-STRESSED  ·  margin {ms_pct:+.0}%"),
-                                egui::Color32::from_rgb(220, 90, 90),
-                            )
-                        };
-                        ui.add_space(2.0);
-                        ui.colored_label(col, egui::RichText::new(txt).strong());
-
-                        // ── Sizing aid ────────────────────────────────────
-                        ui.add_space(6.0);
-                        ui.label(egui::RichText::new("Sizing aid").strong());
-                        ui.horizontal(|ui| {
-                            ui.label("target SF");
-                            ui.add(egui::Slider::new(&mut s.target_sf, 1.0..=3.0));
-                        });
-                        if let Some(a_req) = required_area_per_strut_m2(
-                            r.peak_axial_load_n,
-                            s.design.material_yield_pa,
-                            s.design.strut_count,
-                            s.target_sf,
-                        ) {
-                            let have = s.design.strut_area_m2;
-                            let meets = have >= a_req;
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "  need ≥ {:.2} cm²/strut for SF ≥ {:.2}  (have {:.2} cm²)",
-                                    a_req * 1.0e4,
-                                    s.target_sf,
-                                    have * 1.0e4,
-                                ))
-                                .monospace()
-                                .small(),
-                            );
-                            let (txt, col) = if meets {
-                                (
-                                    "✔ current struts meet the target".to_string(),
-                                    egui::Color32::from_rgb(80, 220, 120),
-                                )
-                            } else {
-                                (
-                                    format!(
-                                        "✖ enlarge struts ×{:.2} to meet the target",
-                                        a_req / have.max(1e-12)
-                                    ),
-                                    egui::Color32::from_rgb(220, 160, 60),
-                                )
-                            };
-                            ui.colored_label(col, egui::RichText::new(txt).small());
-                        }
-
-                        // ── Lightest interstage ───────────────────────────
-                        // Minimum total load-bearing area to hit the target
-                        // SF (A_total = SF·F/σy — strut-count independent),
-                        // plus an estimated minimum strut mass.
-                        if let Some(a_total) = min_total_strut_area_m2(
-                            r.peak_axial_load_n,
-                            s.design.material_yield_pa,
-                            s.target_sf,
-                        ) {
-                            let mass_min =
-                                a_total * INTERSTAGE_STRUT_LENGTH_M * AL2024_DENSITY_KG_M3;
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "lightest interstage @ SF {:.2}: ≥ {:.1} cm² total \
-                                     (≈ {:.0} kg · {:.1} m Al-2024 struts)",
-                                    s.target_sf,
-                                    a_total * 1.0e4,
-                                    mass_min,
-                                    INTERSTAGE_STRUT_LENGTH_M,
-                                ))
-                                .monospace()
-                                .small(),
-                            )
-                            .on_hover_text(
-                                "Minimum total load-bearing cross-section to meet the target \
-                                 safety factor — A_total = SF·F/σy, independent of strut count. \
-                                 Mass assumes solid Al-2024-T3 struts of the length shown.",
-                            );
-                        }
-                    }
-                });
-        },
+        rocket_workbench_body,
     );
     if close {
         app.show_rocket_workbench = false;
     }
 
-    // Deferred (outside the panel borrow): load the 3-D rocket mesh into
-    // the central viewport when requested (the button, or first open).
+    drain_deferred(app);
+}
+
+/// Drain the Rocket workbench's deferred request (outside any panel
+/// borrow): load the 3-D rocket mesh into the central viewport when the
+/// body set the request flag. Called by both [`draw_rocket_workbench`] and
+/// the dockable layout ([`crate::dock_layout`]).
+pub(crate) fn drain_deferred(app: &mut ValenxApp) {
     if app.rocket.show_3d_request {
         app.rocket.show_3d_request = false;
         load_lv1_rocket_3d(app);
     }
+}
+
+/// The Rocket workbench body — auto-design, manual engine + trajectory
+/// knobs, the reactive recompute, and the structural check. Extracted from
+/// [`draw_rocket_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]) without duplicating logic.
+pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("coupled ascent + structural check · valenx-rocket-demo")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+
+    let s = &mut app.rocket;
+    // Poll any background optimization before drawing (non-blocking);
+    // `opt_running` is a live progress snapshot while one is in flight.
+    let opt_running = poll_opt_job(s, ui.ctx());
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ── Auto-design — the AI does the whole search ────────
+            ui.label(egui::RichText::new("Auto-design — let the AI design it for you").strong());
+            ui.label(
+                egui::RichText::new(
+                    "one click: optimize the engine + the trajectory together and \
+                             return the best rocket — no tuning. (You can still tune by hand \
+                             below.)",
+                )
+                .weak()
+                .small(),
+            );
+            if ui
+                .button(egui::RichText::new("🤖 Auto-design the best rocket").strong())
+                .on_hover_text(
+                    "Runs the full automated search — an optimized, cooled engine plus \
+                             the best ascent — and returns the heaviest payload to orbit that \
+                             stays structurally sound.",
+                )
+                .clicked()
+            {
+                s.auto = auto_design::auto_design(2_000);
+            }
+            if let Some(d) = &s.auto {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "✦ AI design: {:.0} kg → {:.0} × {:.0} km\n\
+                                 engine {:.0} bar · ε {:.1} · vac Isp {:.0} s · cooling {:.2}\n\
+                                 pitch {:.1}° · rise {:.0} s · peak {:.1} g · interstage SF {:.2}",
+                        d.payload_kg,
+                        d.periapsis_km,
+                        d.apoapsis_km,
+                        d.engine.chamber_pressure / 1.0e5,
+                        d.engine.expansion_ratio,
+                        d.engine_vacuum.isp,
+                        d.engine_cooling.cooling_margin,
+                        d.pitch_kick_deg,
+                        d.vertical_rise_s,
+                        d.peak_g,
+                        d.structural_sf,
+                    ))
+                    .monospace()
+                    .small(),
+                );
+            }
+            ui.add_space(6.0);
+            ui.separator();
+
+            // ── Valenx LV-1 — watch it fly to orbit ───────────────
+            ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
+            ui.label(
+                egui::RichText::new(
+                    "a from-scratch two-stage launcher, flown live by valenx-astro",
+                )
+                .weak()
+                .small(),
+            );
+            let fly_clicked = ui
+                .button(egui::RichText::new("▶ Fly the Valenx LV-1").strong())
+                .clicked();
+            if s.lv1.is_none() || fly_clicked {
+                s.lv1 = Some(fly_lv1());
+            }
+            // 3-D rocket model → central viewport (auto-loads once
+            // on first open; the button reloads / re-frames it).
+            let show_3d = ui
+                .button(egui::RichText::new("Show the 3-D rocket model").strong())
+                .on_hover_text(
+                    "Loads a 3-D model of the LV-1 into the centre viewport — orbit / zoom it.",
+                )
+                .clicked();
+            if show_3d || !s.loaded_3d_once {
+                s.loaded_3d_once = true;
+                s.show_3d_request = true;
+            }
+            if s.lv1.is_some() {
+                // Summary + flight window (immutable view, released before
+                // the scrubber borrows `scrub_t` mutably below).
+                let (t_max, has_plot) = {
+                    let f = s.lv1.as_ref().unwrap();
+                    ui.label(egui::RichText::new(&f.summary).monospace().small());
+                    (f.t_max.max(0.0), !f.alt_pts.is_empty())
+                };
+                s.scrub_t = s.scrub_t.clamp(0.0, t_max);
+
+                if has_plot {
+                    // Pick which telemetry channel the plot draws; the
+                    // numeric readout below always shows every quantity.
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new("plot:").small());
+                        ui.radio_value(&mut s.plot_y, PlotQuantity::Altitude, "alt");
+                        ui.radio_value(&mut s.plot_y, PlotQuantity::Speed, "speed");
+                        ui.radio_value(&mut s.plot_y, PlotQuantity::Mach, "Mach");
+                        ui.radio_value(&mut s.plot_y, PlotQuantity::DynPressure, "q");
+                        ui.radio_value(&mut s.plot_y, PlotQuantity::AccelG, "g");
+                    });
+                    let q = s.plot_y;
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} vs time (s) · dots = staging + MECO · drag to scrub",
+                            q.axis_label()
+                        ))
+                        .weak()
+                        .small(),
+                    );
+
+                    // ▶ Playback scrubber — drag through the flight and
+                    // read the full vehicle state at that instant.
+                    if t_max > 0.0 {
+                        ui.add(
+                            egui::Slider::new(&mut s.scrub_t, 0.0..=t_max)
+                                .text("▶ playback · t (s)"),
+                        );
+                    }
+
+                    let f = s.lv1.as_ref().unwrap();
+                    let scrub = sample_at(&f.samples, s.scrub_t);
+                    if let Some(p) = scrub {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "t {:>6.1} s   alt {:>7.2} km   downrange {:>7.2} km\n\
+                                         v_rel {:>6.0} m/s   v_inert {:>6.0} m/s   Mach {:>5.2}\n\
+                                         q {:>6.1} kPa   accel {:>5.2} g   mass {:>7.2} t",
+                                p.time,
+                                p.altitude_m / 1000.0,
+                                p.downrange_m / 1000.0,
+                                p.speed_relative,
+                                p.speed_inertial,
+                                p.mach,
+                                p.dynamic_pressure / 1000.0,
+                                p.acceleration_g,
+                                p.mass / 1000.0,
+                            ))
+                            .monospace()
+                            .small(),
+                        );
+                    }
+
+                    // Line + event + now markers all follow the selected
+                    // channel, derived from the one retained sample series.
+                    let line_pts: Vec<[f64; 2]> = if q == PlotQuantity::Altitude {
+                        f.alt_pts.clone()
+                    } else {
+                        f.samples
+                            .iter()
+                            .map(|smp| [smp.time, q.value(smp)])
+                            .collect()
+                    };
+                    let event_pts: Vec<[f64; 2]> = f
+                        .event_pts
+                        .iter()
+                        .filter_map(|ep| {
+                            sample_at(&f.samples, ep[0]).map(|smp| [ep[0], q.value(&smp)])
+                        })
+                        .collect();
+                    let now_pt = scrub.map(|p| [p.time, q.value(&p)]);
+                    Plot::new("lv1_ascent_plot").height(210.0).show(ui, |pui| {
+                        pui.line(Line::new(PlotPoints::from(line_pts)).name(q.axis_label()));
+                        if !event_pts.is_empty() {
+                            pui.points(
+                                Points::new(PlotPoints::from(event_pts))
+                                    .radius(5.0)
+                                    .name("staging / MECO"),
+                            );
+                        }
+                        if let Some(pt) = now_pt {
+                            pui.points(
+                                Points::new(PlotPoints::from(vec![pt]))
+                                    .radius(7.0)
+                                    .color(egui::Color32::from_rgb(255, 196, 0))
+                                    .name("now"),
+                            );
+                        }
+                    });
+                }
+            }
+            // ── AI optimizer — multi-objective design search ──────
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new("AI optimizer — multi-objective design search").strong());
+            ui.label(
+                egui::RichText::new(
+                    "searches payload × pitch-kick × vertical-rise across many real \
+                             valenx-astro sims, keeping interstage SF ≥ the target below.",
+                )
+                .weak()
+                .small(),
+            );
+            ui.horizontal(|ui| {
+                ui.label("objective:");
+                ui.radio_value(
+                    &mut s.opt_objective,
+                    OptObjective::MaxPayload,
+                    "max payload",
+                );
+                ui.radio_value(
+                    &mut s.opt_objective,
+                    OptObjective::MaxApoapsis,
+                    "max apoapsis",
+                );
+                ui.radio_value(&mut s.opt_objective, OptObjective::MinPeakG, "min peak-g");
+            });
+            let busy = opt_running.is_some();
+            let run = ui
+                .add_enabled(
+                    !busy,
+                    egui::Button::new(
+                        egui::RichText::new("Run AI optimization (2000 sims)").strong(),
+                    ),
+                )
+                .on_hover_text(
+                    "Flies 2000 candidate designs through the real ascent engine on a \
+                             background thread — the UI stays responsive — and converges on the \
+                             best design for the selected objective.",
+                );
+            if run.clicked() && !busy {
+                s.opt_job = Some(spawn_opt_job(s.opt_objective, s.target_sf, 2_000));
+            }
+            if let Some((p, n, obj)) = opt_running {
+                let frac = (p.done as f32 / n.max(1) as f32).clamp(0.0, 1.0);
+                // Live best-so-far in the objective's units (blank until
+                // the first feasible design is found).
+                let best = if p.best_value.is_finite() {
+                    match obj {
+                        OptObjective::MaxPayload => {
+                            format!(" · best {:.0} kg", p.best_value)
+                        }
+                        OptObjective::MaxApoapsis => {
+                            format!(" · best {:.0} km", p.best_value)
+                        }
+                        OptObjective::MinPeakG => format!(" · best {:.1} g", p.best_value),
+                    }
+                } else {
+                    String::new()
+                };
+                ui.add(egui::ProgressBar::new(frac).text(format!(
+                    "{} · {}/{} sims · {} orbit{}",
+                    obj.label(),
+                    p.done,
+                    n,
+                    p.reached_orbit,
+                    best,
+                )));
+            }
+            if let Some(o) = &s.opt {
+                match &o.best {
+                    Some(b) => ui.label(
+                        egui::RichText::new(format!(
+                            "{}: ran {} sims · {} reached orbit\n\
+                                     payload {:.0} kg → {:.0} × {:.0} km\n\
+                                     peak {:.1} g · SF {:.2} · pitch {:.1}° · rise {:.0} s",
+                            o.objective.label(),
+                            o.n_evals,
+                            o.reached_orbit,
+                            b.payload_kg,
+                            b.periapsis_km,
+                            b.apoapsis_km,
+                            b.peak_g,
+                            b.safety_factor,
+                            b.pitch_kick_deg,
+                            b.vertical_rise_s,
+                        ))
+                        .monospace()
+                        .small(),
+                    ),
+                    None => ui.colored_label(
+                        egui::Color32::from_rgb(220, 160, 60),
+                        format!("ran {} sims · none met SF ≥ {:.2}", o.n_evals, s.target_sf),
+                    ),
+                };
+                // Plot best-so-far in the objective's own units —
+                // skip the NaN evals before the first feasible design.
+                let conv: Vec<[f64; 2]> = o
+                    .convergence
+                    .iter()
+                    .copied()
+                    .filter(|p| p[1].is_finite())
+                    .collect();
+                if conv.len() > 1 {
+                    let (axis, series) = match o.objective {
+                        OptObjective::MaxPayload => {
+                            ("best payload (kg) vs sim #", "best payload (kg)")
+                        }
+                        OptObjective::MaxApoapsis => {
+                            ("best apoapsis (km) vs sim #", "best apoapsis (km)")
+                        }
+                        OptObjective::MinPeakG => ("best peak-g vs sim #", "best peak g"),
+                    };
+                    ui.label(egui::RichText::new(axis).weak().small());
+                    Plot::new("lv1_opt_plot").height(170.0).show(ui, |pui| {
+                        pui.line(Line::new(PlotPoints::from(conv.clone())).name(series));
+                    });
+                }
+            }
+            ui.add_space(8.0);
+            ui.separator();
+            ui.label(
+                egui::RichText::new(
+                    "Trajectory: fixed medium-lift two-stage preset. \
+                             Edit the interstage struts below — the panel re-flies \
+                             the ascent and re-checks the structure live.",
+                )
+                .weak()
+                .small(),
+            );
+
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new("Interstage structure").strong());
+            ui.horizontal(|ui| {
+                ui.label("supported mass");
+                ui.add(
+                    egui::DragValue::new(&mut s.design.supported_mass_kg)
+                        .speed(100.0)
+                        .range(100.0..=200_000.0)
+                        .suffix(" kg"),
+                )
+                .on_hover_text("Upper stage + payload carried by the interstage.");
+            });
+            ui.horizontal(|ui| {
+                ui.label("strut count N");
+                ui.add(
+                    egui::DragValue::new(&mut s.design.strut_count)
+                        .speed(0.2)
+                        .range(1..=64),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("strut area A");
+                // Edit in cm² for usability; store in m². Only write back
+                // on an actual edit so the reactive dirty-check below stays
+                // stable (no per-frame float drift).
+                let mut area_cm2 = s.design.strut_area_m2 * 1.0e4;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut area_cm2)
+                            .speed(0.1)
+                            .range(0.01..=2000.0)
+                            .suffix(" cm²"),
+                    )
+                    .changed()
+                {
+                    s.design.strut_area_m2 = area_cm2 * 1.0e-4;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("material yield σy");
+                let mut yield_mpa = s.design.material_yield_pa / 1.0e6;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut yield_mpa)
+                            .speed(5.0)
+                            .range(1.0..=2000.0)
+                            .suffix(" MPa"),
+                    )
+                    .on_hover_text("≈ 324 MPa for Al-2024-T3.")
+                    .changed()
+                {
+                    s.design.material_yield_pa = yield_mpa * 1.0e6;
+                }
+            });
+
+            // ── Reactive recompute ────────────────────────────────
+            // Re-fly + re-check whenever the design changed (and on the
+            // first draw, when `last_design` is None).
+            if s.last_design != Some(s.design) {
+                recompute(s);
+            }
+
+            if let Some(e) = &s.error {
+                ui.add_space(4.0);
+                ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
+            }
+
+            if let Some(r) = s.report {
+                ui.separator();
+                ui.label(egui::RichText::new("Trajectory — valenx-astro").strong());
+                let orbit = if r.reached_orbit {
+                    "reached orbit"
+                } else {
+                    "no stable orbit"
+                };
+                ui.label(
+                    egui::RichText::new(format!(
+                        "  {orbit}\n  \
+                                 apoapsis  : {:.0} km\n  \
+                                 periapsis : {:.0} km\n  \
+                                 Δv budget : {:.0} m/s\n  \
+                                 max-Q     : {:.1} kPa\n  \
+                                 peak g    : {:.1} g",
+                        r.apoapsis_km,
+                        r.periapsis_km,
+                        r.delta_v_budget_ms,
+                        r.max_q_pa / 1000.0,
+                        r.max_acceleration_g,
+                    ))
+                    .monospace()
+                    .small(),
+                );
+
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new("Structure — valenx-fem (loaded by peak g)").strong());
+                ui.label(
+                    egui::RichText::new(format!(
+                        "  peak axial load : {:.0} kN\n  \
+                                 strut stress    : {:.0} MPa\n  \
+                                 safety factor   : {:.2}",
+                        r.peak_axial_load_n / 1000.0,
+                        r.strut_stress_pa / 1.0e6,
+                        r.structural_safety_factor,
+                    ))
+                    .monospace()
+                    .small(),
+                );
+
+                // Live verdict banner — margin of safety = SF − 1.
+                let ms_pct = (r.structural_safety_factor - 1.0) * 100.0;
+                let (txt, col) = if r.structurally_safe {
+                    (
+                        format!("✔ SAFE  ·  margin of safety {ms_pct:+.0}%"),
+                        egui::Color32::from_rgb(80, 220, 120),
+                    )
+                } else {
+                    (
+                        format!("✖ OVER-STRESSED  ·  margin {ms_pct:+.0}%"),
+                        egui::Color32::from_rgb(220, 90, 90),
+                    )
+                };
+                ui.add_space(2.0);
+                ui.colored_label(col, egui::RichText::new(txt).strong());
+
+                // ── Sizing aid ────────────────────────────────────
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new("Sizing aid").strong());
+                ui.horizontal(|ui| {
+                    ui.label("target SF");
+                    ui.add(egui::Slider::new(&mut s.target_sf, 1.0..=3.0));
+                });
+                if let Some(a_req) = required_area_per_strut_m2(
+                    r.peak_axial_load_n,
+                    s.design.material_yield_pa,
+                    s.design.strut_count,
+                    s.target_sf,
+                ) {
+                    let have = s.design.strut_area_m2;
+                    let meets = have >= a_req;
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "  need ≥ {:.2} cm²/strut for SF ≥ {:.2}  (have {:.2} cm²)",
+                            a_req * 1.0e4,
+                            s.target_sf,
+                            have * 1.0e4,
+                        ))
+                        .monospace()
+                        .small(),
+                    );
+                    let (txt, col) = if meets {
+                        (
+                            "✔ current struts meet the target".to_string(),
+                            egui::Color32::from_rgb(80, 220, 120),
+                        )
+                    } else {
+                        (
+                            format!(
+                                "✖ enlarge struts ×{:.2} to meet the target",
+                                a_req / have.max(1e-12)
+                            ),
+                            egui::Color32::from_rgb(220, 160, 60),
+                        )
+                    };
+                    ui.colored_label(col, egui::RichText::new(txt).small());
+                }
+
+                // ── Lightest interstage ───────────────────────────
+                // Minimum total load-bearing area to hit the target
+                // SF (A_total = SF·F/σy — strut-count independent),
+                // plus an estimated minimum strut mass.
+                if let Some(a_total) = min_total_strut_area_m2(
+                    r.peak_axial_load_n,
+                    s.design.material_yield_pa,
+                    s.target_sf,
+                ) {
+                    let mass_min = a_total * INTERSTAGE_STRUT_LENGTH_M * AL2024_DENSITY_KG_M3;
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "lightest interstage @ SF {:.2}: ≥ {:.1} cm² total \
+                                     (≈ {:.0} kg · {:.1} m Al-2024 struts)",
+                            s.target_sf,
+                            a_total * 1.0e4,
+                            mass_min,
+                            INTERSTAGE_STRUT_LENGTH_M,
+                        ))
+                        .monospace()
+                        .small(),
+                    )
+                    .on_hover_text(
+                        "Minimum total load-bearing cross-section to meet the target \
+                                 safety factor — A_total = SF·F/σy, independent of strut count. \
+                                 Mass assumes solid Al-2024-T3 struts of the length shown.",
+                    );
+                }
+            }
+        });
 }
 
 #[cfg(test)]

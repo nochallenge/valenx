@@ -125,15 +125,56 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_fem_workbench",
         "FEM Workbench",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new("native finite-element analysis · valenx-fem")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
-            let s = &mut app.fem;
-            egui::ScrollArea::vertical()
+        fem_workbench_body,
+    );
+    if close {
+        app.show_fem_workbench = false;
+    }
+
+    drain_deferred(app);
+}
+
+/// Drain the FEM workbench's deferred request (outside any panel borrow):
+/// push the deformed-shape field overlay into the central 3-D viewport when
+/// the body set the flag. Called by both [`draw_fem_workbench`] and the
+/// dockable layout ([`crate::dock_layout`]).
+pub(crate) fn drain_deferred(app: &mut ValenxApp) {
+    if app.fem.push_viz {
+        app.fem.push_viz = false;
+        if let Some((mesh, field)) = app.fem.viz.take() {
+            let quality = valenx_mesh::quality_report(&mesh);
+            let aspect_hist =
+                valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+            let skew_hist =
+                valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+            app.stl = None;
+            app.mesh = Some(LoadedMesh {
+                path: std::path::PathBuf::from("<fem>/deformed"),
+                mesh,
+                quality,
+                aspect_hist,
+                skew_hist,
+            });
+            app.aero_field_overlay = Some(field);
+            app.frame_current_mesh();
+        }
+    }
+}
+
+/// The FEM workbench body — geometry, material, boundary conditions, the
+/// solve controls, and the result readout. Extracted from
+/// [`draw_fem_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]) without duplicating logic.
+pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("native finite-element analysis · valenx-fem")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+    let s = &mut app.fem;
+    egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Geometry — structured box mesh (m)").strong());
@@ -545,34 +586,6 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
                 });
-        },
-    );
-    if close {
-        app.show_fem_workbench = false;
-    }
-
-    // Deferred (outside the panel borrow): push the deformed-shape field
-    // overlay into the central 3-D viewport.
-    if app.fem.push_viz {
-        app.fem.push_viz = false;
-        if let Some((mesh, field)) = app.fem.viz.take() {
-            let quality = valenx_mesh::quality_report(&mesh);
-            let aspect_hist =
-                valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
-            let skew_hist =
-                valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
-            app.stl = None;
-            app.mesh = Some(LoadedMesh {
-                path: std::path::PathBuf::from("<fem>/deformed"),
-                mesh,
-                quality,
-                aspect_hist,
-                skew_hist,
-            });
-            app.aero_field_overlay = Some(field);
-            app.frame_current_mesh();
-        }
-    }
 }
 
 /// Build the box mesh + boundary conditions and run the selected native

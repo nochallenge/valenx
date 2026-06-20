@@ -145,93 +145,98 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     // appended entries (incl. replies) appear without the user touching
     // anything.
     ctx.request_repaint_after(Duration::from_millis(1000));
-    let entries = load_feed(&app.assistant.feed_path);
 
     let close = crate::workbench_chrome::workbench_shell(
         app,
         ctx,
         "valenx_assistant_panel",
         "Assistant",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new("● live  ·  chat with Claude — type below")
-                    .weak()
-                    .small()
-                    .color(egui::Color32::from_rgb(80, 200, 140)),
-            );
-            ui.separator();
-            // Chat input pinned to the bottom; the feed scrolls above it.
-            egui::TopBottomPanel::bottom("valenx_assistant_input").show_inside(ui, |ui| {
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    let resp = ui.add(
-                        egui::TextEdit::singleline(&mut app.assistant.input)
-                            .hint_text("Message Claude…")
-                            .desired_width(f32::INFINITY),
-                    );
-                    let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    if enter || ui.button("Send").clicked() {
-                        let msg = app.assistant.input.trim().to_string();
-                        if !msg.is_empty() {
-                            send_to_assistant(
-                                &app.assistant.inbox_path,
-                                &app.assistant.feed_path,
-                                &msg,
-                            );
-                            app.assistant.input.clear();
-                            ui.ctx().request_repaint();
-                            resp.request_focus();
-                        }
-                    }
-                });
-                ui.add_space(2.0);
-            });
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    if entries.is_empty() {
-                        ui.add_space(8.0);
-                        ui.label(
-                            egui::RichText::new("No messages yet — say hi below.")
-                                .weak()
-                                .italics(),
-                        );
-                        return;
-                    }
-                    for e in &entries {
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            if !e.time.is_empty() {
-                                ui.label(egui::RichText::new(&e.time).monospace().small().weak());
-                            }
-                            ui.label(
-                                egui::RichText::new(&e.title)
-                                    .strong()
-                                    .color(accent(&e.kind)),
-                            );
-                        });
-                        if !e.detail.is_empty() {
-                            ui.label(egui::RichText::new(&e.detail).small());
-                        }
-                        ui.separator();
-                    }
-                    // Interactive cue: if the newest message is the user's, show
-                    // a "responding" indicator until a reply lands in the feed.
-                    if entries.last().map(|e| e.kind.as_str()) == Some("user") {
-                        ui.add_space(6.0);
-                        ui.label(
-                            egui::RichText::new("Claude is responding...")
-                                .weak()
-                                .italics(),
-                        );
-                    }
-                });
-        },
+        assistant_workbench_body,
     );
     if close {
         app.show_assistant_panel = false;
     }
+}
+
+/// The Assistant activity-sidebar body — the bottom-pinned chat input plus
+/// the scrolling live feed. Extracted from [`draw_assistant_workbench`] so
+/// it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]). Reloads the feed + reschedules the
+/// ~1 s idle repaint up front so the dock path stays live.
+pub(crate) fn assistant_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.ctx().request_repaint_after(Duration::from_millis(1000));
+    let entries = load_feed(&app.assistant.feed_path);
+    ui.label(
+        egui::RichText::new("● live  ·  chat with Claude — type below")
+            .weak()
+            .small()
+            .color(egui::Color32::from_rgb(80, 200, 140)),
+    );
+    ui.separator();
+    // Chat input pinned to the bottom; the feed scrolls above it.
+    egui::TopBottomPanel::bottom("valenx_assistant_input").show_inside(ui, |ui| {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let resp = ui.add(
+                egui::TextEdit::singleline(&mut app.assistant.input)
+                    .hint_text("Message Claude…")
+                    .desired_width(f32::INFINITY),
+            );
+            let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if enter || ui.button("Send").clicked() {
+                let msg = app.assistant.input.trim().to_string();
+                if !msg.is_empty() {
+                    send_to_assistant(&app.assistant.inbox_path, &app.assistant.feed_path, &msg);
+                    app.assistant.input.clear();
+                    ui.ctx().request_repaint();
+                    resp.request_focus();
+                }
+            }
+        });
+        ui.add_space(2.0);
+    });
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .stick_to_bottom(true)
+        .show(ui, |ui| {
+            if entries.is_empty() {
+                ui.add_space(8.0);
+                ui.label(
+                    egui::RichText::new("No messages yet — say hi below.")
+                        .weak()
+                        .italics(),
+                );
+                return;
+            }
+            for e in &entries {
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if !e.time.is_empty() {
+                        ui.label(egui::RichText::new(&e.time).monospace().small().weak());
+                    }
+                    ui.label(
+                        egui::RichText::new(&e.title)
+                            .strong()
+                            .color(accent(&e.kind)),
+                    );
+                });
+                if !e.detail.is_empty() {
+                    ui.label(egui::RichText::new(&e.detail).small());
+                }
+                ui.separator();
+            }
+            // Interactive cue: if the newest message is the user's, show
+            // a "responding" indicator until a reply lands in the feed.
+            if entries.last().map(|e| e.kind.as_str()) == Some("user") {
+                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new("Claude is responding...")
+                        .weak()
+                        .italics(),
+                );
+            }
+        });
 }
 
 #[cfg(test)]

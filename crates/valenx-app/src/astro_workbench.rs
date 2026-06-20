@@ -116,50 +116,57 @@ pub fn draw_astro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_astro_workbench",
         "Astro / Launch",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new("Launch-vehicle ascent + trajectory simulator")
-                    .weak()
-                    .small(),
-            );
-            ui.label(
-                egui::RichText::new("backed by `valenx-astro`")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
-
-            // Fade-in animation on workbench open — when the user toggles
-            // the workbench on via Ctrl+4 / View → Astro / Launch the
-            // panel body fades in over 0.18 s rather than popping in
-            // instantly. The animation auto-resets when the panel closes
-            // (matches the wind tunnel).
-            let anim_id = egui::Id::new("valenx_astro_workbench_open");
-            let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.18);
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    ui.scope(|ui| {
-                        ui.set_opacity(t.clamp(0.0, 1.0));
-                        panels::draw_tab_selector(app, ui);
-                        match app.astro.tab {
-                            AstroTab::Ascent => {
-                                panels::draw_vehicle_section(app, ui);
-                                panels::draw_guidance_section(app, ui);
-                                panels::draw_run_section(app, ui);
-                                panels::draw_results_section(app, ui);
-                            }
-                            AstroTab::Planners => {
-                                panels::draw_planners_section(app, ui);
-                            }
-                        }
-                    });
-                });
-        },
+        astro_workbench_body,
     );
     if close {
         app.show_astro_workbench = false;
     }
+}
+
+/// The Astro / Launch workbench body — the ascent-simulator + mission-
+/// planner tabs. Extracted from [`draw_astro_workbench`] so it can be
+/// hosted by the classic [`crate::workbench_chrome::workbench_shell`] *or*
+/// the opt-in dockable tile layout ([`crate::dock_layout`]) without
+/// duplicating logic.
+pub(crate) fn astro_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("Launch-vehicle ascent + trajectory simulator")
+            .weak()
+            .small(),
+    );
+    ui.label(
+        egui::RichText::new("backed by `valenx-astro`")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+
+    // Fade-in animation on workbench open — when the user toggles
+    // the workbench on via Ctrl+4 / View → Astro / Launch the
+    // panel body fades in over 0.18 s rather than popping in
+    // instantly. The animation auto-resets when the panel closes
+    // (matches the wind tunnel).
+    let anim_id = egui::Id::new("valenx_astro_workbench_open");
+    let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.18);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.scope(|ui| {
+                ui.set_opacity(t.clamp(0.0, 1.0));
+                panels::draw_tab_selector(app, ui);
+                match app.astro.tab {
+                    AstroTab::Ascent => {
+                        panels::draw_vehicle_section(app, ui);
+                        panels::draw_guidance_section(app, ui);
+                        panels::draw_run_section(app, ui);
+                        panels::draw_results_section(app, ui);
+                    }
+                    AstroTab::Planners => {
+                        panels::draw_planners_section(app, ui);
+                    }
+                }
+            });
+        });
 }
 
 #[cfg(test)]
