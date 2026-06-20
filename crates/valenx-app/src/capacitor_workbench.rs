@@ -77,18 +77,18 @@ pub fn draw_capacitor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_capacitor_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Capacitor",
-                "native ideal parallel-plate electrostatics · valenx-capacitor",
-            ) {
-                app.show_capacitor_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_capacitor_workbench",
+        "Capacitor",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native ideal parallel-plate electrostatics · valenx-capacitor")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.capacitor;
             egui::ScrollArea::vertical()
@@ -154,7 +154,11 @@ pub fn draw_capacitor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_capacitor_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.capacitor` borrow is
     // released here): build the capacitor's 3-D solid and load it.

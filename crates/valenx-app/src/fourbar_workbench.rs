@@ -69,18 +69,20 @@ pub fn draw_fourbar_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fourbar_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Four-Bar Linkage",
-                "native planar four-bar mechanism kinematics · valenx-kinematics",
-            ) {
-                app.show_fourbar_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fourbar_workbench",
+        "Four-Bar Linkage",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native planar four-bar mechanism kinematics · valenx-kinematics",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fourbar;
             egui::ScrollArea::vertical()
@@ -140,7 +142,11 @@ pub fn draw_fourbar_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fourbar_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.fourbar` borrow is
     // released here): build the linkage's 3-D solid and load it.

@@ -77,18 +77,20 @@ pub fn draw_fixedwing_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fixedwing_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Fixed-Wing / Aircraft",
-                "native preliminary aircraft point-performance · valenx-fixedwing",
-            ) {
-                app.show_fixedwing_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fixedwing_workbench",
+        "Fixed-Wing / Aircraft",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native preliminary aircraft point-performance · valenx-fixedwing",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fixedwing;
             egui::ScrollArea::vertical()
@@ -166,7 +168,11 @@ pub fn draw_fixedwing_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fixedwing_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.fixedwing` borrow is
     // released here): build the aircraft's 3-D solid and load it.

@@ -82,18 +82,20 @@ pub fn draw_bolt_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_bolt_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Bolted Joint",
-                "native preloaded-joint mechanics (preload / torque / stress) · valenx-bolt",
-            ) {
-                app.show_bolt_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_bolt_workbench",
+        "Bolted Joint",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native preloaded-joint mechanics (preload / torque / stress) · valenx-bolt",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.bolt;
             egui::ScrollArea::vertical()
@@ -169,7 +171,11 @@ pub fn draw_bolt_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_bolt_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.bolt` borrow is
     // released here): build the bolt's 3-D solid and load it.

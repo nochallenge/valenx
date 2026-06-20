@@ -86,18 +86,18 @@ pub fn draw_acoustics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_acoustics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Acoustics",
-                "native room RT60 (Sabine/Eyring) + SPL · valenx-acoustics",
-            ) {
-                app.show_acoustics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_acoustics_workbench",
+        "Acoustics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native room RT60 (Sabine/Eyring) + SPL · valenx-acoustics")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.acoustics;
             egui::ScrollArea::vertical()
@@ -171,7 +171,11 @@ pub fn draw_acoustics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_acoustics_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.acoustics` borrow is
     // released here): build the room's 3-D solid and load it.

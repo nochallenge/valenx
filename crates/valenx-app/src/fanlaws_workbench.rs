@@ -75,18 +75,18 @@ pub fn draw_fanlaws_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fanlaws_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Fan Laws",
-                "native fan / blower affinity-law scaling · valenx-fanlaws",
-            ) {
-                app.show_fanlaws_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fanlaws_workbench",
+        "Fan Laws",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native fan / blower affinity-law scaling · valenx-fanlaws")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fanlaws;
             egui::ScrollArea::vertical()
@@ -145,7 +145,11 @@ pub fn draw_fanlaws_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fanlaws_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.fanlaws` borrow is
     // released here): build the fan's 3-D solid and load it.

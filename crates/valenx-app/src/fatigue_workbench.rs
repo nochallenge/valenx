@@ -75,18 +75,18 @@ pub fn draw_fatigue_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fatigue_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Fatigue",
-                "native high-cycle stress-life (S-N) analysis · valenx-fatigue",
-            ) {
-                app.show_fatigue_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fatigue_workbench",
+        "Fatigue",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native high-cycle stress-life (S-N) analysis · valenx-fatigue")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fatigue;
             egui::ScrollArea::vertical()
@@ -161,7 +161,11 @@ pub fn draw_fatigue_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fatigue_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.fatigue` borrow is
     // released here): build the specimen's 3-D solid and load it.

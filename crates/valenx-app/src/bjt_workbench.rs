@@ -107,18 +107,18 @@ pub fn draw_bjt_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_bjt_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "BJT",
-                "native DC bias Q-point analysis · valenx-bjt",
-            ) {
-                app.show_bjt_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_bjt_workbench",
+        "BJT",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native DC bias Q-point analysis · valenx-bjt")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.bjt;
             egui::ScrollArea::vertical()
@@ -206,7 +206,11 @@ pub fn draw_bjt_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_bjt_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.bjt` borrow is released
     // here): build the transistor's 3-D solid and load it.

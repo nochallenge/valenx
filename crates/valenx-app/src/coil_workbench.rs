@@ -110,18 +110,18 @@ pub fn draw_coil_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_coil_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Solenoid Coil",
-                "native long-solenoid inductor (field / L / X) · valenx-coil",
-            ) {
-                app.show_coil_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_coil_workbench",
+        "Solenoid Coil",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native long-solenoid inductor (field / L / X) · valenx-coil")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.coil;
             egui::ScrollArea::vertical()
@@ -192,7 +192,11 @@ pub fn draw_coil_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_coil_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.coil` borrow is released
     // here): build the coil's 3-D solid and load it.

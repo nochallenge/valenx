@@ -114,18 +114,18 @@ pub fn draw_combustion_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_combustion_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Combustion",
-                "native CxHy air-fuel stoichiometry · valenx-combustion",
-            ) {
-                app.show_combustion_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_combustion_workbench",
+        "Combustion",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native CxHy air-fuel stoichiometry · valenx-combustion")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.combustion;
             egui::ScrollArea::vertical()
@@ -188,7 +188,11 @@ pub fn draw_combustion_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_combustion_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.combustion` borrow is
     // released here): build the combustor's 3-D solid and load it.
