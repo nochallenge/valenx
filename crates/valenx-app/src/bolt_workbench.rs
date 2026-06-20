@@ -205,6 +205,10 @@ fn compute(s: &BoltWorkbenchState) -> Result<String, String> {
     let material = s.grade.material().map_err(|e| e.to_string())?;
     let area_m2 = stress::tensile_stress_area(d_m, pitch_m).map_err(|e| e.to_string())?;
     let proof_n = stress::proof_load(&material, area_m2).map_err(|e| e.to_string())?;
+    // Shigley's reuse target preload Fi = 0.75 Sp At — the recommended
+    // tightening preload for a reused connection. Compare against the
+    // achieved preload F to see how close the torque puts you.
+    let rec_preload = stress::recommended_preload(&material, area_m2).map_err(|e| e.to_string())?;
 
     let preload = joint.preload_n();
     let preload_stress = stress::axial_stress(preload, area_m2).map_err(|e| e.to_string())?;
@@ -229,6 +233,12 @@ fn compute(s: &BoltWorkbenchState) -> Result<String, String> {
     } else {
         0.0
     };
+    // Achieved preload as a fraction of the recommended reuse target.
+    let preload_util = if rec_preload > 0.0 {
+        preload / rec_preload * 100.0
+    } else {
+        0.0
+    };
 
     Ok(format!(
         "bolt            : M{:.0} grade {} (P = {:.2} mm)\n\
@@ -236,6 +246,7 @@ fn compute(s: &BoltWorkbenchState) -> Result<String, String> {
          torque / K      : {:.1} N·m / {:.3}\n\
          stiffness C     : {:.3}  (bolt picks up {:.1}% of P)\n\n\
          preload F       : {:.0} N  ({:.0} MPa, {:.0}% of proof)\n\
+         rec preload Fi  : {:.0} N  (0.75 Sp At, F = {:.0}% of Fi)\n\
          proof load Fp   : {:.0} N  ({:.0} MPa)\n\n\
          service load P  : {:.0} N\n\
          bolt load F+CP  : {:.0} N  ({:.0} MPa)\n\
@@ -254,6 +265,8 @@ fn compute(s: &BoltWorkbenchState) -> Result<String, String> {
         preload,
         preload_mpa,
         preload_frac,
+        rec_preload,
+        preload_util,
         proof_n,
         proof_mpa,
         load_n,
@@ -430,6 +443,43 @@ mod tests {
         let expected = s.torque_nm / (s.nut_factor * d_m);
         assert!((joint.preload_n() - expected).abs() < 1e-6 * expected);
         assert!((joint.preload_n() - 25_000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn recommended_preload_matches_shigley_reuse_rule_ground_truth() {
+        // Ground truth: the recommended reuse-joint preload is
+        // Fi = 0.75 Sp At (Shigley). For the default M10 class-8.8 joint,
+        // Sp = 600 MPa and At = (pi/4)(d - 0.938194 P)^2 with d = 0.010 m,
+        // P = 0.0015 m:
+        //   eff = 0.010 - 0.938194*0.0015 = 0.008592709 m
+        //   At  = (pi/4)*eff^2           = 5.79895969e-5 m^2
+        //   Fi  = 0.75 * 600e6 * At      = 26095.3186... N  -> "26095 N".
+        // The achieved torque preload is F = 25000 N, so the readout
+        // reports F = 96% of Fi (25000 / 26095.3186 * 100 = 95.80% -> 96).
+        let mut s = BoltWorkbenchState::default();
+        run_bolt(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default joint should analyze: {:?}",
+            s.error
+        );
+        assert!(
+            s.result.contains("rec preload Fi  : 26095 N"),
+            "readout: {}",
+            s.result
+        );
+        assert!(s.result.contains("F = 96% of Fi"), "readout: {}", s.result);
+
+        // Hand-computed crate cross-check of the same number.
+        let area = stress::tensile_stress_area(0.010, 0.0015).unwrap();
+        let material = BoltGrade::Class8_8.material().unwrap();
+        let fi = stress::recommended_preload(&material, area).unwrap();
+        let expected = 0.75 * 600.0e6 * area;
+        assert!(
+            (fi - expected).abs() < 1e-6,
+            "Fi {fi} vs expected {expected}"
+        );
+        assert!((fi - 26_095.318_605_830_347).abs() < 1e-3, "Fi was {fi}");
     }
 
     #[test]
