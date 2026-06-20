@@ -1,19 +1,15 @@
-//! The **Assistant** activity sidebar — valenx narrates its own work.
+//! The **Assistant** chat sidebar — a two-way channel with Claude.
 //!
-//! A right-side panel that displays a *live* feed of what the AI assistant
-//! is doing, so the desktop app is self-describing: anyone watching can
-//! see, in-app, what is being designed / simulated / built right now.
+//! A right-side panel that shows a *live* feed of what the AI assistant is
+//! doing AND lets the user type messages back. The feed is a
+//! newline-delimited JSON (`.jsonl`) file — one [`FeedEntry`] per line — that
+//! an external agent (or the app itself) appends to; the panel re-reads it
+//! about once a second so new entries appear live. Messages the user types are
+//! appended to an *inbox* `.jsonl` (for an external agent to read) and echoed
+//! into the feed so they appear in the panel immediately.
 //!
-//! The feed is a newline-delimited JSON (`.jsonl`) file — one
-//! [`FeedEntry`] per line — that an external agent (or the app itself)
-//! appends to. The panel re-reads it about once a second (via
-//! [`egui::Context::request_repaint_after`]) so new entries appear live
-//! without any user interaction. A missing or unreadable feed file is
-//! treated as "no activity yet", never an error, and a half-written final
-//! line (mid-append) is skipped rather than breaking the whole feed.
-//!
-//! The feed path is `$VALENX_ASSISTANT_FEED` when set, otherwise
-//! `<state_dir>/assistant_feed.jsonl`.
+//! Feed path:  `$VALENX_ASSISTANT_FEED`  else `<state_dir>/assistant_feed.jsonl`.
+//! Inbox path: `$VALENX_ASSISTANT_INBOX` else `<state_dir>/assistant_inbox.jsonl`.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -35,29 +31,32 @@ pub struct FeedEntry {
     /// Optional longer detail shown under the title.
     #[serde(default)]
     pub detail: String,
-    /// Category tag driving the accent colour: `build` / `result` / `ship`
-    /// / `warn` (anything else → neutral).
+    /// Category tag driving the accent colour: `build` / `result` / `ship` /
+    /// `warn` / `user` (anything else → neutral).
     #[serde(default)]
     pub kind: String,
 }
 
-/// Persistent state for the Assistant panel — just the resolved feed path
-/// (entries are re-read from disk each frame so the feed stays live).
+/// Persistent state for the Assistant panel.
 pub struct AssistantWorkbenchState {
     feed_path: PathBuf,
+    inbox_path: PathBuf,
+    /// The in-progress message in the chat input box.
+    input: String,
 }
 
 impl Default for AssistantWorkbenchState {
     fn default() -> Self {
         Self {
             feed_path: assistant_feed_path(),
+            inbox_path: assistant_inbox_path(),
+            input: String::new(),
         }
     }
 }
 
-/// Resolve the assistant feed file: `$VALENX_ASSISTANT_FEED` if set,
-/// otherwise `<state_dir>/assistant_feed.jsonl` (falling back to the
-/// system temp dir when no per-user state dir resolves).
+/// Resolve the assistant feed file: `$VALENX_ASSISTANT_FEED` if set, otherwise
+/// `<state_dir>/assistant_feed.jsonl` (system-temp fallback).
 pub fn assistant_feed_path() -> PathBuf {
     if let Ok(p) = std::env::var("VALENX_ASSISTANT_FEED") {
         if !p.is_empty() {
@@ -69,9 +68,41 @@ pub fn assistant_feed_path() -> PathBuf {
         .unwrap_or_else(|| std::env::temp_dir().join("valenx_assistant_feed.jsonl"))
 }
 
-/// Parse a `.jsonl` feed body into entries, skipping blank or malformed
-/// lines (a half-written final line while the file is being appended must
-/// not break the whole feed).
+/// Resolve the assistant **inbox** file (messages the user types in-app, for
+/// an external agent to read): `$VALENX_ASSISTANT_INBOX` if set, otherwise
+/// `<state_dir>/assistant_inbox.jsonl` (system-temp fallback).
+pub fn assistant_inbox_path() -> PathBuf {
+    if let Ok(p) = std::env::var("VALENX_ASSISTANT_INBOX") {
+        if !p.is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    crate::state_paths::state_dir()
+        .map(|d| d.join("assistant_inbox.jsonl"))
+        .unwrap_or_else(|| std::env::temp_dir().join("valenx_assistant_inbox.jsonl"))
+}
+
+/// Append a single line to a `.jsonl` file (create + append; best-effort).
+fn append_line(path: &Path, line: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
+/// Send a user message: append it to the inbox (for the external agent) and
+/// echo it into the feed so it appears in the panel immediately.
+fn send_to_assistant(inbox: &Path, feed: &Path, msg: &str) {
+    append_line(inbox, &serde_json::json!({ "text": msg }).to_string());
+    append_line(
+        feed,
+        &serde_json::json!({ "title": "You", "detail": msg, "kind": "user" }).to_string(),
+    );
+}
+
+/// Parse a `.jsonl` feed body into entries, skipping blank or malformed lines
+/// (a half-written final line while the file is being appended must not break
+/// the whole feed).
 fn parse_feed(body: &str) -> Vec<FeedEntry> {
     body.lines()
         .map(str::trim)
@@ -81,7 +112,7 @@ fn parse_feed(body: &str) -> Vec<FeedEntry> {
 }
 
 /// Read + parse the feed file. A missing / unreadable file yields an empty
-/// feed (not an error) — the panel then shows "waiting".
+/// feed (not an error).
 fn load_feed(path: &Path) -> Vec<FeedEntry> {
     std::fs::read_to_string(path)
         .map(|s| parse_feed(&s))
@@ -95,18 +126,20 @@ fn accent(kind: &str) -> egui::Color32 {
         "result" => egui::Color32::from_rgb(80, 200, 140), // teal/green
         "ship" => egui::Color32::from_rgb(127, 119, 221), // purple
         "warn" => egui::Color32::from_rgb(220, 160, 60),  // amber
+        "user" => egui::Color32::from_rgb(120, 170, 255), // light blue (your messages)
         _ => egui::Color32::from_rgb(150, 150, 145),      // neutral
     }
 }
 
-/// Draw the Assistant activity sidebar. A no-op when the
-/// `show_assistant_panel` toggle is off.
+/// Draw the Assistant chat sidebar. A no-op when the `show_assistant_panel`
+/// toggle is off.
 pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_assistant_panel {
         return;
     }
     // Live: poll the feed about once a second even when otherwise idle, so
-    // appended entries appear without the user touching anything.
+    // appended entries (incl. replies) appear without the user touching
+    // anything.
     ctx.request_repaint_after(Duration::from_millis(1000));
     let entries = load_feed(&app.assistant.feed_path);
 
@@ -115,14 +148,41 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_assistant_panel",
         "Assistant",
-        |_app, ui| {
+        |app, ui| {
             ui.label(
-                egui::RichText::new("● live  ·  what Claude is building, live in-app")
+                egui::RichText::new("● live  ·  chat with Claude — type below")
                     .weak()
                     .small()
                     .color(egui::Color32::from_rgb(80, 200, 140)),
             );
             ui.separator();
+            // Chat input pinned to the bottom; the feed scrolls above it.
+            egui::TopBottomPanel::bottom("valenx_assistant_input").show_inside(ui, |ui| {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(&mut app.assistant.input)
+                            .hint_text("Message Claude…")
+                            .desired_width(f32::INFINITY),
+                    );
+                    let enter =
+                        resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    if enter || ui.button("Send").clicked() {
+                        let msg = app.assistant.input.trim().to_string();
+                        if !msg.is_empty() {
+                            send_to_assistant(
+                                &app.assistant.inbox_path,
+                                &app.assistant.feed_path,
+                                &msg,
+                            );
+                            app.assistant.input.clear();
+                            ui.ctx().request_repaint();
+                            resp.request_focus();
+                        }
+                    }
+                });
+                ui.add_space(2.0);
+            });
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .stick_to_bottom(true)
@@ -130,7 +190,7 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     if entries.is_empty() {
                         ui.add_space(8.0);
                         ui.label(
-                            egui::RichText::new("Waiting for activity…")
+                            egui::RichText::new("No messages yet — say hi below.")
                                 .weak()
                                 .italics(),
                         );
@@ -143,9 +203,7 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 ui.label(egui::RichText::new(&e.time).monospace().small().weak());
                             }
                             ui.label(
-                                egui::RichText::new(&e.title)
-                                    .strong()
-                                    .color(accent(&e.kind)),
+                                egui::RichText::new(&e.title).strong().color(accent(&e.kind)),
                             );
                         });
                         if !e.detail.is_empty() {
@@ -174,13 +232,10 @@ not json at all
 {\"title\":\"Reached orbit\",\"kind\":\"result\"}
 {\"time\":\"20:05\",\"title\":\"half-written";
         let entries = parse_feed(body);
-        // Two well-formed lines parse; the blank, the garbage, and the
-        // truncated final line are skipped.
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].title, "Designed the LV-1");
         assert_eq!(entries[0].kind, "build");
         assert_eq!(entries[0].detail, "two-stage kerolox");
-        // Missing fields default to empty, not an error.
         assert_eq!(entries[1].title, "Reached orbit");
         assert_eq!(entries[1].time, "");
         assert_eq!(entries[1].detail, "");
@@ -197,8 +252,29 @@ not json at all
     fn accent_maps_known_kinds() {
         assert_ne!(accent("build"), accent("result"));
         assert_ne!(accent("ship"), accent("warn"));
-        // Unknown kind falls back to the neutral colour.
+        assert_ne!(accent("user"), accent("build"));
         assert_eq!(accent("whatever"), accent(""));
+    }
+
+    #[test]
+    fn send_to_assistant_writes_inbox_and_echoes_feed() {
+        let dir = std::env::temp_dir();
+        let inbox = dir.join("valenx_test_assistant_inbox_xyz.jsonl");
+        let feed = dir.join("valenx_test_assistant_feed_xyz.jsonl");
+        let _ = std::fs::remove_file(&inbox);
+        let _ = std::fs::remove_file(&feed);
+        send_to_assistant(&inbox, &feed, "hello claude");
+        let ib = std::fs::read_to_string(&inbox).unwrap();
+        let fd = std::fs::read_to_string(&feed).unwrap();
+        assert!(ib.contains("hello claude"));
+        // The feed echo is a parseable FeedEntry with the "You" title.
+        let echoed = parse_feed(&fd);
+        assert_eq!(echoed.len(), 1);
+        assert_eq!(echoed[0].title, "You");
+        assert_eq!(echoed[0].detail, "hello claude");
+        assert_eq!(echoed[0].kind, "user");
+        let _ = std::fs::remove_file(&inbox);
+        let _ = std::fs::remove_file(&feed);
     }
 }
 
@@ -223,8 +299,7 @@ mod headless_ui_tests {
     }
 
     #[test]
-    fn workbench_draws_waiting_state_without_panic() {
-        // No feed file → the panel renders the "waiting" placeholder.
+    fn workbench_draws_empty_state_without_panic() {
         let mut app = ValenxApp::default();
         app.show_assistant_panel = true;
         app.assistant.feed_path =
