@@ -68,7 +68,13 @@ pub fn run() -> anyhow::Result<()> {
     eframe::run_native(
         "Valenx",
         native_options,
-        Box::new(move |cc| Ok(Box::new(ValenxApp::new(cc, initial_stl.clone())))),
+        Box::new(move |cc| {
+            // Larger default UI scale — the dark theme reads too small at 1.0 on
+            // big / hi-DPI monitors. Adjustable live via View -> Text size or the
+            // built-in Ctrl + / Ctrl - zoom.
+            cc.egui_ctx.set_zoom_factor(1.3);
+            Ok(Box::new(ValenxApp::new(cc, initial_stl.clone())))
+        }),
     )
     .map_err(|e| anyhow::anyhow!("eframe run_native failed: {e}"))
 }

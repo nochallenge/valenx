@@ -236,6 +236,21 @@ impl eframe::App for ValenxApp {
                 });
                 ui.menu_button(cat.lookup("menu.view"), |ui| {
                     crate::menu_ui::scrollable_menu(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Text size:");
+                        if ui.button("A-").on_hover_text("Smaller text (Ctrl -)").clicked() {
+                            let z = (ui.ctx().zoom_factor() - 0.1_f32).max(0.6);
+                            ui.ctx().set_zoom_factor(z);
+                        }
+                        if ui.button("Reset").on_hover_text("Default text size").clicked() {
+                            ui.ctx().set_zoom_factor(1.3);
+                        }
+                        if ui.button("A+").on_hover_text("Bigger text (Ctrl +)").clicked() {
+                            let z = (ui.ctx().zoom_factor() + 0.1_f32).min(2.5);
+                            ui.ctx().set_zoom_factor(z);
+                        }
+                    });
+                    ui.separator();
                     if ui
                         .radio(
                             self.shading == ShadingMode::Shaded,
