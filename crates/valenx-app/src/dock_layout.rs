@@ -362,21 +362,37 @@ impl ValenxApp {
             sync_tree(tree, &open_ids);
         }
 
-        // 5. Draw. Take the tree out so the behavior can borrow `self`.
-        if let Some(mut tree) = self.dock_tree.take() {
+        // 5. Host the dock. With the 3-D viewport visible the dock lives in a
+        //    resizable right SidePanel beside it (classic layout). When the
+        //    user hides the viewport (its ✕ / View → "Hide 3D viewport"), the
+        //    CentralPanel hosts the dock **full-width** instead — so e.g. a
+        //    Workbench+Agent grid uses the entire workspace — and we render
+        //    nothing here. The CentralPanel in `update.rs` calls
+        //    [`Self::render_dock_tree_into`] in that case.
+        if !self.viewport_hidden {
             egui::SidePanel::right("valenx_dock_region")
                 .resizable(true)
                 .default_width(700.0)
                 .show(ctx, |ui| {
-                    let mut beh = DockBehavior { app: self };
-                    tree.ui(&mut beh, ui);
+                    self.render_dock_tree_into(ui);
                 });
+        }
+    }
+
+    /// Render the dock tile-tree into `ui`: the actual draw, the
+    /// [`Option::take`]/put-back borrow dance (so [`DockBehavior`] can hold
+    /// `&mut self` while [`render_panel_body`] mutates workbench state), and
+    /// the post-draw deferred-work drain. Host-agnostic — called both from the
+    /// right SidePanel (viewport visible) and from the CentralPanel (viewport
+    /// hidden → the dock fills the whole workspace).
+    pub(crate) fn render_dock_tree_into(&mut self, ui: &mut egui::Ui) {
+        if let Some(mut tree) = self.dock_tree.take() {
+            let mut beh = DockBehavior { app: self };
+            tree.ui(&mut beh, ui);
             // Put it back for next frame (preserves the user's layout edits).
             self.dock_tree = Some(tree);
         }
-
-        // 6. Outside the panel borrow: drain any 3-D / overlay requests the
-        //    bodies queued this frame.
+        // Drain any 3-D / overlay requests the bodies queued this frame.
         drain_workbench_deferred(self);
     }
 
