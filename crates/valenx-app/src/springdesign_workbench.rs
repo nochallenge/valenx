@@ -8,9 +8,11 @@
 //! whose preset fixes the shear modulus `G`, and an applied axial force;
 //! "Analyze" builds a [`valenx_spring_design::HelicalSpring`] and reports
 //! the spring index `C`, the Wahl curvature-correction factor, the spring
-//! rate, the deflection under the force, and the Wahl-corrected (and
-//! uncorrected) torsional shear stress, and "Show 3-D" loads a
-//! representative helical coil solid into the central viewport to orbit.
+//! rate, the deflection under the force, the force needed to reach a
+//! user-set working deflection (the inverse rate-law solve), and the
+//! Wahl-corrected (and uncorrected) torsional shear stress, and "Show 3-D"
+//! loads a representative helical coil solid into the central viewport to
+//! orbit.
 
 use std::path::PathBuf;
 
@@ -72,6 +74,9 @@ pub struct SpringDesignWorkbenchState {
     material: SpringMaterial,
     /// Applied axial force `F` (N).
     force_n: f64,
+    /// Target working deflection (mm) for the inverse rate-law solve —
+    /// the force required to compress the spring this far.
+    target_deflection_mm: f64,
     /// Formatted performance readout (empty until the first analyze).
     result: String,
     /// Validation / compute error, if any.
@@ -92,6 +97,7 @@ impl Default for SpringDesignWorkbenchState {
             active_coils: 10.0,
             material: SpringMaterial::SpringSteel,
             force_n: 40.0,
+            target_deflection_mm: 5.0,
             result: String::new(),
             error: None,
             show_3d_request: false,
@@ -162,6 +168,15 @@ pub fn draw_springdesign_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("applied force F (N)");
                         ui.add(egui::DragValue::new(&mut s.force_n).speed(1.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("target deflection (mm)");
+                        ui.add(
+                            egui::DragValue::new(&mut s.target_deflection_mm).speed(0.1),
+                        )
+                        .on_hover_text(
+                            "Force required to compress the spring this far (F = k·delta)",
+                        );
                     });
 
                     ui.add_space(6.0);
@@ -234,6 +249,11 @@ fn compute(s: &SpringDesignWorkbenchState) -> Result<String, String> {
     let kw = spring.wahl_factor();
     let k = spring.rate();
     let deflection = spring.deflection(s.force_n).map_err(|e| e.to_string())?;
+    // Inverse rate-law solve: the force the spring needs to compress to a
+    // user-specified working deflection (F = k·delta).
+    let force_at_target = spring
+        .force_for_deflection(s.target_deflection_mm)
+        .map_err(|e| e.to_string())?;
     let tau = spring.shear_stress(s.force_n).map_err(|e| e.to_string())?;
     let tau0 = spring
         .shear_stress_uncorrected(s.force_n)
@@ -255,6 +275,7 @@ fn compute(s: &SpringDesignWorkbenchState) -> Result<String, String> {
          Wahl factor Kw  : {:.4}\n\
          spring rate k   : {:.4} N/mm\n\
          deflection delta: {:.3} mm\n\
+         F @ target delta: {:.2} N  (delta = {:.3} mm)\n\
          shear tau (Wahl): {:.2} MPa\n\
          shear tau0 (raw): {:.2} MPa",
         s.wire_diameter_mm,
@@ -267,6 +288,8 @@ fn compute(s: &SpringDesignWorkbenchState) -> Result<String, String> {
         kw,
         k,
         deflection,
+        force_at_target,
+        s.target_deflection_mm,
         tau,
         tau0,
     ))
@@ -453,6 +476,55 @@ mod tests {
         let kw_hand = (4.0 * c - 1.0) / (4.0 * c - 4.0) + 0.615 / c;
         assert!((spring.wahl_factor() - kw_hand).abs() < 1e-12);
         assert!((spring.wahl_factor() - 1.1840178571428).abs() < 1e-9);
+    }
+
+    #[test]
+    fn force_at_target_deflection_matches_hand_computed_ground_truth() {
+        // Ground truth: the inverse rate law F = k·delta. For the default
+        // spring (d=2, D=16, N=10, G=79300) the rate is
+        // k = G·d^4/(8·D^3·N) = 79300·16/(8·4096·10) = 3.8720703125 N/mm,
+        // so the force to reach the default 5.0 mm working deflection is
+        // F = 3.8720703125 · 5.0 = 19.3603515625 N -> "19.36" at 2 dp.
+        let mut s = SpringDesignWorkbenchState::default();
+        assert!((s.target_deflection_mm - 5.0).abs() < 1e-12);
+        run_springdesign(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default spring should analyze: {:?}",
+            s.error
+        );
+        assert!(s.result.contains("F @ target delta"));
+        assert!(
+            s.result.contains("19.36"),
+            "expected F = 19.36 N for 5.0 mm in readout, got:\n{}",
+            s.result
+        );
+
+        // Cross-check the crate method directly against the closed form and
+        // confirm it inverts deflection() exactly (round-trip).
+        let spring = build_spring(&s).expect("default spring is valid");
+        let k = 79_300.0 * 2.0_f64.powi(4) / (8.0 * 16.0_f64.powi(3) * 10.0);
+        let f_hand = k * 5.0;
+        let f_crate = spring
+            .force_for_deflection(s.target_deflection_mm)
+            .expect("5.0 mm is a valid deflection");
+        assert!(
+            (f_crate - f_hand).abs() < 1e-9,
+            "force was {f_crate}, expected {f_hand}"
+        );
+        assert!(
+            (f_crate - 19.3603515625).abs() < 1e-9,
+            "force was {f_crate}"
+        );
+        // F(delta(F)) == F to floating-point precision.
+        let delta = spring
+            .deflection(s.force_n)
+            .expect("default force is valid");
+        let back = spring.force_for_deflection(delta).expect("delta is valid");
+        assert!(
+            (back - s.force_n).abs() < 1e-9,
+            "round-trip force was {back}"
+        );
     }
 
     #[test]
