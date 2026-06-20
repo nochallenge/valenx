@@ -43,6 +43,9 @@ pub struct InclinedPlaneWorkbenchState {
     mu: f64,
     /// Block weight `W` (newtons).
     weight_n: f64,
+    /// Target vertical lift `h` (metres) used to report the incline
+    /// (hypotenuse) distance the effort acts over, `h / sin(θ)`.
+    lift_height_m: f64,
     /// Whether the headline effort is for raising or lowering the load.
     direction: LoadDirection,
     /// Formatted performance readout (empty until the first analyze).
@@ -57,11 +60,13 @@ pub struct InclinedPlaneWorkbenchState {
 impl Default for InclinedPlaneWorkbenchState {
     fn default() -> Self {
         // A 30-degree loading ramp, mu = 0.2, 100 N block: not self-locking,
-        // effort to raise ~67.3 N, efficiency ~0.74.
+        // effort to raise ~67.3 N, efficiency ~0.74. Lifting 1 m up a 30°
+        // ramp travels 1 / sin30 = 2.000 m along the incline.
         Self {
             angle_deg: 30.0,
             mu: 0.2,
             weight_n: 100.0,
+            lift_height_m: 1.0,
             direction: LoadDirection::Raise,
             result: String::new(),
             error: None,
@@ -106,6 +111,10 @@ pub fn draw_inclinedplane_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("block weight W (N)");
                         ui.add(egui::DragValue::new(&mut s.weight_n).speed(1.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("lift height h (m)");
+                        ui.add(egui::DragValue::new(&mut s.lift_height_m).speed(0.1));
                     });
 
                     ui.add_space(4.0);
@@ -180,6 +189,13 @@ fn compute(s: &InclinedPlaneWorkbenchState) -> Result<String, String> {
     let eta = ramp.efficiency();
     let phi_deg = ramp.friction_angle_rad().to_degrees();
     let theta_deg = ramp.geometry().angle_deg();
+    // Incline (hypotenuse) distance the effort travels to gain `h`:
+    // slope length = h / sin(θ) = h · ideal MA.
+    let lift_h = s.lift_height_m;
+    let slope_len = ramp
+        .geometry()
+        .slope_length_for_height(lift_h)
+        .map_err(|e| e.to_string())?;
 
     let lock = if f.is_self_locking {
         "yes (holds under gravity)"
@@ -204,7 +220,8 @@ fn compute(s: &InclinedPlaneWorkbenchState) -> Result<String, String> {
          self-locking      : {lock}\n\n\
          ideal MA (1/sinθ) : {ima:.3}\n\
          actual MA (W/F↑)  : {ama:.3}\n\
-         efficiency η      : {eta:.3}",
+         efficiency η      : {eta:.3}\n\
+         incline for h={lift_h:.2} m : {slope_len:.3} m",
         s.mu, s.weight_n, f.normal, f.slope_force, f.friction, f.effort_to_raise, f.effort_to_lower,
     ))
 }
@@ -356,6 +373,35 @@ mod tests {
         let hand = 1.0 / (30.0_f64.to_radians().sin());
         assert!((ima - hand).abs() < 1e-12);
         assert!((ima - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn incline_distance_for_lift_height_ground_truth() {
+        // Ground truth: lifting h = 1 m up a 30° ramp travels
+        // h / sin(30°) = 1 / 0.5 = 2.000 m along the incline, which is
+        // exactly h times the ideal mechanical advantage (1/sin θ = 2).
+        let mut s = InclinedPlaneWorkbenchState::default();
+        run_inclinedplane(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default ramp should analyze: {:?}",
+            s.error
+        );
+        assert!(
+            s.result.contains("incline for h=1.00 m : 2.000 m"),
+            "expected the 2.000 m incline line, got:\n{result}",
+            result = s.result
+        );
+
+        // Hand check against the crate, independent of formatting.
+        let ramp = build_ramp(&s).expect("default ramp builds");
+        let len = ramp
+            .geometry()
+            .slope_length_for_height(s.lift_height_m)
+            .expect("non-negative height");
+        let hand = 1.0_f64 / 30.0_f64.to_radians().sin();
+        assert!((len - hand).abs() < 1e-12, "len={len}, hand={hand}");
+        assert!((len - 2.0).abs() < 1e-12, "len={len}");
     }
 
     #[test]
