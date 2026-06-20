@@ -563,10 +563,18 @@ impl WgpuRenderer {
     }
 
     fn ensure_offscreen_for(&mut self, renderer: &mut egui_wgpu::Renderer, size: [u32; 2]) {
-        let [w, h] = size;
-        if w == 0 || h == 0 {
+        if size[0] == 0 || size[1] == 0 {
             return;
         }
+        // Clamp to the device's max 2-D texture dimension (commonly 8192).
+        // On hi-DPI or very wide windows — especially with a >1 text-zoom
+        // factor — the requested viewport size can exceed wgpu's limit,
+        // which would otherwise be a fatal Device::create_texture validation
+        // error that crashes the app on launch before the window appears.
+        let max_dim = self.device.limits().max_texture_dimension_2d;
+        let w = size[0].min(max_dim);
+        let h = size[1].min(max_dim);
+        let size = [w, h];
         if let Some(os) = &self.offscreen {
             if os.size == size {
                 return;
