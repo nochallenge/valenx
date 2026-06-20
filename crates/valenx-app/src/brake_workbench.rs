@@ -7,8 +7,10 @@
 //! force, friction coefficient, pad-face count and the annular pad radii)
 //! plus a stopping scenario (mass, speed, deceleration); "Analyze" derives
 //! the uniform-wear effective radius, the Coulomb friction torque
-//! `T = mu * F * n_pads * r_eff`, and the kinetic energy / stopping
-//! distance / stopping time / average braking power of the stop, and
+//! `T = mu * F * n_pads * r_eff`, the larger uniform-pressure (fresh-pad)
+//! effective radius and its higher initial torque, and the kinetic energy
+//! / stopping distance / stopping time / average braking power of the
+//! stop, and
 //! "Show 3-D brake" loads a representative disc-plus-caliper solid into
 //! the central viewport.
 
@@ -18,7 +20,9 @@ use std::path::PathBuf;
 use eframe::egui;
 use nalgebra::Vector3;
 
-use valenx_brake::disc::{disc_torque, effective_radius_uniform_wear, friction_force};
+use valenx_brake::disc::{
+    disc_torque, effective_radius_uniform_pressure, effective_radius_uniform_wear, friction_force,
+};
 use valenx_brake::energy::{
     average_braking_power, kinetic_energy, stopping_distance, stopping_time,
 };
@@ -199,10 +203,25 @@ fn torque(s: &BrakeWorkbenchState) -> Result<(f64, f64), String> {
     Ok((r_eff, t))
 }
 
+/// The **fresh-pad** (uniform-pressure) effective radius and the friction
+/// torque it produces `(r_eff, torque)`. A new, not-yet-bedded pad
+/// presses with uniform contact pressure, giving a larger effective
+/// radius — `r_eff = (2/3)(r_o^3 - r_i^3)/(r_o^2 - r_i^2)` — and hence a
+/// higher initial brake torque than the worn-in `torque` value. The
+/// pair quantifies the bedding-in bite spread. Extracted so it is
+/// unit-testable.
+fn torque_fresh(s: &BrakeWorkbenchState) -> Result<(f64, f64), String> {
+    let r_eff =
+        effective_radius_uniform_pressure(s.r_inner_m, s.r_outer_m).map_err(|e| e.to_string())?;
+    let t = disc_torque(s.mu, s.clamp_force_n, s.n_pads, r_eff).map_err(|e| e.to_string())?;
+    Ok((r_eff, t))
+}
+
 /// Evaluate the brake and format the full readout, mapping any domain
 /// error to a display string. Extracted so it is unit-testable.
 fn compute(s: &BrakeWorkbenchState) -> Result<String, String> {
     let (r_eff, t) = torque(s)?;
+    let (r_eff_fresh, t_fresh) = torque_fresh(s)?;
     let f_face = friction_force(s.mu, s.clamp_force_n).map_err(|e| e.to_string())?;
     let e_kin = kinetic_energy(s.mass_kg, s.speed_mps).map_err(|e| e.to_string())?;
     let dist = stopping_distance(s.speed_mps, s.decel_mps2).map_err(|e| e.to_string())?;
@@ -216,7 +235,9 @@ fn compute(s: &BrakeWorkbenchState) -> Result<String, String> {
          pad annulus     : {:.3} -> {:.3} m\n\
          r_eff (wear)    : {:.4} m\n\
          friction / face : {:.1} N\n\
-         brake torque T  : {:.2} N·m\n\n\
+         brake torque T  : {:.2} N·m\n\
+         r_eff (fresh)   : {:.4} m\n\
+         torque (fresh)  : {:.2} N·m\n\n\
          mass / speed    : {:.0} kg / {:.1} m/s\n\
          kinetic energy  : {:.2} kJ\n\
          stopping dist   : {:.2} m\n\
@@ -230,6 +251,8 @@ fn compute(s: &BrakeWorkbenchState) -> Result<String, String> {
         r_eff,
         f_face,
         t,
+        r_eff_fresh,
+        t_fresh,
         s.mass_kg,
         s.speed_mps,
         e_kin / 1_000.0,
@@ -442,6 +465,61 @@ mod tests {
         let expected_t = s.mu * s.clamp_force_n * f64::from(s.n_pads) * expected_r;
         assert!((t - expected_t).abs() < 1e-9, "torque {t} vs {expected_t}");
         assert!((t - 768.0).abs() < 1e-9, "torque {t}");
+    }
+
+    #[test]
+    fn fresh_pad_torque_matches_uniform_pressure_ground_truth() {
+        // Ground truth: a fresh (uniform-pressure) pad has the LARGER
+        // effective radius r_eff = (2/3)(r_o^3 - r_i^3)/(r_o^2 - r_i^2),
+        // which for the 0.10 -> 0.14 m annulus is
+        //   (2/3)(0.14^3 - 0.10^3)/(0.14^2 - 0.10^2)
+        // = (2/3)(0.001744/0.0096) = 0.121111... m, exceeding the
+        // uniform-wear 0.12 m by exactly (r_o - r_i)^2 / (6(r_o + r_i)).
+        let s = BrakeWorkbenchState::default();
+        let (r_eff_fresh, t_fresh) = torque_fresh(&s).unwrap();
+
+        let num = s.r_outer_m.powi(3) - s.r_inner_m.powi(3);
+        let den = s.r_outer_m.powi(2) - s.r_inner_m.powi(2);
+        let expected_r = (2.0 / 3.0) * num / den;
+        assert!(
+            (r_eff_fresh - expected_r).abs() < 1e-12,
+            "r_eff_fresh {r_eff_fresh} vs {expected_r}"
+        );
+
+        // The fresh radius exceeds the worn radius by the analytic gap.
+        let r_wear = 0.5 * (s.r_inner_m + s.r_outer_m);
+        let gap = (s.r_outer_m - s.r_inner_m).powi(2) / (6.0 * (s.r_outer_m + s.r_inner_m));
+        assert!(
+            (r_eff_fresh - (r_wear + gap)).abs() < 1e-12,
+            "fresh {r_eff_fresh} vs wear+gap {}",
+            r_wear + gap
+        );
+
+        // Torque T = mu * F * n_pads * r_eff_fresh = 0.4*8000*2*0.121111..
+        // = 775.111.. N·m, larger than the worn-in 768 N·m.
+        let expected_t = s.mu * s.clamp_force_n * f64::from(s.n_pads) * expected_r;
+        assert!(
+            (t_fresh - expected_t).abs() < 1e-9,
+            "t_fresh {t_fresh} vs {expected_t}"
+        );
+        assert!(
+            t_fresh > 768.0,
+            "fresh torque {t_fresh} should exceed worn 768"
+        );
+
+        // The formatted readout surfaces both fresh-pad lines.
+        let out = compute(&s).unwrap();
+        assert!(
+            out.contains("r_eff (fresh)"),
+            "missing fresh radius line: {out}"
+        );
+        assert!(
+            out.contains("torque (fresh)"),
+            "missing fresh torque line: {out}"
+        );
+        // r_eff (fresh) : 0.1211 m  and  torque (fresh) : 775.11 N·m.
+        assert!(out.contains("0.1211"), "fresh r_eff substring: {out}");
+        assert!(out.contains("775.11"), "fresh torque substring: {out}");
     }
 
     #[test]
