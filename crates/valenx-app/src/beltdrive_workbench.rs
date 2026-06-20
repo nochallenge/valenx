@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use eframe::egui;
 use nalgebra::Vector3;
 
-use valenx_beltdrive::{DriveAnalysis, DriveSpec};
+use valenx_beltdrive::{belt_length_open, DriveAnalysis, DriveSpec};
 use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
@@ -202,6 +202,16 @@ fn compute(s: &BeltDriveWorkbenchState) -> Result<String, String> {
     let a: DriveAnalysis = spec.analyze().map_err(|e| e.to_string())?;
 
     let driven_rpm = a.driven_rev_per_sec * 60.0;
+    // Exact open-belt length (two straight tangents + the two wrapped
+    // arcs): the practical "what length of belt to order" figure. The
+    // free function sorts the small/large radii internally, so the
+    // driver/driven order does not matter.
+    let belt_length = belt_length_open(
+        spec.driver_diameter / 2.0,
+        spec.driven_diameter / 2.0,
+        spec.center_distance,
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(format!(
         "driver / driven : {:.0} / {:.0} mm\n\
@@ -212,6 +222,7 @@ fn compute(s: &BeltDriveWorkbenchState) -> Result<String, String> {
          driver / driven : {:.0} / {:.0} rpm\n\n\
          wrap (small)    : {:.1}°\n\
          wrap (large)    : {:.1}°\n\
+         belt length     : {belt_length:.3} m ({:.0} mm)\n\n\
          capstan T1/T2   : {:.3}\n\
          centrifugal Tc  : {:.1} N\n\
          max power       : {:.3} kW",
@@ -225,6 +236,7 @@ fn compute(s: &BeltDriveWorkbenchState) -> Result<String, String> {
         driven_rpm,
         a.wrap_small.to_degrees(),
         a.wrap_large.to_degrees(),
+        belt_length * 1000.0,
         a.tension_ratio,
         a.centrifugal_tension,
         a.max_power / 1000.0,
@@ -469,6 +481,40 @@ mod tests {
         assert!((a.belt_speed - expected_v).abs() < 1e-9);
         // Capstan ratio on the small pulley: T1/T2 = exp(mu * theta_small).
         assert!((a.tension_ratio - (s.mu * a.wrap_small).exp()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn belt_length_is_exact_open_belt_ground_truth() {
+        // Ground truth for the default 100/250 mm pulleys 500 mm apart:
+        // the exact open-belt length is the two straight tangents plus the
+        // two wrapped arcs,
+        //   alpha = asin((R_large - R_small) / C),
+        //   L = 2*C*cos(alpha) + R_small*(pi - 2*alpha) + R_large*(pi + 2*alpha).
+        // With R_small = 0.05 m, R_large = 0.125 m, C = 0.5 m this is
+        // 0.98868 + 0.14202 + 0.43034 = 1.56105 m, i.e. "1.561 m".
+        let s = BeltDriveWorkbenchState::default();
+        let r_small = s.driver_diameter_mm / 1000.0 / 2.0;
+        let r_large = s.driven_diameter_mm / 1000.0 / 2.0;
+        let c = s.center_distance_mm / 1000.0;
+        let alpha = ((r_large - r_small) / c).asin();
+        let expected =
+            2.0 * c * alpha.cos() + r_small * (PI - 2.0 * alpha) + r_large * (PI + 2.0 * alpha);
+        assert!(
+            (expected - 1.561_049_951_958_976).abs() < 1e-12,
+            "hand check drifted: {expected}"
+        );
+
+        // The crate's free function must reproduce that closed form.
+        let l = belt_length_open(r_small, r_large, c).unwrap();
+        assert!((l - expected).abs() < 1e-12, "belt_length_open: {l}");
+
+        // …and the readout must surface it (3-decimal metres).
+        let out = compute(&s).expect("default belt drive computes");
+        assert!(
+            out.contains("belt length     : 1.561 m"),
+            "missing belt length line: {out}"
+        );
+        assert!(out.contains("1561 mm"), "missing mm form: {out}");
     }
 
     #[test]
