@@ -5,10 +5,11 @@
 //! [`egui::SidePanel`] gated on `crate::ValenxApp::show_capacitor_workbench`,
 //! toggled from the View menu. The form sets a parallel-plate geometry
 //! (overlapping plate area, gap, dielectric relative permittivity) plus a
-//! terminal voltage and a drive frequency; "Analyze" computes the ideal
-//! capacitance `C = eps_r eps0 A / d`, the stored energy `E = 1/2 C V^2`,
-//! the stored charge `Q = C V` and the capacitive reactance
-//! `X_C = 1 / (2 pi f C)`, and "Show 3-D capacitor" loads a representative
+//! terminal voltage, a drive frequency and a series charging resistance;
+//! "Analyze" computes the ideal capacitance `C = eps_r eps0 A / d`, the
+//! stored energy `E = 1/2 C V^2`, the stored charge `Q = C V`, the
+//! capacitive reactance `X_C = 1 / (2 pi f C)` and the RC charging time
+//! constant `tau = R C`, and "Show 3-D capacitor" loads a representative
 //! parallel-plate solid (two plates with a dielectric slab between) into the
 //! central viewport.
 
@@ -19,6 +20,7 @@ use nalgebra::Vector3;
 
 use valenx_capacitor::parallel_plate;
 use valenx_capacitor::reactance;
+use valenx_capacitor::transient;
 use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
@@ -37,6 +39,8 @@ pub struct CapacitorWorkbenchState {
     voltage_v: f64,
     /// Drive frequency `f` for the reactance (Hz).
     frequency_hz: f64,
+    /// Series charging resistance `R` for the RC time constant (ohms).
+    series_resistance_ohm: f64,
     /// Formatted performance readout (empty until the first analyze).
     result: String,
     /// Validation / compute error, if any.
@@ -51,12 +55,14 @@ impl Default for CapacitorWorkbenchState {
         // A 100 cm^2 = 0.01 m^2 parallel-plate capacitor with a 0.1 mm
         // dielectric film of eps_r = 3.5, charged to 50 V and driven at
         // 1 kHz: C ~ 3.10 nF, E ~ 3.87 uJ, Q ~ 155 nC, X_C ~ 51.4 kohm.
+        // Charged through a 10 kohm series resistor: tau = R C ~ 31.0 us.
         Self {
             area_m2: 0.01,
             gap_m: 0.0001,
             eps_r: 3.5,
             voltage_v: 50.0,
             frequency_hz: 1000.0,
+            series_resistance_ohm: 10_000.0,
             result: String::new(),
             error: None,
             show_3d_request: false,
@@ -114,6 +120,10 @@ pub fn draw_capacitor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("frequency f (Hz)");
                         ui.add(egui::DragValue::new(&mut s.frequency_hz).speed(10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("series R (Ω)");
+                        ui.add(egui::DragValue::new(&mut s.series_resistance_ohm).speed(100.0));
                     });
 
                     ui.add_space(6.0);
@@ -173,25 +183,30 @@ fn compute(s: &CapacitorWorkbenchState) -> Result<String, String> {
     let energy = parallel_plate::stored_energy(c, s.voltage_v).map_err(|e| e.to_string())?;
     let q = parallel_plate::charge(c, s.voltage_v).map_err(|e| e.to_string())?;
     let xc = reactance::reactance(s.frequency_hz, c).map_err(|e| e.to_string())?;
+    let tau = transient::time_constant(s.series_resistance_ohm, c).map_err(|e| e.to_string())?;
 
     Ok(format!(
         "plate area A    : {:.4} m²\n\
          gap d           : {:.6} m\n\
          dielectric εr   : {:.3}\n\
-         voltage / freq  : {:.1} V / {:.1} Hz\n\n\
+         voltage / freq  : {:.1} V / {:.1} Hz\n\
+         series R        : {:.1} Ω\n\n\
          capacitance C   : {:.4} nF\n\
          stored energy E : {:.4} µJ\n\
          stored charge Q : {:.4} nC\n\
-         reactance X_C   : {:.2} Ω",
+         reactance X_C   : {:.2} Ω\n\
+         RC constant τ   : {:.4} µs",
         s.area_m2,
         s.gap_m,
         s.eps_r,
         s.voltage_v,
         s.frequency_hz,
+        s.series_resistance_ohm,
         c * 1.0e9,
         energy * 1.0e6,
         q * 1.0e9,
         xc,
+        tau * 1.0e6,
     ))
 }
 
@@ -331,12 +346,15 @@ mod tests {
         assert!(s.result.contains("capacitance C"));
         assert!(s.result.contains("stored energy E"));
         assert!(s.result.contains("reactance X_C"));
+        assert!(s.result.contains("RC constant τ"));
         // 0.01 m^2, 0.1 mm, eps_r 3.5 -> C ~ 3.099 nF; 50 V -> E ~ 3.874 uJ;
-        // Q ~ 154.95 nC; at 1 kHz X_C ~ 51357.44 ohm.
+        // Q ~ 154.95 nC; at 1 kHz X_C ~ 51357.44 ohm; with R = 10 kohm
+        // tau = R C ~ 30.9897 us.
         assert!(s.result.contains("3.0990"));
         assert!(s.result.contains("3.8737"));
         assert!(s.result.contains("154.9483"));
         assert!(s.result.contains("51357.44"));
+        assert!(s.result.contains("30.9897"));
     }
 
     #[test]
@@ -365,6 +383,34 @@ mod tests {
         assert!((c_api - c).abs() < 1e-18);
         assert!((e_api - energy).abs() < 1e-18);
         assert!((xc_api - xc).abs() < 1e-6 * xc);
+    }
+
+    #[test]
+    fn compute_reports_rc_time_constant_ground_truth() {
+        // Ground truth: tau = R * C with C = eps_r * eps0 * A / d.
+        // Default: R = 10000, C = 8.8541878128e-12 * 3.5 * 0.01 / 0.0001
+        //        = 3.098965734e-9 F  ->  tau = 3.098965734e-5 s = 30.9897 us.
+        let s = CapacitorWorkbenchState::default();
+        let c = parallel_plate::VACUUM_PERMITTIVITY * s.eps_r * s.area_m2 / s.gap_m;
+        let tau = s.series_resistance_ohm * c;
+
+        let c_api = parallel_plate::capacitance(s.eps_r, s.area_m2, s.gap_m).unwrap();
+        let tau_api = transient::time_constant(s.series_resistance_ohm, c_api).unwrap();
+
+        // Hand value: 10_000 * 3.0989657344800006e-9 = 3.09896573448e-5 s.
+        let tau_expected = 3.098_965_734_48e-5;
+        assert!(
+            (tau_api - tau).abs() < 1e-18,
+            "tau_api {tau_api} vs recomputed {tau}"
+        );
+        assert!(
+            (tau_api - tau_expected).abs() < 1e-12,
+            "tau_api {tau_api} vs hand value {tau_expected}"
+        );
+
+        // The formatted readout shows it in microseconds to 4 dp.
+        let r = compute(&s).unwrap();
+        assert!(r.contains("RC constant τ   : 30.9897 µs"), "readout: {r}");
     }
 
     #[test]
