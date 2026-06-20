@@ -94,9 +94,11 @@ pub fn draw_brake_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Brake",
         |app, ui| {
             ui.label(
-                egui::RichText::new("native disc / caliper friction torque + stopping · valenx-brake")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "native disc / caliper friction torque + stopping · valenx-brake",
+                )
+                .weak()
+                .small(),
             );
             ui.separator();
 

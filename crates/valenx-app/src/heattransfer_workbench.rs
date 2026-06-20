@@ -75,18 +75,20 @@ pub fn draw_heattransfer_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_heattransfer_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Heat Transfer",
-                "native composite-wall 1-D heat loss · valenx-heat-transfer",
-            ) {
-                app.show_heattransfer_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_heattransfer_workbench",
+        "Heat Transfer",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native composite-wall 1-D heat loss · valenx-heat-transfer",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.heattransfer;
             egui::ScrollArea::vertical()
@@ -156,7 +158,11 @@ pub fn draw_heattransfer_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_heattransfer_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.heattransfer` borrow is
     // released here): build the wall's 3-D solid and load it.

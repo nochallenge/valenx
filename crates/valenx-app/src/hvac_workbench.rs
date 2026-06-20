@@ -91,18 +91,18 @@ pub fn draw_hvac_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_hvac_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_hvac_workbench")
-        .resizable(true)
-        .default_width(340.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "HVAC",
-                "duct sizing + pressure drop · valenx-hvac",
-            ) {
-                app.show_hvac_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_hvac_workbench",
+        "HVAC",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("duct sizing + pressure drop · valenx-hvac")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.hvac;
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut s.shape, DuctShape::Round, "Round");
@@ -156,7 +156,11 @@ pub fn draw_hvac_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     .small(),
                 );
             }
-        });
+        },
+    );
+    if close {
+        app.show_hvac_workbench = false;
+    }
 }
 
 #[cfg(test)]

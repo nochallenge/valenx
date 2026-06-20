@@ -68,18 +68,9 @@ pub fn draw_marine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_marine_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Marine / Hull",
-                "native box-form hull hydrostatics + stability · valenx-marine",
-            ) {
-                app.show_marine_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_marine_workbench", "Marine / Hull", |app, ui| {
+            ui.label(egui::RichText::new("native box-form hull hydrostatics + stability · valenx-marine").weak().small());
+            ui.separator();
 
             let s = &mut app.marine;
             egui::ScrollArea::vertical()
@@ -157,7 +148,10 @@ pub fn draw_marine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        }, );
+    if close {
+        app.show_marine_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.marine` borrow taken in
     // the closure above is released here): build the hull's 3-D solid and

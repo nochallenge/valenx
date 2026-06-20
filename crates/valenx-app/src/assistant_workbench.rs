@@ -85,7 +85,11 @@ pub fn assistant_inbox_path() -> PathBuf {
 /// Append a single line to a `.jsonl` file (create + append; best-effort).
 fn append_line(path: &Path, line: &str) {
     use std::io::Write;
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
         let _ = writeln!(f, "{line}");
     }
 }
@@ -165,8 +169,7 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             .hint_text("Message Claude…")
                             .desired_width(f32::INFINITY),
                     );
-                    let enter =
-                        resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     if enter || ui.button("Send").clicked() {
                         let msg = app.assistant.input.trim().to_string();
                         if !msg.is_empty() {
@@ -203,7 +206,9 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 ui.label(egui::RichText::new(&e.time).monospace().small().weak());
                             }
                             ui.label(
-                                egui::RichText::new(&e.title).strong().color(accent(&e.kind)),
+                                egui::RichText::new(&e.title)
+                                    .strong()
+                                    .color(accent(&e.kind)),
                             );
                         });
                         if !e.detail.is_empty() {
@@ -216,7 +221,9 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     if entries.last().map(|e| e.kind.as_str()) == Some("user") {
                         ui.add_space(6.0);
                         ui.label(
-                            egui::RichText::new("Claude is responding...").weak().italics(),
+                            egui::RichText::new("Claude is responding...")
+                                .weak()
+                                .italics(),
                         );
                     }
                 });

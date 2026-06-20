@@ -96,18 +96,18 @@ pub fn draw_pulley_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_pulley_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Pulley System",
-                "native rope-and-pulley mechanical advantage · valenx-pulley",
-            ) {
-                app.show_pulley_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_pulley_workbench",
+        "Pulley System",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native rope-and-pulley mechanical advantage · valenx-pulley")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.pulley;
             egui::ScrollArea::vertical()
@@ -183,7 +183,11 @@ pub fn draw_pulley_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_pulley_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.pulley` borrow is
     // released here): build the assembly's 3-D solid and load it.

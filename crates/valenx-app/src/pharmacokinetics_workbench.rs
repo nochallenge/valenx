@@ -71,18 +71,9 @@ pub fn draw_pharmacokinetics_workbench(app: &mut ValenxApp, ctx: &egui::Context)
         return;
     }
 
-    egui::SidePanel::right("valenx_pharmacokinetics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Pharmacokinetics",
-                "native one-compartment PK dosing · valenx-pharmacokinetics",
-            ) {
-                app.show_pharmacokinetics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_pharmacokinetics_workbench", "Pharmacokinetics", |app, ui| {
+            ui.label(egui::RichText::new("native one-compartment PK dosing · valenx-pharmacokinetics").weak().small());
+            ui.separator();
 
             let s = &mut app.pharmacokinetics;
             egui::ScrollArea::vertical()
@@ -144,7 +135,10 @@ pub fn draw_pharmacokinetics_workbench(app: &mut ValenxApp, ctx: &egui::Context)
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        }, );
+    if close {
+        app.show_pharmacokinetics_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.pharmacokinetics` borrow
     // is released here): build the vial's 3-D solid and load it.

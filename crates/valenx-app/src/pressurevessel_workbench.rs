@@ -91,18 +91,18 @@ pub fn draw_pressurevessel_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_pressurevessel_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Pressure Vessel",
-                "native closed-form vessel stress · valenx-pressure-vessel",
-            ) {
-                app.show_pressurevessel_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_pressurevessel_workbench",
+        "Pressure Vessel",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native closed-form vessel stress · valenx-pressure-vessel")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.pressurevessel;
             egui::ScrollArea::vertical()
@@ -171,7 +171,11 @@ pub fn draw_pressurevessel_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_pressurevessel_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.pressurevessel` borrow
     // is released here): build the vessel's 3-D solid and load it.

@@ -74,18 +74,18 @@ pub fn draw_plate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_plate_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Plate Bending",
-                "native thin circular-plate bending · valenx-plate",
-            ) {
-                app.show_plate_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_plate_workbench",
+        "Plate Bending",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native thin circular-plate bending · valenx-plate")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.plate;
             egui::ScrollArea::vertical()
@@ -162,7 +162,11 @@ pub fn draw_plate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_plate_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.plate` borrow is
     // released here): build the plate's 3-D disc and load it.

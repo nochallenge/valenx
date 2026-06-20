@@ -90,18 +90,9 @@ pub fn draw_rivet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_rivet_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Riveted Joint",
-                "native closed-form rivet-joint strength · valenx-rivet",
-            ) {
-                app.show_rivet_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_rivet_workbench", "Riveted Joint", |app, ui| {
+            ui.label(egui::RichText::new("native closed-form rivet-joint strength · valenx-rivet").weak().small());
+            ui.separator();
 
             let s = &mut app.rivet;
             egui::ScrollArea::vertical()
@@ -187,7 +178,8 @@ pub fn draw_rivet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        }, );
+    if close { app.show_rivet_workbench = false; }
 
     // Serviced after the panel draws (the `&mut app.rivet` borrow is
     // released here): build the joint's 3-D solid and load it.

@@ -74,18 +74,20 @@ pub fn draw_gearbox_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_gearbox_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Gearbox",
-                "native two-stage compound gear-train analysis · valenx-gearbox",
-            ) {
-                app.show_gearbox_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_gearbox_workbench",
+        "Gearbox",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native two-stage compound gear-train analysis · valenx-gearbox",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.gearbox;
             egui::ScrollArea::vertical()
@@ -149,7 +151,11 @@ pub fn draw_gearbox_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_gearbox_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.gearbox` borrow is
     // released here): build the gearbox's 3-D solid and load it.
