@@ -234,6 +234,10 @@ fn compute(s: &LeadscrewWorkbenchState) -> Result<String, String> {
     } else {
         "back-drivable"
     };
+    // Angular margin to the self-locking threshold: phi - lambda. Positive
+    // when self-locking (with headroom), zero at the boundary, negative when
+    // back-drivable — a single "how far from locking" number.
+    let locking_margin_deg = bd.locking_margin_rad().to_degrees();
 
     // The static torque/thrust pairing, using the friction-derived eta as the
     // lumped efficiency so the two directions stay mutually consistent.
@@ -260,6 +264,7 @@ fn compute(s: &LeadscrewWorkbenchState) -> Result<String, String> {
          resolution      : {:.5} mm/microstep\n\n\
          friction μ      : {:.3}\n\
          critical μ      : {:.3} ({lock_label})\n\
+         locking margin  : {:.3} deg (φ−λ)\n\
          screw efficiency: {:.1} %\n\n\
          torque          : {:.2} N·mm\n\
          thrust          : {:.2} N",
@@ -272,6 +277,7 @@ fn compute(s: &LeadscrewWorkbenchState) -> Result<String, String> {
         resolution_mm,
         s.friction_mu,
         mu_crit,
+        locking_margin_deg,
         eta * 100.0,
         torque_n_mm,
         thrust_n,
@@ -476,6 +482,38 @@ mod tests {
         assert!((feed - lead * rpm).abs() < 1e-9, "feed = {feed}");
         let per_s = screw.linear_speed_mm_per_s(rpm).unwrap();
         assert!((per_s - feed / 60.0).abs() < 1e-9, "per_s = {per_s}");
+    }
+
+    #[test]
+    fn locking_margin_matches_friction_minus_lead_angle_ground_truth() {
+        use std::f64::consts::PI;
+        // Ground truth: the locking margin is phi - lambda, with
+        // phi = atan(mu) and lambda = atan(lead / (pi * d_m)). For the
+        // default T8x8 screw (lead = 8, d_m = 8, mu = 0.2) the lead angle
+        // (~17.657 deg) exceeds the friction angle (~11.310 deg), so the
+        // margin is negative (back-drivable): atan(0.2) - atan(1/pi).
+        let s = LeadscrewWorkbenchState::default();
+        let lambda = (s.lead_mm / (PI * s.pitch_diameter_mm)).atan();
+        let phi = s.friction_mu.atan();
+        let expected_deg = (phi - lambda).to_degrees();
+        // Hand value: -6.34685... deg, rounding to -6.347 at 3 dp.
+        assert!(
+            (expected_deg - (-6.346_854_677)).abs() < 1e-6,
+            "hand-computed margin drifted: {expected_deg}"
+        );
+        let mut s = LeadscrewWorkbenchState::default();
+        run_leadscrew(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default screw should analyze: {:?}",
+            s.error
+        );
+        // The readout surfaces the margin to 3 dp in degrees.
+        assert!(
+            s.result.contains("locking margin  : -6.347 deg (φ−λ)"),
+            "missing locking-margin line in: {}",
+            s.result
+        );
     }
 
     #[test]
