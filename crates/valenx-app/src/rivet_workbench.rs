@@ -8,8 +8,9 @@
 //! thickness) and the permissible shear / bearing / tensile stresses;
 //! "Analyze" evaluates the three classic failure modes — rivet shear,
 //! plate bearing and net-section tension — and reports each failure load,
-//! the governing strength and mode, the joint efficiency, and the factor
-//! of safety / utilization against an applied service load. "Show 3-D"
+//! the governing strength and mode, the solid (un-drilled) plate strength
+//! that anchors the efficiency, the joint efficiency, and the factor of
+//! safety / utilization against an applied service load. "Show 3-D"
 //! loads a representative riveted-lap-joint solid (two overlapping plates
 //! pierced by rivets) into the central viewport.
 
@@ -247,6 +248,7 @@ fn compute(s: &RivetWorkbenchState) -> Result<String, String> {
          P bearing       : {bearing:.2} kN\n\
          P tension       : {tension:.2} kN\n\
          governing       : {mode} at {strength:.2} kN\n\
+         solid plate     : {solid:.2} kN\n\
          efficiency      : {eff:.1} %\n\n\
          applied load    : {applied:.2} kN\n\
          factor of safety: {fos:.2}\n\
@@ -265,6 +267,7 @@ fn compute(s: &RivetWorkbenchState) -> Result<String, String> {
         bearing = r.bearing / 1.0e3,
         tension = r.tension / 1.0e3,
         strength = r.strength / 1.0e3,
+        solid = r.solid / 1.0e3,
         eff = r.efficiency * 100.0,
         applied = s.applied_kn,
         util = util * 100.0,
@@ -470,6 +473,37 @@ mod tests {
         assert!(s.result.contains("rivet shear"));
         assert!(s.result.contains("75.40 kN"));
         assert!(s.result.contains("50.3 %"));
+    }
+
+    #[test]
+    fn solid_plate_strength_matches_hand_computed_value() {
+        // Ground truth: the solid (un-drilled) plate strength is
+        // `P_solid = w · t · σ_t`, the denominator of the joint
+        // efficiency. For the default textbook joint that is
+        // 0.150 m · 0.010 m · 100e6 Pa = 150 000 N = 150.00 kN, and the
+        // reported efficiency must equal governing / solid exactly.
+        let s = RivetWorkbenchState::default();
+        let joint = build_joint(&s).expect("valid joint");
+        let r = joint.analyze().expect("analyzable");
+        let expected = 0.150_f64 * 0.010_f64 * 100.0e6;
+        assert!(
+            (r.solid - expected).abs() < 1.0e-6,
+            "solid-plate strength {} should equal w*t*st {expected} N",
+            r.solid
+        );
+        // Efficiency is governing / solid by construction.
+        assert!(
+            (r.efficiency - r.strength / r.solid).abs() < 1.0e-12,
+            "efficiency {} should equal strength/solid {}",
+            r.efficiency,
+            r.strength / r.solid
+        );
+        // And it surfaces in the formatted readout as 150.00 kN.
+        let out = compute(&s).expect("default joint formats");
+        assert!(
+            out.contains("solid plate     : 150.00 kN"),
+            "readout should report the solid-plate strength: {out}"
+        );
     }
 
     #[test]
