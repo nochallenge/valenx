@@ -216,6 +216,10 @@ fn compute(s: &FlywheelWorkbenchState) -> Result<String, String> {
 
     let inertia = fw.moment_of_inertia();
     let energy_top = fw.energy_at(omega_max).map_err(|e| e.to_string())?;
+    // Specific energy E/m at the top speed — the energy-density figure of
+    // merit (J/kg) that lets a rotor's storage be compared independent of
+    // how heavy it is.
+    let specific = fw.specific_energy(omega_max).map_err(|e| e.to_string())?;
     let usable = fw
         .usable_energy(omega_min, omega_max)
         .map_err(|e| e.to_string())?;
@@ -237,6 +241,7 @@ fn compute(s: &FlywheelWorkbenchState) -> Result<String, String> {
          speed band      : {:.0} → {:.0} rpm\n\n\
          inertia I       : {inertia:.5} kg·m²\n\
          energy @ top    : {:.1} J\n\
+         specific energy : {specific:.1} J/kg\n\
          usable energy   : {:.1} J\n\
          coeff. of fluct.: {cs:.4}\n\
          rim speed       : {v_rim:.2} m/s\n\
@@ -410,6 +415,33 @@ mod tests {
         // Round-trip the speed conversion as an independent check.
         let back: f64 = rad_s_to_rpm(omega).unwrap();
         assert!((back - 3000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn specific_energy_is_energy_over_mass_ground_truth() {
+        // GROUND TRUTH, hand-computed: the 10 kg / 0.3 m solid disk stores
+        // E = 1/2 I omega^2 with I = 0.45 kg.m^2 at omega = 3000 rpm
+        // (= 100 pi rad/s), so the energy density is
+        // E/m = (0.5 * 0.45 * (100 pi)^2) / 10 = 2250 pi^2 / 10 J/kg.
+        let s = FlywheelWorkbenchState::default();
+        let fw = build_flywheel(&s).unwrap();
+        let omega: f64 = rpm_to_rad_s(3000.0).unwrap();
+        let expected: f64 = (0.5 * 0.45 * omega * omega) / 10.0;
+        let se = fw.specific_energy(omega).unwrap();
+        assert!((se - expected).abs() < 1e-6, "specific energy got {se}");
+        // Pi-pinned closed form, independent of the crate's arithmetic path.
+        let two_pi = 2.0_f64 * std::f64::consts::PI;
+        let analytic: f64 = 2250.0 * (two_pi / 2.0).powi(2) / 10.0;
+        assert!((se - analytic).abs() < 1e-6, "analytic se got {se}");
+
+        // The readout surfaces it at one decimal: 2250 pi^2 / 10 = 2220.7.
+        let mut shown = FlywheelWorkbenchState::default();
+        run_flywheel(&mut shown);
+        assert!(
+            shown.result.contains("specific energy : 2220.7 J/kg"),
+            "readout was: {}",
+            shown.result
+        );
     }
 
     #[test]
