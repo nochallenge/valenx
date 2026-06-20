@@ -116,18 +116,20 @@ pub fn draw_thermocycle_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_thermocycle_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Thermodynamic Cycle",
-                "native closed-form ideal-cycle efficiency · valenx-thermocycle",
-            ) {
-                app.show_thermocycle_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_thermocycle_workbench",
+        "Thermodynamic Cycle",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native closed-form ideal-cycle efficiency · valenx-thermocycle",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.thermocycle;
             egui::ScrollArea::vertical()
@@ -241,7 +243,11 @@ pub fn draw_thermocycle_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_thermocycle_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.thermocycle` borrow is
     // released here): build the cycle's 3-D block and load it.
