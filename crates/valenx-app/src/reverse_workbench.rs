@@ -114,8 +114,17 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
     let mut reconstruct = false;
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_reverse_workbench", "Reverse Engineering", |app, ui| {
-            ui.label(egui::RichText::new("point cloud → mesh · valenx-reverse").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_reverse_workbench",
+        "Reverse Engineering",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("point cloud → mesh · valenx-reverse")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
             let s = &mut app.reverse;
             ui.horizontal(|ui| {
@@ -148,8 +157,11 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     .small()
                     .weak(),
             );
-        }, );
-    if close { app.show_reverse_workbench = false; }
+        },
+    );
+    if close {
+        app.show_reverse_workbench = false;
+    }
 
     if reconstruct {
         let n_pts = demo_cloud(app.reverse.shape, app.reverse.density).len();

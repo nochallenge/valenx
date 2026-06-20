@@ -89,11 +89,9 @@ pub fn draw_led_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "LED",
         |app, ui| {
             ui.label(
-                egui::RichText::new(
-                    "native series current-limiting resistor sizing · valenx-led",
-                )
-                .weak()
-                .small(),
+                egui::RichText::new("native series current-limiting resistor sizing · valenx-led")
+                    .weak()
+                    .small(),
             );
             ui.separator();
 

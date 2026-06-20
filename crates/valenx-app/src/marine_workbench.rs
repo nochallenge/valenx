@@ -68,8 +68,19 @@ pub fn draw_marine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_marine_workbench", "Marine / Hull", |app, ui| {
-            ui.label(egui::RichText::new("native box-form hull hydrostatics + stability · valenx-marine").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_marine_workbench",
+        "Marine / Hull",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native box-form hull hydrostatics + stability · valenx-marine",
+                )
+                .weak()
+                .small(),
+            );
             ui.separator();
 
             let s = &mut app.marine;
@@ -148,7 +159,8 @@ pub fn draw_marine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_marine_workbench = false;
     }

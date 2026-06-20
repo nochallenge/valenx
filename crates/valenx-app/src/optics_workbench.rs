@@ -109,8 +109,19 @@ pub fn draw_optics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_optics_workbench", "Optics", |app, ui| {
-            ui.label(egui::RichText::new("native geometric-optics: lensmaker, Snell, thin-lens · valenx-optics").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_optics_workbench",
+        "Optics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native geometric-optics: lensmaker, Snell, thin-lens · valenx-optics",
+                )
+                .weak()
+                .small(),
+            );
             ui.separator();
 
             let s = &mut app.optics;
@@ -221,7 +232,8 @@ pub fn draw_optics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_optics_workbench = false;
     }

@@ -86,8 +86,19 @@ pub fn draw_openchannel_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_openchannel_workbench", "Open Channel", |app, ui| {
-            ui.label(egui::RichText::new("native steady-uniform free-surface hydraulics · valenx-openchannel").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_openchannel_workbench",
+        "Open Channel",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native steady-uniform free-surface hydraulics · valenx-openchannel",
+                )
+                .weak()
+                .small(),
+            );
             ui.separator();
 
             let s = &mut app.openchannel;
@@ -153,7 +164,8 @@ pub fn draw_openchannel_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_openchannel_workbench = false;
     }

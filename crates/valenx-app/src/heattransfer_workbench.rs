@@ -82,11 +82,9 @@ pub fn draw_heattransfer_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Heat Transfer",
         |app, ui| {
             ui.label(
-                egui::RichText::new(
-                    "native composite-wall 1-D heat loss · valenx-heat-transfer",
-                )
-                .weak()
-                .small(),
+                egui::RichText::new("native composite-wall 1-D heat loss · valenx-heat-transfer")
+                    .weak()
+                    .small(),
             );
             ui.separator();
 

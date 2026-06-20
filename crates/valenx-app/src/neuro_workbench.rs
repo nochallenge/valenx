@@ -208,8 +208,17 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_neuro_workbench {
         return;
     }
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_neuro_workbench", "Neural Interface", |app, ui| {
-            ui.label(egui::RichText::new("native BCI stimulation · valenx-neuro").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_neuro_workbench",
+        "Neural Interface",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native BCI stimulation · valenx-neuro")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
             let s = &mut app.neuro;
             egui::ScrollArea::vertical()
@@ -486,7 +495,8 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_schematic(ui, r);
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_neuro_workbench = false;
     }

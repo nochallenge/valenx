@@ -85,8 +85,19 @@ pub fn draw_resistornetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) 
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_resistornetwork_workbench", "Resistor Network", |app, ui| {
-            ui.label(egui::RichText::new("native closed-form DC resistor-network analysis · valenx-resistor-network").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_resistornetwork_workbench",
+        "Resistor Network",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native closed-form DC resistor-network analysis · valenx-resistor-network",
+                )
+                .weak()
+                .small(),
+            );
             ui.separator();
 
             let s = &mut app.resistornetwork;
@@ -158,8 +169,11 @@ pub fn draw_resistornetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) 
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
-    if close { app.show_resistornetwork_workbench = false; }
+        },
+    );
+    if close {
+        app.show_resistornetwork_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.resistornetwork` borrow
     // is released here): build the resistor row's 3-D solid and load it.

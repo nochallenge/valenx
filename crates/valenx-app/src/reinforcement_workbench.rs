@@ -89,8 +89,17 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
     let mut generate = false;
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_reinforcement_workbench", "Concrete Reinforcement", |app, ui| {
-            ui.label(egui::RichText::new("rebar cages · valenx-reinforcement").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_reinforcement_workbench",
+        "Concrete Reinforcement",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("rebar cages · valenx-reinforcement")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
             let s = &mut app.reinforcement;
             ui.horizontal(|ui| {
@@ -148,8 +157,11 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     .small()
                     .weak(),
             );
-        }, );
-    if close { app.show_reinforcement_workbench = false; }
+        },
+    );
+    if close {
+        app.show_reinforcement_workbench = false;
+    }
 
     if generate {
         match run_reinforcement(&app.reinforcement) {

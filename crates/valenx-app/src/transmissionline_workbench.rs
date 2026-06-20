@@ -89,9 +89,11 @@ pub fn draw_transmissionline_workbench(app: &mut ValenxApp, ctx: &egui::Context)
         "Transmission Line",
         |app, ui| {
             ui.label(
-                egui::RichText::new("native lossless RF reflection / VSWR · valenx-transmissionline")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "native lossless RF reflection / VSWR · valenx-transmissionline",
+                )
+                .weak()
+                .small(),
             );
             ui.separator();
 

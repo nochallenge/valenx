@@ -447,8 +447,17 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     // and applied *after* it releases its &mut borrow of `app`.
     let mut to_push: Option<(ViewMolecule, String)> = None;
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_reactdyn_workbench", "Reaction Dynamics", |app, ui| {
-            ui.label(egui::RichText::new("native ab-initio MD · valenx-reactdyn").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_reactdyn_workbench",
+        "Reaction Dynamics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native ab-initio MD · valenx-reactdyn")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
             let s = &mut app.reactdyn;
             let running = s.run.is_some();
@@ -604,8 +613,11 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     let ctx = ui.ctx().clone();
                     draw_results_and_playback(s, ui, &ctx, &mut to_push);
                 });
-        }, );
-    if close { app.show_reactdyn_workbench = false; }
+        },
+    );
+    if close {
+        app.show_reactdyn_workbench = false;
+    }
 
     // The panel closure has released its &mut app borrow — now push the
     // selected frame's molecule into the shared 3-D viewport.
