@@ -5,11 +5,14 @@
 //! [`egui::SidePanel`] gated on `crate::ValenxApp::show_pulley_workbench`,
 //! toggled from the View menu. The form picks the arrangement (a single
 //! fixed pulley, a single movable pulley, or a block-and-tackle of `n`
-//! supporting rope segments), the load weight and a lumped efficiency
-//! `eta`; "Analyze" reports the ideal mechanical advantage `MA = n`, the
-//! equal velocity ratio, the ideal and friction-aware real effort, the
-//! actual mechanical advantage `MA * eta` and the load that real effort
-//! raises, and "Show 3-D" loads a representative pulley assembly (a fixed
+//! supporting rope segments), the load weight, a lumped efficiency `eta`
+//! and the lift distance `s`; "Analyze" reports the ideal mechanical
+//! advantage `MA = n`, the equal velocity ratio, the ideal and
+//! friction-aware real effort, the actual mechanical advantage `MA * eta`
+//! and the load that real effort raises, plus the energy story for one
+//! lift through `s` — the rope length pulled `VR * s`, the useful output
+//! work `W * s`, the operator's input work `W * s / eta` and the work lost
+//! to friction — and "Show 3-D" loads a representative pulley assembly (a fixed
 //! block over a movable block, drawn as sheave cylinders) into the central
 //! viewport.
 
@@ -20,7 +23,8 @@ use eframe::egui;
 use nalgebra::Vector3;
 
 use valenx_pulley::{
-    actual_mechanical_advantage, ideal_effort, load_from_effort, real_effort, PulleySystem,
+    actual_mechanical_advantage, effort_distance, ideal_effort, input_work, load_from_effort,
+    output_work, real_effort, work_lost, PulleySystem,
 };
 
 use valenx_mesh::element::{ElementBlock, ElementType};
@@ -53,6 +57,9 @@ pub struct PulleyWorkbenchState {
     load_n: f64,
     /// Lumped mechanical efficiency `eta` in `(0, 1]`.
     efficiency: f64,
+    /// Distance to raise the load (m) — drives the rope-pulled length and
+    /// the work / energy readout.
+    lift_distance_m: f64,
     /// Formatted performance readout (empty until the first analyze).
     result: String,
     /// Validation / compute error, if any.
@@ -66,12 +73,15 @@ impl Default for PulleyWorkbenchState {
     fn default() -> Self {
         // A 4-rope block-and-tackle lifting a 1200 N load at 90%
         // efficiency: MA = VR = 4, ideal effort 300 N, real effort
-        // 1200 / 3.6 = 333.33 N, actual MA 3.60.
+        // 1200 / 3.6 = 333.33 N, actual MA 3.60. Raising it 2 m pulls
+        // 8 m of rope, doing 2400 J on the load for 2666.67 J of input
+        // (266.67 J lost to friction).
         Self {
             arrangement: Arrangement::BlockAndTackle,
             supporting_ropes: 4,
             load_n: 1200.0,
             efficiency: 0.9,
+            lift_distance_m: 2.0,
             result: String::new(),
             error: None,
             show_3d_request: false,
@@ -135,6 +145,14 @@ pub fn draw_pulley_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("efficiency η (0–1]");
                         ui.add(egui::DragValue::new(&mut s.efficiency).speed(0.01));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("lift distance s (m)");
+                        ui.add(
+                            egui::DragValue::new(&mut s.lift_distance_m)
+                                .speed(0.1)
+                                .range(0.0..=f64::INFINITY),
+                        );
                     });
 
                     ui.add_space(6.0);
@@ -211,6 +229,14 @@ fn compute(s: &PulleyWorkbenchState) -> Result<String, String> {
     // The load that real effort raises is the round-trip of `real_effort`.
     let raised = load_from_effort(sys, f_real, s.efficiency).map_err(|e| e.to_string())?;
 
+    // Energy story for raising the load through `lift_distance_m`: the
+    // operator pulls `VR * s` of rope, doing `W_in` of work for `W_out`
+    // useful work on the load, with the difference lost to friction.
+    let rope_pulled = effort_distance(sys, s.lift_distance_m).map_err(|e| e.to_string())?;
+    let w_out = output_work(s.load_n, s.lift_distance_m).map_err(|e| e.to_string())?;
+    let w_in = input_work(s.load_n, s.lift_distance_m, s.efficiency).map_err(|e| e.to_string())?;
+    let w_loss = work_lost(s.load_n, s.lift_distance_m, s.efficiency).map_err(|e| e.to_string())?;
+
     Ok(format!(
         "arrangement     : {arrangement}\n\
          supporting ropes: {n}\n\
@@ -221,11 +247,17 @@ fn compute(s: &PulleyWorkbenchState) -> Result<String, String> {
          ideal effort    : {f_ideal:.2} N\n\
          real effort     : {f_real:.2} N\n\
          actual MA (η·MA): {ama:.2}\n\
-         raises load     : {raised:.1} N",
+         raises load     : {raised:.1} N\n\n\
+         lift distance s : {lift:.2} m\n\
+         rope pulled     : {rope_pulled:.2} m\n\
+         output work W_out: {w_out:.1} J\n\
+         input work W_in : {w_in:.1} J\n\
+         work lost (frict): {w_loss:.1} J",
         arrangement = arrangement_label(s.arrangement),
         n = sys.supporting_ropes(),
         load = s.load_n,
         eta = s.efficiency,
+        lift = s.lift_distance_m,
     ))
 }
 
@@ -426,6 +458,68 @@ mod tests {
             let expected = load / f64::from(n);
             assert!((f - expected).abs() < 1e-9, "n = {n}");
         }
+    }
+
+    /// Ground truth for the energy block surfaced from `valenx-pulley`'s
+    /// `effort_distance` / `output_work` / `input_work` / `work_lost`.
+    /// Defaults: n = 4 (VR = 4), W = 1200 N, η = 0.9, lifting s = 2 m.
+    /// Hand values: rope pulled = VR·s = 4·2 = 8.00 m; output work
+    /// W_out = W·s = 1200·2 = 2400 J; input work W_in = W_out/η =
+    /// 2400/0.9 = 2666.67 J; work lost = W_in − W_out = 266.67 J.
+    #[test]
+    fn analyze_default_reports_rope_pulled_and_work() {
+        let mut s = PulleyWorkbenchState::default();
+        run_pulley(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default tackle should analyze: {:?}",
+            s.error
+        );
+        assert!(
+            s.result.contains("rope pulled     : 8.00 m"),
+            "{}",
+            s.result
+        );
+        assert!(
+            s.result.contains("output work W_out: 2400.0 J"),
+            "{}",
+            s.result
+        );
+        assert!(
+            s.result.contains("input work W_in : 2666.7 J"),
+            "{}",
+            s.result
+        );
+        assert!(
+            s.result.contains("work lost (frict): 266.7 J"),
+            "{}",
+            s.result
+        );
+    }
+
+    /// Cross-check the energy identity directly against `valenx-pulley`:
+    /// the surfaced rope length is VR·s and W_in − W_out equals the work
+    /// lost, with no loss at η = 1.
+    #[test]
+    fn energy_block_matches_crate_ground_truth() {
+        let load = 1200.0_f64;
+        let s_load = 2.0_f64;
+        let eta = 0.9_f64;
+        let sys = PulleySystem::block_and_tackle(4).unwrap();
+
+        let rope = effort_distance(sys, s_load).unwrap();
+        assert!((rope - 8.0).abs() < 1e-12, "rope = {rope}");
+
+        let w_out = output_work(load, s_load).unwrap();
+        let w_in = input_work(load, s_load, eta).unwrap();
+        let w_loss = work_lost(load, s_load, eta).unwrap();
+        assert!((w_out - 2400.0).abs() < 1e-9, "w_out = {w_out}");
+        assert!((w_in - 2400.0 / 0.9).abs() < 1e-9, "w_in = {w_in}");
+        assert!((w_loss - (w_in - w_out)).abs() < 1e-9, "w_loss = {w_loss}");
+
+        // No friction loss for the perfect machine.
+        let lossless = work_lost(load, s_load, 1.0).unwrap();
+        assert!(lossless.abs() < 1e-9, "lossless = {lossless}");
     }
 
     #[test]
