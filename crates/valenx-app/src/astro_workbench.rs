@@ -111,14 +111,12 @@ pub fn draw_astro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_astro_workbench")
-        .resizable(true)
-        .default_width(400.0)
-        .width_range(330.0..=680.0)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("Astro / Launch");
-            });
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_astro_workbench",
+        "Astro / Launch",
+        |app, ui| {
             ui.label(
                 egui::RichText::new("Launch-vehicle ascent + trajectory simulator")
                     .weak()
@@ -137,7 +135,7 @@ pub fn draw_astro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             // instantly. The animation auto-resets when the panel closes
             // (matches the wind tunnel).
             let anim_id = egui::Id::new("valenx_astro_workbench_open");
-            let t = ctx.animate_bool_with_time(anim_id, true, 0.18);
+            let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.18);
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
@@ -157,7 +155,11 @@ pub fn draw_astro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     });
                 });
-        });
+        },
+    );
+    if close {
+        app.show_astro_workbench = false;
+    }
 }
 
 #[cfg(test)]

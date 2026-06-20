@@ -168,14 +168,12 @@ pub fn draw_genetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_genetics_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_genetics_workbench")
-        .resizable(true)
-        .default_width(380.0)
-        .width_range(300.0..=620.0)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("Genetics Workbench");
-            });
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_genetics_workbench",
+        "Genetics Workbench",
+        |app, ui| {
             ui.label(
                 egui::RichText::new("15 native computational-biology toolkits")
                     .weak()
@@ -267,7 +265,11 @@ pub fn draw_genetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     });
                 });
-        });
+        },
+    );
+    if close {
+        app.show_genetics_workbench = false;
+    }
 }
 
 #[cfg(test)]

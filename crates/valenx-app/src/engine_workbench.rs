@@ -150,12 +150,12 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_engine_workbench")
-        .resizable(true)
-        .default_width(380.0)
-        .width_range(330.0..=620.0)
-        .show(ctx, |ui| {
-            ui.heading("Engine — design → analyze");
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_engine_workbench",
+        "Engine — design → analyze",
+        |app, ui| {
             ui.label(
                 egui::RichText::new(
                     "ideal-nozzle performance + Bartz regen-cooling · valenx-astro",
@@ -485,7 +485,11 @@ pub fn draw_engine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(msg).weak().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_engine_workbench = false;
+    }
 
     // Deferred (outside the panel borrow): load the 3-D nozzle into the
     // central viewport when requested.

@@ -149,22 +149,22 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
     poll_cfd(&mut app.cfd);
-    egui::SidePanel::right("valenx_cfd_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "CFD Workbench",
-                "native 2-D incompressible CFD · valenx-cfd-native",
-            ) {
-                app.show_cfd_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_cfd_workbench",
+        "CFD Workbench",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native 2-D incompressible CFD · valenx-cfd-native")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.cfd;
             let running = s.job.is_some();
             if running {
-                ctx.request_repaint();
+                ui.ctx().request_repaint();
             }
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
@@ -304,7 +304,11 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             });
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_cfd_workbench = false;
+    }
 }
 
 /// Free-stream dynamic pressure `q = ½ ρ U²` (Pa) — the pressure scale that

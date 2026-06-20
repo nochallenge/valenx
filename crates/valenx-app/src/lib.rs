@@ -217,6 +217,7 @@ pub mod viewport_kind;
 pub mod weir_workbench;
 pub mod welcome_tour;
 pub mod wgpu_renderer;
+pub mod workbench_chrome;
 pub mod workbench_ui;
 
 // Concern-focused helper modules — what used to be a single
@@ -294,6 +295,13 @@ pub struct ValenxApp {
     /// (resizable splits / tabs / close / drag) instead of the classic
     /// single-viewport layout. Default `false` (classic layout).
     pub(crate) docked_layout: bool,
+    /// Per-panel chrome state for the right-side workbenches — keyed by the
+    /// panel's stable `SidePanel` id, it records whether each is collapsed
+    /// and whether it is docked / floating / popped out into its own OS
+    /// window. Driven by [`workbench_chrome::workbench_shell`]; empty until a
+    /// panel's header is first interacted with. See [`workbench_chrome`].
+    pub(crate) workbench_chrome:
+        std::collections::HashMap<String, crate::workbench_chrome::PanelChromeState>,
     pub(crate) project: Option<LoadedProject>,
     pub(crate) project_path: Option<PathBuf>,
     /// RBAC override block parsed from the loaded project's
