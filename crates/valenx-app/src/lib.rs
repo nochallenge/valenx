@@ -337,6 +337,16 @@ pub struct ValenxApp {
     /// `agent:n`) to the top or bottom row of the grid in one click; the
     /// existing per-tile drag is untouched. `None` = nothing pending (default).
     pub(crate) pending_unit_move: Option<(usize, crate::dock_layout::UnitMove)>,
+    /// Per-unit chat **input buffers** for the "Workbench + Agent" `agent:<n>`
+    /// tiles, keyed by unit number `n`. Each unit's chat `TextEdit` binds to its
+    /// own entry here (via `unit_chat_inputs.entry(n).or_default()`) so the six
+    /// agent chats don't share one input box and mirror each other's typing.
+    /// The classic base Assistant panel keeps using
+    /// [`crate::assistant_workbench::AssistantWorkbenchState::input`] instead.
+    /// Defaults empty (derive); an entry is created lazily the first time a unit
+    /// chat is drawn. See [`dock_layout`] and
+    /// [`crate::assistant_workbench::assistant_chat_ui`].
+    pub(crate) unit_chat_inputs: std::collections::HashMap<usize, String>,
 
     pub(crate) project: Option<LoadedProject>,
     pub(crate) project_path: Option<PathBuf>,

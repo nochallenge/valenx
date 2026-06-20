@@ -222,18 +222,20 @@ fn close_panel(app: &mut ValenxApp, panel_id: &str) {
 /// A `panel_id` that isn't wired yet renders a small graceful notice rather
 /// than panicking, so partially-wired states stay usable.
 pub(crate) fn render_panel_body(app: &mut ValenxApp, ui: &mut egui::Ui, panel_id: &str) {
-    // "Workbench + Agent" tiles: the agent half routes to the single shared
-    // Claude chat bridge; the workspace half is an empty build canvas. Both
-    // halves get the per-unit "move whole unit" header at the top so it's
-    // reachable from either tile.
+    // "Workbench + Agent" tiles: the agent half is an **independent** Claude
+    // chat keyed by the unit number (its own feed file + input buffer — see
+    // `assistant_chat_ui`'s `Some(n)` channel); the workspace half is an empty
+    // build canvas. The agent half keeps the per-unit "move whole unit" header
+    // at the top.
     if let Some(n) = panel_id.strip_prefix(AGENT_PREFIX) {
-        // Parse the unit number; only draw the header if it parses (it always
-        // should for ids we insert). Don't touch `assistant_workbench_body`
-        // itself — it's shared with the classic Assistant panel.
         if let Ok(n) = n.parse::<usize>() {
             unit_move_header(app, ui, n);
+            crate::assistant_workbench::assistant_chat_ui(app, ui, Some(n));
+        } else {
+            // Unparseable unit number (shouldn't happen for ids we insert) →
+            // fall back to the classic shared channel rather than panicking.
+            crate::assistant_workbench::assistant_chat_ui(app, ui, None);
         }
-        crate::assistant_workbench::assistant_workbench_body(app, ui);
         return;
     }
     if let Some(n) = panel_id.strip_prefix(WORKSPACE_PREFIX) {
@@ -257,52 +259,32 @@ pub(crate) fn render_panel_body(app: &mut ValenxApp, ui: &mut egui::Ui, panel_id
     }
 }
 
-/// Render a `"workspace:<n>"` tile body — the **empty build canvas** half of a
-/// "Workbench + Agent" unit, where `n` is the unit number (the suffix after
-/// the `"workspace:"` prefix).
+/// Render a `"workspace:<n>"` tile body — the **empty build-output canvas**
+/// half of a "Workbench + Agent" unit, where `n` is the unit number (the suffix
+/// after the `"workspace:"` prefix).
 ///
-/// **Honest first cut:** this is a *labelled placeholder canvas*, not a live
-/// per-unit 3-D viewport — six independent wgpu scenes is a deep follow-up and
-/// out of scope here. It shows a `"Workspace N"` heading, a weak hint that the
-/// agent on the right builds here, and — if the assistant feed has reported a
-/// build/result/ship line — the latest such status, all inside a bordered,
-/// scrollable region.
-fn render_workspace_body(app: &mut ValenxApp, ui: &mut egui::Ui, n: &str) {
-    // Per-unit "move whole unit" header, mirroring the agent half — drawn first
-    // so it sits above the "Workspace N" heading. Only if `n` parses (it always
-    // should for ids we insert via `insert_pair`).
-    if let Ok(num) = n.parse::<usize>() {
-        unit_move_header(app, ui, num);
-    }
-    ui.heading(format!("Workspace {n}"));
-    ui.label(
-        egui::RichText::new("Ask the agent on the right to build something here.")
-            .weak()
-            .small(),
-    );
-    ui.add_space(6.0);
-    // Pull the latest build status *before* the borrow of `ui`'s frame so the
-    // bordered canvas can show it (best-effort; `None` → just the placeholder).
-    let status = crate::assistant_workbench::latest_build_status(app);
+/// The workspace is the **agent's build-output area**, not a chat mirror: it is
+/// deliberately quiet — a small subtle `"Workspace N"` title above a clean
+/// bordered area with a faint centered hint. No chat echo, no
+/// `latest_build_status` box, and no "move whole unit" header here (that control
+/// lives on the agent half). When real per-unit build output lands later, it
+/// renders into this bordered area; for now it's an empty canvas placeholder.
+fn render_workspace_body(_app: &mut ValenxApp, ui: &mut egui::Ui, n: &str) {
+    ui.label(egui::RichText::new(format!("Workspace {n}")).weak());
+    ui.add_space(4.0);
     egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::same(8.0))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .show(ui, |ui| match status {
-                    Some(line) => {
+                .show(ui, |ui| {
+                    ui.centered_and_justified(|ui| {
                         ui.label(
-                            egui::RichText::new("Latest from the agent")
-                                .strong()
-                                .small(),
+                            egui::RichText::new("the agent's output will appear here")
+                                .weak()
+                                .italics(),
                         );
-                        ui.label(line);
-                    }
-                    None => {
-                        ui.centered_and_justified(|ui| {
-                            ui.label(egui::RichText::new("Empty workspace").weak().italics());
-                        });
-                    }
+                    });
                 });
         });
 }
@@ -562,6 +544,8 @@ impl ValenxApp {
                             UnitMove::Bottom => linear.add_child(pair),
                         }
                     }
+                    // Re-equalize the row heights after the moved unit re-joins.
+                    equalize_shares(tree, root);
                 } else {
                     // Root isn't a vertical Linear — wrap it and the new pair
                     // into a fresh vertical container so the unit becomes a new
@@ -734,6 +718,29 @@ fn insert_pair(tree: &mut egui_tiles::Tree<String>, n: usize) -> egui_tiles::Til
     tree.tiles.insert_horizontal_tile(vec![workspace, agent])
 }
 
+/// Reset a [`egui_tiles::Container::Linear`] container's per-child **shares** to
+/// equal, so its children auto-size the same. Used right after a unit is added
+/// into a row (or a row into the vertical root), so a freshly-added unit/row
+/// gets an equal slice rather than squeezing in at the default `1.0` beside
+/// children the user may have resized.
+///
+/// Mechanism (egui_tiles 0.9.1): [`egui_tiles::Linear::shares`] is a public
+/// [`egui_tiles::Shares`] map; its `Index`/`IndexMut` impls **default any
+/// missing child to `1.0`**, and `Shares::split` treats an all-equal (or empty)
+/// map as an even split. So replacing the map with `Shares::default()` (empty)
+/// makes every child weigh an equal `1.0`. A no-op if `id` isn't a `Linear`.
+///
+/// Deliberately only called **on add** — it doesn't run on manual drags, so a
+/// user's hand-tuned split between two adds is preserved until the next add
+/// touches that same container.
+fn equalize_shares(tree: &mut egui_tiles::Tree<String>, id: egui_tiles::TileId) {
+    if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(linear))) =
+        tree.tiles.get_mut(id)
+    {
+        linear.shares = egui_tiles::Shares::default();
+    }
+}
+
 /// Attach a freshly-built unit (`new_unit`) to the dock root as a new **row**:
 ///
 /// - empty tree → the unit becomes the root;
@@ -749,6 +756,9 @@ fn attach_unit_to_root(tree: &mut egui_tiles::Tree<String>, new_unit: egui_tiles
             {
                 if linear.dir == egui_tiles::LinearDir::Vertical {
                     linear.add_child(new_unit);
+                    // Re-equalize the row shares so every row (incl. the new
+                    // one) is the same height.
+                    equalize_shares(tree, root);
                     return;
                 }
             }
@@ -827,6 +837,8 @@ fn place_unit(
                     {
                         linear.children.insert(0, new_unit);
                     }
+                    // New top row → re-equalize the vertical root's row heights.
+                    equalize_shares(tree, root);
                 } else {
                     let new_root = tree.tiles.insert_vertical_tile(vec![new_unit, root]);
                     tree.root = Some(new_root);
@@ -865,6 +877,9 @@ fn place_unit(
                         row.add_child(new_unit);
                     }
                 }
+                // Re-equalize this row's unit widths so the added unit gets an
+                // equal slice rather than squeezing in beside resized siblings.
+                equalize_shares(tree, row_id);
             } else {
                 // Row is a lone pair / single pane / tab group / vertical split:
                 // wrap it and the new unit into a fresh horizontal row and swap
@@ -1384,6 +1399,73 @@ mod tests {
         let row0 = panes_under(tree, rows[0]);
         assert!(row0.contains("workspace:7"));
         assert!(row0.contains("agent:7"));
+    }
+
+    #[test]
+    fn adding_a_unit_equalizes_the_row_shares() {
+        // After adding a unit at the end of a row, that row's Linear `shares`
+        // are reset to equal (empty map → every child defaults to 1.0), so the
+        // new unit auto-sizes the same as its siblings instead of squeezing in.
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        let tree = app.dock_tree.as_mut().unwrap();
+        // Manually skew row 0's shares to simulate a prior manual drag.
+        let row0 = grid_rows(tree)[0];
+        if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(row))) =
+            tree.tiles.get_mut(row0)
+        {
+            let first = row.children[0];
+            row.shares.set_share(first, 9.0);
+            assert!(
+                row.shares.iter().any(|(_, &s)| s == 9.0),
+                "precondition: skewed share is present"
+            );
+        }
+        // Now add a unit to the right end of row 0 — it should equalize.
+        app.add_workbench_agent_pair_at(UnitAddTarget::RowEnd(0));
+        let tree = app.dock_tree.as_ref().unwrap();
+        let row0 = grid_rows(tree)[0];
+        let egui_tiles::Tile::Container(egui_tiles::Container::Linear(row)) =
+            tree.tiles.get(row0).unwrap()
+        else {
+            panic!("row 0 must be a horizontal Linear");
+        };
+        // Equalized → the share map was cleared (all children index to the
+        // default 1.0), so no explicit non-1.0 entries remain.
+        assert!(
+            row.shares.iter().all(|(_, &s)| s == 1.0),
+            "row shares should be equal after add, got {:?}",
+            row.shares.iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn adding_a_new_bottom_row_equalizes_the_root_row_heights() {
+        // NewRowBottom into a vertical grid re-equalizes the vertical root's row
+        // shares so the rows stay the same height.
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        // Skew the root's row shares.
+        let tree = app.dock_tree.as_mut().unwrap();
+        let root = tree.root().unwrap();
+        if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot))) =
+            tree.tiles.get_mut(root)
+        {
+            let first = vroot.children[0];
+            vroot.shares.set_share(first, 5.0);
+        }
+        app.add_workbench_agent_pair_at(UnitAddTarget::NewRowBottom);
+        let tree = app.dock_tree.as_ref().unwrap();
+        let root = tree.root().unwrap();
+        let egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot)) =
+            tree.tiles.get(root).unwrap()
+        else {
+            panic!("root must be a vertical Linear");
+        };
+        assert!(
+            vroot.shares.iter().all(|(_, &s)| s == 1.0),
+            "root row shares should be equal after adding a new bottom row"
+        );
     }
 
     #[test]

@@ -82,6 +82,44 @@ pub fn assistant_inbox_path() -> PathBuf {
         .unwrap_or_else(|| std::env::temp_dir().join("valenx_assistant_inbox.jsonl"))
 }
 
+/// Insert `_u{n}` before a path's final `.jsonl` extension, so a base feed/inbox
+/// file becomes a **per-unit** one: e.g.
+/// `…/valenx_chat_feed.jsonl` → `…/valenx_chat_feed_u3.jsonl`. If the path
+/// doesn't end in `.jsonl` (unusual; a custom env override), the suffix is
+/// appended whole (`…/feed.log` → `…/feed.log_u3`) so units still get distinct
+/// files. Keeps the parent directory unchanged.
+fn per_unit_path(base: &Path, n: usize) -> PathBuf {
+    let file = base
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let renamed = match file.strip_suffix(".jsonl") {
+        Some(stem) => format!("{stem}_u{n}.jsonl"),
+        None => format!("{file}_u{n}"),
+    };
+    match base.parent() {
+        Some(dir) => dir.join(renamed),
+        None => PathBuf::from(renamed),
+    }
+}
+
+/// The **per-unit feed** path for "Workbench + Agent" unit `n`: the base feed
+/// path ([`AssistantWorkbenchState::feed_path`], itself
+/// `$VALENX_ASSISTANT_FEED` or the state-dir default) with `_u{n}` inserted
+/// before `.jsonl`. Each `agent:<n>` tile reads/renders this file so the six
+/// chats are independent conversations rather than one shared feed.
+pub(crate) fn unit_feed_path(app: &ValenxApp, n: usize) -> PathBuf {
+    per_unit_path(&app.assistant.feed_path, n)
+}
+
+/// The **per-unit inbox** path for "Workbench + Agent" unit `n` (messages the
+/// user types in that unit's chat, for an external agent to read): the base
+/// inbox path with `_u{n}` inserted before `.jsonl`. Paired with
+/// [`unit_feed_path`].
+pub(crate) fn unit_inbox_path(app: &ValenxApp, n: usize) -> PathBuf {
+    per_unit_path(&app.assistant.inbox_path, n)
+}
+
 /// Append a single line to a `.jsonl` file (create + append; best-effort).
 fn append_line(path: &Path, line: &str) {
     use std::io::Write;
@@ -123,26 +161,6 @@ fn load_feed(path: &Path) -> Vec<FeedEntry> {
         .unwrap_or_default()
 }
 
-/// The most recent **build / result / ship** headline in the assistant feed,
-/// as a short `"title — detail"` (or just `title`) string — `None` if the feed
-/// has no such entry yet. Used by the dock's `"workspace:<n>"` placeholder
-/// tile to surface the latest thing the agent reported building, without that
-/// tile needing to know the feed's on-disk format. Skips the user's own
-/// `"user"` echoes so it reflects the agent's progress, not the prompt.
-pub(crate) fn latest_build_status(app: &ValenxApp) -> Option<String> {
-    load_feed(&app.assistant.feed_path)
-        .into_iter()
-        .rev()
-        .find(|e| matches!(e.kind.as_str(), "build" | "result" | "ship") && !e.title.is_empty())
-        .map(|e| {
-            if e.detail.is_empty() {
-                e.title
-            } else {
-                format!("{} — {}", e.title, e.detail)
-            }
-        })
-}
-
 /// Accent colour for an entry's `kind` tag.
 fn accent(kind: &str) -> egui::Color32 {
     match kind {
@@ -178,15 +196,46 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
-/// The Assistant activity-sidebar body — the bottom-pinned chat input plus
-/// the scrolling live feed. Extracted from [`draw_assistant_workbench`] so
-/// it can be hosted by the classic
-/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
-/// tile layout ([`crate::dock_layout`]). Reloads the feed + reschedules the
-/// ~1 s idle repaint up front so the dock path stays live.
+/// The classic Assistant activity-sidebar body (the base shared channel) — the
+/// bottom-pinned chat input plus the scrolling live feed. Hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or*, as the lone Assistant
+/// dock tile, by [`crate::dock_layout`]. Thin wrapper that delegates to the
+/// channel-aware [`assistant_chat_ui`] with `channel = None` (base paths +
+/// `app.assistant.input`).
 pub(crate) fn assistant_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    assistant_chat_ui(app, ui, None);
+}
+
+/// Render a Claude chat — the bottom-pinned input plus the scrolling live feed
+/// — for one **channel**:
+///
+/// - `None` → the **classic base panel**: base feed/inbox paths
+///   ([`AssistantWorkbenchState::feed_path`]/`inbox_path`) and the shared
+///   [`AssistantWorkbenchState::input`] buffer. This is the historical
+///   single-channel behaviour, unchanged.
+/// - `Some(n)` → the independent chat for **"Workbench + Agent" unit `n`**:
+///   reads/renders unit `n`'s own feed file ([`unit_feed_path`]), binds the
+///   input to `app.unit_chat_inputs[n]` (per-unit buffer), and Send appends to
+///   unit `n`'s inbox ([`unit_inbox_path`]) + echoes into its feed. This is
+///   what makes the six agent tiles independent conversations instead of one
+///   mirrored feed/input.
+///
+/// Reloads the feed + reschedules the ~1 s idle repaint up front so both the
+/// classic and dock hosts stay live. The bottom-input `TopBottomPanel` id is
+/// scoped to the host `ui` ([`egui::Ui::id`]) so multiple chats on screen each
+/// get a unique id instead of colliding on one shared string.
+pub(crate) fn assistant_chat_ui(app: &mut ValenxApp, ui: &mut egui::Ui, channel: Option<usize>) {
     ui.ctx().request_repaint_after(Duration::from_millis(1000));
-    let entries = load_feed(&app.assistant.feed_path);
+    // Resolve this channel's on-disk paths up front (owned, so they don't tie
+    // up a borrow of `app` while we mutate the input buffer below).
+    let (feed_path, inbox_path) = match channel {
+        None => (
+            app.assistant.feed_path.clone(),
+            app.assistant.inbox_path.clone(),
+        ),
+        Some(n) => (unit_feed_path(app, n), unit_inbox_path(app, n)),
+    };
+    let entries = load_feed(&feed_path);
     ui.label(
         egui::RichText::new("● live  ·  chat with Claude — type below")
             .weak()
@@ -194,24 +243,29 @@ pub(crate) fn assistant_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .color(egui::Color32::from_rgb(80, 200, 140)),
     );
     ui.separator();
-    // Chat input pinned to the bottom; the feed scrolls above it. The panel
-    // id is scoped to the host `ui` so multiple Assistant bodies (e.g. six
-    // "Agent N" dock tiles) each get a unique TopBottomPanel id instead of
-    // colliding on one shared string.
+    // Chat input pinned to the bottom; the feed scrolls above it.
     egui::TopBottomPanel::bottom(ui.id().with("valenx_assistant_input")).show_inside(ui, |ui| {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
+            // Bind to the right input buffer for this channel: the shared
+            // `assistant.input` for the base panel, or this unit's own entry in
+            // `unit_chat_inputs` (created lazily) so per-unit chats don't share
+            // one box.
+            let input: &mut String = match channel {
+                None => &mut app.assistant.input,
+                Some(n) => app.unit_chat_inputs.entry(n).or_default(),
+            };
             let resp = ui.add(
-                egui::TextEdit::singleline(&mut app.assistant.input)
+                egui::TextEdit::singleline(input)
                     .hint_text("Message Claude…")
                     .desired_width(f32::INFINITY),
             );
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if enter || ui.button("Send").clicked() {
-                let msg = app.assistant.input.trim().to_string();
+                let msg = input.trim().to_string();
                 if !msg.is_empty() {
-                    send_to_assistant(&app.assistant.inbox_path, &app.assistant.feed_path, &msg);
-                    app.assistant.input.clear();
+                    send_to_assistant(&inbox_path, &feed_path, &msg);
+                    input.clear();
                     ui.ctx().request_repaint();
                     resp.request_focus();
                 }
@@ -245,7 +299,9 @@ pub(crate) fn assistant_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     );
                 });
                 if !e.detail.is_empty() {
-                    ui.label(egui::RichText::new(&e.detail).small());
+                    // Slightly larger body text (~15px) for readability; the
+                    // timestamp above stays `.small()`.
+                    ui.label(egui::RichText::new(&e.detail).size(15.0));
                 }
                 ui.separator();
             }
@@ -297,6 +353,67 @@ not json at all
         assert_ne!(accent("ship"), accent("warn"));
         assert_ne!(accent("user"), accent("build"));
         assert_eq!(accent("whatever"), accent(""));
+    }
+
+    #[test]
+    fn per_unit_path_inserts_unit_suffix_before_jsonl() {
+        // `…/valenx_chat_feed.jsonl` → `…/valenx_chat_feed_u3.jsonl`, parent dir
+        // preserved. A non-.jsonl base appends the whole suffix.
+        let base = std::path::Path::new("/tmp/dir/valenx_chat_feed.jsonl");
+        assert_eq!(
+            per_unit_path(base, 3),
+            std::path::PathBuf::from("/tmp/dir/valenx_chat_feed_u3.jsonl")
+        );
+        let base2 = std::path::Path::new("/tmp/dir/feed.log");
+        assert_eq!(
+            per_unit_path(base2, 7),
+            std::path::PathBuf::from("/tmp/dir/feed.log_u7")
+        );
+    }
+
+    #[test]
+    fn unit_channels_resolve_to_distinct_feed_and_inbox_paths() {
+        // assistant_chat_ui's channels None / Some(3) / Some(4) must map to
+        // DISTINCT feed+inbox files so the per-unit chats don't share one feed.
+        let app = ValenxApp::default();
+        let base_feed = app.assistant.feed_path.clone();
+        let base_inbox = app.assistant.inbox_path.clone();
+
+        let f3 = unit_feed_path(&app, 3);
+        let f4 = unit_feed_path(&app, 4);
+        let i3 = unit_inbox_path(&app, 3);
+        let i4 = unit_inbox_path(&app, 4);
+
+        // Every channel's feed path is distinct from the others and from base.
+        assert_ne!(base_feed, f3);
+        assert_ne!(base_feed, f4);
+        assert_ne!(f3, f4);
+        // Same for inboxes.
+        assert_ne!(base_inbox, i3);
+        assert_ne!(base_inbox, i4);
+        assert_ne!(i3, i4);
+        // Feed and inbox of the same unit are also distinct (they derive from
+        // the two different base files).
+        assert_ne!(f3, i3);
+    }
+
+    #[test]
+    fn unit_chat_inputs_keep_separate_text_per_unit() {
+        // The per-unit input map keeps each unit's typed text independent — the
+        // bug being fixed was all agent chats sharing one input buffer.
+        let mut app = ValenxApp::default();
+        app.unit_chat_inputs
+            .entry(3)
+            .or_default()
+            .push_str("hello from 3");
+        app.unit_chat_inputs
+            .entry(4)
+            .or_default()
+            .push_str("four says hi");
+        assert_eq!(app.unit_chat_inputs.get(&3).unwrap(), "hello from 3");
+        assert_eq!(app.unit_chat_inputs.get(&4).unwrap(), "four says hi");
+        // Neither touched the shared base-panel input.
+        assert!(app.assistant.input.is_empty());
     }
 
     #[test]
