@@ -330,6 +330,13 @@ pub struct ValenxApp {
     ///
     /// [`DOCKABLE_PANELS`]: crate::dock_layout::DOCKABLE_PANELS
     pub(crate) wb_agent_counter: usize,
+    /// A pending **"move the whole Workbench + Agent unit"** request, set by the
+    /// per-unit header buttons ([`dock_layout::unit_move_header`]) and applied
+    /// once the dock tree is owned again ([`dock_layout::apply_pending_unit_move`]).
+    /// `Some((n, dir))` sends *both* halves of unit `n` (`workspace:n` +
+    /// `agent:n`) to the top or bottom row of the grid in one click; the
+    /// existing per-tile drag is untouched. `None` = nothing pending (default).
+    pub(crate) pending_unit_move: Option<(usize, crate::dock_layout::UnitMove)>,
 
     pub(crate) project: Option<LoadedProject>,
     pub(crate) project_path: Option<PathBuf>,

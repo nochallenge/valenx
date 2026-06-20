@@ -3074,27 +3074,24 @@ impl eframe::App for ValenxApp {
                 let mut do_show_viewport = false;
                 ui.horizontal(|ui| {
                     ui.strong("Workbench workspace");
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            if ui
-                                .button("Close all")
-                                .on_hover_text("Close every dock panel and Workbench+Agent unit")
-                                .clicked()
-                            {
-                                do_close_all = true;
-                            }
-                            if ui
-                                .button("Show 3D viewport")
-                                .on_hover_text(
-                                    "Restore the 3-D viewport (the dock returns to the right).",
-                                )
-                                .clicked()
-                            {
-                                do_show_viewport = true;
-                            }
-                        },
-                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .button("Close all")
+                            .on_hover_text("Close every dock panel and Workbench+Agent unit")
+                            .clicked()
+                        {
+                            do_close_all = true;
+                        }
+                        if ui
+                            .button("Show 3D viewport")
+                            .on_hover_text(
+                                "Restore the 3-D viewport (the dock returns to the right).",
+                            )
+                            .clicked()
+                        {
+                            do_show_viewport = true;
+                        }
+                    });
                 });
                 ui.separator();
                 if do_close_all {
