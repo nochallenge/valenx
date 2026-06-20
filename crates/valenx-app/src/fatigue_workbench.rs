@@ -82,9 +82,11 @@ pub fn draw_fatigue_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Fatigue",
         |app, ui| {
             ui.label(
-                egui::RichText::new("native high-cycle stress-life (S-N) analysis · valenx-fatigue")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "native high-cycle stress-life (S-N) analysis · valenx-fatigue",
+                )
+                .weak()
+                .small(),
             );
             ui.separator();
 

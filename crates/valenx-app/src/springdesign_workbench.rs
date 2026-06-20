@@ -112,18 +112,20 @@ pub fn draw_springdesign_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_springdesign_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Spring Design",
-                "native helical compression spring design · valenx-spring-design",
-            ) {
-                app.show_springdesign_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_springdesign_workbench",
+        "Spring Design",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native helical compression spring design · valenx-spring-design",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.springdesign;
             egui::ScrollArea::vertical()
@@ -207,7 +209,11 @@ pub fn draw_springdesign_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_springdesign_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.springdesign` borrow is
     // released here): build the coil's 3-D solid and load it.

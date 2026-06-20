@@ -78,18 +78,20 @@ pub fn draw_soilbearing_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_soilbearing_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Soil Bearing",
-                "native Terzaghi strip-footing bearing capacity · valenx-soilbearing",
-            ) {
-                app.show_soilbearing_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_soilbearing_workbench",
+        "Soil Bearing",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native Terzaghi strip-footing bearing capacity · valenx-soilbearing",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.soilbearing;
             egui::ScrollArea::vertical()
@@ -155,7 +157,11 @@ pub fn draw_soilbearing_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_soilbearing_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.soilbearing` borrow is
     // released here): build the footing's 3-D solid and load it.

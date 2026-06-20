@@ -99,18 +99,9 @@ pub fn draw_refrigeration_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_refrigeration_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Refrigeration",
-                "native vapor-compression / Carnot COP · valenx-refrigeration",
-            ) {
-                app.show_refrigeration_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_refrigeration_workbench", "Refrigeration", |app, ui| {
+            ui.label(egui::RichText::new("native vapor-compression / Carnot COP · valenx-refrigeration").weak().small());
+            ui.separator();
 
             let s = &mut app.refrigeration;
             egui::ScrollArea::vertical()
@@ -180,7 +171,8 @@ pub fn draw_refrigeration_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        }, );
+    if close { app.show_refrigeration_workbench = false; }
 
     // Serviced after the panel draws (the `&mut app.refrigeration` borrow is
     // released here): build the compressor's 3-D solid and load it.

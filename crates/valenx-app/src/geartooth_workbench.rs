@@ -90,18 +90,20 @@ pub fn draw_geartooth_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_geartooth_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Gear Tooth",
-                "native spur-gear tooth bending strength (Lewis + AGMA) · valenx-geartooth",
-            ) {
-                app.show_geartooth_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_geartooth_workbench",
+        "Gear Tooth",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native spur-gear tooth bending strength (Lewis + AGMA) · valenx-geartooth",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.geartooth;
             egui::ScrollArea::vertical()
@@ -175,7 +177,11 @@ pub fn draw_geartooth_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_geartooth_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.geartooth` borrow is
     // released here): build the gear's 3-D solid and load it.

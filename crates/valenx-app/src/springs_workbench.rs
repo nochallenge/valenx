@@ -75,12 +75,12 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_springs_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            ui.heading("Springs");
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_springs_workbench",
+        "Springs",
+        |app, ui| {
             ui.label(
                 egui::RichText::new("native helical-spring design · valenx-springs")
                     .weak()
@@ -171,7 +171,11 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_centerline_preview(ui, &pts);
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_springs_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.springs` borrow taken in
     // the closure above is released here): build the spring's 3-D solid and

@@ -84,9 +84,11 @@ pub fn draw_capacitor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Capacitor",
         |app, ui| {
             ui.label(
-                egui::RichText::new("native ideal parallel-plate electrostatics · valenx-capacitor")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "native ideal parallel-plate electrostatics · valenx-capacitor",
+                )
+                .weak()
+                .small(),
             );
             ui.separator();
 

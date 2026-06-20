@@ -70,18 +70,9 @@ pub fn draw_mosfet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_mosfet_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "MOSFET",
-                "native square-law NMOS IV (cutoff/triode/saturation) · valenx-mosfet",
-            ) {
-                app.show_mosfet_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_mosfet_workbench", "MOSFET", |app, ui| {
+            ui.label(egui::RichText::new("native square-law NMOS IV (cutoff/triode/saturation) · valenx-mosfet").weak().small());
+            ui.separator();
 
             let s = &mut app.mosfet;
             egui::ScrollArea::vertical()
@@ -144,7 +135,10 @@ pub fn draw_mosfet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        }, );
+    if close {
+        app.show_mosfet_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.mosfet` borrow is
     // released here): build the device's 3-D solid and load it.

@@ -63,18 +63,18 @@ pub fn draw_gears_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_gears_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Gears",
-                "native involute-gear design · valenx-gears",
-            ) {
-                app.show_gears_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_gears_workbench",
+        "Gears",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native involute-gear design · valenx-gears")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.gears;
             egui::ScrollArea::vertical()
@@ -154,7 +154,11 @@ pub fn draw_gears_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_profile_preview(ui, &pts);
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_gears_workbench = false;
+    }
 }
 
 /// Build the [`GearSpec`] from the form and return the full gear outline as

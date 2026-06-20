@@ -75,18 +75,9 @@ pub fn draw_pipenetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_pipenetwork_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Pipe Network",
-                "native pipe-network flow balancing · valenx-pipenetwork",
-            ) {
-                app.show_pipenetwork_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_pipenetwork_workbench", "Pipe Network", |app, ui| {
+            ui.label(egui::RichText::new("native pipe-network flow balancing · valenx-pipenetwork").weak().small());
+            ui.separator();
 
             let s = &mut app.pipenetwork;
             egui::ScrollArea::vertical()
@@ -145,7 +136,10 @@ pub fn draw_pipenetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        }, );
+    if close {
+        app.show_pipenetwork_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.pipenetwork` borrow is
     // released here): build the network's 3-D solid and load it.
