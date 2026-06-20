@@ -4,11 +4,13 @@
 //! Mirrors the Antenna / Heat-Transfer workbenches: a resizable
 //! [`egui::SidePanel`] gated on `crate::ValenxApp::show_geartooth_workbench`,
 //! toggled from the View menu. The form sets the transmitted tangential
-//! load, face width, module and tooth count (plus the AGMA quality `Qv`,
-//! fillet `Kf` and overload `Ko`); "Analyze" looks up the Lewis form factor
-//! `Y(N)`, evaluates the Lewis root bending stress `sigma = Wt/(F m Y)` and
-//! the AGMA refinement, and reports the pitch diameter and both stresses,
-//! and "Show 3-D gear" loads a representative gear-blank solid into the
+//! load, operating speed, face width, module and tooth count (plus the
+//! AGMA quality `Qv`, fillet `Kf` and overload `Ko`); "Analyze" looks up
+//! the Lewis form factor `Y(N)`, evaluates the Lewis root bending stress
+//! `sigma = Wt/(F m Y)` and the AGMA refinement (whose dynamic factor `Kv`
+//! is taken at the real pitch-line velocity `V = pi d n / 60000`), and
+//! reports the pitch diameter, pitch-line velocity and both stresses, and
+//! "Show 3-D gear" loads a representative gear-blank solid into the
 //! central viewport.
 
 use std::f64::consts::TAU;
@@ -18,7 +20,7 @@ use eframe::egui;
 use nalgebra::Vector3;
 
 use valenx_geartooth::agma::{agma_bending_stress, geometry_factor_j, AgmaFactors};
-use valenx_geartooth::lewis::lewis_bending_stress_for_teeth;
+use valenx_geartooth::lewis::{lewis_bending_stress_for_teeth, pitch_line_velocity_m_per_s};
 use valenx_geartooth::lewis_factor::lewis_form_factor;
 use valenx_geartooth::spec::ToothLoad;
 use valenx_mesh::element::{ElementBlock, ElementType};
@@ -37,6 +39,10 @@ pub struct GeartoothWorkbenchState {
     module_mm: f64,
     /// Number of teeth `N` on the gear (drives the Lewis form factor).
     teeth: u32,
+    /// Pinion rotational speed `n` (rev/min). With the pitch diameter it
+    /// fixes the pitch-line velocity `V = pi d n / 60000`, which feeds the
+    /// AGMA dynamic factor `Kv`.
+    speed_rpm: f64,
     /// AGMA transmission accuracy-level (quality) number `Qv` (6..=11).
     qv: f64,
     /// Fillet stress-concentration factor `Kf` (>= 1) for the AGMA `J`.
@@ -59,11 +65,14 @@ impl Default for GeartoothWorkbenchState {
         // gives Y = 0.322, so the Lewis stress is
         // 3500 / (50 * 5 * 0.322) ~= 43.48 MPa, and the pitch diameter is
         // module * teeth = 100 mm. Qv = 7 (commercial), Kf = 1.5, Ko = 1.25.
+        // At 1000 rev/min the pitch-line velocity is
+        // pi * 100 * 1000 / 60000 ~= 5.236 m/s.
         Self {
             tangential_load_n: 3500.0,
             face_width_mm: 50.0,
             module_mm: 5.0,
             teeth: 20,
+            speed_rpm: 1000.0,
             qv: 7.0,
             fillet_kf: 1.5,
             overload_ko: 1.25,
@@ -113,10 +122,14 @@ pub fn draw_geartooth_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
 
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new("Transmitted load").strong());
+                    ui.label(egui::RichText::new("Operating load & speed").strong());
                     ui.horizontal(|ui| {
                         ui.label("tangential Wt (N)");
                         ui.add(egui::DragValue::new(&mut s.tangential_load_n).speed(10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("speed n (rev/min)");
+                        ui.add(egui::DragValue::new(&mut s.speed_rpm).speed(10.0));
                     });
 
                     ui.add_space(4.0);
@@ -197,11 +210,18 @@ fn compute(s: &GeartoothWorkbenchState) -> Result<String, String> {
         lewis_bending_stress_for_teeth(s.tangential_load_n, s.face_width_mm, s.module_mm, s.teeth)
             .map_err(|e| e.to_string())?;
 
-    // AGMA refinement: J = Y / Kf, dynamic factor from Qv at the
-    // pitch-line velocity is folded into Kv; here we apply the overload
-    // factor Ko with the remaining factors at unity, replacing Y with J.
+    // Pitch-line (tangential) velocity at the operating speed:
+    // V = pi * d * n / 60000, in m/s. This is what the AGMA dynamic
+    // factor curve-fit actually depends on.
+    let velocity_m_per_s =
+        pitch_line_velocity_m_per_s(pitch_diameter_mm, s.speed_rpm).map_err(|e| e.to_string())?;
+
+    // AGMA refinement: J = Y / Kf, and the dynamic factor Kv from Qv at
+    // the real pitch-line velocity V; here we apply the overload factor
+    // Ko with the remaining factors at unity, replacing Y with J.
     let j = geometry_factor_j(lewis.form_factor_y, s.fillet_kf).map_err(|e| e.to_string())?;
-    let kv = valenx_geartooth::agma::dynamic_factor_kv(s.qv, 1.0).map_err(|e| e.to_string())?;
+    let kv = valenx_geartooth::agma::dynamic_factor_kv(s.qv, velocity_m_per_s)
+        .map_err(|e| e.to_string())?;
     let factors = AgmaFactors::new(s.overload_ko, kv, 1.0, 1.0, 1.0).map_err(|e| e.to_string())?;
     let agma = agma_bending_stress(
         s.tangential_load_n,
@@ -217,7 +237,9 @@ fn compute(s: &GeartoothWorkbenchState) -> Result<String, String> {
          teeth N         : {}\n\
          pitch diameter  : {:.3} mm\n\
          face width F    : {:.2} mm\n\
-         tangential Wt   : {:.1} N\n\n\
+         tangential Wt   : {:.1} N\n\
+         speed n         : {:.1} rev/min\n\
+         pitch-line V    : {:.3} m/s\n\n\
          Lewis Y(N)      : {:.4}\n\
          Lewis sigma     : {:.3} MPa\n\n\
          fillet Kf       : {:.3}\n\
@@ -230,6 +252,8 @@ fn compute(s: &GeartoothWorkbenchState) -> Result<String, String> {
         pitch_diameter_mm,
         s.face_width_mm,
         s.tangential_load_n,
+        s.speed_rpm,
+        velocity_m_per_s,
         lewis.form_factor_y,
         lewis.bending_stress_mpa,
         s.fillet_kf,
@@ -470,6 +494,52 @@ mod tests {
         let r = lewis_bending_stress_for_teeth(3500.0, 50.0, 5.0, 20).unwrap();
         let expected = 3500.0 / (50.0 * 5.0 * 0.322);
         assert!((r.bending_stress_mpa - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn analyze_default_reports_pitch_line_velocity() {
+        use std::f64::consts::PI;
+
+        let mut s = GeartoothWorkbenchState::default();
+        run_geartooth(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default gear should analyze: {:?}",
+            s.error
+        );
+
+        // The new readout lines: operating speed and pitch-line velocity.
+        assert!(
+            s.result.contains("speed n"),
+            "missing speed line:\n{}",
+            s.result
+        );
+        assert!(
+            s.result.contains("pitch-line V"),
+            "missing pitch-line velocity line:\n{}",
+            s.result
+        );
+        // Default speed = 1000 rev/min (printed with one decimal place).
+        assert!(
+            s.result.contains("1000.0 rev/min"),
+            "speed readout wrong:\n{}",
+            s.result
+        );
+
+        // Ground truth: V = pi * d * n / 60000 with d = module * teeth =
+        // 5 * 20 = 100 mm and n = 1000 rev/min, i.e.
+        // pi * 100 * 1000 / 60000 = pi / 0.6 ~= 5.2359878 m/s, which the
+        // {:.3} readout rounds to "5.236 m/s".
+        let expected_v = PI * 100.0 * 1000.0 / 60_000.0;
+        assert!(
+            (expected_v - 5.235_987_755_982_99).abs() < 1e-9,
+            "hand-computed V drifted: {expected_v}"
+        );
+        assert!(
+            s.result.contains("5.236 m/s"),
+            "pitch-line velocity readout wrong (expected ~{expected_v:.3} m/s):\n{}",
+            s.result
+        );
     }
 
     #[test]
