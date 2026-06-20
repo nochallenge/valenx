@@ -3081,6 +3081,18 @@ impl eframe::App for ValenxApp {
                 return;
             }
 
+            // Dock-fills-workspace: when the dockable layout is on AND the user
+            // has hidden the 3-D viewport, hand the entire central area to the
+            // dock so the docked workbenches / Workbench+Agent units fill the
+            // whole workspace — instead of being squeezed into the right
+            // SidePanel beside an empty "viewport hidden" placeholder. Restore
+            // the viewport from View → "Hide 3D viewport". With no dock tree
+            // yet (nothing open), fall through to the placeholder below.
+            if self.dock_enabled && self.viewport_hidden && self.dock_tree.is_some() {
+                self.render_dock_tree_into(ui);
+                return;
+            }
+
             // ── Central-viewport chrome header ────────────────────────────
             // A slim `−  ⋯  ✕` header above the 2D/3D body, matching the
             // right-side workbench panels' chrome. Drawn only for the live
