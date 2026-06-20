@@ -31,20 +31,109 @@
 //! tabs and the existing default layout untouched. Tab mode only engages
 //! once the user opens the first tab.
 //!
-//! ## Scope (v1)
+//! ## Per-tab workspace documents
 //!
-//! v1 is a *view* layer: the heavy per-domain state stays shared (one
-//! rocket design, one CAD document, …), so two tabs of the same kind show
-//! the same underlying project. Fully independent per-tab documents are a
-//! later stage; the model here ([`TabBar`] owning a `Vec` of [`ProjectTab`]
-//! plus an `active` index) is already shaped for it.
+//! Each tab owns its own **scene / project document** — the loaded
+//! geometry, mesh, camera, and selected case/field/time. These live in
+//! [`WorkspaceDoc`]; the [`TabBar`] keeps one `WorkspaceDoc` per tab in
+//! [`TabBar::docs`] (invariant: `docs.len() == tabs.len()`). The *active*
+//! tab's document is checked **out** into the live [`ValenxApp`] fields
+//! (`app.project`, `app.mesh`, `app.camera`, …) so the rest of the app
+//! reads/writes one plain set of fields; `docs[active]` is a default
+//! placeholder while that tab is checked out. Switching tabs swaps the
+//! live fields back into the old tab's slot and installs the new tab's
+//! document ([`switch_active_to`]), so opening a blank "+ New tab" gives a
+//! genuinely empty scene and switching back restores the prior geometry.
+//!
+//! Per-*workbench* parameter state (e.g. the rocket-design inputs, the CFD
+//! config) is **not** yet per-tab — only the scene/project document above
+//! is isolated. App-global runtime (the adapter registry, residual/log
+//! panels, run/sweep handles, settings, the `show_*` workbench flags) stays
+//! shared across tabs by design. The `docs` vector is runtime-only and is
+//! not serialised: a [`SavedSession`] still persists just `{name, tabs,
+//! active}`, and a restored session rebuilds `docs` as fresh defaults.
 
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 use crate::state_paths::{atomic_write, state_dir};
+use crate::types::{LoadedMesh, LoadedStl};
 use crate::viewport_kind::ViewportKind;
 use crate::ValenxApp;
+use std::path::PathBuf;
+use valenx_core::LoadedProject;
+use valenx_viz::OrbitCamera;
+
+/// One tab's **workspace document** — the per-tab scene / project state.
+///
+/// These are exactly the [`ValenxApp`] fields that make up "what's loaded
+/// in this project": the loaded project + its path + RBAC override, the
+/// dropped STL, the canonical mesh, the orbit camera, and the
+/// currently-selected case / field / time-index, plus the last run's
+/// results + workdir. The *active* tab keeps its document checked out in
+/// the live `ValenxApp` fields; every other tab parks its document in
+/// [`TabBar::docs`].
+///
+/// Construction is via [`Default`] (a fresh, empty document — no project,
+/// no mesh, the default camera). [`WorkspaceDoc::capture`] moves the live
+/// fields *out* of an app (leaving them empty / default), and
+/// [`WorkspaceDoc::install`] moves a document's fields back *in*. Neither
+/// clones the meshes — they are `move`d through `Option`/`Box`.
+#[derive(Default)]
+pub struct WorkspaceDoc {
+    project: Option<LoadedProject>,
+    project_path: Option<PathBuf>,
+    project_rbac_override: Option<valenx_rbac::RbacConfig>,
+    stl: Option<LoadedStl>,
+    mesh: Option<LoadedMesh>,
+    camera: OrbitCamera,
+    selected_case: Option<String>,
+    selected_field_name: Option<String>,
+    selected_time_index: usize,
+    last_run_results: Option<Box<valenx_fields::Results>>,
+    last_run_workdir: Option<PathBuf>,
+}
+
+impl WorkspaceDoc {
+    /// Move this tab's scene/project fields **out** of `app`, leaving the
+    /// live fields empty / default (so the caller can immediately
+    /// [`install`](Self::install) another document into the now-cleared
+    /// app). No mesh is cloned: every `Option`/`Box` is `take`n and the
+    /// camera is swapped for its default.
+    fn capture(app: &mut ValenxApp) -> WorkspaceDoc {
+        WorkspaceDoc {
+            project: app.project.take(),
+            project_path: app.project_path.take(),
+            project_rbac_override: app.project_rbac_override.take(),
+            stl: app.stl.take(),
+            mesh: app.mesh.take(),
+            camera: std::mem::take(&mut app.camera),
+            selected_case: app.selected_case.take(),
+            selected_field_name: app.selected_field_name.take(),
+            selected_time_index: std::mem::take(&mut app.selected_time_index),
+            last_run_results: app.last_run_results.take(),
+            last_run_workdir: app.last_run_workdir.take(),
+        }
+    }
+
+    /// Move this document's fields **into** `app`, replacing whatever the
+    /// live scene/project fields hold. Pair with [`capture`](Self::capture)
+    /// (capture the outgoing tab first, then install the incoming one) so a
+    /// scene is never lost. Consumes `self`.
+    fn install(self, app: &mut ValenxApp) {
+        app.project = self.project;
+        app.project_path = self.project_path;
+        app.project_rbac_override = self.project_rbac_override;
+        app.stl = self.stl;
+        app.mesh = self.mesh;
+        app.camera = self.camera;
+        app.selected_case = self.selected_case;
+        app.selected_field_name = self.selected_field_name;
+        app.selected_time_index = self.selected_time_index;
+        app.last_run_results = self.last_run_results;
+        app.last_run_workdir = self.last_run_workdir;
+    }
+}
 
 /// A project kind a tab can hold. [`TabKind::Blank`] is an empty project
 /// (the default `➕ New tab`); every other variant maps to exactly one
@@ -291,6 +380,14 @@ pub struct SavedSession {
 pub struct TabBar {
     /// Open tabs, left to right.
     pub tabs: Vec<ProjectTab>,
+    /// Per-tab workspace documents, **index-aligned with [`Self::tabs`]**
+    /// (invariant: `docs.len() == tabs.len()`). `docs[i]` holds tab `i`'s
+    /// parked scene/project document — except for the *active* tab, whose
+    /// document is checked out into the live [`ValenxApp`] fields while
+    /// `docs[active]` is a default placeholder. Runtime-only: never
+    /// serialised (a [`SavedSession`] stores just `{name, tabs, active}`),
+    /// so a restored/appended session rebuilds these as fresh defaults.
+    pub docs: Vec<WorkspaceDoc>,
     /// Index of the active tab in [`Self::tabs`], or `None` when empty.
     pub active: Option<usize>,
     /// Monotonic counter feeding the default "Untitled N" name for blank
@@ -301,32 +398,47 @@ pub struct TabBar {
 impl TabBar {
     /// Open a blank, empty project tab with an auto-generated "Untitled N"
     /// name, make it active, and return its index. This is what the default
-    /// `➕ New tab` button does — no workbench is forced open.
+    /// `New tab` button does — no workbench is forced open. Pushes a fresh
+    /// [`WorkspaceDoc`] alongside the tab to keep `docs.len() ==
+    /// tabs.len()`. Does **not** swap the live document — the caller (see
+    /// [`apply_intent`]) runs [`switch_active_to`] right after so the
+    /// previous tab's scene is parked and this blank tab starts empty.
     pub fn open_blank(&mut self) -> usize {
         self.blank_counter += 1;
         let title = format!("Untitled {}", self.blank_counter);
         self.tabs.push(ProjectTab::new(TabKind::Blank, title));
+        self.docs.push(WorkspaceDoc::default());
         let idx = self.tabs.len() - 1;
         self.active = Some(idx);
         idx
     }
 
     /// Open a new tab of `kind` (titled with the kind label), make it
-    /// active, and return its index. Used by the `＋ from template` menu.
+    /// active, and return its index. Used by the `From template` menu.
+    /// Pushes a fresh [`WorkspaceDoc`] to preserve the `docs.len() ==
+    /// tabs.len()` invariant (the live-document swap is done by the caller
+    /// via [`switch_active_to`]).
     pub fn open(&mut self, kind: TabKind) -> usize {
         self.tabs.push(ProjectTab::new(kind, kind.label()));
+        self.docs.push(WorkspaceDoc::default());
         let idx = self.tabs.len() - 1;
         self.active = Some(idx);
         idx
     }
 
-    /// Close the tab at `idx` and pick a sensible new active tab (the
-    /// previous neighbour, or `None` when the strip empties).
+    /// Close the tab at `idx` (and its parked document) and pick a sensible
+    /// new active tab (the previous neighbour, or `None` when the strip
+    /// empties). Keeps `docs` index-aligned with `tabs`. The live document
+    /// is reconciled by the caller (see the `close` branch of
+    /// [`apply_intent`]), which installs the new active tab's document.
     pub fn close(&mut self, idx: usize) {
         if idx >= self.tabs.len() {
             return;
         }
         self.tabs.remove(idx);
+        if idx < self.docs.len() {
+            self.docs.remove(idx);
+        }
         self.active = if self.tabs.is_empty() {
             None
         } else {
@@ -351,7 +463,9 @@ impl TabBar {
 
     /// Replace the whole strip with the tabs from `session`, clearing the
     /// transient edit state and clamping `active` into range. Used when the
-    /// user reopens a saved group.
+    /// user reopens a saved group. Rebuilds [`Self::docs`] as one fresh
+    /// default per restored tab (documents are not serialised), preserving
+    /// the `docs.len() == tabs.len()` invariant.
     pub fn restore(&mut self, session: SavedSession) {
         self.tabs = session
             .tabs
@@ -362,6 +476,9 @@ impl TabBar {
                 t
             })
             .collect();
+        self.docs = (0..self.tabs.len())
+            .map(|_| WorkspaceDoc::default())
+            .collect();
         self.active = match session.active {
             Some(i) if i < self.tabs.len() => Some(i),
             _ if self.tabs.is_empty() => None,
@@ -371,7 +488,9 @@ impl TabBar {
 
     /// Append the tabs from `session` after the current ones (used to
     /// reopen a *single* saved tab without discarding the open set), make
-    /// the first appended tab active, and return its index if any.
+    /// the first appended tab active, and return its index if any. Pushes a
+    /// fresh default [`WorkspaceDoc`] for each appended tab so `docs` stays
+    /// index-aligned with `tabs`.
     pub fn append(&mut self, session: SavedSession) -> Option<usize> {
         if session.tabs.is_empty() {
             return None;
@@ -381,6 +500,7 @@ impl TabBar {
             t.editing = false;
             t.edit_buf.clear();
             self.tabs.push(t);
+            self.docs.push(WorkspaceDoc::default());
         }
         self.active = Some(first);
         Some(first)
@@ -596,12 +716,98 @@ pub fn sync_active(app: &mut ValenxApp) {
     }
 }
 
+/// Switch the active tab to `new_idx`, swapping the per-tab workspace
+/// document so each tab keeps its own scene/project.
+///
+/// The currently-active tab's live scene (`app.project`, `app.mesh`,
+/// `app.camera`, …) is [`captured`](WorkspaceDoc::capture) back into its
+/// `docs` slot, then `docs[new_idx]` is taken and
+/// [`installed`](WorkspaceDoc::install) into the live fields — so the
+/// outgoing tab keeps its geometry and the incoming tab shows its own
+/// (empty for a fresh blank tab). Finally `active` is set and the visible
+/// workbench + viewport are reconciled via [`sync_active`].
+///
+/// `new_idx` out of range is ignored (no-op). When the previous `active`
+/// was `None` (pre-tab mode — the user just opened the first tab), the old
+/// live scene is intentionally discarded: the new tab installs its own
+/// (default/empty) document so "+ New tab" starts fresh.
+pub fn switch_active_to(app: &mut ValenxApp, new_idx: usize) {
+    if new_idx >= app.tab_bar.docs.len() {
+        return;
+    }
+    // Park the outgoing tab's live scene back into its slot (if any).
+    if let Some(a) = app.tab_bar.active {
+        if a < app.tab_bar.docs.len() {
+            app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
+        } else {
+            // Defensive: drop the live scene if the old index is stale.
+            let _ = WorkspaceDoc::capture(app);
+        }
+    } else {
+        // Pre-tab mode: discard the previous live scene so the first tab
+        // starts from a clean document.
+        let _ = WorkspaceDoc::capture(app);
+    }
+    // Install the incoming tab's document into the live fields.
+    let doc = std::mem::take(&mut app.tab_bar.docs[new_idx]);
+    doc.install(app);
+    app.tab_bar.active = Some(new_idx);
+    sync_active(app);
+}
+
+/// Reconcile the live workspace document with whatever `app.tab_bar.active`
+/// already points at, **discarding** the current live scene.
+///
+/// Unlike [`switch_active_to`] (which parks the outgoing scene), this drops
+/// the live fields and installs `docs[active]` (or clears them to a default
+/// empty document when there is no active tab). It's the right reconcile
+/// after operations that rebuild / replace the tab set and have *already*
+/// set `active` themselves — restoring a saved group, appending a saved
+/// tab, or closing a tab — where the outgoing live scene either no longer
+/// has a home or is being deliberately replaced. Always ends with
+/// [`sync_active`].
+fn install_active_doc(app: &mut ValenxApp) {
+    // Drop the current live scene (its tab is gone / being replaced).
+    let _ = WorkspaceDoc::capture(app);
+    match app.tab_bar.active {
+        Some(i) if i < app.tab_bar.docs.len() => {
+            let doc = std::mem::take(&mut app.tab_bar.docs[i]);
+            doc.install(app);
+        }
+        // No active tab (or stale index): leave the live fields empty.
+        _ => WorkspaceDoc::default().install(app),
+    }
+    sync_active(app);
+}
+
+/// Actually close the tab at `idx` (and discard its workspace document),
+/// reconciling the live scene afterwards. Called once the user confirms the
+/// "Close tab?" modal. Preserves the active tab's live scene first so
+/// closing a *non-active* tab doesn't lose the active tab's geometry;
+/// closing the active tab discards its scene (its slot is removed) and the
+/// neighbour's document is installed.
+fn perform_close(app: &mut ValenxApp, idx: usize) {
+    if idx >= app.tab_bar.tabs.len() {
+        return;
+    }
+    if let Some(a) = app.tab_bar.active {
+        if a < app.tab_bar.docs.len() {
+            app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
+        }
+    }
+    app.tab_bar.close(idx);
+    install_active_doc(app);
+}
+
 /// What a single frame of the tab strip wants to do, accumulated while the
 /// read-only borrow of the tab vec is live and applied afterwards.
 #[derive(Default)]
 struct StripIntent {
     activate: Option<usize>,
-    close: Option<usize>,
+    /// **Request** to close the tab at this index — opens the "Close tab?"
+    /// confirmation modal rather than closing immediately. The real close
+    /// only happens once the user confirms (see [`perform_close`]).
+    request_close: Option<usize>,
     open_template: Option<TabKind>,
     open_blank: bool,
     save_tab: Option<usize>,
@@ -616,16 +822,17 @@ struct StripIntent {
 
 /// Draw the project-tab strip (a slim panel just below the ribbon) and
 /// apply any click this frame (open blank / open template / activate /
-/// close / rename / save / open-saved).
+/// request-close / rename / save / open-saved), then render the
+/// "Close tab?" confirmation modal if a close is pending.
 pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
     let mut intent = StripIntent::default();
 
     egui::TopBottomPanel::top("valenx_project_tabs").show(ctx, |ui| {
         ui.horizontal(|ui| {
             // Primary: instant blank named project (no forced workbench, no
-            // folder dialog).
+            // folder dialog). Plain ASCII label so no font-glyph "tofu" box.
             if ui
-                .button("➕ New tab")
+                .button("+ New tab")
                 .on_hover_text("New blank project — name it and start building")
                 .clicked()
             {
@@ -635,7 +842,8 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
             // Secondary: start a tab pre-bound to a workbench template. The
             // body is wrapped in `scrollable_menu` so the long category list
             // stays on-screen and scrolls instead of running off the bottom.
-            ui.menu_button("＋ from template ▾", |ui| {
+            // ASCII label (no glyph caret) so it never renders as tofu.
+            ui.menu_button("From template", |ui| {
                 crate::menu_ui::scrollable_menu(ui, |ui| {
                     let mut last_group = "";
                     for kind in TabKind::TEMPLATES {
@@ -655,8 +863,9 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                 });
             });
 
-            // Open a previously-saved tab or group.
-            ui.menu_button("Open saved ▾", |ui| {
+            // Open a previously-saved tab or group. ASCII label (no glyph
+            // caret) so it never renders as tofu.
+            ui.menu_button("Open saved", |ui| {
                 crate::menu_ui::scrollable_menu(ui, |ui| {
                     let groups = list_saved_groups();
                     let tabs = list_saved_tabs();
@@ -666,7 +875,8 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                     if !groups.is_empty() {
                         ui.label(egui::RichText::new("Groups (sessions)").small().weak());
                         for name in groups {
-                            if ui.button(format!("🗂 {name}")).clicked() {
+                            // Plain text item (the emoji prefix tofu'd).
+                            if ui.button(format!("Group: {name}")).clicked() {
                                 intent.open_saved_group = Some(name);
                                 ui.close_menu();
                             }
@@ -678,7 +888,8 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                     if !tabs.is_empty() {
                         ui.label(egui::RichText::new("Single tabs").small().weak());
                         for name in tabs {
-                            if ui.button(format!("📄 {name}")).clicked() {
+                            // Plain text item (the emoji prefix tofu'd).
+                            if ui.button(format!("Tab: {name}")).clicked() {
                                 intent.open_saved_tab = Some(name);
                                 ui.close_menu();
                             }
@@ -700,7 +911,8 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
             ui.separator();
 
             if app.tab_bar.tabs.is_empty() {
-                ui.label(egui::RichText::new("← New tab to begin").weak().small());
+                // Plain ASCII (the arrow glyph tofu'd).
+                ui.label(egui::RichText::new("New tab to begin").weak().small());
             }
 
             let active = app.tab_bar.active;
@@ -735,7 +947,8 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                     if resp.double_clicked() {
                         intent.begin_rename = Some(i);
                     }
-                    // Right-click context menu: rename / save / close.
+                    // Right-click context menu: rename / save / close. "Save
+                    // this tab" is the escape hatch before a discard-on-close.
                     resp.context_menu(|ui| {
                         if ui.button("Rename").clicked() {
                             intent.begin_rename = Some(i);
@@ -747,16 +960,18 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                         ui.separator();
                         if ui.button("Close").clicked() {
-                            intent.close = Some(i);
+                            // Request a close — opens the confirm modal.
+                            intent.request_close = Some(i);
                             ui.close_menu();
                         }
                     });
                 }
 
                 // Painter-drawn ✕ (reused from the workbench chrome) — never
-                // a font-glyph "tofu" box.
+                // a font-glyph "tofu" box. Requests a close (the confirm
+                // modal gates the actual discard).
                 if crate::workbench_chrome::close_x_button(ui, "Close tab").clicked() {
-                    intent.close = Some(i);
+                    intent.request_close = Some(i);
                 }
                 ui.separator();
             }
@@ -764,6 +979,63 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
     });
 
     apply_intent(app, intent);
+    draw_close_confirm(app, ctx);
+}
+
+/// Render the "Close tab?" confirmation modal while
+/// [`ValenxApp::tab_close_confirm`] is `Some`. Closing a tab discards its
+/// (unsaved) workspace document, so the destructive close is gated behind
+/// an explicit confirm. [Cancel] clears the pending index; [Close tab]
+/// performs the real close (+ document removal + live-scene reconcile) via
+/// [`perform_close`]. The dialog points the user at "Save this tab" (the
+/// right-click escape hatch) so work can be preserved first.
+fn draw_close_confirm(app: &mut ValenxApp, ctx: &egui::Context) {
+    let Some(idx) = app.tab_close_confirm else {
+        return;
+    };
+    // The index may have gone stale (tab removed another way) — bail safely.
+    let Some(title) = app.tab_bar.tabs.get(idx).map(|t| t.title.clone()) else {
+        app.tab_close_confirm = None;
+        return;
+    };
+
+    let mut do_close = false;
+    let mut do_cancel = false;
+    egui::Window::new("Close tab?")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            ui.label(format!(
+                "Close \"{title}\"? This tab and its unsaved work will be permanently discarded."
+            ));
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new("Tip: right-click a tab to Save it first.")
+                    .small()
+                    .weak(),
+            );
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    do_cancel = true;
+                }
+                // Red-ish destructive action.
+                let close_btn = egui::Button::new(
+                    egui::RichText::new("Close tab").color(egui::Color32::from_rgb(220, 80, 80)),
+                );
+                if ui.add(close_btn).clicked() {
+                    do_close = true;
+                }
+            });
+        });
+
+    if do_cancel {
+        app.tab_close_confirm = None;
+    } else if do_close {
+        perform_close(app, idx);
+        app.tab_close_confirm = None;
+    }
 }
 
 /// Apply this frame's accumulated [`StripIntent`] after the read-only
@@ -804,33 +1076,60 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
     }
     if let Some(name) = intent.open_saved_group {
         if let Some(session) = load_saved_group(&name) {
+            // `restore` rebuilds the strip + fresh default docs and sets
+            // `active`; the old live scene is discarded with it.
             app.tab_bar.restore(session);
-            sync_active(app);
+            install_active_doc(app);
         }
     }
     if let Some(name) = intent.open_saved_tab {
         if let Some(session) = load_saved_tab(&name) {
+            // Park the currently-active scene before `append` re-points
+            // `active` at the first appended (fresh) tab, so switching back
+            // restores it.
+            if let Some(a) = app.tab_bar.active {
+                if a < app.tab_bar.docs.len() {
+                    app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
+                }
+            }
             app.tab_bar.append(session);
-            sync_active(app);
+            install_active_doc(app);
         }
     }
-    if let Some(i) = intent.close {
-        app.tab_bar.close(i);
-        sync_active(app);
+    if let Some(i) = intent.request_close {
+        // The ✕ / right-click "Close" only *requests* a close; the real
+        // close happens once the user confirms the "Close tab?" modal (a
+        // tab's unsaved workspace document is discarded on close).
+        if i < app.tab_bar.tabs.len() {
+            app.tab_close_confirm = Some(i);
+        }
     }
     if let Some(i) = intent.activate {
-        if i < app.tab_bar.tabs.len() {
-            app.tab_bar.active = Some(i);
-            sync_active(app);
+        // Swap documents so each tab keeps its own scene.
+        if i < app.tab_bar.tabs.len() && app.tab_bar.active != Some(i) {
+            switch_active_to(app, i);
         }
     }
     if let Some(kind) = intent.open_template {
+        // Park the outgoing tab's scene, open the new tab (pushes a fresh
+        // default doc + makes it active), then install that empty doc so the
+        // new tab starts blank and the prior tab keeps its geometry.
+        if let Some(a) = app.tab_bar.active {
+            if a < app.tab_bar.docs.len() {
+                app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
+            }
+        }
         app.tab_bar.open(kind);
-        sync_active(app);
+        install_active_doc(app);
     }
     if intent.open_blank {
+        if let Some(a) = app.tab_bar.active {
+            if a < app.tab_bar.docs.len() {
+                app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
+            }
+        }
         app.tab_bar.open_blank();
-        sync_active(app);
+        install_active_doc(app);
     }
 }
 
@@ -861,6 +1160,16 @@ mod tests {
         assert!(!TabKind::Blank.group().is_empty());
     }
 
+    /// The core per-tab-document invariant: there is exactly one
+    /// [`WorkspaceDoc`] slot per tab at all times.
+    fn assert_docs_aligned(bar: &TabBar) {
+        assert_eq!(
+            bar.docs.len(),
+            bar.tabs.len(),
+            "docs must stay index-aligned with tabs"
+        );
+    }
+
     #[test]
     fn open_blank_pushes_a_named_blank_and_activates() {
         let mut bar = TabBar::default();
@@ -870,9 +1179,12 @@ mod tests {
         assert_eq!(bar.active, Some(0));
         assert_eq!(bar.active_kind(), Some(TabKind::Blank));
         assert_eq!(bar.tabs[0].title, "Untitled 1");
+        // A workspace document slot is pushed alongside the tab.
+        assert_docs_aligned(&bar);
         // Successive blanks get distinct auto-names.
         bar.open_blank();
         assert_eq!(bar.tabs[1].title, "Untitled 2");
+        assert_docs_aligned(&bar);
     }
 
     #[test]
@@ -886,6 +1198,7 @@ mod tests {
         bar.open(TabKind::Genetics);
         assert_eq!(bar.active, Some(1));
         assert_eq!(bar.tabs.len(), 2);
+        assert_docs_aligned(&bar);
     }
 
     #[test]
@@ -894,14 +1207,18 @@ mod tests {
         bar.open(TabKind::Rocket);
         bar.open(TabKind::Cad);
         bar.open(TabKind::Genetics); // active = 2
+        assert_docs_aligned(&bar);
         bar.close(2);
         assert_eq!(bar.tabs.len(), 2);
         assert_eq!(bar.active, Some(1)); // clamped to last
+        assert_docs_aligned(&bar);
         bar.close(0);
         assert_eq!(bar.active, Some(0));
+        assert_docs_aligned(&bar);
         bar.close(0);
         assert_eq!(bar.tabs.len(), 0);
         assert_eq!(bar.active, None);
+        assert_docs_aligned(&bar);
     }
 
     #[test]
@@ -942,6 +1259,155 @@ mod tests {
         sync_active(&mut app);
         assert!(!app.show_rocket_workbench);
         assert!(!app.show_cad_workbench);
+    }
+
+    /// A minimal, valid [`LoadedMesh`] for exercising the per-tab scene
+    /// swap. The mesh itself is empty — we only care that `app.mesh` is
+    /// `Some` vs `None` across tab switches.
+    fn test_loaded_mesh() -> crate::types::LoadedMesh {
+        let mesh = valenx_mesh::Mesh::new("test-tab-scene");
+        let quality = valenx_mesh::quality_report(&mesh);
+        let aspect_hist =
+            valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+        let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+        crate::types::LoadedMesh {
+            path: std::path::PathBuf::from("<test>/scene"),
+            mesh,
+            quality,
+            aspect_hist,
+            skew_hist,
+        }
+    }
+
+    #[test]
+    fn opening_a_blank_tab_yields_a_fresh_scene_and_switching_back_restores_it() {
+        // The headline per-tab-document promise: a tab's loaded geometry is
+        // isolated. Open a Rocket tab, load a mesh into the live scene, open
+        // a blank tab — the new tab is genuinely empty (mesh == None) — then
+        // switch back to the rocket tab and its mesh returns.
+        let mut app = ValenxApp::default();
+
+        // Open the first (rocket) tab through the real apply_intent path.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.active, Some(0));
+        assert!(app.mesh.is_none(), "a fresh rocket tab starts with no mesh");
+
+        // Load a mesh into the live scene (as if the user imported geometry).
+        app.mesh = Some(test_loaded_mesh());
+        assert!(app.mesh.is_some());
+
+        // Open a blank tab — its scene must be empty, and the rocket tab's
+        // mesh must be parked into docs[0] (not lost, not leaked).
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_blank: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.active, Some(1));
+        assert!(
+            app.mesh.is_none(),
+            "the blank tab's scene is fresh — no mesh leaks across tabs"
+        );
+
+        // Switch back to the rocket tab: its mesh comes back.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                activate: Some(0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.active, Some(0));
+        assert!(
+            app.mesh.is_some(),
+            "switching back to the rocket tab restores its mesh"
+        );
+        // And the blank tab's (empty) doc is preserved for next time.
+        assert_docs_aligned(&app.tab_bar);
+    }
+
+    #[test]
+    fn closing_the_active_tab_discards_its_scene_and_restores_the_neighbour() {
+        // Closing a tab discards that tab's scene; the neighbour's document
+        // (and only it) is installed into the live fields.
+        let mut app = ValenxApp::default();
+        // Tab 0: rocket with a mesh.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        app.mesh = Some(test_loaded_mesh());
+        // Tab 1: blank (empty scene), now active.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_blank: true,
+                ..Default::default()
+            },
+        );
+        assert!(app.mesh.is_none());
+
+        // perform_close(1) (the confirm modal's action): discards tab 1's
+        // empty scene and installs tab 0's — whose mesh returns.
+        perform_close(&mut app, 1);
+        assert_eq!(app.tab_bar.active, Some(0));
+        assert_eq!(app.tab_bar.tabs.len(), 1);
+        assert_docs_aligned(&app.tab_bar);
+        assert!(
+            app.mesh.is_some(),
+            "closing the blank tab brings back the rocket tab's mesh"
+        );
+
+        // Closing the last tab clears the live scene entirely.
+        perform_close(&mut app, 0);
+        assert_eq!(app.tab_bar.active, None);
+        assert!(app.tab_bar.tabs.is_empty());
+        assert!(app.mesh.is_none(), "no tabs left → empty live scene");
+        assert_docs_aligned(&app.tab_bar);
+    }
+
+    #[test]
+    fn requesting_a_close_opens_the_confirm_and_does_not_close_yet() {
+        // The ✕ / right-click "Close" only *requests* a close: it sets the
+        // pending confirm index and leaves the tab (and its scene) intact.
+        let mut app = ValenxApp::default();
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        app.mesh = Some(test_loaded_mesh());
+
+        apply_intent(
+            &mut app,
+            StripIntent {
+                request_close: Some(0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.tab_close_confirm,
+            Some(0),
+            "a close request opens the confirm modal"
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 1, "the tab is not closed yet");
+        assert!(
+            app.mesh.is_some(),
+            "the scene survives an un-confirmed close"
+        );
     }
 
     #[test]
@@ -1018,6 +1484,7 @@ mod tests {
         bar.restore(session);
         assert_eq!(bar.tabs.len(), 1);
         assert_eq!(bar.active, Some(0), "out-of-range active clamps to 0");
+        assert_docs_aligned(&bar);
 
         // Empty session → active None.
         bar.restore(SavedSession {
@@ -1027,6 +1494,7 @@ mod tests {
         });
         assert!(bar.tabs.is_empty());
         assert_eq!(bar.active, None);
+        assert_docs_aligned(&bar);
     }
 
     #[test]
@@ -1046,6 +1514,7 @@ mod tests {
         assert_eq!(bar.tabs.len(), 3);
         assert_eq!(bar.active, Some(1));
         assert_eq!(bar.tabs[1].title, "x");
+        assert_docs_aligned(&bar);
     }
 
     /// A unique throwaway directory under the system temp dir, removed when
@@ -1283,5 +1752,33 @@ mod headless_ui_tests {
         // The field renders; with no synthesised key/focus events the edit
         // flag is left as-is (commit happens on Enter / focus loss).
         assert!(app.tab_bar.tabs[0].editing);
+    }
+
+    #[test]
+    fn strip_renders_close_confirm_modal_without_panic() {
+        // With a close pending, the strip mounts the "Close tab?" modal on
+        // top of the strip; that path must render headlessly. With no
+        // synthesised click on Cancel/Close, the pending index is left set.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket);
+        sync_active(&mut app);
+        app.tab_close_confirm = Some(0);
+        draw_strip(&mut app);
+        assert_eq!(
+            app.tab_close_confirm,
+            Some(0),
+            "no button was clicked, so the confirm stays open"
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 1, "nothing closed without confirm");
+    }
+
+    #[test]
+    fn stale_close_confirm_index_clears_safely() {
+        // If the pending index points past the end (the tab vanished another
+        // way), the modal renderer clears it instead of indexing OOB.
+        let mut app = ValenxApp::default();
+        app.tab_close_confirm = Some(5);
+        draw_strip(&mut app);
+        assert_eq!(app.tab_close_confirm, None);
     }
 }

@@ -1456,6 +1456,14 @@ pub struct ValenxApp {
     /// which workbench the tab strip shows. See [`crate::project_tabs`].
     pub(crate) tab_bar: crate::project_tabs::TabBar,
 
+    /// Pending tab-close confirmation. `Some(i)` while the "Close tab?"
+    /// modal is open for tab index `i` (set by the strip's ✕ / right-click
+    /// "Close"); cleared on Cancel, or on confirm right after the tab is
+    /// actually closed. Closing a tab discards its (unsaved) workspace
+    /// document, so the close is gated behind this explicit confirm. See
+    /// [`crate::project_tabs::draw_tab_strip`].
+    pub(crate) tab_close_confirm: Option<usize>,
+
     /// Persistent state for the 2D DNA / plasmid viewport. Survives
     /// viewport-kind switches so pan, zoom, and sub-view selection are
     /// remembered when the user returns to the 2D view.
