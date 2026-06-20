@@ -69,6 +69,9 @@ pub struct CoilWorkbenchState {
     current_a: f64,
     /// Drive frequency `f` (Hz) for the inductive reactance.
     frequency_hz: f64,
+    /// Series circuit resistance `R` (ohm) for the RL time constant
+    /// `tau = L / R`.
+    series_resistance_ohms: f64,
     /// Core material, selecting the relative permeability `mu_r`.
     core: CoreKind,
     /// Formatted performance readout (empty until the first analyze).
@@ -83,13 +86,15 @@ pub struct CoilWorkbenchState {
 impl Default for CoilWorkbenchState {
     fn default() -> Self {
         // A 500-turn air-cored solenoid, 1 cm winding radius, 10 cm long,
-        // carrying 2 A at 1 kHz: B ~ 12.6 mT, L ~ 0.99 mH, X_L ~ 6.2 ohm.
+        // carrying 2 A at 1 kHz with 4 ohm of series resistance:
+        // B ~ 12.6 mT, L ~ 0.99 mH, X_L ~ 6.2 ohm, tau ~ 0.25 ms.
         Self {
             turns: 500.0,
             radius_m: 0.01,
             length_m: 0.1,
             current_a: 2.0,
             frequency_hz: 1000.0,
+            series_resistance_ohms: 4.0,
             core: CoreKind::Air,
             result: String::new(),
             error: None,
@@ -145,6 +150,10 @@ pub fn draw_coil_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.label("frequency f (Hz)");
                         ui.add(egui::DragValue::new(&mut s.frequency_hz).speed(10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("series R (ohm)");
+                        ui.add(egui::DragValue::new(&mut s.series_resistance_ohms).speed(0.1));
                     });
 
                     ui.add_space(4.0);
@@ -220,6 +229,12 @@ fn compute(s: &CoilWorkbenchState) -> Result<String, String> {
     let inductance = coil.inductance_henries();
     let energy = energy_joules(inductance, s.current_a);
     let reactance = reactance_ohms(inductance, s.frequency_hz).map_err(|e| e.to_string())?;
+    // Series-RL time constant tau = L / R (the energising/decay e-folding
+    // time): the current in a switched series-RL circuit reaches ~63.2 % of
+    // its final value after one tau.
+    let time_constant = coil
+        .time_constant_seconds(s.series_resistance_ohms)
+        .map_err(|e| e.to_string())?;
     // Axial field of an ideal long solenoid: B = mu0 * mu_r * (N / l) * I.
     let mu = VACUUM_PERMEABILITY * s.core.relative_permeability();
     let b_tesla = mu * (s.turns / s.length_m) * s.current_a;
@@ -231,13 +246,15 @@ fn compute(s: &CoilWorkbenchState) -> Result<String, String> {
          radius / length : {:.4} m / {:.4} m\n\
          core (mu_r)     : {} ({:.0})\n\
          current I       : {:.3} A\n\
-         frequency f     : {:.1} Hz\n\n\
+         frequency f     : {:.1} Hz\n\
+         series R        : {:.3} ohm\n\n\
          turn density n  : {:.1} turns/m\n\
          ampere-turns N·I: {:.2} A·turns\n\
          axial field B   : {:.6} T\n\
          inductance L    : {:.6} H\n\
          stored energy E : {:.6} J\n\
-         reactance X_L   : {:.4} ohm",
+         reactance X_L   : {:.4} ohm\n\
+         time const tau  : {:.6} s",
         s.turns,
         s.radius_m,
         s.length_m,
@@ -245,12 +262,14 @@ fn compute(s: &CoilWorkbenchState) -> Result<String, String> {
         s.core.relative_permeability(),
         s.current_a,
         s.frequency_hz,
+        s.series_resistance_ohms,
         turns_per_metre,
         ampere_turns,
         b_tesla,
         inductance,
         energy,
         reactance,
+        time_constant,
     ))
 }
 
@@ -410,6 +429,39 @@ mod tests {
         let b: f64 = VACUUM_PERMEABILITY * 1000.0 * 3.0 / 0.5;
         let expected_b: f64 = 4.0 * PI * 1.0e-7 * 6000.0;
         assert!((b - expected_b).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn time_constant_matches_hand_computed_and_is_in_readout() {
+        // Ground truth: an air-cored solenoid with N = 100, A = 1e-4 m^2,
+        // l = 0.1 m has L = mu0 * N^2 * A / l = 4 pi e-6 H. In series with
+        // R = 2 ohm the RL time constant is tau = L / R = 2 pi e-6 s
+        // = 6.283185e-6 s. Pick a radius giving A = pi r^2 = 1e-4 m^2, i.e.
+        // r = sqrt(1e-4 / pi).
+        let radius = (1.0e-4_f64 / PI).sqrt();
+        let s = CoilWorkbenchState {
+            turns: 100.0,
+            radius_m: radius,
+            length_m: 0.1,
+            series_resistance_ohms: 2.0,
+            core: CoreKind::Air,
+            ..Default::default()
+        };
+        let coil = solenoid_of(&s).expect("valid air-core solenoid");
+        let tau = coil
+            .time_constant_seconds(s.series_resistance_ohms)
+            .expect("positive R yields a time constant");
+        let expected_tau: f64 = 2.0 * PI * 1.0e-6;
+        assert!(
+            (tau - expected_tau).abs() < 1.0e-15,
+            "tau = {tau}, expected {expected_tau}"
+        );
+        // And the formatted readout surfaces it. The default coil
+        // (N=500, r=0.01, l=0.1, air, R=4 ohm) has L ~ 0.987 mH and so
+        // tau = L / R ~ 0.000247 s, formatted to 6 dp.
+        let out = compute(&CoilWorkbenchState::default()).expect("default computes");
+        assert!(out.contains("time const tau"), "readout: {out}");
+        assert!(out.contains("0.000247"), "readout: {out}");
     }
 
     #[test]
