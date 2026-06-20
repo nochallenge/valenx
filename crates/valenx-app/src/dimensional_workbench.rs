@@ -119,18 +119,20 @@ pub fn draw_dimensional_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_dimensional_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Dimensionless Numbers",
-                "native similitude groups + regime classifiers · valenx-dimensional",
-            ) {
-                app.show_dimensional_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_dimensional_workbench",
+        "Dimensionless Numbers",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native similitude groups + regime classifiers · valenx-dimensional",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.dimensional;
             egui::ScrollArea::vertical()
@@ -219,7 +221,11 @@ pub fn draw_dimensional_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_dimensional_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.dimensional` borrow is
     // released here): build the representative box and load it.

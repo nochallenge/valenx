@@ -47,8 +47,63 @@ pub struct PanelChromeState {
     pub mode: PanelMode,
 }
 
-/// Draw the header row: title + `[collapse][pop-out menu][✕]`. Mutates the
-/// passed flags; sets `*close` when ✕ is clicked.
+/// The three header controls. Each is rendered by [`icon_button`] with
+/// [`egui::Painter`] primitives rather than a font glyph, so the chrome looks
+/// identical on every platform and never falls back to a "tofu" box when the
+/// active font lacks a symbol code-point.
+#[derive(Clone, Copy)]
+enum Icon {
+    /// A single horizontal bar — collapse the body to just the header.
+    Minimize,
+    /// Three dots in a row — open the dock / float / pop-out menu.
+    More,
+    /// Two crossing diagonals — hide the workbench.
+    Close,
+}
+
+/// The clickable footprint of a header icon button (a crisp square).
+const ICON_BUTTON_SIZE: f32 = 18.0;
+
+/// Draw one painter-rendered header icon button with a subtle rounded hover
+/// background and a tooltip. No font glyphs are used, so the control renders
+/// the same regardless of the loaded font set.
+fn icon_button(ui: &mut egui::Ui, icon: Icon, tip: &str) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(
+        egui::vec2(ICON_BUTTON_SIZE, ICON_BUTTON_SIZE),
+        egui::Sense::click(),
+    );
+    // Copy the small `Copy` visuals out before borrowing the painter, so the
+    // immutable `ui` borrow from `style()` does not overlap `ui.painter()`.
+    let vis = *ui.style().interact(&resp);
+    let painter = ui.painter();
+    if resp.hovered() {
+        painter.rect_filled(rect, 3.0, vis.bg_fill);
+    }
+    let c = rect.center();
+    let col = vis.fg_stroke.color;
+    let stroke = egui::Stroke::new(1.5, col);
+    let r = 4.0;
+    match icon {
+        Icon::Close => {
+            painter.line_segment([c + egui::vec2(-r, -r), c + egui::vec2(r, r)], stroke);
+            painter.line_segment([c + egui::vec2(-r, r), c + egui::vec2(r, -r)], stroke);
+        }
+        Icon::Minimize => {
+            painter.line_segment([c + egui::vec2(-r, 0.0), c + egui::vec2(r, 0.0)], stroke);
+        }
+        Icon::More => {
+            for dx in [-5.0_f32, 0.0, 5.0] {
+                painter.circle_filled(c + egui::vec2(dx, 0.0), 1.5, col);
+            }
+        }
+    }
+    resp.on_hover_text(tip)
+}
+
+/// Draw the header row: the title on the left and, pinned to the far right, a
+/// uniform `−  ⋯  ✕` cluster (Close rightmost). The buttons are painter-drawn
+/// so they never render as missing-glyph boxes. Mutates the passed flags; sets
+/// `*close` when the close button is clicked.
 fn panel_header(
     ui: &mut egui::Ui,
     title: &str,
@@ -57,37 +112,45 @@ fn panel_header(
     close: &mut bool,
 ) {
     ui.horizontal(|ui| {
-        ui.strong(title);
+        // Keep the controls a fixed, equal distance apart on every panel.
+        ui.spacing_mut().item_spacing.x = 4.0;
+        // Title, vertically centred against the icon cluster.
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.strong(title);
+        });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .small_button("✕")
-                .on_hover_text("Close (reopen from the View / Tools menu)")
-                .clicked()
-            {
+            // Right-to-left layout lays the first-added widget out rightmost,
+            // so add Close first to get the visual order `−  ⋯  ✕`.
+            if icon_button(ui, Icon::Close, "Close — reopen from the View menu").clicked() {
                 *close = true;
             }
-            ui.menu_button("⧉", |ui| {
-                if ui.button("Dock right").clicked() {
-                    *mode = PanelMode::Docked;
-                    ui.close_menu();
-                }
-                if ui.button("Float (in-app window)").clicked() {
-                    *mode = PanelMode::Floating;
-                    ui.close_menu();
-                }
-                if ui.button("Pop out (new OS window)").clicked() {
-                    *mode = PanelMode::Window;
-                    ui.close_menu();
-                }
-            })
-            .response
-            .on_hover_text("Pop out");
-            let (glyph, tip) = if *collapsed {
-                ("▸", "Expand")
-            } else {
-                ("▾", "Collapse")
-            };
-            if ui.small_button(glyph).on_hover_text(tip).clicked() {
+            // "More" opens a small menu via a toggled popup keyed on the
+            // button's own id, so the trigger stays a painter-drawn icon.
+            let more = icon_button(ui, Icon::More, "Dock, float, or pop out");
+            let popup_id = more.id.with("workbench_chrome_more");
+            if more.clicked() {
+                ui.memory_mut(|m| m.toggle_popup(popup_id));
+            }
+            egui::popup::popup_below_widget(
+                ui,
+                popup_id,
+                &more,
+                egui::popup::PopupCloseBehavior::CloseOnClick,
+                |ui| {
+                    ui.set_min_width(170.0);
+                    if ui.button("Dock right").clicked() {
+                        *mode = PanelMode::Docked;
+                    }
+                    if ui.button("Float (in-app window)").clicked() {
+                        *mode = PanelMode::Floating;
+                    }
+                    if ui.button("Pop out (new window)").clicked() {
+                        *mode = PanelMode::Window;
+                    }
+                },
+            );
+            let tip = if *collapsed { "Expand" } else { "Minimize" };
+            if icon_button(ui, Icon::Minimize, tip).clicked() {
                 *collapsed = !*collapsed;
             }
         });
@@ -183,5 +246,38 @@ mod tests {
         let st = PanelChromeState::default();
         assert!(!st.collapsed, "a fresh panel is not collapsed");
         assert_eq!(st.mode, PanelMode::Docked);
+    }
+
+    #[test]
+    fn icon_buttons_draw_headless_without_panicking() {
+        // Each icon is painter-drawn (no font glyph), so it must render on a
+        // bare headless context regardless of the loaded font set.
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let _ = icon_button(ui, Icon::Minimize, "Minimize");
+                let _ = icon_button(ui, Icon::More, "More");
+                let _ = icon_button(ui, Icon::Close, "Close");
+            });
+        });
+    }
+
+    #[test]
+    fn panel_header_draws_and_stays_open_without_a_click() {
+        // With no synthesised pointer input the close button is never clicked,
+        // so the header reports the panel should stay open.
+        let ctx = egui::Context::default();
+        let mut collapsed = false;
+        let mut mode = PanelMode::Docked;
+        let mut close = true;
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                close = false;
+                panel_header(ui, "Test", &mut collapsed, &mut mode, &mut close);
+            });
+        });
+        assert!(!close, "header reports close only when ✕ is clicked");
+        assert!(!collapsed);
+        assert_eq!(mode, PanelMode::Docked);
     }
 }

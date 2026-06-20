@@ -62,18 +62,20 @@ pub fn draw_camdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_camdynamics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Cam Dynamics",
-                "native closed-form cam-follower rise kinematics · valenx-camdynamics",
-            ) {
-                app.show_camdynamics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_camdynamics_workbench",
+        "Cam Dynamics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native closed-form cam-follower rise kinematics · valenx-camdynamics",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.camdynamics;
             egui::ScrollArea::vertical()
@@ -126,7 +128,11 @@ pub fn draw_camdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_camdynamics_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.camdynamics` borrow is
     // released here): build the disc cam's 3-D solid and load it.

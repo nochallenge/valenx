@@ -87,18 +87,18 @@ pub fn draw_brake_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_brake_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Brake",
-                "native disc / caliper friction torque + stopping · valenx-brake",
-            ) {
-                app.show_brake_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_brake_workbench",
+        "Brake",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native disc / caliper friction torque + stopping · valenx-brake")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.brake;
             egui::ScrollArea::vertical()
@@ -172,7 +172,11 @@ pub fn draw_brake_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_brake_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.brake` borrow is
     // released here): build the brake's 3-D solid and load it.

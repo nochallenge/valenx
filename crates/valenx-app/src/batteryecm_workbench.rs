@@ -92,18 +92,20 @@ pub fn draw_batteryecm_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_batteryecm_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Battery ECM",
-                "native first-order Thevenin cell voltage · valenx-battery-ecm",
-            ) {
-                app.show_batteryecm_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_batteryecm_workbench",
+        "Battery ECM",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native first-order Thevenin cell voltage · valenx-battery-ecm",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.batteryecm;
             egui::ScrollArea::vertical()
@@ -172,7 +174,11 @@ pub fn draw_batteryecm_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_batteryecm_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.batteryecm` borrow is
     // released here): build the cell's 3-D solid and load it.
