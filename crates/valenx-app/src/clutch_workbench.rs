@@ -213,13 +213,16 @@ fn compute(s: &ClutchWorkbenchState) -> Result<String, String> {
         .power(s.model, s.clamp_force_n, omega)
         .map_err(|e| e.to_string())?;
 
-    let (model_label, r_eff_m, t_model) = match s.model {
-        PressureModel::UniformWear => ("uniform wear", geom.mean_radius_uniform_wear_m(), t_wear),
-        PressureModel::UniformPressure => (
-            "uniform pressure",
-            geom.mean_radius_uniform_pressure_m(),
-            t_pres,
-        ),
+    // Both theories' effective lever-arm radii. The uniform-wear value is
+    // the arithmetic mean (ro + ri)/2; the uniform-pressure value is the
+    // larger area-weighted (centroidal) mean — which is why uniform
+    // pressure always predicts the higher torque for the same clamp force.
+    let r_wear_m = geom.mean_radius_uniform_wear_m();
+    let r_pres_m = geom.mean_radius_uniform_pressure_m();
+
+    let (model_label, t_model) = match s.model {
+        PressureModel::UniformWear => ("uniform wear", t_wear),
+        PressureModel::UniformPressure => ("uniform pressure", t_pres),
     };
 
     Ok(format!(
@@ -229,7 +232,8 @@ fn compute(s: &ClutchWorkbenchState) -> Result<String, String> {
          clamp force F   : {:.0} N\n\
          speed           : {:.0} rpm ({:.1} rad/s)\n\n\
          model           : {model_label}\n\
-         r_eff (lever)   : {:.2} mm\n\
+         r_eff wear      : {:.2} mm\n\
+         r_eff pressure  : {:.2} mm\n\
          T uniform wear  : {:.1} N·m\n\
          T uniform press : {:.1} N·m\n\
          T (model)       : {:.1} N·m\n\
@@ -241,7 +245,8 @@ fn compute(s: &ClutchWorkbenchState) -> Result<String, String> {
         s.clamp_force_n,
         s.speed_rpm,
         omega,
-        r_eff_m * 1.0e3,
+        r_wear_m * 1.0e3,
+        r_pres_m * 1.0e3,
         t_wear,
         t_pres,
         t_model,
@@ -407,6 +412,38 @@ mod tests {
             .torque(PressureModel::UniformWear, s.clamp_force_n)
             .expect("uniform-wear torque");
         assert!((t - expected).abs() < 1e-9, "got {t}");
+    }
+
+    #[test]
+    fn analyze_default_reports_both_lever_arm_radii() {
+        // The readout now surfaces BOTH effective lever-arm radii (the
+        // crate's mean_radius_uniform_wear_m / mean_radius_uniform_pressure_m).
+        // Ground truth for the 100/200 mm default face:
+        //   r_eff wear     = (ro + ri)/2 = (0.200 + 0.100)/2 = 0.150 m = 150.00 mm.
+        //   r_eff pressure = (2/3)(ro^3 - ri^3)/(ro^2 - ri^2)
+        //                  = (2/3)(0.008 - 0.001)/(0.04 - 0.01)
+        //                  = (2/3)(0.007/0.03) = 0.155555... m = 155.56 mm.
+        let ri = 0.100_f64;
+        let ro = 0.200_f64;
+        let r_wear = 0.5 * (ro + ri);
+        let r_pres = (2.0 / 3.0) * (ro * ro * ro - ri * ri * ri) / (ro * ro - ri * ri);
+        assert!((r_wear - 0.150).abs() < 1e-12, "wear lever {r_wear}");
+        assert!(
+            (r_pres * 1.0e3 - 155.5556).abs() < 1e-3,
+            "pressure lever {r_pres}"
+        );
+        // The area-weighted mean must exceed the arithmetic mean.
+        assert!(r_pres > r_wear);
+
+        let mut s = ClutchWorkbenchState::default();
+        run_clutch(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default clutch should analyze: {:?}",
+            s.error
+        );
+        assert!(s.result.contains("r_eff wear      : 150.00 mm"));
+        assert!(s.result.contains("r_eff pressure  : 155.56 mm"));
     }
 
     #[test]
