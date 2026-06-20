@@ -212,6 +212,13 @@ fn compute(s: &ChainDriveWorkbenchState) -> Result<String, String> {
         VelocityUnits::FeetPerMinute => (r.chain_velocity_m_per_s * 60.0 / 0.3048, "ft/min"),
     };
 
+    // Sprocket pitch (reference) circle diameters d = p / sin(π / z): the
+    // circle the chain rollers seat on, and hence the lever arm that turns
+    // chain tension into shaft torque. Sized straight off the validated
+    // pair, so they are always available once `analyze` above succeeded.
+    let driver_pd_mm = pair.driver_pitch_diameter_mm();
+    let driven_pd_mm = pair.driven_pitch_diameter_mm();
+
     Ok(format!(
         "driver / driven : {} / {} teeth\n\
          chain pitch     : {:.2} mm\n\
@@ -219,6 +226,8 @@ fn compute(s: &ChainDriveWorkbenchState) -> Result<String, String> {
          input torque    : {:.2} N·m\n\
          centre distance : {:.1} mm\n\n\
          ratio (N2/N1)   : {:.4}\n\
+         driver pitch dia: {driver_pd_mm:.2} mm\n\
+         driven pitch dia: {driven_pd_mm:.2} mm\n\
          chain velocity  : {:.3} {}\n\
          driven speed    : {:.2} rpm\n\
          output torque   : {:.2} N·m\n\
@@ -447,6 +456,40 @@ mod tests {
         let expected_ratio = driven_teeth / driver_teeth;
         assert!((r.ratio - expected_ratio).abs() < 1e-12);
         assert!((r.driven_speed_rpm - input_rpm / expected_ratio).abs() < 1e-9);
+    }
+
+    #[test]
+    fn readout_reports_sprocket_pitch_diameters() {
+        // Ground truth: a sprocket's pitch (reference) circle diameter is
+        // the closed form d = p / sin(π / z). For the default pair
+        // (p = 12.7 mm) the driver has z = 17 and the driven z = 34:
+        //   driver d = 12.7 / sin(π/17) = 69.1158... mm  -> "69.12 mm"
+        //   driven d = 12.7 / sin(π/34) = 137.6420... mm -> "137.64 mm"
+        use std::f64::consts::PI;
+        let s = ChainDriveWorkbenchState::default();
+        let out = compute(&s).expect("default drive computes");
+
+        let driver_expected = 12.7 / (PI / 17.0).sin();
+        let driven_expected = 12.7 / (PI / 34.0).sin();
+        // Pin the hand value the formatted substrings below round to.
+        assert!(
+            (driver_expected - 69.115_827).abs() < 1e-5,
+            "driver pitch dia hand-calc drifted: {driver_expected}"
+        );
+        assert!(
+            (driven_expected - 137.641_983).abs() < 1e-5,
+            "driven pitch dia hand-calc drifted: {driven_expected}"
+        );
+
+        // The new readout lines must show those diameters at :.2f.
+        assert!(
+            out.contains("driver pitch dia: 69.12 mm"),
+            "missing driver pitch diameter line:\n{out}"
+        );
+        assert!(
+            out.contains("driven pitch dia: 137.64 mm"),
+            "missing driven pitch diameter line:\n{out}"
+        );
     }
 
     #[test]
