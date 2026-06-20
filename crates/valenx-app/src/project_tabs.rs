@@ -820,8 +820,13 @@ struct StripIntent {
     begin_rename: Option<usize>,
     /// Open a paired "Workbench + Agent" unit (an empty workspace tile + a
     /// Claude chat tile) in the dockable region via
-    /// [`ValenxApp::add_workbench_agent_pair`].
+    /// [`ValenxApp::add_workbench_agent_pair`]. Used by any caller that wants
+    /// the simple "new bottom row" placement (e.g. the View menu).
     open_wb_agent: bool,
+    /// Open a paired "Workbench + Agent" unit at a **chosen** grid position,
+    /// picked from the tab-strip "+ Workbench+Agent" placement dropdown.
+    /// Routed to [`ValenxApp::add_workbench_agent_pair_at`].
+    add_wb_agent_at: Option<crate::dock_layout::UnitAddTarget>,
 }
 
 /// Draw the project-tab strip (a slim panel just below the ribbon) and
@@ -845,16 +850,62 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
 
             // Paired "Workbench + Agent" unit — an empty workspace tile + a
             // Claude chat tile dropped into the dockable region (turns the
-            // dockable layout on). Previously only reachable from the View
-            // menu; surfaced here so it's one click from the tab strip.
-            // Plain ASCII label so no font-glyph "tofu" box.
-            if ui
-                .button("+ Workbench+Agent")
-                .on_hover_text("Open a workspace + agent-chat pair")
-                .clicked()
-            {
-                intent.open_wb_agent = true;
-            }
+            // dockable layout on). A dropdown lets the user PLACE the new unit
+            // precisely: a brand-new row at top/bottom, or into an existing row
+            // (left/right end) of the current grid. The row list is read live
+            // from the dock tree (`dock_grid_rows`) — safe here because the
+            // dock_tree is owned (`Some`) during the tab strip; the dock itself
+            // renders later in `update.rs`. Plain ASCII labels (no glyph carets)
+            // so nothing renders as a "tofu" box. Body wrapped in
+            // `scrollable_menu` so a tall grid's row list stays on-screen.
+            use crate::dock_layout::UnitAddTarget;
+            ui.menu_button("+ Workbench+Agent", |ui| {
+                crate::menu_ui::scrollable_menu(ui, |ui| {
+                    if ui
+                        .button("New row at top")
+                        .on_hover_text("Add the unit as a new first row")
+                        .clicked()
+                    {
+                        intent.add_wb_agent_at = Some(UnitAddTarget::NewRowTop);
+                        ui.close_menu();
+                    }
+                    if ui
+                        .button("New row at bottom")
+                        .on_hover_text("Add the unit as a new last row")
+                        .clicked()
+                    {
+                        intent.add_wb_agent_at = Some(UnitAddTarget::NewRowBottom);
+                        ui.close_menu();
+                    }
+                    // Live grid shape: one entry per row, with its unit count.
+                    let rows = app.dock_grid_rows();
+                    if !rows.is_empty() {
+                        ui.separator();
+                        ui.label(egui::RichText::new("Add into a row:").weak().small());
+                        for (i, units) in rows.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("Row {} ({} units)", i + 1, units));
+                                if ui
+                                    .small_button("left")
+                                    .on_hover_text("Add at the left end of this row")
+                                    .clicked()
+                                {
+                                    intent.add_wb_agent_at = Some(UnitAddTarget::RowStart(i));
+                                    ui.close_menu();
+                                }
+                                if ui
+                                    .small_button("right")
+                                    .on_hover_text("Add at the right end of this row")
+                                    .clicked()
+                                {
+                                    intent.add_wb_agent_at = Some(UnitAddTarget::RowEnd(i));
+                                    ui.close_menu();
+                                }
+                            });
+                        }
+                    }
+                });
+            });
 
             // Secondary: start a tab pre-bound to a workbench template. The
             // body is wrapped in `scrollable_menu` so the long category list
@@ -1154,6 +1205,12 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         // project-tab document state, so no tab/doc reconcile is needed.
         app.add_workbench_agent_pair();
     }
+    if let Some(target) = intent.add_wb_agent_at {
+        // Same as above, but the dropdown chose a precise grid position for
+        // the new unit (new top/bottom row, or into an existing row's
+        // left/right end). Also turns the dockable layout on.
+        app.add_workbench_agent_pair_at(target);
+    }
 }
 
 #[cfg(test)]
@@ -1450,6 +1507,28 @@ mod tests {
         );
         assert!(app.dock_enabled, "the pair launcher turns the dock on");
         assert_eq!(app.wb_agent_counter, 1, "one Workbench+Agent unit added");
+    }
+
+    #[test]
+    fn add_wb_agent_at_intent_places_a_unit_at_the_chosen_spot() {
+        // The "+ Workbench+Agent" dropdown routes through
+        // `StripIntent::add_wb_agent_at`. Build a 3x2 grid first, then place a
+        // new unit into the right end of row 0 — the grid must become [4, 3]
+        // and the dock must be enabled.
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        assert_eq!(app.dock_grid_rows(), vec![3, 3]);
+
+        apply_intent(
+            &mut app,
+            StripIntent {
+                add_wb_agent_at: Some(crate::dock_layout::UnitAddTarget::RowEnd(0)),
+                ..Default::default()
+            },
+        );
+        assert!(app.dock_enabled, "placing a unit turns the dock on");
+        assert_eq!(app.wb_agent_counter, 7, "one more unit minted");
+        assert_eq!(app.dock_grid_rows(), vec![4, 3], "row 0 grew");
     }
 
     #[test]
@@ -1816,13 +1895,32 @@ mod headless_ui_tests {
 
     #[test]
     fn strip_with_wb_agent_button_draws_without_launching() {
-        // The "+ Workbench+Agent" button renders on the strip; with no
-        // synthesised click it must NOT fire the launcher (dock stays off,
-        // counter stays 0).
+        // The "+ Workbench+Agent" menu button renders on the strip; with no
+        // synthesised click on a menu item it must NOT fire the launcher (dock
+        // stays off, counter stays 0). A menu_button's body only runs when the
+        // popup is open, so a plain frame leaves everything untouched.
         let mut app = ValenxApp::default();
         draw_strip(&mut app);
         assert!(!app.dock_enabled, "no click → the dock stays off");
         assert_eq!(app.wb_agent_counter, 0, "no click → no unit launched");
+    }
+
+    #[test]
+    fn strip_draws_with_a_populated_grid_for_the_placement_menu() {
+        // With a live Workbench+Agent grid present, the tab strip still draws
+        // headlessly — the "+ Workbench+Agent" dropdown reads `dock_grid_rows`
+        // to build its "Add into a row:" list while the dock_tree is owned.
+        // (The menu body itself only runs when the popup is open, but this
+        // proves the strip + read path are panic-free with a grid present and
+        // that the dock tree is left intact by merely drawing the strip.)
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        assert_eq!(app.dock_grid_rows(), vec![3, 3]);
+        draw_strip(&mut app);
+        // Drawing the strip neither launched another unit nor disturbed the
+        // grid (the dock renders elsewhere, in update.rs).
+        assert_eq!(app.wb_agent_counter, 6);
+        assert_eq!(app.dock_grid_rows(), vec![3, 3]);
     }
 
     #[test]
