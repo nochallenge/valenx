@@ -123,6 +123,26 @@ fn load_feed(path: &Path) -> Vec<FeedEntry> {
         .unwrap_or_default()
 }
 
+/// The most recent **build / result / ship** headline in the assistant feed,
+/// as a short `"title — detail"` (or just `title`) string — `None` if the feed
+/// has no such entry yet. Used by the dock's `"workspace:<n>"` placeholder
+/// tile to surface the latest thing the agent reported building, without that
+/// tile needing to know the feed's on-disk format. Skips the user's own
+/// `"user"` echoes so it reflects the agent's progress, not the prompt.
+pub(crate) fn latest_build_status(app: &ValenxApp) -> Option<String> {
+    load_feed(&app.assistant.feed_path)
+        .into_iter()
+        .rev()
+        .find(|e| matches!(e.kind.as_str(), "build" | "result" | "ship") && !e.title.is_empty())
+        .map(|e| {
+            if e.detail.is_empty() {
+                e.title
+            } else {
+                format!("{} — {}", e.title, e.detail)
+            }
+        })
+}
+
 /// Accent colour for an entry's `kind` tag.
 fn accent(kind: &str) -> egui::Color32 {
     match kind {

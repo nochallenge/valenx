@@ -312,6 +312,34 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // "Workbench + Agent" launchers — each unit is a paired
+                    // empty workspace (build canvas) + Claude chat tile in the
+                    // dock. Both turn the dockable layout on as a side effect.
+                    if ui
+                        .button("New Workbench + Agent")
+                        .on_hover_text(
+                            "Add a paired Workspace + Agent unit to the dockable \
+                             region: an empty build canvas on the left and a Claude \
+                             chat on the right. Prompt the agent to build into the \
+                             workspace. (Turns the dockable layout on.)",
+                        )
+                        .clicked()
+                    {
+                        self.add_workbench_agent_pair();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .button("Open 6 Workbench+Agents (3x2 grid)")
+                        .on_hover_text(
+                            "Open six paired Workspace + Agent units arranged as a \
+                             3-column x 2-row grid in the dockable region. \
+                             (Turns the dockable layout on.)",
+                        )
+                        .clicked()
+                    {
+                        self.open_six_workbench_agents();
+                        ui.close_menu();
+                    }
                     ui.checkbox(&mut self.snap_to_grid, "Snap to grid")
                         .on_hover_text(
                             "Snap the viewport cursor to the nearest ground-grid \
