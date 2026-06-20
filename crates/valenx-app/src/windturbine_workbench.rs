@@ -82,18 +82,18 @@ pub fn draw_windturbine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_windturbine_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Wind Turbine",
-                "native actuator-disc wind-turbine power · valenx-windturbine",
-            ) {
-                app.show_windturbine_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_windturbine_workbench",
+        "Wind Turbine",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native actuator-disc wind-turbine power · valenx-windturbine")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.windturbine;
             egui::ScrollArea::vertical()
@@ -171,7 +171,11 @@ pub fn draw_windturbine_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_windturbine_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.windturbine` borrow is
     // released here): build the turbine's 3-D solid and load it.

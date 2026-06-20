@@ -72,18 +72,20 @@ pub fn draw_thermocouple_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_thermocouple_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Thermocouple",
-                "native linear-Seebeck EMF + cold-junction compensation · valenx-thermocouple",
-            ) {
-                app.show_thermocouple_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_thermocouple_workbench",
+        "Thermocouple",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native linear-Seebeck EMF + cold-junction compensation · valenx-thermocouple",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.thermocouple;
             egui::ScrollArea::vertical()
@@ -143,7 +145,11 @@ pub fn draw_thermocouple_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_thermocouple_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.thermocouple` borrow is
     // released here): build the probe's 3-D solid and load it.

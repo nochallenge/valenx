@@ -95,18 +95,18 @@ pub fn draw_thermistor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_thermistor_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Thermistor",
-                "native NTC resistance-temperature models · valenx-thermistor",
-            ) {
-                app.show_thermistor_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_thermistor_workbench",
+        "Thermistor",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native NTC resistance-temperature models · valenx-thermistor")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.thermistor;
             egui::ScrollArea::vertical()
@@ -201,7 +201,11 @@ pub fn draw_thermistor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_thermistor_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.thermistor` borrow is
     // released here): build the bead's 3-D solid and load it.
