@@ -87,6 +87,32 @@ pub(crate) enum UnitMove {
     Bottom,
 }
 
+/// Where a **new** "Workbench + Agent" unit should be inserted into the dock
+/// grid, chosen from the tab-strip "+ Workbench+Agent" dropdown. Lets the user
+/// place the new unit precisely rather than always tacking it onto a new bottom
+/// row.
+///
+/// The grid is a vertical stack of full-width **rows**, each row a horizontal
+/// strip of unit pairs. `RowStart`/`RowEnd` carry a **0-based** row index into
+/// that stack and add the new unit at the left / right end *within* that row;
+/// `NewRowTop`/`NewRowBottom` add the unit as a brand-new first / last row.
+///
+/// Consumed by [`ValenxApp::add_workbench_agent_pair_at`]. The menu that
+/// produces it is built from [`ValenxApp::dock_grid_rows`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnitAddTarget {
+    /// Add the new unit as a brand-new **first** row of the grid.
+    NewRowTop,
+    /// Add the new unit as a brand-new **last** row of the grid.
+    NewRowBottom,
+    /// Add the new unit at the **left** end of the existing row at this
+    /// 0-based index (falling back to a new bottom row if out of range).
+    RowStart(usize),
+    /// Add the new unit at the **right** end of the existing row at this
+    /// 0-based index (falling back to a new bottom row if out of range).
+    RowEnd(usize),
+}
+
 /// A slim, painter-safe header drawn at the **top of both halves** of a
 /// "Workbench + Agent" unit (the `workspace:n` build canvas *and* the `agent:n`
 /// chat), so the "move this whole unit" control is reachable from either tile.
@@ -567,6 +593,78 @@ impl ValenxApp {
     /// container so units stack top-to-bottom). Wired to View → "New Workbench
     /// + Agent".
     pub(crate) fn add_workbench_agent_pair(&mut self) {
+        // Same full-workspace behaviour as before; just route through the
+        // precise-placement path with the historical default (new bottom row).
+        self.add_workbench_agent_pair_at(UnitAddTarget::NewRowBottom);
+    }
+
+    /// Read-only snapshot of the dock grid's **row shape**: one entry per row
+    /// of the vertical grid, each the number of "Workbench + Agent" **units**
+    /// in that row. Used to build the tab-strip "+ Workbench+Agent" placement
+    /// dropdown so the menu reflects the live layout.
+    ///
+    /// The launcher builds each **unit** as a horizontal pair
+    /// `[workspace | agent]` (a container) and a multi-unit **row** as a
+    /// horizontal `Linear` whose children are those unit-containers; a *single*
+    /// unit row is just the pair itself (its children are the two panes). So a
+    /// row's unit count is the number of its **container** children, except a
+    /// row whose children are bare panes (it *is* one pair) counts as `1` — see
+    /// [`row_unit_count`]:
+    /// - root is a **vertical** `Linear` → one unit-count per row-child;
+    /// - root is **not** a vertical `Linear` (a single row — one unit, or a
+    ///   horizontal/tab arrangement) → a one-element vec with that row's count;
+    /// - no tree / no root → empty vec.
+    ///
+    /// Caveat: "unit" assumes the launcher's pair shape. After heavy manual
+    /// dragging a row may hold arbitrary tiles, so a count is the best honest
+    /// reading of how many side-by-side groups a row has — not a guarantee
+    /// every group is a genuine `workspace:`/`agent:` pair.
+    pub(crate) fn dock_grid_rows(&self) -> Vec<usize> {
+        let Some(tree) = self.dock_tree.as_ref() else {
+            return Vec::new();
+        };
+        let Some(root) = tree.root() else {
+            return Vec::new();
+        };
+        match tree.tiles.get(root) {
+            Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot)))
+                if vroot.dir == egui_tiles::LinearDir::Vertical =>
+            {
+                vroot
+                    .children
+                    .iter()
+                    .map(|&row| row_unit_count(tree, row))
+                    .collect()
+            }
+            // Root isn't a vertical grid: the whole thing is one row.
+            _ => vec![row_unit_count(tree, root)],
+        }
+    }
+
+    /// Launch **one "Workbench + Agent" unit** into the dock at a *chosen*
+    /// position (`target`) — the precise-placement counterpart of
+    /// [`Self::add_workbench_agent_pair`] (which is now just
+    /// `NewRowBottom`). Turns the dock on full-workspace (hides the 3-D
+    /// viewport), bumps [`Self::wb_agent_counter`] to the new `n`, builds the
+    /// `[workspace:n | agent:n]` pair, then places it per `target`:
+    ///
+    /// - [`UnitAddTarget::NewRowBottom`] → append as a new last row
+    ///   ([`attach_unit_to_root`]).
+    /// - [`UnitAddTarget::NewRowTop`] → prepend as a new first row (mirrors
+    ///   [`Self::apply_pending_unit_move`]'s `Top`: `children.insert(0, …)`
+    ///   when the root is a vertical `Linear`, else wrap `[pair, old_root]`
+    ///   into a fresh vertical container and make it the root).
+    /// - [`UnitAddTarget::RowEnd(i)`] / [`UnitAddTarget::RowStart(i)`] → add the
+    ///   pair at the right / left end **within** the existing `i`-th row: if
+    ///   that row is a horizontal `Linear`, push / insert into its children; if
+    ///   the row is a lone pane / non-horizontal tile, wrap `[row, pair]`
+    ///   (RowEnd) or `[pair, row]` (RowStart) into a fresh horizontal container
+    ///   and swap it in for that row-child. If the root isn't a vertical
+    ///   `Linear`, or `i` is out of range, fall back to `NewRowBottom`.
+    ///
+    /// Pane ids are positional labels (the agent tiles share one chat bridge),
+    /// so insertion never disturbs other units' state.
+    pub(crate) fn add_workbench_agent_pair_at(&mut self, target: UnitAddTarget) {
         self.dock_enabled = true;
         // A Workbench+Agent grid is a full-workspace mode: hide the 3-D
         // viewport so the dock fills the whole central area (restore it from
@@ -576,7 +674,7 @@ impl ValenxApp {
         let n = self.wb_agent_counter;
         let tree = self.dock_tree_or_empty();
         let pair = insert_pair(tree, n);
-        attach_unit_to_root(tree, pair);
+        place_unit(tree, pair, target);
     }
 
     /// Launch **six "Workbench + Agent" units in a 3×2 grid** (3 columns ×
@@ -656,6 +754,137 @@ fn attach_unit_to_root(tree: &mut egui_tiles::Tree<String>, new_unit: egui_tiles
             }
             let new_root = tree.tiles.insert_vertical_tile(vec![root, new_unit]);
             tree.root = Some(new_root);
+        }
+    }
+}
+
+/// Does the tile `row` host **container** children (i.e. it's a horizontal
+/// strip of unit-pairs we can add a sibling unit *into*), as opposed to a lone
+/// pair whose children are the two `workspace:`/`agent:` panes? Returns `true`
+/// only for a horizontal `Linear` at least one of whose children is itself a
+/// container. A bare pair (children are panes) returns `false` so placement
+/// wraps it instead of mixing a nested pair in beside loose panes.
+fn row_is_unit_strip(tree: &egui_tiles::Tree<String>, row: egui_tiles::TileId) -> bool {
+    match tree.tiles.get(row) {
+        Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(hrow)))
+            if hrow.dir == egui_tiles::LinearDir::Horizontal =>
+        {
+            hrow.children
+                .iter()
+                .any(|&c| matches!(tree.tiles.get(c), Some(egui_tiles::Tile::Container(_))))
+        }
+        _ => false,
+    }
+}
+
+/// How many "Workbench + Agent" units does the tile `row` represent? A
+/// horizontal strip of unit-containers ([`row_is_unit_strip`]) counts its
+/// container children; anything else — a lone pair, a single pane, a tab group,
+/// a nested split — is one unit. See [`ValenxApp::dock_grid_rows`].
+fn row_unit_count(tree: &egui_tiles::Tree<String>, row: egui_tiles::TileId) -> usize {
+    if row_is_unit_strip(tree, row) {
+        match tree.tiles.get(row) {
+            Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(hrow))) => hrow
+                .children
+                .iter()
+                .filter(|&&c| matches!(tree.tiles.get(c), Some(egui_tiles::Tile::Container(_))))
+                .count(),
+            _ => 1,
+        }
+    } else {
+        1
+    }
+}
+
+/// Place an already-built unit (`new_unit`) into the grid at `target`.
+///
+/// The placement rules are documented on
+/// [`ValenxApp::add_workbench_agent_pair_at`]; this is the tree surgery. Any
+/// case that can't be honoured exactly (root not a vertical grid, row index out
+/// of range) falls back to attaching the unit as a new bottom row via
+/// [`attach_unit_to_root`], so the unit is never dropped.
+fn place_unit(
+    tree: &mut egui_tiles::Tree<String>,
+    new_unit: egui_tiles::TileId,
+    target: UnitAddTarget,
+) {
+    match target {
+        // New last row — the historical default.
+        UnitAddTarget::NewRowBottom => attach_unit_to_root(tree, new_unit),
+        // New first row — mirror of apply_pending_unit_move's Top.
+        UnitAddTarget::NewRowTop => match tree.root() {
+            None => tree.root = Some(new_unit),
+            Some(root) => {
+                let is_vertical_root = matches!(
+                    tree.tiles.get(root),
+                    Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(l)))
+                        if l.dir == egui_tiles::LinearDir::Vertical
+                );
+                if is_vertical_root {
+                    if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(
+                        linear,
+                    ))) = tree.tiles.get_mut(root)
+                    {
+                        linear.children.insert(0, new_unit);
+                    }
+                } else {
+                    let new_root = tree.tiles.insert_vertical_tile(vec![new_unit, root]);
+                    tree.root = Some(new_root);
+                }
+            }
+        },
+        // Into an existing row, at the left (RowStart) or right (RowEnd) end.
+        UnitAddTarget::RowStart(i) | UnitAddTarget::RowEnd(i) => {
+            let at_start = matches!(target, UnitAddTarget::RowStart(_));
+            // The i-th row is only well-defined under a vertical Linear root.
+            let row_id = tree.root().and_then(|root| match tree.tiles.get(root) {
+                Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot)))
+                    if vroot.dir == egui_tiles::LinearDir::Vertical =>
+                {
+                    vroot.children.get(i).copied()
+                }
+                _ => None,
+            });
+            let Some(row_id) = row_id else {
+                // No clean vertical grid, or i out of range → new bottom row.
+                attach_unit_to_root(tree, new_unit);
+                return;
+            };
+            // Is that row a horizontal strip of unit-containers we can add a
+            // sibling unit *into* directly? (A lone pair — children are panes —
+            // is NOT: adding into it would mix a nested pair beside loose panes,
+            // so we wrap it instead, keeping the existing pair whole as one
+            // unit beside the new one.)
+            if row_is_unit_strip(tree, row_id) {
+                if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(row))) =
+                    tree.tiles.get_mut(row_id)
+                {
+                    if at_start {
+                        row.children.insert(0, new_unit);
+                    } else {
+                        row.add_child(new_unit);
+                    }
+                }
+            } else {
+                // Row is a lone pair / single pane / tab group / vertical split:
+                // wrap it and the new unit into a fresh horizontal row and swap
+                // it in for the old row-child inside the vertical root.
+                let children = if at_start {
+                    vec![new_unit, row_id]
+                } else {
+                    vec![row_id, new_unit]
+                };
+                let wrapped = tree.tiles.insert_horizontal_tile(children);
+                if let Some(root) = tree.root() {
+                    if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot))) =
+                        tree.tiles.get_mut(root)
+                    {
+                        if let Some(slot) = vroot.children.get_mut(i) {
+                            *slot = wrapped;
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1104,5 +1333,147 @@ mod tests {
             .collect();
         assert!(!panes.contains("valenx_fem_workbench"));
         assert!(panes.contains("valenx_engine_workbench"));
+    }
+
+    /// Total pane count in a tree (workspace + agent leaves).
+    fn pane_count(tree: &egui_tiles::Tree<String>) -> usize {
+        tree.tiles
+            .tiles()
+            .filter(|tile| matches!(tile, egui_tiles::Tile::Pane(_)))
+            .count()
+    }
+
+    /// The vertical root's row children (panics if the root isn't a vertical
+    /// Linear) — used by the placement tests.
+    fn grid_rows(tree: &egui_tiles::Tree<String>) -> Vec<egui_tiles::TileId> {
+        let root = tree.root().expect("tree has a root");
+        let egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot)) =
+            tree.tiles.get(root).unwrap()
+        else {
+            panic!("root must be a vertical Linear");
+        };
+        assert_eq!(vroot.dir, egui_tiles::LinearDir::Vertical);
+        vroot.children.clone()
+    }
+
+    #[test]
+    fn dock_grid_rows_reports_the_3x2_grid_shape() {
+        // The 3x2 demo grid is two rows of three unit-pairs each.
+        let mut app = ValenxApp::default();
+        assert!(app.dock_grid_rows().is_empty(), "no tree → empty row shape");
+        app.open_six_workbench_agents();
+        assert_eq!(app.dock_grid_rows(), vec![3, 3]);
+    }
+
+    #[test]
+    fn add_pair_at_row_end_grows_that_row_in_place() {
+        // Adding a unit at the RIGHT end of row 0 makes it a 4-unit row and
+        // takes the grid from 12 to 14 panes (the new pair = 2 panes), without
+        // adding a row.
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        assert_eq!(pane_count(app.dock_tree.as_ref().unwrap()), 12);
+
+        app.add_workbench_agent_pair_at(UnitAddTarget::RowEnd(0));
+        let tree = app.dock_tree.as_ref().unwrap();
+        assert_eq!(pane_count(tree), 14, "the new pair added two panes");
+        assert_eq!(app.dock_grid_rows(), vec![4, 3], "row 0 grew to 4 units");
+
+        // The new unit (n = 7) lives in row 0, at its last position.
+        let rows = grid_rows(tree);
+        let row0 = panes_under(tree, rows[0]);
+        assert!(row0.contains("workspace:7"));
+        assert!(row0.contains("agent:7"));
+    }
+
+    #[test]
+    fn add_pair_at_row_start_inserts_at_the_left_of_that_row() {
+        // RowStart(1) puts the new unit at index 0 of row 1, ahead of the
+        // existing units there.
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        app.add_workbench_agent_pair_at(UnitAddTarget::RowStart(1));
+        let tree = app.dock_tree.as_ref().unwrap();
+        assert_eq!(app.dock_grid_rows(), vec![3, 4], "row 1 grew to 4 units");
+
+        // Row 1 is a horizontal Linear; its FIRST child is the new unit (n=7).
+        let rows = grid_rows(tree);
+        let egui_tiles::Tile::Container(egui_tiles::Container::Linear(row1)) =
+            tree.tiles.get(rows[1]).unwrap()
+        else {
+            panic!("row 1 must be a horizontal Linear");
+        };
+        let first_unit = *row1.children.first().expect("row 1 has a first unit");
+        let first_panes = panes_under(tree, first_unit);
+        assert!(
+            first_panes.contains("workspace:7"),
+            "the new unit must be at index 0 of row 1, got {first_panes:?}"
+        );
+        assert!(first_panes.contains("agent:7"));
+    }
+
+    #[test]
+    fn add_pair_new_row_top_becomes_a_single_unit_first_row() {
+        // NewRowTop prepends a brand-new row holding only the new unit; the
+        // grid grows from [3,3] to [1,3,3].
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        app.add_workbench_agent_pair_at(UnitAddTarget::NewRowTop);
+        assert_eq!(app.dock_grid_rows(), vec![1, 3, 3]);
+
+        let tree = app.dock_tree.as_ref().unwrap();
+        let rows = grid_rows(tree);
+        let top = panes_under(tree, rows[0]);
+        assert_eq!(top.len(), 2, "the new top row holds exactly one unit");
+        assert!(top.contains("workspace:7"));
+        assert!(top.contains("agent:7"));
+    }
+
+    #[test]
+    fn add_pair_new_row_bottom_matches_the_legacy_add() {
+        // NewRowBottom appends a single-unit last row: [3,3] → [3,3,1].
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        app.add_workbench_agent_pair_at(UnitAddTarget::NewRowBottom);
+        assert_eq!(app.dock_grid_rows(), vec![3, 3, 1]);
+
+        // And the View-menu helper still delegates to NewRowBottom.
+        let mut app2 = ValenxApp::default();
+        app2.open_six_workbench_agents();
+        app2.add_workbench_agent_pair();
+        assert_eq!(app2.dock_grid_rows(), vec![3, 3, 1]);
+    }
+
+    #[test]
+    fn add_pair_row_index_out_of_range_falls_back_to_new_bottom_row() {
+        // RowEnd(99) can't target a real row → it lands as a new bottom row,
+        // and no panes are lost.
+        let mut app = ValenxApp::default();
+        app.open_six_workbench_agents();
+        app.add_workbench_agent_pair_at(UnitAddTarget::RowEnd(99));
+        assert_eq!(app.dock_grid_rows(), vec![3, 3, 1]);
+        assert_eq!(pane_count(app.dock_tree.as_ref().unwrap()), 14);
+    }
+
+    #[test]
+    fn add_pair_into_a_lone_row_wraps_it_into_a_horizontal_pair() {
+        // Start from a single Workbench+Agent unit (root = one horizontal pair,
+        // NOT a vertical grid). A lone pair counts as ONE unit (its children are
+        // panes, not nested unit-containers). Then RowEnd(0) on the
+        // freshly-formed vertical grid keeps every unit and adds the new one
+        // beside it.
+        let mut app = ValenxApp::default();
+        app.add_workbench_agent_pair(); // unit 1, lone horizontal pair = 1 unit
+        assert_eq!(app.dock_grid_rows(), vec![1]);
+
+        // A second unit at the bottom forms the vertical grid [1-unit, 1-unit].
+        app.add_workbench_agent_pair_at(UnitAddTarget::NewRowBottom);
+        assert_eq!(app.dock_grid_rows(), vec![1, 1]);
+
+        // Now grow row 0 (a lone-unit row) to the right — it must wrap into a
+        // horizontal row of two units.
+        app.add_workbench_agent_pair_at(UnitAddTarget::RowEnd(0));
+        assert_eq!(app.dock_grid_rows(), vec![2, 1]);
+        assert_eq!(pane_count(app.dock_tree.as_ref().unwrap()), 6);
     }
 }
