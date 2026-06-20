@@ -86,6 +86,7 @@ pub mod conveyor_workbench;
 mod coverage_ui_tests;
 pub mod creep_workbench;
 pub mod dcmotor_workbench;
+pub mod dock_layout;
 pub mod docking;
 pub mod draft_overlay;
 pub mod drone_workbench;
@@ -302,6 +303,24 @@ pub struct ValenxApp {
     /// panel's header is first interacted with. See [`workbench_chrome`].
     pub(crate) workbench_chrome:
         std::collections::HashMap<String, crate::workbench_chrome::PanelChromeState>,
+
+    /// Opt-in **dockable / tileable layout for the right-side workbench
+    /// panels** (View → "Dockable panel layout (beta)"). When `true`, the
+    /// run of `draw_<x>_workbench` dispatch in `update.rs` is replaced by a
+    /// single [`egui_tiles`] tree ([`dock_layout::draw_dock_layout`]) that
+    /// hosts every open workbench as a draggable / reorderable / splittable
+    /// tile. Default `false` — the classic stacked right-side `SidePanel`
+    /// layout is unchanged and stays the default. Distinct from
+    /// [`ValenxApp::docked_layout`], which tiles the *central* viewport.
+    pub(crate) dock_enabled: bool,
+    /// The lazily-built [`egui_tiles`] tree backing the dockable workbench
+    /// layout. `None` until the first frame [`ValenxApp::dock_enabled`] is on
+    /// (built from whichever workbenches are open then); thereafter
+    /// [`dock_layout::draw_dock_layout`] syncs it each frame — adding a tile
+    /// when a workbench is opened and dropping the tile when one is closed.
+    /// Panes are panel-id `String`s (e.g. `"valenx_engine_workbench"`).
+    pub(crate) dock_tree: Option<egui_tiles::Tree<String>>,
+
     pub(crate) project: Option<LoadedProject>,
     pub(crate) project_path: Option<PathBuf>,
     /// RBAC override block parsed from the loaded project's

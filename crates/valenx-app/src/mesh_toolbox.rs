@@ -3028,96 +3028,105 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_mesh_toolbox",
         "Mesh Toolbox",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new(
-                    "Inspector + Transformations + Part / Sketcher / Draft / TechDraw / \
-                     Assembly / Surface / CAM / Arch.",
-                )
-                .weak()
-                .small(),
-            )
-            .on_hover_text("CAD-side workbench. Ctrl+1 toggles. F1 opens panel help.");
-            ui.separator();
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    draw_inspector(app, ui);
-                    ui.separator();
-                    draw_part_workbench(app, ui);
-                    ui.separator();
-                    draw_transformations(app, ui);
-                    ui.separator();
-                    draw_cut_plane(app, ui);
-                    ui.separator();
-                    draw_mesh_tools(app, ui);
-                    ui.separator();
-                    draw_repair(app, ui);
-                    ui.separator();
-                    draw_export(app, ui);
-                    ui.separator();
-                    draw_external_editors(app, ui);
-                    ui.separator();
-                    // Workbench collapsing sections. The hover tooltips
-                    // on each header are part of the polish pass — they
-                    // give the user a one-line summary of what the
-                    // section covers before opening it.
-                    ui.collapsing("Dock", |ui| {
-                        draw_dock_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text("Layout manager for floating panels.");
-                    ui.collapsing("Sketcher", |ui| {
-                        draw_sketcher_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("Sketcher"));
-                    ui.collapsing("Part Design", |ui| {
-                        draw_part_design_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("Part Design"));
-                    ui.collapsing("Draft", |ui| {
-                        draw_draft_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("Draft"));
-                    ui.collapsing("TechDraw", |ui| {
-                        draw_techdraw_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("TechDraw"));
-                    ui.collapsing("Assembly", |ui| {
-                        draw_assembly_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("Assembly"));
-                    ui.collapsing("Surface", |ui| {
-                        draw_surface_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("Surface"));
-                    ui.collapsing("CAM", |ui| {
-                        draw_cam_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("CAM"));
-                    ui.collapsing("Arch / BIM", |ui| {
-                        draw_arch_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("Arch"));
-                    ui.collapsing("Spreadsheet", |ui| {
-                        draw_spreadsheet_panel(app, ui);
-                    })
-                    .header_response
-                    .on_hover_text(crate::panel_help::short_summary("Spreadsheet"));
-                });
-        },
+        mesh_toolbox_body,
     );
     if close {
         app.show_mesh_toolbox = false;
     }
+}
+
+/// The Mesh Toolbox (CAD) workbench body — Inspector, Part / Transform /
+/// cut-plane / repair / export tools, the external-editor row, and the
+/// collapsing CAD-workbench sections (Sketcher, Part Design, Draft,
+/// TechDraw, Assembly, Surface, CAM, Arch, Spreadsheet). Extracted from
+/// [`draw_mesh_toolbox`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]) without duplicating logic.
+pub(crate) fn mesh_toolbox_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new(
+            "Inspector + Transformations + Part / Sketcher / Draft / TechDraw / \
+                     Assembly / Surface / CAM / Arch.",
+        )
+        .weak()
+        .small(),
+    )
+    .on_hover_text("CAD-side workbench. Ctrl+1 toggles. F1 opens panel help.");
+    ui.separator();
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            draw_inspector(app, ui);
+            ui.separator();
+            draw_part_workbench(app, ui);
+            ui.separator();
+            draw_transformations(app, ui);
+            ui.separator();
+            draw_cut_plane(app, ui);
+            ui.separator();
+            draw_mesh_tools(app, ui);
+            ui.separator();
+            draw_repair(app, ui);
+            ui.separator();
+            draw_export(app, ui);
+            ui.separator();
+            draw_external_editors(app, ui);
+            ui.separator();
+            // Workbench collapsing sections. The hover tooltips
+            // on each header are part of the polish pass — they
+            // give the user a one-line summary of what the
+            // section covers before opening it.
+            ui.collapsing("Dock", |ui| {
+                draw_dock_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text("Layout manager for floating panels.");
+            ui.collapsing("Sketcher", |ui| {
+                draw_sketcher_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("Sketcher"));
+            ui.collapsing("Part Design", |ui| {
+                draw_part_design_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("Part Design"));
+            ui.collapsing("Draft", |ui| {
+                draw_draft_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("Draft"));
+            ui.collapsing("TechDraw", |ui| {
+                draw_techdraw_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("TechDraw"));
+            ui.collapsing("Assembly", |ui| {
+                draw_assembly_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("Assembly"));
+            ui.collapsing("Surface", |ui| {
+                draw_surface_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("Surface"));
+            ui.collapsing("CAM", |ui| {
+                draw_cam_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("CAM"));
+            ui.collapsing("Arch / BIM", |ui| {
+                draw_arch_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("Arch"));
+            ui.collapsing("Spreadsheet", |ui| {
+                draw_spreadsheet_panel(app, ui);
+            })
+            .header_response
+            .on_hover_text(crate::panel_help::short_summary("Spreadsheet"));
+        });
 }
 
 fn draw_inspector(app: &ValenxApp, ui: &mut egui::Ui) {

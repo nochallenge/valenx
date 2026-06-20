@@ -173,103 +173,106 @@ pub fn draw_genetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_genetics_workbench",
         "Genetics Workbench",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new("15 native computational-biology toolkits")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
-
-            // --- Panel selector --------------------------------------
-            // A combo box for compact switching plus a wrapped grid of
-            // selectable chips so the 15 panels are all one click away
-            // — the same "tool palette" feel as the CAD workbenches.
-            //
-            // Each chip carries a hover tooltip sourced from
-            // crate::panel_help so the user can see what a panel does
-            // before switching to it. F1 once inside a panel opens
-            // the full help popup.
-            egui::ComboBox::from_id_source("genetics_panel_combo")
-                .selected_text(app.genetics.active.label())
-                .width(ui.available_width())
-                .show_ui(ui, |ui| {
-                    for panel in GeneticsPanel::ALL {
-                        ui.selectable_value(&mut app.genetics.active, panel, panel.label())
-                            .on_hover_text(crate::panel_help::short_summary(panel.label()));
-                    }
-                });
-            ui.add_space(2.0);
-            ui.horizontal_wrapped(|ui| {
-                for panel in GeneticsPanel::ALL {
-                    let selected = app.genetics.active == panel;
-                    if ui
-                        .selectable_label(selected, panel.label())
-                        .on_hover_text(crate::panel_help::short_summary(panel.label()))
-                        .clicked()
-                    {
-                        app.genetics.active = panel;
-                    }
-                }
-            });
-            ui.separator();
-
-            // --- Active panel header ---------------------------------
-            let active = app.genetics.active;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(active.label()).heading());
-            });
-            ui.label(
-                egui::RichText::new(format!("backed by `{}`", active.crate_name()))
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
-
-            // --- Active panel body -----------------------------------
-            //
-            // Fade-in animation on panel switch — egui's
-            // `animate_bool_with_time` interpolates 0..1 on a state flip
-            // (the `false → true` transition). We key the animation id
-            // on the active-panel label so switching panels makes a
-            // *new* id whose stored value is `false`, then jumps to
-            // `true` on this frame → the value crosses 0 to 1 over
-            // 0.15 s. Stale ids are GC'd by egui automatically.
-            let anim_id = egui::Id::new(("valenx_genetics_panel_switch", active.label()));
-            let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.15);
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    ui.scope(|ui| {
-                        ui.set_opacity(t.clamp(0.0, 1.0));
-                        match active {
-                            GeneticsPanel::Sequence => genetics::sequence::draw(app, ui),
-                            GeneticsPanel::Alignment => genetics::alignment::draw(app, ui),
-                            GeneticsPanel::Phylogenetics => genetics::phylogenetics::draw(app, ui),
-                            GeneticsPanel::PopulationGenetics => genetics::popgen::draw(app, ui),
-                            GeneticsPanel::RnaStructure => genetics::rnastruct::draw(app, ui),
-                            GeneticsPanel::RnaDesigner => genetics::rna_designer::draw(app, ui),
-                            GeneticsPanel::MolecularDynamics => genetics::md::draw(app, ui),
-                            GeneticsPanel::Cheminformatics => genetics::cheminf::draw(app, ui),
-                            GeneticsPanel::MacromolecularStructure => {
-                                genetics::biostruct::draw(app, ui)
-                            }
-                            GeneticsPanel::QuantumChemistry => genetics::qchem::draw(app, ui),
-                            GeneticsPanel::Genomics => genetics::genomics::draw(app, ui),
-                            GeneticsPanel::SystemsBiology => genetics::sysbio::draw(app, ui),
-                            GeneticsPanel::Docking => genetics::docking::draw(app, ui),
-                            GeneticsPanel::GeneEditing => genetics::genediting::draw(app, ui),
-                            GeneticsPanel::StructurePrediction => {
-                                genetics::structpredict::draw(app, ui)
-                            }
-                        }
-                    });
-                });
-        },
+        genetics_workbench_body,
     );
     if close {
         app.show_genetics_workbench = false;
     }
+}
+
+/// The Genetics workbench body — the panel selector plus the dispatch to
+/// each of the 15 native computational-biology toolkits. Extracted from
+/// [`draw_genetics_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]) without duplicating logic.
+pub(crate) fn genetics_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("15 native computational-biology toolkits")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+
+    // --- Panel selector --------------------------------------
+    // A combo box for compact switching plus a wrapped grid of
+    // selectable chips so the 15 panels are all one click away
+    // — the same "tool palette" feel as the CAD workbenches.
+    //
+    // Each chip carries a hover tooltip sourced from
+    // crate::panel_help so the user can see what a panel does
+    // before switching to it. F1 once inside a panel opens
+    // the full help popup.
+    egui::ComboBox::from_id_source("genetics_panel_combo")
+        .selected_text(app.genetics.active.label())
+        .width(ui.available_width())
+        .show_ui(ui, |ui| {
+            for panel in GeneticsPanel::ALL {
+                ui.selectable_value(&mut app.genetics.active, panel, panel.label())
+                    .on_hover_text(crate::panel_help::short_summary(panel.label()));
+            }
+        });
+    ui.add_space(2.0);
+    ui.horizontal_wrapped(|ui| {
+        for panel in GeneticsPanel::ALL {
+            let selected = app.genetics.active == panel;
+            if ui
+                .selectable_label(selected, panel.label())
+                .on_hover_text(crate::panel_help::short_summary(panel.label()))
+                .clicked()
+            {
+                app.genetics.active = panel;
+            }
+        }
+    });
+    ui.separator();
+
+    // --- Active panel header ---------------------------------
+    let active = app.genetics.active;
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(active.label()).heading());
+    });
+    ui.label(
+        egui::RichText::new(format!("backed by `{}`", active.crate_name()))
+            .weak()
+            .small(),
+    );
+    ui.separator();
+
+    // --- Active panel body -----------------------------------
+    //
+    // Fade-in animation on panel switch — egui's
+    // `animate_bool_with_time` interpolates 0..1 on a state flip
+    // (the `false → true` transition). We key the animation id
+    // on the active-panel label so switching panels makes a
+    // *new* id whose stored value is `false`, then jumps to
+    // `true` on this frame → the value crosses 0 to 1 over
+    // 0.15 s. Stale ids are GC'd by egui automatically.
+    let anim_id = egui::Id::new(("valenx_genetics_panel_switch", active.label()));
+    let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.15);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.scope(|ui| {
+                ui.set_opacity(t.clamp(0.0, 1.0));
+                match active {
+                    GeneticsPanel::Sequence => genetics::sequence::draw(app, ui),
+                    GeneticsPanel::Alignment => genetics::alignment::draw(app, ui),
+                    GeneticsPanel::Phylogenetics => genetics::phylogenetics::draw(app, ui),
+                    GeneticsPanel::PopulationGenetics => genetics::popgen::draw(app, ui),
+                    GeneticsPanel::RnaStructure => genetics::rnastruct::draw(app, ui),
+                    GeneticsPanel::RnaDesigner => genetics::rna_designer::draw(app, ui),
+                    GeneticsPanel::MolecularDynamics => genetics::md::draw(app, ui),
+                    GeneticsPanel::Cheminformatics => genetics::cheminf::draw(app, ui),
+                    GeneticsPanel::MacromolecularStructure => genetics::biostruct::draw(app, ui),
+                    GeneticsPanel::QuantumChemistry => genetics::qchem::draw(app, ui),
+                    GeneticsPanel::Genomics => genetics::genomics::draw(app, ui),
+                    GeneticsPanel::SystemsBiology => genetics::sysbio::draw(app, ui),
+                    GeneticsPanel::Docking => genetics::docking::draw(app, ui),
+                    GeneticsPanel::GeneEditing => genetics::genediting::draw(app, ui),
+                    GeneticsPanel::StructurePrediction => genetics::structpredict::draw(app, ui),
+                }
+            });
+        });
 }
 
 #[cfg(test)]

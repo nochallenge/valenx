@@ -138,46 +138,56 @@ pub fn draw_aero_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         ctx,
         "valenx_aero_workbench",
         "Wind Tunnel",
-        |app, ui| {
-            ui.label(
-                egui::RichText::new("Virtual wind tunnel — 3-D external-aerodynamics CFD")
-                    .weak()
-                    .small(),
-            );
-            ui.label(
-                egui::RichText::new("backed by `valenx-aero`")
-                    .weak()
-                    .small(),
-            );
-            ui.separator();
-
-            // Fade-in animation on workbench open — when the user
-            // toggles the workbench on via Ctrl+3 / View → Wind Tunnel
-            // the panel body fades in over 0.18 s rather than popping
-            // in instantly. The animation auto-resets when the panel
-            // closes.
-            let anim_id = egui::Id::new("valenx_aero_workbench_open");
-            let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.18);
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    ui.scope(|ui| {
-                        ui.set_opacity(t.clamp(0.0, 1.0));
-                        panels::draw_body_section(app, ui);
-                        panels::draw_wind_section(app, ui);
-                        panels::draw_ground_section(app, ui);
-                        panels::draw_tunnel_section(app, ui);
-                        panels::draw_solver_section(app, ui);
-                        panels::draw_run_section(app, ui);
-                        panels::draw_results_section(app, ui);
-                        panels::draw_visualization_section(app, ui);
-                    });
-                });
-        },
+        aero_workbench_body,
     );
     if close {
         app.show_aero_workbench = false;
     }
+}
+
+/// The Wind Tunnel (Aero) workbench body — body / wind / ground / tunnel /
+/// solver / run / results / visualization sections. Extracted from
+/// [`draw_aero_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]). Drains the background-run poll up
+/// front (cheap `Context` clone) so the dock path shows fresh residuals.
+pub(crate) fn aero_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    let ctx = ui.ctx().clone();
+    pump_aero_run(app, &ctx);
+    ui.label(
+        egui::RichText::new("Virtual wind tunnel — 3-D external-aerodynamics CFD")
+            .weak()
+            .small(),
+    );
+    ui.label(
+        egui::RichText::new("backed by `valenx-aero`")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+
+    // Fade-in animation on workbench open — when the user
+    // toggles the workbench on via Ctrl+3 / View → Wind Tunnel
+    // the panel body fades in over 0.18 s rather than popping
+    // in instantly. The animation auto-resets when the panel
+    // closes.
+    let anim_id = egui::Id::new("valenx_aero_workbench_open");
+    let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.18);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.scope(|ui| {
+                ui.set_opacity(t.clamp(0.0, 1.0));
+                panels::draw_body_section(app, ui);
+                panels::draw_wind_section(app, ui);
+                panels::draw_ground_section(app, ui);
+                panels::draw_tunnel_section(app, ui);
+                panels::draw_solver_section(app, ui);
+                panels::draw_run_section(app, ui);
+                panels::draw_results_section(app, ui);
+                panels::draw_visualization_section(app, ui);
+            });
+        });
 }
 
 /// Poll the background wind-tunnel run: drain progress messages into
