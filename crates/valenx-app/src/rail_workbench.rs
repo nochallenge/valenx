@@ -73,8 +73,17 @@ pub fn draw_rail_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_rail_workbench", "Rail / Train", |app, ui| {
-            ui.label(egui::RichText::new("native train resistance + tractive effort · valenx-rail").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_rail_workbench",
+        "Rail / Train",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native train resistance + tractive effort · valenx-rail")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
 
             let s = &mut app.rail;
@@ -145,8 +154,11 @@ pub fn draw_rail_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
-    if close { app.show_rail_workbench = false; }
+        },
+    );
+    if close {
+        app.show_rail_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.rail` borrow is
     // released here): build the boxcar's 3-D solid and load it.

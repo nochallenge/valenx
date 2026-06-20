@@ -118,8 +118,17 @@ pub fn draw_osmosis_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_osmosis_workbench", "Osmosis / Starling", |app, ui| {
-            ui.label(egui::RichText::new("native semipermeable-membrane water balance · valenx-osmosis").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_osmosis_workbench",
+        "Osmosis / Starling",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native semipermeable-membrane water balance · valenx-osmosis")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
 
             let s = &mut app.osmosis;
@@ -227,7 +236,8 @@ pub fn draw_osmosis_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_osmosis_workbench = false;
     }

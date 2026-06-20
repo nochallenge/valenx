@@ -70,8 +70,19 @@ pub fn draw_mosfet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_mosfet_workbench", "MOSFET", |app, ui| {
-            ui.label(egui::RichText::new("native square-law NMOS IV (cutoff/triode/saturation) · valenx-mosfet").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_mosfet_workbench",
+        "MOSFET",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native square-law NMOS IV (cutoff/triode/saturation) · valenx-mosfet",
+                )
+                .weak()
+                .small(),
+            );
             ui.separator();
 
             let s = &mut app.mosfet;
@@ -135,7 +146,8 @@ pub fn draw_mosfet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_mosfet_workbench = false;
     }

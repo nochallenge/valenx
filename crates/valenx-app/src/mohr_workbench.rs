@@ -69,8 +69,17 @@ pub fn draw_mohr_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_mohr_workbench", "Mohr's Circle", |app, ui| {
-            ui.label(egui::RichText::new("native 2-D plane-stress transformation · valenx-mohr").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_mohr_workbench",
+        "Mohr's Circle",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native 2-D plane-stress transformation · valenx-mohr")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
 
             let s = &mut app.mohr;
@@ -126,7 +135,8 @@ pub fn draw_mohr_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_mohr_workbench = false;
     }

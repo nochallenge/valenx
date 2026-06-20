@@ -81,8 +81,17 @@ pub fn draw_rcbeam_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_rcbeam_workbench", "RC Beam", |app, ui| {
-            ui.label(egui::RichText::new("native reinforced-concrete beam flexure · valenx-rcbeam").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_rcbeam_workbench",
+        "RC Beam",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native reinforced-concrete beam flexure · valenx-rcbeam")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
 
             let s = &mut app.rcbeam;
@@ -145,8 +154,11 @@ pub fn draw_rcbeam_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
-    if close { app.show_rcbeam_workbench = false; }
+        },
+    );
+    if close {
+        app.show_rcbeam_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.rcbeam` borrow is
     // released here): build the beam's 3-D solid and load it.

@@ -64,6 +64,15 @@ enum Icon {
 /// The clickable footprint of a header icon button (a crisp square).
 const ICON_BUTTON_SIZE: f32 = 18.0;
 
+/// Draw a painter-rendered close (`✕`) button — two crossing diagonals — at
+/// the standard icon footprint, with the same hover background + tooltip as the
+/// workbench header controls. Exposed so other chrome (e.g. the project-tab
+/// strip's per-tab close) shares the exact same crisp ✕ instead of falling back
+/// to a font glyph that can render as a "tofu" box.
+pub(crate) fn close_x_button(ui: &mut egui::Ui, tip: &str) -> egui::Response {
+    icon_button(ui, Icon::Close, tip)
+}
+
 /// Draw one painter-rendered header icon button with a subtle rounded hover
 /// background and a tooltip. No font glyphs are used, so the control renders
 /// the same regardless of the loaded font set.

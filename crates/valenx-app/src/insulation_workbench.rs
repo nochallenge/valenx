@@ -92,11 +92,9 @@ pub fn draw_insulation_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Insulation",
         |app, ui| {
             ui.label(
-                egui::RichText::new(
-                    "native composite-wall R-value / U-value · valenx-insulation",
-                )
-                .weak()
-                .small(),
+                egui::RichText::new("native composite-wall R-value / U-value · valenx-insulation")
+                    .weak()
+                    .small(),
             );
             ui.separator();
 

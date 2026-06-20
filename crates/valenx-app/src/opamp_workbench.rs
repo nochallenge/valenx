@@ -79,8 +79,19 @@ pub fn draw_opamp_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_opamp_workbench", "Op-Amp", |app, ui| {
-            ui.label(egui::RichText::new("native ideal closed-loop op-amp gain & bandwidth · valenx-opamp").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_opamp_workbench",
+        "Op-Amp",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native ideal closed-loop op-amp gain & bandwidth · valenx-opamp",
+                )
+                .weak()
+                .small(),
+            );
             ui.separator();
 
             let s = &mut app.opamp;
@@ -147,7 +158,8 @@ pub fn draw_opamp_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_opamp_workbench = false;
     }

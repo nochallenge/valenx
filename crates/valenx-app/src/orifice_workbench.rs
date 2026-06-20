@@ -72,8 +72,17 @@ pub fn draw_orifice_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_orifice_workbench", "Orifice Meter", |app, ui| {
-            ui.label(egui::RichText::new("native incompressible dP flow-meter sizing · valenx-orifice").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_orifice_workbench",
+        "Orifice Meter",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native incompressible dP flow-meter sizing · valenx-orifice")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
 
             let s = &mut app.orifice;
@@ -135,7 +144,8 @@ pub fn draw_orifice_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_orifice_workbench = false;
     }

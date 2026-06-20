@@ -130,9 +130,11 @@ pub fn draw_popdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Population Dynamics",
         |app, ui| {
             ui.label(
-                egui::RichText::new("native closed-form epidemiology / ecology · valenx-popdynamics")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "native closed-form epidemiology / ecology · valenx-popdynamics",
+                )
+                .weak()
+                .small(),
             );
             ui.separator();
 

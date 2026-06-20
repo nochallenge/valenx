@@ -308,8 +308,17 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     let mut do_render = false;
     let mut do_render_rocket = false;
     let mut do_render_engine = false;
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_render_workbench", "Path-Traced Render", |app, ui| {
-            ui.label(egui::RichText::new("global illumination · valenx-pathtrace").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_render_workbench",
+        "Path-Traced Render",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("global illumination · valenx-pathtrace")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
             let s = &mut app.render;
             let running = s.job.is_some();
@@ -384,8 +393,11 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         .weak(),
                 );
             }
-        }, );
-    if close { app.show_render_workbench = false; }
+        },
+    );
+    if close {
+        app.show_render_workbench = false;
+    }
 
     if do_render || do_render_rocket || do_render_engine {
         // Clear stale per-run state up front (house style — cf. cfd_workbench),

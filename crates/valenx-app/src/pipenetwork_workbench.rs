@@ -75,8 +75,17 @@ pub fn draw_pipenetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_pipenetwork_workbench", "Pipe Network", |app, ui| {
-            ui.label(egui::RichText::new("native pipe-network flow balancing · valenx-pipenetwork").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_pipenetwork_workbench",
+        "Pipe Network",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native pipe-network flow balancing · valenx-pipenetwork")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
 
             let s = &mut app.pipenetwork;
@@ -136,7 +145,8 @@ pub fn draw_pipenetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
+        },
+    );
     if close {
         app.show_pipenetwork_workbench = false;
     }

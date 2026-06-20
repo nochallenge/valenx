@@ -72,11 +72,9 @@ pub fn draw_heatpump_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Heat Pump",
         |app, ui| {
             ui.label(
-                egui::RichText::new(
-                    "native Carnot COP + second-law derating · valenx-heatpump",
-                )
-                .weak()
-                .small(),
+                egui::RichText::new("native Carnot COP + second-law derating · valenx-heatpump")
+                    .weak()
+                    .small(),
             );
             ui.separator();
 

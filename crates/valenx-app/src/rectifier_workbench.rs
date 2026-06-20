@@ -72,7 +72,12 @@ pub fn draw_rectifier_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_rectifier_workbench", "Rectifier", |app, ui| {
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_rectifier_workbench",
+        "Rectifier",
+        |app, ui| {
             ui.label(egui::RichText::new("native ideal-diode rectifier figures + capacitor-filter ripple · valenx-rectifier").weak().small());
             ui.separator();
 
@@ -136,8 +141,11 @@ pub fn draw_rectifier_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
-    if close { app.show_rectifier_workbench = false; }
+        },
+    );
+    if close {
+        app.show_rectifier_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.rectifier` borrow is
     // released here): build the rectifier's 3-D solid and load it.

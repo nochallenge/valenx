@@ -108,38 +108,72 @@ pub fn draw_hvac_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.selectable_value(&mut s.shape, DuctShape::Round, "Round");
                 ui.selectable_value(&mut s.shape, DuctShape::Rect, "Rectangular");
             });
-            egui::Grid::new("hvac_params").num_columns(2).show(ui, |ui| {
-                match s.shape {
-                    DuctShape::Round => {
-                        ui.label("diameter (mm)");
-                        ui.add(egui::DragValue::new(&mut s.diameter_mm).speed(2.0).range(10.0..=2000.0));
-                        ui.end_row();
+            egui::Grid::new("hvac_params")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    match s.shape {
+                        DuctShape::Round => {
+                            ui.label("diameter (mm)");
+                            ui.add(
+                                egui::DragValue::new(&mut s.diameter_mm)
+                                    .speed(2.0)
+                                    .range(10.0..=2000.0),
+                            );
+                            ui.end_row();
+                        }
+                        DuctShape::Rect => {
+                            ui.label("width (mm)");
+                            ui.add(
+                                egui::DragValue::new(&mut s.width_mm)
+                                    .speed(2.0)
+                                    .range(10.0..=2000.0),
+                            );
+                            ui.end_row();
+                            ui.label("height (mm)");
+                            ui.add(
+                                egui::DragValue::new(&mut s.height_mm)
+                                    .speed(2.0)
+                                    .range(10.0..=2000.0),
+                            );
+                            ui.end_row();
+                        }
                     }
-                    DuctShape::Rect => {
-                        ui.label("width (mm)");
-                        ui.add(egui::DragValue::new(&mut s.width_mm).speed(2.0).range(10.0..=2000.0));
-                        ui.end_row();
-                        ui.label("height (mm)");
-                        ui.add(egui::DragValue::new(&mut s.height_mm).speed(2.0).range(10.0..=2000.0));
-                        ui.end_row();
-                    }
-                }
-                ui.label("length (m)");
-                ui.add(egui::DragValue::new(&mut s.length_m).speed(0.5).range(0.1..=500.0));
-                ui.end_row();
-                ui.label("velocity (m/s)");
-                ui.add(egui::DragValue::new(&mut s.velocity_ms).speed(0.1).range(0.1..=30.0));
-                ui.end_row();
-                ui.label("friction factor");
-                ui.add(egui::DragValue::new(&mut s.friction).speed(0.001).range(0.001..=0.1));
-                ui.end_row();
-                ui.label("flow (CFM)");
-                ui.add(egui::DragValue::new(&mut s.cfm).speed(10.0).range(1.0..=100000.0));
-                ui.end_row();
-                ui.label("max vel (FPM)");
-                ui.add(egui::DragValue::new(&mut s.max_velocity_fpm).speed(10.0).range(50.0..=5000.0));
-                ui.end_row();
-            });
+                    ui.label("length (m)");
+                    ui.add(
+                        egui::DragValue::new(&mut s.length_m)
+                            .speed(0.5)
+                            .range(0.1..=500.0),
+                    );
+                    ui.end_row();
+                    ui.label("velocity (m/s)");
+                    ui.add(
+                        egui::DragValue::new(&mut s.velocity_ms)
+                            .speed(0.1)
+                            .range(0.1..=30.0),
+                    );
+                    ui.end_row();
+                    ui.label("friction factor");
+                    ui.add(
+                        egui::DragValue::new(&mut s.friction)
+                            .speed(0.001)
+                            .range(0.001..=0.1),
+                    );
+                    ui.end_row();
+                    ui.label("flow (CFM)");
+                    ui.add(
+                        egui::DragValue::new(&mut s.cfm)
+                            .speed(10.0)
+                            .range(1.0..=100000.0),
+                    );
+                    ui.end_row();
+                    ui.label("max vel (FPM)");
+                    ui.add(
+                        egui::DragValue::new(&mut s.max_velocity_fpm)
+                            .speed(10.0)
+                            .range(50.0..=5000.0),
+                    );
+                    ui.end_row();
+                });
             ui.separator();
             if ui.button("▶ Compute").clicked() {
                 let r = run_hvac(s);

@@ -72,9 +72,11 @@ pub fn draw_radioactivity_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         "Radioactive Decay",
         |app, ui| {
             ui.label(
-                egui::RichText::new("native single-nuclide exponential decay · valenx-radioactivity")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "native single-nuclide exponential decay · valenx-radioactivity",
+                )
+                .weak()
+                .small(),
             );
             ui.separator();
 

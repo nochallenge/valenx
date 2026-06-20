@@ -77,8 +77,17 @@ pub fn draw_retainingwall_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    let close = crate::workbench_chrome::workbench_shell(app, ctx, "valenx_retainingwall_workbench", "Retaining Wall", |app, ui| {
-            ui.label(egui::RichText::new("native Rankine lateral earth pressure · valenx-retainingwall").weak().small());
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_retainingwall_workbench",
+        "Retaining Wall",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native Rankine lateral earth pressure · valenx-retainingwall")
+                    .weak()
+                    .small(),
+            );
             ui.separator();
 
             let s = &mut app.retainingwall;
@@ -137,8 +146,11 @@ pub fn draw_retainingwall_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        }, );
-    if close { app.show_retainingwall_workbench = false; }
+        },
+    );
+    if close {
+        app.show_retainingwall_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.retainingwall` borrow is
     // released here): build the wall's 3-D solid and load it.
