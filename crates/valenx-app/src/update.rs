@@ -2295,28 +2295,6 @@ impl eframe::App for ValenxApp {
                         self.show_mesh_toolbox = !self.show_mesh_toolbox;
                     }
                     if ui
-                        .selectable_label(self.show_genetics_workbench, "Genetics")
-                        .on_hover_text(
-                            "Show / hide the Genetics Workbench — 15 native \
-                             computational-biology panels (sequence, alignment, \
-                             phylogenetics, population genetics, RNA structure & \
-                             design, molecular dynamics, cheminformatics, \
-                             macromolecular structure, quantum chemistry, genomics, \
-                             systems biology, docking, gene editing, structure \
-                             prediction).",
-                        )
-                        .clicked()
-                    {
-                        self.show_genetics_workbench = !self.show_genetics_workbench;
-                        // Opening the workbench switches the centre to the 2D
-                        // DNA view (matches the View-menu behaviour).
-                        if self.show_genetics_workbench
-                            && self.active_viewport == ViewportKind::Viewport3D
-                        {
-                            self.active_viewport = ViewportKind::for_genetics();
-                        }
-                    }
-                    if ui
                         .selectable_label(self.show_browser, "Browser")
                         .on_hover_text("Show / hide the left Browser panel.")
                         .clicked()

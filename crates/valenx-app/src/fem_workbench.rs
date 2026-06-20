@@ -120,18 +120,18 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_fem_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_fem_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "FEM Workbench",
-                "native finite-element analysis · valenx-fem",
-            ) {
-                app.show_fem_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fem_workbench",
+        "FEM Workbench",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native finite-element analysis · valenx-fem")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.fem;
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
@@ -545,7 +545,11 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fem_workbench = false;
+    }
 
     // Deferred (outside the panel borrow): push the deformed-shape field
     // overlay into the central 3-D viewport.

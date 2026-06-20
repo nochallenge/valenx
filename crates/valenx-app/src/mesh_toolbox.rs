@@ -3023,13 +3023,12 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_mesh_toolbox {
         return;
     }
-    egui::SidePanel::right("valenx_mesh_toolbox")
-        .resizable(true)
-        .default_width(280.0)
-        .width_range(220.0..=420.0)
-        .show(ctx, |ui| {
-            ui.heading("Mesh Toolbox")
-                .on_hover_text("CAD-side workbench. Ctrl+1 toggles. F1 opens panel help.");
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_mesh_toolbox",
+        "Mesh Toolbox",
+        |app, ui| {
             ui.label(
                 egui::RichText::new(
                     "Inspector + Transformations + Part / Sketcher / Draft / TechDraw / \
@@ -3037,7 +3036,8 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
                 )
                 .weak()
                 .small(),
-            );
+            )
+            .on_hover_text("CAD-side workbench. Ctrl+1 toggles. F1 opens panel help.");
             ui.separator();
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
@@ -3113,7 +3113,11 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
                     .header_response
                     .on_hover_text(crate::panel_help::short_summary("Spreadsheet"));
                 });
-        });
+        },
+    );
+    if close {
+        app.show_mesh_toolbox = false;
+    }
 }
 
 fn draw_inspector(app: &ValenxApp, ui: &mut egui::Ui) {

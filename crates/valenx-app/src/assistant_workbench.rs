@@ -110,23 +110,17 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     ctx.request_repaint_after(Duration::from_millis(1000));
     let entries = load_feed(&app.assistant.feed_path);
 
-    egui::SidePanel::right("valenx_assistant_panel")
-        .resizable(true)
-        .default_width(330.0)
-        .width_range(260.0..=560.0)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("Assistant");
-                ui.label(
-                    egui::RichText::new("● live")
-                        .small()
-                        .color(egui::Color32::from_rgb(80, 200, 140)),
-                );
-            });
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_assistant_panel",
+        "Assistant",
+        |_app, ui| {
             ui.label(
-                egui::RichText::new("what Claude is building, live in-app")
+                egui::RichText::new("● live  ·  what Claude is building, live in-app")
                     .weak()
-                    .small(),
+                    .small()
+                    .color(egui::Color32::from_rgb(80, 200, 140)),
             );
             ui.separator();
             egui::ScrollArea::vertical()
@@ -160,7 +154,11 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.separator();
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_assistant_panel = false;
+    }
 }
 
 #[cfg(test)]
