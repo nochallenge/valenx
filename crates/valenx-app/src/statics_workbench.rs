@@ -228,6 +228,11 @@ fn compute(s: &StaticsWorkbenchState) -> Result<String, String> {
     let sys = beam.equilibrium_system();
     let balanced = sys.is_in_equilibrium(1e-6);
     let check = if balanced { "OK" } else { "FAIL" };
+    // The actual residual net moment of the solved load+reaction system
+    // about the origin (the number behind the OK/FAIL verdict). At the
+    // closed-form solution this is ~0 N·m; a non-zero value would flag a
+    // numerical or modelling error in the assembled system.
+    let residual_moment = sys.sum_moment_origin();
 
     // The single equivalent load resultant (magnitude at the centroid).
     let resultant = beam
@@ -243,7 +248,8 @@ fn compute(s: &StaticsWorkbenchState) -> Result<String, String> {
          R_B roller : {:.2} N up\n\
          sum R       : {:.2} N up\n\
          pin horiz   : {:.2} N\n\n\
-         equilibrium (sum Fx,Fy,M = 0): {check}",
+         equilibrium (sum Fx,Fy,M = 0): {check}\n\
+         residual sum M @ origin: {residual_moment:.3} N·m",
         beam.span(),
         beam.total_down(),
         r.pin_vertical,
@@ -495,6 +501,35 @@ mod tests {
         run_statics(&mut s);
         assert!(s.result.contains("80.00 N up"));
         assert!(s.result.contains("20.00 N up"));
+    }
+
+    #[test]
+    fn ground_truth_residual_moment_is_zero_at_solution() {
+        // Ground truth, hand-computed. Off-centre 100 N load 8 m from
+        // the pin on a 10 m beam: R_by = 100*8/10 = 80, R_ay = 20.
+        // The assembled load+reaction system (all forces at y = 0) has
+        // residual moment about the origin sum(x_i * Fy_i):
+        //   load   8 * (-100) = -800
+        //   pin    0 *  (+20) =    0
+        //   roller 10 * (+80) = +800
+        //   sum                =    0.000 N·m  (the solution closes).
+        let mut s = StaticsWorkbenchState {
+            span_m: 10.0,
+            load_count: LoadCount::One,
+            load1_pos_m: 8.0,
+            load1_down_n: 100.0,
+            ..Default::default()
+        };
+        let beam = build_beam(&s).expect("valid beam");
+        let resid = beam.equilibrium_system().sum_moment_origin();
+        assert!(resid.abs() < 1e-9, "residual moment {resid}");
+        // And the formatted readout carries the hand-computed residual.
+        run_statics(&mut s);
+        assert!(
+            s.result.contains("residual sum M @ origin: 0.000 N·m"),
+            "missing residual readout: {}",
+            s.result
+        );
     }
 
     #[test]
