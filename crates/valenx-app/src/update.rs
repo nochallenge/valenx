@@ -3062,6 +3062,52 @@ impl eframe::App for ValenxApp {
                 self.docking.show(ui);
                 return;
             }
+
+            // Dock-fills-workspace: when the dock is on and the 3-D viewport is
+            // hidden (the Workbench+Agent launcher hides it so the units get
+            // the whole screen), render the dock HERE in the CentralPanel —
+            // ahead of the empty-project landing page and the viewport — with a
+            // slim bar to restore the viewport or close the whole dock. Without
+            // a dock tree yet, fall through to the normal central content.
+            if self.dock_enabled && self.viewport_hidden && self.dock_tree.is_some() {
+                let mut do_close_all = false;
+                let mut do_show_viewport = false;
+                ui.horizontal(|ui| {
+                    ui.strong("Workbench workspace");
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if ui
+                                .button("Close all")
+                                .on_hover_text("Close every dock panel and Workbench+Agent unit")
+                                .clicked()
+                            {
+                                do_close_all = true;
+                            }
+                            if ui
+                                .button("Show 3D viewport")
+                                .on_hover_text(
+                                    "Restore the 3-D viewport (the dock returns to the right).",
+                                )
+                                .clicked()
+                            {
+                                do_show_viewport = true;
+                            }
+                        },
+                    );
+                });
+                ui.separator();
+                if do_close_all {
+                    self.clear_dock();
+                } else {
+                    if do_show_viewport {
+                        self.viewport_hidden = false;
+                    }
+                    self.render_dock_tree_into(ui);
+                }
+                return;
+            }
+
             if show_landing {
                 // CARGO_PKG_REPOSITORY inherits from
                 // [workspace.package].repository at build time, so the
@@ -3078,18 +3124,6 @@ impl eframe::App for ValenxApp {
                     env!("CARGO_PKG_REPOSITORY"),
                     self.landing_inline_message.as_deref(),
                 );
-                return;
-            }
-
-            // Dock-fills-workspace: when the dockable layout is on AND the user
-            // has hidden the 3-D viewport, hand the entire central area to the
-            // dock so the docked workbenches / Workbench+Agent units fill the
-            // whole workspace — instead of being squeezed into the right
-            // SidePanel beside an empty "viewport hidden" placeholder. Restore
-            // the viewport from View → "Hide 3D viewport". With no dock tree
-            // yet (nothing open), fall through to the placeholder below.
-            if self.dock_enabled && self.viewport_hidden && self.dock_tree.is_some() {
-                self.render_dock_tree_into(ui);
                 return;
             }
 
