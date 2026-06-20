@@ -320,6 +320,16 @@ pub struct ValenxApp {
     /// when a workbench is opened and dropping the tile when one is closed.
     /// Panes are panel-id `String`s (e.g. `"valenx_engine_workbench"`).
     pub(crate) dock_tree: Option<egui_tiles::Tree<String>>,
+    /// Monotonic counter for **"Workbench + Agent"** units launched into the
+    /// dock (View → "New Workbench + Agent" / "Open 6 …"). Each unit is a
+    /// paired `"workspace:<n>"` (empty build canvas) + `"agent:<n>"` (Claude
+    /// chat) tile; this is the highest `n` handed out so far (default `0` =
+    /// none). See [`dock_layout`]. Unlike the [`DOCKABLE_PANELS`] tiles, these
+    /// are not gated on a `show_*` flag — they persist in [`Self::dock_tree`]
+    /// until the user closes them.
+    ///
+    /// [`DOCKABLE_PANELS`]: crate::dock_layout::DOCKABLE_PANELS
+    pub(crate) wb_agent_counter: usize,
 
     pub(crate) project: Option<LoadedProject>,
     pub(crate) project_path: Option<PathBuf>,
