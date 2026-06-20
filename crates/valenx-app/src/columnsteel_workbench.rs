@@ -9,9 +9,10 @@
 //! unbraced length and radius of gyration). "Analyze" reports the
 //! slenderness ratio `λ = K L / r`, the column-slenderness transition
 //! `Cc`, the governing regime (elastic Euler vs inelastic Johnson), the
-//! critical buckling stress `Fcr`, and the AISC-ASD allowable stress and
-//! axial load; "Show 3-D column" loads a representative I-section column
-//! solid into the central viewport.
+//! elastic Euler reference stress `Fe = π² E / λ²`, the critical buckling
+//! stress `Fcr`, and the AISC-ASD allowable stress and axial load;
+//! "Show 3-D column" loads a representative I-section column solid into
+//! the central viewport.
 
 use std::path::PathBuf;
 
@@ -241,6 +242,12 @@ fn compute(s: &ColumnSteelWorkbenchState) -> Result<String, String> {
     let cc = col.cc();
     let regime = col.regime().as_str();
     let fcr = col.critical_stress();
+    // Elastic Euler reference stress Fe = π² E / λ², the bare elastic
+    // buckling curve. For a long (Euler-regime) column this equals the
+    // governing Fcr; for a short / intermediate (Johnson-regime) column it
+    // is the higher elastic prediction the inelastic Johnson parabola
+    // corrects downward, so showing both makes the regime tangible.
+    let fe = col.euler_stress_unchecked();
     let fs = col.factor_of_safety_aisc();
     let fa = col.allowable_stress();
     let p_allow = col.allowable_load(s.area_m2).map_err(|e| e.to_string())?;
@@ -253,6 +260,7 @@ fn compute(s: &ColumnSteelWorkbenchState) -> Result<String, String> {
          slenderness λ   : {:.3}\n\
          transition Cc   : {:.3}\n\
          regime          : {regime}\n\
+         Euler ref. Fe   : {:.2} MPa\n\
          critical Fcr    : {:.2} MPa\n\
          safety factor   : {:.3}\n\
          allowable Fa    : {:.2} MPa\n\
@@ -265,6 +273,7 @@ fn compute(s: &ColumnSteelWorkbenchState) -> Result<String, String> {
         s.area_m2,
         lambda,
         cc,
+        fe / 1.0e6,
         fcr / 1.0e6,
         fs,
         fa / 1.0e6,
@@ -449,6 +458,42 @@ mod tests {
         assert_eq!(slender.regime().as_str(), "euler");
         let fcr_hand = PI * PI * e / (lambda * lambda);
         assert!((slender.critical_stress() - fcr_hand).abs() < 1e-3);
+    }
+
+    #[test]
+    fn euler_reference_stress_ground_truth_and_in_readout() {
+        // The readout surfaces the elastic Euler reference stress
+        // Fe = pi^2 * E / lambda^2. For the Johnson-regime default it is
+        // the higher elastic prediction that the inelastic Johnson curve
+        // corrects downward, so it must differ from the governing Fcr.
+        let mut s = ColumnSteelWorkbenchState::default();
+        run_columnsteel(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default column should analyze: {:?}",
+            s.error
+        );
+
+        // Ground truth: lambda = 1.0 * 4.0 / 0.06 = 66.6667;
+        // Fe = pi^2 * 200e9 / 66.6667^2 = 4.44132e8 Pa = 444.13 MPa.
+        let e: f64 = 200.0e9;
+        let lambda: f64 = 1.0 * 4.0 / 0.06;
+        let fe_hand_mpa = PI * PI * e / (lambda * lambda) / 1.0e6;
+        let one = 1.0_f64;
+        assert!(
+            (fe_hand_mpa - 444.132_198).abs() < one * 1e-3,
+            "hand Fe = {fe_hand_mpa} MPa"
+        );
+
+        // The crate accessor agrees with the hand value.
+        let col = column_of(&s).expect("default column is valid");
+        assert!((col.euler_stress_unchecked() / 1.0e6 - fe_hand_mpa).abs() < 1e-6);
+
+        // The formatted readout carries the Euler reference line, and it is
+        // a genuinely distinct value from the Johnson Fcr (278.00 MPa).
+        assert!(s.result.contains("Euler ref. Fe"));
+        assert!(s.result.contains("444.13"));
+        assert!(s.result.contains("278.00"));
     }
 
     #[test]
