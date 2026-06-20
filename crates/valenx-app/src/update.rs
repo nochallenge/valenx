@@ -29,6 +29,151 @@ use crate::viewport_kind::ViewportKind;
 use crate::welcome_tour;
 use crate::ValenxApp;
 
+/// The clickable footprint of a viewport-header icon button — matches the
+/// workbench-chrome header (`workbench_chrome::ICON_BUTTON_SIZE`) so the
+/// central viewport's `−` / `⋯` / `✕` cluster lines up with the right-side
+/// panels' chrome.
+const VIEWPORT_ICON_BUTTON_SIZE: f32 = 18.0;
+
+/// Which painter-drawn glyph a [`viewport_icon_button`] renders.
+///
+/// Mirrors the private `workbench_chrome::Icon` painter geometry so the
+/// central viewport header looks identical to the workbench panel chrome.
+/// Only `−` (minimize) and `⋯` (more) live here; the `✕` reuses the shared
+/// [`crate::workbench_chrome::close_x_button`] directly.
+#[derive(Clone, Copy)]
+enum ViewportHeaderIcon {
+    /// A single horizontal bar — collapse the viewport body to just the header.
+    Minimize,
+    /// Three dots in a row — open the viewport `⋯` menu.
+    More,
+}
+
+/// Draw one painter-rendered viewport-header icon button (no font glyph, so it
+/// never renders as a missing-glyph "tofu" box), with the same subtle rounded
+/// hover background + tooltip as the workbench-panel chrome.
+fn viewport_icon_button(ui: &mut egui::Ui, icon: ViewportHeaderIcon, tip: &str) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(
+        egui::vec2(VIEWPORT_ICON_BUTTON_SIZE, VIEWPORT_ICON_BUTTON_SIZE),
+        egui::Sense::click(),
+    );
+    let vis = *ui.style().interact(&resp);
+    let painter = ui.painter();
+    if resp.hovered() {
+        painter.rect_filled(rect, 3.0, vis.bg_fill);
+    }
+    let c = rect.center();
+    let col = vis.fg_stroke.color;
+    let stroke = egui::Stroke::new(1.5, col);
+    let r = 4.0;
+    match icon {
+        ViewportHeaderIcon::Minimize => {
+            painter.line_segment([c + egui::vec2(-r, 0.0), c + egui::vec2(r, 0.0)], stroke);
+        }
+        ViewportHeaderIcon::More => {
+            for dx in [-5.0_f32, 0.0, 5.0] {
+                painter.circle_filled(c + egui::vec2(dx, 0.0), 1.5, col);
+            }
+        }
+    }
+    resp.on_hover_text(tip)
+}
+
+/// Draw the central viewport's slim chrome header — a title on the left and a
+/// right-aligned `−  ⋯  ✕` cluster (Close rightmost), matching the right-side
+/// workbench panels' chrome. Mutates `app`'s viewport-view-pref fields in
+/// place:
+///
+/// * `✕` sets [`ValenxApp::viewport_hidden`] (hide the viewport; reopen from
+///   the `⋯` menu or View → "Hide 3D viewport").
+/// * `⋯` opens a small menu: **Reset camera** (resets [`ValenxApp::camera`]
+///   to [`valenx_viz::OrbitCamera::default`]), a **3D / 2D viewport switch**
+///   (mirrors the View-menu radios), and **Hide viewport**.
+/// * `−` toggles [`ValenxApp::viewport_collapsed`] (roll the body up to just
+///   this header).
+fn viewport_chrome_header(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    let title = match app.active_viewport {
+        ViewportKind::Viewport2dDna => "2D Sketch",
+        ViewportKind::Viewport3D => "3D Viewport",
+    };
+    ui.horizontal(|ui| {
+        // Keep the controls a fixed, equal distance apart (matches the
+        // workbench header spacing).
+        ui.spacing_mut().item_spacing.x = 4.0;
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.strong(title);
+        });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // Right-to-left: add Close first so the visual order is `−  ⋯  ✕`.
+            if crate::workbench_chrome::close_x_button(
+                ui,
+                "Hide viewport — reopen from the View menu",
+            )
+            .clicked()
+            {
+                app.viewport_hidden = true;
+            }
+            // `⋯` opens a small popup keyed on the button's own id, so the
+            // trigger stays a painter-drawn icon (no font-glyph caret).
+            let more = viewport_icon_button(
+                ui,
+                ViewportHeaderIcon::More,
+                "Reset camera, switch 2D/3D, hide",
+            );
+            let popup_id = more.id.with("viewport_chrome_more");
+            if more.clicked() {
+                ui.memory_mut(|m| m.toggle_popup(popup_id));
+            }
+            egui::popup::popup_below_widget(
+                ui,
+                popup_id,
+                &more,
+                egui::popup::PopupCloseBehavior::CloseOnClick,
+                |ui| {
+                    ui.set_min_width(170.0);
+                    if ui.button("Reset camera").clicked() {
+                        app.camera = valenx_viz::OrbitCamera::default();
+                    }
+                    ui.separator();
+                    // 3D / 2D switch — mirrors the View-menu "Central
+                    // viewport" radios.
+                    if ui
+                        .radio(
+                            app.active_viewport == ViewportKind::Viewport3D,
+                            "3D Viewport",
+                        )
+                        .clicked()
+                    {
+                        app.active_viewport = ViewportKind::Viewport3D;
+                    }
+                    if ui
+                        .radio(
+                            app.active_viewport == ViewportKind::Viewport2dDna,
+                            "2D Sketch",
+                        )
+                        .clicked()
+                    {
+                        app.active_viewport = ViewportKind::for_genetics();
+                    }
+                    ui.separator();
+                    if ui.button("Hide viewport").clicked() {
+                        app.viewport_hidden = true;
+                    }
+                },
+            );
+            let tip = if app.viewport_collapsed {
+                "Expand viewport"
+            } else {
+                "Collapse viewport"
+            };
+            if viewport_icon_button(ui, ViewportHeaderIcon::Minimize, tip).clicked() {
+                app.viewport_collapsed = !app.viewport_collapsed;
+            }
+        });
+    });
+    ui.separator();
+}
+
 impl eframe::App for ValenxApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if !self.theme_applied {
@@ -345,6 +490,21 @@ impl eframe::App for ValenxApp {
                             "Snap the viewport cursor to the nearest ground-grid \
                              node — shows a marker + snapped X/Y/Z readout.",
                         );
+                    // Hide / show the central 2D/3D viewport body. Mirrors the
+                    // viewport header's ✕ / "Hide viewport" so the user can
+                    // always bring it back from the menu.
+                    if ui
+                        .checkbox(&mut self.viewport_hidden, "Hide 3D viewport")
+                        .on_hover_text(
+                            "Hide the central 2D/3D viewport body (its render is \
+                             skipped); the central area shows a placeholder. \
+                             Uncheck — or use the viewport header / its ⋯ menu — \
+                             to bring it back.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
 
                     ui.separator();
                     ui.label(egui::RichText::new("Workbenches").weak().small())
@@ -2330,7 +2490,7 @@ impl eframe::App for ValenxApp {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let any_open = self.show_browser || self.show_mesh_toolbox;
                     if ui
-                        .selectable_label(!any_open, "⛶ Max view")
+                        .selectable_label(!any_open, "Max view")
                         .on_hover_text(
                             "Maximize viewport: hide both side panels \
                              (click again to restore both).",
@@ -2918,6 +3078,32 @@ impl eframe::App for ValenxApp {
                     env!("CARGO_PKG_REPOSITORY"),
                     self.landing_inline_message.as_deref(),
                 );
+                return;
+            }
+
+            // ── Central-viewport chrome header ────────────────────────────
+            // A slim `−  ⋯  ✕` header above the 2D/3D body, matching the
+            // right-side workbench panels' chrome. Drawn only for the live
+            // viewport (not the docked / landing branches, which returned
+            // above). The header mutates the global view-prefs below.
+            viewport_chrome_header(self, ui);
+
+            // Hidden → render a centered placeholder instead of the viewport
+            // and skip the body entirely (no wgpu ctx / no viewport::show).
+            if self.viewport_hidden {
+                ui.centered_and_justified(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("3-D viewport hidden").weak());
+                        ui.add_space(8.0);
+                        if ui.button("Show viewport").clicked() {
+                            self.viewport_hidden = false;
+                        }
+                    });
+                });
+                return;
+            }
+            // Collapsed (but not hidden) → header only; skip the body.
+            if self.viewport_collapsed {
                 return;
             }
 

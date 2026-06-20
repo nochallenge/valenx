@@ -459,6 +459,18 @@ pub struct ValenxApp {
     /// the live cursor coordinate snaps to the nearest grid node, with a
     /// marker drawn there. Defaults to `true`; toggled from the View menu.
     pub(crate) snap_to_grid: bool,
+    /// When `true`, the central 2D/3D viewport body is hidden entirely — the
+    /// central area shows a "viewport hidden" placeholder and the wgpu / 2D
+    /// render is skipped. Driven by the viewport header's ✕ and its `⋯` menu,
+    /// and by View → "Hide 3D viewport". A global view preference (not
+    /// per-tab). Defaults to `false` (viewport shown). See [`update`].
+    pub(crate) viewport_hidden: bool,
+    /// When `true` (and not [`Self::viewport_hidden`]), only the central
+    /// viewport's slim chrome header is drawn and its 2D/3D body is skipped —
+    /// the viewport is "rolled up" to just its title + controls. Toggled by
+    /// the header's `−` (minimize) icon. A global view preference (not
+    /// per-tab). Defaults to `false` (body shown). See [`update`].
+    pub(crate) viewport_collapsed: bool,
     /// Receiver for background adapter-probe results (see
     /// [`valenx_core::AdapterRegistry::spawn_probe_all`]). `Some` while the
     /// background probe is in flight; drained each frame in `update` and
