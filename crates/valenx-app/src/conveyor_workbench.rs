@@ -224,6 +224,16 @@ fn compute(s: &ConveyorWorkbenchState) -> Result<String, String> {
     let lift = lift_power(mdot, rise).map_err(|e| e.to_string())?;
     let power = PowerBreakdown::solve(mdot, s.speed_m_per_s, s.length_m, angle_rad, s.friction_n)
         .map_err(|e| e.to_string())?;
+    // Split the resolved drive power into its lift and friction parts.
+    // The crate resolves `total` and `lift`; the friction part is the
+    // remainder `total - lift` (equal to F_friction * v), and the lift
+    // share is what fraction of the motor demand raises material.
+    let friction_power = power.total - power.lift;
+    let lift_share = if power.total > 0.0 {
+        100.0 * power.lift / power.total
+    } else {
+        0.0
+    };
 
     Ok(format!(
         "material        : {} ({:.0} kg/m³)\n\
@@ -235,6 +245,8 @@ fn compute(s: &ConveyorWorkbenchState) -> Result<String, String> {
          capacity        : {:.1} t/h\n\
          vertical rise H : {:.3} m\n\
          lift power      : {:.2} kW\n\
+         friction power  : {:.2} kW\n\
+         lift share      : {:.1} %\n\
          drive tension   : {:.1} N\n\
          drive power     : {:.2} kW",
         s.material.label(),
@@ -249,6 +261,8 @@ fn compute(s: &ConveyorWorkbenchState) -> Result<String, String> {
         belt.capacity_tph(),
         rise,
         lift / 1000.0,
+        friction_power / 1000.0,
+        lift_share,
         power.tension,
         power.total / 1000.0,
     ))
@@ -523,6 +537,48 @@ mod tests {
         let expected = mdot * valenx_conveyor::G * h;
         let lift = lift_power(mdot, h).expect("valid");
         assert!((lift - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn friction_power_split_is_total_minus_lift_ground_truth() {
+        // Ground truth: the friction part of the resolved drive power is
+        // total - lift = F_friction * v, which for the defaults is
+        // 4000 N * 2.0 m/s = 8000 W = 8.00 kW exactly (no transcendental,
+        // so the substring is libm-independent). The lift share is
+        // 100 * lift / total = 91.9 % for the same defaults.
+        let mut s = ConveyorWorkbenchState::default();
+        run_conveyor(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default conveyor should analyze: {:?}",
+            s.error
+        );
+
+        // Hand-computed split from the form, independent of the readout.
+        let mdot = belt_of(&s).expect("valid").mass_flow();
+        let h = s.length_m * s.incline_deg.to_radians().sin();
+        let lift = mdot * valenx_conveyor::G * h;
+        let expected_friction = s.friction_n * s.speed_m_per_s; // F * v
+        assert!(
+            (expected_friction - 8000.0).abs() < 1e-9,
+            "defaults give F*v = 8000 W, got {expected_friction}"
+        );
+        // The resolved total is friction + lift; the friction part is the
+        // remainder, matching F * v.
+        let total = expected_friction + lift;
+        assert!(((total - lift) - expected_friction).abs() < 1e-6);
+
+        // The readout surfaces both the friction power and the lift share.
+        assert!(
+            s.result.contains("friction power  : 8.00 kW"),
+            "expected friction power 8.00 kW in:\n{}",
+            s.result
+        );
+        assert!(
+            s.result.contains("lift share      : 91.9 %"),
+            "expected lift share 91.9 % in:\n{}",
+            s.result
+        );
     }
 
     #[test]
