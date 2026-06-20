@@ -8,10 +8,11 @@
 //! (diameter) under a steady bending moment `M` and torque `T` with a
 //! material allowable shear stress; "Analyze" reports the bending and
 //! torsional fibre stresses, the equivalent torque `T_e = sqrt(M^2 + T^2)`,
-//! the combined Tresca maximum shear and principal normal stresses, and
-//! the minimum diameter that keeps the combined shear within the
-//! allowable; "Show 3-D" loads a representative round shaft solid into
-//! the central viewport.
+//! the combined Tresca maximum shear and principal normal stresses, the
+//! section properties (section modulus `Z`, polar section modulus `Z_p`,
+//! polar second moment `J`), and the minimum diameter that keeps the
+//! combined shear within the allowable; "Show 3-D" loads a representative
+//! round shaft solid into the central viewport.
 
 use std::f64::consts::PI;
 use std::path::PathBuf;
@@ -202,6 +203,14 @@ fn compute(s: &ShaftDesignWorkbenchState) -> Result<String, String> {
     let tau_max = max_shear_stress(&sec);
     let sigma_1 = max_normal_stress(&sec);
 
+    // Section properties (in metres) — the geometry behind the stresses:
+    // the bending stress is M / Z, the torsional shear is T / Z_p, and the
+    // polar second moment J governs the torsional stiffness / angle of
+    // twist. Reported in engineering units: moduli in cm³, J in cm⁴.
+    let z_modulus_cm3 = sec.section_modulus() * 1.0e6;
+    let zp_modulus_cm3 = sec.polar_section_modulus() * 1.0e6;
+    let polar_j_cm4 = sec.polar_second_moment() * 1.0e8;
+
     // Equivalent-torque (Tresca) sizing inverse: the minimum diameter that
     // keeps the combined shear within the allowable.
     let allowable_pa = s.allowable_shear_mpa * 1.0e6;
@@ -227,7 +236,10 @@ fn compute(s: &ShaftDesignWorkbenchState) -> Result<String, String> {
          equivalent torq : {:.2} N·m\n\
          max shear τmax  : {:.3} MPa\n\
          max normal σ1   : {:.3} MPa\n\
-         required d      : {:.2} mm\n\
+         required d      : {:.2} mm\n\n\
+         section mod Z   : {z_modulus_cm3:.4} cm³\n\
+         polar mod Z_p   : {zp_modulus_cm3:.4} cm³\n\
+         polar 2nd mom J : {polar_j_cm4:.4} cm⁴\n\n\
          verdict         : {verdict}",
         s.diameter_mm,
         s.bending_moment_nm,
@@ -393,6 +405,40 @@ mod tests {
         );
         // ~48.89 MPa.
         assert!((want / 1.0e6 - 48.892_f64).abs() < 0.01);
+    }
+
+    #[test]
+    fn section_properties_match_pi_d_powers_ground_truth() {
+        // Ground truth for the solid round section (d = 0.05 m):
+        //   section modulus     Z   = π d³ / 32  (m³)  → ×1e6 cm³
+        //   polar sect. modulus Z_p = π d³ / 16  (m³)  → ×1e6 cm³
+        //   polar second moment J   = π d⁴ / 32  (m⁴)  → ×1e8 cm⁴
+        let d_m = 0.05_f64;
+        let z_cm3 = PI * d_m.powi(3) / 32.0 * 1.0e6;
+        let zp_cm3 = PI * d_m.powi(3) / 16.0 * 1.0e6;
+        let j_cm4 = PI * d_m.powi(4) / 32.0 * 1.0e8;
+        // Hand values: Z = 12.2718 cm³, Z_p = 24.5437 cm³, J = 61.3592 cm⁴.
+        assert!((z_cm3 - 12.2718_f64).abs() < 1.0e-3, "Z {z_cm3} cm³");
+        assert!((zp_cm3 - 24.5437_f64).abs() < 1.0e-3, "Z_p {zp_cm3} cm³");
+        assert!((j_cm4 - 61.3592_f64).abs() < 1.0e-3, "J {j_cm4} cm⁴");
+        // Z_p is exactly twice Z (π d³/16 = 2 · π d³/32).
+        assert!((zp_cm3 - 2.0 * z_cm3).abs() < 1.0e-9);
+
+        // The compute() readout surfaces all three with .4f precision.
+        let s = ShaftDesignWorkbenchState::default();
+        let out = compute(&s).expect("default shaft computes");
+        assert!(out.contains("section mod Z   : 12.2718 cm³"), "{out}");
+        assert!(out.contains("polar mod Z_p   : 24.5437 cm³"), "{out}");
+        assert!(out.contains("polar 2nd mom J : 61.3592 cm⁴"), "{out}");
+        // Consistency: the bending stress equals M / Z and the torsional
+        // shear equals T / Z_p, both already shown in the readout — so the
+        // new section moduli are the genuine geometry behind those stresses.
+        let z_m3 = z_cm3 / 1.0e6;
+        let zp_m3 = zp_cm3 / 1.0e6;
+        let sigma_mpa = s.bending_moment_nm / z_m3 / 1.0e6;
+        let tau_mpa = s.torque_nm / zp_m3 / 1.0e6;
+        assert!((sigma_mpa - 48.892_f64).abs() < 0.01, "σ=M/Z {sigma_mpa}");
+        assert!((tau_mpa - 32.595_f64).abs() < 0.01, "τ=T/Z_p {tau_mpa}");
     }
 
     #[test]
