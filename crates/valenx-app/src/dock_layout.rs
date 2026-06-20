@@ -413,6 +413,10 @@ impl ValenxApp {
     /// + Agent".
     pub(crate) fn add_workbench_agent_pair(&mut self) {
         self.dock_enabled = true;
+        // A Workbench+Agent grid is a full-workspace mode: hide the 3-D
+        // viewport so the dock fills the whole central area (restore it from
+        // the dock's "Show 3D viewport" bar or the View menu).
+        self.viewport_hidden = true;
         self.wb_agent_counter += 1;
         let n = self.wb_agent_counter;
         let tree = self.dock_tree_or_empty();
@@ -431,6 +435,9 @@ impl ValenxApp {
     /// crisp; the user can still drag tiles around afterwards.
     pub(crate) fn open_six_workbench_agents(&mut self) {
         self.dock_enabled = true;
+        // Fill the whole workspace with the grid: hide the 3-D viewport (the
+        // dock's "Show 3D viewport" bar / View menu restores it).
+        self.viewport_hidden = true;
         // Reserve six fresh unit numbers up front (before borrowing the tree),
         // as `[[r0c0, r0c1, r0c2], [r1c0, r1c1, r1c2]]`.
         let nums: [[usize; 3]; 2] = std::array::from_fn(|_row| {
@@ -450,6 +457,18 @@ impl ValenxApp {
             .collect();
         let grid_root = tree.tiles.insert_vertical_tile(rows);
         tree.root = Some(grid_root);
+    }
+
+    /// Close the entire dock: drop every tile (workbenches + Workbench+Agent
+    /// units) and restore the 3-D viewport. Wired to the dock workspace bar's
+    /// **Close all**. Also clears the flag-gated dockable workbenches so
+    /// [`sync_tree`] won't re-add them on the next frame.
+    pub(crate) fn clear_dock(&mut self) {
+        self.dock_tree = None;
+        self.viewport_hidden = false;
+        for (id, _) in DOCKABLE_PANELS {
+            close_panel(self, id);
+        }
     }
 }
 
