@@ -74,11 +74,24 @@ use valenx_viz::OrbitCamera;
 /// the live `ValenxApp` fields; every other tab parks its document in
 /// [`TabBar::docs`].
 ///
+/// It **also** carries the per-tab *dockable layout / viewport view state*:
+/// whether the dockable workbench layout is on ([`Self::dock_enabled`]),
+/// whether the central 3-D viewport is hidden / collapsed
+/// ([`Self::viewport_hidden`] / [`Self::viewport_collapsed`]), and the
+/// dock's own tile tree ([`Self::dock_tree`]). This is what makes the
+/// "Workbench + Agent" grid **per-tab**: a tab that has six agent units
+/// keeps them, while a freshly-opened tab gets a clean view (dock off,
+/// viewport shown, no tree) and so shows its workbench + the 3-D viewport
+/// rather than another tab's agent grid. Note the per-unit chat-channel
+/// counter [`ValenxApp::wb_agent_counter`] is intentionally **not** here —
+/// it stays global so `agent:n` ids never collide across tabs.
+///
 /// Construction is via [`Default`] (a fresh, empty document — no project,
-/// no mesh, the default camera). [`WorkspaceDoc::capture`] moves the live
-/// fields *out* of an app (leaving them empty / default), and
-/// [`WorkspaceDoc::install`] moves a document's fields back *in*. Neither
-/// clones the meshes — they are `move`d through `Option`/`Box`.
+/// no mesh, the default camera, dock off, viewport shown, no dock tree).
+/// [`WorkspaceDoc::capture`] moves the live fields *out* of an app (leaving
+/// them empty / default), and [`WorkspaceDoc::install`] moves a document's
+/// fields back *in*. Neither clones the meshes or the dock tree — they are
+/// `move`d through `Option`/`Box`/`take`.
 #[derive(Default)]
 pub struct WorkspaceDoc {
     project: Option<LoadedProject>,
@@ -92,14 +105,29 @@ pub struct WorkspaceDoc {
     selected_time_index: usize,
     last_run_results: Option<Box<valenx_fields::Results>>,
     last_run_workdir: Option<PathBuf>,
+    /// Per-tab: is the dockable workbench layout (incl. any "Workbench +
+    /// Agent" grid) on for this tab? Mirrors [`ValenxApp::dock_enabled`].
+    dock_enabled: bool,
+    /// Per-tab: is the central 3-D viewport hidden for this tab? Mirrors
+    /// [`ValenxApp::viewport_hidden`].
+    viewport_hidden: bool,
+    /// Per-tab: is the central viewport rolled up to its header for this
+    /// tab? Mirrors [`ValenxApp::viewport_collapsed`].
+    viewport_collapsed: bool,
+    /// Per-tab: this tab's dock tile tree (the layout of its docked
+    /// workbenches / agent units). Mirrors [`ValenxApp::dock_tree`].
+    /// `take`n in/out — never cloned.
+    dock_tree: Option<egui_tiles::Tree<String>>,
 }
 
 impl WorkspaceDoc {
-    /// Move this tab's scene/project fields **out** of `app`, leaving the
-    /// live fields empty / default (so the caller can immediately
+    /// Move this tab's scene/project + dock/view fields **out** of `app`,
+    /// leaving the live fields empty / default (so the caller can immediately
     /// [`install`](Self::install) another document into the now-cleared
-    /// app). No mesh is cloned: every `Option`/`Box` is `take`n and the
-    /// camera is swapped for its default.
+    /// app). No mesh and no dock tree is cloned: every `Option`/`Box` is
+    /// `take`n and the camera is swapped for its default. The dock booleans
+    /// reset to `false` (dock off / viewport shown) in the live app, and the
+    /// dock tree is `take`n out wholesale.
     fn capture(app: &mut ValenxApp) -> WorkspaceDoc {
         WorkspaceDoc {
             project: app.project.take(),
@@ -113,13 +141,22 @@ impl WorkspaceDoc {
             selected_time_index: std::mem::take(&mut app.selected_time_index),
             last_run_results: app.last_run_results.take(),
             last_run_workdir: app.last_run_workdir.take(),
+            // Per-tab dock / viewport view state. The dock_tree MUST be
+            // `take`n (not cloned) — egui_tiles trees are not Clone here and
+            // the tab owns its layout outright.
+            dock_enabled: std::mem::take(&mut app.dock_enabled),
+            viewport_hidden: std::mem::take(&mut app.viewport_hidden),
+            viewport_collapsed: std::mem::take(&mut app.viewport_collapsed),
+            dock_tree: app.dock_tree.take(),
         }
     }
 
     /// Move this document's fields **into** `app`, replacing whatever the
-    /// live scene/project fields hold. Pair with [`capture`](Self::capture)
-    /// (capture the outgoing tab first, then install the incoming one) so a
-    /// scene is never lost. Consumes `self`.
+    /// live scene/project + dock/view fields hold. Pair with
+    /// [`capture`](Self::capture) (capture the outgoing tab first, then
+    /// install the incoming one) so a scene is never lost. Installing a
+    /// fresh [`Default`] document is exactly how a newly-opened tab gets a
+    /// clean view: dock off, viewport shown, no dock tree. Consumes `self`.
     fn install(self, app: &mut ValenxApp) {
         app.project = self.project;
         app.project_path = self.project_path;
@@ -132,6 +169,12 @@ impl WorkspaceDoc {
         app.selected_time_index = self.selected_time_index;
         app.last_run_results = self.last_run_results;
         app.last_run_workdir = self.last_run_workdir;
+        // Per-tab dock / viewport view state (swapped in so the active tab's
+        // dock grid shows and a clean tab's does not).
+        app.dock_enabled = self.dock_enabled;
+        app.viewport_hidden = self.viewport_hidden;
+        app.viewport_collapsed = self.viewport_collapsed;
+        app.dock_tree = self.dock_tree;
     }
 }
 
@@ -1509,6 +1552,127 @@ mod tests {
         );
         // And the blank tab's (empty) doc is preserved for next time.
         assert_docs_aligned(&app.tab_bar);
+    }
+
+    #[test]
+    fn the_workbench_agent_dock_is_per_tab_and_a_new_tab_is_clean() {
+        // The headline per-tab-DOCK promise (the user-confirmed bug fix): the
+        // "Workbench + Agent" grid belongs to its tab, NOT the whole app.
+        // Open a Workbench+Agent unit on tab A (dock on + a dock_tree), open a
+        // fresh tab B — B is a CLEAN workspace (dock off, no tree, viewport
+        // shown) — then switch back to A and its dock + tree return.
+        let mut app = ValenxApp::default();
+
+        // Tab A: a real project tab, then launch a Workbench+Agent unit into
+        // it through the same intent the View / tab-strip button uses.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_wb_agent: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.active, Some(0));
+        assert!(app.dock_enabled, "tab A has the dock on");
+        assert!(app.dock_tree.is_some(), "tab A has a dock tree (the grid)");
+        // The agent unit hides the viewport to fill the workspace.
+        assert!(app.viewport_hidden, "tab A hid the viewport for the grid");
+        // One unit minted; the counter is GLOBAL so this `n` is unique.
+        assert_eq!(app.wb_agent_counter, 1);
+
+        // Open a fresh blank tab B — it must start as a CLEAN workspace: the
+        // dock off, NO dock tree (not tab A's agent grid), and the 3-D
+        // viewport shown. This is the bug the user hit (the grid used to show
+        // on every tab).
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_blank: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.active, Some(1));
+        assert!(!app.dock_enabled, "a new tab starts with the dock OFF");
+        assert!(
+            app.dock_tree.is_none(),
+            "a new tab has NO dock tree — not tab A's agent grid"
+        );
+        assert!(
+            !app.viewport_hidden,
+            "a new tab shows the 3-D viewport, not the agent grid"
+        );
+        assert!(!app.viewport_collapsed, "a new tab's viewport is expanded");
+        // The global counter is NOT reset by opening a tab.
+        assert_eq!(app.wb_agent_counter, 1, "the unit counter stays global");
+
+        // Switch back to tab A: its dock state + tree return intact.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                activate: Some(0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.active, Some(0));
+        assert!(app.dock_enabled, "switching back restores tab A's dock");
+        assert!(
+            app.dock_tree.is_some(),
+            "switching back restores tab A's dock tree (the agent grid)"
+        );
+        assert!(app.viewport_hidden, "tab A's hidden-viewport state returns");
+        assert_docs_aligned(&app.tab_bar);
+    }
+
+    #[test]
+    fn wb_agent_counter_stays_global_across_tabs_so_channels_never_collide() {
+        // The per-unit chat-channel id is `agent:<n>` → counters must be
+        // GLOBAL, not per-tab, or two tabs' "Agent 1" would map to one
+        // channel. Mint a unit on tab A, open tab B, mint a unit there — the
+        // second `n` must be 2 (continued), never reset to 1.
+        let mut app = ValenxApp::default();
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_wb_agent: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.wb_agent_counter, 1);
+
+        // New tab (clean dock), then mint a unit on it.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_blank: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.wb_agent_counter, 1, "opening a tab never resets it");
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_wb_agent: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.wb_agent_counter, 2,
+            "the second unit gets a globally-unique n (2), not a per-tab reset to 1"
+        );
     }
 
     #[test]
