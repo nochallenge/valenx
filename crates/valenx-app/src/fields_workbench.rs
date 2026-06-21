@@ -177,6 +177,26 @@ fn run_fields(s: &mut FieldsWorkbenchState) {
     );
 }
 
+/// Build the **Field Statistics** result card for the Workbench+Agent bridge —
+/// a DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine descriptive statistics ([`run_fields`]) over the canonical default
+/// dataset (`1 2 3 4 5`). Registered as the `"fields"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card (the
+/// same mesh-less path the `dna` card uses), not a 3-D view.
+pub(crate) fn fields_product() -> crate::WorkspaceProduct {
+    let mut s = FieldsWorkbenchState::default();
+    run_fields(&mut s);
+    crate::WorkspaceProduct {
+        title: "Field Statistics".into(),
+        lines: crate::products_registry::lines_from_readout(&s.result),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

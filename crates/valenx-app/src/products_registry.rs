@@ -239,13 +239,18 @@ pub struct MeshProducerEntry {
 /// kind (the reducer then skips it safely — no panic, no placeholder churn,
 /// matching the rest of its bad-input handling).
 ///
-/// **This `match` is the single shared edit point for 3-D mesh tools**: each
-/// arm is one line pairing a wire `kind` with the per-tool builder in that
+/// **This `match` is the single shared edit point for bridge product tools**:
+/// each arm is one line pairing a wire `kind` with the per-tool builder in that
 /// tool's own module. The substantive per-tool code lives in those builders,
 /// not here — so adding a kind is a one-line addition (see the module docs for
-/// the copy-paste pattern). Note `dna` is intentionally absent: `show_3d:dna`
-/// is a *text* card handled directly in the reducer (no mesh), and the 2-D
-/// `show_2d` drawings (`rcbeam` / `dna`) have their own separate path.
+/// the copy-paste pattern). Most arms are 3-D mesh tools; the trailing block is
+/// the **DATA-ONLY** tools whose builders return a mesh-less *text-card*
+/// `WorkspaceProduct` (`mesh: None`, populated `lines`) — the reducer dispatches
+/// those through this same table and the tile renders the card (the mesh-less
+/// path the `dna` card uses) instead of a 3-D view. Note `dna` itself is
+/// intentionally absent: `show_3d:dna` is a text card handled directly in the
+/// reducer, and the 2-D `show_2d` drawings (`rcbeam` / `dna`) have their own
+/// separate path.
 pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
     let build: fn() -> WorkspaceProduct = match kind {
         "rocket" => crate::rocket_workbench::rocket_product,
@@ -388,6 +393,26 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "reactdyn" => crate::reactdyn_workbench::reactdyn_product,
         "sheetmetal" => crate::sheetmetal_workbench::sheetmetal_product,
         "aero" => crate::aero_workbench::aero_product,
+        // DATA-ONLY workbenches — their output is numbers / analysis, not 3-D
+        // geometry, so each builder returns a TEXT-CARD `WorkspaceProduct`
+        // (`mesh: None`, populated `lines`). The reducer dispatches these
+        // through the same `lookup` as the mesh kinds, and the tile renders the
+        // card (the mesh-less path the `dna` card uses) rather than a 3-D view.
+        // Each builder lives in its own workbench module and formats the genuine
+        // computed result rows from that tool's canonical default state.
+        "fields" => crate::fields_workbench::fields_product,
+        "fasteners" => crate::fasteners_workbench::fasteners_product,
+        "frames" => crate::frames_workbench::frames_product,
+        "collision" => crate::collision_workbench::collision_product,
+        "geomatics" => crate::geomatics_workbench::geomatics_product,
+        "hvac" => crate::hvac_workbench::hvac_product,
+        "gasdynamics" => crate::gasdynamics_workbench::gasdynamics_product,
+        "piping" => crate::piping_workbench::piping_product,
+        "cfd" => crate::cfd_workbench::cfd_product,
+        "astro" => crate::astro_workbench::astro_product,
+        "car" => crate::car_workbench::car_product,
+        "neuro" => crate::neuro_workbench::neuro_product,
+        "variant_effect" => crate::variant_effect_workbench::variant_effect_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -519,6 +544,20 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "reactdyn" => "reactdyn",
         "sheetmetal" => "sheetmetal",
         "aero" => "aero",
+        // DATA-ONLY card workbenches (mesh-less text-card products).
+        "fields" => "fields",
+        "fasteners" => "fasteners",
+        "frames" => "frames",
+        "collision" => "collision",
+        "geomatics" => "geomatics",
+        "hvac" => "hvac",
+        "gasdynamics" => "gasdynamics",
+        "piping" => "piping",
+        "cfd" => "cfd",
+        "astro" => "astro",
+        "car" => "car",
+        "neuro" => "neuro",
+        "variant_effect" => "variant_effect",
         _ => return None,
     })
 }
@@ -794,6 +833,83 @@ mod tests {
         "sheetmetal",
         "aero",
     ];
+
+    /// The DATA-ONLY card workbench kinds wired into the bridge. These differ
+    /// from [`KNOWN_3D_KINDS`] / [`WIRED_WORKBENCH_KINDS`] in one essential way:
+    /// their output is numbers / analysis, **not** 3-D geometry, so each builder
+    /// returns a *text-card* [`WorkspaceProduct`] (`mesh: None`, populated
+    /// `lines`) rather than a `Tri3` mesh. They are therefore asserted by the
+    /// card-specific [`every_card_kind_resolves_and_builds_a_text_card`] test
+    /// below — which checks `mesh.is_none()` + non-empty `lines` — and are kept
+    /// out of the mesh arrays so the Tri3-mesh assertions never run against them.
+    const CARD_KINDS: &[&str] = &[
+        "fields",
+        "fasteners",
+        "frames",
+        "collision",
+        "geomatics",
+        "hvac",
+        "gasdynamics",
+        "piping",
+        "cfd",
+        "astro",
+        "car",
+        "neuro",
+        "variant_effect",
+    ];
+
+    #[test]
+    fn every_card_kind_resolves_and_builds_a_text_card() {
+        // Each DATA-ONLY workbench kind resolves to a registry entry whose pure
+        // builder yields a *text-card* product: NO mesh (so the tile takes the
+        // mesh-less card path the `dna` card uses, not the 3-D viewport), a title,
+        // and at least one genuine computed result row. This is the card-kind
+        // counterpart to the Tri3-mesh assertion above — the distinguishing check
+        // is `mesh.is_none()`, which is exactly what separates a card kind from a
+        // mesh kind, so a card builder that accidentally grew a mesh (or a mesh
+        // builder mis-listed here) is caught.
+        for &k in CARD_KINDS {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
+            let product = (entry.build)();
+            assert!(
+                product.mesh.is_none(),
+                "{k}: a DATA-ONLY card carries no mesh"
+            );
+            // No 2-D drawing either — these render as the plain text card, not the
+            // egui 2-D-drawing branch (which is reserved for `rcbeam` / `dna`).
+            assert!(
+                product.kind2d.is_none(),
+                "{k}: a DATA-ONLY card is a text card, not a 2-D drawing"
+            );
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: card carries genuine result rows"
+            );
+        }
+    }
+
+    #[test]
+    fn card_kinds_are_disjoint_from_mesh_kinds() {
+        // A kind is either a 3-D mesh kind or a DATA-ONLY card kind, never both —
+        // so the two test-suites' invariants (mesh-Some vs mesh-None) can't
+        // collide. (Guards against a future edit that lists a kind in both the
+        // mesh and the card arrays.)
+        for &c in CARD_KINDS {
+            assert!(
+                !KNOWN_3D_KINDS.contains(&c),
+                "{c} is a card kind and must not be in KNOWN_3D_KINDS"
+            );
+            assert!(
+                !WIRED_WORKBENCH_KINDS.contains(&c),
+                "{c} is a card kind and must not be in WIRED_WORKBENCH_KINDS"
+            );
+        }
+    }
 
     #[test]
     fn every_wired_workbench_kind_resolves_and_builds_a_tri3_mesh() {

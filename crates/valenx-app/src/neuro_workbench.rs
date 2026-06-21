@@ -531,6 +531,51 @@ fn draw_schematic(ui: &mut egui::Ui, r: &NeuroResults) {
     }
 }
 
+/// Build the **Neural Interface** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine stimulation results ([`run_neuro`]) for the canonical default scene
+/// (an 8-axon bundle under a cathodic microstimulus): recruited fraction, access
+/// resistance, tissue ΔT, and the recorded extracellular spike (EAP) amplitude
+/// span. Registered as the `"neuro"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view. The rows mirror the panel's own readout. The default scene always
+/// solves; on the (canonically-unreachable) solver error the card carries that
+/// message instead of panicking.
+pub(crate) fn neuro_product() -> crate::WorkspaceProduct {
+    let s = NeuroWorkbenchState::default();
+    let lines = match run_neuro(&s) {
+        Ok(r) => {
+            let n_fired = r.fired.iter().filter(|&&f| f).count();
+            let readout = format!(
+                "recruited {:.0}%  ({n_fired}/{})\naccess resistance {:.1} kΩ\ntissue ΔT @1 mm {:.3} K",
+                r.recruited_fraction * 100.0,
+                r.fired.len(),
+                r.access_resistance_ohm / 1000.0,
+                r.dt_at_1mm_k,
+            );
+            let mut lines = crate::products_registry::lines_from_readout(&readout);
+            if !r.eap_uv.is_empty() {
+                let lo = r.eap_uv.iter().cloned().fold(f64::INFINITY, f64::min);
+                let hi = r.eap_uv.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                lines.push(format!(
+                    "Recorded spike (EAP): {lo:.0} … {hi:.0} µV (biphasic)"
+                ));
+            }
+            lines
+        }
+        Err(e) => vec![format!("stimulation failed: {e}")],
+    };
+    crate::WorkspaceProduct {
+        title: "Neural Interface".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
