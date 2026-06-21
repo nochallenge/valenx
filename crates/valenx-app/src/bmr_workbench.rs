@@ -360,6 +360,31 @@ fn load_figure_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"bmr"}`** product: the canonical human-
+/// figure solid (the panel's "Show 3-D figure" geometry) paired with the
+/// workbench's own BMR / TDEE headline numbers, at a fixed 3/4 camera.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`BmrWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` readout.
+pub(crate) fn bmr_product() -> crate::WorkspaceProduct {
+    let s = BmrWorkbenchState::default();
+    let mesh = figure_solid_mesh(&s).expect("default body inputs ⇒ a 3-D figure");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<figure>/valenx-bmr");
+    let readout = compute(&s).expect("default body inputs ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "BMR / TDEE".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

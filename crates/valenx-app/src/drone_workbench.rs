@@ -357,6 +357,34 @@ fn load_drone_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"drone"}`** product: the canonical hub +
+/// rotor-disk multirotor solid (the panel's "Show 3-D drone" geometry) paired
+/// with the workbench's own hover-performance headline numbers, at a fixed
+/// 3/4 camera. Registered in [`crate::products_registry`]; the per-tool
+/// builder the registry dispatches to. Pure — driven off
+/// [`DroneWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `run_drone` "Hover performance"
+/// readout (this workbench formats its readout into `result` rather than via a
+/// shared `compute()` string fn, so the rows are taken from that here).
+pub(crate) fn drone_product() -> crate::WorkspaceProduct {
+    let mut s = DroneWorkbenchState::default();
+    run_drone(&mut s);
+    let mesh = drone_solid_mesh(&s).expect("default quadcopter ⇒ a 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<drone>/valenx-drone");
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Drone / Multirotor".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

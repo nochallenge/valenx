@@ -263,6 +263,21 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "queueing" => crate::queueing_workbench::queueing_product,
         "fft" => crate::fft_workbench::fft_product,
         "engine" => crate::engine_workbench::engine_product,
+        // Aerospace + bio family — the last of the 3-D mesh workbenches
+        // (each builder lives in its own workbench module; see that module's
+        // `*_product`).
+        "fixedwing" => crate::fixedwing_workbench::fixedwing_product,
+        "drone" => crate::drone_workbench::drone_product,
+        "windturbine" => crate::windturbine_workbench::windturbine_product,
+        "pharmacokinetics" => crate::pharmacokinetics_workbench::pharmacokinetics_product,
+        "enzymekinetics" => crate::enzymekinetics_workbench::enzymekinetics_product,
+        "hemodynamics" => crate::hemodynamics_workbench::hemodynamics_product,
+        "bonemech" => crate::bonemech_workbench::bonemech_product,
+        "bmr" => crate::bmr_workbench::bmr_product,
+        "thermoreg" => crate::thermoreg_workbench::thermoreg_product,
+        "osmosis" => crate::osmosis_workbench::osmosis_product,
+        "acidbase" => crate::acidbase_workbench::acidbase_product,
+        "popdynamics" => crate::popdynamics_workbench::popdynamics_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -372,6 +387,19 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "queueing" => "queueing",
         "fft" => "fft",
         "engine" => "engine",
+        // Aerospace + bio family — the last of the 3-D mesh workbenches.
+        "fixedwing" => "fixedwing",
+        "drone" => "drone",
+        "windturbine" => "windturbine",
+        "pharmacokinetics" => "pharmacokinetics",
+        "enzymekinetics" => "enzymekinetics",
+        "hemodynamics" => "hemodynamics",
+        "bonemech" => "bonemech",
+        "bmr" => "bmr",
+        "thermoreg" => "thermoreg",
+        "osmosis" => "osmosis",
+        "acidbase" => "acidbase",
+        "popdynamics" => "popdynamics",
         _ => return None,
     })
 }
@@ -489,6 +517,20 @@ mod tests {
         "queueing",
         "fft",
         "engine",
+        // The 12 aerospace + bio workbenches — the last of the 3-D mesh
+        // tools — wired in this change.
+        "fixedwing",
+        "drone",
+        "windturbine",
+        "pharmacokinetics",
+        "enzymekinetics",
+        "hemodynamics",
+        "bonemech",
+        "bmr",
+        "thermoreg",
+        "osmosis",
+        "acidbase",
+        "popdynamics",
     ];
 
     /// The machine-design / structural / civil / strength-of-materials /
@@ -597,6 +639,20 @@ mod tests {
         "queueing",
         "fft",
         "engine",
+        // The 12 aerospace + bio workbenches — the last of the 3-D mesh
+        // tools — wired in this change.
+        "fixedwing",
+        "drone",
+        "windturbine",
+        "pharmacokinetics",
+        "enzymekinetics",
+        "hemodynamics",
+        "bonemech",
+        "bmr",
+        "thermoreg",
+        "osmosis",
+        "acidbase",
+        "popdynamics",
     ];
 
     #[test]

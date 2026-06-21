@@ -426,6 +426,34 @@ fn load_aircraft_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"fixedwing"}`** product: the canonical
+/// fuselage + wings + tail aircraft solid (the panel's "Show 3-D aircraft"
+/// geometry) paired with the workbench's own point-performance headline
+/// numbers, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`FixedWingWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `run_aircraft` "Point performance"
+/// readout (this workbench formats its readout into `result` rather than via a
+/// shared `compute()` string fn, so the rows are taken from that here).
+pub(crate) fn fixedwing_product() -> crate::WorkspaceProduct {
+    let mut s = FixedWingWorkbenchState::default();
+    run_aircraft(&mut s);
+    let mesh = aircraft_solid_mesh(&s).expect("default GA aircraft ⇒ a 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<aircraft>/valenx-fixedwing");
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Fixed-Wing / Aircraft".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

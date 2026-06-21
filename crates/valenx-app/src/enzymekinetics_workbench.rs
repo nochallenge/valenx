@@ -497,6 +497,32 @@ fn load_vessel_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"enzymekinetics"}`** product: the
+/// canonical stirred-tank bioreactor solid (the panel's "Show 3-D vessel"
+/// geometry) paired with the workbench's own Michaelis-Menten rate headline
+/// numbers, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`EnzymeKineticsWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` rate readout.
+pub(crate) fn enzymekinetics_product() -> crate::WorkspaceProduct {
+    let s = EnzymeKineticsWorkbenchState::default();
+    let mesh = vessel_solid_mesh(&s).expect("default half-saturated enzyme ⇒ a 3-D vessel");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<vessel>/valenx-enzymekinetics");
+    let readout = compute(&s).expect("default half-saturated enzyme ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Enzyme Kinetics".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

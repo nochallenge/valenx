@@ -462,6 +462,32 @@ fn load_turbine_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"windturbine"}`** product: the canonical
+/// tower + nacelle + three-blade rotor solid (the panel's "Show 3-D turbine"
+/// geometry) paired with the workbench's own actuator-disc power headline
+/// numbers, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`WindTurbineWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` performance readout.
+pub(crate) fn windturbine_product() -> crate::WorkspaceProduct {
+    let s = WindTurbineWorkbenchState::default();
+    let mesh = turbine_solid_mesh(&s).expect("default 3 MW turbine ⇒ a 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<turbine>/valenx-windturbine");
+    let readout = compute(&s).expect("default 3 MW turbine ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Wind Turbine".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -411,6 +411,32 @@ fn load_vessel_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"hemodynamics"}`** product: the canonical
+/// blood-vessel solid (the panel's "Show 3-D vessel" geometry) paired with
+/// the workbench's own flow / resistance headline numbers, at a fixed 3/4
+/// camera. Registered in [`crate::products_registry`]; the per-tool builder
+/// the registry dispatches to. Pure — driven off
+/// [`HemodynamicsWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` readout.
+pub(crate) fn hemodynamics_product() -> crate::WorkspaceProduct {
+    let s = HemodynamicsWorkbenchState::default();
+    let mesh = vessel_solid_mesh(&s).expect("default vessel ⇒ a 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<vessel>/valenx-hemodynamics");
+    let readout = compute(&s).expect("default vessel ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Hemodynamics".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

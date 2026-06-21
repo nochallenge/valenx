@@ -375,6 +375,32 @@ fn load_bone_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"bonemech"}`** product: the canonical
+/// long-bone shaft solid (the panel's "Show 3-D bone" geometry) paired with
+/// the workbench's own bone-stress headline numbers, at a fixed 3/4 camera.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off
+/// [`BonemechWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` readout.
+pub(crate) fn bonemech_product() -> crate::WorkspaceProduct {
+    let s = BonemechWorkbenchState::default();
+    let mesh = bone_solid_mesh(&s).expect("default bone shaft ⇒ a 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<bone>/valenx-bonemech");
+    let readout = compute(&s).expect("default bone shaft ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Bone Mechanics".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

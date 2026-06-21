@@ -482,6 +482,35 @@ fn load_curve_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"popdynamics"}`** product: the canonical
+/// trajectory-ribbon solid (the panel's "Show 3-D curve" geometry — the
+/// active model's representative trajectory swept into a thin ribbon) paired
+/// with the workbench's own model diagnostics headline numbers, at a fixed
+/// 3/4 camera. Registered in [`crate::products_registry`]; the per-tool
+/// builder the registry dispatches to. Pure — driven off
+/// [`PopDynamicsWorkbenchState::default`] (the default SIR model).
+///
+/// The readout rows mirror the panel's `compute()` readout. Unlike the other
+/// 3-D workbenches this product carries a swept curve-ribbon mesh
+/// ([`curve_ribbon_mesh`]) rather than a `*_solid_mesh`.
+pub(crate) fn popdynamics_product() -> crate::WorkspaceProduct {
+    let s = PopDynamicsWorkbenchState::default();
+    let mesh = curve_ribbon_mesh(&s).expect("default SIR model ⇒ a 3-D trajectory ribbon");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<curve>/valenx-popdynamics");
+    let readout = compute(&s).expect("default SIR model ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Population Dynamics".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
