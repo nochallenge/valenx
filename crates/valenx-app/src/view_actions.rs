@@ -24,6 +24,16 @@ impl ValenxApp {
         };
     }
 
+    /// Collapse / expand the bottom Residuals / Log dock.
+    ///
+    /// When collapsed the panel renders only its header strip (the tab
+    /// selectors + the named toggle button) and skips the content body,
+    /// so it shrinks to a thin bar. Backs the header's AI-drivable
+    /// "Collapse panel" / "Expand panel" button.
+    pub fn toggle_bottom_panel(&mut self) {
+        self.bottom_panel_collapsed = !self.bottom_panel_collapsed;
+    }
+
     /// Reframe the camera around the loaded STL's bounding box.
     /// No-op when nothing is loaded.
     pub fn frame_current_stl(&mut self) {
@@ -56,5 +66,16 @@ mod tests {
         assert_ne!(app.shading, original);
         app.toggle_shading();
         assert_eq!(app.shading, original);
+    }
+
+    #[test]
+    fn toggle_bottom_panel_flips_collapsed_flag() {
+        let mut app = ValenxApp::default();
+        // Defaults to expanded (false) via `#[derive(Default)]`.
+        assert!(!app.bottom_panel_collapsed);
+        app.toggle_bottom_panel();
+        assert!(app.bottom_panel_collapsed, "first toggle collapses");
+        app.toggle_bottom_panel();
+        assert!(!app.bottom_panel_collapsed, "second toggle re-expands");
     }
 }
