@@ -11,7 +11,7 @@
 //! to each other*. Ticking **View → "Dockable panel layout (beta)"** flips
 //! [`crate::ValenxApp::dock_enabled`] on and replaces that whole run with a
 //! single resizable right region hosting every open workbench as a tile in
-//! an `egui_tiles` [`Tree`]. `egui_tiles` then provides, for free:
+//! an `egui_tiles` `Tree`. `egui_tiles` then provides, for free:
 //!
 //! - **drag a panel by its tab to reorder** it among the others (they
 //!   reflow),
@@ -29,7 +29,7 @@
 //!
 //! - Default **off** ([`crate::ValenxApp::dock_enabled`] defaults `false`);
 //!   nothing in this module runs unless the user opts in.
-//! - The [`Tree`] is **lazily built** and **synced** every frame to the set
+//! - The `Tree` is **lazily built** and **synced** every frame to the set
 //!   of currently-open workbenches: opening a workbench adds a tile, closing
 //!   one (here or from the View menu) drops its tile, and when none are open
 //!   the tree is dropped and the region paints nothing.

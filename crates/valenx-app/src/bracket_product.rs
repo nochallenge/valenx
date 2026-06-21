@@ -15,7 +15,7 @@
 //! - Two **20 mm**-wide legs forming the L (outer bottom leg 80×20, outer
 //!   vertical leg 20×60).
 //! - The inner re-entrant corner is **rounded** by baking a short tangent arc
-//!   (`FILLET_R` mm, [`FILLET_PTS`] points) straight into the 2-D profile —
+//!   (`FILLET_R` mm, `FILLET_PTS` points) straight into the 2-D profile —
 //!   an honest *profile round*, not a 3-D edge blend. (`valenx_cad::fillet_edges`
 //!   is a documented NotImplemented stub and is deliberately **not** called.)
 //! - Two **M5** holes (Ø5 → r 2.5 mm), one centred in each leg, cut with
