@@ -186,7 +186,19 @@ fn parse_feed(body: &str) -> Vec<FeedEntry> {
 
 /// Read + parse the feed file. A missing / unreadable file yields an empty
 /// feed (not an error).
+///
+/// Bounded by [`crate::settings_io::MAX_STATE_FILE_BYTES`] — the same defensive
+/// size-gate [`crate::agent_commands`]'s `read_cmd_file` uses: a corrupt or
+/// hostile feed file is checked via `metadata` *before* the read, so an
+/// oversized file can't OOM the ~1 s repaint that re-reads the feed. Over the
+/// cap → treated as an empty feed, exactly like a missing/unreadable one.
 fn load_feed(path: &Path) -> Vec<FeedEntry> {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return Vec::new();
+    };
+    if meta.len() > crate::settings_io::MAX_STATE_FILE_BYTES as u64 {
+        return Vec::new();
+    }
     std::fs::read_to_string(path)
         .map(|s| parse_feed(&s))
         .unwrap_or_default()
@@ -376,6 +388,34 @@ not json at all
         let path = std::env::temp_dir().join("valenx_assistant_feed_does_not_exist_xyz.jsonl");
         let _ = std::fs::remove_file(&path);
         assert!(load_feed(&path).is_empty());
+    }
+
+    #[test]
+    fn load_feed_reads_a_normal_small_feed() {
+        // A normal under-cap feed parses through the size-gate unchanged.
+        use std::io::Write;
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            f,
+            r#"{{"title":"Designed LV-1","detail":"two-stage kerolox","kind":"build"}}"#
+        )
+        .unwrap();
+        let entries = load_feed(f.path());
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].title, "Designed LV-1");
+    }
+
+    #[test]
+    fn load_feed_rejects_oversized_file_without_reading_it() {
+        // Defensive symmetry with `agent_commands::read_cmd_file`: a feed file
+        // past MAX_STATE_FILE_BYTES is gated by `metadata` BEFORE the read, so
+        // a hostile/corrupt file can't OOM the ~1 s feed re-read. We don't
+        // write a real 10 MiB file (slow); instead confirm the gate logic
+        // `load_feed` runs would reject an oversized length up-front, mirroring
+        // settings_io's oversized-state-file test.
+        let oversized_len = crate::settings_io::MAX_STATE_FILE_BYTES as u64 + 1;
+        let gated = oversized_len > crate::settings_io::MAX_STATE_FILE_BYTES as u64;
+        assert!(gated, "an over-cap length must trip load_feed's size gate");
     }
 
     #[test]

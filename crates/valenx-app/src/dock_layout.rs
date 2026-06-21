@@ -1181,6 +1181,38 @@ impl ValenxApp {
                 pixels_per_point,
             };
             tree.ui(&mut beh, ui);
+
+            // Reclaim GPU memory for any per-tile offscreen target whose tile
+            // is no longer in the dock tree (FINDING 1: closing a
+            // Workbench+Agent unit otherwise leaks its `"workspace:{n}"` colour
+            // + depth textures + egui registration forever — unit ids are
+            // monotonic and never reused, so the renderer's `offscreens` map
+            // would grow ~8 MB per opened-then-closed unit). Building the live
+            // set here (rather than on `on_tab_close`) also catches tabs
+            // orphaned by a tab-switch or a manual drag, not just explicit
+            // closes.
+            //
+            // Live keys = `"central"` (the main viewport, always kept) PLUS
+            // every `"workspace:{n}"` for the workspace panes still present.
+            // Each such pane id IS its offscreen key (the workspace half of a
+            // unit registers a target keyed by its pane id; agent panes are
+            // chat with no GPU target, so they map to no key). Done while the
+            // egui `Renderer` is already lifted out of `self` (the
+            // take()/put-back dance), with `render_state`'s renderer write-lock.
+            if let (Some(wr), Some(rs)) = (renderer.as_mut(), render_state) {
+                let mut live: std::collections::HashSet<String> = std::collections::HashSet::new();
+                live.insert("central".to_string());
+                for tile in tree.tiles.tiles() {
+                    if let egui_tiles::Tile::Pane(id) = tile {
+                        if id.starts_with(WORKSPACE_PREFIX) {
+                            live.insert(id.clone());
+                        }
+                    }
+                }
+                let mut guard = rs.renderer.write();
+                wr.prune_offscreens(&live, &mut guard);
+            }
+
             // Restore the renderer (it carries the per-tile offscreen targets,
             // so it MUST persist across frames) and the tree (preserves the
             // user's layout edits).
