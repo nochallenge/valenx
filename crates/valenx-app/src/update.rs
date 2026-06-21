@@ -3689,8 +3689,18 @@ impl eframe::App for ValenxApp {
 
 impl ValenxApp {
     fn draw_browser(&mut self, ui: &mut egui::Ui) {
-        // IDE-style project library navigator at the very top of the
-        // Browser: search + ★ Pinned / 🕘 Recent / 📁 All (folders), with
+        // VS-Code-style "Open Editors" list at the very TOP of the Browser:
+        // a collapsible "Open Tabs (N)" section that mirrors EVERY open tab
+        // (100+) so the user can see + switch + close them all from the
+        // organized left panel rather than the cramped horizontal strip.
+        // Deliberately separate from (and above) the Projects navigator:
+        // Open Tabs = the open docs, Projects = the saved library. See
+        // [`crate::project_tabs::draw_open_tabs_list`].
+        crate::project_tabs::draw_open_tabs_list(self, ui);
+        ui.separator();
+
+        // IDE-style project library navigator below it in the Browser:
+        // search + ★ Pinned / 🕘 Recent / 📁 All (folders), with
         // open-as-tab + per-project context actions. See
         // [`crate::project_navigator`].
         crate::project_navigator::draw_navigator(self, ui);
