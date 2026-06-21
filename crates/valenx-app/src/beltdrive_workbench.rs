@@ -77,18 +77,18 @@ pub fn draw_beltdrive_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_beltdrive_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Belt Drive",
-                "native open flat-belt drive analysis · valenx-beltdrive",
-            ) {
-                app.show_beltdrive_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_beltdrive_workbench",
+        "Belt Drive",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native open flat-belt drive analysis · valenx-beltdrive")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.beltdrive;
             egui::ScrollArea::vertical()
@@ -158,7 +158,11 @@ pub fn draw_beltdrive_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_beltdrive_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.beltdrive` borrow is
     // released here): build the belt drive's 3-D solid and load it.
@@ -426,6 +430,27 @@ fn load_beltdrive_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical belt-drive workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn beltdrive_product() -> crate::WorkspaceProduct {
+    let s = BeltDriveWorkbenchState::default();
+    let mesh = beltdrive_solid_mesh(&s).expect("canonical belt drive ⇒ drive solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<beltdrive>/valenx-beltdrive");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical belt drive ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Belt drive (tension/power)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

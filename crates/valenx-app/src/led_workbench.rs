@@ -82,18 +82,18 @@ pub fn draw_led_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_led_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "LED",
-                "native series current-limiting resistor sizing · valenx-led",
-            ) {
-                app.show_led_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_led_workbench",
+        "LED",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native series current-limiting resistor sizing · valenx-led")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.led;
             egui::ScrollArea::vertical()
@@ -157,7 +157,11 @@ pub fn draw_led_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_led_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.led` borrow is released
     // here): build the LED's 3-D solid and load it.

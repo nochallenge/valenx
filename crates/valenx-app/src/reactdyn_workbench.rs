@@ -447,18 +447,18 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     // and applied *after* it releases its &mut borrow of `app`.
     let mut to_push: Option<(ViewMolecule, String)> = None;
 
-    egui::SidePanel::right("valenx_reactdyn_workbench")
-        .resizable(true)
-        .default_width(370.0)
-        .width_range(320.0..=600.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Reaction Dynamics",
-                "native ab-initio MD · valenx-reactdyn",
-            ) {
-                app.show_reactdyn_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_reactdyn_workbench",
+        "Reaction Dynamics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native ab-initio MD · valenx-reactdyn")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.reactdyn;
             let running = s.run.is_some();
 
@@ -601,7 +601,7 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             egui::ProgressBar::new(done as f32 / total as f32)
                                 .text(format!("step {done}/{total}")),
                         );
-                        ctx.request_repaint();
+                        ui.ctx().request_repaint();
                     }
                     if !s.status.is_empty() {
                         ui.label(egui::RichText::new(&s.status).weak().small());
@@ -610,9 +610,14 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
                     }
 
-                    draw_results_and_playback(s, ui, ctx, &mut to_push);
+                    let ctx = ui.ctx().clone();
+                    draw_results_and_playback(s, ui, &ctx, &mut to_push);
                 });
-        });
+        },
+    );
+    if close {
+        app.show_reactdyn_workbench = false;
+    }
 
     // The panel closure has released its &mut app borrow — now push the
     // selected frame's molecule into the shared 3-D viewport.

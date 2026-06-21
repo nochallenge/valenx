@@ -37,6 +37,7 @@
 
 pub mod aero;
 pub mod aero_workbench;
+pub mod agent_commands;
 pub mod animate_workbench;
 pub mod antenna_workbench;
 pub(crate) mod background;
@@ -70,6 +71,7 @@ pub mod bjt_workbench;
 pub mod bmr_workbench;
 pub mod bolt_workbench;
 pub mod bonemech_workbench;
+pub mod bracket_product;
 pub mod brake_workbench;
 pub mod buckling_workbench;
 pub mod cam_overlay;
@@ -86,6 +88,8 @@ pub mod conveyor_workbench;
 mod coverage_ui_tests;
 pub mod creep_workbench;
 pub mod dcmotor_workbench;
+pub mod dna_product;
+pub mod dock_layout;
 pub mod docking;
 pub mod draft_overlay;
 pub mod drone_workbench;
@@ -136,7 +140,6 @@ pub mod led_workbench;
 pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
-pub(crate) mod menu_ui;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
 pub mod mosfet_workbench;
@@ -144,7 +147,6 @@ pub mod new_project_dialog;
 pub mod opamp_workbench;
 pub mod optics_workbench;
 pub mod orifice_workbench;
-pub mod panel_help;
 pub mod pbr_forward_pass;
 pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
@@ -161,6 +163,9 @@ pub mod pneumatics_workbench;
 pub mod popdynamics_workbench;
 pub mod powerfactor_workbench;
 pub mod pressurevessel_workbench;
+/// Per-file registry of agent-bridge `show_3d` mesh producers (replaces the old
+/// per-kind reducer arms; new 3-D tools register from their own module).
+pub mod products_registry;
 pub mod project_tabs;
 pub mod projectile_workbench;
 pub mod psychrometrics_workbench;
@@ -196,14 +201,12 @@ pub mod springs_workbench;
 pub mod statics_workbench;
 pub mod straingauge_workbench;
 pub mod strainrosette_workbench;
-pub mod theme;
 pub mod thermalexpansion_workbench;
 pub mod thermistor_workbench;
 pub mod thermocouple_workbench;
 pub mod thermocycle_workbench;
 pub mod thermoreg_workbench;
 pub mod threephase_workbench;
-pub mod tooltips;
 pub mod torsion_workbench;
 pub mod transformer_workbench;
 pub mod transmissionline_workbench;
@@ -217,7 +220,7 @@ pub mod viewport_kind;
 pub mod weir_workbench;
 pub mod welcome_tour;
 pub mod wgpu_renderer;
-pub mod workbench_ui;
+pub mod workbench_chrome;
 
 // Concern-focused helper modules — what used to be a single
 // `helpers.rs` bag-of-everything (1422 LOC, 36 fns spanning 8+
@@ -228,14 +231,11 @@ pub mod workbench_ui;
 pub(crate) mod adapter_status;
 pub mod audit;
 pub mod file_browser;
-pub(crate) mod histograms;
 pub mod history;
 pub(crate) mod mesh_loader;
 pub mod rbac_io;
 pub mod settings_io;
-pub mod solver_parse;
 pub mod state_paths;
-pub mod time_format;
 
 // Concern-focused impl ValenxApp blocks split out of this file to
 // keep the root module readable. Each module holds one `impl
@@ -278,10 +278,150 @@ pub use crate::history::{
 pub use crate::rbac_io::{load_rbac_config, load_rbac_outcome, RbacLoadOutcome};
 pub use crate::settings_io::{load_settings_from_state_dir, save_settings_to_state_dir};
 pub use crate::setup::{crashes_dir, run};
-pub use crate::solver_parse::{adapter_id_from_solver, derived_inputs_from_case_toml};
 pub use crate::state_paths::state_dir;
-pub use crate::time_format::format_time_key;
 pub use crate::types::{BottomTab, LoadedMesh, LoadedStl, RunHistoryEntry, SweepHistoryEntry};
+
+// Stage A1 of the app split (docs/refactor/2026-06-20-valenx-app-split.md):
+// these leaf modules moved to `valenx-app-core`. Re-export them here so
+// the existing public API (`valenx_app::theme`, `valenx_app::tooltips`,
+// `valenx_app::panel_help`, `valenx_app::workbench_ui`,
+// `valenx_app::format_time_key`, `valenx_app::adapter_id_from_solver`, …)
+// stays stable and in-crate `crate::theme::…` paths keep resolving.
+pub use valenx_app_core::solver_parse::{adapter_id_from_solver, derived_inputs_from_case_toml};
+pub use valenx_app_core::time_format::format_time_key;
+pub use valenx_app_core::{
+    histograms, menu_ui, panel_help, solver_parse, theme, time_format, tooltips, workbench_ui,
+};
+
+/// The **finished build result** an external agent posts into a "Workbench +
+/// Agent" unit's workspace tile, so the agent's output (e.g. a sized rocket, a
+/// gear train) shows up in *this* pane instead of staying a placeholder.
+///
+/// Set per unit `n` by the [`crate::agent_commands::AgentCommand::ShowProduct`]
+/// (text card) or [`crate::agent_commands::AgentCommand::Show3d`] (live 3-D
+/// view) bridge commands and rendered by [`crate::dock_layout`]'s
+/// `render_workspace_body`:
+///
+/// - a text result is a bold `title` heading over a list of plain-text `lines`
+///   (one row each);
+/// - a **3-D** result additionally carries a [`LoadedMesh`] in [`Self::mesh`]
+///   and a fixed [`OrbitCamera`] in [`Self::camera`], which the pane renders as
+///   an actual lit 3-D view (same look as the central viewport) at a fixed 3/4
+///   angle.
+///
+/// Not `Clone`/`Default`/`Debug`: [`LoadedMesh`] owns a `valenx_mesh::Mesh` +
+/// quality reports and implements none of them. The only writer is the
+/// agent-command reducer's `insert` and the only reader is
+/// `render_workspace_body`'s `get` (both move/borrow, never clone or format),
+/// so none of those bounds is needed.
+pub struct WorkspaceProduct {
+    /// Card heading (rendered bold), e.g. the product name.
+    pub title: String,
+    /// Result rows shown under the heading, one `ui.label` per entry. Empty
+    /// for a pure 3-D product.
+    pub lines: Vec<String>,
+    /// When `Some`, the pane renders this mesh as a live lit 3-D view (using
+    /// [`Self::camera`]) instead of a text card. Built by the `show_3d`
+    /// command (e.g. the LV-1 rocket via
+    /// `crate::rocket_workbench::lv1_loaded_mesh`).
+    pub mesh: Option<LoadedMesh>,
+    /// Optional per-vertex base colours for [`Self::mesh`], one `[r, g, b]`
+    /// in `[0, 1]` per surface vertex of the mesh's renderable triangle skin
+    /// (the order [`crate::wgpu_renderer::triangles_to_vertices`] emits:
+    /// triangle-major, then the three vertices of each triangle). `None` for
+    /// plain meshes (rocket / gear / bracket / rcbeam) — those render in the
+    /// neutral brushed-metal colour. The FEM cantilever product sets this to a
+    /// von-Mises stress colormap so the deformed shape reads as a stress map
+    /// rather than flat grey. When the length matches the mesh's surface vertex
+    /// count the tile renders with [`crate::wgpu_renderer::triangles_to_vertices_colored`];
+    /// otherwise it falls back to the plain metal path. Ignored when
+    /// [`Self::mesh`] is `None`.
+    pub vertex_colors: Option<Vec<[f32; 3]>>,
+    /// Fixed camera the 3-D view is rendered from (a pleasant 3/4 angle for
+    /// Stage 1 — per-tile orbit is a later stage). Ignored when
+    /// [`Self::mesh`] is `None`.
+    pub camera: OrbitCamera,
+    /// When `Some`, the pane renders a **2-D engineering drawing** painted with
+    /// egui (no wgpu) — an RC-beam section + rebar, or a DNA construct map —
+    /// instead of the 3-D viewport or the text card. Set by the
+    /// [`crate::agent_commands::AgentCommand::Show2d`] bridge command and painted
+    /// by [`crate::dock_layout`]'s `render_workspace_body` (a branch *between*
+    /// the 3-D viewport and the text card). `None` for plain / mesh / text
+    /// products. See [`Workspace2dKind`].
+    pub kind2d: Option<Workspace2dKind>,
+    /// Transient status line for the tile's "Export STL" action, shown next to
+    /// the button so the user sees where the mesh was written (e.g.
+    /// `"saved → C:\\…\\Downloads\\valenx_rocket.stl"`) or why it failed
+    /// (`"export failed: …"`). `None` until the first export. Only meaningful
+    /// for mesh products ([`Self::mesh`] is `Some`); other product kinds never
+    /// show the button and so never set it. Set by
+    /// [`crate::dock_layout`]'s `render_workspace_body` on button click.
+    pub last_export: Option<String>,
+}
+
+/// Which **2-D engineering drawing** a [`WorkspaceProduct`] carries, with the
+/// small plain-data view the egui painter needs (no wgpu / mesh types, so the
+/// whole thing is cheaply `Clone`). Painted by [`crate::dock_layout`]'s
+/// `render_workspace_body`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Workspace2dKind {
+    /// A reinforced-concrete **beam section + rebar** drawing — a filled
+    /// concrete rectangle with the tension bars near the bottom, dimension
+    /// lines, and the flexural numbers.
+    RcSection(RcSectionView),
+    /// A DNA **construct map** — a horizontal baseline = the construct with each
+    /// feature (ATG / ORF / His6 / stop) drawn as a coloured block proportional
+    /// to its nt span, plus a nt ruler.
+    DnaMap(DnaMapView),
+}
+
+/// Plain-data view for the RC-beam **section drawing** ([`Workspace2dKind::RcSection`]).
+/// Geometry in millimetres plus the already-formatted flexural readout rows
+/// (the same `lines` the 3-D / text product carries) so the painter can show
+/// the key numbers without re-deriving them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RcSectionView {
+    /// Section width `b` (mm) — the horizontal extent of the drawn rectangle.
+    pub width_mm: f64,
+    /// Section depth `h` (mm) — the vertical extent of the drawn rectangle.
+    pub depth_mm: f64,
+    /// Clear cover to the bar centres (mm) — how far the rebar sits in from the
+    /// faces.
+    pub cover_mm: f64,
+    /// Diameter of each tension bar (mm) — sets the drawn circle size.
+    pub bar_dia_mm: f64,
+    /// Number of tension bars drawn across the bottom.
+    pub n_bars: usize,
+    /// The flexural readout rows (Mn, φMn, ρ vs ρ_bal, utilisation, …), shown as
+    /// a small text block beside the section.
+    pub lines: Vec<String>,
+}
+
+/// One labelled feature span on a [`DnaMapView`] — a half-open `[start, end)`
+/// nucleotide interval with a display label and an RGB block colour.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DnaFeature {
+    /// Short label drawn by the block (e.g. `"ATG"`, `"ORF"`, `"His6"`, `"stop"`).
+    pub label: String,
+    /// Inclusive start nucleotide index (0-based).
+    pub start: usize,
+    /// Exclusive end nucleotide index.
+    pub end: usize,
+    /// Block fill colour as `[r, g, b]` (0–255).
+    pub color: [u8; 3],
+}
+
+/// Plain-data view for the DNA **construct map** ([`Workspace2dKind::DnaMap`]).
+/// The total construct length plus its feature spans; the painter lays the
+/// baseline across the tile and draws each feature proportional to its span.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DnaMapView {
+    /// Total construct length in nucleotides — the baseline's full extent.
+    pub total_nt: usize,
+    /// The labelled feature spans (ATG / ORF / His6 / stop), each a
+    /// `[start, end)` nt interval with a colour. Ordered for drawing.
+    pub features: Vec<DnaFeature>,
+}
 
 /// Root application state.
 #[derive(Default)]
@@ -289,60 +429,143 @@ pub struct ValenxApp {
     /// Opt-in dockable / tiling central-panel layout (View → Docked
     /// layout). Default-built tile tree; only painted when
     /// [`ValenxApp::docked_layout`] is on. See [`docking`].
-    pub(crate) docking: docking::DockingState,
+    pub docking: docking::DockingState,
     /// When true, the central panel renders the [`docking`] tile tree
     /// (resizable splits / tabs / close / drag) instead of the classic
     /// single-viewport layout. Default `false` (classic layout).
-    pub(crate) docked_layout: bool,
-    pub(crate) project: Option<LoadedProject>,
-    pub(crate) project_path: Option<PathBuf>,
+    pub docked_layout: bool,
+    /// Per-panel chrome state for the right-side workbenches — keyed by the
+    /// panel's stable `SidePanel` id, it records whether each is collapsed
+    /// and whether it is docked / floating / popped out into its own OS
+    /// window. Driven by [`workbench_chrome::workbench_shell`]; empty until a
+    /// panel's header is first interacted with. See [`workbench_chrome`].
+    pub workbench_chrome:
+        std::collections::HashMap<String, crate::workbench_chrome::PanelChromeState>,
+
+    /// Opt-in **dockable / tileable layout for the right-side workbench
+    /// panels** (View → "Dockable panel layout (beta)"). When `true`, the
+    /// run of `draw_<x>_workbench` dispatch in `update.rs` is replaced by a
+    /// single [`egui_tiles`] tree (`dock_layout::draw_dock_layout`) that
+    /// hosts every open workbench as a draggable / reorderable / splittable
+    /// tile. Default `false` — the classic stacked right-side `SidePanel`
+    /// layout is unchanged and stays the default. Distinct from
+    /// [`ValenxApp::docked_layout`], which tiles the *central* viewport.
+    ///
+    /// **Per-tab.** This holds the *active* tab's value; switching tabs swaps
+    /// it (with [`Self::dock_tree`] / [`Self::viewport_hidden`] /
+    /// [`Self::viewport_collapsed`]) via
+    /// [`project_tabs::WorkspaceDoc`], so a tab carrying a "Workbench +
+    /// Agent" grid keeps it while a freshly-opened tab starts with the dock
+    /// off. A newly-opened tab installs a default document → this is `false`.
+    pub dock_enabled: bool,
+    /// The lazily-built [`egui_tiles`] tree backing the dockable workbench
+    /// layout. `None` until the first frame [`ValenxApp::dock_enabled`] is on
+    /// (built from whichever workbenches are open then); thereafter
+    /// `dock_layout::draw_dock_layout` syncs it each frame — adding a tile
+    /// when a workbench is opened and dropping the tile when one is closed.
+    /// Panes are panel-id `String`s (e.g. `"valenx_engine_workbench"`).
+    ///
+    /// **Per-tab.** This is the *active* tab's tree; switching tabs `take`s it
+    /// into the outgoing tab's [`project_tabs::WorkspaceDoc`] and installs the
+    /// incoming tab's (each tab owns its own dock layout). A newly-opened tab
+    /// starts with `None` (a clean workspace — no other tab's agent grid).
+    pub dock_tree: Option<egui_tiles::Tree<String>>,
+    /// Monotonic counter for **"Workbench + Agent"** units launched into the
+    /// dock (View → "New Workbench + Agent" / "Open 6 …"). Each unit is a
+    /// paired `"workspace:<n>"` (empty build canvas) + `"agent:<n>"` (Claude
+    /// chat) tile; this is the highest `n` handed out so far (default `0` =
+    /// none). See [`dock_layout`]. Unlike the `DOCKABLE_PANELS` tiles, these
+    /// are not gated on a `show_*` flag — they persist in [`Self::dock_tree`]
+    /// until the user closes them.
+    ///
+    /// **Global (deliberately not per-tab).** Although [`Self::dock_tree`] is
+    /// per-tab, this counter stays on the app so the `<n>` minted for each
+    /// unit is unique **across all tabs** — `agent:<n>` is the unit's chat
+    /// channel id (`valenx_chat_*_u<n>`), and per-tab counters would collide
+    /// two different tabs' "Agent 1" onto the same channel. So each tab's
+    /// [`Self::dock_tree`] may contain different `agent:<n>` panes, but every
+    /// `<n>` is globally distinct.
+    pub wb_agent_counter: usize,
+    /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
+    /// many lines of channel `n`'s command file
+    /// ([`crate::agent_commands::cmd_path`]) have already been applied. On the
+    /// first poll for a channel the cursor is seeded to the file's current line
+    /// count so pre-existing history is **not** replayed on launch; thereafter
+    /// only genuinely-new appended lines run. Defaults empty (derive). See
+    /// [`crate::agent_commands::poll_and_apply_agent_commands`].
+    pub agent_cmd_cursor: std::collections::HashMap<usize, usize>,
+    /// Last time the agent-command files were polled, used to throttle the disk
+    /// reads to ~1/sec. `None` until the first poll (derive default). See
+    /// [`crate::agent_commands`].
+    pub last_agent_poll: Option<std::time::Instant>,
+    /// Per-unit chat **input buffers** for the "Workbench + Agent" `agent:<n>`
+    /// tiles, keyed by unit number `n`. Each unit's chat `TextEdit` binds to its
+    /// own entry here (via `unit_chat_inputs.entry(n).or_default()`) so the six
+    /// agent chats don't share one input box and mirror each other's typing.
+    /// The classic base Assistant panel keeps using
+    /// `crate::assistant_workbench::AssistantWorkbenchState::input` instead.
+    /// Defaults empty (derive); an entry is created lazily the first time a unit
+    /// chat is drawn. See [`dock_layout`] and
+    /// `crate::assistant_workbench::assistant_chat_ui`.
+    pub unit_chat_inputs: std::collections::HashMap<usize, String>,
+    /// Per-unit **finished build result** for the "Workbench + Agent"
+    /// `workspace:<n>` tiles, keyed by unit number `n`. An external agent posts
+    /// one via [`crate::agent_commands::AgentCommand::ShowProduct`]; the matching
+    /// `workspace:<n>` tile then renders it as a result card (replacing the empty
+    /// "the agent's output will appear here" placeholder). Defaults empty
+    /// (derive); the same `n` the bridge uses to post Notes to `feed_u<n>`. See
+    /// [`WorkspaceProduct`] and [`crate::dock_layout`].
+    pub workspace_products: std::collections::HashMap<usize, WorkspaceProduct>,
+
+    pub project: Option<LoadedProject>,
+    pub project_path: Option<PathBuf>,
     /// RBAC override block parsed from the loaded project's
     /// `project.toml`. Merged on top of the global `<state_dir>/rbac.json`
     /// at every permission check, so a sensitive project can promote
     /// or demote per-user roles without rewriting the global config.
     /// `None` when no project is loaded or when project.toml has no
     /// `[rbac]` block.
-    pub(crate) project_rbac_override: Option<valenx_rbac::RbacConfig>,
-    pub(crate) stl: Option<LoadedStl>,
-    pub(crate) mesh: Option<LoadedMesh>,
-    pub(crate) camera: OrbitCamera,
-    pub(crate) shading: ShadingMode,
-    pub(crate) last_error: Option<String>,
-    pub(crate) status: Option<String>,
-    pub(crate) about_open: bool,
+    pub project_rbac_override: Option<valenx_rbac::RbacConfig>,
+    pub stl: Option<LoadedStl>,
+    pub mesh: Option<LoadedMesh>,
+    pub camera: OrbitCamera,
+    pub shading: ShadingMode,
+    pub last_error: Option<String>,
+    pub status: Option<String>,
+    pub about_open: bool,
 
-    pub(crate) registry: AdapterRegistry,
-    pub(crate) residuals: ResidualHistory,
-    pub(crate) log: LogPanel,
-    pub(crate) bottom_tab: BottomTab,
+    pub registry: AdapterRegistry,
+    pub residuals: ResidualHistory,
+    pub log: LogPanel,
+    pub bottom_tab: BottomTab,
 
     /// Which case the user clicked on in the browser, if any. `None`
     /// falls back to the first case in the project when a run is
     /// started.
-    pub(crate) selected_case: Option<String>,
+    pub selected_case: Option<String>,
 
-    pub(crate) run_handle: Option<RunHandle>,
+    pub run_handle: Option<RunHandle>,
     /// Live threaded sweep runner. `Some(_)` while a sweep is
     /// executing; cleared when the worker thread finishes / fails.
-    pub(crate) sweep_handle: Option<SweepHandle>,
+    pub sweep_handle: Option<SweepHandle>,
     /// Per-sweep progress: (succeeded, failed, total). Updated as
     /// `SweepEvent::JobFinished` events come in. The numbers persist
     /// across the sweep_handle's lifetime so the status pane can
     /// keep showing the last result after the worker exits.
-    pub(crate) sweep_progress: (usize, usize, usize),
+    pub sweep_progress: (usize, usize, usize),
     /// Status text for the active sweep — surfaced near the run
     /// progress in the UI.
-    pub(crate) sweep_message: String,
-    pub(crate) run_progress: f32,
-    pub(crate) run_message: String,
-    pub(crate) last_run_report: Option<Box<RunReport>>,
-    pub(crate) last_run_error: Option<String>,
+    pub sweep_message: String,
+    pub run_progress: f32,
+    pub run_message: String,
+    pub last_run_report: Option<Box<RunReport>>,
+    pub last_run_error: Option<String>,
 
     /// Last successful prepare-only workdir, if any. Set by
     /// [`Self::prepare_selected_case`] so the UI can show the path
     /// and the "Open in file browser" action can act on it. `None`
     /// until the user clicks "Prepare".
-    pub(crate) last_prepare_workdir: Option<PathBuf>,
+    pub last_prepare_workdir: Option<PathBuf>,
 
     /// PreparedJob from the most recent successful prepare, kept so
     /// [`Self::run_from_prepared_workdir`] can run the solver against
@@ -350,35 +573,35 @@ pub struct ValenxApp {
     /// adapter id that produced this job lives alongside it because
     /// `spawn_prepared` needs to look the adapter back up in the
     /// registry.
-    pub(crate) last_prepared_job: Option<(String, valenx_core::PreparedJob)>,
+    pub last_prepared_job: Option<(String, valenx_core::PreparedJob)>,
 
     /// Last completed run's workdir, captured when the run handle
-    /// drops at the end of [`Self::pump_run_events`]. Mirrors
+    /// drops at the end of `Self::pump_run_events`. Mirrors
     /// `last_prepare_workdir` for the run pipeline so users can
     /// "Open in file browser" the dir holding their .vtu / .frd /
     /// .log artifacts after the solver finishes. `None` until the
     /// first run completes.
-    pub(crate) last_run_workdir: Option<PathBuf>,
+    pub last_run_workdir: Option<PathBuf>,
 
     /// Results bundle from the most recent successful run, populated
     /// when the worker thread sends `RunEvent::Collected`. Carries
     /// the parsed Field catalog (e.g. OpenFOAM's VTU fields), scalar
     /// records, artifact list, and provenance. `None` until the
     /// first run completes successfully.
-    pub(crate) last_run_results: Option<Box<valenx_fields::Results>>,
+    pub last_run_results: Option<Box<valenx_fields::Results>>,
 
     /// Which field the viewport's colour overlay is showing. Set by
     /// clicking a field name in the Results pane. `None` falls back
     /// to "first scalar OnNode field that matches the mesh" — same
     /// auto-pick used before the field selector landed.
-    pub(crate) selected_field_name: Option<String>,
+    pub selected_field_name: Option<String>,
 
     /// Index into the selected field's time series — `0` = first
     /// snapshot, `1` = second, etc. Driven by the slider in the
     /// Results pane. Clamped every frame so the index can't outrun
     /// the time-series length when the user switches fields with
     /// different snapshot counts.
-    pub(crate) selected_time_index: usize,
+    pub selected_time_index: usize,
 
     /// Per-case run history — last outcome + wall time. Keyed by
     /// case name (project-local). Populated when a run finishes;
@@ -387,70 +610,84 @@ pub struct ValenxApp {
     /// without scrolling logs. Persisted to
     /// `<state_dir>/run-history.json` after every run so it
     /// survives app restarts.
-    pub(crate) run_history: std::collections::BTreeMap<String, RunHistoryEntry>,
+    pub run_history: std::collections::BTreeMap<String, RunHistoryEntry>,
     /// Per-case sweep history. Mirrors `run_history` but for the
     /// sweep pipeline — recorded when a sweep finishes (sync or
     /// async) so the case browser can show "you swept this with N
     /// derived cases at `<ts>`". Persisted to
     /// `<state_dir>/sweep-history.json` so it survives an app
     /// restart.
-    pub(crate) sweep_history: std::collections::BTreeMap<String, SweepHistoryEntry>,
+    pub sweep_history: std::collections::BTreeMap<String, SweepHistoryEntry>,
 
     /// Case name currently being run, captured at spawn time so the
     /// Finished/Failed handlers can record the outcome under the
     /// right key even if the user has moved their cursor / changed
     /// `selected_case` while the solver was running.
-    pub(crate) running_case_name: Option<String>,
+    pub running_case_name: Option<String>,
 
-    pub(crate) palette: CommandPalette,
-    pub(crate) settings: Settings,
-    pub(crate) settings_open: bool,
-    pub(crate) theme_applied: bool,
+    pub palette: CommandPalette,
+    pub settings: Settings,
+    pub settings_open: bool,
+    pub theme_applied: bool,
 
-    pub(crate) wgpu_renderer: Option<WgpuRenderer>,
+    pub wgpu_renderer: Option<WgpuRenderer>,
 
     /// Whether the right-side Mesh Toolbox panel is visible. Defaults
     /// to `true` so it surfaces automatically as soon as a mesh /
     /// STL is loaded; the View menu and the command palette can hide
     /// it for users who want a clean viewport.
-    pub(crate) show_mesh_toolbox: bool,
+    pub show_mesh_toolbox: bool,
     /// Whether the left-side Browser panel is visible. Defaults to
     /// `true`; the ribbon toggle, View menu, and command palette can
     /// hide it to give the viewport the full width.
-    pub(crate) show_browser: bool,
+    pub show_browser: bool,
     /// Whether the viewport cursor snaps to the ground grid (Fusion-style):
     /// the live cursor coordinate snaps to the nearest grid node, with a
     /// marker drawn there. Defaults to `true`; toggled from the View menu.
-    pub(crate) snap_to_grid: bool,
+    pub snap_to_grid: bool,
+    /// When `true`, the central 2D/3D viewport body is hidden entirely — the
+    /// central area shows a "viewport hidden" placeholder and the wgpu / 2D
+    /// render is skipped. Driven by the viewport header's ✕ and its `⋯` menu,
+    /// and by View → "Hide 3D viewport". **Per-tab** (swapped with the dock
+    /// state via [`project_tabs::WorkspaceDoc`]); a newly-opened tab starts
+    /// `false` (viewport shown). Defaults to `false`. See `update`.
+    pub viewport_hidden: bool,
+    /// When `true` (and not [`Self::viewport_hidden`]), only the central
+    /// viewport's slim chrome header is drawn and its 2D/3D body is skipped —
+    /// the viewport is "rolled up" to just its title + controls. Toggled by
+    /// the header's `−` (minimize) icon. **Per-tab** (swapped with the dock
+    /// state via [`project_tabs::WorkspaceDoc`]); a newly-opened tab starts
+    /// `false` (body shown). Defaults to `false`. See `update`.
+    pub viewport_collapsed: bool,
     /// Receiver for background adapter-probe results (see
     /// [`valenx_core::AdapterRegistry::spawn_probe_all`]). `Some` while the
     /// background probe is in flight; drained each frame in `update` and
     /// cleared to `None` when the probe thread finishes. Probing off the
     /// main thread keeps startup instant — it fixed a ~30s cold-start
     /// freeze (141 external tools probed synchronously in `new`).
-    pub(crate) adapter_probe_rx:
+    pub adapter_probe_rx:
         Option<std::sync::mpsc::Receiver<(&'static str, valenx_core::AdapterStatus)>>,
     /// Form-input state for the toolbox panel (translate deltas,
     /// scale factors, rotation axis + angle, mirror plane, cut-
     /// plane point + normal, repair tolerance). Cleared back to
     /// defaults on app construction; persisted across panel toggles.
-    pub(crate) mesh_toolbox: crate::mesh_toolbox::MeshToolboxState,
+    pub mesh_toolbox: crate::mesh_toolbox::MeshToolboxState,
 
     /// First CAD operand (operand "A" for boolean ops). Set when the
     /// user creates a primitive through the Part workbench section
     /// with the "Create as second" toggle off, and rewritten every
     /// time a boolean op runs (the result replaces operand A).
-    pub(crate) current_solid: Option<valenx_cad::Solid>,
+    pub current_solid: Option<valenx_cad::Solid>,
     /// Second CAD operand (operand "B"). Set when the user creates
     /// a primitive with the "Create as second" toggle on. Cleared
     /// whenever a boolean op consumes it so the toolbox is honest
     /// about needing a new B for the next op.
-    pub(crate) second_solid: Option<valenx_cad::Solid>,
+    pub second_solid: Option<valenx_cad::Solid>,
 
     /// First-launch wizard state. Loaded from
     /// `<state_dir>/first-run.json` on startup; defaults to a
     /// fresh, never-completed decision when the file doesn't exist.
-    pub(crate) first_run_decision: valenx_first_run::FirstRunDecision,
+    pub first_run_decision: valenx_first_run::FirstRunDecision,
     /// Whether the wizard's egui modal is open right now. Always
     /// initialised to `false` — the wizard never auto-opens because
     /// Valenx ships native Rust engines for every major simulation
@@ -459,11 +696,11 @@ pub struct ValenxApp {
     /// Python contradicts the value proposition). Re-openable from
     /// the Settings menu's "Re-probe external tools" entry and the
     /// command palette.
-    pub(crate) first_run_open: bool,
+    pub first_run_open: bool,
     /// Cached environment report. Built lazily on the frame the
     /// wizard opens, so the registry's probe results survive across
     /// frames without re-probing every redraw.
-    pub(crate) first_run_report: Option<valenx_first_run::EnvironmentReport>,
+    pub first_run_report: Option<valenx_first_run::EnvironmentReport>,
 
     /// Loaded locale catalogue. Populated in `new()` from the
     /// embedded en-US baseline; future versions will pick the
@@ -472,924 +709,923 @@ pub struct ValenxApp {
     /// `Option<Arc<…>>`-style sharing if hot-swap becomes a
     /// requirement (it isn't yet — we set the locale once at
     /// startup).
-    pub(crate) catalogue: valenx_i18n::LocaleCatalogue,
+    pub catalogue: valenx_i18n::LocaleCatalogue,
 
     /// Phase 21 — Macro recorder. UI panels append actions via
-    /// [`Self::record_macro_action`] when the user clicks a
+    /// `macro_recorder.record` when the user clicks a
     /// recordable button. `start_recording` / `stop_recording`
     /// flip the recorder state.
-    pub(crate) macro_recorder: valenx_macro::MacroRecorder,
+    pub macro_recorder: valenx_macro::MacroRecorder,
 
     /// Phase 22 — Add-on registry. Owns the in-memory list of
     /// installed add-ons + dispatches install/update/uninstall via
     /// the manual install-by-directory flow.
-    pub(crate) addons: valenx_addons::AddonRegistry,
+    pub addons: valenx_addons::AddonRegistry,
     /// Whether the Add-on Manager panel is visible.
-    pub(crate) show_addon_manager: bool,
+    pub show_addon_manager: bool,
 
     /// Whether the right-side Genetics Workbench panel is
     /// visible. Defaults to `false` (the CAD-side Mesh Toolbox is the
     /// default right panel); flipped on from the View menu / command
     /// palette. The two right-side workbenches are independent — both
     /// can be open at once, egui docks them side by side.
-    pub(crate) show_genetics_workbench: bool,
+    pub show_genetics_workbench: bool,
     /// Form + result state for the thirteen Genetics-workbench panels
     /// (one per computational-biology crate). See
     /// [`crate::genetics_workbench`].
-    pub(crate) genetics: crate::genetics_workbench::GeneticsWorkbenchState,
+    pub genetics: crate::genetics_workbench::GeneticsWorkbenchState,
 
     /// Whether the right-side Aerodynamics / Wind
     /// Tunnel workbench panel is visible. Defaults to `false`; flipped
     /// on from the View menu. Independent of the Mesh Toolbox and the
     /// Genetics workbench — egui docks them side by side.
-    pub(crate) show_aero_workbench: bool,
+    pub show_aero_workbench: bool,
     /// Form + result state for the Wind Tunnel workbench — the eight
     /// workflow sections wrapping the `valenx-aero` CFD engine. See
     /// [`crate::aero_workbench`].
-    pub(crate) aero: crate::aero_workbench::AeroWorkbenchState,
+    pub aero: crate::aero_workbench::AeroWorkbenchState,
     /// The aero flow-visualization field overlay, if one is active.
     /// When `Some`, the viewport colours the loaded mesh by this scalar
     /// field through the per-vertex colour ramp — it takes priority
     /// over the post-run results overlay. Pushed by the Wind Tunnel
     /// workbench's "Show field in 3-D viewport" button.
-    pub(crate) aero_field_overlay: Option<valenx_fields::Field>,
+    pub aero_field_overlay: Option<valenx_fields::Field>,
 
     /// Whether the right-side FEM Workbench panel is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the
     /// other workbenches — egui docks them side by side.
-    pub(crate) show_fem_workbench: bool,
+    pub show_fem_workbench: bool,
     /// Form + result state for the FEM Workbench — native linear-static
     /// and modal finite-element analysis wrapping the `valenx-fem`
     /// in-process solvers (no external solver, no input deck). See
     /// [`crate::fem_workbench`].
-    pub(crate) fem: crate::fem_workbench::FemWorkbenchState,
+    pub fem: crate::fem_workbench::FemWorkbenchState,
 
     /// Whether the right-side Induction Motor workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
-    pub(crate) show_inductionmotor_workbench: bool,
+    pub show_inductionmotor_workbench: bool,
     /// State for the Induction Motor workbench, wrapping
     /// `valenx-inductionmotor`. See [`crate::inductionmotor_workbench`].
-    pub(crate) inductionmotor: crate::inductionmotor_workbench::InductionMotorWorkbenchState,
+    pub inductionmotor: crate::inductionmotor_workbench::InductionMotorWorkbenchState,
 
     /// Whether the right-side CFD Workbench panel is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the
     /// other workbenches — egui docks them side by side.
-    pub(crate) show_cfd_workbench: bool,
+    pub show_cfd_workbench: bool,
     /// Form + result state for the CFD Workbench — native 2-D
     /// incompressible laminar CFD (SIMPLE) wrapping `valenx-cfd-native`.
     /// See [`crate::cfd_workbench`].
-    pub(crate) cfd: crate::cfd_workbench::CfdWorkbenchState,
+    pub cfd: crate::cfd_workbench::CfdWorkbenchState,
 
     /// Whether the right-side Reaction Dynamics workbench is visible.
     /// Defaults to `false`; flipped on from the View menu. Independent of
     /// the other workbenches — egui docks them side by side.
-    pub(crate) show_reactdyn_workbench: bool,
+    pub show_reactdyn_workbench: bool,
     /// Form + result state for the Reaction Dynamics workbench — native
     /// ab-initio MD (AIMD) wrapping `valenx-reactdyn`. See
     /// [`crate::reactdyn_workbench`].
-    pub(crate) reactdyn: crate::reactdyn_workbench::ReactdynWorkbenchState,
+    pub reactdyn: crate::reactdyn_workbench::ReactdynWorkbenchState,
 
     /// Whether the right-side Springs Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_springs_workbench: bool,
+    pub show_springs_workbench: bool,
     /// Form + result state for the Springs Workbench — native helical-spring
     /// design wrapping `valenx-springs`. See [`crate::springs_workbench`].
-    pub(crate) springs: crate::springs_workbench::SpringsWorkbenchState,
+    pub springs: crate::springs_workbench::SpringsWorkbenchState,
 
     /// Whether the right-side Bearing workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_bearing_workbench: bool,
+    pub show_bearing_workbench: bool,
     /// State for the Bearing workbench, wrapping `valenx-bearing`. See
     /// [`crate::bearing_workbench`].
-    pub(crate) bearing: crate::bearing_workbench::BearingWorkbenchState,
+    pub bearing: crate::bearing_workbench::BearingWorkbenchState,
 
     /// Whether the right-side Belt Drive workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_beltdrive_workbench: bool,
+    pub show_beltdrive_workbench: bool,
     /// State for the Belt Drive workbench, wrapping `valenx-beltdrive`. See
     /// [`crate::beltdrive_workbench`].
-    pub(crate) beltdrive: crate::beltdrive_workbench::BeltDriveWorkbenchState,
+    pub beltdrive: crate::beltdrive_workbench::BeltDriveWorkbenchState,
 
     /// Whether the right-side Buckling workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_buckling_workbench: bool,
+    pub show_buckling_workbench: bool,
     /// State for the Buckling workbench, wrapping `valenx-buckling`. See
     /// [`crate::buckling_workbench`].
-    pub(crate) buckling: crate::buckling_workbench::BucklingWorkbenchState,
+    pub buckling: crate::buckling_workbench::BucklingWorkbenchState,
 
     /// Whether the right-side Brake workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_brake_workbench: bool,
+    pub show_brake_workbench: bool,
     /// State for the Brake workbench, wrapping `valenx-brake`. See
     /// [`crate::brake_workbench`].
-    pub(crate) brake: crate::brake_workbench::BrakeWorkbenchState,
+    pub brake: crate::brake_workbench::BrakeWorkbenchState,
 
     /// Whether the right-side Fatigue workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_fatigue_workbench: bool,
+    pub show_fatigue_workbench: bool,
     /// State for the Fatigue workbench, wrapping `valenx-fatigue`. See
     /// [`crate::fatigue_workbench`].
-    pub(crate) fatigue: crate::fatigue_workbench::FatigueWorkbenchState,
+    pub fatigue: crate::fatigue_workbench::FatigueWorkbenchState,
 
     /// Whether the right-side Gear Tooth workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_geartooth_workbench: bool,
+    pub show_geartooth_workbench: bool,
     /// State for the Gear Tooth workbench, wrapping `valenx-geartooth`. See
     /// [`crate::geartooth_workbench`].
-    pub(crate) geartooth: crate::geartooth_workbench::GeartoothWorkbenchState,
+    pub geartooth: crate::geartooth_workbench::GeartoothWorkbenchState,
 
     /// Whether the right-side Pharmacokinetics workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
-    pub(crate) show_pharmacokinetics_workbench: bool,
+    pub show_pharmacokinetics_workbench: bool,
     /// State for the Pharmacokinetics workbench, wrapping
     /// `valenx-pharmacokinetics`. See [`crate::pharmacokinetics_workbench`].
-    pub(crate) pharmacokinetics: crate::pharmacokinetics_workbench::PharmacokineticsWorkbenchState,
+    pub pharmacokinetics: crate::pharmacokinetics_workbench::PharmacokineticsWorkbenchState,
 
     /// Whether the right-side Pipe Network workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_pipenetwork_workbench: bool,
+    pub show_pipenetwork_workbench: bool,
     /// State for the Pipe Network workbench, wrapping `valenx-pipenetwork`.
     /// See [`crate::pipenetwork_workbench`].
-    pub(crate) pipenetwork: crate::pipenetwork_workbench::PipeNetworkWorkbenchState,
+    pub pipenetwork: crate::pipenetwork_workbench::PipeNetworkWorkbenchState,
 
     /// Whether the right-side RC Beam workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_rcbeam_workbench: bool,
+    pub show_rcbeam_workbench: bool,
     /// State for the RC Beam workbench, wrapping `valenx-rcbeam`. See
     /// [`crate::rcbeam_workbench`].
-    pub(crate) rcbeam: crate::rcbeam_workbench::RcBeamWorkbenchState,
+    pub rcbeam: crate::rcbeam_workbench::RcBeamWorkbenchState,
 
     /// Whether the right-side Marine / Hull Workbench is visible. Off by
     /// default; toggled from the View menu.
-    pub(crate) show_marine_workbench: bool,
+    pub show_marine_workbench: bool,
     /// Form + result state for the Marine / Hull Workbench — native
     /// box-form hull hydrostatics wrapping `valenx-marine`. See
     /// [`crate::marine_workbench`].
-    pub(crate) marine: crate::marine_workbench::MarineWorkbenchState,
+    pub marine: crate::marine_workbench::MarineWorkbenchState,
 
     /// Whether the right-side Capacitor workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_capacitor_workbench: bool,
+    pub show_capacitor_workbench: bool,
     /// State for the Capacitor workbench, wrapping `valenx-capacitor`. See
     /// [`crate::capacitor_workbench`].
-    pub(crate) capacitor: crate::capacitor_workbench::CapacitorWorkbenchState,
+    pub capacitor: crate::capacitor_workbench::CapacitorWorkbenchState,
 
     /// Whether the right-side Fan Laws workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_fanlaws_workbench: bool,
+    pub show_fanlaws_workbench: bool,
     /// State for the Fan Laws workbench, wrapping `valenx-fanlaws`. See
     /// [`crate::fanlaws_workbench`].
-    pub(crate) fanlaws: crate::fanlaws_workbench::FanLawsWorkbenchState,
+    pub fanlaws: crate::fanlaws_workbench::FanLawsWorkbenchState,
 
     /// Whether the right-side Creep workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_creep_workbench: bool,
+    pub show_creep_workbench: bool,
     /// State for the Creep workbench, wrapping `valenx-creep`. See
     /// [`crate::creep_workbench`].
-    pub(crate) creep: crate::creep_workbench::CreepWorkbenchState,
+    pub creep: crate::creep_workbench::CreepWorkbenchState,
 
     /// Whether the right-side Electrochemistry workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
-    pub(crate) show_electrochem_workbench: bool,
+    pub show_electrochem_workbench: bool,
     /// State for the Electrochemistry workbench, wrapping `valenx-electrochem`.
     /// See [`crate::electrochem_workbench`].
-    pub(crate) electrochem: crate::electrochem_workbench::ElectrochemWorkbenchState,
+    pub electrochem: crate::electrochem_workbench::ElectrochemWorkbenchState,
 
     /// Whether the right-side Enzyme Kinetics workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
-    pub(crate) show_enzymekinetics_workbench: bool,
+    pub show_enzymekinetics_workbench: bool,
     /// State for the Enzyme Kinetics workbench, wrapping
     /// `valenx-enzymekinetics`. See [`crate::enzymekinetics_workbench`].
-    pub(crate) enzymekinetics: crate::enzymekinetics_workbench::EnzymeKineticsWorkbenchState,
+    pub enzymekinetics: crate::enzymekinetics_workbench::EnzymeKineticsWorkbenchState,
 
     /// Whether the right-side Gears Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_gears_workbench: bool,
+    pub show_gears_workbench: bool,
     /// Form + result state for the Gears Workbench — native involute-gear
     /// design wrapping `valenx-gears`. See [`crate::gears_workbench`].
-    pub(crate) gears: crate::gears_workbench::GearsWorkbenchState,
+    pub gears: crate::gears_workbench::GearsWorkbenchState,
 
     /// Whether the right-side Pneumatics workbench is visible (View menu).
-    pub(crate) show_pneumatics_workbench: bool,
+    pub show_pneumatics_workbench: bool,
     /// State for the Pneumatics workbench. See [`crate::pneumatics_workbench`].
-    pub(crate) pneumatics: crate::pneumatics_workbench::PneumaticsWorkbenchState,
+    pub pneumatics: crate::pneumatics_workbench::PneumaticsWorkbenchState,
 
     /// Whether the right-side Psychrometrics workbench is visible (View menu).
-    pub(crate) show_psychrometrics_workbench: bool,
+    pub show_psychrometrics_workbench: bool,
     /// State for the Psychrometrics workbench. See [`crate::psychrometrics_workbench`].
-    pub(crate) psychrometrics: crate::psychrometrics_workbench::PsychrometricsWorkbenchState,
+    pub psychrometrics: crate::psychrometrics_workbench::PsychrometricsWorkbenchState,
 
     /// Whether the right-side Thermistor workbench is visible (View menu).
-    pub(crate) show_thermistor_workbench: bool,
+    pub show_thermistor_workbench: bool,
     /// State for the Thermistor workbench. See [`crate::thermistor_workbench`].
-    pub(crate) thermistor: crate::thermistor_workbench::ThermistorWorkbenchState,
+    pub thermistor: crate::thermistor_workbench::ThermistorWorkbenchState,
 
     /// Whether the right-side Strain Gauge workbench is visible (View menu).
-    pub(crate) show_straingauge_workbench: bool,
+    pub show_straingauge_workbench: bool,
     /// State for the Strain Gauge workbench. See [`crate::straingauge_workbench`].
-    pub(crate) straingauge: crate::straingauge_workbench::StrainGaugeWorkbenchState,
+    pub straingauge: crate::straingauge_workbench::StrainGaugeWorkbenchState,
 
     /// Whether the right-side Drone Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_drone_workbench: bool,
+    pub show_drone_workbench: bool,
     /// Form + result state for the Drone Workbench — native multirotor
     /// hover performance wrapping `valenx-drone`. See [`crate::drone_workbench`].
-    pub(crate) drone: crate::drone_workbench::DroneWorkbenchState,
+    pub drone: crate::drone_workbench::DroneWorkbenchState,
 
     /// Whether the right-side Acoustics workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_acoustics_workbench: bool,
+    pub show_acoustics_workbench: bool,
     /// State for the Acoustics workbench, wrapping `valenx-acoustics`. See
     /// [`crate::acoustics_workbench`].
-    pub(crate) acoustics: crate::acoustics_workbench::AcousticsWorkbenchState,
+    pub acoustics: crate::acoustics_workbench::AcousticsWorkbenchState,
 
     /// Whether the right-side Acid-Base workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_acidbase_workbench: bool,
+    pub show_acidbase_workbench: bool,
     /// State for the Acid-Base workbench, wrapping `valenx-acidbase`. See
     /// [`crate::acidbase_workbench`].
-    pub(crate) acidbase: crate::acidbase_workbench::AcidBaseWorkbenchState,
+    pub acidbase: crate::acidbase_workbench::AcidBaseWorkbenchState,
 
     /// Whether the right-side BJT workbench is visible. Defaults to `false`;
     /// flipped on from the View menu.
-    pub(crate) show_bjt_workbench: bool,
+    pub show_bjt_workbench: bool,
     /// State for the BJT workbench, wrapping `valenx-bjt`. See
     /// [`crate::bjt_workbench`].
-    pub(crate) bjt: crate::bjt_workbench::BjtWorkbenchState,
+    pub bjt: crate::bjt_workbench::BjtWorkbenchState,
 
     /// Whether the right-side BMR / TDEE workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_bmr_workbench: bool,
+    pub show_bmr_workbench: bool,
     /// State for the BMR / TDEE workbench, wrapping `valenx-bmr`. See
     /// [`crate::bmr_workbench`].
-    pub(crate) bmr: crate::bmr_workbench::BmrWorkbenchState,
+    pub bmr: crate::bmr_workbench::BmrWorkbenchState,
 
     /// Whether the right-side Bolted Joint workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_bolt_workbench: bool,
+    pub show_bolt_workbench: bool,
     /// State for the Bolted Joint workbench, wrapping `valenx-bolt`. See
     /// [`crate::bolt_workbench`].
-    pub(crate) bolt: crate::bolt_workbench::BoltWorkbenchState,
+    pub bolt: crate::bolt_workbench::BoltWorkbenchState,
 
     /// Whether the right-side Geomatics Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_geomatics_workbench: bool,
+    pub show_geomatics_workbench: bool,
     /// Form + result state for the Geomatics Workbench — native geodesic
     /// calculations wrapping `valenx-geomatics`. See
     /// [`crate::geomatics_workbench`].
-    pub(crate) geomatics: crate::geomatics_workbench::GeomaticsWorkbenchState,
+    pub geomatics: crate::geomatics_workbench::GeomaticsWorkbenchState,
 
     /// Whether the right-side Op-Amp workbench is visible (View menu). Off by default.
-    pub(crate) show_opamp_workbench: bool,
+    pub show_opamp_workbench: bool,
     /// Form + result state for the Op-Amp workbench — ideal closed-loop gain /
     /// bandwidth on `valenx-opamp`. See [`crate::opamp_workbench`].
-    pub(crate) opamp: crate::opamp_workbench::OpAmpWorkbenchState,
+    pub opamp: crate::opamp_workbench::OpAmpWorkbenchState,
     /// Whether the right-side LED workbench is visible (View menu). Off by default.
-    pub(crate) show_led_workbench: bool,
+    pub show_led_workbench: bool,
     /// Form + result state for the LED workbench — series resistor sizing on
     /// `valenx-led`. See [`crate::led_workbench`].
-    pub(crate) led: crate::led_workbench::LedWorkbenchState,
+    pub led: crate::led_workbench::LedWorkbenchState,
     /// Whether the right-side Thermocouple workbench is visible (View menu). Off by default.
-    pub(crate) show_thermocouple_workbench: bool,
+    pub show_thermocouple_workbench: bool,
     /// Form + result state for the Thermocouple workbench — Seebeck EMF on
     /// `valenx-thermocouple`. See [`crate::thermocouple_workbench`].
-    pub(crate) thermocouple: crate::thermocouple_workbench::ThermocoupleWorkbenchState,
+    pub thermocouple: crate::thermocouple_workbench::ThermocoupleWorkbenchState,
     /// Whether the right-side Transmission Line workbench is visible (View menu). Off by default.
-    pub(crate) show_transmissionline_workbench: bool,
+    pub show_transmissionline_workbench: bool,
     /// Form + result state for the Transmission Line workbench — reflection / VSWR
     /// on `valenx-transmissionline`. See [`crate::transmissionline_workbench`].
-    pub(crate) transmissionline: crate::transmissionline_workbench::TransmissionLineWorkbenchState,
+    pub transmissionline: crate::transmissionline_workbench::TransmissionLineWorkbenchState,
     /// Whether the right-side Power Factor workbench is visible (View menu). Off by default.
-    pub(crate) show_powerfactor_workbench: bool,
+    pub show_powerfactor_workbench: bool,
     /// Form + result state for the Power Factor workbench — AC power triangle +
     /// correction on `valenx-powerfactor`. See [`crate::powerfactor_workbench`].
-    pub(crate) powerfactor: crate::powerfactor_workbench::PowerFactorWorkbenchState,
+    pub powerfactor: crate::powerfactor_workbench::PowerFactorWorkbenchState,
     /// Whether the right-side Resistor Network workbench is visible (View menu). Off by default.
-    pub(crate) show_resistornetwork_workbench: bool,
+    pub show_resistornetwork_workbench: bool,
     /// Form + result state for the Resistor Network workbench — series / parallel /
     /// divider on `valenx-resistor-network`. See [`crate::resistornetwork_workbench`].
-    pub(crate) resistornetwork: crate::resistornetwork_workbench::ResistorNetworkWorkbenchState,
+    pub resistornetwork: crate::resistornetwork_workbench::ResistorNetworkWorkbenchState,
     /// Whether the right-side Rectifier workbench is visible (View menu). Off by default.
-    pub(crate) show_rectifier_workbench: bool,
+    pub show_rectifier_workbench: bool,
     /// Form + result state for the Rectifier workbench — rectifier figures + ripple
     /// on `valenx-rectifier`. See [`crate::rectifier_workbench`].
-    pub(crate) rectifier: crate::rectifier_workbench::RectifierWorkbenchState,
+    pub rectifier: crate::rectifier_workbench::RectifierWorkbenchState,
     /// Whether the right-side Filter workbench is visible (View menu). Off by default.
-    pub(crate) show_filter_workbench: bool,
+    pub show_filter_workbench: bool,
     /// Form + result state for the Filter workbench — RC / RLC response on
     /// `valenx-filter`. See [`crate::filter_workbench`].
-    pub(crate) filter: crate::filter_workbench::FilterWorkbenchState,
+    pub filter: crate::filter_workbench::FilterWorkbenchState,
 
     /// Whether the right-side Heat Transfer workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
-    pub(crate) show_heattransfer_workbench: bool,
+    pub show_heattransfer_workbench: bool,
     /// State for the Heat Transfer workbench, wrapping `valenx-heat-transfer`.
     /// See [`crate::heattransfer_workbench`].
-    pub(crate) heattransfer: crate::heattransfer_workbench::HeatTransferWorkbenchState,
+    pub heattransfer: crate::heattransfer_workbench::HeatTransferWorkbenchState,
 
     /// Whether the right-side Four-Bar Linkage Workbench is visible.
     /// Defaults to `false`; flipped on from the View menu. Independent of the
     /// other workbenches — egui docks them side by side.
-    pub(crate) show_fourbar_workbench: bool,
+    pub show_fourbar_workbench: bool,
     /// Form + result state for the Four-Bar Linkage Workbench — native planar
     /// four-bar mechanism kinematics wrapping `valenx-kinematics`. See
     /// [`crate::fourbar_workbench`].
-    pub(crate) fourbar: crate::fourbar_workbench::FourBarWorkbenchState,
+    pub fourbar: crate::fourbar_workbench::FourBarWorkbenchState,
 
     /// Whether the right-side Shaft Design workbench is visible (View menu). Off by default.
-    pub(crate) show_shaftdesign_workbench: bool,
+    pub show_shaftdesign_workbench: bool,
     /// State for the Shaft Design workbench — combined bending + torsion shaft
     /// sizing on `valenx-shaftdesign`. See [`crate::shaftdesign_workbench`].
-    pub(crate) shaftdesign: crate::shaftdesign_workbench::ShaftDesignWorkbenchState,
+    pub shaftdesign: crate::shaftdesign_workbench::ShaftDesignWorkbenchState,
     /// Whether the right-side Power Screw workbench is visible (View menu). Off by default.
-    pub(crate) show_screwthread_workbench: bool,
+    pub show_screwthread_workbench: bool,
     /// State for the Power Screw workbench — square-thread lead-screw torque on
     /// `valenx-screwthread`. See [`crate::screwthread_workbench`].
-    pub(crate) screwthread: crate::screwthread_workbench::ScrewThreadWorkbenchState,
+    pub screwthread: crate::screwthread_workbench::ScrewThreadWorkbenchState,
     /// Whether the right-side Pulley System workbench is visible (View menu). Off by default.
-    pub(crate) show_pulley_workbench: bool,
+    pub show_pulley_workbench: bool,
     /// State for the Pulley System workbench — block-and-tackle mechanical
     /// advantage on `valenx-pulley`. See [`crate::pulley_workbench`].
-    pub(crate) pulley: crate::pulley_workbench::PulleyWorkbenchState,
+    pub pulley: crate::pulley_workbench::PulleyWorkbenchState,
     /// Whether the right-side Spring Design workbench is visible (View menu). Off by default.
-    pub(crate) show_springdesign_workbench: bool,
+    pub show_springdesign_workbench: bool,
     /// State for the Spring Design workbench — helical compression spring on
     /// `valenx-spring-design`. See [`crate::springdesign_workbench`].
-    pub(crate) springdesign: crate::springdesign_workbench::SpringDesignWorkbenchState,
+    pub springdesign: crate::springdesign_workbench::SpringDesignWorkbenchState,
     /// Whether the right-side Spring Combination workbench is visible (View menu). Off by default.
-    pub(crate) show_springcombination_workbench: bool,
+    pub show_springcombination_workbench: bool,
     /// State for the Spring Combination workbench — series / parallel spring
     /// networks on `valenx-springcombination`. See [`crate::springcombination_workbench`].
-    pub(crate) springcombination:
-        crate::springcombination_workbench::SpringCombinationWorkbenchState,
+    pub springcombination: crate::springcombination_workbench::SpringCombinationWorkbenchState,
     /// Whether the right-side Vibration workbench is visible (View menu). Off by default.
-    pub(crate) show_vibration_workbench: bool,
+    pub show_vibration_workbench: bool,
     /// State for the Vibration workbench — single-DOF forced-vibration response
     /// on `valenx-vibration`. See [`crate::vibration_workbench`].
-    pub(crate) vibration: crate::vibration_workbench::VibrationWorkbenchState,
+    pub vibration: crate::vibration_workbench::VibrationWorkbenchState,
     /// Whether the right-side Riveted Joint workbench is visible (View menu). Off by default.
-    pub(crate) show_rivet_workbench: bool,
+    pub show_rivet_workbench: bool,
     /// State for the Riveted Joint workbench — rivet-joint strength + failure
     /// mode on `valenx-rivet`. See [`crate::rivet_workbench`].
-    pub(crate) rivet: crate::rivet_workbench::RivetWorkbenchState,
+    pub rivet: crate::rivet_workbench::RivetWorkbenchState,
     /// Whether the right-side Soil Bearing workbench is visible (View menu). Off by default.
-    pub(crate) show_soilbearing_workbench: bool,
+    pub show_soilbearing_workbench: bool,
     /// State for the Soil Bearing workbench — Terzaghi strip-footing bearing
     /// capacity on `valenx-soilbearing`. See [`crate::soilbearing_workbench`].
-    pub(crate) soilbearing: crate::soilbearing_workbench::SoilBearingWorkbenchState,
+    pub soilbearing: crate::soilbearing_workbench::SoilBearingWorkbenchState,
 
     /// Whether the right-side Piping Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_piping_workbench: bool,
+    pub show_piping_workbench: bool,
     /// Form + result state for the Piping Workbench — native pipe-section
     /// sizing wrapping `valenx-piping`. See [`crate::piping_workbench`].
-    pub(crate) piping: crate::piping_workbench::PipingWorkbenchState,
+    pub piping: crate::piping_workbench::PipingWorkbenchState,
 
     /// Whether the right-side Retaining Wall workbench is visible (View menu). Off by default.
-    pub(crate) show_retainingwall_workbench: bool,
+    pub show_retainingwall_workbench: bool,
     /// State for the Retaining Wall workbench — Rankine earth pressure on
     /// `valenx-retainingwall`. See [`crate::retainingwall_workbench`].
-    pub(crate) retainingwall: crate::retainingwall_workbench::RetainingWallWorkbenchState,
+    pub retainingwall: crate::retainingwall_workbench::RetainingWallWorkbenchState,
     /// Whether the right-side Open Channel workbench is visible (View menu). Off by default.
-    pub(crate) show_openchannel_workbench: bool,
+    pub show_openchannel_workbench: bool,
     /// State for the Open Channel workbench — Manning flow + Froude on
     /// `valenx-openchannel`. See [`crate::openchannel_workbench`].
-    pub(crate) openchannel: crate::openchannel_workbench::OpenChannelWorkbenchState,
+    pub openchannel: crate::openchannel_workbench::OpenChannelWorkbenchState,
     /// Whether the right-side Weir Flow workbench is visible (View menu). Off by default.
-    pub(crate) show_weir_workbench: bool,
+    pub show_weir_workbench: bool,
     /// State for the Weir Flow workbench — sharp-crested weir discharge on
     /// `valenx-weir`. See [`crate::weir_workbench`].
-    pub(crate) weir: crate::weir_workbench::WeirWorkbenchState,
+    pub weir: crate::weir_workbench::WeirWorkbenchState,
     /// Whether the right-side Thermodynamic Cycle workbench is visible (View menu). Off by default.
-    pub(crate) show_thermocycle_workbench: bool,
+    pub show_thermocycle_workbench: bool,
     /// State for the Thermodynamic Cycle workbench — ideal-cycle efficiency on
     /// `valenx-thermocycle`. See [`crate::thermocycle_workbench`].
-    pub(crate) thermocycle: crate::thermocycle_workbench::ThermoCycleWorkbenchState,
+    pub thermocycle: crate::thermocycle_workbench::ThermoCycleWorkbenchState,
     /// Whether the right-side Queueing workbench is visible (View menu). Off by default.
-    pub(crate) show_queueing_workbench: bool,
+    pub show_queueing_workbench: bool,
     /// State for the Queueing workbench — M/M/1 steady-state metrics on
     /// `valenx-queueing`. See [`crate::queueing_workbench`].
-    pub(crate) queueing: crate::queueing_workbench::QueueingWorkbenchState,
+    pub queueing: crate::queueing_workbench::QueueingWorkbenchState,
     /// Whether the right-side Radioactive Decay workbench is visible (View menu). Off by default.
-    pub(crate) show_radioactivity_workbench: bool,
+    pub show_radioactivity_workbench: bool,
     /// State for the Radioactive Decay workbench — single-nuclide decay on
     /// `valenx-radioactivity`. See [`crate::radioactivity_workbench`].
-    pub(crate) radioactivity: crate::radioactivity_workbench::RadioactivityWorkbenchState,
+    pub radioactivity: crate::radioactivity_workbench::RadioactivityWorkbenchState,
     /// Whether the right-side Osmosis workbench is visible (View menu). Off by default.
-    pub(crate) show_osmosis_workbench: bool,
+    pub show_osmosis_workbench: bool,
     /// State for the Osmosis workbench — van't Hoff + Starling on
     /// `valenx-osmosis`. See [`crate::osmosis_workbench`].
-    pub(crate) osmosis: crate::osmosis_workbench::OsmosisWorkbenchState,
+    pub osmosis: crate::osmosis_workbench::OsmosisWorkbenchState,
     /// Whether the right-side Thermoregulation workbench is visible (View menu). Off by default.
-    pub(crate) show_thermoreg_workbench: bool,
+    pub show_thermoreg_workbench: bool,
     /// State for the Thermoregulation workbench — single-node heat balance on
     /// `valenx-thermoreg`. See [`crate::thermoreg_workbench`].
-    pub(crate) thermoreg: crate::thermoreg_workbench::ThermoRegWorkbenchState,
+    pub thermoreg: crate::thermoreg_workbench::ThermoRegWorkbenchState,
     /// Whether the right-side Hemodynamics workbench is visible (View menu). Off by default.
-    pub(crate) show_hemodynamics_workbench: bool,
+    pub show_hemodynamics_workbench: bool,
     /// State for the Hemodynamics workbench — cardiac output / Poiseuille /
     /// Windkessel on `valenx-hemodynamics`. See [`crate::hemodynamics_workbench`].
-    pub(crate) hemodynamics: crate::hemodynamics_workbench::HemodynamicsWorkbenchState,
+    pub hemodynamics: crate::hemodynamics_workbench::HemodynamicsWorkbenchState,
     /// Whether the right-side Population Dynamics workbench is visible (View menu). Off by default.
-    pub(crate) show_popdynamics_workbench: bool,
+    pub show_popdynamics_workbench: bool,
     /// State for the Population Dynamics workbench — SIR / logistic /
     /// Lotka-Volterra on `valenx-popdynamics`. See [`crate::popdynamics_workbench`].
-    pub(crate) popdynamics: crate::popdynamics_workbench::PopDynamicsWorkbenchState,
+    pub popdynamics: crate::popdynamics_workbench::PopDynamicsWorkbenchState,
 
     /// Whether the right-side Rail / Train Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_rail_workbench: bool,
+    pub show_rail_workbench: bool,
     /// Form + result state for the Rail / Train Workbench — native train
     /// resistance + tractive effort wrapping `valenx-rail`. See
     /// [`crate::rail_workbench`].
-    pub(crate) rail: crate::rail_workbench::RailWorkbenchState,
+    pub rail: crate::rail_workbench::RailWorkbenchState,
 
     /// Whether the right-side Bone Mechanics workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_bonemech_workbench: bool,
+    pub show_bonemech_workbench: bool,
     /// State for the Bone Mechanics workbench, wrapping `valenx-bonemech`. See
     /// [`crate::bonemech_workbench`].
-    pub(crate) bonemech: crate::bonemech_workbench::BonemechWorkbenchState,
+    pub bonemech: crate::bonemech_workbench::BonemechWorkbenchState,
 
     /// Whether the right-side Chain Drive workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_chaindrive_workbench: bool,
+    pub show_chaindrive_workbench: bool,
     /// State for the Chain Drive workbench, wrapping `valenx-chaindrive`. See
     /// [`crate::chaindrive_workbench`].
-    pub(crate) chaindrive: crate::chaindrive_workbench::ChainDriveWorkbenchState,
+    pub chaindrive: crate::chaindrive_workbench::ChainDriveWorkbenchState,
 
     /// Whether the right-side Clutch workbench is visible. Defaults to `false`;
     /// flipped on from the View menu.
-    pub(crate) show_clutch_workbench: bool,
+    pub show_clutch_workbench: bool,
     /// State for the Clutch workbench, wrapping `valenx-clutch`. See
     /// [`crate::clutch_workbench`].
-    pub(crate) clutch: crate::clutch_workbench::ClutchWorkbenchState,
+    pub clutch: crate::clutch_workbench::ClutchWorkbenchState,
 
     /// Whether the right-side Solenoid Coil workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_coil_workbench: bool,
+    pub show_coil_workbench: bool,
     /// State for the Solenoid Coil workbench, wrapping `valenx-coil`. See
     /// [`crate::coil_workbench`].
-    pub(crate) coil: crate::coil_workbench::CoilWorkbenchState,
+    pub coil: crate::coil_workbench::CoilWorkbenchState,
 
     /// Whether the right-side Steel Column workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_columnsteel_workbench: bool,
+    pub show_columnsteel_workbench: bool,
     /// State for the Steel Column workbench, wrapping `valenx-columnsteel`. See
     /// [`crate::columnsteel_workbench`].
-    pub(crate) columnsteel: crate::columnsteel_workbench::ColumnSteelWorkbenchState,
+    pub columnsteel: crate::columnsteel_workbench::ColumnSteelWorkbenchState,
 
     /// Whether the right-side Collision Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_collision_workbench: bool,
+    pub show_collision_workbench: bool,
     /// Form + result state for the Collision Workbench — native AABB
     /// geometry + overlap tests wrapping `valenx-collision`. See
     /// [`crate::collision_workbench`].
-    pub(crate) collision: crate::collision_workbench::CollisionWorkbenchState,
+    pub collision: crate::collision_workbench::CollisionWorkbenchState,
 
     /// Whether the right-side Statics workbench is visible (View menu).
-    pub(crate) show_statics_workbench: bool,
+    pub show_statics_workbench: bool,
     /// State for the Statics workbench. See [`crate::statics_workbench`].
-    pub(crate) statics: crate::statics_workbench::StaticsWorkbenchState,
+    pub statics: crate::statics_workbench::StaticsWorkbenchState,
 
     /// Whether the right-side Projectile workbench is visible (View menu).
-    pub(crate) show_projectile_workbench: bool,
+    pub show_projectile_workbench: bool,
     /// State for the Projectile workbench. See [`crate::projectile_workbench`].
-    pub(crate) projectile: crate::projectile_workbench::ProjectileWorkbenchState,
+    pub projectile: crate::projectile_workbench::ProjectileWorkbenchState,
 
     /// Whether the right-side Conveyor workbench is visible (View menu).
-    pub(crate) show_conveyor_workbench: bool,
+    pub show_conveyor_workbench: bool,
     /// State for the Conveyor workbench. See [`crate::conveyor_workbench`].
-    pub(crate) conveyor: crate::conveyor_workbench::ConveyorWorkbenchState,
+    pub conveyor: crate::conveyor_workbench::ConveyorWorkbenchState,
 
     /// Whether the right-side Fluid Statics workbench is visible (View menu).
-    pub(crate) show_fluidstatics_workbench: bool,
+    pub show_fluidstatics_workbench: bool,
     /// State for the Fluid Statics workbench. See [`crate::fluidstatics_workbench`].
-    pub(crate) fluidstatics: crate::fluidstatics_workbench::FluidStaticsWorkbenchState,
+    pub fluidstatics: crate::fluidstatics_workbench::FluidStaticsWorkbenchState,
 
     /// Whether the right-side Plate Bending workbench is visible (View menu).
-    pub(crate) show_plate_workbench: bool,
+    pub show_plate_workbench: bool,
     /// State for the Plate Bending workbench. See [`crate::plate_workbench`].
-    pub(crate) plate: crate::plate_workbench::PlateWorkbenchState,
+    pub plate: crate::plate_workbench::PlateWorkbenchState,
 
     /// Whether the right-side Strain Rosette workbench is visible (View menu).
-    pub(crate) show_strainrosette_workbench: bool,
+    pub show_strainrosette_workbench: bool,
     /// State for the Strain Rosette workbench. See [`crate::strainrosette_workbench`].
-    pub(crate) strainrosette: crate::strainrosette_workbench::StrainRosetteWorkbenchState,
+    pub strainrosette: crate::strainrosette_workbench::StrainRosetteWorkbenchState,
 
     /// Whether the right-side Transformer workbench is visible (View menu).
-    pub(crate) show_transformer_workbench: bool,
+    pub show_transformer_workbench: bool,
     /// State for the Transformer workbench. See [`crate::transformer_workbench`].
-    pub(crate) transformer: crate::transformer_workbench::TransformerWorkbenchState,
+    pub transformer: crate::transformer_workbench::TransformerWorkbenchState,
 
     /// Whether the right-side Three-Phase workbench is visible (View menu).
-    pub(crate) show_threephase_workbench: bool,
+    pub show_threephase_workbench: bool,
     /// State for the Three-Phase workbench. See [`crate::threephase_workbench`].
-    pub(crate) threephase: crate::threephase_workbench::ThreePhaseWorkbenchState,
+    pub threephase: crate::threephase_workbench::ThreePhaseWorkbenchState,
 
     /// Whether the right-side Solar PV Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_solarpv_workbench: bool,
+    pub show_solarpv_workbench: bool,
     /// Form + result state for the Solar PV Workbench — native single-diode
     /// photovoltaic cell performance wrapping `valenx-solarpv`. See
     /// [`crate::solarpv_workbench`].
-    pub(crate) solarpv: crate::solarpv_workbench::SolarPvWorkbenchState,
+    pub solarpv: crate::solarpv_workbench::SolarPvWorkbenchState,
 
     /// Whether the right-side Sheet Metal Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_sheetmetal_workbench: bool,
+    pub show_sheetmetal_workbench: bool,
     /// Form + result state for the Sheet Metal Workbench — native bend
     /// allowance / deduction wrapping `valenx-sheet-metal`. See
     /// [`crate::sheetmetal_workbench`].
-    pub(crate) sheetmetal: crate::sheetmetal_workbench::SheetmetalWorkbenchState,
+    pub sheetmetal: crate::sheetmetal_workbench::SheetmetalWorkbenchState,
 
     /// Whether the right-side Truss Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_truss_workbench: bool,
+    pub show_truss_workbench: bool,
     /// Form + result state for the Truss Workbench — native planar
     /// pin-jointed truss analysis wrapping `valenx-truss`. See
     /// [`crate::truss_workbench`].
-    pub(crate) truss: crate::truss_workbench::TrussWorkbenchState,
+    pub truss: crate::truss_workbench::TrussWorkbenchState,
 
     /// Whether the right-side Field Statistics Workbench is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_fields_workbench: bool,
+    pub show_fields_workbench: bool,
     /// Form + result state for the Field Statistics Workbench — descriptive
     /// statistics over a pasted number list, via `valenx-fields`. See
     /// [`crate::fields_workbench`].
-    pub(crate) fields: crate::fields_workbench::FieldsWorkbenchState,
+    pub fields: crate::fields_workbench::FieldsWorkbenchState,
 
     /// Whether the right-side Gearbox workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_gearbox_workbench: bool,
+    pub show_gearbox_workbench: bool,
     /// State for the Gearbox workbench, wrapping `valenx-gearbox`. See
     /// [`crate::gearbox_workbench`].
-    pub(crate) gearbox: crate::gearbox_workbench::GearboxWorkbenchState,
+    pub gearbox: crate::gearbox_workbench::GearboxWorkbenchState,
 
     /// Whether the right-side Cam Dynamics workbench is visible (View menu). Off by default.
-    pub(crate) show_camdynamics_workbench: bool,
+    pub show_camdynamics_workbench: bool,
     /// State for the Cam Dynamics workbench — cam-follower rise kinematics on
     /// `valenx-camdynamics`. See [`crate::camdynamics_workbench`].
-    pub(crate) camdynamics: crate::camdynamics_workbench::CamDynamicsWorkbenchState,
+    pub camdynamics: crate::camdynamics_workbench::CamDynamicsWorkbenchState,
     /// Whether the right-side Battery ECM workbench is visible (View menu). Off by default.
-    pub(crate) show_batteryecm_workbench: bool,
+    pub show_batteryecm_workbench: bool,
     /// State for the Battery ECM workbench — first-order Thevenin terminal voltage
     /// on `valenx-battery-ecm`. See [`crate::batteryecm_workbench`].
-    pub(crate) batteryecm: crate::batteryecm_workbench::BatteryEcmWorkbenchState,
+    pub batteryecm: crate::batteryecm_workbench::BatteryEcmWorkbenchState,
     /// Whether the right-side Diffusion workbench is visible (View menu). Off by default.
-    pub(crate) show_diffusion_workbench: bool,
+    pub show_diffusion_workbench: bool,
     /// State for the Diffusion workbench — Fickian flux + Gaussian spread on
     /// `valenx-diffusion`. See [`crate::diffusion_workbench`].
-    pub(crate) diffusion: crate::diffusion_workbench::DiffusionWorkbenchState,
+    pub diffusion: crate::diffusion_workbench::DiffusionWorkbenchState,
     /// Whether the right-side Dimensionless Numbers workbench is visible (View menu). Off by default.
-    pub(crate) show_dimensional_workbench: bool,
+    pub show_dimensional_workbench: bool,
     /// State for the Dimensionless Numbers workbench — similitude groups +
     /// regime classifiers on `valenx-dimensional`. See [`crate::dimensional_workbench`].
-    pub(crate) dimensional: crate::dimensional_workbench::DimensionalWorkbenchState,
+    pub dimensional: crate::dimensional_workbench::DimensionalWorkbenchState,
     /// Whether the right-side FFT / Spectrum workbench is visible (View menu). Off by default.
-    pub(crate) show_fft_workbench: bool,
+    pub show_fft_workbench: bool,
     /// State for the FFT / Spectrum workbench — DFT of a synthesized tone on
     /// `valenx-fft`. See [`crate::fft_workbench`].
-    pub(crate) fft: crate::fft_workbench::FftWorkbenchState,
+    pub fft: crate::fft_workbench::FftWorkbenchState,
 
     /// Whether the right-side Fasteners Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_fasteners_workbench: bool,
+    pub show_fasteners_workbench: bool,
     /// Form + result state for the Fasteners Workbench — ISO 4017 hex-bolt
     /// dimensions wrapping `valenx-fasteners`. See
     /// [`crate::fasteners_workbench`].
-    pub(crate) fasteners: crate::fasteners_workbench::FastenersWorkbenchState,
+    pub fasteners: crate::fasteners_workbench::FastenersWorkbenchState,
 
     /// Whether the right-side Fixed-Wing / Aircraft Workbench is visible.
     /// Defaults to `false`; flipped on from the View menu. Independent of the
     /// other workbenches — egui docks them side by side.
-    pub(crate) show_fixedwing_workbench: bool,
+    pub show_fixedwing_workbench: bool,
     /// Form + result state for the Fixed-Wing / Aircraft Workbench — native
     /// preliminary aircraft point-performance wrapping `valenx-fixedwing`.
     /// See [`crate::fixedwing_workbench`].
-    pub(crate) fixedwing: crate::fixedwing_workbench::FixedWingWorkbenchState,
+    pub fixedwing: crate::fixedwing_workbench::FixedWingWorkbenchState,
 
     /// Whether the right-side Combustion workbench is visible (View menu).
-    pub(crate) show_combustion_workbench: bool,
+    pub show_combustion_workbench: bool,
     /// State for the Combustion workbench. See [`crate::combustion_workbench`].
-    pub(crate) combustion: crate::combustion_workbench::CombustionWorkbenchState,
+    pub combustion: crate::combustion_workbench::CombustionWorkbenchState,
 
     /// Whether the right-side Flywheel workbench is visible (View menu).
-    pub(crate) show_flywheel_workbench: bool,
+    pub show_flywheel_workbench: bool,
     /// State for the Flywheel workbench. See [`crate::flywheel_workbench`].
-    pub(crate) flywheel: crate::flywheel_workbench::FlywheelWorkbenchState,
+    pub flywheel: crate::flywheel_workbench::FlywheelWorkbenchState,
 
     /// Whether the right-side Fracture Mechanics workbench is visible (View menu).
-    pub(crate) show_fracture_workbench: bool,
+    pub show_fracture_workbench: bool,
     /// State for the Fracture workbench. See [`crate::fracture_workbench`].
-    pub(crate) fracture: crate::fracture_workbench::FractureWorkbenchState,
+    pub fracture: crate::fracture_workbench::FractureWorkbenchState,
 
     /// Whether the right-side Hydraulics workbench is visible (View menu).
-    pub(crate) show_hydraulics_workbench: bool,
+    pub show_hydraulics_workbench: bool,
     /// State for the Hydraulics workbench. See [`crate::hydraulics_workbench`].
-    pub(crate) hydraulics: crate::hydraulics_workbench::HydraulicsWorkbenchState,
+    pub hydraulics: crate::hydraulics_workbench::HydraulicsWorkbenchState,
 
     /// Whether the right-side Inclined Plane workbench is visible (View menu).
-    pub(crate) show_inclinedplane_workbench: bool,
+    pub show_inclinedplane_workbench: bool,
     /// State for the Inclined Plane workbench. See [`crate::inclinedplane_workbench`].
-    pub(crate) inclinedplane: crate::inclinedplane_workbench::InclinedPlaneWorkbenchState,
+    pub inclinedplane: crate::inclinedplane_workbench::InclinedPlaneWorkbenchState,
 
     /// Whether the right-side Insulation workbench is visible (View menu).
-    pub(crate) show_insulation_workbench: bool,
+    pub show_insulation_workbench: bool,
     /// State for the Insulation workbench. See [`crate::insulation_workbench`].
-    pub(crate) insulation: crate::insulation_workbench::InsulationWorkbenchState,
+    pub insulation: crate::insulation_workbench::InsulationWorkbenchState,
 
     /// Whether the right-side Lead Screw workbench is visible (View menu).
-    pub(crate) show_leadscrew_workbench: bool,
+    pub show_leadscrew_workbench: bool,
     /// State for the Lead Screw workbench. See [`crate::leadscrew_workbench`].
-    pub(crate) leadscrew: crate::leadscrew_workbench::LeadscrewWorkbenchState,
+    pub leadscrew: crate::leadscrew_workbench::LeadscrewWorkbenchState,
 
     /// Whether the right-side Lever workbench is visible (View menu).
-    pub(crate) show_leverage_workbench: bool,
+    pub show_leverage_workbench: bool,
     /// State for the Lever workbench. See [`crate::leverage_workbench`].
-    pub(crate) leverage: crate::leverage_workbench::LeverageWorkbenchState,
+    pub leverage: crate::leverage_workbench::LeverageWorkbenchState,
 
     /// Whether the right-side Mohr's Circle workbench is visible (View menu).
-    pub(crate) show_mohr_workbench: bool,
+    pub show_mohr_workbench: bool,
     /// State for the Mohr's Circle workbench. See [`crate::mohr_workbench`].
-    pub(crate) mohr: crate::mohr_workbench::MohrWorkbenchState,
+    pub mohr: crate::mohr_workbench::MohrWorkbenchState,
 
     /// Whether the right-side MOSFET workbench is visible (View menu).
-    pub(crate) show_mosfet_workbench: bool,
+    pub show_mosfet_workbench: bool,
     /// State for the MOSFET workbench. See [`crate::mosfet_workbench`].
-    pub(crate) mosfet: crate::mosfet_workbench::MosfetWorkbenchState,
+    pub mosfet: crate::mosfet_workbench::MosfetWorkbenchState,
 
     /// Whether the right-side Optics workbench is visible (View menu).
-    pub(crate) show_optics_workbench: bool,
+    pub show_optics_workbench: bool,
     /// State for the Optics workbench. See [`crate::optics_workbench`].
-    pub(crate) optics: crate::optics_workbench::OpticsWorkbenchState,
+    pub optics: crate::optics_workbench::OpticsWorkbenchState,
 
     /// Whether the right-side Orifice Meter workbench is visible (View menu).
-    pub(crate) show_orifice_workbench: bool,
+    pub show_orifice_workbench: bool,
     /// State for the Orifice Meter workbench. See [`crate::orifice_workbench`].
-    pub(crate) orifice: crate::orifice_workbench::OrificeWorkbenchState,
+    pub orifice: crate::orifice_workbench::OrificeWorkbenchState,
 
     /// Whether the right-side Pressure Vessel workbench is visible (View menu).
-    pub(crate) show_pressurevessel_workbench: bool,
+    pub show_pressurevessel_workbench: bool,
     /// State for the Pressure Vessel workbench. See [`crate::pressurevessel_workbench`].
-    pub(crate) pressurevessel: crate::pressurevessel_workbench::PressureVesselWorkbenchState,
+    pub pressurevessel: crate::pressurevessel_workbench::PressureVesselWorkbenchState,
 
     /// Whether the right-side Torsion workbench is visible (View menu).
-    pub(crate) show_torsion_workbench: bool,
+    pub show_torsion_workbench: bool,
     /// State for the Torsion workbench. See [`crate::torsion_workbench`].
-    pub(crate) torsion: crate::torsion_workbench::TorsionWorkbenchState,
+    pub torsion: crate::torsion_workbench::TorsionWorkbenchState,
 
     /// Whether the right-side Refrigeration workbench is visible (View menu).
-    pub(crate) show_refrigeration_workbench: bool,
+    pub show_refrigeration_workbench: bool,
     /// State for the Refrigeration workbench. See [`crate::refrigeration_workbench`].
-    pub(crate) refrigeration: crate::refrigeration_workbench::RefrigerationWorkbenchState,
+    pub refrigeration: crate::refrigeration_workbench::RefrigerationWorkbenchState,
 
     /// Whether the right-side Frames Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_frames_workbench: bool,
+    pub show_frames_workbench: bool,
     /// Form + result state for the Frames Workbench — structural
     /// cross-section properties wrapping `valenx-frames`. See
     /// [`crate::frames_workbench`].
-    pub(crate) frames: crate::frames_workbench::FramesWorkbenchState,
+    pub frames: crate::frames_workbench::FramesWorkbenchState,
 
     /// Whether the right-side DC Motor Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_dcmotor_workbench: bool,
+    pub show_dcmotor_workbench: bool,
     /// Form + result state for the DC Motor Workbench — native brushed-DC-
     /// motor performance wrapping `valenx-dcmotor`. See
     /// [`crate::dcmotor_workbench`].
-    pub(crate) dcmotor: crate::dcmotor_workbench::DcMotorWorkbenchState,
+    pub dcmotor: crate::dcmotor_workbench::DcMotorWorkbenchState,
 
     /// Whether the right-side Gas Dynamics workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_gasdynamics_workbench: bool,
+    pub show_gasdynamics_workbench: bool,
     /// Form + result state for the Gas Dynamics workbench — 1-D
     /// compressible-flow relations wrapping `valenx-gasdynamics`. See
     /// [`crate::gasdynamics_workbench`].
-    pub(crate) gasdynamics: crate::gasdynamics_workbench::GasDynamicsWorkbenchState,
+    pub gasdynamics: crate::gasdynamics_workbench::GasDynamicsWorkbenchState,
 
     /// Whether the right-side Thermal Expansion workbench is visible. Defaults
     /// to `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_thermalexpansion_workbench: bool,
+    pub show_thermalexpansion_workbench: bool,
     /// Form + result state for the Thermal Expansion workbench — linear
     /// expansion + constrained stress wrapping `valenx-thermalexpansion`. See
     /// [`crate::thermalexpansion_workbench`].
-    pub(crate) thermalexpansion: crate::thermalexpansion_workbench::ThermalExpansionWorkbenchState,
+    pub thermalexpansion: crate::thermalexpansion_workbench::ThermalExpansionWorkbenchState,
 
     /// Whether the right-side Neural-Interface (BCI stimulation) workbench is
     /// visible. Defaults to `false`; flipped on from the View menu.
-    pub(crate) show_neuro_workbench: bool,
+    pub show_neuro_workbench: bool,
     /// Form + result state for the Neural-Interface workbench, wrapping
     /// `valenx-neuro`. See [`crate::neuro_workbench`].
-    pub(crate) neuro: crate::neuro_workbench::NeuroWorkbenchState,
+    pub neuro: crate::neuro_workbench::NeuroWorkbenchState,
 
     /// Whether the right-side Wind Turbine workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
     /// workbenches — egui docks them side by side.
-    pub(crate) show_windturbine_workbench: bool,
+    pub show_windturbine_workbench: bool,
     /// Form + result state for the Wind Turbine workbench — native
     /// actuator-disc wind-turbine power wrapping `valenx-windturbine`. See
     /// [`crate::windturbine_workbench`].
-    pub(crate) windturbine: crate::windturbine_workbench::WindTurbineWorkbenchState,
+    pub windturbine: crate::windturbine_workbench::WindTurbineWorkbenchState,
 
     /// Whether the right-side Parametric-CAD workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_cad_workbench: bool,
+    pub show_cad_workbench: bool,
     /// Form + result state for the Parametric-CAD workbench, wrapping
     /// `valenx-solvespace-3d`. See [`crate::cad_workbench`].
-    pub(crate) cad: crate::cad_workbench::CadWorkbenchState,
+    pub cad: crate::cad_workbench::CadWorkbenchState,
 
     /// Whether the right-side Antenna workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_antenna_workbench: bool,
+    pub show_antenna_workbench: bool,
     /// State for the Antenna workbench, wrapping `valenx-antenna`. See
     /// [`crate::antenna_workbench`].
-    pub(crate) antenna: crate::antenna_workbench::AntennaWorkbenchState,
+    pub antenna: crate::antenna_workbench::AntennaWorkbenchState,
 
     /// Whether the right-side 2D Drafting workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_draft2d_workbench: bool,
+    pub show_draft2d_workbench: bool,
     /// State for the 2D Drafting workbench, wrapping `valenx-librecad-2d`. See
     /// [`crate::draft2d_workbench`].
-    pub(crate) draft2d: crate::draft2d_workbench::Draft2dWorkbenchState,
+    pub draft2d: crate::draft2d_workbench::Draft2dWorkbenchState,
 
     /// Whether the right-side Reinforcement workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_reinforcement_workbench: bool,
+    pub show_reinforcement_workbench: bool,
     /// State for the Reinforcement workbench, wrapping `valenx-reinforcement`.
     /// See [`crate::reinforcement_workbench`].
-    pub(crate) reinforcement: crate::reinforcement_workbench::ReinforcementWorkbenchState,
+    pub reinforcement: crate::reinforcement_workbench::ReinforcementWorkbenchState,
 
     /// Whether the right-side Path-Traced Render workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
-    pub(crate) show_render_workbench: bool,
+    pub show_render_workbench: bool,
     /// State for the Render workbench, wrapping `valenx-pathtrace`. See
     /// [`crate::render_workbench`].
-    pub(crate) render: crate::render_workbench::RenderWorkbenchState,
+    pub render: crate::render_workbench::RenderWorkbenchState,
 
     /// Whether the right-side HVAC workbench is visible. Defaults to `false`;
     /// flipped on from the View menu.
-    pub(crate) show_hvac_workbench: bool,
+    pub show_hvac_workbench: bool,
     /// State for the HVAC workbench, wrapping `valenx-hvac`. See
     /// [`crate::hvac_workbench`].
-    pub(crate) hvac: crate::hvac_workbench::HvacWorkbenchState,
+    pub hvac: crate::hvac_workbench::HvacWorkbenchState,
 
     /// Whether the right-side Beam Workbench is visible. Defaults to `false`;
     /// flipped on from the View menu.
-    pub(crate) show_beam_workbench: bool,
+    pub show_beam_workbench: bool,
     /// State for the Beam Workbench, wrapping `valenx-beam`. See
     /// [`crate::beam_workbench`].
-    pub(crate) beam: crate::beam_workbench::BeamWorkbenchState,
+    pub beam: crate::beam_workbench::BeamWorkbenchState,
 
     /// Whether the right-side Reverse-Engineering workbench is visible.
     /// Defaults to `false`; flipped on from the View menu.
-    pub(crate) show_reverse_workbench: bool,
+    pub show_reverse_workbench: bool,
     /// State for the Reverse-Engineering workbench, wrapping `valenx-reverse`.
     /// See [`crate::reverse_workbench`].
-    pub(crate) reverse: crate::reverse_workbench::ReverseWorkbenchState,
+    pub reverse: crate::reverse_workbench::ReverseWorkbenchState,
 
     /// Whether the right-side Pump workbench is visible. Defaults to `false`;
     /// flipped on from the View menu.
-    pub(crate) show_pump_workbench: bool,
+    pub show_pump_workbench: bool,
     /// State for the Pump workbench, wrapping `valenx-pump`. See
     /// [`crate::pump_workbench`].
-    pub(crate) pump: crate::pump_workbench::PumpWorkbenchState,
+    pub pump: crate::pump_workbench::PumpWorkbenchState,
 
     /// Whether the right-side Interior-Design workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_interior_workbench: bool,
+    pub show_interior_workbench: bool,
     /// State for the Interior-Design workbench, wrapping `valenx-interior`. See
     /// [`crate::interior_workbench`].
-    pub(crate) interior: crate::interior_workbench::InteriorWorkbenchState,
+    pub interior: crate::interior_workbench::InteriorWorkbenchState,
 
     /// Whether the right-side Animation workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_animate_workbench: bool,
+    pub show_animate_workbench: bool,
     /// State for the Animation workbench, wrapping `valenx-animate`. See
     /// [`crate::animate_workbench`].
-    pub(crate) animate: crate::animate_workbench::AnimateWorkbenchState,
+    pub animate: crate::animate_workbench::AnimateWorkbenchState,
 
     /// Whether the right-side Variant-Effect workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_variant_effect_workbench: bool,
+    pub show_variant_effect_workbench: bool,
     /// State for the Variant-Effect workbench, wrapping `valenx-variant-effect`.
     /// See [`crate::variant_effect_workbench`].
-    pub(crate) variant_effect: crate::variant_effect_workbench::VariantEffectWorkbenchState,
+    pub variant_effect: crate::variant_effect_workbench::VariantEffectWorkbenchState,
 
     /// Whether the right-side Heat Pump workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_heatpump_workbench: bool,
+    pub show_heatpump_workbench: bool,
     /// State for the Heat Pump workbench, wrapping `valenx-heatpump`. See
     /// [`crate::heatpump_workbench`].
-    pub(crate) heatpump: crate::heatpump_workbench::HeatPumpWorkbenchState,
+    pub heatpump: crate::heatpump_workbench::HeatPumpWorkbenchState,
 
     /// Whether the right-side Astro / Launch workbench panel is visible.
     /// Defaults to `false`; flipped on from the View menu (Ctrl+4).
     /// Independent of the Mesh Toolbox, Genetics and Wind Tunnel
     /// workbenches — egui docks them side by side.
-    pub(crate) show_astro_workbench: bool,
+    pub show_astro_workbench: bool,
     /// Form + result state for the Astro / Launch workbench — the launch
     /// ascent simulator + the closed-form mission planners wrapping the
     /// `valenx-astro` crate. See [`crate::astro_workbench`].
-    pub(crate) astro: crate::astro_workbench::AstroWorkbenchState,
+    pub astro: crate::astro_workbench::AstroWorkbenchState,
 
     /// Whether the right-side Pipe Flow workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_pipeflow_workbench: bool,
+    pub show_pipeflow_workbench: bool,
     /// State for the Pipe Flow workbench, wrapping `valenx-pipeflow`. See
     /// [`crate::pipeflow_workbench`].
-    pub(crate) pipeflow: crate::pipeflow_workbench::PipeFlowWorkbenchState,
+    pub pipeflow: crate::pipeflow_workbench::PipeFlowWorkbenchState,
 
     /// Whether the right-side Rocket workbench panel is visible. Defaults
     /// to `false`; flipped on from the View menu. Surfaces the
     /// `valenx-rocket-demo` coupled design→simulate pipeline.
-    pub(crate) show_rocket_workbench: bool,
+    pub show_rocket_workbench: bool,
     /// Form + result state for the Rocket workbench — the reactive
     /// design→simulate panel wrapping `valenx-rocket-demo`. See
     /// [`crate::rocket_workbench`].
-    pub(crate) rocket: crate::rocket_workbench::RocketWorkbenchState,
+    pub rocket: crate::rocket_workbench::RocketWorkbenchState,
 
     /// Whether the right-side Battery Pack workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_batterypack_workbench: bool,
+    pub show_batterypack_workbench: bool,
     /// State for the Battery Pack workbench, wrapping `valenx-batterypack`.
     /// See [`crate::batterypack_workbench`].
-    pub(crate) batterypack: crate::batterypack_workbench::BatteryPackWorkbenchState,
+    pub batterypack: crate::batterypack_workbench::BatteryPackWorkbenchState,
 
     /// Whether the right-side Engine workbench panel is visible — the
     /// reactive engine design → analyze → optimize → export loop. On by
     /// default (set in [`ValenxApp::new`]).
-    pub(crate) show_engine_workbench: bool,
+    pub show_engine_workbench: bool,
     /// Form + result state for the Engine workbench. See
     /// [`crate::engine_workbench`].
-    pub(crate) engine: crate::engine_workbench::EngineWorkbenchState,
+    pub engine: crate::engine_workbench::EngineWorkbenchState,
 
     /// Whether the right-side Heat Exchanger workbench is visible. Defaults to
     /// `false`; flipped on from the View menu.
-    pub(crate) show_heatexchanger_workbench: bool,
+    pub show_heatexchanger_workbench: bool,
     /// State for the Heat Exchanger workbench, wrapping `valenx-heatexchanger`.
     /// See [`crate::heatexchanger_workbench`].
-    pub(crate) heatexchanger: crate::heatexchanger_workbench::HeatExchangerWorkbenchState,
+    pub heatexchanger: crate::heatexchanger_workbench::HeatExchangerWorkbenchState,
 
     /// Whether the right-side Car workbench panel is visible. Defaults to
     /// `false`; toggled from the View menu. Wraps `valenx-vehicle`'s
     /// performance model. See [`crate::car_workbench`].
-    pub(crate) show_car_workbench: bool,
+    pub show_car_workbench: bool,
     /// Form + result state for the Car workbench (design → simulate over
     /// `valenx-vehicle`).
-    pub(crate) car: crate::car_workbench::CarWorkbenchState,
+    pub car: crate::car_workbench::CarWorkbenchState,
 
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work
     /// via the live feed.
-    pub(crate) show_assistant_panel: bool,
+    pub show_assistant_panel: bool,
     /// State for the Assistant activity sidebar (the live `.jsonl` feed
     /// path). See [`crate::assistant_workbench`].
-    pub(crate) assistant: crate::assistant_workbench::AssistantWorkbenchState,
+    pub assistant: crate::assistant_workbench::AssistantWorkbenchState,
 
     /// Whether the keyboard-shortcut cheat-sheet overlay is open.
     /// Toggled by the `?` key + by Help → Keyboard shortcuts.
-    pub(crate) keyboard_help_open: bool,
+    pub keyboard_help_open: bool,
 
     /// Whether the per-panel contextual help popup is open. Mapped
     /// to F1 + Help → Panel help.
-    pub(crate) panel_help_open: bool,
+    pub panel_help_open: bool,
 
     /// Which panel's help text the F1 popup shows. Resolved at the
     /// moment F1 is pressed from "what workbench is active right
     /// now"; defaults to "Sequence" when nothing else is up.
-    pub(crate) panel_help_target: String,
+    pub panel_help_target: String,
 
     /// Whether the first-launch welcome tour is currently open. Auto-set
     /// to `true` on a fresh install (gated by `settings.welcome_tour_completed`);
     /// re-openable from the Help menu.
-    pub(crate) welcome_tour_open: bool,
+    pub welcome_tour_open: bool,
 
     /// Tour navigation state — which step the user is on, and
     /// whether they've finished. See [`crate::welcome_tour::TourState`].
-    pub(crate) welcome_tour_state: crate::welcome_tour::TourState,
+    pub welcome_tour_state: crate::welcome_tour::TourState,
 
     /// "File → New Project…" modal state. `Some(_)` while the dialog
     /// is open; `None` once the user clicks Create / Cancel / closes
     /// the window. Triggered by the File menu, the command palette,
     /// and the Ctrl+N shortcut. See [`crate::new_project_dialog`].
-    pub(crate) new_project_dialog: Option<crate::new_project_dialog::NewProjectDialog>,
+    pub new_project_dialog: Option<crate::new_project_dialog::NewProjectDialog>,
 
     /// One-line notice rendered inline on the welcome / landing page
     /// (next to the recent-projects list). Set by the host when a
@@ -1397,7 +1633,7 @@ pub struct ValenxApp {
     /// the top status bar — currently the "removed missing project
     /// from recents" confirmation. Cleared as soon as the user takes
     /// another action on the landing page.
-    pub(crate) landing_inline_message: Option<String>,
+    pub landing_inline_message: Option<String>,
 
     /// Memoised command-palette entry list, keyed by
     /// `(registry.len(), show_non_oss_adapters)`. `build_visible_commands`
@@ -1405,7 +1641,7 @@ pub struct ValenxApp {
     /// the cache invalidates only when the registry grows (rare —
     /// re-probe / load) or the OSS-only toggle flips in Settings.
     /// `None` until the first palette render fills it.
-    pub(crate) palette_cache: Option<(usize, bool, Vec<crate::commands::CommandKind>)>,
+    pub palette_cache: Option<(usize, bool, Vec<crate::commands::CommandKind>)>,
 
     // ── Swappable viewport system (cloud/viewport) ────────────────────────
     /// Which viewport implementation is rendered in the central panel.
@@ -1413,16 +1649,24 @@ pub struct ValenxApp {
     /// Defaults to `Viewport3D`; switches to `Viewport2dDna` when the
     /// user first enables the Genetics Workbench (and can be overridden
     /// at any time from **View → Central viewport**).
-    pub(crate) active_viewport: crate::viewport_kind::ViewportKind,
+    pub active_viewport: crate::viewport_kind::ViewportKind,
 
     /// Open project tabs (Chrome-style) plus the active index. Drives
     /// which workbench the tab strip shows. See [`crate::project_tabs`].
-    pub(crate) tab_bar: crate::project_tabs::TabBar,
+    pub tab_bar: crate::project_tabs::TabBar,
+
+    /// Pending tab-close confirmation. `Some(i)` while the "Close tab?"
+    /// modal is open for tab index `i` (set by the strip's ✕ / right-click
+    /// "Close"); cleared on Cancel, or on confirm right after the tab is
+    /// actually closed. Closing a tab discards its (unsaved) workspace
+    /// document, so the close is gated behind this explicit confirm. See
+    /// [`crate::project_tabs::draw_tab_strip`].
+    pub tab_close_confirm: Option<usize>,
 
     /// Persistent state for the 2D DNA / plasmid viewport. Survives
     /// viewport-kind switches so pan, zoom, and sub-view selection are
     /// remembered when the user returns to the 2D view.
-    pub(crate) viewport_2d: crate::viewport_2d::Viewport2dState,
+    pub viewport_2d: crate::viewport_2d::Viewport2dState,
 }
 
 impl ValenxApp {
@@ -1525,6 +1769,12 @@ impl ValenxApp {
         if let Some(path) = initial_stl {
             app.load_stl(path);
         }
+        // Wipe any leftover agent-command files from a previous run so the
+        // agent-drives-valenx bridge starts each session with a clean slate
+        // (the cursor logic then runs every newly-appended command from line 0
+        // without replaying stale history). `app.assistant` is initialized in
+        // `Self::default()` above, so its inbox path resolves here.
+        crate::agent_commands::clear_command_files(&app);
         app
     }
 

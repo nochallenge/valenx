@@ -75,18 +75,18 @@ pub fn draw_fanlaws_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fanlaws_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Fan Laws",
-                "native fan / blower affinity-law scaling · valenx-fanlaws",
-            ) {
-                app.show_fanlaws_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fanlaws_workbench",
+        "Fan Laws",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native fan / blower affinity-law scaling · valenx-fanlaws")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fanlaws;
             egui::ScrollArea::vertical()
@@ -145,7 +145,11 @@ pub fn draw_fanlaws_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fanlaws_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.fanlaws` borrow is
     // released here): build the fan's 3-D solid and load it.
@@ -397,6 +401,27 @@ fn load_fan_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical fan-laws workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn fanlaws_product() -> crate::WorkspaceProduct {
+    let s = FanLawsWorkbenchState::default();
+    let mesh = fan_solid_mesh(&s).expect("canonical fan laws ⇒ fan solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fanlaws>/valenx-fan");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical fan laws ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Fan laws (affinity scaling)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

@@ -99,107 +99,106 @@ pub fn draw_car_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_car_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_car_workbench")
-        .resizable(true)
-        .default_width(380.0)
-        .width_range(330.0..=620.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Car — design → simulate",
-                "point-mass longitudinal + friction-circle · valenx-vehicle",
-            ) {
-                app.show_car_workbench = false;
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_car_workbench",
+        "Car — design → simulate",
+        car_workbench_body,
+    );
+    if close {
+        app.show_car_workbench = false;
+    }
+}
+
+/// The Car workbench body — presets, the vehicle knobs, and the
+/// longitudinal-dynamics / friction-circle results. Extracted from
+/// [`draw_car_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]) without duplicating logic.
+pub(crate) fn car_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("point-mass longitudinal + friction-circle · valenx-vehicle")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            let s = &mut app.car;
+
+            ui.horizontal(|ui| {
+                ui.label("preset:");
+                if ui.button("Sports car").clicked() {
+                    s.car = sports_car();
+                }
+                if ui.button("Hypercar").clicked() {
+                    s.car = hypercar();
+                }
+            });
+            ui.separator();
+
+            ui.add(egui::Slider::new(&mut s.car.mass, 600.0..=3000.0).text("mass (kg)"));
+            let mut power_kw = s.car.peak_power / 1000.0;
+            if ui
+                .add(egui::Slider::new(&mut power_kw, 50.0..=1500.0).text("peak power (kW)"))
+                .changed()
+            {
+                s.car.peak_power = power_kw * 1000.0;
             }
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    let s = &mut app.car;
+            ui.horizontal(|ui| {
+                ui.label("drivetrain:");
+                ui.radio_value(&mut s.car.drivetrain, Drivetrain::FrontWheel, "FWD");
+                ui.radio_value(&mut s.car.drivetrain, Drivetrain::RearWheel, "RWD");
+                ui.radio_value(&mut s.car.drivetrain, Drivetrain::AllWheel, "AWD");
+            });
+            ui.add(egui::Slider::new(&mut s.car.tire_friction, 0.6..=2.0).text("tire grip μ"));
+            ui.add(egui::Slider::new(&mut s.car.drag_coefficient, 0.20..=0.60).text("drag Cd"));
+            ui.add(egui::Slider::new(&mut s.car.frontal_area, 1.5..=3.0).text("frontal area (m²)"));
+            ui.add(
+                egui::Slider::new(&mut s.car.downforce_cla, 0.0..=6.0).text("downforce Cl·A (m²)"),
+            );
 
-                    ui.horizontal(|ui| {
-                        ui.label("preset:");
-                        if ui.button("Sports car").clicked() {
-                            s.car = sports_car();
-                        }
-                        if ui.button("Hypercar").clicked() {
-                            s.car = hypercar();
-                        }
-                    });
-                    ui.separator();
+            // Reactive recompute, only when the design actually changed.
+            if s.last != Some(s.car) {
+                s.performance = Some(simulate(&s.car));
+                s.last = Some(s.car);
+            }
 
-                    ui.add(egui::Slider::new(&mut s.car.mass, 600.0..=3000.0).text("mass (kg)"));
-                    let mut power_kw = s.car.peak_power / 1000.0;
-                    if ui
-                        .add(
-                            egui::Slider::new(&mut power_kw, 50.0..=1500.0).text("peak power (kW)"),
-                        )
-                        .changed()
-                    {
-                        s.car.peak_power = power_kw * 1000.0;
-                    }
-                    ui.horizontal(|ui| {
-                        ui.label("drivetrain:");
-                        ui.radio_value(&mut s.car.drivetrain, Drivetrain::FrontWheel, "FWD");
-                        ui.radio_value(&mut s.car.drivetrain, Drivetrain::RearWheel, "RWD");
-                        ui.radio_value(&mut s.car.drivetrain, Drivetrain::AllWheel, "AWD");
-                    });
-                    ui.add(
-                        egui::Slider::new(&mut s.car.tire_friction, 0.6..=2.0).text("tire grip μ"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut s.car.drag_coefficient, 0.20..=0.60).text("drag Cd"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut s.car.frontal_area, 1.5..=3.0)
-                            .text("frontal area (m²)"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut s.car.downforce_cla, 0.0..=6.0)
-                            .text("downforce Cl·A (m²)"),
-                    );
-
-                    // Reactive recompute, only when the design actually changed.
-                    if s.last != Some(s.car) {
-                        s.performance = Some(simulate(&s.car));
-                        s.last = Some(s.car);
-                    }
-
-                    ui.separator();
-                    if let Some(p) = &s.performance {
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "top speed    {:>6.1} km/h\n\
+            ui.separator();
+            if let Some(p) = &s.performance {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "top speed    {:>6.1} km/h\n\
                                  0-100 km/h   {:>6.2} s\n\
                                  0-200 km/h   {:>6.2} s\n\
                                  100-0 brake  {:>6.1} m\n\
                                  skidpad 30 m {:>6.1} km/h   ({:.2} g)",
-                                p.top_speed_kmh,
-                                p.sprint_0_100_s,
-                                p.sprint_0_200_s,
-                                p.braking_100_0_m,
-                                p.skidpad_kmh,
-                                p.skidpad_lat_g,
-                            ))
-                            .monospace()
+                        p.top_speed_kmh,
+                        p.sprint_0_100_s,
+                        p.sprint_0_200_s,
+                        p.braking_100_0_m,
+                        p.skidpad_kmh,
+                        p.skidpad_lat_g,
+                    ))
+                    .monospace()
+                    .small(),
+                );
+                if p.launch_curve.len() > 1 {
+                    ui.label(
+                        egui::RichText::new("speed (km/h) vs time (s) — full-throttle launch")
+                            .weak()
                             .small(),
+                    );
+                    Plot::new("car_launch_plot").height(200.0).show(ui, |pui| {
+                        pui.line(
+                            Line::new(PlotPoints::from(p.launch_curve.clone()))
+                                .name("speed (km/h)"),
                         );
-                        if p.launch_curve.len() > 1 {
-                            ui.label(
-                                egui::RichText::new(
-                                    "speed (km/h) vs time (s) — full-throttle launch",
-                                )
-                                .weak()
-                                .small(),
-                            );
-                            Plot::new("car_launch_plot").height(200.0).show(ui, |pui| {
-                                pui.line(
-                                    Line::new(PlotPoints::from(p.launch_curve.clone()))
-                                        .name("speed (km/h)"),
-                                );
-                            });
-                        }
-                    }
-                });
+                    });
+                }
+            }
         });
 }
 

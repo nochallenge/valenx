@@ -75,18 +75,20 @@ pub fn draw_fatigue_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fatigue_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Fatigue",
-                "native high-cycle stress-life (S-N) analysis · valenx-fatigue",
-            ) {
-                app.show_fatigue_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fatigue_workbench",
+        "Fatigue",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native high-cycle stress-life (S-N) analysis · valenx-fatigue",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fatigue;
             egui::ScrollArea::vertical()
@@ -161,7 +163,11 @@ pub fn draw_fatigue_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fatigue_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.fatigue` borrow is
     // released here): build the specimen's 3-D solid and load it.
@@ -427,6 +433,27 @@ fn load_specimen_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical fatigue workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn fatigue_product() -> crate::WorkspaceProduct {
+    let s = FatigueWorkbenchState::default();
+    let mesh = specimen_solid_mesh(&s).expect("canonical fatigue ⇒ specimen solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fatigue>/valenx-specimen");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical fatigue ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Fatigue life (S-N curve)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

@@ -79,18 +79,18 @@ pub fn draw_psychrometrics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_psychrometrics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Psychrometrics",
-                "native moist-air state (Magnus) · valenx-psychrometrics",
-            ) {
-                app.show_psychrometrics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_psychrometrics_workbench",
+        "Psychrometrics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native moist-air state (Magnus) · valenx-psychrometrics")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.psychrometrics;
             egui::ScrollArea::vertical()
@@ -149,7 +149,11 @@ pub fn draw_psychrometrics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_psychrometrics_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.psychrometrics` borrow is
     // released here): build the parcel's 3-D control box and load it.
@@ -303,6 +307,27 @@ fn load_parcel_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical psychrometrics workbench as a 3-D solid
+/// plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn psychrometrics_product() -> crate::WorkspaceProduct {
+    let s = PsychrometricsWorkbenchState::default();
+    let mesh = parcel_solid_mesh(&s).expect("canonical psychrometrics ⇒ parcel solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<psychrometrics>/valenx-parcel");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical psychrometrics ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Psychrometrics (humidity/enthalpy)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

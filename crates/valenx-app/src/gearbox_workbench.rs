@@ -74,18 +74,20 @@ pub fn draw_gearbox_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_gearbox_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Gearbox",
-                "native two-stage compound gear-train analysis · valenx-gearbox",
-            ) {
-                app.show_gearbox_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_gearbox_workbench",
+        "Gearbox",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native two-stage compound gear-train analysis · valenx-gearbox",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.gearbox;
             egui::ScrollArea::vertical()
@@ -149,7 +151,11 @@ pub fn draw_gearbox_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_gearbox_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.gearbox` borrow is
     // released here): build the gearbox's 3-D solid and load it.
@@ -400,6 +406,32 @@ fn load_gearbox_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"gearbox"}`** product: the representative
+/// two-stage compound gear train (three shafts, two meshing gear pairs, a
+/// base) built from the canonical 9:1 reducer (two 17:51 stages at 97 %),
+/// paired with the drive readout rows (ratio / output speed-torque / power),
+/// at a fixed 3/4 camera. Registered in [`crate::products_registry`]; the
+/// per-tool builder the registry dispatches to. Pure — driven off
+/// [`GearboxWorkbenchState::default`].
+pub(crate) fn gearbox_product() -> crate::WorkspaceProduct {
+    let s = GearboxWorkbenchState::default();
+    let mesh = gearbox_solid_mesh(&s).expect("canonical gearbox ⇒ gear-train solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<gearbox>/valenx-gearbox");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical gearbox ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Two-stage gearbox (9:1)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

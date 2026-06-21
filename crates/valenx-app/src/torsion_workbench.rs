@@ -96,18 +96,18 @@ pub fn draw_torsion_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_torsion_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Torsion",
-                "native circular-shaft elastic torsion · valenx-torsion",
-            ) {
-                app.show_torsion_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_torsion_workbench",
+        "Torsion",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native circular-shaft elastic torsion · valenx-torsion")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.torsion;
             egui::ScrollArea::vertical()
@@ -187,7 +187,11 @@ pub fn draw_torsion_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_torsion_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.torsion` borrow is
     // released here): build the shaft's 3-D solid and load it.
@@ -352,6 +356,27 @@ fn load_shaft_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical torsion workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn torsion_product() -> crate::WorkspaceProduct {
+    let s = TorsionWorkbenchState::default();
+    let mesh = shaft_solid_mesh(&s).expect("canonical torsion ⇒ shaft solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<torsion>/valenx-shaft");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical torsion ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Shaft torsion (shear stress/twist)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

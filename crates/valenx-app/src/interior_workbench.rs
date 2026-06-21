@@ -68,18 +68,18 @@ pub fn draw_interior_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_interior_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_interior_workbench")
-        .resizable(true)
-        .default_width(440.0)
-        .width_range(360.0..=760.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Interior Design",
-                "floor plan + furniture · valenx-interior",
-            ) {
-                app.show_interior_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_interior_workbench",
+        "Interior Design",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("floor plan + furniture · valenx-interior")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.interior;
             ui.label(egui::RichText::new("Furniture").strong());
             ui.horizontal_wrapped(|ui| {
@@ -115,7 +115,11 @@ pub fn draw_interior_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 s.pan -= egui::vec2(d.x / s.scale, -d.y / s.scale);
             }
             draw_plan(&painter, rect, s.pan, s.scale, &s.scene);
-        });
+        },
+    );
+    if close {
+        app.show_interior_workbench = false;
+    }
 }
 
 fn draw_plan(

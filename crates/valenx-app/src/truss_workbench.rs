@@ -63,18 +63,18 @@ pub fn draw_truss_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_truss_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Truss",
-                "native planar pin-jointed Warren truss · valenx-truss",
-            ) {
-                app.show_truss_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_truss_workbench",
+        "Truss",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native planar pin-jointed Warren truss · valenx-truss")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.truss;
             egui::ScrollArea::vertical()
@@ -126,7 +126,11 @@ pub fn draw_truss_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_truss_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.truss` borrow is
     // released here): build the truss's 3-D solid and load it.
@@ -391,6 +395,31 @@ fn load_truss_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"truss"}`** product: the parametric Warren
+/// truss bar frame (members + joint markers) built from the canonical 4-panel
+/// truss (12 long × 2.5 high, 40 of load), paired with the statics readout rows
+/// (determinacy, reactions, peak tension / compression members), at a fixed 3/4
+/// camera. Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`TrussWorkbenchState::default`].
+pub(crate) fn truss_product() -> crate::WorkspaceProduct {
+    let s = TrussWorkbenchState::default();
+    let mesh = truss_solid_mesh(&s).expect("canonical Warren truss ⇒ bar-frame solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<truss>/valenx-truss");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical Warren truss ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Warren truss (method of joints)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

@@ -86,18 +86,20 @@ pub fn draw_electrochem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_electrochem_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Electrochemistry",
-                "native Nernst cell potential + Faraday electrolysis · valenx-electrochem",
-            ) {
-                app.show_electrochem_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_electrochem_workbench",
+        "Electrochemistry",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native Nernst cell potential + Faraday electrolysis · valenx-electrochem",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.electrochem;
             egui::ScrollArea::vertical()
@@ -172,7 +174,11 @@ pub fn draw_electrochem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_electrochem_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.electrochem` borrow is
     // released here): build the cell's 3-D solid and load it.

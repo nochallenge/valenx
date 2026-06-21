@@ -87,18 +87,20 @@ pub fn draw_brake_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_brake_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Brake",
-                "native disc / caliper friction torque + stopping · valenx-brake",
-            ) {
-                app.show_brake_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_brake_workbench",
+        "Brake",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native disc / caliper friction torque + stopping · valenx-brake",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.brake;
             egui::ScrollArea::vertical()
@@ -172,7 +174,11 @@ pub fn draw_brake_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_brake_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.brake` borrow is
     // released here): build the brake's 3-D solid and load it.
@@ -412,6 +418,32 @@ fn load_brake_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"brake"}`** product: the representative
+/// disc rotor with a straddling caliper and hub, built from the canonical
+/// 2-pad caliper (μ = 0.4, 8 kN clamp, 100→140 mm pad annulus) stopping a
+/// 1500 kg car from 30 m/s, paired with the friction-torque + stopping
+/// readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`BrakeWorkbenchState::default`].
+pub(crate) fn brake_product() -> crate::WorkspaceProduct {
+    let s = BrakeWorkbenchState::default();
+    let mesh = brake_solid_mesh(&s).expect("canonical brake ⇒ rotor-and-caliper solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<brake>/valenx-brake");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical brake ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Disc brake (torque + stopping)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

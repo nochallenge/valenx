@@ -447,7 +447,11 @@ fn render_wgpu_scene(
 /// through the same wgpu pass as STLs. Volumetric element types (Tet4,
 /// Hex8, ...) are skipped: those keep the wireframe path. `None` when no
 /// surface triangle could be produced.
-fn mesh_to_triangle_surface(mesh: &Mesh) -> Option<TriangleMesh> {
+///
+/// `pub(crate)` so the dockable `workspace:<n>` tile can build the same
+/// shaded surface for its own per-tile 3-D view (see
+/// [`crate::dock_layout`]'s `render_workspace_body`).
+pub(crate) fn mesh_to_triangle_surface(mesh: &Mesh) -> Option<TriangleMesh> {
     let nodes = &mesh.nodes;
     let tri = |a: u32, b: u32, c: u32| -> Option<StlTriangle> {
         let p = nodes.get(a as usize)?;
@@ -1268,7 +1272,7 @@ fn edges_for(et: ElementType) -> &'static [(usize, usize)] {
 /// Axis-aligned bounding box over a canonical mesh's node
 /// coordinates. Mirrors `lib::mesh_bounding_box` locally so the
 /// viewport module doesn't need to import from the parent.
-fn mesh_aabb(mesh: &Mesh) -> Option<([f32; 3], [f32; 3])> {
+pub(crate) fn mesh_aabb(mesh: &Mesh) -> Option<([f32; 3], [f32; 3])> {
     let first = mesh.nodes.first()?;
     let mut min = [first.x as f32, first.y as f32, first.z as f32];
     let mut max = min;

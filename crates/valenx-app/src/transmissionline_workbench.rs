@@ -82,18 +82,20 @@ pub fn draw_transmissionline_workbench(app: &mut ValenxApp, ctx: &egui::Context)
         return;
     }
 
-    egui::SidePanel::right("valenx_transmissionline_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Transmission Line",
-                "native lossless RF reflection / VSWR · valenx-transmissionline",
-            ) {
-                app.show_transmissionline_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_transmissionline_workbench",
+        "Transmission Line",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native lossless RF reflection / VSWR · valenx-transmissionline",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.transmissionline;
             egui::ScrollArea::vertical()
@@ -147,7 +149,11 @@ pub fn draw_transmissionline_workbench(app: &mut ValenxApp, ctx: &egui::Context)
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_transmissionline_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.transmissionline`
     // borrow is released here): build the coax 3-D solid and load it.

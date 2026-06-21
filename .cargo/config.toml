@@ -19,3 +19,14 @@ rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
 
 [target.aarch64-apple-darwin]
 rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+# ── Faster linking on Windows (committed so every contributor + CI gets it) ──
+# Use the LLVM linker (rust-lld, bundled with every Rust toolchain) instead of
+# the default MSVC link.exe. On this workspace, link.exe makes a one-file-change
+# rebuild of valenx-app take ~143s; rust-lld makes it ~5s (~28x). The bare name
+# "rust-lld" resolves from the active toolchain's sysroot, so it survives
+# `rustup update` and works on any windows-msvc machine without installing LLVM.
+# Measured 2026-06-20 on 1.88.0-x86_64-pc-windows-msvc.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=lld-link"]

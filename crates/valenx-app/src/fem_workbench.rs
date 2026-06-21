@@ -120,20 +120,61 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_fem_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_fem_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "FEM Workbench",
-                "native finite-element analysis · valenx-fem",
-            ) {
-                app.show_fem_workbench = false;
-            }
-            let s = &mut app.fem;
-            egui::ScrollArea::vertical()
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fem_workbench",
+        "FEM Workbench",
+        fem_workbench_body,
+    );
+    if close {
+        app.show_fem_workbench = false;
+    }
+
+    drain_deferred(app);
+}
+
+/// Drain the FEM workbench's deferred request (outside any panel borrow):
+/// push the deformed-shape field overlay into the central 3-D viewport when
+/// the body set the flag. Called by both [`draw_fem_workbench`] and the
+/// dockable layout ([`crate::dock_layout`]).
+pub(crate) fn drain_deferred(app: &mut ValenxApp) {
+    if app.fem.push_viz {
+        app.fem.push_viz = false;
+        if let Some((mesh, field)) = app.fem.viz.take() {
+            let quality = valenx_mesh::quality_report(&mesh);
+            let aspect_hist =
+                valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+            let skew_hist =
+                valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+            app.stl = None;
+            app.mesh = Some(LoadedMesh {
+                path: std::path::PathBuf::from("<fem>/deformed"),
+                mesh,
+                quality,
+                aspect_hist,
+                skew_hist,
+            });
+            app.aero_field_overlay = Some(field);
+            app.frame_current_mesh();
+        }
+    }
+}
+
+/// The FEM workbench body — geometry, material, boundary conditions, the
+/// solve controls, and the result readout. Extracted from
+/// [`draw_fem_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]) without duplicating logic.
+pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("native finite-element analysis · valenx-fem")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+    let s = &mut app.fem;
+    egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Geometry — structured box mesh (m)").strong());
@@ -545,30 +586,6 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
                 });
-        });
-
-    // Deferred (outside the panel borrow): push the deformed-shape field
-    // overlay into the central 3-D viewport.
-    if app.fem.push_viz {
-        app.fem.push_viz = false;
-        if let Some((mesh, field)) = app.fem.viz.take() {
-            let quality = valenx_mesh::quality_report(&mesh);
-            let aspect_hist =
-                valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
-            let skew_hist =
-                valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
-            app.stl = None;
-            app.mesh = Some(LoadedMesh {
-                path: std::path::PathBuf::from("<fem>/deformed"),
-                mesh,
-                quality,
-                aspect_hist,
-                skew_hist,
-            });
-            app.aero_field_overlay = Some(field);
-            app.frame_current_mesh();
-        }
-    }
 }
 
 /// Build the box mesh + boundary conditions and run the selected native
@@ -844,6 +861,335 @@ fn run_fem(s: &mut FemWorkbenchState) {
     }
 }
 
+/// Canonical steel-cantilever demo for the Workbench+Agent **3-D workspace
+/// tile**: a 1 m bar of 50 × 100 mm rectangular section, structural steel
+/// (`E = 200 GPa`, `ν = 0.30`, `ρ = 7850 kg/m³`, yield `σy = 250 MPa`),
+/// **fully fixed at `x = 0`** and carrying a **5 kN tip load** in `−Y` on the
+/// `x = Lx` face. Runs the real `valenx-fem` linear-static solver
+/// ([`solve_linear_static`] over a [`structured_box_mesh`] Tet4 box), deforms
+/// the mesh by the nodal displacements (scaled for visibility), and returns the
+/// **deformed boundary skin as a Tri3 surface** plus a **per-surface-vertex
+/// von-Mises colour vec** (so the tile renders the deformed shape as a stress
+/// colormap) plus the numeric readout rows. The single source of truth for the
+/// agent-bridge FEM product (see
+/// [`crate::agent_commands::AgentCommand::Show3d`] `kind:"fem"`).
+///
+/// Self-contained (no live workbench state) so the command is deterministic:
+/// every quantity comes from a freshly-built mesh + solve over the constants
+/// below. The colour vec carries one `[r, g, b]` per emitted surface vertex,
+/// built in the *same* loop as the boundary skin so the two are index-aligned;
+/// it maps each boundary node's von-Mises stress through a blue→cyan→green→
+/// yellow→red ramp normalised over `[0, peak σvm]`.
+///
+/// The rows compare the FE results against closed-form Euler–Bernoulli cantilever
+/// theory (`δ = PL³/3EI`, tip bending `σ = Mc/I` with `M = PL`), and state the
+/// factor of safety against yield. The FE vs analytical figures **will differ**
+/// — the structured box is a coarse first-order tetrahedral mesh, so the
+/// bending stiffness is over-stiff and the corner stress is mesh-sensitive; the
+/// rows say so rather than implying agreement.
+///
+/// Infallible for the canonical inputs (a non-degenerate box with a populated
+/// fixed face always solves); on the theoretically-impossible solver/mesh error
+/// it falls back to a tiny single-triangle placeholder mesh so the tile still
+/// shows *something* (and the rows note the failure) rather than panicking.
+pub(crate) fn fem_beam_loaded_mesh() -> (LoadedMesh, Vec<[f32; 3]>, Vec<String>) {
+    // Canonical cantilever: 1 m span, 50 mm × 100 mm rectangular section,
+    // structural steel, 5 kN tip load. Bend about the strong axis (load in -Y,
+    // section depth = Ly), so I = b·h³/12 with b = Lz, h = Ly.
+    const LX: f64 = 1.0; // span (m)
+    const LY: f64 = 0.10; // section depth in the bending (−Y) direction (m)
+    const LZ: f64 = 0.05; // section width (m)
+    const NX: usize = 16;
+    const NY: usize = 4;
+    const NZ: usize = 2;
+    const E_PA: f64 = 200.0e9; // Young's modulus (Pa)
+    const NU: f64 = 0.30;
+    const RHO: f64 = 7850.0;
+    const YIELD_MPA: f64 = 250.0;
+    const LOAD_N: f64 = 5000.0; // tip load (N), downward (−Y)
+
+    // Closed-form Euler–Bernoulli cantilever reference (strong-axis bending):
+    //   I = b·h³/12   (b = width Lz, h = depth Ly)
+    //   δ_tip = P·L³ / (3·E·I)
+    //   M_root = P·L ; σ_bending = M·c/I  with c = h/2
+    let i_area = LZ * LY * LY * LY / 12.0; // m^4
+    let analytic_defl_m = LOAD_N * LX * LX * LX / (3.0 * E_PA * i_area); // m
+    let m_root = LOAD_N * LX; // N·m
+    let analytic_bending_pa = m_root * (LY / 2.0) / i_area; // Pa
+
+    // Build the structured Tet4 box + run the real linear-static solver with the
+    // x=0 face fully fixed and the tip load spread over the x=Lx face nodes.
+    let built = (|| -> Option<(valenx_mesh::Mesh, valenx_fem::native_solver::NativeSolution)> {
+        let mesh = structured_box_mesh(LX, LY, LZ, NX, NY, NZ).ok()?;
+        let material = FemMaterial {
+            youngs_modulus: E_PA,
+            poisson_ratio: NU,
+            density: RHO,
+            ..Default::default()
+        };
+        let tol = (LX / NX as f64) * 1e-3 + 1e-9;
+        let mut constraints = Vec::new();
+        let mut tip_nodes = Vec::new();
+        for (i, p) in mesh.nodes.iter().enumerate() {
+            if p.x <= tol {
+                constraints.push(NodalConstraint::fixed(i));
+            } else if p.x >= LX - tol {
+                tip_nodes.push(i);
+            }
+        }
+        if constraints.is_empty() || tip_nodes.is_empty() {
+            return None;
+        }
+        let per = -LOAD_N / tip_nodes.len() as f64;
+        let forces: Vec<NodalForce> = tip_nodes
+            .iter()
+            .map(|&n| NodalForce {
+                node: n,
+                force: [0.0, per, 0.0],
+            })
+            .collect();
+        let sol = solve_linear_static(&mesh, &material, &constraints, &forces).ok()?;
+        Some((mesh, sol))
+    })();
+
+    let Some((mesh, sol)) = built else {
+        // Theoretically unreachable for the canonical inputs; degrade to a tiny
+        // placeholder mesh + a note rather than panicking.
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![0, 1, 2];
+        let mut placeholder = valenx_mesh::Mesh::new("valenx-fem-cantilever");
+        placeholder.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(LX, 0.0, 0.0),
+            Vector3::new(0.0, LY, 0.0),
+        ];
+        placeholder.element_blocks.push(block);
+        placeholder.recompute_stats();
+        let loaded = loaded_from_mesh(placeholder, "<fem>/valenx-fem-cantilever");
+        let lines = vec![
+            "steel cantilever 1 m, 50 × 100 mm, 5 kN tip".to_string(),
+            "FE solve unavailable — showing geometry placeholder".to_string(),
+            format!("analytical δ = PL³/3EI = {:.3} mm", analytic_defl_m * 1.0e3),
+        ];
+        // No solve → no stress field → no colours (renders plain metal).
+        return (loaded, Vec::new(), lines);
+    };
+
+    let max_disp = sol.max_displacement(); // m
+    let max_vm_pa = sol.max_von_mises(); // Pa
+    let fos = if max_vm_pa > 0.0 {
+        Some(YIELD_MPA * 1.0e6 / max_vm_pa)
+    } else {
+        None
+    };
+
+    // Deform the Tet4 mesh by the nodal displacements, scaled so the bending is
+    // visible in the small tile (same 10%-of-span visual scale the workbench
+    // viewport uses), then extract the deformed boundary as a Tri3 skin so the
+    // surface-only tile renderer can draw it as a grey solid.
+    let scale = if max_disp > 1.0e-12 {
+        0.1 * LX / max_disp
+    } else {
+        0.0
+    };
+    let mut deformed = mesh.clone();
+    for (node, d) in deformed.nodes.iter_mut().zip(&sol.displacement) {
+        *node += Vector3::new(d[0], d[1], d[2]) * scale;
+    }
+    deformed.recompute_stats();
+    // Per-node von-Mises colours (blue→cyan→green→yellow→red, normalised over
+    // [0, peak σvm]); the skin builder samples them per boundary face into a
+    // vertex-aligned colour vec in the same loop it builds the connectivity.
+    let node_colors = von_mises_node_colors(&sol.von_mises, max_vm_pa);
+    let (skin, vertex_colors) =
+        boundary_skin_tri3_colored(&deformed, "valenx-fem-cantilever", &node_colors);
+    let loaded = loaded_from_mesh(skin, "<fem>/valenx-fem-cantilever");
+
+    let lines = vec![
+        format!(
+            "steel cantilever {LX:.0} m, {:.0} × {:.0} mm, fixed end",
+            LZ * 1.0e3,
+            LY * 1.0e3
+        ),
+        format!(
+            "tip load {:.1} kN downward · E {:.0} GPa · σy {YIELD_MPA:.0} MPa",
+            LOAD_N / 1.0e3,
+            E_PA / 1.0e9
+        ),
+        format!(
+            "max deflection (FE): {:.3} mm   vs analytical PL³/3EI = {:.3} mm",
+            max_disp * 1.0e3,
+            analytic_defl_m * 1.0e3
+        ),
+        format!(
+            "max von Mises (FE): {:.1} MPa   vs analytical tip bending Mc/I = {:.1} MPa",
+            max_vm_pa / 1.0e6,
+            analytic_bending_pa / 1.0e6
+        ),
+        match fos {
+            Some(f) => format!("factor of safety (σy / peak σvm): {f:.2}"),
+            None => "factor of safety: n/a (zero stress)".to_string(),
+        },
+        "FE vs analytical differ: coarse first-order tet mesh is over-stiff and".to_string(),
+        "the re-entrant corner stress is mesh-sensitive — refine to converge.".to_string(),
+        "deformed shape coloured by von Mises: blue (low) → red (peak).".to_string(),
+    ];
+    (loaded, vertex_colors, lines)
+}
+
+/// Wrap a finished `mesh` as a fully-populated [`LoadedMesh`] (quality report +
+/// aspect / skew histograms) tagged with the synthetic `path`. Shared by the
+/// FEM cantilever producer's success and placeholder paths.
+fn loaded_from_mesh(mesh: valenx_mesh::Mesh, path: &str) -> LoadedMesh {
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    LoadedMesh {
+        path: std::path::PathBuf::from(path),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    }
+}
+
+/// Extract the **boundary surface** of a 3-D (Tet4) `mesh` as a new Tri3
+/// surface [`valenx_mesh::Mesh`] named `id`. Each single-owner boundary face of
+/// the volumetric mesh is a triangle (Tet4 faces are tris); we keep its
+/// `sorted_nodes` directly. Orientation isn't preserved, but the tile draws the
+/// skin with per-face normals recomputed at render time, so a flipped
+/// facet only flips its shading — fine for a deformed-shape preview. Returns a
+/// surface mesh with the same node coordinates (so the deformation shows) and
+/// one Tri3 element per boundary face.
+///
+/// `node_colors` (one `[r, g, b]` per *volumetric* node) is sampled per boundary
+/// face into the returned `Vec<[f32; 3]>`, which carries **one colour per
+/// emitted surface vertex** in the exact order
+/// [`crate::wgpu_renderer::triangles_to_vertices`] will later walk the surface:
+/// face-major, then the three corners `[f[0], f[1], f[2]]` of each face — built
+/// in the *same* loop as the connectivity so the two are index-aligned by
+/// construction. Pass an empty `node_colors` to get an empty colour vec back
+/// (the caller then renders plain metal).
+fn boundary_skin_tri3_colored(
+    mesh: &valenx_mesh::Mesh,
+    id: &str,
+    node_colors: &[[f32; 3]],
+) -> (valenx_mesh::Mesh, Vec<[f32; 3]>) {
+    let adjacency = valenx_mesh::build_face_adjacency(mesh);
+    let mut conn: Vec<u32> = Vec::with_capacity(adjacency.boundary_face_count() * 3);
+    let mut colors: Vec<[f32; 3]> = Vec::with_capacity(adjacency.boundary_face_count() * 3);
+    let want_colors = !node_colors.is_empty();
+    for face in adjacency.boundary_faces() {
+        // Tet4 boundary faces are triangles (3 nodes). Skip any non-triangular
+        // face defensively (none arise for a pure Tet4 box).
+        if face.sorted_nodes.len() == 3 {
+            conn.extend_from_slice(&face.sorted_nodes);
+            // Same loop, same order: push the three corners' node colours so the
+            // colour vec lines up 1:1 with the surface vertices the renderer
+            // emits for this face. A node index past the colour table degrades
+            // to the metal base rather than panicking.
+            if want_colors {
+                for &node in &face.sorted_nodes {
+                    colors.push(
+                        node_colors
+                            .get(node as usize)
+                            .copied()
+                            .unwrap_or(crate::wgpu_renderer::METAL_BASE),
+                    );
+                }
+            }
+        }
+    }
+    let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+    block.connectivity = conn;
+    let mut surface = valenx_mesh::Mesh::new(id);
+    surface.nodes = mesh.nodes.clone();
+    surface.element_blocks.push(block);
+    surface.recompute_stats();
+    (surface, colors)
+}
+
+/// 5-stop **jet-style** colormap (blue → cyan → green → yellow → red) mapping a
+/// normalised `t ∈ [0, 1]` to an `[r, g, b]` triple in `[0, 1]`, ready to use
+/// directly as a vertex base albedo. Used for the FEM von-Mises stress ramp on
+/// the deformed-shape tile.
+///
+/// This is the classic engineering stress-map ramp the task calls for — cool
+/// (low stress) at `t = 0`, hot (high stress) at `t = 1`. It is intentionally
+/// distinct from `valenx_fields::colormap::cool_to_warm` (a blue→white→red
+/// divergent ramp that returns `u8`s): a stress magnitude is sequential, not
+/// divergent, and the renderer wants floats.
+fn von_mises_jet(t: f64) -> [f32; 3] {
+    const STOPS: &[(f32, [f32; 3])] = &[
+        (0.00, [0.0, 0.0, 1.0]), // blue   — low stress
+        (0.25, [0.0, 1.0, 1.0]), // cyan
+        (0.50, [0.0, 1.0, 0.0]), // green
+        (0.75, [1.0, 1.0, 0.0]), // yellow
+        (1.00, [1.0, 0.0, 0.0]), // red    — high stress
+    ];
+    let t = (t as f32).clamp(0.0, 1.0);
+    for i in 0..STOPS.len() - 1 {
+        let (t0, c0) = STOPS[i];
+        let (t1, c1) = STOPS[i + 1];
+        if t <= t1 {
+            let span = (t1 - t0).max(1e-9);
+            let f = (t - t0) / span;
+            return [
+                c0[0] + (c1[0] - c0[0]) * f,
+                c0[1] + (c1[1] - c0[1]) * f,
+                c0[2] + (c1[2] - c0[2]) * f,
+            ];
+        }
+    }
+    STOPS[STOPS.len() - 1].1
+}
+
+/// Map a per-node von-Mises stress field to per-node jet colours, normalised
+/// over `[0, max_vm]` (low → blue, high → red). A non-positive `max_vm`
+/// (unstressed body) collapses every node to the cool end rather than dividing
+/// by zero.
+fn von_mises_node_colors(von_mises: &[f64], max_vm: f64) -> Vec<[f32; 3]> {
+    let inv = if max_vm > 0.0 { 1.0 / max_vm } else { 0.0 };
+    von_mises
+        .iter()
+        .map(|&vm| von_mises_jet(vm * inv))
+        .collect()
+}
+
+/// A fixed 3/4-view [`valenx_viz::OrbitCamera`] framing the FEM cantilever
+/// `mesh` (same `frame_bounds` fit + hero angle as
+/// [`crate::rocket_workbench::lv1_camera`]), for the Workbench+Agent FEM
+/// product's per-tile 3-D view.
+pub(crate) fn fem_beam_camera(mesh: &valenx_mesh::Mesh) -> valenx_viz::OrbitCamera {
+    let mut camera = valenx_viz::OrbitCamera::default();
+    if let Some((min, max)) = crate::mesh_loader::mesh_bounding_box(mesh) {
+        camera.frame_bounds(min, max);
+    }
+    camera.azimuth_deg = 35.0;
+    camera.elevation_deg = 22.0;
+    camera
+}
+
+/// The agent-bridge **`show_3d{kind:"fem"}`** product: the steel cantilever's
+/// deformed boundary skin coloured by per-vertex von-Mises stress (the only
+/// product that sets `vertex_colors`) + the FE-vs-analytical readout rows, at a
+/// fixed 3/4 camera. Registered in [`crate::products_registry`]; the per-tool
+/// builder the registry dispatches to (so the FEM product lives here, not in
+/// the shared reducer). Pure (no app state).
+pub(crate) fn fem_product() -> crate::WorkspaceProduct {
+    let (mesh, vertex_colors, lines) = fem_beam_loaded_mesh();
+    let camera = fem_beam_camera(&mesh.mesh);
+    crate::WorkspaceProduct {
+        title: "FEM cantilever (steel, 5 kN tip)".into(),
+        lines,
+        mesh: Some(mesh),
+        vertex_colors: Some(vertex_colors),
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1065,6 +1411,65 @@ mod tests {
         assert!(
             (r2 - 0.5 * r1).abs() / r1 < 1e-6,
             "doubling the load halves L/δ: {r1} → {r2}"
+        );
+    }
+
+    #[test]
+    fn fem_beam_product_carries_aligned_vertex_colors() {
+        // The agent-bridge FEM product now ships a per-surface-vertex von-Mises
+        // colour vec. It must be non-empty and exactly one colour per surface
+        // vertex the tile renderer emits (3 per boundary-skin triangle), so
+        // `triangles_to_vertices_colored` stays index-aligned.
+        let (loaded, vertex_colors, _lines) = fem_beam_loaded_mesh();
+        let surface = crate::viewport::mesh_to_triangle_surface(&loaded.mesh)
+            .expect("the cantilever skin is a Tri3 surface");
+        let expected = surface.triangles.len() * 3;
+        assert!(
+            !vertex_colors.is_empty(),
+            "FEM product must carry stress colours"
+        );
+        assert_eq!(
+            vertex_colors.len(),
+            expected,
+            "one colour per emitted surface vertex (3 × {} faces)",
+            surface.triangles.len()
+        );
+        // Every colour is a valid [0,1] RGB triple from the jet ramp.
+        for c in &vertex_colors {
+            for ch in c {
+                assert!(
+                    (0.0..=1.0).contains(ch),
+                    "colour channel out of range: {ch}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn von_mises_jet_spans_blue_to_red() {
+        // Endpoints of the stress ramp: t=0 is pure blue (low stress), t=1 is
+        // pure red (peak stress); the middle is green.
+        assert_eq!(von_mises_jet(0.0), [0.0, 0.0, 1.0]);
+        assert_eq!(von_mises_jet(1.0), [1.0, 0.0, 0.0]);
+        assert_eq!(von_mises_jet(0.5), [0.0, 1.0, 0.0]);
+        // Out-of-range inputs clamp rather than extrapolate.
+        assert_eq!(von_mises_jet(-1.0), [0.0, 0.0, 1.0]);
+        assert_eq!(von_mises_jet(2.0), [1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn von_mises_node_colors_normalise_over_peak() {
+        // A node at peak stress maps to red, a node at zero maps to blue, and a
+        // zero peak (unstressed body) collapses everything to the cool end.
+        let colors = von_mises_node_colors(&[0.0, 50.0, 100.0], 100.0);
+        assert_eq!(colors.len(), 3);
+        assert_eq!(colors[0], [0.0, 0.0, 1.0]); // 0 → blue
+        assert_eq!(colors[2], [1.0, 0.0, 0.0]); // peak → red
+        let flat = von_mises_node_colors(&[0.0, 0.0], 0.0);
+        assert_eq!(
+            flat[0],
+            [0.0, 0.0, 1.0],
+            "zero peak → cool end, no div-by-zero"
         );
     }
 

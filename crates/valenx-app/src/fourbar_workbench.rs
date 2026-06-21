@@ -69,18 +69,20 @@ pub fn draw_fourbar_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fourbar_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Four-Bar Linkage",
-                "native planar four-bar mechanism kinematics · valenx-kinematics",
-            ) {
-                app.show_fourbar_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fourbar_workbench",
+        "Four-Bar Linkage",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native planar four-bar mechanism kinematics · valenx-kinematics",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fourbar;
             egui::ScrollArea::vertical()
@@ -140,7 +142,11 @@ pub fn draw_fourbar_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fourbar_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.fourbar` borrow is
     // released here): build the linkage's 3-D solid and load it.
@@ -375,6 +381,27 @@ fn load_linkage_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical four-bar-linkage workbench as a 3-D solid
+/// plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn fourbar_product() -> crate::WorkspaceProduct {
+    let s = FourBarWorkbenchState::default();
+    let mesh = linkage_solid_mesh(&s).expect("canonical four-bar ⇒ linkage solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fourbar>/valenx-linkage");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical four-bar ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Four-bar linkage (kinematics)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

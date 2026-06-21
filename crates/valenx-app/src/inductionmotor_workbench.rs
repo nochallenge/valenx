@@ -65,18 +65,20 @@ pub fn draw_inductionmotor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_inductionmotor_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Induction Motor",
-                "native 3-phase induction-motor slip / power · valenx-inductionmotor",
-            ) {
-                app.show_inductionmotor_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_inductionmotor_workbench",
+        "Induction Motor",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native 3-phase induction-motor slip / power · valenx-inductionmotor",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.inductionmotor;
             egui::ScrollArea::vertical()
@@ -131,7 +133,11 @@ pub fn draw_inductionmotor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_inductionmotor_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.inductionmotor` borrow
     // is released here): build the motor's 3-D solid and load it.
@@ -371,6 +377,27 @@ fn load_motor_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical induction-motor workbench as a 3-D solid
+/// plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn inductionmotor_product() -> crate::WorkspaceProduct {
+    let s = InductionMotorWorkbenchState::default();
+    let mesh = motor_solid_mesh(&s).expect("canonical induction motor ⇒ motor solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<inductionmotor>/valenx-motor");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical induction motor ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Induction motor (slip/torque)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

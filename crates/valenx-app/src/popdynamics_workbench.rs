@@ -123,18 +123,20 @@ pub fn draw_popdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_popdynamics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Population Dynamics",
-                "native closed-form epidemiology / ecology · valenx-popdynamics",
-            ) {
-                app.show_popdynamics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_popdynamics_workbench",
+        "Population Dynamics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native closed-form epidemiology / ecology · valenx-popdynamics",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.popdynamics;
             egui::ScrollArea::vertical()
@@ -248,7 +250,11 @@ pub fn draw_popdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_popdynamics_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.popdynamics` borrow is
     // released here): build the trajectory ribbon and load it.

@@ -31,18 +31,30 @@ use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};
 
 /// Vertex layout the pipeline expects: position (float3) + normal
-/// (float3). No texture coords, no vertex colours — flat shading
-/// derives colour entirely from the normal and light direction.
+/// (float3) + colour (float3). The fragment uses `color` as the base
+/// albedo, shaded by the existing normal·light Lambert term. Plain
+/// meshes set `color` to the neutral brushed-metal constant
+/// ([`METAL_BASE`]) for every vertex, which reproduces the old
+/// hard-coded flat shading byte-for-byte; field overlays (e.g. the FEM
+/// von-Mises ramp) write a per-vertex colour instead.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
 pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
+    pub color: [f32; 3],
 }
 
-const VERTEX_ATTRS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+/// The neutral brushed-metal base albedo every plain (non-field) mesh
+/// uses — the exact constant the fragment shader baked in before
+/// per-vertex colour existed. Writing this into every vertex's `color`
+/// makes the metal path render identically to the old pipeline.
+pub const METAL_BASE: [f32; 3] = [0.66, 0.76, 0.88];
+
+const VERTEX_ATTRS: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
     0 => Float32x3, // position
     1 => Float32x3, // normal
+    2 => Float32x3, // color (base albedo)
 ];
 
 fn vertex_layout() -> wgpu::VertexBufferLayout<'static> {
@@ -100,10 +112,12 @@ struct Uniforms {
 struct VIn {
     @location(0) position: vec3<f32>,
     @location(1) normal:   vec3<f32>,
+    @location(2) color:    vec3<f32>,
 }
 struct VOut {
     @builtin(position) clip_pos: vec4<f32>,
     @location(0) normal: vec3<f32>,
+    @location(1) color:  vec3<f32>,
 }
 
 @vertex
@@ -111,6 +125,7 @@ fn vs_main(v_in: VIn) -> VOut {
     var out: VOut;
     out.clip_pos = u.mvp * vec4<f32>(v_in.position, 1.0);
     out.normal = v_in.normal;
+    out.color = v_in.color;
     return out;
 }
 
@@ -119,7 +134,11 @@ fn fs_main(f_in: VOut) -> @location(0) vec4<f32> {
     let n = normalize(f_in.normal);
     let l = normalize(u.light_dir.xyz);
     let lambert = max(dot(-l, n), 0.0);
-    let base = vec3<f32>(0.66, 0.76, 0.88);
+    // Base albedo comes from the interpolated vertex colour. A plain
+    // mesh feeds the neutral brushed-metal constant (METAL_BASE) into
+    // every vertex, so this is identical to the old hard-coded base;
+    // a field overlay feeds a per-vertex colormap colour instead.
+    let base = f_in.color;
     let ambient = 0.22;
     let color = base * (ambient + 0.78 * lambert);
     return vec4<f32>(color, 1.0);
@@ -332,7 +351,16 @@ pub struct WgpuRenderer {
     vertex_capacity: u64,
     vertex_count: u32,
 
-    offscreen: Option<Offscreen>,
+    /// Per-tile offscreen targets, keyed by a caller-chosen tile id (e.g.
+    /// `"central"` for the main viewport or `"workspace:3"` for a
+    /// Workbench+Agent tile). Each key owns its own colour + depth texture
+    /// and a stable egui `TextureId`, so two viewports drawn in the same
+    /// frame never alias one shared target. Pipelines, shaders, the uniform
+    /// buffer and the vertex buffer all stay shared — only the render
+    /// targets multiply. Entries are created lazily by
+    /// [`Self::ensure_offscreen_for`] and recreated only when that key's
+    /// pixel size changes.
+    offscreens: std::collections::HashMap<String, Offscreen>,
 }
 
 struct Offscreen {
@@ -558,16 +586,35 @@ impl WgpuRenderer {
             vertex_buffer,
             vertex_capacity: initial_capacity,
             vertex_count: 0,
-            offscreen: None,
+            offscreens: std::collections::HashMap::new(),
         }
     }
 
-    fn ensure_offscreen_for(&mut self, renderer: &mut egui_wgpu::Renderer, size: [u32; 2]) {
-        let [w, h] = size;
-        if w == 0 || h == 0 {
+    /// Ensure the offscreen target for tile `key` exists and matches `size`,
+    /// creating or resizing its colour + depth textures as needed. The egui
+    /// `TextureId` is kept **stable** across resizes for a given key (the
+    /// texture view is re-pointed in place) so the UI never flickers on
+    /// resize. Each key is independent, so the central viewport and a
+    /// mini-tile never clobber each other's target.
+    fn ensure_offscreen_for(
+        &mut self,
+        key: &str,
+        renderer: &mut egui_wgpu::Renderer,
+        size: [u32; 2],
+    ) {
+        if size[0] == 0 || size[1] == 0 {
             return;
         }
-        if let Some(os) = &self.offscreen {
+        // Clamp to the device's max 2-D texture dimension (commonly 8192).
+        // On hi-DPI or very wide windows — especially with a >1 text-zoom
+        // factor — the requested viewport size can exceed wgpu's limit,
+        // which would otherwise be a fatal Device::create_texture validation
+        // error that crashes the app on launch before the window appears.
+        let max_dim = self.device.limits().max_texture_dimension_2d;
+        let w = size[0].min(max_dim);
+        let h = size[1].min(max_dim);
+        let size = [w, h];
+        if let Some(os) = self.offscreens.get(key) {
             if os.size == size {
                 return;
             }
@@ -605,11 +652,11 @@ impl WgpuRenderer {
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Register (or re-register) with egui. If we already have an
+        // Register (or re-register) with egui. If this key already has an
         // id we keep it and point it at the new view — egui's ids
         // are stable across texture re-creations which avoids
         // flickering during resize.
-        let egui_id = match &self.offscreen {
+        let egui_id = match self.offscreens.get(key) {
             Some(prev) => {
                 renderer.update_egui_texture_from_wgpu_texture(
                     &self.device,
@@ -626,14 +673,17 @@ impl WgpuRenderer {
             ),
         };
 
-        self.offscreen = Some(Offscreen {
-            size,
-            color_texture,
-            color_view,
-            depth_texture,
-            depth_view,
-            egui_id,
-        });
+        self.offscreens.insert(
+            key.to_string(),
+            Offscreen {
+                size,
+                color_texture,
+                color_view,
+                depth_texture,
+                depth_view,
+                egui_id,
+            },
+        );
     }
 
     fn upload_vertices(&mut self, vertices: &[Vertex]) {
@@ -664,9 +714,10 @@ impl WgpuRenderer {
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(uniforms));
     }
 
-    /// Render to the offscreen target and return the egui TextureId
-    /// the caller should display. Returns `None` if the viewport size
-    /// is zero.
+    /// Render to the **central** offscreen target and return the egui
+    /// TextureId the caller should display. Returns `None` if the viewport
+    /// size is zero. Thin wrapper over [`Self::render_keyed`] with the
+    /// `"central"` key, kept so the main viewport's call site is unchanged.
     ///
     /// `inv_mvp` is the inverse of `mvp`; the grid shader uses it to
     /// unproject fragments to world-space rays.
@@ -684,10 +735,44 @@ impl WgpuRenderer {
         grid2: [f32; 4],
         vertices: &[Vertex],
     ) -> Option<egui::TextureId> {
+        self.render_keyed(
+            "central", renderer, size, mvp, inv_mvp, light_dir, cam_pos, grid, grid2, true,
+            vertices,
+        )
+    }
+
+    /// Render into the offscreen target for tile `key` and return that
+    /// target's egui TextureId. Each `key` owns an independent colour +
+    /// depth texture (and stable id), so multiple viewports — the central
+    /// one plus any number of per-tile mini-views — can each render their
+    /// own scene in the same frame without aliasing. Returns `None` if the
+    /// viewport size is zero.
+    ///
+    /// `draw_grid` toggles the ground-grid + axes pass: `true` reproduces
+    /// the central viewport exactly (background → mesh → grid); `false`
+    /// draws only the background gradient + the shaded mesh, which is the
+    /// cheaper, cleaner look wanted in small per-tile previews where an
+    /// infinite ground grid would be visual noise. Pipelines, shaders,
+    /// uniform + vertex buffers stay shared across keys.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_keyed(
+        &mut self,
+        key: &str,
+        renderer: &mut egui_wgpu::Renderer,
+        size: [u32; 2],
+        mvp: [[f32; 4]; 4],
+        inv_mvp: [[f32; 4]; 4],
+        light_dir: [f32; 3],
+        cam_pos: [f32; 3],
+        grid: [f32; 4],
+        grid2: [f32; 4],
+        draw_grid: bool,
+        vertices: &[Vertex],
+    ) -> Option<egui::TextureId> {
         if size[0] == 0 || size[1] == 0 {
             return None;
         }
-        self.ensure_offscreen_for(renderer, size);
+        self.ensure_offscreen_for(key, renderer, size);
         self.upload_vertices(vertices);
         self.write_uniforms(&Uniforms {
             mvp,
@@ -698,7 +783,7 @@ impl WgpuRenderer {
             grid2,
         });
 
-        let os = self.offscreen.as_ref()?;
+        let os = self.offscreens.get(key)?;
 
         let mut encoder = self
             .device
@@ -751,12 +836,68 @@ impl WgpuRenderer {
             // grid's frag_depth is larger (Y=0 is farther than geometry
             // above Y=0), the Less depth-test fails wherever the mesh was
             // already drawn — clean occlusion without a depth pre-pass.
-            rpass.set_pipeline(&self.grid_pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.draw(0..3, 0..1); // fullscreen triangle
+            // Skipped entirely for grid-less mini-previews (`draw_grid` false).
+            if draw_grid {
+                rpass.set_pipeline(&self.grid_pipeline);
+                rpass.set_bind_group(0, &self.bind_group, &[]);
+                rpass.draw(0..3, 0..1); // fullscreen triangle
+            }
         }
         self.queue.submit(Some(encoder.finish()));
         Some(os.egui_id)
+    }
+
+    /// Free every per-tile offscreen target whose key is **not** in `live`,
+    /// reclaiming its GPU memory. The `"central"` key (the main viewport's
+    /// target) is **always** kept regardless of `live`, so a caller need not
+    /// remember to list it.
+    ///
+    /// Each `Offscreen` owns a colour + depth `wgpu::Texture` (~8 MB for a
+    /// reasonably-sized tile) plus an egui `TextureId` registered with the
+    /// egui-wgpu [`egui_wgpu::Renderer`]. The textures free themselves on
+    /// `Drop` once the entry is removed from the map, but the egui-side
+    /// registration does **not** — it must be released explicitly via
+    /// [`egui_wgpu::Renderer::free_texture`], or the renderer leaks one bind
+    /// group + texture-view per orphaned id. This frees both.
+    ///
+    /// Called once per frame at the end of the dock draw (see
+    /// [`crate::dock_layout`]'s `render_dock_tree_into`) with the set of keys
+    /// for the tiles still present in the dock tree, so a closed
+    /// Workbench+Agent tile's `"workspace:{n}"` target is reclaimed instead of
+    /// surviving forever (unit ids are monotonic and never reused, so without
+    /// this the map would grow unboundedly).
+    pub fn prune_offscreens(
+        &mut self,
+        live: &std::collections::HashSet<String>,
+        renderer: &mut egui_wgpu::Renderer,
+    ) {
+        prune_offscreen_map(&mut self.offscreens, live, renderer);
+    }
+}
+
+/// Prune logic for [`WgpuRenderer::prune_offscreens`], split out as a free
+/// function over just the offscreen map so it can be unit-tested headless
+/// (building a full [`WgpuRenderer`] needs an `egui_wgpu::RenderState`, but the
+/// prune only ever touches this map). Removes every entry whose key is neither
+/// `"central"` nor in `live`, calling [`egui_wgpu::Renderer::free_texture`] on
+/// each removed entry's egui id (the wgpu textures drop with the entry).
+fn prune_offscreen_map(
+    offscreens: &mut std::collections::HashMap<String, Offscreen>,
+    live: &std::collections::HashSet<String>,
+    renderer: &mut egui_wgpu::Renderer,
+) {
+    // Collect the doomed keys first so we don't mutate the map while iterating.
+    let dead: Vec<String> = offscreens
+        .keys()
+        .filter(|k| k.as_str() != "central" && !live.contains(k.as_str()))
+        .cloned()
+        .collect();
+    for key in dead {
+        if let Some(os) = offscreens.remove(&key) {
+            // Release the egui-side registration (bind group + view); the
+            // colour/depth `wgpu::Texture`s free on `os` Drop here.
+            renderer.free_texture(&os.egui_id);
+        }
     }
 }
 
@@ -764,6 +905,13 @@ impl WgpuRenderer {
 /// triangle becomes three `Vertex` entries that share the triangle's
 /// face normal, so the fragment shader gets a constant normal across
 /// each triangle (the visual hallmark of flat shading).
+///
+/// Every vertex's `color` is the neutral brushed-metal constant
+/// ([`METAL_BASE`]) — exactly the base albedo the fragment shader baked
+/// in before per-vertex colour existed — so this path (the central
+/// viewport, STLs, and all plain product meshes: rocket / gear / bracket
+/// / rcbeam) renders byte-for-byte identically to the pre-colour
+/// pipeline.
 pub fn triangles_to_vertices(mesh: &valenx_viz::TriangleMesh) -> Vec<Vertex> {
     let mut out = Vec::with_capacity(mesh.triangles.len() * 3);
     for tri in &mesh.triangles {
@@ -772,7 +920,42 @@ pub fn triangles_to_vertices(mesh: &valenx_viz::TriangleMesh) -> Vec<Vertex> {
             out.push(Vertex {
                 position: *v,
                 normal: n,
+                color: METAL_BASE,
             });
+        }
+    }
+    out
+}
+
+/// Build flat-shaded vertex data from a `TriangleMesh`, colouring each
+/// of the surface's vertices from `vertex_colors` (one `[r, g, b]` in
+/// `[0, 1]` per surface vertex, i.e. `3 × mesh.triangles.len()` entries
+/// laid out triangle-major then vertex-within-triangle — the same order
+/// [`triangles_to_vertices`] emits). Used for field overlays such as the
+/// FEM von-Mises ramp.
+///
+/// Falls back to [`METAL_BASE`] for any vertex whose colour is missing
+/// (a `vertex_colors` shorter than the emitted vertex stream), so a
+/// length mismatch degrades gracefully to the plain metal look rather
+/// than panicking or mis-indexing. Callers should pass a slice whose
+/// length equals the vertex count this function would emit; the FEM
+/// producer builds the two in the same loop so they stay aligned.
+pub fn triangles_to_vertices_colored(
+    mesh: &valenx_viz::TriangleMesh,
+    vertex_colors: &[[f32; 3]],
+) -> Vec<Vertex> {
+    let mut out = Vec::with_capacity(mesh.triangles.len() * 3);
+    let mut vi = 0usize;
+    for tri in &mesh.triangles {
+        let n = tri.computed_normal();
+        for v in &tri.vertices {
+            let color = vertex_colors.get(vi).copied().unwrap_or(METAL_BASE);
+            out.push(Vertex {
+                position: *v,
+                normal: n,
+                color,
+            });
+            vi += 1;
         }
     }
     out
@@ -842,9 +1025,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vertex_is_repr_c_and_24_bytes() {
-        // Position (3 × 4) + normal (3 × 4) = 24 bytes, no padding.
-        assert_eq!(std::mem::size_of::<Vertex>(), 24);
+    fn vertex_is_repr_c_and_36_bytes() {
+        // Position (3 × 4) + normal (3 × 4) + colour (3 × 4) = 36 bytes,
+        // no padding. The `vertex_attr_array` offsets (0, 12, 24) and the
+        // stride must agree with this for the GPU to read attributes
+        // correctly.
+        assert_eq!(std::mem::size_of::<Vertex>(), 36);
     }
 
     #[test]
@@ -876,6 +1062,35 @@ mod tests {
         // Each triangle's three vertices share the face normal.
         assert_eq!(verts[0].normal, verts[1].normal);
         assert_eq!(verts[1].normal, verts[2].normal);
+        // Every plain-path vertex carries the metal base colour — this is
+        // what makes the central viewport render identically to before.
+        for v in &verts {
+            assert_eq!(v.color, METAL_BASE);
+        }
+    }
+
+    #[test]
+    fn triangles_to_vertices_colored_assigns_per_vertex_colors() {
+        use valenx_viz::{StlFormat, StlTriangle, TriangleMesh};
+        let mesh = TriangleMesh {
+            format: Some(StlFormat::Ascii),
+            name: None,
+            triangles: vec![StlTriangle {
+                normal: [0.0, 0.0, 1.0],
+                vertices: [[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            }],
+        };
+        let colors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let verts = triangles_to_vertices_colored(&mesh, &colors);
+        assert_eq!(verts.len(), 3);
+        assert_eq!(verts[0].color, [1.0, 0.0, 0.0]);
+        assert_eq!(verts[1].color, [0.0, 1.0, 0.0]);
+        assert_eq!(verts[2].color, [0.0, 0.0, 1.0]);
+        // A short colour slice degrades to the metal base, never panics.
+        let short = triangles_to_vertices_colored(&mesh, &[[0.5, 0.5, 0.5]]);
+        assert_eq!(short[0].color, [0.5, 0.5, 0.5]);
+        assert_eq!(short[1].color, METAL_BASE);
+        assert_eq!(short[2].color, METAL_BASE);
     }
 
     #[test]
@@ -1431,5 +1646,144 @@ mod headless_ui_tests {
             adapter.get_info().backend,
             SIZE * SIZE
         );
+    }
+
+    /// Build one minimal [`Offscreen`] (a 4×4 colour + depth texture, the
+    /// colour view registered with `renderer` to get a real `egui::TextureId`)
+    /// — exactly the shape `ensure_offscreen_for` produces, but tiny. Used by
+    /// the prune test below to populate the offscreen map on a real device
+    /// without running a full render.
+    fn make_test_offscreen(
+        device: &wgpu::Device,
+        renderer: &mut egui_wgpu::Renderer,
+        format: wgpu::TextureFormat,
+    ) -> Offscreen {
+        let extent = wgpu::Extent3d {
+            width: 4,
+            height: 4,
+            depth_or_array_layers: 1,
+        };
+        let color_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("valenx.prune_test.color"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("valenx.prune_test.depth"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let egui_id =
+            renderer.register_native_texture(device, &color_view, wgpu::FilterMode::Linear);
+        Offscreen {
+            size: [4, 4],
+            color_texture,
+            color_view,
+            depth_texture,
+            depth_view,
+            egui_id,
+        }
+    }
+
+    /// FINDING 1 (GPU-memory leak) regression: closing a Workbench+Agent tile
+    /// must reclaim its `"workspace:{n}"` offscreen target. We populate the map
+    /// with `"central"`, `"workspace:1"`, `"workspace:2"`, then prune with a
+    /// live set of `{"central","workspace:1"}` (as if `workspace:2`'s tile was
+    /// closed). `workspace:2` must be gone; `central` (always kept) and the
+    /// still-live `workspace:1` must remain.
+    ///
+    /// Skips cleanly (logs + returns) when no GPU adapter exists — building real
+    /// `egui::TextureId`s + textures needs a device. The pure key-selection
+    /// logic is exercised on every removed entry regardless.
+    #[test]
+    fn prune_offscreens_frees_dead_tiles_keeps_central_and_live() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            force_fallback_adapter: false,
+            compatible_surface: None,
+        }));
+        let Some(adapter) = adapter else {
+            eprintln!(
+                "prune_offscreens_frees_dead_tiles_keeps_central_and_live: no wgpu \
+                 adapter in this environment — skipping (the prune needs a device to \
+                 register the egui texture ids)."
+            );
+            return;
+        };
+        let (device, _queue) = match pollster::block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                label: Some("valenx.prune_test.device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::downlevel_defaults(),
+            },
+            None,
+        )) {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!(
+                    "prune_offscreens_frees_dead_tiles_keeps_central_and_live: \
+                     request_device failed ({e}) — skipping."
+                );
+                return;
+            }
+        };
+
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let mut renderer = egui_wgpu::Renderer::new(&device, format, None, 1);
+
+        // Populate the offscreen map exactly as render_keyed would for the
+        // central viewport plus two Workbench+Agent workspace tiles.
+        let mut offscreens: std::collections::HashMap<String, Offscreen> =
+            std::collections::HashMap::new();
+        for key in ["central", "workspace:1", "workspace:2"] {
+            let os = make_test_offscreen(&device, &mut renderer, format);
+            offscreens.insert(key.to_string(), os);
+        }
+        assert_eq!(offscreens.len(), 3, "test setup: three targets registered");
+
+        // Tile `workspace:2` was closed → it's NOT in the live set. `central`
+        // is deliberately omitted from `live` to prove it's kept unconditionally.
+        let live: std::collections::HashSet<String> = ["central".to_string(), "workspace:1".to_string()]
+                .into_iter()
+                // central is intentionally re-removed to test the always-keep
+                // rule independently of the caller listing it.
+                .filter(|k| k != "central")
+                .collect();
+        assert!(
+            !live.contains("central"),
+            "test: central excluded from live"
+        );
+
+        prune_offscreen_map(&mut offscreens, &live, &mut renderer);
+
+        assert!(
+            !offscreens.contains_key("workspace:2"),
+            "closed tile workspace:2 should have been pruned"
+        );
+        assert!(
+            offscreens.contains_key("workspace:1"),
+            "live tile workspace:1 must remain"
+        );
+        assert!(
+            offscreens.contains_key("central"),
+            "central must always be kept even when absent from the live set"
+        );
+        assert_eq!(offscreens.len(), 2, "exactly one target should be freed");
     }
 }

@@ -1,0 +1,42 @@
+# valenx-app-core — the leaf modules of the desktop app that have NO
+# dependency on the root `ValenxApp` struct or on `eframe::App`
+# dispatch. Splitting these out of `valenx-app` is stage A1 of the
+# crate-split (docs/refactor/2026-06-20-valenx-app-split.md): editing
+# one of these self-contained helpers no longer forces a full
+# `valenx-app` recompile.
+#
+# Pure helpers only for now — theme, tooltips, panel/keyboard help
+# text, mesh histograms, the long-menu scroll wrapper, the workbench
+# header chrome, the `solver`/time-key parsers, and the per-OS
+# state-path math. The big `ValenxApp` struct + its `impl` files move
+# in a LATER slice.
+[package]
+name         = "valenx-app-core"
+description  = "Self-contained leaf modules of the Valenx desktop app (theme, help text, tooltips, mesh histograms, parsers) with no dependency on the ValenxApp struct."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace     = true
+
+[dependencies]
+# egui adapter (theme `Visuals` builder, tooltip/help/histogram/menu
+# rendering, workbench header chrome). eframe re-exports egui.
+eframe     = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+toml       = { workspace = true }
+
+# Canonical types + capped IO (`solver_parse` reads case.toml through
+# the shared project-file cap).
+valenx-core          = { path = "../valenx-core" }
+# `time_format` renders `valenx_fields::TimeKey` snapshot labels.
+valenx-fields        = { path = "../valenx-fields" }
+# `histograms` renders `valenx_mesh::{AspectRatioHistogram, SkewnessHistogram}`.
+valenx-mesh          = { path = "../valenx-mesh" }
+# `theme` resolves the design-token colour palette into egui `Visuals`.
+valenx-design-tokens = { path = "../valenx-design-tokens" }

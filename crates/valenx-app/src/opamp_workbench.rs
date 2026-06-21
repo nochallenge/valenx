@@ -79,18 +79,20 @@ pub fn draw_opamp_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_opamp_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Op-Amp",
-                "native ideal closed-loop op-amp gain & bandwidth · valenx-opamp",
-            ) {
-                app.show_opamp_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_opamp_workbench",
+        "Op-Amp",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native ideal closed-loop op-amp gain & bandwidth · valenx-opamp",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.opamp;
             egui::ScrollArea::vertical()
@@ -156,7 +158,11 @@ pub fn draw_opamp_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_opamp_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.opamp` borrow is
     // released here): build the op-amp's 3-D solid and load it.
@@ -326,6 +332,30 @@ fn load_opamp_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"opamp"}`** product: the canonical
+/// closed-loop op-amp package built as a 3-D solid, paired with the
+/// workbench's own `compute()` readout rows, at a fixed 3/4 camera. Registered
+/// in [`crate::products_registry`]; the per-tool builder the registry
+/// dispatches to. Pure — driven off [`OpAmpWorkbenchState::default`].
+pub(crate) fn opamp_product() -> crate::WorkspaceProduct {
+    let s = OpAmpWorkbenchState::default();
+    let mesh = opamp_solid_mesh(&s).expect("canonical op-amp ⇒ package solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<opamp>/valenx-opamp");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical op-amp ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Op-amp (closed-loop)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

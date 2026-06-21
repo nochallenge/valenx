@@ -62,18 +62,20 @@ pub fn draw_camdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_camdynamics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Cam Dynamics",
-                "native closed-form cam-follower rise kinematics · valenx-camdynamics",
-            ) {
-                app.show_camdynamics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_camdynamics_workbench",
+        "Cam Dynamics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native closed-form cam-follower rise kinematics · valenx-camdynamics",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.camdynamics;
             egui::ScrollArea::vertical()
@@ -126,7 +128,11 @@ pub fn draw_camdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_camdynamics_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.camdynamics` borrow is
     // released here): build the disc cam's 3-D solid and load it.
@@ -288,6 +294,32 @@ fn load_cam_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"camdynamics"}`** product: the
+/// representative disc cam (an extruded disc with a single eccentric lift lobe)
+/// built from the canonical 10 mm cycloidal rise over a 90° interval, paired
+/// with the rise-kinematics readout rows (endpoint displacements, peak velocity
+/// / acceleration), at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`CamDynamicsWorkbenchState::default`].
+pub(crate) fn camdynamics_product() -> crate::WorkspaceProduct {
+    let s = CamDynamicsWorkbenchState::default();
+    let mesh = cam_solid_mesh(&s).expect("canonical cam ⇒ disc-cam solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<cam>/valenx-camdynamics");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical cam ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Disc cam (cycloidal rise)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]
