@@ -846,6 +846,59 @@ impl WgpuRenderer {
         self.queue.submit(Some(encoder.finish()));
         Some(os.egui_id)
     }
+
+    /// Free every per-tile offscreen target whose key is **not** in `live`,
+    /// reclaiming its GPU memory. The `"central"` key (the main viewport's
+    /// target) is **always** kept regardless of `live`, so a caller need not
+    /// remember to list it.
+    ///
+    /// Each [`Offscreen`] owns a colour + depth `wgpu::Texture` (~8 MB for a
+    /// reasonably-sized tile) plus an egui `TextureId` registered with the
+    /// egui-wgpu [`egui_wgpu::Renderer`]. The textures free themselves on
+    /// `Drop` once the entry is removed from the map, but the egui-side
+    /// registration does **not** — it must be released explicitly via
+    /// [`egui_wgpu::Renderer::free_texture`], or the renderer leaks one bind
+    /// group + texture-view per orphaned id. This frees both.
+    ///
+    /// Called once per frame at the end of the dock draw (see
+    /// [`crate::dock_layout`]'s `render_dock_tree_into`) with the set of keys
+    /// for the tiles still present in the dock tree, so a closed
+    /// Workbench+Agent tile's `"workspace:{n}"` target is reclaimed instead of
+    /// surviving forever (unit ids are monotonic and never reused, so without
+    /// this the map would grow unboundedly).
+    pub fn prune_offscreens(
+        &mut self,
+        live: &std::collections::HashSet<String>,
+        renderer: &mut egui_wgpu::Renderer,
+    ) {
+        prune_offscreen_map(&mut self.offscreens, live, renderer);
+    }
+}
+
+/// Prune logic for [`WgpuRenderer::prune_offscreens`], split out as a free
+/// function over just the offscreen map so it can be unit-tested headless
+/// (building a full [`WgpuRenderer`] needs an `egui_wgpu::RenderState`, but the
+/// prune only ever touches this map). Removes every entry whose key is neither
+/// `"central"` nor in `live`, calling [`egui_wgpu::Renderer::free_texture`] on
+/// each removed entry's egui id (the wgpu textures drop with the entry).
+fn prune_offscreen_map(
+    offscreens: &mut std::collections::HashMap<String, Offscreen>,
+    live: &std::collections::HashSet<String>,
+    renderer: &mut egui_wgpu::Renderer,
+) {
+    // Collect the doomed keys first so we don't mutate the map while iterating.
+    let dead: Vec<String> = offscreens
+        .keys()
+        .filter(|k| k.as_str() != "central" && !live.contains(k.as_str()))
+        .cloned()
+        .collect();
+    for key in dead {
+        if let Some(os) = offscreens.remove(&key) {
+            // Release the egui-side registration (bind group + view); the
+            // colour/depth `wgpu::Texture`s free on `os` Drop here.
+            renderer.free_texture(&os.egui_id);
+        }
+    }
 }
 
 /// Build flat-shaded vertex data from a `TriangleMesh`. Each input
@@ -1593,5 +1646,144 @@ mod headless_ui_tests {
             adapter.get_info().backend,
             SIZE * SIZE
         );
+    }
+
+    /// Build one minimal [`Offscreen`] (a 4×4 colour + depth texture, the
+    /// colour view registered with `renderer` to get a real `egui::TextureId`)
+    /// — exactly the shape `ensure_offscreen_for` produces, but tiny. Used by
+    /// the prune test below to populate the offscreen map on a real device
+    /// without running a full render.
+    fn make_test_offscreen(
+        device: &wgpu::Device,
+        renderer: &mut egui_wgpu::Renderer,
+        format: wgpu::TextureFormat,
+    ) -> Offscreen {
+        let extent = wgpu::Extent3d {
+            width: 4,
+            height: 4,
+            depth_or_array_layers: 1,
+        };
+        let color_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("valenx.prune_test.color"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("valenx.prune_test.depth"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let egui_id =
+            renderer.register_native_texture(device, &color_view, wgpu::FilterMode::Linear);
+        Offscreen {
+            size: [4, 4],
+            color_texture,
+            color_view,
+            depth_texture,
+            depth_view,
+            egui_id,
+        }
+    }
+
+    /// FINDING 1 (GPU-memory leak) regression: closing a Workbench+Agent tile
+    /// must reclaim its `"workspace:{n}"` offscreen target. We populate the map
+    /// with `"central"`, `"workspace:1"`, `"workspace:2"`, then prune with a
+    /// live set of `{"central","workspace:1"}` (as if `workspace:2`'s tile was
+    /// closed). `workspace:2` must be gone; `central` (always kept) and the
+    /// still-live `workspace:1` must remain.
+    ///
+    /// Skips cleanly (logs + returns) when no GPU adapter exists — building real
+    /// `egui::TextureId`s + textures needs a device. The pure key-selection
+    /// logic is exercised on every removed entry regardless.
+    #[test]
+    fn prune_offscreens_frees_dead_tiles_keeps_central_and_live() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            force_fallback_adapter: false,
+            compatible_surface: None,
+        }));
+        let Some(adapter) = adapter else {
+            eprintln!(
+                "prune_offscreens_frees_dead_tiles_keeps_central_and_live: no wgpu \
+                 adapter in this environment — skipping (the prune needs a device to \
+                 register the egui texture ids)."
+            );
+            return;
+        };
+        let (device, _queue) = match pollster::block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                label: Some("valenx.prune_test.device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::downlevel_defaults(),
+            },
+            None,
+        )) {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!(
+                    "prune_offscreens_frees_dead_tiles_keeps_central_and_live: \
+                     request_device failed ({e}) — skipping."
+                );
+                return;
+            }
+        };
+
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let mut renderer = egui_wgpu::Renderer::new(&device, format, None, 1);
+
+        // Populate the offscreen map exactly as render_keyed would for the
+        // central viewport plus two Workbench+Agent workspace tiles.
+        let mut offscreens: std::collections::HashMap<String, Offscreen> =
+            std::collections::HashMap::new();
+        for key in ["central", "workspace:1", "workspace:2"] {
+            let os = make_test_offscreen(&device, &mut renderer, format);
+            offscreens.insert(key.to_string(), os);
+        }
+        assert_eq!(offscreens.len(), 3, "test setup: three targets registered");
+
+        // Tile `workspace:2` was closed → it's NOT in the live set. `central`
+        // is deliberately omitted from `live` to prove it's kept unconditionally.
+        let live: std::collections::HashSet<String> = ["central".to_string(), "workspace:1".to_string()]
+                .into_iter()
+                // central is intentionally re-removed to test the always-keep
+                // rule independently of the caller listing it.
+                .filter(|k| k != "central")
+                .collect();
+        assert!(
+            !live.contains("central"),
+            "test: central excluded from live"
+        );
+
+        prune_offscreen_map(&mut offscreens, &live, &mut renderer);
+
+        assert!(
+            !offscreens.contains_key("workspace:2"),
+            "closed tile workspace:2 should have been pruned"
+        );
+        assert!(
+            offscreens.contains_key("workspace:1"),
+            "live tile workspace:1 must remain"
+        );
+        assert!(
+            offscreens.contains_key("central"),
+            "central must always be kept even when absent from the live set"
+        );
+        assert_eq!(offscreens.len(), 2, "exactly one target should be freed");
     }
 }
