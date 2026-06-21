@@ -607,6 +607,16 @@ pub struct ValenxApp {
     /// only genuinely-new appended lines run. Defaults empty (derive). See
     /// [`crate::agent_commands::poll_and_apply_agent_commands`].
     pub agent_cmd_cursor: std::collections::HashMap<usize, usize>,
+    /// Cursor for the **global** (no-`_u`-suffix) agent-command channel
+    /// (`<base-dir>/valenx_chat_cmd.jsonl`): how many lines of that file have
+    /// already been applied. Unlike [`Self::agent_cmd_cursor`] this channel is
+    /// **not** keyed per unit and is polled on every poll regardless of
+    /// [`Self::wb_agent_counter`], so an external agent can `new_unit` to
+    /// bootstrap its own Workbench+Agent unit before any unit exists. `None`
+    /// until the first poll sees the file → starts at line 0 (stale history is
+    /// wiped at launch by [`crate::agent_commands::clear_command_files`]). See
+    /// [`crate::agent_commands::poll_and_apply_agent_commands`].
+    pub agent_global_cmd_cursor: Option<usize>,
     /// Last time the agent-command files were polled, used to throttle the disk
     /// reads to ~1/sec. `None` until the first poll (derive default). See
     /// [`crate::agent_commands`].

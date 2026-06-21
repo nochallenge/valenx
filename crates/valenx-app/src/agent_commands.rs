@@ -55,8 +55,16 @@ use crate::ValenxApp;
 const POLL_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// Fixed stem for a per-channel command file (the `_u{n}.jsonl` suffix is
-/// appended per channel by [`cmd_path`]).
+/// appended per channel by [`cmd_path`]). The **global** channel file (read by
+/// [`apply_global`] for [`NewUnit`](AgentCommand::NewUnit)) is this stem with
+/// **no** suffix: `<base-dir>/valenx_chat_cmd.jsonl` (see [`global_cmd_path`]).
 const CMD_STEM: &str = "valenx_chat_cmd";
+
+/// Upper bound on how many Workbench+Agent units the global
+/// [`NewUnit`](AgentCommand::NewUnit) command will open, so a runaway / hostile
+/// command file cannot spawn unbounded panes. A `new_unit` arriving once
+/// [`crate::ValenxApp::wb_agent_counter`] has reached this is ignored.
+const MAX_UNITS: usize = 200;
 
 /// One command an external agent can append to its channel's command file to
 /// drive valenx. **Internally tagged** on `"cmd"`, so each line is a flat
@@ -182,6 +190,46 @@ pub enum AgentCommand {
         /// `"dna"` → the DNA construct map; other values are skipped.
         kind: String,
     },
+    /// **Open a brand-new "Workbench + Agent" unit** and (optionally) build a
+    /// product into it — entirely from the file, *no UI click*. This is the
+    /// **bootstrap** command an external agent uses to mint its own tab before
+    /// any unit exists, so it is honoured **only on the global channel**
+    /// (`<base-dir>/valenx_chat_cmd.jsonl`, no `_u` suffix) by the `apply_global`
+    /// handler; appearing on a per-unit file it is parsed but ignored (a
+    /// per-unit channel already *is* a unit). Drives the very same path the
+    /// "+ Workbench+Agent → New row at bottom" button uses
+    /// (`ValenxApp::add_workbench_agent_pair_at` with `UnitAddTarget::NewRowBottom`),
+    /// which bumps [`crate::ValenxApp::wb_agent_counter`] to the new unit `n`.
+    ///
+    /// Then, on that new unit `n`:
+    /// - if `kind` is set, the named product is rendered into the unit's
+    ///   `workspace:<n>` tile via the **same** `show_3d` / `show_2d` reducer
+    ///   paths a running agent would use (registry mesh, the `dna` text card,
+    ///   or a 2-D drawing — unknown kinds render nothing, no panic);
+    /// - if `title` is set, it overrides the rendered product's heading (or, if
+    ///   no product was rendered, a title-only card is shown so the workspace
+    ///   names itself);
+    /// - if `note` is set, it is posted to unit `n`'s chat feed (the same
+    ///   `append_feed_note` path the [`Note`](AgentCommand::Note) command uses)
+    ///   so the agent's narration shows up;
+    /// - a `"Unit <n> ready"` confirmation note is **always** posted so the
+    ///   agent can detect the unit opened.
+    ///
+    /// Bounded: refused once the `MAX_UNITS` cap of units exist, so a runaway
+    /// command file can't spawn unbounded panes.
+    NewUnit {
+        /// Optional product to build into the new unit, by the same id
+        /// `show_3d` / `show_2d` accept (e.g. `"rocket"`, `"gear"`, `"rcbeam"`,
+        /// `"dna"`). Absent → an empty unit.
+        #[serde(default)]
+        kind: Option<String>,
+        /// Optional heading for the unit's workspace product card.
+        #[serde(default)]
+        title: Option<String>,
+        /// Optional narration line posted to the new unit's chat feed.
+        #[serde(default)]
+        note: Option<String>,
+    },
 }
 
 /// The per-channel **command file** path for agent channel `n`:
@@ -200,6 +248,23 @@ pub fn cmd_path(app: &ValenxApp, n: usize) -> PathBuf {
         .map(Path::to_path_buf)
         .unwrap_or_else(std::env::temp_dir);
     base_dir.join(format!("{CMD_STEM}_u{n}.jsonl"))
+}
+
+/// The **global** command-channel file: `<base-dir>/valenx_chat_cmd.jsonl` (the
+/// `valenx_chat_cmd` stem with **no** `_u{n}` suffix), in the same base
+/// directory as the per-unit channels ([`cmd_path`]). Polled on **every** poll
+/// regardless of
+/// [`crate::ValenxApp::wb_agent_counter`] so an external agent can append a
+/// [`NewUnit`](AgentCommand::NewUnit) to open its own unit before any unit
+/// exists — the entry point for agent-per-tab product generation.
+pub fn global_cmd_path(app: &ValenxApp) -> PathBuf {
+    let base_dir: PathBuf = app
+        .assistant
+        .inbox_path()
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(std::env::temp_dir);
+    base_dir.join(format!("{CMD_STEM}.jsonl"))
 }
 
 /// **Wipe stale command files at launch.** Deletes every
@@ -226,13 +291,17 @@ pub fn clear_command_files(app: &ValenxApp) {
         return; // dir missing / unreadable → nothing to clean
     };
     let prefix = format!("{CMD_STEM}_u");
+    // The global (no-`_u`-suffix) channel file is wiped too, so a stale
+    // `new_unit` from a previous run is never replayed at launch.
+    let global_name = format!("{CMD_STEM}.jsonl");
     for entry in entries.flatten() {
         let path = entry.path();
-        // Match files named `valenx_chat_cmd_u*.jsonl`.
+        // Match the per-unit `valenx_chat_cmd_u*.jsonl` files and the global
+        // `valenx_chat_cmd.jsonl` file.
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if name.starts_with(&prefix) && name.ends_with(".jsonl") {
+        if (name.starts_with(&prefix) && name.ends_with(".jsonl")) || name == global_name {
             // Best-effort delete; a still-open handle elsewhere just leaves it.
             let _ = std::fs::remove_file(&path);
         }
@@ -276,6 +345,41 @@ pub fn poll_and_apply_agent_commands(app: &mut ValenxApp) {
     }
     app.last_agent_poll = Some(now);
 
+    // GLOBAL channel first: read `<base-dir>/valenx_chat_cmd.jsonl` (no `_u`
+    // suffix) on EVERY poll, NOT gated on `wb_agent_counter`, so an external
+    // agent can `new_unit` to bootstrap its own Workbench+Agent unit before any
+    // unit exists. Mirrors the per-unit append-only cursor read below, but with
+    // its own persistent cursor `agent_global_cmd_cursor` and dispatch through
+    // `apply_global`.
+    {
+        let path = global_cmd_path(app);
+        if let Some(body) = read_cmd_file(&path) {
+            let total = line_count(&body);
+            // First poll that sees the file → start at line 0 so EVERY appended
+            // command runs (stale history was wiped by `clear_command_files` at
+            // launch). Thereafter only genuinely-new lines run; clamp in case
+            // the file was truncated.
+            let start = match app.agent_global_cmd_cursor {
+                Some(c) => c.min(total),
+                None => 0,
+            };
+            if start < total {
+                for line in body
+                    .lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty())
+                    .skip(start)
+                {
+                    if let Ok(cmd) = serde_json::from_str::<AgentCommand>(line) {
+                        apply_global(app, cmd);
+                    }
+                    // Unparseable line → skip safely.
+                }
+                app.agent_global_cmd_cursor = Some(total);
+            }
+        }
+    }
+
     // Scan every channel handed out so far (1..=wb_agent_counter). Channels
     // with no command file are skipped cheaply.
     let highest = app.wb_agent_counter;
@@ -315,6 +419,99 @@ pub fn poll_and_apply_agent_commands(app: &mut ValenxApp) {
         // Advance the cursor past everything we just saw.
         app.agent_cmd_cursor.insert(n, total);
     }
+}
+
+/// Apply **one** command from the **global** channel
+/// (`<base-dir>/valenx_chat_cmd.jsonl`). Only [`NewUnit`](AgentCommand::NewUnit)
+/// is meaningful here — it opens a fresh Workbench+Agent unit (the bootstrap an
+/// agent needs before any unit exists) and optionally builds a product into it.
+/// Every other variant is a per-*unit* command and is ignored on the global
+/// channel (it has no unit to act on); a malformed line never reaches here (the
+/// poll loop skips unparseable lines). Like [`apply`], every branch is a
+/// no-op-on-bad-input rather than a panic.
+fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
+    let AgentCommand::NewUnit { kind, title, note } = cmd else {
+        // Non-`new_unit` commands are per-unit; the global channel has no unit
+        // to target, so they are ignored here.
+        return;
+    };
+
+    // Bound the unit count so a runaway / hostile command file can't spawn
+    // unbounded panes.
+    if app.wb_agent_counter >= MAX_UNITS {
+        return;
+    }
+
+    // Open the unit through the SAME path the "+ Workbench+Agent → New row at
+    // bottom" button uses; this bumps `wb_agent_counter` to the new unit `n`.
+    app.add_workbench_agent_pair_at(crate::dock_layout::UnitAddTarget::NewRowBottom);
+    let n = app.wb_agent_counter;
+
+    // If a product kind was named, render it into the new unit's `workspace:<n>`
+    // tile by delegating to the SAME reducer paths a running agent would use:
+    // first the `show_3d` path (registry meshes + the `dna` text card), and if
+    // that produced nothing, the `show_2d` path (the 2-D-only drawings). An
+    // unknown kind renders nothing — a safe no-op, like the reducer elsewhere.
+    if let Some(kind) = kind {
+        apply(
+            app,
+            n,
+            AgentCommand::Show3d {
+                n: None,
+                kind: kind.clone(),
+            },
+        );
+        if !app.workspace_products.contains_key(&n) {
+            apply(app, n, AgentCommand::Show2d { n: None, kind });
+        }
+    }
+
+    // If a title was given, use it as the workspace card heading: override a
+    // rendered product's title, or (when no product rendered) show a title-only
+    // card so the workspace names itself.
+    if let Some(title) = title {
+        let trimmed = title.trim();
+        if !trimmed.is_empty() {
+            match app.workspace_products.get_mut(&n) {
+                Some(product) => product.title = trimmed.to_string(),
+                None => {
+                    app.workspace_products.insert(
+                        n,
+                        crate::WorkspaceProduct {
+                            title: trimmed.to_string(),
+                            lines: Vec::new(),
+                            mesh: None,
+                            vertex_colors: None,
+                            camera: valenx_viz::OrbitCamera::default(),
+                            kind2d: None,
+                            last_export: None,
+                            image: None,
+                            image_texture: None,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    // Post the agent's narration (if any) to the new unit's chat feed, through
+    // the same path the `note` command uses.
+    if let Some(note) = note {
+        let trimmed = note.trim();
+        if !trimmed.is_empty() {
+            crate::assistant_workbench::append_feed_note(app, n, "Claude", trimmed, "build");
+        }
+    }
+
+    // ALWAYS confirm the unit opened, so an agent polling the feed can detect
+    // its new unit is live.
+    crate::assistant_workbench::append_feed_note(
+        app,
+        n,
+        "Claude",
+        &format!("Unit {n} ready"),
+        "ship",
+    );
 }
 
 /// Apply **one** [`AgentCommand`] for channel `n` through existing vetted
@@ -517,6 +714,11 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     },
                 );
             }
+        }
+        AgentCommand::NewUnit { .. } => {
+            // `new_unit` is a **global-channel bootstrap** command (it opens a
+            // brand-new unit), handled by `apply_global`. On a per-unit channel
+            // there is no new unit to open, so it is a deliberate no-op here.
         }
     }
 }
@@ -1412,6 +1614,268 @@ mod tests {
         assert!(!cmd2.exists(), "channel-2 command file deleted");
         assert!(keep.exists(), "unrelated file left intact");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_command_files_also_removes_the_global_channel_file() {
+        // The global (no-`_u`-suffix) channel file `valenx_chat_cmd.jsonl` is
+        // wiped at launch too, so a stale `new_unit` is never replayed.
+        let dir =
+            std::env::temp_dir().join(format!("valenx_clear_global_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let global = dir.join(format!("{CMD_STEM}.jsonl"));
+        let per_unit = dir.join(format!("{CMD_STEM}_u1.jsonl"));
+        std::fs::write(&global, "{\"cmd\":\"new_unit\"}\n").unwrap();
+        std::fs::write(&per_unit, "{\"cmd\":\"note\",\"text\":\"x\"}\n").unwrap();
+
+        let mut app = ValenxApp::default();
+        app.assistant
+            .set_inbox_path_for_test(dir.join("assistant_inbox.jsonl"));
+        assert_eq!(
+            global_cmd_path(&app),
+            global,
+            "test base dir wired up correctly"
+        );
+
+        clear_command_files(&app);
+
+        assert!(!global.exists(), "global channel file deleted");
+        assert!(!per_unit.exists(), "per-unit channel file deleted");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn new_unit_parses_bare_and_rich_wire_forms() {
+        // The bootstrap command parses from its global-channel wire form: the
+        // bare `{"cmd":"new_unit"}` (all fields default to None) and the rich
+        // `{"cmd":"new_unit","kind":"rocket","title":"Rocket"}`.
+        let bare: AgentCommand = serde_json::from_str(r#"{"cmd":"new_unit"}"#).unwrap();
+        assert_eq!(
+            bare,
+            AgentCommand::NewUnit {
+                kind: None,
+                title: None,
+                note: None,
+            }
+        );
+        let rich: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"new_unit","kind":"rocket","title":"Rocket"}"#).unwrap();
+        assert_eq!(
+            rich,
+            AgentCommand::NewUnit {
+                kind: Some("rocket".into()),
+                title: Some("Rocket".into()),
+                note: None,
+            }
+        );
+        // The full form with a narration note parses too.
+        let full: AgentCommand = serde_json::from_str(
+            r#"{"cmd":"new_unit","kind":"gear","title":"Gear train","note":"Designing the reducer…"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            full,
+            AgentCommand::NewUnit {
+                kind: Some("gear".into()),
+                title: Some("Gear train".into()),
+                note: Some("Designing the reducer…".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn new_unit_increments_the_unit_counter_by_one() {
+        // Applying a bare `new_unit` through the global handler opens exactly one
+        // unit (the counter goes up by 1) and turns the dock on, exactly as the
+        // "+ Workbench+Agent → New row at bottom" button would.
+        let mut app = ValenxApp::default();
+        assert_eq!(app.wb_agent_counter, 0);
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: None,
+                title: None,
+                note: None,
+            },
+        );
+        assert_eq!(app.wb_agent_counter, 1, "exactly one unit opened");
+        assert!(app.dock_enabled, "the dock is turned on for the unit grid");
+        // A bare new_unit (no kind, no title) renders no workspace product.
+        assert!(!app.workspace_products.contains_key(&1));
+    }
+
+    #[test]
+    fn new_unit_with_kind_renders_a_product_into_the_new_unit() {
+        // `new_unit` with `kind:"rocket"` opens unit 1 AND publishes the rocket
+        // product into `workspace_products[&1]` via the same show_3d path a
+        // running agent uses (a live LV-1 mesh).
+        let mut app = ValenxApp::default();
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: Some("rocket".into()),
+                title: None,
+                note: None,
+            },
+        );
+        assert_eq!(app.wb_agent_counter, 1);
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("new_unit{kind:rocket} renders a product into the new unit");
+        let mesh = product
+            .mesh
+            .as_ref()
+            .expect("the rocket kind attaches a live mesh");
+        assert!(mesh.path.to_string_lossy().contains("valenx-lv1"));
+    }
+
+    #[test]
+    fn new_unit_title_overrides_the_rendered_product_heading() {
+        // When both `kind` and `title` are set, the product renders and its
+        // heading is replaced by the caller's title.
+        let mut app = ValenxApp::default();
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: Some("rocket".into()),
+                title: Some("LV-1 Heavy".into()),
+                note: None,
+            },
+        );
+        let product = app.workspace_products.get(&1).expect("product set");
+        assert_eq!(product.title, "LV-1 Heavy", "title overrode the heading");
+        assert!(product.mesh.is_some(), "the rocket mesh still rendered");
+    }
+
+    #[test]
+    fn new_unit_title_only_shows_a_named_card() {
+        // A `title` with no `kind` shows a title-only card so the workspace
+        // names itself even with nothing built yet.
+        let mut app = ValenxApp::default();
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: None,
+                title: Some("Empty bench".into()),
+                note: None,
+            },
+        );
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("a title-only card is shown");
+        assert_eq!(product.title, "Empty bench");
+        assert!(product.mesh.is_none() && product.lines.is_empty());
+    }
+
+    #[test]
+    fn new_unit_is_bounded_at_max_units() {
+        // Once `MAX_UNITS` units exist, a further `new_unit` is refused (the
+        // counter does not advance) so a runaway file can't spawn unbounded
+        // panes.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = MAX_UNITS;
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: None,
+                title: None,
+                note: None,
+            },
+        );
+        assert_eq!(
+            app.wb_agent_counter, MAX_UNITS,
+            "new_unit refused at the cap"
+        );
+    }
+
+    #[test]
+    fn new_unit_on_a_per_unit_channel_is_a_no_op() {
+        // `new_unit` is global-only: routed through the per-unit `apply` it does
+        // nothing (no extra unit, no product), since a per-unit channel already
+        // is a unit.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 3;
+        apply(
+            &mut app,
+            3,
+            AgentCommand::NewUnit {
+                kind: Some("rocket".into()),
+                title: Some("x".into()),
+                note: None,
+            },
+        );
+        assert_eq!(app.wb_agent_counter, 3, "per-unit new_unit opens no unit");
+        assert!(app.workspace_products.is_empty());
+    }
+
+    #[test]
+    fn global_poll_opens_a_unit_and_builds_a_product_from_the_file() {
+        // END-TO-END through the REAL poll path: an agent appends a rich
+        // `new_unit` line to the GLOBAL command file (no unit exists yet,
+        // wb_agent_counter == 0). The first poll reads the global channel,
+        // opens unit 1, renders the gear product into it, applies the title,
+        // and advances the global cursor — all from the file, no UI click.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "global_newunit");
+        let path = global_cmd_path(&app);
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"new_unit\",\"kind\":\"gear\",\"title\":\"Reducer\",\"note\":\"building\"}\n",
+        )
+        .unwrap();
+
+        assert_eq!(app.wb_agent_counter, 0, "no unit before the poll");
+        assert!(app.agent_global_cmd_cursor.is_none());
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(app.wb_agent_counter, 1, "the global new_unit opened unit 1");
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("the gear product was built into the new unit");
+        // The title overrode the gear product's heading, and the gear mesh is live.
+        assert_eq!(product.title, "Reducer");
+        assert!(product.mesh.is_some(), "gear kind attaches a live mesh");
+        // The global cursor advanced past the one applied line.
+        assert_eq!(app.agent_global_cmd_cursor, Some(1));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn global_poll_runs_only_newly_appended_new_units() {
+        // The global channel mirrors the per-unit append-only semantics: the
+        // first poll runs the first line (cursor 0→1), then a later append runs
+        // ONLY the new line (cursor 1→2), so two units open in total — never a
+        // replay of the first.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "global_onlynew");
+        let path = global_cmd_path(&app);
+        std::fs::write(&path, "{\"cmd\":\"new_unit\"}\n").unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(app.wb_agent_counter, 1, "first new_unit opened one unit");
+        assert_eq!(app.agent_global_cmd_cursor, Some(1));
+
+        use std::io::Write as _;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(f, "{{\"cmd\":\"new_unit\"}}").unwrap();
+        app.last_agent_poll = None; // bypass the 1s throttle for the test
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(
+            app.wb_agent_counter, 2,
+            "only the newly-appended new_unit ran the 2nd time (no replay)"
+        );
+        assert_eq!(app.agent_global_cmd_cursor, Some(2));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
