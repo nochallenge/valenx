@@ -242,43 +242,97 @@ fn render_workspace_body(
 ) {
     ui.label(egui::RichText::new(format!("Workspace {n}")).weak());
     ui.add_space(4.0);
-    // Look up this unit's posted result by its numeric id (the same `n` the
+    // This unit's posted result is keyed by its numeric id (the same `n` the
     // agent bridge uses). A non-numeric suffix (shouldn't happen for ids we
-    // insert) simply finds nothing → placeholder.
-    let product = n
-        .parse::<usize>()
-        .ok()
-        .and_then(|idx| app.workspace_products.get(&idx));
+    // insert) simply finds nothing → placeholder. We deliberately do NOT bind
+    // the product to a long-lived immutable borrow here: the 3-D branch below
+    // mutates the product's camera (`get_mut`), so the lookups are kept short.
+    let idx = n.parse::<usize>().ok();
 
     // A live 3-D product (a `show_3d` command set `mesh: Some`) renders as an
-    // actual lit viewport — same look as the central viewport — at the
-    // product's fixed 3/4 camera, provided the wgpu backend is up. The tile id
-    // keys a dedicated per-tile offscreen target so it never aliases the
-    // central viewport's or another tile's. If anything required is missing
-    // (no GPU ctx, no mesh) it falls through to the text card / placeholder.
-    let has_3d = product.map(|p| p.mesh.is_some()).unwrap_or(false);
+    // actual lit viewport — same look as the central viewport. The tile id keys
+    // a dedicated per-tile offscreen target so it never aliases the central
+    // viewport's or another tile's. If anything required is missing (no GPU
+    // ctx, no mesh) it falls through to the text card / placeholder.
+    let has_3d = idx
+        .and_then(|i| app.workspace_products.get(&i))
+        .map(|p| p.mesh.is_some())
+        .unwrap_or(false);
     if has_3d {
-        if let (Some(product), Some(renderer), Some(rs)) =
-            (product, wgpu_renderer.as_mut(), render_state)
+        // Borrow plan: the offscreen render reads the product's mesh through an
+        // immutable `app.workspace_products.get(..)` borrow, but afterwards we
+        // mutate that same product's camera via `get_mut`. The two borrows can't
+        // overlap, so:
+        //   1. clone the camera into an owned `camera` (it's `Clone`, not
+        //      `Copy`) — the value we orbit / zoom / frame this frame;
+        //   2. run the render inside a scoped immutable borrow of the product
+        //      (for its mesh), evaluating to the *owned* `Response` + AABB so no
+        //      borrow escapes the block;
+        //   3. apply the input deltas to the owned `camera`, then re-borrow
+        //      mutably (`get_mut`) and commit it back.
+        // `wgpu_renderer` / `render_state` were lifted out of `self` (see the
+        // `DockBehavior` doc), so they don't alias `workspace_products` — the
+        // mesh borrow and the renderer `&mut` coexist fine.
+        let camera = idx
+            .and_then(|i| app.workspace_products.get(&i))
+            .map(|p| p.camera.clone());
+        if let (Some(mut camera), Some(renderer), Some(rs), Some(i)) =
+            (camera, wgpu_renderer.as_mut(), render_state, idx)
         {
-            if let Some(mesh) = product.mesh.as_ref() {
-                let tile_key = format!("workspace:{n}");
-                let drew = render_tile_mesh_3d(
+            let tile_key = format!("workspace:{n}");
+            // Scope the mesh borrow to the render call only; it yields owned
+            // values (`Response`, AABB) that outlive the borrow.
+            let drawn = match app.workspace_products.get(&i).and_then(|p| p.mesh.as_ref()) {
+                Some(mesh) => render_tile_mesh_3d(
                     ui,
                     &tile_key,
                     mesh,
-                    &product.camera,
+                    &camera,
                     renderer,
                     rs,
                     pixels_per_point,
-                );
-                if drew {
-                    return;
+                ),
+                None => None,
+            };
+            if let Some((response, aabb)) = drawn {
+                // Mirror the central viewport's input blocks (viewport.rs::show)
+                // against this pane's camera clone, then commit it back.
+                let mut changed = false;
+                if response.dragged_by(egui::PointerButton::Primary)
+                    || response.dragged_by(egui::PointerButton::Middle)
+                {
+                    let delta = response.drag_delta();
+                    camera.orbit(delta.x * 0.5, -delta.y * 0.5);
+                    changed = true;
                 }
+                if response.hovered() {
+                    let scroll = ui.input(|i| i.raw_scroll_delta.y);
+                    if scroll.abs() > f32::EPSILON {
+                        camera.zoom(scroll * 0.01);
+                        changed = true;
+                    }
+                }
+                if response.double_clicked() {
+                    if let Some((min, max)) = aabb {
+                        camera.frame_bounds(min, max);
+                        changed = true;
+                    }
+                }
+                if changed {
+                    if let Some(p) = app.workspace_products.get_mut(&i) {
+                        p.camera = camera;
+                    }
+                    ui.ctx().request_repaint();
+                }
+                return;
             }
         }
     }
 
+    // Fall-through: text card / placeholder. Re-borrow the product fresh (a
+    // short immutable borrow) — it was deliberately not held across the 3-D
+    // branch's camera mutation above.
+    let product = idx.and_then(|i| app.workspace_products.get(&i));
     egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::same(8.0))
         .show(ui, |ui| {
@@ -308,15 +362,21 @@ fn render_workspace_body(
         });
 }
 
-/// Render `mesh` as a lit 3-D view filling the tile's remaining rect, from the
-/// fixed `camera`, into the per-tile offscreen target keyed by `tile_key`, and
-/// blit it. Mirrors [`crate::viewport`]'s `render_wgpu_scene` (the central
+/// An axis-aligned bounding box as `(min, max)` corner coordinates — the shape
+/// [`crate::viewport::mesh_aabb`] returns, used here for double-click-to-frame.
+type MeshAabb = ([f32; 3], [f32; 3]);
+
+/// Render `mesh` as a lit 3-D view filling the tile's remaining rect, from
+/// `camera`, into the per-tile offscreen target keyed by `tile_key`, and blit
+/// it. Mirrors [`crate::viewport`]'s `render_wgpu_scene` (the central
 /// viewport's path) but: keys its own offscreen target (so two viewports per
-/// frame don't alias), allocates a hover-only rect (Stage 1 — no per-tile
-/// orbit yet), and draws **grid-less** (background + shaded mesh only) for a
-/// clean, cheap mini-view. Returns `true` if it drew (so the caller skips the
-/// text-card fallback), `false` if the rect was degenerate or the GPU returned
-/// no texture.
+/// frame don't alias) and draws **grid-less** (background + shaded mesh only)
+/// for a clean, cheap mini-view. Allocates a `click_and_drag` rect (Stage 2 —
+/// the caller reads the returned [`egui::Response`] to orbit / zoom / frame
+/// this pane's own camera). Returns `Some((response, aabb))` if it drew — the
+/// AABB is the mesh's bounds for double-click-to-frame — or `None` if the rect
+/// was degenerate or the GPU returned no texture (caller falls back to the
+/// text card).
 fn render_tile_mesh_3d(
     ui: &mut egui::Ui,
     tile_key: &str,
@@ -325,28 +385,27 @@ fn render_tile_mesh_3d(
     renderer: &mut crate::wgpu_renderer::WgpuRenderer,
     render_state: &egui_wgpu::RenderState,
     pixels_per_point: f32,
-) -> bool {
+) -> Option<(egui::Response, Option<MeshAabb>)> {
     // Build the shaded surface for the mesh's surface elements (Tri3 / Quad4).
     // A volumetric-only mesh yields nothing → fall back to the card.
-    let Some(surface) = crate::viewport::mesh_to_triangle_surface(&mesh.mesh) else {
-        return false;
-    };
+    let surface = crate::viewport::mesh_to_triangle_surface(&mesh.mesh)?;
     let vertices = crate::wgpu_renderer::triangles_to_vertices(&surface);
     if vertices.is_empty() {
-        return false;
+        return None;
     }
 
-    // Take the whole remaining tile rect; hover-only sense (no drag → no orbit
-    // this stage).
+    // Take the whole remaining tile rect; `click_and_drag` so the caller can
+    // orbit (drag), zoom (scroll while hovered) and frame (double-click) this
+    // pane's camera — same interaction model as the central viewport.
     let avail = ui.available_size();
-    let (rect, _response) = ui.allocate_exact_size(
+    let (rect, response) = ui.allocate_exact_size(
         egui::vec2(avail.x.max(16.0), avail.y.max(16.0)),
-        egui::Sense::hover(),
+        egui::Sense::click_and_drag(),
     );
     let w_logical = rect.width();
     let h_logical = rect.height();
     if w_logical < 1.0 || h_logical < 1.0 {
-        return false;
+        return None;
     }
     let ppp = pixels_per_point.max(0.5);
     let size_px = [(w_logical * ppp) as u32, (h_logical * ppp) as u32];
@@ -380,13 +439,13 @@ fn render_tile_mesh_3d(
     );
     drop(render_guard);
 
-    let Some(texture_id) = texture_id else {
-        return false;
-    };
+    let texture_id = texture_id?;
     let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
     ui.painter_at(rect)
         .image(texture_id, rect, uv, egui::Color32::WHITE);
-    true
+    // Mesh bounds for the caller's double-click-to-frame.
+    let aabb = crate::viewport::mesh_aabb(&mesh.mesh);
+    Some((response, aabb))
 }
 
 /// After the tree has been drawn, drain the per-workbench deferred requests
@@ -1552,5 +1611,42 @@ mod tests {
         app.add_workbench_agent_pair_at(UnitAddTarget::RowEnd(0));
         assert_eq!(app.dock_grid_rows(), vec![2, 1]);
         assert_eq!(pane_count(app.dock_tree.as_ref().unwrap()), 6);
+    }
+
+    #[test]
+    fn pane_camera_orbit_zoom_frame_mutate_the_camera() {
+        // The workspace pane (render_tile_mesh_3d caller) applies exactly the
+        // central viewport's input math to its *own* camera clone: orbit by
+        // `drag_delta * 0.5` (y inverted), zoom by `scroll * 0.01`, and frame to
+        // a mesh AABB on double-click. A headless egui Response can't be
+        // synthesised here, so this guards the underlying mutations the caller
+        // performs — that each genuinely moves the camera (no silent no-op).
+        let mut camera = valenx_viz::OrbitCamera::default();
+        let before = camera.clone();
+
+        // Orbit: a primary/middle drag of (+10, +6) px → orbit(+5.0, -3.0).
+        camera.orbit(10.0 * 0.5, -6.0 * 0.5);
+        assert!(
+            (camera.azimuth_deg - before.azimuth_deg).abs() > f32::EPSILON,
+            "orbit should change azimuth"
+        );
+        assert!(
+            (camera.elevation_deg - before.elevation_deg).abs() > f32::EPSILON,
+            "orbit should change elevation"
+        );
+
+        // Zoom: a scroll of +40 → zoom(0.4), pulling the camera closer.
+        let dist_before = camera.distance;
+        camera.zoom(40.0 * 0.01);
+        assert!(
+            camera.distance < dist_before,
+            "scroll-in should reduce distance"
+        );
+
+        // Frame: double-click frames the mesh AABB → target moves to its center.
+        camera.frame_bounds([0.0, 0.0, 0.0], [4.0, 4.0, 4.0]);
+        assert!((camera.target.x - 2.0).abs() < 1e-4);
+        assert!((camera.target.y - 2.0).abs() < 1e-4);
+        assert!((camera.target.z - 2.0).abs() < 1e-4);
     }
 }

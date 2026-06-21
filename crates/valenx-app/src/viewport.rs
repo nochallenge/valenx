@@ -1272,7 +1272,7 @@ fn edges_for(et: ElementType) -> &'static [(usize, usize)] {
 /// Axis-aligned bounding box over a canonical mesh's node
 /// coordinates. Mirrors `lib::mesh_bounding_box` locally so the
 /// viewport module doesn't need to import from the parent.
-fn mesh_aabb(mesh: &Mesh) -> Option<([f32; 3], [f32; 3])> {
+pub(crate) fn mesh_aabb(mesh: &Mesh) -> Option<([f32; 3], [f32; 3])> {
     let first = mesh.nodes.first()?;
     let mut min = [first.x as f32, first.y as f32, first.z as f32];
     let mut max = min;
