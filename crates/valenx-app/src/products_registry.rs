@@ -122,6 +122,103 @@ pub(crate) fn lines_from_readout(readout: &str) -> Vec<String> {
         .collect()
 }
 
+/// Promote a [`valenx_viz::TriangleMesh`] triangle soup into a
+/// [`valenx_mesh::Mesh`] of one `Tri3` element **per source triangle, in the
+/// source order**, tagged `id`.
+///
+/// Used by the molecular-geometry product builders (`molecule` / `reactdyn`),
+/// whose canonical geometry comes out of
+/// [`crate::genetics::molecule_view::ball_and_stick`] as a `TriangleMesh`
+/// rather than a `valenx_mesh::Mesh`. Keeping one element per source triangle
+/// **in order** is what lets a paired per-triangle colour list expand cleanly to
+/// the triangle-major per-vertex `vertex_colors` the tile renderer expects:
+/// [`crate::viewport::mesh_to_triangle_surface`] re-emits this mesh's `Tri3`
+/// elements in the same order, so triangle *k* of the returned mesh is triangle
+/// *k* of the input (see [`per_triangle_to_vertex_colors`]). Vertices are not
+/// welded — each triangle owns three fresh nodes — which matches how the source
+/// soup is laid out and keeps the index-alignment trivial.
+pub(crate) fn mesh_from_triangle_soup(
+    soup: &valenx_viz::TriangleMesh,
+    id: &str,
+) -> valenx_mesh::Mesh {
+    let mut nodes: Vec<nalgebra::Vector3<f64>> = Vec::with_capacity(soup.triangles.len() * 3);
+    let mut conn: Vec<u32> = Vec::with_capacity(soup.triangles.len() * 3);
+    for tri in &soup.triangles {
+        for v in &tri.vertices {
+            conn.push(nodes.len() as u32);
+            nodes.push(nalgebra::Vector3::new(
+                v[0] as f64,
+                v[1] as f64,
+                v[2] as f64,
+            ));
+        }
+    }
+    let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+    block.connectivity = conn;
+    let mut mesh = valenx_mesh::Mesh::new(id);
+    mesh.nodes = nodes;
+    mesh.element_blocks.push(block);
+    mesh.recompute_stats();
+    mesh
+}
+
+/// Expand a **per-triangle** colour list (one `[r, g, b]` per triangle, in the
+/// triangle order of a [`mesh_from_triangle_soup`] mesh) into the triangle-major
+/// **per-vertex** `vertex_colors` a [`WorkspaceProduct`] carries: each
+/// triangle's colour is repeated three times (once per corner), in the same
+/// order [`crate::wgpu_renderer::triangles_to_vertices`] walks the surface.
+///
+/// The molecular builders pair this with [`mesh_from_triangle_soup`] (one
+/// element per source triangle, in order) so the returned vec lines up 1:1 with
+/// the renderer's emitted surface vertices.
+pub(crate) fn per_triangle_to_vertex_colors(per_tri: &[[f32; 3]]) -> Vec<[f32; 3]> {
+    let mut out = Vec::with_capacity(per_tri.len() * 3);
+    for &c in per_tri {
+        out.push(c);
+        out.push(c);
+        out.push(c);
+    }
+    out
+}
+
+/// Build the triangle-major **per-vertex** `vertex_colors` for a `Tri3`
+/// `valenx_mesh::Mesh` whose nodes carry a scalar field (one value per node),
+/// mapped through the shared `valenx_fields` cool-to-warm divergent ramp over
+/// `[min, max]`.
+///
+/// Walks the mesh's `Tri3` elements in the exact order
+/// [`crate::viewport::mesh_to_triangle_surface`] re-emits them (block-major,
+/// then the three corners of each triangle) so the result is index-aligned with
+/// the surface vertices [`crate::wgpu_renderer::triangles_to_vertices_colored`]
+/// draws — i.e. its length is `3 × (number of Tri3 elements)`. A node index past
+/// the field length, or a non-finite value, degrades that corner to mid-ramp
+/// rather than panicking. Used by the aero product (per-face `Cp` painted on the
+/// voxelized body shell).
+pub(crate) fn node_field_to_vertex_colors(
+    mesh: &valenx_mesh::Mesh,
+    field: &[f64],
+    min: f64,
+    max: f64,
+) -> Vec<[f32; 3]> {
+    let to_rgb = |node: u32| -> [f32; 3] {
+        let v = field.get(node as usize).copied().unwrap_or(f64::NAN);
+        let v = if v.is_finite() { v } else { 0.5 * (min + max) };
+        let [r, g, b] = valenx_fields::colormap::cool_to_warm_in_range(v, min, max);
+        [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0]
+    };
+    let mut out = Vec::new();
+    for block in &mesh.element_blocks {
+        if block.element_type == valenx_mesh::ElementType::Tri3 {
+            for f in block.connectivity.chunks_exact(3) {
+                out.push(to_rgb(f[0]));
+                out.push(to_rgb(f[1]));
+                out.push(to_rgb(f[2]));
+            }
+        }
+    }
+    out
+}
+
 /// One registry entry: a wire `kind` string mapped to a pure builder that
 /// returns the [`WorkspaceProduct`] for that 3-D model.
 ///
@@ -278,6 +375,19 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "osmosis" => crate::osmosis_workbench::osmosis_product,
         "acidbase" => crate::acidbase_workbench::acidbase_product,
         "popdynamics" => crate::popdynamics_workbench::popdynamics_product,
+        // CAD / reconstruction / reinforcement / molecular / sheet-metal / aero
+        // family — workbenches that produce real geometry from their own kernels
+        // (not the mechanical `*_solid_mesh` pattern); each builder lives in its
+        // own module and extracts a `valenx_mesh::Mesh` from that kernel. The
+        // molecular (`molecule` / `reactdyn`) and `aero` products additionally
+        // carry per-vertex colours (CPK element palette / Cp field).
+        "cad" => crate::cad_workbench::cad_product,
+        "reverse" => crate::reverse_workbench::reverse_product,
+        "reinforcement" => crate::reinforcement_workbench::reinforcement_product,
+        "molecule" => crate::genetics::molecule_view::molecule_product,
+        "reactdyn" => crate::reactdyn_workbench::reactdyn_product,
+        "sheetmetal" => crate::sheetmetal_workbench::sheetmetal_product,
+        "aero" => crate::aero_workbench::aero_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -400,6 +510,15 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "osmosis" => "osmosis",
         "acidbase" => "acidbase",
         "popdynamics" => "popdynamics",
+        // CAD / reconstruction / reinforcement / molecular / sheet-metal / aero
+        // family.
+        "cad" => "cad",
+        "reverse" => "reverse",
+        "reinforcement" => "reinforcement",
+        "molecule" => "molecule",
+        "reactdyn" => "reactdyn",
+        "sheetmetal" => "sheetmetal",
+        "aero" => "aero",
         _ => return None,
     })
 }
@@ -531,6 +650,16 @@ mod tests {
         "osmosis",
         "acidbase",
         "popdynamics",
+        // The 7 real-geometry-extraction workbenches wired in this change — CAD
+        // CSG, point-cloud reconstruction, rebar cage, coloured molecule,
+        // reaction-dynamics frame, folded sheet metal, aero Cp on a demo body.
+        "cad",
+        "reverse",
+        "reinforcement",
+        "molecule",
+        "reactdyn",
+        "sheetmetal",
+        "aero",
     ];
 
     /// The machine-design / structural / civil / strength-of-materials /
@@ -653,6 +782,17 @@ mod tests {
         "osmosis",
         "acidbase",
         "popdynamics",
+        // The 7 real-geometry-extraction workbenches wired in this change. Each
+        // must resolve and build a non-empty `Tri3` product with a title and at
+        // least one readout row — `molecule` / `reactdyn` / `aero` additionally
+        // carry per-vertex colours (asserted separately below).
+        "cad",
+        "reverse",
+        "reinforcement",
+        "molecule",
+        "reactdyn",
+        "sheetmetal",
+        "aero",
     ];
 
     #[test]
@@ -710,11 +850,50 @@ mod tests {
             assert!(!mesh.mesh.nodes.is_empty(), "{k}: mesh has vertices");
             assert!(mesh.mesh.total_elements() > 0, "{k}: mesh has triangles");
         }
-        // The FEM cantilever is the only kind that ships per-vertex colours.
+        // The FEM cantilever ships von-Mises per-vertex colours.
         assert!(
             (lookup("fem").unwrap().build)().vertex_colors.is_some(),
             "fem product carries von-Mises vertex colours"
         );
+    }
+
+    #[test]
+    fn coloured_products_carry_a_vertex_aligned_colour_vec() {
+        // The molecular (CPK by element) and aero (Cp field) products ship
+        // per-vertex colours. The tile renderer only takes the coloured path
+        // when the colour vec length EXACTLY equals the emitted surface-vertex
+        // stream — three per `Tri3` element (triangle-major, vertex-within-
+        // triangle). Assert that invariant here so a future mesh/colour drift
+        // silently falls back to grey rather than mis-indexing (and this catches
+        // the alignment without the GPU).
+        for k in ["molecule", "reactdyn", "aero"] {
+            let product = (lookup(k).unwrap().build)();
+            let mesh = product
+                .mesh
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: a 3-D product carries a mesh"));
+            let colors = product
+                .vertex_colors
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: coloured product carries vertex_colors"));
+            let expected = mesh.mesh.total_elements() * 3;
+            assert_eq!(
+                colors.len(),
+                expected,
+                "{k}: vertex_colors length ({}) must equal 3 \u{00D7} triangle count ({expected}) \
+                 so the renderer takes the coloured path",
+                colors.len(),
+            );
+            // Every channel is a sane [0, 1] colour.
+            for c in colors {
+                for ch in c {
+                    assert!(
+                        ch.is_finite() && (0.0..=1.0).contains(ch),
+                        "{k}: colour channel {ch} out of [0, 1]"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

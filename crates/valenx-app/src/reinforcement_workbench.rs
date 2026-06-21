@@ -185,6 +185,69 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// The agent-bridge product for the concrete-reinforcement workbench
+/// (`show_3d{kind="reinforcement"}`).
+///
+/// Generates the **default** canonical rebar cage — a 0.3 × 0.5 × 4.0 m beam
+/// with 4 longitudinal bars per face (Ø16) and Ø10 U-stirrups at 0.2 m centres —
+/// via [`valenx_reinforcement::cage::generate_beam`] and tessellates it to a
+/// `Tri3` [`valenx_mesh::Mesh`] with `cage::to_mesh`. Pure and app-state-free:
+/// it builds a fresh [`ReinforcementWorkbenchState::default`] so it yields
+/// exactly the cage the workbench shows on first generate. The readout reports
+/// the beam dimensions and triangle count.
+pub(crate) fn reinforcement_product() -> crate::WorkspaceProduct {
+    let state = ReinforcementWorkbenchState::default();
+    let (mesh, lines) = match run_reinforcement(&state) {
+        Ok(mesh) => {
+            let tris = mesh.total_elements();
+            let lines = vec![
+                format!(
+                    "RC beam {:.1} × {:.1} × {:.1} m · {} longitudinal bars/face",
+                    state.width, state.depth, state.length, state.n_bars
+                ),
+                format!(
+                    "Ø10 U-stirrups at {:.2} m centres · 30 mm cover",
+                    state.hoop_spacing
+                ),
+                format!("rebar cage: {tris} triangles"),
+            ];
+            (mesh, lines)
+        }
+        Err(e) => {
+            // Theoretically unreachable for the canonical beam; degrade to a
+            // tiny placeholder triangle + a note rather than panicking.
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = vec![0, 1, 2];
+            let mut placeholder = valenx_mesh::Mesh::new("valenx-rebar-cage");
+            placeholder.nodes = vec![
+                nalgebra::Vector3::new(0.0, 0.0, 0.0),
+                nalgebra::Vector3::new(1.0, 0.0, 0.0),
+                nalgebra::Vector3::new(0.0, 1.0, 0.0),
+            ];
+            placeholder.element_blocks.push(block);
+            placeholder.recompute_stats();
+            (
+                placeholder,
+                vec![
+                    "parametric rebar cage".to_string(),
+                    format!("cage generation unavailable — showing placeholder ({e})"),
+                ],
+            )
+        }
+    };
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<reinforcement>/cage");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Rebar cage (RC beam)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
