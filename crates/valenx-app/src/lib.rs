@@ -137,7 +137,6 @@ pub mod led_workbench;
 pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
-pub(crate) mod menu_ui;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
 pub mod mosfet_workbench;
@@ -145,7 +144,6 @@ pub mod new_project_dialog;
 pub mod opamp_workbench;
 pub mod optics_workbench;
 pub mod orifice_workbench;
-pub mod panel_help;
 pub mod pbr_forward_pass;
 pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
@@ -197,14 +195,12 @@ pub mod springs_workbench;
 pub mod statics_workbench;
 pub mod straingauge_workbench;
 pub mod strainrosette_workbench;
-pub mod theme;
 pub mod thermalexpansion_workbench;
 pub mod thermistor_workbench;
 pub mod thermocouple_workbench;
 pub mod thermocycle_workbench;
 pub mod thermoreg_workbench;
 pub mod threephase_workbench;
-pub mod tooltips;
 pub mod torsion_workbench;
 pub mod transformer_workbench;
 pub mod transmissionline_workbench;
@@ -219,7 +215,6 @@ pub mod weir_workbench;
 pub mod welcome_tour;
 pub mod wgpu_renderer;
 pub mod workbench_chrome;
-pub mod workbench_ui;
 
 // Concern-focused helper modules — what used to be a single
 // `helpers.rs` bag-of-everything (1422 LOC, 36 fns spanning 8+
@@ -230,14 +225,11 @@ pub mod workbench_ui;
 pub(crate) mod adapter_status;
 pub mod audit;
 pub mod file_browser;
-pub(crate) mod histograms;
 pub mod history;
 pub(crate) mod mesh_loader;
 pub mod rbac_io;
 pub mod settings_io;
-pub mod solver_parse;
 pub mod state_paths;
-pub mod time_format;
 
 // Concern-focused impl ValenxApp blocks split out of this file to
 // keep the root module readable. Each module holds one `impl
@@ -280,10 +272,20 @@ pub use crate::history::{
 pub use crate::rbac_io::{load_rbac_config, load_rbac_outcome, RbacLoadOutcome};
 pub use crate::settings_io::{load_settings_from_state_dir, save_settings_to_state_dir};
 pub use crate::setup::{crashes_dir, run};
-pub use crate::solver_parse::{adapter_id_from_solver, derived_inputs_from_case_toml};
 pub use crate::state_paths::state_dir;
-pub use crate::time_format::format_time_key;
 pub use crate::types::{BottomTab, LoadedMesh, LoadedStl, RunHistoryEntry, SweepHistoryEntry};
+
+// Stage A1 of the app split (docs/refactor/2026-06-20-valenx-app-split.md):
+// these leaf modules moved to `valenx-app-core`. Re-export them here so
+// the existing public API (`valenx_app::theme`, `valenx_app::tooltips`,
+// `valenx_app::panel_help`, `valenx_app::workbench_ui`,
+// `valenx_app::format_time_key`, `valenx_app::adapter_id_from_solver`, …)
+// stays stable and in-crate `crate::theme::…` paths keep resolving.
+pub use valenx_app_core::solver_parse::{adapter_id_from_solver, derived_inputs_from_case_toml};
+pub use valenx_app_core::time_format::format_time_key;
+pub use valenx_app_core::{
+    histograms, menu_ui, panel_help, solver_parse, theme, time_format, tooltips, workbench_ui,
+};
 
 /// Root application state.
 #[derive(Default)]

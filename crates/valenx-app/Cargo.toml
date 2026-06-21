@@ -56,6 +56,12 @@ serde_json = { workspace = true }
 toml       = { workspace = true }
 
 valenx-core          = { path = "../valenx-core" }
+# Stage A1 of the app split (docs/refactor/2026-06-20-valenx-app-split.md):
+# the ValenxApp-free leaf modules (theme, tooltips, panel/keyboard help,
+# mesh histograms, the long-menu scroll wrapper, the workbench header
+# chrome, the solver / time-key parsers) now live here. valenx-app
+# re-exports them so the public API stays stable.
+valenx-app-core      = { path = "../valenx-app-core" }
 valenx-geo           = { path = "../valenx-geo" }
 valenx-mesh          = { path = "../valenx-mesh" }
 valenx-fields        = { path = "../valenx-fields" }

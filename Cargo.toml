@@ -12,6 +12,10 @@ resolver = "2"
 members = [
     # Native shell + canonical types
     "crates/valenx-app",
+    # Leaf modules split out of valenx-app (stage A1 of the app split —
+    # docs/refactor/2026-06-20-valenx-app-split.md): the ValenxApp-free
+    # helpers (theme, help text, tooltips, mesh histograms, parsers).
+    "crates/valenx-app-core",
     "crates/valenx-astro",
     "crates/valenx-core",
     "crates/valenx-geo",
