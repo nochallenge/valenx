@@ -321,6 +321,51 @@ impl TabKind {
         }
     }
 
+    /// Map a short, **case-insensitive** workbench id string to a [`TabKind`]
+    /// (e.g. `"rocket"` → [`TabKind::Rocket`], `"varianteffect"` →
+    /// [`TabKind::VariantEffect`]). Returns `None` for an unknown id — callers
+    /// (the agent-drives-valenx bridge in [`crate::agent_commands`]) then fall
+    /// back to a blank tab / skip rather than panicking.
+    ///
+    /// Accepts a couple of friendly aliases where the workbench has more than
+    /// one common name: `mesh`/`meshtoolbox`, `variant`/`varianteffect`. This is
+    /// the inverse of the ids an external agent is told to emit; keep it in sync
+    /// with [`Self::TEMPLATES`].
+    pub fn from_id(s: &str) -> Option<TabKind> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "rocket" => Some(TabKind::Rocket),
+            "engine" => Some(TabKind::Engine),
+            "astro" => Some(TabKind::Astro),
+            "aero" => Some(TabKind::Aero),
+            "gasdynamics" => Some(TabKind::Gasdynamics),
+            "cfd" => Some(TabKind::Cfd),
+            "fem" => Some(TabKind::Fem),
+            "reactdyn" => Some(TabKind::Reactdyn),
+            "fields" => Some(TabKind::Fields),
+            "cad" => Some(TabKind::Cad),
+            "mesh" | "meshtoolbox" => Some(TabKind::MeshToolbox),
+            "sheetmetal" => Some(TabKind::Sheetmetal),
+            "reverse" => Some(TabKind::Reverse),
+            "draft2d" => Some(TabKind::Draft2d),
+            "render" => Some(TabKind::Render),
+            "animate" => Some(TabKind::Animate),
+            "springs" => Some(TabKind::Springs),
+            "gears" => Some(TabKind::Gears),
+            "fasteners" => Some(TabKind::Fasteners),
+            "frames" => Some(TabKind::Frames),
+            "collision" => Some(TabKind::Collision),
+            "piping" => Some(TabKind::Piping),
+            "hvac" => Some(TabKind::Hvac),
+            "reinforcement" => Some(TabKind::Reinforcement),
+            "interior" => Some(TabKind::Interior),
+            "geomatics" => Some(TabKind::Geomatics),
+            "genetics" => Some(TabKind::Genetics),
+            "neuro" => Some(TabKind::Neuro),
+            "variant" | "varianteffect" => Some(TabKind::VariantEffect),
+            _ => None,
+        }
+    }
+
     /// The central viewport this kind prefers (genetics is the 2D DNA
     /// view; everything else — including a blank project — is the 3D
     /// viewport).
@@ -755,6 +800,20 @@ pub fn switch_active_to(app: &mut ValenxApp, new_idx: usize) {
     sync_active(app);
 }
 
+/// Park the **currently-active** tab's live scene back into its `docs` slot
+/// (a no-op when there is no active tab or the index is stale). This is the
+/// "capture the outgoing tab before we re-point `active`" step shared by every
+/// open/restore/append path — extracted so the agent-drives-valenx bridge
+/// ([`crate::agent_commands`]) can reuse the exact same reconcile the UI uses
+/// rather than duplicating the snippet.
+pub(crate) fn park_active_doc(app: &mut ValenxApp) {
+    if let Some(a) = app.tab_bar.active {
+        if a < app.tab_bar.docs.len() {
+            app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
+        }
+    }
+}
+
 /// Reconcile the live workspace document with whatever `app.tab_bar.active`
 /// already points at, **discarding** the current live scene.
 ///
@@ -765,8 +824,9 @@ pub fn switch_active_to(app: &mut ValenxApp, new_idx: usize) {
 /// set `active` themselves — restoring a saved group, appending a saved
 /// tab, or closing a tab — where the outgoing live scene either no longer
 /// has a home or is being deliberately replaced. Always ends with
-/// [`sync_active`].
-fn install_active_doc(app: &mut ValenxApp) {
+/// [`sync_active`]. Exposed `pub(crate)` so [`crate::agent_commands`]'s
+/// `NewTab` reducer can finish an open exactly as the tab strip does.
+pub(crate) fn install_active_doc(app: &mut ValenxApp) {
     // Drop the current live scene (its tab is gone / being replaced).
     let _ = WorkspaceDoc::capture(app);
     match app.tab_bar.active {
@@ -790,11 +850,7 @@ fn perform_close(app: &mut ValenxApp, idx: usize) {
     if idx >= app.tab_bar.tabs.len() {
         return;
     }
-    if let Some(a) = app.tab_bar.active {
-        if a < app.tab_bar.docs.len() {
-            app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
-        }
-    }
+    park_active_doc(app);
     app.tab_bar.close(idx);
     install_active_doc(app);
 }
@@ -1155,11 +1211,7 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
             // Park the currently-active scene before `append` re-points
             // `active` at the first appended (fresh) tab, so switching back
             // restores it.
-            if let Some(a) = app.tab_bar.active {
-                if a < app.tab_bar.docs.len() {
-                    app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
-                }
-            }
+            park_active_doc(app);
             app.tab_bar.append(session);
             install_active_doc(app);
         }
@@ -1182,20 +1234,12 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         // Park the outgoing tab's scene, open the new tab (pushes a fresh
         // default doc + makes it active), then install that empty doc so the
         // new tab starts blank and the prior tab keeps its geometry.
-        if let Some(a) = app.tab_bar.active {
-            if a < app.tab_bar.docs.len() {
-                app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
-            }
-        }
+        park_active_doc(app);
         app.tab_bar.open(kind);
         install_active_doc(app);
     }
     if intent.open_blank {
-        if let Some(a) = app.tab_bar.active {
-            if a < app.tab_bar.docs.len() {
-                app.tab_bar.docs[a] = WorkspaceDoc::capture(app);
-            }
-        }
+        park_active_doc(app);
         app.tab_bar.open_blank();
         install_active_doc(app);
     }
@@ -1238,6 +1282,59 @@ mod tests {
         }
         assert!(!TabKind::Blank.label().is_empty());
         assert!(!TabKind::Blank.group().is_empty());
+    }
+
+    #[test]
+    fn from_id_maps_every_template_kind_case_insensitively() {
+        // The canonical id for each kind maps back to it (the inverse the
+        // agent-drives-valenx bridge relies on), and matching is
+        // case-insensitive / whitespace-tolerant.
+        let canonical = [
+            ("rocket", TabKind::Rocket),
+            ("engine", TabKind::Engine),
+            ("astro", TabKind::Astro),
+            ("aero", TabKind::Aero),
+            ("gasdynamics", TabKind::Gasdynamics),
+            ("cfd", TabKind::Cfd),
+            ("fem", TabKind::Fem),
+            ("reactdyn", TabKind::Reactdyn),
+            ("fields", TabKind::Fields),
+            ("cad", TabKind::Cad),
+            ("meshtoolbox", TabKind::MeshToolbox),
+            ("sheetmetal", TabKind::Sheetmetal),
+            ("reverse", TabKind::Reverse),
+            ("draft2d", TabKind::Draft2d),
+            ("render", TabKind::Render),
+            ("animate", TabKind::Animate),
+            ("springs", TabKind::Springs),
+            ("gears", TabKind::Gears),
+            ("fasteners", TabKind::Fasteners),
+            ("frames", TabKind::Frames),
+            ("collision", TabKind::Collision),
+            ("piping", TabKind::Piping),
+            ("hvac", TabKind::Hvac),
+            ("reinforcement", TabKind::Reinforcement),
+            ("interior", TabKind::Interior),
+            ("geomatics", TabKind::Geomatics),
+            ("genetics", TabKind::Genetics),
+            ("neuro", TabKind::Neuro),
+            ("varianteffect", TabKind::VariantEffect),
+        ];
+        // Every TEMPLATES kind is covered by the canonical table above.
+        assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
+        for (id, kind) in canonical {
+            assert_eq!(TabKind::from_id(id), Some(kind), "id {id} should map");
+            // Case-insensitive + whitespace-tolerant.
+            assert_eq!(TabKind::from_id(&id.to_uppercase()), Some(kind));
+            assert_eq!(TabKind::from_id(&format!("  {id}  ")), Some(kind));
+        }
+        // Friendly aliases.
+        assert_eq!(TabKind::from_id("mesh"), Some(TabKind::MeshToolbox));
+        assert_eq!(TabKind::from_id("variant"), Some(TabKind::VariantEffect));
+        // Unknown ids (and Blank, which has no id) map to None.
+        assert_eq!(TabKind::from_id("blank"), None);
+        assert_eq!(TabKind::from_id("nope"), None);
+        assert_eq!(TabKind::from_id(""), None);
     }
 
     /// The core per-tab-document invariant: there is exactly one

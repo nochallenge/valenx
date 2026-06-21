@@ -2520,6 +2520,13 @@ impl eframe::App for ValenxApp {
             });
         });
 
+        // Agent-drives-valenx bridge: apply any new commands an external agent
+        // appended to a channel's command file (open/focus/rename/close tabs,
+        // switch a workbench, post a chat note) before the tab strip is drawn,
+        // so those effects show up this frame. Throttled to ~1/sec internally;
+        // clean &mut self here (no dock-tree borrow held).
+        crate::agent_commands::poll_and_apply_agent_commands(self);
+
         // Project tabs (Chrome-style) — a slim strip just below the
         // ribbon. Each tab is a project workbench the user switches
         // between; additive, so it's empty until the user opens a tab.

@@ -55,6 +55,16 @@ impl Default for AssistantWorkbenchState {
     }
 }
 
+impl AssistantWorkbenchState {
+    /// The base **inbox** path (`$VALENX_ASSISTANT_INBOX` or the state-dir
+    /// default). Read-only accessor used by [`crate::agent_commands`] to derive
+    /// the per-channel command-file directory (the agent-drives-valenx bridge
+    /// puts its command files beside the chat inbox/feed).
+    pub(crate) fn inbox_path(&self) -> &Path {
+        &self.inbox_path
+    }
+}
+
 /// Resolve the assistant feed file: `$VALENX_ASSISTANT_FEED` if set, otherwise
 /// `<state_dir>/assistant_feed.jsonl` (system-temp fallback).
 pub fn assistant_feed_path() -> PathBuf {
@@ -139,6 +149,19 @@ fn send_to_assistant(inbox: &Path, feed: &Path, msg: &str) {
     append_line(
         feed,
         &serde_json::json!({ "title": "You", "detail": msg, "kind": "user" }).to_string(),
+    );
+}
+
+/// Append a [`FeedEntry`] line (title + detail + accent `kind`) to **channel
+/// `n`'s** feed file, so it shows up in that agent tile's chat. Used by the
+/// agent-drives-valenx bridge's `Note` command
+/// ([`crate::agent_commands`]) to post a visible summary into the panel.
+/// Best-effort (a write failure is swallowed, like the rest of the feed I/O).
+pub(crate) fn append_feed_note(app: &ValenxApp, n: usize, title: &str, detail: &str, kind: &str) {
+    let feed = unit_feed_path(app, n);
+    append_line(
+        &feed,
+        &serde_json::json!({ "title": title, "detail": detail, "kind": kind }).to_string(),
     );
 }
 
