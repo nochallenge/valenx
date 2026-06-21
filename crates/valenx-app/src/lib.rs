@@ -293,15 +293,37 @@ pub use valenx_app_core::{
 /// gear train) shows up in *this* pane instead of staying a placeholder.
 ///
 /// Set per unit `n` by the [`crate::agent_commands::AgentCommand::ShowProduct`]
-/// bridge command and rendered as a result card by
-/// [`crate::dock_layout`]'s `render_workspace_body`. Pure data — a bold `title`
-/// heading over a list of plain-text `lines` (one row each). Defaults empty.
-#[derive(Debug, Clone, Default)]
+/// (text card) or [`crate::agent_commands::AgentCommand::Show3d`] (live 3-D
+/// view) bridge commands and rendered by [`crate::dock_layout`]'s
+/// `render_workspace_body`:
+///
+/// - a text result is a bold `title` heading over a list of plain-text `lines`
+///   (one row each);
+/// - a **3-D** result additionally carries a [`LoadedMesh`] in [`Self::mesh`]
+///   and a fixed [`OrbitCamera`] in [`Self::camera`], which the pane renders as
+///   an actual lit 3-D view (same look as the central viewport) at a fixed 3/4
+///   angle.
+///
+/// Not `Clone`/`Default`/`Debug`: [`LoadedMesh`] owns a `valenx_mesh::Mesh` +
+/// quality reports and implements none of them. The only writer is the
+/// agent-command reducer's `insert` and the only reader is
+/// `render_workspace_body`'s `get` (both move/borrow, never clone or format),
+/// so none of those bounds is needed.
 pub struct WorkspaceProduct {
     /// Card heading (rendered bold), e.g. the product name.
     pub title: String,
-    /// Result rows shown under the heading, one `ui.label` per entry.
+    /// Result rows shown under the heading, one `ui.label` per entry. Empty
+    /// for a pure 3-D product.
     pub lines: Vec<String>,
+    /// When `Some`, the pane renders this mesh as a live lit 3-D view (using
+    /// [`Self::camera`]) instead of a text card. Built by the `show_3d`
+    /// command (e.g. the LV-1 rocket via
+    /// [`crate::rocket_workbench::lv1_loaded_mesh`]).
+    pub mesh: Option<LoadedMesh>,
+    /// Fixed camera the 3-D view is rendered from (a pleasant 3/4 angle for
+    /// Stage 1 — per-tile orbit is a later stage). Ignored when
+    /// [`Self::mesh`] is `None`.
+    pub camera: OrbitCamera,
 }
 
 /// Root application state.

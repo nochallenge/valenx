@@ -617,21 +617,52 @@ fn recompute(s: &mut RocketWorkbenchState) {
     s.last_design = Some(s.design);
 }
 
-/// Build the 3-D Valenx LV-1 rocket mesh and load it into the central
-/// viewport (replacing any current STL / mesh) so it can be orbited.
-fn load_lv1_rocket_3d(app: &mut ValenxApp) {
+/// Build the 3-D Valenx LV-1 rocket as a fully-populated [`LoadedMesh`]
+/// (mesh + quality + aspect / skew histograms, tagged with the synthetic
+/// `<rocket>/valenx-lv1` path). The single source of truth for "the LV-1
+/// model" — used both to load it into the central viewport
+/// ([`load_lv1_rocket_3d`]) and to hand a copy to a Workbench+Agent
+/// workspace tile for its own per-tile 3-D view
+/// ([`crate::agent_commands::AgentCommand::Show3d`]).
+pub(crate) fn lv1_loaded_mesh() -> LoadedMesh {
     let mesh = crate::rocket_mesh::lv1_rocket_mesh();
     let quality = valenx_mesh::quality_report(&mesh);
     let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
     let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
-    app.stl = None;
-    app.mesh = Some(LoadedMesh {
+    LoadedMesh {
         path: PathBuf::from("<rocket>/valenx-lv1"),
         mesh,
         quality,
         aspect_hist,
         skew_hist,
-    });
+    }
+}
+
+/// A fixed **3/4 view** [`OrbitCamera`] framing the LV-1 rocket `mesh`, for
+/// Stage-1 per-tile previews (no orbit yet). Frames the mesh's bounding box
+/// exactly like the central viewport's [`ValenxApp::frame_current_mesh`]
+/// (same `frame_bounds` fit, so the rocket fills the tile the same way), then
+/// pins a pleasant three-quarter angle: azimuth 35° / elevation 22°, matching
+/// the central viewport's default-camera look. Falls back to the default
+/// camera if the mesh has no computable bounds.
+pub(crate) fn lv1_camera(mesh: &valenx_mesh::Mesh) -> valenx_viz::OrbitCamera {
+    let mut camera = valenx_viz::OrbitCamera::default();
+    if let Some((min, max)) = crate::mesh_loader::mesh_bounding_box(mesh) {
+        camera.frame_bounds(min, max);
+    }
+    // A three-quarter hero angle (close to the viewport's default 45°/25°),
+    // nudged a touch lower/more head-on so the slender LV-1 reads well in a
+    // small square-ish tile.
+    camera.azimuth_deg = 35.0;
+    camera.elevation_deg = 22.0;
+    camera
+}
+
+/// Build the 3-D Valenx LV-1 rocket mesh and load it into the central
+/// viewport (replacing any current STL / mesh) so it can be orbited.
+fn load_lv1_rocket_3d(app: &mut ValenxApp) {
+    app.stl = None;
+    app.mesh = Some(lv1_loaded_mesh());
     app.frame_current_mesh();
 }
 

@@ -37,6 +37,7 @@
 //!   this tiles the *right-side workbenches*.
 
 use eframe::egui;
+use eframe::egui_wgpu;
 
 use crate::ValenxApp;
 
@@ -172,7 +173,17 @@ fn close_panel(app: &mut ValenxApp, panel_id: &str) {
 ///
 /// A `panel_id` that isn't wired yet renders a small graceful notice rather
 /// than panicking, so partially-wired states stay usable.
-pub(crate) fn render_panel_body(app: &mut ValenxApp, ui: &mut egui::Ui, panel_id: &str) {
+///
+/// `wgpu_renderer` / `render_state` / `pixels_per_point` are only used by the
+/// `workspace:<n>` branch (live 3-D render); every other body ignores them.
+pub(crate) fn render_panel_body(
+    app: &mut ValenxApp,
+    ui: &mut egui::Ui,
+    panel_id: &str,
+    wgpu_renderer: &mut Option<crate::wgpu_renderer::WgpuRenderer>,
+    render_state: Option<&egui_wgpu::RenderState>,
+    pixels_per_point: f32,
+) {
     // "Workbench + Agent" tiles: the agent half is an **independent** Claude
     // chat keyed by the unit number (its own feed file + input buffer — see
     // `assistant_chat_ui`'s `Some(n)` channel); the workspace half is an empty
@@ -188,7 +199,7 @@ pub(crate) fn render_panel_body(app: &mut ValenxApp, ui: &mut egui::Ui, panel_id
         return;
     }
     if let Some(n) = panel_id.strip_prefix(WORKSPACE_PREFIX) {
-        render_workspace_body(app, ui, n);
+        render_workspace_body(app, ui, n, wgpu_renderer, render_state, pixels_per_point);
         return;
     }
     match panel_id {
@@ -221,7 +232,14 @@ pub(crate) fn render_panel_body(app: &mut ValenxApp, ui: &mut egui::Ui, panel_id
 /// — a bold title heading over one row per line. Until then it shows a faint
 /// centered hint. No chat echo and no "move whole unit" header here (that
 /// control lives on the agent half).
-fn render_workspace_body(app: &mut ValenxApp, ui: &mut egui::Ui, n: &str) {
+fn render_workspace_body(
+    app: &mut ValenxApp,
+    ui: &mut egui::Ui,
+    n: &str,
+    wgpu_renderer: &mut Option<crate::wgpu_renderer::WgpuRenderer>,
+    render_state: Option<&egui_wgpu::RenderState>,
+    pixels_per_point: f32,
+) {
     ui.label(egui::RichText::new(format!("Workspace {n}")).weak());
     ui.add_space(4.0);
     // Look up this unit's posted result by its numeric id (the same `n` the
@@ -231,6 +249,36 @@ fn render_workspace_body(app: &mut ValenxApp, ui: &mut egui::Ui, n: &str) {
         .parse::<usize>()
         .ok()
         .and_then(|idx| app.workspace_products.get(&idx));
+
+    // A live 3-D product (a `show_3d` command set `mesh: Some`) renders as an
+    // actual lit viewport — same look as the central viewport — at the
+    // product's fixed 3/4 camera, provided the wgpu backend is up. The tile id
+    // keys a dedicated per-tile offscreen target so it never aliases the
+    // central viewport's or another tile's. If anything required is missing
+    // (no GPU ctx, no mesh) it falls through to the text card / placeholder.
+    let has_3d = product.map(|p| p.mesh.is_some()).unwrap_or(false);
+    if has_3d {
+        if let (Some(product), Some(renderer), Some(rs)) =
+            (product, wgpu_renderer.as_mut(), render_state)
+        {
+            if let Some(mesh) = product.mesh.as_ref() {
+                let tile_key = format!("workspace:{n}");
+                let drew = render_tile_mesh_3d(
+                    ui,
+                    &tile_key,
+                    mesh,
+                    &product.camera,
+                    renderer,
+                    rs,
+                    pixels_per_point,
+                );
+                if drew {
+                    return;
+                }
+            }
+        }
+    }
+
     egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::same(8.0))
         .show(ui, |ui| {
@@ -260,6 +308,87 @@ fn render_workspace_body(app: &mut ValenxApp, ui: &mut egui::Ui, n: &str) {
         });
 }
 
+/// Render `mesh` as a lit 3-D view filling the tile's remaining rect, from the
+/// fixed `camera`, into the per-tile offscreen target keyed by `tile_key`, and
+/// blit it. Mirrors [`crate::viewport`]'s `render_wgpu_scene` (the central
+/// viewport's path) but: keys its own offscreen target (so two viewports per
+/// frame don't alias), allocates a hover-only rect (Stage 1 — no per-tile
+/// orbit yet), and draws **grid-less** (background + shaded mesh only) for a
+/// clean, cheap mini-view. Returns `true` if it drew (so the caller skips the
+/// text-card fallback), `false` if the rect was degenerate or the GPU returned
+/// no texture.
+fn render_tile_mesh_3d(
+    ui: &mut egui::Ui,
+    tile_key: &str,
+    mesh: &crate::types::LoadedMesh,
+    camera: &valenx_viz::OrbitCamera,
+    renderer: &mut crate::wgpu_renderer::WgpuRenderer,
+    render_state: &egui_wgpu::RenderState,
+    pixels_per_point: f32,
+) -> bool {
+    // Build the shaded surface for the mesh's surface elements (Tri3 / Quad4).
+    // A volumetric-only mesh yields nothing → fall back to the card.
+    let Some(surface) = crate::viewport::mesh_to_triangle_surface(&mesh.mesh) else {
+        return false;
+    };
+    let vertices = crate::wgpu_renderer::triangles_to_vertices(&surface);
+    if vertices.is_empty() {
+        return false;
+    }
+
+    // Take the whole remaining tile rect; hover-only sense (no drag → no orbit
+    // this stage).
+    let avail = ui.available_size();
+    let (rect, _response) = ui.allocate_exact_size(
+        egui::vec2(avail.x.max(16.0), avail.y.max(16.0)),
+        egui::Sense::hover(),
+    );
+    let w_logical = rect.width();
+    let h_logical = rect.height();
+    if w_logical < 1.0 || h_logical < 1.0 {
+        return false;
+    }
+    let ppp = pixels_per_point.max(0.5);
+    let size_px = [(w_logical * ppp) as u32, (h_logical * ppp) as u32];
+
+    // Camera → MVP / inverse-MVP for this tile's aspect ratio, matching the
+    // central viewport's matrix construction exactly.
+    let mvp = crate::wgpu_renderer::mvp_from_camera(camera, w_logical, h_logical);
+    let inv_mvp = crate::wgpu_renderer::inv_mvp_from_camera(camera, w_logical, h_logical);
+    let light_dir = [-0.3f32, -0.8, -0.5];
+    let eye = camera.eye();
+    let cam_pos = [eye.x, eye.y, eye.z];
+    // Grid params are still supplied (the uniform layout is shared) but the
+    // grid pass is disabled below via `draw_grid = false`, so they're inert.
+    let (minor, blend_t) = valenx_viz::grid_lod_params(camera.distance);
+    let grid = [minor, 0.0, 0.0, camera.distance * 14.0];
+    let grid2 = [blend_t, 0.0, 0.0, 0.0];
+
+    let mut render_guard = render_state.renderer.write();
+    let texture_id = renderer.render_keyed(
+        tile_key,
+        &mut render_guard,
+        size_px,
+        mvp,
+        inv_mvp,
+        light_dir,
+        cam_pos,
+        grid,
+        grid2,
+        false, // draw_grid = false: background + shaded mesh only (mini-view)
+        &vertices,
+    );
+    drop(render_guard);
+
+    let Some(texture_id) = texture_id else {
+        return false;
+    };
+    let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+    ui.painter_at(rect)
+        .image(texture_id, rect, uv, egui::Color32::WHITE);
+    true
+}
+
 /// After the tree has been drawn, drain the per-workbench deferred requests
 /// (3-D mesh loads, field-overlay pushes) the bodies may have set. These run
 /// *outside* any panel borrow, exactly as the classic `draw_<x>_workbench`
@@ -275,8 +404,21 @@ fn drain_workbench_deferred(app: &mut ValenxApp) {
 /// wires the per-tab close button back to the workbench's `show_*` flag. It
 /// borrows the whole app so [`render_panel_body`] can mutate workbench state
 /// while drawing — see the borrow note on [`ValenxApp::draw_dock_layout`].
+///
+/// It also carries the wgpu bits a `workspace:<n>` tile needs to render a
+/// live 3-D model: `wgpu_renderer` is the app's renderer *lifted out of
+/// `self`* (so it can be held alongside `&mut app` without aliasing — see
+/// [`ValenxApp::render_dock_tree_into`]), plus the frame's `render_state`
+/// and `pixels_per_point`.
 struct DockBehavior<'a> {
     app: &'a mut ValenxApp,
+    /// The app's wgpu renderer, taken into a local for the duration of the
+    /// draw. `None` when eframe has no wgpu backend → tiles fall back to text.
+    wgpu_renderer: &'a mut Option<crate::wgpu_renderer::WgpuRenderer>,
+    /// The frame's wgpu render state (egui texture registry + device/queue).
+    render_state: Option<&'a egui_wgpu::RenderState>,
+    /// Logical-to-physical pixel ratio, for sizing the offscreen target.
+    pixels_per_point: f32,
 }
 
 impl egui_tiles::Behavior<String> for DockBehavior<'_> {
@@ -291,11 +433,16 @@ impl egui_tiles::Behavior<String> for DockBehavior<'_> {
         pane: &mut String,
     ) -> egui_tiles::UiResponse {
         // A little breathing room around the body, matching the central
-        // docking layout's pane frame.
+        // docking layout's pane frame. Borrow the behavior's fields
+        // disjointly so the renderer/render-state can ride along to a
+        // `workspace:<n>` tile while `app` is mutably borrowed for the body.
+        let renderer = &mut *self.wgpu_renderer;
+        let render_state = self.render_state;
+        let ppp = self.pixels_per_point;
         egui::Frame::none()
             .inner_margin(egui::Margin::same(6.0))
             .show(ui, |ui| {
-                render_panel_body(self.app, ui, pane);
+                render_panel_body(self.app, ui, pane, renderer, render_state, ppp);
             });
         // The drag handle is the tab bar (handled by egui_tiles); we never
         // start a drag from the body.
@@ -356,7 +503,17 @@ impl ValenxApp {
     /// workbench state). Those two `&mut self` borrows can't coexist, so we
     /// [`Option::take`] the tree into a local, build the behavior against
     /// `self`, draw, then put the tree back.
-    pub(crate) fn draw_dock_layout(&mut self, ctx: &egui::Context) {
+    ///
+    /// `render_state` + `pixels_per_point` are the wgpu bits a
+    /// `workspace:<n>` tile needs to render its live 3-D model; they thread
+    /// through to [`Self::render_dock_tree_into`]. `None`/any value is fine
+    /// when no GPU backend exists — the tile falls back to its text card.
+    pub(crate) fn draw_dock_layout(
+        &mut self,
+        ctx: &egui::Context,
+        render_state: Option<&egui_wgpu::RenderState>,
+        pixels_per_point: f32,
+    ) {
         // 1. Which workbenches are open right now, in the registry's order.
         let open_ids: Vec<String> = DOCKABLE_PANELS
             .iter()
@@ -416,7 +573,7 @@ impl ValenxApp {
                 .resizable(true)
                 .default_width(700.0)
                 .show(ctx, |ui| {
-                    self.render_dock_tree_into(ui);
+                    self.render_dock_tree_into(ui, render_state, pixels_per_point);
                 });
         }
     }
@@ -427,11 +584,36 @@ impl ValenxApp {
     /// the post-draw deferred-work drain. Host-agnostic — called both from the
     /// right SidePanel (viewport visible) and from the CentralPanel (viewport
     /// hidden → the dock fills the whole workspace).
-    pub(crate) fn render_dock_tree_into(&mut self, ui: &mut egui::Ui) {
+    ///
+    /// `render_state` + `pixels_per_point` let a `workspace:<n>` tile build a
+    /// [`crate::viewport::WgpuCtx`] and render its live 3-D model. The
+    /// **same** `Option::take` trick that frees `self.dock_tree` is applied to
+    /// `self.wgpu_renderer`: it's lifted into a local so `DockBehavior` can
+    /// borrow `&mut self` (for workbench-state mutation) and the renderer
+    /// **simultaneously** without aliasing `self`. The renderer is restored
+    /// after the draw.
+    pub(crate) fn render_dock_tree_into(
+        &mut self,
+        ui: &mut egui::Ui,
+        render_state: Option<&egui_wgpu::RenderState>,
+        pixels_per_point: f32,
+    ) {
         if let Some(mut tree) = self.dock_tree.take() {
-            let mut beh = DockBehavior { app: self };
+            // Lift the renderer out of `self` too, so the behavior can hold
+            // both `&mut self` and `&mut renderer` without two borrows of
+            // `self`. Put back below regardless of the draw outcome.
+            let mut renderer = self.wgpu_renderer.take();
+            let mut beh = DockBehavior {
+                app: self,
+                wgpu_renderer: &mut renderer,
+                render_state,
+                pixels_per_point,
+            };
             tree.ui(&mut beh, ui);
-            // Put it back for next frame (preserves the user's layout edits).
+            // Restore the renderer (it carries the per-tile offscreen targets,
+            // so it MUST persist across frames) and the tree (preserves the
+            // user's layout edits).
+            self.wgpu_renderer = renderer;
             self.dock_tree = Some(tree);
         }
         // Drain any 3-D / overlay requests the bodies queued this frame.
@@ -1048,7 +1230,8 @@ mod tests {
         // Several frames: build → sync (with empty open_ids) → persist.
         for _ in 0..3 {
             let _ = ctx.run(egui::RawInput::default(), |ctx| {
-                app.draw_dock_layout(ctx);
+                // Tests run headless (no wgpu backend): pass no render state.
+                app.draw_dock_layout(ctx, None, 1.0);
             });
         }
         let tree = app
@@ -1064,7 +1247,8 @@ mod tests {
         // the WB+Agent tiles.
         app.show_assistant_panel = true;
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            app.draw_dock_layout(ctx);
+            // Tests run headless (no wgpu backend): pass no render state.
+            app.draw_dock_layout(ctx, None, 1.0);
         });
         let panes = pane_ids(app.dock_tree.as_ref().unwrap());
         assert!(panes.contains("valenx_assistant_panel"));
@@ -1101,7 +1285,8 @@ mod tests {
         app.dock_enabled = true;
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            app.draw_dock_layout(ctx);
+            // Tests run headless (no wgpu backend): pass no render state.
+            app.draw_dock_layout(ctx, None, 1.0);
         });
         assert!(app.dock_tree.is_none());
     }
@@ -1123,7 +1308,8 @@ mod tests {
         // Two frames: first builds, second hits the sync + persisted-tree path.
         for _ in 0..2 {
             let _ = ctx.run(egui::RawInput::default(), |ctx| {
-                app.draw_dock_layout(ctx);
+                // Tests run headless (no wgpu backend): pass no render state.
+                app.draw_dock_layout(ctx, None, 1.0);
             });
         }
         let tree = app.dock_tree.as_ref().expect("tree built for open panels");
@@ -1143,7 +1329,8 @@ mod tests {
         // Close one workbench; the next dock frame must drop its pane.
         app.show_fem_workbench = false;
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            app.draw_dock_layout(ctx);
+            // Tests run headless (no wgpu backend): pass no render state.
+            app.draw_dock_layout(ctx, None, 1.0);
         });
         let tree = app.dock_tree.as_ref().expect("tree still has open panels");
         let panes: std::collections::HashSet<String> = tree
