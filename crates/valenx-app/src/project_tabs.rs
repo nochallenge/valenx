@@ -1135,6 +1135,14 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
 /// the `show_mesh_toolbox` toolbox flag.
 pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
     match kind {
+        // Registry-kind aliases: a few product kinds carry a different id than
+        // their workbench field, so the agent registry string would otherwise
+        // open no tool panel. The spur gear is kind `gear` but its workbench
+        // flag is `gears`; the bracket FE sample is driven from the FEM
+        // workbench; the `molecule` kind is the genetics molecule view.
+        "gear" => app.show_gears_workbench = on,
+        "bracket" => app.show_fem_workbench = on,
+        "molecule" => app.show_genetics_workbench = on,
         "genetics" => app.show_genetics_workbench = on,
         "aero" => app.show_aero_workbench = on,
         "fem" => app.show_fem_workbench = on,
@@ -4281,6 +4289,26 @@ mod headless_ui_tests {
         for k in ["rocket", "fem", "dcmotor", "pump", "gears"] {
             assert!(!read_workbench_flag(&app, k), "{k} untouched by unknown");
         }
+    }
+
+    #[test]
+    fn registry_kind_aliases_open_their_real_workbench() {
+        // A few product kinds carry a different id than their workbench field
+        // (gear↔gears, the bracket FE sample, the genetics molecule view). The
+        // agent registry string must still light the right panel, not no-op.
+        let mut app = ValenxApp::default();
+        set_workbench_flag(&mut app, "gear", true);
+        assert!(app.show_gears_workbench, "kind 'gear' opens the gears workbench");
+        set_workbench_flag(&mut app, "bracket", true);
+        assert!(app.show_fem_workbench, "kind 'bracket' opens the FEM workbench");
+        set_workbench_flag(&mut app, "molecule", true);
+        assert!(
+            app.show_genetics_workbench,
+            "kind 'molecule' opens the genetics workbench"
+        );
+        // …and they clear back off.
+        set_workbench_flag(&mut app, "gear", false);
+        assert!(!app.show_gears_workbench, "kind 'gear' clears its workbench");
     }
 
     #[test]
