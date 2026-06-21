@@ -180,6 +180,21 @@ impl eframe::App for ValenxApp {
             self.settings.apply_theme(ctx);
             self.theme_applied = true;
         }
+
+        // Agent-bridge heartbeat (UNCONDITIONAL, every frame). egui is
+        // reactive, so when valenx is idle/unfocused — the normal case while
+        // an external agent drives it from the background — `update()` would
+        // otherwise stop being called, and the agent-command poll below
+        // (`poll_and_apply_agent_commands`) would never run. Commands appended
+        // to a channel's cmd file (including the **global** `new_unit`, which
+        // must be processed even when zero Workbench+Agent units exist) would
+        // then sit unprocessed. Scheduling a repaint on the same cadence as
+        // `agent_commands::POLL_INTERVAL` wakes egui ~once/second with zero
+        // input so the poll always fires. This is additive: `request_repaint_after`
+        // is a no-op when a sooner repaint is already scheduled (run/sweep,
+        // automation, adapter-probe, etc.), so the idle cost is only ~1 fps.
+        ctx.request_repaint_after(crate::agent_commands::POLL_INTERVAL);
+
         self.pump_run_events();
         self.pump_sweep_events();
         // Repaint promptly while a run or sweep is live so residual
