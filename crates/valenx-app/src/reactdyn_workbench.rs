@@ -776,6 +776,62 @@ fn summarize(traj: &Trajectory) -> String {
     )
 }
 
+/// The agent-bridge product for the reaction-dynamics workbench
+/// (`show_3d{kind="reactdyn"}`).
+///
+/// Exposes **one representative frame** of the canonical reaction — the initial
+/// geometry (frame 0) of the default **Water** preset, parsed straight from its
+/// built-in XYZ via [`MolecularGeometry::from_xyz_str`] into a [`ViewMolecule`].
+/// This is the same geometry an AIMD run starts from, but it needs **no** solve:
+/// the numerical-gradient Born-Oppenheimer dynamics is deliberately *not* run
+/// here, so the builder stays pure, deterministic and cheap (no background
+/// thread, no qchem cost). The frame is meshed as a colour-aware ball-and-stick
+/// (CPK by element, reusing the molecule view's
+/// [`molecule_view::ball_and_stick_colored`]) and promoted to a `Tri3`
+/// [`valenx_mesh::Mesh`] the tile renders coloured. The readout names the
+/// reaction system and its atom count.
+pub(crate) fn reactdyn_product() -> crate::WorkspaceProduct {
+    // The representative frame: the Water preset's initial geometry (frame 0).
+    let mol = (|| -> Option<ViewMolecule> {
+        let xyz = Preset::Water.xyz()?;
+        let geom = MolecularGeometry::from_xyz_str(xyz).ok()?;
+        if geom.atoms.is_empty() {
+            return None;
+        }
+        let atoms: Vec<ViewAtom> = geom
+            .atoms
+            .iter()
+            .map(|a| {
+                let p = a.position_angstrom();
+                ViewAtom::new([p[0] as f32, p[1] as f32, p[2] as f32], a.element.symbol())
+            })
+            .collect();
+        let bonds = molecule_view::detect_bonds(&atoms);
+        Some(ViewMolecule { atoms, bonds })
+    })()
+    .unwrap_or_default();
+
+    let (soup, per_tri_colors) = molecule_view::ball_and_stick_colored(&mol, 0.28, 0.18);
+    let mesh = crate::products_registry::mesh_from_triangle_soup(&soup, "valenx-reactdyn-frame");
+    let vertex_colors = crate::products_registry::per_triangle_to_vertex_colors(&per_tri_colors);
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<reactdyn>/frame-0");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    let lines = vec![
+        "reaction dynamics: H₂O (Born-Oppenheimer AIMD)".to_string(),
+        format!("representative frame 0 · {} atoms", mol.atoms.len()),
+        "initial geometry — run the workbench for the full trajectory".to_string(),
+    ];
+    crate::WorkspaceProduct {
+        title: "Reaction dynamics (frame)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: Some(vertex_colors),
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -263,6 +263,138 @@ fn pump_aero_run(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// The agent-bridge product for the aerodynamics workbench
+/// (`show_3d{kind="aero"}`).
+///
+/// Aero computes a *field on a body*, not geometry — so this product uses the
+/// workbench's built-in **demo box** (`valenx_aero::geometry::box_body`, the
+/// always-available canonical bluff body that needs no user-loaded mesh), runs a
+/// small bounded steady RANS solve over it (`valenx_aero::run_windtunnel` with a
+/// coarse grid and capped iterations so the builder stays cheap and
+/// deterministic), then paints the **surface pressure coefficient `Cp`** onto
+/// the voxelized body shell. [`crate::aero::viz::build_flow_viz`] yields a
+/// `(valenx_mesh::Mesh, valenx_fields::Field)` pair (one flat-shaded quad per
+/// surface face, the `Cp` value on its nodes); the field is mapped to
+/// triangle-major per-vertex `vertex_colors` through the shared cool-to-warm
+/// ramp ([`crate::products_registry::node_field_to_vertex_colors`]) so the body
+/// renders as a `Cp` map (blue low → red high). Pure and app-state-free. The
+/// readout reports the demo case and the drag / lift coefficients.
+pub(crate) fn aero_product() -> crate::WorkspaceProduct {
+    /// The geometry + colours + headline coefficients a successful demo solve
+    /// yields — a named struct so the fallible builder's return type stays
+    /// simple (no complex tuple).
+    struct Built {
+        mesh: valenx_mesh::Mesh,
+        colors: Vec<[f32; 3]>,
+        cd: f64,
+        cl: f64,
+    }
+
+    // A small canonical demo body (car-ish proportions, ~1 m scale) + a bounded
+    // coarse solve so the synchronous build is fast and deterministic.
+    let speed = 20.0_f64;
+    let built = (|| -> Result<Built, String> {
+        use crate::aero::model::{CutAxis, FlowField};
+        use valenx_aero::{
+            geometry::box_body, run_windtunnel, AeroRequest, TunnelSizing, TurbulenceModel,
+        };
+        let body = box_body(
+            nalgebra::Vector3::new(-0.6, -0.3, -0.2),
+            nalgebra::Vector3::new(0.6, 0.3, 0.2),
+        );
+        let req = AeroRequest::new(speed)
+            .with_turbulence(TurbulenceModel::KEpsilon)
+            .with_sizing(TunnelSizing {
+                cells_across_body: 10,
+                max_cells: 400_000,
+                ..TunnelSizing::default()
+            })
+            .with_max_iterations(20);
+        let result = run_windtunnel(&body, &req).map_err(|e| e.to_string())?;
+        let cd = result.coefficients.cd;
+        let cl = result.coefficients.cl;
+        let viz = crate::aero::viz::build_flow_viz(&result, FlowField::SurfaceCp, CutAxis::Y, 0.5)?;
+        // The field range drives the colour ramp endpoints.
+        let (min, max) = viz.field.range.unwrap_or_else(|| {
+            let mut lo = f64::INFINITY;
+            let mut hi = f64::NEG_INFINITY;
+            for &v in &viz.field.data {
+                if v.is_finite() {
+                    lo = lo.min(v);
+                    hi = hi.max(v);
+                }
+            }
+            if lo <= hi {
+                (lo, hi)
+            } else {
+                (0.0, 1.0)
+            }
+        });
+        let colors = crate::products_registry::node_field_to_vertex_colors(
+            &viz.mesh,
+            &viz.field.data,
+            min,
+            max,
+        );
+        Ok(Built {
+            mesh: viz.mesh,
+            colors,
+            cd,
+            cl,
+        })
+    })();
+
+    match built {
+        Ok(b) => {
+            let loaded = crate::products_registry::loaded_mesh_from(b.mesh, "<aero>/surface-cp");
+            let camera = crate::products_registry::camera_for(&loaded.mesh);
+            let lines = vec![
+                format!("wind tunnel: demo box @ {speed:.0} m/s (k-\u{03B5})"),
+                format!("Cd {:+.4} · Cl {:+.4}", b.cd, b.cl),
+                "surface coloured by pressure coefficient Cp".to_string(),
+            ];
+            crate::WorkspaceProduct {
+                title: "Aero (Cp on demo body)".into(),
+                lines,
+                mesh: Some(loaded),
+                vertex_colors: Some(b.colors),
+                camera,
+                kind2d: None,
+                last_export: None,
+            }
+        }
+        Err(e) => {
+            // Theoretically unreachable for the bounded demo solve; degrade to a
+            // tiny placeholder triangle + a note rather than panicking.
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = vec![0, 1, 2];
+            let mut placeholder = valenx_mesh::Mesh::new("valenx-aero-surface");
+            placeholder.nodes = vec![
+                nalgebra::Vector3::new(0.0, 0.0, 0.0),
+                nalgebra::Vector3::new(1.0, 0.0, 0.0),
+                nalgebra::Vector3::new(0.0, 1.0, 0.0),
+            ];
+            placeholder.element_blocks.push(block);
+            placeholder.recompute_stats();
+            let loaded =
+                crate::products_registry::loaded_mesh_from(placeholder, "<aero>/surface-cp");
+            let camera = crate::products_registry::camera_for(&loaded.mesh);
+            crate::WorkspaceProduct {
+                title: "Aero (Cp on demo body)".into(),
+                lines: vec![
+                    "aero surface-pressure field".to_string(),
+                    format!("solve unavailable — showing placeholder ({e})"),
+                ],
+                mesh: Some(loaded),
+                vertex_colors: None,
+                camera,
+                kind2d: None,
+                last_export: None,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

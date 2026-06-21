@@ -2172,6 +2172,72 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// The agent-bridge product for the parametric CSG feature-tree workbench
+/// (`show_3d{kind="cad"}`).
+///
+/// Rebuilds the **default feature tree** — valenx-cad's canonical punched cube
+/// (a unit box with a Ø0.5 cylinder cut through it) — into BRep solid(s) via
+/// [`rebuild_tree`], then tessellates the final step to a `Tri3`
+/// [`valenx_mesh::Mesh`] with [`tessellate_step`] (which calls
+/// `valenx_cad::solid_to_mesh`). Pure and app-state-free: it constructs a fresh
+/// [`CadWorkbenchState::default`], so it produces exactly the geometry the
+/// workbench shows on first open. The readout rows report the solid's volume,
+/// surface area and triangle count.
+pub(crate) fn cad_product() -> crate::WorkspaceProduct {
+    let state = CadWorkbenchState::default();
+    let built = (|| -> Result<(valenx_mesh::Mesh, f64, f64), String> {
+        let (snapshots, _status) = rebuild_tree(&state)?;
+        let bodies = snapshots.last().cloned().unwrap_or_default();
+        let volume = total_volume(&bodies);
+        let area = total_area(&bodies);
+        let mesh = tessellate_step(&snapshots, snapshots.len(), &[])?;
+        Ok((mesh, volume, area))
+    })();
+    let (mesh, lines) = match built {
+        Ok((mesh, volume, area)) => {
+            let tris = mesh.total_elements();
+            let lines = vec![
+                "parametric CSG: unit box − Ø0.5 through-cylinder".to_string(),
+                format!("volume {volume:.4} u³ · surface area {area:.4} u²"),
+                format!("BRep tessellation: {tris} triangles"),
+            ];
+            (mesh, lines)
+        }
+        Err(e) => {
+            // Theoretically unreachable for the canonical default tree; degrade
+            // to a tiny placeholder triangle + a note rather than panicking.
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = vec![0, 1, 2];
+            let mut placeholder = valenx_mesh::Mesh::new("valenx-cad-part");
+            placeholder.nodes = vec![
+                nalgebra::Vector3::new(0.0, 0.0, 0.0),
+                nalgebra::Vector3::new(1.0, 0.0, 0.0),
+                nalgebra::Vector3::new(0.0, 1.0, 0.0),
+            ];
+            placeholder.element_blocks.push(block);
+            placeholder.recompute_stats();
+            (
+                placeholder,
+                vec![
+                    "parametric CSG feature tree".to_string(),
+                    format!("rebuild unavailable — showing placeholder ({e})"),
+                ],
+            )
+        }
+    };
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<cad>/feature-tree");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "CAD part (parametric CSG)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
