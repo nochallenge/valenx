@@ -868,17 +868,18 @@ fn run_fem(s: &mut FemWorkbenchState) {
 /// `x = Lx` face. Runs the real `valenx-fem` linear-static solver
 /// ([`solve_linear_static`] over a [`structured_box_mesh`] Tet4 box), deforms
 /// the mesh by the nodal displacements (scaled for visibility), and returns the
-/// **deformed boundary skin as a Tri3 surface** (so the tile renders it as a
-/// grey solid — the per-tile 3-D path draws surface elements only) plus the
-/// numeric readout rows. The single source of truth for the agent-bridge FEM
-/// product (see [`crate::agent_commands::AgentCommand::Show3d`] `kind:"fem"`).
+/// **deformed boundary skin as a Tri3 surface** plus a **per-surface-vertex
+/// von-Mises colour vec** (so the tile renders the deformed shape as a stress
+/// colormap) plus the numeric readout rows. The single source of truth for the
+/// agent-bridge FEM product (see
+/// [`crate::agent_commands::AgentCommand::Show3d`] `kind:"fem"`).
 ///
 /// Self-contained (no live workbench state) so the command is deterministic:
 /// every quantity comes from a freshly-built mesh + solve over the constants
-/// below. Per-vertex stress *colour* is deliberately **not** applied here — the
-/// tile vertex format carries no colour, so the deformed shape ships grey and
-/// the von-Mises magnitude is reported in the text rows; colouring the tile is
-/// a deferred renderer change.
+/// below. The colour vec carries one `[r, g, b]` per emitted surface vertex,
+/// built in the *same* loop as the boundary skin so the two are index-aligned;
+/// it maps each boundary node's von-Mises stress through a blue→cyan→green→
+/// yellow→red ramp normalised over `[0, peak σvm]`.
 ///
 /// The rows compare the FE results against closed-form Euler–Bernoulli cantilever
 /// theory (`δ = PL³/3EI`, tip bending `σ = Mc/I` with `M = PL`), and state the
@@ -891,7 +892,7 @@ fn run_fem(s: &mut FemWorkbenchState) {
 /// fixed face always solves); on the theoretically-impossible solver/mesh error
 /// it falls back to a tiny single-triangle placeholder mesh so the tile still
 /// shows *something* (and the rows note the failure) rather than panicking.
-pub(crate) fn fem_beam_loaded_mesh() -> (LoadedMesh, Vec<String>) {
+pub(crate) fn fem_beam_loaded_mesh() -> (LoadedMesh, Vec<[f32; 3]>, Vec<String>) {
     // Canonical cantilever: 1 m span, 50 mm × 100 mm rectangular section,
     // structural steel, 5 kN tip load. Bend about the strong axis (load in -Y,
     // section depth = Ly), so I = b·h³/12 with b = Lz, h = Ly.
@@ -970,7 +971,8 @@ pub(crate) fn fem_beam_loaded_mesh() -> (LoadedMesh, Vec<String>) {
             "FE solve unavailable — showing geometry placeholder".to_string(),
             format!("analytical δ = PL³/3EI = {:.3} mm", analytic_defl_m * 1.0e3),
         ];
-        return (loaded, lines);
+        // No solve → no stress field → no colours (renders plain metal).
+        return (loaded, Vec::new(), lines);
     };
 
     let max_disp = sol.max_displacement(); // m
@@ -995,7 +997,12 @@ pub(crate) fn fem_beam_loaded_mesh() -> (LoadedMesh, Vec<String>) {
         *node += Vector3::new(d[0], d[1], d[2]) * scale;
     }
     deformed.recompute_stats();
-    let skin = boundary_skin_tri3(&deformed, "valenx-fem-cantilever");
+    // Per-node von-Mises colours (blue→cyan→green→yellow→red, normalised over
+    // [0, peak σvm]); the skin builder samples them per boundary face into a
+    // vertex-aligned colour vec in the same loop it builds the connectivity.
+    let node_colors = von_mises_node_colors(&sol.von_mises, max_vm_pa);
+    let (skin, vertex_colors) =
+        boundary_skin_tri3_colored(&deformed, "valenx-fem-cantilever", &node_colors);
     let loaded = loaded_from_mesh(skin, "<fem>/valenx-fem-cantilever");
 
     let lines = vec![
@@ -1025,8 +1032,9 @@ pub(crate) fn fem_beam_loaded_mesh() -> (LoadedMesh, Vec<String>) {
         },
         "FE vs analytical differ: coarse first-order tet mesh is over-stiff and".to_string(),
         "the re-entrant corner stress is mesh-sensitive — refine to converge.".to_string(),
+        "deformed shape coloured by von Mises: blue (low) → red (peak).".to_string(),
     ];
-    (loaded, lines)
+    (loaded, vertex_colors, lines)
 }
 
 /// Wrap a finished `mesh` as a fully-populated [`LoadedMesh`] (quality report +
@@ -1049,18 +1057,47 @@ fn loaded_from_mesh(mesh: valenx_mesh::Mesh, path: &str) -> LoadedMesh {
 /// surface [`valenx_mesh::Mesh`] named `id`. Each single-owner boundary face of
 /// the volumetric mesh is a triangle (Tet4 faces are tris); we keep its
 /// `sorted_nodes` directly. Orientation isn't preserved, but the tile draws the
-/// skin **grey** with per-face normals recomputed at render time, so a flipped
+/// skin with per-face normals recomputed at render time, so a flipped
 /// facet only flips its shading — fine for a deformed-shape preview. Returns a
 /// surface mesh with the same node coordinates (so the deformation shows) and
 /// one Tri3 element per boundary face.
-fn boundary_skin_tri3(mesh: &valenx_mesh::Mesh, id: &str) -> valenx_mesh::Mesh {
+///
+/// `node_colors` (one `[r, g, b]` per *volumetric* node) is sampled per boundary
+/// face into the returned `Vec<[f32; 3]>`, which carries **one colour per
+/// emitted surface vertex** in the exact order
+/// [`crate::wgpu_renderer::triangles_to_vertices`] will later walk the surface:
+/// face-major, then the three corners `[f[0], f[1], f[2]]` of each face — built
+/// in the *same* loop as the connectivity so the two are index-aligned by
+/// construction. Pass an empty `node_colors` to get an empty colour vec back
+/// (the caller then renders plain metal).
+fn boundary_skin_tri3_colored(
+    mesh: &valenx_mesh::Mesh,
+    id: &str,
+    node_colors: &[[f32; 3]],
+) -> (valenx_mesh::Mesh, Vec<[f32; 3]>) {
     let adjacency = valenx_mesh::build_face_adjacency(mesh);
     let mut conn: Vec<u32> = Vec::with_capacity(adjacency.boundary_face_count() * 3);
+    let mut colors: Vec<[f32; 3]> = Vec::with_capacity(adjacency.boundary_face_count() * 3);
+    let want_colors = !node_colors.is_empty();
     for face in adjacency.boundary_faces() {
         // Tet4 boundary faces are triangles (3 nodes). Skip any non-triangular
         // face defensively (none arise for a pure Tet4 box).
         if face.sorted_nodes.len() == 3 {
             conn.extend_from_slice(&face.sorted_nodes);
+            // Same loop, same order: push the three corners' node colours so the
+            // colour vec lines up 1:1 with the surface vertices the renderer
+            // emits for this face. A node index past the colour table degrades
+            // to the metal base rather than panicking.
+            if want_colors {
+                for &node in &face.sorted_nodes {
+                    colors.push(
+                        node_colors
+                            .get(node as usize)
+                            .copied()
+                            .unwrap_or(crate::wgpu_renderer::METAL_BASE),
+                    );
+                }
+            }
         }
     }
     let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
@@ -1069,7 +1106,54 @@ fn boundary_skin_tri3(mesh: &valenx_mesh::Mesh, id: &str) -> valenx_mesh::Mesh {
     surface.nodes = mesh.nodes.clone();
     surface.element_blocks.push(block);
     surface.recompute_stats();
-    surface
+    (surface, colors)
+}
+
+/// 5-stop **jet-style** colormap (blue → cyan → green → yellow → red) mapping a
+/// normalised `t ∈ [0, 1]` to an `[r, g, b]` triple in `[0, 1]`, ready to use
+/// directly as a vertex base albedo. Used for the FEM von-Mises stress ramp on
+/// the deformed-shape tile.
+///
+/// This is the classic engineering stress-map ramp the task calls for — cool
+/// (low stress) at `t = 0`, hot (high stress) at `t = 1`. It is intentionally
+/// distinct from `valenx_fields::colormap::cool_to_warm` (a blue→white→red
+/// divergent ramp that returns `u8`s): a stress magnitude is sequential, not
+/// divergent, and the renderer wants floats.
+fn von_mises_jet(t: f64) -> [f32; 3] {
+    const STOPS: &[(f32, [f32; 3])] = &[
+        (0.00, [0.0, 0.0, 1.0]), // blue   — low stress
+        (0.25, [0.0, 1.0, 1.0]), // cyan
+        (0.50, [0.0, 1.0, 0.0]), // green
+        (0.75, [1.0, 1.0, 0.0]), // yellow
+        (1.00, [1.0, 0.0, 0.0]), // red    — high stress
+    ];
+    let t = (t as f32).clamp(0.0, 1.0);
+    for i in 0..STOPS.len() - 1 {
+        let (t0, c0) = STOPS[i];
+        let (t1, c1) = STOPS[i + 1];
+        if t <= t1 {
+            let span = (t1 - t0).max(1e-9);
+            let f = (t - t0) / span;
+            return [
+                c0[0] + (c1[0] - c0[0]) * f,
+                c0[1] + (c1[1] - c0[1]) * f,
+                c0[2] + (c1[2] - c0[2]) * f,
+            ];
+        }
+    }
+    STOPS[STOPS.len() - 1].1
+}
+
+/// Map a per-node von-Mises stress field to per-node jet colours, normalised
+/// over `[0, max_vm]` (low → blue, high → red). A non-positive `max_vm`
+/// (unstressed body) collapses every node to the cool end rather than dividing
+/// by zero.
+fn von_mises_node_colors(von_mises: &[f64], max_vm: f64) -> Vec<[f32; 3]> {
+    let inv = if max_vm > 0.0 { 1.0 / max_vm } else { 0.0 };
+    von_mises
+        .iter()
+        .map(|&vm| von_mises_jet(vm * inv))
+        .collect()
 }
 
 /// A fixed 3/4-view [`valenx_viz::OrbitCamera`] framing the FEM cantilever
@@ -1307,6 +1391,65 @@ mod tests {
         assert!(
             (r2 - 0.5 * r1).abs() / r1 < 1e-6,
             "doubling the load halves L/δ: {r1} → {r2}"
+        );
+    }
+
+    #[test]
+    fn fem_beam_product_carries_aligned_vertex_colors() {
+        // The agent-bridge FEM product now ships a per-surface-vertex von-Mises
+        // colour vec. It must be non-empty and exactly one colour per surface
+        // vertex the tile renderer emits (3 per boundary-skin triangle), so
+        // `triangles_to_vertices_colored` stays index-aligned.
+        let (loaded, vertex_colors, _lines) = fem_beam_loaded_mesh();
+        let surface = crate::viewport::mesh_to_triangle_surface(&loaded.mesh)
+            .expect("the cantilever skin is a Tri3 surface");
+        let expected = surface.triangles.len() * 3;
+        assert!(
+            !vertex_colors.is_empty(),
+            "FEM product must carry stress colours"
+        );
+        assert_eq!(
+            vertex_colors.len(),
+            expected,
+            "one colour per emitted surface vertex (3 × {} faces)",
+            surface.triangles.len()
+        );
+        // Every colour is a valid [0,1] RGB triple from the jet ramp.
+        for c in &vertex_colors {
+            for ch in c {
+                assert!(
+                    (0.0..=1.0).contains(ch),
+                    "colour channel out of range: {ch}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn von_mises_jet_spans_blue_to_red() {
+        // Endpoints of the stress ramp: t=0 is pure blue (low stress), t=1 is
+        // pure red (peak stress); the middle is green.
+        assert_eq!(von_mises_jet(0.0), [0.0, 0.0, 1.0]);
+        assert_eq!(von_mises_jet(1.0), [1.0, 0.0, 0.0]);
+        assert_eq!(von_mises_jet(0.5), [0.0, 1.0, 0.0]);
+        // Out-of-range inputs clamp rather than extrapolate.
+        assert_eq!(von_mises_jet(-1.0), [0.0, 0.0, 1.0]);
+        assert_eq!(von_mises_jet(2.0), [1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn von_mises_node_colors_normalise_over_peak() {
+        // A node at peak stress maps to red, a node at zero maps to blue, and a
+        // zero peak (unstressed body) collapses everything to the cool end.
+        let colors = von_mises_node_colors(&[0.0, 50.0, 100.0], 100.0);
+        assert_eq!(colors.len(), 3);
+        assert_eq!(colors[0], [0.0, 0.0, 1.0]); // 0 → blue
+        assert_eq!(colors[2], [1.0, 0.0, 0.0]); // peak → red
+        let flat = von_mises_node_colors(&[0.0, 0.0], 0.0);
+        assert_eq!(
+            flat[0],
+            [0.0, 0.0, 1.0],
+            "zero peak → cool end, no div-by-zero"
         );
     }
 

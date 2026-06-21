@@ -31,18 +31,30 @@ use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};
 
 /// Vertex layout the pipeline expects: position (float3) + normal
-/// (float3). No texture coords, no vertex colours — flat shading
-/// derives colour entirely from the normal and light direction.
+/// (float3) + colour (float3). The fragment uses `color` as the base
+/// albedo, shaded by the existing normal·light Lambert term. Plain
+/// meshes set `color` to the neutral brushed-metal constant
+/// ([`METAL_BASE`]) for every vertex, which reproduces the old
+/// hard-coded flat shading byte-for-byte; field overlays (e.g. the FEM
+/// von-Mises ramp) write a per-vertex colour instead.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
 pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
+    pub color: [f32; 3],
 }
 
-const VERTEX_ATTRS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+/// The neutral brushed-metal base albedo every plain (non-field) mesh
+/// uses — the exact constant the fragment shader baked in before
+/// per-vertex colour existed. Writing this into every vertex's `color`
+/// makes the metal path render identically to the old pipeline.
+pub const METAL_BASE: [f32; 3] = [0.66, 0.76, 0.88];
+
+const VERTEX_ATTRS: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
     0 => Float32x3, // position
     1 => Float32x3, // normal
+    2 => Float32x3, // color (base albedo)
 ];
 
 fn vertex_layout() -> wgpu::VertexBufferLayout<'static> {
@@ -100,10 +112,12 @@ struct Uniforms {
 struct VIn {
     @location(0) position: vec3<f32>,
     @location(1) normal:   vec3<f32>,
+    @location(2) color:    vec3<f32>,
 }
 struct VOut {
     @builtin(position) clip_pos: vec4<f32>,
     @location(0) normal: vec3<f32>,
+    @location(1) color:  vec3<f32>,
 }
 
 @vertex
@@ -111,6 +125,7 @@ fn vs_main(v_in: VIn) -> VOut {
     var out: VOut;
     out.clip_pos = u.mvp * vec4<f32>(v_in.position, 1.0);
     out.normal = v_in.normal;
+    out.color = v_in.color;
     return out;
 }
 
@@ -119,7 +134,11 @@ fn fs_main(f_in: VOut) -> @location(0) vec4<f32> {
     let n = normalize(f_in.normal);
     let l = normalize(u.light_dir.xyz);
     let lambert = max(dot(-l, n), 0.0);
-    let base = vec3<f32>(0.66, 0.76, 0.88);
+    // Base albedo comes from the interpolated vertex colour. A plain
+    // mesh feeds the neutral brushed-metal constant (METAL_BASE) into
+    // every vertex, so this is identical to the old hard-coded base;
+    // a field overlay feeds a per-vertex colormap colour instead.
+    let base = f_in.color;
     let ambient = 0.22;
     let color = base * (ambient + 0.78 * lambert);
     return vec4<f32>(color, 1.0);
@@ -833,6 +852,13 @@ impl WgpuRenderer {
 /// triangle becomes three `Vertex` entries that share the triangle's
 /// face normal, so the fragment shader gets a constant normal across
 /// each triangle (the visual hallmark of flat shading).
+///
+/// Every vertex's `color` is the neutral brushed-metal constant
+/// ([`METAL_BASE`]) — exactly the base albedo the fragment shader baked
+/// in before per-vertex colour existed — so this path (the central
+/// viewport, STLs, and all plain product meshes: rocket / gear / bracket
+/// / rcbeam) renders byte-for-byte identically to the pre-colour
+/// pipeline.
 pub fn triangles_to_vertices(mesh: &valenx_viz::TriangleMesh) -> Vec<Vertex> {
     let mut out = Vec::with_capacity(mesh.triangles.len() * 3);
     for tri in &mesh.triangles {
@@ -841,7 +867,42 @@ pub fn triangles_to_vertices(mesh: &valenx_viz::TriangleMesh) -> Vec<Vertex> {
             out.push(Vertex {
                 position: *v,
                 normal: n,
+                color: METAL_BASE,
             });
+        }
+    }
+    out
+}
+
+/// Build flat-shaded vertex data from a `TriangleMesh`, colouring each
+/// of the surface's vertices from `vertex_colors` (one `[r, g, b]` in
+/// `[0, 1]` per surface vertex, i.e. `3 × mesh.triangles.len()` entries
+/// laid out triangle-major then vertex-within-triangle — the same order
+/// [`triangles_to_vertices`] emits). Used for field overlays such as the
+/// FEM von-Mises ramp.
+///
+/// Falls back to [`METAL_BASE`] for any vertex whose colour is missing
+/// (a `vertex_colors` shorter than the emitted vertex stream), so a
+/// length mismatch degrades gracefully to the plain metal look rather
+/// than panicking or mis-indexing. Callers should pass a slice whose
+/// length equals the vertex count this function would emit; the FEM
+/// producer builds the two in the same loop so they stay aligned.
+pub fn triangles_to_vertices_colored(
+    mesh: &valenx_viz::TriangleMesh,
+    vertex_colors: &[[f32; 3]],
+) -> Vec<Vertex> {
+    let mut out = Vec::with_capacity(mesh.triangles.len() * 3);
+    let mut vi = 0usize;
+    for tri in &mesh.triangles {
+        let n = tri.computed_normal();
+        for v in &tri.vertices {
+            let color = vertex_colors.get(vi).copied().unwrap_or(METAL_BASE);
+            out.push(Vertex {
+                position: *v,
+                normal: n,
+                color,
+            });
+            vi += 1;
         }
     }
     out
@@ -911,9 +972,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vertex_is_repr_c_and_24_bytes() {
-        // Position (3 × 4) + normal (3 × 4) = 24 bytes, no padding.
-        assert_eq!(std::mem::size_of::<Vertex>(), 24);
+    fn vertex_is_repr_c_and_36_bytes() {
+        // Position (3 × 4) + normal (3 × 4) + colour (3 × 4) = 36 bytes,
+        // no padding. The `vertex_attr_array` offsets (0, 12, 24) and the
+        // stride must agree with this for the GPU to read attributes
+        // correctly.
+        assert_eq!(std::mem::size_of::<Vertex>(), 36);
     }
 
     #[test]
@@ -945,6 +1009,35 @@ mod tests {
         // Each triangle's three vertices share the face normal.
         assert_eq!(verts[0].normal, verts[1].normal);
         assert_eq!(verts[1].normal, verts[2].normal);
+        // Every plain-path vertex carries the metal base colour — this is
+        // what makes the central viewport render identically to before.
+        for v in &verts {
+            assert_eq!(v.color, METAL_BASE);
+        }
+    }
+
+    #[test]
+    fn triangles_to_vertices_colored_assigns_per_vertex_colors() {
+        use valenx_viz::{StlFormat, StlTriangle, TriangleMesh};
+        let mesh = TriangleMesh {
+            format: Some(StlFormat::Ascii),
+            name: None,
+            triangles: vec![StlTriangle {
+                normal: [0.0, 0.0, 1.0],
+                vertices: [[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            }],
+        };
+        let colors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let verts = triangles_to_vertices_colored(&mesh, &colors);
+        assert_eq!(verts.len(), 3);
+        assert_eq!(verts[0].color, [1.0, 0.0, 0.0]);
+        assert_eq!(verts[1].color, [0.0, 1.0, 0.0]);
+        assert_eq!(verts[2].color, [0.0, 0.0, 1.0]);
+        // A short colour slice degrades to the metal base, never panics.
+        let short = triangles_to_vertices_colored(&mesh, &[[0.5, 0.5, 0.5]]);
+        assert_eq!(short[0].color, [0.5, 0.5, 0.5]);
+        assert_eq!(short[1].color, METAL_BASE);
+        assert_eq!(short[2].color, METAL_BASE);
     }
 
     #[test]
