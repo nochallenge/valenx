@@ -369,7 +369,17 @@ fn push_cyl_z(
 /// nacelle box at hub height and a three-blade rotor (thin tapered blades in
 /// the rotor plane, perpendicular to the wind along +x). The blade length
 /// follows the rotor radius. `None` for an invalid configuration.
-fn turbine_solid_mesh(s: &WindTurbineWorkbenchState) -> Option<Mesh> {
+/// Presentation spin rate of the rotor (hub + blades), rad/s (~0.2 rev/s) — a
+/// slow, readable turbine spin keyed to the rotor's large size.
+const ROTOR_RAD_PER_S: f32 = 1.2;
+
+/// Build the turbine as a triangle [`Mesh`] together with the
+/// [`crate::RigidPart`] for the rotating rotor (the hub + three blades), so the
+/// tower and nacelle stay put while the rotor spins about the wind (+x) axis
+/// through the hub. `None` for an invalid configuration.
+fn turbine_solid_mesh_parts(
+    s: &WindTurbineWorkbenchState,
+) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     // Gate the 3-D build on a physically valid configuration.
     let r = s.rotor_radius_m;
     if !(r.is_finite() && r > 0.0) {
@@ -404,6 +414,9 @@ fn turbine_solid_mesh(s: &WindTurbineWorkbenchState) -> Option<Mesh> {
         Vector3::new(0.0, 0.0, hub_height),
         Vector3::new(r * 0.12, r * 0.05, r * 0.05),
     );
+    // Rotating rotor (hub + three blades) is built last; record its node span so
+    // the animation rotates exactly the rotor and leaves the tower/nacelle still.
+    let rotor_start = nodes.len();
     // Hub (at the upwind front of the nacelle, +x).
     let hub = Vector3::new(r * 0.15, 0.0, hub_height);
     push_box(
@@ -431,6 +444,7 @@ fn turbine_solid_mesh(s: &WindTurbineWorkbenchState) -> Option<Mesh> {
             tip + chord * tip_hc,
         );
     }
+    let rotor_end = nodes.len();
 
     let mut block = ElementBlock::new(ElementType::Tri3);
     block.connectivity = tris.iter().map(|&i| i as u32).collect();
@@ -438,7 +452,20 @@ fn turbine_solid_mesh(s: &WindTurbineWorkbenchState) -> Option<Mesh> {
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+    // The rotor spins about the wind axis (+x) through the hub centre.
+    let parts = vec![crate::RigidPart {
+        node_range: rotor_start..rotor_end,
+        axis: [1.0, 0.0, 0.0],
+        pivot: [hub.x as f32, hub.y as f32, hub.z as f32],
+        rad_per_s: ROTOR_RAD_PER_S,
+    }];
+    Some((mesh, parts))
+}
+
+/// Build the turbine as a triangle [`Mesh`] (without the rotor part metadata)
+/// for the central viewport. See [`turbine_solid_mesh_parts`].
+fn turbine_solid_mesh(s: &WindTurbineWorkbenchState) -> Option<Mesh> {
+    turbine_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D turbine solid and load it into the central viewport.
@@ -472,7 +499,7 @@ fn load_turbine_3d(app: &mut ValenxApp) {
 /// The readout rows mirror the panel's `compute()` performance readout.
 pub(crate) fn windturbine_product() -> crate::WorkspaceProduct {
     let s = WindTurbineWorkbenchState::default();
-    let mesh = turbine_solid_mesh(&s).expect("default 3 MW turbine ⇒ a 3-D solid");
+    let (mesh, parts) = turbine_solid_mesh_parts(&s).expect("default 3 MW turbine ⇒ a 3-D solid");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<turbine>/valenx-windturbine");
     let readout = compute(&s).expect("default 3 MW turbine ⇒ a valid readout");
     let lines = crate::products_registry::lines_from_readout(&readout);
@@ -487,7 +514,14 @@ pub(crate) fn windturbine_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
-        animation: None,
+        // Animated: the rotor (hub + three blades) spins about the wind axis
+        // through the hub while the tower and nacelle stay put. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -552,6 +586,38 @@ mod tests {
             ..Default::default()
         };
         assert!(turbine_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn windturbine_product_spins_the_rotor_only() {
+        // The product carries a RigidParts animation: the rotor (hub + blades, a
+        // non-empty trailing node range) spins about +x at a non-zero rate; the
+        // leading tower + nacelle nodes are left static.
+        let product = windturbine_product();
+        let loaded = product.mesh.as_ref().expect("turbine product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("turbine product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 1, "one rotating part: the rotor");
+                let p = &parts[0];
+                assert!(
+                    p.node_range.start < p.node_range.end,
+                    "non-empty rotor range"
+                );
+                assert!(
+                    p.node_range.start > 0,
+                    "the tower + nacelle precede the rotor (static)"
+                );
+                assert_eq!(p.node_range.end, node_count, "rotor reaches the final node");
+                assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about the wind axis");
+                assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("turbine must use per-part rigid motion")
+            }
+        }
     }
 }
 

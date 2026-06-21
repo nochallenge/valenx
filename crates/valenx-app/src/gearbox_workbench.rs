@@ -317,7 +317,17 @@ fn push_cyl_x(
 /// drawn as discs on the shafts, with a base. Representative geometry (the
 /// gears are smooth discs sized by stage, not toothed; the ratios are the
 /// `valenx-gearbox` result). `None` for an invalid train.
-fn gearbox_solid_mesh(s: &GearboxWorkbenchState) -> Option<Mesh> {
+/// Presentation spin rate of the input (stage-1) pinion, rad/s (~1.3 rev/s) —
+/// a readable inspect speed; the rest follow the true ratios + mesh signs.
+const INPUT_RAD_PER_S: f32 = 8.0;
+
+/// Build the gearbox as a triangle [`Mesh`] together with a [`crate::RigidPart`]
+/// per gear disc, so the four gears spin about their shafts (the +x axis through
+/// each shaft) while the three cosmetic shaft rods and the base stay put.
+/// Meshing pairs counter-rotate and the stage-2 pinion shares the mid shaft with
+/// the stage-1 gear (equal ω); rates follow the disc-radius ratio,
+/// presentation-scaled. `None` for an invalid train.
+fn gearbox_solid_mesh_parts(s: &GearboxWorkbenchState) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     build_train(s).ok()?;
 
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
@@ -336,39 +346,53 @@ fn gearbox_solid_mesh(s: &GearboxWorkbenchState) -> Option<Mesh> {
             12,
         );
     }
+
+    // Record each gear disc's node range + shaft pivot as we fuse it, so the
+    // animation rotates each gear about its own shaft (+x). Order: stage-1
+    // pinion, stage-1 gear, stage-2 pinion, stage-2 gear.
+    let mut gear_ranges: Vec<(std::ops::Range<usize>, [f32; 3])> = Vec::with_capacity(4);
+    let mut push_gear = |nodes: &mut Vec<Vector3<f64>>,
+                         tris: &mut Vec<usize>,
+                         centre: Vector3<f64>,
+                         half_len: f64,
+                         radius: f64| {
+        let start = nodes.len();
+        push_cyl_x(nodes, tris, centre, half_len, radius, 24);
+        let end = nodes.len();
+        // Pivot is the shaft line: x is irrelevant for +x rotation, so use
+        // the gear's (y, z) shaft centre.
+        gear_ranges.push((start..end, [0.0, centre.y as f32, centre.z as f32]));
+    };
+
     // Stage 1: pinion on the top shaft meshing the gear on the mid shaft.
-    push_cyl_x(
+    push_gear(
         &mut nodes,
         &mut tris,
         Vector3::new(-0.05, 0.45, z),
         0.1,
         pinion_r,
-        24,
     );
-    push_cyl_x(
+    push_gear(
         &mut nodes,
         &mut tris,
         Vector3::new(-0.06, 0.0, z),
         0.12,
         gear_r,
-        28,
     );
     // Stage 2: pinion on the mid shaft meshing the gear on the lower shaft.
-    push_cyl_x(
+    push_gear(
         &mut nodes,
         &mut tris,
         Vector3::new(0.3, 0.0, z),
         0.1,
         pinion_r,
-        24,
     );
-    push_cyl_x(
+    push_gear(
         &mut nodes,
         &mut tris,
         Vector3::new(0.29, -0.45, z),
         0.12,
         gear_r,
-        28,
     );
     // Base.
     push_box(
@@ -384,7 +408,34 @@ fn gearbox_solid_mesh(s: &GearboxWorkbenchState) -> Option<Mesh> {
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+
+    // True mesh kinematics on the representative discs (ratio = pinion_r/gear_r
+    // per stage): the input pinion spins +; the stage-1 gear counter-rotates and
+    // is slower; the stage-2 pinion shares the mid shaft (equal ω); the stage-2
+    // gear counter-rotates the stage-2 pinion (sign flips back +) and is slower.
+    let step = (pinion_r / gear_r) as f32; // <1 per stage
+    let w_in = INPUT_RAD_PER_S;
+    let w_s1g = -w_in * step; // stage-1 gear (counter, slower)
+    let w_s2p = w_s1g; // stage-2 pinion rigid on the mid shaft
+    let w_s2g = -w_s2p * step; // stage-2 gear (counter again ⇒ +, slower)
+    let omegas = [w_in, w_s1g, w_s2p, w_s2g];
+    let parts: Vec<crate::RigidPart> = gear_ranges
+        .into_iter()
+        .zip(omegas)
+        .map(|((node_range, pivot), rad_per_s)| crate::RigidPart {
+            node_range,
+            axis: [1.0, 0.0, 0.0],
+            pivot,
+            rad_per_s,
+        })
+        .collect();
+    Some((mesh, parts))
+}
+
+/// Build the gearbox [`Mesh`] (without the per-gear part metadata) for the
+/// central viewport. See [`gearbox_solid_mesh_parts`].
+fn gearbox_solid_mesh(s: &GearboxWorkbenchState) -> Option<Mesh> {
+    gearbox_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D gearbox solid and load it into the central viewport.
@@ -417,7 +468,8 @@ fn load_gearbox_3d(app: &mut ValenxApp) {
 /// [`GearboxWorkbenchState::default`].
 pub(crate) fn gearbox_product() -> crate::WorkspaceProduct {
     let s = GearboxWorkbenchState::default();
-    let mesh = gearbox_solid_mesh(&s).expect("canonical gearbox ⇒ gear-train solid builds");
+    let (mesh, parts) =
+        gearbox_solid_mesh_parts(&s).expect("canonical gearbox ⇒ gear-train solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<gearbox>/valenx-gearbox");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical gearbox ⇒ readout computes"),
@@ -433,7 +485,14 @@ pub(crate) fn gearbox_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
-        animation: None,
+        // Animated: each gear disc spins about its shaft, meshing pairs counter-
+        // rotate, while the shaft rods and base stay put. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -511,6 +570,58 @@ mod tests {
             ..Default::default()
         };
         assert!(gearbox_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn gearbox_product_spins_four_gears_counter_rotating() {
+        // The product carries a RigidParts animation: four gear discs, each a
+        // non-empty node range within the mesh, all spinning about +x. Meshing
+        // pairs counter-rotate; the stage-2 pinion shares the mid shaft with the
+        // stage-1 gear (equal ω). The shaft rods + base are left static.
+        let product = gearbox_product();
+        let loaded = product.mesh.as_ref().expect("gearbox product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("gearbox product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 4, "four gear discs");
+                for p in &parts {
+                    assert!(
+                        p.node_range.start < p.node_range.end,
+                        "non-empty gear range"
+                    );
+                    assert!(p.node_range.end <= node_count, "gear range within the mesh");
+                    assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about its shaft");
+                    assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+                }
+                let w_in = parts[0].rad_per_s; // stage-1 pinion (input)
+                let w_s1g = parts[1].rad_per_s; // stage-1 gear
+                let w_s2p = parts[2].rad_per_s; // stage-2 pinion (mid shaft)
+                let w_s2g = parts[3].rad_per_s; // stage-2 gear (output)
+                assert!(w_in > 0.0, "input pinion spins +");
+                assert!(w_s1g < 0.0, "stage-1 gear counter-rotates the input");
+                assert!(
+                    (w_s1g - w_s2p).abs() < 1e-6,
+                    "stage-2 pinion shares the mid shaft with the stage-1 gear"
+                );
+                assert!(
+                    w_s2g > 0.0,
+                    "stage-2 gear counter-rotates the pinion (sign flips back +)"
+                );
+                // The train steps down: the input is fastest, the output slowest.
+                assert!(w_in.abs() > w_s1g.abs());
+                assert!(w_s2p.abs() > w_s2g.abs());
+                // The first gear is built right after the three shaft rods (static).
+                assert!(
+                    parts[0].node_range.start > 0,
+                    "shaft rods precede the gears"
+                );
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("gearbox must use per-part rigid motion")
+            }
+        }
     }
 }
 

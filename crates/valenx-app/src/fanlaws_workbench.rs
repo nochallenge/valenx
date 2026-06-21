@@ -303,13 +303,23 @@ fn push_x_cylinder(
 /// around it. Representative geometry (not to scale; the affinity-law
 /// numbers are the `valenx-fanlaws` result). `None` for an invalid
 /// configuration.
-fn fan_solid_mesh(s: &FanLawsWorkbenchState) -> Option<Mesh> {
+/// Presentation spin rate of the fan rotor (hub + blades), rad/s (~1.3 rev/s)
+/// — a readable inspect speed, not the real fan-speed blur.
+const ROTOR_RAD_PER_S: f32 = 8.0;
+
+/// Build the fan as a triangle [`Mesh`] together with the [`crate::RigidPart`]
+/// for the rotating rotor (hub + blades), so the back orientation plate stays
+/// put while the rotor spins about the +x axis. `None` for an invalid config.
+fn fan_solid_mesh_parts(s: &FanLawsWorkbenchState) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     // Gate on the real crate object: an invalid baseline yields no solid.
     baseline(s).ok()?;
 
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
     let mut tris: Vec<usize> = Vec::new();
 
+    // Rotating rotor (hub + all blades) is built first; record its node span so
+    // the animation rotates exactly the rotor and leaves the back plate static.
+    let rotor_start = nodes.len();
     // Central hub on the spin (x) axis.
     push_x_cylinder(&mut nodes, &mut tris, 0.18, 0.16, 16);
 
@@ -366,7 +376,9 @@ fn fan_solid_mesh(s: &FanLawsWorkbenchState) -> Option<Mesh> {
         }
     }
 
-    // A short back plate behind the hub for orientation.
+    let rotor_end = nodes.len();
+
+    // A short back plate behind the hub for orientation (static).
     push_box(
         &mut nodes,
         &mut tris,
@@ -380,7 +392,20 @@ fn fan_solid_mesh(s: &FanLawsWorkbenchState) -> Option<Mesh> {
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+    // The rotor spins about the fan (x) axis through the origin (the hub centre).
+    let parts = vec![crate::RigidPart {
+        node_range: rotor_start..rotor_end,
+        axis: [1.0, 0.0, 0.0],
+        pivot: [0.0, 0.0, 0.0],
+        rad_per_s: ROTOR_RAD_PER_S,
+    }];
+    Some((mesh, parts))
+}
+
+/// Build the fan as a triangle [`Mesh`] (without the rotor part metadata) for
+/// the central viewport. See [`fan_solid_mesh_parts`].
+fn fan_solid_mesh(s: &FanLawsWorkbenchState) -> Option<Mesh> {
+    fan_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D fan solid and load it into the central viewport.
@@ -407,7 +432,7 @@ fn load_fan_3d(app: &mut ValenxApp) {
 /// its `compute()` readout rows (see [`crate::products_registry`]).
 pub(crate) fn fanlaws_product() -> crate::WorkspaceProduct {
     let s = FanLawsWorkbenchState::default();
-    let mesh = fan_solid_mesh(&s).expect("canonical fan laws ⇒ fan solid builds");
+    let (mesh, parts) = fan_solid_mesh_parts(&s).expect("canonical fan laws ⇒ fan solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fanlaws>/valenx-fan");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical fan laws ⇒ readout computes"),
@@ -423,7 +448,14 @@ pub(crate) fn fanlaws_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
-        animation: None,
+        // Animated: the rotor (hub + blades) spins about the fan axis while the
+        // back orientation plate stays put. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -499,6 +531,36 @@ mod tests {
             ..Default::default()
         };
         assert!(fan_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn fanlaws_product_spins_the_rotor_only() {
+        // The product carries a RigidParts animation: the rotor (hub + blades, a
+        // non-empty node range that does not reach the final node) spins about
+        // +x at a non-zero rate; the trailing back plate is left static.
+        let product = fanlaws_product();
+        let loaded = product.mesh.as_ref().expect("fan product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("fan product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 1, "one rotating part: the rotor");
+                let p = &parts[0];
+                assert!(
+                    p.node_range.start < p.node_range.end,
+                    "non-empty rotor range"
+                );
+                assert_eq!(p.node_range.start, 0, "rotor is built first");
+                assert!(
+                    p.node_range.end < node_count,
+                    "the trailing back plate is outside the rotor range (static)"
+                );
+                assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about the fan axis");
+                assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+            }
+            crate::ProductMotion::Turntable { .. } => panic!("fan must use per-part rigid motion"),
+        }
     }
 }
 
