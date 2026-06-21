@@ -400,6 +400,9 @@ valenx-structpredict = { path = "../valenx-structpredict" }
 # The unified synthetic-RNA design workflow,
 # surfaced by the Genetics workbench's guided "RNA Designer" panel.
 valenx-rnadesign     = { path = "../valenx-rnadesign" }
+# Native codon optimisation (reverse translation / CAI / GC), backing
+# the Workbench+Agent "DNA construct" workspace product.
+valenx-codon-optimize = { path = "../valenx-codon-optimize" }
 
 # Adapter registry wiring — pull in every live adapter so the
 # browser tree has something real to enumerate and the Run action

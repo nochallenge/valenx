@@ -861,6 +861,231 @@ fn run_fem(s: &mut FemWorkbenchState) {
     }
 }
 
+/// Canonical steel-cantilever demo for the Workbench+Agent **3-D workspace
+/// tile**: a 1 m bar of 50 × 100 mm rectangular section, structural steel
+/// (`E = 200 GPa`, `ν = 0.30`, `ρ = 7850 kg/m³`, yield `σy = 250 MPa`),
+/// **fully fixed at `x = 0`** and carrying a **5 kN tip load** in `−Y` on the
+/// `x = Lx` face. Runs the real `valenx-fem` linear-static solver
+/// ([`solve_linear_static`] over a [`structured_box_mesh`] Tet4 box), deforms
+/// the mesh by the nodal displacements (scaled for visibility), and returns the
+/// **deformed boundary skin as a Tri3 surface** (so the tile renders it as a
+/// grey solid — the per-tile 3-D path draws surface elements only) plus the
+/// numeric readout rows. The single source of truth for the agent-bridge FEM
+/// product (see [`crate::agent_commands::AgentCommand::Show3d`] `kind:"fem"`).
+///
+/// Self-contained (no live workbench state) so the command is deterministic:
+/// every quantity comes from a freshly-built mesh + solve over the constants
+/// below. Per-vertex stress *colour* is deliberately **not** applied here — the
+/// tile vertex format carries no colour, so the deformed shape ships grey and
+/// the von-Mises magnitude is reported in the text rows; colouring the tile is
+/// a deferred renderer change.
+///
+/// The rows compare the FE results against closed-form Euler–Bernoulli cantilever
+/// theory (`δ = PL³/3EI`, tip bending `σ = Mc/I` with `M = PL`), and state the
+/// factor of safety against yield. The FE vs analytical figures **will differ**
+/// — the structured box is a coarse first-order tetrahedral mesh, so the
+/// bending stiffness is over-stiff and the corner stress is mesh-sensitive; the
+/// rows say so rather than implying agreement.
+///
+/// Infallible for the canonical inputs (a non-degenerate box with a populated
+/// fixed face always solves); on the theoretically-impossible solver/mesh error
+/// it falls back to a tiny single-triangle placeholder mesh so the tile still
+/// shows *something* (and the rows note the failure) rather than panicking.
+pub(crate) fn fem_beam_loaded_mesh() -> (LoadedMesh, Vec<String>) {
+    // Canonical cantilever: 1 m span, 50 mm × 100 mm rectangular section,
+    // structural steel, 5 kN tip load. Bend about the strong axis (load in -Y,
+    // section depth = Ly), so I = b·h³/12 with b = Lz, h = Ly.
+    const LX: f64 = 1.0; // span (m)
+    const LY: f64 = 0.10; // section depth in the bending (−Y) direction (m)
+    const LZ: f64 = 0.05; // section width (m)
+    const NX: usize = 16;
+    const NY: usize = 4;
+    const NZ: usize = 2;
+    const E_PA: f64 = 200.0e9; // Young's modulus (Pa)
+    const NU: f64 = 0.30;
+    const RHO: f64 = 7850.0;
+    const YIELD_MPA: f64 = 250.0;
+    const LOAD_N: f64 = 5000.0; // tip load (N), downward (−Y)
+
+    // Closed-form Euler–Bernoulli cantilever reference (strong-axis bending):
+    //   I = b·h³/12   (b = width Lz, h = depth Ly)
+    //   δ_tip = P·L³ / (3·E·I)
+    //   M_root = P·L ; σ_bending = M·c/I  with c = h/2
+    let i_area = LZ * LY * LY * LY / 12.0; // m^4
+    let analytic_defl_m = LOAD_N * LX * LX * LX / (3.0 * E_PA * i_area); // m
+    let m_root = LOAD_N * LX; // N·m
+    let analytic_bending_pa = m_root * (LY / 2.0) / i_area; // Pa
+
+    // Build the structured Tet4 box + run the real linear-static solver with the
+    // x=0 face fully fixed and the tip load spread over the x=Lx face nodes.
+    let built = (|| -> Option<(valenx_mesh::Mesh, valenx_fem::native_solver::NativeSolution)> {
+        let mesh = structured_box_mesh(LX, LY, LZ, NX, NY, NZ).ok()?;
+        let material = FemMaterial {
+            youngs_modulus: E_PA,
+            poisson_ratio: NU,
+            density: RHO,
+            ..Default::default()
+        };
+        let tol = (LX / NX as f64) * 1e-3 + 1e-9;
+        let mut constraints = Vec::new();
+        let mut tip_nodes = Vec::new();
+        for (i, p) in mesh.nodes.iter().enumerate() {
+            if p.x <= tol {
+                constraints.push(NodalConstraint::fixed(i));
+            } else if p.x >= LX - tol {
+                tip_nodes.push(i);
+            }
+        }
+        if constraints.is_empty() || tip_nodes.is_empty() {
+            return None;
+        }
+        let per = -LOAD_N / tip_nodes.len() as f64;
+        let forces: Vec<NodalForce> = tip_nodes
+            .iter()
+            .map(|&n| NodalForce {
+                node: n,
+                force: [0.0, per, 0.0],
+            })
+            .collect();
+        let sol = solve_linear_static(&mesh, &material, &constraints, &forces).ok()?;
+        Some((mesh, sol))
+    })();
+
+    let Some((mesh, sol)) = built else {
+        // Theoretically unreachable for the canonical inputs; degrade to a tiny
+        // placeholder mesh + a note rather than panicking.
+        let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+        block.connectivity = vec![0, 1, 2];
+        let mut placeholder = valenx_mesh::Mesh::new("valenx-fem-cantilever");
+        placeholder.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(LX, 0.0, 0.0),
+            Vector3::new(0.0, LY, 0.0),
+        ];
+        placeholder.element_blocks.push(block);
+        placeholder.recompute_stats();
+        let loaded = loaded_from_mesh(placeholder, "<fem>/valenx-fem-cantilever");
+        let lines = vec![
+            "steel cantilever 1 m, 50 × 100 mm, 5 kN tip".to_string(),
+            "FE solve unavailable — showing geometry placeholder".to_string(),
+            format!("analytical δ = PL³/3EI = {:.3} mm", analytic_defl_m * 1.0e3),
+        ];
+        return (loaded, lines);
+    };
+
+    let max_disp = sol.max_displacement(); // m
+    let max_vm_pa = sol.max_von_mises(); // Pa
+    let fos = if max_vm_pa > 0.0 {
+        Some(YIELD_MPA * 1.0e6 / max_vm_pa)
+    } else {
+        None
+    };
+
+    // Deform the Tet4 mesh by the nodal displacements, scaled so the bending is
+    // visible in the small tile (same 10%-of-span visual scale the workbench
+    // viewport uses), then extract the deformed boundary as a Tri3 skin so the
+    // surface-only tile renderer can draw it as a grey solid.
+    let scale = if max_disp > 1.0e-12 {
+        0.1 * LX / max_disp
+    } else {
+        0.0
+    };
+    let mut deformed = mesh.clone();
+    for (node, d) in deformed.nodes.iter_mut().zip(&sol.displacement) {
+        *node += Vector3::new(d[0], d[1], d[2]) * scale;
+    }
+    deformed.recompute_stats();
+    let skin = boundary_skin_tri3(&deformed, "valenx-fem-cantilever");
+    let loaded = loaded_from_mesh(skin, "<fem>/valenx-fem-cantilever");
+
+    let lines = vec![
+        format!(
+            "steel cantilever {LX:.0} m, {:.0} × {:.0} mm, fixed end",
+            LZ * 1.0e3,
+            LY * 1.0e3
+        ),
+        format!(
+            "tip load {:.1} kN downward · E {:.0} GPa · σy {YIELD_MPA:.0} MPa",
+            LOAD_N / 1.0e3,
+            E_PA / 1.0e9
+        ),
+        format!(
+            "max deflection (FE): {:.3} mm   vs analytical PL³/3EI = {:.3} mm",
+            max_disp * 1.0e3,
+            analytic_defl_m * 1.0e3
+        ),
+        format!(
+            "max von Mises (FE): {:.1} MPa   vs analytical tip bending Mc/I = {:.1} MPa",
+            max_vm_pa / 1.0e6,
+            analytic_bending_pa / 1.0e6
+        ),
+        match fos {
+            Some(f) => format!("factor of safety (σy / peak σvm): {f:.2}"),
+            None => "factor of safety: n/a (zero stress)".to_string(),
+        },
+        "FE vs analytical differ: coarse first-order tet mesh is over-stiff and".to_string(),
+        "the re-entrant corner stress is mesh-sensitive — refine to converge.".to_string(),
+    ];
+    (loaded, lines)
+}
+
+/// Wrap a finished `mesh` as a fully-populated [`LoadedMesh`] (quality report +
+/// aspect / skew histograms) tagged with the synthetic `path`. Shared by the
+/// FEM cantilever producer's success and placeholder paths.
+fn loaded_from_mesh(mesh: valenx_mesh::Mesh, path: &str) -> LoadedMesh {
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    LoadedMesh {
+        path: std::path::PathBuf::from(path),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    }
+}
+
+/// Extract the **boundary surface** of a 3-D (Tet4) `mesh` as a new Tri3
+/// surface [`valenx_mesh::Mesh`] named `id`. Each single-owner boundary face of
+/// the volumetric mesh is a triangle (Tet4 faces are tris); we keep its
+/// `sorted_nodes` directly. Orientation isn't preserved, but the tile draws the
+/// skin **grey** with per-face normals recomputed at render time, so a flipped
+/// facet only flips its shading — fine for a deformed-shape preview. Returns a
+/// surface mesh with the same node coordinates (so the deformation shows) and
+/// one Tri3 element per boundary face.
+fn boundary_skin_tri3(mesh: &valenx_mesh::Mesh, id: &str) -> valenx_mesh::Mesh {
+    let adjacency = valenx_mesh::build_face_adjacency(mesh);
+    let mut conn: Vec<u32> = Vec::with_capacity(adjacency.boundary_face_count() * 3);
+    for face in adjacency.boundary_faces() {
+        // Tet4 boundary faces are triangles (3 nodes). Skip any non-triangular
+        // face defensively (none arise for a pure Tet4 box).
+        if face.sorted_nodes.len() == 3 {
+            conn.extend_from_slice(&face.sorted_nodes);
+        }
+    }
+    let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+    block.connectivity = conn;
+    let mut surface = valenx_mesh::Mesh::new(id);
+    surface.nodes = mesh.nodes.clone();
+    surface.element_blocks.push(block);
+    surface.recompute_stats();
+    surface
+}
+
+/// A fixed 3/4-view [`valenx_viz::OrbitCamera`] framing the FEM cantilever
+/// `mesh` (same `frame_bounds` fit + hero angle as
+/// [`crate::rocket_workbench::lv1_camera`]), for the Workbench+Agent FEM
+/// product's per-tile 3-D view.
+pub(crate) fn fem_beam_camera(mesh: &valenx_mesh::Mesh) -> valenx_viz::OrbitCamera {
+    let mut camera = valenx_viz::OrbitCamera::default();
+    if let Some((min, max)) = crate::mesh_loader::mesh_bounding_box(mesh) {
+        camera.frame_bounds(min, max);
+    }
+    camera.azimuth_deg = 35.0;
+    camera.elevation_deg = 22.0;
+    camera
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

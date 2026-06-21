@@ -88,6 +88,7 @@ pub mod conveyor_workbench;
 mod coverage_ui_tests;
 pub mod creep_workbench;
 pub mod dcmotor_workbench;
+pub mod dna_product;
 pub mod dock_layout;
 pub mod docking;
 pub mod draft_overlay;
