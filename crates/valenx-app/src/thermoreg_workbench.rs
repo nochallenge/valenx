@@ -452,6 +452,32 @@ fn load_body_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"thermoreg"}`** product: the canonical
+/// human-body solid (the panel's "Show 3-D body" geometry) paired with the
+/// workbench's own heat-balance headline numbers, at a fixed 3/4 camera.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off
+/// [`ThermoRegWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` readout.
+pub(crate) fn thermoreg_product() -> crate::WorkspaceProduct {
+    let s = ThermoRegWorkbenchState::default();
+    let mesh = body_solid_mesh(&s).expect("default body ⇒ a 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<body>/valenx-thermoreg");
+    let readout = compute(&s).expect("default body ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Thermoregulation".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
