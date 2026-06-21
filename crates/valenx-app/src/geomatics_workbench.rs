@@ -209,6 +209,27 @@ fn run_geomatics(s: &mut GeomaticsWorkbenchState) {
     );
 }
 
+/// Build the **Geomatics** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine great-circle / bearing / rhumb / cross-track results
+/// ([`run_geomatics`]) for the canonical default points (Cambridge → Paris with a
+/// query point). Registered as the `"geomatics"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view.
+pub(crate) fn geomatics_product() -> crate::WorkspaceProduct {
+    let mut s = GeomaticsWorkbenchState::default();
+    run_geomatics(&mut s);
+    crate::WorkspaceProduct {
+        title: "Geomatics".into(),
+        lines: crate::products_registry::lines_from_readout(&s.result),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

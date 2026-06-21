@@ -197,6 +197,31 @@ pub fn draw_hvac_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// Build the **HVAC** result card for the Workbench+Agent bridge — a DATA-ONLY
+/// [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the genuine duct
+/// hydraulics ([`run_hvac`]) for the canonical default duct (a 200 mm round duct,
+/// 10 m long at 5 m/s): hydraulic diameter, area, Darcy–Weisbach pressure drop,
+/// and the CFM-recommended duct size. Registered as the `"hvac"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view. The rows mirror the panel's own readout format.
+pub(crate) fn hvac_product() -> crate::WorkspaceProduct {
+    let s = HvacWorkbenchState::default();
+    let r = run_hvac(&s);
+    let readout = format!(
+        "hydraulic Ø {:.1} mm\narea {:.4} m²\npressure drop {:.2} Pa\nCFM duct size {:.1} × {:.1} in",
+        r.hydraulic_diameter_mm, r.area_m2, r.pressure_drop_pa, r.duct_w_in, r.duct_h_in,
+    );
+    crate::WorkspaceProduct {
+        title: "HVAC".into(),
+        lines: crate::products_registry::lines_from_readout(&readout),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

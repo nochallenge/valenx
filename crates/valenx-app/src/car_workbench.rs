@@ -202,6 +202,39 @@ pub(crate) fn car_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
         });
 }
 
+/// Build the **Car** result card for the Workbench+Agent bridge — a DATA-ONLY
+/// [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the genuine
+/// performance figures ([`simulate`]) for the canonical default vehicle (the
+/// [`sports_car`] preset): top speed, 0–100 / 0–200 km/h sprints, 100–0 braking
+/// distance, and skidpad speed / lateral g. Registered as the `"car"` producer
+/// in [`crate::products_registry::lookup`]; the tile renders it as a text card,
+/// not a 3-D view. The rows mirror the panel's own readout format.
+pub(crate) fn car_product() -> crate::WorkspaceProduct {
+    let p = simulate(&sports_car());
+    let readout = format!(
+        "top speed    {:>6.1} km/h\n\
+         0-100 km/h   {:>6.2} s\n\
+         0-200 km/h   {:>6.2} s\n\
+         100-0 brake  {:>6.1} m\n\
+         skidpad 30 m {:>6.1} km/h   ({:.2} g)",
+        p.top_speed_kmh,
+        p.sprint_0_100_s,
+        p.sprint_0_200_s,
+        p.braking_100_0_m,
+        p.skidpad_kmh,
+        p.skidpad_lat_g,
+    );
+    crate::WorkspaceProduct {
+        title: "Car".into(),
+        lines: crate::products_registry::lines_from_readout(&readout),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -217,6 +217,26 @@ fn run_fasteners(s: &mut FastenersWorkbenchState) {
     );
 }
 
+/// Build the **Fasteners** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine ISO 4017 hex-bolt dimensions ([`run_fasteners`]) for the canonical
+/// default designation (`M6`). Registered as the `"fasteners"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view.
+pub(crate) fn fasteners_product() -> crate::WorkspaceProduct {
+    let mut s = FastenersWorkbenchState::default();
+    run_fasteners(&mut s);
+    crate::WorkspaceProduct {
+        title: "Fasteners".into(),
+        lines: crate::products_registry::lines_from_readout(&s.result),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

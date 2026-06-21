@@ -256,6 +256,28 @@ pub fn draw_gasdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// Build the **Gas Dynamics** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine compressible-flow ratios ([`run_gasdynamics`]) for the canonical
+/// default condition (M = 2.0, gamma = 1.4 — the supersonic NACA-1135 worked
+/// example: isentropic, normal-shock, Prandtl-Meyer, Fanno and Rayleigh ratios).
+/// Registered as the `"gasdynamics"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view.
+pub(crate) fn gasdynamics_product() -> crate::WorkspaceProduct {
+    let mut s = GasDynamicsWorkbenchState::default();
+    run_gasdynamics(&mut s);
+    crate::WorkspaceProduct {
+        title: "Gas Dynamics".into(),
+        lines: crate::products_registry::lines_from_readout(&s.result),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
