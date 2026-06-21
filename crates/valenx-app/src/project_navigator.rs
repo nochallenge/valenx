@@ -578,7 +578,12 @@ fn apply_nav_intent(app: &mut crate::ValenxApp, intent: NavIntent) {
 /// (empty) doc so the new tab starts clean while the previous tab keeps its
 /// geometry. Bumps `last_opened` + persists the library. Returns `true` if a
 /// project with that id existed.
-fn open_project_as_tab(app: &mut crate::ValenxApp, id: &str) -> bool {
+///
+/// Exposed `pub(crate)` so the command palette's universal launcher
+/// ([`crate::commands::dispatch`] of [`crate::commands::CommandKind::OpenSavedProject`])
+/// can open a saved project through the **exact** same path the navigator
+/// row-click uses, rather than duplicating the reconcile + persist snippet.
+pub(crate) fn open_project_as_tab(app: &mut crate::ValenxApp, id: &str) -> bool {
     // Pull the kind + title out before we touch the tab bar (ends the
     // library borrow cleanly).
     let Some((kind, title)) = app.library.get(id).map(|p| (p.tab.kind, p.name.clone())) else {
