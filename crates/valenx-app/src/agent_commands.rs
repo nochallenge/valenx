@@ -129,6 +129,33 @@ pub enum AgentCommand {
         #[serde(default)]
         lines: Vec<String>,
     },
+    /// Render a **live 3-D model** into *this* unit's workspace tile
+    /// (`workspace:<n>`): the tile shows the actual lit mesh (same look as the
+    /// central viewport) at a fixed 3/4 camera, not a text card or a
+    /// placeholder. `kind` selects the model — currently `"rocket"` (the LV-1
+    /// launch vehicle); unknown kinds are skipped. Like every other command the
+    /// effective channel is the command file's `n`; the optional wire `n` is
+    /// accepted (and ignored) so an agent may include it for readability.
+    ///
+    /// Stored on [`crate::ValenxApp::workspace_products`] under the channel `n`,
+    /// the same key [`ShowProduct`](AgentCommand::ShowProduct) and `Note` use,
+    /// so the 3-D view lands in the workspace pane paired with its chat. This is
+    /// the answer to "when the agent builds a rocket, show the *actual rocket*
+    /// here — lit and in 3-D — not a card".
+    ///
+    /// Note the explicit `rename`: the enum's `rename_all = "snake_case"`
+    /// would map `Show3d` to `"show3d"` (no underscore before the digit), but
+    /// the wire tag is `"show_3d"`.
+    #[serde(rename = "show_3d")]
+    Show3d {
+        /// Optional unit number for readability; ignored in favour of the
+        /// command file's channel `n` (the bridge always routes by channel).
+        #[serde(default)]
+        n: Option<usize>,
+        /// Which model to show. `"rocket"` → the LV-1; other values are
+        /// skipped.
+        kind: String,
+    },
 }
 
 /// The per-channel **command file** path for agent channel `n`:
@@ -361,8 +388,41 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
             // Publish the finished result into THIS unit's workspace tile. The
             // reducer already knows the channel `n` (the same one Notes post to),
             // so the `workspace:<n>` pane and its paired `agent:<n>` chat agree.
-            app.workspace_products
-                .insert(n, crate::WorkspaceProduct { title, lines });
+            // A text card carries no mesh; the camera field is unused but must
+            // be set (WorkspaceProduct is no longer Default).
+            app.workspace_products.insert(
+                n,
+                crate::WorkspaceProduct {
+                    title,
+                    lines,
+                    mesh: None,
+                    camera: valenx_viz::OrbitCamera::default(),
+                },
+            );
+        }
+        AgentCommand::Show3d { n: _, kind } => {
+            // Publish a LIVE 3-D model into THIS unit's workspace tile, keyed by
+            // the channel `n` the reducer already knows (the wire `n` is ignored
+            // — the bridge routes by file channel, same as every other command).
+            // The `workspace:<n>` pane then renders the actual lit mesh at a
+            // fixed 3/4 camera (see `dock_layout::render_workspace_body`).
+            // Only `"rocket"` (the LV-1) is wired today; any other kind is
+            // skipped safely (no panic, no placeholder churn), consistent with
+            // the rest of the reducer's bad-input handling. Add new model kinds
+            // as `else if kind == "<x>"` arms here.
+            if kind == "rocket" {
+                let mesh = crate::rocket_workbench::lv1_loaded_mesh();
+                let camera = crate::rocket_workbench::lv1_camera(&mesh.mesh);
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title: "Rocket".into(),
+                        lines: vec![],
+                        mesh: Some(mesh),
+                        camera,
+                    },
+                );
+            }
         }
     }
 }
@@ -768,6 +828,78 @@ mod tests {
             "show_landing == false: the rocket renders, not the welcome page"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_3d_parses_with_and_without_n() {
+        // The `show_3d` command parses from its wire form; `n` is optional.
+        let s: AgentCommand = serde_json::from_str(r#"{"cmd":"show_3d","kind":"rocket"}"#).unwrap();
+        assert_eq!(
+            s,
+            AgentCommand::Show3d {
+                n: None,
+                kind: "rocket".into(),
+            }
+        );
+        let s2: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"show_3d","n":2,"kind":"rocket"}"#).unwrap();
+        assert_eq!(
+            s2,
+            AgentCommand::Show3d {
+                n: Some(2),
+                kind: "rocket".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn show_3d_rocket_publishes_a_live_mesh_into_the_workspace() {
+        // End-to-end through the REAL poll/reducer path: the agent appends a
+        // `show_3d` rocket line on channel 1; the first poll runs it and the
+        // unit's workspace product gains a live LV-1 mesh (so the
+        // `workspace:1` tile renders the actual 3-D rocket, not a card).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "show3d_rocket");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"show_3d\",\"kind\":\"rocket\"}\n").unwrap();
+
+        assert!(app.workspace_products.is_empty());
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("channel-1 product set by the show_3d command");
+        let mesh = product
+            .mesh
+            .as_ref()
+            .expect("show_3d rocket attaches a live LoadedMesh");
+        assert!(
+            mesh.path.to_string_lossy().contains("valenx-lv1"),
+            "the attached mesh is the LV-1 rocket (path = {:?})",
+            mesh.path
+        );
+        // It's a 3-D product, so no text rows.
+        assert_eq!(product.title, "Rocket");
+        assert!(product.lines.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_3d_unknown_kind_is_skipped() {
+        // An unknown `kind` is a safe no-op (no product inserted, no panic),
+        // consistent with the reducer's bad-input handling elsewhere.
+        let mut app = ValenxApp::default();
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Show3d {
+                n: None,
+                kind: "not-a-model".into(),
+            },
+        );
+        assert!(app.workspace_products.get(&1).is_none());
     }
 
     #[test]

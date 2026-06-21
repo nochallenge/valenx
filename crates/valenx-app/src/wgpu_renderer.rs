@@ -332,7 +332,16 @@ pub struct WgpuRenderer {
     vertex_capacity: u64,
     vertex_count: u32,
 
-    offscreen: Option<Offscreen>,
+    /// Per-tile offscreen targets, keyed by a caller-chosen tile id (e.g.
+    /// `"central"` for the main viewport or `"workspace:3"` for a
+    /// Workbench+Agent tile). Each key owns its own colour + depth texture
+    /// and a stable egui `TextureId`, so two viewports drawn in the same
+    /// frame never alias one shared target. Pipelines, shaders, the uniform
+    /// buffer and the vertex buffer all stay shared — only the render
+    /// targets multiply. Entries are created lazily by
+    /// [`Self::ensure_offscreen_for`] and recreated only when that key's
+    /// pixel size changes.
+    offscreens: std::collections::HashMap<String, Offscreen>,
 }
 
 struct Offscreen {
@@ -558,11 +567,22 @@ impl WgpuRenderer {
             vertex_buffer,
             vertex_capacity: initial_capacity,
             vertex_count: 0,
-            offscreen: None,
+            offscreens: std::collections::HashMap::new(),
         }
     }
 
-    fn ensure_offscreen_for(&mut self, renderer: &mut egui_wgpu::Renderer, size: [u32; 2]) {
+    /// Ensure the offscreen target for tile `key` exists and matches `size`,
+    /// creating or resizing its colour + depth textures as needed. The egui
+    /// `TextureId` is kept **stable** across resizes for a given key (the
+    /// texture view is re-pointed in place) so the UI never flickers on
+    /// resize. Each key is independent, so the central viewport and a
+    /// mini-tile never clobber each other's target.
+    fn ensure_offscreen_for(
+        &mut self,
+        key: &str,
+        renderer: &mut egui_wgpu::Renderer,
+        size: [u32; 2],
+    ) {
         if size[0] == 0 || size[1] == 0 {
             return;
         }
@@ -575,7 +595,7 @@ impl WgpuRenderer {
         let w = size[0].min(max_dim);
         let h = size[1].min(max_dim);
         let size = [w, h];
-        if let Some(os) = &self.offscreen {
+        if let Some(os) = self.offscreens.get(key) {
             if os.size == size {
                 return;
             }
@@ -613,11 +633,11 @@ impl WgpuRenderer {
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Register (or re-register) with egui. If we already have an
+        // Register (or re-register) with egui. If this key already has an
         // id we keep it and point it at the new view — egui's ids
         // are stable across texture re-creations which avoids
         // flickering during resize.
-        let egui_id = match &self.offscreen {
+        let egui_id = match self.offscreens.get(key) {
             Some(prev) => {
                 renderer.update_egui_texture_from_wgpu_texture(
                     &self.device,
@@ -634,14 +654,17 @@ impl WgpuRenderer {
             ),
         };
 
-        self.offscreen = Some(Offscreen {
-            size,
-            color_texture,
-            color_view,
-            depth_texture,
-            depth_view,
-            egui_id,
-        });
+        self.offscreens.insert(
+            key.to_string(),
+            Offscreen {
+                size,
+                color_texture,
+                color_view,
+                depth_texture,
+                depth_view,
+                egui_id,
+            },
+        );
     }
 
     fn upload_vertices(&mut self, vertices: &[Vertex]) {
@@ -672,9 +695,10 @@ impl WgpuRenderer {
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(uniforms));
     }
 
-    /// Render to the offscreen target and return the egui TextureId
-    /// the caller should display. Returns `None` if the viewport size
-    /// is zero.
+    /// Render to the **central** offscreen target and return the egui
+    /// TextureId the caller should display. Returns `None` if the viewport
+    /// size is zero. Thin wrapper over [`Self::render_keyed`] with the
+    /// `"central"` key, kept so the main viewport's call site is unchanged.
     ///
     /// `inv_mvp` is the inverse of `mvp`; the grid shader uses it to
     /// unproject fragments to world-space rays.
@@ -692,10 +716,44 @@ impl WgpuRenderer {
         grid2: [f32; 4],
         vertices: &[Vertex],
     ) -> Option<egui::TextureId> {
+        self.render_keyed(
+            "central", renderer, size, mvp, inv_mvp, light_dir, cam_pos, grid, grid2, true,
+            vertices,
+        )
+    }
+
+    /// Render into the offscreen target for tile `key` and return that
+    /// target's egui TextureId. Each `key` owns an independent colour +
+    /// depth texture (and stable id), so multiple viewports — the central
+    /// one plus any number of per-tile mini-views — can each render their
+    /// own scene in the same frame without aliasing. Returns `None` if the
+    /// viewport size is zero.
+    ///
+    /// `draw_grid` toggles the ground-grid + axes pass: `true` reproduces
+    /// the central viewport exactly (background → mesh → grid); `false`
+    /// draws only the background gradient + the shaded mesh, which is the
+    /// cheaper, cleaner look wanted in small per-tile previews where an
+    /// infinite ground grid would be visual noise. Pipelines, shaders,
+    /// uniform + vertex buffers stay shared across keys.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_keyed(
+        &mut self,
+        key: &str,
+        renderer: &mut egui_wgpu::Renderer,
+        size: [u32; 2],
+        mvp: [[f32; 4]; 4],
+        inv_mvp: [[f32; 4]; 4],
+        light_dir: [f32; 3],
+        cam_pos: [f32; 3],
+        grid: [f32; 4],
+        grid2: [f32; 4],
+        draw_grid: bool,
+        vertices: &[Vertex],
+    ) -> Option<egui::TextureId> {
         if size[0] == 0 || size[1] == 0 {
             return None;
         }
-        self.ensure_offscreen_for(renderer, size);
+        self.ensure_offscreen_for(key, renderer, size);
         self.upload_vertices(vertices);
         self.write_uniforms(&Uniforms {
             mvp,
@@ -706,7 +764,7 @@ impl WgpuRenderer {
             grid2,
         });
 
-        let os = self.offscreen.as_ref()?;
+        let os = self.offscreens.get(key)?;
 
         let mut encoder = self
             .device
@@ -759,9 +817,12 @@ impl WgpuRenderer {
             // grid's frag_depth is larger (Y=0 is farther than geometry
             // above Y=0), the Less depth-test fails wherever the mesh was
             // already drawn — clean occlusion without a depth pre-pass.
-            rpass.set_pipeline(&self.grid_pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.draw(0..3, 0..1); // fullscreen triangle
+            // Skipped entirely for grid-less mini-previews (`draw_grid` false).
+            if draw_grid {
+                rpass.set_pipeline(&self.grid_pipeline);
+                rpass.set_bind_group(0, &self.bind_group, &[]);
+                rpass.draw(0..3, 0..1); // fullscreen triangle
+            }
         }
         self.queue.submit(Some(encoder.finish()));
         Some(os.egui_id)

@@ -447,7 +447,11 @@ fn render_wgpu_scene(
 /// through the same wgpu pass as STLs. Volumetric element types (Tet4,
 /// Hex8, ...) are skipped: those keep the wireframe path. `None` when no
 /// surface triangle could be produced.
-fn mesh_to_triangle_surface(mesh: &Mesh) -> Option<TriangleMesh> {
+///
+/// `pub(crate)` so the dockable `workspace:<n>` tile can build the same
+/// shaded surface for its own per-tile 3-D view (see
+/// [`crate::dock_layout`]'s `render_workspace_body`).
+pub(crate) fn mesh_to_triangle_surface(mesh: &Mesh) -> Option<TriangleMesh> {
     let nodes = &mesh.nodes;
     let tri = |a: u32, b: u32, c: u32| -> Option<StlTriangle> {
         let p = nodes.get(a as usize)?;

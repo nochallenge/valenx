@@ -2627,6 +2627,14 @@ impl eframe::App for ValenxApp {
                 });
         }
 
+        // wgpu render state + DPI, grabbed once up-front so BOTH the dockable
+        // workbench layout (below — its `workspace:<n>` tiles render live 3-D)
+        // and the central viewport (further down) can build a `WgpuCtx`. The
+        // clone is an Arc-backed handle (cheap) and owned, so it doesn't pin a
+        // borrow on `frame`.
+        let wgpu_render_state = frame.wgpu_render_state().cloned();
+        let pixels_per_point = ctx.pixels_per_point();
+
         // Right-side workbench dispatch. By default each open workbench is
         // its own stacked `SidePanel::right` (the classic layout). When the
         // user opts into View → "Dockable panel layout (beta)", the whole run
@@ -3039,15 +3047,11 @@ impl eframe::App for ValenxApp {
         } else {
             // Opt-in dockable workbench layout: one resizable right region
             // hosting every open workbench as a draggable / reorderable /
-            // splittable tile.
-            self.draw_dock_layout(ctx);
+            // splittable tile. The render state + DPI are threaded in so a
+            // `workspace:<n>` tile can render its live 3-D model.
+            self.draw_dock_layout(ctx, wgpu_render_state.as_ref(), pixels_per_point);
         }
 
-        // Central viewport — grabs the wgpu render state for the
-        // offscreen-depth-buffered shaded path if the wgpu backend is
-        // available.
-        let wgpu_render_state = frame.wgpu_render_state().cloned();
-        let pixels_per_point = ctx.pixels_per_point();
         // Welcome / landing-page action picked this frame. Resolved
         // inside the CentralPanel closure (the landing page renders
         // there) and dispatched against `&mut self` AFTER the closure
@@ -3107,7 +3111,7 @@ impl eframe::App for ValenxApp {
                     if do_show_viewport {
                         self.viewport_hidden = false;
                     }
-                    self.render_dock_tree_into(ui);
+                    self.render_dock_tree_into(ui, wgpu_render_state.as_ref(), pixels_per_point);
                 }
                 return;
             }
