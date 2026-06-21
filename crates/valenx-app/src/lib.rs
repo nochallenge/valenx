@@ -1784,6 +1784,15 @@ pub struct ValenxApp {
     /// [`crate::project_tabs::draw_tab_strip`].
     pub tab_close_confirm: Option<usize>,
 
+    /// Pending **"Close all tabs?"** confirmation. `Some(())` while the
+    /// "Close all N tabs?" modal is open (set by the strip toolbar's
+    /// "Close all tabs" button); cleared on Cancel, or on confirm right after
+    /// every tab is closed via [`crate::project_tabs::TabBar::close_all`].
+    /// Closing all tabs discards each tab's unsaved workspace document, so the
+    /// batch close is gated behind this explicit confirm. See
+    /// [`crate::project_tabs::draw_tab_strip`].
+    pub tab_close_all_confirm: Option<()>,
+
     /// Pending "Save as project…" prompt opened from a tab's right-click
     /// menu. `Some` while the modal is up; carries the source tab index, the
     /// in-progress project name, and the chosen destination folder id (None =
