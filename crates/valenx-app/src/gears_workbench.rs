@@ -350,7 +350,8 @@ fn run_gears(s: &mut GearsWorkbenchState) {
 /// Self-contained + deterministic. Infallible — the canonical specs are valid
 /// (positive face width, ≥3 profile vertices), so every `to_solid_spur` /
 /// tessellation succeeds.
-pub(crate) fn gear_train_loaded_mesh() -> (crate::types::LoadedMesh, Vec<String>) {
+pub(crate) fn gear_train_loaded_mesh(
+) -> (crate::types::LoadedMesh, Vec<String>, Vec<crate::RigidPart>) {
     use valenx_gears::{contact_ratio, GearSpec};
 
     const MODULE_MM: f64 = 2.0;
@@ -396,9 +397,13 @@ pub(crate) fn gear_train_loaded_mesh() -> (crate::types::LoadedMesh, Vec<String>
         (s2g.clone(), c1 + c2, zstack),
     ];
 
-    // Merge the four positioned spur solids into one Tri3 mesh.
+    // Merge the four positioned spur solids into one Tri3 mesh, recording each
+    // gear's half-open node range (in placement/concatenation order) so the
+    // animation can rotate each gear about its own shaft independently. The
+    // pivot is that gear's shaft centre `(cx, 0, cz)`.
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
     let mut tris: Vec<u32> = Vec::new();
+    let mut gear_ranges: Vec<(std::ops::Range<usize>, [f32; 3])> = Vec::with_capacity(4);
     for (gs, cx, cz) in &placements {
         let solid = valenx_gears::to_solid_spur(gs).expect("canonical spur spec ⇒ solid");
         // Move the mesh-backed solid's nodes to the shaft centre, then take the
@@ -407,7 +412,10 @@ pub(crate) fn gear_train_loaded_mesh() -> (crate::types::LoadedMesh, Vec<String>
         let m = valenx_cad::solid_to_mesh(&placed, valenx_cad::DEFAULT_TESS_TOLERANCE)
             .expect("mesh-backed solid ⇒ cached mesh");
         let offset = nodes.len() as u32;
+        let start = nodes.len();
         nodes.extend_from_slice(&m.nodes);
+        let end = nodes.len();
+        gear_ranges.push((start..end, [*cx as f32, 0.0, *cz as f32]));
         for blk in &m.element_blocks {
             if blk.element_type == valenx_mesh::ElementType::Tri3 {
                 tris.extend(blk.connectivity.iter().map(|&i| i + offset));
@@ -449,7 +457,35 @@ pub(crate) fn gear_train_loaded_mesh() -> (crate::types::LoadedMesh, Vec<String>
         format!("contact ratio: stage 1 {cr1:.2}, stage 2 {cr2:.2}"),
         format!("circular pitch: {:.2} mm", circular_pitch_mm(MODULE_MM)),
     ];
-    (loaded, lines)
+
+    // Per-gear angular rates for the animation. The TRUE kinematics:
+    //   input pinion ω0 ; layshaft gear & pinion share the layshaft = -ω0/r1
+    //   (meshing pair counter-rotates ⇒ sign flip); output = -(layshaft)/r2 =
+    //   +ω0/(r1·r2). We keep those exact ratios and counter-rotation signs but
+    //   PRESENTATION-SCALE the input so the fastest gear reads as ~1.3 rev/s
+    //   (≈8 rad/s) instead of the real ~157 rad/s blur. `gear_ranges` is in
+    //   placement order: [input pinion, layshaft gear, layshaft pinion, output].
+    const PRESENT_W0: f32 = 8.0; // rad/s on the input pinion (~1.27 rev/s)
+    let r1f = r1 as f32;
+    let r2f = r2 as f32;
+    let omegas = [
+        PRESENT_W0,               // s1p input pinion
+        -PRESENT_W0 / r1f,        // s1g layshaft gear (counter to input)
+        -PRESENT_W0 / r1f,        // s2p layshaft pinion (rigid on layshaft)
+        PRESENT_W0 / (r1f * r2f), // s2g output (counter to layshaft pinion)
+    ];
+    let parts: Vec<crate::RigidPart> = gear_ranges
+        .into_iter()
+        .zip(omegas)
+        .map(|((node_range, pivot), rad_per_s)| crate::RigidPart {
+            node_range,
+            axis: [0.0, 0.0, 1.0], // extrusion axis
+            pivot,
+            rad_per_s,
+        })
+        .collect();
+
+    (loaded, lines, parts)
 }
 
 /// A fixed 3/4-view [`OrbitCamera`] framing the 2-stage gear-train `mesh`
@@ -470,7 +506,7 @@ pub(crate) fn gear_train_camera(mesh: &valenx_mesh::Mesh) -> OrbitCamera {
 /// [`crate::products_registry`]. The per-tool builder the registry dispatches
 /// to (so the gear product lives here, not in the shared reducer). Pure.
 pub(crate) fn gear_product() -> crate::WorkspaceProduct {
-    let (mesh, lines) = gear_train_loaded_mesh();
+    let (mesh, lines, parts) = gear_train_loaded_mesh();
     let camera = gear_train_camera(&mesh.mesh);
     crate::WorkspaceProduct {
         title: "2-stage spur reducer".into(),
@@ -482,6 +518,14 @@ pub(crate) fn gear_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
+        // Animated: each gear counter-rotates about its own shaft so the teeth
+        // visibly mesh. Starts paused at t = 0; the tile toolbar drives it.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -549,6 +593,124 @@ mod tests {
         run_gears(&mut s);
         assert!(s.error.is_some());
         assert!(s.result.is_empty());
+    }
+
+    #[test]
+    fn gear_train_parts_tile_the_mesh_node_count() {
+        // The four recorded RigidParts must exactly tile [0, node_count): one
+        // contiguous range per gear, in placement order, with no gaps or
+        // overlaps — so every node belongs to exactly one rotating body.
+        let (mesh, _lines, parts) = gear_train_loaded_mesh();
+        assert_eq!(parts.len(), 4, "two-stage reducer fuses four gears");
+        let node_count = mesh.mesh.nodes.len();
+        assert!(node_count > 0);
+        // Ranges are contiguous starting at 0 and ending at node_count.
+        assert_eq!(parts[0].node_range.start, 0);
+        for w in parts.windows(2) {
+            assert_eq!(
+                w[0].node_range.end, w[1].node_range.start,
+                "gear node ranges must be contiguous (no gap/overlap)"
+            );
+        }
+        assert_eq!(
+            parts.last().unwrap().node_range.end,
+            node_count,
+            "the last gear's range must reach the final node"
+        );
+        // Each gear owns a non-empty slice.
+        for p in &parts {
+            assert!(
+                p.node_range.end > p.node_range.start,
+                "non-empty gear range"
+            );
+        }
+    }
+
+    #[test]
+    fn gear_train_parts_counter_rotate_with_true_ratios() {
+        // Meshing pairs spin in OPPOSITE directions; the layshaft gear and
+        // pinion share a shaft (equal ω). All spin about +z. Speeds follow the
+        // true ratios r1, r2 (presentation-scaled but ratio-preserving), so the
+        // input is the fastest and the output the slowest.
+        let (_mesh, _lines, parts) = gear_train_loaded_mesh();
+        // Axis is +z for every gear (the extrusion axis).
+        for p in &parts {
+            assert_eq!(p.axis, [0.0, 0.0, 1.0]);
+        }
+        let w_in = parts[0].rad_per_s; // input pinion
+        let w_lay_g = parts[1].rad_per_s; // layshaft gear (meshes with input)
+        let w_lay_p = parts[2].rad_per_s; // layshaft pinion (rigid on layshaft)
+        let w_out = parts[3].rad_per_s; // output gear (meshes with layshaft pinion)
+        assert!(w_in > 0.0, "input pinion spins +");
+        assert!(w_lay_g < 0.0, "layshaft counter-rotates the input");
+        assert!(
+            (w_lay_g - w_lay_p).abs() < 1e-6,
+            "layshaft gear & pinion share the shaft ⇒ same ω"
+        );
+        assert!(
+            w_out > 0.0,
+            "output counter-rotates the layshaft pinion (sign flips back +)"
+        );
+        // True-ratio magnitudes: |ω_in| > |ω_layshaft| > |ω_out| (the train
+        // steps down), and the layshaft ratio matches stage-1 r1.
+        assert!(w_in.abs() > w_lay_g.abs());
+        assert!(w_lay_p.abs() > w_out.abs());
+        let r1 = gear_ratio(80, 18) as f32; // Z1G / Z1P
+        assert!(
+            (w_in.abs() / w_lay_g.abs() - r1).abs() < 1e-3,
+            "input:layshaft speed ratio equals stage-1 gear ratio r1"
+        );
+        // Presentation scale: the fastest gear is a readable ~6–9 rad/s spin,
+        // not the real ~157 rad/s blur.
+        assert!(
+            (6.0..=9.0).contains(&w_in.abs()),
+            "fastest gear presentation-scaled into ~1–1.5 rev/s, got {w_in}"
+        );
+    }
+
+    #[test]
+    fn gear_product_is_animated_rigid_parts() {
+        // The agent-bridge gear product carries a paused RigidParts animation
+        // with the four gear parts.
+        let product = gear_product();
+        let anim = product.animation.expect("gear product is animated");
+        assert!(!anim.playing, "starts paused at t = 0");
+        assert_eq!(anim.t, 0.0);
+        assert_eq!(anim.speed, 1.0);
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => assert_eq!(parts.len(), 4),
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("gears use per-part rigid motion")
+            }
+        }
+    }
+
+    #[test]
+    fn product_animation_clock_math() {
+        // Mirror the toolbar's clock advance: t += dt * speed only while playing.
+        let mut anim = crate::ProductAnimation {
+            playing: true,
+            speed: 2.0,
+            t: 0.0,
+            motion: crate::ProductMotion::Turntable {
+                axis: [0.0, 0.0, 1.0],
+                pivot: [0.0, 0.0, 0.0],
+                rad_per_s: 1.0,
+            },
+        };
+        let dt = 0.5_f32;
+        anim.t += dt * anim.speed; // 0.5 * 2.0 = 1.0
+        assert!((anim.t - 1.0).abs() < 1e-6);
+        // Paused ⇒ the clock would not advance (guarded by `if anim.playing`).
+        anim.playing = false;
+        let before = anim.t;
+        if anim.playing {
+            anim.t += dt * anim.speed;
+        }
+        assert_eq!(anim.t, before, "paused clock holds t");
+        // Reset zeroes t.
+        anim.t = 0.0;
+        assert_eq!(anim.t, 0.0);
     }
 
     #[test]

@@ -398,6 +398,7 @@ pub(crate) fn heatpump_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
+        animation: None,
     }
 }
 

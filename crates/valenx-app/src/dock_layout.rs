@@ -354,14 +354,20 @@ fn render_workspace_body(
         // borrows here are short `get` / `get_mut` that finish before the camera
         // clone and the mesh render borrow below, so nothing aliases.
         if let Some(i) = idx {
-            // Read what the strip needs (title + current status) through a short
-            // immutable borrow, cloning out so the borrow ends immediately.
+            // Read what the strip needs (title + current status + a snapshot of
+            // the animation state, if any) through a short immutable borrow,
+            // cloning out so the borrow ends immediately. `ProductAnimation` is
+            // a cheap plain-data `Clone`.
             let strip = app
                 .workspace_products
                 .get(&i)
-                .map(|p| (p.title.clone(), p.last_export.clone()));
-            if let Some((title, last_export)) = strip {
+                .map(|p| (p.title.clone(), p.last_export.clone(), p.animation.clone()));
+            if let Some((title, last_export, animation)) = strip {
                 let mut do_export = false;
+                // Local working copy of the animation state we mutate from the
+                // controls below; written back via one short `get_mut` after the
+                // strip closes (the render borrow above is long gone).
+                let mut anim = animation;
                 ui.horizontal(|ui| {
                     if ui
                         .small_button("⬇ Export STL")
@@ -370,10 +376,58 @@ fn render_workspace_body(
                     {
                         do_export = true;
                     }
+                    // Animation transport controls — only for an animated
+                    // product. The button glyph flips ▶/⏸ but the accessible
+                    // label is FIXED ("Play/Pause animation") so AI / screen
+                    // readers find it by a stable name regardless of state.
+                    if let Some(anim) = anim.as_mut() {
+                        ui.separator();
+                        let glyph = if anim.playing { "⏸" } else { "▶" };
+                        let play = ui
+                            .add(egui::Button::new(glyph).small())
+                            .on_hover_text("Play/Pause animation");
+                        if play.clicked() {
+                            anim.playing = !anim.playing;
+                        }
+                        // Fixed accessible name independent of the ▶/⏸ glyph, so
+                        // AI / screen readers always find this control by the
+                        // same stable label.
+                        play.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::WidgetType::Button,
+                                true,
+                                "Play/Pause animation",
+                            )
+                        });
+                        ui.add(egui::Slider::new(&mut anim.speed, 0.0..=4.0).text("speed x"));
+                        if ui
+                            .add(egui::Button::new("⤺ reset").small())
+                            .on_hover_text("Reset animation")
+                            .clicked()
+                        {
+                            anim.t = 0.0;
+                        }
+                        ui.label(egui::RichText::new(format!("t = {:.2} s", anim.t)).monospace());
+                        // Advance the clock HERE, inside the toolbar's mutable
+                        // borrow (never inside the immutable mesh-render borrow
+                        // below), and keep repainting while playing.
+                        if anim.playing {
+                            anim.t += ui.input(|i| i.stable_dt) * anim.speed;
+                            ui.ctx().request_repaint();
+                        }
+                    }
                     if let Some(msg) = &last_export {
                         ui.label(egui::RichText::new(msg).weak().small());
                     }
                 });
+                // Commit the mutated animation state back (Play/Pause toggle,
+                // speed, reset, advanced `t`) via a short `get_mut`. Cheap
+                // PartialEq guard avoids a write when nothing changed.
+                if let Some(p) = app.workspace_products.get_mut(&i) {
+                    if p.animation != anim {
+                        p.animation = anim;
+                    }
+                }
                 if do_export {
                     // Re-borrow mutably only now (the immutable borrow above is
                     // long gone) to run the export and stash its status. The
@@ -414,6 +468,7 @@ fn render_workspace_body(
                         &tile_key,
                         mesh,
                         product.vertex_colors.as_deref(),
+                        product.animation.as_ref(),
                         &camera,
                         renderer,
                         rs,
@@ -597,19 +652,27 @@ type MeshAabb = ([f32; 3], [f32; 3]);
 /// was degenerate or the GPU returned no texture (caller falls back to the
 /// text card).
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn render_tile_mesh_3d(
     ui: &mut egui::Ui,
     tile_key: &str,
     mesh: &crate::types::LoadedMesh,
     vertex_colors: Option<&[[f32; 3]]>,
+    animation: Option<&crate::ProductAnimation>,
     camera: &valenx_viz::OrbitCamera,
     renderer: &mut crate::wgpu_renderer::WgpuRenderer,
     render_state: &egui_wgpu::RenderState,
     pixels_per_point: f32,
 ) -> Option<(egui::Response, Option<MeshAabb>)> {
     // Build the shaded surface for the mesh's surface elements (Tri3 / Quad4).
-    // A volumetric-only mesh yields nothing → fall back to the card.
-    let surface = crate::viewport::mesh_to_triangle_surface(&mesh.mesh)?;
+    // A volumetric-only mesh yields nothing → fall back to the card. When the
+    // product is animated, pose the mesh nodes for the current animation clock
+    // first (same triangle order, so `vertex_colors` stay aligned); otherwise
+    // the byte-identical static path.
+    let surface = match animation {
+        Some(anim) => crate::viewport::mesh_to_triangle_surface_posed(&mesh.mesh, anim)?,
+        None => crate::viewport::mesh_to_triangle_surface(&mesh.mesh)?,
+    };
     // Per-vertex-coloured path only when a colour was supplied AND it covers
     // every surface vertex the renderer will emit (3 per triangle); otherwise
     // the plain metal path (byte-identical to the central viewport). The length

@@ -480,6 +480,7 @@ pub(crate) fn render_product() -> crate::WorkspaceProduct {
                 last_export: None,
                 image: Some(image),
                 image_texture: None,
+                animation: None,
             };
         }
         // Unreachable at 96² (well under the cap) — but the bridge path must not
@@ -499,6 +500,7 @@ pub(crate) fn render_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
+        animation: None,
     }
 }
 
