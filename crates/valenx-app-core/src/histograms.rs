@@ -7,7 +7,7 @@ use eframe::egui;
 /// bars sized proportionally to the per-bucket count. Rows look like:
 /// `≤ 1.50: ████████ 1234`. Uncategorised + overflow get their own
 /// summary line at the bottom when non-zero.
-pub(crate) fn render_aspect_histogram(ui: &mut egui::Ui, hist: &valenx_mesh::AspectRatioHistogram) {
+pub fn render_aspect_histogram(ui: &mut egui::Ui, hist: &valenx_mesh::AspectRatioHistogram) {
     ui.label("Aspect ratio");
     let max_count = hist
         .counts
@@ -32,7 +32,7 @@ pub(crate) fn render_aspect_histogram(ui: &mut egui::Ui, hist: &valenx_mesh::Asp
 
 /// Render a skewness histogram as text rows with quality-band labels
 /// (excellent / good / acceptable / poor / very poor).
-pub(crate) fn render_skewness_histogram(ui: &mut egui::Ui, hist: &valenx_mesh::SkewnessHistogram) {
+pub fn render_skewness_histogram(ui: &mut egui::Ui, hist: &valenx_mesh::SkewnessHistogram) {
     ui.label("Skewness");
     let labels = ["excellent", "good", "acceptable", "poor", "very poor"];
     let max_count = hist.counts.iter().copied().max().unwrap_or(0);
@@ -52,7 +52,7 @@ pub(crate) fn render_skewness_histogram(ui: &mut egui::Ui, hist: &valenx_mesh::S
 /// Render `count` as a Unicode block-bar of width up to `max_width`
 /// proportional to `max`. Always returns at least one cell when
 /// count > 0 so non-zero buckets remain visible.
-pub(crate) fn histogram_bar(count: u64, max: u64, max_width: usize) -> String {
+pub fn histogram_bar(count: u64, max: u64, max_width: usize) -> String {
     if max == 0 || count == 0 {
         return " ".repeat(max_width);
     }

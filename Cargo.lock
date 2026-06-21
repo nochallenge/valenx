@@ -6905,6 +6905,7 @@ dependencies = [
  "valenx-align",
  "valenx-animate",
  "valenx-antenna",
+ "valenx-app-core",
  "valenx-arch",
  "valenx-assembly",
  "valenx-astro",
@@ -7074,6 +7075,20 @@ dependencies = [
  "valenx-weir",
  "valenx-windturbine",
  "whoami",
+]
+
+[[package]]
+name = "valenx-app-core"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "eframe",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "valenx-core",
+ "valenx-design-tokens",
+ "valenx-fields",
+ "valenx-mesh",
 ]
 
 [[package]]
