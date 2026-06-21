@@ -163,6 +163,9 @@ pub mod pneumatics_workbench;
 pub mod popdynamics_workbench;
 pub mod powerfactor_workbench;
 pub mod pressurevessel_workbench;
+/// Per-file registry of agent-bridge `show_3d` mesh producers (replaces the old
+/// per-kind reducer arms; new 3-D tools register from their own module).
+pub mod products_registry;
 pub mod project_tabs;
 pub mod projectile_workbench;
 pub mod psychrometrics_workbench;

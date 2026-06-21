@@ -658,6 +658,24 @@ pub(crate) fn lv1_camera(mesh: &valenx_mesh::Mesh) -> valenx_viz::OrbitCamera {
     camera
 }
 
+/// The agent-bridge **`show_3d{kind:"rocket"}`** product: the lit LV-1 mesh at
+/// a fixed 3/4 camera, registered in [`crate::products_registry`]. This is the
+/// per-tool builder the registry dispatches to — adding/altering the rocket
+/// product happens here, not in the shared reducer. Pure (no app state).
+pub(crate) fn rocket_product() -> crate::WorkspaceProduct {
+    let mesh = lv1_loaded_mesh();
+    let camera = lv1_camera(&mesh.mesh);
+    crate::WorkspaceProduct {
+        title: "Rocket".into(),
+        lines: vec![],
+        mesh: Some(mesh),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 /// Build the 3-D Valenx LV-1 rocket mesh and load it into the central
 /// viewport (replacing any current STL / mesh) so it can be orbited.
 fn load_lv1_rocket_3d(app: &mut ValenxApp) {

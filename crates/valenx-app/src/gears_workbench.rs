@@ -465,6 +465,24 @@ pub(crate) fn gear_train_camera(mesh: &valenx_mesh::Mesh) -> OrbitCamera {
     camera
 }
 
+/// The agent-bridge **`show_3d{kind:"gear"}`** product: the lit 2-stage spur
+/// reducer mesh + its ratio readout rows at a fixed 3/4 camera, registered in
+/// [`crate::products_registry`]. The per-tool builder the registry dispatches
+/// to (so the gear product lives here, not in the shared reducer). Pure.
+pub(crate) fn gear_product() -> crate::WorkspaceProduct {
+    let (mesh, lines) = gear_train_loaded_mesh();
+    let camera = gear_train_camera(&mesh.mesh);
+    crate::WorkspaceProduct {
+        title: "2-stage spur reducer".into(),
+        lines,
+        mesh: Some(mesh),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
