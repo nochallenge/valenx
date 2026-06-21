@@ -37,6 +37,7 @@
 
 pub mod aero;
 pub mod aero_workbench;
+pub mod agent_commands;
 pub mod animate_workbench;
 pub mod antenna_workbench;
 pub(crate) mod background;
@@ -332,13 +333,18 @@ pub struct ValenxApp {
     ///
     /// [`DOCKABLE_PANELS`]: crate::dock_layout::DOCKABLE_PANELS
     pub wb_agent_counter: usize,
-    /// A pending **"move the whole Workbench + Agent unit"** request, set by the
-    /// per-unit header buttons ([`dock_layout::unit_move_header`]) and applied
-    /// once the dock tree is owned again ([`dock_layout::apply_pending_unit_move`]).
-    /// `Some((n, dir))` sends *both* halves of unit `n` (`workspace:n` +
-    /// `agent:n`) to the top or bottom row of the grid in one click; the
-    /// existing per-tile drag is untouched. `None` = nothing pending (default).
-    pub pending_unit_move: Option<(usize, crate::dock_layout::UnitMove)>,
+    /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
+    /// many lines of channel `n`'s command file
+    /// ([`crate::agent_commands::cmd_path`]) have already been applied. On the
+    /// first poll for a channel the cursor is seeded to the file's current line
+    /// count so pre-existing history is **not** replayed on launch; thereafter
+    /// only genuinely-new appended lines run. Defaults empty (derive). See
+    /// [`crate::agent_commands::poll_and_apply_agent_commands`].
+    pub agent_cmd_cursor: std::collections::HashMap<usize, usize>,
+    /// Last time the agent-command files were polled, used to throttle the disk
+    /// reads to ~1/sec. `None` until the first poll (derive default). See
+    /// [`crate::agent_commands`].
+    pub last_agent_poll: Option<std::time::Instant>,
     /// Per-unit chat **input buffers** for the "Workbench + Agent" `agent:<n>`
     /// tiles, keyed by unit number `n`. Each unit's chat `TextEdit` binds to its
     /// own entry here (via `unit_chat_inputs.entry(n).or_default()`) so the six
@@ -892,8 +898,7 @@ pub struct ValenxApp {
     pub show_springcombination_workbench: bool,
     /// State for the Spring Combination workbench — series / parallel spring
     /// networks on `valenx-springcombination`. See [`crate::springcombination_workbench`].
-    pub springcombination:
-        crate::springcombination_workbench::SpringCombinationWorkbenchState,
+    pub springcombination: crate::springcombination_workbench::SpringCombinationWorkbenchState,
     /// Whether the right-side Vibration workbench is visible (View menu). Off by default.
     pub show_vibration_workbench: bool,
     /// State for the Vibration workbench — single-DOF forced-vibration response

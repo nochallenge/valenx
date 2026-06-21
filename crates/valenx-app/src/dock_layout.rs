@@ -71,22 +71,6 @@ const WORKSPACE_PREFIX: &str = "workspace:";
 /// `"agent:<n>"`. Paired with [`WORKSPACE_PREFIX`].
 const AGENT_PREFIX: &str = "agent:";
 
-/// Where a one-click **"move the whole unit"** request sends a
-/// "Workbench + Agent" unit (both its `workspace:n` and `agent:n` panes): the
-/// **top** row or the **bottom** row of the dock grid. Set by
-/// [`unit_move_header`]'s buttons, consumed by [`ValenxApp::apply_pending_unit_move`].
-///
-/// This is *additive* to egui_tiles' per-tile tab drag — it doesn't disable it;
-/// it just gives a keyboard-free, single-click way to relocate a whole unit
-/// (which would otherwise take two separate tab drags, one per half).
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum UnitMove {
-    /// Send the unit to the top of the grid (first row).
-    Top,
-    /// Send the unit to the bottom of the grid (last row).
-    Bottom,
-}
-
 /// Where a **new** "Workbench + Agent" unit should be inserted into the dock
 /// grid, chosen from the tab-strip "+ Workbench+Agent" dropdown. Lets the user
 /// place the new unit precisely rather than always tacking it onto a new bottom
@@ -111,39 +95,6 @@ pub(crate) enum UnitAddTarget {
     /// Add the new unit at the **right** end of the existing row at this
     /// 0-based index (falling back to a new bottom row if out of range).
     RowEnd(usize),
-}
-
-/// A slim, painter-safe header drawn at the **top of both halves** of a
-/// "Workbench + Agent" unit (the `workspace:n` build canvas *and* the `agent:n`
-/// chat), so the "move this whole unit" control is reachable from either tile.
-///
-/// It shows a weak `"unit N"` tag and two small buttons — **`to top`** and
-/// **`to bottom`** — that, on click, queue [`ValenxApp::pending_unit_move`] to
-/// send *both* panes of unit `n` to the top / bottom row of the grid in one
-/// click. The actual tree surgery happens later, once the tree is owned again
-/// (see [`ValenxApp::apply_pending_unit_move`]), because the tree is `take`n
-/// out of `self` during pane rendering.
-///
-/// Labels are **plain ASCII** on purpose (`"to top"` / `"to bottom"`, not
-/// Unicode arrows) so they never render as tofu boxes in the app's font.
-fn unit_move_header(app: &mut ValenxApp, ui: &mut egui::Ui, n: usize) {
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(format!("unit {n}")).weak().small());
-        if ui
-            .small_button("to top")
-            .on_hover_text("Move this whole unit (workspace + agent) to the top row")
-            .clicked()
-        {
-            app.pending_unit_move = Some((n, UnitMove::Top));
-        }
-        if ui
-            .small_button("to bottom")
-            .on_hover_text("Move this whole unit (workspace + agent) to the bottom row")
-            .clicked()
-        {
-            app.pending_unit_move = Some((n, UnitMove::Bottom));
-        }
-    });
 }
 
 /// Is this a special "Workbench + Agent" tile id (either half)? These are
@@ -225,11 +176,9 @@ pub(crate) fn render_panel_body(app: &mut ValenxApp, ui: &mut egui::Ui, panel_id
     // "Workbench + Agent" tiles: the agent half is an **independent** Claude
     // chat keyed by the unit number (its own feed file + input buffer — see
     // `assistant_chat_ui`'s `Some(n)` channel); the workspace half is an empty
-    // build canvas. The agent half keeps the per-unit "move whole unit" header
-    // at the top.
+    // build canvas. Whole-unit relocation is via egui_tiles' per-tile tab drag.
     if let Some(n) = panel_id.strip_prefix(AGENT_PREFIX) {
         if let Ok(n) = n.parse::<usize>() {
-            unit_move_header(app, ui, n);
             crate::assistant_workbench::assistant_chat_ui(app, ui, Some(n));
         } else {
             // Unparseable unit number (shouldn't happen for ids we insert) →
@@ -465,100 +414,6 @@ impl ValenxApp {
         }
         // Drain any 3-D / overlay requests the bodies queued this frame.
         drain_workbench_deferred(self);
-        // Apply a queued "move whole unit" request now that the tree is owned
-        // again (it can't be done during pane_ui — the tree is `take`n out).
-        self.apply_pending_unit_move();
-    }
-
-    /// Consume a queued [`Self::pending_unit_move`] (set by [`unit_move_header`]
-    /// when the user clicks `to top` / `to bottom` on either half of a
-    /// "Workbench + Agent" unit) and relocate the **whole unit** — both the
-    /// `workspace:n` and `agent:n` panes — to the top or bottom row of the
-    /// dock grid in one move. Runs only when the tree is owned (i.e. *not*
-    /// mid-`pane_ui`); call it from [`Self::render_dock_tree_into`] after the
-    /// tree is put back.
-    ///
-    /// Mechanics: the two panes are removed from the tree (egui_tiles'
-    /// next-frame simplification then cleans up any container left empty), a
-    /// fresh `[workspace | agent]` pair is rebuilt via [`insert_pair`], and that
-    /// pair is prepended (Top) / appended (Bottom) to the vertical root's
-    /// children. If the root isn't a vertical [`egui_tiles::Container::Linear`]
-    /// (e.g. after heavy manual dragging collapsed the grid to a single row or
-    /// a horizontal/tab arrangement), we instead wrap `[pair, old_root]` (Top)
-    /// or `[old_root, pair]` (Bottom) into a fresh vertical container and make
-    /// it the root — so "top"/"bottom" still mean a new first/last row stacked
-    /// against whatever the rest of the layout currently is.
-    ///
-    /// Pane ids are pure positional labels (the agent tiles all share the one
-    /// chat bridge; the workspace shows the shared feed status), so remove +
-    /// reinsert loses **no** state.
-    fn apply_pending_unit_move(&mut self) {
-        let Some((n, dir)) = self.pending_unit_move.take() else {
-            return;
-        };
-        let Some(tree) = self.dock_tree.as_mut() else {
-            return;
-        };
-
-        // Find the two panes of this unit and remove them. (If either is
-        // missing — already closed — we just move whichever remain; the rebuilt
-        // pair always has both, so the unit is made whole again.)
-        let want = [
-            format!("{WORKSPACE_PREFIX}{n}"),
-            format!("{AGENT_PREFIX}{n}"),
-        ];
-        let to_remove: Vec<egui_tiles::TileId> = tree
-            .tiles
-            .iter()
-            .filter_map(|(tile_id, tile)| match tile {
-                egui_tiles::Tile::Pane(id) if want.contains(id) => Some(*tile_id),
-                _ => None,
-            })
-            .collect();
-        for tile_id in to_remove {
-            tree.tiles.remove(tile_id);
-        }
-
-        // Rebuild a fresh `[workspace:n | agent:n]` pair...
-        let pair = insert_pair(tree, n);
-
-        // ...and place it at the top or bottom of the grid.
-        match tree.root() {
-            // Empty tree (the unit was the only thing) → the pair is the root.
-            None => tree.root = Some(pair),
-            Some(root) => {
-                let is_vertical_root = matches!(
-                    tree.tiles.get(root),
-                    Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(l)))
-                        if l.dir == egui_tiles::LinearDir::Vertical
-                );
-                if is_vertical_root {
-                    // Prepend (Top) / append (Bottom) into the vertical root's
-                    // children — `Linear::children` is a public `Vec<TileId>`.
-                    if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(
-                        linear,
-                    ))) = tree.tiles.get_mut(root)
-                    {
-                        match dir {
-                            UnitMove::Top => linear.children.insert(0, pair),
-                            UnitMove::Bottom => linear.add_child(pair),
-                        }
-                    }
-                    // Re-equalize the row heights after the moved unit re-joins.
-                    equalize_shares(tree, root);
-                } else {
-                    // Root isn't a vertical Linear — wrap it and the new pair
-                    // into a fresh vertical container so the unit becomes a new
-                    // first/last row stacked above/below the rest.
-                    let children = match dir {
-                        UnitMove::Top => vec![pair, root],
-                        UnitMove::Bottom => vec![root, pair],
-                    };
-                    let new_root = tree.tiles.insert_vertical_tile(children);
-                    tree.root = Some(new_root);
-                }
-            }
-        }
     }
 
     /// Ensure the dock tree exists and return it mutably, creating an empty
@@ -634,10 +489,10 @@ impl ValenxApp {
     ///
     /// - [`UnitAddTarget::NewRowBottom`] → append as a new last row
     ///   ([`attach_unit_to_root`]).
-    /// - [`UnitAddTarget::NewRowTop`] → prepend as a new first row (mirrors
-    ///   [`Self::apply_pending_unit_move`]'s `Top`: `children.insert(0, …)`
-    ///   when the root is a vertical `Linear`, else wrap `[pair, old_root]`
-    ///   into a fresh vertical container and make it the root).
+    /// - [`UnitAddTarget::NewRowTop`] → prepend as a new first row
+    ///   (`children.insert(0, …)` when the root is a vertical `Linear`, else
+    ///   wrap `[pair, old_root]` into a fresh vertical container and make it the
+    ///   root).
     /// - [`UnitAddTarget::RowEnd(i)`] / [`UnitAddTarget::RowStart(i)`] → add the
     ///   pair at the right / left end **within** the existing `i`-th row: if
     ///   that row is a horizontal `Linear`, push / insert into its children; if
@@ -821,7 +676,7 @@ fn place_unit(
     match target {
         // New last row — the historical default.
         UnitAddTarget::NewRowBottom => attach_unit_to_root(tree, new_unit),
-        // New first row — mirror of apply_pending_unit_move's Top.
+        // New first row — prepend into the vertical root (or wrap it).
         UnitAddTarget::NewRowTop => match tree.root() {
             None => tree.root = Some(new_unit),
             Some(root) => {
@@ -1193,75 +1048,6 @@ mod tests {
         assert!(panes.contains("valenx_assistant_panel"));
         assert!(panes.contains("workspace:1"));
         assert_eq!(panes.len(), 13);
-    }
-
-    #[test]
-    fn apply_pending_unit_move_relocates_whole_unit_to_top_row() {
-        // Build the 3x2 grid, then queue "move unit 5 to the top" and apply it.
-        // Both halves of unit 5 must survive (12 panes total still), and after
-        // the move they must live in the FIRST child (top row) of the vertical
-        // root — i.e. the whole unit moved up in one go.
-        let mut app = ValenxApp::default();
-        app.open_six_workbench_agents();
-        assert_eq!(pane_ids(app.dock_tree.as_ref().unwrap()).len(), 12);
-
-        app.pending_unit_move = Some((5, UnitMove::Top));
-        app.apply_pending_unit_move();
-        assert!(
-            app.pending_unit_move.is_none(),
-            "the request must be consumed"
-        );
-
-        let tree = app.dock_tree.as_ref().expect("tree still present");
-        // Both panes of unit 5 are still there, and the total is unchanged.
-        let panes = pane_ids(tree);
-        assert_eq!(panes.len(), 12, "no panes lost moving the unit");
-        assert!(panes.contains("workspace:5"));
-        assert!(panes.contains("agent:5"));
-
-        // The root is still a vertical Linear; unit 5 now lives in its FIRST
-        // child (the top row). Gather the pane ids reachable under that first
-        // child and confirm both halves of unit 5 are among them.
-        let root = tree.root().expect("grid has a root");
-        let egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot)) =
-            tree.tiles.get(root).unwrap()
-        else {
-            panic!("root must stay a vertical Linear");
-        };
-        assert_eq!(vroot.dir, egui_tiles::LinearDir::Vertical);
-        let top_row = *vroot.children.first().expect("root has a first/top row");
-        let top_panes = panes_under(tree, top_row);
-        assert!(
-            top_panes.contains("workspace:5"),
-            "workspace:5 should be in the top row, got {top_panes:?}"
-        );
-        assert!(
-            top_panes.contains("agent:5"),
-            "agent:5 should be in the top row, got {top_panes:?}"
-        );
-    }
-
-    #[test]
-    fn apply_pending_unit_move_to_bottom_puts_unit_in_last_row() {
-        // Symmetric check for "to bottom": unit 1 should end up in the LAST
-        // child (bottom row) of the vertical root, all 12 panes intact.
-        let mut app = ValenxApp::default();
-        app.open_six_workbench_agents();
-        app.pending_unit_move = Some((1, UnitMove::Bottom));
-        app.apply_pending_unit_move();
-
-        let tree = app.dock_tree.as_ref().unwrap();
-        assert_eq!(pane_ids(tree).len(), 12);
-        let root = tree.root().unwrap();
-        let egui_tiles::Tile::Container(egui_tiles::Container::Linear(vroot)) =
-            tree.tiles.get(root).unwrap()
-        else {
-            panic!("root must stay a vertical Linear");
-        };
-        let bottom_row = *vroot.children.last().expect("root has a last/bottom row");
-        let bottom_panes = panes_under(tree, bottom_row);
-        assert!(bottom_panes.contains("workspace:1"));
-        assert!(bottom_panes.contains("agent:1"));
     }
 
     /// Test helper: collect all pane ids reachable from `root` (a tile id),
