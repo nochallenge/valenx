@@ -2728,37 +2728,65 @@ impl eframe::App for ValenxApp {
         let wgpu_render_state = frame.wgpu_render_state().cloned();
         let pixels_per_point = ctx.pixels_per_point();
 
-        // Right-side workbench dispatch. By default each open workbench is
-        // its own stacked `SidePanel::right` (the classic layout). When the
-        // user opts into View → "Dockable panel layout (beta)", the whole run
-        // is replaced by a single dockable `egui_tiles` region in which the
-        // open workbenches are draggable / reorderable / splittable tiles —
-        // see [`crate::dock_layout::draw_dock_layout`]. Toggling the flag
-        // never changes any panel's contents, only where it is hosted.
-        if !self.dock_enabled {
+        // Right-side workbench dispatch. Each open workbench is its own
+        // `SidePanel::right`; the dispatch ALWAYS runs (in both classic and
+        // dock modes) so that a workbench panel can sit on the right alongside
+        // the dock in the centre. In a normal (non-product) tab at most the
+        // active tab's one workbench flag is set, so exactly one panel renders;
+        // in a `new_unit` product tab the tab's linked `workbench_kind` flag is
+        // the only one on (see `project_tabs::sync_active`), so its single
+        // workbench reserves the right edge BEFORE the CentralPanel/dock below.
+        //
+        // When the user opts into View → "Dockable panel layout (beta)", the
+        // `egui_tiles` dock region is ALSO drawn (further down, before the
+        // CentralPanel) — see [`crate::dock_layout::draw_dock_layout`]. The
+        // SidePanel(s) are added before it, so egui reserves their right-hand
+        // width first and the dock fills the remaining centre: workbench right,
+        // dock centre, no overlap.
+        {
+            // The 10 [`crate::dock_layout::DOCKABLE_PANELS`] (mesh toolbox,
+            // genetics, aero, fem, cfd, astro, rocket, engine, car, assistant)
+            // are hosted INSIDE the dock tree when the dock is on AND this is
+            // not a clean agent product tab (`!dock_agent_only`) — see
+            // `draw_dock_layout`'s `open_ids`. In that one case they must NOT
+            // also paint as classic right SidePanels (that would duplicate
+            // them), so their draws below are gated on this. Every other
+            // workbench — and these same panels in a `dock_agent_only` product
+            // tab (whose dock hosts only `workspace:n | agent:n`) or in classic
+            // mode — always paints as a SidePanel.
+            let dock_owns_dockable_panels = self.dock_enabled && !self.dock_agent_only;
+
             // Mesh Toolbox (right) — only paints when a mesh / STL is
             // loaded AND the user hasn't hidden it. Mounted before the
             // CentralPanel so egui docks it to the right of the viewport.
-            crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
+            }
 
             // Genetics Workbench (right) — the Round-6 computational-
             // biology panels. A no-op unless the user has toggled it on
             // via View → Genetics Workbench. Mounted before the
             // CentralPanel so egui docks it to the right (alongside the
             // Mesh Toolbox when both are open).
-            crate::genetics_workbench::draw_genetics_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::genetics_workbench::draw_genetics_workbench(self, ctx);
+            }
 
             // Aerodynamics / Wind Tunnel workbench (right) — the
             // valenx-aero virtual-wind-tunnel CFD panels. A no-op unless
             // toggled on via View → Aerodynamics / Wind Tunnel. Mounted
             // before the CentralPanel so egui docks it to the right.
-            crate::aero_workbench::draw_aero_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::aero_workbench::draw_aero_workbench(self, ctx);
+            }
 
             // FEM Workbench (right) — native linear-static + modal FEA on
             // valenx-fem's in-process solvers. A no-op unless toggled on via
             // View → FEM Workbench. Mounted before the CentralPanel so egui
             // docks it to the right (alongside the other open workbenches).
-            crate::fem_workbench::draw_fem_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::fem_workbench::draw_fem_workbench(self, ctx);
+            }
 
             // Induction Motor workbench (right) — 3-phase induction-motor slip /
             // power on valenx-inductionmotor. Off unless toggled via View.
@@ -2768,7 +2796,9 @@ impl eframe::App for ValenxApp {
             // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via
             // View → CFD Workbench. Mounted before the CentralPanel so egui
             // docks it to the right alongside the other workbenches.
-            crate::cfd_workbench::draw_cfd_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::cfd_workbench::draw_cfd_workbench(self, ctx);
+            }
 
             // Reaction Dynamics workbench (right) — native ab-initio MD on
             // valenx-reactdyn. A no-op unless toggled on via View → Reaction
@@ -3106,7 +3136,9 @@ impl eframe::App for ValenxApp {
             // on via View → Astro / Launch. Mounted before the CentralPanel
             // so egui docks it to the right (alongside the other open
             // workbenches).
-            crate::astro_workbench::draw_astro_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::astro_workbench::draw_astro_workbench(self, ctx);
+            }
 
             // Pipe Flow workbench (right) — Darcy-Weisbach pipe-flow analysis
             // on valenx-pipeflow. Off unless toggled via View.
@@ -3116,7 +3148,9 @@ impl eframe::App for ValenxApp {
             // design→simulate pipeline. A no-op unless toggled on via
             // View → Rocket. Mounted before the CentralPanel so egui docks it
             // to the right alongside the other workbenches.
-            crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+            }
 
             // Battery Pack workbench (right) — series / parallel pack sizing on
             // valenx-batterypack. Off unless toggled via View.
@@ -3124,7 +3158,9 @@ impl eframe::App for ValenxApp {
 
             // Engine workbench (right) — reactive engine design → analyze →
             // optimize → export. A no-op unless toggled on via View → Engine.
-            crate::engine_workbench::draw_engine_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::engine_workbench::draw_engine_workbench(self, ctx);
+            }
 
             // Heat Exchanger workbench (right) — effectiveness-NTU analysis on
             // valenx-heatexchanger. Off unless toggled via View.
@@ -3132,16 +3168,27 @@ impl eframe::App for ValenxApp {
 
             // Car workbench (right) — vehicle dynamics design → simulate over
             // valenx-vehicle. A no-op unless toggled on via View → Car.
-            crate::car_workbench::draw_car_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::car_workbench::draw_car_workbench(self, ctx);
+            }
 
             // Assistant activity sidebar (right) — a live in-app feed of what
             // the AI assistant is building. On by default; toggle via View.
-            crate::assistant_workbench::draw_assistant_workbench(self, ctx);
-        } else {
-            // Opt-in dockable workbench layout: one resizable right region
-            // hosting every open workbench as a draggable / reorderable /
-            // splittable tile. The render state + DPI are threaded in so a
-            // `workspace:<n>` tile can render its live 3-D model.
+            // In dock mode (non-product) the Assistant lives in the dock tree,
+            // so suppress the classic SidePanel to avoid a duplicate chat.
+            if !dock_owns_dockable_panels {
+                crate::assistant_workbench::draw_assistant_workbench(self, ctx);
+            }
+        }
+
+        // Opt-in dockable workbench layout: one resizable right region hosting
+        // every open dock pane (workspace render + agent chat) as a draggable /
+        // reorderable / splittable tile. Mounted AFTER the workbench
+        // SidePanel(s) above so they reserve the right edge first and this dock
+        // fills the centre — the workbench tool panel and the dock coexist
+        // side-by-side. The render state + DPI are threaded in so a
+        // `workspace:<n>` tile can render its live 3-D model.
+        if self.dock_enabled {
             self.draw_dock_layout(ctx, wgpu_render_state.as_ref(), pixels_per_point);
         }
 

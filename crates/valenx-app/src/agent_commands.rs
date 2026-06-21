@@ -536,6 +536,28 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
         }
     }
 
+    // PER-TAB WORKBENCH LINK: record the product `kind` on this (now-active)
+    // tab so [`project_tabs::sync_active`] re-shows exactly its
+    // `show_<kind>_workbench` panel whenever the tab is active — the
+    // inputs/calculations/readouts render on the right, alongside this unit's
+    // dock (workspace render + agent chat) in the centre. Set BEFORE `kind` is
+    // moved into `pending_products` below. A `kind`-less unit links nothing
+    // (the dock fills the tab as before).
+    if let Some(kind) = kind.as_deref() {
+        let kind = kind.trim();
+        if !kind.is_empty() {
+            if let Some(idx) = app.tab_bar.active {
+                if let Some(tab) = app.tab_bar.tabs.get_mut(idx) {
+                    tab.workbench_kind = Some(kind.to_string());
+                }
+            }
+            // Reconcile now so the linked panel is visible from this frame on
+            // (not only after the next tab switch). `sync_active` clears every
+            // panel then turns on just this tab's linked workbench.
+            project_tabs::sync_active(app);
+        }
+    }
+
     // LAZY-BUILD: if a product kind was named, DON'T build it now — record it in
     // `pending_products` so the actual 3-D/2-D product is built only when this
     // unit's `workspace:<n>` pane is first VIEWED (see `materialize_pending`,
@@ -2525,5 +2547,93 @@ mod tests {
             "a placeholder tab names itself by unit number"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn new_unit_links_the_product_kind_to_the_tab_and_shows_its_workbench() {
+        // WORKBENCH-TOOL-PER-TAB: a `new_unit{kind}` records the registry kind on
+        // the freshly-opened product tab's `workbench_kind`, and `apply_global`
+        // reconciles so exactly that one `show_*_workbench` flag is on — its
+        // tool panel renders on the right alongside the unit's dock.
+        let mut app = ValenxApp::default();
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: Some("fem".into()),
+                title: Some("Bracket FEA".into()),
+                note: None,
+            },
+        );
+        let active = app.tab_bar.active.expect("the product tab is active");
+        assert_eq!(
+            app.tab_bar.tabs[active].workbench_kind.as_deref(),
+            Some("fem"),
+            "the product kind is linked to the tab"
+        );
+        assert!(
+            app.show_fem_workbench,
+            "the linked FEM workbench panel is shown for the product tab"
+        );
+        // No other workbench leaked on (spot-check a spread).
+        assert!(!app.show_rocket_workbench);
+        assert!(!app.show_car_workbench);
+        assert!(!app.show_dcmotor_workbench);
+    }
+
+    #[test]
+    fn new_unit_without_kind_links_no_workbench() {
+        // A `kind`-less unit links nothing — `workbench_kind` stays `None` and no
+        // workbench flag is forced on (the dock fills the tab as before).
+        let mut app = ValenxApp::default();
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: None,
+                title: Some("Scratch".into()),
+                note: None,
+            },
+        );
+        let active = app.tab_bar.active.expect("the tab is active");
+        assert!(
+            app.tab_bar.tabs[active].workbench_kind.is_none(),
+            "no kind → no per-tab workbench link"
+        );
+        assert!(!app.show_fem_workbench);
+        assert!(!app.show_rocket_workbench);
+    }
+
+    #[test]
+    fn new_unit_links_each_of_a_spread_of_kinds() {
+        // Round-trip a representative spread through the product-tab path:
+        // rocket / fem / dcmotor / pump / gears each links + shows its own panel.
+        // The visible flag is read back through a small per-kind probe.
+        fn flag_on(app: &ValenxApp, kind: &str) -> bool {
+            match kind {
+                "rocket" => app.show_rocket_workbench,
+                "fem" => app.show_fem_workbench,
+                "dcmotor" => app.show_dcmotor_workbench,
+                "pump" => app.show_pump_workbench,
+                "gears" => app.show_gears_workbench,
+                _ => false,
+            }
+        }
+        for kind in ["rocket", "fem", "dcmotor", "pump", "gears"] {
+            let mut app = ValenxApp::default();
+            apply_global(
+                &mut app,
+                AgentCommand::NewUnit {
+                    kind: Some(kind.into()),
+                    title: None,
+                    note: None,
+                },
+            );
+            let active = app.tab_bar.active.expect("active");
+            assert_eq!(
+                app.tab_bar.tabs[active].workbench_kind.as_deref(),
+                Some(kind),
+                "{kind} linked to its product tab"
+            );
+            assert!(flag_on(&app, kind), "{kind}'s workbench panel is shown");
+        }
     }
 }

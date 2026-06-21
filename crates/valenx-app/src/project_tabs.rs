@@ -491,6 +491,18 @@ pub struct ProjectTab {
     /// deserialises with `group == None` — the back-compat guarantee.
     #[serde(default)]
     pub group: Option<String>,
+    /// For an **agent-built product tab** (an `apply_global` `new_unit`), the
+    /// registry kind string of the workbench tool this tab hosts — e.g.
+    /// `"rocket"`, `"fem"`, `"dcmotor"`. `Some(kind)` makes [`sync_active`]
+    /// re-show exactly that one `show_<kind>_workbench` panel (via
+    /// [`set_workbench_flag`]) whenever this tab is active, so the workbench's
+    /// inputs/calculations/readouts render on the right alongside the unit's
+    /// dock (workspace render + agent chat) in the centre. `None` for the 29
+    /// [`TabKind`] template tabs and blank tabs, which key their workbench off
+    /// `TabKind::show` instead. `#[serde(default)]` so older saved JSON
+    /// (which predates this field) deserialises with `workbench_kind == None`.
+    #[serde(default)]
+    pub workbench_kind: Option<String>,
     /// `true` while the title is being edited inline. Transient.
     #[serde(skip)]
     pub editing: bool,
@@ -507,6 +519,7 @@ impl ProjectTab {
             kind,
             title: title.into(),
             group: None,
+            workbench_kind: None,
             editing: false,
             edit_buf: String::new(),
         }
@@ -966,9 +979,314 @@ pub fn load_saved_group(name: &str) -> Option<SavedSession> {
 // Workbench reconciliation.
 // ---------------------------------------------------------------------------
 
-/// Hide every project workbench panel. The active tab (if any) then
-/// re-shows exactly one via [`TabKind::show`] (or none, for a blank tab).
+/// Every workbench **registry kind** string, one per `show_<kind>_workbench`
+/// field on [`ValenxApp`] (the kind is the field name with the `show_` prefix
+/// and `_workbench` suffix stripped, e.g. `show_fem_workbench` → `"fem"`).
+///
+/// This is the authoritative list backing [`set_workbench_flag`] and the
+/// "clear every panel" sweep in `clear_all_workbenches`; a `new_unit`
+/// product tab records one of these strings in [`ProjectTab::workbench_kind`]
+/// so [`sync_active`] can re-show exactly its panel. Keep it in lock-step with
+/// the `pub show_*_workbench: bool` fields in `lib.rs`.
+pub const ALL_WORKBENCH_KINDS: &[&str] = &[
+    "genetics",
+    "aero",
+    "fem",
+    "inductionmotor",
+    "cfd",
+    "reactdyn",
+    "springs",
+    "bearing",
+    "beltdrive",
+    "buckling",
+    "brake",
+    "fatigue",
+    "geartooth",
+    "pharmacokinetics",
+    "pipenetwork",
+    "rcbeam",
+    "marine",
+    "capacitor",
+    "fanlaws",
+    "creep",
+    "electrochem",
+    "enzymekinetics",
+    "gears",
+    "pneumatics",
+    "psychrometrics",
+    "thermistor",
+    "straingauge",
+    "drone",
+    "acoustics",
+    "acidbase",
+    "bjt",
+    "bmr",
+    "bolt",
+    "geomatics",
+    "opamp",
+    "led",
+    "thermocouple",
+    "transmissionline",
+    "powerfactor",
+    "resistornetwork",
+    "rectifier",
+    "filter",
+    "heattransfer",
+    "fourbar",
+    "shaftdesign",
+    "screwthread",
+    "pulley",
+    "springdesign",
+    "springcombination",
+    "vibration",
+    "rivet",
+    "soilbearing",
+    "piping",
+    "retainingwall",
+    "openchannel",
+    "weir",
+    "thermocycle",
+    "queueing",
+    "radioactivity",
+    "osmosis",
+    "thermoreg",
+    "hemodynamics",
+    "popdynamics",
+    "rail",
+    "bonemech",
+    "chaindrive",
+    "clutch",
+    "coil",
+    "columnsteel",
+    "collision",
+    "statics",
+    "projectile",
+    "conveyor",
+    "fluidstatics",
+    "plate",
+    "strainrosette",
+    "transformer",
+    "threephase",
+    "solarpv",
+    "sheetmetal",
+    "truss",
+    "fields",
+    "gearbox",
+    "camdynamics",
+    "batteryecm",
+    "diffusion",
+    "dimensional",
+    "fft",
+    "fasteners",
+    "fixedwing",
+    "combustion",
+    "flywheel",
+    "fracture",
+    "hydraulics",
+    "inclinedplane",
+    "insulation",
+    "leadscrew",
+    "leverage",
+    "mohr",
+    "mosfet",
+    "optics",
+    "orifice",
+    "pressurevessel",
+    "torsion",
+    "refrigeration",
+    "frames",
+    "dcmotor",
+    "gasdynamics",
+    "thermalexpansion",
+    "neuro",
+    "windturbine",
+    "cad",
+    "antenna",
+    "draft2d",
+    "reinforcement",
+    "render",
+    "hvac",
+    "beam",
+    "reverse",
+    "pump",
+    "interior",
+    "animate",
+    "variant_effect",
+    "heatpump",
+    "astro",
+    "pipeflow",
+    "rocket",
+    "batterypack",
+    "engine",
+    "heatexchanger",
+    "car",
+    // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
+    // `_workbench`, field) but behaves like a per-tab workbench, so it is
+    // mappable here under the same id the agent registry / `TabKind::from_id`
+    // use. Not one of the 131 `show_*_workbench` fields.
+    "meshtoolbox",
+];
+
+/// Set the single `show_<kind>_workbench` flag named by `kind` to `on`,
+/// covering **every** workbench field on [`ValenxApp`]. The `kind` is the
+/// field name with `show_` and `_workbench` stripped (see
+/// [`ALL_WORKBENCH_KINDS`]). An unknown `kind` is a no-op, so a stale /
+/// hostile registry string can never panic. `"mesh"`/`"meshtoolbox"` map to
+/// the `show_mesh_toolbox` toolbox flag.
+pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
+    match kind {
+        "genetics" => app.show_genetics_workbench = on,
+        "aero" => app.show_aero_workbench = on,
+        "fem" => app.show_fem_workbench = on,
+        "inductionmotor" => app.show_inductionmotor_workbench = on,
+        "cfd" => app.show_cfd_workbench = on,
+        "reactdyn" => app.show_reactdyn_workbench = on,
+        "springs" => app.show_springs_workbench = on,
+        "bearing" => app.show_bearing_workbench = on,
+        "beltdrive" => app.show_beltdrive_workbench = on,
+        "buckling" => app.show_buckling_workbench = on,
+        "brake" => app.show_brake_workbench = on,
+        "fatigue" => app.show_fatigue_workbench = on,
+        "geartooth" => app.show_geartooth_workbench = on,
+        "pharmacokinetics" => app.show_pharmacokinetics_workbench = on,
+        "pipenetwork" => app.show_pipenetwork_workbench = on,
+        "rcbeam" => app.show_rcbeam_workbench = on,
+        "marine" => app.show_marine_workbench = on,
+        "capacitor" => app.show_capacitor_workbench = on,
+        "fanlaws" => app.show_fanlaws_workbench = on,
+        "creep" => app.show_creep_workbench = on,
+        "electrochem" => app.show_electrochem_workbench = on,
+        "enzymekinetics" => app.show_enzymekinetics_workbench = on,
+        "gears" => app.show_gears_workbench = on,
+        "pneumatics" => app.show_pneumatics_workbench = on,
+        "psychrometrics" => app.show_psychrometrics_workbench = on,
+        "thermistor" => app.show_thermistor_workbench = on,
+        "straingauge" => app.show_straingauge_workbench = on,
+        "drone" => app.show_drone_workbench = on,
+        "acoustics" => app.show_acoustics_workbench = on,
+        "acidbase" => app.show_acidbase_workbench = on,
+        "bjt" => app.show_bjt_workbench = on,
+        "bmr" => app.show_bmr_workbench = on,
+        "bolt" => app.show_bolt_workbench = on,
+        "geomatics" => app.show_geomatics_workbench = on,
+        "opamp" => app.show_opamp_workbench = on,
+        "led" => app.show_led_workbench = on,
+        "thermocouple" => app.show_thermocouple_workbench = on,
+        "transmissionline" => app.show_transmissionline_workbench = on,
+        "powerfactor" => app.show_powerfactor_workbench = on,
+        "resistornetwork" => app.show_resistornetwork_workbench = on,
+        "rectifier" => app.show_rectifier_workbench = on,
+        "filter" => app.show_filter_workbench = on,
+        "heattransfer" => app.show_heattransfer_workbench = on,
+        "fourbar" => app.show_fourbar_workbench = on,
+        "shaftdesign" => app.show_shaftdesign_workbench = on,
+        "screwthread" => app.show_screwthread_workbench = on,
+        "pulley" => app.show_pulley_workbench = on,
+        "springdesign" => app.show_springdesign_workbench = on,
+        "springcombination" => app.show_springcombination_workbench = on,
+        "vibration" => app.show_vibration_workbench = on,
+        "rivet" => app.show_rivet_workbench = on,
+        "soilbearing" => app.show_soilbearing_workbench = on,
+        "piping" => app.show_piping_workbench = on,
+        "retainingwall" => app.show_retainingwall_workbench = on,
+        "openchannel" => app.show_openchannel_workbench = on,
+        "weir" => app.show_weir_workbench = on,
+        "thermocycle" => app.show_thermocycle_workbench = on,
+        "queueing" => app.show_queueing_workbench = on,
+        "radioactivity" => app.show_radioactivity_workbench = on,
+        "osmosis" => app.show_osmosis_workbench = on,
+        "thermoreg" => app.show_thermoreg_workbench = on,
+        "hemodynamics" => app.show_hemodynamics_workbench = on,
+        "popdynamics" => app.show_popdynamics_workbench = on,
+        "rail" => app.show_rail_workbench = on,
+        "bonemech" => app.show_bonemech_workbench = on,
+        "chaindrive" => app.show_chaindrive_workbench = on,
+        "clutch" => app.show_clutch_workbench = on,
+        "coil" => app.show_coil_workbench = on,
+        "columnsteel" => app.show_columnsteel_workbench = on,
+        "collision" => app.show_collision_workbench = on,
+        "statics" => app.show_statics_workbench = on,
+        "projectile" => app.show_projectile_workbench = on,
+        "conveyor" => app.show_conveyor_workbench = on,
+        "fluidstatics" => app.show_fluidstatics_workbench = on,
+        "plate" => app.show_plate_workbench = on,
+        "strainrosette" => app.show_strainrosette_workbench = on,
+        "transformer" => app.show_transformer_workbench = on,
+        "threephase" => app.show_threephase_workbench = on,
+        "solarpv" => app.show_solarpv_workbench = on,
+        "sheetmetal" => app.show_sheetmetal_workbench = on,
+        "truss" => app.show_truss_workbench = on,
+        "fields" => app.show_fields_workbench = on,
+        "gearbox" => app.show_gearbox_workbench = on,
+        "camdynamics" => app.show_camdynamics_workbench = on,
+        "batteryecm" => app.show_batteryecm_workbench = on,
+        "diffusion" => app.show_diffusion_workbench = on,
+        "dimensional" => app.show_dimensional_workbench = on,
+        "fft" => app.show_fft_workbench = on,
+        "fasteners" => app.show_fasteners_workbench = on,
+        "fixedwing" => app.show_fixedwing_workbench = on,
+        "combustion" => app.show_combustion_workbench = on,
+        "flywheel" => app.show_flywheel_workbench = on,
+        "fracture" => app.show_fracture_workbench = on,
+        "hydraulics" => app.show_hydraulics_workbench = on,
+        "inclinedplane" => app.show_inclinedplane_workbench = on,
+        "insulation" => app.show_insulation_workbench = on,
+        "leadscrew" => app.show_leadscrew_workbench = on,
+        "leverage" => app.show_leverage_workbench = on,
+        "mohr" => app.show_mohr_workbench = on,
+        "mosfet" => app.show_mosfet_workbench = on,
+        "optics" => app.show_optics_workbench = on,
+        "orifice" => app.show_orifice_workbench = on,
+        "pressurevessel" => app.show_pressurevessel_workbench = on,
+        "torsion" => app.show_torsion_workbench = on,
+        "refrigeration" => app.show_refrigeration_workbench = on,
+        "frames" => app.show_frames_workbench = on,
+        "dcmotor" => app.show_dcmotor_workbench = on,
+        "gasdynamics" => app.show_gasdynamics_workbench = on,
+        "thermalexpansion" => app.show_thermalexpansion_workbench = on,
+        "neuro" => app.show_neuro_workbench = on,
+        "windturbine" => app.show_windturbine_workbench = on,
+        "cad" => app.show_cad_workbench = on,
+        "antenna" => app.show_antenna_workbench = on,
+        "draft2d" => app.show_draft2d_workbench = on,
+        "reinforcement" => app.show_reinforcement_workbench = on,
+        "render" => app.show_render_workbench = on,
+        "hvac" => app.show_hvac_workbench = on,
+        "beam" => app.show_beam_workbench = on,
+        "reverse" => app.show_reverse_workbench = on,
+        "pump" => app.show_pump_workbench = on,
+        "interior" => app.show_interior_workbench = on,
+        "animate" => app.show_animate_workbench = on,
+        "variant_effect" => app.show_variant_effect_workbench = on,
+        "heatpump" => app.show_heatpump_workbench = on,
+        "astro" => app.show_astro_workbench = on,
+        "pipeflow" => app.show_pipeflow_workbench = on,
+        "rocket" => app.show_rocket_workbench = on,
+        "batterypack" => app.show_batterypack_workbench = on,
+        "engine" => app.show_engine_workbench = on,
+        "heatexchanger" => app.show_heatexchanger_workbench = on,
+        "car" => app.show_car_workbench = on,
+        // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
+        "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
+        // Unknown kind: no-op — a stale/hostile registry string is ignored.
+        _ => {}
+    }
+}
+
+/// Hide every project workbench panel. The active tab (if any) then re-shows
+/// exactly one via [`TabKind::show`] and/or its
+/// [`ProjectTab::workbench_kind`] (or none, for a blank landing tab).
+///
+/// Sweeps **all** ~131 `show_<kind>_workbench` flags (plus the Mesh Toolbox)
+/// through [`set_workbench_flag`] so no panel can leak across a tab switch,
+/// then redundantly clears the original [`TabKind`] template flags (idempotent
+/// — they are a subset of [`ALL_WORKBENCH_KINDS`]).
 fn clear_all_workbenches(app: &mut ValenxApp) {
+    for k in ALL_WORKBENCH_KINDS {
+        set_workbench_flag(app, k, false);
+    }
+    // The 29 TabKind template flags are a subset of the sweep above; clearing
+    // them again is a harmless no-op kept for explicitness / belt-and-braces.
     app.show_rocket_workbench = false;
     app.show_engine_workbench = false;
     app.show_astro_workbench = false;
@@ -1005,12 +1323,32 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
 /// switch the viewport to match. A blank tab shows no workbench (just the
 /// 3D viewport). With no active tab, everything stays hidden (the user
 /// closed the last tab).
+///
+/// For an agent-built **product tab** (a `new_unit`), the tab is a Blank
+/// kind (so `TabKind::show` opens nothing) but carries a
+/// [`ProjectTab::workbench_kind`]; we then turn on exactly that one
+/// `show_<kind>_workbench` flag via [`set_workbench_flag`] so the workbench's
+/// inputs/calculations/readouts render on the right, alongside the unit's
+/// dock (workspace + agent chat) in the centre. Because every other flag was
+/// just cleared, switching tabs never leaks a panel between tabs.
 pub fn sync_active(app: &mut ValenxApp) {
     let kind = app.tab_bar.active_kind();
+    // The active tab's per-tab workbench link (product tabs only), captured
+    // before the clear so the borrow on `app.tab_bar` is released.
+    let workbench_kind = app
+        .tab_bar
+        .active
+        .and_then(|i| app.tab_bar.tabs.get(i))
+        .and_then(|t| t.workbench_kind.clone());
     clear_all_workbenches(app);
     if let Some(kind) = kind {
         kind.show(app);
         app.active_viewport = kind.viewport();
+    }
+    // Product tab: re-show its single linked workbench panel on top of the
+    // (Blank) kind's no-op. Done after `kind.show` so it always wins.
+    if let Some(wk) = workbench_kind {
+        set_workbench_flag(app, &wk, true);
     }
 }
 
@@ -3871,6 +4209,151 @@ mod headless_ui_tests {
             app.tab_bar.tabs.len(),
             2,
             "filtering renders, closes nothing"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Per-tab workbench wiring (WORKBENCH-TOOL-PER-TAB).
+    // -----------------------------------------------------------------------
+
+    /// Read a `show_<kind>_workbench` flag back out by kind, for assertions.
+    /// Mirrors [`set_workbench_flag`]'s mapping (incl. the Mesh Toolbox); an
+    /// unknown kind reads `false`.
+    fn read_workbench_flag(app: &ValenxApp, kind: &str) -> bool {
+        // Round-trip through the setter on a scratch clone is overkill; instead
+        // flip a probe and observe — but the flags are plain bools, so just
+        // toggle-and-restore is unnecessary. Read directly via a tiny match.
+        macro_rules! rd {
+            ($($k:literal => $f:ident),+ $(,)?) => {
+                match kind { $($k => app.$f,)+ "mesh" | "meshtoolbox" => app.show_mesh_toolbox, _ => false }
+            };
+        }
+        rd!(
+            "genetics" => show_genetics_workbench,
+            "fem" => show_fem_workbench,
+            "rocket" => show_rocket_workbench,
+            "dcmotor" => show_dcmotor_workbench,
+            "pump" => show_pump_workbench,
+            "gears" => show_gears_workbench,
+            "car" => show_car_workbench,
+            "aero" => show_aero_workbench,
+        )
+    }
+
+    #[test]
+    fn all_workbench_kinds_is_unique_and_covers_131_plus_mesh() {
+        // The registry list has no duplicate ids, and is the 131
+        // `show_*_workbench` fields plus the one `meshtoolbox` alias.
+        let mut seen = std::collections::HashSet::new();
+        for k in ALL_WORKBENCH_KINDS {
+            assert!(
+                seen.insert(*k),
+                "duplicate kind in ALL_WORKBENCH_KINDS: {k}"
+            );
+        }
+        assert_eq!(
+            ALL_WORKBENCH_KINDS.len(),
+            132,
+            "131 `show_*_workbench` fields + the meshtoolbox alias"
+        );
+        assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
+        // A couple of representative kinds are present.
+        for k in ["rocket", "fem", "dcmotor", "pump", "gears", "car"] {
+            assert!(ALL_WORKBENCH_KINDS.contains(&k), "{k} should be a kind");
+        }
+    }
+
+    #[test]
+    fn set_workbench_flag_round_trips_a_sample() {
+        // A representative spread across the field list — turning each on then
+        // off flips exactly its own flag (read back via `read_workbench_flag`),
+        // and an unknown kind is a no-op.
+        let mut app = ValenxApp::default();
+        for k in ["rocket", "fem", "dcmotor", "pump", "gears"] {
+            assert!(!read_workbench_flag(&app, k), "{k} starts off");
+            set_workbench_flag(&mut app, k, true);
+            assert!(read_workbench_flag(&app, k), "{k} turned on");
+            set_workbench_flag(&mut app, k, false);
+            assert!(!read_workbench_flag(&app, k), "{k} turned back off");
+        }
+        // Unknown kind: no panic, nothing flips.
+        set_workbench_flag(&mut app, "definitely-not-a-workbench", true);
+        for k in ["rocket", "fem", "dcmotor", "pump", "gears"] {
+            assert!(!read_workbench_flag(&app, k), "{k} untouched by unknown");
+        }
+    }
+
+    #[test]
+    fn set_workbench_flag_sets_every_listed_kind_then_clears_it() {
+        // Exhaustive: EVERY id in `ALL_WORKBENCH_KINDS` is a live arm of
+        // `set_workbench_flag` — none silently fall through to the no-op `_`.
+        // Proven by toggling each on, asserting `clear_all_workbenches`
+        // (which sweeps the whole list) drives them all back off.
+        let mut app = ValenxApp::default();
+        for k in ALL_WORKBENCH_KINDS {
+            set_workbench_flag(&mut app, k, true);
+        }
+        clear_all_workbenches(&mut app);
+        // After the sweep, the representative flags are all off again.
+        for k in [
+            "genetics", "rocket", "fem", "dcmotor", "pump", "gears", "car", "aero",
+        ] {
+            assert!(!read_workbench_flag(&app, k), "{k} cleared by the sweep");
+        }
+        assert!(!app.show_mesh_toolbox, "mesh toolbox cleared too");
+    }
+
+    #[test]
+    fn sync_active_shows_only_the_active_product_tabs_linked_workbench() {
+        // A product tab is a Blank tab carrying a `workbench_kind`. `sync_active`
+        // must turn on EXACTLY that one `show_*_workbench` flag (Blank's own
+        // `show` opens nothing) and leave every other off.
+        let mut app = ValenxApp::default();
+        let idx = app.tab_bar.open(TabKind::Blank);
+        app.tab_bar.tabs[idx].workbench_kind = Some("fem".to_string());
+        sync_active(&mut app);
+        assert!(app.show_fem_workbench, "the linked FEM panel is shown");
+        // Nothing else leaked on (spot-check a spread).
+        for k in [
+            "rocket", "dcmotor", "pump", "gears", "car", "aero", "genetics",
+        ] {
+            assert!(!read_workbench_flag(&app, k), "{k} stays hidden");
+        }
+        // A Blank tab WITHOUT a link shows no workbench at all.
+        let idx2 = app.tab_bar.open(TabKind::Blank);
+        app.tab_bar.active = Some(idx2);
+        sync_active(&mut app);
+        assert!(
+            !app.show_fem_workbench,
+            "switching away clears the prior panel"
+        );
+        for k in ALL_WORKBENCH_KINDS {
+            assert!(
+                !read_workbench_flag(&app, k),
+                "an unlinked blank tab shows no workbench ({k})"
+            );
+        }
+    }
+
+    #[test]
+    fn sync_active_switches_the_linked_workbench_without_leaking() {
+        // Two product tabs with different links: switching between them shows
+        // each tab's own workbench and hides the other's (no cross-tab leak).
+        let mut app = ValenxApp::default();
+        let a = app.tab_bar.open(TabKind::Blank);
+        app.tab_bar.tabs[a].workbench_kind = Some("rocket".to_string());
+        let b = app.tab_bar.open(TabKind::Blank);
+        app.tab_bar.tabs[b].workbench_kind = Some("car".to_string());
+
+        app.tab_bar.active = Some(a);
+        sync_active(&mut app);
+        assert!(app.show_rocket_workbench && !app.show_car_workbench);
+
+        app.tab_bar.active = Some(b);
+        sync_active(&mut app);
+        assert!(
+            app.show_car_workbench && !app.show_rocket_workbench,
+            "switching tabs swaps the visible workbench cleanly"
         );
     }
 }

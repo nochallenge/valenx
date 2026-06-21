@@ -512,6 +512,7 @@ mod tests {
             kind,
             title: title.to_string(),
             group: None,
+            workbench_kind: None,
             editing: false,
             edit_buf: String::new(),
         }
