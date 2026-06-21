@@ -5,7 +5,8 @@
 //! [`crate::agent_commands`]'s shared reducer — so wiring a new model meant
 //! editing that one shared `match`, which serialises parallel work and is a
 //! merge-conflict magnet. This module replaces those arms with a single
-//! generic lookup ([`lookup`]) keyed by the wire `kind` string, so the reducer
+//! generic lookup ([`lookup`](crate::products_registry::lookup)) keyed by the
+//! wire `kind` string, so the reducer
 //! never grows a new branch again.
 //!
 //! ## What lives where
@@ -13,8 +14,9 @@
 //! The *substance* of each product — how its [`crate::WorkspaceProduct`] is
 //! assembled from that tool's canonical mesh / camera / readout-row producers —
 //! lives in **that tool's own module** as a pure `pub(crate) fn …() ->
-//! WorkspaceProduct` builder (e.g. [`crate::rocket_workbench::rocket_product`]).
-//! This file only holds the tiny `kind → builder` table in [`lookup`]. Adding a
+//! WorkspaceProduct` builder (e.g. `crate::rocket_workbench::rocket_product`).
+//! This file only holds the tiny `kind → builder` table in
+//! [`lookup`](crate::products_registry::lookup). Adding a
 //! tool is therefore a *one-line* edit to the table here plus a self-contained
 //! builder in the new tool's file — the per-tool code (the part that actually
 //! varies and that two contributors might touch at once) is fully isolated, so
@@ -37,7 +39,8 @@
 //!
 //! ## Builder contract
 //!
-//! Every builder is a `fn() -> WorkspaceProduct` ([`MeshProducerEntry::build`])
+//! Every builder is a `fn() -> WorkspaceProduct`
+//! ([`MeshProducerEntry::build`](crate::products_registry::MeshProducerEntry::build))
 //! — pure, app-state-free, built only from that tool's canonical inputs — so
 //! the reducer can call it with nothing but the channel it already knows.
 //! Behaviour is byte-for-byte what the old inline arms produced.
@@ -60,7 +63,8 @@
 //! }
 //! ```
 //!
-//! …then add the single table line in [`lookup`] below:
+//! …then add the single table line in
+//! [`lookup`](crate::products_registry::lookup) below:
 //! `"foo" => Some(crate::foo_workbench::foo_product),`. That is the only shared
 //! edit, and it is a one-liner — everything else lives in the tool's file.
 

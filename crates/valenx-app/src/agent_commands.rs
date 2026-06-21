@@ -63,7 +63,7 @@ const CMD_STEM: &str = "valenx_chat_cmd";
 /// object like `{"cmd":"new_tab","name":"…"}`.
 ///
 /// Every variant is honoured through an *existing* vetted tab/dock method (see
-/// [`apply`]); none writes a raw [`ValenxApp`] field. Unknown command tags or
+/// `apply`); none writes a raw [`ValenxApp`] field. Unknown command tags or
 /// bad workbench ids are skipped without panicking.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
@@ -1096,7 +1096,7 @@ mod tests {
                 kind: "not-a-model".into(),
             },
         );
-        assert!(app.workspace_products.get(&1).is_none());
+        assert!(!app.workspace_products.contains_key(&1));
     }
 
     #[test]
@@ -1251,7 +1251,7 @@ mod tests {
                 kind: "not-a-drawing".into(),
             },
         );
-        assert!(app.workspace_products.get(&1).is_none());
+        assert!(!app.workspace_products.contains_key(&1));
     }
 
     #[test]

@@ -852,7 +852,7 @@ impl WgpuRenderer {
     /// target) is **always** kept regardless of `live`, so a caller need not
     /// remember to list it.
     ///
-    /// Each [`Offscreen`] owns a colour + depth `wgpu::Texture` (~8 MB for a
+    /// Each `Offscreen` owns a colour + depth `wgpu::Texture` (~8 MB for a
     /// reasonably-sized tile) plus an egui `TextureId` registered with the
     /// egui-wgpu [`egui_wgpu::Renderer`]. The textures free themselves on
     /// `Drop` once the entry is removed from the map, but the egui-side

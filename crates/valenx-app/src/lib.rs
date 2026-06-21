@@ -323,7 +323,7 @@ pub struct WorkspaceProduct {
     /// When `Some`, the pane renders this mesh as a live lit 3-D view (using
     /// [`Self::camera`]) instead of a text card. Built by the `show_3d`
     /// command (e.g. the LV-1 rocket via
-    /// [`crate::rocket_workbench::lv1_loaded_mesh`]).
+    /// `crate::rocket_workbench::lv1_loaded_mesh`).
     pub mesh: Option<LoadedMesh>,
     /// Optional per-vertex base colours for [`Self::mesh`], one `[r, g, b]`
     /// in `[0, 1]` per surface vertex of the mesh's renderable triangle skin
@@ -445,7 +445,7 @@ pub struct ValenxApp {
     /// Opt-in **dockable / tileable layout for the right-side workbench
     /// panels** (View → "Dockable panel layout (beta)"). When `true`, the
     /// run of `draw_<x>_workbench` dispatch in `update.rs` is replaced by a
-    /// single [`egui_tiles`] tree ([`dock_layout::draw_dock_layout`]) that
+    /// single [`egui_tiles`] tree (`dock_layout::draw_dock_layout`) that
     /// hosts every open workbench as a draggable / reorderable / splittable
     /// tile. Default `false` — the classic stacked right-side `SidePanel`
     /// layout is unchanged and stays the default. Distinct from
@@ -461,7 +461,7 @@ pub struct ValenxApp {
     /// The lazily-built [`egui_tiles`] tree backing the dockable workbench
     /// layout. `None` until the first frame [`ValenxApp::dock_enabled`] is on
     /// (built from whichever workbenches are open then); thereafter
-    /// [`dock_layout::draw_dock_layout`] syncs it each frame — adding a tile
+    /// `dock_layout::draw_dock_layout` syncs it each frame — adding a tile
     /// when a workbench is opened and dropping the tile when one is closed.
     /// Panes are panel-id `String`s (e.g. `"valenx_engine_workbench"`).
     ///
@@ -474,7 +474,7 @@ pub struct ValenxApp {
     /// dock (View → "New Workbench + Agent" / "Open 6 …"). Each unit is a
     /// paired `"workspace:<n>"` (empty build canvas) + `"agent:<n>"` (Claude
     /// chat) tile; this is the highest `n` handed out so far (default `0` =
-    /// none). See [`dock_layout`]. Unlike the [`DOCKABLE_PANELS`] tiles, these
+    /// none). See [`dock_layout`]. Unlike the `DOCKABLE_PANELS` tiles, these
     /// are not gated on a `show_*` flag — they persist in [`Self::dock_tree`]
     /// until the user closes them.
     ///
@@ -485,8 +485,6 @@ pub struct ValenxApp {
     /// two different tabs' "Agent 1" onto the same channel. So each tab's
     /// [`Self::dock_tree`] may contain different `agent:<n>` panes, but every
     /// `<n>` is globally distinct.
-    ///
-    /// [`DOCKABLE_PANELS`]: crate::dock_layout::DOCKABLE_PANELS
     pub wb_agent_counter: usize,
     /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
     /// many lines of channel `n`'s command file
@@ -505,10 +503,10 @@ pub struct ValenxApp {
     /// own entry here (via `unit_chat_inputs.entry(n).or_default()`) so the six
     /// agent chats don't share one input box and mirror each other's typing.
     /// The classic base Assistant panel keeps using
-    /// [`crate::assistant_workbench::AssistantWorkbenchState::input`] instead.
+    /// `crate::assistant_workbench::AssistantWorkbenchState::input` instead.
     /// Defaults empty (derive); an entry is created lazily the first time a unit
     /// chat is drawn. See [`dock_layout`] and
-    /// [`crate::assistant_workbench::assistant_chat_ui`].
+    /// `crate::assistant_workbench::assistant_chat_ui`.
     pub unit_chat_inputs: std::collections::HashMap<usize, String>,
     /// Per-unit **finished build result** for the "Workbench + Agent"
     /// `workspace:<n>` tiles, keyed by unit number `n`. An external agent posts
@@ -578,7 +576,7 @@ pub struct ValenxApp {
     pub last_prepared_job: Option<(String, valenx_core::PreparedJob)>,
 
     /// Last completed run's workdir, captured when the run handle
-    /// drops at the end of [`Self::pump_run_events`]. Mirrors
+    /// drops at the end of `Self::pump_run_events`. Mirrors
     /// `last_prepare_workdir` for the run pipeline so users can
     /// "Open in file browser" the dir holding their .vtu / .frd /
     /// .log artifacts after the solver finishes. `None` until the
@@ -652,14 +650,14 @@ pub struct ValenxApp {
     /// render is skipped. Driven by the viewport header's ✕ and its `⋯` menu,
     /// and by View → "Hide 3D viewport". **Per-tab** (swapped with the dock
     /// state via [`project_tabs::WorkspaceDoc`]); a newly-opened tab starts
-    /// `false` (viewport shown). Defaults to `false`. See [`update`].
+    /// `false` (viewport shown). Defaults to `false`. See `update`.
     pub viewport_hidden: bool,
     /// When `true` (and not [`Self::viewport_hidden`]), only the central
     /// viewport's slim chrome header is drawn and its 2D/3D body is skipped —
     /// the viewport is "rolled up" to just its title + controls. Toggled by
     /// the header's `−` (minimize) icon. **Per-tab** (swapped with the dock
     /// state via [`project_tabs::WorkspaceDoc`]); a newly-opened tab starts
-    /// `false` (body shown). Defaults to `false`. See [`update`].
+    /// `false` (body shown). Defaults to `false`. See `update`.
     pub viewport_collapsed: bool,
     /// Receiver for background adapter-probe results (see
     /// [`valenx_core::AdapterRegistry::spawn_probe_all`]). `Some` while the
@@ -714,7 +712,7 @@ pub struct ValenxApp {
     pub catalogue: valenx_i18n::LocaleCatalogue,
 
     /// Phase 21 — Macro recorder. UI panels append actions via
-    /// [`Self::record_macro_action`] when the user clicks a
+    /// `macro_recorder.record` when the user clicks a
     /// recordable button. `start_recording` / `stop_recording`
     /// flip the recorder state.
     pub macro_recorder: valenx_macro::MacroRecorder,

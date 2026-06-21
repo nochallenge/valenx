@@ -75,10 +75,10 @@ use valenx_viz::OrbitCamera;
 /// [`TabBar::docs`].
 ///
 /// It **also** carries the per-tab *dockable layout / viewport view state*:
-/// whether the dockable workbench layout is on ([`Self::dock_enabled`]),
+/// whether the dockable workbench layout is on (`dock_enabled`),
 /// whether the central 3-D viewport is hidden / collapsed
-/// ([`Self::viewport_hidden`] / [`Self::viewport_collapsed`]), and the
-/// dock's own tile tree ([`Self::dock_tree`]). This is what makes the
+/// (`viewport_hidden` / `viewport_collapsed`), and the
+/// dock's own tile tree (`dock_tree`). This is what makes the
 /// "Workbench + Agent" grid **per-tab**: a tab that has six agent units
 /// keeps them, while a freshly-opened tab gets a clean view (dock off,
 /// viewport shown, no tree) and so shows its workbench + the 3-D viewport
@@ -88,8 +88,8 @@ use valenx_viz::OrbitCamera;
 ///
 /// Construction is via [`Default`] (a fresh, empty document — no project,
 /// no mesh, the default camera, dock off, viewport shown, no dock tree).
-/// [`WorkspaceDoc::capture`] moves the live fields *out* of an app (leaving
-/// them empty / default), and [`WorkspaceDoc::install`] moves a document's
+/// `WorkspaceDoc::capture` moves the live fields *out* of an app (leaving
+/// them empty / default), and `WorkspaceDoc::install` moves a document's
 /// fields back *in*. Neither clones the meshes or the dock tree — they are
 /// `move`d through `Option`/`Box`/`take`.
 #[derive(Default)]
@@ -489,7 +489,7 @@ impl TabBar {
     /// `New tab` button does — no workbench is forced open. Pushes a fresh
     /// [`WorkspaceDoc`] alongside the tab to keep `docs.len() ==
     /// tabs.len()`. Does **not** swap the live document — the caller (see
-    /// [`apply_intent`]) runs [`switch_active_to`] right after so the
+    /// `apply_intent`) runs [`switch_active_to`] right after so the
     /// previous tab's scene is parked and this blank tab starts empty.
     pub fn open_blank(&mut self) -> usize {
         self.blank_counter += 1;
@@ -518,7 +518,7 @@ impl TabBar {
     /// new active tab (the previous neighbour, or `None` when the strip
     /// empties). Keeps `docs` index-aligned with `tabs`. The live document
     /// is reconciled by the caller (see the `close` branch of
-    /// [`apply_intent`]), which installs the new active tab's document.
+    /// `apply_intent`), which installs the new active tab's document.
     pub fn close(&mut self, idx: usize) {
         if idx >= self.tabs.len() {
             return;
@@ -808,9 +808,9 @@ pub fn sync_active(app: &mut ValenxApp) {
 /// document so each tab keeps its own scene/project.
 ///
 /// The currently-active tab's live scene (`app.project`, `app.mesh`,
-/// `app.camera`, …) is [`captured`](WorkspaceDoc::capture) back into its
+/// `app.camera`, …) is captured (`WorkspaceDoc::capture`) back into its
 /// `docs` slot, then `docs[new_idx]` is taken and
-/// [`installed`](WorkspaceDoc::install) into the live fields — so the
+/// installed (`WorkspaceDoc::install`) into the live fields — so the
 /// outgoing tab keeps its geometry and the incoming tab shows its own
 /// (empty for a fresh blank tab). Finally `active` is set and the visible
 /// workbench + viewport are reconciled via [`sync_active`].
