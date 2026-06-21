@@ -458,6 +458,64 @@ fn render_workspace_body(
         }
     }
 
+    // An IMAGE product (e.g. the path-traced `render`) shows a raster image
+    // scaled to fit the tile — sits *between* the 3-D viewport and the 2-D /
+    // text branches. The CPU pixels live on the product as an `egui::ColorImage`;
+    // the first frame uploads them to a GPU texture (keyed by the tile id) and
+    // caches the handle on the product so later frames reuse it rather than
+    // re-allocating a texture every repaint.
+    let has_image = idx
+        .and_then(|i| app.workspace_products.get(&i))
+        .map(|p| p.image.is_some())
+        .unwrap_or(false);
+    if has_image {
+        if let Some(i) = idx {
+            // Lazily upload the ColorImage to a texture once. `load_texture`
+            // allocates a fresh texture, so we only call it when the cache is
+            // empty; the cloned image is consumed by the upload. The handle is
+            // stashed back on the product (`image_texture`) and freed (RAII)
+            // when the product is dropped.
+            let needs_upload = app
+                .workspace_products
+                .get(&i)
+                .map(|p| p.image.is_some() && p.image_texture.is_none())
+                .unwrap_or(false);
+            if needs_upload {
+                let image = app.workspace_products.get(&i).and_then(|p| p.image.clone());
+                if let Some(image) = image {
+                    let tex = ui.ctx().load_texture(
+                        format!("workspace_img:{n}"),
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    );
+                    if let Some(p) = app.workspace_products.get_mut(&i) {
+                        p.image_texture = Some(tex);
+                    }
+                }
+            }
+            // Draw the cached texture scaled to fit the remaining rect, keeping
+            // the image's aspect ratio. Read the size + handle through a short
+            // immutable borrow.
+            let drawn = app
+                .workspace_products
+                .get(&i)
+                .and_then(|p| p.image_texture.as_ref().map(|t| (t.id(), t.size_vec2())));
+            if let Some((tex_id, tex_size)) = drawn {
+                let avail = ui.available_size();
+                if avail.x > 1.0 && avail.y > 1.0 && tex_size.x > 0.0 && tex_size.y > 0.0 {
+                    let scale = (avail.x / tex_size.x).min(avail.y / tex_size.y);
+                    let draw_size = tex_size * scale;
+                    let (rect, _resp) = ui.allocate_exact_size(avail, egui::Sense::hover());
+                    let img_rect = egui::Rect::from_center_size(rect.center(), draw_size);
+                    let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                    ui.painter_at(rect)
+                        .image(tex_id, img_rect, uv, egui::Color32::WHITE);
+                }
+                return;
+            }
+        }
+    }
+
     // A 2-D drawing product (a `show_2d` command set `kind2d: Some`) paints a
     // flat egui engineering drawing (no wgpu) — sits *between* the 3-D viewport
     // and the text card. Read through a short immutable borrow (no camera
@@ -479,6 +537,12 @@ fn render_workspace_body(
             }
             crate::Workspace2dKind::DnaMap(map) => {
                 paint_dna_map(ui, rect, &map);
+            }
+            crate::Workspace2dKind::Draft2d(view) => {
+                paint_draft2d(ui, rect, &view);
+            }
+            crate::Workspace2dKind::FloorPlan(plan) => {
+                paint_floor_plan(ui, rect, &plan);
             }
         }
         return;
@@ -958,6 +1022,224 @@ fn truncate_to_width(text: &str, max_w: f32, font_size: f32) -> String {
     }
     let keep: String = text.chars().take(max_chars - 1).collect();
     format!("{keep}…")
+}
+
+/// A drawing-units → screen-pixels mapping that fits an axis-aligned
+/// drawing-space box `((min_x, min_y), (max_x, max_y))` into `area` with the
+/// aspect ratio preserved and the content centred, flipping y (drawing y-up →
+/// screen y-down). Returns a closure mapping a drawing `[x, y]` to an
+/// [`egui::Pos2`], together with the uniform scale (px per drawing unit) so the
+/// caller can size radii / strokes consistently.
+///
+/// Shared by [`paint_draft2d`] and [`paint_floor_plan`] (the 2-D CAD drawing
+/// and the floor plan): both lay a real-world-units model into a tile rect and
+/// need the same centred, aspect-correct fit. A degenerate (zero-extent) box
+/// gets a unit extent so the scale stays finite.
+fn fit_box_to_area(
+    min: [f64; 2],
+    max: [f64; 2],
+    area: egui::Rect,
+) -> (impl Fn([f64; 2]) -> egui::Pos2, f32) {
+    let w = (max[0] - min[0]).abs().max(1e-6) as f32;
+    let h = (max[1] - min[1]).abs().max(1e-6) as f32;
+    let scale = (area.width() / w).min(area.height() / h).max(0.0);
+    // The content's drawn size, centred in `area`.
+    let drawn_w = w * scale;
+    let drawn_h = h * scale;
+    let off_x = area.left() + (area.width() - drawn_w) * 0.5;
+    let off_y = area.top() + (area.height() - drawn_h) * 0.5;
+    let min_x = min[0] as f32;
+    let max_y = max[1] as f32;
+    let map = move |p: [f64; 2]| -> egui::Pos2 {
+        egui::pos2(
+            off_x + (p[0] as f32 - min_x) * scale,
+            // y-up → y-down: measure from the top (max_y) downward.
+            off_y + (max_y - p[1] as f32) * scale,
+        )
+    };
+    (map, scale)
+}
+
+/// Paint the **2-D CAD drawing** ([`crate::Workspace2dKind::Draft2d`]) into
+/// `rect` with the egui painter — no wgpu. Fits the drawing's entities
+/// (lines / circles / arcs / polylines) to the tile keeping aspect, draws them
+/// in the engineering-drawing accent colour, and shows the readout rows
+/// (entity count, extent) as a small text block. Pure painting — reads only the
+/// plain-data [`crate::Draft2dView`].
+fn paint_draft2d(ui: &egui::Ui, rect: egui::Rect, view: &crate::Draft2dView) {
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    if rect.width() < 32.0 || rect.height() < 32.0 {
+        return;
+    }
+    let base = (rect.height() * 0.045).clamp(9.0, 13.0);
+    let title_font = egui::FontId::proportional(base + 2.0);
+    let small_font = egui::FontId::proportional((base - 1.0).max(8.0));
+    let pad = 8.0;
+
+    painter.text(
+        egui::pos2(rect.left() + pad, rect.top() + pad),
+        egui::Align2::LEFT_TOP,
+        "2-D Drawing",
+        title_font.clone(),
+        ink,
+    );
+    // Reserve a numbers strip at the bottom; the drawing fills the rest.
+    let strip_h = (view.lines.len() as f32) * (small_font.size + 3.0) + 4.0;
+    let body = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + pad, rect.top() + pad + title_font.size + 6.0),
+        egui::pos2(rect.right() - pad, rect.bottom() - pad - strip_h),
+    );
+    if body.width() < 8.0 || body.height() < 8.0 {
+        return;
+    }
+    let (min, max) = view.bounds;
+    let (to_screen, scale) = fit_box_to_area(min, max, body);
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    for e in &view.entities {
+        match e {
+            crate::Draft2dEntity::Line { a, b } => {
+                painter.line_segment([to_screen(*a), to_screen(*b)], stroke);
+            }
+            crate::Draft2dEntity::Circle { centre, radius } => {
+                painter.circle_stroke(to_screen(*centre), *radius as f32 * scale, stroke);
+            }
+            crate::Draft2dEntity::Arc {
+                centre,
+                radius,
+                start_angle_deg,
+                end_angle_deg,
+            } => {
+                let cc = to_screen(*centre);
+                let r = *radius as f32 * scale;
+                let a0 = start_angle_deg.to_radians() as f32;
+                let a1 = end_angle_deg.to_radians() as f32;
+                let n = 48;
+                let mut prev: Option<egui::Pos2> = None;
+                for i in 0..=n {
+                    let t = a0 + (a1 - a0) * (i as f32 / n as f32);
+                    // y is screen-down, so subtract the sin term.
+                    let p = egui::pos2(cc.x + r * t.cos(), cc.y - r * t.sin());
+                    if let Some(pp) = prev {
+                        painter.line_segment([pp, p], stroke);
+                    }
+                    prev = Some(p);
+                }
+            }
+            crate::Draft2dEntity::Polyline { vertices, closed } => {
+                for w in vertices.windows(2) {
+                    painter.line_segment([to_screen(w[0]), to_screen(w[1])], stroke);
+                }
+                if *closed && vertices.len() > 2 {
+                    painter.line_segment(
+                        [
+                            to_screen(vertices[vertices.len() - 1]),
+                            to_screen(vertices[0]),
+                        ],
+                        stroke,
+                    );
+                }
+            }
+        }
+    }
+    // Numbers strip at the bottom.
+    let mut y = rect.bottom() - pad - strip_h + 2.0;
+    for line in &view.lines {
+        painter.text(
+            egui::pos2(rect.left() + pad, y),
+            egui::Align2::LEFT_TOP,
+            truncate_to_width(line, rect.width() - 2.0 * pad, base),
+            small_font.clone(),
+            weak,
+        );
+        y += small_font.size + 3.0;
+    }
+}
+
+/// Paint the **interior floor-plan** ([`crate::Workspace2dKind::FloorPlan`])
+/// into `rect` with the egui painter — no wgpu. Fits the room wall polygons +
+/// furniture footprints to the tile keeping aspect, draws walls as strokes and
+/// furniture as filled+labelled rectangles, and shows the readout rows (room /
+/// piece counts, extent). Pure painting — reads only the plain-data
+/// [`crate::FloorPlanView`].
+fn paint_floor_plan(ui: &egui::Ui, rect: egui::Rect, plan: &crate::FloorPlanView) {
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    if rect.width() < 40.0 || rect.height() < 40.0 {
+        return;
+    }
+    let base = (rect.height() * 0.045).clamp(9.0, 13.0);
+    let title_font = egui::FontId::proportional(base + 2.0);
+    let small_font = egui::FontId::proportional((base - 1.0).max(8.0));
+    let pad = 8.0;
+
+    painter.text(
+        egui::pos2(rect.left() + pad, rect.top() + pad),
+        egui::Align2::LEFT_TOP,
+        "Floor Plan",
+        title_font.clone(),
+        ink,
+    );
+    let strip_h = (plan.lines.len() as f32) * (small_font.size + 3.0) + 4.0;
+    let body = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + pad, rect.top() + pad + title_font.size + 6.0),
+        egui::pos2(rect.right() - pad, rect.bottom() - pad - strip_h),
+    );
+    if body.width() < 8.0 || body.height() < 8.0 {
+        return;
+    }
+    let (min, max) = plan.bounds;
+    let (to_screen, scale) = fit_box_to_area(min, max, body);
+
+    let wall = egui::Stroke::new(2.0, egui::Color32::from_rgb(180, 190, 210));
+    for poly in &plan.rooms {
+        for w in poly.windows(2) {
+            painter.line_segment([to_screen(w[0]), to_screen(w[1])], wall);
+        }
+        if poly.len() > 2 {
+            painter.line_segment([to_screen(poly[poly.len() - 1]), to_screen(poly[0])], wall);
+        }
+    }
+    let label_font = egui::FontId::proportional((base - 1.0).max(8.0));
+    for item in &plan.furniture {
+        let c = to_screen(item.centre);
+        let r = egui::Rect::from_center_size(
+            c,
+            egui::vec2(item.size[0] as f32 * scale, item.size[1] as f32 * scale),
+        );
+        painter.rect_filled(r, 2.0, egui::Color32::from_rgb(70, 110, 90));
+        painter.rect_stroke(
+            r,
+            2.0,
+            egui::Stroke::new(1.0, egui::Color32::from_gray(200)),
+        );
+        // Only label when the footprint is wide enough to read.
+        if r.width() > 18.0 && r.height() > 10.0 {
+            painter.text(
+                c,
+                egui::Align2::CENTER_CENTER,
+                &item.label,
+                label_font.clone(),
+                egui::Color32::from_gray(220),
+            );
+        }
+    }
+    // Numbers strip at the bottom.
+    let mut y = rect.bottom() - pad - strip_h + 2.0;
+    for line in &plan.lines {
+        painter.text(
+            egui::pos2(rect.left() + pad, y),
+            egui::Align2::LEFT_TOP,
+            truncate_to_width(line, rect.width() - 2.0 * pad, base),
+            small_font.clone(),
+            weak,
+        );
+        y += small_font.size + 3.0;
+    }
 }
 
 /// After the tree has been drawn, drain the per-workbench deferred requests

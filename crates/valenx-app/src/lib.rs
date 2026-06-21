@@ -357,6 +357,22 @@ pub struct WorkspaceProduct {
     /// show the button and so never set it. Set by
     /// [`crate::dock_layout`]'s `render_workspace_body` on button click.
     pub last_export: Option<String>,
+    /// When `Some`, the pane renders this raster **image** scaled to fit the
+    /// tile — the path-traced `render` view (a small Cornell-box framebuffer)
+    /// is the canonical producer. The pixels are carried as a CPU
+    /// [`egui::ColorImage`]; the first frame uploads them to a GPU texture
+    /// cached in [`Self::image_texture`] and then draws with `ui.image`.
+    /// Rendered by [`crate::dock_layout`]'s `render_workspace_body` in a branch
+    /// *before* the text-card fall-through (a peer to the 3-D and 2-D
+    /// branches). `None` for mesh / 2-D / text products.
+    pub image: Option<egui::ColorImage>,
+    /// Lazily-uploaded GPU texture for [`Self::image`] — `None` until the first
+    /// frame that renders the image, which uploads the [`egui::ColorImage`]
+    /// once (keyed by the tile id) and caches the handle here so subsequent
+    /// frames reuse it instead of re-allocating a texture every repaint. The
+    /// handle frees the GPU texture when the product is dropped (RAII). Never
+    /// set for non-image products.
+    pub image_texture: Option<egui::TextureHandle>,
 }
 
 /// Which **2-D engineering drawing** a [`WorkspaceProduct`] carries, with the
@@ -373,6 +389,13 @@ pub enum Workspace2dKind {
     /// feature (ATG / ORF / His6 / stop) drawn as a coloured block proportional
     /// to its nt span, plus a nt ruler.
     DnaMap(DnaMapView),
+    /// A **2-D CAD drawing** — the LibreCAD-style entity soup (lines / circles /
+    /// arcs / polylines) of the 2-D drafting workbench, painted as a
+    /// fit-to-tile drawing.
+    Draft2d(Draft2dView),
+    /// An **interior floor-plan** — one or more room wall polygons plus the
+    /// placed-furniture rectangles, painted as a fit-to-tile plan.
+    FloorPlan(FloorPlanView),
 }
 
 /// Plain-data view for the RC-beam **section drawing** ([`Workspace2dKind::RcSection`]).
@@ -421,6 +444,94 @@ pub struct DnaMapView {
     /// The labelled feature spans (ATG / ORF / His6 / stop), each a
     /// `[start, end)` nt interval with a colour. Ordered for drawing.
     pub features: Vec<DnaFeature>,
+}
+
+/// One drawing primitive on a [`Draft2dView`] — the plain-data (`f64`,
+/// drawing-unit) form of a `valenx_librecad_2d::Entity2D`, carrying only the
+/// geometry the tile painter needs (no layer / DXF metadata). The painter maps
+/// these to screen pixels with a fit-to-tile transform.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Draft2dEntity {
+    /// A straight segment from `a` to `b` (drawing units).
+    Line {
+        /// Start point `[x, y]`.
+        a: [f64; 2],
+        /// End point `[x, y]`.
+        b: [f64; 2],
+    },
+    /// A full circle of `radius` about `centre` (drawing units).
+    Circle {
+        /// Centre `[x, y]`.
+        centre: [f64; 2],
+        /// Radius in drawing units.
+        radius: f64,
+    },
+    /// A circular arc about `centre` from `start_angle_deg` to `end_angle_deg`
+    /// (degrees, CCW), tessellated by the painter.
+    Arc {
+        /// Centre `[x, y]`.
+        centre: [f64; 2],
+        /// Radius in drawing units.
+        radius: f64,
+        /// Start angle (degrees, CCW from +x).
+        start_angle_deg: f64,
+        /// End angle (degrees, CCW from +x).
+        end_angle_deg: f64,
+    },
+    /// A polyline through `vertices`; `closed` joins the last vertex back to
+    /// the first.
+    Polyline {
+        /// Ordered `[x, y]` vertices (drawing units).
+        vertices: Vec<[f64; 2]>,
+        /// Whether the last vertex connects back to the first.
+        closed: bool,
+    },
+}
+
+/// Plain-data view for the **2-D CAD drawing** ([`Workspace2dKind::Draft2d`]).
+/// The drawing's entities plus the model's overall extent (so the painter can
+/// fit it to the tile), and the already-formatted readout rows (entity count,
+/// extent) shown beside the drawing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Draft2dView {
+    /// The drawing primitives to paint, in draw order.
+    pub entities: Vec<Draft2dEntity>,
+    /// Axis-aligned drawing-unit bounds `((min_x, min_y), (max_x, max_y))` of
+    /// all entities — the box the painter scales to fit. A degenerate (empty)
+    /// drawing leaves this at the default unit box.
+    pub bounds: ([f64; 2], [f64; 2]),
+    /// Readout rows shown beside the drawing (entity count, extent).
+    pub lines: Vec<String>,
+}
+
+/// One furniture rectangle on a [`FloorPlanView`] — an axis-aligned footprint
+/// centred at `centre` with `size` `[w, d]` (metres) and a short `label`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FloorPlanItem {
+    /// Footprint centre `[x, y]` (metres, plan coordinates).
+    pub centre: [f64; 2],
+    /// Footprint size `[width, depth]` (metres).
+    pub size: [f64; 2],
+    /// Short label drawn in the rectangle (the furniture kind).
+    pub label: String,
+}
+
+/// Plain-data view for the **interior floor-plan**
+/// ([`Workspace2dKind::FloorPlan`]). The room wall polygons plus the placed
+/// furniture footprints, the overall plan extent (so the painter can fit it to
+/// the tile), and the readout rows (room / piece counts).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FloorPlanView {
+    /// Each room's wall polygon as ordered `[x, y]` vertices (metres). Drawn as
+    /// a closed loop of wall segments.
+    pub rooms: Vec<Vec<[f64; 2]>>,
+    /// The placed-furniture footprints.
+    pub furniture: Vec<FloorPlanItem>,
+    /// Axis-aligned plan-unit bounds `((min_x, min_y), (max_x, max_y))` of the
+    /// rooms — the box the painter scales to fit.
+    pub bounds: ([f64; 2], [f64; 2]),
+    /// Readout rows shown beside the plan (room + furniture counts).
+    pub lines: Vec<String>,
 }
 
 /// Root application state.
