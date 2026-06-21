@@ -63,6 +63,14 @@ impl AssistantWorkbenchState {
     pub(crate) fn inbox_path(&self) -> &Path {
         &self.inbox_path
     }
+
+    /// Test-only: override the inbox path so a test can point the
+    /// agent-command base dir (the inbox path's parent) at a temp directory it
+    /// controls. See `crate::agent_commands` tests.
+    #[cfg(test)]
+    pub(crate) fn set_inbox_path_for_test(&mut self, path: PathBuf) {
+        self.inbox_path = path;
+    }
 }
 
 /// Resolve the assistant feed file: `$VALENX_ASSISTANT_FEED` if set, otherwise
