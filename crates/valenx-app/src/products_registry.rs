@@ -242,6 +242,27 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "bjt" => crate::bjt_workbench::bjt_product,
         "mosfet" => crate::mosfet_workbench::mosfet_product,
         "rectifier" => crate::rectifier_workbench::rectifier_product,
+        // Electrical / EM / power-systems / electrochemistry / photonics /
+        // acoustics / nuclear / signals / propulsion family (each builder lives
+        // in its own workbench module; see that module's `*_product`).
+        "filter" => crate::filter_workbench::filter_product,
+        "antenna" => crate::antenna_workbench::antenna_product,
+        "transmissionline" => crate::transmissionline_workbench::transmissionline_product,
+        "coil" => crate::coil_workbench::coil_product,
+        "led" => crate::led_workbench::led_product,
+        "transformer" => crate::transformer_workbench::transformer_product,
+        "threephase" => crate::threephase_workbench::threephase_product,
+        "powerfactor" => crate::powerfactor_workbench::powerfactor_product,
+        "electrochem" => crate::electrochem_workbench::electrochem_product,
+        "batterypack" => crate::batterypack_workbench::batterypack_product,
+        "batteryecm" => crate::batteryecm_workbench::batteryecm_product,
+        "solarpv" => crate::solarpv_workbench::solarpv_product,
+        "optics" => crate::optics_workbench::optics_product,
+        "acoustics" => crate::acoustics_workbench::acoustics_product,
+        "radioactivity" => crate::radioactivity_workbench::radioactivity_product,
+        "queueing" => crate::queueing_workbench::queueing_product,
+        "fft" => crate::fft_workbench::fft_product,
+        "engine" => crate::engine_workbench::engine_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -333,6 +354,24 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "bjt" => "bjt",
         "mosfet" => "mosfet",
         "rectifier" => "rectifier",
+        "filter" => "filter",
+        "antenna" => "antenna",
+        "transmissionline" => "transmissionline",
+        "coil" => "coil",
+        "led" => "led",
+        "transformer" => "transformer",
+        "threephase" => "threephase",
+        "powerfactor" => "powerfactor",
+        "electrochem" => "electrochem",
+        "batterypack" => "batterypack",
+        "batteryecm" => "batteryecm",
+        "solarpv" => "solarpv",
+        "optics" => "optics",
+        "acoustics" => "acoustics",
+        "radioactivity" => "radioactivity",
+        "queueing" => "queueing",
+        "fft" => "fft",
+        "engine" => "engine",
         _ => return None,
     })
 }
@@ -429,6 +468,27 @@ mod tests {
         "bjt",
         "mosfet",
         "rectifier",
+        // The 18 electrical / EM / power-systems / electrochemistry /
+        // photonics / acoustics / nuclear / signals / propulsion workbenches
+        // wired in this change.
+        "filter",
+        "antenna",
+        "transmissionline",
+        "coil",
+        "led",
+        "transformer",
+        "threephase",
+        "powerfactor",
+        "electrochem",
+        "batterypack",
+        "batteryecm",
+        "solarpv",
+        "optics",
+        "acoustics",
+        "radioactivity",
+        "queueing",
+        "fft",
+        "engine",
     ];
 
     /// The machine-design / structural / civil / strength-of-materials /
@@ -516,6 +576,27 @@ mod tests {
         "bjt",
         "mosfet",
         "rectifier",
+        // The 18 electrical / EM / power-systems / electrochemistry /
+        // photonics / acoustics / nuclear / signals / propulsion workbenches
+        // wired in this change.
+        "filter",
+        "antenna",
+        "transmissionline",
+        "coil",
+        "led",
+        "transformer",
+        "threephase",
+        "powerfactor",
+        "electrochem",
+        "batterypack",
+        "batteryecm",
+        "solarpv",
+        "optics",
+        "acoustics",
+        "radioactivity",
+        "queueing",
+        "fft",
+        "engine",
     ];
 
     #[test]

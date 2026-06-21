@@ -509,6 +509,58 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
         });
 }
 
+/// The agent-bridge **`show_3d{kind:"engine"}`** product: the canonical
+/// procedurally-detailed liquid-rocket engine (chamber + regen nozzle +
+/// powerhead — the panel's primary "Show 3-D engine" geometry) paired with
+/// the workbench's own ideal-nozzle + Bartz-cooling headline numbers, at a
+/// fixed 3/4 camera. Registered in [`crate::products_registry`]; the per-tool
+/// builder the registry dispatches to. Pure — driven off
+/// [`EngineWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `analyze()` "Performance — ideal
+/// nozzle" + "Cooling — Bartz regen balance" sections (this workbench formats
+/// its readout inline rather than via a shared `compute()` string fn, so the
+/// rows are assembled here from the same [`EngineReport`]).
+pub(crate) fn engine_product() -> crate::WorkspaceProduct {
+    let s = EngineWorkbenchState::default();
+    let mesh = crate::rocket_mesh::detailed_engine_mesh();
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<engine>/detailed");
+    let r =
+        analyze(&s.design, &s.cooling).expect("canonical kerolox engine ⇒ analysis is physical");
+    let readout = format!(
+        "vac thrust : {:.0} kN\n\
+         vac Isp    : {:.0} s\n\
+         SL  thrust : {:.0} kN\n\
+         SL  Isp    : {:.0} s\n\
+         c*         : {:.0} m/s\n\
+         exit Mach  : {:.2}\n\
+         throat flux: {:.1} MW/m²\n\
+         coolant ΔT : {:.0} K\n\
+         margin     : {:.2}  (target {:.2})",
+        r.vacuum.thrust / 1.0e3,
+        r.vacuum.isp,
+        r.sea_level.thrust / 1.0e3,
+        r.sea_level.isp,
+        r.vacuum.c_star,
+        r.vacuum.exit_mach,
+        r.cooling.throat_heat_flux / 1.0e6,
+        r.cooling.coolant_temperature_rise,
+        r.cooling.cooling_margin,
+        s.target_margin,
+    );
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Engine (liquid-rocket)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

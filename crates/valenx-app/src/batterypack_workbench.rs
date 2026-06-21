@@ -367,6 +367,30 @@ fn load_pack_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"batterypack"}`** product: the canonical
+/// battery pack built as a 3-D solid, paired with the workbench's own
+/// `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`BatteryPackWorkbenchState::default`].
+pub(crate) fn batterypack_product() -> crate::WorkspaceProduct {
+    let s = BatteryPackWorkbenchState::default();
+    let mesh = pack_solid_mesh(&s).expect("canonical pack ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<pack>/valenx-batterypack");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical pack ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Battery pack".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
