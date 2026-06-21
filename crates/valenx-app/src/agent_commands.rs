@@ -52,7 +52,16 @@ use crate::ValenxApp;
 
 /// Throttle: poll the command files at most this often (matches the ~1 s the
 /// chat feed itself re-reads at).
-const POLL_INTERVAL: Duration = Duration::from_millis(1000);
+///
+/// Public so the eframe `update()` loop can schedule an unconditional
+/// heartbeat repaint on the *same* cadence (see `update.rs`). egui is
+/// reactive — when valenx is idle/unfocused (the normal case while an
+/// external agent drives it from the background) `update()` would otherwise
+/// stop being called, so [`poll_and_apply_agent_commands`] would never run and
+/// appended commands (incl. the **global** `new_unit`) would sit unprocessed.
+/// Keeping the heartbeat in lockstep with this interval guarantees the poll
+/// fires every ~1 s regardless of focus.
+pub const POLL_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// Fixed stem for a per-channel command file (the `_u{n}.jsonl` suffix is
 /// appended per channel by [`cmd_path`]). The **global** channel file (read by
