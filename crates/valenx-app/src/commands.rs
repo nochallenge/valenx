@@ -768,7 +768,10 @@ fn fuzzy_match(query: &str, label: &str) -> bool {
 ///
 /// `None` when even subsequence matching fails. Empty query
 /// returns `Some(0)` (matches everything, no ranking signal).
-fn fuzzy_score(query: &str, label: &str) -> Option<i32> {
+///
+/// `pub(crate)` so the project navigator ([`crate::project_navigator`])
+/// can reuse the same ranking for its project-search box.
+pub(crate) fn fuzzy_score(query: &str, label: &str) -> Option<i32> {
     if query.is_empty() {
         return Some(0);
     }

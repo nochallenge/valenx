@@ -166,6 +166,8 @@ pub mod pressurevessel_workbench;
 /// Per-file registry of agent-bridge `show_3d` mesh producers (replaces the old
 /// per-kind reducer arms; new 3-D tools register from their own module).
 pub mod products_registry;
+pub mod project_library;
+pub mod project_navigator;
 pub mod project_tabs;
 pub mod projectile_workbench;
 pub mod psychrometrics_workbench;
@@ -1774,6 +1776,26 @@ pub struct ValenxApp {
     /// [`crate::project_tabs::draw_tab_strip`].
     pub tab_close_confirm: Option<usize>,
 
+    /// Pending "Save as project…" prompt opened from a tab's right-click
+    /// menu. `Some` while the modal is up; carries the source tab index, the
+    /// in-progress project name, and the chosen destination folder id (None =
+    /// unfiled). On confirm it calls `library.add_project` + persists. Drawn
+    /// by `project_tabs`'s `draw_save_as_project`.
+    pub tab_save_as_project: Option<crate::project_tabs::SaveAsProjectPrompt>,
+
+    /// The foldered, persistent **project library** — saved projects the
+    /// user manages from the Browser's "Projects" navigator (search /
+    /// folders / pin / reorder / reopen-as-tab). Loaded from
+    /// `<state_dir>/library.json` in [`ValenxApp::new`]; persisted on every
+    /// mutation. See [`crate::project_library`] / [`crate::project_navigator`].
+    pub library: crate::project_library::ProjectLibrary,
+
+    /// Transient UI state for the project navigator (search box text, the
+    /// inline-rename editor target + buffer, the "New folder" name prompt).
+    /// Never persisted — rebuilt empty each launch. See
+    /// [`crate::project_navigator::NavigatorState`].
+    pub nav_state: crate::project_navigator::NavigatorState,
+
     /// Persistent state for the 2D DNA / plasmid viewport. Survives
     /// viewport-kind switches so pan, zoom, and sub-view selection are
     /// remembered when the user returns to the 2D view.
@@ -1827,6 +1849,11 @@ impl ValenxApp {
         if let Some(history) = load_sweep_history_from_state_dir() {
             app.sweep_history = history;
         }
+        // Restore the foldered project library from `<state_dir>/library.json`
+        // so the Browser's "Projects" navigator shows the user's saved
+        // projects on launch. A missing / corrupt file yields an empty
+        // library (see `ProjectLibrary::load`).
+        app.library = crate::project_library::ProjectLibrary::load();
         // First-launch wizard. Load any persisted decision so a user
         // who already dismissed it stays dismissed. Auto-show used to
         // gate on `should_auto_show` (open if not yet completed) — that
