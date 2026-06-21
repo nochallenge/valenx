@@ -377,6 +377,27 @@ fn load_bead_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical thermistor workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn thermistor_product() -> crate::WorkspaceProduct {
+    let s = ThermistorWorkbenchState::default();
+    let mesh = bead_solid_mesh(&s).expect("canonical thermistor ⇒ bead solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<thermistor>/valenx-bead");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical thermistor ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Thermistor (resistance/temperature)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -466,6 +466,27 @@ fn load_regime_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical dimensional-analysis workbench as a 3-D
+/// solid plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn dimensional_product() -> crate::WorkspaceProduct {
+    let s = DimensionalWorkbenchState::default();
+    let mesh = regime_box_mesh(&s).expect("canonical dimensional ⇒ regime box solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<dimensional>/valenx-regime");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical dimensional ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Dimensional analysis (flow regime)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

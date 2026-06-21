@@ -403,6 +403,27 @@ fn load_fan_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical fan-laws workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn fanlaws_product() -> crate::WorkspaceProduct {
+    let s = FanLawsWorkbenchState::default();
+    let mesh = fan_solid_mesh(&s).expect("canonical fan laws ⇒ fan solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fanlaws>/valenx-fan");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical fan laws ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Fan laws (affinity scaling)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

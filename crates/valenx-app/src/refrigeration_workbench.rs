@@ -375,6 +375,29 @@ fn load_unit_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical refrigeration workbench as a 3-D solid
+/// plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn refrigeration_product() -> crate::WorkspaceProduct {
+    let s = RefrigerationWorkbenchState::default();
+    let mesh =
+        compressor_solid_mesh(&s).expect("canonical refrigeration ⇒ compressor solid builds");
+    let loaded =
+        crate::products_registry::loaded_mesh_from(mesh, "<refrigeration>/valenx-compressor");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical refrigeration ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Refrigeration cycle (COP)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
