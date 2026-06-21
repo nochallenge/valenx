@@ -290,6 +290,17 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                 }
             }
             project_tabs::install_active_doc(app);
+            // Rocket tab → load the 3-D LV-1 mesh into this (now active, empty)
+            // tab's viewport immediately, so the central panel renders the
+            // rocket this frame instead of the landing page. The per-tab mesh
+            // starts `None` and the workbench's global first-open guard may
+            // already be set from an earlier tab, so the workbench body itself
+            // would never re-request the load — do it here in the reducer
+            // (which runs before `show_landing` is computed). Rocket-specific
+            // for now; other workbenches get their own product-load later.
+            if kind == TabKind::Rocket {
+                crate::rocket_workbench::ensure_lv1_3d_loaded(app);
+            }
         }
         AgentCommand::OpenWorkbench { id } => {
             if let Some(kind) = TabKind::from_id(&id) {
@@ -298,6 +309,12 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         tab.kind = kind;
                         project_tabs::sync_active(app);
                     }
+                }
+                // Same rocket-specific 3-D load as NewTab: switching the active
+                // tab to the Rocket workbench should show the rocket model in
+                // the centre, not the landing page.
+                if kind == TabKind::Rocket {
+                    crate::rocket_workbench::ensure_lv1_3d_loaded(app);
                 }
             }
         }
@@ -443,6 +460,15 @@ mod tests {
         assert_eq!(app.tab_bar.tabs[idx].kind, TabKind::Rocket);
         // The bound workbench is the one shown.
         assert!(app.show_rocket_workbench);
+        // The 3-D LV-1 mesh is loaded into the central viewport, so the central
+        // panel's `show_landing` (project & stl & mesh all None) is false and
+        // the rocket renders instead of the welcome page.
+        let mesh = app
+            .mesh
+            .as_ref()
+            .expect("rocket tab loads the 3-D mesh into the viewport");
+        assert!(mesh.path.to_string_lossy().contains("valenx-lv1"));
+        assert!(app.project.is_none() && app.stl.is_none()); // ⇒ show_landing == false
     }
 
     #[test]
@@ -700,6 +726,47 @@ mod tests {
             .expect("channel-1 product set by the show_product command");
         assert_eq!(product.title, "Rocket");
         assert_eq!(product.lines, vec!["thrust 1000 kN", "to orbit"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn new_tab_rocket_loads_3d_mesh_through_real_poll_path() {
+        // The bug: an agent-created "Rocket" tab showed the landing page because
+        // its per-tab mesh was None while the workbench's global first-open
+        // guard was already set. Fix: the NewTab reducer loads the LV-1 3-D mesh
+        // for a rocket tab. Drive it end-to-end through the REAL
+        // `poll_and_apply_agent_commands` path (a `new_tab` line with
+        // workbench:"rocket") and assert the mesh is present and is the LV-1, so
+        // the central panel's `show_landing` would be false.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "rocket3d");
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"new_tab\",\"name\":\"Rocket\",\"workbench\":\"rocket\"}\n",
+        )
+        .unwrap();
+
+        assert!(app.mesh.is_none(), "no mesh before the command runs");
+        poll_and_apply_agent_commands(&mut app);
+
+        let idx = app.tab_bar.active.expect("rocket tab is active");
+        assert_eq!(app.tab_bar.tabs[idx].kind, TabKind::Rocket);
+        // The viewport now holds the LV-1 3-D mesh ⇒ show_landing is false.
+        let mesh = app
+            .mesh
+            .as_ref()
+            .expect("rocket tab loaded the 3-D mesh via the agent bridge");
+        assert!(
+            mesh.path.to_string_lossy().contains("valenx-lv1"),
+            "loaded mesh is the LV-1 rocket (path = {:?})",
+            mesh.path
+        );
+        assert!(
+            app.project.is_none() && app.stl.is_none() && app.mesh.is_some(),
+            "show_landing == false: the rocket renders, not the welcome page"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
