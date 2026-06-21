@@ -2652,18 +2652,57 @@ impl eframe::App for ValenxApp {
             }
         });
 
-        // Browser (left) — collapsible via the ribbon toggle / View menu
-        // so the viewport can take the full width.
+        // Browser (left) — shown/hidden by `self.show_browser` (the
+        // ribbon / View toggle). When shown it is ALSO collapsible to a
+        // thin bar via `self.browser_collapsed`, mirroring the bottom
+        // dock: collapsed renders only a narrow vertical strip holding
+        // the AI-drivable "Expand panel" button and skips the heavy
+        // browser body; expanded renders the full Browser plus a named
+        // "Collapse panel" button in the header row. The resize handle /
+        // wide default width only apply when expanded.
         if self.show_browser {
-            egui::SidePanel::left("valenx_browser")
-                .resizable(true)
-                .default_width(300.0)
-                .width_range(220.0..=520.0)
-                .show(ctx, |ui| {
+            let browser_collapsed = self.browser_collapsed;
+            let browser = egui::SidePanel::left("valenx_browser");
+            let browser = if browser_collapsed {
+                // Thin, fixed strip — no resize handle, no wide default
+                // that would keep reserving the browser's full width.
+                browser.resizable(false).exact_width(30.0)
+            } else {
+                browser
+                    .resizable(true)
+                    .default_width(300.0)
+                    .width_range(220.0..=520.0)
+            };
+            browser.show(ctx, |ui| {
+                if browser_collapsed {
+                    // Collapsed: only the named "Expand panel" button.
+                    // Its label TEXT is the accessibility / UI-Automation
+                    // `Name` (egui derives a button's accesskit name from
+                    // its label, exactly like the bottom dock's toggle),
+                    // so the full plain-ASCII phrase is what an external
+                    // driver finds and Invokes by Name. egui clips the
+                    // rendered glyphs to the narrow 30px strip while the
+                    // accesskit Name stays the complete "Expand panel"
+                    // string.
+                    if ui.button("Expand panel").clicked() {
+                        self.toggle_browser_panel();
+                    }
+                    return;
+                }
+                // Expanded: full Browser. The header row carries the
+                // right-aligned, named "Collapse panel" toggle alongside
+                // the "Browser" title.
+                ui.horizontal(|ui| {
                     ui.heading("Browser");
-                    ui.separator();
-                    self.draw_browser(ui);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Collapse panel").clicked() {
+                            self.toggle_browser_panel();
+                        }
+                    });
                 });
+                ui.separator();
+                self.draw_browser(ui);
+            });
         }
 
         // wgpu render state + DPI, grabbed once up-front so BOTH the dockable

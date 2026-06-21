@@ -660,6 +660,16 @@ pub struct ValenxApp {
     /// Defaults to `false` (expanded) via `#[derive(Default)]`.
     pub bottom_panel_collapsed: bool,
 
+    /// When `true`, the left Browser panel collapses to a thin vertical
+    /// bar holding only the AI-drivable "Expand panel" button; the heavy
+    /// browser body (open-tabs list, navigator, Cases / Geometry / Mesh
+    /// / Results sections) is skipped and the panel stops reserving its
+    /// wide default width. Mirrors `bottom_panel_collapsed` for the
+    /// bottom dock. Toggled by the "Collapse panel" / "Expand panel"
+    /// button; separate from `show_browser` (the show/hide toggle).
+    /// Defaults to `false` (expanded) via `#[derive(Default)]`.
+    pub browser_collapsed: bool,
+
     /// Which case the user clicked on in the browser, if any. `None`
     /// falls back to the first case in the project when a run is
     /// started.
