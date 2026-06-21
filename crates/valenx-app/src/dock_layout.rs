@@ -80,7 +80,7 @@ const AGENT_PREFIX: &str = "agent:";
 /// it just gives a keyboard-free, single-click way to relocate a whole unit
 /// (which would otherwise take two separate tab drags, one per half).
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum UnitMove {
+pub enum UnitMove {
     /// Send the unit to the top of the grid (first row).
     Top,
     /// Send the unit to the bottom of the grid (last row).
