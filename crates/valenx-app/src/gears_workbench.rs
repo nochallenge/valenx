@@ -327,6 +327,144 @@ fn run_gears(s: &mut GearsWorkbenchState) {
     );
 }
 
+/// Canonical 2-stage spur reducer for the Workbench+Agent **3-D workspace
+/// tile**: a ~20:1 speed reducer (1500 rpm / 3 kW input) built from four
+/// involute spur gears on two layshafts. Stage 1 meshes an 18-tooth pinion
+/// with an 80-tooth gear (4.44:1); stage 2 an 18-tooth pinion with an
+/// 81-tooth gear (4.5:1); the overall ratio is `(80/18)·(81/18) ≈ 20.0`.
+/// Common geometry: module 2.0 mm, 20° pressure angle, 20 mm face width.
+///
+/// Each gear is emitted by [`valenx_gears::to_solid_spur`] (a
+/// [`valenx_cad::Solid::Mesh`] of involute teeth extruded along +z), then
+/// shifted to its shaft centre with [`valenx_cad::Solid::translated`] (which
+/// moves the mesh nodes for a mesh-backed solid) and tessellated back to a
+/// [`valenx_mesh::Mesh`] via [`valenx_cad::solid_to_mesh`] (a no-op pass-through
+/// that returns the cached mesh for mesh-backed solids). The four meshes are
+/// merged into one `Tri3` surface — node arrays concatenated and triangle
+/// indices re-based by the running node offset — and wrapped as a
+/// fully-populated [`crate::types::LoadedMesh`] tagged `<gear>/valenx-2stage`,
+/// paired with the design-scalar readout rows. The single source of truth for
+/// the agent-bridge gear product (see
+/// [`crate::agent_commands::AgentCommand::Show3d`] `kind:"gear"`).
+///
+/// Self-contained + deterministic. Infallible — the canonical specs are valid
+/// (positive face width, ≥3 profile vertices), so every `to_solid_spur` /
+/// tessellation succeeds.
+pub(crate) fn gear_train_loaded_mesh() -> (crate::types::LoadedMesh, Vec<String>) {
+    use valenx_gears::{contact_ratio, GearSpec};
+
+    const MODULE_MM: f64 = 2.0;
+    const PA_DEG: f64 = 20.0;
+    const FACE_MM: f64 = 20.0;
+    // Input drive conditions (for the readout).
+    const INPUT_RPM: f64 = 1500.0;
+    const INPUT_KW: f64 = 3.0;
+    // Tooth counts: stage-1 pinion→gear, stage-2 pinion→gear.
+    const Z1P: u32 = 18;
+    const Z1G: u32 = 80;
+    const Z2P: u32 = 18;
+    const Z2G: u32 = 81;
+
+    let spec = |teeth: u32| GearSpec {
+        kind: GearKind::Spur,
+        module_mm: MODULE_MM,
+        teeth,
+        pressure_angle_deg: PA_DEG,
+        helix_angle_deg: 0.0,
+        face_width_mm: FACE_MM,
+    };
+    let s1p = spec(Z1P);
+    let s1g = spec(Z1G);
+    let s2p = spec(Z2P);
+    let s2g = spec(Z2G);
+
+    // Centre distances C = m·(zₐ+z_b)/2 keep each meshing pair tangent.
+    let c1 = MODULE_MM * (Z1P + Z1G) as f64 / 2.0; // input ↔ layshaft
+    let c2 = MODULE_MM * (Z2P + Z2G) as f64 / 2.0; // layshaft ↔ output
+
+    // Two-layshaft layout. Stage 1 sits at z = 0; stage 2 is stacked one face
+    // width along +z (a real reducer's gears ride side-by-side on the shaft),
+    // so the assembly reads as three parallel shafts:
+    //   input  pinion : (x=0,  z=0)
+    //   layshaft gear+pinion : (x=c1, z=0) and (x=c1, z=zstack)
+    //   output gear : (x=c1+c2, z=zstack)
+    let zstack = FACE_MM + 5.0;
+    let placements: [(GearSpec, f64, f64); 4] = [
+        (s1p.clone(), 0.0, 0.0),
+        (s1g.clone(), c1, 0.0),
+        (s2p.clone(), c1, zstack),
+        (s2g.clone(), c1 + c2, zstack),
+    ];
+
+    // Merge the four positioned spur solids into one Tri3 mesh.
+    let mut nodes: Vec<Vector3<f64>> = Vec::new();
+    let mut tris: Vec<u32> = Vec::new();
+    for (gs, cx, cz) in &placements {
+        let solid = valenx_gears::to_solid_spur(gs).expect("canonical spur spec ⇒ solid");
+        // Move the mesh-backed solid's nodes to the shaft centre, then take the
+        // cached mesh straight back out (solid_to_mesh is a pass-through here).
+        let placed = solid.translated(*cx, 0.0, *cz).expect("finite translation");
+        let m = valenx_cad::solid_to_mesh(&placed, valenx_cad::DEFAULT_TESS_TOLERANCE)
+            .expect("mesh-backed solid ⇒ cached mesh");
+        let offset = nodes.len() as u32;
+        nodes.extend_from_slice(&m.nodes);
+        for blk in &m.element_blocks {
+            if blk.element_type == valenx_mesh::ElementType::Tri3 {
+                tris.extend(blk.connectivity.iter().map(|&i| i + offset));
+            }
+        }
+    }
+
+    let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+    block.connectivity = tris;
+    let mut mesh = valenx_mesh::Mesh::new("valenx-2stage-reducer");
+    mesh.nodes = nodes;
+    mesh.element_blocks.push(block);
+    mesh.recompute_stats();
+
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    let loaded = crate::types::LoadedMesh {
+        path: std::path::PathBuf::from("<gear>/valenx-2stage"),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    };
+
+    // Design scalars from the real spec API.
+    let r1 = gear_ratio(Z1G, Z1P);
+    let r2 = gear_ratio(Z2G, Z2P);
+    let total = r1 * r2;
+    let cr1 = contact_ratio(&s1p, &s1g);
+    let cr2 = contact_ratio(&s2p, &s2g);
+    let out_rpm = INPUT_RPM / total;
+    let lines = vec![
+        format!("overall ratio: {total:.2}:1  ({INPUT_RPM:.0} rpm in → {out_rpm:.1} rpm out)"),
+        format!("input: {INPUT_RPM:.0} rpm, {INPUT_KW:.0} kW"),
+        format!("stage 1: {Z1P}T → {Z1G}T  = {r1:.3}:1"),
+        format!("stage 2: {Z2P}T → {Z2G}T  = {r2:.3}:1"),
+        format!("module {MODULE_MM:.1} mm · {PA_DEG:.0}° PA · {FACE_MM:.0} mm face"),
+        format!("contact ratio: stage 1 {cr1:.2}, stage 2 {cr2:.2}"),
+        format!("circular pitch: {:.2} mm", circular_pitch_mm(MODULE_MM)),
+    ];
+    (loaded, lines)
+}
+
+/// A fixed 3/4-view [`OrbitCamera`] framing the 2-stage gear-train `mesh`
+/// (same `frame_bounds` fit + hero angle as [`crate::rocket_workbench::lv1_camera`]),
+/// for the Workbench+Agent gear product's per-tile 3-D view.
+pub(crate) fn gear_train_camera(mesh: &valenx_mesh::Mesh) -> OrbitCamera {
+    let mut camera = OrbitCamera::default();
+    if let Some((min, max)) = crate::mesh_loader::mesh_bounding_box(mesh) {
+        camera.frame_bounds(min, max);
+    }
+    camera.azimuth_deg = 35.0;
+    camera.elevation_deg = 22.0;
+    camera
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -406,10 +406,12 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
             // — the bridge routes by file channel, same as every other command).
             // The `workspace:<n>` pane then renders the actual lit mesh at a
             // fixed 3/4 camera (see `dock_layout::render_workspace_body`).
-            // Only `"rocket"` (the LV-1) is wired today; any other kind is
-            // skipped safely (no panic, no placeholder churn), consistent with
-            // the rest of the reducer's bad-input handling. Add new model kinds
-            // as `else if kind == "<x>"` arms here.
+            // Each `kind` builds its producer's LoadedMesh + a fixed 3/4 camera
+            // and publishes a 3-D `WorkspaceProduct`; the render path
+            // (`dock_layout::render_workspace_body`) is kind-agnostic. An
+            // unknown kind is skipped safely (no panic, no placeholder churn),
+            // consistent with the rest of the reducer's bad-input handling. Add
+            // new model kinds as further `else if kind == "<x>"` arms.
             if kind == "rocket" {
                 let mesh = crate::rocket_workbench::lv1_loaded_mesh();
                 let camera = crate::rocket_workbench::lv1_camera(&mesh.mesh);
@@ -418,6 +420,42 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     crate::WorkspaceProduct {
                         title: "Rocket".into(),
                         lines: vec![],
+                        mesh: Some(mesh),
+                        camera,
+                    },
+                );
+            } else if kind == "gear" {
+                let (mesh, lines) = crate::gears_workbench::gear_train_loaded_mesh();
+                let camera = crate::gears_workbench::gear_train_camera(&mesh.mesh);
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title: "2-stage spur reducer".into(),
+                        lines,
+                        mesh: Some(mesh),
+                        camera,
+                    },
+                );
+            } else if kind == "bracket" {
+                let (mesh, lines) = crate::bracket_product::bracket_loaded_mesh();
+                let camera = crate::bracket_product::bracket_camera(&mesh.mesh);
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title: "L-bracket".into(),
+                        lines,
+                        mesh: Some(mesh),
+                        camera,
+                    },
+                );
+            } else if kind == "rcbeam" {
+                let (mesh, lines) = crate::rcbeam_workbench::rcbeam_loaded_mesh();
+                let camera = crate::rcbeam_workbench::rcbeam_camera(&mesh.mesh);
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title: "RC beam (6 m, 25 kN/m)".into(),
+                        lines,
                         mesh: Some(mesh),
                         camera,
                     },
@@ -884,6 +922,65 @@ mod tests {
         assert_eq!(product.title, "Rocket");
         assert!(product.lines.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Drive each newly-wired 3-D `kind` (`gear` / `bracket` / `rcbeam`)
+    /// end-to-end through the REAL poll/reducer path and assert the unit's
+    /// workspace product gains a live mesh with a non-empty `Tri3` surface
+    /// plus its numeric readout rows — the same contract the rocket meets.
+    fn assert_show_3d_kind_publishes_live_mesh(kind: &str, tag: &str, expect_line_substr: &str) {
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, tag);
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            format!("{{\"cmd\":\"show_3d\",\"kind\":\"{kind}\"}}\n"),
+        )
+        .unwrap();
+
+        assert!(app.workspace_products.is_empty());
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .unwrap_or_else(|| panic!("channel-1 product set by show_3d {kind}"));
+        let mesh = product
+            .mesh
+            .as_ref()
+            .unwrap_or_else(|| panic!("show_3d {kind} attaches a live LoadedMesh"));
+        // The mesh is non-empty and carries surface (Tri3) elements.
+        assert!(!mesh.mesh.nodes.is_empty(), "{kind}: mesh has vertices");
+        assert!(mesh.mesh.total_elements() > 0, "{kind}: mesh has triangles");
+        // Tagged with its synthetic source path.
+        assert!(
+            mesh.path.to_string_lossy().contains(tag),
+            "{kind}: path = {:?}",
+            mesh.path
+        );
+        // 3-D products built from a producer carry numeric readout rows.
+        assert!(
+            product.lines.iter().any(|l| l.contains(expect_line_substr)),
+            "{kind}: expected a line containing {expect_line_substr:?}, got {:?}",
+            product.lines
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_3d_gear_publishes_a_live_mesh_into_the_workspace() {
+        assert_show_3d_kind_publishes_live_mesh("gear", "valenx-2stage", "ratio");
+    }
+
+    #[test]
+    fn show_3d_bracket_publishes_a_live_mesh_into_the_workspace() {
+        assert_show_3d_kind_publishes_live_mesh("bracket", "valenx-l-bracket", "M5");
+    }
+
+    #[test]
+    fn show_3d_rcbeam_publishes_a_live_mesh_into_the_workspace() {
+        assert_show_3d_kind_publishes_live_mesh("rcbeam", "valenx-rcbeam", "Mn");
     }
 
     #[test]
