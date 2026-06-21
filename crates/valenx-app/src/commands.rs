@@ -1205,6 +1205,7 @@ mod tests {
             ProjectTab {
                 kind: TabKind::Rocket,
                 title: "My Rocket".into(),
+                group: None,
                 editing: false,
                 edit_buf: String::new(),
             },
@@ -1214,6 +1215,7 @@ mod tests {
             ProjectTab {
                 kind: TabKind::Cad,
                 title: "My Part".into(),
+                group: None,
                 editing: false,
                 edit_buf: String::new(),
             },
