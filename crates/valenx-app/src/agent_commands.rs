@@ -115,6 +115,20 @@ pub enum AgentCommand {
         #[serde(default)]
         name: Option<String>,
     },
+    /// Render a **finished build result** into *this* unit's workspace tile
+    /// (`workspace:<n>`), replacing its "the agent's output will appear here"
+    /// placeholder with a result card: `title` as a bold heading over `lines`
+    /// (one row each). Stored on [`crate::ValenxApp::workspace_products`] under
+    /// the same channel `n` the bridge posts Notes to, so the agent's output
+    /// lands in the workspace pane paired with its chat. This is the answer to
+    /// "when the agent builds a rocket, show the rocket here, not a placeholder".
+    ShowProduct {
+        /// Card heading (rendered bold), e.g. the product name.
+        title: String,
+        /// Result rows shown under the heading, one per entry. Optional.
+        #[serde(default)]
+        lines: Vec<String>,
+    },
 }
 
 /// The per-channel **command file** path for agent channel `n`:
@@ -325,6 +339,13 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     app.tab_close_confirm = Some(idx);
                 }
             }
+        }
+        AgentCommand::ShowProduct { title, lines } => {
+            // Publish the finished result into THIS unit's workspace tile. The
+            // reducer already knows the channel `n` (the same one Notes post to),
+            // so the `workspace:<n>` pane and its paired `agent:<n>` chat agree.
+            app.workspace_products
+                .insert(n, crate::WorkspaceProduct { title, lines });
         }
     }
 }
@@ -652,6 +673,48 @@ mod tests {
         assert_eq!(app.tab_bar.tabs[idx].title, "fresh");
         assert_eq!(app.tab_bar.tabs[idx].kind, TabKind::Cad);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_product_publishes_into_the_units_workspace() {
+        // End-to-end through the REAL poll/reducer path: the agent appends a
+        // `show_product` line on channel 1; the first poll runs it and the
+        // finished result lands on `app.workspace_products[&1]` (so the
+        // `workspace:1` tile renders a card instead of the placeholder).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "showproduct");
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"show_product\",\"title\":\"Rocket\",\"lines\":[\"thrust 1000 kN\",\"to orbit\"]}\n",
+        )
+        .unwrap();
+
+        assert!(app.workspace_products.is_empty());
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("channel-1 product set by the show_product command");
+        assert_eq!(product.title, "Rocket");
+        assert_eq!(product.lines, vec!["thrust 1000 kN", "to orbit"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_product_lines_default_to_empty() {
+        // `lines` is optional on the wire — a title-only card parses fine.
+        let sp: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"show_product","title":"Gear train"}"#).unwrap();
+        assert_eq!(
+            sp,
+            AgentCommand::ShowProduct {
+                title: "Gear train".into(),
+                lines: vec![],
+            }
+        );
     }
 
     #[test]
