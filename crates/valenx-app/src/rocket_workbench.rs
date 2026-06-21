@@ -635,6 +635,27 @@ fn load_lv1_rocket_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Ensure the LV-1 3-D rocket mesh is loaded into the central viewport *now*
+/// and mark the workbench's first-open auto-load as already satisfied.
+///
+/// Used by the agent-drives-valenx bridge ([`crate::agent_commands`]): when an
+/// agent opens a fresh **Rocket** tab, the per-tab mesh starts `None` while the
+/// rocket state's global `loaded_3d_once` guard is already set from an earlier
+/// tab — so the workbench would *never* re-request the load and the new tab
+/// would show the landing page. Calling this from the command reducer (which
+/// runs before the central panel computes `show_landing`) loads the mesh on the
+/// new active tab the same frame, so the rocket renders instead of the welcome
+/// page. It also clears `show_3d_request` and sets `loaded_3d_once` so the
+/// workbench body's own first-open auto-load won't redundantly fire afterwards.
+pub(crate) fn ensure_lv1_3d_loaded(app: &mut ValenxApp) {
+    load_lv1_rocket_3d(app);
+    // Reconcile the workbench's load guards so its body won't double-load: the
+    // mesh is already present, so there's nothing deferred to drain, and the
+    // first-open auto-load is now satisfied.
+    app.rocket.show_3d_request = false;
+    app.rocket.loaded_3d_once = true;
+}
+
 /// Draw the Rocket workbench right-side panel. A no-op when the
 /// `show_rocket_workbench` toggle is off.
 pub fn draw_rocket_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
