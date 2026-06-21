@@ -311,6 +311,31 @@ fn load_hull_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"marine"}`** product: the canonical ship
+/// hull built as a 3-D solid, paired with the workbench's own hydrostatics
+/// readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`MarineWorkbenchState::default`]. This workbench
+/// formats its readout via [`run_marine`] into `s.result` (it has no separate
+/// `compute()`), so the builder runs the analysis first and reads that field.
+pub(crate) fn marine_product() -> crate::WorkspaceProduct {
+    let mut s = MarineWorkbenchState::default();
+    let mesh = hull_solid_mesh(&s).expect("canonical marine ⇒ hull solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<marine>/valenx-hull");
+    run_marine(&mut s);
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Marine hull (hydrostatics)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

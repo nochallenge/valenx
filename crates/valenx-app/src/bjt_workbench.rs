@@ -439,6 +439,30 @@ fn load_transistor_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"bjt"}`** product: the canonical BJT
+/// package built as a 3-D solid, paired with the workbench's own `compute()`
+/// DC-bias readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`BjtWorkbenchState::default`].
+pub(crate) fn bjt_product() -> crate::WorkspaceProduct {
+    let s = BjtWorkbenchState::default();
+    let mesh = transistor_solid_mesh(&s).expect("canonical BJT ⇒ package solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<bjt>/valenx-bjt");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical BJT ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "BJT (DC bias Q-point)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

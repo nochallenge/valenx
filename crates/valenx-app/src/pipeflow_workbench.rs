@@ -397,6 +397,30 @@ fn load_pipe_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"pipeflow"}`** product: the canonical
+/// Darcy-Weisbach pipe run built as a 3-D solid, paired with the workbench's
+/// own `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`PipeFlowWorkbenchState::default`].
+pub(crate) fn pipeflow_product() -> crate::WorkspaceProduct {
+    let s = PipeFlowWorkbenchState::default();
+    let mesh = pipe_solid_mesh(&s).expect("canonical pipe flow ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<pipeflow>/valenx-pipe");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical pipe flow ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Pipe flow (Darcy-Weisbach)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

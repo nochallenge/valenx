@@ -217,6 +217,27 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "thermistor" => crate::thermistor_workbench::thermistor_product,
         "thermocycle" => crate::thermocycle_workbench::thermocycle_product,
         "fanlaws" => crate::fanlaws_workbench::fanlaws_product,
+        // Fluid-mechanics / hydraulics / thermo-fluids / electronics family
+        // (each builder lives in its own workbench module; see that module's
+        // `*_product`).
+        "pump" => crate::pump_workbench::pump_product,
+        "pipeflow" => crate::pipeflow_workbench::pipeflow_product,
+        "pipenetwork" => crate::pipenetwork_workbench::pipenetwork_product,
+        "hydraulics" => crate::hydraulics_workbench::hydraulics_product,
+        "pneumatics" => crate::pneumatics_workbench::pneumatics_product,
+        "fluidstatics" => crate::fluidstatics_workbench::fluidstatics_product,
+        "openchannel" => crate::openchannel_workbench::openchannel_product,
+        "weir" => crate::weir_workbench::weir_product,
+        "orifice" => crate::orifice_workbench::orifice_product,
+        "combustion" => crate::combustion_workbench::combustion_product,
+        "diffusion" => crate::diffusion_workbench::diffusion_product,
+        "marine" => crate::marine_workbench::marine_product,
+        "resistornetwork" => crate::resistornetwork_workbench::resistornetwork_product,
+        "capacitor" => crate::capacitor_workbench::capacitor_product,
+        "opamp" => crate::opamp_workbench::opamp_product,
+        "bjt" => crate::bjt_workbench::bjt_product,
+        "mosfet" => crate::mosfet_workbench::mosfet_product,
+        "rectifier" => crate::rectifier_workbench::rectifier_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -290,6 +311,24 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "thermistor" => "thermistor",
         "thermocycle" => "thermocycle",
         "fanlaws" => "fanlaws",
+        "pump" => "pump",
+        "pipeflow" => "pipeflow",
+        "pipenetwork" => "pipenetwork",
+        "hydraulics" => "hydraulics",
+        "pneumatics" => "pneumatics",
+        "fluidstatics" => "fluidstatics",
+        "openchannel" => "openchannel",
+        "weir" => "weir",
+        "orifice" => "orifice",
+        "combustion" => "combustion",
+        "diffusion" => "diffusion",
+        "marine" => "marine",
+        "resistornetwork" => "resistornetwork",
+        "capacitor" => "capacitor",
+        "opamp" => "opamp",
+        "bjt" => "bjt",
+        "mosfet" => "mosfet",
+        "rectifier" => "rectifier",
         _ => return None,
     })
 }
@@ -366,6 +405,26 @@ mod tests {
         "thermistor",
         "thermocycle",
         "fanlaws",
+        // Fluid-mechanics / hydraulics / thermo-fluids / electronics
+        // workbenches wired into the bridge.
+        "pump",
+        "pipeflow",
+        "pipenetwork",
+        "hydraulics",
+        "pneumatics",
+        "fluidstatics",
+        "openchannel",
+        "weir",
+        "orifice",
+        "combustion",
+        "diffusion",
+        "marine",
+        "resistornetwork",
+        "capacitor",
+        "opamp",
+        "bjt",
+        "mosfet",
+        "rectifier",
     ];
 
     /// The machine-design / structural / civil / strength-of-materials /
@@ -433,6 +492,26 @@ mod tests {
         "thermistor",
         "thermocycle",
         "fanlaws",
+        // The 18 fluid-mechanics / hydraulics / thermo-fluids / electronics
+        // workbenches wired in this change.
+        "pump",
+        "pipeflow",
+        "pipenetwork",
+        "hydraulics",
+        "pneumatics",
+        "fluidstatics",
+        "openchannel",
+        "weir",
+        "orifice",
+        "combustion",
+        "diffusion",
+        "marine",
+        "resistornetwork",
+        "capacitor",
+        "opamp",
+        "bjt",
+        "mosfet",
+        "rectifier",
     ];
 
     #[test]
