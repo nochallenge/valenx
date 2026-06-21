@@ -374,6 +374,32 @@ fn load_beam_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"beam"}`** product: the schematic
+/// beam-plus-supports-plus-load solid built from the canonical 3 m
+/// simply-supported steel beam (50×100 mm section, central 1 kN point load),
+/// paired with the Euler-Bernoulli bending readout rows (max deflection /
+/// moment / stress), at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`BeamWorkbenchState::default`].
+pub(crate) fn beam_product() -> crate::WorkspaceProduct {
+    let s = BeamWorkbenchState::default();
+    let mesh = beam_solid_mesh(&s).expect("canonical beam ⇒ beam-and-supports solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<beam>/valenx-beam");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical beam ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Beam (Euler-Bernoulli bending)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

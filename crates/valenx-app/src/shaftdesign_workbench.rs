@@ -352,6 +352,32 @@ fn load_shaft_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"shaftdesign"}`** product: the
+/// representative solid round shaft built from the canonical 50 mm steel
+/// line-shaft (M = 600 N·m, T = 800 N·m, 40 MPa allowable shear), paired with
+/// the combined bending + torsion stress / section-property readout rows, at a
+/// fixed 3/4 camera. Registered in [`crate::products_registry`]; the per-tool
+/// builder the registry dispatches to. Pure — driven off
+/// [`ShaftDesignWorkbenchState::default`].
+pub(crate) fn shaftdesign_product() -> crate::WorkspaceProduct {
+    let s = ShaftDesignWorkbenchState::default();
+    let mesh = shaft_solid_mesh(&s).expect("canonical shaft ⇒ round-bar solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<shaft>/valenx-shaftdesign");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical shaft ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Shaft (bending + torsion)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

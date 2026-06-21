@@ -354,6 +354,31 @@ fn load_flywheel_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"flywheel"}`** product: the representative
+/// spinning rotor disc built from the canonical 10 kg / 0.3 m solid steel disk
+/// cycling 3000→1500 rpm, paired with the energy + rim-stress readout rows, at
+/// a fixed 3/4 camera. Registered in [`crate::products_registry`]; the
+/// per-tool builder the registry dispatches to. Pure — driven off
+/// [`FlywheelWorkbenchState::default`].
+pub(crate) fn flywheel_product() -> crate::WorkspaceProduct {
+    let s = FlywheelWorkbenchState::default();
+    let mesh = rotor_solid_mesh(&s).expect("canonical flywheel ⇒ rotor disc solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<rotor>/valenx-flywheel");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical flywheel ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Flywheel (energy + rim stress)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

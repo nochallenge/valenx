@@ -469,6 +469,32 @@ fn load_bearing_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"bearing"}`** product: the representative
+/// rolling-element bearing (outer ring, inner ring, a ring of balls, base)
+/// built from the canonical deep-groove ball bearing (C = 25 kN, Fr = 5 kN
+/// radial, 1500 rpm), paired with the ISO 281 rating-life + ISO 76 static
+/// readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`BearingWorkbenchState::default`].
+pub(crate) fn bearing_product() -> crate::WorkspaceProduct {
+    let s = BearingWorkbenchState::default();
+    let mesh = bearing_solid_mesh(&s).expect("canonical bearing ⇒ ring-and-ball solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<bearing>/valenx-bearing");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical bearing ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Ball bearing (L10 rating life)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
