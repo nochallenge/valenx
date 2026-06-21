@@ -338,6 +338,78 @@ pub struct WorkspaceProduct {
     /// Stage 1 — per-tile orbit is a later stage). Ignored when
     /// [`Self::mesh`] is `None`.
     pub camera: OrbitCamera,
+    /// When `Some`, the pane renders a **2-D engineering drawing** painted with
+    /// egui (no wgpu) — an RC-beam section + rebar, or a DNA construct map —
+    /// instead of the 3-D viewport or the text card. Set by the
+    /// [`crate::agent_commands::AgentCommand::Show2d`] bridge command and painted
+    /// by [`crate::dock_layout`]'s `render_workspace_body` (a branch *between*
+    /// the 3-D viewport and the text card). `None` for plain / mesh / text
+    /// products. See [`Workspace2dKind`].
+    pub kind2d: Option<Workspace2dKind>,
+}
+
+/// Which **2-D engineering drawing** a [`WorkspaceProduct`] carries, with the
+/// small plain-data view the egui painter needs (no wgpu / mesh types, so the
+/// whole thing is cheaply `Clone`). Painted by [`crate::dock_layout`]'s
+/// `render_workspace_body`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Workspace2dKind {
+    /// A reinforced-concrete **beam section + rebar** drawing — a filled
+    /// concrete rectangle with the tension bars near the bottom, dimension
+    /// lines, and the flexural numbers.
+    RcSection(RcSectionView),
+    /// A DNA **construct map** — a horizontal baseline = the construct with each
+    /// feature (ATG / ORF / His6 / stop) drawn as a coloured block proportional
+    /// to its nt span, plus a nt ruler.
+    DnaMap(DnaMapView),
+}
+
+/// Plain-data view for the RC-beam **section drawing** ([`Workspace2dKind::RcSection`]).
+/// Geometry in millimetres plus the already-formatted flexural readout rows
+/// (the same `lines` the 3-D / text product carries) so the painter can show
+/// the key numbers without re-deriving them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RcSectionView {
+    /// Section width `b` (mm) — the horizontal extent of the drawn rectangle.
+    pub width_mm: f64,
+    /// Section depth `h` (mm) — the vertical extent of the drawn rectangle.
+    pub depth_mm: f64,
+    /// Clear cover to the bar centres (mm) — how far the rebar sits in from the
+    /// faces.
+    pub cover_mm: f64,
+    /// Diameter of each tension bar (mm) — sets the drawn circle size.
+    pub bar_dia_mm: f64,
+    /// Number of tension bars drawn across the bottom.
+    pub n_bars: usize,
+    /// The flexural readout rows (Mn, φMn, ρ vs ρ_bal, utilisation, …), shown as
+    /// a small text block beside the section.
+    pub lines: Vec<String>,
+}
+
+/// One labelled feature span on a [`DnaMapView`] — a half-open `[start, end)`
+/// nucleotide interval with a display label and an RGB block colour.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DnaFeature {
+    /// Short label drawn by the block (e.g. `"ATG"`, `"ORF"`, `"His6"`, `"stop"`).
+    pub label: String,
+    /// Inclusive start nucleotide index (0-based).
+    pub start: usize,
+    /// Exclusive end nucleotide index.
+    pub end: usize,
+    /// Block fill colour as `[r, g, b]` (0–255).
+    pub color: [u8; 3],
+}
+
+/// Plain-data view for the DNA **construct map** ([`Workspace2dKind::DnaMap`]).
+/// The total construct length plus its feature spans; the painter lays the
+/// baseline across the tile and draws each feature proportional to its span.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DnaMapView {
+    /// Total construct length in nucleotides — the baseline's full extent.
+    pub total_nt: usize,
+    /// The labelled feature spans (ATG / ORF / His6 / stop), each a
+    /// `[start, end)` nt interval with a colour. Ordered for drawing.
+    pub features: Vec<DnaFeature>,
 }
 
 /// Root application state.

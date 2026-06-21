@@ -128,6 +128,65 @@ pub(crate) fn dna_construct_lines() -> (String, Vec<String>) {
     (title, lines)
 }
 
+/// Build the **construct map** for the 2-D DNA drawing — the total construct
+/// length plus the labelled feature spans (ATG start · ORF · C-terminal His6 ·
+/// stop) computed from the *real* codon lengths of the canonical 93-nt
+/// construct, paired with the same text `lines` the card uses (so the 2-D pane
+/// can show both the map and the sequence rows). The single source of truth for
+/// the agent-bridge DNA **2-D** product (see
+/// [`crate::agent_commands::AgentCommand::Show2d`] `kind:"dna"`); the spans are
+/// derived from the same peptide/tag/stop constants as [`dna_construct_lines`],
+/// so the map and the card always agree.
+///
+/// Feature layout (half-open `[start, end)` nt intervals), from the construct
+/// `ATG·ORF·His6·stop` where the reverse-translated ORF already begins with the
+/// peptide's Met (`ATG`):
+/// - `ATG` start: `0..3` (the first codon of the ORF);
+/// - `ORF`: `0..(peptide_len*3)` (the whole coding region, e.g. `0..72`);
+/// - `His6`: `(peptide_len*3)..(peptide_len*3 + 6*3)` (e.g. `72..90`);
+/// - `stop`: the final codon (e.g. `90..93`).
+pub(crate) fn dna_construct_map() -> (crate::DnaMapView, Vec<String>) {
+    let (_title, lines) = dna_construct_lines();
+
+    // Codon-count math straight off the construct's constants: the peptide
+    // (24 aa) reverse-translates to whole codons (its first is ATG = Met), the
+    // His6 tag is six codons, and the stop is one codon. 3 nt per codon.
+    let orf_nt = ILLUSTRATIVE_PEPTIDE.len() * 3;
+    let his_nt = HIS_TAG.len() * 3;
+    let stop_nt = STOP_CODON.len(); // STOP_CODON is exactly one 3-nt codon
+    let total_nt = orf_nt + his_nt + stop_nt;
+
+    // ATG / ORF / His6 / stop colours: green / blue / orange / red.
+    let features = vec![
+        crate::DnaFeature {
+            label: "ATG".to_string(),
+            start: 0,
+            end: 3,
+            color: [46, 160, 67], // green
+        },
+        crate::DnaFeature {
+            label: "ORF".to_string(),
+            start: 0,
+            end: orf_nt,
+            color: [56, 132, 222], // blue
+        },
+        crate::DnaFeature {
+            label: "His6".to_string(),
+            start: orf_nt,
+            end: orf_nt + his_nt,
+            color: [230, 145, 56], // orange
+        },
+        crate::DnaFeature {
+            label: "stop".to_string(),
+            start: orf_nt + his_nt,
+            end: total_nt,
+            color: [219, 68, 55], // red
+        },
+    ];
+
+    (crate::DnaMapView { total_nt, features }, lines)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +232,40 @@ mod tests {
             ),
             "the explicit 'not in valenx' note must be present: {lines:?}"
         );
+    }
+
+    #[test]
+    fn construct_map_spans_the_full_construct() {
+        let (map, lines) = dna_construct_map();
+        // 24 aa ORF + 6 aa His6 + 1 stop codon = 31 codons = 93 nt.
+        assert_eq!(
+            map.total_nt,
+            (ILLUSTRATIVE_PEPTIDE.len() + HIS_TAG.len() + 1) * 3
+        );
+        assert_eq!(map.total_nt, 93);
+        assert!(
+            !lines.is_empty(),
+            "the map carries the card's text rows too"
+        );
+
+        // All four features present, in draw order.
+        let labels: Vec<&str> = map.features.iter().map(|f| f.label.as_str()).collect();
+        assert_eq!(labels, vec!["ATG", "ORF", "His6", "stop"]);
+
+        // Spans: ATG 0..3, ORF 0..72, His6 72..90, stop 90..93.
+        let by = |name: &str| map.features.iter().find(|f| f.label == name).unwrap();
+        assert_eq!((by("ATG").start, by("ATG").end), (0, 3));
+        assert_eq!((by("ORF").start, by("ORF").end), (0, 72));
+        assert_eq!((by("His6").start, by("His6").end), (72, 90));
+        assert_eq!((by("stop").start, by("stop").end), (90, 93));
+
+        // Every feature is a valid in-bounds half-open interval.
+        for f in &map.features {
+            assert!(f.start < f.end, "{}: start < end", f.label);
+            assert!(f.end <= map.total_nt, "{}: within total_nt", f.label);
+        }
+        // The His6 + stop tail abuts total_nt (the map covers the whole construct).
+        assert_eq!(by("stop").end, map.total_nt);
     }
 
     #[test]
