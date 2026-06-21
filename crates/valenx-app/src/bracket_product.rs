@@ -158,6 +158,24 @@ pub(crate) fn bracket_camera(mesh: &valenx_mesh::Mesh) -> OrbitCamera {
     camera
 }
 
+/// The agent-bridge **`show_3d{kind:"bracket"}`** product: the lit L-bracket
+/// mesh + its readout rows at a fixed 3/4 camera, registered in
+/// [`crate::products_registry`]. The per-tool builder the registry dispatches
+/// to (so the bracket product lives here, not in the shared reducer). Pure.
+pub(crate) fn bracket_workspace_product() -> crate::WorkspaceProduct {
+    let (mesh, lines) = bracket_loaded_mesh();
+    let camera = bracket_camera(&mesh.mesh);
+    crate::WorkspaceProduct {
+        title: "L-bracket".into(),
+        lines,
+        mesh: Some(mesh),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

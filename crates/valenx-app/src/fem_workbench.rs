@@ -1170,6 +1170,26 @@ pub(crate) fn fem_beam_camera(mesh: &valenx_mesh::Mesh) -> valenx_viz::OrbitCame
     camera
 }
 
+/// The agent-bridge **`show_3d{kind:"fem"}`** product: the steel cantilever's
+/// deformed boundary skin coloured by per-vertex von-Mises stress (the only
+/// product that sets `vertex_colors`) + the FE-vs-analytical readout rows, at a
+/// fixed 3/4 camera. Registered in [`crate::products_registry`]; the per-tool
+/// builder the registry dispatches to (so the FEM product lives here, not in
+/// the shared reducer). Pure (no app state).
+pub(crate) fn fem_product() -> crate::WorkspaceProduct {
+    let (mesh, vertex_colors, lines) = fem_beam_loaded_mesh();
+    let camera = fem_beam_camera(&mesh.mesh);
+    crate::WorkspaceProduct {
+        title: "FEM cantilever (steel, 5 kN tip)".into(),
+        lines,
+        mesh: Some(mesh),
+        vertex_colors: Some(vertex_colors),
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

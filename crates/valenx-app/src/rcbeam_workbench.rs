@@ -569,6 +569,26 @@ pub(crate) fn rcbeam_camera(mesh: &Mesh) -> valenx_viz::OrbitCamera {
     camera
 }
 
+/// The agent-bridge **`show_3d{kind:"rcbeam"}`** product: the lit RC-beam solid
+/// with its flexural readout rows at a fixed 3/4 camera, registered in
+/// [`crate::products_registry`]. The per-tool builder the registry dispatches
+/// to (so the rcbeam 3-D product lives here, not in the shared reducer). It is
+/// distinct from the 2-D section drawing in [`rcbeam_section_view`], which the
+/// `show_2d` arm still dispatches separately. Pure (no app state).
+pub(crate) fn rcbeam_product() -> crate::WorkspaceProduct {
+    let (mesh, lines) = rcbeam_loaded_mesh();
+    let camera = rcbeam_camera(&mesh.mesh);
+    crate::WorkspaceProduct {
+        title: "RC beam (6 m, 25 kN/m)".into(),
+        lines,
+        mesh: Some(mesh),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

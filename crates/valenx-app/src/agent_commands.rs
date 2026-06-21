@@ -435,96 +435,24 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
             // — the bridge routes by file channel, same as every other command).
             // The `workspace:<n>` pane then renders the actual lit mesh at a
             // fixed 3/4 camera (see `dock_layout::render_workspace_body`).
-            // Each `kind` builds its producer's LoadedMesh + a fixed 3/4 camera
-            // and publishes a 3-D `WorkspaceProduct`; the render path
-            // (`dock_layout::render_workspace_body`) is kind-agnostic. An
-            // unknown kind is skipped safely (no panic, no placeholder churn),
-            // consistent with the rest of the reducer's bad-input handling. Add
-            // new model kinds as further `else if kind == "<x>"` arms.
-            if kind == "rocket" {
-                let mesh = crate::rocket_workbench::lv1_loaded_mesh();
-                let camera = crate::rocket_workbench::lv1_camera(&mesh.mesh);
-                app.workspace_products.insert(
-                    n,
-                    crate::WorkspaceProduct {
-                        title: "Rocket".into(),
-                        lines: vec![],
-                        mesh: Some(mesh),
-                        vertex_colors: None,
-                        camera,
-                        kind2d: None,
-                        last_export: None,
-                    },
-                );
-            } else if kind == "gear" {
-                let (mesh, lines) = crate::gears_workbench::gear_train_loaded_mesh();
-                let camera = crate::gears_workbench::gear_train_camera(&mesh.mesh);
-                app.workspace_products.insert(
-                    n,
-                    crate::WorkspaceProduct {
-                        title: "2-stage spur reducer".into(),
-                        lines,
-                        mesh: Some(mesh),
-                        vertex_colors: None,
-                        camera,
-                        kind2d: None,
-                        last_export: None,
-                    },
-                );
-            } else if kind == "bracket" {
-                let (mesh, lines) = crate::bracket_product::bracket_loaded_mesh();
-                let camera = crate::bracket_product::bracket_camera(&mesh.mesh);
-                app.workspace_products.insert(
-                    n,
-                    crate::WorkspaceProduct {
-                        title: "L-bracket".into(),
-                        lines,
-                        mesh: Some(mesh),
-                        vertex_colors: None,
-                        camera,
-                        kind2d: None,
-                        last_export: None,
-                    },
-                );
-            } else if kind == "rcbeam" {
-                let (mesh, lines) = crate::rcbeam_workbench::rcbeam_loaded_mesh();
-                let camera = crate::rcbeam_workbench::rcbeam_camera(&mesh.mesh);
-                app.workspace_products.insert(
-                    n,
-                    crate::WorkspaceProduct {
-                        title: "RC beam (6 m, 25 kN/m)".into(),
-                        lines,
-                        mesh: Some(mesh),
-                        vertex_colors: None,
-                        camera,
-                        kind2d: None,
-                        last_export: None,
-                    },
-                );
-            } else if kind == "fem" {
-                // Steel cantilever (1 m, 50×100 mm, 5 kN tip): the real
-                // `valenx-fem` linear-static solve, shown as the deformed
-                // boundary skin coloured by per-vertex von-Mises stress
-                // (blue→red) plus the FE-vs-analytical readout rows.
-                let (mesh, vertex_colors, lines) = crate::fem_workbench::fem_beam_loaded_mesh();
-                let camera = crate::fem_workbench::fem_beam_camera(&mesh.mesh);
-                app.workspace_products.insert(
-                    n,
-                    crate::WorkspaceProduct {
-                        title: "FEM cantilever (steel, 5 kN tip)".into(),
-                        lines,
-                        mesh: Some(mesh),
-                        vertex_colors: Some(vertex_colors),
-                        camera,
-                        kind2d: None,
-                        last_export: None,
-                    },
-                );
+            //
+            // The mesh kinds (rocket / gear / bracket / rcbeam / fem) are looked
+            // up in the per-file registry ([`crate::products_registry`]) instead
+            // of an inline per-kind chain: each tool registers its own
+            // pure builder in its own module, so a new 3-D tool is added there
+            // (plus one table line) without touching this shared reducer. An
+            // unknown kind resolves to `None` and is skipped safely (no panic,
+            // no placeholder churn), consistent with the reducer's other
+            // bad-input handling.
+            if let Some(entry) = crate::products_registry::lookup(&kind) {
+                app.workspace_products.insert(n, (entry.build)());
             } else if kind == "dna" {
-                // Codon-optimised therapeutic-peptide construct + synthesis
-                // screen. This is a TEXT product (mesh: None) — the workspace
-                // card renders the sequence + CAI / GC / hairpin ΔG rows,
-                // including the explicit "NOT a biosecurity screen" note.
+                // `dna` is NOT a registry 3-D mesh kind — it's a TEXT product
+                // (mesh: None): the codon-optimised therapeutic-peptide
+                // construct + synthesis screen, rendered as a card with the
+                // sequence + CAI / GC / hairpin ΔG rows, including the explicit
+                // "NOT a biosecurity screen" note. Kept inline here (migrate
+                // later); the registry is 3-D-mesh-only for now.
                 let (title, lines) = crate::dna_product::dna_construct_lines();
                 app.workspace_products.insert(
                     n,
@@ -1169,6 +1097,26 @@ mod tests {
             },
         );
         assert!(app.workspace_products.get(&1).is_none());
+    }
+
+    #[test]
+    fn show_3d_mesh_kinds_route_through_the_per_file_registry() {
+        // The reducer's `show_3d` mesh path delegates to
+        // `products_registry::lookup`. Assert the registry resolves every
+        // migrated 3-D kind (and that an unknown kind returns None, the no-op
+        // the reducer relies on), so the bridge and the registry stay in sync.
+        for kind in ["rocket", "gear", "bracket", "rcbeam", "fem"] {
+            assert!(
+                crate::products_registry::lookup(kind).is_some(),
+                "registry resolves the migrated 3-D kind {kind:?}"
+            );
+        }
+        assert!(
+            crate::products_registry::lookup("not-a-model").is_none(),
+            "an unknown kind returns None (the reducer then skips it)"
+        );
+        // `dna` is a text card, not a registry 3-D mesh kind.
+        assert!(crate::products_registry::lookup("dna").is_none());
     }
 
     #[test]
