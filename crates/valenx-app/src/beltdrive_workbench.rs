@@ -337,7 +337,18 @@ fn push_cyl_x(
 /// radii follow the diameters. Representative geometry (the kinematics /
 /// power numbers are the `valenx-beltdrive` result). `None` for an invalid
 /// configuration.
-fn beltdrive_solid_mesh(s: &BeltDriveWorkbenchState) -> Option<Mesh> {
+/// Presentation spin rate of the driver pulley, rad/s (~1.0 rev/s) — a readable
+/// inspect speed; the driven pulley follows at the diameter ratio.
+const DRIVER_RAD_PER_S: f32 = 6.0;
+
+/// Build the belt drive as a triangle [`Mesh`] together with a
+/// [`crate::RigidPart`] for each pulley (driver + driven), so both wheels spin
+/// about their shafts (the +x axis through each centre) while the belt runs and
+/// base stay put. The driven pulley turns the same direction as the driver but
+/// slower by the diameter ratio (open belt). `None` for an invalid config.
+fn beltdrive_solid_mesh_parts(
+    s: &BeltDriveWorkbenchState,
+) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     // Gate the geometry on a buildable, analysable drive.
     build_spec(s).ok()?.analyze().ok()?;
 
@@ -353,24 +364,16 @@ fn beltdrive_solid_mesh(s: &BeltDriveWorkbenchState) -> Option<Mesh> {
     let width = 0.12;
     let lift = (r_drv.max(r_drn)) + 0.15;
 
-    // Driver pulley disc (small) at z = -half_c.
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(face_x, lift, -half_c),
-        width,
-        r_drv,
-        28,
-    );
-    // Driven pulley disc (large) at z = +half_c.
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(face_x, lift, half_c),
-        width,
-        r_drn,
-        32,
-    );
+    // Driver pulley disc (small) at z = -half_c — record its node range.
+    let drv_centre = Vector3::new(face_x, lift, -half_c);
+    let drv_start = nodes.len();
+    push_cyl_x(&mut nodes, &mut tris, drv_centre, width, r_drv, 28);
+    let drv_end = nodes.len();
+    // Driven pulley disc (large) at z = +half_c — record its node range.
+    let drn_centre = Vector3::new(face_x, lift, half_c);
+    let drn_start = nodes.len();
+    push_cyl_x(&mut nodes, &mut tris, drn_centre, width, r_drn, 32);
+    let drn_end = nodes.len();
 
     // Belt loop: two straight tangent runs as thin boxes spanning the gap.
     // Approximate the (near-horizontal) tangents by the top and bottom of
@@ -408,7 +411,43 @@ fn beltdrive_solid_mesh(s: &BeltDriveWorkbenchState) -> Option<Mesh> {
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+    // Both pulleys spin about their shafts (+x) through their own centres. Open
+    // belt ⇒ same direction; the driven pulley is slower by the diameter ratio
+    // (ω_driven = ω_driver · d_driver / d_driven). Presentation-scaled.
+    let ratio = if r_drn > 0.0 {
+        (r_drv / r_drn) as f32
+    } else {
+        1.0
+    };
+    let parts = vec![
+        crate::RigidPart {
+            node_range: drv_start..drv_end,
+            axis: [1.0, 0.0, 0.0],
+            pivot: [
+                drv_centre.x as f32,
+                drv_centre.y as f32,
+                drv_centre.z as f32,
+            ],
+            rad_per_s: DRIVER_RAD_PER_S,
+        },
+        crate::RigidPart {
+            node_range: drn_start..drn_end,
+            axis: [1.0, 0.0, 0.0],
+            pivot: [
+                drn_centre.x as f32,
+                drn_centre.y as f32,
+                drn_centre.z as f32,
+            ],
+            rad_per_s: DRIVER_RAD_PER_S * ratio,
+        },
+    ];
+    Some((mesh, parts))
+}
+
+/// Build the belt-drive [`Mesh`] (without the per-pulley part metadata) for the
+/// central viewport. See [`beltdrive_solid_mesh_parts`].
+fn beltdrive_solid_mesh(s: &BeltDriveWorkbenchState) -> Option<Mesh> {
+    beltdrive_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D belt-drive solid and load it into the central viewport.
@@ -436,7 +475,8 @@ fn load_beltdrive_3d(app: &mut ValenxApp) {
 /// its `compute()` readout rows (see [`crate::products_registry`]).
 pub(crate) fn beltdrive_product() -> crate::WorkspaceProduct {
     let s = BeltDriveWorkbenchState::default();
-    let mesh = beltdrive_solid_mesh(&s).expect("canonical belt drive ⇒ drive solid builds");
+    let (mesh, parts) =
+        beltdrive_solid_mesh_parts(&s).expect("canonical belt drive ⇒ drive solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<beltdrive>/valenx-beltdrive");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical belt drive ⇒ readout computes"),
@@ -452,7 +492,14 @@ pub(crate) fn beltdrive_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
-        animation: None,
+        // Animated: both pulleys spin about their shafts (driven slower by the
+        // diameter ratio) while the belt runs and base stay put. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -567,6 +614,56 @@ mod tests {
             ..Default::default()
         };
         assert!(beltdrive_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn beltdrive_product_spins_both_pulleys_same_dir() {
+        // The product carries a RigidParts animation: the driver and driven
+        // pulleys are two non-empty node ranges within the mesh, both spinning
+        // about +x in the SAME direction (open belt), with the larger driven
+        // pulley slower (smaller |rate|). The belt + base are left static.
+        let product = beltdrive_product();
+        let loaded = product
+            .mesh
+            .as_ref()
+            .expect("belt-drive product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("belt-drive product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 2, "two rotating parts: driver + driven");
+                for p in &parts {
+                    assert!(
+                        p.node_range.start < p.node_range.end,
+                        "non-empty pulley range"
+                    );
+                    assert!(
+                        p.node_range.end <= node_count,
+                        "pulley range within the mesh"
+                    );
+                    assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about the shaft axis");
+                }
+                let (drv, drn) = (&parts[0], &parts[1]);
+                assert!(
+                    drv.rad_per_s.signum() == drn.rad_per_s.signum(),
+                    "open belt ⇒ same direction"
+                );
+                assert!(drv.rad_per_s.abs() > 0.0, "driver spins");
+                assert!(
+                    drn.rad_per_s.abs() < drv.rad_per_s.abs(),
+                    "the larger driven pulley (250 mm vs 100 mm) turns slower"
+                );
+                // Belt + base nodes lie beyond the two pulley ranges (static).
+                assert!(
+                    drn.node_range.end < node_count,
+                    "belt + base are not animated"
+                );
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("belt drive must use per-part rigid motion")
+            }
+        }
     }
 }
 

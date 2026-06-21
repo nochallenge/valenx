@@ -283,7 +283,17 @@ fn push_cyl_x(
 /// terminal box on top and mounting feet. Representative geometry (the
 /// slip / power split is the `valenx-inductionmotor` result). `None` for
 /// an invalid machine.
-fn motor_solid_mesh(s: &InductionMotorWorkbenchState) -> Option<Mesh> {
+/// Presentation spin rate of the rotor (shaft + cooling fan), rad/s (~1.3
+/// rev/s) — a readable inspect speed, not the real ~3000-rpm blur.
+const ROTOR_RAD_PER_S: f32 = 8.0;
+
+/// Build the motor as a triangle [`Mesh`] together with the [`crate::RigidPart`]
+/// for the rotating rotor assembly (the output shaft + cooling-fan cowl), so the
+/// frame, end bells, terminal box and feet stay put while the rotor spins.
+/// `None` for an invalid machine.
+fn motor_solid_mesh_parts(
+    s: &InductionMotorWorkbenchState,
+) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     build_motor(s).ok()?;
 
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
@@ -316,6 +326,10 @@ fn motor_solid_mesh(s: &InductionMotorWorkbenchState) -> Option<Mesh> {
         0.45,
         28,
     );
+    // Rotating rotor assembly: the output shaft (+x end) and the cooling-fan
+    // cowl (-x end) are built consecutively so they form one contiguous node
+    // range spinning about the motor axis. Record its half-open span.
+    let rotor_start = nodes.len();
     // Output shaft (thin cylinder protruding from the +x end).
     push_cyl_x(
         &mut nodes,
@@ -334,6 +348,7 @@ fn motor_solid_mesh(s: &InductionMotorWorkbenchState) -> Option<Mesh> {
         0.3,
         20,
     );
+    let rotor_end = nodes.len();
     // Terminal box on top.
     push_box(
         &mut nodes,
@@ -355,7 +370,21 @@ fn motor_solid_mesh(s: &InductionMotorWorkbenchState) -> Option<Mesh> {
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+    // The rotor spins about the motor axis (+x) through the centreline
+    // (y = 0, z = axis_z).
+    let parts = vec![crate::RigidPart {
+        node_range: rotor_start..rotor_end,
+        axis: [1.0, 0.0, 0.0],
+        pivot: [0.0, 0.0, axis_z as f32],
+        rad_per_s: ROTOR_RAD_PER_S,
+    }];
+    Some((mesh, parts))
+}
+
+/// Build the motor as a triangle [`Mesh`] (without the rotor part metadata) for
+/// the central viewport. See [`motor_solid_mesh_parts`].
+fn motor_solid_mesh(s: &InductionMotorWorkbenchState) -> Option<Mesh> {
+    motor_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D motor solid and load it into the central viewport.
@@ -383,7 +412,8 @@ fn load_motor_3d(app: &mut ValenxApp) {
 /// plus its `compute()` readout rows (see [`crate::products_registry`]).
 pub(crate) fn inductionmotor_product() -> crate::WorkspaceProduct {
     let s = InductionMotorWorkbenchState::default();
-    let mesh = motor_solid_mesh(&s).expect("canonical induction motor ⇒ motor solid builds");
+    let (mesh, parts) =
+        motor_solid_mesh_parts(&s).expect("canonical induction motor ⇒ motor solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<inductionmotor>/valenx-motor");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical induction motor ⇒ readout computes"),
@@ -399,7 +429,14 @@ pub(crate) fn inductionmotor_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
-        animation: None,
+        // Animated: the rotor (output shaft + cooling fan) spins about the motor
+        // axis while the frame/feet/terminal box stay put. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -475,6 +512,41 @@ mod tests {
             ..Default::default()
         };
         assert!(motor_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn inductionmotor_product_spins_the_rotor_only() {
+        // The product carries a RigidParts animation: the rotor (shaft + fan, a
+        // non-empty node range strictly inside the mesh) spins about +x at a
+        // non-zero rate; the frame/feet/terminal box are left static.
+        let product = inductionmotor_product();
+        let loaded = product.mesh.as_ref().expect("motor product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("motor product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 1, "one rotating part: the rotor");
+                let p = &parts[0];
+                assert!(
+                    p.node_range.start < p.node_range.end,
+                    "non-empty rotor range"
+                );
+                assert!(
+                    p.node_range.end <= node_count,
+                    "rotor range within the mesh"
+                );
+                assert!(
+                    p.node_range.start > 0 && p.node_range.end < node_count,
+                    "frame precedes and feet/box follow the rotor (housing static)"
+                );
+                assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about the motor axis");
+                assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("motor must use per-part rigid motion")
+            }
+        }
     }
 }
 

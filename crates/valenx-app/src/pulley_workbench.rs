@@ -321,12 +321,21 @@ fn push_cyl_x(
 /// between the two blocks. Representative geometry (not to scale; the
 /// mechanical-advantage numbers are the `valenx-pulley` result). `None`
 /// for an invalid configuration.
-fn pulley_solid_mesh(s: &PulleyWorkbenchState) -> Option<Mesh> {
+/// Presentation spin rate of each sheave wheel, rad/s (~0.6 rev/s) — a readable
+/// inspect speed for the rope wheels.
+const SHEAVE_RAD_PER_S: f32 = 4.0;
+
+/// Build the pulley assembly as a triangle [`Mesh`] together with a
+/// [`crate::RigidPart`] per sheave wheel, so every sheave spins about its own
+/// pin (the +x axis through its centre) while the rope/blocks frame stays put.
+/// `None` for an invalid configuration.
+fn pulley_solid_mesh_parts(s: &PulleyWorkbenchState) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     let sys = system_of(s).ok()?;
     let n = sys.supporting_ropes();
 
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
     let mut tris: Vec<usize> = Vec::new();
+    let mut parts: Vec<crate::RigidPart> = Vec::new();
 
     // Split the supporting segments between a fixed (upper) and movable
     // (lower) block: ceil(n/2) sheaves up, floor(n/2) (at least one) down.
@@ -336,32 +345,33 @@ fn pulley_solid_mesh(s: &PulleyWorkbenchState) -> Option<Mesh> {
     let width = 0.12;
     let pitch = 0.5;
 
+    // Each sheave is its own rotating body: record its half-open node range and
+    // its pin centre as the pivot. All spin about the pin (+x) axis.
+    let mut push_sheave =
+        |nodes: &mut Vec<Vector3<f64>>, tris: &mut Vec<usize>, centre: Vector3<f64>| {
+            let start = nodes.len();
+            push_cyl_x(nodes, tris, centre, width, r, 28);
+            let end = nodes.len();
+            parts.push(crate::RigidPart {
+                node_range: start..end,
+                axis: [1.0, 0.0, 0.0],
+                pivot: [centre.x as f32, centre.y as f32, centre.z as f32],
+                rad_per_s: SHEAVE_RAD_PER_S,
+            });
+        };
+
     // Fixed block: a row of sheaves along y at the top (+z).
     let fixed_span = (fixed_sheaves.saturating_sub(1)) as f64 * pitch;
     for i in 0..fixed_sheaves {
         let y = i as f64 * pitch - 0.5 * fixed_span;
-        push_cyl_x(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(-0.5 * width, y, 0.9),
-            width,
-            r,
-            28,
-        );
+        push_sheave(&mut nodes, &mut tris, Vector3::new(-0.5 * width, y, 0.9));
     }
 
     // Movable block: a row of sheaves lower down (the load hangs here).
     let movable_span = (movable_sheaves.saturating_sub(1)) as f64 * pitch;
     for i in 0..movable_sheaves {
         let y = i as f64 * pitch - 0.5 * movable_span;
-        push_cyl_x(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(-0.5 * width, y, 0.1),
-            width,
-            r,
-            28,
-        );
+        push_sheave(&mut nodes, &mut tris, Vector3::new(-0.5 * width, y, 0.1));
     }
 
     let mut block = ElementBlock::new(ElementType::Tri3);
@@ -370,7 +380,13 @@ fn pulley_solid_mesh(s: &PulleyWorkbenchState) -> Option<Mesh> {
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+    Some((mesh, parts))
+}
+
+/// Build the pulley assembly as a triangle [`Mesh`] (without the per-sheave part
+/// metadata) for the central viewport. See [`pulley_solid_mesh_parts`].
+fn pulley_solid_mesh(s: &PulleyWorkbenchState) -> Option<Mesh> {
+    pulley_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D pulley assembly and load it into the central viewport.
@@ -403,7 +419,8 @@ fn load_pulley_3d(app: &mut ValenxApp) {
 /// to. Pure — driven off [`PulleyWorkbenchState::default`].
 pub(crate) fn pulley_product() -> crate::WorkspaceProduct {
     let s = PulleyWorkbenchState::default();
-    let mesh = pulley_solid_mesh(&s).expect("canonical tackle ⇒ sheave-block solid builds");
+    let (mesh, parts) =
+        pulley_solid_mesh_parts(&s).expect("canonical tackle ⇒ sheave-block solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<pulley>/valenx-pulley");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical tackle ⇒ readout computes"),
@@ -419,7 +436,13 @@ pub(crate) fn pulley_product() -> crate::WorkspaceProduct {
         last_export: None,
         image: None,
         image_texture: None,
-        animation: None,
+        // Animated: each sheave wheel spins about its own pin. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -576,6 +599,48 @@ mod tests {
             ..Default::default()
         };
         assert!(pulley_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn pulley_product_spins_each_sheave() {
+        // The product carries a RigidParts animation: one rotating part per
+        // sheave, each a non-empty node range within the mesh that spins about
+        // its pin (+x) at a non-zero rate.
+        let product = pulley_product();
+        let loaded = product.mesh.as_ref().expect("pulley product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("pulley product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert!(
+                    parts.len() >= 2,
+                    "default 4-rope tackle splits into ≥2 sheaves"
+                );
+                for p in &parts {
+                    assert!(
+                        p.node_range.start < p.node_range.end,
+                        "non-empty sheave range"
+                    );
+                    assert!(
+                        p.node_range.end <= node_count,
+                        "sheave range within the mesh"
+                    );
+                    assert_eq!(p.axis, [1.0, 0.0, 0.0], "each sheave spins about its pin");
+                    assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+                }
+                // Sheave ranges tile contiguously (no gap/overlap).
+                for w in parts.windows(2) {
+                    assert_eq!(
+                        w[0].node_range.end, w[1].node_range.start,
+                        "sheave node ranges are contiguous"
+                    );
+                }
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("pulley must use per-part rigid motion")
+            }
+        }
     }
 }
 
