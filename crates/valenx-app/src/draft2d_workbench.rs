@@ -66,6 +66,109 @@ fn demo_drawing() -> Drawing2D {
     d
 }
 
+/// Convert a [`Drawing2D`] into the plain-data [`crate::Draft2dView`] the
+/// workspace-tile painter consumes — drop the CAD layer / DXF metadata, keep
+/// only the geometry, and compute the overall extent so the painter can fit it
+/// to the tile. `Text` entities are skipped (the tile draws geometry only).
+fn drawing_to_view(drawing: &Drawing2D) -> crate::Draft2dView {
+    let mut entities = Vec::new();
+    let mut min = [f64::INFINITY; 2];
+    let mut max = [f64::NEG_INFINITY; 2];
+    let mut grow = |p: &[f64; 2]| {
+        min[0] = min[0].min(p[0]);
+        min[1] = min[1].min(p[1]);
+        max[0] = max[0].max(p[0]);
+        max[1] = max[1].max(p[1]);
+    };
+    for e in &drawing.entities {
+        match e {
+            Entity2D::Line { a, b, .. } => {
+                grow(a);
+                grow(b);
+                entities.push(crate::Draft2dEntity::Line { a: *a, b: *b });
+            }
+            Entity2D::Circle { centre, radius, .. } => {
+                grow(&[centre[0] - radius, centre[1] - radius]);
+                grow(&[centre[0] + radius, centre[1] + radius]);
+                entities.push(crate::Draft2dEntity::Circle {
+                    centre: *centre,
+                    radius: *radius,
+                });
+            }
+            Entity2D::Arc {
+                centre,
+                radius,
+                start_angle_deg,
+                end_angle_deg,
+                ..
+            } => {
+                // Bound by the full circle (a safe superset of the arc).
+                grow(&[centre[0] - radius, centre[1] - radius]);
+                grow(&[centre[0] + radius, centre[1] + radius]);
+                entities.push(crate::Draft2dEntity::Arc {
+                    centre: *centre,
+                    radius: *radius,
+                    start_angle_deg: *start_angle_deg,
+                    end_angle_deg: *end_angle_deg,
+                });
+            }
+            Entity2D::Polyline {
+                vertices, closed, ..
+            } => {
+                for v in vertices {
+                    grow(v);
+                }
+                entities.push(crate::Draft2dEntity::Polyline {
+                    vertices: vertices.clone(),
+                    closed: *closed,
+                });
+            }
+            // Text + any future variant: geometry-only tile, skip.
+            _ => {}
+        }
+    }
+    // A drawing with no boundable geometry leaves the default unit box.
+    if !min[0].is_finite() {
+        min = [0.0, 0.0];
+        max = [1.0, 1.0];
+    }
+    crate::Draft2dView {
+        entities,
+        bounds: (min, max),
+        lines: vec![
+            format!("{} entities", drawing.entities.len()),
+            format!(
+                "extent {:.0} × {:.0} units",
+                (max[0] - min[0]).abs(),
+                (max[1] - min[1]).abs()
+            ),
+            "valenx-librecad-2d · DXF".into(),
+        ],
+    }
+}
+
+/// Build the agent-bridge **`draft2d` product** — the canonical demo 2-D CAD
+/// drawing (a closed rectangle, a circle, a diagonal) as a
+/// [`crate::Workspace2dKind::Draft2d`] painted by the tile's 2-D branch
+/// (mirroring `rcbeam` / `dna`). A 2-D drawing, NOT a mesh: `mesh: None`,
+/// `kind2d: Some(Draft2d(..))`.
+pub(crate) fn draft2d_product() -> crate::WorkspaceProduct {
+    let drawing = demo_drawing();
+    let view = drawing_to_view(&drawing);
+    let lines = view.lines.clone();
+    crate::WorkspaceProduct {
+        title: "2-D Drawing".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: valenx_viz::OrbitCamera::default(),
+        kind2d: Some(crate::Workspace2dKind::Draft2d(view)),
+        last_export: None,
+        image: None,
+        image_texture: None,
+    }
+}
+
 /// Draw the 2D drafting workbench (a no-op unless toggled on via
 /// View → 2D Drafting).
 pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {

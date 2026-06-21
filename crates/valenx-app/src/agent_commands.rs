@@ -426,6 +426,8 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     camera: valenx_viz::OrbitCamera::default(),
                     kind2d: None,
                     last_export: None,
+                    image: None,
+                    image_texture: None,
                 },
             );
         }
@@ -464,6 +466,8 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         camera: valenx_viz::OrbitCamera::default(),
                         kind2d: None,
                         last_export: None,
+                        image: None,
+                        image_texture: None,
                     },
                 );
             }
@@ -490,6 +494,8 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         camera: valenx_viz::OrbitCamera::default(),
                         kind2d: Some(crate::Workspace2dKind::RcSection(view)),
                         last_export: None,
+                        image: None,
+                        image_texture: None,
                     },
                 );
             } else if kind == "dna" {
@@ -506,6 +512,8 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         camera: valenx_viz::OrbitCamera::default(),
                         kind2d: Some(crate::Workspace2dKind::DnaMap(map)),
                         last_export: None,
+                        image: None,
+                        image_texture: None,
                     },
                 );
             }
@@ -1081,6 +1089,110 @@ mod tests {
             product.lines
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_3d_render_publishes_an_image_into_the_workspace() {
+        // End-to-end through the REAL poll/reducer path: `show_3d` render on
+        // channel 1 routes through the registry to the path-traced IMAGE
+        // product — no mesh / no 2-D drawing, a non-empty `egui::ColorImage`.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "show3d_render");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"show_3d\",\"kind\":\"render\"}\n").unwrap();
+
+        assert!(app.workspace_products.is_empty());
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("channel-1 product set by show_3d render");
+        assert!(product.mesh.is_none(), "render is an image (no mesh)");
+        assert!(
+            product.kind2d.is_none(),
+            "render is an image (not a 2-D drawing)"
+        );
+        let image = product.image.as_ref().expect("render carries a ColorImage");
+        let [w, h] = image.size;
+        assert!(w > 0 && h > 0, "render image has non-zero size");
+        assert_eq!(image.pixels.len(), w * h, "ColorImage pixel count = w·h");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_3d_animate_publishes_a_timeline_card_into_the_workspace() {
+        // `show_3d` animate routes through the registry to a DATA-ONLY text
+        // card summarising the keyframe timeline (mesh None, kind2d None, rows
+        // mentioning the keyframe count + duration).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "show3d_animate");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"show_3d\",\"kind\":\"animate\"}\n").unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("channel-1 product set by show_3d animate");
+        assert!(product.mesh.is_none(), "animate is a text card (no mesh)");
+        assert!(product.image.is_none(), "animate is a text card (no image)");
+        assert!(
+            product.kind2d.is_none(),
+            "animate is a text card (not a 2-D drawing)"
+        );
+        assert!(
+            product.lines.iter().any(|l| l.contains("keyframes")),
+            "the card reports the keyframe count: {:?}",
+            product.lines
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_3d_draft2d_and_interior_publish_2d_drawings_into_the_workspace() {
+        // `show_3d` draft2d / interior route through the registry to 2-D
+        // DRAWING products (kind2d Some, mesh None, image None) — the same egui
+        // 2-D branch as rcbeam / dna, with the matching plain-data view.
+        for (kind, tag) in [
+            ("draft2d", "show3d_draft2d"),
+            ("interior", "show3d_interior"),
+        ] {
+            let mut app = ValenxApp::default();
+            app.wb_agent_counter = 1;
+            let dir = isolate_cmd_dir(&mut app, tag);
+            let path = cmd_path(&app, 1);
+            std::fs::write(
+                &path,
+                format!("{{\"cmd\":\"show_3d\",\"kind\":\"{kind}\"}}\n"),
+            )
+            .unwrap();
+
+            poll_and_apply_agent_commands(&mut app);
+
+            let product = app
+                .workspace_products
+                .get(&1)
+                .unwrap_or_else(|| panic!("channel-1 product set by show_3d {kind}"));
+            assert!(product.mesh.is_none(), "{kind} is a 2-D drawing (no mesh)");
+            assert!(
+                product.image.is_none(),
+                "{kind} is a 2-D drawing (no image)"
+            );
+            match product.kind2d.as_ref() {
+                Some(crate::Workspace2dKind::Draft2d(view)) if kind == "draft2d" => {
+                    assert!(!view.entities.is_empty(), "draft2d drawing has entities");
+                }
+                Some(crate::Workspace2dKind::FloorPlan(plan)) if kind == "interior" => {
+                    assert!(!plan.rooms.is_empty(), "interior plan has a room");
+                }
+                other => panic!("{kind}: unexpected kind2d {other:?}"),
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
     }
 
     #[test]

@@ -63,6 +63,88 @@ fn room_centre(scene: &InteriorPanelState) -> Vector3<f64> {
     Vector3::new(0.0, 0.0, 0.0)
 }
 
+/// Convert an [`InteriorPanelState`] into the plain-data
+/// [`crate::FloorPlanView`] the workspace-tile painter consumes — room wall
+/// polygons + furniture footprints (centre + size + label) in metres, plus the
+/// overall room extent so the painter can fit the plan to the tile.
+fn scene_to_view(scene: &InteriorPanelState) -> crate::FloorPlanView {
+    let mut rooms: Vec<Vec<[f64; 2]>> = Vec::new();
+    let mut min = [f64::INFINITY; 2];
+    let mut max = [f64::NEG_INFINITY; 2];
+    for room in &scene.rooms {
+        let poly: Vec<[f64; 2]> = room
+            .floor_polygon
+            .iter()
+            .map(|p| {
+                min[0] = min[0].min(p.x);
+                min[1] = min[1].min(p.y);
+                max[0] = max[0].max(p.x);
+                max[1] = max[1].max(p.y);
+                [p.x, p.y]
+            })
+            .collect();
+        if !poly.is_empty() {
+            rooms.push(poly);
+        }
+    }
+    let furniture: Vec<crate::FloorPlanItem> = scene
+        .placements
+        .iter()
+        .map(|p| {
+            let size = p.kind.default_size();
+            crate::FloorPlanItem {
+                centre: [p.position.x, p.position.y],
+                size: [size.x, size.y],
+                label: p.kind.name().to_string(),
+            }
+        })
+        .collect();
+    if !min[0].is_finite() {
+        min = [0.0, 0.0];
+        max = [1.0, 1.0];
+    }
+    crate::FloorPlanView {
+        rooms,
+        furniture,
+        bounds: (min, max),
+        lines: vec![
+            format!(
+                "{} room · {} pieces",
+                scene.rooms.len(),
+                scene.placements.len()
+            ),
+            format!(
+                "{:.1} × {:.1} m",
+                (max[0] - min[0]).abs(),
+                (max[1] - min[1]).abs()
+            ),
+            "valenx-interior · floor plan".into(),
+        ],
+    }
+}
+
+/// Build the agent-bridge **`interior` product** — the canonical demo floor
+/// plan (a 6 m × 4 m living room with a sofa + table) as a
+/// [`crate::Workspace2dKind::FloorPlan`] painted by the tile's 2-D branch
+/// (mirroring `rcbeam` / `dna`). A 2-D drawing, NOT a mesh: `mesh: None`,
+/// `kind2d: Some(FloorPlan(..))`.
+pub(crate) fn interior_product() -> crate::WorkspaceProduct {
+    let scene = demo_scene();
+    let view = scene_to_view(&scene);
+    let lines = view.lines.clone();
+    crate::WorkspaceProduct {
+        title: "Floor Plan".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: valenx_viz::OrbitCamera::default(),
+        kind2d: Some(crate::Workspace2dKind::FloorPlan(view)),
+        last_export: None,
+        image: None,
+        image_texture: None,
+    }
+}
+
 /// Draw the interior workbench (a no-op unless toggled on via View → Interior).
 pub fn draw_interior_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_interior_workbench {

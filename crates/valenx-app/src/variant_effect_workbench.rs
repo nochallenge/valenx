@@ -166,6 +166,8 @@ pub(crate) fn variant_effect_product() -> crate::WorkspaceProduct {
         camera: Default::default(),
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
     }
 }
 

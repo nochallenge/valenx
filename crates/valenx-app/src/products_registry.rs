@@ -59,6 +59,7 @@
 //!     crate::WorkspaceProduct {
 //!         title: "Foo".into(), lines, mesh: Some(mesh),
 //!         vertex_colors: None, camera, kind2d: None, last_export: None,
+//!         image: None, image_texture: None,
 //!     }
 //! }
 //! ```
@@ -413,6 +414,24 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "car" => crate::car_workbench::car_product,
         "neuro" => crate::neuro_workbench::neuro_product,
         "variant_effect" => crate::variant_effect_workbench::variant_effect_product,
+        // IMAGE / 2-D-DRAWING / extra-card workbenches — these resolve through
+        // the same `lookup`, but their builders return a product that is
+        // neither a `Tri3` mesh nor a bare text card:
+        //   • `render`  → an IMAGE product (`image: Some(ColorImage)`): a small
+        //     synchronous path-trace of a Cornell box (the pane's image branch
+        //     uploads + draws it).
+        //   • `animate` → a DATA-ONLY text CARD (`mesh: None`, `lines`): the
+        //     keyframe-timeline summary (no posed body to rasterise — see
+        //     `animate_product`).
+        //   • `draft2d` / `interior` → 2-D DRAWING products
+        //     (`kind2d: Some(..)`): the 2-D CAD drawing / floor plan, painted by
+        //     the same egui 2-D branch as `rcbeam` / `dna`.
+        // They are asserted by their own registry tests (image.is_some() /
+        // kind2d.is_some()), not the Tri3-mesh assertion.
+        "render" => crate::render_workbench::render_product,
+        "animate" => crate::animate_workbench::animate_product,
+        "draft2d" => crate::draft2d_workbench::draft2d_product,
+        "interior" => crate::interior_workbench::interior_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -558,6 +577,11 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "car" => "car",
         "neuro" => "neuro",
         "variant_effect" => "variant_effect",
+        // IMAGE / 2-D-drawing / extra-card workbenches (see `lookup`).
+        "render" => "render",
+        "animate" => "animate",
+        "draft2d" => "draft2d",
+        "interior" => "interior",
         _ => return None,
     })
 }
@@ -856,7 +880,26 @@ mod tests {
         "car",
         "neuro",
         "variant_effect",
+        // The animation timeline is a DATA-ONLY card too — it summarises the
+        // keyframe timeline (count / duration / sampled joint values); there is
+        // no posed body to rasterise, so it carries no mesh and no 2-D drawing.
+        "animate",
     ];
+
+    /// The IMAGE workbench kinds — their builder returns a product carrying a
+    /// raster [`crate::WorkspaceProduct::image`] (a CPU `egui::ColorImage`)
+    /// instead of a mesh / card / 2-D drawing. Asserted by
+    /// [`image_kinds_resolve_and_build_an_image_product`] (`image.is_some()` +
+    /// `mesh.is_none()`), so they are kept out of the mesh / card / 2-D arrays.
+    const IMAGE_KINDS: &[&str] = &["render"];
+
+    /// The 2-D-DRAWING workbench kinds whose builder returns a product with a
+    /// [`crate::WorkspaceProduct::kind2d`] (`Some(..)`) painted by the egui 2-D
+    /// branch — the same path `rcbeam` / `dna` use, but resolved through the
+    /// registry. Asserted by
+    /// [`drawing_2d_kinds_resolve_and_build_a_2d_drawing`] (`kind2d.is_some()` +
+    /// `mesh.is_none()` + `image.is_none()`).
+    const DRAWING_2D_KINDS: &[&str] = &["draft2d", "interior"];
 
     #[test]
     fn every_card_kind_resolves_and_builds_a_text_card() {
@@ -880,10 +923,18 @@ mod tests {
                 "{k}: a DATA-ONLY card carries no mesh"
             );
             // No 2-D drawing either — these render as the plain text card, not the
-            // egui 2-D-drawing branch (which is reserved for `rcbeam` / `dna`).
+            // egui 2-D-drawing branch (which is reserved for `rcbeam` / `dna` /
+            // `draft2d` / `interior`).
             assert!(
                 product.kind2d.is_none(),
                 "{k}: a DATA-ONLY card is a text card, not a 2-D drawing"
+            );
+            // And no raster image — a text card is text, not the IMAGE branch
+            // (which is `render`). Guards a card builder that mis-listed an
+            // image kind here.
+            assert!(
+                product.image.is_none(),
+                "{k}: a DATA-ONLY card is a text card, not an image"
             );
             assert!(!product.title.is_empty(), "{k}: product has a title");
             assert!(
@@ -894,19 +945,115 @@ mod tests {
     }
 
     #[test]
-    fn card_kinds_are_disjoint_from_mesh_kinds() {
-        // A kind is either a 3-D mesh kind or a DATA-ONLY card kind, never both —
-        // so the two test-suites' invariants (mesh-Some vs mesh-None) can't
-        // collide. (Guards against a future edit that lists a kind in both the
-        // mesh and the card arrays.)
-        for &c in CARD_KINDS {
+    fn image_kinds_resolve_and_build_an_image_product() {
+        // Each IMAGE workbench kind resolves to a registry entry whose builder
+        // yields a product carrying a non-empty raster `image` (a CPU
+        // `egui::ColorImage`) and NO mesh — so the tile takes the image branch,
+        // not the 3-D viewport / card / 2-D drawing. The image's pixel buffer
+        // is sized `w·h` Color32 entries (the `from_rgb` invariant), which we
+        // assert is non-empty and matches its declared size.
+        for &k in IMAGE_KINDS {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
+            let product = (entry.build)();
             assert!(
-                !KNOWN_3D_KINDS.contains(&c),
-                "{c} is a card kind and must not be in KNOWN_3D_KINDS"
+                product.mesh.is_none(),
+                "{k}: an image product carries no mesh"
             );
             assert!(
-                !WIRED_WORKBENCH_KINDS.contains(&c),
-                "{c} is a card kind and must not be in WIRED_WORKBENCH_KINDS"
+                product.kind2d.is_none(),
+                "{k}: an image product is not a 2-D drawing"
+            );
+            let image = product
+                .image
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: an image product carries an image"));
+            let [w, h] = image.size;
+            assert!(w > 0 && h > 0, "{k}: image has non-zero dimensions");
+            assert_eq!(
+                image.pixels.len(),
+                w * h,
+                "{k}: ColorImage pixel count equals w·h"
+            );
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+        }
+    }
+
+    #[test]
+    fn drawing_2d_kinds_resolve_and_build_a_2d_drawing() {
+        // Each 2-D-DRAWING workbench kind resolves to a registry entry whose
+        // builder yields a product with a `kind2d` (the egui 2-D branch paints
+        // it) and NO mesh / NO image — the distinguishing check is
+        // `kind2d.is_some()`, exactly what routes it to the 2-D painter rather
+        // than the 3-D viewport / image branch / text card. The drawing's view
+        // must carry geometry (a non-empty entity / room list) so the painter
+        // has something to draw.
+        for &k in DRAWING_2D_KINDS {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
+            let product = (entry.build)();
+            assert!(product.mesh.is_none(), "{k}: a 2-D drawing carries no mesh");
+            assert!(
+                product.image.is_none(),
+                "{k}: a 2-D drawing carries no image"
+            );
+            match product
+                .kind2d
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: a 2-D drawing carries a kind2d"))
+            {
+                crate::Workspace2dKind::Draft2d(view) => {
+                    assert!(!view.entities.is_empty(), "{k}: drawing has entities");
+                }
+                crate::Workspace2dKind::FloorPlan(plan) => {
+                    assert!(!plan.rooms.is_empty(), "{k}: floor plan has a room");
+                }
+                other => panic!("{k}: unexpected 2-D kind {other:?}"),
+            }
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: drawing carries readout rows"
+            );
+        }
+    }
+
+    #[test]
+    fn card_kinds_are_disjoint_from_mesh_kinds() {
+        // A kind is exactly one of: a 3-D mesh kind, a DATA-ONLY card kind, an
+        // IMAGE kind, or a 2-D-DRAWING kind — never two at once, so each
+        // test-suite's invariant (mesh-Some / mesh-None+card / image / kind2d)
+        // can't collide. (Guards against a future edit that lists a kind in two
+        // of these arrays.)
+        let mesh = |c: &str| KNOWN_3D_KINDS.contains(&c) || WIRED_WORKBENCH_KINDS.contains(&c);
+        for &c in CARD_KINDS {
+            assert!(!mesh(c), "{c} is a card kind and must not be a mesh kind");
+            assert!(
+                !IMAGE_KINDS.contains(&c),
+                "{c} is a card kind and must not be an image kind"
+            );
+            assert!(
+                !DRAWING_2D_KINDS.contains(&c),
+                "{c} is a card kind and must not be a 2-D-drawing kind"
+            );
+        }
+        for &c in IMAGE_KINDS {
+            assert!(!mesh(c), "{c} is an image kind and must not be a mesh kind");
+            assert!(
+                !DRAWING_2D_KINDS.contains(&c),
+                "{c} is an image kind and must not be a 2-D-drawing kind"
+            );
+        }
+        for &c in DRAWING_2D_KINDS {
+            assert!(
+                !mesh(c),
+                "{c} is a 2-D-drawing kind and must not be a mesh kind"
             );
         }
     }
