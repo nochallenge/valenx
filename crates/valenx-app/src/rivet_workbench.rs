@@ -446,6 +446,32 @@ fn load_joint_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"rivet"}`** product: the representative
+/// riveted lap joint (two overlapping plates pierced by a row of rivets) built
+/// from the canonical textbook joint (three 20 mm single-shear rivets joining
+/// 150×10 mm mild-steel plates), paired with the three-failure-mode strength /
+/// efficiency / safety readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`RivetWorkbenchState::default`].
+pub(crate) fn rivet_product() -> crate::WorkspaceProduct {
+    let s = RivetWorkbenchState::default();
+    let mesh = joint_solid_mesh(&s).expect("canonical rivet joint ⇒ lap-joint solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<joint>/valenx-rivet");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical rivet joint ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Riveted lap joint".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

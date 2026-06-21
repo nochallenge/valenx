@@ -425,6 +425,31 @@ fn load_screw_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"leadscrew"}`** product: the representative
+/// threaded screw shaft (root cylinder with crest rings) built from the
+/// canonical T8x8 leadscrew (8 mm lead on an 8 mm pitch diameter, μ = 0.2, 300
+/// rpm), paired with the kinematics + statics readout rows, at a fixed 3/4
+/// camera. Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`LeadscrewWorkbenchState::default`].
+pub(crate) fn leadscrew_product() -> crate::WorkspaceProduct {
+    let s = LeadscrewWorkbenchState::default();
+    let mesh = screw_solid_mesh(&s).expect("canonical leadscrew ⇒ threaded-shaft solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<screw>/valenx-leadscrew");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical leadscrew ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Lead screw (T8x8)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

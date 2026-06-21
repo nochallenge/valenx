@@ -320,6 +320,32 @@ fn load_screw_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"screwthread"}`** product: the
+/// representative power-screw shank (a solid round bar of the mean diameter)
+/// built from the canonical Shigley square-thread screw (dm = 25 mm, p = 5 mm,
+/// single start, μ = 0.08, lifting 6.5 kN), paired with the lead-angle / torque
+/// / efficiency / self-locking readout rows, at a fixed 3/4 camera. Registered
+/// in [`crate::products_registry`]; the per-tool builder the registry
+/// dispatches to. Pure — driven off [`ScrewThreadWorkbenchState::default`].
+pub(crate) fn screwthread_product() -> crate::WorkspaceProduct {
+    let s = ScrewThreadWorkbenchState::default();
+    let mesh = screw_solid_mesh(&s).expect("canonical power screw ⇒ shank solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<screw>/valenx-screwthread");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical power screw ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Power screw (square thread)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

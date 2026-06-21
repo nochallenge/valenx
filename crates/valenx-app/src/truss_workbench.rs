@@ -397,6 +397,31 @@ fn load_truss_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"truss"}`** product: the parametric Warren
+/// truss bar frame (members + joint markers) built from the canonical 4-panel
+/// truss (12 long × 2.5 high, 40 of load), paired with the statics readout rows
+/// (determinacy, reactions, peak tension / compression members), at a fixed 3/4
+/// camera. Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`TrussWorkbenchState::default`].
+pub(crate) fn truss_product() -> crate::WorkspaceProduct {
+    let s = TrussWorkbenchState::default();
+    let mesh = truss_solid_mesh(&s).expect("canonical Warren truss ⇒ bar-frame solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<truss>/valenx-truss");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical Warren truss ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Warren truss (method of joints)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -394,6 +394,32 @@ fn load_pulley_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"pulley"}`** product: the representative
+/// pulley assembly (a fixed block of sheave cylinders over a movable block)
+/// built from the canonical 4-rope block-and-tackle (1200 N load, 90 %
+/// efficiency, 2 m lift), paired with the mechanical-advantage + energy
+/// readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`PulleyWorkbenchState::default`].
+pub(crate) fn pulley_product() -> crate::WorkspaceProduct {
+    let s = PulleyWorkbenchState::default();
+    let mesh = pulley_solid_mesh(&s).expect("canonical tackle ⇒ sheave-block solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<pulley>/valenx-pulley");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical tackle ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Block & tackle (MA = 4)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

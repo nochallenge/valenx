@@ -356,6 +356,32 @@ fn load_clutch_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"clutch"}`** product: the representative
+/// friction disc (an annular plate with a centre hole) plus a thin pressure
+/// plate, built from the canonical single-plate dry clutch (100/200 mm face,
+/// μ = 0.3, N = 2, 5 kN clamp, 3000 rpm), paired with the torque-capacity /
+/// power readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`ClutchWorkbenchState::default`].
+pub(crate) fn clutch_product() -> crate::WorkspaceProduct {
+    let s = ClutchWorkbenchState::default();
+    let mesh = clutch_solid_mesh(&s).expect("canonical clutch ⇒ disc-and-plate solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<clutch>/valenx-clutch");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical clutch ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Friction clutch (torque capacity)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

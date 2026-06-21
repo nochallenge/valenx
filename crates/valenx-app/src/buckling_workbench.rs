@@ -394,6 +394,32 @@ fn load_column_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"buckling"}`** product: the representative
+/// slender column (a tall thin shaft with end-restraint plates) built from the
+/// canonical 3 m pinned-pinned A36-like steel strut (50 mm solid round bar, 200
+/// GPa, 250 MPa yield), paired with the Euler/Johnson readout rows (critical
+/// load / stress / slenderness / design stress), at a fixed 3/4 camera.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`BucklingWorkbenchState::default`].
+pub(crate) fn buckling_product() -> crate::WorkspaceProduct {
+    let s = BucklingWorkbenchState::default();
+    let mesh = column_solid_mesh(&s).expect("canonical column ⇒ slender-column solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<column>/valenx-buckling");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical column ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Column (Euler/Johnson buckling)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
