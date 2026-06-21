@@ -1441,11 +1441,26 @@ impl ValenxApp {
         pixels_per_point: f32,
     ) {
         // 1. Which workbenches are open right now, in the registry's order.
-        let open_ids: Vec<String> = DOCKABLE_PANELS
-            .iter()
-            .filter(|(id, _)| is_panel_open(self, id))
-            .map(|(id, _)| (*id).to_string())
-            .collect();
+        //
+        // A clean agent **product tab** ([`ValenxApp::dock_agent_only`], set by
+        // [`Self::set_clean_workbench_agent_dock`] for a `new_unit`-created tab)
+        // must host ONLY its own `[workspace:n | agent:n]` pair — never the
+        // flag-gated [`DOCKABLE_PANELS`] (notably the global
+        // `"valenx_assistant_panel"`, which is open by default). Forcing the
+        // open set empty here means `sync_tree` adds none of them and strips any
+        // that slipped in, while the unit's wb_agent panes (exempt from sync,
+        // see [`is_wb_agent_pane`]) stay. Normal tabs keep the real open set, so
+        // the landing tab and manually-opened Workbench+Agent grids are
+        // unchanged.
+        let open_ids: Vec<String> = if self.dock_agent_only {
+            Vec::new()
+        } else {
+            DOCKABLE_PANELS
+                .iter()
+                .filter(|(id, _)| is_panel_open(self, id))
+                .map(|(id, _)| (*id).to_string())
+                .collect()
+        };
 
         // Are there any "Workbench + Agent" tiles in the current tree? Those
         // are launcher-created and not gated on a `show_*` flag, so the region
@@ -1676,6 +1691,35 @@ impl ValenxApp {
         let tree = self.dock_tree_or_empty();
         let pair = insert_pair(tree, n);
         place_unit(tree, pair, target);
+    }
+
+    /// Make the active tab a **clean agent product tab** for unit `n`:
+    /// **replace** [`Self::dock_tree`] outright with a fresh tree holding only
+    /// the horizontal `[workspace:n | agent:n]` pair, and latch
+    /// [`Self::dock_agent_only`] so [`Self::draw_dock_layout`]'s per-frame
+    /// [`sync_tree`] never injects the flag-gated [`DOCKABLE_PANELS`] — notably
+    /// the global `"valenx_assistant_panel"` (open by default) — into it.
+    ///
+    /// This is what the `new_unit` bridge command calls right after
+    /// [`Self::add_workbench_agent_pair_at`]: that helper *appends* the pair to
+    /// whatever tree exists and the next frame's sync would otherwise add the
+    /// global Assistant pane beside the unit's own `agent:n` chat (two chat
+    /// panes in one product tab — the bug this fixes). Replacing the tree with
+    /// just the pair, plus the `dock_agent_only` latch, guarantees the product
+    /// tab shows exactly **one** chat (its `agent:n`) next to its workspace.
+    ///
+    /// Turns the dock on full-workspace (dock enabled, 3-D viewport hidden) like
+    /// the launcher, so the single pair fills the central area. Leaves
+    /// [`Self::wb_agent_counter`] untouched — the caller already bumped it to
+    /// `n` via `add_workbench_agent_pair_at`.
+    pub(crate) fn set_clean_workbench_agent_dock(&mut self, n: usize) {
+        self.dock_enabled = true;
+        self.viewport_hidden = true;
+        self.dock_agent_only = true;
+        let mut tree = egui_tiles::Tree::empty("valenx_dock_tree");
+        let pair = insert_pair(&mut tree, n);
+        tree.root = Some(pair);
+        self.dock_tree = Some(tree);
     }
 
     /// Launch **six "Workbench + Agent" units in a 3×2 grid** (3 columns ×
@@ -2212,6 +2256,59 @@ mod tests {
         assert!(panes.contains("valenx_assistant_panel"));
         assert!(panes.contains("workspace:1"));
         assert_eq!(panes.len(), 13);
+    }
+
+    #[test]
+    fn clean_agent_product_tab_dock_excludes_the_assistant_pane() {
+        // A `new_unit`-created PRODUCT tab (set up via
+        // `set_clean_workbench_agent_dock`) must host ONLY its own
+        // `[workspace:n | agent:n]` pair — the global Assistant pane
+        // (`valenx_assistant_panel`, on by DEFAULT) must NOT leak into it, even
+        // across the per-frame `sync_tree` inside `draw_dock_layout`. Contrast
+        // with `wb_agent_tiles_survive_sync_and_dock_keeps_region_alive` above,
+        // where a normal grid (dock_agent_only == false) DOES get the assistant
+        // injected — so this asserts the `dock_agent_only` gate is what keeps a
+        // product tab to a single chat pane.
+        let mut app = ValenxApp::default();
+        // The bug only bites when the assistant is open; it is by default, but
+        // pin it explicitly so the test states its own precondition.
+        app.show_assistant_panel = true;
+
+        // Mint a unit number the way the bridge does (the pair add bumps the
+        // counter), then install the clean product-tab dock for it.
+        app.add_workbench_agent_pair_at(UnitAddTarget::NewRowBottom);
+        let n = app.wb_agent_counter;
+        app.set_clean_workbench_agent_dock(n);
+        assert!(app.dock_agent_only, "product tab latches dock_agent_only");
+
+        // Run several frames so the per-frame sync has every chance to inject
+        // the assistant — it must not, for this tab.
+        let ctx = egui::Context::default();
+        for _ in 0..3 {
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                // Tests run headless (no wgpu backend): pass no render state.
+                app.draw_dock_layout(ctx, None, 1.0);
+            });
+        }
+
+        let panes = pane_ids(app.dock_tree.as_ref().expect("product tab has a dock"));
+        assert!(
+            panes.contains(&format!("workspace:{n}")),
+            "the unit's workspace pane is present"
+        );
+        assert!(
+            panes.contains(&format!("agent:{n}")),
+            "the unit's own agent chat pane is present"
+        );
+        assert!(
+            !panes.contains("valenx_assistant_panel"),
+            "the GLOBAL assistant pane must NOT leak into a clean product tab"
+        );
+        assert_eq!(
+            panes.len(),
+            2,
+            "exactly the workspace + agent pair, nothing else"
+        );
     }
 
     /// Test helper: collect all pane ids reachable from `root` (a tile id),
