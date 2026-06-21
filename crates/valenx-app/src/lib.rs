@@ -71,6 +71,7 @@ pub mod bjt_workbench;
 pub mod bmr_workbench;
 pub mod bolt_workbench;
 pub mod bonemech_workbench;
+pub mod bracket_product;
 pub mod brake_workbench;
 pub mod buckling_workbench;
 pub mod cam_overlay;

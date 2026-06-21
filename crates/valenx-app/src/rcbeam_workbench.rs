@@ -399,6 +399,112 @@ fn load_beam_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Canonical RC-beam demo for the Workbench+Agent **3-D workspace tile**:
+/// a simply-supported 6 m span carrying a 25 kN/m service load, sized with
+/// the textbook 300×550 mm section (`fc' = 30 MPa`, `fy = 420 MPa`,
+/// `As = 1500 mm²`). Builds the same concrete-prism-plus-tension-rebar solid
+/// as the workbench's central-viewport [`beam_solid_mesh`], wrapped as a
+/// fully-populated [`LoadedMesh`] (mesh + quality + aspect / skew
+/// histograms, tagged `<beam>/valenx-rcbeam`), paired with the flexural
+/// readout rows. The single source of truth for the agent-bridge RC-beam
+/// product (see [`crate::agent_commands::AgentCommand::Show3d`] `kind:"rcbeam"`).
+///
+/// Self-contained (no live workbench state) so the agent command is
+/// deterministic: every quantity comes from a freshly-built
+/// [`valenx_rcbeam::BeamSection`]. Infallible — the canonical section is
+/// known under-reinforced and constructible.
+pub(crate) fn rcbeam_loaded_mesh() -> (LoadedMesh, Vec<String>) {
+    // Canonical simply-supported span + service load and the textbook
+    // singly-reinforced section that carries it.
+    const SPAN_M: f64 = 6.0;
+    const UDL_KN_PER_M: f64 = 25.0;
+    let (b, d, fc, fy, area) = (300.0_f64, 550.0_f64, 30.0_f64, 420.0_f64, 1500.0_f64);
+    let section = BeamSection::new(b, d, fc, fy, area)
+        .expect("canonical RC section is valid (positive inputs)");
+
+    // Flexural capacity from the real solver.
+    let mn = section
+        .nominal_moment()
+        .expect("canonical section is under-reinforced ⇒ Mn evaluates");
+    let phi_mn = section
+        .design_moment_default()
+        .expect("canonical section ⇒ phi*Mn evaluates");
+    let rho = section.reinforcement_ratio();
+    let rho_b = section
+        .balanced_ratio(BETA1, STEEL_MODULUS_MPA)
+        .expect("canonical beta1/Es ⇒ rho_b evaluates");
+    let under = section
+        .is_under_reinforced(BETA1, STEEL_MODULUS_MPA)
+        .expect("canonical beta1/Es ⇒ under-reinforced check evaluates");
+
+    // Demand: simply-supported UDL midspan moment Mu = w·L²/8 (kN·m), and the
+    // utilisation against the design strength phi*Mn (kN·m).
+    let mu_knm = UDL_KN_PER_M * SPAN_M * SPAN_M / 8.0;
+    let phi_mn_knm = phi_mn / 1.0e6;
+    let utilisation = mu_knm / phi_mn_knm;
+
+    // Geometry: reuse the workbench's representative concrete-prism-with-rebar
+    // builder, driven by the same section dimensions.
+    let geom_state = RcBeamWorkbenchState {
+        width_mm: b,
+        effective_depth_mm: d,
+        fc_prime_mpa: fc,
+        fy_mpa: fy,
+        area_steel_mm2: area,
+        result: String::new(),
+        error: None,
+        show_3d_request: false,
+    };
+    let mesh = beam_solid_mesh(&geom_state).expect("canonical RC section ⇒ beam solid mesh builds");
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    let loaded = LoadedMesh {
+        path: PathBuf::from("<beam>/valenx-rcbeam"),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    };
+
+    let lines = vec![
+        format!("span / load: {SPAN_M:.0} m simply-supported, {UDL_KN_PER_M:.0} kN/m UDL"),
+        format!("section b×d: {b:.0} × {d:.0} mm  (fc' {fc:.0} MPa / fy {fy:.0} MPa)"),
+        format!("tension steel As: {area:.0} mm²"),
+        format!("nominal Mn: {:.1} kN·m", mn / 1.0e6),
+        format!("design φ·Mn: {phi_mn_knm:.1} kN·m  (φ = 0.90)"),
+        format!(
+            "ρ = {rho:.4} vs ρ_bal = {rho_b:.4}  →  {}",
+            if under {
+                "under-reinforced (ductile)"
+            } else {
+                "NOT under-reinforced"
+            }
+        ),
+        format!("demand Mu = wL²/8 = {mu_knm:.1} kN·m"),
+        format!(
+            "utilisation Mu/φMn: {:.0}%  ({})",
+            utilisation * 100.0,
+            if utilisation <= 1.0 { "OK" } else { "OVER" }
+        ),
+    ];
+    (loaded, lines)
+}
+
+/// A fixed 3/4-view [`valenx_viz::OrbitCamera`] framing the RC-beam `mesh`
+/// (same `frame_bounds` fit + hero angle as
+/// [`crate::rocket_workbench::lv1_camera`]), for the Workbench+Agent RC-beam
+/// product's per-tile 3-D view.
+pub(crate) fn rcbeam_camera(mesh: &Mesh) -> valenx_viz::OrbitCamera {
+    let mut camera = valenx_viz::OrbitCamera::default();
+    if let Some((min, max)) = crate::mesh_loader::mesh_bounding_box(mesh) {
+        camera.frame_bounds(min, max);
+    }
+    camera.azimuth_deg = 35.0;
+    camera.elevation_deg = 22.0;
+    camera
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
