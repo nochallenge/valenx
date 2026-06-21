@@ -1764,6 +1764,12 @@ impl ValenxApp {
     pub(crate) fn clear_dock(&mut self) {
         self.dock_tree = None;
         self.viewport_hidden = false;
+        // Return the tab to the neutral dock state. Without this, a "Close all"
+        // on a clean agent product tab (which latched `dock_agent_only = true`
+        // via `set_clean_workbench_agent_dock`) leaves the flag stuck on, so a
+        // subsequently-opened dockable workbench renders as a classic SidePanel
+        // instead of docking (its `sync_tree` injection stays suppressed).
+        self.dock_agent_only = false;
         for (id, _) in DOCKABLE_PANELS {
             close_panel(self, id);
         }

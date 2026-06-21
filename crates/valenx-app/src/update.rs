@@ -3535,16 +3535,16 @@ impl eframe::App for ValenxApp {
         // (one per static command + per-adapter dynamic entries + one
         // per workbench template + one per saved project), so running
         // it on every frame is wasteful. We memoise on
-        // `(registry.len(), library.projects.len(), show_non_oss_adapters)`:
+        // `(registry.len(), library.content_rev(), show_non_oss_adapters)`:
         // the registry is monotonic (adapters only ever land via
         // `register`, so a change in `len()` covers re-probes and
-        // post-startup registration); the saved-project count changes
-        // when the launcher's project list must change (the project list
-        // is keyed on `registry.len`/`show_non_oss` alone, so without it
-        // a freshly-saved project wouldn't appear until a re-probe); and
+        // post-startup registration); `content_rev()` is a fingerprint of
+        // every project's `(id, name)`, so add/remove/**rename** all flip
+        // it (the old `projects.len()` key missed a rename, which keeps the
+        // count identical, so the launcher showed the stale name); and
         // the OSS-filter is a bool. The cache invalidates automatically
-        // when any of the three changes; a Settings toggle or a new saved
-        // project reflects on the next frame.
+        // when any of the three changes; a Settings toggle, a new saved
+        // project, or a rename reflects on the next frame.
         //
         // Round-8: skip the per-frame Vec clone entirely when the
         // palette is closed (the common case). The clone runs only
@@ -3552,16 +3552,16 @@ impl eframe::App for ValenxApp {
         if self.palette.open {
             let show_non_oss = self.settings.show_non_oss_adapters;
             let registry_len = self.registry.len();
-            let projects_len = self.library.projects.len();
+            let projects_rev = self.library.content_rev();
             let cache_valid = matches!(
                 &self.palette_cache,
-                Some((len, plen, oss, _))
-                    if *len == registry_len && *plen == projects_len && *oss == show_non_oss
+                Some((len, prev, oss, _))
+                    if *len == registry_len && *prev == projects_rev && *oss == show_non_oss
             );
             if !cache_valid {
                 let built =
                     commands::build_visible_commands(&self.registry, show_non_oss, &self.library);
-                self.palette_cache = Some((registry_len, projects_len, show_non_oss, built));
+                self.palette_cache = Some((registry_len, projects_rev, show_non_oss, built));
             }
             // Take the cached Vec by clone — the dispatch step needs
             // exclusive `&mut self`, so we can't hold a borrow into

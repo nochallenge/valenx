@@ -248,7 +248,8 @@ pub enum AgentCommand {
     /// meshing gear train) — the file-driven equivalent of clicking the tile's
     /// Play/Pause button and dragging its speed slider. `play` sets the
     /// playing/paused state and `speed` sets the playback multiplier (clamped to
-    /// the toolbar's `0.0..=8.0`); either may be omitted to leave that field
+    /// the toolbar's `0.0..=4.0`, with a non-finite value falling back to `1.0`);
+    /// either may be omitted to leave that field
     /// untouched. The effective unit is `n` when given, else the command file's
     /// channel — so it works on a per-unit channel (`n` absent) and on the
     /// global channel (where an explicit `n` is required to pick a unit). A unit
@@ -851,7 +852,15 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                             a.playing = v;
                         }
                         if let Some(s) = speed {
-                            a.speed = s.clamp(0.0, 8.0);
+                            // Match the toolbar slider + `ProductAnimation::speed`
+                            // range (`0.0..=4.0`), and guard a non-finite speed:
+                            // `f32::NAN.clamp(..)` returns NaN, which would poison
+                            // `anim.t` → NaN rotation coords on the next tick.
+                            a.speed = if s.is_finite() {
+                                s.clamp(0.0, 4.0)
+                            } else {
+                                1.0
+                            };
                         }
                         let state = if a.playing { "playing" } else { "paused" };
                         crate::assistant_workbench::append_feed_note(
@@ -2349,6 +2358,45 @@ mod tests {
     }
 
     #[test]
+    fn animate_clamps_speed_to_slider_range_and_guards_non_finite() {
+        // The stored speed must match the toolbar slider + `ProductAnimation`
+        // range (`0.0..=4.0`), and a non-finite speed must not poison `anim.t`.
+        let mut app = ValenxApp::default();
+        app.workspace_products.insert(1, animated_product());
+
+        // An over-range speed (8.0) clamps to the slider's max (4.0), not 8.0.
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Animate {
+                n: Some(1),
+                play: None,
+                speed: Some(8.0),
+            },
+        );
+        assert_eq!(
+            app.workspace_products[&1].animation.as_ref().unwrap().speed,
+            4.0,
+            "speed 8.0 clamps to the 0.0..=4.0 slider max"
+        );
+
+        // A non-finite speed (NaN) falls back to a finite default (1.0) rather
+        // than storing NaN — `f32::NAN.clamp(..)` would otherwise return NaN.
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Animate {
+                n: Some(1),
+                play: None,
+                speed: Some(f32::NAN),
+            },
+        );
+        let speed = app.workspace_products[&1].animation.as_ref().unwrap().speed;
+        assert!(speed.is_finite(), "a non-finite speed must not be stored");
+        assert_eq!(speed, 1.0, "non-finite speed falls back to 1.0");
+    }
+
+    #[test]
     fn animate_on_a_pending_unit_materialises_it_then_starts_playing() {
         // LAZY-BUILD: an agent can animate a unit whose tab was never viewed.
         // `new_unit{kind:rocket}` only queued the kind (nothing in
@@ -2399,11 +2447,12 @@ mod tests {
 
     #[test]
     fn animate_clamps_speed_and_defaults_the_target_to_the_channel() {
-        // `speed` is clamped to the toolbar's 0.0..=8.0, and a missing `n`
-        // targets the command file's channel `ch` (here 1) — pausing it.
+        // `speed` is clamped to the toolbar slider + `ProductAnimation` range
+        // (`0.0..=4.0`), and a missing `n` targets the command file's channel
+        // `ch` (here 1) — pausing it.
         let mut app = ValenxApp::default();
         app.workspace_products.insert(1, animated_product());
-        // First start it, with an out-of-range speed that must clamp to 8.0.
+        // First start it, with an out-of-range speed that must clamp to 4.0.
         apply(
             &mut app,
             1,
@@ -2416,9 +2465,9 @@ mod tests {
         {
             let anim = app.workspace_products[&1].animation.as_ref().unwrap();
             assert!(anim.playing, "play:true via the channel default");
-            assert_eq!(anim.speed, 8.0, "speed clamped to the 8.0 ceiling");
+            assert_eq!(anim.speed, 4.0, "speed clamped to the 4.0 ceiling");
         }
-        // Now pause it (speed left untouched → stays 8.0).
+        // Now pause it (speed left untouched → stays 4.0).
         apply(
             &mut app,
             1,
@@ -2430,7 +2479,7 @@ mod tests {
         );
         let anim = app.workspace_products[&1].animation.as_ref().unwrap();
         assert!(!anim.playing, "play:false paused it");
-        assert_eq!(anim.speed, 8.0, "omitted speed left the value untouched");
+        assert_eq!(anim.speed, 4.0, "omitted speed left the value untouched");
     }
 
     #[test]

@@ -449,6 +449,30 @@ impl ProjectLibrary {
         self.projects.iter().find(|p| p.id == id)
     }
 
+    /// A cheap content fingerprint of the project list as the user sees it in
+    /// the command palette: a hash over every project's `(id, name)`. It
+    /// changes on add/remove/rename/clear (a rename keeps the count identical,
+    /// so the launcher's old `projects.len()` cache key missed it and showed
+    /// the stale name). The id keeps it stable across reorders that don't touch
+    /// names, and order-independent so two libraries with the same projects in
+    /// a different stored order fingerprint equal. Not persisted; recomputed on
+    /// demand — it walks ~130 short strings, far cheaper than rebuilding the
+    /// palette entries every frame.
+    pub fn content_rev(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        // XOR each project's per-field hash so the result is independent of the
+        // `projects` vec order (a reorder must not, by itself, invalidate the
+        // palette — the launcher lists names, not order).
+        let mut acc: u64 = self.projects.len() as u64;
+        for p in &self.projects {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            p.id.hash(&mut h);
+            p.name.hash(&mut h);
+            acc ^= h.finish();
+        }
+        acc
+    }
+
     /// One-past-the-max `order` among projects in `folder` (or unfiled when
     /// `None`) — the slot a freshly-added/moved project lands in.
     fn next_order_in(&self, folder: Option<&str>) -> u32 {
@@ -753,6 +777,52 @@ mod tests {
         };
         lib.reconcile();
         assert!(lib.projects[0].folder.is_none());
+    }
+
+    #[test]
+    fn content_rev_changes_on_rename_even_though_count_is_unchanged() {
+        // The launcher's old cache key was `projects.len()`, which a rename
+        // leaves untouched — so the palette showed the stale name. `content_rev`
+        // fingerprints `(id, name)`, so a rename must flip it while the count
+        // (and thus the old key) stays equal.
+        let mut lib = ProjectLibrary::default();
+        let id = lib.add_project(tab(TabKind::Rocket, "Old"), None);
+        let before_rev = lib.content_rev();
+        let before_len = lib.projects.len();
+
+        lib.rename(&id, "New");
+        assert_eq!(
+            lib.projects.len(),
+            before_len,
+            "rename must not change the project count"
+        );
+        assert_ne!(
+            lib.content_rev(),
+            before_rev,
+            "rename must change the content fingerprint"
+        );
+    }
+
+    #[test]
+    fn content_rev_is_independent_of_stored_order() {
+        // Two libraries holding the same projects in a different `projects` vec
+        // order must fingerprint equal (the launcher lists names, not order, so
+        // a reorder alone should not invalidate the palette cache).
+        let mut a = ProjectLibrary::default();
+        let p1 = a.add_project(tab(TabKind::Rocket, "A"), None);
+        let _p2 = a.add_project(tab(TabKind::Cad, "B"), None);
+
+        // Build `b` with the same two projects pushed in reverse order.
+        let mut b = ProjectLibrary::default();
+        for p in a.projects.iter().rev() {
+            b.projects.push(p.clone());
+        }
+        assert_eq!(
+            a.content_rev(),
+            b.content_rev(),
+            "fingerprint must not depend on stored order"
+        );
+        let _ = p1;
     }
 
     #[test]
