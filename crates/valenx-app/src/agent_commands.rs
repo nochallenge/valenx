@@ -82,7 +82,11 @@ const MAX_UNITS: usize = 200;
 /// Every variant is honoured through an *existing* vetted tab/dock method (see
 /// `apply`); none writes a raw [`ValenxApp`] field. Unknown command tags or
 /// bad workbench ids are skipped without panicking.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+// `Eq` is intentionally NOT derived: the `animate` command carries an
+// `Option<f32>` (`speed`), and `f32` is not `Eq`. `PartialEq` is enough for the
+// tests' `assert_eq!` round-trips, and nothing uses `AgentCommand` as a hash /
+// set key, so dropping `Eq` is free.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum AgentCommand {
     /// Open a **new project tab** named `name`. If `workbench` is a known
@@ -238,6 +242,28 @@ pub enum AgentCommand {
         /// Optional narration line posted to the new unit's chat feed.
         #[serde(default)]
         note: Option<String>,
+    },
+    /// **Drive an animated product's playback clock** on a unit whose
+    /// `workspace:<n>` product carries a [`crate::ProductAnimation`] (e.g. the
+    /// meshing gear train) — the file-driven equivalent of clicking the tile's
+    /// Play/Pause button and dragging its speed slider. `play` sets the
+    /// playing/paused state and `speed` sets the playback multiplier (clamped to
+    /// the toolbar's `0.0..=8.0`); either may be omitted to leave that field
+    /// untouched. The effective unit is `n` when given, else the command file's
+    /// channel — so it works on a per-unit channel (`n` absent) and on the
+    /// global channel (where an explicit `n` is required to pick a unit). A unit
+    /// with no animated product just gets a feed note saying so; nothing panics.
+    #[serde(rename = "animate")]
+    Animate {
+        /// Optional target unit; defaults to the command file's channel.
+        #[serde(default)]
+        n: Option<usize>,
+        /// When set, play (`true`) or pause (`false`) the product's clock.
+        #[serde(default)]
+        play: Option<bool>,
+        /// When set, the playback-speed multiplier (clamped to `0.0..=8.0`).
+        #[serde(default)]
+        speed: Option<f32>,
     },
 }
 
@@ -451,10 +477,53 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
         return;
     }
 
-    // Open the unit through the SAME path the "+ Workbench+Agent → New row at
-    // bottom" button uses; this bumps `wb_agent_counter` to the new unit `n`.
+    // Open the new unit in its OWN top-strip project tab so each agent unit
+    // lands in an isolated workspace (its own dock tree), instead of stacking
+    // another pane into whatever tab is current. Mirror the `NewTab` reducer's
+    // park → open → title → install dance EXACTLY: park the outgoing tab's scene
+    // FIRST, open a fresh Blank tab (pushes a doc + makes it active), title it,
+    // then install that empty doc so the prior tab keeps its geometry and this
+    // one starts clean. Only AFTER the install do we add the Workbench+Agent
+    // pair, which builds this (now-active, empty) tab's dock tree — so routing
+    // by the global unit `n` (cmd_u{n} / feed_u{n} / workspace_products[n]) is
+    // unchanged. (Crucially NOT the rocket-specific `ensure_lv1_3d_loaded`
+    // branch — a unit's product is rendered into its workspace tile, not the
+    // central viewport.)
+    project_tabs::park_active_doc(app);
+    app.tab_bar.open(TabKind::Blank);
+    // Resolve the new tab's title: the caller's `title`, else the product
+    // `kind` (its label), else `None` → a placeholder rewritten with the unit
+    // number once it's known below.
+    let resolved_title: Option<String> = title
+        .as_deref()
+        .or(kind.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let title_is_placeholder = resolved_title.is_none();
+    if let Some(idx) = app.tab_bar.active {
+        if let Some(tab) = app.tab_bar.tabs.get_mut(idx) {
+            tab.title = resolved_title.unwrap_or_else(|| "Workbench".to_string());
+        }
+    }
+    project_tabs::install_active_doc(app);
+
+    // Add the unit through the SAME path the "+ Workbench+Agent → New row at
+    // bottom" button uses; this bumps `wb_agent_counter` to the new unit `n` and
+    // builds the pair into this tab's (now-installed, empty) dock tree.
     app.add_workbench_agent_pair_at(crate::dock_layout::UnitAddTarget::NewRowBottom);
     let n = app.wb_agent_counter;
+
+    // If the tab title was a pure placeholder (no caller `title`, no product
+    // `kind`), rewrite it now that the unit number is known so the tab names
+    // itself rather than reading "Workbench".
+    if title_is_placeholder {
+        if let Some(idx) = app.tab_bar.active {
+            if let Some(tab) = app.tab_bar.tabs.get_mut(idx) {
+                tab.title = format!("Unit {n}");
+            }
+        }
+    }
 
     // If a product kind was named, render it into the new unit's `workspace:<n>`
     // tile by delegating to the SAME reducer paths a running agent would use:
@@ -524,10 +593,10 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
     );
 }
 
-/// Apply **one** [`AgentCommand`] for channel `n` through existing vetted
+/// Apply **one** [`AgentCommand`] for channel `ch` through existing vetted
 /// methods only. Every branch is a no-op-on-bad-input (unknown workbench id,
 /// no active tab, no title match) rather than a panic.
-fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
+fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
     match cmd {
         AgentCommand::NewTab { name, workbench } => {
             // Mirror draw_tab_strip's `open_template` intent exactly: park the
@@ -597,7 +666,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
         AgentCommand::Note { text, kind } => {
             crate::assistant_workbench::append_feed_note(
                 app,
-                n,
+                ch,
                 "Claude",
                 &text,
                 kind.as_deref().unwrap_or("ship"),
@@ -619,12 +688,12 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
         }
         AgentCommand::ShowProduct { title, lines } => {
             // Publish the finished result into THIS unit's workspace tile. The
-            // reducer already knows the channel `n` (the same one Notes post to),
+            // reducer already knows the channel `ch` (the same one Notes post to),
             // so the `workspace:<n>` pane and its paired `agent:<n>` chat agree.
             // A text card carries no mesh; the camera field is unused but must
             // be set (WorkspaceProduct is no longer Default).
             app.workspace_products.insert(
-                n,
+                ch,
                 crate::WorkspaceProduct {
                     title,
                     lines,
@@ -641,7 +710,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
         }
         AgentCommand::Show3d { n: _, kind } => {
             // Publish a LIVE 3-D model into THIS unit's workspace tile, keyed by
-            // the channel `n` the reducer already knows (the wire `n` is ignored
+            // the channel `ch` the reducer already knows (the wire `n` is ignored
             // — the bridge routes by file channel, same as every other command).
             // The `workspace:<n>` pane then renders the actual lit mesh at a
             // fixed 3/4 camera (see `dock_layout::render_workspace_body`).
@@ -655,7 +724,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
             // no placeholder churn), consistent with the reducer's other
             // bad-input handling.
             if let Some(entry) = crate::products_registry::lookup(&kind) {
-                app.workspace_products.insert(n, (entry.build)());
+                app.workspace_products.insert(ch, (entry.build)());
             } else if kind == "dna" {
                 // `dna` is NOT a registry 3-D mesh kind — it's a TEXT product
                 // (mesh: None): the codon-optimised therapeutic-peptide
@@ -665,7 +734,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                 // later); the registry is 3-D-mesh-only for now.
                 let (title, lines) = crate::dna_product::dna_construct_lines();
                 app.workspace_products.insert(
-                    n,
+                    ch,
                     crate::WorkspaceProduct {
                         title,
                         lines,
@@ -683,7 +752,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
         }
         AgentCommand::Show2d { n: _, kind } => {
             // Publish a 2-D engineering DRAWING into THIS unit's workspace tile,
-            // keyed by the channel `n` the reducer already knows (the wire `n`
+            // keyed by the channel `ch` the reducer already knows (the wire `n`
             // is ignored — the bridge routes by file channel, like every other
             // command). The `workspace:<n>` pane then paints the flat egui
             // drawing (see `dock_layout::render_workspace_body`'s 2-D branch).
@@ -694,7 +763,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                 // Canonical 300×550 RC section + rebar, with the flexural rows.
                 let (view, lines) = crate::rcbeam_workbench::rcbeam_section_view();
                 app.workspace_products.insert(
-                    n,
+                    ch,
                     crate::WorkspaceProduct {
                         title: "RC Beam — section".into(),
                         lines,
@@ -713,7 +782,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                 // the sequence / CAI / GC rows (incl. the no-biosecurity note).
                 let (map, lines) = crate::dna_product::dna_construct_map();
                 app.workspace_products.insert(
-                    n,
+                    ch,
                     crate::WorkspaceProduct {
                         title: "DNA Construct — map".into(),
                         lines,
@@ -727,6 +796,44 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         animation: None,
                     },
                 );
+            }
+        }
+        AgentCommand::Animate { n, play, speed } => {
+            // Drive the playback clock of THIS unit's animated product (the
+            // file-driven Play/Pause + speed-slider). Route by `n` when the
+            // command carries one (so it also works arriving on the global
+            // channel), else the command file's channel `n`. Same vetted state a
+            // user toolbar click would set; a missing animation is a no-op note,
+            // never a panic.
+            let target = n.unwrap_or(ch);
+            if let Some(p) = app.workspace_products.get_mut(&target) {
+                match p.animation.as_mut() {
+                    Some(a) => {
+                        if let Some(v) = play {
+                            a.playing = v;
+                        }
+                        if let Some(s) = speed {
+                            a.speed = s.clamp(0.0, 8.0);
+                        }
+                        let state = if a.playing { "playing" } else { "paused" };
+                        crate::assistant_workbench::append_feed_note(
+                            app,
+                            target,
+                            "Claude",
+                            &format!("Animation {state}"),
+                            "result",
+                        );
+                    }
+                    None => {
+                        crate::assistant_workbench::append_feed_note(
+                            app,
+                            target,
+                            "Claude",
+                            "(no animation on this product)",
+                            "warn",
+                        );
+                    }
+                }
             }
         }
         AgentCommand::NewUnit { .. } => {
@@ -1890,6 +1997,238 @@ mod tests {
             "only the newly-appended new_unit ran the 2nd time (no replay)"
         );
         assert_eq!(app.agent_global_cmd_cursor, Some(2));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Build a `WorkspaceProduct` carrying an animation that starts paused at
+    /// `1.0×`, with a simple turntable motion — the fixture the `animate` tests
+    /// drive Play/Pause + speed against.
+    fn animated_product() -> crate::WorkspaceProduct {
+        crate::WorkspaceProduct {
+            title: "Spinner".into(),
+            lines: Vec::new(),
+            mesh: None,
+            vertex_colors: None,
+            camera: valenx_viz::OrbitCamera::default(),
+            kind2d: None,
+            last_export: None,
+            image: None,
+            image_texture: None,
+            animation: Some(crate::ProductAnimation {
+                playing: false,
+                speed: 1.0,
+                t: 0.0,
+                motion: crate::ProductMotion::Turntable {
+                    axis: [0.0, 1.0, 0.0],
+                    pivot: [0.0, 0.0, 0.0],
+                    rad_per_s: 1.0,
+                },
+            }),
+        }
+    }
+
+    #[test]
+    fn animate_round_trips_its_wire_form() {
+        // The `animate` command parses from its `{"cmd":"animate",…}` wire form;
+        // `n` / `play` / `speed` are each optional.
+        let full: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"animate","n":1,"play":true,"speed":2.0}"#).unwrap();
+        assert_eq!(
+            full,
+            AgentCommand::Animate {
+                n: Some(1),
+                play: Some(true),
+                speed: Some(2.0),
+            }
+        );
+        // A bare `animate` (drive the command file's own channel, toggle
+        // nothing) parses with every field None.
+        let bare: AgentCommand = serde_json::from_str(r#"{"cmd":"animate"}"#).unwrap();
+        assert_eq!(
+            bare,
+            AgentCommand::Animate {
+                n: None,
+                play: None,
+                speed: None,
+            }
+        );
+    }
+
+    #[test]
+    fn animate_flips_playing_and_speed_on_an_animated_product() {
+        // `animate{n:1,play:true,speed:2.0}` applied to a unit whose product has
+        // an animation flips it to playing at 2.0×, through the same state a
+        // user's Play button + speed slider would set.
+        let mut app = ValenxApp::default();
+        app.workspace_products.insert(1, animated_product());
+        // Routed by the explicit `n` even though we hand `apply` a different
+        // channel, so it works arriving on the global channel too.
+        apply(
+            &mut app,
+            7,
+            AgentCommand::Animate {
+                n: Some(1),
+                play: Some(true),
+                speed: Some(2.0),
+            },
+        );
+        let anim = app.workspace_products[&1]
+            .animation
+            .as_ref()
+            .expect("the product keeps its animation");
+        assert!(anim.playing, "play:true started the clock");
+        assert_eq!(anim.speed, 2.0, "speed:2.0 was applied");
+    }
+
+    #[test]
+    fn animate_clamps_speed_and_defaults_the_target_to_the_channel() {
+        // `speed` is clamped to the toolbar's 0.0..=8.0, and a missing `n`
+        // targets the command file's channel `ch` (here 1) — pausing it.
+        let mut app = ValenxApp::default();
+        app.workspace_products.insert(1, animated_product());
+        // First start it, with an out-of-range speed that must clamp to 8.0.
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Animate {
+                n: None,
+                play: Some(true),
+                speed: Some(99.0),
+            },
+        );
+        {
+            let anim = app.workspace_products[&1].animation.as_ref().unwrap();
+            assert!(anim.playing, "play:true via the channel default");
+            assert_eq!(anim.speed, 8.0, "speed clamped to the 8.0 ceiling");
+        }
+        // Now pause it (speed left untouched → stays 8.0).
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Animate {
+                n: None,
+                play: Some(false),
+                speed: None,
+            },
+        );
+        let anim = app.workspace_products[&1].animation.as_ref().unwrap();
+        assert!(!anim.playing, "play:false paused it");
+        assert_eq!(anim.speed, 8.0, "omitted speed left the value untouched");
+    }
+
+    #[test]
+    fn animate_on_a_product_without_an_animation_is_a_safe_no_op() {
+        // A unit whose product has no animation just gets a feed note (handled
+        // inside `apply`); nothing panics and no animation appears.
+        let mut app = ValenxApp::default();
+        app.workspace_products.insert(
+            2,
+            crate::WorkspaceProduct {
+                title: "Static".into(),
+                lines: Vec::new(),
+                mesh: None,
+                vertex_colors: None,
+                camera: valenx_viz::OrbitCamera::default(),
+                kind2d: None,
+                last_export: None,
+                image: None,
+                image_texture: None,
+                animation: None,
+            },
+        );
+        apply(
+            &mut app,
+            2,
+            AgentCommand::Animate {
+                n: None,
+                play: Some(true),
+                speed: Some(2.0),
+            },
+        );
+        assert!(
+            app.workspace_products[&2].animation.is_none(),
+            "no animation was conjured onto a static product"
+        );
+        // An animate aimed at a unit with no product at all is also a no-op.
+        apply(
+            &mut app,
+            99,
+            AgentCommand::Animate {
+                n: None,
+                play: Some(true),
+                speed: None,
+            },
+        );
+        assert!(!app.workspace_products.contains_key(&99));
+    }
+
+    /// Collect the pane ids in a dock tile tree (mirrors `dock_layout`'s private
+    /// `pane_ids` test helper) so a test can assert a unit's `workspace:<n>`
+    /// pane is present.
+    fn dock_pane_ids(tree: &egui_tiles::Tree<String>) -> std::collections::HashSet<String> {
+        tree.tiles
+            .tiles()
+            .filter_map(|t| match t {
+                egui_tiles::Tile::Pane(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn global_new_unit_opens_its_own_tab_with_the_units_dock() {
+        // One-tab-per-product: a global `new_unit` parks the current tab, opens a
+        // fresh project tab, and builds the unit's `[workspace:n | agent:n]` pair
+        // into THAT tab's (now live) dock tree. Drive it end-to-end through the
+        // REAL poll path and assert the tab strip grew by one and the installed
+        // (live) dock contains the new unit's `workspace:1` pane.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "global_newunit_tab");
+        let path = global_cmd_path(&app);
+        std::fs::write(&path, "{\"cmd\":\"new_unit\",\"title\":\"Rocket bay\"}\n").unwrap();
+
+        let tabs_before = app.tab_bar.tabs.len();
+        assert_eq!(app.wb_agent_counter, 0, "no unit before the poll");
+        poll_and_apply_agent_commands(&mut app);
+
+        // Exactly one new tab, made active, titled from the command.
+        assert_eq!(
+            app.tab_bar.tabs.len(),
+            tabs_before + 1,
+            "new_unit grew the tab strip by one"
+        );
+        let active = app.tab_bar.active.expect("the new tab is active");
+        assert_eq!(app.tab_bar.tabs[active].title, "Rocket bay");
+        // The unit opened (counter bumped) and its dock is checked out into the
+        // live `dock_tree` (this tab is active), carrying its workspace pane.
+        assert_eq!(app.wb_agent_counter, 1);
+        let tree = app
+            .dock_tree
+            .as_ref()
+            .expect("the new tab's unit dock is installed live");
+        assert!(
+            dock_pane_ids(tree).contains("workspace:1"),
+            "the installed dock holds the unit's workspace:1 pane"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn global_new_unit_without_title_or_kind_names_the_tab_by_unit_number() {
+        // With neither `title` nor `kind`, the tab title is a placeholder that is
+        // rewritten to "Unit <n>" once the unit number is known.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "global_newunit_placeholder");
+        let path = global_cmd_path(&app);
+        std::fs::write(&path, "{\"cmd\":\"new_unit\"}\n").unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        let active = app.tab_bar.active.expect("the new tab is active");
+        assert_eq!(
+            app.tab_bar.tabs[active].title, "Unit 1",
+            "a placeholder tab names itself by unit number"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
