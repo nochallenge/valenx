@@ -315,6 +315,13 @@ pub struct ValenxApp {
     /// tile. Default `false` — the classic stacked right-side `SidePanel`
     /// layout is unchanged and stays the default. Distinct from
     /// [`ValenxApp::docked_layout`], which tiles the *central* viewport.
+    ///
+    /// **Per-tab.** This holds the *active* tab's value; switching tabs swaps
+    /// it (with [`Self::dock_tree`] / [`Self::viewport_hidden`] /
+    /// [`Self::viewport_collapsed`]) via
+    /// [`project_tabs::WorkspaceDoc`], so a tab carrying a "Workbench +
+    /// Agent" grid keeps it while a freshly-opened tab starts with the dock
+    /// off. A newly-opened tab installs a default document → this is `false`.
     pub dock_enabled: bool,
     /// The lazily-built [`egui_tiles`] tree backing the dockable workbench
     /// layout. `None` until the first frame [`ValenxApp::dock_enabled`] is on
@@ -322,6 +329,11 @@ pub struct ValenxApp {
     /// [`dock_layout::draw_dock_layout`] syncs it each frame — adding a tile
     /// when a workbench is opened and dropping the tile when one is closed.
     /// Panes are panel-id `String`s (e.g. `"valenx_engine_workbench"`).
+    ///
+    /// **Per-tab.** This is the *active* tab's tree; switching tabs `take`s it
+    /// into the outgoing tab's [`project_tabs::WorkspaceDoc`] and installs the
+    /// incoming tab's (each tab owns its own dock layout). A newly-opened tab
+    /// starts with `None` (a clean workspace — no other tab's agent grid).
     pub dock_tree: Option<egui_tiles::Tree<String>>,
     /// Monotonic counter for **"Workbench + Agent"** units launched into the
     /// dock (View → "New Workbench + Agent" / "Open 6 …"). Each unit is a
@@ -330,6 +342,14 @@ pub struct ValenxApp {
     /// none). See [`dock_layout`]. Unlike the [`DOCKABLE_PANELS`] tiles, these
     /// are not gated on a `show_*` flag — they persist in [`Self::dock_tree`]
     /// until the user closes them.
+    ///
+    /// **Global (deliberately not per-tab).** Although [`Self::dock_tree`] is
+    /// per-tab, this counter stays on the app so the `<n>` minted for each
+    /// unit is unique **across all tabs** — `agent:<n>` is the unit's chat
+    /// channel id (`valenx_chat_*_u<n>`), and per-tab counters would collide
+    /// two different tabs' "Agent 1" onto the same channel. So each tab's
+    /// [`Self::dock_tree`] may contain different `agent:<n>` panes, but every
+    /// `<n>` is globally distinct.
     ///
     /// [`DOCKABLE_PANELS`]: crate::dock_layout::DOCKABLE_PANELS
     pub wb_agent_counter: usize,
@@ -487,14 +507,16 @@ pub struct ValenxApp {
     /// When `true`, the central 2D/3D viewport body is hidden entirely — the
     /// central area shows a "viewport hidden" placeholder and the wgpu / 2D
     /// render is skipped. Driven by the viewport header's ✕ and its `⋯` menu,
-    /// and by View → "Hide 3D viewport". A global view preference (not
-    /// per-tab). Defaults to `false` (viewport shown). See [`update`].
+    /// and by View → "Hide 3D viewport". **Per-tab** (swapped with the dock
+    /// state via [`project_tabs::WorkspaceDoc`]); a newly-opened tab starts
+    /// `false` (viewport shown). Defaults to `false`. See [`update`].
     pub viewport_hidden: bool,
     /// When `true` (and not [`Self::viewport_hidden`]), only the central
     /// viewport's slim chrome header is drawn and its 2D/3D body is skipped —
     /// the viewport is "rolled up" to just its title + controls. Toggled by
-    /// the header's `−` (minimize) icon. A global view preference (not
-    /// per-tab). Defaults to `false` (body shown). See [`update`].
+    /// the header's `−` (minimize) icon. **Per-tab** (swapped with the dock
+    /// state via [`project_tabs::WorkspaceDoc`]); a newly-opened tab starts
+    /// `false` (body shown). Defaults to `false`. See [`update`].
     pub viewport_collapsed: bool,
     /// Receiver for background adapter-probe results (see
     /// [`valenx_core::AdapterRegistry::spawn_probe_all`]). `Some` while the
