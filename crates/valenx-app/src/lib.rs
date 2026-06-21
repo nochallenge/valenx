@@ -1606,6 +1606,12 @@ impl ValenxApp {
         if let Some(path) = initial_stl {
             app.load_stl(path);
         }
+        // Wipe any leftover agent-command files from a previous run so the
+        // agent-drives-valenx bridge starts each session with a clean slate
+        // (the cursor logic then runs every newly-appended command from line 0
+        // without replaying stale history). `app.assistant` is initialized in
+        // `Self::default()` above, so its inbox path resolves here.
+        crate::agent_commands::clear_command_files(&app);
         app
     }
 

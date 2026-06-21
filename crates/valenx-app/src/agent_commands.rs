@@ -27,13 +27,20 @@
 //!
 //! ## Replay safety
 //!
-//! [`poll_and_apply_agent_commands`] keeps a per-channel **cursor**
-//! ([`ValenxApp::agent_cmd_cursor`]) of how many lines it has already applied.
-//! On the **first** poll for a channel the cursor is set to the file's
-//! *current* line count, so a command file left over from a previous run (or
-//! the agent's own scrollback) is **not** re-executed on launch — only
-//! genuinely new appended lines run. Disk reads are throttled to ~1/sec via
-//! [`ValenxApp::last_agent_poll`].
+//! Stale command files are wiped **once at launch** by [`clear_command_files`]
+//! (called from [`ValenxApp::new`]), so no command file left over from a
+//! previous run (or the agent's own scrollback) survives into this session —
+//! the only lines a channel ever holds are genuinely new commands the agent
+//! appends *now*.
+//!
+//! Given that, [`poll_and_apply_agent_commands`] keeps a per-channel **cursor**
+//! ([`ValenxApp::agent_cmd_cursor`]) of how many lines it has already applied
+//! and, on the **first** poll for a channel, starts that cursor at **0** so
+//! every appended command runs from the very first line. This is essential for
+//! the live flow: the agent *creates* the command file by appending its
+//! commands, so the first poll that sees the file is exactly the poll that must
+//! run them — adopting the line count here would skip the agent's whole first
+//! batch. Disk reads are throttled to ~1/sec via [`ValenxApp::last_agent_poll`].
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -128,6 +135,43 @@ pub fn cmd_path(app: &ValenxApp, n: usize) -> PathBuf {
     base_dir.join(format!("{CMD_STEM}_u{n}.jsonl"))
 }
 
+/// **Wipe stale command files at launch.** Deletes every
+/// `valenx_chat_cmd_u*.jsonl` in the command-channel base directory (the parent
+/// of [`crate::assistant_workbench`]'s inbox path — the same dir [`cmd_path`]
+/// uses) so that no command file left over from a previous run is replayed this
+/// session. Best-effort: a missing dir or an un-deletable file is ignored.
+///
+/// This is what makes the "start the cursor at line 0" rule in
+/// [`poll_and_apply_agent_commands`] safe — once the leftovers are gone, the
+/// only lines a channel can contain are genuinely-new commands the agent
+/// appends during *this* run, so running them all from line 0 replays nothing.
+/// Call **once** at startup (see [`ValenxApp::new`]).
+pub fn clear_command_files(app: &ValenxApp) {
+    // Same base-dir derivation as `cmd_path` so we clean exactly the directory
+    // the bridge writes into.
+    let base_dir: PathBuf = app
+        .assistant
+        .inbox_path()
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(std::env::temp_dir);
+    let Ok(entries) = std::fs::read_dir(&base_dir) else {
+        return; // dir missing / unreadable → nothing to clean
+    };
+    let prefix = format!("{CMD_STEM}_u");
+    for entry in entries.flatten() {
+        let path = entry.path();
+        // Match files named `valenx_chat_cmd_u*.jsonl`.
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.starts_with(&prefix) && name.ends_with(".jsonl") {
+            // Best-effort delete; a still-open handle elsewhere just leaves it.
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 /// Count the newline-delimited lines in a `.jsonl` body the same way the
 /// applier iterates them — non-empty, trimmed lines — so the cursor and the
 /// apply loop always agree on "how many lines are there".
@@ -175,14 +219,14 @@ pub fn poll_and_apply_agent_commands(app: &mut ValenxApp) {
         };
         let total = line_count(&body);
 
-        // First poll for this channel: adopt the current line count as the
-        // cursor so pre-existing history is NOT replayed on launch.
+        // First poll for this channel: start at line 0 so EVERY appended command
+        // runs. In the live flow the agent creates this file by appending its
+        // commands, so the first poll that sees the file is the one that must run
+        // them — there is no stale history to skip because `clear_command_files`
+        // wiped any leftovers at launch.
         let start = match app.agent_cmd_cursor.get(&n) {
             Some(&c) => c.min(total), // clamp in case the file was truncated
-            None => {
-                app.agent_cmd_cursor.insert(n, total);
-                total
-            }
+            None => 0,
         };
         if start >= total {
             continue; // nothing new
@@ -517,56 +561,72 @@ mod tests {
         assert_eq!(line_count("  \n a \n"), 1);
     }
 
+    /// Point `app`'s command base dir at a fresh, test-private temp directory
+    /// (named by `tag`) so the command files this test reads/writes can't
+    /// collide with another test's channel-1 file or a live app. Returns the
+    /// base dir; the caller derives paths via `cmd_path`.
+    fn isolate_cmd_dir(app: &mut ValenxApp, tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "valenx_agentcmd_test_{}_{}",
+            std::process::id(),
+            tag
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        app.assistant
+            .set_inbox_path_for_test(dir.join("assistant_inbox.jsonl"));
+        dir
+    }
+
     #[test]
-    fn first_poll_adopts_line_count_so_history_is_not_replayed() {
-        // A command file that pre-exists at launch must NOT be executed: the
-        // first poll sets the cursor to the current line count, runs nothing,
-        // and only a later appended line takes effect.
+    fn first_poll_runs_all_appended_commands_from_line_zero() {
+        // The live flow: a channel's command file is *created* by the agent
+        // appending its commands, so the first poll that sees the file must run
+        // ALL of them (cursor starts at 0). Stale-history replay is prevented by
+        // `clear_command_files` at launch, not by adopting the line count here.
         let mut app = ValenxApp::default();
         app.wb_agent_counter = 1;
-        // Point the channel at a temp command file with two pre-existing cmds.
-        let dir = std::env::temp_dir();
-        let path = dir.join(format!("{CMD_STEM}_u1_replaytest.jsonl"));
-        let _ = std::fs::remove_file(&path);
+        let dir = isolate_cmd_dir(&mut app, "firstpoll");
+        let path = cmd_path(&app, 1);
+        // The agent appends two commands, creating the file.
         std::fs::write(
             &path,
-            "{\"cmd\":\"new_tab\",\"name\":\"old1\"}\n{\"cmd\":\"new_tab\",\"name\":\"old2\"}\n",
+            "{\"cmd\":\"new_tab\",\"name\":\"one\"}\n{\"cmd\":\"new_tab\",\"name\":\"two\"}\n",
         )
         .unwrap();
-        // Drive the cursor logic directly (cmd_path points elsewhere, so we
-        // exercise the same read→count→cursor sequence by hand here).
-        let body = std::fs::read_to_string(&path).unwrap();
-        let total = line_count(&body);
-        assert_eq!(total, 2);
-        // First poll: no cursor yet → adopt the count, apply nothing.
-        assert!(app.agent_cmd_cursor.get(&1).is_none());
-        let start = match app.agent_cmd_cursor.get(&1) {
-            Some(&c) => c.min(total),
-            None => {
-                app.agent_cmd_cursor.insert(1, total);
-                total
-            }
-        };
-        assert_eq!(start, 2, "first-poll cursor == current line count");
-        assert!(start >= total, "nothing new to run on first poll");
-        assert_eq!(app.tab_bar.tabs.len(), 0, "pre-existing history not run");
-        let _ = std::fs::remove_file(&path);
+
+        // First poll for the channel: no cursor yet → start at 0 → both run.
+        assert!(!app.agent_cmd_cursor.contains_key(&1));
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(
+            app.tab_bar.tabs.len(),
+            2,
+            "both freshly-appended commands ran on the first poll"
+        );
+        assert_eq!(app.tab_bar.tabs[0].title, "one");
+        assert_eq!(app.tab_bar.tabs[1].title, "two");
+        // Cursor advanced past everything just applied.
+        assert_eq!(app.agent_cmd_cursor.get(&1), Some(&2));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn poll_runs_only_newly_appended_lines() {
-        // End-to-end through poll_and_apply_agent_commands: seed a file, first
-        // poll adopts (runs nothing), append one line, second poll runs just
-        // that one. Uses the real cmd_path for channel 1.
+        // End-to-end through poll_and_apply_agent_commands: the first batch runs
+        // in full (cursor from 0), then a later append runs ONLY the new line as
+        // the cursor advances. Uses an isolated temp dir so the channel-1 file
+        // is private to this test.
         let mut app = ValenxApp::default();
         app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "onlynew");
         let path = cmd_path(&app, 1);
-        let _ = std::fs::remove_file(&path);
-        std::fs::write(&path, "{\"cmd\":\"new_tab\",\"name\":\"preexisting\"}\n").unwrap();
+        std::fs::write(&path, "{\"cmd\":\"new_tab\",\"name\":\"first\"}\n").unwrap();
 
-        // First poll: history adopted, nothing run.
+        // First poll: the freshly-created file's one command runs.
         poll_and_apply_agent_commands(&mut app);
-        assert_eq!(app.tab_bar.tabs.len(), 0, "history must not replay");
+        assert_eq!(app.tab_bar.tabs.len(), 1, "first appended command ran");
+        assert_eq!(app.tab_bar.tabs[0].title, "first");
         assert_eq!(app.agent_cmd_cursor.get(&1), Some(&1));
 
         // Append a genuinely new command, force the throttle open, poll again.
@@ -583,10 +643,49 @@ mod tests {
         app.last_agent_poll = None; // bypass the 1s throttle for the test
         poll_and_apply_agent_commands(&mut app);
 
-        assert_eq!(app.tab_bar.tabs.len(), 1, "only the new line ran");
+        assert_eq!(
+            app.tab_bar.tabs.len(),
+            2,
+            "only the new line ran the 2nd time"
+        );
         let idx = app.tab_bar.active.unwrap();
         assert_eq!(app.tab_bar.tabs[idx].title, "fresh");
         assert_eq!(app.tab_bar.tabs[idx].kind, TabKind::Cad);
-        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_command_files_removes_matching_files() {
+        // `clear_command_files` deletes every `valenx_chat_cmd_u*.jsonl` in the
+        // command-channel base dir (the inbox path's parent) and leaves other
+        // files alone. Build an app whose inbox path lives in a fresh temp dir
+        // so the scan targets a directory we control.
+        let dir =
+            std::env::temp_dir().join(format!("valenx_clear_cmd_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Two command files (different channels) + one unrelated file.
+        let cmd1 = dir.join(format!("{CMD_STEM}_u1.jsonl"));
+        let cmd2 = dir.join(format!("{CMD_STEM}_u2.jsonl"));
+        let keep = dir.join("assistant_feed.jsonl");
+        std::fs::write(&cmd1, "{\"cmd\":\"note\",\"text\":\"x\"}\n").unwrap();
+        std::fs::write(&cmd2, "{\"cmd\":\"note\",\"text\":\"y\"}\n").unwrap();
+        std::fs::write(&keep, "unrelated\n").unwrap();
+
+        // Point the app's assistant inbox at a path inside `dir` so its parent
+        // (the base dir) is exactly `dir`.
+        let mut app = ValenxApp::default();
+        app.assistant
+            .set_inbox_path_for_test(dir.join("assistant_inbox.jsonl"));
+        assert_eq!(cmd_path(&app, 1), cmd1, "test base dir wired up correctly");
+
+        clear_command_files(&app);
+
+        assert!(!cmd1.exists(), "channel-1 command file deleted");
+        assert!(!cmd2.exists(), "channel-2 command file deleted");
+        assert!(keep.exists(), "unrelated file left intact");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
