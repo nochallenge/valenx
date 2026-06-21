@@ -288,6 +288,22 @@ pub use valenx_app_core::{
     histograms, menu_ui, panel_help, solver_parse, theme, time_format, tooltips, workbench_ui,
 };
 
+/// The **finished build result** an external agent posts into a "Workbench +
+/// Agent" unit's workspace tile, so the agent's output (e.g. a sized rocket, a
+/// gear train) shows up in *this* pane instead of staying a placeholder.
+///
+/// Set per unit `n` by the [`crate::agent_commands::AgentCommand::ShowProduct`]
+/// bridge command and rendered as a result card by
+/// [`crate::dock_layout`]'s `render_workspace_body`. Pure data — a bold `title`
+/// heading over a list of plain-text `lines` (one row each). Defaults empty.
+#[derive(Debug, Clone, Default)]
+pub struct WorkspaceProduct {
+    /// Card heading (rendered bold), e.g. the product name.
+    pub title: String,
+    /// Result rows shown under the heading, one `ui.label` per entry.
+    pub lines: Vec<String>,
+}
+
 /// Root application state.
 #[derive(Default)]
 pub struct ValenxApp {
@@ -375,6 +391,14 @@ pub struct ValenxApp {
     /// chat is drawn. See [`dock_layout`] and
     /// [`crate::assistant_workbench::assistant_chat_ui`].
     pub unit_chat_inputs: std::collections::HashMap<usize, String>,
+    /// Per-unit **finished build result** for the "Workbench + Agent"
+    /// `workspace:<n>` tiles, keyed by unit number `n`. An external agent posts
+    /// one via [`crate::agent_commands::AgentCommand::ShowProduct`]; the matching
+    /// `workspace:<n>` tile then renders it as a result card (replacing the empty
+    /// "the agent's output will appear here" placeholder). Defaults empty
+    /// (derive); the same `n` the bridge uses to post Notes to `feed_u<n>`. See
+    /// [`WorkspaceProduct`] and [`crate::dock_layout`].
+    pub workspace_products: std::collections::HashMap<usize, WorkspaceProduct>,
 
     pub project: Option<LoadedProject>,
     pub project_path: Option<PathBuf>,

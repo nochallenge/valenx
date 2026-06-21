@@ -214,26 +214,48 @@ pub(crate) fn render_panel_body(app: &mut ValenxApp, ui: &mut egui::Ui, panel_id
 ///
 /// The workspace is the **agent's build-output area**, not a chat mirror: it is
 /// deliberately quiet — a small subtle `"Workspace N"` title above a clean
-/// bordered area with a faint centered hint. No chat echo, no
-/// `latest_build_status` box, and no "move whole unit" header here (that control
-/// lives on the agent half). When real per-unit build output lands later, it
-/// renders into this bordered area; for now it's an empty canvas placeholder.
-fn render_workspace_body(_app: &mut ValenxApp, ui: &mut egui::Ui, n: &str) {
+/// bordered area. Once the external agent posts a finished result for this unit
+/// (a [`crate::WorkspaceProduct`] via
+/// [`crate::agent_commands::AgentCommand::ShowProduct`], keyed by the unit
+/// number `n`), that result renders into the bordered area as a **result card**
+/// — a bold title heading over one row per line. Until then it shows a faint
+/// centered hint. No chat echo and no "move whole unit" header here (that
+/// control lives on the agent half).
+fn render_workspace_body(app: &mut ValenxApp, ui: &mut egui::Ui, n: &str) {
     ui.label(egui::RichText::new(format!("Workspace {n}")).weak());
     ui.add_space(4.0);
+    // Look up this unit's posted result by its numeric id (the same `n` the
+    // agent bridge uses). A non-numeric suffix (shouldn't happen for ids we
+    // insert) simply finds nothing → placeholder.
+    let product = n
+        .parse::<usize>()
+        .ok()
+        .and_then(|idx| app.workspace_products.get(&idx));
     egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::same(8.0))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    ui.centered_and_justified(|ui| {
-                        ui.label(
-                            egui::RichText::new("the agent's output will appear here")
-                                .weak()
-                                .italics(),
-                        );
-                    });
+                .show(ui, |ui| match product {
+                    Some(product) => {
+                        // Result card: bold title heading, then one row per line.
+                        ui.heading(&product.title);
+                        if !product.lines.is_empty() {
+                            ui.add_space(4.0);
+                            for line in &product.lines {
+                                ui.label(line);
+                            }
+                        }
+                    }
+                    None => {
+                        ui.centered_and_justified(|ui| {
+                            ui.label(
+                                egui::RichText::new("the agent's output will appear here")
+                                    .weak()
+                                    .italics(),
+                            );
+                        });
+                    }
                 });
         });
 }
