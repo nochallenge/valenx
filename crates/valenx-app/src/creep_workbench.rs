@@ -346,6 +346,27 @@ fn load_specimen_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical creep workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn creep_product() -> crate::WorkspaceProduct {
+    let s = CreepWorkbenchState::default();
+    let mesh = specimen_solid_mesh(&s).expect("canonical creep ⇒ specimen solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<creep>/valenx-specimen");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical creep ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Creep (Larson-Miller)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

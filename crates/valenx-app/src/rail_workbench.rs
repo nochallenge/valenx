@@ -394,6 +394,28 @@ fn load_train_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical rail workbench as a 3-D solid plus its
+/// analysed readout rows (this workbench formats its readout into `s.result`
+/// via [`run_train`] rather than a `compute()` string; see
+/// [`crate::products_registry`]).
+pub(crate) fn rail_product() -> crate::WorkspaceProduct {
+    let mut s = RailWorkbenchState::default();
+    let mesh = train_solid_mesh(&s).expect("canonical rail ⇒ train solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<rail>/valenx-train");
+    run_train(&mut s);
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Rail vehicle (Davis resistance)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

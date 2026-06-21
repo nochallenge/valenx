@@ -318,6 +318,27 @@ fn load_wall_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical retainingwall workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn retainingwall_product() -> crate::WorkspaceProduct {
+    let s = RetainingWallWorkbenchState::default();
+    let mesh = wall_solid_mesh(&s).expect("canonical retainingwall ⇒ stem-and-base solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<retainingwall>/valenx-wall");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical retainingwall ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Retaining wall (overturning/sliding)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

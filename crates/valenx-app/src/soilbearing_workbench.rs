@@ -340,6 +340,27 @@ fn load_footing_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical soilbearing workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn soilbearing_product() -> crate::WorkspaceProduct {
+    let s = SoilBearingWorkbenchState::default();
+    let mesh = footing_solid_mesh(&s).expect("canonical soilbearing ⇒ footing solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<soilbearing>/valenx-footing");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical soilbearing ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Footing (Terzaghi bearing capacity)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
