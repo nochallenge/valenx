@@ -281,17 +281,24 @@ fn render_workspace_body(
         {
             let tile_key = format!("workspace:{n}");
             // Scope the mesh borrow to the render call only; it yields owned
-            // values (`Response`, AABB) that outlive the borrow.
-            let drawn = match app.workspace_products.get(&i).and_then(|p| p.mesh.as_ref()) {
-                Some(mesh) => render_tile_mesh_3d(
-                    ui,
-                    &tile_key,
-                    mesh,
-                    &camera,
-                    renderer,
-                    rs,
-                    pixels_per_point,
-                ),
+            // values (`Response`, AABB) that outlive the borrow. The product's
+            // optional per-vertex colours (the FEM von-Mises ramp) are read
+            // through the same short borrow and forwarded; `None` for plain
+            // meshes keeps the neutral metal look.
+            let drawn = match app.workspace_products.get(&i) {
+                Some(product) => match product.mesh.as_ref() {
+                    Some(mesh) => render_tile_mesh_3d(
+                        ui,
+                        &tile_key,
+                        mesh,
+                        product.vertex_colors.as_deref(),
+                        &camera,
+                        renderer,
+                        rs,
+                        pixels_per_point,
+                    ),
+                    None => None,
+                },
                 None => None,
             };
             if let Some((response, aabb)) = drawn {
@@ -377,10 +384,12 @@ type MeshAabb = ([f32; 3], [f32; 3]);
 /// AABB is the mesh's bounds for double-click-to-frame — or `None` if the rect
 /// was degenerate or the GPU returned no texture (caller falls back to the
 /// text card).
+#[allow(clippy::too_many_arguments)]
 fn render_tile_mesh_3d(
     ui: &mut egui::Ui,
     tile_key: &str,
     mesh: &crate::types::LoadedMesh,
+    vertex_colors: Option<&[[f32; 3]]>,
     camera: &valenx_viz::OrbitCamera,
     renderer: &mut crate::wgpu_renderer::WgpuRenderer,
     render_state: &egui_wgpu::RenderState,
@@ -389,7 +398,18 @@ fn render_tile_mesh_3d(
     // Build the shaded surface for the mesh's surface elements (Tri3 / Quad4).
     // A volumetric-only mesh yields nothing → fall back to the card.
     let surface = crate::viewport::mesh_to_triangle_surface(&mesh.mesh)?;
-    let vertices = crate::wgpu_renderer::triangles_to_vertices(&surface);
+    // Per-vertex-coloured path only when a colour was supplied AND it covers
+    // every surface vertex the renderer will emit (3 per triangle); otherwise
+    // the plain metal path (byte-identical to the central viewport). The length
+    // guard means a mismatched colour vec never produces a half-coloured mesh —
+    // it cleanly falls back to grey.
+    let expected_len = surface.triangles.len() * 3;
+    let vertices = match vertex_colors {
+        Some(colors) if colors.len() == expected_len => {
+            crate::wgpu_renderer::triangles_to_vertices_colored(&surface, colors)
+        }
+        _ => crate::wgpu_renderer::triangles_to_vertices(&surface),
+    };
     if vertices.is_empty() {
         return None;
     }

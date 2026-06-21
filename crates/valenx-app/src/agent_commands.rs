@@ -396,6 +396,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     title,
                     lines,
                     mesh: None,
+                    vertex_colors: None,
                     camera: valenx_viz::OrbitCamera::default(),
                 },
             );
@@ -421,6 +422,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         title: "Rocket".into(),
                         lines: vec![],
                         mesh: Some(mesh),
+                        vertex_colors: None,
                         camera,
                     },
                 );
@@ -433,6 +435,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         title: "2-stage spur reducer".into(),
                         lines,
                         mesh: Some(mesh),
+                        vertex_colors: None,
                         camera,
                     },
                 );
@@ -445,6 +448,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         title: "L-bracket".into(),
                         lines,
                         mesh: Some(mesh),
+                        vertex_colors: None,
                         camera,
                     },
                 );
@@ -457,15 +461,16 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         title: "RC beam (6 m, 25 kN/m)".into(),
                         lines,
                         mesh: Some(mesh),
+                        vertex_colors: None,
                         camera,
                     },
                 );
             } else if kind == "fem" {
                 // Steel cantilever (1 m, 50×100 mm, 5 kN tip): the real
-                // `valenx-fem` linear-static solve, shown as the GREY deformed
-                // boundary skin (per-vertex stress colour is a deferred renderer
-                // change) plus the FE-vs-analytical readout rows.
-                let (mesh, lines) = crate::fem_workbench::fem_beam_loaded_mesh();
+                // `valenx-fem` linear-static solve, shown as the deformed
+                // boundary skin coloured by per-vertex von-Mises stress
+                // (blue→red) plus the FE-vs-analytical readout rows.
+                let (mesh, vertex_colors, lines) = crate::fem_workbench::fem_beam_loaded_mesh();
                 let camera = crate::fem_workbench::fem_beam_camera(&mesh.mesh);
                 app.workspace_products.insert(
                     n,
@@ -473,6 +478,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         title: "FEM cantilever (steel, 5 kN tip)".into(),
                         lines,
                         mesh: Some(mesh),
+                        vertex_colors: Some(vertex_colors),
                         camera,
                     },
                 );
@@ -488,6 +494,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         title,
                         lines,
                         mesh: None,
+                        vertex_colors: None,
                         camera: valenx_viz::OrbitCamera::default(),
                     },
                 );

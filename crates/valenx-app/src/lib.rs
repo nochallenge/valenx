@@ -322,6 +322,18 @@ pub struct WorkspaceProduct {
     /// command (e.g. the LV-1 rocket via
     /// [`crate::rocket_workbench::lv1_loaded_mesh`]).
     pub mesh: Option<LoadedMesh>,
+    /// Optional per-vertex base colours for [`Self::mesh`], one `[r, g, b]`
+    /// in `[0, 1]` per surface vertex of the mesh's renderable triangle skin
+    /// (the order [`crate::wgpu_renderer::triangles_to_vertices`] emits:
+    /// triangle-major, then the three vertices of each triangle). `None` for
+    /// plain meshes (rocket / gear / bracket / rcbeam) — those render in the
+    /// neutral brushed-metal colour. The FEM cantilever product sets this to a
+    /// von-Mises stress colormap so the deformed shape reads as a stress map
+    /// rather than flat grey. When the length matches the mesh's surface vertex
+    /// count the tile renders with [`crate::wgpu_renderer::triangles_to_vertices_colored`];
+    /// otherwise it falls back to the plain metal path. Ignored when
+    /// [`Self::mesh`] is `None`.
+    pub vertex_colors: Option<Vec<[f32; 3]>>,
     /// Fixed camera the 3-D view is rendered from (a pleasant 3/4 angle for
     /// Stage 1 — per-tile orbit is a later stage). Ignored when
     /// [`Self::mesh`] is `None`.
