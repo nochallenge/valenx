@@ -762,6 +762,19 @@ pub struct ValenxApp {
     /// [`WorkspaceProduct`] and [`crate::dock_layout`].
     pub workspace_products: std::collections::HashMap<usize, WorkspaceProduct>,
 
+    /// **Lazy-build queue** for `new_unit`: unit number `n` → the product `kind`
+    /// string its tab should render, deferred until that `workspace:<n>` pane is
+    /// first viewed (or the unit is animated). `new_unit` inserts here and opens
+    /// the tab INSTANTLY instead of building the 3-D product up front, so an
+    /// agent fleet can open 130+ tabs in a burst without building every product
+    /// at once (which briefly hung the app). The deferred build runs in
+    /// `agent_commands::materialize_pending` (crate-private), called from
+    /// `render_workspace_body` (first render of the pane) and the `animate`
+    /// reducer; it moves the entry into [`Self::workspace_products`] and removes
+    /// it here. Defaults empty (derive). A `kind`-less `new_unit` inserts
+    /// nothing, so there is nothing to materialize.
+    pub pending_products: std::collections::HashMap<usize, String>,
+
     pub project: Option<LoadedProject>,
     pub project_path: Option<PathBuf>,
     /// RBAC override block parsed from the loaded project's
