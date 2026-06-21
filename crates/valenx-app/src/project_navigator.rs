@@ -67,6 +67,10 @@ pub struct NavigatorState {
     pub new_folder_prompt: Option<NewFolderTarget>,
     /// Scratch buffer for the "New folder" name prompt.
     pub new_folder_buf: String,
+    /// `true` while the "Delete all projects and folders?" confirmation modal
+    /// is open (the destructive whole-library wipe). Cleared on Cancel, or on
+    /// confirm right after [`ProjectLibrary::clear_all`] runs.
+    pub clear_all_prompt: bool,
 }
 
 /// What a freshly-created folder should do once the user names it in the
@@ -104,6 +108,11 @@ pub struct NavIntent {
     pub reorder: Option<(String, bool)>,
     /// Open the "New folder" name prompt for the given purpose.
     pub open_new_folder_prompt: Option<NewFolderTarget>,
+    /// Open the "Clear all projects" confirmation modal (the destructive
+    /// batch-delete of the whole library).
+    pub open_clear_all_prompt: bool,
+    /// Confirmed: clear the entire library (all projects + folders).
+    pub clear_all: bool,
     /// Begin an inline rename of the folder with this id.
     pub begin_folder_rename: Option<String>,
     /// Commit an inline folder rename: (folder id, new name).
@@ -126,6 +135,8 @@ impl NavIntent {
             && self.move_to_folder.is_none()
             && self.reorder.is_none()
             && self.open_new_folder_prompt.is_none()
+            && !self.open_clear_all_prompt
+            && !self.clear_all
             && self.begin_folder_rename.is_none()
             && self.commit_folder_rename.is_none()
             && self.delete_folder.is_none()
@@ -154,6 +165,30 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 }
             });
 
+            // Pinned management buttons (kept ABOVE the scrolling tree, next to
+            // the Projects header + search box): create a folder, or wipe the
+            // whole library. Plain-ASCII, uniquely-named so the accessibility
+            // tree exposes each by Name. "Clear all projects" opens a confirm
+            // modal (it is a destructive, can't-be-undone batch delete) and is
+            // disabled when the library is already empty.
+            ui.horizontal(|ui| {
+                if ui
+                    .small_button("+ New folder…")
+                    .on_hover_text("Create a folder to organise projects")
+                    .clicked()
+                {
+                    intent.open_new_folder_prompt = Some(NewFolderTarget::Create);
+                }
+                let any = !app.library.projects.is_empty() || !app.library.folders.is_empty();
+                if ui
+                    .add_enabled(any, egui::Button::new("Clear all projects").small())
+                    .on_hover_text("Delete every saved project and folder (cannot be undone)")
+                    .clicked()
+                {
+                    intent.open_clear_all_prompt = true;
+                }
+            });
+
             if app.library.projects.is_empty() {
                 ui.add_space(2.0);
                 ui.label(
@@ -174,146 +209,28 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             let renaming = app.nav_state.renaming.clone();
             let renaming_folder = app.nav_state.renaming_folder.clone();
 
-            // ── ★ Pinned ──────────────────────────────────────────────────
-            let pinned: Vec<_> = lib
-                .pinned()
-                .into_iter()
-                .filter(|p| matches(&p.name))
-                .collect();
-            if !pinned.is_empty() {
-                egui::CollapsingHeader::new(format!("\u{2605} Pinned ({})", pinned.len()))
-                    .default_open(true)
-                    .id_source("nav_pinned")
-                    .show(ui, |ui| {
-                        for p in &pinned {
-                            project_row(
-                                ui,
-                                p,
-                                lib,
-                                renaming.as_deref(),
-                                &mut app.nav_state.rename_buf,
-                                &mut intent,
-                            );
-                        }
-                    });
-            }
-
-            // ── 🕘 Recent ─────────────────────────────────────────────────
-            let recent: Vec<_> = lib
-                .recent(RECENT_LEN)
-                .into_iter()
-                .filter(|p| matches(&p.name))
-                .collect();
-            if !recent.is_empty() {
-                egui::CollapsingHeader::new(format!("\u{1F558} Recent ({})", recent.len()))
-                    .default_open(true)
-                    .id_source("nav_recent")
-                    .show(ui, |ui| {
-                        for p in &recent {
-                            project_row(
-                                ui,
-                                p,
-                                lib,
-                                renaming.as_deref(),
-                                &mut app.nav_state.rename_buf,
-                                &mut intent,
-                            );
-                        }
-                    });
-            }
-
-            // ── 📁 All (folders + unfiled) ────────────────────────────────
-            egui::CollapsingHeader::new("\u{1F4C1} All")
-                .default_open(true)
-                .id_source("nav_all")
+            // Only the PROJECT TREE (the ★ Pinned / 🕘 Recent / 📁 All
+            // sections) scrolls vertically — the Projects header, search box,
+            // and the pinned management buttons above stay fixed. With 130+
+            // projects the tree would otherwise overrun the Browser panel.
+            // `auto_shrink([false, false])` lets the scroll area claim the full
+            // remaining panel height/width so the inner CollapsingHeaders keep
+            // their normal layout and the overflow scrolls instead of clipping.
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    // A "New folder…" entry at the top of All.
-                    if ui
-                        .small_button("+ New folder…")
-                        .on_hover_text("Create a folder to organise projects")
-                        .clicked()
-                    {
-                        intent.open_new_folder_prompt = Some(NewFolderTarget::Create);
-                    }
-
-                    for folder in lib.sorted_folders() {
-                        let children: Vec<_> = lib
-                            .projects_in(Some(&folder.id))
-                            .into_iter()
-                            .filter(|p| matches(&p.name))
-                            .collect();
-                        // While searching, hide folders with no matching child
-                        // so the tree collapses to just the hits.
-                        if children.is_empty() && !query.is_empty() {
-                            continue;
-                        }
-                        // Inline folder-rename editor takes over the header row.
-                        if renaming_folder.as_deref() == Some(folder.id.as_str()) {
-                            let resp = ui.add(
-                                egui::TextEdit::singleline(&mut app.nav_state.folder_rename_buf)
-                                    .desired_width(150.0)
-                                    .id_source(("nav_folder_rename", &folder.id)),
-                            );
-                            resp.request_focus();
-                            if resp.lost_focus() {
-                                intent.commit_folder_rename = Some((
-                                    folder.id.clone(),
-                                    app.nav_state.folder_rename_buf.clone(),
-                                ));
-                            }
-                            continue;
-                        }
-                        let header = egui::CollapsingHeader::new(format!(
-                            "{} ({})",
-                            folder.name,
-                            children.len()
-                        ))
-                        .id_source(("nav_folder", &folder.id))
-                        .default_open(query.is_empty().not_default(children.len()));
-                        let resp = header.show(ui, |ui| {
-                            for p in &children {
-                                project_row(
-                                    ui,
-                                    p,
-                                    lib,
-                                    renaming.as_deref(),
-                                    &mut app.nav_state.rename_buf,
-                                    &mut intent,
-                                );
-                            }
-                            if children.is_empty() {
-                                ui.label(egui::RichText::new("(empty)").weak().small());
-                            }
-                        });
-                        // Right-click the folder header → folder actions.
-                        resp.header_response.context_menu(|ui| {
-                            if ui.button("Rename folder").clicked() {
-                                intent.begin_folder_rename = Some(folder.id.clone());
-                                ui.close_menu();
-                            }
-                            if ui
-                                .button("Delete folder")
-                                .on_hover_text("Projects inside move to (unfiled)")
-                                .clicked()
-                            {
-                                intent.delete_folder = Some(folder.id.clone());
-                                ui.close_menu();
-                            }
-                        });
-                    }
-
-                    // Unfiled group (only shown if it has matching projects).
-                    let unfiled: Vec<_> = lib
-                        .projects_in(None)
+                    // ── ★ Pinned ──────────────────────────────────────────────────
+                    let pinned: Vec<_> = lib
+                        .pinned()
                         .into_iter()
                         .filter(|p| matches(&p.name))
                         .collect();
-                    if !unfiled.is_empty() {
-                        egui::CollapsingHeader::new(format!("(unfiled) ({})", unfiled.len()))
-                            .id_source("nav_unfiled")
+                    if !pinned.is_empty() {
+                        egui::CollapsingHeader::new(format!("\u{2605} Pinned ({})", pinned.len()))
                             .default_open(true)
+                            .id_source("nav_pinned")
                             .show(ui, |ui| {
-                                for p in &unfiled {
+                                for p in &pinned {
                                     project_row(
                                         ui,
                                         p,
@@ -325,7 +242,134 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                                 }
                             });
                     }
-                });
+
+                    // ── 🕘 Recent ─────────────────────────────────────────────────
+                    let recent: Vec<_> = lib
+                        .recent(RECENT_LEN)
+                        .into_iter()
+                        .filter(|p| matches(&p.name))
+                        .collect();
+                    if !recent.is_empty() {
+                        egui::CollapsingHeader::new(format!("\u{1F558} Recent ({})", recent.len()))
+                            .default_open(true)
+                            .id_source("nav_recent")
+                            .show(ui, |ui| {
+                                for p in &recent {
+                                    project_row(
+                                        ui,
+                                        p,
+                                        lib,
+                                        renaming.as_deref(),
+                                        &mut app.nav_state.rename_buf,
+                                        &mut intent,
+                                    );
+                                }
+                            });
+                    }
+
+                    // ── 📁 All (folders + unfiled) ────────────────────────────────
+                    egui::CollapsingHeader::new("\u{1F4C1} All")
+                        .default_open(true)
+                        .id_source("nav_all")
+                        .show(ui, |ui| {
+                            // (The "+ New folder…" affordance now lives in the pinned
+                            // management row above the scrolling tree.)
+                            for folder in lib.sorted_folders() {
+                                let children: Vec<_> = lib
+                                    .projects_in(Some(&folder.id))
+                                    .into_iter()
+                                    .filter(|p| matches(&p.name))
+                                    .collect();
+                                // While searching, hide folders with no matching child
+                                // so the tree collapses to just the hits.
+                                if children.is_empty() && !query.is_empty() {
+                                    continue;
+                                }
+                                // Inline folder-rename editor takes over the header row.
+                                if renaming_folder.as_deref() == Some(folder.id.as_str()) {
+                                    let resp = ui.add(
+                                        egui::TextEdit::singleline(
+                                            &mut app.nav_state.folder_rename_buf,
+                                        )
+                                        .desired_width(150.0)
+                                        .id_source(("nav_folder_rename", &folder.id)),
+                                    );
+                                    resp.request_focus();
+                                    if resp.lost_focus() {
+                                        intent.commit_folder_rename = Some((
+                                            folder.id.clone(),
+                                            app.nav_state.folder_rename_buf.clone(),
+                                        ));
+                                    }
+                                    continue;
+                                }
+                                let header = egui::CollapsingHeader::new(format!(
+                                    "{} ({})",
+                                    folder.name,
+                                    children.len()
+                                ))
+                                .id_source(("nav_folder", &folder.id))
+                                .default_open(query.is_empty().not_default(children.len()));
+                                let resp = header.show(ui, |ui| {
+                                    for p in &children {
+                                        project_row(
+                                            ui,
+                                            p,
+                                            lib,
+                                            renaming.as_deref(),
+                                            &mut app.nav_state.rename_buf,
+                                            &mut intent,
+                                        );
+                                    }
+                                    if children.is_empty() {
+                                        ui.label(egui::RichText::new("(empty)").weak().small());
+                                    }
+                                });
+                                // Right-click the folder header → folder actions.
+                                resp.header_response.context_menu(|ui| {
+                                    if ui.button("Rename folder").clicked() {
+                                        intent.begin_folder_rename = Some(folder.id.clone());
+                                        ui.close_menu();
+                                    }
+                                    if ui
+                                        .button("Delete folder")
+                                        .on_hover_text("Projects inside move to (unfiled)")
+                                        .clicked()
+                                    {
+                                        intent.delete_folder = Some(folder.id.clone());
+                                        ui.close_menu();
+                                    }
+                                });
+                            }
+
+                            // Unfiled group (only shown if it has matching projects).
+                            let unfiled: Vec<_> = lib
+                                .projects_in(None)
+                                .into_iter()
+                                .filter(|p| matches(&p.name))
+                                .collect();
+                            if !unfiled.is_empty() {
+                                egui::CollapsingHeader::new(format!(
+                                    "(unfiled) ({})",
+                                    unfiled.len()
+                                ))
+                                .id_source("nav_unfiled")
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    for p in &unfiled {
+                                        project_row(
+                                            ui,
+                                            p,
+                                            lib,
+                                            renaming.as_deref(),
+                                            &mut app.nav_state.rename_buf,
+                                            &mut intent,
+                                        );
+                                    }
+                                });
+                            }
+                        }); // 📁 All CollapsingHeader
+                }); // ScrollArea::vertical (the scrolling project tree)
         });
 
     // Apply this frame's actions after the read borrow ends, and persist
@@ -336,6 +380,8 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
 
     // The "New folder" name prompt modal (mirrors `draw_close_confirm`).
     draw_new_folder_prompt(app, ui.ctx());
+    // The "Clear all projects" destructive-confirm modal.
+    draw_clear_all_confirm(app, ui.ctx());
 }
 
 /// Number of entries shown in the 🕘 Recent section.
@@ -546,6 +592,20 @@ fn apply_nav_intent(app: &mut crate::ValenxApp, intent: NavIntent) {
         app.nav_state.new_folder_prompt = Some(target);
         app.nav_state.new_folder_buf.clear();
     }
+    if intent.open_clear_all_prompt {
+        app.nav_state.clear_all_prompt = true;
+    }
+    if intent.clear_all {
+        // Confirmed whole-library wipe: drop every project + folder, then
+        // persist the now-empty catalogue. Also clear any in-progress inline
+        // rename editors, since their target rows no longer exist.
+        app.library.clear_all();
+        app.nav_state.renaming = None;
+        app.nav_state.rename_buf.clear();
+        app.nav_state.renaming_folder = None;
+        app.nav_state.folder_rename_buf.clear();
+        dirty = true;
+    }
     if let Some(id) = intent.begin_folder_rename {
         if let Some(f) = app.library.folders.iter().find(|f| f.id == id) {
             app.nav_state.folder_rename_buf = f.name.clone();
@@ -654,6 +714,61 @@ fn draw_new_folder_prompt(app: &mut crate::ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// Render the **"Delete all projects and folders?"** confirmation modal while
+/// [`NavigatorState::clear_all_prompt`] is `true`. Mirrors
+/// [`draw_new_folder_prompt`]: an anchored, non-collapsible window. Clearing
+/// the library is a destructive, can't-be-undone batch delete, so it is gated
+/// behind this explicit confirm. [Cancel] clears the pending flag; [Delete
+/// all] routes a [`NavIntent::clear_all`] through [`apply_nav_intent`] (which
+/// runs [`ProjectLibrary::clear_all`] + persists). The confirm button is named
+/// distinctly from the toolbar's "Clear all projects" so the accessibility
+/// tree never shows two same-named controls.
+fn draw_clear_all_confirm(app: &mut crate::ValenxApp, ctx: &egui::Context) {
+    if !app.nav_state.clear_all_prompt {
+        return;
+    }
+    let n_projects = app.library.projects.len();
+    let n_folders = app.library.folders.len();
+
+    let mut do_clear = false;
+    let mut do_cancel = false;
+    egui::Window::new("Clear all projects?")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            ui.label(format!(
+                "Delete all {n_projects} projects and {n_folders} folders? This cannot be undone."
+            ));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    do_cancel = true;
+                }
+                // Red-ish destructive action, uniquely named.
+                let del = egui::Button::new(
+                    egui::RichText::new("Delete all").color(egui::Color32::from_rgb(220, 80, 80)),
+                );
+                if ui.add(del).clicked() {
+                    do_clear = true;
+                }
+            });
+        });
+
+    if do_cancel {
+        app.nav_state.clear_all_prompt = false;
+    } else if do_clear {
+        apply_nav_intent(
+            app,
+            NavIntent {
+                clear_all: true,
+                ..Default::default()
+            },
+        );
+        app.nav_state.clear_all_prompt = false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -692,6 +807,9 @@ mod tests {
         }
         if let Some((id, up)) = &intent.reorder {
             lib.reorder(id, *up);
+        }
+        if intent.clear_all {
+            lib.clear_all();
         }
     }
 
@@ -773,6 +891,38 @@ mod tests {
             .collect();
         assert_eq!(names, vec!["B", "A"]);
         let _ = a;
+    }
+
+    #[test]
+    fn nav_intent_clear_all_is_not_empty_and_empties_library() {
+        // The clear-all and open-prompt intents must register as "not empty"
+        // so `draw_navigator` actually runs the apply (and persists).
+        assert!(!NavIntent {
+            clear_all: true,
+            ..Default::default()
+        }
+        .is_empty());
+        assert!(!NavIntent {
+            open_clear_all_prompt: true,
+            ..Default::default()
+        }
+        .is_empty());
+
+        // Routing a `clear_all` intent through the library-side apply wipes
+        // every project + folder.
+        let mut lib = ProjectLibrary::default();
+        let f = lib.add_folder("Group");
+        let _a = lib.add_project(tab(TabKind::Rocket, "A"), Some(f));
+        let _b = lib.add_project(tab(TabKind::Cad, "B"), None);
+        apply_to_library(
+            &mut lib,
+            &NavIntent {
+                clear_all: true,
+                ..Default::default()
+            },
+        );
+        assert!(lib.projects.is_empty());
+        assert!(lib.folders.is_empty());
     }
 
     #[test]

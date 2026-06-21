@@ -606,6 +606,21 @@ impl TabBar {
         };
     }
 
+    /// Close **every** tab at once: clears [`Self::tabs`] and the
+    /// index-aligned [`Self::docs`], drops all [`Self::groups`], and resets
+    /// [`Self::active`] to `None` (the empty-strip landing state). Leaves
+    /// [`Self::blank_counter`] alone so a subsequent blank tab still gets a
+    /// fresh "Untitled N". The live workspace document is reconciled by the
+    /// caller (see the `close_all_tabs` branch of `apply_intent`, which runs
+    /// `install_active_doc` to clear the live scene). Preserves the
+    /// `docs.len() == tabs.len()` invariant (both end empty).
+    pub fn close_all(&mut self) {
+        self.tabs.clear();
+        self.docs.clear();
+        self.groups.clear();
+        self.active = None;
+    }
+
     /// The active tab's kind, if any.
     pub fn active_kind(&self) -> Option<TabKind> {
         self.active.and_then(|i| self.tabs.get(i)).map(|t| t.kind)
@@ -1109,6 +1124,14 @@ struct StripIntent {
     /// confirmation modal rather than closing immediately. The real close
     /// only happens once the user confirms (see [`perform_close`]).
     request_close: Option<usize>,
+    /// **Request** to close every tab — opens the "Close all N tabs?" confirm
+    /// modal (the toolbar "Close all tabs" button), rather than closing
+    /// immediately. Sets [`ValenxApp::tab_close_all_confirm`] in `apply_intent`.
+    request_close_all: bool,
+    /// Close **all** tabs at once. Fired only after the user confirms the
+    /// "Close all N tabs?" modal; routed to [`TabBar::close_all`] +
+    /// [`install_active_doc`] in `apply_intent`.
+    close_all_tabs: bool,
     open_template: Option<TabKind>,
     open_blank: bool,
     save_tab: Option<usize>,
@@ -1320,6 +1343,22 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                 }
             }
 
+            // Batch "Close all tabs" — clears the whole strip in one click
+            // (after a confirm). Disabled when there are no tabs. Plain-ASCII,
+            // uniquely-named button so the accessibility tree exposes it by
+            // Name; opens the "Close all N tabs?" confirm modal rather than
+            // closing immediately (it discards every unsaved tab document).
+            if ui
+                .add_enabled(
+                    !app.tab_bar.tabs.is_empty(),
+                    egui::Button::new("Close all tabs"),
+                )
+                .on_hover_text("Close every open tab (unsaved tabs are discarded)")
+                .clicked()
+            {
+                intent.request_close_all = true;
+            }
+
             ui.separator();
 
             if app.tab_bar.tabs.is_empty() {
@@ -1327,162 +1366,181 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.label(egui::RichText::new("New tab to begin").weak().small());
             }
 
-            let active = app.tab_bar.active;
+            // The tab row scrolls HORIZONTALLY in a single row (rather than
+            // wrapping to extra rows at ~100 tabs, which ate vertical space).
+            // Only the per-tab loop + its group headers live inside this
+            // scroll area; the toolbar buttons above stay outside it (always
+            // visible). `auto_shrink([false, false])` lets it claim the full
+            // remaining width so the tabs fill the strip and overflow scrolls.
+            egui::ScrollArea::horizontal()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let active = app.tab_bar.active;
 
-            // Snapshot the group display attributes (id → name/color/collapsed)
-            // and the existing-group list for the "Add to group" submenu. Both
-            // are cheap clones taken before the per-tab loop so the loop can
-            // read group state without re-borrowing `app.tab_bar.groups` while
-            // it indexes `app.tab_bar.tabs[i]`; every change is deferred via
-            // `intent`.
-            let group_list: Vec<(String, String)> = app
-                .tab_bar
-                .groups
-                .iter()
-                .map(|g| (g.id.clone(), g.name.clone()))
-                .collect();
-            let group_attrs: std::collections::HashMap<String, TabGroup> = app
-                .tab_bar
-                .groups
-                .iter()
-                .map(|g| (g.id.clone(), g.clone()))
-                .collect();
+                        // Snapshot the group display attributes (id → name/color/collapsed)
+                        // and the existing-group list for the "Add to group" submenu. Both
+                        // are cheap clones taken before the per-tab loop so the loop can
+                        // read group state without re-borrowing `app.tab_bar.groups` while
+                        // it indexes `app.tab_bar.tabs[i]`; every change is deferred via
+                        // `intent`.
+                        let group_list: Vec<(String, String)> = app
+                            .tab_bar
+                            .groups
+                            .iter()
+                            .map(|g| (g.id.clone(), g.name.clone()))
+                            .collect();
+                        let group_attrs: std::collections::HashMap<String, TabGroup> = app
+                            .tab_bar
+                            .groups
+                            .iter()
+                            .map(|g| (g.id.clone(), g.clone()))
+                            .collect();
 
-            // Track which group headers we've already drawn this frame so a
-            // group's coloured band is rendered exactly once, before its first
-            // member (groups are normally contiguous, but membership doesn't
-            // enforce it — a "seen" set keeps a single header per group id).
-            let mut header_drawn: std::collections::HashSet<String> =
-                std::collections::HashSet::new();
+                        // Track which group headers we've already drawn this frame so a
+                        // group's coloured band is rendered exactly once, before its first
+                        // member (groups are normally contiguous, but membership doesn't
+                        // enforce it — a "seen" set keeps a single header per group id).
+                        let mut header_drawn: std::collections::HashSet<String> =
+                            std::collections::HashSet::new();
 
-            // Iterate by index so the inline-edit buffer can be mutated.
-            for i in 0..app.tab_bar.tabs.len() {
-                let selected = active == Some(i);
-                let editing = app.tab_bar.tabs[i].editing;
-                let this_group = app.tab_bar.tabs[i].group.clone();
+                        // Iterate by index so the inline-edit buffer can be mutated.
+                        for i in 0..app.tab_bar.tabs.len() {
+                            let selected = active == Some(i);
+                            let editing = app.tab_bar.tabs[i].editing;
+                            let this_group = app.tab_bar.tabs[i].group.clone();
 
-                // -- Group header: drawn once, just before this group's first
-                //    member. Carries a coloured swatch + collapse caret, the
-                //    name, a member count, and a right-click context menu.
-                let mut collapsed_here = false;
-                if let Some(gid) = &this_group {
-                    if let Some(g) = group_attrs.get(gid) {
-                        collapsed_here = g.collapsed;
-                        if header_drawn.insert(gid.clone()) {
-                            let members = app
-                                .tab_bar
-                                .tabs
-                                .iter()
-                                .filter(|t| t.group.as_deref() == Some(gid.as_str()))
-                                .count();
-                            draw_group_header(ui, g, members, &mut intent);
-                        }
-                    }
-                }
-
-                // A collapsed group hides its members — the header (with its
-                // count) stands in for them. Skip this tab's button entirely.
-                if collapsed_here {
-                    continue;
-                }
-
-                if editing {
-                    // Inline rename: a single-line text field, committed on
-                    // Enter or focus loss.
-                    let resp = ui.add(
-                        egui::TextEdit::singleline(&mut app.tab_bar.tabs[i].edit_buf)
-                            .desired_width(120.0)
-                            .id_source(("tab_rename", i)),
-                    );
-                    resp.request_focus();
-                    let lost_focus = resp.lost_focus();
-                    let enter = lost_focus && ui.input(|inp| inp.key_pressed(egui::Key::Enter));
-                    if enter || lost_focus {
-                        intent.commit_rename = Some((i, app.tab_bar.tabs[i].edit_buf.clone()));
-                    }
-                } else {
-                    let label = app.tab_bar.tabs[i].title.clone();
-                    let group = app.tab_bar.tabs[i].kind.group();
-                    let resp = ui
-                        .selectable_label(selected, label)
-                        .on_hover_text(format!("{group} — double-click to rename"));
-                    if resp.clicked() {
-                        intent.activate = Some(i);
-                    }
-                    if resp.double_clicked() {
-                        intent.begin_rename = Some(i);
-                    }
-                    // Right-click context menu: rename / save / group / close.
-                    // "Save this tab" is the escape hatch before a
-                    // discard-on-close.
-                    let in_group = this_group.clone();
-                    resp.context_menu(|ui| {
-                        if ui.button("Rename").clicked() {
-                            intent.begin_rename = Some(i);
-                            ui.close_menu();
-                        }
-                        if ui.button("Save this tab").clicked() {
-                            intent.save_tab = Some(i);
-                            ui.close_menu();
-                        }
-                        // Add to the foldered project library (the Browser
-                        // "Projects" navigator) via a name + folder prompt.
-                        if ui
-                            .button("Save as project…")
-                            .on_hover_text("Add this tab to the Projects library (Browser panel)")
-                            .clicked()
-                        {
-                            intent.save_as_project = Some(i);
-                            ui.close_menu();
-                        }
-                        ui.separator();
-                        // "Add to group ▸" submenu: existing groups + "New
-                        // group". ASCII-only labels (no glyph caret) so no tofu.
-                        ui.menu_button("Add to group", |ui| {
-                            if ui.button("New group").clicked() {
-                                intent.new_group_with_tab = Some(i);
-                                ui.close_menu();
-                            }
-                            if !group_list.is_empty() {
-                                ui.separator();
-                                for (gid, gname) in &group_list {
-                                    // Skip the group this tab is already in.
-                                    if in_group.as_deref() == Some(gid.as_str()) {
-                                        continue;
-                                    }
-                                    if ui.button(gname).clicked() {
-                                        intent.assign_to_group = Some((i, gid.clone()));
-                                        ui.close_menu();
+                            // -- Group header: drawn once, just before this group's first
+                            //    member. Carries a coloured swatch + collapse caret, the
+                            //    name, a member count, and a right-click context menu.
+                            let mut collapsed_here = false;
+                            if let Some(gid) = &this_group {
+                                if let Some(g) = group_attrs.get(gid) {
+                                    collapsed_here = g.collapsed;
+                                    if header_drawn.insert(gid.clone()) {
+                                        let members = app
+                                            .tab_bar
+                                            .tabs
+                                            .iter()
+                                            .filter(|t| t.group.as_deref() == Some(gid.as_str()))
+                                            .count();
+                                        draw_group_header(ui, g, members, &mut intent);
                                     }
                                 }
                             }
-                        });
-                        if in_group.is_some() && ui.button("Remove from group").clicked() {
-                            intent.remove_from_group = Some(i);
-                            ui.close_menu();
-                        }
-                        ui.separator();
-                        if ui.button("Close").clicked() {
-                            // Request a close — opens the confirm modal.
-                            intent.request_close = Some(i);
-                            ui.close_menu();
-                        }
-                    });
-                }
 
-                // Painter-drawn ✕ (reused from the workbench chrome) — never
-                // a font-glyph "tofu" box. Requests a close (the confirm
-                // modal gates the actual discard).
-                if crate::workbench_chrome::close_x_button(ui, "Close tab").clicked() {
-                    intent.request_close = Some(i);
-                }
-                ui.separator();
-            }
+                            // A collapsed group hides its members — the header (with its
+                            // count) stands in for them. Skip this tab's button entirely.
+                            if collapsed_here {
+                                continue;
+                            }
+
+                            if editing {
+                                // Inline rename: a single-line text field, committed on
+                                // Enter or focus loss.
+                                let resp = ui.add(
+                                    egui::TextEdit::singleline(&mut app.tab_bar.tabs[i].edit_buf)
+                                        .desired_width(120.0)
+                                        .id_source(("tab_rename", i)),
+                                );
+                                resp.request_focus();
+                                let lost_focus = resp.lost_focus();
+                                let enter =
+                                    lost_focus && ui.input(|inp| inp.key_pressed(egui::Key::Enter));
+                                if enter || lost_focus {
+                                    intent.commit_rename =
+                                        Some((i, app.tab_bar.tabs[i].edit_buf.clone()));
+                                }
+                            } else {
+                                let label = app.tab_bar.tabs[i].title.clone();
+                                let group = app.tab_bar.tabs[i].kind.group();
+                                let resp = ui
+                                    .selectable_label(selected, label)
+                                    .on_hover_text(format!("{group} — double-click to rename"));
+                                if resp.clicked() {
+                                    intent.activate = Some(i);
+                                }
+                                if resp.double_clicked() {
+                                    intent.begin_rename = Some(i);
+                                }
+                                // Right-click context menu: rename / save / group / close.
+                                // "Save this tab" is the escape hatch before a
+                                // discard-on-close.
+                                let in_group = this_group.clone();
+                                resp.context_menu(|ui| {
+                                    if ui.button("Rename").clicked() {
+                                        intent.begin_rename = Some(i);
+                                        ui.close_menu();
+                                    }
+                                    if ui.button("Save this tab").clicked() {
+                                        intent.save_tab = Some(i);
+                                        ui.close_menu();
+                                    }
+                                    // Add to the foldered project library (the Browser
+                                    // "Projects" navigator) via a name + folder prompt.
+                                    if ui
+                                        .button("Save as project…")
+                                        .on_hover_text(
+                                            "Add this tab to the Projects library (Browser panel)",
+                                        )
+                                        .clicked()
+                                    {
+                                        intent.save_as_project = Some(i);
+                                        ui.close_menu();
+                                    }
+                                    ui.separator();
+                                    // "Add to group ▸" submenu: existing groups + "New
+                                    // group". ASCII-only labels (no glyph caret) so no tofu.
+                                    ui.menu_button("Add to group", |ui| {
+                                        if ui.button("New group").clicked() {
+                                            intent.new_group_with_tab = Some(i);
+                                            ui.close_menu();
+                                        }
+                                        if !group_list.is_empty() {
+                                            ui.separator();
+                                            for (gid, gname) in &group_list {
+                                                // Skip the group this tab is already in.
+                                                if in_group.as_deref() == Some(gid.as_str()) {
+                                                    continue;
+                                                }
+                                                if ui.button(gname).clicked() {
+                                                    intent.assign_to_group = Some((i, gid.clone()));
+                                                    ui.close_menu();
+                                                }
+                                            }
+                                        }
+                                    });
+                                    if in_group.is_some()
+                                        && ui.button("Remove from group").clicked()
+                                    {
+                                        intent.remove_from_group = Some(i);
+                                        ui.close_menu();
+                                    }
+                                    ui.separator();
+                                    if ui.button("Close").clicked() {
+                                        // Request a close — opens the confirm modal.
+                                        intent.request_close = Some(i);
+                                        ui.close_menu();
+                                    }
+                                });
+                            }
+
+                            // Painter-drawn ✕ (reused from the workbench chrome) — never
+                            // a font-glyph "tofu" box. Requests a close (the confirm
+                            // modal gates the actual discard).
+                            if crate::workbench_chrome::close_x_button(ui, "Close tab").clicked() {
+                                intent.request_close = Some(i);
+                            }
+                            ui.separator();
+                        }
+                    }); // inner ui.horizontal (the scrolling tab row)
+                }); // ScrollArea::horizontal
         });
     });
 
     apply_intent(app, intent);
     draw_close_confirm(app, ctx);
+    draw_close_all_confirm(app, ctx);
     draw_save_as_project(app, ctx);
 }
 
@@ -1638,6 +1696,71 @@ fn draw_close_confirm(app: &mut ValenxApp, ctx: &egui::Context) {
     } else if do_close {
         perform_close(app, idx);
         app.tab_close_confirm = None;
+    }
+}
+
+/// Render the **"Close all N tabs?"** confirmation modal while
+/// [`ValenxApp::tab_close_all_confirm`] is `Some`. Mirrors
+/// [`draw_close_confirm`] but for the whole strip: closing all tabs discards
+/// every tab's (unsaved) workspace document, so the batch close is gated
+/// behind an explicit confirm. [Cancel] clears the pending flag; [Close all
+/// tabs] performs the real batch close ([`TabBar::close_all`] + an
+/// [`install_active_doc`] reconcile of the now-empty live scene). If the
+/// strip emptied another way while the modal was up, it bails safely.
+fn draw_close_all_confirm(app: &mut ValenxApp, ctx: &egui::Context) {
+    if app.tab_close_all_confirm.is_none() {
+        return;
+    }
+    let n = app.tab_bar.tabs.len();
+    // No tabs left (closed another way) — drop the pending confirm.
+    if n == 0 {
+        app.tab_close_all_confirm = None;
+        return;
+    }
+
+    let mut do_close = false;
+    let mut do_cancel = false;
+    egui::Window::new("Close all tabs?")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            ui.label(format!("Close all {n} tabs?"));
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new("Unsaved tabs are discarded.")
+                    .small()
+                    .weak(),
+            );
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    do_cancel = true;
+                }
+                // Red-ish destructive action. Named distinctly from the
+                // toolbar's "Close all tabs" button so the accessibility tree
+                // never shows two same-named controls.
+                let close_btn = egui::Button::new(
+                    egui::RichText::new("Close all tabs now")
+                        .color(egui::Color32::from_rgb(220, 80, 80)),
+                );
+                if ui.add(close_btn).clicked() {
+                    do_close = true;
+                }
+            });
+        });
+
+    if do_cancel {
+        app.tab_close_all_confirm = None;
+    } else if do_close {
+        apply_intent(
+            app,
+            StripIntent {
+                close_all_tabs: true,
+                ..Default::default()
+            },
+        );
+        app.tab_close_all_confirm = None;
     }
 }
 
@@ -1826,6 +1949,21 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         if i < app.tab_bar.tabs.len() {
             app.tab_close_confirm = Some(i);
         }
+    }
+    if intent.request_close_all {
+        // The toolbar "Close all tabs" button only *requests* a batch close;
+        // the real close happens once the user confirms the "Close all N tabs?"
+        // modal (every tab's unsaved workspace document is discarded).
+        if !app.tab_bar.tabs.is_empty() {
+            app.tab_close_all_confirm = Some(());
+        }
+    }
+    if intent.close_all_tabs {
+        // Confirmed batch close: drop every tab + its parked document + all
+        // groups, then reconcile the now-empty strip's live scene (clears the
+        // live fields, since there is no active tab left).
+        app.tab_bar.close_all();
+        install_active_doc(app);
     }
     if let Some(i) = intent.activate {
         // Swap documents so each tab keeps its own scene.
@@ -2335,6 +2473,105 @@ mod tests {
             app.mesh.is_some(),
             "the scene survives an un-confirmed close"
         );
+    }
+
+    #[test]
+    fn close_all_empties_tabs_docs_groups_and_clears_active() {
+        // `TabBar::close_all` is the batch-delete behind the "Close all tabs"
+        // button: it must drop every tab + its parked doc + all groups and
+        // reset `active` to None, leaving a clean empty strip.
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket);
+        bar.open(TabKind::Cad);
+        bar.open_blank();
+        bar.new_group_with_tab(0); // a group so we prove groups clear too
+        assert!(!bar.tabs.is_empty());
+        assert!(!bar.groups.is_empty());
+        assert_docs_aligned(&bar);
+
+        bar.close_all();
+        assert!(bar.tabs.is_empty(), "close_all drops every tab");
+        assert!(bar.docs.is_empty(), "close_all drops every doc");
+        assert!(bar.groups.is_empty(), "close_all drops every group");
+        assert_eq!(bar.active, None, "no active tab after close_all");
+        assert_docs_aligned(&bar);
+    }
+
+    #[test]
+    fn close_all_tabs_intent_routes_through_apply_and_clears_the_live_scene() {
+        // The confirmed "Close all tabs" path: a `close_all_tabs` StripIntent
+        // must empty the strip AND reconcile the live scene to empty (no tab
+        // left to install a document from).
+        let mut app = ValenxApp::default();
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        app.mesh = Some(test_loaded_mesh());
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_blank: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 2);
+
+        apply_intent(
+            &mut app,
+            StripIntent {
+                close_all_tabs: true,
+                ..Default::default()
+            },
+        );
+        assert!(app.tab_bar.tabs.is_empty(), "every tab closed");
+        assert_eq!(app.tab_bar.active, None);
+        assert!(
+            app.mesh.is_none(),
+            "closing all tabs clears the live scene (no tab to install from)"
+        );
+        assert_docs_aligned(&app.tab_bar);
+    }
+
+    #[test]
+    fn request_close_all_intent_opens_the_confirm_without_closing() {
+        // The toolbar "Close all tabs" button only *requests* the batch close:
+        // it sets the pending confirm flag and leaves the tabs intact.
+        let mut app = ValenxApp::default();
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        apply_intent(
+            &mut app,
+            StripIntent {
+                request_close_all: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.tab_close_all_confirm,
+            Some(()),
+            "a batch-close request opens the confirm modal"
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 1, "the tab is not closed yet");
+
+        // With no tabs, a request is a no-op (nothing to confirm).
+        let mut empty = ValenxApp::default();
+        apply_intent(
+            &mut empty,
+            StripIntent {
+                request_close_all: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(empty.tab_close_all_confirm, None);
     }
 
     #[test]

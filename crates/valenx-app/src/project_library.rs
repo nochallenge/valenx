@@ -217,6 +217,16 @@ impl ProjectLibrary {
         self.projects.retain(|p| p.id != id);
     }
 
+    /// Clear the **entire** library: drop every saved project *and* every
+    /// folder, leaving an empty catalogue. The destructive batch-delete behind
+    /// the navigator's "Clear all projects" button (the caller gates it behind
+    /// a confirm and persists afterwards). Does not touch any saved single-tab
+    /// / session files on disk — only this library.
+    pub fn clear_all(&mut self) {
+        self.projects.clear();
+        self.folders.clear();
+    }
+
     /// Rename the project `id` to `name` (trimmed; empty names are
     /// rejected so a row never goes nameless). No-op if `id` is absent.
     pub fn rename(&mut self, id: &str, name: &str) {
@@ -705,6 +715,22 @@ mod tests {
         assert_eq!(lib, loaded);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_all_empties_projects_and_folders() {
+        let mut lib = ProjectLibrary::default();
+        let f = lib.add_folder("Group");
+        let _a = lib.add_project(tab(TabKind::Rocket, "A"), Some(f.clone()));
+        let _b = lib.add_project(tab(TabKind::Cad, "B"), None);
+        assert!(!lib.projects.is_empty());
+        assert!(!lib.folders.is_empty());
+
+        lib.clear_all();
+        assert!(lib.projects.is_empty(), "clear_all drops every project");
+        assert!(lib.folders.is_empty(), "clear_all drops every folder");
+        // A cleared library equals a fresh default one.
+        assert_eq!(lib, ProjectLibrary::default());
     }
 
     #[test]
