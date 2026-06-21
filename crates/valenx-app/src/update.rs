@@ -3386,14 +3386,19 @@ impl eframe::App for ValenxApp {
         // exclusive access to the whole app.
         //
         // `build_visible_commands` allocates ~360 `String`s per call
-        // (one per static command + per-adapter dynamic entries), so
-        // running it on every frame is wasteful. We memoise on
-        // `(registry.len(), show_non_oss_adapters)`: the registry is
-        // monotonic (adapters only ever land via `register`, so a
-        // change in `len()` covers re-probes and post-startup
-        // registration), and the OSS-filter is a bool. The cache
-        // invalidates automatically when either changes; a Settings
-        // toggle reflects on the next frame.
+        // (one per static command + per-adapter dynamic entries + one
+        // per workbench template + one per saved project), so running
+        // it on every frame is wasteful. We memoise on
+        // `(registry.len(), library.projects.len(), show_non_oss_adapters)`:
+        // the registry is monotonic (adapters only ever land via
+        // `register`, so a change in `len()` covers re-probes and
+        // post-startup registration); the saved-project count changes
+        // when the launcher's project list must change (the project list
+        // is keyed on `registry.len`/`show_non_oss` alone, so without it
+        // a freshly-saved project wouldn't appear until a re-probe); and
+        // the OSS-filter is a bool. The cache invalidates automatically
+        // when any of the three changes; a Settings toggle or a new saved
+        // project reflects on the next frame.
         //
         // Round-8: skip the per-frame Vec clone entirely when the
         // palette is closed (the common case). The clone runs only
@@ -3401,13 +3406,16 @@ impl eframe::App for ValenxApp {
         if self.palette.open {
             let show_non_oss = self.settings.show_non_oss_adapters;
             let registry_len = self.registry.len();
+            let projects_len = self.library.projects.len();
             let cache_valid = matches!(
                 &self.palette_cache,
-                Some((len, oss, _)) if *len == registry_len && *oss == show_non_oss
+                Some((len, plen, oss, _))
+                    if *len == registry_len && *plen == projects_len && *oss == show_non_oss
             );
             if !cache_valid {
-                let built = commands::build_visible_commands(&self.registry, show_non_oss);
-                self.palette_cache = Some((registry_len, show_non_oss, built));
+                let built =
+                    commands::build_visible_commands(&self.registry, show_non_oss, &self.library);
+                self.palette_cache = Some((registry_len, projects_len, show_non_oss, built));
             }
             // Take the cached Vec by clone — the dispatch step needs
             // exclusive `&mut self`, so we can't hold a borrow into
@@ -3418,7 +3426,7 @@ impl eframe::App for ValenxApp {
             let visible: Vec<commands::CommandKind> = self
                 .palette_cache
                 .as_ref()
-                .map(|(_, _, v)| v.clone())
+                .map(|(_, _, _, v)| v.clone())
                 .unwrap_or_default();
             if let Some(idx) = commands::show(ctx, &mut self.palette, &visible) {
                 if let Some(kind) = visible.get(idx) {

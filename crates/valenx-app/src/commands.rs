@@ -27,6 +27,8 @@ use eframe::egui;
 
 use valenx_core::registry::AdapterRegistry;
 
+use crate::project_library::ProjectLibrary;
+use crate::project_tabs::TabKind;
 use crate::ValenxApp;
 
 /// Stable identifier for a command. Keep this string immutable per
@@ -62,9 +64,10 @@ pub fn all_commands() -> &'static [Command] {
     static_commands()
 }
 
-/// One palette entry. Either points at a static [`Command`] or
-/// describes a per-adapter dynamic action composed from the
-/// `AdapterRegistry`.
+/// One palette entry. Either points at a static [`Command`], describes
+/// a per-adapter dynamic action composed from the `AdapterRegistry`, or
+/// is a navigation entry that opens a workbench tab / saved project (the
+/// universal "type to open anything" launcher).
 ///
 /// `Clone` is derived so the palette-rebuild cache (see
 /// `ValenxApp::palette_cache`) can hand out an owned `Vec` without
@@ -82,6 +85,23 @@ pub enum CommandKind {
         label: String,
         adapter_id: String,
     },
+    /// Open a fresh workbench tab of the given [`TabKind`] (one entry per
+    /// [`TabKind::TEMPLATES`]). `id` is the short tab kind id —
+    /// [`TabKind::from_id`] round-trips it back to the kind in [`dispatch`].
+    /// `label` is the search-visible palette title (e.g. `"Open tab:
+    /// Rocket"`).
+    OpenWorkbenchTab {
+        id: String,
+        label: String,
+    },
+    /// Open a saved project from the [`crate::project_library`] as a new
+    /// tab. `id` is the [`crate::project_library::SavedProject::id`] (stable
+    /// across renames), used in [`dispatch`] to look the project up. `name`
+    /// is the search-visible palette title (e.g. `"Project: My Boat"`).
+    OpenSavedProject {
+        id: String,
+        name: String,
+    },
 }
 
 impl CommandKind {
@@ -93,6 +113,8 @@ impl CommandKind {
             CommandKind::Static(cmd) => cmd.id.0,
             CommandKind::DynamicRunAdapter { id, .. } => id,
             CommandKind::DynamicNewCase { id, .. } => id,
+            CommandKind::OpenWorkbenchTab { id, .. } => id,
+            CommandKind::OpenSavedProject { id, .. } => id,
         }
     }
 
@@ -103,6 +125,8 @@ impl CommandKind {
             CommandKind::Static(cmd) => cmd.label,
             CommandKind::DynamicRunAdapter { label, .. } => label,
             CommandKind::DynamicNewCase { label, .. } => label,
+            CommandKind::OpenWorkbenchTab { label, .. } => label,
+            CommandKind::OpenSavedProject { name, .. } => name,
         }
     }
 
@@ -113,6 +137,8 @@ impl CommandKind {
             CommandKind::Static(cmd) => cmd.shortcut,
             CommandKind::DynamicRunAdapter { .. } => None,
             CommandKind::DynamicNewCase { .. } => None,
+            CommandKind::OpenWorkbenchTab { .. } => None,
+            CommandKind::OpenSavedProject { .. } => None,
         }
     }
 }
@@ -135,7 +161,18 @@ impl CommandKind {
 /// `Settings::show_non_oss_adapters`; callers in the GUI pass it
 /// every frame so a flip in the Settings dialog takes effect on
 /// the next palette open.
-pub fn build_visible_commands(registry: &AdapterRegistry, show_non_oss: bool) -> Vec<CommandKind> {
+///
+/// The `library` argument turns the palette into a universal launcher:
+/// it appends one [`CommandKind::OpenWorkbenchTab`] per
+/// [`TabKind::TEMPLATES`] (so `Ctrl+P → "rocket"` opens a Rocket tab) and
+/// one [`CommandKind::OpenSavedProject`] per saved project (so
+/// `Ctrl+P → "<project name>"` reopens it). These navigation entries are
+/// **not** OSS-filtered — the filter is adapter-only.
+pub fn build_visible_commands(
+    registry: &AdapterRegistry,
+    show_non_oss: bool,
+    library: &ProjectLibrary,
+) -> Vec<CommandKind> {
     let mut cmds: Vec<CommandKind> = static_commands().iter().map(CommandKind::Static).collect();
     // Sort adapter entries by display name so the palette ordering
     // is deterministic across runs (the registry is a HashMap).
@@ -157,7 +194,65 @@ pub fn build_visible_commands(registry: &AdapterRegistry, show_non_oss: bool) ->
             adapter_id: info.id.to_string(),
         });
     }
+    // Launcher: one "Open tab: <label>" per workbench template. The id is
+    // the short `from_id` token so dispatch can round-trip it back to the
+    // kind; the label carries the search-visible "Open tab:" prefix.
+    for kind in TabKind::TEMPLATES {
+        cmds.push(CommandKind::OpenWorkbenchTab {
+            id: tab_kind_id(kind),
+            label: format!("Open tab: {}", kind.label()),
+        });
+    }
+    // Launcher: one "Project: <name>" per saved library project, opened as
+    // a new tab on dispatch. Keyed by the stable project id.
+    for project in &library.projects {
+        cmds.push(CommandKind::OpenSavedProject {
+            id: project.id.clone(),
+            name: format!("Project: {}", project.name),
+        });
+    }
     cmds
+}
+
+/// The short, lowercase id string for a [`TabKind`] — the inverse of
+/// [`TabKind::from_id`], used to tag [`CommandKind::OpenWorkbenchTab`]
+/// entries so dispatch can recover the kind. Returns `"blank"` for
+/// [`TabKind::Blank`] (which is not a template and so never reached here in
+/// practice; kept total so the match needs no fallthrough panic).
+fn tab_kind_id(kind: TabKind) -> String {
+    match kind {
+        TabKind::Blank => "blank",
+        TabKind::Rocket => "rocket",
+        TabKind::Engine => "engine",
+        TabKind::Astro => "astro",
+        TabKind::Aero => "aero",
+        TabKind::Gasdynamics => "gasdynamics",
+        TabKind::Cfd => "cfd",
+        TabKind::Fem => "fem",
+        TabKind::Reactdyn => "reactdyn",
+        TabKind::Fields => "fields",
+        TabKind::Cad => "cad",
+        TabKind::MeshToolbox => "meshtoolbox",
+        TabKind::Sheetmetal => "sheetmetal",
+        TabKind::Reverse => "reverse",
+        TabKind::Draft2d => "draft2d",
+        TabKind::Render => "render",
+        TabKind::Animate => "animate",
+        TabKind::Springs => "springs",
+        TabKind::Gears => "gears",
+        TabKind::Fasteners => "fasteners",
+        TabKind::Frames => "frames",
+        TabKind::Collision => "collision",
+        TabKind::Piping => "piping",
+        TabKind::Hvac => "hvac",
+        TabKind::Reinforcement => "reinforcement",
+        TabKind::Interior => "interior",
+        TabKind::Geomatics => "geomatics",
+        TabKind::Genetics => "genetics",
+        TabKind::Neuro => "neuro",
+        TabKind::VariantEffect => "varianteffect",
+    }
+    .to_string()
 }
 
 /// Run the action a [`CommandKind`] describes. Static entries call
@@ -171,6 +266,22 @@ pub fn dispatch(app: &mut ValenxApp, kind: &CommandKind) {
         }
         CommandKind::DynamicNewCase { adapter_id, .. } => {
             app.new_case_for_adapter(adapter_id);
+        }
+        CommandKind::OpenWorkbenchTab { id, .. } => {
+            // Open a fresh tab of the requested kind, reusing the exact
+            // tab-reconcile the strip + navigator use (park the outgoing
+            // doc → open → install). An unknown id falls back to a blank
+            // tab rather than panicking, matching `agent_commands`.
+            let kind = TabKind::from_id(id).unwrap_or(TabKind::Blank);
+            crate::project_tabs::park_active_doc(app);
+            app.tab_bar.open(kind);
+            crate::project_tabs::install_active_doc(app);
+        }
+        CommandKind::OpenSavedProject { id, .. } => {
+            // Reuse the navigator's open path verbatim (sets the saved
+            // title, bumps `last_opened`, persists the library). A no-op
+            // when the project id no longer exists.
+            crate::project_navigator::open_project_as_tab(app, id);
         }
     }
 }
@@ -993,17 +1104,35 @@ mod tests {
 
     // ---- Phase 44: dynamic per-adapter commands ----
 
+    /// The launcher appends one `OpenWorkbenchTab` per template
+    /// unconditionally, so every `build_visible_commands` length
+    /// expectation is offset by this. `+ library.projects.len()` adds the
+    /// per-saved-project entries on top.
+    const TEMPLATE_ENTRIES: usize = TabKind::TEMPLATES.len();
+
+    /// Floor count with an empty registry + empty library: the static
+    /// catalogue plus the always-present per-template launcher entries.
+    fn launcher_floor() -> usize {
+        static_commands().len() + TEMPLATE_ENTRIES
+    }
+
     #[test]
-    fn build_visible_commands_empty_registry_returns_static_commands() {
+    fn build_visible_commands_empty_registry_returns_static_plus_launcher() {
         let registry = AdapterRegistry::new();
-        let cmds = build_visible_commands(&registry, false);
-        // Empty registry → exactly the static commands surface.
-        assert_eq!(cmds.len(), static_commands().len());
-        // And every entry is the Static variant.
+        let library = ProjectLibrary::default();
+        let cmds = build_visible_commands(&registry, false, &library);
+        // Empty registry + empty library → static commands + the
+        // per-template launcher entries, nothing else.
+        assert_eq!(cmds.len(), launcher_floor());
+        // Every entry is either Static or an OpenWorkbenchTab (no adapter
+        // or saved-project entries with empty registry + library).
         for cmd in &cmds {
             assert!(
-                matches!(cmd, CommandKind::Static(_)),
-                "expected only Static; got id `{}`",
+                matches!(
+                    cmd,
+                    CommandKind::Static(_) | CommandKind::OpenWorkbenchTab { .. }
+                ),
+                "unexpected entry id `{}`",
                 cmd.id()
             );
         }
@@ -1019,11 +1148,12 @@ mod tests {
         use std::sync::Arc;
         let mut registry = AdapterRegistry::new();
         registry.register(Arc::new(valenx_adapter_openfoam::OpenFoamAdapter::new()));
-        let cmds = build_visible_commands(&registry, false);
-        // 2 dynamic entries per registered adapter (run + new-case).
-        // OpenFOAM is GPL-3.0-only (OSS) so the OSS-only filter
-        // keeps it visible.
-        assert_eq!(cmds.len(), static_commands().len() + 2);
+        let library = ProjectLibrary::default();
+        let cmds = build_visible_commands(&registry, false, &library);
+        // 2 dynamic entries per registered adapter (run + new-case), on
+        // top of the static + launcher floor. OpenFOAM is GPL-3.0-only
+        // (OSS) so the OSS-only filter keeps it visible.
+        assert_eq!(cmds.len(), launcher_floor() + 2);
         // The labels follow the documented pattern.
         let labels: Vec<&str> = cmds.iter().map(|c| c.label()).collect();
         assert!(
@@ -1051,14 +1181,131 @@ mod tests {
         use std::sync::Arc;
         let mut registry = AdapterRegistry::new();
         registry.register(Arc::new(valenx_adapter_rosetta::RosettaAdapter::new()));
-        let cmds = build_visible_commands(&registry, false);
+        let library = ProjectLibrary::default();
+        let cmds = build_visible_commands(&registry, false, &library);
         assert_eq!(
             cmds.len(),
-            static_commands().len(),
+            launcher_floor(),
             "non-OSS adapter must contribute zero dynamic entries when show_non_oss=false"
         );
         // Flipping the flag surfaces both dynamic entries again.
-        let cmds_all = build_visible_commands(&registry, true);
-        assert_eq!(cmds_all.len(), static_commands().len() + 2);
+        let cmds_all = build_visible_commands(&registry, true, &library);
+        assert_eq!(cmds_all.len(), launcher_floor() + 2);
+    }
+
+    // ---- Universal launcher: open-tab + open-project entries ----
+
+    #[test]
+    fn build_visible_commands_has_open_tab_entry_per_template_and_project_per_library() {
+        use crate::project_tabs::ProjectTab;
+
+        // A library with two saved projects of different kinds.
+        let mut library = ProjectLibrary::default();
+        let p1 = library.add_project(
+            ProjectTab {
+                kind: TabKind::Rocket,
+                title: "My Rocket".into(),
+                editing: false,
+                edit_buf: String::new(),
+            },
+            None,
+        );
+        let p2 = library.add_project(
+            ProjectTab {
+                kind: TabKind::Cad,
+                title: "My Part".into(),
+                editing: false,
+                edit_buf: String::new(),
+            },
+            None,
+        );
+
+        let registry = AdapterRegistry::new();
+        let cmds = build_visible_commands(&registry, false, &library);
+
+        // One OpenWorkbenchTab per template, tagged with the round-trippable
+        // `from_id` token and the "Open tab:" display prefix.
+        for kind in TabKind::TEMPLATES {
+            let want_id = tab_kind_id(kind);
+            let entry = cmds
+                .iter()
+                .find(|c| matches!(c, CommandKind::OpenWorkbenchTab { id, .. } if *id == want_id));
+            let entry = entry.unwrap_or_else(|| {
+                panic!("missing OpenWorkbenchTab for {kind:?} (id `{want_id}`)")
+            });
+            assert_eq!(entry.label(), format!("Open tab: {}", kind.label()));
+            // The tag must round-trip back to the same kind.
+            assert_eq!(
+                TabKind::from_id(entry.id()),
+                Some(kind),
+                "id `{want_id}` should round-trip via from_id"
+            );
+        }
+        // Exactly one OpenWorkbenchTab per template — no more, no fewer.
+        let tab_entries = cmds
+            .iter()
+            .filter(|c| matches!(c, CommandKind::OpenWorkbenchTab { .. }))
+            .count();
+        assert_eq!(tab_entries, TabKind::TEMPLATES.len());
+
+        // One OpenSavedProject per library project, keyed on the stable id,
+        // labelled "Project: <name>".
+        let proj_entries: Vec<&CommandKind> = cmds
+            .iter()
+            .filter(|c| matches!(c, CommandKind::OpenSavedProject { .. }))
+            .collect();
+        assert_eq!(proj_entries.len(), library.projects.len());
+        let ids: Vec<&str> = proj_entries.iter().map(|c| c.id()).collect();
+        assert!(
+            ids.contains(&p1.as_str()),
+            "missing project {p1}; got {ids:?}"
+        );
+        assert!(
+            ids.contains(&p2.as_str()),
+            "missing project {p2}; got {ids:?}"
+        );
+        let labels: Vec<&str> = proj_entries.iter().map(|c| c.label()).collect();
+        assert!(labels.contains(&"Project: My Rocket"), "got {labels:?}");
+        assert!(labels.contains(&"Project: My Part"), "got {labels:?}");
+    }
+
+    #[test]
+    fn dispatch_open_workbench_tab_opens_a_tab() {
+        // Dispatching an OpenWorkbenchTab adds exactly one tab of the
+        // requested kind and makes it active (tab count +1).
+        let mut app = ValenxApp::default();
+        assert_eq!(app.tab_bar.tabs.len(), 0);
+
+        dispatch(
+            &mut app,
+            &CommandKind::OpenWorkbenchTab {
+                id: "rocket".into(),
+                label: "Open tab: Rocket".into(),
+            },
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 1, "tab count should be +1");
+        assert_eq!(app.tab_bar.active_kind(), Some(TabKind::Rocket));
+
+        // A second dispatch adds another tab (+1 again).
+        dispatch(
+            &mut app,
+            &CommandKind::OpenWorkbenchTab {
+                id: "cad".into(),
+                label: "Open tab: Parametric CAD".into(),
+            },
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 2);
+        assert_eq!(app.tab_bar.active_kind(), Some(TabKind::Cad));
+
+        // An unknown id falls back to a blank tab rather than panicking.
+        dispatch(
+            &mut app,
+            &CommandKind::OpenWorkbenchTab {
+                id: "no-such-kind".into(),
+                label: "Open tab: ?".into(),
+            },
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 3);
+        assert_eq!(app.tab_bar.active_kind(), Some(TabKind::Blank));
     }
 }
