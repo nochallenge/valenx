@@ -664,6 +664,7 @@ mod tests {
         ProjectTab {
             kind,
             title: title.to_string(),
+            group: None,
             editing: false,
             edit_buf: String::new(),
         }

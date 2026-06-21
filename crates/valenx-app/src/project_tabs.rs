@@ -420,6 +420,57 @@ impl TabKind {
     }
 }
 
+/// Mint a short, process-unique tab-group id of the form `grp-{n}`. Uses a
+/// monotonic [`AtomicU64`] counter (like [`crate::project_library`]'s
+/// `fresh_id`, but simpler — group ids never persist anywhere a clock would
+/// matter, they only have to stay distinct within one run, and a saved
+/// session round-trips the *existing* ids verbatim). No `rand` dep, no
+/// `Date::now`-style API.
+fn fresh_group_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("grp-{n}")
+}
+
+/// A small rotating palette for new tab groups, à la Chrome's coloured tab
+/// groups. [`StripIntent::new_group_with_tab`] picks the next colour by the
+/// current group count modulo the palette length, so successive groups read
+/// as visually distinct.
+const GROUP_PALETTE: [[u8; 3]; 8] = [
+    [66, 133, 244],  // blue
+    [219, 68, 55],   // red
+    [15, 157, 88],   // green
+    [244, 180, 0],   // amber
+    [171, 71, 188],  // purple
+    [0, 172, 193],   // cyan
+    [255, 112, 67],  // deep-orange
+    [120, 144, 156], // blue-grey
+];
+
+/// A Chrome-style **tab group**: a named, coloured, collapsible band that
+/// brackets a contiguous run of [`ProjectTab`]s sharing its [`Self::id`].
+///
+/// Groups are a pure *presentation* layer over [`TabBar::tabs`] — they never
+/// touch the `docs`/`active` indexing. A tab's membership is the
+/// [`ProjectTab::group`] back-reference (the group id, or `None` for an
+/// ungrouped tab); this struct only carries the group's display attributes.
+/// Empty groups (no member tab still points at them) are pruned in
+/// `apply_intent`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TabGroup {
+    /// Stable id minted by `fresh_group_id`; referenced by
+    /// [`ProjectTab::group`]. Never shown to the user.
+    pub id: String,
+    /// User-facing group name (e.g. "Group 1"); renamable.
+    pub name: String,
+    /// Header tint, RGB. Seeded from `GROUP_PALETTE`.
+    pub color: [u8; 3],
+    /// When `true`, the group's member tabs are hidden in the strip and only
+    /// the header (plus a member count) is drawn.
+    pub collapsed: bool,
+}
+
 /// One open project tab: its kind plus a user-facing title. The two
 /// `edit_*` fields drive inline rename and are transient (never persisted).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -429,6 +480,11 @@ pub struct ProjectTab {
     /// Title shown on the tab (defaults to the kind label, or "Untitled N"
     /// for a blank tab).
     pub title: String,
+    /// Id of the [`TabGroup`] this tab belongs to, or `None` when ungrouped.
+    /// `#[serde(default)]` so older saved JSON (which predates groups)
+    /// deserialises with `group == None` — the back-compat guarantee.
+    #[serde(default)]
+    pub group: Option<String>,
     /// `true` while the title is being edited inline. Transient.
     #[serde(skip)]
     pub editing: bool,
@@ -444,6 +500,7 @@ impl ProjectTab {
         ProjectTab {
             kind,
             title: title.into(),
+            group: None,
             editing: false,
             edit_buf: String::new(),
         }
@@ -461,6 +518,11 @@ pub struct SavedSession {
     pub tabs: Vec<ProjectTab>,
     /// Active tab index within `tabs`, if any.
     pub active: Option<usize>,
+    /// Tab groups present in the strip (the coloured Chrome-style bands).
+    /// `#[serde(default)]` so older session files (which predate groups)
+    /// still load — they deserialise with an empty group list.
+    #[serde(default)]
+    pub groups: Vec<TabGroup>,
 }
 
 /// The project-tab strip state, owned by [`ValenxApp`].
@@ -481,6 +543,14 @@ pub struct TabBar {
     /// Monotonic counter feeding the default "Untitled N" name for blank
     /// tabs, so successive blanks get distinct titles.
     pub blank_counter: usize,
+    /// The Chrome-style tab groups (coloured, collapsible header bands) over
+    /// [`Self::tabs`]. A tab's membership is its [`ProjectTab::group`] id;
+    /// this vec holds each group's display attributes. Empty groups are
+    /// pruned by `apply_intent`. Runtime + snapshot state: a
+    /// [`SavedSession`] carries these (its `groups` field is
+    /// `#[serde(default)]` for back-compat), but `TabBar` itself is not
+    /// serde-derived, so no attribute is needed here.
+    pub groups: Vec<TabGroup>,
 }
 
 impl TabBar {
@@ -527,6 +597,8 @@ impl TabBar {
         if idx < self.docs.len() {
             self.docs.remove(idx);
         }
+        // Closing a tab may have orphaned its group (it was the last member).
+        self.prune_empty_groups();
         self.active = if self.tabs.is_empty() {
             None
         } else {
@@ -546,6 +618,7 @@ impl TabBar {
             name: name.into(),
             tabs: self.tabs.clone(),
             active: self.active,
+            groups: self.groups.clone(),
         }
     }
 
@@ -567,6 +640,11 @@ impl TabBar {
         self.docs = (0..self.tabs.len())
             .map(|_| WorkspaceDoc::default())
             .collect();
+        // Adopt the session's groups wholesale (the whole strip is replaced),
+        // then drop any group no surviving tab points at so the header band
+        // never outlives its members.
+        self.groups = session.groups;
+        self.prune_empty_groups();
         self.active = match session.active {
             Some(i) if i < self.tabs.len() => Some(i),
             _ if self.tabs.is_empty() => None,
@@ -583,15 +661,120 @@ impl TabBar {
         if session.tabs.is_empty() {
             return None;
         }
+        // Remap the appended session's group ids to fresh ones so they can
+        // never collide with a group already in the strip; carry the remapped
+        // groups in alongside the tabs that reference them.
+        let mut id_map: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        for g in session.groups {
+            let new_id = fresh_group_id();
+            id_map.insert(g.id.clone(), new_id.clone());
+            self.groups.push(TabGroup { id: new_id, ..g });
+        }
         let first = self.tabs.len();
         for mut t in session.tabs {
             t.editing = false;
             t.edit_buf.clear();
+            // Re-point a membership at its remapped group; drop a dangling
+            // reference (a tab whose group wasn't in the session's group list).
+            t.group = t.group.and_then(|gid| id_map.get(&gid).cloned());
             self.tabs.push(t);
             self.docs.push(WorkspaceDoc::default());
         }
+        self.prune_empty_groups();
         self.active = Some(first);
         Some(first)
+    }
+
+    /// Drop every [`TabGroup`] no remaining tab still references. Called after
+    /// any mutation that can orphan a group (close, ungroup, restore, append,
+    /// and the group-edit intents in `apply_intent`) so a coloured header
+    /// band never outlives its last member.
+    pub fn prune_empty_groups(&mut self) {
+        self.groups.retain(|g| {
+            self.tabs
+                .iter()
+                .any(|t| t.group.as_deref() == Some(g.id.as_str()))
+        });
+    }
+
+    /// Create a fresh group containing exactly the tab at `tab_idx`, auto-named
+    /// "Group N" (N = `groups.len() + 1`) with the next colour from
+    /// `GROUP_PALETTE`, and return its id. The tab is moved out of any group
+    /// it was already in (then that old group is pruned if it emptied). A
+    /// `tab_idx` out of range is a no-op returning `None`.
+    pub fn new_group_with_tab(&mut self, tab_idx: usize) -> Option<String> {
+        if tab_idx >= self.tabs.len() {
+            return None;
+        }
+        let id = fresh_group_id();
+        let name = format!("Group {}", self.groups.len() + 1);
+        let color = GROUP_PALETTE[self.groups.len() % GROUP_PALETTE.len()];
+        self.groups.push(TabGroup {
+            id: id.clone(),
+            name,
+            color,
+            collapsed: false,
+        });
+        self.tabs[tab_idx].group = Some(id.clone());
+        self.prune_empty_groups();
+        Some(id)
+    }
+
+    /// Assign the tab at `tab_idx` to the existing group `group_id` (a no-op if
+    /// either is unknown). Prunes whatever group the tab just left.
+    pub fn assign_to_group(&mut self, tab_idx: usize, group_id: &str) {
+        if tab_idx >= self.tabs.len() || !self.groups.iter().any(|g| g.id == group_id) {
+            return;
+        }
+        self.tabs[tab_idx].group = Some(group_id.to_string());
+        self.prune_empty_groups();
+    }
+
+    /// Remove the tab at `tab_idx` from its group (a no-op if it has none or
+    /// the index is stale). Prunes the group if that was its last member.
+    pub fn remove_from_group(&mut self, tab_idx: usize) {
+        if let Some(t) = self.tabs.get_mut(tab_idx) {
+            t.group = None;
+        }
+        self.prune_empty_groups();
+    }
+
+    /// Flip the collapsed state of group `group_id` (a no-op if unknown).
+    pub fn toggle_group_collapse(&mut self, group_id: &str) {
+        if let Some(g) = self.groups.iter_mut().find(|g| g.id == group_id) {
+            g.collapsed = !g.collapsed;
+        }
+    }
+
+    /// Rename group `group_id` (ignoring an all-whitespace name; a no-op if
+    /// the group is unknown).
+    pub fn rename_group(&mut self, group_id: &str, name: &str) {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        if let Some(g) = self.groups.iter_mut().find(|g| g.id == group_id) {
+            g.name = trimmed.to_string();
+        }
+    }
+
+    /// Recolour group `group_id` (a no-op if unknown).
+    pub fn set_group_color(&mut self, group_id: &str, color: [u8; 3]) {
+        if let Some(g) = self.groups.iter_mut().find(|g| g.id == group_id) {
+            g.color = color;
+        }
+    }
+
+    /// Remove **all** members of `group_id` from the group (which then prunes
+    /// away), i.e. "ungroup". A no-op if the group is unknown.
+    pub fn ungroup_all(&mut self, group_id: &str) {
+        for t in &mut self.tabs {
+            if t.group.as_deref() == Some(group_id) {
+                t.group = None;
+            }
+        }
+        self.prune_empty_groups();
     }
 }
 
@@ -671,10 +854,16 @@ pub fn save_single_tab(tab: &ProjectTab) -> bool {
     let Some(dir) = tabs_dir() else {
         return false;
     };
+    // A single tab is saved out of its group context: drop the membership and
+    // carry no group bands (a band with no member would just be pruned on
+    // load anyway).
+    let mut lone = tab.clone();
+    lone.group = None;
     let session = SavedSession {
         name: tab.title.clone(),
-        tabs: vec![tab.clone()],
+        tabs: vec![lone],
         active: Some(0),
+        groups: Vec::new(),
     };
     save_session_in(&dir, &sanitize_name(&tab.title), &session)
 }
@@ -942,6 +1131,29 @@ struct StripIntent {
     /// picked from the tab-strip "+ Workbench+Agent" placement dropdown.
     /// Routed to [`ValenxApp::add_workbench_agent_pair_at`].
     add_wb_agent_at: Option<crate::dock_layout::UnitAddTarget>,
+
+    // -- Tab groups (Chrome-style coloured bands over the strip) --
+    /// Create a fresh group around the tab at this index (auto-named, next
+    /// palette colour). Routed to [`TabBar::new_group_with_tab`].
+    new_group_with_tab: Option<usize>,
+    /// Add the tab at this index to an existing group: `(tab_idx, group_id)`.
+    /// Routed to [`TabBar::assign_to_group`].
+    assign_to_group: Option<(usize, String)>,
+    /// Remove the tab at this index from its group. Routed to
+    /// [`TabBar::remove_from_group`].
+    remove_from_group: Option<usize>,
+    /// Toggle the collapsed state of this group id. Routed to
+    /// [`TabBar::toggle_group_collapse`].
+    toggle_group_collapse: Option<String>,
+    /// Rename a group: `(group_id, new_name)`. Routed to
+    /// [`TabBar::rename_group`].
+    rename_group: Option<(String, String)>,
+    /// Recolour a group: `(group_id, rgb)`. Routed to
+    /// [`TabBar::set_group_color`].
+    set_group_color: Option<(String, [u8; 3])>,
+    /// Ungroup every member of this group id. Routed to
+    /// [`TabBar::ungroup_all`].
+    ungroup_all: Option<String>,
 }
 
 /// Draw the project-tab strip (a slim panel just below the ribbon) and
@@ -1091,6 +1303,23 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                 intent.save_group = true;
             }
 
+            // Visible "Save project" button — the discoverable second trigger
+            // for the same "Save as project…" modal that the tab right-click
+            // offers (testing found Save-as was right-click-only). Targets the
+            // ACTIVE tab; disabled when there is none. Plain-ASCII label so no
+            // glyph "tofu" box. Reuses the `save_as_project` StripIntent +
+            // `draw_save_as_project` modal verbatim.
+            let active_tab = app.tab_bar.active;
+            if ui
+                .add_enabled(active_tab.is_some(), egui::Button::new("Save project"))
+                .on_hover_text("Save the active tab to the Projects library (Browser panel)")
+                .clicked()
+            {
+                if let Some(i) = active_tab {
+                    intent.save_as_project = Some(i);
+                }
+            }
+
             ui.separator();
 
             if app.tab_bar.tabs.is_empty() {
@@ -1099,10 +1328,63 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
             }
 
             let active = app.tab_bar.active;
+
+            // Snapshot the group display attributes (id → name/color/collapsed)
+            // and the existing-group list for the "Add to group" submenu. Both
+            // are cheap clones taken before the per-tab loop so the loop can
+            // read group state without re-borrowing `app.tab_bar.groups` while
+            // it indexes `app.tab_bar.tabs[i]`; every change is deferred via
+            // `intent`.
+            let group_list: Vec<(String, String)> = app
+                .tab_bar
+                .groups
+                .iter()
+                .map(|g| (g.id.clone(), g.name.clone()))
+                .collect();
+            let group_attrs: std::collections::HashMap<String, TabGroup> = app
+                .tab_bar
+                .groups
+                .iter()
+                .map(|g| (g.id.clone(), g.clone()))
+                .collect();
+
+            // Track which group headers we've already drawn this frame so a
+            // group's coloured band is rendered exactly once, before its first
+            // member (groups are normally contiguous, but membership doesn't
+            // enforce it — a "seen" set keeps a single header per group id).
+            let mut header_drawn: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+
             // Iterate by index so the inline-edit buffer can be mutated.
             for i in 0..app.tab_bar.tabs.len() {
                 let selected = active == Some(i);
                 let editing = app.tab_bar.tabs[i].editing;
+                let this_group = app.tab_bar.tabs[i].group.clone();
+
+                // -- Group header: drawn once, just before this group's first
+                //    member. Carries a coloured swatch + collapse caret, the
+                //    name, a member count, and a right-click context menu.
+                let mut collapsed_here = false;
+                if let Some(gid) = &this_group {
+                    if let Some(g) = group_attrs.get(gid) {
+                        collapsed_here = g.collapsed;
+                        if header_drawn.insert(gid.clone()) {
+                            let members = app
+                                .tab_bar
+                                .tabs
+                                .iter()
+                                .filter(|t| t.group.as_deref() == Some(gid.as_str()))
+                                .count();
+                            draw_group_header(ui, g, members, &mut intent);
+                        }
+                    }
+                }
+
+                // A collapsed group hides its members — the header (with its
+                // count) stands in for them. Skip this tab's button entirely.
+                if collapsed_here {
+                    continue;
+                }
 
                 if editing {
                     // Inline rename: a single-line text field, committed on
@@ -1130,8 +1412,10 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                     if resp.double_clicked() {
                         intent.begin_rename = Some(i);
                     }
-                    // Right-click context menu: rename / save / close. "Save
-                    // this tab" is the escape hatch before a discard-on-close.
+                    // Right-click context menu: rename / save / group / close.
+                    // "Save this tab" is the escape hatch before a
+                    // discard-on-close.
+                    let in_group = this_group.clone();
                     resp.context_menu(|ui| {
                         if ui.button("Rename").clicked() {
                             intent.begin_rename = Some(i);
@@ -1149,6 +1433,32 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                             .clicked()
                         {
                             intent.save_as_project = Some(i);
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        // "Add to group ▸" submenu: existing groups + "New
+                        // group". ASCII-only labels (no glyph caret) so no tofu.
+                        ui.menu_button("Add to group", |ui| {
+                            if ui.button("New group").clicked() {
+                                intent.new_group_with_tab = Some(i);
+                                ui.close_menu();
+                            }
+                            if !group_list.is_empty() {
+                                ui.separator();
+                                for (gid, gname) in &group_list {
+                                    // Skip the group this tab is already in.
+                                    if in_group.as_deref() == Some(gid.as_str()) {
+                                        continue;
+                                    }
+                                    if ui.button(gname).clicked() {
+                                        intent.assign_to_group = Some((i, gid.clone()));
+                                        ui.close_menu();
+                                    }
+                                }
+                            }
+                        });
+                        if in_group.is_some() && ui.button("Remove from group").clicked() {
+                            intent.remove_from_group = Some(i);
                             ui.close_menu();
                         }
                         ui.separator();
@@ -1174,6 +1484,105 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
     apply_intent(app, intent);
     draw_close_confirm(app, ctx);
     draw_save_as_project(app, ctx);
+}
+
+/// Draw a single tab group's coloured header band in the strip, just before
+/// the group's first member tab. The band is an [`egui::Frame`] tinted with
+/// the group's [`TabGroup::color`]; it shows a collapse caret (`>` collapsed /
+/// `v` expanded — ASCII so it never renders as a "tofu" box), the group name,
+/// and the member count (`(n)`). Clicking the band toggles collapse; a
+/// right-click context menu offers Rename, Collapse/Expand, a few colour
+/// swatches, and Ungroup-all. Every action is deferred onto `intent` (the
+/// caller applies it after the read borrow ends), matching the rest of the
+/// strip's deferred-[`StripIntent`] pattern.
+fn draw_group_header(
+    ui: &mut egui::Ui,
+    group: &TabGroup,
+    members: usize,
+    intent: &mut StripIntent,
+) {
+    let [r, g, b] = group.color;
+    let tint = egui::Color32::from_rgb(r, g, b);
+    // A translucent fill so the coloured band reads as a group without
+    // overpowering the tab labels; the caret/name use the solid colour.
+    let frame = egui::Frame::none()
+        .fill(tint.gamma_multiply(0.25))
+        .stroke(egui::Stroke::new(1.0, tint))
+        .rounding(4.0)
+        .inner_margin(egui::Margin::symmetric(6.0, 2.0));
+    let caret = if group.collapsed { ">" } else { "v" };
+    let header_text = format!("{caret} {} ({members})", group.name);
+
+    let resp = frame
+        .show(ui, |ui| {
+            // The band itself is the click target (toggles collapse). A
+            // coloured RichText label keeps the group identity visible.
+            ui.add(egui::Label::new(
+                egui::RichText::new(header_text).color(tint).strong(),
+            ))
+        })
+        .response
+        .interact(egui::Sense::click());
+
+    let resp = resp.on_hover_text(if group.collapsed {
+        "Click to expand this group — right-click for more"
+    } else {
+        "Click to collapse this group — right-click for more"
+    });
+
+    if resp.clicked() {
+        intent.toggle_group_collapse = Some(group.id.clone());
+    }
+
+    resp.context_menu(|ui| {
+        if ui.button("Rename group").clicked() {
+            // Seed the rename with the current name; a tiny inline prompt would
+            // be heavier than this loop needs, so reuse the same `rename_group`
+            // intent the (future) header-edit path uses, no-op-safe.
+            intent.rename_group = Some((group.id.clone(), group.name.clone()));
+            ui.close_menu();
+        }
+        let toggle_label = if group.collapsed {
+            "Expand"
+        } else {
+            "Collapse"
+        };
+        if ui.button(toggle_label).clicked() {
+            intent.toggle_group_collapse = Some(group.id.clone());
+            ui.close_menu();
+        }
+        ui.separator();
+        ui.label(egui::RichText::new("Colour").small().weak());
+        // A row of swatches from the shared palette; clicking recolours.
+        ui.horizontal(|ui| {
+            for swatch in GROUP_PALETTE {
+                let [sr, sg, sb] = swatch;
+                let col = egui::Color32::from_rgb(sr, sg, sb);
+                let (rect, sresp) =
+                    ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
+                ui.painter().rect_filled(rect, 3.0, col);
+                if swatch == group.color {
+                    // Mark the current colour with a light border.
+                    ui.painter().rect_stroke(
+                        rect,
+                        3.0,
+                        egui::Stroke::new(2.0, egui::Color32::WHITE),
+                    );
+                }
+                if sresp.clicked() {
+                    intent.set_group_color = Some((group.id.clone(), swatch));
+                    ui.close_menu();
+                }
+            }
+        });
+        ui.separator();
+        if ui.button("Ungroup all").clicked() {
+            intent.ungroup_all = Some(group.id.clone());
+            ui.close_menu();
+        }
+    });
+
+    ui.separator();
 }
 
 /// Render the "Close tab?" confirmation modal while
@@ -1448,6 +1857,32 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         // the new unit (new top/bottom row, or into an existing row's
         // left/right end). Also turns the dockable layout on.
         app.add_workbench_agent_pair_at(target);
+    }
+
+    // -- Tab-group mutations. Each is a pure presentation-layer change over
+    //    `tabs` (membership + group display attrs); none touches `docs` /
+    //    `active`, and each prunes any group it empties (via the `TabBar`
+    //    helpers).
+    if let Some(i) = intent.new_group_with_tab {
+        app.tab_bar.new_group_with_tab(i);
+    }
+    if let Some((i, gid)) = intent.assign_to_group {
+        app.tab_bar.assign_to_group(i, &gid);
+    }
+    if let Some(i) = intent.remove_from_group {
+        app.tab_bar.remove_from_group(i);
+    }
+    if let Some(gid) = intent.toggle_group_collapse {
+        app.tab_bar.toggle_group_collapse(&gid);
+    }
+    if let Some((gid, name)) = intent.rename_group {
+        app.tab_bar.rename_group(&gid, &name);
+    }
+    if let Some((gid, color)) = intent.set_group_color {
+        app.tab_bar.set_group_color(&gid, color);
+    }
+    if let Some(gid) = intent.ungroup_all {
+        app.tab_bar.ungroup_all(&gid);
     }
 }
 
@@ -1988,6 +2423,388 @@ mod tests {
         assert!(parsed.tabs[0].edit_buf.is_empty());
     }
 
+    // -- Tab groups ---------------------------------------------------------
+
+    #[test]
+    fn session_with_groups_round_trips_through_json() {
+        // A SavedSession carrying tab groups (the coloured Chrome-style bands)
+        // survives a JSON round-trip: the group bands AND each tab's membership
+        // come back intact.
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket); // tab 0
+        bar.open(TabKind::Cad); // tab 1
+        bar.open_blank(); // tab 2 (ungrouped)
+                          // Put tabs 0 and 1 into one group.
+        let gid = bar.new_group_with_tab(0).expect("group minted");
+        bar.assign_to_group(1, &gid);
+        bar.set_group_color(&gid, [10, 20, 30]);
+        bar.rename_group(&gid, "Aero stack");
+        bar.toggle_group_collapse(&gid); // collapsed = true
+        bar.active = Some(1);
+
+        let session = bar.snapshot("grouped session");
+        let json = to_json(&session).expect("serialize");
+        let parsed = from_json(&json).expect("deserialize");
+
+        assert_eq!(parsed.groups.len(), 1, "the one group round-trips");
+        let g = &parsed.groups[0];
+        assert_eq!(g.id, gid);
+        assert_eq!(g.name, "Aero stack");
+        assert_eq!(g.color, [10, 20, 30]);
+        assert!(g.collapsed, "collapsed state round-trips");
+        // Membership survives on the tabs.
+        assert_eq!(parsed.tabs[0].group.as_deref(), Some(gid.as_str()));
+        assert_eq!(parsed.tabs[1].group.as_deref(), Some(gid.as_str()));
+        assert_eq!(parsed.tabs[2].group, None, "the blank tab stays ungrouped");
+    }
+
+    #[test]
+    fn old_session_json_without_groups_field_deserializes_to_empty() {
+        // BACK-COMPAT GUARANTEE 1: a session file written before tab groups
+        // existed (no `groups` key at all) must still load — serde fills it via
+        // `#[serde(default)]` with an empty group list, and the tabs (which
+        // also lack a `group` key) deserialise ungrouped.
+        let old_json = r#"{
+            "name": "legacy",
+            "tabs": [
+                { "kind": "Rocket", "title": "old rocket" },
+                { "kind": "Cad", "title": "old part" }
+            ],
+            "active": 0
+        }"#;
+        let parsed = from_json(old_json).expect("legacy session must deserialize");
+        assert_eq!(parsed.name, "legacy");
+        assert_eq!(parsed.tabs.len(), 2);
+        assert!(
+            parsed.groups.is_empty(),
+            "a missing `groups` field defaults to no groups"
+        );
+        // BACK-COMPAT GUARANTEE 2: a tab without a `group` field is ungrouped.
+        assert_eq!(parsed.tabs[0].group, None);
+        assert_eq!(parsed.tabs[1].group, None);
+        assert_eq!(parsed.tabs[0].kind, TabKind::Rocket);
+    }
+
+    #[test]
+    fn project_tab_json_without_group_deserializes_to_none() {
+        // The narrowest back-compat case: a bare ProjectTab JSON with no
+        // `group` key deserialises with `group == None` (the `#[serde(default)]`
+        // on the field), so library entries / single-tab saves from before the
+        // feature still load.
+        let tab: ProjectTab =
+            serde_json::from_str(r#"{ "kind": "Fem", "title": "beam" }"#).expect("deserialize");
+        assert_eq!(tab.group, None);
+        assert_eq!(tab.kind, TabKind::Fem);
+        assert_eq!(tab.title, "beam");
+        // And the transient edit fields default too (they are `#[serde(skip)]`).
+        assert!(!tab.editing);
+        assert!(tab.edit_buf.is_empty());
+    }
+
+    #[test]
+    fn new_group_with_tab_mints_named_coloured_group_and_assigns() {
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket);
+        bar.open(TabKind::Cad);
+        let gid = bar.new_group_with_tab(0).expect("group minted");
+        assert_eq!(bar.groups.len(), 1);
+        assert_eq!(bar.groups[0].id, gid);
+        assert_eq!(bar.groups[0].name, "Group 1", "auto-named Group N");
+        assert_eq!(
+            bar.groups[0].color, GROUP_PALETTE[0],
+            "first group takes the first palette colour"
+        );
+        assert!(!bar.groups[0].collapsed, "a fresh group is expanded");
+        assert_eq!(bar.tabs[0].group.as_deref(), Some(gid.as_str()));
+        assert_eq!(bar.tabs[1].group, None);
+
+        // A second group takes the next palette colour and the next number.
+        let gid2 = bar.new_group_with_tab(1).expect("second group");
+        assert_ne!(gid, gid2, "group ids are unique");
+        assert_eq!(bar.groups[1].name, "Group 2");
+        assert_eq!(bar.groups[1].color, GROUP_PALETTE[1]);
+
+        // Out-of-range index is a no-op.
+        assert_eq!(bar.new_group_with_tab(99), None);
+        assert_eq!(bar.groups.len(), 2);
+    }
+
+    #[test]
+    fn assign_to_group_moves_membership_and_prunes_emptied_group() {
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket); // 0
+        bar.open(TabKind::Cad); // 1
+        let g_a = bar.new_group_with_tab(0).expect("group A");
+        let g_b = bar.new_group_with_tab(1).expect("group B");
+        assert_eq!(bar.groups.len(), 2);
+
+        // Move tab 0 (sole member of A) into B → A empties and is pruned.
+        bar.assign_to_group(0, &g_b);
+        assert_eq!(bar.tabs[0].group.as_deref(), Some(g_b.as_str()));
+        assert_eq!(
+            bar.groups.len(),
+            1,
+            "group A had no members left and was pruned"
+        );
+        assert!(
+            bar.groups.iter().all(|g| g.id != g_a),
+            "the emptied group A is gone"
+        );
+
+        // Assigning to an unknown group id is a no-op.
+        bar.assign_to_group(0, "grp-does-not-exist");
+        assert_eq!(bar.tabs[0].group.as_deref(), Some(g_b.as_str()));
+    }
+
+    #[test]
+    fn remove_from_group_clears_membership_and_prunes() {
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket);
+        let gid = bar.new_group_with_tab(0).expect("group");
+        assert_eq!(bar.groups.len(), 1);
+        bar.remove_from_group(0);
+        assert_eq!(bar.tabs[0].group, None);
+        assert!(
+            bar.groups.is_empty(),
+            "removing the sole member prunes the now-empty group"
+        );
+        // A second remove is harmless.
+        bar.remove_from_group(0);
+        assert!(bar.groups.is_empty());
+        let _ = gid;
+    }
+
+    #[test]
+    fn toggle_collapse_rename_and_recolour_mutate_the_group() {
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket);
+        let gid = bar.new_group_with_tab(0).expect("group");
+        assert!(!bar.groups[0].collapsed);
+
+        bar.toggle_group_collapse(&gid);
+        assert!(bar.groups[0].collapsed, "toggle flips collapse on");
+        bar.toggle_group_collapse(&gid);
+        assert!(!bar.groups[0].collapsed, "toggle flips it back off");
+
+        bar.rename_group(&gid, "  Boosters  ");
+        assert_eq!(bar.groups[0].name, "Boosters", "rename trims whitespace");
+        // An all-whitespace rename is ignored.
+        bar.rename_group(&gid, "   ");
+        assert_eq!(bar.groups[0].name, "Boosters");
+
+        bar.set_group_color(&gid, [1, 2, 3]);
+        assert_eq!(bar.groups[0].color, [1, 2, 3]);
+
+        // Mutations on an unknown id are all no-ops (no panic, no change).
+        bar.toggle_group_collapse("nope");
+        bar.rename_group("nope", "x");
+        bar.set_group_color("nope", [9, 9, 9]);
+        assert_eq!(bar.groups.len(), 1);
+        assert_eq!(bar.groups[0].name, "Boosters");
+        assert_eq!(bar.groups[0].color, [1, 2, 3]);
+    }
+
+    #[test]
+    fn ungroup_all_clears_every_member_and_prunes_the_group() {
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket); // 0
+        bar.open(TabKind::Cad); // 1
+        bar.open_blank(); // 2 (stays ungrouped)
+        let gid = bar.new_group_with_tab(0).expect("group");
+        bar.assign_to_group(1, &gid);
+        assert_eq!(bar.groups.len(), 1);
+
+        bar.ungroup_all(&gid);
+        assert_eq!(bar.tabs[0].group, None);
+        assert_eq!(bar.tabs[1].group, None);
+        assert_eq!(bar.tabs[2].group, None);
+        assert!(bar.groups.is_empty(), "the ungrouped band is pruned");
+    }
+
+    #[test]
+    fn closing_a_tab_prunes_its_now_empty_group() {
+        // Closing the last member of a group must drop the group band too —
+        // exercised through the bare TabBar::close path.
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket); // 0
+        bar.open(TabKind::Cad); // 1
+        let gid = bar.new_group_with_tab(1).expect("group on tab 1");
+        assert_eq!(bar.groups.len(), 1);
+        bar.close(1);
+        assert!(
+            bar.groups.is_empty(),
+            "closing the sole group member prunes the group"
+        );
+        let _ = gid;
+    }
+
+    #[test]
+    fn restore_drops_groups_with_no_surviving_members() {
+        // A (hand-built or corrupt) session whose group has no member tab must
+        // not resurrect an orphan band on restore.
+        let session = SavedSession {
+            name: "orphan".to_string(),
+            tabs: vec![ProjectTab::new(TabKind::Rocket, "solo")],
+            active: Some(0),
+            groups: vec![TabGroup {
+                id: "grp-orphan".to_string(),
+                name: "Ghost".to_string(),
+                color: [1, 2, 3],
+                collapsed: false,
+            }],
+        };
+        let mut bar = TabBar::default();
+        bar.restore(session);
+        assert_eq!(bar.tabs.len(), 1);
+        assert!(
+            bar.groups.is_empty(),
+            "a group with no member is pruned on restore"
+        );
+    }
+
+    #[test]
+    fn append_remaps_group_ids_so_they_never_collide() {
+        // Appending a saved session that has its own group must NOT clobber an
+        // existing group sharing the same id — the appended group's id is
+        // remapped to a fresh one, and the appended tabs follow the remap.
+        let mut bar = TabBar::default();
+        bar.open(TabKind::Rocket); // 0
+        let existing = bar.new_group_with_tab(0).expect("existing group");
+
+        // A session that (adversarially) reuses the SAME id string the live
+        // strip just minted, on its own tab.
+        let mut appended_tab = ProjectTab::new(TabKind::Cad, "imported");
+        appended_tab.group = Some(existing.clone());
+        let session = SavedSession {
+            name: "import".to_string(),
+            tabs: vec![appended_tab],
+            active: Some(0),
+            groups: vec![TabGroup {
+                id: existing.clone(),
+                name: "Imported".to_string(),
+                color: [4, 5, 6],
+                collapsed: false,
+            }],
+        };
+        bar.append(session);
+
+        assert_eq!(bar.tabs.len(), 2);
+        assert_eq!(bar.groups.len(), 2, "both groups survive (ids remapped)");
+        // The original tab still points at the original group.
+        assert_eq!(bar.tabs[0].group.as_deref(), Some(existing.as_str()));
+        // The appended tab points at a DIFFERENT id (the remap), not `existing`.
+        let imported_gid = bar.tabs[1].group.clone().expect("imported membership");
+        assert_ne!(
+            imported_gid, existing,
+            "the appended group id was remapped to avoid collision"
+        );
+        // And that remapped group carries the appended group's attributes.
+        let imported = bar
+            .groups
+            .iter()
+            .find(|g| g.id == imported_gid)
+            .expect("remapped group present");
+        assert_eq!(imported.name, "Imported");
+        assert_eq!(imported.color, [4, 5, 6]);
+    }
+
+    #[test]
+    fn group_intents_route_through_apply_intent() {
+        // The strip's deferred StripIntent variants drive the TabBar group
+        // helpers. Walk the lifecycle end-to-end through apply_intent.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // 0
+        app.tab_bar.open(TabKind::Cad); // 1
+
+        // new_group_with_tab(0)
+        apply_intent(
+            &mut app,
+            StripIntent {
+                new_group_with_tab: Some(0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.groups.len(), 1);
+        let gid = app.tab_bar.groups[0].id.clone();
+        assert_eq!(app.tab_bar.tabs[0].group.as_deref(), Some(gid.as_str()));
+
+        // assign_to_group(1, gid)
+        apply_intent(
+            &mut app,
+            StripIntent {
+                assign_to_group: Some((1, gid.clone())),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.tabs[1].group.as_deref(), Some(gid.as_str()));
+
+        // toggle_group_collapse(gid)
+        apply_intent(
+            &mut app,
+            StripIntent {
+                toggle_group_collapse: Some(gid.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(app.tab_bar.groups[0].collapsed);
+
+        // rename_group(gid, "Stack")
+        apply_intent(
+            &mut app,
+            StripIntent {
+                rename_group: Some((gid.clone(), "Stack".to_string())),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.groups[0].name, "Stack");
+
+        // ungroup_all(gid) → group pruned
+        apply_intent(
+            &mut app,
+            StripIntent {
+                ungroup_all: Some(gid.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(app.tab_bar.groups.is_empty());
+        assert_eq!(app.tab_bar.tabs[0].group, None);
+        assert_eq!(app.tab_bar.tabs[1].group, None);
+    }
+
+    #[test]
+    fn save_project_button_intent_opens_prompt_for_active_tab() {
+        // The visible "Save project" button reuses the `save_as_project`
+        // StripIntent, seeded with the ACTIVE tab's index + title — exactly the
+        // same prompt the right-click "Save as project…" raises.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket);
+        app.tab_bar.open(TabKind::Cad);
+        app.tab_bar.tabs[1].title = "My Part".to_string();
+        app.tab_bar.active = Some(1);
+
+        assert!(
+            app.tab_save_as_project.is_none(),
+            "no prompt open initially"
+        );
+        // The button fires `save_as_project` with the active index (the strip
+        // computes `app.tab_bar.active` and forwards it).
+        let active = app.tab_bar.active;
+        apply_intent(
+            &mut app,
+            StripIntent {
+                save_as_project: active,
+                ..Default::default()
+            },
+        );
+        let prompt = app
+            .tab_save_as_project
+            .as_ref()
+            .expect("Save-project button opens the prompt");
+        assert_eq!(prompt.tab_idx, 1, "prompt targets the active tab");
+        assert_eq!(prompt.name, "My Part", "prompt is seeded with the title");
+        assert_eq!(prompt.folder, None, "defaults to (unfiled)");
+    }
+
     #[test]
     fn single_tab_json_round_trip() {
         let tab = ProjectTab::new(TabKind::Cad, "bracket");
@@ -1995,6 +2812,7 @@ mod tests {
             name: tab.title.clone(),
             tabs: vec![tab.clone()],
             active: Some(0),
+            groups: Vec::new(),
         };
         let json = to_json(&session).expect("serialize");
         let parsed = from_json(&json).expect("deserialize");
@@ -2013,6 +2831,7 @@ mod tests {
             name: "bad".to_string(),
             tabs: vec![ProjectTab::new(TabKind::Cad, "a")],
             active: Some(7),
+            groups: Vec::new(),
         };
         bar.restore(session);
         assert_eq!(bar.tabs.len(), 1);
@@ -2024,6 +2843,7 @@ mod tests {
             name: "empty".to_string(),
             tabs: vec![],
             active: Some(3),
+            groups: Vec::new(),
         });
         assert!(bar.tabs.is_empty());
         assert_eq!(bar.active, None);
@@ -2041,6 +2861,7 @@ mod tests {
                 ProjectTab::new(TabKind::Fem, "y"),
             ],
             active: Some(1),
+            groups: Vec::new(),
         };
         let idx = bar.append(session);
         assert_eq!(idx, Some(1));
@@ -2114,6 +2935,7 @@ mod tests {
             name: tab.title.clone(),
             tabs: vec![tab.clone()],
             active: Some(0),
+            groups: Vec::new(),
         };
         assert!(
             save_session_in(dir.path(), &sanitize_name(&tab.title), &session),
@@ -2343,5 +3165,61 @@ mod headless_ui_tests {
         app.tab_close_confirm = Some(5);
         draw_strip(&mut app);
         assert_eq!(app.tab_close_confirm, None);
+    }
+
+    #[test]
+    fn strip_with_an_expanded_group_draws_without_panic() {
+        // A grouped + ungrouped mix: the strip draws the group's coloured
+        // header band before its members and the plain ungrouped tab after,
+        // plus the "Save project" toolbar button — all headlessly, no panic.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // 0
+        app.tab_bar.open(TabKind::Cad); // 1
+        app.tab_bar.open_blank(); // 2 (ungrouped)
+        let gid = app.tab_bar.new_group_with_tab(0).expect("group");
+        app.tab_bar.assign_to_group(1, &gid);
+        app.tab_bar.active = Some(1);
+        sync_active(&mut app);
+        draw_strip(&mut app);
+        // Drawing alone (no synthesised clicks) disturbs nothing.
+        assert_eq!(app.tab_bar.groups.len(), 1);
+        assert!(!app.tab_bar.groups[0].collapsed);
+        assert_eq!(app.tab_bar.tabs.len(), 3);
+    }
+
+    #[test]
+    fn strip_with_a_collapsed_group_draws_header_and_skips_members() {
+        // A collapsed group renders just its header (with the member count);
+        // its member tabs are skipped. The render path must stay panic-free and
+        // leave the collapsed state untouched without a click.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // 0
+        app.tab_bar.open(TabKind::Cad); // 1
+        let gid = app.tab_bar.new_group_with_tab(0).expect("group");
+        app.tab_bar.assign_to_group(1, &gid);
+        app.tab_bar.toggle_group_collapse(&gid); // collapse it
+        app.tab_bar.active = Some(0);
+        sync_active(&mut app);
+        draw_strip(&mut app);
+        assert!(
+            app.tab_bar.groups[0].collapsed,
+            "no click → the group stays collapsed"
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 2, "no tab was closed");
+    }
+
+    #[test]
+    fn strip_save_project_button_is_present_with_an_active_tab() {
+        // With an active tab the strip mounts the enabled "Save project"
+        // button; with no synthesised click it must NOT open the prompt.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket);
+        app.tab_bar.active = Some(0);
+        sync_active(&mut app);
+        draw_strip(&mut app);
+        assert!(
+            app.tab_save_as_project.is_none(),
+            "no click → the Save-project prompt stays closed"
+        );
     }
 }
