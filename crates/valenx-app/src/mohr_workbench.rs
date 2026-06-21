@@ -292,6 +292,27 @@ fn load_element_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical mohr workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn mohr_product() -> crate::WorkspaceProduct {
+    let s = MohrWorkbenchState::default();
+    let mesh = element_solid_mesh(&s).expect("canonical mohr ⇒ stress-element solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<mohr>/valenx-element");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical mohr ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Mohr's circle (principal stresses)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -173,6 +173,28 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "truss" => crate::truss_workbench::truss_product,
         "plate" => crate::plate_workbench::plate_product,
         "buckling" => crate::buckling_workbench::buckling_product,
+        // Civil / strength-of-materials / mechanisms / vibration family (each
+        // builder lives in its own workbench module; see that module's
+        // `*_product`).
+        "columnsteel" => crate::columnsteel_workbench::columnsteel_product,
+        "retainingwall" => crate::retainingwall_workbench::retainingwall_product,
+        "soilbearing" => crate::soilbearing_workbench::soilbearing_product,
+        "statics" => crate::statics_workbench::statics_product,
+        "mohr" => crate::mohr_workbench::mohr_product,
+        "torsion" => crate::torsion_workbench::torsion_product,
+        "fatigue" => crate::fatigue_workbench::fatigue_product,
+        "fracture" => crate::fracture_workbench::fracture_product,
+        "creep" => crate::creep_workbench::creep_product,
+        "pressurevessel" => crate::pressurevessel_workbench::pressurevessel_product,
+        "straingauge" => crate::straingauge_workbench::straingauge_product,
+        "strainrosette" => crate::strainrosette_workbench::strainrosette_product,
+        "rail" => crate::rail_workbench::rail_product,
+        "springdesign" => crate::springdesign_workbench::springdesign_product,
+        "springs" => crate::springs_workbench::springs_product,
+        "springcombination" => crate::springcombination_workbench::springcombination_product,
+        "leverage" => crate::leverage_workbench::leverage_product,
+        "inclinedplane" => crate::inclinedplane_workbench::inclinedplane_product,
+        "vibration" => crate::vibration_workbench::vibration_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -209,6 +231,25 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "truss" => "truss",
         "plate" => "plate",
         "buckling" => "buckling",
+        "columnsteel" => "columnsteel",
+        "retainingwall" => "retainingwall",
+        "soilbearing" => "soilbearing",
+        "statics" => "statics",
+        "mohr" => "mohr",
+        "torsion" => "torsion",
+        "fatigue" => "fatigue",
+        "fracture" => "fracture",
+        "creep" => "creep",
+        "pressurevessel" => "pressurevessel",
+        "straingauge" => "straingauge",
+        "strainrosette" => "strainrosette",
+        "rail" => "rail",
+        "springdesign" => "springdesign",
+        "springs" => "springs",
+        "springcombination" => "springcombination",
+        "leverage" => "leverage",
+        "inclinedplane" => "inclinedplane",
+        "vibration" => "vibration",
         _ => return None,
     })
 }
@@ -244,11 +285,34 @@ mod tests {
         "truss",
         "plate",
         "buckling",
+        // Civil / strength-of-materials / mechanisms / vibration workbenches
+        // wired into the bridge.
+        "columnsteel",
+        "retainingwall",
+        "soilbearing",
+        "statics",
+        "mohr",
+        "torsion",
+        "fatigue",
+        "fracture",
+        "creep",
+        "pressurevessel",
+        "straingauge",
+        "strainrosette",
+        "rail",
+        "springdesign",
+        "springs",
+        "springcombination",
+        "leverage",
+        "inclinedplane",
+        "vibration",
     ];
 
-    /// The 18 machine-design / structural workbench kinds wired into the bridge
-    /// in this change — every one must resolve via [`lookup`] and build a
-    /// non-empty `Tri3` mesh product (the agent-bridge `show_3d{kind}` payload).
+    /// The machine-design / structural / civil / strength-of-materials /
+    /// mechanisms / vibration workbench kinds wired into the bridge — every one
+    /// must resolve via [`lookup`] and build a non-empty `Tri3` mesh product
+    /// carrying a title and at least one readout row (the agent-bridge
+    /// `show_3d{kind}` payload).
     const WIRED_WORKBENCH_KINDS: &[&str] = &[
         "geartooth",
         "gearbox",
@@ -268,6 +332,27 @@ mod tests {
         "truss",
         "plate",
         "buckling",
+        // The 19 civil / strength-of-materials / mechanisms / vibration
+        // workbenches wired in this change.
+        "columnsteel",
+        "retainingwall",
+        "soilbearing",
+        "statics",
+        "mohr",
+        "torsion",
+        "fatigue",
+        "fracture",
+        "creep",
+        "pressurevessel",
+        "straingauge",
+        "strainrosette",
+        "rail",
+        "springdesign",
+        "springs",
+        "springcombination",
+        "leverage",
+        "inclinedplane",
+        "vibration",
     ];
 
     #[test]

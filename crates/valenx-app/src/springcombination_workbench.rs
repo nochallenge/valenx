@@ -318,6 +318,29 @@ fn load_springs_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical springcombination workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn springcombination_product() -> crate::WorkspaceProduct {
+    let s = SpringCombinationWorkbenchState::default();
+    let mesh =
+        springs_solid_mesh(&s).expect("canonical springcombination ⇒ spring-set solid builds");
+    let loaded =
+        crate::products_registry::loaded_mesh_from(mesh, "<springcombination>/valenx-springs");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical springcombination ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Spring combination (series/parallel)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

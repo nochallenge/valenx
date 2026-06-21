@@ -361,6 +361,27 @@ fn load_specimen_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical fracture workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn fracture_product() -> crate::WorkspaceProduct {
+    let s = FractureWorkbenchState::default();
+    let mesh = specimen_solid_mesh(&s).expect("canonical fracture ⇒ specimen solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fracture>/valenx-specimen");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical fracture ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Fracture (stress-intensity K)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

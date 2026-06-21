@@ -394,6 +394,27 @@ fn load_plate_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical strainrosette workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn strainrosette_product() -> crate::WorkspaceProduct {
+    let s = StrainRosetteWorkbenchState::default();
+    let mesh = plate_solid_mesh(&s).expect("canonical strainrosette ⇒ rosette plate solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<strainrosette>/valenx-plate");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical strainrosette ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Strain rosette (principal strains)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

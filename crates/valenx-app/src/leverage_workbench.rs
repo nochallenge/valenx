@@ -398,6 +398,27 @@ fn load_lever_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical leverage workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn leverage_product() -> crate::WorkspaceProduct {
+    let s = LeverageWorkbenchState::default();
+    let mesh = lever_solid_mesh(&s).expect("canonical leverage ⇒ lever solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<leverage>/valenx-lever");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical leverage ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Lever (mechanical advantage)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

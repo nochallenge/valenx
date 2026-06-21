@@ -358,6 +358,27 @@ fn load_shaft_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical torsion workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn torsion_product() -> crate::WorkspaceProduct {
+    let s = TorsionWorkbenchState::default();
+    let mesh = shaft_solid_mesh(&s).expect("canonical torsion ⇒ shaft solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<torsion>/valenx-shaft");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical torsion ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Shaft torsion (shear stress/twist)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -336,6 +336,27 @@ fn load_specimen_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical straingauge workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn straingauge_product() -> crate::WorkspaceProduct {
+    let s = StrainGaugeWorkbenchState::default();
+    let mesh = specimen_solid_mesh(&s).expect("canonical straingauge ⇒ specimen solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<straingauge>/valenx-specimen");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical straingauge ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Strain gauge (Wheatstone bridge)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

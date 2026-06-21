@@ -445,6 +445,27 @@ fn load_beam_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical statics workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn statics_product() -> crate::WorkspaceProduct {
+    let s = StaticsWorkbenchState::default();
+    let mesh = beam_solid_mesh(&s).expect("canonical statics ⇒ beam solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<statics>/valenx-beam");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical statics ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Statics beam (reactions/shear/moment)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

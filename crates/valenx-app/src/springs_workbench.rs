@@ -444,6 +444,28 @@ fn run_springs(s: &mut SpringsWorkbenchState) {
     );
 }
 
+/// Agent-bridge product: the canonical springs workbench as a 3-D solid plus its
+/// analysed readout rows (this workbench formats its readout into `s.result`
+/// via [`run_springs`] rather than a `compute()` string; see
+/// [`crate::products_registry`]).
+pub(crate) fn springs_product() -> crate::WorkspaceProduct {
+    let mut s = SpringsWorkbenchState::default();
+    let mesh = spring_solid_mesh(&s).expect("canonical springs ⇒ coil-spring solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<springs>/valenx-spring");
+    run_springs(&mut s);
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Coil spring (rate/stress)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
