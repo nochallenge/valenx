@@ -425,6 +425,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     vertex_colors: None,
                     camera: valenx_viz::OrbitCamera::default(),
                     kind2d: None,
+                    last_export: None,
                 },
             );
         }
@@ -452,6 +453,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: None,
                         camera,
                         kind2d: None,
+                        last_export: None,
                     },
                 );
             } else if kind == "gear" {
@@ -466,6 +468,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: None,
                         camera,
                         kind2d: None,
+                        last_export: None,
                     },
                 );
             } else if kind == "bracket" {
@@ -480,6 +483,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: None,
                         camera,
                         kind2d: None,
+                        last_export: None,
                     },
                 );
             } else if kind == "rcbeam" {
@@ -494,6 +498,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: None,
                         camera,
                         kind2d: None,
+                        last_export: None,
                     },
                 );
             } else if kind == "fem" {
@@ -512,6 +517,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: Some(vertex_colors),
                         camera,
                         kind2d: None,
+                        last_export: None,
                     },
                 );
             } else if kind == "dna" {
@@ -529,6 +535,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: None,
                         camera: valenx_viz::OrbitCamera::default(),
                         kind2d: None,
+                        last_export: None,
                     },
                 );
             }
@@ -554,6 +561,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: None,
                         camera: valenx_viz::OrbitCamera::default(),
                         kind2d: Some(crate::Workspace2dKind::RcSection(view)),
+                        last_export: None,
                     },
                 );
             } else if kind == "dna" {
@@ -569,6 +577,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         vertex_colors: None,
                         camera: valenx_viz::OrbitCamera::default(),
                         kind2d: Some(crate::Workspace2dKind::DnaMap(map)),
+                        last_export: None,
                     },
                 );
             }

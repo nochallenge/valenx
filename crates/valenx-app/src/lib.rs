@@ -346,6 +346,14 @@ pub struct WorkspaceProduct {
     /// the 3-D viewport and the text card). `None` for plain / mesh / text
     /// products. See [`Workspace2dKind`].
     pub kind2d: Option<Workspace2dKind>,
+    /// Transient status line for the tile's "Export STL" action, shown next to
+    /// the button so the user sees where the mesh was written (e.g.
+    /// `"saved → C:\\…\\Downloads\\valenx_rocket.stl"`) or why it failed
+    /// (`"export failed: …"`). `None` until the first export. Only meaningful
+    /// for mesh products ([`Self::mesh`] is `Some`); other product kinds never
+    /// show the button and so never set it. Set by
+    /// [`crate::dock_layout`]'s `render_workspace_body` on button click.
+    pub last_export: Option<String>,
 }
 
 /// Which **2-D engineering drawing** a [`WorkspaceProduct`] carries, with the
