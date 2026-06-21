@@ -59,7 +59,7 @@
 //!     crate::WorkspaceProduct {
 //!         title: "Foo".into(), lines, mesh: Some(mesh),
 //!         vertex_colors: None, camera, kind2d: None, last_export: None,
-//!         image: None, image_texture: None,
+//!         image: None, image_texture: None, animation: None,
 //!     }
 //! }
 //! ```

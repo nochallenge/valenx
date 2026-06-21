@@ -375,6 +375,77 @@ pub struct WorkspaceProduct {
     /// handle frees the GPU texture when the product is dropped (RAII). Never
     /// set for non-image products.
     pub image_texture: Option<egui::TextureHandle>,
+    /// When `Some`, this mesh product is **animated**: the toolbar shows
+    /// Play/Pause + speed + reset controls and, while playing, the per-tile 3-D
+    /// view re-poses the mesh nodes each frame from [`ProductAnimation::t`]
+    /// (see [`crate::dock_layout`]'s render path). `None` for static products
+    /// (the existing byte-identical static render). Only meaningful when
+    /// [`Self::mesh`] is `Some` — a 2-D / text / image product never animates.
+    /// The 2-stage spur reducer (`gears_workbench::gear_product`) sets this to a
+    /// [`ProductMotion::RigidParts`] so each gear counter-rotates and the teeth
+    /// visibly mesh; other mesh products leave it `None` for now.
+    pub animation: Option<ProductAnimation>,
+}
+
+/// Real-time **animation state** for an animated [`WorkspaceProduct`].
+///
+/// The toolbar advances [`Self::t`] (seconds of *animation* time) each frame
+/// while [`Self::playing`], scaled by [`Self::speed`]; the render path then
+/// poses the product's mesh from `t` via [`Self::motion`]. Kept a plain
+/// `Clone + PartialEq` value (no GPU / mesh handles) so products stay cheap to
+/// snapshot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProductAnimation {
+    /// Whether the clock is currently running (Play vs Pause).
+    pub playing: bool,
+    /// Playback-speed multiplier applied to wall-clock dt, in `0.0..=4.0`
+    /// (the toolbar slider's range). `1.0` is real-time relative to the motion's
+    /// own `rad_per_s`.
+    pub speed: f32,
+    /// Elapsed **animation** time in seconds. Drives every motion's angle
+    /// (`rad_per_s * t`). Reset to `0.0` by the toolbar's reset button.
+    pub t: f32,
+    /// What moves and how.
+    pub motion: ProductMotion,
+}
+
+/// The kind of rigid motion an animated product performs.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProductMotion {
+    /// Spin the **whole mesh** about a fixed world axis through `pivot` — a
+    /// generic turntable for any single-body product. Angle = `rad_per_s * t`.
+    Turntable {
+        /// World-space rotation axis (need not be unit length; normalised at
+        /// pose time).
+        axis: [f32; 3],
+        /// World-space point the axis passes through.
+        pivot: [f32; 3],
+        /// Angular rate (radians per second of animation time).
+        rad_per_s: f32,
+    },
+    /// Per-part **rigid rotation**: each [`RigidPart`] spins its own contiguous
+    /// node range about its own axis/pivot. Used by the gear train so meshing
+    /// gears counter-rotate independently. Nodes outside every part's range stay
+    /// fixed.
+    RigidParts(Vec<RigidPart>),
+}
+
+/// One independently-rotating body inside a [`ProductMotion::RigidParts`]
+/// product: the half-open `node_range` of mesh nodes to rotate, about `axis`
+/// through `pivot`, at `rad_per_s`. The ranges are recorded at mesh-fusion time
+/// (the order parts are concatenated into the combined node array), so they tile
+/// the mesh's node count without overlap.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RigidPart {
+    /// Half-open `[start, end)` index range into the mesh's `nodes` array.
+    pub node_range: std::ops::Range<usize>,
+    /// World-space rotation axis (normalised at pose time).
+    pub axis: [f32; 3],
+    /// World-space point the axis passes through (this body's shaft centre).
+    pub pivot: [f32; 3],
+    /// Signed angular rate (rad/s); the sign encodes spin direction so meshing
+    /// pairs counter-rotate.
+    pub rad_per_s: f32,
 }
 
 /// Which **2-D engineering drawing** a [`WorkspaceProduct`] carries, with the

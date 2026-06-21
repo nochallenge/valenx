@@ -496,6 +496,7 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
                             last_export: None,
                             image: None,
                             image_texture: None,
+                            animation: None,
                         },
                     );
                 }
@@ -634,6 +635,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     last_export: None,
                     image: None,
                     image_texture: None,
+                    animation: None,
                 },
             );
         }
@@ -674,6 +676,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         last_export: None,
                         image: None,
                         image_texture: None,
+                        animation: None,
                     },
                 );
             }
@@ -702,6 +705,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         last_export: None,
                         image: None,
                         image_texture: None,
+                        animation: None,
                     },
                 );
             } else if kind == "dna" {
@@ -720,6 +724,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         last_export: None,
                         image: None,
                         image_texture: None,
+                        animation: None,
                     },
                 );
             }
