@@ -448,6 +448,57 @@ pub struct RigidPart {
     pub rad_per_s: f32,
 }
 
+impl WorkspaceProduct {
+    /// Give a mesh product a **default inspect-spin** animation if it has none,
+    /// so every bridge-rendered 3-D product carries the Play/Pause + speed
+    /// toolbar (an idle turntable the user can start to inspect the part from
+    /// all sides).
+    ///
+    /// Sets [`Self::animation`] to a paused [`ProductMotion::Turntable`] about
+    /// `+Z` through the mesh's axis-aligned bounding-box centre at
+    /// `0.4 rad/s` (~1 revolution / 15 s — a gentle inspect spin), but **only**
+    /// when both:
+    ///
+    /// - [`Self::animation`] is currently `None` (so a product that already has
+    ///   real motion — e.g. the gear train's [`ProductMotion::RigidParts`] — is
+    ///   left untouched), and
+    /// - [`Self::mesh`] is `Some` (a 2-D / card / image product, which never
+    ///   animates, is left untouched).
+    ///
+    /// `playing` starts `false`: the control is present but the product does
+    /// **not** auto-spin until the user (or an `animate` command) presses Play.
+    /// A no-op in every other case, so it is safe to call unconditionally right
+    /// after a product is built. The pivot is the `(min + max) * 0.5` midpoint
+    /// of the mesh's node AABB (via `mesh_loader::mesh_bounding_box`); an empty
+    /// mesh falls back to the origin.
+    pub fn ensure_default_animation(&mut self) {
+        if self.animation.is_some() {
+            return;
+        }
+        let Some(loaded) = self.mesh.as_ref() else {
+            return;
+        };
+        let pivot = match crate::mesh_loader::mesh_bounding_box(&loaded.mesh) {
+            Some((min, max)) => [
+                (min[0] + max[0]) * 0.5,
+                (min[1] + max[1]) * 0.5,
+                (min[2] + max[2]) * 0.5,
+            ],
+            None => [0.0, 0.0, 0.0],
+        };
+        self.animation = Some(ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: ProductMotion::Turntable {
+                axis: [0.0, 0.0, 1.0],
+                pivot,
+                rad_per_s: 0.4,
+            },
+        });
+    }
+}
+
 /// Which **2-D engineering drawing** a [`WorkspaceProduct`] carries, with the
 /// small plain-data view the egui painter needs (no wgpu / mesh types, so the
 /// whole thing is cheaply `Clone`). Painted by [`crate::dock_layout`]'s
@@ -2689,4 +2740,134 @@ mod tests {
     // public Result<(), String> signature is the contract; the
     // no-workdir error paths above test the callers, which is what
     // matters for app behaviour.
+
+    /// Build a `LoadedMesh` whose node cloud spans the given AABB, so a test
+    /// can assert `ensure_default_animation`'s pivot is the box centre. The
+    /// mesh carries only nodes (no elements) — the quality / histogram
+    /// companions run fine on an element-less mesh (empty results), which is
+    /// all `ensure_default_animation` (node-only AABB) needs.
+    fn loaded_mesh_spanning(min: [f64; 3], max: [f64; 3]) -> LoadedMesh {
+        let mut mesh = valenx_mesh::Mesh::new("test-aabb");
+        // Two opposite corners are enough to fix the AABB; add the origin to
+        // prove the centre is the midpoint of the extent, not of the points.
+        mesh.nodes
+            .push(nalgebra::Vector3::new(min[0], min[1], min[2]));
+        mesh.nodes
+            .push(nalgebra::Vector3::new(max[0], max[1], max[2]));
+        mesh.nodes.push(nalgebra::Vector3::new(0.0, 0.0, 0.0));
+        let quality = valenx_mesh::quality_report(&mesh);
+        let aspect_hist =
+            valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+        let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+        LoadedMesh {
+            path: PathBuf::from("<test>/aabb"),
+            mesh,
+            quality,
+            aspect_hist,
+            skew_hist,
+        }
+    }
+
+    /// A mesh `WorkspaceProduct` (carries `mesh: Some`) with no animation yet —
+    /// the shape every bridge-rendered registry product has before
+    /// `ensure_default_animation` runs.
+    fn mesh_product_without_animation(min: [f64; 3], max: [f64; 3]) -> WorkspaceProduct {
+        WorkspaceProduct {
+            title: "Mesh part".into(),
+            lines: Vec::new(),
+            mesh: Some(loaded_mesh_spanning(min, max)),
+            vertex_colors: None,
+            camera: OrbitCamera::default(),
+            kind2d: None,
+            last_export: None,
+            image: None,
+            image_texture: None,
+            animation: None,
+        }
+    }
+
+    #[test]
+    fn ensure_default_animation_adds_turntable_at_aabb_centre() {
+        // A mesh product with no animation gets a paused +Z turntable whose
+        // pivot is the AABB centre — here the box [-2,-4,-6]..[4,6,10] (which
+        // already contains the helper's origin node, so it is the full extent)
+        // centres on [1, 1, 2].
+        let mut product = mesh_product_without_animation([-2.0, -4.0, -6.0], [4.0, 6.0, 10.0]);
+        product.ensure_default_animation();
+        let anim = product
+            .animation
+            .as_ref()
+            .expect("a default animation was attached to the mesh product");
+        assert!(!anim.playing, "the default inspect-spin starts paused");
+        assert_eq!(anim.speed, 1.0, "default speed is 1.0×");
+        assert_eq!(anim.t, 0.0, "the clock starts at zero");
+        match &anim.motion {
+            ProductMotion::Turntable {
+                axis,
+                pivot,
+                rad_per_s,
+            } => {
+                assert_eq!(*axis, [0.0, 0.0, 1.0], "spins about +Z");
+                assert_eq!(*rad_per_s, 0.4, "~1 rev / 15 s gentle inspect rate");
+                for (got, want) in pivot.iter().zip([1.0_f32, 1.0, 2.0].iter()) {
+                    assert!(
+                        (got - want).abs() < 1e-5,
+                        "pivot {pivot:?} is the AABB centre"
+                    );
+                }
+            }
+            other => panic!("expected a Turntable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ensure_default_animation_is_a_no_op_on_an_already_animated_product() {
+        // A product that already animates (the gear's RigidParts) keeps its own
+        // motion untouched — the default is NOT overwritten onto it.
+        let parts = vec![RigidPart {
+            node_range: 0..3,
+            axis: [0.0, 1.0, 0.0],
+            pivot: [5.0, 0.0, 5.0],
+            rad_per_s: -2.0,
+        }];
+        let mut product = mesh_product_without_animation([-1.0, -1.0, -1.0], [1.0, 1.0, 1.0]);
+        product.animation = Some(ProductAnimation {
+            playing: true,
+            speed: 3.0,
+            t: 1.5,
+            motion: ProductMotion::RigidParts(parts.clone()),
+        });
+        product.ensure_default_animation();
+        let anim = product.animation.as_ref().expect("animation retained");
+        assert!(anim.playing, "the existing playing flag is preserved");
+        assert_eq!(anim.speed, 3.0, "existing speed untouched");
+        assert_eq!(anim.t, 1.5, "existing clock untouched");
+        match &anim.motion {
+            ProductMotion::RigidParts(p) => assert_eq!(*p, parts, "RigidParts left intact"),
+            other => panic!("RigidParts must not be replaced by a Turntable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ensure_default_animation_is_a_no_op_on_a_mesh_less_product() {
+        // A 2-D / card / image product (mesh: None) never animates — no control
+        // is conjured onto it.
+        let mut product = WorkspaceProduct {
+            title: "Card".into(),
+            lines: vec!["a result".into()],
+            mesh: None,
+            vertex_colors: None,
+            camera: OrbitCamera::default(),
+            kind2d: None,
+            last_export: None,
+            image: None,
+            image_texture: None,
+            animation: None,
+        };
+        product.ensure_default_animation();
+        assert!(
+            product.animation.is_none(),
+            "no animation is attached to a mesh-less product"
+        );
+    }
 }

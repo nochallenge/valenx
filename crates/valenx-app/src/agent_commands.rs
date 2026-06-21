@@ -542,6 +542,14 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
         if !app.workspace_products.contains_key(&n) {
             apply(app, n, AgentCommand::Show2d { n: None, kind });
         }
+        // Ensure the freshly-rendered product carries a default inspect-spin so
+        // the new unit's tile shows the Play/Pause + speed controls. The
+        // `Show3d` arm above already does this for registry meshes; this keeps
+        // the guarantee at the `new_unit` render path too (idempotent — a no-op
+        // once the product already animates or is mesh-less).
+        if let Some(product) = app.workspace_products.get_mut(&n) {
+            product.ensure_default_animation();
+        }
     }
 
     // If a title was given, use it as the workspace card heading: override a
@@ -724,7 +732,14 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
             // no placeholder churn), consistent with the reducer's other
             // bad-input handling.
             if let Some(entry) = crate::products_registry::lookup(&kind) {
-                app.workspace_products.insert(ch, (entry.build)());
+                let mut product = (entry.build)();
+                // Give every bridge-rendered mesh product a default paused
+                // inspect-spin (Turntable about +Z through the AABB centre) so
+                // the tile shows the Play/Pause + speed controls. A no-op for a
+                // product that already animates (the gear's RigidParts) or that
+                // is mesh-less, so it is safe to call unconditionally here.
+                product.ensure_default_animation();
+                app.workspace_products.insert(ch, product);
             } else if kind == "dna" {
                 // `dna` is NOT a registry 3-D mesh kind — it's a TEXT product
                 // (mesh: None): the codon-optimised therapeutic-peptide
