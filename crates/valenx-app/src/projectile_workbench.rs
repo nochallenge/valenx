@@ -400,6 +400,27 @@ fn load_trajectory_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical projectile-motion workbench as a 3-D
+/// solid plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn projectile_product() -> crate::WorkspaceProduct {
+    let s = ProjectileWorkbenchState::default();
+    let mesh = trajectory_solid_mesh(&s).expect("canonical projectile ⇒ trajectory solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<projectile>/valenx-trajectory");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical projectile ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Projectile motion (range/apex)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

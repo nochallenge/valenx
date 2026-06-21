@@ -432,6 +432,27 @@ fn load_beltdrive_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical belt-drive workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn beltdrive_product() -> crate::WorkspaceProduct {
+    let s = BeltDriveWorkbenchState::default();
+    let mesh = beltdrive_solid_mesh(&s).expect("canonical belt drive ⇒ drive solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<beltdrive>/valenx-beltdrive");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical belt drive ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Belt drive (tension/power)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

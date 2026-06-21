@@ -394,6 +394,27 @@ fn load_drive_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical chain-drive workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn chaindrive_product() -> crate::WorkspaceProduct {
+    let s = ChainDriveWorkbenchState::default();
+    let mesh = drive_solid_mesh(&s).expect("canonical chain drive ⇒ drive solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<chaindrive>/valenx-chaindrive");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical chain drive ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Chain drive (ratio/power)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

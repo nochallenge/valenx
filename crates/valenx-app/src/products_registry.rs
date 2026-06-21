@@ -195,6 +195,28 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "leverage" => crate::leverage_workbench::leverage_product,
         "inclinedplane" => crate::inclinedplane_workbench::inclinedplane_product,
         "vibration" => crate::vibration_workbench::vibration_product,
+        // Electric-machines / power-transmission / mechanisms family (each
+        // builder lives in its own workbench module; see that module's
+        // `*_product`).
+        "dcmotor" => crate::dcmotor_workbench::dcmotor_product,
+        "inductionmotor" => crate::inductionmotor_workbench::inductionmotor_product,
+        "beltdrive" => crate::beltdrive_workbench::beltdrive_product,
+        "chaindrive" => crate::chaindrive_workbench::chaindrive_product,
+        "fourbar" => crate::fourbar_workbench::fourbar_product,
+        // Thermal / HVAC / thermodynamics / measurement family.
+        "thermalexpansion" => crate::thermalexpansion_workbench::thermalexpansion_product,
+        "dimensional" => crate::dimensional_workbench::dimensional_product,
+        "projectile" => crate::projectile_workbench::projectile_product,
+        "heattransfer" => crate::heattransfer_workbench::heattransfer_product,
+        "insulation" => crate::insulation_workbench::insulation_product,
+        "heatexchanger" => crate::heatexchanger_workbench::heatexchanger_product,
+        "heatpump" => crate::heatpump_workbench::heatpump_product,
+        "refrigeration" => crate::refrigeration_workbench::refrigeration_product,
+        "psychrometrics" => crate::psychrometrics_workbench::psychrometrics_product,
+        "thermocouple" => crate::thermocouple_workbench::thermocouple_product,
+        "thermistor" => crate::thermistor_workbench::thermistor_product,
+        "thermocycle" => crate::thermocycle_workbench::thermocycle_product,
+        "fanlaws" => crate::fanlaws_workbench::fanlaws_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -250,6 +272,24 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "leverage" => "leverage",
         "inclinedplane" => "inclinedplane",
         "vibration" => "vibration",
+        "dcmotor" => "dcmotor",
+        "inductionmotor" => "inductionmotor",
+        "beltdrive" => "beltdrive",
+        "chaindrive" => "chaindrive",
+        "fourbar" => "fourbar",
+        "thermalexpansion" => "thermalexpansion",
+        "dimensional" => "dimensional",
+        "projectile" => "projectile",
+        "heattransfer" => "heattransfer",
+        "insulation" => "insulation",
+        "heatexchanger" => "heatexchanger",
+        "heatpump" => "heatpump",
+        "refrigeration" => "refrigeration",
+        "psychrometrics" => "psychrometrics",
+        "thermocouple" => "thermocouple",
+        "thermistor" => "thermistor",
+        "thermocycle" => "thermocycle",
+        "fanlaws" => "fanlaws",
         _ => return None,
     })
 }
@@ -306,6 +346,26 @@ mod tests {
         "leverage",
         "inclinedplane",
         "vibration",
+        // Electric-machines / power-transmission / mechanisms / thermal / HVAC /
+        // thermodynamics / measurement workbenches wired into the bridge.
+        "dcmotor",
+        "inductionmotor",
+        "beltdrive",
+        "chaindrive",
+        "fourbar",
+        "thermalexpansion",
+        "dimensional",
+        "projectile",
+        "heattransfer",
+        "insulation",
+        "heatexchanger",
+        "heatpump",
+        "refrigeration",
+        "psychrometrics",
+        "thermocouple",
+        "thermistor",
+        "thermocycle",
+        "fanlaws",
     ];
 
     /// The machine-design / structural / civil / strength-of-materials /
@@ -353,14 +413,34 @@ mod tests {
         "leverage",
         "inclinedplane",
         "vibration",
+        // The 18 electric-machines / power-transmission / mechanisms / thermal /
+        // HVAC / thermodynamics / measurement workbenches wired in this change.
+        "dcmotor",
+        "inductionmotor",
+        "beltdrive",
+        "chaindrive",
+        "fourbar",
+        "thermalexpansion",
+        "dimensional",
+        "projectile",
+        "heattransfer",
+        "insulation",
+        "heatexchanger",
+        "heatpump",
+        "refrigeration",
+        "psychrometrics",
+        "thermocouple",
+        "thermistor",
+        "thermocycle",
+        "fanlaws",
     ];
 
     #[test]
     fn every_wired_workbench_kind_resolves_and_builds_a_tri3_mesh() {
-        // Each of the 18 newly-wired workbench kinds resolves to a registry
-        // entry whose pure builder yields a non-empty triangle-mesh product —
-        // so a missing table line (or a builder that stops producing geometry)
-        // is caught here without the file-poll bridge plumbing.
+        // Each wired engineering-workbench kind resolves to a registry entry
+        // whose pure builder yields a non-empty triangle-mesh product — so a
+        // missing table line (or a builder that stops producing geometry) is
+        // caught here without the file-poll bridge plumbing.
         for &k in WIRED_WORKBENCH_KINDS {
             let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
             assert_eq!(

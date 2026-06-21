@@ -383,6 +383,27 @@ fn load_linkage_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical four-bar-linkage workbench as a 3-D solid
+/// plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn fourbar_product() -> crate::WorkspaceProduct {
+    let s = FourBarWorkbenchState::default();
+    let mesh = linkage_solid_mesh(&s).expect("canonical four-bar ⇒ linkage solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fourbar>/valenx-linkage");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical four-bar ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Four-bar linkage (kinematics)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

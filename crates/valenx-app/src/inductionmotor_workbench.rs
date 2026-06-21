@@ -379,6 +379,27 @@ fn load_motor_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Agent-bridge product: the canonical induction-motor workbench as a 3-D solid
+/// plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn inductionmotor_product() -> crate::WorkspaceProduct {
+    let s = InductionMotorWorkbenchState::default();
+    let mesh = motor_solid_mesh(&s).expect("canonical induction motor ⇒ motor solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<inductionmotor>/valenx-motor");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical induction motor ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Induction motor (slip/torque)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
