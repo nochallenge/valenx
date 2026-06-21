@@ -573,8 +573,14 @@ fn apply_nav_intent(app: &mut crate::ValenxApp, intent: NavIntent) {
     }
 
     if let Some(id) = intent.begin_rename {
-        if let Some(p) = app.library.get(&id) {
-            app.nav_state.rename_buf = p.name.clone();
+        // Make this project-row editor mutually exclusive with the other three
+        // inline rename editors (folder, tab-title, group): clear them all
+        // first so only one focus-grabbing `TextEdit` exists per frame and no
+        // other editor fires a premature commit on `lost_focus`. Only wipe once
+        // we know the target project exists, so an unknown id stays a no-op.
+        if let Some(name) = app.library.get(&id).map(|p| p.name.clone()) {
+            crate::project_tabs::clear_all_inline_renames(app);
+            app.nav_state.rename_buf = name;
             app.nav_state.renaming = Some(id);
         }
     }
@@ -634,8 +640,18 @@ fn apply_nav_intent(app: &mut crate::ValenxApp, intent: NavIntent) {
         dirty = true;
     }
     if let Some(id) = intent.begin_folder_rename {
-        if let Some(f) = app.library.folders.iter().find(|f| f.id == id) {
-            app.nav_state.folder_rename_buf = f.name.clone();
+        // Mutually exclusive with the other three inline rename editors (see
+        // the project-row `begin_rename` above): clear them all first, then
+        // latch this folder-header editor. Only wipe once the folder exists.
+        if let Some(name) = app
+            .library
+            .folders
+            .iter()
+            .find(|f| f.id == id)
+            .map(|f| f.name.clone())
+        {
+            crate::project_tabs::clear_all_inline_renames(app);
+            app.nav_state.folder_rename_buf = name;
             app.nav_state.renaming_folder = Some(id);
         }
     }
@@ -951,6 +967,74 @@ mod tests {
         );
         assert!(lib.projects.is_empty());
         assert!(lib.folders.is_empty());
+    }
+
+    #[test]
+    fn project_and_folder_inline_renames_are_mutually_exclusive() {
+        // Regression: a project rename and a folder rename both bind a
+        // `request_focus()`-every-frame editor. If both latch at once, the
+        // earlier one loses focus and fires a premature commit. Beginning the
+        // folder rename must therefore clear the project-row editor first (and
+        // vice-versa) — this is routed through the shared
+        // `project_tabs::clear_all_inline_renames` from `apply_nav_intent`.
+        let mut app = crate::ValenxApp::default();
+        let pid = app
+            .library
+            .add_project(tab(TabKind::Rocket, "Proj"), None);
+        let fid = app.library.add_folder("Aero");
+
+        // Begin a PROJECT rename → its editor latches.
+        apply_nav_intent(
+            &mut app,
+            NavIntent {
+                begin_rename: Some(pid.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.nav_state.renaming.as_deref(), Some(pid.as_str()));
+        assert_eq!(app.nav_state.rename_buf, "Proj");
+
+        // Begin a FOLDER rename → only the folder editor stays live; the
+        // project-row editor (latch + buffer) is cleared.
+        apply_nav_intent(
+            &mut app,
+            NavIntent {
+                begin_folder_rename: Some(fid.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.nav_state.renaming_folder.as_deref(),
+            Some(fid.as_str()),
+            "folder editor is the active one"
+        );
+        assert!(
+            app.nav_state.renaming.is_none(),
+            "beginning the folder rename cleared the project-row editor"
+        );
+        assert!(
+            app.nav_state.rename_buf.is_empty(),
+            "project-row scratch buffer was cleared too"
+        );
+
+        // Reverse: begin a PROJECT rename while the folder editor is live →
+        // only the project editor remains.
+        apply_nav_intent(
+            &mut app,
+            NavIntent {
+                begin_rename: Some(pid.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.nav_state.renaming.as_deref(), Some(pid.as_str()));
+        assert!(
+            app.nav_state.renaming_folder.is_none(),
+            "beginning the project rename cleared the folder editor"
+        );
+        assert!(
+            app.nav_state.folder_rename_buf.is_empty(),
+            "folder scratch buffer was cleared too"
+        );
     }
 
     #[test]

@@ -646,6 +646,12 @@ impl TabBar {
         self.docs.clear();
         self.groups.clear();
         self.active = None;
+        // Defensive: a group rename in progress would otherwise strand its
+        // transient editor state now that every group is gone. (The tab-title
+        // editors vanish with `tabs`; the two navigator editors live on a
+        // different struct and are cleared by the caller's begin handlers.)
+        self.group_renaming = None;
+        self.group_rename_buf.clear();
     }
 
     /// The active tab's kind, if any.
@@ -687,6 +693,11 @@ impl TabBar {
         // never outlives its members.
         self.groups = session.groups;
         self.prune_empty_groups();
+        // Defensive: the group ids were just replaced wholesale, so any
+        // in-progress group rename now points at a gone id — drop its editor.
+        // (Per-tab title editors were already cleared in the map above.)
+        self.group_renaming = None;
+        self.group_rename_buf.clear();
         self.active = match session.active {
             Some(i) if i < self.tabs.len() => Some(i),
             _ if self.tabs.is_empty() => None,
@@ -738,6 +749,15 @@ impl TabBar {
                 .iter()
                 .any(|t| t.group.as_deref() == Some(g.id.as_str()))
         });
+        // Defensive: if the group whose header is being renamed inline just got
+        // pruned away (its last member left), its editor latch now points at a
+        // gone id — tear the transient editor down so it can't strand.
+        if let Some(gid) = &self.group_renaming {
+            if !self.groups.iter().any(|g| &g.id == gid) {
+                self.group_renaming = None;
+                self.group_rename_buf.clear();
+            }
+        }
     }
 
     /// Create a fresh group containing exactly the tab at `tab_idx`, auto-named
@@ -2534,6 +2554,46 @@ fn draw_save_as_project(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// Tear down **every** inline rename editor across both the project
+/// navigator and the tab strip, clearing each editor's latch state *and* its
+/// scratch buffer. There are four such editors and they all bind a
+/// `request_focus()`-every-frame `TextEdit`:
+///
+/// 1. project rename — [`crate::project_navigator::NavigatorState::renaming`]
+///    (+ `rename_buf`),
+/// 2. folder rename — `NavigatorState::renaming_folder` (+ `folder_rename_buf`),
+/// 3. tab-title rename — [`ProjectTab::editing`] (+ `edit_buf`) on each tab,
+/// 4. group rename — [`TabBar::group_renaming`] (+ `group_rename_buf`).
+///
+/// If two were ever active in the *same* frame (e.g. start a project rename,
+/// then right-click a folder → "Rename folder"; or a tab-title rename plus a
+/// group rename), **both** call `request_focus()`, egui focuses the
+/// later-drawn one, the earlier one immediately sees `lost_focus()`, and that
+/// fires a **premature commit** of whatever was in its buffer. Making the four
+/// mutually exclusive — every "begin a rename" first calls this to wipe the
+/// other three, then sets its own — guarantees at most one focus-grabbing
+/// editor per frame. It is also called from the close/restore/prune paths so a
+/// rename in progress on a tab or group that gets closed or pruned never
+/// strands transient editor state.
+///
+/// `pub(crate)` so [`crate::project_navigator::apply_nav_intent`] can route
+/// the cross-struct clear from its own two begin handlers.
+pub(crate) fn clear_all_inline_renames(app: &mut ValenxApp) {
+    // 1 + 2: the two navigator editors (project row + folder header).
+    app.nav_state.renaming = None;
+    app.nav_state.rename_buf.clear();
+    app.nav_state.renaming_folder = None;
+    app.nav_state.folder_rename_buf.clear();
+    // 3: every tab's inline title editor.
+    for t in &mut app.tab_bar.tabs {
+        t.editing = false;
+        t.edit_buf.clear();
+    }
+    // 4: the group-header editor.
+    app.tab_bar.group_renaming = None;
+    app.tab_bar.group_rename_buf.clear();
+}
+
 /// Apply this frame's accumulated [`StripIntent`] after the read-only
 /// borrows in [`draw_tab_strip`] end. At most a couple of these fire per
 /// frame in practice; each leaves `active` consistent.
@@ -2549,6 +2609,13 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         }
     }
     if let Some(i) = intent.begin_rename {
+        // Mutually exclusive with the other three inline rename editors: wipe
+        // them first so only this tab-title editor grabs focus this frame (a
+        // second focus-grabber would force a premature commit — see
+        // `clear_all_inline_renames`).
+        if i < app.tab_bar.tabs.len() {
+            clear_all_inline_renames(app);
+        }
         if let Some(tab) = app.tab_bar.tabs.get_mut(i) {
             tab.edit_buf = tab.title.clone();
             tab.editing = true;
@@ -2673,8 +2740,19 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         // Seed the inline editor: buffer = the group's current name, and latch
         // `group_renaming` so the strip swaps that header for a focused text
         // field next frame. No-op if the group id is unknown.
-        if let Some(g) = app.tab_bar.groups.iter().find(|g| g.id == gid) {
-            app.tab_bar.group_rename_buf = g.name.clone();
+        //
+        // Mutually exclusive with the other three inline rename editors: only
+        // wipe them once we know the group exists (so an unknown id stays a
+        // pure no-op and never disturbs an in-progress tab/project rename).
+        if let Some(name) = app
+            .tab_bar
+            .groups
+            .iter()
+            .find(|g| g.id == gid)
+            .map(|g| g.name.clone())
+        {
+            clear_all_inline_renames(app);
+            app.tab_bar.group_rename_buf = name;
             app.tab_bar.group_renaming = Some(gid);
         }
     }
@@ -3745,6 +3823,110 @@ mod tests {
             app.tab_bar.groups[0].name, "Boosters",
             "cancel must not rename"
         );
+        assert!(app.tab_bar.group_renaming.is_none());
+        assert!(app.tab_bar.group_rename_buf.is_empty());
+    }
+
+    #[test]
+    fn tab_and_group_inline_renames_are_mutually_exclusive() {
+        // Regression: two inline rename editors active in the same frame both
+        // `request_focus()`, so the earlier one loses focus and fires a
+        // premature commit. Beginning either rename must tear the other down.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // tab 0
+        apply_intent(
+            &mut app,
+            StripIntent {
+                new_group_with_tab: Some(0),
+                ..Default::default()
+            },
+        );
+        let gid = app.tab_bar.groups[0].id.clone();
+
+        // Begin a TAB-TITLE rename, then begin a GROUP rename → only the group
+        // editor is live; no tab carries `editing == true`.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                begin_rename: Some(0),
+                ..Default::default()
+            },
+        );
+        assert!(app.tab_bar.tabs[0].editing, "tab-title editor latched");
+        apply_intent(
+            &mut app,
+            StripIntent {
+                begin_group_rename: Some(gid.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.tab_bar.group_renaming.as_deref(),
+            Some(gid.as_str()),
+            "group editor is now the active one"
+        );
+        assert!(
+            !app.tab_bar.tabs.iter().any(|t| t.editing),
+            "beginning the group rename cleared the tab-title editor"
+        );
+        assert!(
+            app.tab_bar.tabs[0].edit_buf.is_empty(),
+            "tab-title scratch buffer was cleared too"
+        );
+
+        // Now the reverse: begin a TAB-TITLE rename while a group rename is
+        // live → only the tab editor remains; the group editor is gone.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                begin_rename: Some(0),
+                ..Default::default()
+            },
+        );
+        assert!(app.tab_bar.tabs[0].editing, "tab-title editor latched again");
+        assert!(
+            app.tab_bar.group_renaming.is_none(),
+            "beginning the tab rename cleared the group editor"
+        );
+        assert!(
+            app.tab_bar.group_rename_buf.is_empty(),
+            "group scratch buffer was cleared too"
+        );
+    }
+
+    #[test]
+    fn clear_all_inline_renames_clears_all_four_editors() {
+        // The shared helper must reset every one of the four editors (latch
+        // state AND scratch buffer) regardless of which were active.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // tab 0
+        apply_intent(
+            &mut app,
+            StripIntent {
+                new_group_with_tab: Some(0),
+                ..Default::default()
+            },
+        );
+        let gid = app.tab_bar.groups[0].id.clone();
+
+        // Latch all four editors directly.
+        app.nav_state.renaming = Some("p1".to_string());
+        app.nav_state.rename_buf = "proj".to_string();
+        app.nav_state.renaming_folder = Some("f1".to_string());
+        app.nav_state.folder_rename_buf = "fold".to_string();
+        app.tab_bar.tabs[0].editing = true;
+        app.tab_bar.tabs[0].edit_buf = "tab".to_string();
+        app.tab_bar.group_renaming = Some(gid);
+        app.tab_bar.group_rename_buf = "grp".to_string();
+
+        clear_all_inline_renames(&mut app);
+
+        assert!(app.nav_state.renaming.is_none());
+        assert!(app.nav_state.rename_buf.is_empty());
+        assert!(app.nav_state.renaming_folder.is_none());
+        assert!(app.nav_state.folder_rename_buf.is_empty());
+        assert!(!app.tab_bar.tabs.iter().any(|t| t.editing));
+        assert!(app.tab_bar.tabs[0].edit_buf.is_empty());
         assert!(app.tab_bar.group_renaming.is_none());
         assert!(app.tab_bar.group_rename_buf.is_empty());
     }
