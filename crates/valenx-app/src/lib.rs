@@ -1821,6 +1821,12 @@ pub struct ValenxApp {
     /// [`crate::project_navigator::NavigatorState`].
     pub nav_state: crate::project_navigator::NavigatorState,
 
+    /// Transient UI state for the Browser panel's **"Open Tabs"** list (the
+    /// VS-Code-style "Open Editors" pane mirroring every open tab) — currently
+    /// just the search-box text. Never persisted. See
+    /// [`crate::project_tabs::OpenTabsState`] / `draw_open_tabs_list`.
+    pub open_tabs_state: crate::project_tabs::OpenTabsState,
+
     /// Persistent state for the 2D DNA / plasmid viewport. Survives
     /// viewport-kind switches so pan, zoom, and sub-view selection are
     /// remembered when the user returns to the 2D view.

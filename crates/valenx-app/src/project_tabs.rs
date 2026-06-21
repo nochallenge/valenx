@@ -1102,6 +1102,22 @@ fn perform_close(app: &mut ValenxApp, idx: usize) {
     install_active_doc(app);
 }
 
+/// Transient UI state for the Browser panel's **"Open Tabs"** list — the
+/// VS-Code-style "Open Editors" pane that mirrors *every* open tab (100+)
+/// from the organized left panel rather than the cramped horizontal strip.
+/// Held on [`crate::ValenxApp::open_tabs_state`]. Currently just the live
+/// search-box contents (filters the listed tabs by title via
+/// `commands::fuzzy_score`); never persisted — rebuilt empty each launch. The
+/// actual switch/close actions are deferred per-frame through an
+/// `OpenTabsIntent` (see `draw_open_tabs_list`) so the list never mutates
+/// `app` while iterating its tab borrow.
+#[derive(Default)]
+pub struct OpenTabsState {
+    /// Live contents of the Open-Tabs search box; filters the listed tabs by
+    /// title. Plain substring/subsequence match via `commands::fuzzy_score`.
+    pub search: String,
+}
+
 /// Working state of the "Save as project…" modal (opened from a tab's
 /// right-click menu). Held on [`crate::ValenxApp::tab_save_as_project`] while
 /// the dialog is up. On confirm, the tab at `tab_idx` is cloned into the
@@ -1542,6 +1558,240 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
     draw_close_confirm(app, ctx);
     draw_close_all_confirm(app, ctx);
     draw_save_as_project(app, ctx);
+}
+
+/// What one frame of the Browser's **"Open Tabs"** list wants to do, recorded
+/// while the read borrow of `app.tab_bar.tabs` is live (the list iterates the
+/// tabs by index to draw a row each) and applied afterwards by
+/// [`apply_open_tabs_intent`]. This mirrors the tab strip's deferred
+/// [`StripIntent`] pattern so a row click never mutates `app` mid-borrow.
+///
+/// Only two actions exist (the list is navigation, not full tab management):
+/// `switch_to` activates a tab, `close_idx` requests its close (routed through
+/// the **same** "Close tab?" confirm modal the strip uses, not an immediate
+/// discard).
+#[derive(Default)]
+struct OpenTabsIntent {
+    /// Switch the active tab to this index (clicked a row). Routed to
+    /// [`switch_active_to`].
+    switch_to: Option<usize>,
+    /// **Request** to close the tab at this index (clicked its per-row close
+    /// button) — opens the shared "Close tab?" confirm modal via
+    /// [`ValenxApp::tab_close_confirm`] rather than closing immediately, so the
+    /// list closes a tab through the exact same gated path as the strip.
+    close_idx: Option<usize>,
+}
+
+/// Draw the **"Open Tabs"** list — a collapsible section at the top of the
+/// Browser panel (above the Projects navigator) that mirrors *every* open tab
+/// so the user can see + switch + close all of them (100+) from the organized
+/// left panel rather than the cramped horizontal strip (the VS Code "Open
+/// Editors" pattern).
+///
+/// Layout:
+/// - a `CollapsingHeader` titled `Open Tabs (N)` (N = open-tab count),
+///   default-open;
+/// - a search [`egui::TextEdit`] filtering tabs by title (reusing
+///   [`crate::commands::fuzzy_score`]);
+/// - a vertical [`egui::ScrollArea`] listing every open tab as a
+///   [`egui::Ui::selectable_label`] row (the active tab is `selected`), with a
+///   dim right-aligned [`TabKind::label`] tag and a per-row close button.
+///   Tabs are grouped by their [`ProjectTab::group`]: a small coloured group
+///   header (mirroring the strip's band) precedes that group's members. A
+///   collapsed group's members are still **listed here** (the left list is for
+///   navigation — every tab stays reachable), with the group header noting it
+///   is collapsed in the strip.
+///
+/// **AI-drivability / accessibility:** every control is a uniquely-named egui
+/// widget so the accessibility (UIA) tree exposes it by Name. A tab row's
+/// Name is the tab title; its close button is named `Close tab: <title>`
+/// (unique + addressable). Plain-ASCII throughout.
+///
+/// Interactions are deferred onto an [`OpenTabsIntent`] while the tab borrow is
+/// live, then applied by [`apply_open_tabs_intent`] — clicking a row switches
+/// via [`switch_active_to`]; clicking a close button requests a close through
+/// the shared "Close tab?" confirm modal (same path as the strip).
+pub(crate) fn draw_open_tabs_list(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    let mut intent = OpenTabsIntent::default();
+    let n = app.tab_bar.tabs.len();
+
+    egui::CollapsingHeader::new(format!("Open Tabs ({n})"))
+        .default_open(true)
+        .id_source("open_tabs_list")
+        .show(ui, |ui| {
+            // Search box (filters listed tabs by title) + a Clear button.
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut app.open_tabs_state.search)
+                        .hint_text("Search open tabs...")
+                        .desired_width(150.0),
+                );
+                if !app.open_tabs_state.search.is_empty() && ui.small_button("Clear").clicked() {
+                    app.open_tabs_state.search.clear();
+                }
+            });
+
+            if n == 0 {
+                ui.add_space(2.0);
+                ui.label(
+                    egui::RichText::new("(no open tabs — use \"+ New tab\" above the viewport)")
+                        .weak()
+                        .small(),
+                );
+                return;
+            }
+
+            let query = app.open_tabs_state.search.clone();
+            let matches = |title: &str| crate::commands::fuzzy_score(&query, title).is_some();
+            let active = app.tab_bar.active;
+
+            // Snapshot the group display attributes (id -> name/color/collapsed)
+            // before the per-tab loop so the loop can read a tab's group band
+            // without re-borrowing `app.tab_bar.groups` while it indexes
+            // `app.tab_bar.tabs[i]`. Every action is deferred via `intent`.
+            let group_attrs: std::collections::HashMap<String, TabGroup> = app
+                .tab_bar
+                .groups
+                .iter()
+                .map(|g| (g.id.clone(), g.clone()))
+                .collect();
+
+            // Only the list scrolls; the header + search box above stay fixed.
+            // `auto_shrink([false, false])` lets the scroll area claim the full
+            // remaining panel width/height so 100+ rows scroll instead of
+            // clipping or pushing the panel.
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .id_source("open_tabs_scroll")
+                .show(ui, |ui| {
+                    // A group's coloured header is drawn once, just before that
+                    // group's first listed member (membership need not be
+                    // contiguous, so a "seen" set keeps a single header per id).
+                    let mut header_drawn: std::collections::HashSet<String> =
+                        std::collections::HashSet::new();
+
+                    for i in 0..app.tab_bar.tabs.len() {
+                        let title = app.tab_bar.tabs[i].title.clone();
+                        // Honour the search filter (by title).
+                        if !matches(&title) {
+                            continue;
+                        }
+                        let kind_label = app.tab_bar.tabs[i].kind.label();
+                        let this_group = app.tab_bar.tabs[i].group.clone();
+
+                        // Group header before this group's first listed member.
+                        // Unlike the strip, a collapsed group does NOT hide its
+                        // members here — the left list is for navigation, so all
+                        // tabs stay reachable; the header just notes the
+                        // collapsed-in-strip state.
+                        if let Some(gid) = &this_group {
+                            if let Some(g) = group_attrs.get(gid) {
+                                if header_drawn.insert(gid.clone()) {
+                                    let members = app
+                                        .tab_bar
+                                        .tabs
+                                        .iter()
+                                        .filter(|t| t.group.as_deref() == Some(gid.as_str()))
+                                        .count();
+                                    draw_open_tabs_group_header(ui, g, members);
+                                }
+                            }
+                        }
+
+                        // One row: a selectable_label whose Name IS the tab
+                        // title (active tab highlighted), a dim right-aligned
+                        // kind tag, and a uniquely-named per-row close button.
+                        let selected = active == Some(i);
+                        ui.horizontal(|ui| {
+                            // Indent grouped rows slightly under their band.
+                            if this_group.is_some() {
+                                ui.add_space(12.0);
+                            }
+                            let resp = ui.selectable_label(selected, &title).on_hover_text(
+                                format!("{kind_label} — click to switch to this tab"),
+                            );
+                            if resp.clicked() {
+                                intent.switch_to = Some(i);
+                            }
+                            // Right-aligned: the dim kind tag, then the close
+                            // button (laid out right-to-left so the ✕ sits at
+                            // the far right and the tag just left of it).
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    // Painter-drawn ✕ (never a font-glyph "tofu"
+                                    // box). Its `tip` is the accessible Name, made
+                                    // unique + AI-addressable per tab.
+                                    if crate::workbench_chrome::close_x_button(
+                                        ui,
+                                        &format!("Close tab: {title}"),
+                                    )
+                                    .clicked()
+                                    {
+                                        intent.close_idx = Some(i);
+                                    }
+                                    ui.label(
+                                        egui::RichText::new(kind_label)
+                                            .small()
+                                            .color(egui::Color32::from_gray(120)),
+                                    );
+                                },
+                            );
+                        });
+                    }
+                });
+        });
+
+    apply_open_tabs_intent(app, intent);
+}
+
+/// Draw a tab group's coloured header band in the Browser's Open-Tabs list,
+/// just before that group's first listed member. A read-only mini version of
+/// the strip's [`draw_group_header`]: a tinted [`egui::Frame`] showing the
+/// group name + member count, plus a `(collapsed)` note when the group is
+/// collapsed in the strip. The list never collapses its own rows (it is for
+/// navigation), so this header carries no interaction — every tab stays
+/// reachable and switch/close happen on the rows themselves.
+fn draw_open_tabs_group_header(ui: &mut egui::Ui, group: &TabGroup, members: usize) {
+    let [r, g, b] = group.color;
+    let tint = egui::Color32::from_rgb(r, g, b);
+    let frame = egui::Frame::none()
+        .fill(tint.gamma_multiply(0.25))
+        .stroke(egui::Stroke::new(1.0, tint))
+        .rounding(4.0)
+        .inner_margin(egui::Margin::symmetric(6.0, 2.0));
+    let suffix = if group.collapsed { " (collapsed)" } else { "" };
+    let header_text = format!("{} ({members}){suffix}", group.name);
+    frame.show(ui, |ui| {
+        ui.add(egui::Label::new(
+            egui::RichText::new(header_text).color(tint).strong(),
+        ));
+    });
+}
+
+/// Apply one frame's [`OpenTabsIntent`] after the Open-Tabs list's read borrow
+/// of `app.tab_bar.tabs` ends. A row click `switch_to` swaps the active tab via
+/// [`switch_active_to`] (so each tab keeps its own scene); a close `close_idx`
+/// opens the shared "Close tab?" confirm modal (via
+/// [`ValenxApp::tab_close_confirm`]) — the **same** gated close path the strip
+/// uses, so the actual discard only happens once the user confirms. At most one
+/// of each fires per frame.
+fn apply_open_tabs_intent(app: &mut ValenxApp, intent: OpenTabsIntent) {
+    if let Some(i) = intent.switch_to {
+        // Swap documents so each tab keeps its own scene. Guard the index and
+        // skip a no-op switch to the already-active tab.
+        if i < app.tab_bar.tabs.len() && app.tab_bar.active != Some(i) {
+            switch_active_to(app, i);
+        }
+    }
+    if let Some(i) = intent.close_idx {
+        // Route through the SAME close path the strip uses: only *request* the
+        // close (open the "Close tab?" confirm modal); the real discard happens
+        // on confirm via `perform_close` in `draw_close_confirm`.
+        if i < app.tab_bar.tabs.len() {
+            app.tab_close_confirm = Some(i);
+        }
+    }
 }
 
 /// Draw a single tab group's coloured header band in the strip, just before
@@ -3108,6 +3358,100 @@ mod tests {
         assert_docs_aligned(&bar);
     }
 
+    #[test]
+    fn open_tabs_list_switch_intent_sets_active_to_clicked_index() {
+        // The Browser "Open Tabs" list's row click routes through
+        // `OpenTabsIntent::switch_to`, which must activate exactly the clicked
+        // tab (swapping the per-tab scene via `switch_active_to`).
+        let mut app = ValenxApp::default();
+        // Three tabs; the LAST one (idx 2) is active after the opens.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Rocket),
+                ..Default::default()
+            },
+        );
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Cad),
+                ..Default::default()
+            },
+        );
+        apply_intent(
+            &mut app,
+            StripIntent {
+                open_template: Some(TabKind::Fem),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.active, Some(2), "the last-opened tab is active");
+
+        // Click the FIRST row in the Open-Tabs list → active becomes 0.
+        apply_open_tabs_intent(
+            &mut app,
+            OpenTabsIntent {
+                switch_to: Some(0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.tab_bar.active,
+            Some(0),
+            "the switch intent activates the clicked tab index"
+        );
+        assert_eq!(
+            app.tab_bar.active_kind(),
+            Some(TabKind::Rocket),
+            "switching shows the clicked tab's kind"
+        );
+        assert_docs_aligned(&app.tab_bar);
+    }
+
+    #[test]
+    fn open_tabs_list_close_intent_closes_the_right_tab() {
+        // The Open-Tabs list's per-row close button routes through
+        // `OpenTabsIntent::close_idx`, which requests a close via the SAME gated
+        // path the strip uses (the "Close tab?" confirm modal). Confirming the
+        // request then closes exactly that tab (count -1).
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // 0
+        app.tab_bar.open(TabKind::Cad); // 1 "My Part"
+        app.tab_bar.open(TabKind::Fem); // 2
+        app.tab_bar.tabs[1].title = "My Part".to_string();
+        app.tab_bar.active = Some(2);
+        assert_eq!(app.tab_bar.tabs.len(), 3);
+
+        // Click the close button on the MIDDLE row (idx 1) → it only *requests*
+        // the close: the shared confirm modal opens and nothing is closed yet.
+        apply_open_tabs_intent(
+            &mut app,
+            OpenTabsIntent {
+                close_idx: Some(1),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.tab_close_confirm,
+            Some(1),
+            "the close intent opens the shared Close-tab confirm for that index"
+        );
+        assert_eq!(app.tab_bar.tabs.len(), 3, "no tab is closed before confirm");
+
+        // Confirm via the SAME action `draw_close_confirm` runs on the modal's
+        // "Close tab" button: `perform_close`. The right tab is gone (count -1).
+        perform_close(&mut app, 1);
+        app.tab_close_confirm = None;
+        assert_eq!(app.tab_bar.tabs.len(), 2, "exactly one tab was closed");
+        let titles: Vec<&str> = app.tab_bar.tabs.iter().map(|t| t.title.as_str()).collect();
+        assert!(
+            !titles.contains(&"My Part"),
+            "the requested ('My Part') tab is the one that closed"
+        );
+        assert_docs_aligned(&app.tab_bar);
+    }
+
     /// A unique throwaway directory under the system temp dir, removed when
     /// the returned guard drops. Used to exercise the on-disk save/load path
     /// without touching the process-global state-dir env var (so the tests
@@ -3457,6 +3801,70 @@ mod headless_ui_tests {
         assert!(
             app.tab_save_as_project.is_none(),
             "no click → the Save-project prompt stays closed"
+        );
+    }
+
+    /// Run the Browser's Open-Tabs list once in a headless context (it takes a
+    /// `ui`, so wrap it in a CentralPanel).
+    fn draw_open_tabs(app: &mut ValenxApp) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                draw_open_tabs_list(app, ui);
+            });
+        });
+    }
+
+    #[test]
+    fn open_tabs_list_empty_draws_without_panic() {
+        // A fresh app has no tabs; the Open-Tabs section shows its
+        // "Open Tabs (0)" header + the "(no open tabs ...)" hint, no panic.
+        let mut app = ValenxApp::default();
+        assert!(app.tab_bar.tabs.is_empty());
+        draw_open_tabs(&mut app);
+    }
+
+    #[test]
+    fn open_tabs_list_with_grouped_and_collapsed_tabs_draws_without_panic() {
+        // Exercises the full row render path: a grouped pair (one group
+        // collapsed-in-strip — still LISTED here), an ungrouped tab, the active
+        // highlight, the dim kind tag, and the per-row "Close tab: <title>"
+        // button. Drawing alone (no synthesised clicks) must disturb nothing.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // 0
+        app.tab_bar.open(TabKind::Cad); // 1
+        app.tab_bar.open_blank(); // 2 (ungrouped)
+        let gid = app.tab_bar.new_group_with_tab(0).expect("group");
+        app.tab_bar.assign_to_group(1, &gid);
+        app.tab_bar.toggle_group_collapse(&gid); // collapsed in the strip
+        app.tab_bar.active = Some(1);
+        sync_active(&mut app);
+
+        draw_open_tabs(&mut app);
+
+        // The list never collapses its own rows, and drawing fired no intent:
+        // every tab is still present and nothing was activated/closed.
+        assert_eq!(app.tab_bar.tabs.len(), 3, "no tab closed by drawing");
+        assert_eq!(app.tab_bar.active, Some(1), "active unchanged by drawing");
+        assert!(app.tab_close_confirm.is_none(), "no close requested");
+    }
+
+    #[test]
+    fn open_tabs_list_with_a_search_filter_draws_without_panic() {
+        // With a search string set, the list filters rows by title; the render
+        // path (including a possibly-empty result) must stay panic-free, and
+        // drawing must not mutate the tab set.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket);
+        app.tab_bar.open(TabKind::Cad);
+        app.tab_bar.active = Some(0);
+        sync_active(&mut app);
+        app.open_tabs_state.search = "roc".to_string();
+        draw_open_tabs(&mut app);
+        assert_eq!(
+            app.tab_bar.tabs.len(),
+            2,
+            "filtering renders, closes nothing"
         );
     }
 }
