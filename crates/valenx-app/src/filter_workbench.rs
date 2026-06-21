@@ -91,18 +91,20 @@ pub fn draw_filter_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_filter_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "RC / RLC Filter",
-                "native RC / series-RLC analog filter response · valenx-filter",
-            ) {
-                app.show_filter_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_filter_workbench",
+        "RC / RLC Filter",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native RC / series-RLC analog filter response · valenx-filter",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.filter;
             egui::ScrollArea::vertical()
@@ -175,7 +177,11 @@ pub fn draw_filter_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_filter_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.filter` borrow is
     // released here): build the component trio's 3-D solid and load it.

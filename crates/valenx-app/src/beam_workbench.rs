@@ -80,18 +80,18 @@ pub fn draw_beam_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_beam_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Beam",
-                "native Euler-Bernoulli beam bending · valenx-beam",
-            ) {
-                app.show_beam_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_beam_workbench",
+        "Beam",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native Euler-Bernoulli beam bending · valenx-beam")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.beam;
             egui::ScrollArea::vertical()
@@ -154,7 +154,11 @@ pub fn draw_beam_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_beam_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.beam` borrow is released
     // here): build the beam's 3-D solid and load it.
@@ -368,6 +372,32 @@ fn load_beam_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"beam"}`** product: the schematic
+/// beam-plus-supports-plus-load solid built from the canonical 3 m
+/// simply-supported steel beam (50×100 mm section, central 1 kN point load),
+/// paired with the Euler-Bernoulli bending readout rows (max deflection /
+/// moment / stress), at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`BeamWorkbenchState::default`].
+pub(crate) fn beam_product() -> crate::WorkspaceProduct {
+    let s = BeamWorkbenchState::default();
+    let mesh = beam_solid_mesh(&s).expect("canonical beam ⇒ beam-and-supports solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<beam>/valenx-beam");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical beam ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Beam (Euler-Bernoulli bending)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

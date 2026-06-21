@@ -67,18 +67,20 @@ pub fn draw_threephase_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_threephase_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Three-Phase",
-                "balanced wye/delta line-phase & power triangle · valenx-threephase",
-            ) {
-                app.show_threephase_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_threephase_workbench",
+        "Three-Phase",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "balanced wye/delta line-phase & power triangle · valenx-threephase",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.threephase;
             egui::ScrollArea::vertical()
@@ -133,7 +135,11 @@ pub fn draw_threephase_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_threephase_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.threephase` borrow is
     // released here): build the limb solid and load it.

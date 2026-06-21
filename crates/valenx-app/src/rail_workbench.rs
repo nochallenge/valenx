@@ -73,18 +73,18 @@ pub fn draw_rail_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_rail_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Rail / Train",
-                "native train resistance + tractive effort · valenx-rail",
-            ) {
-                app.show_rail_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_rail_workbench",
+        "Rail / Train",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native train resistance + tractive effort · valenx-rail")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.rail;
             egui::ScrollArea::vertical()
@@ -154,7 +154,11 @@ pub fn draw_rail_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_rail_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.rail` borrow is
     // released here): build the boxcar's 3-D solid and load it.
@@ -388,6 +392,28 @@ fn load_train_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical rail workbench as a 3-D solid plus its
+/// analysed readout rows (this workbench formats its readout into `s.result`
+/// via [`run_train`] rather than a `compute()` string; see
+/// [`crate::products_registry`]).
+pub(crate) fn rail_product() -> crate::WorkspaceProduct {
+    let mut s = RailWorkbenchState::default();
+    let mesh = train_solid_mesh(&s).expect("canonical rail ⇒ train solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<rail>/valenx-train");
+    run_train(&mut s);
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Rail vehicle (Davis resistance)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

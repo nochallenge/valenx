@@ -72,18 +72,18 @@ pub fn draw_orifice_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_orifice_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Orifice Meter",
-                "native incompressible dP flow-meter sizing · valenx-orifice",
-            ) {
-                app.show_orifice_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_orifice_workbench",
+        "Orifice Meter",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native incompressible dP flow-meter sizing · valenx-orifice")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.orifice;
             egui::ScrollArea::vertical()
@@ -144,7 +144,11 @@ pub fn draw_orifice_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_orifice_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.orifice` borrow is
     // released here): build the meter's 3-D solid and load it.
@@ -355,6 +359,30 @@ fn load_orifice_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"orifice"}`** product: the canonical
+/// orifice-plate flow meter built as a 3-D solid, paired with the workbench's
+/// own `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`OrificeWorkbenchState::default`].
+pub(crate) fn orifice_product() -> crate::WorkspaceProduct {
+    let s = OrificeWorkbenchState::default();
+    let mesh = meter_solid_mesh(&s).expect("canonical orifice meter ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<orifice>/valenx-orifice");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical orifice meter ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Orifice meter (DP sizing)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

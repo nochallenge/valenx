@@ -74,18 +74,18 @@ pub fn draw_plate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_plate_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Plate Bending",
-                "native thin circular-plate bending · valenx-plate",
-            ) {
-                app.show_plate_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_plate_workbench",
+        "Plate Bending",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native thin circular-plate bending · valenx-plate")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.plate;
             egui::ScrollArea::vertical()
@@ -162,7 +162,11 @@ pub fn draw_plate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_plate_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.plate` borrow is
     // released here): build the plate's 3-D disc and load it.
@@ -308,6 +312,32 @@ fn load_plate_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"plate"}`** product: the representative
+/// circular-plate disc (true radius `a`, thickness `t`) built from the
+/// canonical steel disc (250 mm radius, 5 mm thick, 200 GPa, 20 kPa, clamped
+/// rim), paired with the Kirchhoff-Love bending readout rows (flexural
+/// rigidity / centre deflection / max stress), at a fixed 3/4 camera.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`PlateWorkbenchState::default`].
+pub(crate) fn plate_product() -> crate::WorkspaceProduct {
+    let s = PlateWorkbenchState::default();
+    let mesh = plate_disc_mesh(&s).expect("canonical plate ⇒ circular-disc solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<plate>/valenx-plate");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical plate ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Circular plate (Kirchhoff-Love)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

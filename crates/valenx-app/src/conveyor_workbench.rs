@@ -108,18 +108,20 @@ pub fn draw_conveyor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_conveyor_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Conveyor",
-                "native belt-conveyor throughput + drive power · valenx-conveyor",
-            ) {
-                app.show_conveyor_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_conveyor_workbench",
+        "Conveyor",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native belt-conveyor throughput + drive power · valenx-conveyor",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.conveyor;
             egui::ScrollArea::vertical()
@@ -187,7 +189,11 @@ pub fn draw_conveyor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_conveyor_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.conveyor` borrow is
     // released here): build the belt's 3-D solid and load it.
@@ -476,6 +482,31 @@ fn load_belt_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"conveyor"}`** product: the representative
+/// inclined belt slab on two pulleys (with a carried-material layer) built from
+/// the canonical sand conveyor (0.20 m² load at 2 m/s up a 60 m belt inclined
+/// 15°), paired with the throughput + drive-power readout rows, at a fixed 3/4
+/// camera. Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`ConveyorWorkbenchState::default`].
+pub(crate) fn conveyor_product() -> crate::WorkspaceProduct {
+    let s = ConveyorWorkbenchState::default();
+    let mesh = belt_solid_mesh(&s).expect("canonical conveyor ⇒ inclined-belt solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<conveyor>/valenx-conveyor");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical conveyor ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Belt conveyor (throughput + power)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

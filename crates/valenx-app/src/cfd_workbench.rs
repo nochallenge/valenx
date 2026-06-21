@@ -149,24 +149,38 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
     poll_cfd(&mut app.cfd);
-    egui::SidePanel::right("valenx_cfd_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "CFD Workbench",
-                "native 2-D incompressible CFD · valenx-cfd-native",
-            ) {
-                app.show_cfd_workbench = false;
-            }
-            let s = &mut app.cfd;
-            let running = s.job.is_some();
-            if running {
-                ctx.request_repaint();
-            }
-            egui::ScrollArea::vertical()
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_cfd_workbench",
+        "CFD Workbench",
+        cfd_workbench_body,
+    );
+    if close {
+        app.show_cfd_workbench = false;
+    }
+}
+
+/// The CFD workbench body — case picker, grid, fluid props, run controls,
+/// residual/convergence plots, and the centreline-profile plot. Extracted
+/// from [`draw_cfd_workbench`] so it can be hosted by the classic
+/// [`crate::workbench_chrome::workbench_shell`] *or* the opt-in dockable
+/// tile layout ([`crate::dock_layout`]). Re-runs the non-blocking
+/// background-job poll up front so the dock path stays live too.
+pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    poll_cfd(&mut app.cfd);
+    ui.label(
+        egui::RichText::new("native 2-D incompressible CFD · valenx-cfd-native")
+            .weak()
+            .small(),
+    );
+    ui.separator();
+    let s = &mut app.cfd;
+    let running = s.job.is_some();
+    if running {
+        ui.ctx().request_repaint();
+    }
+    egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     if running {
@@ -304,7 +318,6 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             });
                     }
                 });
-        });
 }
 
 /// Free-stream dynamic pressure `q = ½ ρ U²` (Pa) — the pressure scale that

@@ -12,6 +12,10 @@ resolver = "2"
 members = [
     # Native shell + canonical types
     "crates/valenx-app",
+    # Leaf modules split out of valenx-app (stage A1 of the app split —
+    # docs/refactor/2026-06-20-valenx-app-split.md): the ValenxApp-free
+    # helpers (theme, help text, tooltips, mesh histograms, parsers).
+    "crates/valenx-app-core",
     "crates/valenx-astro",
     "crates/valenx-core",
     "crates/valenx-geo",
@@ -633,7 +637,10 @@ panic         = "abort"
 # faster than the opt-level-0 default, so the dev test suite stops being
 # dominated by unoptimized numerics.
 opt-level = 1
-debug     = true
+# Line-tables-only keeps panic/backtrace file:line info (crashes stay
+# debuggable) but drops heavy variable-level DWARF, which makes LINKING the big
+# binary markedly faster. Flip back to `true` if you need full step-debugging.
+debug     = "line-tables-only"
 
 # Dependencies (nalgebra, ndarray, etc.) fully optimized even in dev /
 # test builds. They compile once and are cached, so this doesn't slow
@@ -642,6 +649,14 @@ debug     = true
 # pattern); applies to external deps, not the workspace crates above.
 [profile.dev.package."*"]
 opt-level = 3
+
+# valenx-app is ~115k lines of UI + dispatch; ALL its heavy compute lives in
+# the opt-3 dependency crates above, so the app crate gains nothing from opt-1
+# and only pays the compile cost. opt-0 here makes the crate you edit most
+# (every workbench tweak recompiles this whole crate) noticeably faster to
+# rebuild. Bump to 1 only if the dev-build UI itself feels sluggish.
+[profile.dev.package.valenx-app]
+opt-level = 0
 
 # valenx-aero is the one genuinely compute-bound long-pole crate — its
 # immersed-boundary cut-cell CFD tests dominated the suite (57 min at

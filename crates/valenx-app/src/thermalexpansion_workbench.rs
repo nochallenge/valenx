@@ -67,18 +67,20 @@ pub fn draw_thermalexpansion_workbench(app: &mut ValenxApp, ctx: &egui::Context)
         return;
     }
 
-    egui::SidePanel::right("valenx_thermalexpansion_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Thermal Expansion",
-                "native linear expansion + constrained stress · valenx-thermalexpansion",
-            ) {
-                app.show_thermalexpansion_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_thermalexpansion_workbench",
+        "Thermal Expansion",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native linear expansion + constrained stress · valenx-thermalexpansion",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.thermalexpansion;
             egui::ScrollArea::vertical()
@@ -133,7 +135,11 @@ pub fn draw_thermalexpansion_workbench(app: &mut ValenxApp, ctx: &egui::Context)
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_thermalexpansion_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.thermalexpansion` borrow
     // is released here): build the bar's 3-D solid and load it.
@@ -286,6 +292,27 @@ fn load_bar_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical thermal-expansion workbench as a 3-D
+/// solid plus its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn thermalexpansion_product() -> crate::WorkspaceProduct {
+    let s = ThermalExpansionWorkbenchState::default();
+    let mesh = bar_solid_mesh(&s).expect("canonical thermal expansion ⇒ bar solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<thermalexpansion>/valenx-bar");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical thermal expansion ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Thermal expansion (ΔL/stress)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

@@ -81,18 +81,18 @@ pub fn draw_rcbeam_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_rcbeam_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "RC Beam",
-                "native reinforced-concrete beam flexure · valenx-rcbeam",
-            ) {
-                app.show_rcbeam_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_rcbeam_workbench",
+        "RC Beam",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native reinforced-concrete beam flexure · valenx-rcbeam")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.rcbeam;
             egui::ScrollArea::vertical()
@@ -154,7 +154,11 @@ pub fn draw_rcbeam_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_rcbeam_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.rcbeam` borrow is
     // released here): build the beam's 3-D solid and load it.
@@ -395,6 +399,196 @@ fn load_beam_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// Canonical RC-beam demo for the Workbench+Agent **3-D workspace tile**:
+/// a simply-supported 6 m span carrying a 25 kN/m service load, sized with
+/// the textbook 300×550 mm section (`fc' = 30 MPa`, `fy = 420 MPa`,
+/// `As = 1500 mm²`). Builds the same concrete-prism-plus-tension-rebar solid
+/// as the workbench's central-viewport [`beam_solid_mesh`], wrapped as a
+/// fully-populated [`LoadedMesh`] (mesh + quality + aspect / skew
+/// histograms, tagged `<beam>/valenx-rcbeam`), paired with the flexural
+/// readout rows. The single source of truth for the agent-bridge RC-beam
+/// product (see [`crate::agent_commands::AgentCommand::Show3d`] `kind:"rcbeam"`).
+///
+/// Self-contained (no live workbench state) so the agent command is
+/// deterministic: every quantity comes from a freshly-built
+/// [`valenx_rcbeam::BeamSection`]. Infallible — the canonical section is
+/// known under-reinforced and constructible.
+pub(crate) fn rcbeam_loaded_mesh() -> (LoadedMesh, Vec<String>) {
+    let (b, d, fc, fy, area) = RCBEAM_CANONICAL;
+    let lines = rcbeam_canonical_lines();
+
+    // Geometry: reuse the workbench's representative concrete-prism-with-rebar
+    // builder, driven by the same canonical section dimensions.
+    let geom_state = RcBeamWorkbenchState {
+        width_mm: b,
+        effective_depth_mm: d,
+        fc_prime_mpa: fc,
+        fy_mpa: fy,
+        area_steel_mm2: area,
+        result: String::new(),
+        error: None,
+        show_3d_request: false,
+    };
+    let mesh = beam_solid_mesh(&geom_state).expect("canonical RC section ⇒ beam solid mesh builds");
+    let quality = valenx_mesh::quality_report(&mesh);
+    let aspect_hist = valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+    let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+    let loaded = LoadedMesh {
+        path: PathBuf::from("<beam>/valenx-rcbeam"),
+        mesh,
+        quality,
+        aspect_hist,
+        skew_hist,
+    };
+    (loaded, lines)
+}
+
+/// The canonical RC-beam demo section: `(b, d, fc', fy, As)` =
+/// `(300 mm, 550 mm, 30 MPa, 420 MPa, 1500 mm²)` — a simply-supported 6 m span
+/// carrying 25 kN/m. Shared by the 3-D mesh product, the 2-D section drawing,
+/// and the flexural readout so all three agree on one section.
+const RCBEAM_CANONICAL: (f64, f64, f64, f64, f64) = (300.0, 550.0, 30.0, 420.0, 1500.0);
+
+/// Canonical span / load for the demo (simply-supported 6 m, 25 kN/m UDL).
+const RCBEAM_SPAN_M: f64 = 6.0;
+const RCBEAM_UDL_KN_PER_M: f64 = 25.0;
+/// Number of tension bars drawn / built for the demo section, and the clear
+/// cover (mm) to their centroid used for the 2-D section drawing's bar
+/// placement and the overall-depth estimate.
+const RCBEAM_N_BARS: usize = 3;
+const RCBEAM_COVER_MM: f64 = 40.0;
+
+/// The flexural readout rows for the canonical demo section — the real
+/// `valenx-rcbeam` capacity (Mn, φMn), reinforcement ratios (ρ vs ρ_bal), the
+/// under-reinforced check, the `Mu = wL²/8` demand and the utilisation. Shared
+/// by [`rcbeam_loaded_mesh`] (3-D) and [`rcbeam_section_view`] (2-D) so both
+/// carry identical numbers. Infallible — the canonical section is known valid
+/// and under-reinforced.
+fn rcbeam_canonical_lines() -> Vec<String> {
+    let (b, d, fc, fy, area) = RCBEAM_CANONICAL;
+    let section = BeamSection::new(b, d, fc, fy, area)
+        .expect("canonical RC section is valid (positive inputs)");
+
+    // Flexural capacity from the real solver.
+    let mn = section
+        .nominal_moment()
+        .expect("canonical section is under-reinforced ⇒ Mn evaluates");
+    let phi_mn = section
+        .design_moment_default()
+        .expect("canonical section ⇒ phi*Mn evaluates");
+    let rho = section.reinforcement_ratio();
+    let rho_b = section
+        .balanced_ratio(BETA1, STEEL_MODULUS_MPA)
+        .expect("canonical beta1/Es ⇒ rho_b evaluates");
+    let under = section
+        .is_under_reinforced(BETA1, STEEL_MODULUS_MPA)
+        .expect("canonical beta1/Es ⇒ under-reinforced check evaluates");
+
+    // Demand: simply-supported UDL midspan moment Mu = w·L²/8 (kN·m), and the
+    // utilisation against the design strength phi*Mn (kN·m).
+    let mu_knm = RCBEAM_UDL_KN_PER_M * RCBEAM_SPAN_M * RCBEAM_SPAN_M / 8.0;
+    let phi_mn_knm = phi_mn / 1.0e6;
+    let utilisation = mu_knm / phi_mn_knm;
+
+    vec![
+        format!(
+            "span / load: {RCBEAM_SPAN_M:.0} m simply-supported, {RCBEAM_UDL_KN_PER_M:.0} kN/m UDL"
+        ),
+        format!("section b×d: {b:.0} × {d:.0} mm  (fc' {fc:.0} MPa / fy {fy:.0} MPa)"),
+        format!("tension steel As: {area:.0} mm²"),
+        format!("nominal Mn: {:.1} kN·m", mn / 1.0e6),
+        format!("design φ·Mn: {phi_mn_knm:.1} kN·m  (φ = 0.90)"),
+        format!(
+            "ρ = {rho:.4} vs ρ_bal = {rho_b:.4}  →  {}",
+            if under {
+                "under-reinforced (ductile)"
+            } else {
+                "NOT under-reinforced"
+            }
+        ),
+        format!("demand Mu = wL²/8 = {mu_knm:.1} kN·m"),
+        format!(
+            "utilisation Mu/φMn: {:.0}%  ({})",
+            utilisation * 100.0,
+            if utilisation <= 1.0 { "OK" } else { "OVER" }
+        ),
+    ]
+}
+
+/// Canonical RC-beam demo for the Workbench+Agent **2-D section drawing** tile:
+/// the same textbook 300×550 mm section (`fc' = 30 MPa`, `fy = 420 MPa`,
+/// `As = 1500 mm²`) the 3-D product uses, packaged as a plain-data
+/// [`crate::RcSectionView`] (geometry in mm + `RCBEAM_N_BARS` tension bars at
+/// `RCBEAM_COVER_MM` cover, the per-bar diameter back-figured from `As`) paired
+/// with the shared flexural readout rows. The single source of truth for the
+/// agent-bridge RC-beam 2-D product (see
+/// [`crate::agent_commands::AgentCommand::Show2d`] `kind:"rcbeam"`). The section
+/// is painted by [`crate::dock_layout`]'s `render_workspace_body`.
+///
+/// `width_mm`/`depth_mm` are the *drawn* outline: width is the section `b`, and
+/// depth is the **overall** height `h ≈ d + cover` (the effective depth `d` is
+/// to the steel centroid, which sits `cover` above the soffit), so the drawn
+/// bars land at `cover` from the bottom face exactly as the dimension implies.
+pub(crate) fn rcbeam_section_view() -> (crate::RcSectionView, Vec<String>) {
+    let (b, d, _fc, _fy, area) = RCBEAM_CANONICAL;
+    let lines = rcbeam_canonical_lines();
+
+    // Per-bar diameter back-figured from the total steel area split over the
+    // bar count: As = n · π/4 · dia²  ⇒  dia = sqrt(4·As / (n·π)). For the
+    // canonical 1500 mm² over 3 bars this is ≈ 25.2 mm (a ~25M bar).
+    let per_bar_area = area / RCBEAM_N_BARS as f64;
+    let bar_dia_mm = (4.0 * per_bar_area / std::f64::consts::PI).sqrt();
+    // Overall section height = effective depth (to steel centroid) + the cover
+    // below it, so the drawn bars sit `cover` up from the soffit.
+    let depth_mm = d + RCBEAM_COVER_MM;
+
+    (
+        crate::RcSectionView {
+            width_mm: b,
+            depth_mm,
+            cover_mm: RCBEAM_COVER_MM,
+            bar_dia_mm,
+            n_bars: RCBEAM_N_BARS,
+            lines: lines.clone(),
+        },
+        lines,
+    )
+}
+
+/// A fixed 3/4-view [`valenx_viz::OrbitCamera`] framing the RC-beam `mesh`
+/// (same `frame_bounds` fit + hero angle as
+/// [`crate::rocket_workbench::lv1_camera`]), for the Workbench+Agent RC-beam
+/// product's per-tile 3-D view.
+pub(crate) fn rcbeam_camera(mesh: &Mesh) -> valenx_viz::OrbitCamera {
+    let mut camera = valenx_viz::OrbitCamera::default();
+    if let Some((min, max)) = crate::mesh_loader::mesh_bounding_box(mesh) {
+        camera.frame_bounds(min, max);
+    }
+    camera.azimuth_deg = 35.0;
+    camera.elevation_deg = 22.0;
+    camera
+}
+
+/// The agent-bridge **`show_3d{kind:"rcbeam"}`** product: the lit RC-beam solid
+/// with its flexural readout rows at a fixed 3/4 camera, registered in
+/// [`crate::products_registry`]. The per-tool builder the registry dispatches
+/// to (so the rcbeam 3-D product lives here, not in the shared reducer). It is
+/// distinct from the 2-D section drawing in [`rcbeam_section_view`], which the
+/// `show_2d` arm still dispatches separately. Pure (no app state).
+pub(crate) fn rcbeam_product() -> crate::WorkspaceProduct {
+    let (mesh, lines) = rcbeam_loaded_mesh();
+    let camera = rcbeam_camera(&mesh.mesh);
+    crate::WorkspaceProduct {
+        title: "RC beam (6 m, 25 kN/m)".into(),
+        lines,
+        mesh: Some(mesh),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,6 +691,29 @@ mod tests {
             ..Default::default()
         };
         assert!(beam_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn section_view_matches_the_canonical_section() {
+        let (view, lines) = rcbeam_section_view();
+        // Width = section b = 300; depth = effective depth d (550) + cover (40).
+        assert_eq!(view.width_mm, 300.0);
+        assert_eq!(view.depth_mm, 550.0 + 40.0);
+        assert_eq!(view.cover_mm, 40.0);
+        assert_eq!(view.n_bars, 3);
+        // 3 bars over As = 1500 mm² ⇒ per-bar 500 mm² ⇒ dia ≈ 25.23 mm.
+        let expected_dia = (4.0 * (1500.0 / 3.0) / std::f64::consts::PI).sqrt();
+        assert!(
+            (view.bar_dia_mm - expected_dia).abs() < 1.0e-9,
+            "bar dia = {}, expected {expected_dia}",
+            view.bar_dia_mm
+        );
+        assert!((view.bar_dia_mm - 25.23).abs() < 0.05, "≈25 mm bar");
+        // The view's own rows equal the returned lines, and carry the key numbers.
+        assert_eq!(view.lines, lines);
+        assert!(lines.iter().any(|l| l.contains("nominal Mn")));
+        assert!(lines.iter().any(|l| l.contains("utilisation")));
+        assert!(lines.iter().any(|l| l.contains("under-reinforced")));
     }
 }
 

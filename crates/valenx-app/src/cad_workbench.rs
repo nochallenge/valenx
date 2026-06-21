@@ -1659,12 +1659,12 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_cad_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_cad_workbench")
-        .resizable(true)
-        .default_width(340.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            ui.heading("Parametric CAD");
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_cad_workbench",
+        "Parametric CAD",
+        |app, ui| {
             ui.label(
                 egui::RichText::new("named parameters · valenx-solvespace-3d")
                     .weak()
@@ -2142,7 +2142,11 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_cad_workbench = false;
+    }
 
     // Deferred (outside the panel borrow): push the rebuilt solid's mesh into
     // the central 3-D viewport.

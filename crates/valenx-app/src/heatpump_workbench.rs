@@ -65,18 +65,18 @@ pub fn draw_heatpump_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_heatpump_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Heat Pump",
-                "native Carnot COP + second-law derating · valenx-heatpump",
-            ) {
-                app.show_heatpump_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_heatpump_workbench",
+        "Heat Pump",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native Carnot COP + second-law derating · valenx-heatpump")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.heatpump;
             egui::ScrollArea::vertical()
@@ -127,7 +127,11 @@ pub fn draw_heatpump_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_heatpump_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.heatpump` borrow is
     // released here): build the unit's 3-D solid and load it.
@@ -372,6 +376,27 @@ fn load_unit_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical heat-pump workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn heatpump_product() -> crate::WorkspaceProduct {
+    let s = HeatPumpWorkbenchState::default();
+    let mesh = unit_solid_mesh(&s).expect("canonical heat pump ⇒ unit solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<heatpump>/valenx-unit");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical heat pump ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Heat pump (COP/capacity)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

@@ -15,7 +15,7 @@ use eframe::egui;
 ///
 /// `auto_shrink([false, true])` keeps the normal menu width (only the
 /// height is bounded), so full-width row highlights are preserved.
-pub(crate) fn scrollable_menu(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+pub fn scrollable_menu(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
     // 70 % of the viewport, floored at 120 px so tiny windows still show a
     // usable, scrollable strip rather than a single clipped row.
     let max_height = (ui.ctx().screen_rect().height() * 0.7).max(120.0);

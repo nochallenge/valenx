@@ -75,18 +75,18 @@ pub fn draw_pipenetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_pipenetwork_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Pipe Network",
-                "native pipe-network flow balancing · valenx-pipenetwork",
-            ) {
-                app.show_pipenetwork_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_pipenetwork_workbench",
+        "Pipe Network",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native pipe-network flow balancing · valenx-pipenetwork")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.pipenetwork;
             egui::ScrollArea::vertical()
@@ -145,7 +145,11 @@ pub fn draw_pipenetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_pipenetwork_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.pipenetwork` borrow is
     // released here): build the network's 3-D solid and load it.
@@ -396,6 +400,31 @@ fn load_network_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"pipenetwork"}`** product: the canonical
+/// looped pipe network built as a 3-D solid, paired with the workbench's own
+/// `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`PipeNetworkWorkbenchState::default`].
+pub(crate) fn pipenetwork_product() -> crate::WorkspaceProduct {
+    let s = PipeNetworkWorkbenchState::default();
+    let mesh = network_solid_mesh(&s).expect("canonical pipe network ⇒ solid builds");
+    let loaded =
+        crate::products_registry::loaded_mesh_from(mesh, "<pipenetwork>/valenx-pipenetwork");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical pipe network ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Pipe network (loop balancing)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

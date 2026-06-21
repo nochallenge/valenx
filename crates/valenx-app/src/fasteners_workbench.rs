@@ -43,18 +43,18 @@ pub fn draw_fasteners_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_fasteners_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Fasteners",
-                "ISO 4017 hex-bolt dimensions · valenx-fasteners",
-            ) {
-                app.show_fasteners_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_fasteners_workbench",
+        "Fasteners",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("ISO 4017 hex-bolt dimensions · valenx-fasteners")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.fasteners;
             egui::ScrollArea::vertical()
@@ -100,7 +100,11 @@ pub fn draw_fasteners_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_hex_preview(ui, &pts);
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_fasteners_workbench = false;
+    }
 }
 
 /// A regular hexagon with the given width **across flats** (the distance

@@ -29,6 +29,151 @@ use crate::viewport_kind::ViewportKind;
 use crate::welcome_tour;
 use crate::ValenxApp;
 
+/// The clickable footprint of a viewport-header icon button — matches the
+/// workbench-chrome header (`workbench_chrome::ICON_BUTTON_SIZE`) so the
+/// central viewport's `−` / `⋯` / `✕` cluster lines up with the right-side
+/// panels' chrome.
+const VIEWPORT_ICON_BUTTON_SIZE: f32 = 18.0;
+
+/// Which painter-drawn glyph a [`viewport_icon_button`] renders.
+///
+/// Mirrors the private `workbench_chrome::Icon` painter geometry so the
+/// central viewport header looks identical to the workbench panel chrome.
+/// Only `−` (minimize) and `⋯` (more) live here; the `✕` reuses the shared
+/// [`crate::workbench_chrome::close_x_button`] directly.
+#[derive(Clone, Copy)]
+enum ViewportHeaderIcon {
+    /// A single horizontal bar — collapse the viewport body to just the header.
+    Minimize,
+    /// Three dots in a row — open the viewport `⋯` menu.
+    More,
+}
+
+/// Draw one painter-rendered viewport-header icon button (no font glyph, so it
+/// never renders as a missing-glyph "tofu" box), with the same subtle rounded
+/// hover background + tooltip as the workbench-panel chrome.
+fn viewport_icon_button(ui: &mut egui::Ui, icon: ViewportHeaderIcon, tip: &str) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(
+        egui::vec2(VIEWPORT_ICON_BUTTON_SIZE, VIEWPORT_ICON_BUTTON_SIZE),
+        egui::Sense::click(),
+    );
+    let vis = *ui.style().interact(&resp);
+    let painter = ui.painter();
+    if resp.hovered() {
+        painter.rect_filled(rect, 3.0, vis.bg_fill);
+    }
+    let c = rect.center();
+    let col = vis.fg_stroke.color;
+    let stroke = egui::Stroke::new(1.5, col);
+    let r = 4.0;
+    match icon {
+        ViewportHeaderIcon::Minimize => {
+            painter.line_segment([c + egui::vec2(-r, 0.0), c + egui::vec2(r, 0.0)], stroke);
+        }
+        ViewportHeaderIcon::More => {
+            for dx in [-5.0_f32, 0.0, 5.0] {
+                painter.circle_filled(c + egui::vec2(dx, 0.0), 1.5, col);
+            }
+        }
+    }
+    resp.on_hover_text(tip)
+}
+
+/// Draw the central viewport's slim chrome header — a title on the left and a
+/// right-aligned `−  ⋯  ✕` cluster (Close rightmost), matching the right-side
+/// workbench panels' chrome. Mutates `app`'s viewport-view-pref fields in
+/// place:
+///
+/// * `✕` sets [`ValenxApp::viewport_hidden`] (hide the viewport; reopen from
+///   the `⋯` menu or View → "Hide 3D viewport").
+/// * `⋯` opens a small menu: **Reset camera** (resets [`ValenxApp::camera`]
+///   to [`valenx_viz::OrbitCamera::default`]), a **3D / 2D viewport switch**
+///   (mirrors the View-menu radios), and **Hide viewport**.
+/// * `−` toggles [`ValenxApp::viewport_collapsed`] (roll the body up to just
+///   this header).
+fn viewport_chrome_header(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    let title = match app.active_viewport {
+        ViewportKind::Viewport2dDna => "2D Sketch",
+        ViewportKind::Viewport3D => "3D Viewport",
+    };
+    ui.horizontal(|ui| {
+        // Keep the controls a fixed, equal distance apart (matches the
+        // workbench header spacing).
+        ui.spacing_mut().item_spacing.x = 4.0;
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.strong(title);
+        });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // Right-to-left: add Close first so the visual order is `−  ⋯  ✕`.
+            if crate::workbench_chrome::close_x_button(
+                ui,
+                "Hide viewport — reopen from the View menu",
+            )
+            .clicked()
+            {
+                app.viewport_hidden = true;
+            }
+            // `⋯` opens a small popup keyed on the button's own id, so the
+            // trigger stays a painter-drawn icon (no font-glyph caret).
+            let more = viewport_icon_button(
+                ui,
+                ViewportHeaderIcon::More,
+                "Reset camera, switch 2D/3D, hide",
+            );
+            let popup_id = more.id.with("viewport_chrome_more");
+            if more.clicked() {
+                ui.memory_mut(|m| m.toggle_popup(popup_id));
+            }
+            egui::popup::popup_below_widget(
+                ui,
+                popup_id,
+                &more,
+                egui::popup::PopupCloseBehavior::CloseOnClick,
+                |ui| {
+                    ui.set_min_width(170.0);
+                    if ui.button("Reset camera").clicked() {
+                        app.camera = valenx_viz::OrbitCamera::default();
+                    }
+                    ui.separator();
+                    // 3D / 2D switch — mirrors the View-menu "Central
+                    // viewport" radios.
+                    if ui
+                        .radio(
+                            app.active_viewport == ViewportKind::Viewport3D,
+                            "3D Viewport",
+                        )
+                        .clicked()
+                    {
+                        app.active_viewport = ViewportKind::Viewport3D;
+                    }
+                    if ui
+                        .radio(
+                            app.active_viewport == ViewportKind::Viewport2dDna,
+                            "2D Sketch",
+                        )
+                        .clicked()
+                    {
+                        app.active_viewport = ViewportKind::for_genetics();
+                    }
+                    ui.separator();
+                    if ui.button("Hide viewport").clicked() {
+                        app.viewport_hidden = true;
+                    }
+                },
+            );
+            let tip = if app.viewport_collapsed {
+                "Expand viewport"
+            } else {
+                "Collapse viewport"
+            };
+            if viewport_icon_button(ui, ViewportHeaderIcon::Minimize, tip).clicked() {
+                app.viewport_collapsed = !app.viewport_collapsed;
+            }
+        });
+    });
+    ui.separator();
+}
+
 impl eframe::App for ValenxApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if !self.theme_applied {
@@ -236,6 +381,21 @@ impl eframe::App for ValenxApp {
                 });
                 ui.menu_button(cat.lookup("menu.view"), |ui| {
                     crate::menu_ui::scrollable_menu(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Text size:");
+                        if ui.button("A-").on_hover_text("Smaller text (Ctrl -)").clicked() {
+                            let z = (ui.ctx().zoom_factor() - 0.1_f32).max(0.6);
+                            ui.ctx().set_zoom_factor(z);
+                        }
+                        if ui.button("Reset").on_hover_text("Default text size").clicked() {
+                            ui.ctx().set_zoom_factor(1.3);
+                        }
+                        if ui.button("A+").on_hover_text("Bigger text (Ctrl +)").clicked() {
+                            let z = (ui.ctx().zoom_factor() + 0.1_f32).min(2.5);
+                            ui.ctx().set_zoom_factor(z);
+                        }
+                    });
+                    ui.separator();
                     if ui
                         .radio(
                             self.shading == ShadingMode::Shaded,
@@ -285,11 +445,66 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    if ui
+                        .checkbox(&mut self.dock_enabled, "Dockable panel layout (beta)")
+                        .on_hover_text(
+                            "Opt-in: host the open right-side workbenches in one \
+                             dockable region — grab a panel by its tab and drag to \
+                             reorder, drop into a second row, or split. \
+                             Off = classic stacked side panels.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // "Workbench + Agent" launchers — each unit is a paired
+                    // empty workspace (build canvas) + Claude chat tile in the
+                    // dock. Both turn the dockable layout on as a side effect.
+                    if ui
+                        .button("New Workbench + Agent")
+                        .on_hover_text(
+                            "Add a paired Workspace + Agent unit to the dockable \
+                             region: an empty build canvas on the left and a Claude \
+                             chat on the right. Prompt the agent to build into the \
+                             workspace. (Turns the dockable layout on.)",
+                        )
+                        .clicked()
+                    {
+                        self.add_workbench_agent_pair();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .button("Open 6 Workbench+Agents (3x2 grid)")
+                        .on_hover_text(
+                            "Open six paired Workspace + Agent units arranged as a \
+                             3-column x 2-row grid in the dockable region. \
+                             (Turns the dockable layout on.)",
+                        )
+                        .clicked()
+                    {
+                        self.open_six_workbench_agents();
+                        ui.close_menu();
+                    }
                     ui.checkbox(&mut self.snap_to_grid, "Snap to grid")
                         .on_hover_text(
                             "Snap the viewport cursor to the nearest ground-grid \
                              node — shows a marker + snapped X/Y/Z readout.",
                         );
+                    // Hide / show the central 2D/3D viewport body. Mirrors the
+                    // viewport header's ✕ / "Hide viewport" so the user can
+                    // always bring it back from the menu.
+                    if ui
+                        .checkbox(&mut self.viewport_hidden, "Hide 3D viewport")
+                        .on_hover_text(
+                            "Hide the central 2D/3D viewport body (its render is \
+                             skipped); the central area shows a placeholder. \
+                             Uncheck — or use the viewport header / its ⋯ menu — \
+                             to bring it back.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
 
                     ui.separator();
                     ui.label(egui::RichText::new("Workbenches").weak().small())
@@ -2275,7 +2490,7 @@ impl eframe::App for ValenxApp {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let any_open = self.show_browser || self.show_mesh_toolbox;
                     if ui
-                        .selectable_label(!any_open, "⛶ Max view")
+                        .selectable_label(!any_open, "Max view")
                         .on_hover_text(
                             "Maximize viewport: hide both side panels \
                              (click again to restore both).",
@@ -2295,28 +2510,6 @@ impl eframe::App for ValenxApp {
                         self.show_mesh_toolbox = !self.show_mesh_toolbox;
                     }
                     if ui
-                        .selectable_label(self.show_genetics_workbench, "Genetics")
-                        .on_hover_text(
-                            "Show / hide the Genetics Workbench — 15 native \
-                             computational-biology panels (sequence, alignment, \
-                             phylogenetics, population genetics, RNA structure & \
-                             design, molecular dynamics, cheminformatics, \
-                             macromolecular structure, quantum chemistry, genomics, \
-                             systems biology, docking, gene editing, structure \
-                             prediction).",
-                        )
-                        .clicked()
-                    {
-                        self.show_genetics_workbench = !self.show_genetics_workbench;
-                        // Opening the workbench switches the centre to the 2D
-                        // DNA view (matches the View-menu behaviour).
-                        if self.show_genetics_workbench
-                            && self.active_viewport == ViewportKind::Viewport3D
-                        {
-                            self.active_viewport = ViewportKind::for_genetics();
-                        }
-                    }
-                    if ui
                         .selectable_label(self.show_browser, "Browser")
                         .on_hover_text("Show / hide the left Browser panel.")
                         .clicked()
@@ -2326,6 +2519,13 @@ impl eframe::App for ValenxApp {
                 });
             });
         });
+
+        // Agent-drives-valenx bridge: apply any new commands an external agent
+        // appended to a channel's command file (open/focus/rename/close tabs,
+        // switch a workbench, post a chat note) before the tab strip is drawn,
+        // so those effects show up this frame. Throttled to ~1/sec internally;
+        // clean &mut self here (no dock-tree borrow held).
+        crate::agent_commands::poll_and_apply_agent_commands(self);
 
         // Project tabs (Chrome-style) — a slim strip just below the
         // ribbon. Each tab is a project workbench the user switches
@@ -2427,413 +2627,431 @@ impl eframe::App for ValenxApp {
                 });
         }
 
-        // Mesh Toolbox (right) — only paints when a mesh / STL is
-        // loaded AND the user hasn't hidden it. Mounted before the
-        // CentralPanel so egui docks it to the right of the viewport.
-        crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
-
-        // Genetics Workbench (right) — the Round-6 computational-
-        // biology panels. A no-op unless the user has toggled it on
-        // via View → Genetics Workbench. Mounted before the
-        // CentralPanel so egui docks it to the right (alongside the
-        // Mesh Toolbox when both are open).
-        crate::genetics_workbench::draw_genetics_workbench(self, ctx);
-
-        // Aerodynamics / Wind Tunnel workbench (right) — the
-        // valenx-aero virtual-wind-tunnel CFD panels. A no-op unless
-        // toggled on via View → Aerodynamics / Wind Tunnel. Mounted
-        // before the CentralPanel so egui docks it to the right.
-        crate::aero_workbench::draw_aero_workbench(self, ctx);
-
-        // FEM Workbench (right) — native linear-static + modal FEA on
-        // valenx-fem's in-process solvers. A no-op unless toggled on via
-        // View → FEM Workbench. Mounted before the CentralPanel so egui
-        // docks it to the right (alongside the other open workbenches).
-        crate::fem_workbench::draw_fem_workbench(self, ctx);
-
-        // Induction Motor workbench (right) — 3-phase induction-motor slip /
-        // power on valenx-inductionmotor. Off unless toggled via View.
-        crate::inductionmotor_workbench::draw_inductionmotor_workbench(self, ctx);
-
-        // CFD Workbench (right) — native 2-D incompressible laminar CFD
-        // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via
-        // View → CFD Workbench. Mounted before the CentralPanel so egui
-        // docks it to the right alongside the other workbenches.
-        crate::cfd_workbench::draw_cfd_workbench(self, ctx);
-
-        // Reaction Dynamics workbench (right) — native ab-initio MD on
-        // valenx-reactdyn. A no-op unless toggled on via View → Reaction
-        // Dynamics. Mounted before the CentralPanel so egui docks it to
-        // the right alongside the other workbenches.
-        crate::reactdyn_workbench::draw_reactdyn_workbench(self, ctx);
-
-        // Springs Workbench (right) — native helical-spring design on
-        // valenx-springs. A no-op unless toggled on via View → Springs.
-        crate::springs_workbench::draw_springs_workbench(self, ctx);
-
-        // Bearing workbench (right) — rolling-bearing ISO 281 rating life on
-        // valenx-bearing. Off unless toggled via View.
-        crate::bearing_workbench::draw_bearing_workbench(self, ctx);
-
-        // Belt Drive workbench (right) — flat-belt drive analysis on
-        // valenx-beltdrive. Off unless toggled via View.
-        crate::beltdrive_workbench::draw_beltdrive_workbench(self, ctx);
-
-        // Buckling workbench (right) — Euler / Johnson column buckling on
-        // valenx-buckling. Off unless toggled via View.
-        crate::buckling_workbench::draw_buckling_workbench(self, ctx);
-
-        // Brake workbench (right) — disc-brake torque + stop dynamics on
-        // valenx-brake. Off unless toggled via View.
-        crate::brake_workbench::draw_brake_workbench(self, ctx);
-
-        // Fatigue workbench (right) — high-cycle stress-life on valenx-fatigue.
-        // Off unless toggled via View.
-        crate::fatigue_workbench::draw_fatigue_workbench(self, ctx);
-
-        // Gear Tooth workbench (right) — spur-gear tooth bending strength on
-        // valenx-geartooth. Off unless toggled via View.
-        crate::geartooth_workbench::draw_geartooth_workbench(self, ctx);
-
-        // Pharmacokinetics workbench (right) — one-compartment IV dosing on
-        // valenx-pharmacokinetics. Off unless toggled via View.
-        crate::pharmacokinetics_workbench::draw_pharmacokinetics_workbench(self, ctx);
-
-        // Pipe Network workbench (right) — Hardy-Cross flow balancing on
-        // valenx-pipenetwork. Off unless toggled via View.
-        crate::pipenetwork_workbench::draw_pipenetwork_workbench(self, ctx);
-
-        // RC Beam workbench (right) — reinforced-concrete beam flexure on
-        // valenx-rcbeam. Off unless toggled via View.
-        crate::rcbeam_workbench::draw_rcbeam_workbench(self, ctx);
-
-        // Marine / Hull Workbench (right) — native box-form hull
-        // hydrostatics on valenx-marine. A no-op unless toggled on.
-        crate::marine_workbench::draw_marine_workbench(self, ctx);
-
-        // Capacitor workbench (right) — parallel-plate electrostatics on
-        // valenx-capacitor. Off unless toggled via View.
-        crate::capacitor_workbench::draw_capacitor_workbench(self, ctx);
-
-        // Fan Laws workbench (right) — fan / blower affinity-law scaling on
-        // valenx-fanlaws. Off unless toggled via View.
-        crate::fanlaws_workbench::draw_fanlaws_workbench(self, ctx);
-
-        // Creep workbench (right) — Larson-Miller / Norton creep on
-        // valenx-creep. Off unless toggled via View.
-        crate::creep_workbench::draw_creep_workbench(self, ctx);
-
-        // Electrochemistry workbench (right) — Nernst / Faraday cell analysis
-        // on valenx-electrochem. Off unless toggled via View.
-        crate::electrochem_workbench::draw_electrochem_workbench(self, ctx);
-
-        // Enzyme Kinetics workbench (right) — Michaelis-Menten rate laws on
-        // valenx-enzymekinetics. Off unless toggled via View.
-        crate::enzymekinetics_workbench::draw_enzymekinetics_workbench(self, ctx);
-
-        // Gears Workbench (right) — native involute-gear design on
-        // valenx-gears. A no-op unless toggled on via View → Gears.
-        crate::gears_workbench::draw_gears_workbench(self, ctx);
-
-        // Pneumatics workbench (right) — cylinder force / consumption on
-        // valenx-pneumatics. Off unless toggled via View.
-        crate::pneumatics_workbench::draw_pneumatics_workbench(self, ctx);
-
-        // Psychrometrics workbench (right) — moist-air state on
-        // valenx-psychrometrics. Off unless toggled via View.
-        crate::psychrometrics_workbench::draw_psychrometrics_workbench(self, ctx);
-
-        // Thermistor workbench (right) — NTC R<->T on valenx-thermistor.
-        // Off unless toggled via View.
-        crate::thermistor_workbench::draw_thermistor_workbench(self, ctx);
-
-        // Strain Gauge workbench (right) — Wheatstone-bridge output on
-        // valenx-straingauge. Off unless toggled via View.
-        crate::straingauge_workbench::draw_straingauge_workbench(self, ctx);
-
-        // Drone Workbench (right) — native multirotor hover performance on
-        // valenx-drone. A no-op unless toggled on via View → Drone / Multirotor.
-        crate::drone_workbench::draw_drone_workbench(self, ctx);
-
-        // Acoustics workbench (right) — room reverberation + SPL on
-        // valenx-acoustics. Off unless toggled via View.
-        crate::acoustics_workbench::draw_acoustics_workbench(self, ctx);
-
-        // Acid-Base workbench (right) — aqueous pH / buffer equilibria on
-        // valenx-acidbase. Off unless toggled via View.
-        crate::acidbase_workbench::draw_acidbase_workbench(self, ctx);
-
-        // BJT workbench (right) — bipolar-transistor DC bias on valenx-bjt.
-        // Off unless toggled via View.
-        crate::bjt_workbench::draw_bjt_workbench(self, ctx);
-
-        // BMR / TDEE workbench (right) — energy expenditure on valenx-bmr.
-        // Off unless toggled via View.
-        crate::bmr_workbench::draw_bmr_workbench(self, ctx);
-
-        // Bolted Joint workbench (right) — preloaded joint mechanics on
-        // valenx-bolt. Off unless toggled via View.
-        crate::bolt_workbench::draw_bolt_workbench(self, ctx);
-
-        // Geomatics Workbench (right) — native geodesic calculations on
-        // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
-        crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
-
-        // EE / DSP workbenches (electronics batch). Each a no-op unless toggled
-        // on via the View menu.
-        crate::opamp_workbench::draw_opamp_workbench(self, ctx);
-        crate::led_workbench::draw_led_workbench(self, ctx);
-        crate::thermocouple_workbench::draw_thermocouple_workbench(self, ctx);
-        crate::transmissionline_workbench::draw_transmissionline_workbench(self, ctx);
-        crate::powerfactor_workbench::draw_powerfactor_workbench(self, ctx);
-        crate::resistornetwork_workbench::draw_resistornetwork_workbench(self, ctx);
-        crate::rectifier_workbench::draw_rectifier_workbench(self, ctx);
-        crate::filter_workbench::draw_filter_workbench(self, ctx);
-
-        // Heat Transfer workbench (right) — composite-wall 1-D heat loss on
-        // valenx-heat-transfer. Off unless toggled via View.
-        crate::heattransfer_workbench::draw_heattransfer_workbench(self, ctx);
-
-        // Four-Bar Linkage Workbench (right) — native planar mechanism
-        // kinematics on valenx-kinematics. A no-op unless toggled via View → Four-Bar Linkage.
-        crate::fourbar_workbench::draw_fourbar_workbench(self, ctx);
-
-        // Mechanical + civil batch workbenches. Each a no-op unless toggled via View.
-        crate::shaftdesign_workbench::draw_shaftdesign_workbench(self, ctx);
-        crate::screwthread_workbench::draw_screwthread_workbench(self, ctx);
-        crate::pulley_workbench::draw_pulley_workbench(self, ctx);
-        crate::springdesign_workbench::draw_springdesign_workbench(self, ctx);
-        crate::springcombination_workbench::draw_springcombination_workbench(self, ctx);
-        crate::vibration_workbench::draw_vibration_workbench(self, ctx);
-        crate::rivet_workbench::draw_rivet_workbench(self, ctx);
-        crate::soilbearing_workbench::draw_soilbearing_workbench(self, ctx);
-
-        // Piping Workbench (right) — native pipe-section sizing on
-        // valenx-piping. A no-op unless toggled on via View → Piping.
-        crate::piping_workbench::draw_piping_workbench(self, ctx);
-
-        // Science / bio / civil batch workbenches. Each a no-op unless toggled via View.
-        crate::retainingwall_workbench::draw_retainingwall_workbench(self, ctx);
-        crate::openchannel_workbench::draw_openchannel_workbench(self, ctx);
-        crate::weir_workbench::draw_weir_workbench(self, ctx);
-        crate::thermocycle_workbench::draw_thermocycle_workbench(self, ctx);
-        crate::queueing_workbench::draw_queueing_workbench(self, ctx);
-        crate::radioactivity_workbench::draw_radioactivity_workbench(self, ctx);
-        crate::osmosis_workbench::draw_osmosis_workbench(self, ctx);
-        crate::thermoreg_workbench::draw_thermoreg_workbench(self, ctx);
-        crate::hemodynamics_workbench::draw_hemodynamics_workbench(self, ctx);
-        crate::popdynamics_workbench::draw_popdynamics_workbench(self, ctx);
-
-        // Rail / Train Workbench (right) — native train resistance + tractive
-        // effort on valenx-rail. A no-op unless toggled on via View → Rail / Train.
-        crate::rail_workbench::draw_rail_workbench(self, ctx);
-
-        // Bone Mechanics workbench (right) — long-bone stress / strength on
-        // valenx-bonemech. Off unless toggled via View.
-        crate::bonemech_workbench::draw_bonemech_workbench(self, ctx);
-
-        // Chain Drive workbench (right) — roller-chain kinematics on
-        // valenx-chaindrive. Off unless toggled via View.
-        crate::chaindrive_workbench::draw_chaindrive_workbench(self, ctx);
-
-        // Clutch workbench (right) — friction-clutch torque capacity on
-        // valenx-clutch. Off unless toggled via View.
-        crate::clutch_workbench::draw_clutch_workbench(self, ctx);
-
-        // Solenoid Coil workbench (right) — long-solenoid field / inductance
-        // on valenx-coil. Off unless toggled via View.
-        crate::coil_workbench::draw_coil_workbench(self, ctx);
-
-        // Steel Column workbench (right) — Euler-Johnson axial buckling on
-        // valenx-columnsteel. Off unless toggled via View.
-        crate::columnsteel_workbench::draw_columnsteel_workbench(self, ctx);
-
-        // Collision Workbench (right) — native AABB geometry + overlap tests
-        // on valenx-collision. A no-op unless toggled on via View → Collision.
-        crate::collision_workbench::draw_collision_workbench(self, ctx);
-
-        // Science / engineering batch 4 (right) — each a no-op unless toggled via View.
-        crate::statics_workbench::draw_statics_workbench(self, ctx);
-        crate::projectile_workbench::draw_projectile_workbench(self, ctx);
-        crate::conveyor_workbench::draw_conveyor_workbench(self, ctx);
-        crate::fluidstatics_workbench::draw_fluidstatics_workbench(self, ctx);
-        crate::plate_workbench::draw_plate_workbench(self, ctx);
-        crate::strainrosette_workbench::draw_strainrosette_workbench(self, ctx);
-        crate::transformer_workbench::draw_transformer_workbench(self, ctx);
-        crate::threephase_workbench::draw_threephase_workbench(self, ctx);
-
-        // Solar PV Workbench (right) — native single-diode photovoltaic cell
-        // performance on valenx-solarpv. A no-op unless toggled via View → Solar PV.
-        crate::solarpv_workbench::draw_solarpv_workbench(self, ctx);
-
-        // Sheet Metal Workbench (right) — native bend allowance / deduction
-        // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.
-        crate::sheetmetal_workbench::draw_sheetmetal_workbench(self, ctx);
-
-        // Truss Workbench (right) — native planar pin-jointed truss analysis
-        // on valenx-truss. A no-op unless toggled on via View → Truss.
-        crate::truss_workbench::draw_truss_workbench(self, ctx);
-
-        // Field Statistics Workbench (right) — descriptive statistics over a
-        // pasted number list on valenx-fields. A no-op unless toggled on via
-        // View → Field Statistics.
-        crate::fields_workbench::draw_fields_workbench(self, ctx);
-
-        // Gearbox workbench (right) — two-stage compound gear-train analysis
-        // on valenx-gearbox. Off unless toggled via View.
-        crate::gearbox_workbench::draw_gearbox_workbench(self, ctx);
-
-        // Science batch 5 workbenches. Each a no-op unless toggled via View.
-        crate::camdynamics_workbench::draw_camdynamics_workbench(self, ctx);
-        crate::batteryecm_workbench::draw_batteryecm_workbench(self, ctx);
-        crate::diffusion_workbench::draw_diffusion_workbench(self, ctx);
-        crate::dimensional_workbench::draw_dimensional_workbench(self, ctx);
-        crate::fft_workbench::draw_fft_workbench(self, ctx);
-
-        // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
-        // valenx-fasteners. A no-op unless toggled on via View → Fasteners.
-        crate::fasteners_workbench::draw_fasteners_workbench(self, ctx);
-
-        // Fixed-Wing / Aircraft Workbench (right) — native preliminary aircraft
-        // point-performance on valenx-fixedwing. A no-op unless toggled on via
-        // View → Fixed-Wing / Aircraft.
-        crate::fixedwing_workbench::draw_fixedwing_workbench(self, ctx);
-
-        // Science / engineering batch (right) — each a no-op unless toggled via View.
-        crate::combustion_workbench::draw_combustion_workbench(self, ctx);
-        crate::flywheel_workbench::draw_flywheel_workbench(self, ctx);
-        crate::fracture_workbench::draw_fracture_workbench(self, ctx);
-        crate::hydraulics_workbench::draw_hydraulics_workbench(self, ctx);
-        crate::inclinedplane_workbench::draw_inclinedplane_workbench(self, ctx);
-        crate::insulation_workbench::draw_insulation_workbench(self, ctx);
-        crate::leadscrew_workbench::draw_leadscrew_workbench(self, ctx);
-        crate::leverage_workbench::draw_leverage_workbench(self, ctx);
-        crate::mohr_workbench::draw_mohr_workbench(self, ctx);
-        crate::mosfet_workbench::draw_mosfet_workbench(self, ctx);
-        crate::optics_workbench::draw_optics_workbench(self, ctx);
-        crate::orifice_workbench::draw_orifice_workbench(self, ctx);
-        crate::pressurevessel_workbench::draw_pressurevessel_workbench(self, ctx);
-        crate::torsion_workbench::draw_torsion_workbench(self, ctx);
-        crate::refrigeration_workbench::draw_refrigeration_workbench(self, ctx);
-
-        // Frames Workbench (right) — structural cross-section properties on
-        // valenx-frames. A no-op unless toggled on via View → Frames.
-        crate::frames_workbench::draw_frames_workbench(self, ctx);
-
-        // DC Motor Workbench (right) — native brushed-DC-motor performance on
-        // valenx-dcmotor. A no-op unless toggled on via View → DC Motor.
-        crate::dcmotor_workbench::draw_dcmotor_workbench(self, ctx);
-
-        // Gas Dynamics workbench (right) — 1-D compressible-flow relations on
-        // valenx-gasdynamics. A no-op unless toggled on via View → Gas Dynamics.
-        crate::gasdynamics_workbench::draw_gasdynamics_workbench(self, ctx);
-
-        // Thermal Expansion workbench (right) — linear expansion + constrained
-        // stress on valenx-thermalexpansion. A no-op unless toggled via View → Thermal Expansion.
-        crate::thermalexpansion_workbench::draw_thermalexpansion_workbench(self, ctx);
-
-        // Neural-Interface workbench (right) — native BCI stimulation on
-        // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
-        crate::neuro_workbench::draw_neuro_workbench(self, ctx);
-
-        // Wind Turbine workbench (right) — native actuator-disc wind-turbine
-        // power on valenx-windturbine. A no-op unless toggled via View → Wind Turbine.
-        crate::windturbine_workbench::draw_windturbine_workbench(self, ctx);
-
-        // Parametric-CAD workbench (right) — named parameters driving sketch
-        // geometry on valenx-solvespace-3d. Off unless toggled via View.
-        crate::cad_workbench::draw_cad_workbench(self, ctx);
-
-        // Antenna workbench (right) — parabolic-dish gain / beamwidth on
-        // valenx-antenna. Off unless toggled via View.
-        crate::antenna_workbench::draw_antenna_workbench(self, ctx);
-
-        // 2D Drafting workbench (right) — LibreCAD-style 2D canvas on
-        // valenx-librecad-2d. Off unless toggled via View.
-        crate::draft2d_workbench::draw_draft2d_workbench(self, ctx);
-
-        // Reinforcement workbench (right) — parametric rebar cages pushed to
-        // the 3D viewport, on valenx-reinforcement. Off unless toggled.
-        crate::reinforcement_workbench::draw_reinforcement_workbench(self, ctx);
-
-        // Path-Traced Render workbench (right) — global-illumination image on
-        // valenx-pathtrace. Off unless toggled via View.
-        crate::render_workbench::draw_render_workbench(self, ctx);
-
-        // HVAC workbench (right) — duct sizing + pressure drop on valenx-hvac.
-        // Off unless toggled via View.
-        crate::hvac_workbench::draw_hvac_workbench(self, ctx);
-
-        // Beam Workbench (right) — native Euler-Bernoulli beam bending on
-        // valenx-beam. A no-op unless toggled on via View → Beam.
-        crate::beam_workbench::draw_beam_workbench(self, ctx);
-
-        // Reverse-Engineering workbench (right) — point-cloud reconstruction
-        // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
-        crate::reverse_workbench::draw_reverse_workbench(self, ctx);
-
-        // Pump workbench (right) — centrifugal-pump duty point + NPSH on
-        // valenx-pump. Off unless toggled via View.
-        crate::pump_workbench::draw_pump_workbench(self, ctx);
-
-        // Interior-Design workbench (right) — 2D floor plan + furniture on
-        // valenx-interior. Off unless toggled via View.
-        crate::interior_workbench::draw_interior_workbench(self, ctx);
-
-        // Animation workbench (right) — joint keyframe timeline on
-        // valenx-animate. Off unless toggled via View.
-        crate::animate_workbench::draw_animate_workbench(self, ctx);
-
-        // Variant-Effect workbench (right) — HGVS variant parser on
-        // valenx-variant-effect. Off unless toggled via View.
-        crate::variant_effect_workbench::draw_variant_effect_workbench(self, ctx);
-
-        // Heat Pump workbench (right) — Carnot COP + second-law derating on
-        // valenx-heatpump. Off unless toggled via View.
-        crate::heatpump_workbench::draw_heatpump_workbench(self, ctx);
-
-        // Astro / Launch workbench (right) — the valenx-astro launch
-        // ascent simulator + mission planners. A no-op unless toggled
-        // on via View → Astro / Launch. Mounted before the CentralPanel
-        // so egui docks it to the right (alongside the other open
-        // workbenches).
-        crate::astro_workbench::draw_astro_workbench(self, ctx);
-
-        // Pipe Flow workbench (right) — Darcy-Weisbach pipe-flow analysis
-        // on valenx-pipeflow. Off unless toggled via View.
-        crate::pipeflow_workbench::draw_pipeflow_workbench(self, ctx);
-
-        // Rocket workbench (right) — the valenx-rocket-demo coupled
-        // design→simulate pipeline. A no-op unless toggled on via
-        // View → Rocket. Mounted before the CentralPanel so egui docks it
-        // to the right alongside the other workbenches.
-        crate::rocket_workbench::draw_rocket_workbench(self, ctx);
-
-        // Battery Pack workbench (right) — series / parallel pack sizing on
-        // valenx-batterypack. Off unless toggled via View.
-        crate::batterypack_workbench::draw_batterypack_workbench(self, ctx);
-
-        // Engine workbench (right) — reactive engine design → analyze →
-        // optimize → export. A no-op unless toggled on via View → Engine.
-        crate::engine_workbench::draw_engine_workbench(self, ctx);
-
-        // Heat Exchanger workbench (right) — effectiveness-NTU analysis on
-        // valenx-heatexchanger. Off unless toggled via View.
-        crate::heatexchanger_workbench::draw_heatexchanger_workbench(self, ctx);
-
-        // Car workbench (right) — vehicle dynamics design → simulate over
-        // valenx-vehicle. A no-op unless toggled on via View → Car.
-        crate::car_workbench::draw_car_workbench(self, ctx);
-
-        // Assistant activity sidebar (right) — a live in-app feed of what
-        // the AI assistant is building. On by default; toggle via View.
-        crate::assistant_workbench::draw_assistant_workbench(self, ctx);
-
-        // Central viewport — grabs the wgpu render state for the
-        // offscreen-depth-buffered shaded path if the wgpu backend is
-        // available.
+        // wgpu render state + DPI, grabbed once up-front so BOTH the dockable
+        // workbench layout (below — its `workspace:<n>` tiles render live 3-D)
+        // and the central viewport (further down) can build a `WgpuCtx`. The
+        // clone is an Arc-backed handle (cheap) and owned, so it doesn't pin a
+        // borrow on `frame`.
         let wgpu_render_state = frame.wgpu_render_state().cloned();
         let pixels_per_point = ctx.pixels_per_point();
+
+        // Right-side workbench dispatch. By default each open workbench is
+        // its own stacked `SidePanel::right` (the classic layout). When the
+        // user opts into View → "Dockable panel layout (beta)", the whole run
+        // is replaced by a single dockable `egui_tiles` region in which the
+        // open workbenches are draggable / reorderable / splittable tiles —
+        // see [`crate::dock_layout::draw_dock_layout`]. Toggling the flag
+        // never changes any panel's contents, only where it is hosted.
+        if !self.dock_enabled {
+            // Mesh Toolbox (right) — only paints when a mesh / STL is
+            // loaded AND the user hasn't hidden it. Mounted before the
+            // CentralPanel so egui docks it to the right of the viewport.
+            crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
+
+            // Genetics Workbench (right) — the Round-6 computational-
+            // biology panels. A no-op unless the user has toggled it on
+            // via View → Genetics Workbench. Mounted before the
+            // CentralPanel so egui docks it to the right (alongside the
+            // Mesh Toolbox when both are open).
+            crate::genetics_workbench::draw_genetics_workbench(self, ctx);
+
+            // Aerodynamics / Wind Tunnel workbench (right) — the
+            // valenx-aero virtual-wind-tunnel CFD panels. A no-op unless
+            // toggled on via View → Aerodynamics / Wind Tunnel. Mounted
+            // before the CentralPanel so egui docks it to the right.
+            crate::aero_workbench::draw_aero_workbench(self, ctx);
+
+            // FEM Workbench (right) — native linear-static + modal FEA on
+            // valenx-fem's in-process solvers. A no-op unless toggled on via
+            // View → FEM Workbench. Mounted before the CentralPanel so egui
+            // docks it to the right (alongside the other open workbenches).
+            crate::fem_workbench::draw_fem_workbench(self, ctx);
+
+            // Induction Motor workbench (right) — 3-phase induction-motor slip /
+            // power on valenx-inductionmotor. Off unless toggled via View.
+            crate::inductionmotor_workbench::draw_inductionmotor_workbench(self, ctx);
+
+            // CFD Workbench (right) — native 2-D incompressible laminar CFD
+            // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via
+            // View → CFD Workbench. Mounted before the CentralPanel so egui
+            // docks it to the right alongside the other workbenches.
+            crate::cfd_workbench::draw_cfd_workbench(self, ctx);
+
+            // Reaction Dynamics workbench (right) — native ab-initio MD on
+            // valenx-reactdyn. A no-op unless toggled on via View → Reaction
+            // Dynamics. Mounted before the CentralPanel so egui docks it to
+            // the right alongside the other workbenches.
+            crate::reactdyn_workbench::draw_reactdyn_workbench(self, ctx);
+
+            // Springs Workbench (right) — native helical-spring design on
+            // valenx-springs. A no-op unless toggled on via View → Springs.
+            crate::springs_workbench::draw_springs_workbench(self, ctx);
+
+            // Bearing workbench (right) — rolling-bearing ISO 281 rating life on
+            // valenx-bearing. Off unless toggled via View.
+            crate::bearing_workbench::draw_bearing_workbench(self, ctx);
+
+            // Belt Drive workbench (right) — flat-belt drive analysis on
+            // valenx-beltdrive. Off unless toggled via View.
+            crate::beltdrive_workbench::draw_beltdrive_workbench(self, ctx);
+
+            // Buckling workbench (right) — Euler / Johnson column buckling on
+            // valenx-buckling. Off unless toggled via View.
+            crate::buckling_workbench::draw_buckling_workbench(self, ctx);
+
+            // Brake workbench (right) — disc-brake torque + stop dynamics on
+            // valenx-brake. Off unless toggled via View.
+            crate::brake_workbench::draw_brake_workbench(self, ctx);
+
+            // Fatigue workbench (right) — high-cycle stress-life on valenx-fatigue.
+            // Off unless toggled via View.
+            crate::fatigue_workbench::draw_fatigue_workbench(self, ctx);
+
+            // Gear Tooth workbench (right) — spur-gear tooth bending strength on
+            // valenx-geartooth. Off unless toggled via View.
+            crate::geartooth_workbench::draw_geartooth_workbench(self, ctx);
+
+            // Pharmacokinetics workbench (right) — one-compartment IV dosing on
+            // valenx-pharmacokinetics. Off unless toggled via View.
+            crate::pharmacokinetics_workbench::draw_pharmacokinetics_workbench(self, ctx);
+
+            // Pipe Network workbench (right) — Hardy-Cross flow balancing on
+            // valenx-pipenetwork. Off unless toggled via View.
+            crate::pipenetwork_workbench::draw_pipenetwork_workbench(self, ctx);
+
+            // RC Beam workbench (right) — reinforced-concrete beam flexure on
+            // valenx-rcbeam. Off unless toggled via View.
+            crate::rcbeam_workbench::draw_rcbeam_workbench(self, ctx);
+
+            // Marine / Hull Workbench (right) — native box-form hull
+            // hydrostatics on valenx-marine. A no-op unless toggled on.
+            crate::marine_workbench::draw_marine_workbench(self, ctx);
+
+            // Capacitor workbench (right) — parallel-plate electrostatics on
+            // valenx-capacitor. Off unless toggled via View.
+            crate::capacitor_workbench::draw_capacitor_workbench(self, ctx);
+
+            // Fan Laws workbench (right) — fan / blower affinity-law scaling on
+            // valenx-fanlaws. Off unless toggled via View.
+            crate::fanlaws_workbench::draw_fanlaws_workbench(self, ctx);
+
+            // Creep workbench (right) — Larson-Miller / Norton creep on
+            // valenx-creep. Off unless toggled via View.
+            crate::creep_workbench::draw_creep_workbench(self, ctx);
+
+            // Electrochemistry workbench (right) — Nernst / Faraday cell analysis
+            // on valenx-electrochem. Off unless toggled via View.
+            crate::electrochem_workbench::draw_electrochem_workbench(self, ctx);
+
+            // Enzyme Kinetics workbench (right) — Michaelis-Menten rate laws on
+            // valenx-enzymekinetics. Off unless toggled via View.
+            crate::enzymekinetics_workbench::draw_enzymekinetics_workbench(self, ctx);
+
+            // Gears Workbench (right) — native involute-gear design on
+            // valenx-gears. A no-op unless toggled on via View → Gears.
+            crate::gears_workbench::draw_gears_workbench(self, ctx);
+
+            // Pneumatics workbench (right) — cylinder force / consumption on
+            // valenx-pneumatics. Off unless toggled via View.
+            crate::pneumatics_workbench::draw_pneumatics_workbench(self, ctx);
+
+            // Psychrometrics workbench (right) — moist-air state on
+            // valenx-psychrometrics. Off unless toggled via View.
+            crate::psychrometrics_workbench::draw_psychrometrics_workbench(self, ctx);
+
+            // Thermistor workbench (right) — NTC R<->T on valenx-thermistor.
+            // Off unless toggled via View.
+            crate::thermistor_workbench::draw_thermistor_workbench(self, ctx);
+
+            // Strain Gauge workbench (right) — Wheatstone-bridge output on
+            // valenx-straingauge. Off unless toggled via View.
+            crate::straingauge_workbench::draw_straingauge_workbench(self, ctx);
+
+            // Drone Workbench (right) — native multirotor hover performance on
+            // valenx-drone. A no-op unless toggled on via View → Drone / Multirotor.
+            crate::drone_workbench::draw_drone_workbench(self, ctx);
+
+            // Acoustics workbench (right) — room reverberation + SPL on
+            // valenx-acoustics. Off unless toggled via View.
+            crate::acoustics_workbench::draw_acoustics_workbench(self, ctx);
+
+            // Acid-Base workbench (right) — aqueous pH / buffer equilibria on
+            // valenx-acidbase. Off unless toggled via View.
+            crate::acidbase_workbench::draw_acidbase_workbench(self, ctx);
+
+            // BJT workbench (right) — bipolar-transistor DC bias on valenx-bjt.
+            // Off unless toggled via View.
+            crate::bjt_workbench::draw_bjt_workbench(self, ctx);
+
+            // BMR / TDEE workbench (right) — energy expenditure on valenx-bmr.
+            // Off unless toggled via View.
+            crate::bmr_workbench::draw_bmr_workbench(self, ctx);
+
+            // Bolted Joint workbench (right) — preloaded joint mechanics on
+            // valenx-bolt. Off unless toggled via View.
+            crate::bolt_workbench::draw_bolt_workbench(self, ctx);
+
+            // Geomatics Workbench (right) — native geodesic calculations on
+            // valenx-geomatics. A no-op unless toggled on via View → Geomatics.
+            crate::geomatics_workbench::draw_geomatics_workbench(self, ctx);
+
+            // EE / DSP workbenches (electronics batch). Each a no-op unless toggled
+            // on via the View menu.
+            crate::opamp_workbench::draw_opamp_workbench(self, ctx);
+            crate::led_workbench::draw_led_workbench(self, ctx);
+            crate::thermocouple_workbench::draw_thermocouple_workbench(self, ctx);
+            crate::transmissionline_workbench::draw_transmissionline_workbench(self, ctx);
+            crate::powerfactor_workbench::draw_powerfactor_workbench(self, ctx);
+            crate::resistornetwork_workbench::draw_resistornetwork_workbench(self, ctx);
+            crate::rectifier_workbench::draw_rectifier_workbench(self, ctx);
+            crate::filter_workbench::draw_filter_workbench(self, ctx);
+
+            // Heat Transfer workbench (right) — composite-wall 1-D heat loss on
+            // valenx-heat-transfer. Off unless toggled via View.
+            crate::heattransfer_workbench::draw_heattransfer_workbench(self, ctx);
+
+            // Four-Bar Linkage Workbench (right) — native planar mechanism
+            // kinematics on valenx-kinematics. A no-op unless toggled via View → Four-Bar Linkage.
+            crate::fourbar_workbench::draw_fourbar_workbench(self, ctx);
+
+            // Mechanical + civil batch workbenches. Each a no-op unless toggled via View.
+            crate::shaftdesign_workbench::draw_shaftdesign_workbench(self, ctx);
+            crate::screwthread_workbench::draw_screwthread_workbench(self, ctx);
+            crate::pulley_workbench::draw_pulley_workbench(self, ctx);
+            crate::springdesign_workbench::draw_springdesign_workbench(self, ctx);
+            crate::springcombination_workbench::draw_springcombination_workbench(self, ctx);
+            crate::vibration_workbench::draw_vibration_workbench(self, ctx);
+            crate::rivet_workbench::draw_rivet_workbench(self, ctx);
+            crate::soilbearing_workbench::draw_soilbearing_workbench(self, ctx);
+
+            // Piping Workbench (right) — native pipe-section sizing on
+            // valenx-piping. A no-op unless toggled on via View → Piping.
+            crate::piping_workbench::draw_piping_workbench(self, ctx);
+
+            // Science / bio / civil batch workbenches. Each a no-op unless toggled via View.
+            crate::retainingwall_workbench::draw_retainingwall_workbench(self, ctx);
+            crate::openchannel_workbench::draw_openchannel_workbench(self, ctx);
+            crate::weir_workbench::draw_weir_workbench(self, ctx);
+            crate::thermocycle_workbench::draw_thermocycle_workbench(self, ctx);
+            crate::queueing_workbench::draw_queueing_workbench(self, ctx);
+            crate::radioactivity_workbench::draw_radioactivity_workbench(self, ctx);
+            crate::osmosis_workbench::draw_osmosis_workbench(self, ctx);
+            crate::thermoreg_workbench::draw_thermoreg_workbench(self, ctx);
+            crate::hemodynamics_workbench::draw_hemodynamics_workbench(self, ctx);
+            crate::popdynamics_workbench::draw_popdynamics_workbench(self, ctx);
+
+            // Rail / Train Workbench (right) — native train resistance + tractive
+            // effort on valenx-rail. A no-op unless toggled on via View → Rail / Train.
+            crate::rail_workbench::draw_rail_workbench(self, ctx);
+
+            // Bone Mechanics workbench (right) — long-bone stress / strength on
+            // valenx-bonemech. Off unless toggled via View.
+            crate::bonemech_workbench::draw_bonemech_workbench(self, ctx);
+
+            // Chain Drive workbench (right) — roller-chain kinematics on
+            // valenx-chaindrive. Off unless toggled via View.
+            crate::chaindrive_workbench::draw_chaindrive_workbench(self, ctx);
+
+            // Clutch workbench (right) — friction-clutch torque capacity on
+            // valenx-clutch. Off unless toggled via View.
+            crate::clutch_workbench::draw_clutch_workbench(self, ctx);
+
+            // Solenoid Coil workbench (right) — long-solenoid field / inductance
+            // on valenx-coil. Off unless toggled via View.
+            crate::coil_workbench::draw_coil_workbench(self, ctx);
+
+            // Steel Column workbench (right) — Euler-Johnson axial buckling on
+            // valenx-columnsteel. Off unless toggled via View.
+            crate::columnsteel_workbench::draw_columnsteel_workbench(self, ctx);
+
+            // Collision Workbench (right) — native AABB geometry + overlap tests
+            // on valenx-collision. A no-op unless toggled on via View → Collision.
+            crate::collision_workbench::draw_collision_workbench(self, ctx);
+
+            // Science / engineering batch 4 (right) — each a no-op unless toggled via View.
+            crate::statics_workbench::draw_statics_workbench(self, ctx);
+            crate::projectile_workbench::draw_projectile_workbench(self, ctx);
+            crate::conveyor_workbench::draw_conveyor_workbench(self, ctx);
+            crate::fluidstatics_workbench::draw_fluidstatics_workbench(self, ctx);
+            crate::plate_workbench::draw_plate_workbench(self, ctx);
+            crate::strainrosette_workbench::draw_strainrosette_workbench(self, ctx);
+            crate::transformer_workbench::draw_transformer_workbench(self, ctx);
+            crate::threephase_workbench::draw_threephase_workbench(self, ctx);
+
+            // Solar PV Workbench (right) — native single-diode photovoltaic cell
+            // performance on valenx-solarpv. A no-op unless toggled via View → Solar PV.
+            crate::solarpv_workbench::draw_solarpv_workbench(self, ctx);
+
+            // Sheet Metal Workbench (right) — native bend allowance / deduction
+            // on valenx-sheet-metal. A no-op unless toggled on via View → Sheet Metal.
+            crate::sheetmetal_workbench::draw_sheetmetal_workbench(self, ctx);
+
+            // Truss Workbench (right) — native planar pin-jointed truss analysis
+            // on valenx-truss. A no-op unless toggled on via View → Truss.
+            crate::truss_workbench::draw_truss_workbench(self, ctx);
+
+            // Field Statistics Workbench (right) — descriptive statistics over a
+            // pasted number list on valenx-fields. A no-op unless toggled on via
+            // View → Field Statistics.
+            crate::fields_workbench::draw_fields_workbench(self, ctx);
+
+            // Gearbox workbench (right) — two-stage compound gear-train analysis
+            // on valenx-gearbox. Off unless toggled via View.
+            crate::gearbox_workbench::draw_gearbox_workbench(self, ctx);
+
+            // Science batch 5 workbenches. Each a no-op unless toggled via View.
+            crate::camdynamics_workbench::draw_camdynamics_workbench(self, ctx);
+            crate::batteryecm_workbench::draw_batteryecm_workbench(self, ctx);
+            crate::diffusion_workbench::draw_diffusion_workbench(self, ctx);
+            crate::dimensional_workbench::draw_dimensional_workbench(self, ctx);
+            crate::fft_workbench::draw_fft_workbench(self, ctx);
+
+            // Fasteners Workbench (right) — ISO 4017 hex-bolt dimensions on
+            // valenx-fasteners. A no-op unless toggled on via View → Fasteners.
+            crate::fasteners_workbench::draw_fasteners_workbench(self, ctx);
+
+            // Fixed-Wing / Aircraft Workbench (right) — native preliminary aircraft
+            // point-performance on valenx-fixedwing. A no-op unless toggled on via
+            // View → Fixed-Wing / Aircraft.
+            crate::fixedwing_workbench::draw_fixedwing_workbench(self, ctx);
+
+            // Science / engineering batch (right) — each a no-op unless toggled via View.
+            crate::combustion_workbench::draw_combustion_workbench(self, ctx);
+            crate::flywheel_workbench::draw_flywheel_workbench(self, ctx);
+            crate::fracture_workbench::draw_fracture_workbench(self, ctx);
+            crate::hydraulics_workbench::draw_hydraulics_workbench(self, ctx);
+            crate::inclinedplane_workbench::draw_inclinedplane_workbench(self, ctx);
+            crate::insulation_workbench::draw_insulation_workbench(self, ctx);
+            crate::leadscrew_workbench::draw_leadscrew_workbench(self, ctx);
+            crate::leverage_workbench::draw_leverage_workbench(self, ctx);
+            crate::mohr_workbench::draw_mohr_workbench(self, ctx);
+            crate::mosfet_workbench::draw_mosfet_workbench(self, ctx);
+            crate::optics_workbench::draw_optics_workbench(self, ctx);
+            crate::orifice_workbench::draw_orifice_workbench(self, ctx);
+            crate::pressurevessel_workbench::draw_pressurevessel_workbench(self, ctx);
+            crate::torsion_workbench::draw_torsion_workbench(self, ctx);
+            crate::refrigeration_workbench::draw_refrigeration_workbench(self, ctx);
+
+            // Frames Workbench (right) — structural cross-section properties on
+            // valenx-frames. A no-op unless toggled on via View → Frames.
+            crate::frames_workbench::draw_frames_workbench(self, ctx);
+
+            // DC Motor Workbench (right) — native brushed-DC-motor performance on
+            // valenx-dcmotor. A no-op unless toggled on via View → DC Motor.
+            crate::dcmotor_workbench::draw_dcmotor_workbench(self, ctx);
+
+            // Gas Dynamics workbench (right) — 1-D compressible-flow relations on
+            // valenx-gasdynamics. A no-op unless toggled on via View → Gas Dynamics.
+            crate::gasdynamics_workbench::draw_gasdynamics_workbench(self, ctx);
+
+            // Thermal Expansion workbench (right) — linear expansion + constrained
+            // stress on valenx-thermalexpansion. A no-op unless toggled via View → Thermal Expansion.
+            crate::thermalexpansion_workbench::draw_thermalexpansion_workbench(self, ctx);
+
+            // Neural-Interface workbench (right) — native BCI stimulation on
+            // valenx-neuro. A no-op unless toggled on via View → Neural Interface.
+            crate::neuro_workbench::draw_neuro_workbench(self, ctx);
+
+            // Wind Turbine workbench (right) — native actuator-disc wind-turbine
+            // power on valenx-windturbine. A no-op unless toggled via View → Wind Turbine.
+            crate::windturbine_workbench::draw_windturbine_workbench(self, ctx);
+
+            // Parametric-CAD workbench (right) — named parameters driving sketch
+            // geometry on valenx-solvespace-3d. Off unless toggled via View.
+            crate::cad_workbench::draw_cad_workbench(self, ctx);
+
+            // Antenna workbench (right) — parabolic-dish gain / beamwidth on
+            // valenx-antenna. Off unless toggled via View.
+            crate::antenna_workbench::draw_antenna_workbench(self, ctx);
+
+            // 2D Drafting workbench (right) — LibreCAD-style 2D canvas on
+            // valenx-librecad-2d. Off unless toggled via View.
+            crate::draft2d_workbench::draw_draft2d_workbench(self, ctx);
+
+            // Reinforcement workbench (right) — parametric rebar cages pushed to
+            // the 3D viewport, on valenx-reinforcement. Off unless toggled.
+            crate::reinforcement_workbench::draw_reinforcement_workbench(self, ctx);
+
+            // Path-Traced Render workbench (right) — global-illumination image on
+            // valenx-pathtrace. Off unless toggled via View.
+            crate::render_workbench::draw_render_workbench(self, ctx);
+
+            // HVAC workbench (right) — duct sizing + pressure drop on valenx-hvac.
+            // Off unless toggled via View.
+            crate::hvac_workbench::draw_hvac_workbench(self, ctx);
+
+            // Beam Workbench (right) — native Euler-Bernoulli beam bending on
+            // valenx-beam. A no-op unless toggled on via View → Beam.
+            crate::beam_workbench::draw_beam_workbench(self, ctx);
+
+            // Reverse-Engineering workbench (right) — point-cloud reconstruction
+            // pushed to the 3D viewport, on valenx-reverse. Off unless toggled.
+            crate::reverse_workbench::draw_reverse_workbench(self, ctx);
+
+            // Pump workbench (right) — centrifugal-pump duty point + NPSH on
+            // valenx-pump. Off unless toggled via View.
+            crate::pump_workbench::draw_pump_workbench(self, ctx);
+
+            // Interior-Design workbench (right) — 2D floor plan + furniture on
+            // valenx-interior. Off unless toggled via View.
+            crate::interior_workbench::draw_interior_workbench(self, ctx);
+
+            // Animation workbench (right) — joint keyframe timeline on
+            // valenx-animate. Off unless toggled via View.
+            crate::animate_workbench::draw_animate_workbench(self, ctx);
+
+            // Variant-Effect workbench (right) — HGVS variant parser on
+            // valenx-variant-effect. Off unless toggled via View.
+            crate::variant_effect_workbench::draw_variant_effect_workbench(self, ctx);
+
+            // Heat Pump workbench (right) — Carnot COP + second-law derating on
+            // valenx-heatpump. Off unless toggled via View.
+            crate::heatpump_workbench::draw_heatpump_workbench(self, ctx);
+
+            // Astro / Launch workbench (right) — the valenx-astro launch
+            // ascent simulator + mission planners. A no-op unless toggled
+            // on via View → Astro / Launch. Mounted before the CentralPanel
+            // so egui docks it to the right (alongside the other open
+            // workbenches).
+            crate::astro_workbench::draw_astro_workbench(self, ctx);
+
+            // Pipe Flow workbench (right) — Darcy-Weisbach pipe-flow analysis
+            // on valenx-pipeflow. Off unless toggled via View.
+            crate::pipeflow_workbench::draw_pipeflow_workbench(self, ctx);
+
+            // Rocket workbench (right) — the valenx-rocket-demo coupled
+            // design→simulate pipeline. A no-op unless toggled on via
+            // View → Rocket. Mounted before the CentralPanel so egui docks it
+            // to the right alongside the other workbenches.
+            crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+
+            // Battery Pack workbench (right) — series / parallel pack sizing on
+            // valenx-batterypack. Off unless toggled via View.
+            crate::batterypack_workbench::draw_batterypack_workbench(self, ctx);
+
+            // Engine workbench (right) — reactive engine design → analyze →
+            // optimize → export. A no-op unless toggled on via View → Engine.
+            crate::engine_workbench::draw_engine_workbench(self, ctx);
+
+            // Heat Exchanger workbench (right) — effectiveness-NTU analysis on
+            // valenx-heatexchanger. Off unless toggled via View.
+            crate::heatexchanger_workbench::draw_heatexchanger_workbench(self, ctx);
+
+            // Car workbench (right) — vehicle dynamics design → simulate over
+            // valenx-vehicle. A no-op unless toggled on via View → Car.
+            crate::car_workbench::draw_car_workbench(self, ctx);
+
+            // Assistant activity sidebar (right) — a live in-app feed of what
+            // the AI assistant is building. On by default; toggle via View.
+            crate::assistant_workbench::draw_assistant_workbench(self, ctx);
+        } else {
+            // Opt-in dockable workbench layout: one resizable right region
+            // hosting every open workbench as a draggable / reorderable /
+            // splittable tile. The render state + DPI are threaded in so a
+            // `workspace:<n>` tile can render its live 3-D model.
+            self.draw_dock_layout(ctx, wgpu_render_state.as_ref(), pixels_per_point);
+        }
+
         // Welcome / landing-page action picked this frame. Resolved
         // inside the CentralPanel closure (the landing page renders
         // there) and dispatched against `&mut self` AFTER the closure
@@ -2855,6 +3073,49 @@ impl eframe::App for ValenxApp {
                 self.docking.show(ui);
                 return;
             }
+
+            // Dock-fills-workspace: when the dock is on and the 3-D viewport is
+            // hidden (the Workbench+Agent launcher hides it so the units get
+            // the whole screen), render the dock HERE in the CentralPanel —
+            // ahead of the empty-project landing page and the viewport — with a
+            // slim bar to restore the viewport or close the whole dock. Without
+            // a dock tree yet, fall through to the normal central content.
+            if self.dock_enabled && self.viewport_hidden && self.dock_tree.is_some() {
+                let mut do_close_all = false;
+                let mut do_show_viewport = false;
+                ui.horizontal(|ui| {
+                    ui.strong("Workbench workspace");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .button("Close all")
+                            .on_hover_text("Close every dock panel and Workbench+Agent unit")
+                            .clicked()
+                        {
+                            do_close_all = true;
+                        }
+                        if ui
+                            .button("Show 3D viewport")
+                            .on_hover_text(
+                                "Restore the 3-D viewport (the dock returns to the right).",
+                            )
+                            .clicked()
+                        {
+                            do_show_viewport = true;
+                        }
+                    });
+                });
+                ui.separator();
+                if do_close_all {
+                    self.clear_dock();
+                } else {
+                    if do_show_viewport {
+                        self.viewport_hidden = false;
+                    }
+                    self.render_dock_tree_into(ui, wgpu_render_state.as_ref(), pixels_per_point);
+                }
+                return;
+            }
+
             if show_landing {
                 // CARGO_PKG_REPOSITORY inherits from
                 // [workspace.package].repository at build time, so the
@@ -2871,6 +3132,32 @@ impl eframe::App for ValenxApp {
                     env!("CARGO_PKG_REPOSITORY"),
                     self.landing_inline_message.as_deref(),
                 );
+                return;
+            }
+
+            // ── Central-viewport chrome header ────────────────────────────
+            // A slim `−  ⋯  ✕` header above the 2D/3D body, matching the
+            // right-side workbench panels' chrome. Drawn only for the live
+            // viewport (not the docked / landing branches, which returned
+            // above). The header mutates the global view-prefs below.
+            viewport_chrome_header(self, ui);
+
+            // Hidden → render a centered placeholder instead of the viewport
+            // and skip the body entirely (no wgpu ctx / no viewport::show).
+            if self.viewport_hidden {
+                ui.centered_and_justified(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("3-D viewport hidden").weak());
+                        ui.add_space(8.0);
+                        if ui.button("Show viewport").clicked() {
+                            self.viewport_hidden = false;
+                        }
+                    });
+                });
+                return;
+            }
+            // Collapsed (but not hidden) → header only; skip the body.
+            if self.viewport_collapsed {
                 return;
             }
 

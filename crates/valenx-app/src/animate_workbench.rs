@@ -53,14 +53,18 @@ pub fn draw_animate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_animate_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_animate_workbench")
-        .resizable(true)
-        .default_width(380.0)
-        .width_range(320.0..=720.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(ui, "Animation", "keyframe timeline · valenx-animate") {
-                app.show_animate_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_animate_workbench",
+        "Animation",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("keyframe timeline · valenx-animate")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.animate;
             let mut tw = s.tween;
             egui::ComboBox::from_label("easing")
@@ -100,7 +104,11 @@ pub fn draw_animate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     .collect();
                 pui.line(Line::new(PlotPoints::from(pts)).name("joint 0 (rad)"));
             });
-        });
+        },
+    );
+    if close {
+        app.show_animate_workbench = false;
+    }
 }
 
 #[cfg(test)]

@@ -193,18 +193,18 @@ pub fn draw_gasdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_gasdynamics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Gas Dynamics",
-                "1-D compressible-flow relations · valenx-gasdynamics",
-            ) {
-                app.show_gasdynamics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_gasdynamics_workbench",
+        "Gas Dynamics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("1-D compressible-flow relations · valenx-gasdynamics")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.gasdynamics;
             egui::ScrollArea::vertical()
@@ -249,7 +249,11 @@ pub fn draw_gasdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_gasdynamics_workbench = false;
+    }
 }
 
 #[cfg(test)]

@@ -64,18 +64,18 @@ pub fn draw_geomatics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_geomatics_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Geomatics",
-                "native geodesic calculations · valenx-geomatics",
-            ) {
-                app.show_geomatics_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_geomatics_workbench",
+        "Geomatics",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native geodesic calculations · valenx-geomatics")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.geomatics;
             egui::ScrollArea::vertical()
@@ -133,7 +133,11 @@ pub fn draw_geomatics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_geomatics_workbench = false;
+    }
 }
 
 /// Validate the three points, run the geodesic calculations, and format

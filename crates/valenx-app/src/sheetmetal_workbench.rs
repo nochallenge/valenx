@@ -55,18 +55,18 @@ pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_sheetmetal_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Sheet Metal",
-                "native bend allowance / deduction · valenx-sheet-metal",
-            ) {
-                app.show_sheetmetal_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_sheetmetal_workbench",
+        "Sheet Metal",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native bend allowance / deduction · valenx-sheet-metal")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.sheetmetal;
             egui::ScrollArea::vertical()
@@ -121,7 +121,11 @@ pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_bend_preview(ui, &pts);
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_sheetmetal_workbench = false;
+    }
 }
 
 /// The closed cross-section outline of a sheet of `thickness` bent through

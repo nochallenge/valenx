@@ -75,12 +75,12 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_springs_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            ui.heading("Springs");
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_springs_workbench",
+        "Springs",
+        |app, ui| {
             ui.label(
                 egui::RichText::new("native helical-spring design · valenx-springs")
                     .weak()
@@ -171,7 +171,11 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_centerline_preview(ui, &pts);
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_springs_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.springs` borrow taken in
     // the closure above is released here): build the spring's 3-D solid and
@@ -438,6 +442,28 @@ fn run_springs(s: &mut SpringsWorkbenchState) {
         spec.pitch_mm(),
         spec.helix_length_mm(),
     );
+}
+
+/// Agent-bridge product: the canonical springs workbench as a 3-D solid plus its
+/// analysed readout rows (this workbench formats its readout into `s.result`
+/// via [`run_springs`] rather than a `compute()` string; see
+/// [`crate::products_registry`]).
+pub(crate) fn springs_product() -> crate::WorkspaceProduct {
+    let mut s = SpringsWorkbenchState::default();
+    let mesh = spring_solid_mesh(&s).expect("canonical springs ⇒ coil-spring solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<springs>/valenx-spring");
+    run_springs(&mut s);
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Coil spring (rate/stress)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

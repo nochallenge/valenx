@@ -72,15 +72,18 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_draft2d_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_draft2d_workbench")
-        .resizable(true)
-        .default_width(440.0)
-        .width_range(360.0..=760.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(ui, "2D Drafting", "LibreCAD-style · valenx-librecad-2d")
-            {
-                app.show_draft2d_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_draft2d_workbench",
+        "2D Drafting",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("LibreCAD-style · valenx-librecad-2d")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.draft2d;
 
             ui.horizontal(|ui| {
@@ -152,7 +155,11 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 s.pan -= egui::vec2(d.x / s.scale, -d.y / s.scale);
             }
             draw_entities(&painter, rect, s.pan, s.scale, &s.drawing);
-        });
+        },
+    );
+    if close {
+        app.show_draft2d_workbench = false;
+    }
 }
 
 /// Render every entity in `drawing` onto `painter`, mapping drawing units to

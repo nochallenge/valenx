@@ -68,18 +68,18 @@ pub fn draw_variant_effect_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_variant_effect_workbench {
         return;
     }
-    egui::SidePanel::right("valenx_variant_effect_workbench")
-        .resizable(true)
-        .default_width(340.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Variant Effect",
-                "HGVS variant parser · valenx-variant-effect",
-            ) {
-                app.show_variant_effect_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_variant_effect_workbench",
+        "Variant Effect",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("HGVS variant parser · valenx-variant-effect")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
             let s = &mut app.variant_effect;
             ui.label(egui::RichText::new("Variants (one per line)").strong());
             ui.add(
@@ -130,7 +130,11 @@ pub fn draw_variant_effect_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     });
             }
-        });
+        },
+    );
+    if close {
+        app.show_variant_effect_workbench = false;
+    }
 }
 
 #[cfg(test)]

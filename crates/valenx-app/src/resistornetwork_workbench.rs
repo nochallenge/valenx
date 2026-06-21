@@ -85,18 +85,20 @@ pub fn draw_resistornetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) 
         return;
     }
 
-    egui::SidePanel::right("valenx_resistornetwork_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Resistor Network",
-                "native closed-form DC resistor-network analysis · valenx-resistor-network",
-            ) {
-                app.show_resistornetwork_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_resistornetwork_workbench",
+        "Resistor Network",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native closed-form DC resistor-network analysis · valenx-resistor-network",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.resistornetwork;
             egui::ScrollArea::vertical()
@@ -167,7 +169,11 @@ pub fn draw_resistornetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) 
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_resistornetwork_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.resistornetwork` borrow
     // is released here): build the resistor row's 3-D solid and load it.
@@ -363,6 +369,33 @@ fn load_network_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"resistornetwork"}`** product: the
+/// canonical DC resistor network built as a 3-D solid, paired with the
+/// workbench's own `compute()` readout rows, at a fixed 3/4 camera. Registered
+/// in [`crate::products_registry`]; the per-tool builder the registry
+/// dispatches to. Pure — driven off [`ResistorNetworkWorkbenchState::default`].
+pub(crate) fn resistornetwork_product() -> crate::WorkspaceProduct {
+    let s = ResistorNetworkWorkbenchState::default();
+    let mesh = network_solid_mesh(&s).expect("canonical resistor network ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(
+        mesh,
+        "<resistornetwork>/valenx-resistornetwork",
+    );
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical resistor network ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Resistor network (DC analysis)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

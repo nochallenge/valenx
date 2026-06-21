@@ -70,18 +70,20 @@ pub fn draw_mosfet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_mosfet_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "MOSFET",
-                "native square-law NMOS IV (cutoff/triode/saturation) · valenx-mosfet",
-            ) {
-                app.show_mosfet_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_mosfet_workbench",
+        "MOSFET",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native square-law NMOS IV (cutoff/triode/saturation) · valenx-mosfet",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.mosfet;
             egui::ScrollArea::vertical()
@@ -144,7 +146,11 @@ pub fn draw_mosfet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_mosfet_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.mosfet` borrow is
     // released here): build the device's 3-D solid and load it.
@@ -351,6 +357,30 @@ fn load_device_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"mosfet"}`** product: the canonical
+/// n-channel MOSFET package built as a 3-D solid, paired with the workbench's
+/// own `compute()` square-law readout rows, at a fixed 3/4 camera. Registered
+/// in [`crate::products_registry`]; the per-tool builder the registry
+/// dispatches to. Pure — driven off [`MosfetWorkbenchState::default`].
+pub(crate) fn mosfet_product() -> crate::WorkspaceProduct {
+    let s = MosfetWorkbenchState::default();
+    let mesh = device_solid_mesh(&s).expect("canonical MOSFET ⇒ package solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<mosfet>/valenx-mosfet");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical MOSFET ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "MOSFET (square-law IV)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

@@ -90,18 +90,20 @@ pub fn draw_strainrosette_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_strainrosette_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Strain Rosette",
-                "native rectangular 0/45/90 rosette reduction · valenx-strainrosette",
-            ) {
-                app.show_strainrosette_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_strainrosette_workbench",
+        "Strain Rosette",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native rectangular 0/45/90 rosette reduction · valenx-strainrosette",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.strainrosette;
             egui::ScrollArea::vertical()
@@ -169,7 +171,11 @@ pub fn draw_strainrosette_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_strainrosette_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.strainrosette` borrow is
     // released here): build the plate's 3-D solid and load it.
@@ -386,6 +392,27 @@ fn load_plate_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical strainrosette workbench as a 3-D solid plus its
+/// `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn strainrosette_product() -> crate::WorkspaceProduct {
+    let s = StrainRosetteWorkbenchState::default();
+    let mesh = plate_solid_mesh(&s).expect("canonical strainrosette ⇒ rosette plate solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<strainrosette>/valenx-plate");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical strainrosette ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Strain rosette (principal strains)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

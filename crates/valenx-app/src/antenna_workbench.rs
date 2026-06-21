@@ -63,18 +63,18 @@ pub fn draw_antenna_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_antenna_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Antenna",
-                "native parabolic-dish gain / beamwidth · valenx-antenna",
-            ) {
-                app.show_antenna_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_antenna_workbench",
+        "Antenna",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native parabolic-dish gain / beamwidth · valenx-antenna")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.antenna;
             egui::ScrollArea::vertical()
@@ -122,7 +122,11 @@ pub fn draw_antenna_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_antenna_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.antenna` borrow is
     // released here): build the dish's 3-D solid and load it.

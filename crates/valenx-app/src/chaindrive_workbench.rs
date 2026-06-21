@@ -88,18 +88,20 @@ pub fn draw_chaindrive_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_chaindrive_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Chain Drive",
-                "native single-stage roller-chain kinematics · valenx-chaindrive",
-            ) {
-                app.show_chaindrive_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_chaindrive_workbench",
+        "Chain Drive",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native single-stage roller-chain kinematics · valenx-chaindrive",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.chaindrive;
             egui::ScrollArea::vertical()
@@ -177,7 +179,11 @@ pub fn draw_chaindrive_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_chaindrive_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.chaindrive` borrow is
     // released here): build the drive's 3-D solid and load it.
@@ -386,6 +392,27 @@ fn load_drive_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// Agent-bridge product: the canonical chain-drive workbench as a 3-D solid plus
+/// its `compute()` readout rows (see [`crate::products_registry`]).
+pub(crate) fn chaindrive_product() -> crate::WorkspaceProduct {
+    let s = ChainDriveWorkbenchState::default();
+    let mesh = drive_solid_mesh(&s).expect("canonical chain drive ⇒ drive solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<chaindrive>/valenx-chaindrive");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical chain drive ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Chain drive (ratio/power)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

@@ -83,18 +83,20 @@ pub fn draw_screwthread_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_screwthread_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Power Screw",
-                "native square-thread power / lead-screw torque · valenx-screwthread",
-            ) {
-                app.show_screwthread_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_screwthread_workbench",
+        "Power Screw",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native square-thread power / lead-screw torque · valenx-screwthread",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.screwthread;
             egui::ScrollArea::vertical()
@@ -160,7 +162,11 @@ pub fn draw_screwthread_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_screwthread_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.screwthread` borrow is
     // released here): build the screw's 3-D solid and load it.
@@ -312,6 +318,32 @@ fn load_screw_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"screwthread"}`** product: the
+/// representative power-screw shank (a solid round bar of the mean diameter)
+/// built from the canonical Shigley square-thread screw (dm = 25 mm, p = 5 mm,
+/// single start, μ = 0.08, lifting 6.5 kN), paired with the lead-angle / torque
+/// / efficiency / self-locking readout rows, at a fixed 3/4 camera. Registered
+/// in [`crate::products_registry`]; the per-tool builder the registry
+/// dispatches to. Pure — driven off [`ScrewThreadWorkbenchState::default`].
+pub(crate) fn screwthread_product() -> crate::WorkspaceProduct {
+    let s = ScrewThreadWorkbenchState::default();
+    let mesh = screw_solid_mesh(&s).expect("canonical power screw ⇒ shank solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<screw>/valenx-screwthread");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical power screw ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Power screw (square thread)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

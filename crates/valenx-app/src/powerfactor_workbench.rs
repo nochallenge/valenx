@@ -94,18 +94,20 @@ pub fn draw_powerfactor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_powerfactor_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Power Factor",
-                "native AC power triangle + shunt-capacitor correction · valenx-powerfactor",
-            ) {
-                app.show_powerfactor_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_powerfactor_workbench",
+        "Power Factor",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native AC power triangle + shunt-capacitor correction · valenx-powerfactor",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.powerfactor;
             egui::ScrollArea::vertical()
@@ -194,7 +196,11 @@ pub fn draw_powerfactor_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_powerfactor_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.powerfactor` borrow is
     // released here): build the triangle's 3-D prism and load it.

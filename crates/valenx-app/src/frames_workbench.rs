@@ -87,18 +87,18 @@ pub fn draw_frames_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_frames_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Frames",
-                "structural cross-section properties · valenx-frames",
-            ) {
-                app.show_frames_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_frames_workbench",
+        "Frames",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("structural cross-section properties · valenx-frames")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.frames;
             egui::ScrollArea::vertical()
@@ -165,7 +165,11 @@ pub fn draw_frames_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         draw_section_preview(ui, &pts);
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_frames_workbench = false;
+    }
 }
 
 /// Build the active [`Profile`] from the form and return its closed

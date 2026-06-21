@@ -72,18 +72,18 @@ pub fn draw_pipeflow_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_pipeflow_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Pipe Flow",
-                "native Darcy-Weisbach pipe-flow analysis · valenx-pipeflow",
-            ) {
-                app.show_pipeflow_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_pipeflow_workbench",
+        "Pipe Flow",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native Darcy-Weisbach pipe-flow analysis · valenx-pipeflow")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.pipeflow;
             egui::ScrollArea::vertical()
@@ -149,7 +149,11 @@ pub fn draw_pipeflow_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_pipeflow_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.pipeflow` borrow is
     // released here): build the pipe's 3-D solid and load it.
@@ -391,6 +395,30 @@ fn load_pipe_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"pipeflow"}`** product: the canonical
+/// Darcy-Weisbach pipe run built as a 3-D solid, paired with the workbench's
+/// own `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`PipeFlowWorkbenchState::default`].
+pub(crate) fn pipeflow_product() -> crate::WorkspaceProduct {
+    let s = PipeFlowWorkbenchState::default();
+    let mesh = pipe_solid_mesh(&s).expect("canonical pipe flow ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<pipeflow>/valenx-pipe");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical pipe flow ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Pipe flow (Darcy-Weisbach)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

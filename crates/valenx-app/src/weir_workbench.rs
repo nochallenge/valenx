@@ -82,18 +82,18 @@ pub fn draw_weir_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_weir_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Weir Flow",
-                "native sharp-crested open-channel weir gauging · valenx-weir",
-            ) {
-                app.show_weir_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_weir_workbench",
+        "Weir Flow",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new("native sharp-crested open-channel weir gauging · valenx-weir")
+                    .weak()
+                    .small(),
+            );
+            ui.separator();
 
             let s = &mut app.weir;
             egui::ScrollArea::vertical()
@@ -159,7 +159,11 @@ pub fn draw_weir_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_weir_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.weir` borrow is
     // released here): build the weir's 3-D solid and load it.
@@ -402,6 +406,30 @@ fn load_weir_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"weir"}`** product: the canonical
+/// sharp-crested weir plate built as a 3-D solid, paired with the workbench's
+/// own `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`WeirWorkbenchState::default`].
+pub(crate) fn weir_product() -> crate::WorkspaceProduct {
+    let s = WeirWorkbenchState::default();
+    let mesh = weir_plate_mesh(&s).expect("canonical weir ⇒ plate solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<weir>/valenx-weir");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical weir ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Weir flow (sharp-crested)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]

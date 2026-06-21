@@ -82,18 +82,20 @@ pub fn draw_bolt_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
         return;
     }
 
-    egui::SidePanel::right("valenx_bolt_workbench")
-        .resizable(true)
-        .default_width(360.0)
-        .width_range(300.0..=560.0)
-        .show(ctx, |ui| {
-            if crate::workbench_ui::header(
-                ui,
-                "Bolted Joint",
-                "native preloaded-joint mechanics (preload / torque / stress) · valenx-bolt",
-            ) {
-                app.show_bolt_workbench = false;
-            }
+    let close = crate::workbench_chrome::workbench_shell(
+        app,
+        ctx,
+        "valenx_bolt_workbench",
+        "Bolted Joint",
+        |app, ui| {
+            ui.label(
+                egui::RichText::new(
+                    "native preloaded-joint mechanics (preload / torque / stress) · valenx-bolt",
+                )
+                .weak()
+                .small(),
+            );
+            ui.separator();
 
             let s = &mut app.bolt;
             egui::ScrollArea::vertical()
@@ -169,7 +171,11 @@ pub fn draw_bolt_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&s.result).monospace().small());
                     }
                 });
-        });
+        },
+    );
+    if close {
+        app.show_bolt_workbench = false;
+    }
 
     // Serviced after the panel draws (the `&mut app.bolt` borrow is
     // released here): build the bolt's 3-D solid and load it.
@@ -401,6 +407,32 @@ fn load_bolt_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"bolt"}`** product: the representative bolt
+/// (hex head + threaded shank + nut) built from the canonical M10 class-8.8
+/// joint (tightened to 50 N·m, K = 0.2, C = 0.25, 6 kN service load), paired
+/// with the preloaded-joint mechanics readout rows (preload / stresses /
+/// load-sharing / safety factors), at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`BoltWorkbenchState::default`].
+pub(crate) fn bolt_product() -> crate::WorkspaceProduct {
+    let s = BoltWorkbenchState::default();
+    let mesh = bolt_solid_mesh(&s).expect("canonical bolt ⇒ head-shank-nut solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<bolt>/valenx-bolt");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical bolt ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Bolted joint (M10 8.8)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
 }
 
 #[cfg(test)]
