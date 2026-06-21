@@ -354,6 +354,31 @@ fn load_rectifier_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"rectifier"}`** product: the canonical
+/// rectifier bridge built as a 3-D solid, paired with the workbench's own
+/// `compute()` figures-of-merit readout rows, at a fixed 3/4 camera.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off
+/// [`RectifierWorkbenchState::default`].
+pub(crate) fn rectifier_product() -> crate::WorkspaceProduct {
+    let s = RectifierWorkbenchState::default();
+    let mesh = rectifier_solid_mesh(&s).expect("canonical rectifier ⇒ bridge solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<rectifier>/valenx-rectifier");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical rectifier ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Rectifier (figures of merit)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

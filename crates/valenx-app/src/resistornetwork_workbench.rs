@@ -371,6 +371,33 @@ fn load_network_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"resistornetwork"}`** product: the
+/// canonical DC resistor network built as a 3-D solid, paired with the
+/// workbench's own `compute()` readout rows, at a fixed 3/4 camera. Registered
+/// in [`crate::products_registry`]; the per-tool builder the registry
+/// dispatches to. Pure — driven off [`ResistorNetworkWorkbenchState::default`].
+pub(crate) fn resistornetwork_product() -> crate::WorkspaceProduct {
+    let s = ResistorNetworkWorkbenchState::default();
+    let mesh = network_solid_mesh(&s).expect("canonical resistor network ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(
+        mesh,
+        "<resistornetwork>/valenx-resistornetwork",
+    );
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical resistor network ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Resistor network (DC analysis)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
