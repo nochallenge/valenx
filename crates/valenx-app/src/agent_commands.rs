@@ -514,6 +514,17 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
     app.add_workbench_agent_pair_at(crate::dock_layout::UnitAddTarget::NewRowBottom);
     let n = app.wb_agent_counter;
 
+    // CLEAN PRODUCT-TAB DOCK: `add_workbench_agent_pair_at` *appended* the
+    // `[workspace:n | agent:n]` pair to this tab's dock tree, but the tab's
+    // per-frame `sync_tree` would otherwise inject the global Assistant pane
+    // (`valenx_assistant_panel`, on by default) beside the unit's own `agent:n`
+    // chat — leaving the product tab with TWO chat panes. Replace the tree with
+    // just this unit's pair and latch `dock_agent_only` so the sync never adds
+    // the Assistant (or any other `DOCKABLE_PANELS`) into a product tab. The
+    // landing tab and manually-opened Workbench+Agent units are untouched (their
+    // `dock_agent_only` stays `false`).
+    app.set_clean_workbench_agent_dock(n);
+
     // If the tab title was a pure placeholder (no caller `title`, no product
     // `kind`), rewrite it now that the unit number is known so the tab names
     // itself rather than reading "Workbench".
@@ -932,6 +943,37 @@ pub(crate) fn materialize_pending(app: &mut ValenxApp, n: usize) {
                     },
                 );
             }
+        }
+    }
+
+    // SHOW THE BUILD: now that the unit's real product exists, post its readout
+    // to the unit's agent feed so opening the product tab shows the actual
+    // numbers in the chat (not just the "Unit N ready" line). `materialize_pending`
+    // runs at most once per unit (it `remove`d the pending entry up top), so this
+    // posts exactly once. Only a product carrying a non-empty `lines` readout is
+    // worth posting — a pure 3-D mesh (empty `lines`) or a kind that built
+    // nothing posts nothing. The note body is `title` + each readout line; very
+    // long bodies are truncated so a runaway readout can't bloat the feed.
+    if let Some(product) = app.workspace_products.get(&n) {
+        if !product.lines.is_empty() {
+            let mut body = product.title.clone();
+            for line in &product.lines {
+                body.push('\n');
+                body.push_str(line);
+            }
+            // Cap the feed note so an unexpectedly huge readout stays bounded.
+            // Truncate at the nearest char boundary at or below the cap so a
+            // multi-byte char straddling the limit never panics `truncate`.
+            const MAX_FEED_NOTE_BYTES: usize = 4000;
+            if body.len() > MAX_FEED_NOTE_BYTES {
+                let mut cut = MAX_FEED_NOTE_BYTES;
+                while cut > 0 && !body.is_char_boundary(cut) {
+                    cut -= 1;
+                }
+                body.truncate(cut);
+                body.push('…');
+            }
+            crate::assistant_workbench::append_feed_note(app, n, "Claude", &body, "result");
         }
     }
 }
@@ -1502,6 +1544,58 @@ mod tests {
                 .any(|l| l.contains("NOT a biosecurity screen")),
             "the no-biosecurity-screen note is present: {:?}",
             product.lines
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn materialize_pending_posts_the_products_readout_to_the_unit_feed() {
+        // SHOW THE BUILD: when a `new_unit`-queued product is materialised on
+        // first view, `materialize_pending` must post the product's own readout
+        // (its `title` + `lines`) to that unit's agent feed — so opening the
+        // product tab shows its real numbers in the chat, not just "Unit N
+        // ready". Drive it directly: queue the `dna` kind (a pure text card with
+        // a non-empty readout) on unit 1, materialise, then read the unit's feed
+        // file back and assert a `result` note carrying the readout is present.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "materialize_feed");
+        // Point the per-unit FEED at the same isolated dir so we can read it
+        // back without colliding with the live app's feed.
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+
+        // What `new_unit` records: only the product kind is queued (lazy build).
+        app.pending_products.insert(1, "dna".to_string());
+        assert!(app.workspace_products.is_empty());
+
+        crate::agent_commands::materialize_pending(&mut app, 1);
+
+        // The product was built (a dna text card with a readout) …
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("materialize built the dna product");
+        assert!(!product.lines.is_empty(), "dna card has a readout");
+        let first_line = product.lines[0].clone();
+
+        // … and its readout was posted to unit 1's feed as a `result` note.
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed file written");
+        // The feed line is a JSON object; assert the build-readout note is there
+        // (kind "result", carrying the product title and its first readout row).
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("result")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains(&product.title) && d.contains(&first_line))
+            });
+        assert!(
+            posted,
+            "materialize posts a `result` note with the product readout; feed = {body:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

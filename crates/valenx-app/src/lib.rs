@@ -721,6 +721,22 @@ pub struct ValenxApp {
     /// [`Self::dock_tree`] may contain different `agent:<n>` panes, but every
     /// `<n>` is globally distinct.
     pub wb_agent_counter: usize,
+    /// When `true`, the active tab's dock is a **clean agent product tab**: its
+    /// [`Self::dock_tree`] holds **only** that unit's `[workspace:n | agent:n]`
+    /// pair, and `dock_layout::draw_dock_layout` must NOT sync the flag-gated
+    /// `dock_layout::DOCKABLE_PANELS` (notably the global
+    /// `"valenx_assistant_panel"`) into it — so the agent-built product tab
+    /// shows exactly one chat (its own `agent:n`) beside its workspace, never
+    /// the global Assistant pane too. Set by
+    /// `dock_layout::set_clean_workbench_agent_dock` (called from the `new_unit`
+    /// bridge command) and `false` for every other tab, so the landing tab and
+    /// manually-opened "Workbench + Agent" units keep the existing behaviour
+    /// (the assistant tile may share their grid).
+    ///
+    /// **Per-tab.** Swapped in/out with [`Self::dock_tree`] /
+    /// [`Self::dock_enabled`] via [`project_tabs::WorkspaceDoc`]; a
+    /// newly-opened tab installs a default document → this is `false`.
+    pub dock_agent_only: bool,
     /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
     /// many lines of channel `n`'s command file
     /// ([`crate::agent_commands::cmd_path`]) have already been applied. On the

@@ -108,6 +108,10 @@ pub struct WorkspaceDoc {
     /// Per-tab: is the dockable workbench layout (incl. any "Workbench +
     /// Agent" grid) on for this tab? Mirrors [`ValenxApp::dock_enabled`].
     dock_enabled: bool,
+    /// Per-tab: is this a clean agent **product tab** (dock holds only its
+    /// own `[workspace:n | agent:n]` pair, no global Assistant pane)? Mirrors
+    /// [`ValenxApp::dock_agent_only`].
+    dock_agent_only: bool,
     /// Per-tab: is the central 3-D viewport hidden for this tab? Mirrors
     /// [`ValenxApp::viewport_hidden`].
     viewport_hidden: bool,
@@ -145,6 +149,7 @@ impl WorkspaceDoc {
             // `take`n (not cloned) — egui_tiles trees are not Clone here and
             // the tab owns its layout outright.
             dock_enabled: std::mem::take(&mut app.dock_enabled),
+            dock_agent_only: std::mem::take(&mut app.dock_agent_only),
             viewport_hidden: std::mem::take(&mut app.viewport_hidden),
             viewport_collapsed: std::mem::take(&mut app.viewport_collapsed),
             dock_tree: app.dock_tree.take(),
@@ -172,6 +177,7 @@ impl WorkspaceDoc {
         // Per-tab dock / viewport view state (swapped in so the active tab's
         // dock grid shows and a clean tab's does not).
         app.dock_enabled = self.dock_enabled;
+        app.dock_agent_only = self.dock_agent_only;
         app.viewport_hidden = self.viewport_hidden;
         app.viewport_collapsed = self.viewport_collapsed;
         app.dock_tree = self.dock_tree;
