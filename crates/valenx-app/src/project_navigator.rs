@@ -231,12 +231,16 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .id_source("nav_pinned")
                             .show(ui, |ui| {
                                 for p in &pinned {
+                                    // `false`: the All tree owns the inline rename
+                                    // editor (see `project_row`), so Pinned draws the
+                                    // plain label even if this row is the rename target.
                                     project_row(
                                         ui,
                                         p,
                                         lib,
                                         renaming.as_deref(),
                                         &mut app.nav_state.rename_buf,
+                                        false,
                                         &mut intent,
                                     );
                                 }
@@ -255,12 +259,15 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .id_source("nav_recent")
                             .show(ui, |ui| {
                                 for p in &recent {
+                                    // `false`: same as Pinned — only the All tree
+                                    // hosts the single inline rename editor.
                                     project_row(
                                         ui,
                                         p,
                                         lib,
                                         renaming.as_deref(),
                                         &mut app.nav_state.rename_buf,
+                                        false,
                                         &mut intent,
                                     );
                                 }
@@ -312,12 +319,15 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                                 .default_open(query.is_empty().not_default(children.len()));
                                 let resp = header.show(ui, |ui| {
                                     for p in &children {
+                                        // `true`: the All tree owns the single inline
+                                        // rename editor for the active rename target.
                                         project_row(
                                             ui,
                                             p,
                                             lib,
                                             renaming.as_deref(),
                                             &mut app.nav_state.rename_buf,
+                                            true,
                                             &mut intent,
                                         );
                                     }
@@ -357,12 +367,15 @@ pub(crate) fn draw_navigator(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                                 .default_open(true)
                                 .show(ui, |ui| {
                                     for p in &unfiled {
+                                        // `true`: unfiled is part of the All tree, so it
+                                        // also hosts the inline rename editor.
                                         project_row(
                                             ui,
                                             p,
                                             lib,
                                             renaming.as_deref(),
                                             &mut app.nav_state.rename_buf,
+                                            true,
                                             &mut intent,
                                         );
                                     }
@@ -409,16 +422,28 @@ impl DefaultOpenExt for bool {
 /// Render a single project row: a [`selectable_label`] with the project name
 /// and a dim type tag, plus the right-click context menu. Interactions are
 /// recorded into `intent` (never applied here). When the row is the one
-/// being renamed, a single-line text editor replaces the label.
+/// being renamed, a single-line text editor replaces the label — but **only**
+/// where `allow_inline_rename` is `true`.
+///
+/// A pinned and/or recently-opened project shows up as a row in several
+/// sections at once (★ Pinned, 🕘 Recent, *and* its All-tree folder/unfiled
+/// group), since those are independent views of the same library. The inline
+/// rename editor binds the **shared** `rename_buf` and calls `request_focus()`,
+/// so drawing it in more than one section per frame causes focus thrash and a
+/// premature commit — making rename unusable for pinned/recent rows. To keep
+/// exactly one editor on screen, only the All-tree call sites pass
+/// `allow_inline_rename = true`; Pinned and Recent pass `false` and render the
+/// plain label even when this row's id is the active rename target.
 fn project_row(
     ui: &mut egui::Ui,
     p: &crate::project_library::SavedProject,
     lib: &ProjectLibrary,
     renaming: Option<&str>,
     rename_buf: &mut String,
+    allow_inline_rename: bool,
     intent: &mut NavIntent,
 ) {
-    if renaming == Some(p.id.as_str()) {
+    if allow_inline_rename && renaming == Some(p.id.as_str()) {
         let resp = ui.add(
             egui::TextEdit::singleline(rename_buf)
                 .desired_width(160.0)
@@ -453,7 +478,9 @@ fn project_row(
         .inner;
     let resp = resp.on_hover_text(format!("{kind_label} — click to open as a tab"));
 
-    if resp.clicked() {
+    // A double-click renames (below); guard the open so a double-click that
+    // begins a rename does not *also* spuriously open the project as a tab.
+    if resp.clicked() && !resp.double_clicked() {
         intent.open = Some(p.id.clone());
     }
     if resp.double_clicked() {

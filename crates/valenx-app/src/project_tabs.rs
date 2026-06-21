@@ -570,6 +570,14 @@ pub struct TabBar {
     /// `#[serde(default)]` for back-compat), but `TabBar` itself is not
     /// serde-derived, so no attribute is needed here.
     pub groups: Vec<TabGroup>,
+    /// While `Some(group_id)`, that group's header is being renamed inline;
+    /// [`Self::group_rename_buf`] backs the text field. Transient UI scratch
+    /// (the strip's group-header equivalent of a tab's [`ProjectTab::editing`]
+    /// flag) — never serialised. Mirrors the project navigator's
+    /// `NavigatorState::renaming` / `rename_buf` pair.
+    pub group_renaming: Option<String>,
+    /// Scratch buffer for the inline group rename (see [`Self::group_renaming`]).
+    pub group_rename_buf: String,
 }
 
 impl TabBar {
@@ -1536,9 +1544,17 @@ struct StripIntent {
     /// Toggle the collapsed state of this group id. Routed to
     /// [`TabBar::toggle_group_collapse`].
     toggle_group_collapse: Option<String>,
-    /// Rename a group: `(group_id, new_name)`. Routed to
-    /// [`TabBar::rename_group`].
+    /// Begin an inline rename of the group with this id: seeds
+    /// [`TabBar::group_renaming`] + [`TabBar::group_rename_buf`] in
+    /// `apply_intent` so the header swaps to a focused text field next frame.
+    begin_group_rename: Option<String>,
+    /// Commit an inline group rename: `(group_id, new_name)`. Routed to
+    /// [`TabBar::rename_group`] (which trims + ignores an empty name), then
+    /// clears the transient [`TabBar::group_renaming`] editor state.
     rename_group: Option<(String, String)>,
+    /// Cancel an in-progress inline group rename (Esc): clears
+    /// [`TabBar::group_renaming`] + buffer without committing.
+    cancel_group_rename: bool,
     /// Recolour a group: `(group_id, rgb)`. Routed to
     /// [`TabBar::set_group_color`].
     set_group_color: Option<(String, [u8; 3])>,
@@ -1764,6 +1780,10 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                             .iter()
                             .map(|g| (g.id.clone(), g.clone()))
                             .collect();
+                        // Which group (if any) is being renamed inline this frame.
+                        // Snapshot it so the loop can compare without holding a
+                        // borrow of `app.tab_bar` while it mutates `group_rename_buf`.
+                        let group_renaming = app.tab_bar.group_renaming.clone();
 
                         // Track which group headers we've already drawn this frame so a
                         // group's coloured band is rendered exactly once, before its first
@@ -1786,13 +1806,44 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                                 if let Some(g) = group_attrs.get(gid) {
                                     collapsed_here = g.collapsed;
                                     if header_drawn.insert(gid.clone()) {
-                                        let members = app
-                                            .tab_bar
-                                            .tabs
-                                            .iter()
-                                            .filter(|t| t.group.as_deref() == Some(gid.as_str()))
-                                            .count();
-                                        draw_group_header(ui, g, members, &mut intent);
+                                        if group_renaming.as_deref() == Some(gid.as_str()) {
+                                            // Inline group-rename editor takes over the
+                                            // header slot (mirrors the per-tab title
+                                            // editor above). Commit on Enter or focus
+                                            // loss via `rename_group`; Esc cancels.
+                                            let resp = ui.add(
+                                                egui::TextEdit::singleline(
+                                                    &mut app.tab_bar.group_rename_buf,
+                                                )
+                                                .desired_width(120.0)
+                                                .id_source(("group_rename", gid)),
+                                            );
+                                            resp.request_focus();
+                                            let esc =
+                                                ui.input(|inp| inp.key_pressed(egui::Key::Escape));
+                                            let lost_focus = resp.lost_focus();
+                                            let enter = lost_focus
+                                                && ui.input(|inp| inp.key_pressed(egui::Key::Enter));
+                                            if esc {
+                                                intent.cancel_group_rename = true;
+                                            } else if enter || lost_focus {
+                                                intent.rename_group = Some((
+                                                    gid.clone(),
+                                                    app.tab_bar.group_rename_buf.clone(),
+                                                ));
+                                            }
+                                            ui.separator();
+                                        } else {
+                                            let members = app
+                                                .tab_bar
+                                                .tabs
+                                                .iter()
+                                                .filter(|t| {
+                                                    t.group.as_deref() == Some(gid.as_str())
+                                                })
+                                                .count();
+                                            draw_group_header(ui, g, members, &mut intent);
+                                        }
                                     }
                                 }
                             }
@@ -2196,10 +2247,13 @@ fn draw_group_header(
 
     resp.context_menu(|ui| {
         if ui.button("Rename group").clicked() {
-            // Seed the rename with the current name; a tiny inline prompt would
-            // be heavier than this loop needs, so reuse the same `rename_group`
-            // intent the (future) header-edit path uses, no-op-safe.
-            intent.rename_group = Some((group.id.clone(), group.name.clone()));
+            // Begin an inline rename: `apply_intent` seeds the transient
+            // `group_renaming`/`group_rename_buf` editor state, and the strip
+            // loop swaps this header for a focused text field next frame
+            // (committing via `rename_group` on Enter / focus-loss). Previously
+            // this seeded `rename_group` with the group's *current* name — a
+            // no-op (it renamed the group to itself) with no editor wired.
+            intent.begin_group_rename = Some(group.id.clone());
             ui.close_menu();
         }
         let toggle_label = if group.collapsed {
@@ -2615,8 +2669,25 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
     if let Some(gid) = intent.toggle_group_collapse {
         app.tab_bar.toggle_group_collapse(&gid);
     }
+    if let Some(gid) = intent.begin_group_rename {
+        // Seed the inline editor: buffer = the group's current name, and latch
+        // `group_renaming` so the strip swaps that header for a focused text
+        // field next frame. No-op if the group id is unknown.
+        if let Some(g) = app.tab_bar.groups.iter().find(|g| g.id == gid) {
+            app.tab_bar.group_rename_buf = g.name.clone();
+            app.tab_bar.group_renaming = Some(gid);
+        }
+    }
     if let Some((gid, name)) = intent.rename_group {
+        // Commit the inline edit (trims + ignores an all-whitespace name), then
+        // tear down the transient editor state regardless of the id's validity.
         app.tab_bar.rename_group(&gid, &name);
+        app.tab_bar.group_renaming = None;
+        app.tab_bar.group_rename_buf.clear();
+    }
+    if intent.cancel_group_rename {
+        app.tab_bar.group_renaming = None;
+        app.tab_bar.group_rename_buf.clear();
     }
     if let Some((gid, color)) = intent.set_group_color {
         app.tab_bar.set_group_color(&gid, color);
@@ -3608,6 +3679,74 @@ mod tests {
         assert!(app.tab_bar.groups.is_empty());
         assert_eq!(app.tab_bar.tabs[0].group, None);
         assert_eq!(app.tab_bar.tabs[1].group, None);
+    }
+
+    #[test]
+    fn inline_group_rename_begin_commit_and_cancel() {
+        // The "Rename group" header menu now wires a real inline editor:
+        // `begin_group_rename` seeds the transient buffer + latches
+        // `group_renaming`; `rename_group` commits the EDITED text and tears the
+        // editor down; `cancel_group_rename` (Esc) drops it without renaming.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Rocket); // 0
+        apply_intent(
+            &mut app,
+            StripIntent {
+                new_group_with_tab: Some(0),
+                ..Default::default()
+            },
+        );
+        let gid = app.tab_bar.groups[0].id.clone();
+        let original = app.tab_bar.groups[0].name.clone();
+
+        // Begin → buffer seeded with the current name, editor latched on.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                begin_group_rename: Some(gid.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.group_renaming.as_deref(), Some(gid.as_str()));
+        assert_eq!(app.tab_bar.group_rename_buf, original);
+
+        // Commit the EDITED text (not the seed) → renamed + editor torn down.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                rename_group: Some((gid.clone(), "Boosters".to_string())),
+                ..Default::default()
+            },
+        );
+        assert_eq!(app.tab_bar.groups[0].name, "Boosters");
+        assert!(
+            app.tab_bar.group_renaming.is_none(),
+            "commit clears the inline editor"
+        );
+        assert!(app.tab_bar.group_rename_buf.is_empty());
+
+        // Begin again, then cancel (Esc) → name unchanged, editor cleared.
+        apply_intent(
+            &mut app,
+            StripIntent {
+                begin_group_rename: Some(gid.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(app.tab_bar.group_renaming.is_some());
+        apply_intent(
+            &mut app,
+            StripIntent {
+                cancel_group_rename: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            app.tab_bar.groups[0].name, "Boosters",
+            "cancel must not rename"
+        );
+        assert!(app.tab_bar.group_renaming.is_none());
+        assert!(app.tab_bar.group_rename_buf.is_empty());
     }
 
     #[test]

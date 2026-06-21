@@ -1928,20 +1928,20 @@ pub struct ValenxApp {
     pub landing_inline_message: Option<String>,
 
     /// Memoised command-palette entry list, keyed by
-    /// `(registry.len(), library.projects.len(), show_non_oss_adapters)`.
+    /// `(registry.len(), library.content_rev(), show_non_oss_adapters)`.
     /// `build_visible_commands` allocates ~360 `String`s per call and used
     /// to run every frame; the cache invalidates when the registry grows
-    /// (rare — re-probe / load), when the saved-project count changes (the
-    /// launcher lists one entry per saved project, so add/remove must
-    /// rebuild), or when the OSS-only toggle flips in Settings. `None`
+    /// (rare — re-probe / load), when the saved-project list changes (the
+    /// launcher lists one entry per saved project, so add/remove/**rename**
+    /// must rebuild), or when the OSS-only toggle flips in Settings. `None`
     /// until the first palette render fills it.
     ///
-    /// Note the projects **count** catches add/remove but not an in-place
-    /// rename (same count). That's acceptable: a renamed project still
-    /// opens correctly (dispatch keys on the stable id), only its
-    /// search-visible label lags until the next add/remove/registry change
-    /// or app restart — see the cache-build site in `update.rs`.
-    pub palette_cache: Option<(usize, usize, bool, Vec<crate::commands::CommandKind>)>,
+    /// The second key is [`crate::project_library::ProjectLibrary::content_rev`],
+    /// a content fingerprint over each project's `(id, name)` — so an in-place
+    /// rename (which leaves `projects.len()` unchanged) now flips the key and
+    /// the launcher shows the new name on the next frame. See the cache-build
+    /// site in `update.rs`.
+    pub palette_cache: Option<(usize, u64, bool, Vec<crate::commands::CommandKind>)>,
 
     // ── Swappable viewport system (cloud/viewport) ────────────────────────
     /// Which viewport implementation is rendered in the central panel.
