@@ -231,6 +231,77 @@ pub(crate) fn render_panel_body(
 /// number `n`), that result renders into the bordered area as a **result card**
 /// — a bold title heading over one row per line. Until then it shows a faint
 /// centered hint. No chat echo and no "move whole unit" header here (that
+/// Turn a product `title` into a safe STL filename stem: lower-case, every run
+/// of non-alphanumeric characters collapsed to a single `_`, leading/trailing
+/// `_` trimmed. An empty / all-symbol title falls back to `"mesh"` so we never
+/// produce a bare `".stl"`. E.g. `"L-bracket"` → `"l_bracket"`, `"RC beam (6 m,
+/// 25 kN/m)"` → `"rc_beam_6_m_25_kn_m"`.
+fn stl_filename_stem(title: &str) -> String {
+    let mut stem = String::with_capacity(title.len());
+    let mut last_was_us = true; // trims leading separators
+    for ch in title.chars() {
+        if ch.is_ascii_alphanumeric() {
+            stem.extend(ch.to_lowercase());
+            last_was_us = false;
+        } else if !last_was_us {
+            stem.push('_');
+            last_was_us = true;
+        }
+    }
+    while stem.ends_with('_') {
+        stem.pop();
+    }
+    if stem.is_empty() {
+        "mesh".to_string()
+    } else {
+        stem
+    }
+}
+
+/// Pick the directory STL exports are written to: the user's `Downloads` folder
+/// when discoverable (read straight from `%USERPROFILE%` / `$HOME` — no `dirs`
+/// dependency), else the OS temp dir. We only use `Downloads` when it already
+/// exists as a directory so we never create folders behind the user's back; a
+/// missing or non-directory `Downloads` cleanly falls back to temp.
+fn export_dir() -> std::path::PathBuf {
+    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+        let downloads = std::path::Path::new(&home).join("Downloads");
+        if downloads.is_dir() {
+            return downloads;
+        }
+    }
+    std::env::temp_dir()
+}
+
+/// Write a mesh product's `mesh` to a binary STL named `valenx_<stem>.stl` (see
+/// [`stl_filename_stem`]) inside `dir`, and return a short status line for the
+/// tile to display — either `"saved → <path>"` on success or
+/// `"export failed: <e>"` on an [`std::io::Error`]. Never panics: the
+/// `io::Result` from [`valenx_mesh::write_stl_binary`] is matched, not
+/// unwrapped. Splitting the directory out (vs. [`export_mesh_product_stl`])
+/// keeps this UI- and env-free so it can be unit-tested against an explicit
+/// temp dir without mutating process environment.
+fn export_mesh_product_stl_to(
+    dir: &std::path::Path,
+    mesh: &valenx_mesh::Mesh,
+    title: &str,
+) -> String {
+    let path = dir.join(format!("valenx_{}.stl", stl_filename_stem(title)));
+    match valenx_mesh::write_stl_binary(mesh, &path) {
+        Ok(()) => format!("saved → {}", path.display()),
+        Err(e) => format!("export failed: {e}"),
+    }
+}
+
+/// Write a mesh product's `mesh` to a binary STL named from `title`, into
+/// [`export_dir`], and return the tile status line. The generalisation of
+/// `bracket_product`'s build-time STL to *any* mesh product (rocket / gear /
+/// bracket / rcbeam / fem). Thin wrapper over [`export_mesh_product_stl_to`]
+/// that supplies the resolved export directory.
+fn export_mesh_product_stl(mesh: &valenx_mesh::Mesh, title: &str) -> String {
+    export_mesh_product_stl_to(&export_dir(), mesh, title)
+}
+
 /// control lives on the agent half).
 fn render_workspace_body(
     app: &mut ValenxApp,
@@ -273,6 +344,57 @@ fn render_workspace_body(
         // `wgpu_renderer` / `render_state` were lifted out of `self` (see the
         // `DockBehavior` doc), so they don't alias `workspace_products` — the
         // mesh borrow and the renderer `&mut` coexist fine.
+        //
+        // First, a thin unobtrusive top strip with an "⬇ Export STL" button (and
+        // the last-export status next to it). This is allocated BEFORE the
+        // viewport so the orbit/zoom rect below it is undisturbed — the viewport
+        // then fills the remaining rect, exactly as before. The button writes the
+        // product's mesh to disk via `export_mesh_product_stl` and stores the
+        // resulting status string back on the product (`last_export`). All
+        // borrows here are short `get` / `get_mut` that finish before the camera
+        // clone and the mesh render borrow below, so nothing aliases.
+        if let Some(i) = idx {
+            // Read what the strip needs (title + current status) through a short
+            // immutable borrow, cloning out so the borrow ends immediately.
+            let strip = app
+                .workspace_products
+                .get(&i)
+                .map(|p| (p.title.clone(), p.last_export.clone()));
+            if let Some((title, last_export)) = strip {
+                let mut do_export = false;
+                ui.horizontal(|ui| {
+                    if ui
+                        .small_button("⬇ Export STL")
+                        .on_hover_text("Save this 3-D mesh to disk as a binary STL")
+                        .clicked()
+                    {
+                        do_export = true;
+                    }
+                    if let Some(msg) = &last_export {
+                        ui.label(egui::RichText::new(msg).weak().small());
+                    }
+                });
+                if do_export {
+                    // Re-borrow mutably only now (the immutable borrow above is
+                    // long gone) to run the export and stash its status. The
+                    // mesh is read and written inside `export_mesh_product_stl`,
+                    // which never panics on an io error.
+                    if let Some(p) = app.workspace_products.get_mut(&i) {
+                        // Compute the status inside a block so the immutable
+                        // borrow of `p` (via `p.mesh`) is dropped before the
+                        // mutable write to `p.last_export`.
+                        let status = p
+                            .mesh
+                            .as_ref()
+                            .map(|m| export_mesh_product_stl(&m.mesh, &title));
+                        if let Some(status) = status {
+                            p.last_export = Some(status);
+                        }
+                    }
+                }
+            }
+        }
+
         let camera = idx
             .and_then(|i| app.workspace_products.get(&i))
             .map(|p| p.camera.clone());
@@ -2038,5 +2160,60 @@ mod tests {
         assert!((camera.target.x - 2.0).abs() < 1e-4);
         assert!((camera.target.y - 2.0).abs() < 1e-4);
         assert!((camera.target.z - 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn stl_filename_stem_sanitises_titles() {
+        // Lower-cased, non-alphanumeric runs collapsed to one `_`, trimmed.
+        assert_eq!(stl_filename_stem("L-bracket"), "l_bracket");
+        assert_eq!(stl_filename_stem("Rocket"), "rocket");
+        assert_eq!(
+            stl_filename_stem("RC beam (6 m, 25 kN/m)"),
+            "rc_beam_6_m_25_kn_m"
+        );
+        // Leading/trailing separators trimmed; internal runs collapse.
+        assert_eq!(stl_filename_stem("  --weird__name!!  "), "weird_name");
+        // All-symbol / empty falls back to a stable stem (never a bare ".stl").
+        assert_eq!(stl_filename_stem(""), "mesh");
+        assert_eq!(stl_filename_stem("***"), "mesh");
+    }
+
+    #[test]
+    fn export_mesh_product_writes_nonempty_stl() {
+        // The export helper, run on a REAL mesh product (the LV-1 rocket the
+        // `show_3d "rocket"` command publishes), must write a non-empty binary
+        // STL and report "saved → <path>". We aim it at a unique temp dir (via
+        // the env-free `_to` variant, so this is parallel-safe), assert the file
+        // exists + is non-empty, then clean it up.
+        let mesh = crate::rocket_workbench::lv1_loaded_mesh();
+
+        let dir = std::env::temp_dir().join(format!(
+            "valenx_export_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp export dir");
+
+        let status = export_mesh_product_stl_to(&dir, &mesh.mesh, "Rocket");
+        assert!(
+            status.starts_with("saved → "),
+            "expected success status, got {status:?}"
+        );
+
+        // Filename is derived from the title via stl_filename_stem("Rocket").
+        let expected = dir.join("valenx_rocket.stl");
+        let meta = std::fs::metadata(&expected)
+            .unwrap_or_else(|e| panic!("STL {expected:?} should exist: {e}"));
+        assert!(
+            meta.len() > 0,
+            "STL should be non-empty, was {} bytes",
+            meta.len()
+        );
+
+        // Clean up the whole temp tree.
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
