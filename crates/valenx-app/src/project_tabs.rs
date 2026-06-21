@@ -422,7 +422,7 @@ impl TabKind {
 
 /// One open project tab: its kind plus a user-facing title. The two
 /// `edit_*` fields drive inline rename and are transient (never persisted).
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectTab {
     /// The project kind this tab hosts.
     pub kind: TabKind,
@@ -898,6 +898,19 @@ fn perform_close(app: &mut ValenxApp, idx: usize) {
     install_active_doc(app);
 }
 
+/// Working state of the "Save as project…" modal (opened from a tab's
+/// right-click menu). Held on [`crate::ValenxApp::tab_save_as_project`] while
+/// the dialog is up. On confirm, the tab at `tab_idx` is cloned into the
+/// foldered project library under `name` in `folder` (None = unfiled).
+pub struct SaveAsProjectPrompt {
+    /// Index of the source tab being saved.
+    pub tab_idx: usize,
+    /// In-progress project name (seeded from the tab title).
+    pub name: String,
+    /// Chosen destination folder id, or `None` for "(unfiled)".
+    pub folder: Option<String>,
+}
+
 /// What a single frame of the tab strip wants to do, accumulated while the
 /// read-only borrow of the tab vec is live and applied afterwards.
 #[derive(Default)]
@@ -910,6 +923,9 @@ struct StripIntent {
     open_template: Option<TabKind>,
     open_blank: bool,
     save_tab: Option<usize>,
+    /// Open the "Save as project…" prompt for the tab at this index — adds
+    /// the tab to the foldered project library (see [`crate::project_library`]).
+    save_as_project: Option<usize>,
     save_group: bool,
     open_saved_group: Option<String>,
     open_saved_tab: Option<String>,
@@ -1125,6 +1141,16 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                             intent.save_tab = Some(i);
                             ui.close_menu();
                         }
+                        // Add to the foldered project library (the Browser
+                        // "Projects" navigator) via a name + folder prompt.
+                        if ui
+                            .button("Save as project…")
+                            .on_hover_text("Add this tab to the Projects library (Browser panel)")
+                            .clicked()
+                        {
+                            intent.save_as_project = Some(i);
+                            ui.close_menu();
+                        }
                         ui.separator();
                         if ui.button("Close").clicked() {
                             // Request a close — opens the confirm modal.
@@ -1147,6 +1173,7 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
 
     apply_intent(app, intent);
     draw_close_confirm(app, ctx);
+    draw_save_as_project(app, ctx);
 }
 
 /// Render the "Close tab?" confirmation modal while
@@ -1205,6 +1232,120 @@ fn draw_close_confirm(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// Render the "Save as project…" modal while
+/// [`crate::ValenxApp::tab_save_as_project`] is `Some`. Mirrors
+/// [`draw_close_confirm`]: an anchored, non-collapsible window with a name
+/// field, a folder picker (existing library folders + "(unfiled)"), and
+/// Save / Cancel. On Save it clones the source tab into the project library
+/// under the entered name + folder (the tab is `Clone` + `Serialize`) and
+/// persists `library.json`. The project name overrides the cloned tab's
+/// title so the library entry reads as the user typed.
+fn draw_save_as_project(app: &mut ValenxApp, ctx: &egui::Context) {
+    let Some(prompt) = &app.tab_save_as_project else {
+        return;
+    };
+    let idx = prompt.tab_idx;
+    // Bail safely if the source tab vanished (closed another way).
+    let Some(tab_title) = app.tab_bar.tabs.get(idx).map(|t| t.title.clone()) else {
+        app.tab_save_as_project = None;
+        return;
+    };
+
+    let mut do_save = false;
+    let mut do_cancel = false;
+    // Snapshot the folder list for the picker (immutable read of the lib).
+    let folders: Vec<(String, String)> = app
+        .library
+        .sorted_folders()
+        .into_iter()
+        .map(|f| (f.id.clone(), f.name.clone()))
+        .collect();
+
+    egui::Window::new("Save as project")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            ui.label(format!("Save \"{tab_title}\" to the Projects library."));
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label("Name:");
+                if let Some(p) = &mut app.tab_save_as_project {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut p.name)
+                            .desired_width(220.0)
+                            .hint_text("Project name"),
+                    );
+                }
+            });
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label("Folder:");
+                // Current selection label.
+                let current = app
+                    .tab_save_as_project
+                    .as_ref()
+                    .and_then(|p| p.folder.clone());
+                let current_label = current
+                    .as_ref()
+                    .and_then(|fid| {
+                        folders
+                            .iter()
+                            .find(|(id, _)| id == fid)
+                            .map(|(_, n)| n.clone())
+                    })
+                    .unwrap_or_else(|| "(unfiled)".to_string());
+                egui::ComboBox::from_id_source("save_as_project_folder")
+                    .selected_text(current_label)
+                    .show_ui(ui, |ui| {
+                        if let Some(p) = &mut app.tab_save_as_project {
+                            ui.selectable_value(&mut p.folder, None, "(unfiled)");
+                            for (fid, fname) in &folders {
+                                ui.selectable_value(&mut p.folder, Some(fid.clone()), fname);
+                            }
+                        }
+                    });
+            });
+            if folders.is_empty() {
+                ui.label(
+                    egui::RichText::new("Tip: create folders in the Browser → Projects navigator.")
+                        .small()
+                        .weak(),
+                );
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    do_cancel = true;
+                }
+                if ui.button("Save").clicked() {
+                    do_save = true;
+                }
+            });
+        });
+
+    if do_cancel {
+        app.tab_save_as_project = None;
+    } else if do_save {
+        // Pull the entered name + folder, clone the source tab, override its
+        // title with the project name, add to the library, persist.
+        if let Some(prompt) = app.tab_save_as_project.take() {
+            if let Some(tab) = app.tab_bar.tabs.get(prompt.tab_idx) {
+                let mut saved_tab = tab.clone();
+                // Transient inline-edit state should never persist.
+                saved_tab.editing = false;
+                saved_tab.edit_buf.clear();
+                let trimmed = prompt.name.trim();
+                if !trimmed.is_empty() {
+                    saved_tab.title = trimmed.to_string();
+                }
+                app.library.add_project(saved_tab, prompt.folder);
+                let _ = app.library.save();
+            }
+        }
+    }
+}
+
 /// Apply this frame's accumulated [`StripIntent`] after the read-only
 /// borrows in [`draw_tab_strip`] end. At most a couple of these fire per
 /// frame in practice; each leaves `active` consistent.
@@ -1228,6 +1369,16 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
     if let Some(i) = intent.save_tab {
         if let Some(tab) = app.tab_bar.tabs.get(i) {
             let _ = save_single_tab(tab);
+        }
+    }
+    if let Some(i) = intent.save_as_project {
+        // Open the "Save as project…" prompt seeded with the tab's title.
+        if let Some(tab) = app.tab_bar.tabs.get(i) {
+            app.tab_save_as_project = Some(SaveAsProjectPrompt {
+                tab_idx: i,
+                name: tab.title.clone(),
+                folder: None,
+            });
         }
     }
     if intent.save_group {

@@ -3642,6 +3642,13 @@ impl eframe::App for ValenxApp {
 
 impl ValenxApp {
     fn draw_browser(&mut self, ui: &mut egui::Ui) {
+        // IDE-style project library navigator at the very top of the
+        // Browser: search + ★ Pinned / 🕘 Recent / 📁 All (folders), with
+        // open-as-tab + per-project context actions. See
+        // [`crate::project_navigator`].
+        crate::project_navigator::draw_navigator(self, ui);
+        ui.separator();
+
         ui.collapsing("Project", |ui| match &self.project {
             None => {
                 // The welcome landing page in the central viewport
