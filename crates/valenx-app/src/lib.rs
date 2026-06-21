@@ -2086,6 +2086,61 @@ impl ValenxApp {
         // without replaying stale history). `app.assistant` is initialized in
         // `Self::default()` above, so its inbox path resolves here.
         crate::agent_commands::clear_command_files(&app);
+
+        // Agent-bridge wake thread. The in-`update()` heartbeat
+        // (`ctx.request_repaint_after(POLL_INTERVAL)` in `update.rs`) only
+        // fires *while `update()` runs*, and egui is reactive: when valenx is
+        // idle (occluded, in the background, or otherwise not receiving input —
+        // the normal case while an external agent drives it) frames stop, so
+        // the agent-command poll stops with them and appended commands sit
+        // unread. A detached background thread holding a clone of the egui
+        // `Context` (`egui::Context` is `Send + Sync`) pokes the event loop on
+        // a fixed cadence regardless of window/focus state: cross-thread
+        // `request_repaint()` routes through eframe's
+        // `set_request_repaint_callback`, which posts a winit
+        // `UserEvent::RequestRepaint` via the `EventLoopProxy` — delivered even
+        // when no OS input is arriving. Spawned once per process (guarded
+        // below) because `eframe::run_native` may invoke this constructor more
+        // than once under `run_and_return`.
+        //
+        // CAVEAT (honest): this does NOT guarantee polling while the window is
+        // *minimized* on eframe 0.28. The run-and-return event loop hard-gates
+        // painting on `window.is_minimized()` (eframe `native/run.rs`): when
+        // iconified it drops the scheduled repaint without calling
+        // `request_redraw`, so `update()` (and the poll) do not run until the
+        // window is restored. There is no `NativeOptions`/`ViewportBuilder`
+        // option to disable that gate. What the thread DOES guarantee is an
+        // immediate flush the instant the window is restored, and continuous
+        // ~3 Hz polling whenever the window is merely idle/background/occluded
+        // but not minimized. Needs runtime verification.
+        {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WAKE_THREAD_STARTED: AtomicBool = AtomicBool::new(false);
+            if WAKE_THREAD_STARTED
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                let ctx = cc.egui_ctx.clone();
+                std::thread::Builder::new()
+                    .name("valenx-agent-wake".to_owned())
+                    .spawn(move || loop {
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                        ctx.request_repaint();
+                    })
+                    // A failure to spawn the wake thread is non-fatal: the app
+                    // still runs and the in-`update()` heartbeat covers the
+                    // interactive case, so we only log rather than abort launch.
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            target: "valenx",
+                            "failed to spawn agent-bridge wake thread: {e}"
+                        );
+                        // Return a dummy handle so the closure's type is
+                        // `JoinHandle<()>`; the thread simply never started.
+                        std::thread::spawn(|| {})
+                    });
+            }
+        }
         app
     }
 
