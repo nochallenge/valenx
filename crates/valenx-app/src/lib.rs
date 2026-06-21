@@ -651,6 +651,14 @@ pub struct ValenxApp {
     pub residuals: ResidualHistory,
     pub log: LogPanel,
     pub bottom_tab: BottomTab,
+    /// When `true`, the bottom Residuals / Log dock collapses to just
+    /// its thin header strip (the tab selectors + the collapse/expand
+    /// toggle); the content body — residual plot, log text, or the
+    /// empty-state placeholder — is skipped and the panel stops
+    /// reserving vertical space. Toggled by the AI-drivable
+    /// "Collapse panel" / "Expand panel" button in the header row.
+    /// Defaults to `false` (expanded) via `#[derive(Default)]`.
+    pub bottom_panel_collapsed: bool,
 
     /// Which case the user clicked on in the browser, if any. `None`
     /// falls back to the first case in the project when a run is

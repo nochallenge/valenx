@@ -2575,43 +2575,82 @@ impl eframe::App for ValenxApp {
             });
         });
 
-        // Tabbed bottom panel — Residuals or Log
-        egui::TopBottomPanel::bottom("valenx_bottom_dock")
-            .resizable(true)
-            .default_height(240.0)
-            .height_range(140.0..=520.0)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.selectable_value(
-                        &mut self.bottom_tab,
-                        BottomTab::Residuals,
-                        format!("Residuals ({})", self.residuals.by_field.len()),
-                    );
-                    ui.selectable_value(
-                        &mut self.bottom_tab,
-                        BottomTab::Log,
-                        format!("Log ({})", self.log.lines.len()),
-                    );
-                    ui.separator();
-                    if self.bottom_tab == BottomTab::Log {
-                        log_panel::header(ui, &mut self.log);
+        // Tabbed bottom panel — Residuals or Log. Collapsible: when
+        // `self.bottom_panel_collapsed` is set the panel shrinks to
+        // just its header strip (tab selectors + toggle) and the
+        // content body is skipped, freeing the vertical space. The
+        // resize handle / tall default height only apply in the
+        // expanded state — collapsed it auto-sizes to the bar.
+        let collapsed = self.bottom_panel_collapsed;
+        let bottom_dock = egui::TopBottomPanel::bottom("valenx_bottom_dock");
+        let bottom_dock = if collapsed {
+            // Thin, fixed bar — no resize handle, no minimum that would
+            // keep reserving the tall content area.
+            bottom_dock.resizable(false)
+        } else {
+            bottom_dock
+                .resizable(true)
+                .default_height(240.0)
+                .height_range(140.0..=520.0)
+        };
+        bottom_dock.show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.selectable_value(
+                    &mut self.bottom_tab,
+                    BottomTab::Residuals,
+                    format!("Residuals ({})", self.residuals.by_field.len()),
+                );
+                ui.selectable_value(
+                    &mut self.bottom_tab,
+                    BottomTab::Log,
+                    format!("Log ({})", self.log.lines.len()),
+                );
+                ui.separator();
+                if !collapsed && self.bottom_tab == BottomTab::Log {
+                    log_panel::header(ui, &mut self.log);
+                }
+                // Collapse / expand toggle on the right edge. The
+                // button's TEXT is the accessibility / UI-Automation
+                // `Name`, so it is a uniquely- and stably-named,
+                // AI-invokable widget: "Collapse panel" when expanded,
+                // "Expand panel" when collapsed. egui derives a
+                // button's accesskit name from its label text, so the
+                // plain-ASCII phrase is what an external driver finds
+                // and Invokes by Name.
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let name = if collapsed {
+                        "Expand panel"
+                    } else {
+                        "Collapse panel"
+                    };
+                    if ui.button(name).clicked() {
+                        self.toggle_bottom_panel();
                     }
                 });
-                ui.separator();
-                match self.bottom_tab {
-                    BottomTab::Residuals => {
-                        residuals::show(
-                            ui,
-                            &self.residuals,
-                            self.settings.residual_scale,
-                            self.settings.convergence_target,
-                        );
-                    }
-                    BottomTab::Log => {
-                        log_panel::show(ui, &self.log);
-                    }
-                }
             });
+
+            // Collapsed: stop here — render only the header strip and
+            // skip the residual plot / log / placeholder body so the
+            // panel stays a thin bar.
+            if collapsed {
+                return;
+            }
+
+            ui.separator();
+            match self.bottom_tab {
+                BottomTab::Residuals => {
+                    residuals::show(
+                        ui,
+                        &self.residuals,
+                        self.settings.residual_scale,
+                        self.settings.convergence_target,
+                    );
+                }
+                BottomTab::Log => {
+                    log_panel::show(ui, &self.log);
+                }
+            }
+        });
 
         // Browser (left) — collapsible via the ribbon toggle / View menu
         // so the viewport can take the full width.
