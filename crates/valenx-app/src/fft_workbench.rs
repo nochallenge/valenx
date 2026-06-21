@@ -340,6 +340,30 @@ fn load_spectrum_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"fft"}`** product: the canonical
+/// magnitude spectrum built as a 3-D bar mesh, paired with the workbench's
+/// own `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`FftWorkbenchState::default`].
+pub(crate) fn fft_product() -> crate::WorkspaceProduct {
+    let s = FftWorkbenchState::default();
+    let mesh = spectrum_bars_mesh(&s).expect("canonical FFT ⇒ spectrum bars build");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<spectrum>/valenx-fft");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical FFT ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "FFT (magnitude spectrum)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
