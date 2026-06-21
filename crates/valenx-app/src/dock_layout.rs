@@ -320,6 +320,16 @@ fn render_workspace_body(
     // mutates the product's camera (`get_mut`), so the lookups are kept short.
     let idx = n.parse::<usize>().ok();
 
+    // LAZY-BUILD: a `new_unit` only queued this unit's product `kind` in
+    // `pending_products` (so opening its tab was instant); build it now, on the
+    // first render of its pane. Done through a short `&mut app` borrow BEFORE any
+    // immutable render borrow of the product below, so it never overlaps them
+    // (idempotent + a no-op once built / nothing pending). After this, the
+    // `workspace_products.get(..)` lookups below see the freshly built product.
+    if let Some(i) = idx {
+        crate::agent_commands::materialize_pending(app, i);
+    }
+
     // A live 3-D product (a `show_3d` command set `mesh: Some`) renders as an
     // actual lit viewport — same look as the central viewport. The tile id keys
     // a dedicated per-tile offscreen target so it never aliases the central

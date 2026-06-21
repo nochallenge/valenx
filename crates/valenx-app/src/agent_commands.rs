@@ -525,31 +525,15 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
         }
     }
 
-    // If a product kind was named, render it into the new unit's `workspace:<n>`
-    // tile by delegating to the SAME reducer paths a running agent would use:
-    // first the `show_3d` path (registry meshes + the `dna` text card), and if
-    // that produced nothing, the `show_2d` path (the 2-D-only drawings). An
-    // unknown kind renders nothing — a safe no-op, like the reducer elsewhere.
+    // LAZY-BUILD: if a product kind was named, DON'T build it now — record it in
+    // `pending_products` so the actual 3-D/2-D product is built only when this
+    // unit's `workspace:<n>` pane is first VIEWED (see `materialize_pending`,
+    // called from `render_workspace_body`) or when the unit is animated. Opening
+    // the tab stays instant, so an agent fleet can `new_unit` 130+ tabs in a
+    // burst without building every product at once (which briefly hung the app).
+    // A `kind`-less `new_unit` records nothing — there is nothing to build.
     if let Some(kind) = kind {
-        apply(
-            app,
-            n,
-            AgentCommand::Show3d {
-                n: None,
-                kind: kind.clone(),
-            },
-        );
-        if !app.workspace_products.contains_key(&n) {
-            apply(app, n, AgentCommand::Show2d { n: None, kind });
-        }
-        // Ensure the freshly-rendered product carries a default inspect-spin so
-        // the new unit's tile shows the Play/Pause + speed controls. The
-        // `Show3d` arm above already does this for registry meshes; this keeps
-        // the guarantee at the `new_unit` render path too (idempotent — a no-op
-        // once the product already animates or is mesh-less).
-        if let Some(product) = app.workspace_products.get_mut(&n) {
-            product.ensure_default_animation();
-        }
+        app.pending_products.insert(n, kind);
     }
 
     // If a title was given, use it as the workspace card heading: override a
@@ -821,6 +805,12 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
             // user toolbar click would set; a missing animation is a no-op note,
             // never a panic.
             let target = n.unwrap_or(ch);
+            // LAZY-BUILD: if this unit's product was only queued by `new_unit`
+            // (its tab not yet viewed, so nothing in `workspace_products`),
+            // build it now so the agent can animate it without first opening the
+            // pane. A no-op once built / nothing pending; after it the product
+            // (with its default inspect-spin) is present to toggle below.
+            materialize_pending(app, target);
             if let Some(p) = app.workspace_products.get_mut(&target) {
                 match p.animation.as_mut() {
                     Some(a) => {
@@ -855,6 +845,93 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
             // `new_unit` is a **global-channel bootstrap** command (it opens a
             // brand-new unit), handled by `apply_global`. On a per-unit channel
             // there is no new unit to open, so it is a deliberate no-op here.
+        }
+    }
+}
+
+/// **LAZY-BUILD materialiser.** Build unit `n`'s deferred product the first time
+/// it is needed — when its `workspace:<n>` pane is rendered, or when the unit is
+/// animated. `new_unit` records only the product `kind` in
+/// [`crate::ValenxApp::pending_products`] (so opening a tab is instant); this
+/// turns that record into a live product on demand, through the EXACT same path
+/// `new_unit` used to build inline: the `show_3d` reducer (registry meshes + the
+/// `dna` text card), then the `show_2d` reducer as a fallback (2-D-only
+/// drawings), then a default inspect-spin via `ensure_default_animation`.
+///
+/// Idempotent and cheap to call every frame: if the product already exists in
+/// [`crate::ValenxApp::workspace_products`], or there is nothing pending for `n`,
+/// it returns immediately without building. A title-only card the `new_unit`
+/// title path may have inserted (when both `kind` and `title` were given) is
+/// preserved — its heading is reapplied onto the freshly built product so the
+/// caller's title still overrides the product's default heading.
+pub(crate) fn materialize_pending(app: &mut ValenxApp, n: usize) {
+    // Nothing queued → nothing to build. This is the sole early-out: a product
+    // built directly (`show_3d`/`show_2d`) or already materialised has no pending
+    // entry, so it is never rebuilt; only a unit `new_unit` queued is built here.
+    // (We must NOT early-out merely because `workspace_products` has `n`: the
+    // `new_unit` title path may have parked an instant *title-only placeholder*
+    // card there while the real product is still pending.)
+    let Some(kind) = app.pending_products.remove(&n) else {
+        return;
+    };
+
+    // Take any title-only placeholder card the `new_unit` title path inserted
+    // (when both `kind` and `title` were given): capture its heading and REMOVE
+    // it so the build below sees an empty slot — exactly as the old inline
+    // `new_unit` build did (so the `show_3d`→`show_2d` fallback keys off a truly
+    // empty slot, e.g. for a 2-D-only `rcbeam`). The title is reapplied after the
+    // build, preserving the title-overrides-heading contract.
+    let title_override = app.workspace_products.remove(&n).map(|p| p.title);
+
+    // Build through the SAME reducer paths `new_unit` used to: first `show_3d`
+    // (registry meshes + the `dna` text card); if that produced nothing, the
+    // `show_2d` 2-D drawings. An unknown kind builds nothing — a safe no-op.
+    apply(
+        app,
+        n,
+        AgentCommand::Show3d {
+            n: None,
+            kind: kind.clone(),
+        },
+    );
+    if !app.workspace_products.contains_key(&n) {
+        apply(app, n, AgentCommand::Show2d { n: None, kind });
+    }
+
+    match app.workspace_products.get_mut(&n) {
+        Some(product) => {
+            // Default paused inspect-spin so the tile shows the Play/Pause +
+            // speed controls (idempotent — a no-op once the product animates or
+            // is mesh-less). Mirrors the old inline `new_unit` build.
+            product.ensure_default_animation();
+            // Reapply the caller's title (if any) so it still overrides the
+            // product's default heading, exactly as the eager build did.
+            if let Some(title) = title_override {
+                product.title = title;
+            }
+        }
+        None => {
+            // The kind built nothing (unknown / not yet a registered product).
+            // If the `new_unit` title path had parked a title-only card, restore
+            // it so the workspace still names itself — matching the eager build,
+            // where the title block ran after a no-op build and kept the card.
+            if let Some(title) = title_override {
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title,
+                        lines: Vec::new(),
+                        mesh: None,
+                        vertex_colors: None,
+                        camera: valenx_viz::OrbitCamera::default(),
+                        kind2d: None,
+                        last_export: None,
+                        image: None,
+                        image_texture: None,
+                        animation: None,
+                    },
+                );
+            }
         }
     }
 }
@@ -1845,10 +1922,12 @@ mod tests {
     }
 
     #[test]
-    fn new_unit_with_kind_renders_a_product_into_the_new_unit() {
-        // `new_unit` with `kind:"rocket"` opens unit 1 AND publishes the rocket
-        // product into `workspace_products[&1]` via the same show_3d path a
-        // running agent uses (a live LV-1 mesh).
+    fn new_unit_with_kind_queues_then_materialises_a_product_into_the_new_unit() {
+        // LAZY-BUILD: `new_unit` with `kind:"rocket"` opens unit 1 INSTANTLY and
+        // only QUEUES the rocket kind in `pending_products` — nothing is built
+        // into `workspace_products` yet. `materialize_pending` then builds it
+        // through the same show_3d path a running agent uses (a live LV-1 mesh)
+        // and moves the entry across, clearing the pending queue.
         let mut app = ValenxApp::default();
         apply_global(
             &mut app,
@@ -1859,21 +1938,45 @@ mod tests {
             },
         );
         assert_eq!(app.wb_agent_counter, 1);
+        // Lazy: queued, not built.
+        assert_eq!(
+            app.pending_products.get(&1).map(String::as_str),
+            Some("rocket"),
+            "new_unit queues the kind instead of building it"
+        );
+        assert!(
+            !app.workspace_products.contains_key(&1),
+            "no product is built until the pane is viewed"
+        );
+
+        // First view of the pane → materialise.
+        materialize_pending(&mut app, 1);
+        assert!(
+            !app.pending_products.contains_key(&1),
+            "the pending entry is consumed once materialised"
+        );
         let product = app
             .workspace_products
             .get(&1)
-            .expect("new_unit{kind:rocket} renders a product into the new unit");
+            .expect("materialize_pending builds the queued product into the unit");
         let mesh = product
             .mesh
             .as_ref()
             .expect("the rocket kind attaches a live mesh");
         assert!(mesh.path.to_string_lossy().contains("valenx-lv1"));
+        // It carries the default inspect-spin so the tile shows the controls.
+        assert!(
+            product.animation.is_some(),
+            "the materialised mesh product gains a default animation"
+        );
     }
 
     #[test]
-    fn new_unit_title_overrides_the_rendered_product_heading() {
-        // When both `kind` and `title` are set, the product renders and its
-        // heading is replaced by the caller's title.
+    fn materialize_pending_preserves_a_title_override_onto_the_built_product() {
+        // When both `kind` and `title` are set, `new_unit` queues the kind AND
+        // shows an instant title-only card. `materialize_pending` then builds the
+        // real product but re-applies the caller's title so it still overrides
+        // the product's default heading (and the rocket mesh is live).
         let mut app = ValenxApp::default();
         apply_global(
             &mut app,
@@ -1883,9 +1986,24 @@ mod tests {
                 note: None,
             },
         );
-        let product = app.workspace_products.get(&1).expect("product set");
-        assert_eq!(product.title, "LV-1 Heavy", "title overrode the heading");
-        assert!(product.mesh.is_some(), "the rocket mesh still rendered");
+        // Instant title-only card; kind queued for lazy build.
+        assert_eq!(app.workspace_products.get(&1).unwrap().title, "LV-1 Heavy");
+        assert!(app.workspace_products.get(&1).unwrap().mesh.is_none());
+        assert_eq!(
+            app.pending_products.get(&1).map(String::as_str),
+            Some("rocket")
+        );
+
+        materialize_pending(&mut app, 1);
+        let product = app.workspace_products.get(&1).expect("product built");
+        assert_eq!(
+            product.title, "LV-1 Heavy",
+            "title still overrode the heading"
+        );
+        assert!(
+            product.mesh.is_some(),
+            "the rocket mesh was built on materialise"
+        );
     }
 
     #[test]
@@ -1951,12 +2069,15 @@ mod tests {
     }
 
     #[test]
-    fn global_poll_opens_a_unit_and_builds_a_product_from_the_file() {
-        // END-TO-END through the REAL poll path: an agent appends a rich
-        // `new_unit` line to the GLOBAL command file (no unit exists yet,
-        // wb_agent_counter == 0). The first poll reads the global channel,
-        // opens unit 1, renders the gear product into it, applies the title,
-        // and advances the global cursor — all from the file, no UI click.
+    fn global_poll_opens_a_unit_and_queues_its_product_lazily() {
+        // END-TO-END through the REAL poll path with LAZY-BUILD: an agent appends
+        // a rich `new_unit` line to the GLOBAL command file (no unit exists yet,
+        // wb_agent_counter == 0). The first poll reads the global channel, opens
+        // unit 1 INSTANTLY, QUEUES the gear kind in `pending_products` (it does
+        // NOT build the mesh up front — so a burst of new_units stays cheap),
+        // shows the instant title-only card, and advances the global cursor —
+        // all from the file, no UI click. The gear product is built only when
+        // `materialize_pending` runs (first pane view / animate).
         let mut app = ValenxApp::default();
         let dir = isolate_cmd_dir(&mut app, "global_newunit");
         let path = global_cmd_path(&app);
@@ -1971,15 +2092,31 @@ mod tests {
         poll_and_apply_agent_commands(&mut app);
 
         assert_eq!(app.wb_agent_counter, 1, "the global new_unit opened unit 1");
-        let product = app
+        // LAZY: the kind is queued, not built — no mesh in workspace_products yet.
+        assert_eq!(
+            app.pending_products.get(&1).map(String::as_str),
+            Some("gear"),
+            "the global new_unit queued the gear kind for lazy build"
+        );
+        let card = app
             .workspace_products
             .get(&1)
-            .expect("the gear product was built into the new unit");
-        // The title overrode the gear product's heading, and the gear mesh is live.
-        assert_eq!(product.title, "Reducer");
-        assert!(product.mesh.is_some(), "gear kind attaches a live mesh");
+            .expect("the instant title-only card is shown");
+        assert_eq!(card.title, "Reducer", "the title card names the unit");
+        assert!(
+            card.mesh.is_none(),
+            "no mesh is built until the pane is viewed (lazy build)"
+        );
         // The global cursor advanced past the one applied line.
         assert_eq!(app.agent_global_cmd_cursor, Some(1));
+
+        // Materialise (as the first pane render would) → the gear mesh builds and
+        // the title override is preserved.
+        materialize_pending(&mut app, 1);
+        assert!(!app.pending_products.contains_key(&1), "pending consumed");
+        let product = app.workspace_products.get(&1).expect("gear product built");
+        assert_eq!(product.title, "Reducer", "title still overrode the heading");
+        assert!(product.mesh.is_some(), "gear kind attaches a live mesh");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2093,6 +2230,55 @@ mod tests {
             .expect("the product keeps its animation");
         assert!(anim.playing, "play:true started the clock");
         assert_eq!(anim.speed, 2.0, "speed:2.0 was applied");
+    }
+
+    #[test]
+    fn animate_on_a_pending_unit_materialises_it_then_starts_playing() {
+        // LAZY-BUILD: an agent can animate a unit whose tab was never viewed.
+        // `new_unit{kind:rocket}` only queued the kind (nothing in
+        // workspace_products). `animate{play:true}` must first build the product
+        // via `materialize_pending` (which attaches the default inspect-spin),
+        // then flip it to playing — all without the pane ever being rendered.
+        let mut app = ValenxApp::default();
+        apply_global(
+            &mut app,
+            AgentCommand::NewUnit {
+                kind: Some("rocket".into()),
+                title: None,
+                note: None,
+            },
+        );
+        assert!(
+            !app.workspace_products.contains_key(&1),
+            "lazy: the unit is pending, not built, before animate"
+        );
+        assert_eq!(
+            app.pending_products.get(&1).map(String::as_str),
+            Some("rocket")
+        );
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Animate {
+                n: None,
+                play: Some(true),
+                speed: None,
+            },
+        );
+
+        assert!(
+            !app.pending_products.contains_key(&1),
+            "animate materialised the pending unit"
+        );
+        let anim = app.workspace_products[&1]
+            .animation
+            .as_ref()
+            .expect("materialise attached the default inspect-spin animation");
+        assert!(
+            anim.playing,
+            "play:true started the freshly-built product's clock"
+        );
     }
 
     #[test]
