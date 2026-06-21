@@ -156,6 +156,32 @@ pub enum AgentCommand {
         /// skipped.
         kind: String,
     },
+    /// Render a **2-D engineering drawing** into *this* unit's workspace tile
+    /// (`workspace:<n>`): the tile paints a flat egui drawing (no wgpu) — these
+    /// are the user's originally-spec'd outputs. `kind` selects the drawing:
+    /// `"rcbeam"` → a reinforced-concrete **section + rebar** drawing (the
+    /// canonical 300×550 section), `"dna"` → a DNA **construct map** (the
+    /// 93-nt ATG·ORF·His6·stop construct as coloured feature blocks on a nt
+    /// ruler). Unknown kinds are skipped. These are **distinct** from the
+    /// `show_3d` views — `show_3d{kind:"rcbeam"}` is the lit 3-D solid and
+    /// `show_3d{kind:"dna"}` is the text card; `show_2d` adds the 2-D drawings,
+    /// so both coexist.
+    ///
+    /// As with [`Show3d`](AgentCommand::Show3d) the effective channel is the
+    /// command file's `n`; the optional wire `n` is accepted (and ignored) for
+    /// readability. The enum's `rename_all = "snake_case"` would map `Show2d`
+    /// to `"show2d"` (no underscore before the digit), so the wire tag is
+    /// pinned to `"show_2d"`.
+    #[serde(rename = "show_2d")]
+    Show2d {
+        /// Optional unit number for readability; ignored in favour of the
+        /// command file's channel `n` (the bridge always routes by channel).
+        #[serde(default)]
+        n: Option<usize>,
+        /// Which 2-D drawing to show. `"rcbeam"` → the RC section + rebar,
+        /// `"dna"` → the DNA construct map; other values are skipped.
+        kind: String,
+    },
 }
 
 /// The per-channel **command file** path for agent channel `n`:
@@ -398,6 +424,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                     mesh: None,
                     vertex_colors: None,
                     camera: valenx_viz::OrbitCamera::default(),
+                    kind2d: None,
                 },
             );
         }
@@ -424,6 +451,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         mesh: Some(mesh),
                         vertex_colors: None,
                         camera,
+                        kind2d: None,
                     },
                 );
             } else if kind == "gear" {
@@ -437,6 +465,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         mesh: Some(mesh),
                         vertex_colors: None,
                         camera,
+                        kind2d: None,
                     },
                 );
             } else if kind == "bracket" {
@@ -450,6 +479,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         mesh: Some(mesh),
                         vertex_colors: None,
                         camera,
+                        kind2d: None,
                     },
                 );
             } else if kind == "rcbeam" {
@@ -463,6 +493,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         mesh: Some(mesh),
                         vertex_colors: None,
                         camera,
+                        kind2d: None,
                     },
                 );
             } else if kind == "fem" {
@@ -480,6 +511,7 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         mesh: Some(mesh),
                         vertex_colors: Some(vertex_colors),
                         camera,
+                        kind2d: None,
                     },
                 );
             } else if kind == "dna" {
@@ -496,6 +528,47 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         mesh: None,
                         vertex_colors: None,
                         camera: valenx_viz::OrbitCamera::default(),
+                        kind2d: None,
+                    },
+                );
+            }
+        }
+        AgentCommand::Show2d { n: _, kind } => {
+            // Publish a 2-D engineering DRAWING into THIS unit's workspace tile,
+            // keyed by the channel `n` the reducer already knows (the wire `n`
+            // is ignored — the bridge routes by file channel, like every other
+            // command). The `workspace:<n>` pane then paints the flat egui
+            // drawing (see `dock_layout::render_workspace_body`'s 2-D branch).
+            // These are the user's originally-spec'd outputs and are distinct
+            // from the `show_3d` views — both can coexist for the same kind. An
+            // unknown kind is skipped safely (no panic, no placeholder churn).
+            if kind == "rcbeam" {
+                // Canonical 300×550 RC section + rebar, with the flexural rows.
+                let (view, lines) = crate::rcbeam_workbench::rcbeam_section_view();
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title: "RC Beam — section".into(),
+                        lines,
+                        mesh: None,
+                        vertex_colors: None,
+                        camera: valenx_viz::OrbitCamera::default(),
+                        kind2d: Some(crate::Workspace2dKind::RcSection(view)),
+                    },
+                );
+            } else if kind == "dna" {
+                // The 93-nt ATG·ORF·His6·stop construct as a feature map, with
+                // the sequence / CAI / GC rows (incl. the no-biosecurity note).
+                let (map, lines) = crate::dna_product::dna_construct_map();
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title: "DNA Construct — map".into(),
+                        lines,
+                        mesh: None,
+                        vertex_colors: None,
+                        camera: valenx_viz::OrbitCamera::default(),
+                        kind2d: Some(crate::Workspace2dKind::DnaMap(map)),
                     },
                 );
             }
@@ -1084,6 +1157,141 @@ mod tests {
             AgentCommand::Show3d {
                 n: None,
                 kind: "not-a-model".into(),
+            },
+        );
+        assert!(app.workspace_products.get(&1).is_none());
+    }
+
+    #[test]
+    fn show_2d_parses_with_and_without_n() {
+        // `show_2d` parses from its wire form; `n` is optional.
+        let s: AgentCommand = serde_json::from_str(r#"{"cmd":"show_2d","kind":"rcbeam"}"#).unwrap();
+        assert_eq!(
+            s,
+            AgentCommand::Show2d {
+                n: None,
+                kind: "rcbeam".into(),
+            }
+        );
+        let s2: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"show_2d","n":3,"kind":"dna"}"#).unwrap();
+        assert_eq!(
+            s2,
+            AgentCommand::Show2d {
+                n: Some(3),
+                kind: "dna".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn show_2d_rcbeam_publishes_a_section_drawing_into_the_workspace() {
+        // End-to-end through the REAL poll/reducer path: the agent appends a
+        // `show_2d` rcbeam line on channel 1; the first poll runs it and the
+        // unit's workspace product is a 2-D RC SECTION drawing (kind2d =
+        // Some(RcSection), mesh None) carrying the flexural rows.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "show2d_rcbeam");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"show_2d\",\"kind\":\"rcbeam\"}\n").unwrap();
+
+        assert!(app.workspace_products.is_empty());
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("channel-1 product set by show_2d rcbeam");
+        // It's a 2-D drawing: no mesh, a RcSection kind2d.
+        assert!(product.mesh.is_none(), "rcbeam 2-D carries no 3-D mesh");
+        match product.kind2d.as_ref() {
+            Some(crate::Workspace2dKind::RcSection(view)) => {
+                assert_eq!(view.width_mm, 300.0);
+                assert_eq!(view.n_bars, 3);
+                assert!(view.bar_dia_mm > 0.0);
+                // The flexural rows came along.
+                assert!(
+                    product.lines.iter().any(|l| l.contains("nominal Mn")),
+                    "section drawing carries the Mn row: {:?}",
+                    product.lines
+                );
+            }
+            other => panic!("expected RcSection kind2d, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_2d_dna_publishes_a_construct_map_into_the_workspace() {
+        // End-to-end through the REAL poll/reducer path: the agent appends a
+        // `show_2d` dna line on channel 1; the first poll runs it and the unit's
+        // workspace product is a 2-D DNA CONSTRUCT MAP (kind2d = Some(DnaMap)
+        // with features non-empty spanning total_nt, mesh None) carrying the
+        // sequence rows.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "show2d_dna");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"show_2d\",\"kind\":\"dna\"}\n").unwrap();
+
+        assert!(app.workspace_products.is_empty());
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("channel-1 product set by show_2d dna");
+        assert!(product.mesh.is_none(), "dna 2-D carries no 3-D mesh");
+        match product.kind2d.as_ref() {
+            Some(crate::Workspace2dKind::DnaMap(map)) => {
+                assert_eq!(map.total_nt, 93, "the canonical construct is 93 nt");
+                assert!(!map.features.is_empty(), "the map has feature spans");
+                // Every feature is an in-bounds half-open interval and the spans
+                // collectively cover the full construct (a 0-start feature and a
+                // feature ending exactly at total_nt).
+                for f in &map.features {
+                    assert!(f.start < f.end, "{}: start < end", f.label);
+                    assert!(f.end <= map.total_nt, "{}: end within total_nt", f.label);
+                }
+                assert!(
+                    map.features.iter().any(|f| f.start == 0),
+                    "a feature starts at 0 (the ATG/ORF)"
+                );
+                assert!(
+                    map.features.iter().any(|f| f.end == map.total_nt),
+                    "a feature reaches total_nt (the stop)"
+                );
+                // The codon-optimisation rows came along (incl. the honesty note).
+                assert!(
+                    product.lines.iter().any(|l| l.contains("GC content")),
+                    "map carries the GC row: {:?}",
+                    product.lines
+                );
+                assert!(
+                    product
+                        .lines
+                        .iter()
+                        .any(|l| l.contains("NOT a biosecurity screen")),
+                    "the no-biosecurity-screen note is present: {:?}",
+                    product.lines
+                );
+            }
+            other => panic!("expected DnaMap kind2d, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_2d_unknown_kind_is_skipped() {
+        // An unknown `kind` is a safe no-op (no product inserted, no panic).
+        let mut app = ValenxApp::default();
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Show2d {
+                n: None,
+                kind: "not-a-drawing".into(),
             },
         );
         assert!(app.workspace_products.get(&1).is_none());

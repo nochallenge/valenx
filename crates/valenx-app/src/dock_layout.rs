@@ -336,6 +336,32 @@ fn render_workspace_body(
         }
     }
 
+    // A 2-D drawing product (a `show_2d` command set `kind2d: Some`) paints a
+    // flat egui engineering drawing (no wgpu) — sits *between* the 3-D viewport
+    // and the text card. Read through a short immutable borrow (no camera
+    // mutation, so nothing is held across it).
+    let kind2d = idx
+        .and_then(|i| app.workspace_products.get(&i))
+        .and_then(|p| p.kind2d.clone());
+    if let Some(kind2d) = kind2d {
+        // Take the whole remaining tile rect; hover-only (the drawing is
+        // non-interactive). A degenerate rect just paints nothing.
+        let avail = ui.available_size();
+        let (rect, _response) = ui.allocate_exact_size(
+            egui::vec2(avail.x.max(16.0), avail.y.max(16.0)),
+            egui::Sense::hover(),
+        );
+        match kind2d {
+            crate::Workspace2dKind::RcSection(view) => {
+                paint_rc_section(ui, rect, &view);
+            }
+            crate::Workspace2dKind::DnaMap(map) => {
+                paint_dna_map(ui, rect, &map);
+            }
+        }
+        return;
+    }
+
     // Fall-through: text card / placeholder. Re-borrow the product fresh (a
     // short immutable borrow) — it was deliberately not held across the 3-D
     // branch's camera mutation above.
@@ -466,6 +492,350 @@ fn render_tile_mesh_3d(
     // Mesh bounds for the caller's double-click-to-frame.
     let aabb = crate::viewport::mesh_aabb(&mesh.mesh);
     Some((response, aabb))
+}
+
+/// Paint the **RC-beam section + rebar** 2-D drawing (the user's spec'd output)
+/// into `rect` with the egui painter — no wgpu. Draws a filled concrete
+/// rectangle scaled to fit the rect (aspect preserved), the tension bars as
+/// filled circles near the bottom at `cover`, width/depth dimension lines with
+/// labels, and the key flexural numbers as a small text block beside the
+/// section. Legible at small tile sizes (clamped fonts). Pure painting — reads
+/// only the plain-data [`crate::RcSectionView`].
+fn paint_rc_section(ui: &egui::Ui, rect: egui::Rect, view: &crate::RcSectionView) {
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    // Theme-derived stroke for dimension lines.
+    let dim_stroke = egui::Stroke::new(1.0, weak);
+    // Concrete fill + rebar colours (engineering-drawing palette, theme-neutral).
+    let concrete = egui::Color32::from_rgb(176, 176, 180);
+    let concrete_edge = egui::Color32::from_rgb(96, 96, 100);
+    let rebar = egui::Color32::from_rgb(40, 40, 44);
+
+    if rect.width() < 24.0 || rect.height() < 24.0 {
+        return; // too small to draw anything legible
+    }
+
+    // Clamp a readable font to the tile size.
+    let base = (rect.height() * 0.045).clamp(9.0, 13.0);
+    let title_font = egui::FontId::proportional(base + 2.0);
+    let label_font = egui::FontId::proportional(base);
+    let small_font = egui::FontId::proportional((base - 1.0).max(8.0));
+
+    // Title.
+    let pad = 8.0;
+    let mut cursor_y = rect.top() + pad;
+    painter.text(
+        egui::pos2(rect.left() + pad, cursor_y),
+        egui::Align2::LEFT_TOP,
+        "RC Beam — section",
+        title_font.clone(),
+        ink,
+    );
+    cursor_y += title_font.size + 6.0;
+
+    // Split the remaining area: the section drawing on the left ~58 %, the
+    // numbers block on the right. The drawing keeps the section's true aspect.
+    let body_top = cursor_y;
+    let body = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + pad, body_top),
+        egui::pos2(rect.right() - pad, rect.bottom() - pad),
+    );
+    if body.height() < 16.0 {
+        return;
+    }
+    let draw_w = body.width() * 0.56;
+    // Leave headroom inside the draw area for the dimension lines + labels.
+    let margin = (base * 2.2).min(draw_w * 0.28).min(body.height() * 0.22);
+    let avail_w = (draw_w - 2.0 * margin).max(1.0);
+    let avail_h = (body.height() - 2.0 * margin).max(1.0);
+
+    // Scale to fit the section's b×h into the available draw box (aspect kept).
+    // Work in f32 (egui geometry units) — px-per-mm scale × mm dimensions.
+    let b = view.width_mm.max(1.0) as f32;
+    let h = view.depth_mm.max(1.0) as f32;
+    let scale = (avail_w / b).min(avail_h / h);
+    let sec_w = b * scale;
+    let sec_h = h * scale;
+    // Centre the section in the left draw area.
+    let cx = body.left() + margin + avail_w * 0.5;
+    let cy = body.top() + margin + avail_h * 0.5;
+    let sec = egui::Rect::from_center_size(
+        egui::pos2(cx, cy),
+        egui::vec2(sec_w.max(2.0), sec_h.max(2.0)),
+    );
+
+    // Concrete prism (filled + edged).
+    painter.rect_filled(sec, 0.0, concrete);
+    painter.rect_stroke(sec, 0.0, egui::Stroke::new(1.5, concrete_edge));
+
+    // Tension rebars: n filled circles inset from the faces, sitting `cover`
+    // up from the soffit. Bar radius from the real diameter (scaled), clamped
+    // so it stays visible but never overflows the section.
+    let cover_px = view.cover_mm.max(0.0) as f32 * scale;
+    let bar_r = (view.bar_dia_mm as f32 * 0.5 * scale).clamp(1.5, (sec_h * 0.18).max(1.5));
+    let bar_y = sec.bottom() - cover_px.max(bar_r + 1.0);
+    let n = view.n_bars.max(1);
+    // Inset the outermost bar centres from the side faces by `cover` (or a bit
+    // more so the drawn circle clears the edge).
+    let inset = cover_px.max(bar_r + 1.0);
+    let span_l = sec.left() + inset;
+    let span_r = sec.right() - inset;
+    for k in 0..n {
+        let t = if n > 1 {
+            k as f32 / (n - 1) as f32
+        } else {
+            0.5
+        };
+        let x = if n > 1 {
+            span_l + t * (span_r - span_l)
+        } else {
+            sec.center().x
+        };
+        painter.circle_filled(egui::pos2(x, bar_y), bar_r, rebar);
+    }
+
+    // Width dimension line below the section (with end ticks + label).
+    let dim_off = margin * 0.55;
+    let wy = sec.bottom() + dim_off;
+    painter.line_segment(
+        [egui::pos2(sec.left(), wy), egui::pos2(sec.right(), wy)],
+        dim_stroke,
+    );
+    let tick = 3.0;
+    painter.line_segment(
+        [
+            egui::pos2(sec.left(), wy - tick),
+            egui::pos2(sec.left(), wy + tick),
+        ],
+        dim_stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(sec.right(), wy - tick),
+            egui::pos2(sec.right(), wy + tick),
+        ],
+        dim_stroke,
+    );
+    painter.text(
+        egui::pos2(sec.center().x, wy + 2.0),
+        egui::Align2::CENTER_TOP,
+        format!("b = {:.0} mm", view.width_mm),
+        small_font.clone(),
+        weak,
+    );
+
+    // Depth dimension line to the left of the section (vertical, label rotated
+    // is awkward in egui, so place a horizontal label at its middle-left).
+    let dx = sec.left() - dim_off;
+    painter.line_segment(
+        [egui::pos2(dx, sec.top()), egui::pos2(dx, sec.bottom())],
+        dim_stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(dx - tick, sec.top()),
+            egui::pos2(dx + tick, sec.top()),
+        ],
+        dim_stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(dx - tick, sec.bottom()),
+            egui::pos2(dx + tick, sec.bottom()),
+        ],
+        dim_stroke,
+    );
+    painter.text(
+        egui::pos2(dx - 3.0, sec.center().y),
+        egui::Align2::RIGHT_CENTER,
+        format!("h = {:.0}", view.depth_mm),
+        small_font.clone(),
+        weak,
+    );
+
+    // Numbers block on the right: the flexural readout rows, clamped/truncated.
+    let nums_x = body.left() + draw_w + pad;
+    let nums_w = (body.right() - nums_x).max(0.0);
+    if nums_w > 40.0 {
+        let mut y = body.top();
+        let line_h = label_font.size + 3.0;
+        for line in &view.lines {
+            if y + line_h > body.bottom() {
+                break; // ran out of vertical room
+            }
+            let text = truncate_to_width(line, nums_w, base);
+            painter.text(
+                egui::pos2(nums_x, y),
+                egui::Align2::LEFT_TOP,
+                text,
+                label_font.clone(),
+                ink,
+            );
+            y += line_h;
+        }
+    }
+}
+
+/// Paint the **DNA construct map** 2-D drawing (the user's spec'd output) into
+/// `rect` with the egui painter — no wgpu. Draws a horizontal baseline spanning
+/// the rect = the construct, each feature as a coloured block proportional to
+/// its nt span (ATG green / ORF blue / His6 orange / stop red) with its label,
+/// and a nt ruler (`0 … total_nt`) with a few ticks, plus the title + length.
+/// Legible at small tile sizes (clamped fonts, labels skipped when a block is
+/// too narrow). Pure painting — reads only the plain-data [`crate::DnaMapView`].
+fn paint_dna_map(ui: &egui::Ui, rect: egui::Rect, map: &crate::DnaMapView) {
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    let axis_stroke = egui::Stroke::new(1.0, weak);
+
+    if rect.width() < 40.0 || rect.height() < 40.0 || map.total_nt == 0 {
+        return;
+    }
+
+    let base = (rect.height() * 0.05).clamp(9.0, 13.0);
+    let title_font = egui::FontId::proportional(base + 2.0);
+    let label_font = egui::FontId::proportional(base);
+    let small_font = egui::FontId::proportional((base - 1.0).max(8.0));
+
+    let pad = 8.0;
+    // Title + length.
+    painter.text(
+        egui::pos2(rect.left() + pad, rect.top() + pad),
+        egui::Align2::LEFT_TOP,
+        format!("DNA Construct — map  ({} nt)", map.total_nt),
+        title_font.clone(),
+        ink,
+    );
+
+    // The track spans the rect width (inset by pad); place it vertically
+    // centred with room for above-track labels and a below-track ruler.
+    let track_l = rect.left() + pad;
+    let track_r = rect.right() - pad;
+    let track_w = (track_r - track_l).max(1.0);
+    let total = map.total_nt as f32;
+    let nt_to_x = |nt: usize| track_l + (nt as f32 / total) * track_w;
+
+    // Vertical layout: title at top, then a band of feature labels-above, the
+    // blocks, then the ruler.
+    let blocks_top = rect.top() + pad + title_font.size + 10.0 + label_font.size;
+    let block_h = (base * 1.6).clamp(12.0, 26.0);
+    let blocks_bottom = blocks_top + block_h;
+    if blocks_bottom + small_font.size + 14.0 > rect.bottom() {
+        // Not enough height — still draw the baseline + blocks without the ruler.
+    }
+
+    // Baseline (the full construct), drawn through the block band's vertical
+    // centre so zero-thickness features still read.
+    let mid_y = blocks_top + block_h * 0.5;
+    painter.line_segment(
+        [egui::pos2(track_l, mid_y), egui::pos2(track_r, mid_y)],
+        egui::Stroke::new(2.0, weak),
+    );
+
+    // Each feature: a coloured block proportional to its nt span. The ORF spans
+    // the whole coding region, so draw it slightly shorter so the ATG/His6/stop
+    // sub-features layered on top stay visible — alternate the vertical offset
+    // for wide vs narrow features so overlapping spans (ATG ⊂ ORF) don't hide.
+    for f in &map.features {
+        let start = f.start.min(map.total_nt);
+        let end = f.end.min(map.total_nt).max(start);
+        let x0 = nt_to_x(start);
+        let x1 = nt_to_x(end);
+        let w = (x1 - x0).max(2.0);
+        let color = egui::Color32::from_rgb(f.color[0], f.color[1], f.color[2]);
+        // The big ORF block is drawn as a thinner bar centred on the baseline;
+        // the short features (ATG/His6/stop) as full-height blocks above it so
+        // they remain legible where they overlap the ORF.
+        let is_orf = f.label == "ORF";
+        let blk = if is_orf {
+            egui::Rect::from_min_max(
+                egui::pos2(x0, mid_y - block_h * 0.18),
+                egui::pos2(x0 + w, mid_y + block_h * 0.18),
+            )
+        } else {
+            egui::Rect::from_min_max(
+                egui::pos2(x0, blocks_top),
+                egui::pos2(x0 + w, blocks_bottom),
+            )
+        };
+        painter.rect_filled(blk, 2.0, color);
+        painter.rect_stroke(blk, 2.0, egui::Stroke::new(1.0, ink.gamma_multiply(0.5)));
+
+        // Label: above the block for short features, below the title for the
+        // ORF. Skip if the block is too narrow to host even a short glyph and
+        // it's not the ORF (which always gets its label at the left).
+        let label_y = if is_orf {
+            blocks_bottom + 2.0
+        } else {
+            blocks_top - label_font.size - 1.0
+        };
+        if is_orf || w > base * 1.4 {
+            let anchor = egui::Align2::CENTER_TOP;
+            let lx = (x0 + x1) * 0.5;
+            painter.text(
+                egui::pos2(lx, label_y),
+                anchor,
+                &f.label,
+                small_font.clone(),
+                ink,
+            );
+        }
+    }
+
+    // nt ruler below the blocks: a horizontal axis with a few ticks + labels.
+    let ruler_y = blocks_bottom + small_font.size + 8.0;
+    if ruler_y + small_font.size < rect.bottom() {
+        painter.line_segment(
+            [egui::pos2(track_l, ruler_y), egui::pos2(track_r, ruler_y)],
+            axis_stroke,
+        );
+        // ~5 ticks across 0..total_nt (rounded), always including 0 and total.
+        let n_ticks = 4usize;
+        for k in 0..=n_ticks {
+            let nt = (map.total_nt * k) / n_ticks;
+            let x = nt_to_x(nt);
+            painter.line_segment(
+                [egui::pos2(x, ruler_y - 3.0), egui::pos2(x, ruler_y + 3.0)],
+                axis_stroke,
+            );
+            let anchor = if k == 0 {
+                egui::Align2::LEFT_TOP
+            } else if k == n_ticks {
+                egui::Align2::RIGHT_TOP
+            } else {
+                egui::Align2::CENTER_TOP
+            };
+            painter.text(
+                egui::pos2(x, ruler_y + 4.0),
+                anchor,
+                format!("{nt}"),
+                small_font.clone(),
+                weak,
+            );
+        }
+    }
+}
+
+/// Truncate `text` (with an ellipsis) to roughly fit `max_w` logical px at the
+/// given proportional font size, using a crude average-glyph-width estimate
+/// (`~0.5·size` per char). Good enough for the section drawing's numbers block —
+/// keeps a long readout row from overflowing the tile. Never panics on a short
+/// string (returns it unchanged).
+fn truncate_to_width(text: &str, max_w: f32, font_size: f32) -> String {
+    let avg_w = (font_size * 0.5).max(1.0);
+    let max_chars = (max_w / avg_w).floor() as usize;
+    if text.chars().count() <= max_chars || max_chars == 0 {
+        return text.to_string();
+    }
+    if max_chars <= 1 {
+        return "…".to_string();
+    }
+    let keep: String = text.chars().take(max_chars - 1).collect();
+    format!("{keep}…")
 }
 
 /// After the tree has been drawn, drain the per-workbench deferred requests
