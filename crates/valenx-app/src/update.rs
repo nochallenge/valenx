@@ -3172,11 +3172,17 @@ impl eframe::App for ValenxApp {
                 crate::car_workbench::draw_car_workbench(self, ctx);
             }
 
-            // Assistant activity sidebar (right) — a live in-app feed of what
-            // the AI assistant is building. On by default; toggle via View.
-            // In dock mode (non-product) the Assistant lives in the dock tree,
-            // so suppress the classic SidePanel to avoid a duplicate chat.
-            if !dock_owns_dockable_panels {
+            // Assistant activity sidebar — a live in-app feed of what the AI
+            // assistant is building. On by default; toggle via View. Renders
+            // ONLY in classic (non-dock) mode: a normal dock tab hosts the
+            // Assistant inside its dock tree, and an agent product tab
+            // (`dock_agent_only`) has its OWN per-unit Agent chat — in both
+            // dock cases the global Assistant panel would duplicate/overlap the
+            // dock, so it is suppressed whenever the dock is enabled. (Unlike
+            // the dockable workbenches above, `show_assistant_panel` defaults
+            // on, so gating it on `!dock_owns_dockable_panels` leaked it into
+            // every product tab — the layout glitch this fixes.)
+            if !self.dock_enabled {
                 crate::assistant_workbench::draw_assistant_workbench(self, ctx);
             }
         }
