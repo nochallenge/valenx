@@ -460,6 +460,37 @@ fn apply(app: &mut ValenxApp, n: usize, cmd: AgentCommand) {
                         camera,
                     },
                 );
+            } else if kind == "fem" {
+                // Steel cantilever (1 m, 50×100 mm, 5 kN tip): the real
+                // `valenx-fem` linear-static solve, shown as the GREY deformed
+                // boundary skin (per-vertex stress colour is a deferred renderer
+                // change) plus the FE-vs-analytical readout rows.
+                let (mesh, lines) = crate::fem_workbench::fem_beam_loaded_mesh();
+                let camera = crate::fem_workbench::fem_beam_camera(&mesh.mesh);
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title: "FEM cantilever (steel, 5 kN tip)".into(),
+                        lines,
+                        mesh: Some(mesh),
+                        camera,
+                    },
+                );
+            } else if kind == "dna" {
+                // Codon-optimised therapeutic-peptide construct + synthesis
+                // screen. This is a TEXT product (mesh: None) — the workspace
+                // card renders the sequence + CAI / GC / hairpin ΔG rows,
+                // including the explicit "NOT a biosecurity screen" note.
+                let (title, lines) = crate::dna_product::dna_construct_lines();
+                app.workspace_products.insert(
+                    n,
+                    crate::WorkspaceProduct {
+                        title,
+                        lines,
+                        mesh: None,
+                        camera: valenx_viz::OrbitCamera::default(),
+                    },
+                );
             }
         }
     }
@@ -981,6 +1012,58 @@ mod tests {
     #[test]
     fn show_3d_rcbeam_publishes_a_live_mesh_into_the_workspace() {
         assert_show_3d_kind_publishes_live_mesh("rcbeam", "valenx-rcbeam", "Mn");
+    }
+
+    #[test]
+    fn show_3d_fem_publishes_a_live_mesh_into_the_workspace() {
+        // The steel cantilever ships a non-empty Tri3 boundary skin (the deformed
+        // shape, grey) plus a readout row reporting the FE max deflection.
+        assert_show_3d_kind_publishes_live_mesh("fem", "valenx-fem-cantilever", "max deflection");
+    }
+
+    #[test]
+    fn show_3d_dna_publishes_a_text_card_into_the_workspace() {
+        // End-to-end through the REAL poll/reducer path: the agent appends a
+        // `show_3d` dna line on channel 1; the first poll runs it and the unit's
+        // workspace product is a TEXT card (mesh: None) with the codon-optimised
+        // construct, a GC / CAI line, and the explicit no-biosecurity-screen note.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "show3d_dna");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"show_3d\",\"kind\":\"dna\"}\n").unwrap();
+
+        assert!(app.workspace_products.is_empty());
+        poll_and_apply_agent_commands(&mut app);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("channel-1 product set by show_3d dna");
+        // A text card: no mesh, non-empty rows.
+        assert!(product.mesh.is_none(), "dna is a text card (no mesh)");
+        assert!(!product.lines.is_empty(), "dna card has rows");
+        // A GC / CAI line is present.
+        assert!(
+            product.lines.iter().any(|l| l.contains("GC content")),
+            "a GC content line is present: {:?}",
+            product.lines
+        );
+        assert!(
+            product.lines.iter().any(|l| l.starts_with("CAI")),
+            "a CAI line is present: {:?}",
+            product.lines
+        );
+        // The explicit honesty note that this is NOT a biosecurity screen.
+        assert!(
+            product
+                .lines
+                .iter()
+                .any(|l| l.contains("NOT a biosecurity screen")),
+            "the no-biosecurity-screen note is present: {:?}",
+            product.lines
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
