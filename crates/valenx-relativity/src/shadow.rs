@@ -132,7 +132,8 @@ fn observer_photon(
     let p_t = -1.0;
     let p_phi = lambda;
     let ptheta2 = eta - (lambda * lambda / (sin0 * sin0) - a * a) * cos0 * cos0;
-    let p_theta = beta.signum() * ptheta2.max(0.0).sqrt();
+    let theta_sign = if beta >= 0.0 { 1.0 } else { -1.0 };
+    let p_theta = theta_sign * ptheta2.max(0.0).sqrt();
 
     // Null condition g^{μν} p_μ p_ν = 0 → solve for p_r (ingoing).
     let s = ginv[0][0] * p_t * p_t

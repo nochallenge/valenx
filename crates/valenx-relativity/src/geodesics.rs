@@ -170,8 +170,10 @@ pub fn equatorial_state(
     let rhs = kind.norm() - (g_tt * ut * ut + 2.0 * g_tp * ut * up + g_pp * up * up);
     let ur2 = rhs / g_rr;
     // A genuinely forbidden radius gives a clearly negative uʳ²; tiny negative
-    // values are floating-point noise at a turning point (uʳ = 0), so clamp.
-    if !ur2.is_finite() || ur2 < -1e-9 {
+    // values are floating-point noise at a turning point (uʳ = 0). The floor
+    // scales with |uʳ²| so it stays meaningful away from M ≈ 1.
+    let neg_floor = -1e-9 * (1.0 + ur2.abs());
+    if !ur2.is_finite() || ur2 < neg_floor {
         return Err(RelativityError::OutsideDomain(format!(
             "no real radial velocity at r={r} (uʳ² = {ur2})"
         )));
@@ -218,14 +220,23 @@ fn rk4(bh: &KerrNewman, y: &[f64; 8], h: f64) -> Result<[f64; 8]> {
 
 /// One accepted adaptive step via step-doubling. Returns `(new_y, step_used,
 /// next_step)`.
-fn adaptive_step(bh: &KerrNewman, y: &[f64; 8], h0: f64, tol: f64) -> Result<([f64; 8], f64, f64)> {
+fn adaptive_step(
+    bh: &KerrNewman,
+    y: &[f64; 8],
+    h0: f64,
+    tol: f64,
+    min_h: f64,
+) -> Result<([f64; 8], f64, f64)> {
     let mut h = h0;
     loop {
         let big = rk4(bh, y, h)?;
         let mid = rk4(bh, y, 0.5 * h)?;
         let two = rk4(bh, &mid, 0.5 * h)?;
         let err = (0..8).map(|i| (two[i] - big[i]).abs()).fold(0.0, f64::max);
-        if err <= tol || h <= 1e-9 {
+        // Accept when within tolerance, or when the step has shrunk to the
+        // scale-relative floor — there we are beside a singularity and the tiny
+        // step already bounds the local error.
+        if err <= tol || h <= min_h {
             // Richardson-extrapolated (5th-order) accepted value.
             let y_new: [f64; 8] = std::array::from_fn(|i| two[i] + (two[i] - big[i]) / 15.0);
             let grow = if err > 0.0 {
@@ -241,6 +252,9 @@ fn adaptive_step(bh: &KerrNewman, y: &[f64; 8], h0: f64, tol: f64) -> Result<([f
 
 /// Integrate a geodesic from `init` until a stop condition in `opts` fires.
 ///
+/// Note: `r_escape` should lie beyond any bound orbit's aphelion — a bound
+/// orbit sampled past `r_escape` while moving outward is reported as `Escaped`.
+///
 /// # Errors
 /// [`RelativityError::CoordinateSingularity`] if the path reaches a point where
 /// the metric breaks down (e.g. a horizon) before a clean capture/escape.
@@ -254,6 +268,7 @@ pub fn integrate_geodesic(
     ];
     let mut lambda = 0.0;
     let mut h = opts.step;
+    let min_h = opts.step.abs() * 1e-10;
     let mut states = vec![init];
     let mut lambdas = vec![0.0];
 
@@ -281,7 +296,7 @@ pub fn integrate_geodesic(
                 stop: StopReason::Limit,
             });
         }
-        let (yn, used, next) = adaptive_step(bh, &y, h, opts.tol)?;
+        let (yn, used, next) = adaptive_step(bh, &y, h, opts.tol, min_h)?;
         y = yn;
         lambda += used;
         h = next;
@@ -392,6 +407,7 @@ pub fn orbit_precession(bh: &KerrNewman, r_peri: f64, r_apo: f64) -> Result<f64>
         init.x[0], init.x[1], init.x[2], init.x[3], init.u[0], init.u[1], init.u[2], init.u[3],
     ];
     let mut h = (r2 - r1) / 50.0;
+    let min_h = h.abs() * 1e-10;
     let tol = 1e-12;
     let mut lambda = 0.0;
     let max_lambda = 1e9;
@@ -399,7 +415,7 @@ pub fn orbit_precession(bh: &KerrNewman, r_peri: f64, r_apo: f64) -> Result<f64>
     // the next perihelion: u^r crossing from negative back to positive.
     for _ in 0..5_000_000 {
         let prev = y;
-        let (yn, used, next) = adaptive_step(bh, &y, h, tol)?;
+        let (yn, used, next) = adaptive_step(bh, &y, h, tol, min_h)?;
         y = yn;
         h = next;
         lambda += used;
