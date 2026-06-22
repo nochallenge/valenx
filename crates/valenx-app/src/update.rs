@@ -1009,6 +1009,23 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Parametric Sketch (constraints)
+                    // panel — the in-house valenx-sketch constraint sketcher.
+                    // Also reachable from Part Design → "Parametric Sketch
+                    // (constraints)". Off by default.
+                    if ui
+                        .checkbox(&mut self.show_param_sketch, "Parametric Sketch")
+                        .on_hover_text(
+                            "Show / hide the right-side Parametric Sketch (constraints) panel — \
+                             the in-house valenx-sketch constraint sketcher: draw lines / circles \
+                             / arcs, apply geometric + dimensional constraints, Solve with \
+                             under/over-constrained DOF feedback, then Pad/extrude into a 3-D \
+                             solid. Shares its sketch with the Mesh Toolbox's Sketcher section.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Geomatics Workbench — native
                     // geodesic calculations (valenx-geomatics). Off by default.
                     if ui
@@ -2304,6 +2321,21 @@ impl eframe::App for ValenxApp {
                             self.cad.focus_sketch();
                             ui.close_menu();
                         }
+                        if ui
+                            .button("Parametric Sketch (constraints)")
+                            .on_hover_text(
+                                "Open the in-house constraint sketcher (valenx-sketch): draw \
+                                 lines / circles / arcs, apply geometric (Horizontal, Vertical, \
+                                 Parallel, Tangent, …) + dimensional (Distance, Angle, Radius, \
+                                 Length) constraints, then Solve — with under/over-constrained \
+                                 DOF feedback — and Pad/extrude into a 3-D solid. The more \
+                                 powerful, fully-constrained alternative to the polygon canvas.",
+                            )
+                            .clicked()
+                        {
+                            self.show_param_sketch = true;
+                            ui.close_menu();
+                        }
                         ui.separator();
                         ui.label(egui::RichText::new("Add feature").weak().small());
                         if ui
@@ -3275,6 +3307,14 @@ impl eframe::App for ValenxApp {
             // Parametric-CAD workbench (right) — named parameters driving sketch
             // geometry on valenx-solvespace-3d. Off unless toggled via View.
             crate::cad_workbench::draw_cad_workbench(self, ctx);
+
+            // Parametric Sketch (constraints) workbench (right) — first-class,
+            // discoverable host for the in-house valenx-sketch constraint
+            // sketcher (draw → constrain → Solve w/ DOF feedback → extrude).
+            // Off unless toggled via Part Design → "Parametric Sketch
+            // (constraints)". Shares its sketch with the Mesh Toolbox's
+            // Sketcher section.
+            crate::param_sketch_panel::draw_param_sketch_workbench(self, ctx);
 
             // Antenna workbench (right) — parabolic-dish gain / beamwidth on
             // valenx-antenna. Off unless toggled via View.

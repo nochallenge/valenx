@@ -1204,6 +1204,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "bjt" => app.show_bjt_workbench = on,
         "bmr" => app.show_bmr_workbench = on,
         "bolt" => app.show_bolt_workbench = on,
+        "paramsketch" => app.show_param_sketch = on,
         "geomatics" => app.show_geomatics_workbench = on,
         "opamp" => app.show_opamp_workbench = on,
         "led" => app.show_led_workbench = on,

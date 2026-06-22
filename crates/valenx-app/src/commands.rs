@@ -291,7 +291,7 @@ pub fn dispatch(app: &mut ValenxApp, kind: &CommandKind) {
 /// flooding the user with thousands of lines on a busy machine.
 pub const AUDIT_TAIL_DEFAULT_N: usize = 50;
 
-const COMMANDS: [Command; 65] = [
+const COMMANDS: [Command; 66] = [
     Command {
         id: CommandId("file.new-project"),
         label: "File: New project…",
@@ -631,6 +631,12 @@ const COMMANDS: [Command; 65] = [
         label: "View: Toggle Parametric CAD",
         shortcut: None,
         invoke: |app| app.show_cad_workbench = !app.show_cad_workbench,
+    },
+    Command {
+        id: CommandId("view.toggle-param-sketch"),
+        label: "View: Toggle Parametric Sketch (constraints)",
+        shortcut: None,
+        invoke: |app| app.show_param_sketch = !app.show_param_sketch,
     },
     Command {
         id: CommandId("view.toggle-draft2d"),
@@ -1052,6 +1058,7 @@ mod tests {
                 a.show_frames_workbench,
                 a.show_neuro_workbench,
                 a.show_cad_workbench,
+                a.show_param_sketch,
                 a.show_draft2d_workbench,
                 a.show_reinforcement_workbench,
                 a.show_render_workbench,
@@ -1063,9 +1070,10 @@ mod tests {
             ]
         }
 
-        // The 25 new entries. Exclude two pre-existing `view.toggle-*`
-        // commands that aren't workbench flag-flips: `mesh-toolbox` (runs
-        // through a method) and `shading` (toggles render mode, not a panel).
+        // The workbench-toggle entries. Exclude two pre-existing
+        // `view.toggle-*` commands that aren't workbench flag-flips:
+        // `mesh-toolbox` (runs through a method) and `shading` (toggles
+        // render mode, not a panel).
         let toggles: Vec<&Command> = static_commands()
             .iter()
             .filter(|c| {
@@ -1074,7 +1082,7 @@ mod tests {
                     && c.id.0 != "view.toggle-shading"
             })
             .collect();
-        assert_eq!(toggles.len(), 25, "expected 25 workbench-toggle commands");
+        assert_eq!(toggles.len(), 26, "expected 26 workbench-toggle commands");
 
         // One app, all flags start false; each command flips its own flag
         // false→true exactly once. A wrong-flag closure surfaces as a

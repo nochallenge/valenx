@@ -29,6 +29,7 @@ fn run_frame(app: &mut ValenxApp) {
         crate::neuro_workbench::draw_neuro_workbench(app, ctx);
         crate::fem_workbench::draw_fem_workbench(app, ctx);
         crate::cfd_workbench::draw_cfd_workbench(app, ctx);
+        crate::param_sketch_panel::draw_param_sketch_workbench(app, ctx);
     });
 }
 
@@ -47,6 +48,7 @@ fn all_coverage_workbenches_draw_when_shown_without_panic() {
     app.show_neuro_workbench = true;
     app.show_fem_workbench = true;
     app.show_cfd_workbench = true;
+    app.show_param_sketch = true;
     // Two frames: render, then re-render against retained state.
     run_frame(&mut app);
     run_frame(&mut app);
