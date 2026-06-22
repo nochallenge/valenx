@@ -49,13 +49,21 @@
 mod autodiff;
 pub mod curvature;
 pub mod metric;
+pub mod observables;
 pub mod spacetimes;
 pub mod tensor;
+pub mod thermo;
+pub mod units;
 
 pub use autodiff::{Dual, HyperDual, Scalar};
 pub use curvature::{curvature_at, Curvature};
 pub use metric::{CoordSystem, Spacetime};
+pub use observables::{
+    ergosphere_radius, gravitational_redshift, horizons, isco, photon_sphere, shadow_radius,
+    Horizons, OrbitSense,
+};
 pub use spacetimes::{kerr, reissner_nordstrom, schwarzschild, KerrNewman, Minkowski};
+pub use thermo::{thermodynamics, Thermodynamics};
 
 use thiserror::Error;
 
@@ -81,6 +89,12 @@ pub enum RelativityError {
     /// The requested point lies outside the metric's valid domain.
     #[error("point outside domain: {0}")]
     OutsideDomain(String),
+
+    /// No closed form is implemented for this quantity at these parameters
+    /// (e.g. an ISCO with both spin and charge); the numerical geodesic path
+    /// covers those cases instead.
+    #[error("unsupported: {0}")]
+    Unsupported(String),
 }
 
 /// Result alias for fallible relativity computations.
