@@ -1015,6 +1015,10 @@ pub(crate) fn materialize_pending(app: &mut ValenxApp, n: usize) {
         return;
     };
 
+    // Keep the wire `kind` to stamp the confidence badge after the build: the
+    // `kind` binding is consumed by the `Show2d` reducer path below.
+    let kind_for_badge = kind.clone();
+
     // Take any title-only placeholder card the `new_unit` title path inserted
     // (when both `kind` and `title` were given): capture its heading and REMOVE
     // it so the build below sees an empty slot — exactly as the old inline
@@ -1073,6 +1077,16 @@ pub(crate) fn materialize_pending(app: &mut ValenxApp, n: usize) {
                 );
             }
         }
+    }
+
+    // CONFIDENCE BADGE: stamp one honest validation line as the final readout
+    // entry of every built product. Wired centrally here (not in each producer)
+    // so the badge is uniform and conflict-free; it then flows into BOTH the
+    // workspace readout tile and the agent-feed post below.
+    if let Some(product) = app.workspace_products.get_mut(&n) {
+        product
+            .lines
+            .push(crate::confidence::confidence_for(&kind_for_badge).badge_line());
     }
 
     // SHOW THE BUILD: now that the unit's real product exists, post its readout

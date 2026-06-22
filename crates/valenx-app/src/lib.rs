@@ -46,6 +46,7 @@ pub mod beam_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
+pub mod confidence;
 pub mod draft2d_workbench;
 pub mod fem_workbench;
 pub mod headless;
