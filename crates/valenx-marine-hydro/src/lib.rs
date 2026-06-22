@@ -534,19 +534,11 @@ impl Hull {
     #[must_use]
     pub fn length_of_run(&self) -> f64 {
         let cp = self.prismatic_coefficient();
-        // Guard the LCB-term pole: the denominator (4·Cp − 1) vanishes at
-        // Cp = 0.25 — far below Holtrop's validity band (~0.55–0.85) but
-        // reachable from a degenerate UI block-coefficient entry. Unguarded
-        // it returns ±inf/NaN and poisons the entire resistance readout;
-        // clamp the magnitude (sign-preserving) so a degenerate Cp degrades
-        // to a finite (if non-physical) value instead of NaN.
-        let denom = 4.0 * cp - 1.0;
-        let denom = if denom.abs() < 1e-6 {
-            1e-6_f64.copysign(denom)
-        } else {
-            denom
-        };
-        self.length_m * (1.0 - cp + 0.06 * cp * self.lcb_percent / denom)
+        // Pure Holtrop formula. The (4·Cp − 1) term is singular at Cp = 0.25,
+        // but that is far outside Holtrop's validity band — `resistance_at`
+        // rejects out-of-band Cp before this is evaluated, so the resistance
+        // path never reaches the pole.
+        self.length_m * (1.0 - cp + 0.06 * cp * self.lcb_percent / (4.0 * cp - 1.0))
     }
 
     /// **Holtrop-Mennen wetted-surface estimate** `S` (m^2) from the principal
@@ -753,6 +745,22 @@ impl Hull {
     ) -> Result<ResistancePoint, HydroError> {
         let v = require_positive("speed", speed_ms)?;
         water.validate()?;
+
+        // Holtrop-Mennen is a statistical regression fitted to displacement
+        // hulls with prismatic coefficient ~0.55..0.85. Outside that band the
+        // form-factor and wave-resistance powf terms hit poles (the LCB term
+        // at Cp=0.25, the (0.95-Cp) term at Cp=0.95) and return NaN. Reject an
+        // out-of-band hull with an honest domain error so the readout reports
+        // "unavailable" instead of displaying NaN. (Reachable from the Marine
+        // workbench: Cp = Cb / C_m with C_m fixed at 0.98.)
+        const HOLTROP_CP_MIN: f64 = 0.55;
+        const HOLTROP_CP_MAX: f64 = 0.85;
+        require_range(
+            "prismatic coefficient Cp (Holtrop-Mennen validity 0.55..0.85)",
+            self.prismatic_coefficient(),
+            HOLTROP_CP_MIN,
+            HOLTROP_CP_MAX,
+        )?;
 
         let s = self.wetted_surface();
         let re = reynolds_number(v, self.length_m, water.kinematic_viscosity)?;
