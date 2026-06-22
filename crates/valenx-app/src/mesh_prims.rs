@@ -596,6 +596,91 @@ impl MeshBuilder {
         start..self.nodes.len()
     }
 
+    /// **Loft** a sequence of closed 3-D cross-`sections` (each the *same*
+    /// vertex count `m`, listed in a consistent winding) into a skinned tube by
+    /// joining consecutive sections ring-to-ring with quads — the
+    /// section-to-section skin pattern from `valenx-gears/src/solid.rs:157`
+    /// (`extrude_twisted`), generalised to arbitrary 3-D rings. This is the
+    /// primitive an aircraft wing (root + tip airfoil sections), a marine hull
+    /// (a dozen station sections along the length), or any swept body needs when
+    /// the section shape *and* its placement vary station to station — something
+    /// neither [`revolve`](Self::revolve) (axisymmetric) nor
+    /// [`extrude`](Self::extrude) (constant profile, straight +z) can express.
+    ///
+    /// With `cap_ends` true the first and last sections are closed with a
+    /// centroid-fanned cap (wound so the end normals point outward along the
+    /// loft), making a watertight solid; with it false the tube is left open
+    /// (e.g. when both ends are sealed some other way). Sections with fewer than
+    /// 2 entries, or any ragged section whose length differs from the first, are
+    /// rejected (returns an empty range). Built outward-facing for sections
+    /// wound counter-clockwise as seen looking back along the loft direction.
+    ///
+    /// Returns the appended node [`Range<usize>`]: `sections.len()·m` ring
+    /// vertices, plus one centroid per capped end.
+    pub fn loft(
+        &mut self,
+        sections: &[Vec<[f64; 3]>],
+        cap_ends: bool,
+        color: [f32; 3],
+    ) -> Range<usize> {
+        let start = self.nodes.len();
+        if sections.len() < 2 {
+            return start..self.nodes.len();
+        }
+        let m = sections[0].len();
+        if m < 2 || sections.iter().any(|s| s.len() != m) {
+            return start..self.nodes.len();
+        }
+        // One ring of `m` vertices per section, in append order.
+        let mut ring_base: Vec<u32> = Vec::with_capacity(sections.len());
+        for sec in sections {
+            ring_base.push(self.nodes.len() as u32);
+            for p in sec {
+                self.vert(Vector3::new(p[0], p[1], p[2]));
+            }
+        }
+        // Skin consecutive rings with quads (ring-to-ring band).
+        let mu = m as u32;
+        for w in 0..ring_base.len() - 1 {
+            let a = ring_base[w];
+            let b = ring_base[w + 1];
+            for i in 0..mu {
+                let j = (i + 1) % mu;
+                self.quad(a + i, a + j, b + j, b + i, color);
+            }
+        }
+        if cap_ends {
+            // Front cap (first section): centroid fan, wound to face back along
+            // the loft (−direction), i.e. the reverse of the side winding.
+            let s0 = &sections[0];
+            let mut c0 = Vector3::zeros();
+            for p in s0 {
+                c0 += Vector3::new(p[0], p[1], p[2]);
+            }
+            c0 /= m as f64;
+            let c0i = self.vert(c0);
+            let f0 = ring_base[0];
+            for i in 0..mu {
+                let j = (i + 1) % mu;
+                self.tri(c0i, f0 + j, f0 + i, color);
+            }
+            // Back cap (last section): centroid fan, opposite winding.
+            let sl = sections.last().unwrap();
+            let mut cl = Vector3::zeros();
+            for p in sl {
+                cl += Vector3::new(p[0], p[1], p[2]);
+            }
+            cl /= m as f64;
+            let cli = self.vert(cl);
+            let fl = *ring_base.last().unwrap();
+            for i in 0..mu {
+                let j = (i + 1) % mu;
+                self.tri(cli, fl + i, fl + j, color);
+            }
+        }
+        start..self.nodes.len()
+    }
+
     /// Append an **already-built [`Tri3`](ElementType::Tri3) mesh** (its nodes
     /// re-based onto this builder's node array) with one flat `color`,
     /// preserving the per-triangle colour lock-step. This is the bridge for
@@ -803,6 +888,54 @@ mod tests {
         // Side wall = 2·n tris; two caps = 2·n tris.
         assert_eq!(t, 2 * 4 + 2 * 4);
         assert_well_formed(&m, &c, t);
+    }
+
+    #[test]
+    fn loft_two_squares_is_a_capped_prism() {
+        // Lofting two identical unit squares at z=0 and z=2, capped, must yield a
+        // closed box: 2 rings of 4 + 2 cap centroids, and side band (2·m tris) +
+        // two caps (m tris each).
+        let m = 4;
+        let s0 = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+        let s1 = vec![[0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [1.0, 1.0, 2.0], [0.0, 1.0, 2.0]];
+        let mut b = MeshBuilder::new();
+        let range = b.loft(&[s0, s1], true, RED);
+        assert_eq!(range, 0..(2 * m + 2), "2 rings of m + 2 cap centroids");
+        let (mesh, c, t) = bake(b);
+        // Side band = 2·m tris (one quad per edge); two caps = m tris each.
+        assert_eq!(t, 2 * m + 2 * m);
+        assert_well_formed(&mesh, &c, t);
+        // The bbox spans the two stations and the unit square.
+        let max_z = mesh.nodes.iter().map(|p| p.z).fold(f64::MIN, f64::max);
+        assert!((max_z - 2.0).abs() < 1e-9, "loft spans the section z");
+    }
+
+    #[test]
+    fn loft_open_has_no_caps_and_rejects_ragged() {
+        // Open loft: just the side band (no cap centroids), so node count is
+        // exactly sections·m and triangles = 2·m·(sections-1).
+        let m = 6;
+        let ring = |z: f64| -> Vec<[f64; 3]> {
+            (0..m)
+                .map(|k| {
+                    let a = k as f64 / m as f64 * TAU;
+                    [a.cos(), a.sin(), z]
+                })
+                .collect()
+        };
+        let mut b = MeshBuilder::new();
+        let range = b.loft(&[ring(0.0), ring(1.0), ring(2.0)], false, RED);
+        assert_eq!(range, 0..(3 * m), "3 rings of m, no cap centroids");
+        let (mesh, c, t) = bake(b);
+        assert_eq!(t, 2 * m * 2, "two bands × 2·m tris");
+        assert_well_formed(&mesh, &c, t);
+        // Ragged sections (mismatched length) are rejected → empty range.
+        let mut b2 = MeshBuilder::new();
+        let bad = b2.loft(&[ring(0.0), vec![[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]], true, RED);
+        assert!(bad.is_empty(), "ragged sections rejected");
+        // A single section is also rejected.
+        let mut b3 = MeshBuilder::new();
+        assert!(b3.loft(&[ring(0.0)], true, RED).is_empty(), "one section rejected");
     }
 
     #[test]
