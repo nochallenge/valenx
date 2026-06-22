@@ -530,7 +530,10 @@ mod tests {
             .fold(f64::MIN, f64::max);
         // (The hex head's across-corners is wider, so only assert the thread
         // crest is at least the nominal radius — it must reach d/2 somewhere.)
-        assert!(max_rad >= major_r - 1e-9, "thread crest reaches the nominal radius");
+        assert!(
+            max_rad >= major_r - 1e-9,
+            "thread crest reaches the nominal radius"
+        );
     }
 
     #[test]
@@ -560,7 +563,10 @@ mod tests {
             "product colours aligned to the coloured path"
         );
         assert!(
-            product.lines.iter().any(|l| l.contains("width across flats")),
+            product
+                .lines
+                .iter()
+                .any(|l| l.contains("width across flats")),
             "keeps the ISO dimension readout"
         );
     }

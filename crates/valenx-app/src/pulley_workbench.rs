@@ -311,25 +311,17 @@ pub(crate) fn push_grooved_sheave(
     // point repeats the first so the lathe produces a watertight solid: the
     // bore wall, the two flat faces, and the V-groove rim.
     let profile = [
-        [bore_r, -half_w],   // bore edge, −z face
-        [rim_r, -half_w],    // rim, −z face
-        [groove_r, 0.0],     // bottom of the V at the mid-plane
-        [rim_r, half_w],     // rim, +z face
-        [bore_r, half_w],    // bore edge, +z face
-        [bore_r, -half_w],   // close the inner wall back to the start
+        [bore_r, -half_w], // bore edge, −z face
+        [rim_r, -half_w],  // rim, −z face
+        [groove_r, 0.0],   // bottom of the V at the mid-plane
+        [rim_r, half_w],   // rim, +z face
+        [bore_r, half_w],  // bore edge, +z face
+        [bore_r, -half_w], // close the inner wall back to the start
     ];
     b.revolve(&profile, centre, axis, 360.0, 36, rim_color);
     // Darker hub tube filling the bore (a short collar standing slightly proud).
     let hub_inner = bore_r * 0.45;
-    b.tube(
-        centre,
-        axis,
-        hub_inner,
-        bore_r,
-        half_w * 2.2,
-        24,
-        hub_color,
-    );
+    b.tube(centre, axis, hub_inner, bore_r, half_w * 2.2, 24, hub_color);
     start..b.node_count()
 }
 
@@ -624,8 +616,7 @@ mod tests {
         // coloured path (3/triangle), with both the cast-iron rim and the dark
         // hub colours present.
         let s = PulleyWorkbenchState::default();
-        let (mesh, colors, _parts) =
-            pulley_solid_mesh_parts(&s).expect("default tackle builds");
+        let (mesh, colors, _parts) = pulley_solid_mesh_parts(&s).expect("default tackle builds");
         assert_eq!(
             colors.len(),
             mesh.total_elements() * 3,

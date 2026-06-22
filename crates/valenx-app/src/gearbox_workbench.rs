@@ -275,7 +275,7 @@ fn gearbox_solid_mesh_parts(
     // True centre distances C = m·(z_a + z_b)/2 keep each meshing pair tangent.
     let c1 = GB_MODULE_MM * (s.stage1_in + s.stage1_out) as f64 / 2.0; // input ↔ layshaft
     let c2 = GB_MODULE_MM * (s.stage2_in + s.stage2_out) as f64 / 2.0; // layshaft ↔ output
-    // The two stages ride side-by-side on the layshaft: stack along +z.
+                                                                       // The two stages ride side-by-side on the layshaft: stack along +z.
     let zstack = GB_FACE_MM + 5.0;
 
     // Placement (teeth, centre-x, centre-z) in spin/animation order.
@@ -575,8 +575,7 @@ mod tests {
         // path (3 per triangle, triangle-major), with all three part colours
         // (housing / steel gears / dark shafts) present.
         let s = GearboxWorkbenchState::default();
-        let (mesh, colors, _parts) =
-            gearbox_solid_mesh_parts(&s).expect("default gearbox builds");
+        let (mesh, colors, _parts) = gearbox_solid_mesh_parts(&s).expect("default gearbox builds");
         assert_eq!(
             colors.len(),
             mesh.total_elements() * 3,

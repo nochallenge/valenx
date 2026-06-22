@@ -1844,7 +1844,8 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                                                 ui.input(|inp| inp.key_pressed(egui::Key::Escape));
                                             let lost_focus = resp.lost_focus();
                                             let enter = lost_focus
-                                                && ui.input(|inp| inp.key_pressed(egui::Key::Enter));
+                                                && ui
+                                                    .input(|inp| inp.key_pressed(egui::Key::Enter));
                                             if esc {
                                                 intent.cancel_group_rename = true;
                                             } else if enter || lost_focus {
@@ -3884,7 +3885,10 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert!(app.tab_bar.tabs[0].editing, "tab-title editor latched again");
+        assert!(
+            app.tab_bar.tabs[0].editing,
+            "tab-title editor latched again"
+        );
         assert!(
             app.tab_bar.group_renaming.is_none(),
             "beginning the tab rename cleared the group editor"
@@ -4620,9 +4624,15 @@ mod headless_ui_tests {
         // agent registry string must still light the right panel, not no-op.
         let mut app = ValenxApp::default();
         set_workbench_flag(&mut app, "gear", true);
-        assert!(app.show_gears_workbench, "kind 'gear' opens the gears workbench");
+        assert!(
+            app.show_gears_workbench,
+            "kind 'gear' opens the gears workbench"
+        );
         set_workbench_flag(&mut app, "bracket", true);
-        assert!(app.show_fem_workbench, "kind 'bracket' opens the FEM workbench");
+        assert!(
+            app.show_fem_workbench,
+            "kind 'bracket' opens the FEM workbench"
+        );
         set_workbench_flag(&mut app, "molecule", true);
         assert!(
             app.show_genetics_workbench,
@@ -4630,7 +4640,10 @@ mod headless_ui_tests {
         );
         // …and they clear back off.
         set_workbench_flag(&mut app, "gear", false);
-        assert!(!app.show_gears_workbench, "kind 'gear' clears its workbench");
+        assert!(
+            !app.show_gears_workbench,
+            "kind 'gear' clears its workbench"
+        );
     }
 
     #[test]

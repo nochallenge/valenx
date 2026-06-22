@@ -1065,7 +1065,10 @@ mod tests {
         // points, exactly what routes the product to the 2-D chart painter.
         for k in ["fft", "diffusion", "popdynamics"] {
             let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
-            assert_eq!(entry.kind, k, "entry.kind echoes the looked-up kind for {k}");
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
             let product = (entry.build)();
             assert!(product.mesh.is_none(), "{k}: a chart carries no mesh");
             assert!(product.image.is_none(), "{k}: a chart carries no image");
@@ -1073,7 +1076,10 @@ mod tests {
                 Some(crate::Workspace2dKind::Chart(d)) => d,
                 other => panic!("{k}: expected kind2d Some(Chart), got {other:?}"),
             };
-            assert!(!data.series.is_empty(), "{k}: chart has at least one series");
+            assert!(
+                !data.series.is_empty(),
+                "{k}: chart has at least one series"
+            );
             let total_points: usize = data.series.iter().map(|s| s.points.len()).sum();
             assert!(total_points > 1, "{k}: chart carries plottable points");
             for s in &data.series {
@@ -1210,13 +1216,29 @@ mod tests {
         // `run_gasdynamics` first; this guards the rest so a producer that
         // forgets to populate its readout can't slip into the catalogue.
         for k in [
-            "animate", "astro", "car", "cfd", "collision", "diffusion",
-            "draft2d", "fft", "fields", "frames", "gasdynamics", "geomatics",
-            "hvac", "interior", "neuro", "piping", "popdynamics", "render",
+            "animate",
+            "astro",
+            "car",
+            "cfd",
+            "collision",
+            "diffusion",
+            "draft2d",
+            "fft",
+            "fields",
+            "frames",
+            "gasdynamics",
+            "geomatics",
+            "hvac",
+            "interior",
+            "neuro",
+            "piping",
+            "popdynamics",
+            "render",
             "variant_effect",
         ] {
-            let product =
-                (lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}")).build)();
+            let product = (lookup(k)
+                .unwrap_or_else(|| panic!("registry resolves {k:?}"))
+                .build)();
             assert!(
                 !product.lines.is_empty(),
                 "{k}: product carries result rows for the agent chat"

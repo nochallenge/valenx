@@ -358,8 +358,8 @@ fn concentration_chart(s: &DiffusionWorkbenchState) -> Option<crate::ChartData> 
             (0..=n)
                 .map(|j| {
                     let x = -half + 2.0 * half * j as f64 / n as f64;
-                    let c =
-                        gaussian_point_source(s.mass, s.diffusivity_m2_s, x, s.time_s).unwrap_or(0.0);
+                    let c = gaussian_point_source(s.mass, s.diffusivity_m2_s, x, s.time_s)
+                        .unwrap_or(0.0);
                     [x, c]
                 })
                 .collect()

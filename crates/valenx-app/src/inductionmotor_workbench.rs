@@ -423,8 +423,7 @@ mod tests {
         // and the steel rotor assembly (inner rotor + shaft + fan) is a non-empty
         // mid-mesh range so the spinning part reads.
         let s = InductionMotorWorkbenchState::default();
-        let (mesh, colors, parts) =
-            motor_solid_mesh_parts(&s).expect("default motor builds");
+        let (mesh, colors, parts) = motor_solid_mesh_parts(&s).expect("default motor builds");
         assert_eq!(
             colors.len(),
             mesh.total_elements() * 3,

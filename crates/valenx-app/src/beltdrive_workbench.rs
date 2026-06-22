@@ -290,7 +290,7 @@ fn belt_band_mesh(
     // Direction from pulley 1 → pulley 2 and the in-plane perpendicular.
     let dir = (dz / c_dist, dy / c_dist); // (z, y)
     let perp = (-dir.1, dir.0); // rotate +90° in the (z, y) plane
-    // Open-belt tangent offset angle.
+                                // Open-belt tangent offset angle.
     let gamma = ((rho2 - rho1) / c_dist).clamp(-1.0, 1.0).asin();
 
     // A point on pulley `i` (centre `(zc, yc)`, radius `rho`) at angle `phi`
@@ -308,9 +308,9 @@ fn belt_band_mesh(
     // wraps pulley 1 over the MAJOR arc on the far side (from +(π/2+γ) round the
     // back to −(π/2+γ)), and pulley 2 over its arc on the near side.
     let a = PI / 2.0 + gamma; // upper contact, measured from dir
-    // Sample: pulley-1 wrap (the long way round, away from pulley 2), then
-    // tangent to pulley-2 lower contact, pulley-2 wrap (the long way round away
-    // from pulley 1), then tangent back. Build the closed centreline polyline.
+                              // Sample: pulley-1 wrap (the long way round, away from pulley 2), then
+                              // tangent to pulley-2 lower contact, pulley-2 wrap (the long way round away
+                              // from pulley 1), then tangent back. Build the closed centreline polyline.
     let arc_steps = 24usize;
     let mut center: Vec<(f64, f64)> = Vec::new();
 
@@ -356,13 +356,17 @@ fn belt_band_mesh(
         let (nz, ny) = (-ty / tl, tz / tl); // outward-ish normal in plane
         let base = mesh.nodes.len() as u32;
         // inner (−normal), −x
-        mesh.nodes.push(Vector3::new(belt_x - hw, y - ny * half_t, z - nz * half_t));
+        mesh.nodes
+            .push(Vector3::new(belt_x - hw, y - ny * half_t, z - nz * half_t));
         // outer (+normal), −x
-        mesh.nodes.push(Vector3::new(belt_x - hw, y + ny * half_t, z + nz * half_t));
+        mesh.nodes
+            .push(Vector3::new(belt_x - hw, y + ny * half_t, z + nz * half_t));
         // outer (+normal), +x
-        mesh.nodes.push(Vector3::new(belt_x + hw, y + ny * half_t, z + nz * half_t));
+        mesh.nodes
+            .push(Vector3::new(belt_x + hw, y + ny * half_t, z + nz * half_t));
         // inner (−normal), +x
-        mesh.nodes.push(Vector3::new(belt_x + hw, y - ny * half_t, z - nz * half_t));
+        mesh.nodes
+            .push(Vector3::new(belt_x + hw, y - ny * half_t, z - nz * half_t));
         let _ = base;
     }
     // Connect consecutive cross-sections (i → i+1, wrapping) into a tube of 4
@@ -467,18 +471,30 @@ fn beltdrive_solid_mesh_parts(
 
     // Open belt ⇒ same direction; the driven pulley is slower by the diameter
     // ratio (ω_driven = ω_driver · d_driver / d_driven). Presentation-scaled.
-    let ratio = if r_drn > 0.0 { (r_drv / r_drn) as f32 } else { 1.0 };
+    let ratio = if r_drn > 0.0 {
+        (r_drv / r_drn) as f32
+    } else {
+        1.0
+    };
     let parts = vec![
         crate::RigidPart {
             node_range: drv_range,
             axis: [1.0, 0.0, 0.0],
-            pivot: [drv_centre[0] as f32, drv_centre[1] as f32, drv_centre[2] as f32],
+            pivot: [
+                drv_centre[0] as f32,
+                drv_centre[1] as f32,
+                drv_centre[2] as f32,
+            ],
             rad_per_s: DRIVER_RAD_PER_S,
         },
         crate::RigidPart {
             node_range: drn_range,
             axis: [1.0, 0.0, 0.0],
-            pivot: [drn_centre[0] as f32, drn_centre[1] as f32, drn_centre[2] as f32],
+            pivot: [
+                drn_centre[0] as f32,
+                drn_centre[1] as f32,
+                drn_centre[2] as f32,
+            ],
             rad_per_s: DRIVER_RAD_PER_S * ratio,
         },
     ];

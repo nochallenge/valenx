@@ -346,11 +346,7 @@ fn polygon_area_centroid(poly: &[[f64; 2]]) -> (f64, f64, f64) {
     if signed_area.abs() < f64::EPSILON {
         return (0.0, 0.0, 0.0);
     }
-    (
-        signed_area.abs(),
-        cx / (3.0 * a2),
-        cy / (3.0 * a2),
-    )
+    (signed_area.abs(), cx / (3.0 * a2), cy / (3.0 * a2))
 }
 
 /// Second moments of area `(I_u, I_v)` of a simple polygon taken about
@@ -640,12 +636,12 @@ mod tests {
         let want_iu = b * h.powi(3) / 12.0 - (b - tw) * (h - 2.0 * tf).powi(3) / 12.0;
 
         let (iu, iv) = p.second_moment_of_area_mm4();
-        assert!(
-            (iu - want_iu).abs() < 1e-3,
-            "I_u got {iu}, want {want_iu}"
-        );
+        assert!((iu - want_iu).abs() < 1e-3, "I_u got {iu}, want {want_iu}");
         // Strong axis must be the larger one for a wide-flange.
-        assert!(iu > iv, "expected I_u ({iu}) > I_v ({iv}) for a wide flange");
+        assert!(
+            iu > iv,
+            "expected I_u ({iu}) > I_v ({iv}) for a wide flange"
+        );
 
         // Section modulus consistency S_u = I_u / (h/2).
         let (su, _) = p.section_modulus_mm3();

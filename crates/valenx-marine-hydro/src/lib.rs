@@ -99,9 +99,7 @@ use serde::{Deserialize, Serialize};
 
 // Re-export the hydrostatics hull so callers can build geometry once and feed
 // it to both crates without a second `use`.
-pub use valenx_marine::{
-    Hull as HydrostaticHull, FRESHWATER_DENSITY, GRAVITY, SEAWATER_DENSITY,
-};
+pub use valenx_marine::{Hull as HydrostaticHull, FRESHWATER_DENSITY, GRAVITY, SEAWATER_DENSITY};
 
 /// One knot in metres per second (1 nmi/h = 1852 m / 3600 s).
 pub const KNOT_MS: f64 = 1852.0 / 3600.0;
@@ -193,12 +191,7 @@ fn require_finite(quantity: &'static str, value: f64) -> Result<f64, HydroError>
     }
 }
 
-fn require_range(
-    quantity: &'static str,
-    value: f64,
-    lo: f64,
-    hi: f64,
-) -> Result<f64, HydroError> {
+fn require_range(quantity: &'static str, value: f64, lo: f64, hi: f64) -> Result<f64, HydroError> {
     if value.is_finite() && value >= lo && value <= hi {
         Ok(value)
     } else {
@@ -440,8 +433,12 @@ impl Hull {
         let beam_m = require_positive("beam", beam_m)?;
         let draft_m = require_positive("draft", draft_m)?;
         let volume_m3 = require_positive("displaced volume", volume_m3)?;
-        let midship_coefficient =
-            require_range("midship coefficient", midship_coefficient, f64::MIN_POSITIVE, 1.0)?;
+        let midship_coefficient = require_range(
+            "midship coefficient",
+            midship_coefficient,
+            f64::MIN_POSITIVE,
+            1.0,
+        )?;
         let waterplane_coefficient = require_range(
             "waterplane coefficient",
             waterplane_coefficient,
@@ -707,8 +704,7 @@ impl Hull {
         } else {
             1.732_5 - 0.7067 * cp
         };
-        let m1 = 0.014_04 * l / t - 1.752_54 * nabla.powf(1.0 / 3.0) / l - 4.793_23 * b / l
-            - c16;
+        let m1 = 0.014_04 * l / t - 1.752_54 * nabla.powf(1.0 / 3.0) / l - 4.793_23 * b / l - c16;
         // c15 and m2.
         let l3_over_v = l * l * l / nabla;
         let c15 = if l3_over_v < 512.0 {
@@ -722,7 +718,9 @@ impl Hull {
 
         let rho = water.density;
         let g = GRAVITY;
-        Ok(c1 * c2 * c5
+        Ok(c1
+            * c2
+            * c5
             * nabla
             * rho
             * g

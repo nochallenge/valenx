@@ -339,16 +339,23 @@ fn aircraft_solid_mesh_colored(s: &FixedWingWorkbenchState) -> Option<(Mesh, Vec
     let nose = fus_len * 0.5;
     let tail = -fus_len * 0.5;
     let profile: Vec<[f64; 2]> = vec![
-        [0.0, nose],                 // nose apex
+        [0.0, nose], // nose apex
         [max_r * 0.45, nose - fus_len * 0.10],
         [max_r * 0.85, nose - fus_len * 0.22],
-        [max_r, fus_len * 0.10],     // cabin (fullest, slightly fwd of centre)
+        [max_r, fus_len * 0.10], // cabin (fullest, slightly fwd of centre)
         [max_r * 0.95, 0.0],
         [max_r * 0.70, tail + fus_len * 0.28],
         [max_r * 0.34, tail + fus_len * 0.06],
-        [0.0, tail],                 // tailcone tip
+        [0.0, tail], // tailcone tip
     ];
-    b.revolve(&profile, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], 360.0, 24, FUSELAGE);
+    b.revolve(
+        &profile,
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        360.0,
+        24,
+        FUSELAGE,
+    );
 
     // Main wing: tapered + swept, finite-thickness airfoil. Root chord 1.5×
     // mean, tip 0.55×, gentle aft sweep, 12 % thick. Lofted root→tip per side.
@@ -357,7 +364,11 @@ fn aircraft_solid_mesh_colored(s: &FixedWingWorkbenchState) -> Option<(Mesh, Vec
     let tip_sweep = -chord * 0.4;
     let root_y = span * 0.05;
     for side in [1.0_f64, -1.0] {
-        let root = horiz_section(&airfoil_section(root_c, 0.12, -root_c * 0.5), side * root_y, 0.0);
+        let root = horiz_section(
+            &airfoil_section(root_c, 0.12, -root_c * 0.5),
+            side * root_y,
+            0.0,
+        );
         let tip = horiz_section(
             &airfoil_section(tip_c, 0.10, tip_sweep - tip_c * 0.5),
             side * semi,
@@ -547,7 +558,10 @@ mod tests {
         assert_eq!(pts.len(), 2 * AIRFOIL_HALF_POINTS - 2);
         let max_x = pts.iter().map(|p| p[0]).fold(f64::MIN, f64::max);
         let min_x = pts.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
-        assert!((max_x - chord).abs() < 1e-9 && min_x.abs() < 1e-9, "spans chord");
+        assert!(
+            (max_x - chord).abs() < 1e-9 && min_x.abs() < 1e-9,
+            "spans chord"
+        );
         let max_t = pts.iter().map(|p| p[1]).fold(f64::MIN, f64::max);
         // NACA 4-digit peak half-thickness is ≈ 0.6·t·chord above the chord.
         assert!(

@@ -196,29 +196,20 @@ mod tests {
         // Dimensional constraint: pin the bottom edge to length 2.0
         // (Distance between its two endpoints). The solver should move
         // b from x=1 to x=2 to satisfy it.
-        sketch.add_constraint(Constraint::Distance {
-            a,
-            b,
-            target: 2.0,
-        });
+        sketch.add_constraint(Constraint::Distance { a, b, target: 2.0 });
 
         // Solve — expect convergence.
-        let report = valenx_sketch::solver::solve(&mut sketch, valenx_sketch::SolverConfig::default())
-            .expect("solver runs on the square");
+        let report =
+            valenx_sketch::solver::solve(&mut sketch, valenx_sketch::SolverConfig::default())
+                .expect("solver runs on the square");
         assert_eq!(
             report.status,
             valenx_sketch::SolverStatus::Converged,
             "constrained square should converge (report: {report:?})"
         );
         // The Distance constraint should have been satisfied: |a→b| ≈ 2.
-        let (ax, ay) = sketch
-            .point_at(a)
-            .expect("point a")
-            .read(&sketch.vars);
-        let (bx, by) = sketch
-            .point_at(b)
-            .expect("point b")
-            .read(&sketch.vars);
+        let (ax, ay) = sketch.point_at(a).expect("point a").read(&sketch.vars);
+        let (bx, by) = sketch.point_at(b).expect("point b").read(&sketch.vars);
         let len = ((bx - ax).powi(2) + (by - ay).powi(2)).sqrt();
         assert!(
             (len - 2.0).abs() < 1e-3,
