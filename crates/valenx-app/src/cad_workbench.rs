@@ -35,6 +35,7 @@ enum FeatureKind {
     Cone,
     Torus,
     Extrude,
+    Revolve,
 }
 
 /// One UI-editable feature-tree step. Carries both the box and cylinder
@@ -43,7 +44,8 @@ enum FeatureKind {
 struct UiStep {
     op: Op,
     kind: FeatureKind,
-    /// Extrude profile — `(x, y)` points (literal coords, not expressions).
+    /// Extrude profile — `(x, y)` points (literal coords, not expressions). For
+    /// a Revolve step the same field holds the `(r, z)` half-section.
     profile: Vec<(f64, f64)>,
     dx: String,
     dy: String,
@@ -53,6 +55,8 @@ struct UiStep {
     top_radius: String,
     major: String,
     minor: String,
+    /// Revolve sweep angle in degrees (expression). `360` = full lathe body.
+    angle: String,
     x: String,
     y: String,
     z: String,
@@ -77,6 +81,7 @@ impl UiStep {
             top_radius: "0".into(),
             major: "1".into(),
             minor: "0.25".into(),
+            angle: "360".into(),
             x: "0".into(),
             y: "0".into(),
             z: "0".into(),
@@ -113,6 +118,15 @@ impl UiStep {
         Self::base(Op::Join, FeatureKind::Extrude)
     }
 
+    fn new_revolve() -> Self {
+        let mut s = Self::base(Op::Join, FeatureKind::Revolve);
+        // Default half-section is a cone profile that starts and ends on the
+        // axis (r = 0) so a full-turn revolve caps cleanly: axis → outer → axis.
+        s.profile = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 2.0)];
+        s.angle = "360".into();
+        s
+    }
+
     /// Translate into a solver-crate [`Step`].
     fn to_step(&self) -> Step {
         let feature = match self.kind {
@@ -140,6 +154,10 @@ impl UiStep {
             FeatureKind::Extrude => Feature::Extrude {
                 profile: self.profile.clone(),
                 height: self.height.clone(),
+            },
+            FeatureKind::Revolve => Feature::Revolve {
+                profile: self.profile.clone(),
+                angle_deg: self.angle.clone(),
             },
         };
         let mut step = Step::placed(
@@ -197,6 +215,11 @@ pub struct CadWorkbenchState {
     body_visible: Vec<bool>,
     /// Material density (mass per unit volume) — drives the mass readout.
     density: f64,
+    /// Set by [`CadWorkbenchState::request_rebuild`] (e.g. the top-bar Part
+    /// Design menu) to ask `draw_cad_workbench` to rebuild the tree into the
+    /// viewport on this frame — the programmatic equivalent of clicking the
+    /// panel's "Rebuild → viewport" button.
+    rebuild_request: bool,
 }
 
 impl Default for CadWorkbenchState {
@@ -219,7 +242,108 @@ impl Default for CadWorkbenchState {
             scrub: 1,
             body_visible: Vec::new(),
             density: 1.0,
+            rebuild_request: false,
         }
+    }
+}
+
+/// Public feature-tree mutators — the **single code path** shared by the
+/// workbench's own `+ Box / + Cylinder / …` buttons and the top-bar
+/// **Part Design** menu, so a feature added from the menu behaves exactly like
+/// one added from the panel. Each `add_*` appends a step; [`Self::set_last_op`]
+/// sets the boolean op of the last step; [`Self::request_rebuild`] flags a
+/// rebuild-to-viewport on the next frame (mirroring the panel's "Rebuild →
+/// viewport" button); [`Self::reset_to_base_solid`] starts a fresh single-solid
+/// part.
+impl CadWorkbenchState {
+    /// Append a Box feature (the panel's `+ Box`).
+    pub fn add_box(&mut self) {
+        self.steps.push(UiStep::new_box());
+    }
+
+    /// Append a Cylinder feature (the panel's `+ Cylinder`).
+    pub fn add_cylinder(&mut self) {
+        self.steps.push(UiStep::new_cylinder());
+    }
+
+    /// Append a Sphere feature (the panel's `+ Sphere`).
+    pub fn add_sphere(&mut self) {
+        self.steps.push(UiStep::new_sphere());
+    }
+
+    /// Append a Cone feature (the panel's `+ Cone`).
+    pub fn add_cone(&mut self) {
+        self.steps.push(UiStep::new_cone());
+    }
+
+    /// Append a Torus feature (the panel's `+ Torus`).
+    pub fn add_torus(&mut self) {
+        self.steps.push(UiStep::new_torus());
+    }
+
+    /// Append an Extrude feature — a 2-D sketch profile swept along +Z (the
+    /// panel's `+ Extrude`). This is the discoverable *sketch → extrude → solid*
+    /// path: the step's editable `(x, y)` profile **is** the sketch.
+    pub fn add_extrude(&mut self) {
+        self.steps.push(UiStep::new_extrude());
+    }
+
+    /// Append a Revolve feature — a half-section profile revolved about the Z
+    /// axis (the panel's `+ Revolve`), the lathe/turn operation.
+    pub fn add_revolve(&mut self) {
+        self.steps.push(UiStep::new_revolve());
+    }
+
+    /// Set the boolean [`Op`] of the **last** step (the next feature combines
+    /// with the running body this way). No-op on an empty tree. Used by the
+    /// Part Design → Boolean submenu (Union / Cut / Intersect).
+    pub fn set_last_op(&mut self, op: Op) {
+        if let Some(last) = self.steps.last_mut() {
+            last.op = op;
+        }
+    }
+
+    /// Part Design → Boolean → Union: set the last step to weld (boolean union).
+    pub fn set_last_op_union(&mut self) {
+        self.set_last_op(Op::Join);
+    }
+
+    /// Part Design → Boolean → Cut: set the last step to subtract (difference).
+    pub fn set_last_op_cut(&mut self) {
+        self.set_last_op(Op::Cut);
+    }
+
+    /// Part Design → Boolean → Intersect: set the last step to keep the overlap.
+    pub fn set_last_op_intersect(&mut self) {
+        self.set_last_op(Op::Intersect);
+    }
+
+    /// Whether the feature tree has at least one step (so the Boolean submenu
+    /// can disable itself when there's nothing to combine).
+    pub fn has_steps(&self) -> bool {
+        !self.steps.is_empty()
+    }
+
+    /// Reset the feature tree to a single base solid (a unit box) — Part Design
+    /// → "New part". Clears any cached rebuild/history so the viewport reflects
+    /// the fresh part on the next rebuild.
+    pub fn reset_to_base_solid(&mut self) {
+        let mut base = UiStep::base(Op::New, FeatureKind::Box);
+        base.dx = "size".into();
+        base.dy = "size".into();
+        base.dz = "size".into();
+        self.steps = vec![base];
+        self.history = None;
+        self.rebuilt_mesh = None;
+        self.body_visible = Vec::new();
+        self.tree_status = None;
+    }
+
+    /// Flag that the tree should be rebuilt and pushed into the central 3-D
+    /// viewport on the next frame — the same effect as the panel's
+    /// "Rebuild → viewport" button. `draw_cad_workbench` performs the rebuild.
+    pub fn request_rebuild(&mut self) {
+        self.rebuild_request = true;
     }
 }
 
@@ -346,6 +470,11 @@ fn ui_step_from(step: &Step) -> Result<UiStep, String> {
             us.kind = FeatureKind::Extrude;
             us.profile = profile.clone();
             us.height = height.clone();
+        }
+        Feature::Revolve { profile, angle_deg } => {
+            us.kind = FeatureKind::Revolve;
+            us.profile = profile.clone();
+            us.angle = angle_deg.clone();
         }
     }
     Ok(us)
@@ -1645,6 +1774,7 @@ fn kind_label(kind: FeatureKind) -> &'static str {
         FeatureKind::Cone => "Cone",
         FeatureKind::Torus => "Torus",
         FeatureKind::Extrude => "Extrude",
+        FeatureKind::Revolve => "Revolve",
     }
 }
 
@@ -1653,11 +1783,56 @@ fn dim_edit(ui: &mut egui::Ui, v: &mut String) {
     ui.add(egui::TextEdit::singleline(v).desired_width(52.0));
 }
 
+/// Rebuild the feature tree and stage the final solid's mesh for the central
+/// 3-D viewport. This is the shared implementation of the panel's
+/// "Rebuild → viewport" button and the programmatic [`CadWorkbenchState::
+/// request_rebuild`] path (Part Design menu), so both behave identically:
+/// on success it caches the per-step history, sets the scrubber to the last
+/// step, and flags `push_rebuild`; on failure it records the error in
+/// `tree_status` and clears any stale rebuild.
+fn perform_rebuild(s: &mut CadWorkbenchState) {
+    match rebuild_tree(s) {
+        Ok((history, status)) => {
+            let k = history.len();
+            let nbodies = history.last().map_or(0, |b| b.len());
+            let visible = vec![true; nbodies];
+            match tessellate_step(&history, k, &visible) {
+                Ok(mesh) => {
+                    s.rebuilt_mesh = Some(mesh);
+                    s.push_rebuild = true;
+                    s.tree_status = Some(Ok(status));
+                    s.scrub = k;
+                    s.history = Some(history);
+                    s.body_visible = visible;
+                }
+                Err(e) => {
+                    s.history = None;
+                    s.rebuilt_mesh = None;
+                    s.push_rebuild = false;
+                    s.tree_status = Some(Err(e));
+                }
+            }
+        }
+        Err(e) => {
+            s.history = None;
+            s.rebuilt_mesh = None;
+            s.push_rebuild = false;
+            s.tree_status = Some(Err(e));
+        }
+    }
+}
+
 /// Draw the parametric-CAD workbench (a no-op unless toggled on via
 /// View → Parametric CAD).
 pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_cad_workbench {
         return;
+    }
+    // A programmatic rebuild requested this frame (e.g. from the top-bar Part
+    // Design menu, which sets the flag before this panel draws). Run it before
+    // the panel so the staged mesh is pushed into the viewport this frame.
+    if std::mem::take(&mut app.cad.rebuild_request) {
+        perform_rebuild(&mut app.cad);
     }
     let close = crate::workbench_chrome::workbench_shell(
         app,
@@ -1843,6 +2018,11 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                             FeatureKind::Extrude,
                                             "Extrude",
                                         );
+                                        ui.selectable_value(
+                                            &mut st.kind,
+                                            FeatureKind::Revolve,
+                                            "Revolve",
+                                        );
                                     });
                                 if ui.small_button("✕").clicked() {
                                     remove_step = Some(i);
@@ -1922,6 +2102,46 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         st.profile.push((0.0, 0.0));
                                     }
                                 }
+                                FeatureKind::Revolve => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("angle°");
+                                        dim_edit(ui, &mut st.angle);
+                                    });
+                                    ui.label(
+                                        egui::RichText::new(
+                                            "half-section (r, z) — ends on axis (r=0) cap the body",
+                                        )
+                                        .weak()
+                                        .small(),
+                                    );
+                                    let mut rm_pt: Option<usize> = None;
+                                    for (j, pt) in st.profile.iter_mut().enumerate() {
+                                        ui.horizontal(|ui| {
+                                            ui.add(
+                                                egui::DragValue::new(&mut pt.0)
+                                                    .speed(0.1)
+                                                    .prefix("r ")
+                                                    .range(0.0..=f64::INFINITY),
+                                            );
+                                            ui.add(
+                                                egui::DragValue::new(&mut pt.1)
+                                                    .speed(0.1)
+                                                    .prefix("z "),
+                                            );
+                                            if ui.small_button("✕").clicked() {
+                                                rm_pt = Some(j);
+                                            }
+                                        });
+                                    }
+                                    if let Some(j) = rm_pt {
+                                        if st.profile.len() > 2 {
+                                            st.profile.remove(j);
+                                        }
+                                    }
+                                    if ui.small_button("+ point").clicked() {
+                                        st.profile.push((0.0, 0.0));
+                                    }
+                                }
                             }
                             ui.horizontal(|ui| {
                                 ui.label("at x,y,z");
@@ -1941,23 +2161,28 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         s.steps.remove(i);
                     }
                     ui.horizontal_wrapped(|ui| {
+                        // Each button calls the same public mutator the top-bar
+                        // Part Design menu uses, so panel and menu share one path.
                         if ui.button("+ Box").clicked() {
-                            s.steps.push(UiStep::new_box());
+                            s.add_box();
                         }
                         if ui.button("+ Cylinder").clicked() {
-                            s.steps.push(UiStep::new_cylinder());
+                            s.add_cylinder();
                         }
                         if ui.button("+ Sphere").clicked() {
-                            s.steps.push(UiStep::new_sphere());
+                            s.add_sphere();
                         }
                         if ui.button("+ Cone").clicked() {
-                            s.steps.push(UiStep::new_cone());
+                            s.add_cone();
                         }
                         if ui.button("+ Torus").clicked() {
-                            s.steps.push(UiStep::new_torus());
+                            s.add_torus();
                         }
                         if ui.button("+ Extrude").clicked() {
-                            s.steps.push(UiStep::new_extrude());
+                            s.add_extrude();
+                        }
+                        if ui.button("+ Revolve").clicked() {
+                            s.add_revolve();
                         }
                     });
                     ui.horizontal(|ui| {
@@ -2033,35 +2258,7 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     });
                     if ui.button("▶ Rebuild → viewport").clicked() {
-                        match rebuild_tree(s) {
-                            Ok((history, status)) => {
-                                let k = history.len();
-                                let nbodies = history.last().map_or(0, |b| b.len());
-                                let visible = vec![true; nbodies];
-                                match tessellate_step(&history, k, &visible) {
-                                    Ok(mesh) => {
-                                        s.rebuilt_mesh = Some(mesh);
-                                        s.push_rebuild = true;
-                                        s.tree_status = Some(Ok(status));
-                                        s.scrub = k;
-                                        s.history = Some(history);
-                                        s.body_visible = visible;
-                                    }
-                                    Err(e) => {
-                                        s.history = None;
-                                        s.rebuilt_mesh = None;
-                                        s.push_rebuild = false;
-                                        s.tree_status = Some(Err(e));
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                s.history = None;
-                                s.rebuilt_mesh = None;
-                                s.push_rebuild = false;
-                                s.tree_status = Some(Err(e));
-                            }
-                        }
+                        perform_rebuild(s);
                     }
                     if let Some(res) = &s.tree_status {
                         match res {
@@ -2314,6 +2511,90 @@ mod tests {
             v_punched < v_box,
             "cutting the hole reduces the volume: {v_box} → {v_punched}"
         );
+    }
+
+    #[test]
+    fn revolve_step_rebuilds_to_a_nonempty_solid() {
+        // A feature tree whose sole step is a New Revolve of a cone half-section
+        // must rebuild to a non-empty body that tessellates to a real mesh —
+        // proving the Revolve FeatureKind threads through the timeline + kernel.
+        let mut s = CadWorkbenchState::default();
+        let mut rev = UiStep::new_revolve();
+        rev.op = Op::New; // start a fresh body from the revolve
+        s.steps = vec![rev];
+        let (history, status) = rebuild_tree(&s).expect("revolve tree rebuilds");
+        assert_eq!(history.len(), 1, "one step → one snapshot");
+        assert!(
+            history[0][0].faces() > 0,
+            "the revolved body has faces; status: {status}"
+        );
+        let mesh = tessellate_step(&history, 1, &[]).expect("tessellate revolve");
+        assert!(
+            crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
+            "the revolved solid tessellates to a non-empty viewport mesh"
+        );
+        // The default half-section is a cone (r 1, h 2) → analytic volume
+        // π r² h / 3 ≈ 2.094; the BRep volume converges from below.
+        let vol = total_volume(&history[0]);
+        assert!(vol > 1.5, "revolved cone volume {vol} is in the right range");
+    }
+
+    #[test]
+    fn part_design_menu_mutators_share_the_panel_path() {
+        // The top-bar Part Design menu drives these same `CadWorkbenchState`
+        // methods the panel's + buttons call. Exercise each and assert the
+        // feature tree + flags land as expected.
+        let mut s = CadWorkbenchState::default();
+
+        // Populate a real rebuild history first (via the shared rebuild path),
+        // so we can prove the reset clears it rather than injecting a fake one.
+        perform_rebuild(&mut s);
+        assert!(s.history.is_some(), "a rebuild populates the history");
+
+        // New part → a single base solid (a New box), cached rebuild cleared.
+        s.reset_to_base_solid();
+        assert_eq!(s.steps.len(), 1, "reset leaves exactly one base step");
+        assert_eq!(s.steps[0].op, Op::New, "the base step starts a new body");
+        assert_eq!(s.steps[0].kind, FeatureKind::Box);
+        assert!(s.history.is_none(), "reset clears the stale rebuild history");
+
+        // Each add_* appends one step of the expected kind.
+        s.add_extrude();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Extrude);
+        s.add_revolve();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Revolve);
+        s.add_box();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Box);
+        s.add_cylinder();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Cylinder);
+        s.add_sphere();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Sphere);
+        s.add_cone();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Cone);
+        s.add_torus();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Torus);
+        assert_eq!(s.steps.len(), 8, "7 adds on top of the 1 base step");
+
+        // Boolean submenu sets the last step's op.
+        s.set_last_op_cut();
+        assert_eq!(s.steps.last().unwrap().op, Op::Cut);
+        s.set_last_op_intersect();
+        assert_eq!(s.steps.last().unwrap().op, Op::Intersect);
+        s.set_last_op_union();
+        assert_eq!(s.steps.last().unwrap().op, Op::Join);
+
+        // request_rebuild raises the flag draw_cad_workbench consumes.
+        assert!(!s.rebuild_request);
+        s.request_rebuild();
+        assert!(s.rebuild_request, "request_rebuild flags a viewport rebuild");
+
+        // "New part (reset)" leaves a lone base box that rebuilds to a real
+        // solid on its own (the menu's New-part → rebuild path).
+        let mut t = CadWorkbenchState::default();
+        t.reset_to_base_solid();
+        let (history, _status) = rebuild_tree(&t).expect("reset base solid rebuilds");
+        assert_eq!(history.len(), 1, "the reset part is a single base step");
+        assert_eq!(history[0][0].faces(), 6, "the base solid is a box");
     }
 
     #[test]

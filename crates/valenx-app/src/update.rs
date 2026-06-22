@@ -2252,6 +2252,184 @@ impl eframe::App for ValenxApp {
                     }
                     });
                 });
+                // ── Part Design ─────────────────────────────────────────────
+                // Surfaces valenx's in-house parametric CAD modeler (the
+                // valenx-solvespace-3d feature tree) as a first-class top-bar
+                // menu, so the Extrude / Revolve / primitive / boolean
+                // operations are discoverable without first hunting for the
+                // View → Parametric CAD toggle. Every item is a clearly named,
+                // AI-drivable widget; each reveals the workbench, mutates the
+                // shared feature tree through the same `CadWorkbenchState`
+                // methods the panel's own buttons call, then requests a rebuild
+                // so the central 3-D viewport updates immediately.
+                ui.menu_button("Part Design", |ui| {
+                    crate::menu_ui::scrollable_menu(ui, |ui| {
+                        if ui
+                            .button("Open Part Design workbench")
+                            .on_hover_text(
+                                "Reveal the right-side parametric CAD modeler — named-parameter \
+                                 feature tree (sketch, extrude, revolve, primitives, booleans), \
+                                 built in-house on valenx-solvespace-3d + valenx-cad.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("New part (reset)")
+                            .on_hover_text(
+                                "Reset the feature tree to a single base solid (a parametric \
+                                 box) — a clean start for a new part.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.reset_to_base_solid();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        ui.label(egui::RichText::new("Add feature").weak().small());
+                        if ui
+                            .button("Sketch (extrude profile)")
+                            .on_hover_text(
+                                "Add an Extrude feature whose editable (x, y) profile IS the \
+                                 sketch — the in-house sketch → extrude → 3-D-part workflow.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_extrude();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Extrude")
+                            .on_hover_text("Sweep a 2-D profile along +Z into a solid prism.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_extrude();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Revolve")
+                            .on_hover_text(
+                                "Revolve a half-section profile about the Z axis (lathe / turn) \
+                                 into a solid of revolution.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_revolve();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Box")
+                            .on_hover_text("Add an axis-aligned box primitive.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_box();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Cylinder")
+                            .on_hover_text("Add a cylinder primitive (axis along +Z).")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_cylinder();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Sphere")
+                            .on_hover_text("Add a sphere primitive.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_sphere();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Cone")
+                            .on_hover_text("Add a (truncated) cone primitive.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_cone();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Torus")
+                            .on_hover_text("Add a torus primitive (major axis along Z).")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_torus();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        ui.menu_button("Boolean", |ui| {
+                            ui.label(
+                                egui::RichText::new("combine the last feature with the body")
+                                    .weak()
+                                    .small(),
+                            );
+                            let has = self.cad.has_steps();
+                            if ui
+                                .add_enabled(has, egui::Button::new("Union (join)"))
+                                .on_hover_text("Weld the last feature onto the running body.")
+                                .clicked()
+                            {
+                                self.show_cad_workbench = true;
+                                self.cad.set_last_op_union();
+                                self.cad.request_rebuild();
+                                ui.close_menu();
+                            }
+                            if ui
+                                .add_enabled(has, egui::Button::new("Cut (subtract)"))
+                                .on_hover_text("Subtract the last feature from the running body.")
+                                .clicked()
+                            {
+                                self.show_cad_workbench = true;
+                                self.cad.set_last_op_cut();
+                                self.cad.request_rebuild();
+                                ui.close_menu();
+                            }
+                            if ui
+                                .add_enabled(has, egui::Button::new("Intersect"))
+                                .on_hover_text("Keep only the overlap of the last feature and body.")
+                                .clicked()
+                            {
+                                self.show_cad_workbench = true;
+                                self.cad.set_last_op_intersect();
+                                self.cad.request_rebuild();
+                                ui.close_menu();
+                            }
+                        });
+                        ui.separator();
+                        if ui
+                            .button("Save part…")
+                            .on_hover_text(
+                                "Open the Part Design workbench, where the feature tree can be \
+                                 saved to a .ron document (and exported to STL).",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            ui.close_menu();
+                        }
+                    });
+                });
                 ui.menu_button(cat.lookup("menu.run"), |ui| {
                     let running = self.run_handle.is_some();
                     let has_selection = self.selected_case.is_some();

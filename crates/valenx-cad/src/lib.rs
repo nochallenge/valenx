@@ -6,7 +6,7 @@
 //! ============
 //!
 //! - **Primitives** — [`box_solid`], [`cylinder`], [`sphere`],
-//!   [`cone`], [`torus`], [`prism`]. All built from
+//!   [`cone`], [`torus`], [`prism`], [`revolve`]. All built from
 //!   [`truck_modeling::builder`] sweeps so the resulting [`Solid`] is
 //!   a proper closed BRep (faces / edges / vertices form a closed
 //!   2-manifold), not just a triangle soup.
@@ -79,7 +79,7 @@ pub use measure::{
     solid_surface_equivalent_sphere_diameter, solid_surface_equivalent_sphere_diameter_tol,
     solid_total_gaussian_curvature, solid_volume, solid_volume_tol,
 };
-pub use primitives::{box_solid, cone, cylinder, prism, sphere, torus};
+pub use primitives::{box_solid, cone, cylinder, prism, revolve, sphere, torus};
 pub use solid::{CadError, Solid};
 pub use tessellate::solid_to_mesh;
 
