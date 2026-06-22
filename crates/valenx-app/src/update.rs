@@ -180,6 +180,21 @@ impl eframe::App for ValenxApp {
             self.settings.apply_theme(ctx);
             self.theme_applied = true;
         }
+
+        // Agent-bridge heartbeat (UNCONDITIONAL, every frame). egui is
+        // reactive, so when valenx is idle/unfocused — the normal case while
+        // an external agent drives it from the background — `update()` would
+        // otherwise stop being called, and the agent-command poll below
+        // (`poll_and_apply_agent_commands`) would never run. Commands appended
+        // to a channel's cmd file (including the **global** `new_unit`, which
+        // must be processed even when zero Workbench+Agent units exist) would
+        // then sit unprocessed. Scheduling a repaint on the same cadence as
+        // `agent_commands::POLL_INTERVAL` wakes egui ~once/second with zero
+        // input so the poll always fires. This is additive: `request_repaint_after`
+        // is a no-op when a sooner repaint is already scheduled (run/sweep,
+        // automation, adapter-probe, etc.), so the idle cost is only ~1 fps.
+        ctx.request_repaint_after(crate::agent_commands::POLL_INTERVAL);
+
         self.pump_run_events();
         self.pump_sweep_events();
         // Repaint promptly while a run or sweep is live so residual
@@ -989,6 +1004,23 @@ impl eframe::App for ValenxApp {
                              bolted-joint mechanics: preload from torque, bolt / member load \
                              sharing, separation and overload safety, computed in-process by \
                              valenx-bolt.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Parametric Sketch (constraints)
+                    // panel — the in-house valenx-sketch constraint sketcher.
+                    // Also reachable from Part Design → "Parametric Sketch
+                    // (constraints)". Off by default.
+                    if ui
+                        .checkbox(&mut self.show_param_sketch, "Parametric Sketch")
+                        .on_hover_text(
+                            "Show / hide the right-side Parametric Sketch (constraints) panel — \
+                             the in-house valenx-sketch constraint sketcher: draw lines / circles \
+                             / arcs, apply geometric + dimensional constraints, Solve with \
+                             under/over-constrained DOF feedback, then Pad/extrude into a 3-D \
+                             solid. Shares its sketch with the Mesh Toolbox's Sketcher section.",
                         )
                         .changed()
                     {
@@ -2237,6 +2269,214 @@ impl eframe::App for ValenxApp {
                     }
                     });
                 });
+                // ── Part Design ─────────────────────────────────────────────
+                // Surfaces valenx's in-house parametric CAD modeler (the
+                // valenx-solvespace-3d feature tree) as a first-class top-bar
+                // menu, so the Extrude / Revolve / primitive / boolean
+                // operations are discoverable without first hunting for the
+                // View → Parametric CAD toggle. Every item is a clearly named,
+                // AI-drivable widget; each reveals the workbench, mutates the
+                // shared feature tree through the same `CadWorkbenchState`
+                // methods the panel's own buttons call, then requests a rebuild
+                // so the central 3-D viewport updates immediately.
+                ui.menu_button("Part Design", |ui| {
+                    crate::menu_ui::scrollable_menu(ui, |ui| {
+                        if ui
+                            .button("Open Part Design workbench")
+                            .on_hover_text(
+                                "Reveal the right-side parametric CAD modeler — named-parameter \
+                                 feature tree (sketch, extrude, revolve, primitives, booleans), \
+                                 built in-house on valenx-solvespace-3d + valenx-cad.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("New part (reset)")
+                            .on_hover_text(
+                                "Reset the feature tree to a single base solid (a parametric \
+                                 box) — a clean start for a new part.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.reset_to_base_solid();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        ui.label(egui::RichText::new("Sketch").weak().small());
+                        if ui
+                            .button("Sketch (draw on canvas)")
+                            .on_hover_text(
+                                "Open the interactive 2-D sketch canvas — click to draw a \
+                                 polygon profile with the mouse, then Extrude it into a 3-D \
+                                 solid (the Fusion-style draw → extrude workflow).",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.focus_sketch();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Parametric Sketch (constraints)")
+                            .on_hover_text(
+                                "Open the in-house constraint sketcher (valenx-sketch): draw \
+                                 lines / circles / arcs, apply geometric (Horizontal, Vertical, \
+                                 Parallel, Tangent, …) + dimensional (Distance, Angle, Radius, \
+                                 Length) constraints, then Solve — with under/over-constrained \
+                                 DOF feedback — and Pad/extrude into a 3-D solid. The more \
+                                 powerful, fully-constrained alternative to the polygon canvas.",
+                            )
+                            .clicked()
+                        {
+                            self.show_param_sketch = true;
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        ui.label(egui::RichText::new("Add feature").weak().small());
+                        if ui
+                            .button("Sketch (extrude profile)")
+                            .on_hover_text(
+                                "Add an Extrude feature whose editable (x, y) profile IS the \
+                                 sketch — the in-house sketch → extrude → 3-D-part workflow.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_extrude();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Extrude")
+                            .on_hover_text("Sweep a 2-D profile along +Z into a solid prism.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_extrude();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Revolve")
+                            .on_hover_text(
+                                "Revolve a half-section profile about the Z axis (lathe / turn) \
+                                 into a solid of revolution.",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_revolve();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Box")
+                            .on_hover_text("Add an axis-aligned box primitive.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_box();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Cylinder")
+                            .on_hover_text("Add a cylinder primitive (axis along +Z).")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_cylinder();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Sphere")
+                            .on_hover_text("Add a sphere primitive.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_sphere();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Cone")
+                            .on_hover_text("Add a (truncated) cone primitive.")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_cone();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        if ui
+                            .button("Torus")
+                            .on_hover_text("Add a torus primitive (major axis along Z).")
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.add_torus();
+                            self.cad.request_rebuild();
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        ui.menu_button("Boolean", |ui| {
+                            ui.label(
+                                egui::RichText::new("combine the last feature with the body")
+                                    .weak()
+                                    .small(),
+                            );
+                            let has = self.cad.has_steps();
+                            if ui
+                                .add_enabled(has, egui::Button::new("Union (join)"))
+                                .on_hover_text("Weld the last feature onto the running body.")
+                                .clicked()
+                            {
+                                self.show_cad_workbench = true;
+                                self.cad.set_last_op_union();
+                                self.cad.request_rebuild();
+                                ui.close_menu();
+                            }
+                            if ui
+                                .add_enabled(has, egui::Button::new("Cut (subtract)"))
+                                .on_hover_text("Subtract the last feature from the running body.")
+                                .clicked()
+                            {
+                                self.show_cad_workbench = true;
+                                self.cad.set_last_op_cut();
+                                self.cad.request_rebuild();
+                                ui.close_menu();
+                            }
+                            if ui
+                                .add_enabled(has, egui::Button::new("Intersect"))
+                                .on_hover_text("Keep only the overlap of the last feature and body.")
+                                .clicked()
+                            {
+                                self.show_cad_workbench = true;
+                                self.cad.set_last_op_intersect();
+                                self.cad.request_rebuild();
+                                ui.close_menu();
+                            }
+                        });
+                        ui.separator();
+                        if ui
+                            .button("Save part…")
+                            .on_hover_text(
+                                "Open the Part Design workbench, where the feature tree can be \
+                                 saved to a .ron document (and exported to STL).",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            ui.close_menu();
+                        }
+                    });
+                });
                 ui.menu_button(cat.lookup("menu.run"), |ui| {
                     let running = self.run_handle.is_some();
                     let has_selection = self.selected_case.is_some();
@@ -2575,56 +2815,134 @@ impl eframe::App for ValenxApp {
             });
         });
 
-        // Tabbed bottom panel — Residuals or Log
-        egui::TopBottomPanel::bottom("valenx_bottom_dock")
-            .resizable(true)
-            .default_height(240.0)
-            .height_range(140.0..=520.0)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.selectable_value(
-                        &mut self.bottom_tab,
-                        BottomTab::Residuals,
-                        format!("Residuals ({})", self.residuals.by_field.len()),
-                    );
-                    ui.selectable_value(
-                        &mut self.bottom_tab,
-                        BottomTab::Log,
-                        format!("Log ({})", self.log.lines.len()),
-                    );
-                    ui.separator();
-                    if self.bottom_tab == BottomTab::Log {
-                        log_panel::header(ui, &mut self.log);
+        // Tabbed bottom panel — Residuals or Log. Collapsible: when
+        // `self.bottom_panel_collapsed` is set the panel shrinks to
+        // just its header strip (tab selectors + toggle) and the
+        // content body is skipped, freeing the vertical space. The
+        // resize handle / tall default height only apply in the
+        // expanded state — collapsed it auto-sizes to the bar.
+        let collapsed = self.bottom_panel_collapsed;
+        let bottom_dock = egui::TopBottomPanel::bottom("valenx_bottom_dock");
+        let bottom_dock = if collapsed {
+            // Thin, fixed bar — no resize handle, no minimum that would
+            // keep reserving the tall content area.
+            bottom_dock.resizable(false)
+        } else {
+            bottom_dock
+                .resizable(true)
+                .default_height(240.0)
+                .height_range(140.0..=520.0)
+        };
+        bottom_dock.show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.selectable_value(
+                    &mut self.bottom_tab,
+                    BottomTab::Residuals,
+                    format!("Residuals ({})", self.residuals.by_field.len()),
+                );
+                ui.selectable_value(
+                    &mut self.bottom_tab,
+                    BottomTab::Log,
+                    format!("Log ({})", self.log.lines.len()),
+                );
+                ui.separator();
+                if !collapsed && self.bottom_tab == BottomTab::Log {
+                    log_panel::header(ui, &mut self.log);
+                }
+                // Collapse / expand toggle on the right edge. The
+                // button's TEXT is the accessibility / UI-Automation
+                // `Name`, so it is a uniquely- and stably-named,
+                // AI-invokable widget: "Collapse panel" when expanded,
+                // "Expand panel" when collapsed. egui derives a
+                // button's accesskit name from its label text, so the
+                // plain-ASCII phrase is what an external driver finds
+                // and Invokes by Name.
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let name = if collapsed {
+                        "Expand panel"
+                    } else {
+                        "Collapse panel"
+                    };
+                    if ui.button(name).clicked() {
+                        self.toggle_bottom_panel();
                     }
                 });
-                ui.separator();
-                match self.bottom_tab {
-                    BottomTab::Residuals => {
-                        residuals::show(
-                            ui,
-                            &self.residuals,
-                            self.settings.residual_scale,
-                            self.settings.convergence_target,
-                        );
-                    }
-                    BottomTab::Log => {
-                        log_panel::show(ui, &self.log);
-                    }
-                }
             });
 
-        // Browser (left) — collapsible via the ribbon toggle / View menu
-        // so the viewport can take the full width.
+            // Collapsed: stop here — render only the header strip and
+            // skip the residual plot / log / placeholder body so the
+            // panel stays a thin bar.
+            if collapsed {
+                return;
+            }
+
+            ui.separator();
+            match self.bottom_tab {
+                BottomTab::Residuals => {
+                    residuals::show(
+                        ui,
+                        &self.residuals,
+                        self.settings.residual_scale,
+                        self.settings.convergence_target,
+                    );
+                }
+                BottomTab::Log => {
+                    log_panel::show(ui, &self.log);
+                }
+            }
+        });
+
+        // Browser (left) — shown/hidden by `self.show_browser` (the
+        // ribbon / View toggle). When shown it is ALSO collapsible to a
+        // thin bar via `self.browser_collapsed`, mirroring the bottom
+        // dock: collapsed renders only a narrow vertical strip holding
+        // the AI-drivable "Expand panel" button and skips the heavy
+        // browser body; expanded renders the full Browser plus a named
+        // "Collapse panel" button in the header row. The resize handle /
+        // wide default width only apply when expanded.
         if self.show_browser {
-            egui::SidePanel::left("valenx_browser")
-                .resizable(true)
-                .default_width(300.0)
-                .width_range(220.0..=520.0)
-                .show(ctx, |ui| {
+            let browser_collapsed = self.browser_collapsed;
+            let browser = egui::SidePanel::left("valenx_browser");
+            let browser = if browser_collapsed {
+                // Thin, fixed strip — no resize handle, no wide default
+                // that would keep reserving the browser's full width.
+                browser.resizable(false).exact_width(30.0)
+            } else {
+                browser
+                    .resizable(true)
+                    .default_width(300.0)
+                    .width_range(220.0..=520.0)
+            };
+            browser.show(ctx, |ui| {
+                if browser_collapsed {
+                    // Collapsed: only the named "Expand panel" button.
+                    // Its label TEXT is the accessibility / UI-Automation
+                    // `Name` (egui derives a button's accesskit name from
+                    // its label, exactly like the bottom dock's toggle),
+                    // so the full plain-ASCII phrase is what an external
+                    // driver finds and Invokes by Name. egui clips the
+                    // rendered glyphs to the narrow 30px strip while the
+                    // accesskit Name stays the complete "Expand panel"
+                    // string.
+                    if ui.button("Expand panel").clicked() {
+                        self.toggle_browser_panel();
+                    }
+                    return;
+                }
+                // Expanded: full Browser. The header row carries the
+                // right-aligned, named "Collapse panel" toggle alongside
+                // the "Browser" title.
+                ui.horizontal(|ui| {
                     ui.heading("Browser");
-                    ui.separator();
-                    self.draw_browser(ui);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Collapse panel").clicked() {
+                            self.toggle_browser_panel();
+                        }
+                    });
                 });
+                ui.separator();
+                self.draw_browser(ui);
+            });
         }
 
         // wgpu render state + DPI, grabbed once up-front so BOTH the dockable
@@ -2635,37 +2953,65 @@ impl eframe::App for ValenxApp {
         let wgpu_render_state = frame.wgpu_render_state().cloned();
         let pixels_per_point = ctx.pixels_per_point();
 
-        // Right-side workbench dispatch. By default each open workbench is
-        // its own stacked `SidePanel::right` (the classic layout). When the
-        // user opts into View → "Dockable panel layout (beta)", the whole run
-        // is replaced by a single dockable `egui_tiles` region in which the
-        // open workbenches are draggable / reorderable / splittable tiles —
-        // see [`crate::dock_layout::draw_dock_layout`]. Toggling the flag
-        // never changes any panel's contents, only where it is hosted.
-        if !self.dock_enabled {
+        // Right-side workbench dispatch. Each open workbench is its own
+        // `SidePanel::right`; the dispatch ALWAYS runs (in both classic and
+        // dock modes) so that a workbench panel can sit on the right alongside
+        // the dock in the centre. In a normal (non-product) tab at most the
+        // active tab's one workbench flag is set, so exactly one panel renders;
+        // in a `new_unit` product tab the tab's linked `workbench_kind` flag is
+        // the only one on (see `project_tabs::sync_active`), so its single
+        // workbench reserves the right edge BEFORE the CentralPanel/dock below.
+        //
+        // When the user opts into View → "Dockable panel layout (beta)", the
+        // `egui_tiles` dock region is ALSO drawn (further down, before the
+        // CentralPanel) — see [`crate::dock_layout::draw_dock_layout`]. The
+        // SidePanel(s) are added before it, so egui reserves their right-hand
+        // width first and the dock fills the remaining centre: workbench right,
+        // dock centre, no overlap.
+        {
+            // The 10 [`crate::dock_layout::DOCKABLE_PANELS`] (mesh toolbox,
+            // genetics, aero, fem, cfd, astro, rocket, engine, car, assistant)
+            // are hosted INSIDE the dock tree when the dock is on AND this is
+            // not a clean agent product tab (`!dock_agent_only`) — see
+            // `draw_dock_layout`'s `open_ids`. In that one case they must NOT
+            // also paint as classic right SidePanels (that would duplicate
+            // them), so their draws below are gated on this. Every other
+            // workbench — and these same panels in a `dock_agent_only` product
+            // tab (whose dock hosts only `workspace:n | agent:n`) or in classic
+            // mode — always paints as a SidePanel.
+            let dock_owns_dockable_panels = self.dock_enabled && !self.dock_agent_only;
+
             // Mesh Toolbox (right) — only paints when a mesh / STL is
             // loaded AND the user hasn't hidden it. Mounted before the
             // CentralPanel so egui docks it to the right of the viewport.
-            crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
+            }
 
             // Genetics Workbench (right) — the Round-6 computational-
             // biology panels. A no-op unless the user has toggled it on
             // via View → Genetics Workbench. Mounted before the
             // CentralPanel so egui docks it to the right (alongside the
             // Mesh Toolbox when both are open).
-            crate::genetics_workbench::draw_genetics_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::genetics_workbench::draw_genetics_workbench(self, ctx);
+            }
 
             // Aerodynamics / Wind Tunnel workbench (right) — the
             // valenx-aero virtual-wind-tunnel CFD panels. A no-op unless
             // toggled on via View → Aerodynamics / Wind Tunnel. Mounted
             // before the CentralPanel so egui docks it to the right.
-            crate::aero_workbench::draw_aero_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::aero_workbench::draw_aero_workbench(self, ctx);
+            }
 
             // FEM Workbench (right) — native linear-static + modal FEA on
             // valenx-fem's in-process solvers. A no-op unless toggled on via
             // View → FEM Workbench. Mounted before the CentralPanel so egui
             // docks it to the right (alongside the other open workbenches).
-            crate::fem_workbench::draw_fem_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::fem_workbench::draw_fem_workbench(self, ctx);
+            }
 
             // Induction Motor workbench (right) — 3-phase induction-motor slip /
             // power on valenx-inductionmotor. Off unless toggled via View.
@@ -2675,7 +3021,9 @@ impl eframe::App for ValenxApp {
             // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via
             // View → CFD Workbench. Mounted before the CentralPanel so egui
             // docks it to the right alongside the other workbenches.
-            crate::cfd_workbench::draw_cfd_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::cfd_workbench::draw_cfd_workbench(self, ctx);
+            }
 
             // Reaction Dynamics workbench (right) — native ab-initio MD on
             // valenx-reactdyn. A no-op unless toggled on via View → Reaction
@@ -2960,6 +3308,14 @@ impl eframe::App for ValenxApp {
             // geometry on valenx-solvespace-3d. Off unless toggled via View.
             crate::cad_workbench::draw_cad_workbench(self, ctx);
 
+            // Parametric Sketch (constraints) workbench (right) — first-class,
+            // discoverable host for the in-house valenx-sketch constraint
+            // sketcher (draw → constrain → Solve w/ DOF feedback → extrude).
+            // Off unless toggled via Part Design → "Parametric Sketch
+            // (constraints)". Shares its sketch with the Mesh Toolbox's
+            // Sketcher section.
+            crate::param_sketch_panel::draw_param_sketch_workbench(self, ctx);
+
             // Antenna workbench (right) — parabolic-dish gain / beamwidth on
             // valenx-antenna. Off unless toggled via View.
             crate::antenna_workbench::draw_antenna_workbench(self, ctx);
@@ -3013,7 +3369,9 @@ impl eframe::App for ValenxApp {
             // on via View → Astro / Launch. Mounted before the CentralPanel
             // so egui docks it to the right (alongside the other open
             // workbenches).
-            crate::astro_workbench::draw_astro_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::astro_workbench::draw_astro_workbench(self, ctx);
+            }
 
             // Pipe Flow workbench (right) — Darcy-Weisbach pipe-flow analysis
             // on valenx-pipeflow. Off unless toggled via View.
@@ -3023,7 +3381,9 @@ impl eframe::App for ValenxApp {
             // design→simulate pipeline. A no-op unless toggled on via
             // View → Rocket. Mounted before the CentralPanel so egui docks it
             // to the right alongside the other workbenches.
-            crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::rocket_workbench::draw_rocket_workbench(self, ctx);
+            }
 
             // Battery Pack workbench (right) — series / parallel pack sizing on
             // valenx-batterypack. Off unless toggled via View.
@@ -3031,7 +3391,9 @@ impl eframe::App for ValenxApp {
 
             // Engine workbench (right) — reactive engine design → analyze →
             // optimize → export. A no-op unless toggled on via View → Engine.
-            crate::engine_workbench::draw_engine_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::engine_workbench::draw_engine_workbench(self, ctx);
+            }
 
             // Heat Exchanger workbench (right) — effectiveness-NTU analysis on
             // valenx-heatexchanger. Off unless toggled via View.
@@ -3039,16 +3401,33 @@ impl eframe::App for ValenxApp {
 
             // Car workbench (right) — vehicle dynamics design → simulate over
             // valenx-vehicle. A no-op unless toggled on via View → Car.
-            crate::car_workbench::draw_car_workbench(self, ctx);
+            if !dock_owns_dockable_panels {
+                crate::car_workbench::draw_car_workbench(self, ctx);
+            }
 
-            // Assistant activity sidebar (right) — a live in-app feed of what
-            // the AI assistant is building. On by default; toggle via View.
-            crate::assistant_workbench::draw_assistant_workbench(self, ctx);
-        } else {
-            // Opt-in dockable workbench layout: one resizable right region
-            // hosting every open workbench as a draggable / reorderable /
-            // splittable tile. The render state + DPI are threaded in so a
-            // `workspace:<n>` tile can render its live 3-D model.
+            // Assistant activity sidebar — a live in-app feed of what the AI
+            // assistant is building. On by default; toggle via View. Renders
+            // ONLY in classic (non-dock) mode: a normal dock tab hosts the
+            // Assistant inside its dock tree, and an agent product tab
+            // (`dock_agent_only`) has its OWN per-unit Agent chat — in both
+            // dock cases the global Assistant panel would duplicate/overlap the
+            // dock, so it is suppressed whenever the dock is enabled. (Unlike
+            // the dockable workbenches above, `show_assistant_panel` defaults
+            // on, so gating it on `!dock_owns_dockable_panels` leaked it into
+            // every product tab — the layout glitch this fixes.)
+            if !self.dock_enabled {
+                crate::assistant_workbench::draw_assistant_workbench(self, ctx);
+            }
+        }
+
+        // Opt-in dockable workbench layout: one resizable right region hosting
+        // every open dock pane (workspace render + agent chat) as a draggable /
+        // reorderable / splittable tile. Mounted AFTER the workbench
+        // SidePanel(s) above so they reserve the right edge first and this dock
+        // fills the centre — the workbench tool panel and the dock coexist
+        // side-by-side. The render state + DPI are threaded in so a
+        // `workspace:<n>` tile can render its live 3-D model.
+        if self.dock_enabled {
             self.draw_dock_layout(ctx, wgpu_render_state.as_ref(), pixels_per_point);
         }
 
@@ -3386,14 +3765,19 @@ impl eframe::App for ValenxApp {
         // exclusive access to the whole app.
         //
         // `build_visible_commands` allocates ~360 `String`s per call
-        // (one per static command + per-adapter dynamic entries), so
-        // running it on every frame is wasteful. We memoise on
-        // `(registry.len(), show_non_oss_adapters)`: the registry is
-        // monotonic (adapters only ever land via `register`, so a
-        // change in `len()` covers re-probes and post-startup
-        // registration), and the OSS-filter is a bool. The cache
-        // invalidates automatically when either changes; a Settings
-        // toggle reflects on the next frame.
+        // (one per static command + per-adapter dynamic entries + one
+        // per workbench template + one per saved project), so running
+        // it on every frame is wasteful. We memoise on
+        // `(registry.len(), library.content_rev(), show_non_oss_adapters)`:
+        // the registry is monotonic (adapters only ever land via
+        // `register`, so a change in `len()` covers re-probes and
+        // post-startup registration); `content_rev()` is a fingerprint of
+        // every project's `(id, name)`, so add/remove/**rename** all flip
+        // it (the old `projects.len()` key missed a rename, which keeps the
+        // count identical, so the launcher showed the stale name); and
+        // the OSS-filter is a bool. The cache invalidates automatically
+        // when any of the three changes; a Settings toggle, a new saved
+        // project, or a rename reflects on the next frame.
         //
         // Round-8: skip the per-frame Vec clone entirely when the
         // palette is closed (the common case). The clone runs only
@@ -3401,13 +3785,16 @@ impl eframe::App for ValenxApp {
         if self.palette.open {
             let show_non_oss = self.settings.show_non_oss_adapters;
             let registry_len = self.registry.len();
+            let projects_rev = self.library.content_rev();
             let cache_valid = matches!(
                 &self.palette_cache,
-                Some((len, oss, _)) if *len == registry_len && *oss == show_non_oss
+                Some((len, prev, oss, _))
+                    if *len == registry_len && *prev == projects_rev && *oss == show_non_oss
             );
             if !cache_valid {
-                let built = commands::build_visible_commands(&self.registry, show_non_oss);
-                self.palette_cache = Some((registry_len, show_non_oss, built));
+                let built =
+                    commands::build_visible_commands(&self.registry, show_non_oss, &self.library);
+                self.palette_cache = Some((registry_len, projects_rev, show_non_oss, built));
             }
             // Take the cached Vec by clone — the dispatch step needs
             // exclusive `&mut self`, so we can't hold a borrow into
@@ -3418,7 +3805,7 @@ impl eframe::App for ValenxApp {
             let visible: Vec<commands::CommandKind> = self
                 .palette_cache
                 .as_ref()
-                .map(|(_, _, v)| v.clone())
+                .map(|(_, _, _, v)| v.clone())
                 .unwrap_or_default();
             if let Some(idx) = commands::show(ctx, &mut self.palette, &visible) {
                 if let Some(kind) = visible.get(idx) {
@@ -3642,6 +4029,23 @@ impl eframe::App for ValenxApp {
 
 impl ValenxApp {
     fn draw_browser(&mut self, ui: &mut egui::Ui) {
+        // VS-Code-style "Open Editors" list at the very TOP of the Browser:
+        // a collapsible "Open Tabs (N)" section that mirrors EVERY open tab
+        // (100+) so the user can see + switch + close them all from the
+        // organized left panel rather than the cramped horizontal strip.
+        // Deliberately separate from (and above) the Projects navigator:
+        // Open Tabs = the open docs, Projects = the saved library. See
+        // [`crate::project_tabs::draw_open_tabs_list`].
+        crate::project_tabs::draw_open_tabs_list(self, ui);
+        ui.separator();
+
+        // IDE-style project library navigator below it in the Browser:
+        // search + ★ Pinned / 🕘 Recent / 📁 All (folders), with
+        // open-as-tab + per-project context actions. See
+        // [`crate::project_navigator`].
+        crate::project_navigator::draw_navigator(self, ui);
+        ui.separator();
+
         ui.collapsing("Project", |ui| match &self.project {
             None => {
                 // The welcome landing page in the central viewport

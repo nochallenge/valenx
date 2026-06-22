@@ -288,6 +288,30 @@ fn run_collision(s: &mut CollisionWorkbenchState) {
     );
 }
 
+/// Build the **Collision (AABB)** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine AABB overlap test + separation ([`run_collision`]) for the canonical
+/// default pair of boxes (the default is a disjoint pair with a 10-unit gap).
+/// Registered as the `"collision"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view.
+pub(crate) fn collision_product() -> crate::WorkspaceProduct {
+    let mut s = CollisionWorkbenchState::default();
+    run_collision(&mut s);
+    crate::WorkspaceProduct {
+        title: "Collision (AABB)".into(),
+        lines: crate::products_registry::lines_from_readout(&s.result),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

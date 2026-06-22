@@ -308,7 +308,15 @@ fn push_disc(
 /// Representative geometry (a fixed visual thickness; the energy and stress
 /// numbers are the `valenx-flywheel` result). `None` for an invalid
 /// configuration.
-fn rotor_solid_mesh(s: &FlywheelWorkbenchState) -> Option<Mesh> {
+/// Presentation spin rate of the flywheel disc, rad/s (~1.3 rev/s) — a readable
+/// inspect speed, not the real ~3000-rpm blur.
+const ROTOR_RAD_PER_S: f32 = 8.0;
+
+/// Build the rotor as a triangle [`Mesh`] together with the
+/// [`crate::RigidPart`] for the spinning disc. The whole mesh *is* the rotor (a
+/// single body), so the one part covers every node, spinning about the +z axis
+/// through the origin. `None` for an invalid configuration.
+fn rotor_solid_mesh_parts(s: &FlywheelWorkbenchState) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     build_flywheel(s).ok()?;
 
     let r_out = s.r_out_m;
@@ -324,13 +332,28 @@ fn rotor_solid_mesh(s: &FlywheelWorkbenchState) -> Option<Mesh> {
     let mut tris: Vec<usize> = Vec::new();
     push_disc(&mut nodes, &mut tris, r_out, r_in, hz, 64);
 
+    let node_count = nodes.len();
     let mut block = ElementBlock::new(ElementType::Tri3);
     block.connectivity = tris.iter().map(|&i| i as u32).collect();
     let mut mesh = Mesh::new("valenx-flywheel");
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+    // The whole disc is the rotor: one part covering every node, spinning about
+    // the disc (+z) axis through the origin.
+    let parts = vec![crate::RigidPart {
+        node_range: 0..node_count,
+        axis: [0.0, 0.0, 1.0],
+        pivot: [0.0, 0.0, 0.0],
+        rad_per_s: ROTOR_RAD_PER_S,
+    }];
+    Some((mesh, parts))
+}
+
+/// Build the rotor as a triangle [`Mesh`] (without the rotor part metadata) for
+/// the central viewport. See [`rotor_solid_mesh_parts`].
+fn rotor_solid_mesh(s: &FlywheelWorkbenchState) -> Option<Mesh> {
+    rotor_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D rotor solid and load it into the central viewport.
@@ -362,7 +385,8 @@ fn load_flywheel_3d(app: &mut ValenxApp) {
 /// [`FlywheelWorkbenchState::default`].
 pub(crate) fn flywheel_product() -> crate::WorkspaceProduct {
     let s = FlywheelWorkbenchState::default();
-    let mesh = rotor_solid_mesh(&s).expect("canonical flywheel ⇒ rotor disc solid builds");
+    let (mesh, parts) =
+        rotor_solid_mesh_parts(&s).expect("canonical flywheel ⇒ rotor disc solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<rotor>/valenx-flywheel");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical flywheel ⇒ readout computes"),
@@ -376,6 +400,17 @@ pub(crate) fn flywheel_product() -> crate::WorkspaceProduct {
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        // Animated: the disc spins about its own (+z) axis. A single rigid part
+        // covering the whole rotor (set explicitly so the default turntable does
+        // not apply). Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -495,6 +530,30 @@ mod tests {
             ..Default::default()
         };
         assert!(rotor_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn flywheel_product_spins_the_disc() {
+        // The product carries a RigidParts animation: the whole disc (one part
+        // covering every node) spins about the +z disc axis at a non-zero rate.
+        let product = flywheel_product();
+        let loaded = product.mesh.as_ref().expect("flywheel product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("flywheel product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 1, "one rotating part: the disc");
+                let p = &parts[0];
+                assert_eq!(p.node_range.start, 0, "the disc is the whole mesh");
+                assert_eq!(p.node_range.end, node_count, "range covers every node");
+                assert_eq!(p.axis, [0.0, 0.0, 1.0], "spins about the disc axis");
+                assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("flywheel must set RigidParts explicitly so the default no-ops")
+            }
+        }
     }
 }
 

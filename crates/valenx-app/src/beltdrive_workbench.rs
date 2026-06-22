@@ -12,7 +12,7 @@
 //! belt drive" loads a representative two-pulley drive (two discs on
 //! parallel shafts joined by a belt loop) into the central viewport.
 
-use std::f64::consts::TAU;
+use std::f64::consts::{PI, TAU};
 use std::path::PathBuf;
 
 use eframe::egui;
@@ -22,8 +22,17 @@ use valenx_beltdrive::{belt_length_open, DriveAnalysis, DriveSpec};
 use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
+use crate::pulley_workbench::push_grooved_sheave;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Cast-iron sheave grey (matches the Pulley Workbench).
+const PULLEY_GREY: [f32; 3] = [0.46, 0.47, 0.50];
+/// Dark hub/axle.
+const HUB: [f32; 3] = [0.26, 0.27, 0.30];
+/// Dark rubber belt.
+const RUBBER: [f32; 3] = [0.13, 0.13, 0.15];
 
 /// Persistent form + result state for the Belt Drive Workbench.
 pub struct BeltDriveWorkbenchState {
@@ -247,102 +256,158 @@ fn compute(s: &BeltDriveWorkbenchState) -> Result<String, String> {
     ))
 }
 
-/// Append an outward-facing box (centre `c`, half-extents `h`) to the
-/// buffers (double-sided).
-fn push_box(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    h: Vector3<f64>,
-) {
-    let base = nodes.len();
-    let signs = [
-        (-1.0, -1.0, -1.0),
-        (1.0, -1.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (-1.0, 1.0, -1.0),
-        (-1.0, -1.0, 1.0),
-        (1.0, -1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (-1.0, 1.0, 1.0),
-    ];
-    for (sx, sy, sz) in signs {
-        nodes.push(c + Vector3::new(sx * h.x, sy * h.y, sz * h.z));
+/// Presentation spin rate of the driver pulley, rad/s (~1.0 rev/s) — a readable
+/// inspect speed; the driven pulley follows at the diameter ratio.
+const DRIVER_RAD_PER_S: f32 = 6.0;
+
+/// Build the **open (external-tangent) belt** as its own thin swept-band
+/// [`Mesh`]. The belt wraps two pulleys whose centres sit in the wheel plane
+/// (the constant-`x` y–z plane) at `c1 = (y, z1)` / `c2 = (y, z2)` with belt
+/// pitch radii `rho1` / `rho2` (the pulley radius + the belt's radial
+/// mid-thickness). The closed belt centreline is the standard open-belt path —
+/// a wrap arc on pulley 1, a straight external tangent, a wrap arc on pulley 2,
+/// the return tangent — built from the closed-form tangent angle
+/// `gamma = asin((rho2 − rho1) / C)`. The centreline is then swept into a solid
+/// of `width` (along the axle `x`) and `2·half_t` radial thickness.
+///
+/// Returns a [`valenx_mesh::Mesh`] (`Tri3`) ready to drop into a [`MeshBuilder`]
+/// via [`MeshBuilder::append_tri_mesh`].
+#[allow(clippy::too_many_arguments)]
+fn belt_band_mesh(
+    cy: f64,
+    z1: f64,
+    rho1: f64,
+    z2: f64,
+    rho2: f64,
+    belt_x: f64,
+    width: f64,
+    half_t: f64,
+) -> Mesh {
+    // Centre-to-centre geometry in the wheel plane (axes: z horizontal, y up).
+    let dz = z2 - z1;
+    let dy = 0.0; // both centres share the same height
+    let c_dist = (dz * dz + dy * dy).sqrt().max(1e-9);
+    // Direction from pulley 1 → pulley 2 and the in-plane perpendicular.
+    let dir = (dz / c_dist, dy / c_dist); // (z, y)
+    let perp = (-dir.1, dir.0); // rotate +90° in the (z, y) plane
+                                // Open-belt tangent offset angle.
+    let gamma = ((rho2 - rho1) / c_dist).clamp(-1.0, 1.0).asin();
+
+    // A point on pulley `i` (centre `(zc, yc)`, radius `rho`) at angle `phi`
+    // measured from `dir`, toward `perp`. Returns (z, y).
+    let on_circle = |zc: f64, yc: f64, rho: f64, phi: f64| -> (f64, f64) {
+        let (s, c) = phi.sin_cos();
+        // Local frame: dir = phi 0, perp = phi +90°.
+        let z = zc + rho * (c * dir.0 + s * perp.0);
+        let y = yc + rho * (c * dir.1 + s * perp.1);
+        (z, y)
+    };
+
+    // Tangent contact angles (from `dir`): the upper tangent leaves pulley 1 and
+    // meets pulley 2 at +(π/2 + gamma); the lower at −(π/2 + gamma). The belt
+    // wraps pulley 1 over the MAJOR arc on the far side (from +(π/2+γ) round the
+    // back to −(π/2+γ)), and pulley 2 over its arc on the near side.
+    let a = PI / 2.0 + gamma; // upper contact, measured from dir
+                              // Sample: pulley-1 wrap (the long way round, away from pulley 2), then
+                              // tangent to pulley-2 lower contact, pulley-2 wrap (the long way round away
+                              // from pulley 1), then tangent back. Build the closed centreline polyline.
+    let arc_steps = 24usize;
+    let mut center: Vec<(f64, f64)> = Vec::new();
+
+    // Pulley 1 wrap: from +a, increasing through π to (2π − a) i.e. the arc on
+    // the side AWAY from pulley 2 (pulley 2 is at phi = 0 direction).
+    let p1_start = a;
+    let p1_end = TAU - a;
+    for k in 0..=arc_steps {
+        let t = k as f64 / arc_steps as f64;
+        let phi = p1_start + (p1_end - p1_start) * t;
+        center.push(on_circle(z1, cy, rho1, phi));
     }
-    let faces = [
-        [1, 2, 6, 5],
-        [0, 4, 7, 3],
-        [3, 7, 6, 2],
-        [0, 1, 5, 4],
-        [4, 5, 6, 7],
-        [0, 3, 2, 1],
-    ];
-    for f in faces {
-        tris.extend_from_slice(&[
-            base + f[0],
-            base + f[1],
-            base + f[2],
-            base + f[0],
-            base + f[2],
-            base + f[3],
-        ]);
+    // Pulley 2 wrap: pulley 1 is in the −dir direction from pulley 2, i.e. at
+    // phi = π relative to pulley 2's own `dir`. The belt wraps pulley 2 on the
+    // far side: from −a round through 0 to +a (centred on phi = 0, the side away
+    // from pulley 1). Use the SAME `dir`/`perp`; pulley 2's far side is phi ∈
+    // [−a, +a] going through 0.
+    let p2_start = -a;
+    let p2_end = a;
+    for k in 0..=arc_steps {
+        let t = k as f64 / arc_steps as f64;
+        let phi = p2_start + (p2_end - p2_start) * t;
+        center.push(on_circle(z2, cy, rho2, phi));
     }
+
+    // Sweep the closed centreline into a solid band. Each centreline point gets
+    // a 4-corner cross-section: ±half_t radially (in the wheel plane, along the
+    // outward normal from the local pulley centre ≈ the centreline tangent's
+    // perpendicular) and ±0.5·width along the axle (x). We approximate the
+    // radial outward direction by the segment normal in the (z, y) plane.
+    let n = center.len();
+    let mut mesh = Mesh::new("valenx-belt");
+    let mut block = ElementBlock::new(ElementType::Tri3);
+    let hw = 0.5 * width;
+    // Build 4 corners per station: order [inner-(-x), outer-(-x), outer+(+x), inner+(+x)].
+    for i in 0..n {
+        let (z, y) = center[i];
+        let (zp, yp) = center[(i + 1) % n];
+        let (zm, ym) = center[(i + n - 1) % n];
+        // Tangent ≈ next − prev; radial normal = perp of tangent in (z, y).
+        let (tz, ty) = (zp - zm, yp - ym);
+        let tl = (tz * tz + ty * ty).sqrt().max(1e-9);
+        let (nz, ny) = (-ty / tl, tz / tl); // outward-ish normal in plane
+        let base = mesh.nodes.len() as u32;
+        // inner (−normal), −x
+        mesh.nodes
+            .push(Vector3::new(belt_x - hw, y - ny * half_t, z - nz * half_t));
+        // outer (+normal), −x
+        mesh.nodes
+            .push(Vector3::new(belt_x - hw, y + ny * half_t, z + nz * half_t));
+        // outer (+normal), +x
+        mesh.nodes
+            .push(Vector3::new(belt_x + hw, y + ny * half_t, z + nz * half_t));
+        // inner (−normal), +x
+        mesh.nodes
+            .push(Vector3::new(belt_x + hw, y - ny * half_t, z - nz * half_t));
+        let _ = base;
+    }
+    // Connect consecutive cross-sections (i → i+1, wrapping) into a tube of 4
+    // quad faces (inner, outer, −x side, +x side) = 8 triangles per segment.
+    let quad = |block: &mut ElementBlock, a: u32, b: u32, c: u32, d: u32| {
+        block.connectivity.extend_from_slice(&[a, b, c, a, c, d]);
+    };
+    for i in 0..n {
+        let s0 = (i * 4) as u32;
+        let s1 = (((i + 1) % n) * 4) as u32;
+        // corners: 0 inner−x, 1 outer−x, 2 outer+x, 3 inner+x
+        // −x face (corners 0,1)
+        quad(&mut block, s0, s0 + 1, s1 + 1, s1);
+        // outer face (corners 1,2)
+        quad(&mut block, s0 + 1, s0 + 2, s1 + 2, s1 + 1);
+        // +x face (corners 2,3)
+        quad(&mut block, s0 + 2, s0 + 3, s1 + 3, s1 + 2);
+        // inner face (corners 3,0)
+        quad(&mut block, s0 + 3, s0, s1, s1 + 3);
+    }
+    mesh.element_blocks.push(block);
+    mesh.recompute_stats();
+    mesh
 }
 
-/// Append a (double-sided) cylinder disc whose axis runs along `+x`,
-/// spanning `base.x ..= base.x + length` with circle centre
-/// `(base.y, base.z)`.
-fn push_cyl_x(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    base: Vector3<f64>,
-    length: f64,
-    r: f64,
-    seg: usize,
-) {
-    let (x0, x1) = (base.x, base.x + length);
-    let lo = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x0, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    let hi = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x1, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    for j in 0..seg {
-        let jn = (j + 1) % seg;
-        tris.extend_from_slice(&[
-            lo + j,
-            hi + j,
-            hi + jn,
-            lo + j,
-            hi + jn,
-            lo + jn,
-            lo + j,
-            hi + jn,
-            hi + j,
-            lo + j,
-            lo + jn,
-            hi + jn,
-        ]);
-    }
-}
-
-/// Build the belt drive as a triangle [`Mesh`] — two pulley discs on two
-/// parallel shafts (the driver small, the driven large), joined by a belt
-/// loop drawn as the two straight tangent runs (top and bottom). The two
-/// shaft centres are spaced along `z` by the centre distance; the disc
-/// radii follow the diameters. Representative geometry (the kinematics /
-/// power numbers are the `valenx-beltdrive` result). `None` for an invalid
-/// configuration.
-fn beltdrive_solid_mesh(s: &BeltDriveWorkbenchState) -> Option<Mesh> {
+/// Build the belt drive as a triangle [`Mesh`] **with per-vertex colours** plus
+/// a [`crate::RigidPart`] for each pulley (driver + driven), so both wheels spin
+/// about their shafts while the belt + base stay put. Both pulleys are now true
+/// **grooved V-sheaves** ([`push_grooved_sheave`], shared with the Pulley
+/// Workbench) and the belt is the real **external-tangent loop** wrapping them
+/// ([`belt_band_mesh`]) — not two parked boxes. The driver turns the same
+/// direction as the driven but the driven is slower by the diameter ratio (open
+/// belt). Colours: pulleys cast-iron grey, belt dark rubber. `None` for an
+/// invalid config.
+///
+/// Returns `(mesh, colors, parts)` with `colors.len() == 3 × triangle_count`.
+fn beltdrive_solid_mesh_parts(
+    s: &BeltDriveWorkbenchState,
+) -> Option<(Mesh, Vec<[f32; 3]>, Vec<crate::RigidPart>)> {
     // Gate the geometry on a buildable, analysable drive.
     build_spec(s).ok()?.analyze().ok()?;
-
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
 
     // Scale the real (mm) dimensions to a tidy on-screen size.
     let scale = 1.0 / s.center_distance_mm.max(1.0);
@@ -351,64 +416,95 @@ fn beltdrive_solid_mesh(s: &BeltDriveWorkbenchState) -> Option<Mesh> {
     let half_c = 0.5; // centre distance maps to 1.0 along z
     let face_x = -0.06;
     let width = 0.12;
-    let lift = (r_drv.max(r_drn)) + 0.15;
+    let half_w = 0.5 * width;
+    let bore_r = 0.04;
+    let lift = r_drv.max(r_drn) + 0.15;
 
-    // Driver pulley disc (small) at z = -half_c.
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(face_x, lift, -half_c),
-        width,
+    let mut b = MeshBuilder::new();
+
+    // Driver grooved sheave (small) at z = −half_c — record its node range.
+    let drv_centre = [face_x, lift, -half_c];
+    let drv_range = push_grooved_sheave(
+        &mut b,
+        drv_centre,
+        [1.0, 0.0, 0.0],
         r_drv,
-        28,
+        half_w,
+        bore_r,
+        PULLEY_GREY,
+        HUB,
     );
-    // Driven pulley disc (large) at z = +half_c.
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(face_x, lift, half_c),
-        width,
+    // Driven grooved sheave (large) at z = +half_c — record its node range.
+    let drn_centre = [face_x, lift, half_c];
+    let drn_range = push_grooved_sheave(
+        &mut b,
+        drn_centre,
+        [1.0, 0.0, 0.0],
         r_drn,
-        32,
+        half_w,
+        bore_r,
+        PULLEY_GREY,
+        HUB,
     );
 
-    // Belt loop: two straight tangent runs as thin boxes spanning the gap.
-    // Approximate the (near-horizontal) tangents by the top and bottom of
-    // each pulley; representative, not the exact tangent line.
-    let belt_x = face_x + 0.5 * width;
-    let belt_t = 0.02; // belt half-thickness
-    let mid_z = 0.0;
-    let span_z = half_c + 0.5 * belt_t;
-    // Top run, sitting on the larger radius.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(belt_x, lift + r_drn, mid_z),
-        Vector3::new(0.5 * width, belt_t, span_z),
+    // Real open-belt loop wrapping both sheave rims (centreline radius = rim +
+    // half the belt thickness), swept into a thin band. Static.
+    let belt_x = face_x; // belt sits centred on the sheave plane
+    let belt_half_t = 0.02;
+    let belt_band = belt_band_mesh(
+        lift,
+        -half_c,
+        r_drv + belt_half_t,
+        half_c,
+        r_drn + belt_half_t,
+        belt_x,
+        width * 0.9,
+        belt_half_t,
     );
-    // Bottom run, hanging below by the larger radius.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(belt_x, lift - r_drn, mid_z),
-        Vector3::new(0.5 * width, belt_t, span_z),
-    );
+    b.append_tri_mesh(&belt_band, RUBBER);
 
-    // Base.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.0, 0.06, 0.0),
-        Vector3::new(0.5, 0.06, 0.8),
-    );
+    // Base (static).
+    b.cuboid([0.0, 0.06, 0.0], [1.0, 0.12, 1.6], HUB);
 
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-beltdrive");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
-    Some(mesh)
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-beltdrive".to_string();
+
+    // Open belt ⇒ same direction; the driven pulley is slower by the diameter
+    // ratio (ω_driven = ω_driver · d_driver / d_driven). Presentation-scaled.
+    let ratio = if r_drn > 0.0 {
+        (r_drv / r_drn) as f32
+    } else {
+        1.0
+    };
+    let parts = vec![
+        crate::RigidPart {
+            node_range: drv_range,
+            axis: [1.0, 0.0, 0.0],
+            pivot: [
+                drv_centre[0] as f32,
+                drv_centre[1] as f32,
+                drv_centre[2] as f32,
+            ],
+            rad_per_s: DRIVER_RAD_PER_S,
+        },
+        crate::RigidPart {
+            node_range: drn_range,
+            axis: [1.0, 0.0, 0.0],
+            pivot: [
+                drn_centre[0] as f32,
+                drn_centre[1] as f32,
+                drn_centre[2] as f32,
+            ],
+            rad_per_s: DRIVER_RAD_PER_S * ratio,
+        },
+    ];
+    Some((mesh, colors, parts))
+}
+
+/// Build the belt-drive [`Mesh`] (without the colour / part metadata) for the
+/// central viewport. See [`beltdrive_solid_mesh_parts`].
+fn beltdrive_solid_mesh(s: &BeltDriveWorkbenchState) -> Option<Mesh> {
+    beltdrive_solid_mesh_parts(s).map(|(mesh, _colors, _parts)| mesh)
 }
 
 /// Build the 3-D belt-drive solid and load it into the central viewport.
@@ -436,7 +532,8 @@ fn load_beltdrive_3d(app: &mut ValenxApp) {
 /// its `compute()` readout rows (see [`crate::products_registry`]).
 pub(crate) fn beltdrive_product() -> crate::WorkspaceProduct {
     let s = BeltDriveWorkbenchState::default();
-    let mesh = beltdrive_solid_mesh(&s).expect("canonical belt drive ⇒ drive solid builds");
+    let (mesh, colors, parts) =
+        beltdrive_solid_mesh_parts(&s).expect("canonical belt drive ⇒ drive solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<beltdrive>/valenx-beltdrive");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical belt drive ⇒ readout computes"),
@@ -446,10 +543,20 @@ pub(crate) fn beltdrive_product() -> crate::WorkspaceProduct {
         title: "Belt drive (tension/power)".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        // Animated: both pulleys spin about their shafts (driven slower by the
+        // diameter ratio) while the belt runs and base stay put. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -564,6 +671,93 @@ mod tests {
             ..Default::default()
         };
         assert!(beltdrive_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn beltdrive_carries_vertex_aligned_colours() {
+        // The two grooved sheaves + the swept belt band ship per-vertex colours
+        // aligned to the renderer's coloured path (3/triangle), with the pulley
+        // grey and the dark rubber belt colours both present.
+        let s = BeltDriveWorkbenchState::default();
+        let (mesh, colors, _parts) =
+            beltdrive_solid_mesh_parts(&s).expect("default belt drive builds");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        assert!(colors.contains(&PULLEY_GREY), "pulley rim colour present");
+        assert!(colors.contains(&RUBBER), "belt colour present");
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
+            }
+        }
+    }
+
+    #[test]
+    fn belt_band_is_a_closed_nonempty_loop() {
+        // The open-belt band mesh is a closed swept loop: non-empty nodes +
+        // triangles, all node indices in range. For unequal radii (100 vs 250
+        // mm) the band still closes (the tangent angle is finite).
+        let band = belt_band_mesh(0.7, -0.5, 0.12, 0.5, 0.27, -0.06, 0.1, 0.02);
+        assert!(band.nodes.len() > 8, "belt band has vertices");
+        assert!(band.total_elements() > 0, "belt band has triangles");
+        let n = band.nodes.len() as u32;
+        for blk in &band.element_blocks {
+            assert_eq!(blk.connectivity.len() % 3, 0);
+            assert!(blk.connectivity.iter().all(|&i| i < n));
+        }
+    }
+
+    #[test]
+    fn beltdrive_product_spins_both_pulleys_same_dir() {
+        // The product carries a RigidParts animation: the driver and driven
+        // pulleys are two non-empty node ranges within the mesh, both spinning
+        // about +x in the SAME direction (open belt), with the larger driven
+        // pulley slower (smaller |rate|). The belt + base are left static.
+        let product = beltdrive_product();
+        let loaded = product
+            .mesh
+            .as_ref()
+            .expect("belt-drive product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("belt-drive product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 2, "two rotating parts: driver + driven");
+                for p in &parts {
+                    assert!(
+                        p.node_range.start < p.node_range.end,
+                        "non-empty pulley range"
+                    );
+                    assert!(
+                        p.node_range.end <= node_count,
+                        "pulley range within the mesh"
+                    );
+                    assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about the shaft axis");
+                }
+                let (drv, drn) = (&parts[0], &parts[1]);
+                assert!(
+                    drv.rad_per_s.signum() == drn.rad_per_s.signum(),
+                    "open belt ⇒ same direction"
+                );
+                assert!(drv.rad_per_s.abs() > 0.0, "driver spins");
+                assert!(
+                    drn.rad_per_s.abs() < drv.rad_per_s.abs(),
+                    "the larger driven pulley (250 mm vs 100 mm) turns slower"
+                );
+                // Belt + base nodes lie beyond the two pulley ranges (static).
+                assert!(
+                    drn.node_range.end < node_count,
+                    "belt + base are not animated"
+                );
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("belt drive must use per-part rigid motion")
+            }
+        }
     }
 }
 

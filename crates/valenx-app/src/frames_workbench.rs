@@ -354,6 +354,29 @@ fn run_frames(s: &mut FramesWorkbenchState) {
     );
 }
 
+/// Build the **Frames** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine cross-section properties ([`run_frames`]) for the canonical default
+/// profile (an IPE 200 I-beam: label, area, perimeter). Registered as the
+/// `"frames"` producer in [`crate::products_registry::lookup`]; the tile renders
+/// it as a text card, not a 3-D view.
+pub(crate) fn frames_product() -> crate::WorkspaceProduct {
+    let mut s = FramesWorkbenchState::default();
+    run_frames(&mut s);
+    crate::WorkspaceProduct {
+        title: "Frames".into(),
+        lines: crate::products_registry::lines_from_readout(&s.result),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -376,6 +376,33 @@ fn load_room_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"acoustics"}`** product: the canonical
+/// room built as a 3-D solid, paired with the workbench's own `compute()`
+/// readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`AcousticsWorkbenchState::default`].
+pub(crate) fn acoustics_product() -> crate::WorkspaceProduct {
+    let s = AcousticsWorkbenchState::default();
+    let mesh = room_solid_mesh(&s).expect("canonical room ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<room>/valenx-acoustics");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical room ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Acoustics (room)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

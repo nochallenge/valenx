@@ -506,6 +506,9 @@ pub(crate) fn conveyor_product() -> crate::WorkspaceProduct {
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
     }
 }
 

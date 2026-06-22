@@ -12,7 +12,7 @@
 use eframe::egui;
 use nalgebra::Vector3;
 
-use valenx_sheet_metal::Bend;
+use valenx_sheet_metal::{Bend, Sheet};
 use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
 use crate::ValenxApp;
@@ -302,6 +302,87 @@ fn run_sheetmetal(s: &mut SheetmetalWorkbenchState) {
          bend deduction : {:.4} mm   (2\u{00B7}OSSB \u{2212} BA; flat-blank)",
         s.thickness_mm, s.inside_radius_mm, s.bend_angle_deg, s.k_factor, r_neutral, ba, bd,
     );
+}
+
+/// The agent-bridge product for the sheet-metal workbench
+/// (`show_3d{kind="sheetmetal"}`).
+///
+/// Folds a **canonical demo part** — a 100 × 50 mm rectangular blank in 1 mm
+/// stock with a single 90° bend down the middle — into a 3-D solid via
+/// [`valenx_sheet_metal::Sheet::to_solid`], then extracts its `Tri3`
+/// [`valenx_mesh::Mesh`] through the public `valenx_cad::solid_to_mesh` (a
+/// mesh-backed [`valenx_cad::Solid`] short-circuits to its cached mesh — no
+/// re-tessellation). The bend angle / inside radius mirror the workbench's
+/// canonical worked example. Pure and app-state-free. The readout reports the
+/// blank size, bend, and triangle count.
+///
+/// (The workbench panel itself is a 2-D bend-allowance calculator; the folded
+/// solid is the natural 3-D companion the backing crate already produces.)
+pub(crate) fn sheetmetal_product() -> crate::WorkspaceProduct {
+    // Canonical demo blank (mm): 100 × 50 × 1 mm with one 90° bend at x = 50.
+    const W: f64 = 100.0;
+    const H: f64 = 50.0;
+    const T: f64 = 1.0;
+    const R: f64 = 1.0;
+    let built = (|| -> Result<valenx_mesh::Mesh, String> {
+        let sheet = Sheet::rectangle(W, H, T)
+            .map_err(|e| e.to_string())?
+            .add_bend(Bend::new(
+                [W / 2.0, 0.0],
+                [W / 2.0, H],
+                std::f64::consts::FRAC_PI_2,
+                R,
+            ));
+        let solid = sheet.to_solid().map_err(|e| e.to_string())?;
+        valenx_cad::solid_to_mesh(&solid, valenx_cad::DEFAULT_TESS_TOLERANCE)
+            .map_err(|e| e.to_string())
+    })();
+    let (mesh, lines) = match built {
+        Ok(mesh) => {
+            let tris = mesh.total_elements();
+            let lines = vec![
+                format!("sheet-metal blank {W:.0} \u{00D7} {H:.0} \u{00D7} {T:.0} mm"),
+                "single 90\u{00B0} bend · 1 mm inside radius".to_string(),
+                format!("folded solid: {tris} triangles"),
+            ];
+            (mesh, lines)
+        }
+        Err(e) => {
+            // Theoretically unreachable for the canonical blank; degrade to a
+            // tiny placeholder triangle + a note rather than panicking.
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = vec![0, 1, 2];
+            let mut placeholder = valenx_mesh::Mesh::new("valenx-sheet-metal");
+            placeholder.nodes = vec![
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(1.0, 0.0, 0.0),
+                Vector3::new(0.0, 1.0, 0.0),
+            ];
+            placeholder.element_blocks.push(block);
+            placeholder.recompute_stats();
+            (
+                placeholder,
+                vec![
+                    "folded sheet-metal part".to_string(),
+                    format!("fold unavailable — showing placeholder ({e})"),
+                ],
+            )
+        }
+    };
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<sheetmetal>/folded");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Sheet-metal part (folded)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
 }
 
 #[cfg(test)]

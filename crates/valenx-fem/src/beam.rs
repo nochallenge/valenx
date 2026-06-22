@@ -5157,6 +5157,150 @@ mod tests {
         );
     }
 
+    /// **External-benchmark cross-validation — cantilever with an end
+    /// point load (Roark / Gere–Timoshenko).**
+    ///
+    /// This pins the native 3D Timoshenko beam solver
+    /// ([`solve_beam_static`]) to a *published, independently computed*
+    /// reference, not to one of this crate's own closed-form helpers —
+    /// the "outside source" cross-validation a validation audit flagged
+    /// as the gap.
+    ///
+    /// Case 1 of Roark's *Formulas for Stress and Strain* (cantilever,
+    /// "left end free, right end fixed", concentrated intermediate load
+    /// at the free end) and Gere & Goodno / Timoshenko *Mechanics of
+    /// Materials* give, for a tip load `P`, span `L`, modulus `E`, second
+    /// moment `I`:
+    ///
+    /// - max tip deflection  `δ = P·L³ / (3·E·I)`
+    /// - max tip slope       `θ = P·L² / (2·E·I)`
+    /// - max bending stress  `σ = M·c / I` with the root moment `M = P·L`
+    ///   (exact statics) and `c = h/2`.
+    ///
+    /// Worked numbers (`P = 1000 N`, `L = 1.0 m`, `E = 200 GPa`,
+    /// rectangular section `b = 0.05 m × h = 0.10 m`, so
+    /// `I = b·h³/12 = 4.1667e-6 m⁴`):
+    ///
+    /// - δ_EB = `1000·1³ / (3·200e9·4.1667e-6)` = **0.4000 mm**
+    /// - θ    = `1000·1² / (2·200e9·4.1667e-6)` = **6.000e-4 rad**
+    /// - σ    = `(1000·1)·0.05 / 4.1667e-6`     = **12.00 MPa**
+    ///
+    /// The solver is a **Timoshenko** beam, so its tip deflection is the
+    /// Euler–Bernoulli value *plus* a transverse-shear term
+    /// `P·L/(k·G·A)` (`k = 5/6` for a rectangle); for this slender beam
+    /// that adds 0.78 %, giving ≈0.4031 mm. We therefore assert the FE
+    /// deflection lands within 2 % of the published Euler–Bernoulli
+    /// 0.4000 mm — the residual *is* the (correct) shear contribution,
+    /// not solver error.
+    ///
+    /// Sources:
+    /// - Roark's Formulas for Stress and Strain (Young, Budynas, Sadegh),
+    ///   beam cantilever Case 1 — `δ = PL³/3EI`, `θ = PL²/2EI`.
+    /// - Gere & Goodno / Timoshenko, *Mechanics of Materials* — same.
+    /// - Cross-checked against the public derivation summarised at
+    ///   <https://www.omnicalculator.com/construction/beam-deflection>
+    ///   (cantilever, end load: `δ = WL³/3EI`).
+    #[test]
+    fn cantilever_end_load_matches_published_roark_timoshenko_values() {
+        // --- Published benchmark inputs ---
+        let p = 1000.0_f64; // N, downward tip load
+        let l = 1.0_f64; // m
+        let mat = FemMaterial {
+            youngs_modulus: 200.0e9, // Pa (steel)
+            poisson_ratio: 0.3,
+            density: 7850.0,
+            ..FemMaterial::default()
+        };
+        let width = 0.05_f64; // m, local-y extent
+        let height = 0.10_f64; // m, local-z extent (bending depth)
+        let section = BeamSection::rectangle(width, height);
+        // rectangle(width, height): iy = width·height³/12 governs bending
+        // in the x–z plane, which is what a load along local/global z
+        // excites. iy is the I that enters the published formulas here.
+        let i_bending = section.iy;
+        assert!(
+            (i_bending - width * height.powi(3) / 12.0).abs() < 1e-18,
+            "section Iy must be b·h³/12"
+        );
+
+        // --- Published reference values (independently hand-computed) ---
+        let delta_published = 0.4000e-3_f64; // m  (P·L³/3EI)
+        let slope_published = 6.000e-4_f64; // rad (P·L²/2EI)
+        let sigma_published = 12.00e6_f64; // Pa  (M·c/I, M = P·L)
+
+        // Sanity: the published numbers really are P·L³/3EI etc. (catches
+        // a typo in the literals above, without making the test
+        // self-referential — these are the textbook formulas, evaluated).
+        let eb = p * l.powi(3) / (3.0 * mat.youngs_modulus * i_bending);
+        assert!(
+            (eb - delta_published).abs() / delta_published < 1e-6,
+            "EB formula {eb} should equal the pinned 0.4 mm reference"
+        );
+
+        // --- Solve with the native Timoshenko FE beam ---
+        // A handful of elements; a prismatic Timoshenko beam is exact in
+        // displacement at the nodes for an end load regardless of count,
+        // but several elements make it a non-trivial assembled solve.
+        let n_elem = 8usize;
+        let nodes: Vec<Vector3<f64>> = (0..=n_elem)
+            .map(|k| Vector3::new(l * k as f64 / n_elem as f64, 0.0, 0.0))
+            .collect();
+        // Pin the cross-section roll so the local frame coincides with
+        // the global frame: roll reference = +Y makes local-y ∥ +Y and
+        // local-z ∥ +Z. A transverse load along global -Z then bends the
+        // beam in the local x–z plane, which is governed by Iy — the I
+        // used in the published numbers above. (Without an explicit
+        // orientation the automatic triad maps a +Z load onto Iz, the
+        // weak axis, giving 4× the deflection for this 1:2 section.)
+        let roll_ref = Vector3::new(0.0, 1.0, 0.0);
+        let elements: Vec<BeamElement> = (0..n_elem)
+            .map(|k| BeamElement::with_orientation(k, k + 1, section, roll_ref))
+            .collect();
+        let constraints = [BeamConstraint::clamped(0)];
+        let loads = [BeamLoad::force(n_elem, [0.0, 0.0, -p])]; // -z tip load
+        let sol = solve_beam_static(&nodes, &elements, &mat, &constraints, &loads).unwrap();
+
+        // (1) Tip deflection within 2 % of the published 0.4 mm. The
+        // Timoshenko shear term adds ~0.78 %, so the FE value is slightly
+        // larger — the test confirms it brackets the EB reference on the
+        // correct (softer) side.
+        let tip = sol.translation[n_elem][2].abs();
+        let rel_delta = (tip - delta_published).abs() / delta_published;
+        assert!(
+            rel_delta < 0.02,
+            "FE tip deflection {tip:.6e} m vs published {delta_published:.6e} m \
+             (rel {rel_delta:.4}); shear term should keep this under 2%"
+        );
+        // And it must be on the soft side (Timoshenko ≥ Euler–Bernoulli).
+        assert!(
+            tip >= delta_published - 1e-12,
+            "Timoshenko deflection {tip:.6e} must not be stiffer than EB {delta_published:.6e}"
+        );
+
+        // (2) Tip slope within 1 % of the published 6.0e-4 rad. Rotation
+        // about local/global y bends the beam in the x–z plane; the sign
+        // follows the downward load.
+        let slope = sol.rotation[n_elem][1].abs();
+        let rel_slope = (slope - slope_published).abs() / slope_published;
+        assert!(
+            rel_slope < 0.01,
+            "FE tip slope {slope:.6e} rad vs published {slope_published:.6e} rad (rel {rel_slope:.4})"
+        );
+
+        // (3) Max bending stress at the root. The root moment of a
+        // tip-loaded cantilever is M = P·L by statics (exact, FE-
+        // independent); feed it through the crate's σ = M·c/I to confirm
+        // the stress recovery reproduces the published 12.0 MPa.
+        let root_moment = p * l; // N·m (statics)
+        let c = height / 2.0; // m, extreme fibre
+        let sigma = bending_stress(root_moment, c, i_bending);
+        let rel_sigma = (sigma - sigma_published).abs() / sigma_published;
+        assert!(
+            rel_sigma < 1e-6,
+            "bending stress {sigma:.6e} Pa vs published {sigma_published:.6e} Pa (rel {rel_sigma:.2e})"
+        );
+    }
+
     #[test]
     fn polar_section_modulus_is_the_torsion_design_property() {
         // Worked: Z_p = J/r = 1e-6/0.05 = 2e-5 m³.

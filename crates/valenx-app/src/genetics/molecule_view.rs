@@ -331,6 +331,66 @@ pub fn ball_and_stick(mol: &ViewMolecule, ball_scale: f32, stick_radius: f32) ->
     }
 }
 
+/// Build a **ball-and-stick** triangle mesh of a molecule *with a paired
+/// per-triangle CPK colour* — the colour-aware sibling of [`ball_and_stick`].
+///
+/// Returns the same geometry as [`ball_and_stick`] (identical triangle order)
+/// plus a `Vec<[f32; 3]>` carrying **one colour per triangle**, in lockstep with
+/// `mesh.triangles`: every triangle of an atom's sphere takes that atom's
+/// [`element_color`], and each half of a midpoint-split bond cylinder takes its
+/// own end atom's colour. The colour for triangle `k` is `colors[k]`, so
+/// `colors.len() == mesh.triangles.len()`.
+///
+/// This is what lets a colour-aware consumer (the Workbench+Agent product tile,
+/// which *does* render per-vertex colour) tint the molecule by element: promote
+/// the mesh to a `valenx_mesh::Mesh` one-`Tri3`-per-triangle in order
+/// (`products_registry::mesh_from_triangle_soup`) and expand these per-triangle
+/// colours to triangle-major per-vertex colours
+/// (`products_registry::per_triangle_to_vertex_colors`). The colours are
+/// recovered by snapshotting the triangle count before/after each `push_sphere`
+/// / `push_cylinder`, so the mapping stays correct regardless of the
+/// sphere/cylinder tessellation density.
+pub fn ball_and_stick_colored(
+    mol: &ViewMolecule,
+    ball_scale: f32,
+    stick_radius: f32,
+) -> (TriangleMesh, Vec<[f32; 3]>) {
+    let mut tris: Vec<StlTriangle> = Vec::new();
+    let mut colors: Vec<[f32; 3]> = Vec::new();
+    // Push `tris` for one primitive, then tag every triangle it added with
+    // `color` — independent of how many triangles the tessellator emitted.
+    let mut tag = |tris: &mut Vec<StlTriangle>, before: usize, color: [f32; 3]| {
+        for _ in before..tris.len() {
+            colors.push(color);
+        }
+    };
+    for atom in &mol.atoms {
+        let r = (vdw_radius(&atom.element) * ball_scale).max(0.05);
+        let before = tris.len();
+        push_sphere(&mut tris, atom.pos, r);
+        tag(&mut tris, before, element_color(&atom.element));
+    }
+    for &(a, b) in &mol.bonds {
+        let (Some(atom_a), Some(atom_b)) = (mol.atoms.get(a), mol.atoms.get(b)) else {
+            continue;
+        };
+        let mid = midpoint(atom_a.pos, atom_b.pos);
+        // Each half-cylinder takes its near atom's colour.
+        let before = tris.len();
+        push_cylinder(&mut tris, atom_a.pos, mid, stick_radius);
+        tag(&mut tris, before, element_color(&atom_a.element));
+        let before = tris.len();
+        push_cylinder(&mut tris, mid, atom_b.pos, stick_radius);
+        tag(&mut tris, before, element_color(&atom_b.element));
+    }
+    let mesh = TriangleMesh {
+        format: None,
+        name: Some("genetics-ball-and-stick".to_string()),
+        triangles: tris,
+    };
+    (mesh, colors)
+}
+
 /// Build a **spacefill** (CPK / van-der-Waals) triangle mesh.
 ///
 /// Every atom is a full van-der-Waals sphere; bonds are not drawn (the
@@ -502,6 +562,104 @@ pub fn show_molecule(
     });
     app.frame_current_stl();
     Ok(count)
+}
+
+/// A small canonical demo molecule — a single water (H₂O) with realistic
+/// geometry (O at the origin, two O–H bonds at ~104.5°, 0.96 Å), bonds detected
+/// by the covalent-radius rule. Used by [`molecule_product`] so the
+/// agent-bridge molecule tile renders a real, correctly-coloured structure with
+/// no external data.
+fn demo_molecule() -> ViewMolecule {
+    let mut mol = ViewMolecule {
+        atoms: vec![
+            ViewAtom::new([0.000, 0.000, 0.1173], "O"),
+            ViewAtom::new([0.000, 0.7572, -0.4692], "H"),
+            ViewAtom::new([0.000, -0.7572, -0.4692], "H"),
+        ],
+        bonds: Vec::new(),
+    };
+    mol.bonds = detect_bonds(&mol.atoms);
+    mol
+}
+
+/// Count atoms by element and emit a Hill-ish formula string (C, then H, then
+/// the rest alphabetically) for a [`ViewMolecule`] — a compact readout row.
+fn molecule_formula(mol: &ViewMolecule) -> String {
+    use std::collections::BTreeMap;
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for a in &mol.atoms {
+        *counts
+            .entry(a.element.trim().to_ascii_uppercase())
+            .or_default() += 1;
+    }
+    let mut order: Vec<String> = Vec::new();
+    if counts.contains_key("C") {
+        order.push("C".to_string());
+    }
+    if counts.contains_key("H") {
+        order.push("H".to_string());
+    }
+    for k in counts.keys() {
+        if k != "C" && k != "H" {
+            order.push(k.clone());
+        }
+    }
+    let mut s = String::new();
+    for el in order {
+        let n = counts[&el];
+        // Title-case the symbol (e.g. "FE" → "Fe") for display.
+        let mut sym = String::new();
+        for (i, ch) in el.chars().enumerate() {
+            if i == 0 {
+                sym.extend(ch.to_uppercase());
+            } else {
+                sym.extend(ch.to_lowercase());
+            }
+        }
+        s.push_str(&sym);
+        if n > 1 {
+            s.push_str(&n.to_string());
+        }
+    }
+    s
+}
+
+/// The agent-bridge product for the molecule view (`show_3d{kind="molecule"}`).
+///
+/// Builds the [`demo_molecule`] (a water H₂O), meshes it as a **colour-aware**
+/// ball-and-stick model via [`ball_and_stick_colored`], promotes the triangle
+/// soup to a `Tri3` [`valenx_mesh::Mesh`]
+/// ([`crate::products_registry::mesh_from_triangle_soup`]), and expands the
+/// per-triangle CPK colours to the triangle-major per-vertex `vertex_colors` the
+/// tile renderer paints
+/// ([`crate::products_registry::per_triangle_to_vertex_colors`]) — so the
+/// molecule renders coloured by element (O red, H white) rather than flat metal.
+/// Pure and app-state-free. The readout reports the formula and atom/bond
+/// counts.
+pub(crate) fn molecule_product() -> crate::WorkspaceProduct {
+    let mol = demo_molecule();
+    let (soup, per_tri_colors) = ball_and_stick_colored(&mol, 0.25, 0.15);
+    let mesh = crate::products_registry::mesh_from_triangle_soup(&soup, "valenx-molecule");
+    let vertex_colors = crate::products_registry::per_triangle_to_vertex_colors(&per_tri_colors);
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<molecule>/ball-and-stick");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    let lines = vec![
+        format!("molecule: {} (water)", molecule_formula(&mol)),
+        format!("{} atoms · {} bonds", mol.atoms.len(), mol.bonds.len()),
+        "ball-and-stick, coloured by CPK element palette".to_string(),
+    ];
+    crate::WorkspaceProduct {
+        title: "Molecule (ball-and-stick)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: Some(vertex_colors),
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
 }
 
 #[cfg(test)]

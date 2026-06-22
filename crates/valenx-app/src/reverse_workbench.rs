@@ -186,6 +186,67 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// The agent-bridge product for the reverse-engineering workbench
+/// (`show_3d{kind="reverse"}`).
+///
+/// Runs the **default** demo reconstruction — the canonical sphere point cloud
+/// (density 24 ⇒ ~600 points) reconstructed by the k-NN
+/// [`valenx_reverse::triangulate`] (k = 8) into a `Tri3`
+/// [`valenx_mesh::Mesh`]. Pure and app-state-free: it builds a fresh
+/// [`ReverseWorkbenchState::default`] so it yields exactly the surface the
+/// workbench shows on first reconstruct. The readout reports the point and
+/// triangle counts.
+pub(crate) fn reverse_product() -> crate::WorkspaceProduct {
+    let state = ReverseWorkbenchState::default();
+    let n_pts = demo_cloud(state.shape, state.density).len();
+    let (mesh, lines) = match run_reverse(&state) {
+        Ok(mesh) => {
+            let tris = mesh.total_elements();
+            let lines = vec![
+                "scan-to-CAD: sphere point cloud → k-NN surface".to_string(),
+                format!("{n_pts} sampled points · k = {} neighbours", state.k),
+                format!("reconstructed surface: {tris} triangles"),
+            ];
+            (mesh, lines)
+        }
+        Err(e) => {
+            // Theoretically unreachable for the canonical cloud; degrade to a
+            // tiny placeholder triangle + a note rather than panicking.
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = vec![0, 1, 2];
+            let mut placeholder = valenx_mesh::Mesh::new("valenx-reverse-surface");
+            placeholder.nodes = vec![
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(1.0, 0.0, 0.0),
+                Vector3::new(0.0, 1.0, 0.0),
+            ];
+            placeholder.element_blocks.push(block);
+            placeholder.recompute_stats();
+            (
+                placeholder,
+                vec![
+                    "point-cloud surface reconstruction".to_string(),
+                    format!("reconstruction unavailable — showing placeholder ({e})"),
+                ],
+            )
+        }
+    };
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<reverse>/reconstruction");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Reverse-engineered surface (k-NN)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

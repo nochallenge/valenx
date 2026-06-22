@@ -165,6 +165,9 @@ valenx-rcbeam        = { path = "../valenx-rcbeam" }
 # Native box-form hull hydrostatics — surfaced by the Marine workbench
 # (src/marine_workbench.rs).
 valenx-marine        = { path = "../valenx-marine" }
+# Native calm-water hull resistance + powering (ITTC-57 + Holtrop-Mennen) —
+# surfaced by the Marine workbench's readout (src/marine_workbench.rs).
+valenx-marine-hydro  = { path = "../valenx-marine-hydro" }
 # Native parallel-plate capacitor electrostatics — surfaced by the
 # Capacitor workbench (src/capacitor_workbench.rs).
 valenx-capacitor     = { path = "../valenx-capacitor" }

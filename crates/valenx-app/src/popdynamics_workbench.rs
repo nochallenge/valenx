@@ -482,6 +482,59 @@ fn load_curve_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The active model's representative trajectory as a 2-D **line-chart** series —
+/// population vs time. The plotted quantity matches [`curve_samples`]: SIR
+/// infectious count, logistic `N(t)`, or Lotka-Volterra prey count, all the
+/// genuine `valenx-popdynamics` result (closed-form logistic / RK4 `simulate`
+/// for the others). `None` for an invalid configuration.
+fn trajectory_chart(s: &PopDynamicsWorkbenchState) -> Option<crate::ChartData> {
+    let samples = curve_samples(s)?;
+    let (label, y_label) = match s.model {
+        PopModel::Sir => ("infectious I(t)", "population"),
+        PopModel::Logistic => ("N(t)", "population N"),
+        PopModel::LotkaVolterra => ("prey x(t)", "population"),
+    };
+    let points: Vec<[f64; 2]> = samples.iter().map(|&(t, v)| [t, v]).collect();
+    Some(crate::ChartData {
+        title: "Population trajectory".into(),
+        x_label: "time".into(),
+        y_label: y_label.into(),
+        series: vec![crate::ChartSeries {
+            label: label.into(),
+            points,
+            bars: false,
+        }],
+    })
+}
+
+/// The agent-bridge **`show_3d{kind:"popdynamics"}`** product: the canonical
+/// model trajectory presented as a 2-D **line chart** (population vs time — see
+/// [`trajectory_chart`]) paired with the workbench's own model-diagnostics
+/// headline numbers. A population-vs-time trajectory reads far better as a
+/// framed, auto-scaled curve than as a swept 3-D ribbon, so this product carries
+/// `kind2d: Some(Chart(..))` and no mesh. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`PopDynamicsWorkbenchState::default`] (the default SIR
+/// model). The readout rows mirror the panel's `compute()` readout.
+pub(crate) fn popdynamics_product() -> crate::WorkspaceProduct {
+    let s = PopDynamicsWorkbenchState::default();
+    let chart = trajectory_chart(&s).expect("default SIR model ⇒ a trajectory chart");
+    let readout = compute(&s).expect("default SIR model ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    crate::WorkspaceProduct {
+        title: "Population Dynamics".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: valenx_viz::OrbitCamera::default(),
+        kind2d: Some(crate::Workspace2dKind::Chart(chart)),
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

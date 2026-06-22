@@ -26,6 +26,45 @@ use valenx_solvespace_3d::{
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
+/// Which drawing tool the sketch canvas is in. `Line` drops straight segments
+/// (one click each); `Arc` builds a 3-point circular arc (start, end, a point on
+/// the arc); `Spline` builds a smooth Catmull-Rom curve through clicked points.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+enum SketchTool {
+    #[default]
+    Line,
+    Arc,
+    Spline,
+}
+
+/// One ordered edge of the drawn sketch profile. Each segment knows its own end
+/// anchor (`to`) so the profile is an ordered chain `start → seg₀.to → seg₁.to …`.
+/// Tessellated by [`CadWorkbenchState::sketch_profile_polyline`] into the closed
+/// polyline that [`CadWorkbenchState::add_extrude_from_sketch`] sweeps into a solid.
+#[derive(Clone, Debug, PartialEq)]
+enum SketchSeg {
+    /// Straight segment from the previous anchor to `to`.
+    Line { to: [f64; 2] },
+    /// Circular arc from the previous anchor to `to`, passing through `via` (a
+    /// third point ON the arc). The circle is the unique one through the three
+    /// points; if they are collinear it degenerates to a straight line.
+    Arc { to: [f64; 2], via: [f64; 2] },
+    /// Smooth Catmull-Rom spline from the previous anchor through every point in
+    /// `thru` (the last of which is this segment's end anchor).
+    Spline { thru: Vec<[f64; 2]> },
+}
+
+impl SketchSeg {
+    /// The end anchor of this segment (where the next segment starts).
+    fn end(&self) -> [f64; 2] {
+        match self {
+            SketchSeg::Line { to } | SketchSeg::Arc { to, .. } => *to,
+            // A Spline always carries ≥1 `thru` point; its end is the last one.
+            SketchSeg::Spline { thru } => *thru.last().expect("spline has ≥1 point"),
+        }
+    }
+}
+
 /// Which primitive a feature-tree step builds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FeatureKind {
@@ -35,6 +74,7 @@ enum FeatureKind {
     Cone,
     Torus,
     Extrude,
+    Revolve,
 }
 
 /// One UI-editable feature-tree step. Carries both the box and cylinder
@@ -43,7 +83,8 @@ enum FeatureKind {
 struct UiStep {
     op: Op,
     kind: FeatureKind,
-    /// Extrude profile — `(x, y)` points (literal coords, not expressions).
+    /// Extrude profile — `(x, y)` points (literal coords, not expressions). For
+    /// a Revolve step the same field holds the `(r, z)` half-section.
     profile: Vec<(f64, f64)>,
     dx: String,
     dy: String,
@@ -53,6 +94,8 @@ struct UiStep {
     top_radius: String,
     major: String,
     minor: String,
+    /// Revolve sweep angle in degrees (expression). `360` = full lathe body.
+    angle: String,
     x: String,
     y: String,
     z: String,
@@ -77,6 +120,7 @@ impl UiStep {
             top_radius: "0".into(),
             major: "1".into(),
             minor: "0.25".into(),
+            angle: "360".into(),
             x: "0".into(),
             y: "0".into(),
             z: "0".into(),
@@ -113,6 +157,15 @@ impl UiStep {
         Self::base(Op::Join, FeatureKind::Extrude)
     }
 
+    fn new_revolve() -> Self {
+        let mut s = Self::base(Op::Join, FeatureKind::Revolve);
+        // Default half-section is a cone profile that starts and ends on the
+        // axis (r = 0) so a full-turn revolve caps cleanly: axis → outer → axis.
+        s.profile = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 2.0)];
+        s.angle = "360".into();
+        s
+    }
+
     /// Translate into a solver-crate [`Step`].
     fn to_step(&self) -> Step {
         let feature = match self.kind {
@@ -140,6 +193,10 @@ impl UiStep {
             FeatureKind::Extrude => Feature::Extrude {
                 profile: self.profile.clone(),
                 height: self.height.clone(),
+            },
+            FeatureKind::Revolve => Feature::Revolve {
+                profile: self.profile.clone(),
+                angle_deg: self.angle.clone(),
             },
         };
         let mut step = Step::placed(
@@ -197,7 +254,59 @@ pub struct CadWorkbenchState {
     body_visible: Vec<bool>,
     /// Material density (mass per unit volume) — drives the mass readout.
     density: f64,
+    /// Set by [`CadWorkbenchState::request_rebuild`] (e.g. the top-bar Part
+    /// Design menu) to ask `draw_cad_workbench` to rebuild the tree into the
+    /// viewport on this frame — the programmatic equivalent of clicking the
+    /// panel's "Rebuild → viewport" button.
+    rebuild_request: bool,
+    /// First anchor of the mouse-drawn sketch profile (model units), or `None`
+    /// when the sketch is empty. The profile is the ordered chain
+    /// `sketch_start → sketch_segs[0].end → sketch_segs[1].end → …`.
+    sketch_start: Option<[f64; 2]>,
+    /// Ordered edges of the mouse-drawn profile (Line / Arc / Spline), in draw
+    /// order. Feeds [`CadWorkbenchState::sketch_profile_polyline`].
+    sketch_segs: Vec<SketchSeg>,
+    /// Which drawing tool clicks add (Line / Arc / Spline).
+    sketch_tool: SketchTool,
+    /// Clicks staged for a multi-click segment: 3 for an Arc (start, end, via),
+    /// ≥1 for a Spline run (committed on **Finish curve**). Empty between segments.
+    sketch_pending: Vec<[f64; 2]>,
+    /// Whether the sketched profile's loop is closed (the user clicked back near
+    /// the first anchor). A closed loop renders a translucent fill.
+    sketch_closed: bool,
+    /// Snap canvas clicks to the [`SKETCH_SNAP`]-unit grid.
+    sketch_grid_snap: bool,
+    /// Extrude depth (model units) the **Extrude sketch** button applies to the
+    /// drawn profile.
+    sketch_extrude_height: f64,
+    /// Set by the top-bar Part Design **Sketch** menu item to ask the panel to
+    /// scroll the sketch canvas into view and flash its header on this frame.
+    sketch_focus_request: bool,
 }
+
+/// Grid spacing of the sketch canvas, in model units — also the snap step when
+/// **snap-to-grid** is enabled.
+const SKETCH_SNAP: f64 = 0.25;
+
+/// Half-extent of the sketch canvas in model units: the canvas shows
+/// `[-SKETCH_VIEW, +SKETCH_VIEW]` on each axis (a `2·SKETCH_VIEW`-unit window).
+const SKETCH_VIEW: f64 = 4.0;
+
+/// Click/close pick radius on the sketch canvas, in screen pixels — a click
+/// within this distance of the first vertex closes the polygon loop.
+const SKETCH_PICK_PX: f32 = 8.0;
+
+/// Number of straight chords each circular Arc segment is sampled into (both for
+/// the live canvas render and the extruded profile). 24 chords keeps the
+/// faceting under ~0.5° per chord on a quarter-turn arc — visually smooth and a
+/// faithful extrusion cross-section. The arc's endpoints are always included.
+const SKETCH_ARC_SAMPLES: usize = 24;
+
+/// Number of straight chords sampled **per Catmull-Rom span** (one span between
+/// each pair of consecutive control points). The spline's control points are
+/// always included, so a curve through N points yields N + (N−1)·(SAMPLES−1)
+/// polyline vertices.
+const SKETCH_SPLINE_SAMPLES: usize = 16;
 
 impl Default for CadWorkbenchState {
     fn default() -> Self {
@@ -219,7 +328,405 @@ impl Default for CadWorkbenchState {
             scrub: 1,
             body_visible: Vec::new(),
             density: 1.0,
+            rebuild_request: false,
+            sketch_start: None,
+            sketch_segs: Vec::new(),
+            sketch_tool: SketchTool::default(),
+            sketch_pending: Vec::new(),
+            sketch_closed: false,
+            sketch_grid_snap: true,
+            sketch_extrude_height: 1.0,
+            sketch_focus_request: false,
         }
+    }
+}
+
+/// Solve the centre and radius of the circle through three points. Returns
+/// `None` when the points are (near-)collinear — the circumradius diverges, so
+/// the caller falls back to a straight chord. Closed form from the perpendicular
+/// bisectors: with `d = 2·(aₓ(bᵧ−cᵧ)+bₓ(cᵧ−aᵧ)+cₓ(aᵧ−bᵧ))`, the centre is the
+/// standard circumcentre and `r = |centre − a|`.
+fn circle_through_3(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> Option<([f64; 2], f64)> {
+    let d = 2.0 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]));
+    if d.abs() < 1e-9 {
+        return None; // collinear → no finite circle
+    }
+    let a2 = a[0] * a[0] + a[1] * a[1];
+    let b2 = b[0] * b[0] + b[1] * b[1];
+    let c2 = c[0] * c[0] + c[1] * c[1];
+    let ux = (a2 * (b[1] - c[1]) + b2 * (c[1] - a[1]) + c2 * (a[1] - b[1])) / d;
+    let uy = (a2 * (c[0] - b[0]) + b2 * (a[0] - c[0]) + c2 * (b[0] - a[0])) / d;
+    let centre = [ux, uy];
+    let r = ((a[0] - ux).powi(2) + (a[1] - uy).powi(2)).sqrt();
+    Some((centre, r))
+}
+
+/// Sample the circular arc that starts at `start`, ends at `end`, and passes
+/// through `via`, into a polyline. The first point is `start`; the returned
+/// vector ends just *before* `end` (the caller appends the shared end anchor, so
+/// chained segments don't duplicate vertices). The swept direction and span are
+/// chosen so the arc actually passes through `via` (i.e. the minor-or-major arc
+/// that contains the via point). Collinear points fall back to the single
+/// straight point `[start]` (a plain chord to `end`).
+fn sample_arc(start: [f64; 2], via: [f64; 2], end: [f64; 2]) -> Vec<[f64; 2]> {
+    let Some((centre, r)) = circle_through_3(start, via, end) else {
+        return vec![start]; // collinear → straight chord start→end
+    };
+    let ang = |p: [f64; 2]| (p[1] - centre[1]).atan2(p[0] - centre[0]);
+    let a0 = ang(start);
+    let a1 = ang(end);
+    let av = ang(via);
+    let tau = std::f64::consts::TAU;
+    // Normalise a positive (CCW) sweep start→end, and the via offset within it.
+    let mut sweep = a1 - a0;
+    while sweep <= 0.0 {
+        sweep += tau;
+    }
+    let mut via_off = av - a0;
+    while via_off <= 0.0 {
+        via_off += tau;
+    }
+    // If `via` is not inside the CCW start→end arc, the arc through it is the
+    // complementary one — sweep clockwise (negative) instead.
+    if via_off > sweep {
+        sweep -= tau;
+    }
+    let mut out = Vec::with_capacity(SKETCH_ARC_SAMPLES);
+    // Sample [0, SAMPLES): includes start (t=0), excludes end (t=1).
+    for i in 0..SKETCH_ARC_SAMPLES {
+        let t = i as f64 / SKETCH_ARC_SAMPLES as f64;
+        let a = a0 + sweep * t;
+        out.push([centre[0] + r * a.cos(), centre[1] + r * a.sin()]);
+    }
+    out
+}
+
+/// One uniform (centripetal-free, standard) Catmull-Rom interpolation at
+/// parameter `t ∈ [0,1]` on the span `p1 → p2`, using neighbours `p0`/`p3` for
+/// the tangents. The curve passes through `p1` at `t=0` and `p2` at `t=1`.
+fn catmull_rom(p0: [f64; 2], p1: [f64; 2], p2: [f64; 2], p3: [f64; 2], t: f64) -> [f64; 2] {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let comp = |a: f64, b: f64, c: f64, d: f64| {
+        0.5 * ((2.0 * b)
+            + (-a + c) * t
+            + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2
+            + (-a + 3.0 * b - 3.0 * c + d) * t3)
+    };
+    [
+        comp(p0[0], p1[0], p2[0], p3[0]),
+        comp(p0[1], p1[1], p2[1], p3[1]),
+    ]
+}
+
+/// Sample a Catmull-Rom spline through `ctrl` (≥2 control points) into a
+/// polyline. The first point is `ctrl[0]`; the returned vector ends just
+/// *before* the final control point (the caller appends the shared end anchor).
+/// End tangents use a reflected phantom point so the curve still passes through
+/// the endpoints. A single control point returns `[ctrl[0]]`.
+fn sample_spline(ctrl: &[[f64; 2]]) -> Vec<[f64; 2]> {
+    if ctrl.len() < 2 {
+        return ctrl.first().map(|&p| vec![p]).unwrap_or_default();
+    }
+    let n = ctrl.len();
+    // Phantom endpoints (reflect the neighbour about the endpoint) so the spline
+    // interpolates ctrl[0] and ctrl[n-1] cleanly.
+    let pt = |i: isize| -> [f64; 2] {
+        if i < 0 {
+            [2.0 * ctrl[0][0] - ctrl[1][0], 2.0 * ctrl[0][1] - ctrl[1][1]]
+        } else if i as usize >= n {
+            [
+                2.0 * ctrl[n - 1][0] - ctrl[n - 2][0],
+                2.0 * ctrl[n - 1][1] - ctrl[n - 2][1],
+            ]
+        } else {
+            ctrl[i as usize]
+        }
+    };
+    let mut out = Vec::with_capacity((n - 1) * SKETCH_SPLINE_SAMPLES);
+    // One span per consecutive control pair; sample [0,SAMPLES) so spans join
+    // without duplicating the shared control point. The final endpoint is left
+    // for the caller to append.
+    for k in 0..n - 1 {
+        let p0 = pt(k as isize - 1);
+        let p1 = pt(k as isize);
+        let p2 = pt(k as isize + 1);
+        let p3 = pt(k as isize + 2);
+        for i in 0..SKETCH_SPLINE_SAMPLES {
+            let t = i as f64 / SKETCH_SPLINE_SAMPLES as f64;
+            out.push(catmull_rom(p0, p1, p2, p3, t));
+        }
+    }
+    out
+}
+
+/// Public feature-tree mutators — the **single code path** shared by the
+/// workbench's own `+ Box / + Cylinder / …` buttons and the top-bar
+/// **Part Design** menu, so a feature added from the menu behaves exactly like
+/// one added from the panel. Each `add_*` appends a step; [`Self::set_last_op`]
+/// sets the boolean op of the last step; [`Self::request_rebuild`] flags a
+/// rebuild-to-viewport on the next frame (mirroring the panel's "Rebuild →
+/// viewport" button); [`Self::reset_to_base_solid`] starts a fresh single-solid
+/// part.
+impl CadWorkbenchState {
+    /// Append a Box feature (the panel's `+ Box`).
+    pub fn add_box(&mut self) {
+        self.steps.push(UiStep::new_box());
+    }
+
+    /// Append a Cylinder feature (the panel's `+ Cylinder`).
+    pub fn add_cylinder(&mut self) {
+        self.steps.push(UiStep::new_cylinder());
+    }
+
+    /// Append a Sphere feature (the panel's `+ Sphere`).
+    pub fn add_sphere(&mut self) {
+        self.steps.push(UiStep::new_sphere());
+    }
+
+    /// Append a Cone feature (the panel's `+ Cone`).
+    pub fn add_cone(&mut self) {
+        self.steps.push(UiStep::new_cone());
+    }
+
+    /// Append a Torus feature (the panel's `+ Torus`).
+    pub fn add_torus(&mut self) {
+        self.steps.push(UiStep::new_torus());
+    }
+
+    /// Append an Extrude feature — a 2-D sketch profile swept along +Z (the
+    /// panel's `+ Extrude`). This is the discoverable *sketch → extrude → solid*
+    /// path: the step's editable `(x, y)` profile **is** the sketch.
+    pub fn add_extrude(&mut self) {
+        self.steps.push(UiStep::new_extrude());
+    }
+
+    /// Append a Revolve feature — a half-section profile revolved about the Z
+    /// axis (the panel's `+ Revolve`), the lathe/turn operation.
+    pub fn add_revolve(&mut self) {
+        self.steps.push(UiStep::new_revolve());
+    }
+
+    /// Append an Extrude feature whose `(x, y)` profile is the supplied polygon
+    /// `points` (in model units), swept along +Z by `height`. This is the
+    /// **draw-then-extrude** path: the mouse-drawn sketch canvas hands its
+    /// vertices straight to the feature tree. The op is `New` when the tree is
+    /// empty (the first step must start a body) and `Join` otherwise (weld the
+    /// prism onto the running body, matching the panel's `+ Extrude`). A profile
+    /// of fewer than 3 points or a non-finite `height` is ignored. Caller should
+    /// follow with [`Self::request_rebuild`] (or `perform_rebuild`) to fold the
+    /// new prism into the viewport.
+    pub fn add_extrude_from_sketch(&mut self, points: &[[f64; 2]], height: f64) {
+        if points.len() < 3 || !height.is_finite() {
+            return;
+        }
+        let op = if self.steps.is_empty() {
+            Op::New
+        } else {
+            Op::Join
+        };
+        let mut st = UiStep::base(op, FeatureKind::Extrude);
+        st.profile = points.iter().map(|p| (p[0], p[1])).collect();
+        // Literal extrude depth — the timeline resolves the height as an
+        // expression, so a plain number string drives it parametrically-compatibly.
+        st.height = fmt_num(height);
+        self.steps.push(st);
+    }
+
+    /// Append a straight-line vertex (Line tool, and the canvas's plain click).
+    /// The first vertex becomes `sketch_start`; each later vertex appends a
+    /// `Line` segment from the previous anchor. A no-op once the loop is closed.
+    pub fn sketch_add_point(&mut self, x: f64, y: f64) {
+        if self.sketch_closed {
+            return;
+        }
+        let p = [x, y];
+        match self.sketch_start {
+            None => self.sketch_start = Some(p),
+            Some(_) => self.sketch_segs.push(SketchSeg::Line { to: p }),
+        }
+    }
+
+    /// Commit a 3-point circular arc (Arc tool): `start → end` passing through
+    /// `via`. The previous anchor is the implicit start of the first arc; if the
+    /// sketch is empty the supplied `start` seeds `sketch_start`. A no-op once the
+    /// loop is closed.
+    pub fn sketch_add_arc(&mut self, start: [f64; 2], via: [f64; 2], end: [f64; 2]) {
+        if self.sketch_closed {
+            return;
+        }
+        if self.sketch_start.is_none() {
+            self.sketch_start = Some(start);
+        }
+        self.sketch_segs.push(SketchSeg::Arc { to: end, via });
+    }
+
+    /// Commit a Catmull-Rom spline (Spline tool) through `pts`. The previous
+    /// anchor is the implicit start of the curve; if the sketch is empty `pts[0]`
+    /// seeds `sketch_start` and the spline runs through the remaining points. A
+    /// no-op once the loop is closed, or when fewer than 2 usable points result.
+    pub fn sketch_add_spline(&mut self, pts: &[[f64; 2]]) {
+        if self.sketch_closed || pts.is_empty() {
+            return;
+        }
+        let thru: Vec<[f64; 2]> = if self.sketch_start.is_none() {
+            self.sketch_start = Some(pts[0]);
+            pts[1..].to_vec()
+        } else {
+            pts.to_vec()
+        };
+        if thru.is_empty() {
+            return; // a lone seed point is just the start anchor, no curve yet
+        }
+        self.sketch_segs.push(SketchSeg::Spline { thru });
+    }
+
+    /// Remove the last sketched segment (canvas **Undo**). Dropping the only
+    /// anchor empties the sketch. Always re-opens a closed loop.
+    pub fn sketch_undo(&mut self) {
+        if self.sketch_segs.pop().is_none() {
+            self.sketch_start = None;
+        }
+        self.sketch_pending.clear();
+        self.sketch_closed = false;
+    }
+
+    /// Discard the whole mouse-drawn sketch (canvas **Clear sketch**).
+    pub fn sketch_clear(&mut self) {
+        self.sketch_start = None;
+        self.sketch_segs.clear();
+        self.sketch_pending.clear();
+        self.sketch_closed = false;
+    }
+
+    /// The ordered **anchor** vertices of the drawn profile (model units): the
+    /// start anchor followed by each segment's end anchor. For a Line-only sketch
+    /// these are exactly the clicked points; for Arc/Spline they are the segment
+    /// endpoints (the curve interior lives between them — see
+    /// [`Self::sketch_profile_polyline`]).
+    pub fn sketch_points(&self) -> Vec<[f64; 2]> {
+        let mut v = Vec::with_capacity(1 + self.sketch_segs.len());
+        if let Some(p) = self.sketch_start {
+            v.push(p);
+            v.extend(self.sketch_segs.iter().map(|s| s.end()));
+        }
+        v
+    }
+
+    /// Number of anchor vertices currently in the sketch (start + one per
+    /// segment). `0` when empty.
+    pub fn sketch_anchor_count(&self) -> usize {
+        if self.sketch_start.is_some() {
+            1 + self.sketch_segs.len()
+        } else {
+            0
+        }
+    }
+
+    /// Whether the mouse-drawn sketch loop is closed.
+    pub fn sketch_is_closed(&self) -> bool {
+        self.sketch_closed
+    }
+
+    /// Walk the segment chain and produce the closed **polyline** (model units)
+    /// that [`Self::add_extrude_from_sketch`] sweeps into a solid: line endpoints
+    /// are kept as-is, each Arc is sampled into `SKETCH_ARC_SAMPLES` chords
+    /// along the circle through its 3 points, and each Spline into
+    /// `SKETCH_SPLINE_SAMPLES` chords per control span. The result starts at the
+    /// start anchor and ends at the last segment's end anchor (the extruder closes
+    /// the loop back to the start). Returns an empty vector for an empty sketch.
+    pub fn sketch_profile_polyline(&self) -> Vec<[f64; 2]> {
+        let Some(start) = self.sketch_start else {
+            return Vec::new();
+        };
+        let mut poly = vec![start];
+        let mut cur = start;
+        for seg in &self.sketch_segs {
+            match seg {
+                SketchSeg::Line { to } => {
+                    poly.push(*to);
+                    cur = *to;
+                }
+                SketchSeg::Arc { to, via } => {
+                    // sample_arc yields [start .. just-before-end]; skip its
+                    // first point (== cur, already in poly), then add the end.
+                    let arc = sample_arc(cur, *via, *to);
+                    poly.extend(arc.into_iter().skip(1));
+                    poly.push(*to);
+                    cur = *to;
+                }
+                SketchSeg::Spline { thru } => {
+                    // Control points = previous anchor + the run-through points.
+                    let mut ctrl = Vec::with_capacity(1 + thru.len());
+                    ctrl.push(cur);
+                    ctrl.extend_from_slice(thru);
+                    let end = *thru.last().expect("spline thru is non-empty");
+                    let curve = sample_spline(&ctrl);
+                    poly.extend(curve.into_iter().skip(1)); // skip cur (already in poly)
+                    poly.push(end);
+                    cur = end;
+                }
+            }
+        }
+        poly
+    }
+
+    /// Ask the panel to scroll the sketch canvas into view (the top-bar Part
+    /// Design → **Sketch** menu item). `draw_cad_workbench` consumes the flag.
+    pub fn focus_sketch(&mut self) {
+        self.sketch_focus_request = true;
+    }
+
+    /// Set the boolean [`Op`] of the **last** step (the next feature combines
+    /// with the running body this way). No-op on an empty tree. Used by the
+    /// Part Design → Boolean submenu (Union / Cut / Intersect).
+    pub fn set_last_op(&mut self, op: Op) {
+        if let Some(last) = self.steps.last_mut() {
+            last.op = op;
+        }
+    }
+
+    /// Part Design → Boolean → Union: set the last step to weld (boolean union).
+    pub fn set_last_op_union(&mut self) {
+        self.set_last_op(Op::Join);
+    }
+
+    /// Part Design → Boolean → Cut: set the last step to subtract (difference).
+    pub fn set_last_op_cut(&mut self) {
+        self.set_last_op(Op::Cut);
+    }
+
+    /// Part Design → Boolean → Intersect: set the last step to keep the overlap.
+    pub fn set_last_op_intersect(&mut self) {
+        self.set_last_op(Op::Intersect);
+    }
+
+    /// Whether the feature tree has at least one step (so the Boolean submenu
+    /// can disable itself when there's nothing to combine).
+    pub fn has_steps(&self) -> bool {
+        !self.steps.is_empty()
+    }
+
+    /// Reset the feature tree to a single base solid (a unit box) — Part Design
+    /// → "New part". Clears any cached rebuild/history so the viewport reflects
+    /// the fresh part on the next rebuild.
+    pub fn reset_to_base_solid(&mut self) {
+        let mut base = UiStep::base(Op::New, FeatureKind::Box);
+        base.dx = "size".into();
+        base.dy = "size".into();
+        base.dz = "size".into();
+        self.steps = vec![base];
+        self.history = None;
+        self.rebuilt_mesh = None;
+        self.body_visible = Vec::new();
+        self.tree_status = None;
+    }
+
+    /// Flag that the tree should be rebuilt and pushed into the central 3-D
+    /// viewport on the next frame — the same effect as the panel's
+    /// "Rebuild → viewport" button. `draw_cad_workbench` performs the rebuild.
+    pub fn request_rebuild(&mut self) {
+        self.rebuild_request = true;
     }
 }
 
@@ -346,6 +853,11 @@ fn ui_step_from(step: &Step) -> Result<UiStep, String> {
             us.kind = FeatureKind::Extrude;
             us.profile = profile.clone();
             us.height = height.clone();
+        }
+        Feature::Revolve { profile, angle_deg } => {
+            us.kind = FeatureKind::Revolve;
+            us.profile = profile.clone();
+            us.angle = angle_deg.clone();
         }
     }
     Ok(us)
@@ -1645,6 +2157,7 @@ fn kind_label(kind: FeatureKind) -> &'static str {
         FeatureKind::Cone => "Cone",
         FeatureKind::Torus => "Torus",
         FeatureKind::Extrude => "Extrude",
+        FeatureKind::Revolve => "Revolve",
     }
 }
 
@@ -1653,11 +2166,396 @@ fn dim_edit(ui: &mut egui::Ui, v: &mut String) {
     ui.add(egui::TextEdit::singleline(v).desired_width(52.0));
 }
 
+/// Format a float as a compact expression string for a feature field — up to 4
+/// decimal places with trailing zeros trimmed (so `1.0 → "1"`, `0.25 → "0.25"`).
+fn fmt_num(v: f64) -> String {
+    let s = format!("{v:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s.is_empty() || s == "-" {
+        "0".to_string()
+    } else {
+        s.to_string()
+    }
+}
+
+/// Rebuild the feature tree and stage the final solid's mesh for the central
+/// 3-D viewport. This is the shared implementation of the panel's
+/// "Rebuild → viewport" button and the programmatic [`CadWorkbenchState::
+/// request_rebuild`] path (Part Design menu), so both behave identically:
+/// on success it caches the per-step history, sets the scrubber to the last
+/// step, and flags `push_rebuild`; on failure it records the error in
+/// `tree_status` and clears any stale rebuild.
+fn perform_rebuild(s: &mut CadWorkbenchState) {
+    match rebuild_tree(s) {
+        Ok((history, status)) => {
+            let k = history.len();
+            let nbodies = history.last().map_or(0, |b| b.len());
+            let visible = vec![true; nbodies];
+            match tessellate_step(&history, k, &visible) {
+                Ok(mesh) => {
+                    s.rebuilt_mesh = Some(mesh);
+                    s.push_rebuild = true;
+                    s.tree_status = Some(Ok(status));
+                    s.scrub = k;
+                    s.history = Some(history);
+                    s.body_visible = visible;
+                }
+                Err(e) => {
+                    s.history = None;
+                    s.rebuilt_mesh = None;
+                    s.push_rebuild = false;
+                    s.tree_status = Some(Err(e));
+                }
+            }
+        }
+        Err(e) => {
+            s.history = None;
+            s.rebuilt_mesh = None;
+            s.push_rebuild = false;
+            s.tree_status = Some(Err(e));
+        }
+    }
+}
+
+/// Draw the interactive 2-D **sketch canvas** — a Fusion-style draw-then-extrude
+/// surface supporting **Line / Arc / Spline** tools. Clicks (optionally snapped
+/// to the grid) drop straight segments, 3-point circular arcs, or Catmull-Rom
+/// splines; clicking back near the first anchor closes the loop. The in-progress
+/// profile renders live (straight segments, smooth tessellated arcs/splines,
+/// vertex + via/control-point dots, a translucent fill when closed, and a
+/// rubber-band preview to the cursor). **Undo** / **Clear sketch** / a
+/// **snap-to-grid** checkbox edit the sketch; **Extrude sketch** (enabled once
+/// the profile encloses an area) tessellates the curved profile and sweeps it +
+/// the height into the feature tree, rebuilding the viewport. Every control is a
+/// named, AI-drivable egui widget. All state lives on [`CadWorkbenchState`];
+/// nothing touches the app god-struct.
+fn draw_sketch_canvas(s: &mut CadWorkbenchState, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new(match s.sketch_tool {
+            SketchTool::Line => "Line: click to drop points · click the first point to close",
+            SketchTool::Arc => "Arc: click start, click end, click a 3rd point on the arc",
+            SketchTool::Spline => "Spline: click points · Finish curve to commit the spline",
+        })
+        .weak()
+        .small(),
+    );
+
+    // ── Tool selector (Line | Arc | Spline) ─────────────────────────────────
+    ui.horizontal(|ui| {
+        ui.label("Tool:");
+        for (tool, name) in [
+            (SketchTool::Line, "Line"),
+            (SketchTool::Arc, "Arc"),
+            (SketchTool::Spline, "Spline"),
+        ] {
+            if ui
+                .selectable_label(s.sketch_tool == tool, name)
+                .on_hover_text(match tool {
+                    SketchTool::Line => "Straight segments — one click per vertex.",
+                    SketchTool::Arc => "3-point circular arc — start, end, a point on the arc.",
+                    SketchTool::Spline => "Smooth Catmull-Rom curve through clicked points.",
+                })
+                .clicked()
+                && s.sketch_tool != tool
+            {
+                // Switching tool abandons any half-entered multi-click segment.
+                s.sketch_tool = tool;
+                s.sketch_pending.clear();
+            }
+        }
+    });
+
+    // ── Controls row ────────────────────────────────────────────────────────
+    ui.horizontal_wrapped(|ui| {
+        ui.checkbox(&mut s.sketch_grid_snap, "Snap to grid")
+            .on_hover_text(format!("Snap clicks to the {SKETCH_SNAP}-unit grid."));
+        if ui
+            .button("Undo")
+            .on_hover_text("Remove the most recently placed segment (or pending click).")
+            .clicked()
+            && s.sketch_pending.pop().is_none()
+        {
+            // No staged click to drop → remove the last committed segment.
+            s.sketch_undo();
+        }
+        if ui
+            .button("Clear sketch")
+            .on_hover_text("Discard the whole drawn profile.")
+            .clicked()
+        {
+            s.sketch_clear();
+        }
+        // Spline runs are open-ended: an explicit button commits the pending
+        // points as one smooth curve (≥1 staged point on top of an anchor, or
+        // ≥2 staged points when the sketch is still empty).
+        let can_finish_spline = s.sketch_tool == SketchTool::Spline
+            && !s.sketch_closed
+            && (s.sketch_pending.len() >= 2
+                || (s.sketch_start.is_some() && !s.sketch_pending.is_empty()));
+        if ui
+            .add_enabled(can_finish_spline, egui::Button::new("Finish curve"))
+            .on_hover_text("Commit the staged points as one Catmull-Rom spline segment.")
+            .clicked()
+        {
+            let pts = std::mem::take(&mut s.sketch_pending);
+            s.sketch_add_spline(&pts);
+        }
+    });
+
+    // ── Canvas ──────────────────────────────────────────────────────────────
+    let side = ui.available_width().clamp(160.0, 360.0);
+    let (resp, painter) = ui.allocate_painter(egui::vec2(side, side), egui::Sense::click());
+    let rect = resp.rect;
+    painter.rect_filled(rect, 3.0, egui::Color32::from_gray(18));
+
+    // Model (y-up, centred, ±SKETCH_VIEW window) ↔ screen (y-down) mapping.
+    let half = rect.width().min(rect.height()) * 0.5;
+    let c = rect.center();
+    let scale = (half / SKETCH_VIEW as f32).max(1.0);
+    let to_screen = |p: [f64; 2]| -> egui::Pos2 {
+        egui::pos2(c.x + p[0] as f32 * scale, c.y - p[1] as f32 * scale)
+    };
+    let to_model = |pos: egui::Pos2| -> [f64; 2] {
+        [
+            ((pos.x - c.x) / scale) as f64,
+            ((c.y - pos.y) / scale) as f64,
+        ]
+    };
+    let snap = |v: [f64; 2]| -> [f64; 2] {
+        if s.sketch_grid_snap {
+            [
+                (v[0] / SKETCH_SNAP).round() * SKETCH_SNAP,
+                (v[1] / SKETCH_SNAP).round() * SKETCH_SNAP,
+            ]
+        } else {
+            v
+        }
+    };
+
+    // Light grid on the SKETCH_SNAP step, brighter X/Y axes.
+    let grid_stroke = egui::Stroke::new(0.5, egui::Color32::from_gray(40));
+    let axis_stroke = egui::Stroke::new(1.0, egui::Color32::from_gray(90));
+    let mut g = -SKETCH_VIEW;
+    while g <= SKETCH_VIEW + 1e-9 {
+        let sx = to_screen([g, 0.0]).x;
+        let sy = to_screen([0.0, g]).y;
+        painter.line_segment(
+            [egui::pos2(sx, rect.top()), egui::pos2(sx, rect.bottom())],
+            grid_stroke,
+        );
+        painter.line_segment(
+            [egui::pos2(rect.left(), sy), egui::pos2(rect.right(), sy)],
+            grid_stroke,
+        );
+        g += SKETCH_SNAP;
+    }
+    let origin = to_screen([0.0, 0.0]);
+    painter.line_segment(
+        [
+            egui::pos2(rect.left(), origin.y),
+            egui::pos2(rect.right(), origin.y),
+        ],
+        axis_stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(origin.x, rect.top()),
+            egui::pos2(origin.x, rect.bottom()),
+        ],
+        axis_stroke,
+    );
+
+    // Handle a click. Closing the loop (near the first anchor) takes precedence;
+    // otherwise the active tool consumes the (snapped) point.
+    if resp.clicked() {
+        if let Some(pos) = resp.interact_pointer_pos() {
+            let first_screen = s.sketch_start.map(to_screen);
+            let near_first = first_screen
+                .map(|f| f.distance(pos) <= SKETCH_PICK_PX)
+                .unwrap_or(false);
+            let m = snap(to_model(pos));
+            if near_first && s.sketch_anchor_count() >= 3 && s.sketch_pending.is_empty() {
+                s.sketch_closed = true;
+            } else if !s.sketch_closed {
+                match s.sketch_tool {
+                    SketchTool::Line => s.sketch_add_point(m[0], m[1]),
+                    SketchTool::Arc => {
+                        s.sketch_pending.push(m);
+                        // For the first arc we need 3 clicks (start, end, via);
+                        // once a chain exists the previous anchor is the start,
+                        // so only end + via are needed.
+                        let need = if s.sketch_start.is_none() { 3 } else { 2 };
+                        if s.sketch_pending.len() >= need {
+                            let p = std::mem::take(&mut s.sketch_pending);
+                            // p = [start, end, via] (fresh) or [end, via] (chained).
+                            let (start, end, via) = if need == 3 {
+                                (p[0], p[1], p[2])
+                            } else {
+                                let start = s.sketch_points().last().copied().unwrap_or(p[0]);
+                                (start, p[0], p[1])
+                            };
+                            s.sketch_add_arc(start, via, end);
+                        }
+                    }
+                    SketchTool::Spline => {
+                        // Accumulate; the user commits the run with "Finish curve".
+                        s.sketch_pending.push(m);
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    let line_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    // The fully tessellated committed profile (curves smoothed). Drives both the
+    // outline and the closed-loop fill, so arcs/splines show as smooth curves.
+    let profile: Vec<egui::Pos2> = s
+        .sketch_profile_polyline()
+        .iter()
+        .map(|&p| to_screen(p))
+        .collect();
+    if s.sketch_closed && profile.len() >= 3 {
+        // Translucent fill for the closed loop (the tessellated outline may be
+        // concave, so fill via a triangle fan around the centroid).
+        let cx = profile.iter().map(|p| p.x).sum::<f32>() / profile.len() as f32;
+        let cy = profile.iter().map(|p| p.y).sum::<f32>() / profile.len() as f32;
+        let centroid = egui::pos2(cx, cy);
+        let fill = egui::Color32::from_rgba_unmultiplied(120, 200, 255, 40);
+        for w in profile.windows(2) {
+            painter.add(egui::Shape::convex_polygon(
+                vec![centroid, w[0], w[1]],
+                fill,
+                egui::Stroke::NONE,
+            ));
+        }
+        painter.add(egui::Shape::convex_polygon(
+            vec![centroid, *profile.last().unwrap(), profile[0]],
+            fill,
+            egui::Stroke::NONE,
+        ));
+    }
+    // Outline (smooth curves) + the closing edge or a rubber-band preview.
+    for w in profile.windows(2) {
+        painter.line_segment([w[0], w[1]], line_stroke);
+    }
+    if s.sketch_closed && profile.len() >= 3 {
+        painter.line_segment([*profile.last().unwrap(), profile[0]], line_stroke);
+    } else {
+        // Rubber-band preview from the last committed anchor to the cursor (only
+        // while no multi-click segment is mid-entry).
+        let band = (!s.sketch_closed && s.sketch_pending.is_empty())
+            .then(|| profile.last().copied().zip(resp.hover_pos()))
+            .flatten();
+        if let Some((last, cursor)) = band {
+            painter.line_segment(
+                [last, cursor],
+                egui::Stroke::new(1.0, egui::Color32::from_gray(120)),
+            );
+        }
+    }
+
+    // Pending (un-committed) clicks: a dashed-ish preview chain in amber so the
+    // user sees the arc-via / spline points building up.
+    let pending_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 180, 80));
+    if !s.sketch_pending.is_empty() {
+        // Chain from the current end anchor (if any) through the pending points.
+        let mut chain: Vec<egui::Pos2> = Vec::new();
+        if let Some(&anchor) = s.sketch_points().last() {
+            chain.push(to_screen(anchor));
+        }
+        chain.extend(s.sketch_pending.iter().map(|&p| to_screen(p)));
+        for w in chain.windows(2) {
+            painter.line_segment([w[0], w[1]], pending_stroke);
+        }
+        for &p in &s.sketch_pending {
+            painter.circle_filled(to_screen(p), 3.0, egui::Color32::from_rgb(255, 180, 80));
+        }
+        // Live spline preview through anchor + pending points.
+        if s.sketch_tool == SketchTool::Spline && chain.len() >= 2 {
+            let ctrl: Vec<[f64; 2]> = {
+                let mut v = Vec::new();
+                if let Some(&anchor) = s.sketch_points().last() {
+                    v.push(anchor);
+                }
+                v.extend(s.sketch_pending.iter().copied());
+                v
+            };
+            let mut curve = sample_spline(&ctrl);
+            curve.push(*ctrl.last().unwrap());
+            let cs: Vec<egui::Pos2> = curve.iter().map(|&p| to_screen(p)).collect();
+            for w in cs.windows(2) {
+                painter.line_segment([w[0], w[1]], pending_stroke);
+            }
+        }
+    }
+
+    // Anchor dots: the first is highlighted amber as the loop-closing target.
+    for (i, &p) in s.sketch_points().iter().enumerate() {
+        let col = if i == 0 {
+            egui::Color32::from_rgb(255, 210, 90)
+        } else {
+            egui::Color32::from_rgb(120, 200, 255)
+        };
+        painter.circle_filled(to_screen(p), 3.0, col);
+    }
+
+    // ── Status + extrude controls ───────────────────────────────────────────
+    let n = s.sketch_anchor_count();
+    let pend = s.sketch_pending.len();
+    ui.label(
+        egui::RichText::new(format!(
+            "{n} anchor{}{} · {}",
+            if n == 1 { "" } else { "s" },
+            if pend > 0 {
+                format!(" (+{pend} pending)")
+            } else {
+                String::new()
+            },
+            if s.sketch_closed { "closed" } else { "open" }
+        ))
+        .small()
+        .monospace(),
+    );
+    ui.horizontal(|ui| {
+        ui.label("Extrude height");
+        ui.add(
+            egui::DragValue::new(&mut s.sketch_extrude_height)
+                .speed(0.1)
+                .range(0.01..=1.0e6)
+                .suffix(" u"),
+        );
+    });
+    // A profile encloses area once its tessellated polyline has ≥3 points; arcs
+    // and splines reach that with as few as 2 anchors.
+    let can_extrude = s.sketch_profile_polyline().len() >= 3;
+    if ui
+        .add_enabled(can_extrude, egui::Button::new("Extrude sketch"))
+        .on_hover_text(
+            "Tessellate the drawn profile (arcs/splines sampled into a smooth \
+             polyline), sweep it along +Z by the height above into a solid, add \
+             it to the feature tree, and rebuild the viewport.",
+        )
+        .clicked()
+    {
+        let pts = s.sketch_profile_polyline();
+        let h = s.sketch_extrude_height;
+        s.add_extrude_from_sketch(&pts, h);
+        perform_rebuild(s);
+    }
+}
+
 /// Draw the parametric-CAD workbench (a no-op unless toggled on via
 /// View → Parametric CAD).
 pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     if !app.show_cad_workbench {
         return;
+    }
+    // A programmatic rebuild requested this frame (e.g. from the top-bar Part
+    // Design menu, which sets the flag before this panel draws). Run it before
+    // the panel so the staged mesh is pushed into the viewport this frame.
+    if std::mem::take(&mut app.cad.rebuild_request) {
+        perform_rebuild(&mut app.cad);
     }
     let close = crate::workbench_chrome::workbench_shell(
         app,
@@ -1789,6 +2687,17 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.colored_label(color, &r.status);
                     }
 
+                    // ---- Sketch canvas: draw a polygon → extrude → solid ----
+                    ui.separator();
+                    let sketch_header =
+                        ui.label(egui::RichText::new("Sketch canvas (draw → extrude)").strong());
+                    // The top-bar Part Design → Sketch menu item flags a focus
+                    // request; scroll the canvas header into view this frame.
+                    if std::mem::take(&mut s.sketch_focus_request) {
+                        sketch_header.scroll_to_me(Some(egui::Align::TOP));
+                    }
+                    draw_sketch_canvas(s, ui);
+
                     // ---- Feature tree (CSG) ----
                     ui.separator();
                     ui.label(egui::RichText::new("Feature tree (CSG)").strong());
@@ -1842,6 +2751,11 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                             &mut st.kind,
                                             FeatureKind::Extrude,
                                             "Extrude",
+                                        );
+                                        ui.selectable_value(
+                                            &mut st.kind,
+                                            FeatureKind::Revolve,
+                                            "Revolve",
                                         );
                                     });
                                 if ui.small_button("✕").clicked() {
@@ -1922,6 +2836,46 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         st.profile.push((0.0, 0.0));
                                     }
                                 }
+                                FeatureKind::Revolve => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("angle°");
+                                        dim_edit(ui, &mut st.angle);
+                                    });
+                                    ui.label(
+                                        egui::RichText::new(
+                                            "half-section (r, z) — ends on axis (r=0) cap the body",
+                                        )
+                                        .weak()
+                                        .small(),
+                                    );
+                                    let mut rm_pt: Option<usize> = None;
+                                    for (j, pt) in st.profile.iter_mut().enumerate() {
+                                        ui.horizontal(|ui| {
+                                            ui.add(
+                                                egui::DragValue::new(&mut pt.0)
+                                                    .speed(0.1)
+                                                    .prefix("r ")
+                                                    .range(0.0..=f64::INFINITY),
+                                            );
+                                            ui.add(
+                                                egui::DragValue::new(&mut pt.1)
+                                                    .speed(0.1)
+                                                    .prefix("z "),
+                                            );
+                                            if ui.small_button("✕").clicked() {
+                                                rm_pt = Some(j);
+                                            }
+                                        });
+                                    }
+                                    if let Some(j) = rm_pt {
+                                        if st.profile.len() > 2 {
+                                            st.profile.remove(j);
+                                        }
+                                    }
+                                    if ui.small_button("+ point").clicked() {
+                                        st.profile.push((0.0, 0.0));
+                                    }
+                                }
                             }
                             ui.horizontal(|ui| {
                                 ui.label("at x,y,z");
@@ -1941,23 +2895,28 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         s.steps.remove(i);
                     }
                     ui.horizontal_wrapped(|ui| {
+                        // Each button calls the same public mutator the top-bar
+                        // Part Design menu uses, so panel and menu share one path.
                         if ui.button("+ Box").clicked() {
-                            s.steps.push(UiStep::new_box());
+                            s.add_box();
                         }
                         if ui.button("+ Cylinder").clicked() {
-                            s.steps.push(UiStep::new_cylinder());
+                            s.add_cylinder();
                         }
                         if ui.button("+ Sphere").clicked() {
-                            s.steps.push(UiStep::new_sphere());
+                            s.add_sphere();
                         }
                         if ui.button("+ Cone").clicked() {
-                            s.steps.push(UiStep::new_cone());
+                            s.add_cone();
                         }
                         if ui.button("+ Torus").clicked() {
-                            s.steps.push(UiStep::new_torus());
+                            s.add_torus();
                         }
                         if ui.button("+ Extrude").clicked() {
-                            s.steps.push(UiStep::new_extrude());
+                            s.add_extrude();
+                        }
+                        if ui.button("+ Revolve").clicked() {
+                            s.add_revolve();
                         }
                     });
                     ui.horizontal(|ui| {
@@ -2033,35 +2992,7 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         }
                     });
                     if ui.button("▶ Rebuild → viewport").clicked() {
-                        match rebuild_tree(s) {
-                            Ok((history, status)) => {
-                                let k = history.len();
-                                let nbodies = history.last().map_or(0, |b| b.len());
-                                let visible = vec![true; nbodies];
-                                match tessellate_step(&history, k, &visible) {
-                                    Ok(mesh) => {
-                                        s.rebuilt_mesh = Some(mesh);
-                                        s.push_rebuild = true;
-                                        s.tree_status = Some(Ok(status));
-                                        s.scrub = k;
-                                        s.history = Some(history);
-                                        s.body_visible = visible;
-                                    }
-                                    Err(e) => {
-                                        s.history = None;
-                                        s.rebuilt_mesh = None;
-                                        s.push_rebuild = false;
-                                        s.tree_status = Some(Err(e));
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                s.history = None;
-                                s.rebuilt_mesh = None;
-                                s.push_rebuild = false;
-                                s.tree_status = Some(Err(e));
-                            }
-                        }
+                        perform_rebuild(s);
                     }
                     if let Some(res) = &s.tree_status {
                         match res {
@@ -2172,6 +3103,75 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// The agent-bridge product for the parametric CSG feature-tree workbench
+/// (`show_3d{kind="cad"}`).
+///
+/// Rebuilds the **default feature tree** — valenx-cad's canonical punched cube
+/// (a unit box with a Ø0.5 cylinder cut through it) — into BRep solid(s) via
+/// [`rebuild_tree`], then tessellates the final step to a `Tri3`
+/// [`valenx_mesh::Mesh`] with [`tessellate_step`] (which calls
+/// `valenx_cad::solid_to_mesh`). Pure and app-state-free: it constructs a fresh
+/// [`CadWorkbenchState::default`], so it produces exactly the geometry the
+/// workbench shows on first open. The readout rows report the solid's volume,
+/// surface area and triangle count.
+pub(crate) fn cad_product() -> crate::WorkspaceProduct {
+    let state = CadWorkbenchState::default();
+    let built = (|| -> Result<(valenx_mesh::Mesh, f64, f64), String> {
+        let (snapshots, _status) = rebuild_tree(&state)?;
+        let bodies = snapshots.last().cloned().unwrap_or_default();
+        let volume = total_volume(&bodies);
+        let area = total_area(&bodies);
+        let mesh = tessellate_step(&snapshots, snapshots.len(), &[])?;
+        Ok((mesh, volume, area))
+    })();
+    let (mesh, lines) = match built {
+        Ok((mesh, volume, area)) => {
+            let tris = mesh.total_elements();
+            let lines = vec![
+                "parametric CSG: unit box − Ø0.5 through-cylinder".to_string(),
+                format!("volume {volume:.4} u³ · surface area {area:.4} u²"),
+                format!("BRep tessellation: {tris} triangles"),
+            ];
+            (mesh, lines)
+        }
+        Err(e) => {
+            // Theoretically unreachable for the canonical default tree; degrade
+            // to a tiny placeholder triangle + a note rather than panicking.
+            let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+            block.connectivity = vec![0, 1, 2];
+            let mut placeholder = valenx_mesh::Mesh::new("valenx-cad-part");
+            placeholder.nodes = vec![
+                nalgebra::Vector3::new(0.0, 0.0, 0.0),
+                nalgebra::Vector3::new(1.0, 0.0, 0.0),
+                nalgebra::Vector3::new(0.0, 1.0, 0.0),
+            ];
+            placeholder.element_blocks.push(block);
+            placeholder.recompute_stats();
+            (
+                placeholder,
+                vec![
+                    "parametric CSG feature tree".to_string(),
+                    format!("rebuild unavailable — showing placeholder ({e})"),
+                ],
+            )
+        }
+    };
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<cad>/feature-tree");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "CAD part (parametric CSG)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2245,6 +3245,434 @@ mod tests {
             v_punched < v_box,
             "cutting the hole reduces the volume: {v_box} → {v_punched}"
         );
+    }
+
+    #[test]
+    fn revolve_step_rebuilds_to_a_nonempty_solid() {
+        // A feature tree whose sole step is a New Revolve of a cone half-section
+        // must rebuild to a non-empty body that tessellates to a real mesh —
+        // proving the Revolve FeatureKind threads through the timeline + kernel.
+        let mut s = CadWorkbenchState::default();
+        let mut rev = UiStep::new_revolve();
+        rev.op = Op::New; // start a fresh body from the revolve
+        s.steps = vec![rev];
+        let (history, status) = rebuild_tree(&s).expect("revolve tree rebuilds");
+        assert_eq!(history.len(), 1, "one step → one snapshot");
+        assert!(
+            history[0][0].faces() > 0,
+            "the revolved body has faces; status: {status}"
+        );
+        let mesh = tessellate_step(&history, 1, &[]).expect("tessellate revolve");
+        assert!(
+            crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
+            "the revolved solid tessellates to a non-empty viewport mesh"
+        );
+        // The default half-section is a cone (r 1, h 2) → analytic volume
+        // π r² h / 3 ≈ 2.094; the BRep volume converges from below.
+        let vol = total_volume(&history[0]);
+        assert!(
+            vol > 1.5,
+            "revolved cone volume {vol} is in the right range"
+        );
+    }
+
+    #[test]
+    fn add_extrude_from_sketch_rebuilds_a_triangular_prism() {
+        // The draw-then-extrude path: a 3-point triangle drawn on the sketch
+        // canvas + a height must yield a feature tree that rebuilds to a
+        // non-empty solid carrying that exact profile.
+        let mut s = CadWorkbenchState::default();
+        s.steps.clear(); // start from an empty tree → the extrude is the base body
+        let triangle = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]];
+        let height = 3.0;
+        s.add_extrude_from_sketch(&triangle, height);
+
+        // One Extrude step, op New (first step starts the body), carrying the
+        // drawn profile and the requested height.
+        assert_eq!(s.steps.len(), 1, "one extrude step appended");
+        let st = &s.steps[0];
+        assert_eq!(st.kind, FeatureKind::Extrude);
+        assert_eq!(st.op, Op::New, "an empty tree's first step must be New");
+        assert_eq!(
+            st.profile,
+            vec![(0.0, 0.0), (2.0, 0.0), (0.0, 2.0)],
+            "the step carries the drawn triangle profile"
+        );
+        assert_eq!(st.height, "3", "the step carries the requested height");
+
+        // It rebuilds to a non-empty solid.
+        let (history, status) = rebuild_tree(&s).expect("extruded sketch rebuilds");
+        assert_eq!(history.len(), 1, "one step → one snapshot");
+        assert!(
+            history[0][0].faces() > 0,
+            "the extruded prism has faces; status: {status}"
+        );
+        let mesh = tessellate_step(&history, 1, &[]).expect("tessellate extrude");
+        assert!(
+            crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
+            "the extruded prism tessellates to a non-empty viewport mesh"
+        );
+        // Triangular prism volume = base area · height = (½·2·2) · 3 = 6 u³.
+        let vol = total_volume(&history[0]);
+        assert!(
+            (vol - 6.0).abs() < 1e-6,
+            "triangular-prism volume should be 6, got {vol}"
+        );
+
+        // On a non-empty tree the helper welds with Join instead of New.
+        let mut t = CadWorkbenchState::default();
+        let before = t.steps.len();
+        t.add_extrude_from_sketch(&triangle, height);
+        assert_eq!(t.steps.len(), before + 1, "appended onto the existing tree");
+        assert_eq!(
+            t.steps.last().unwrap().op,
+            Op::Join,
+            "a non-empty tree welds the extrude with Join"
+        );
+
+        // Degenerate inputs (fewer than 3 points, or a non-finite height) are
+        // ignored rather than producing a broken step.
+        let mut u = CadWorkbenchState::default();
+        u.steps.clear();
+        u.add_extrude_from_sketch(&[[0.0, 0.0], [1.0, 0.0]], 1.0);
+        assert!(u.steps.is_empty(), "a 2-point profile is rejected");
+        u.add_extrude_from_sketch(&triangle, f64::NAN);
+        assert!(u.steps.is_empty(), "a non-finite height is rejected");
+    }
+
+    #[test]
+    fn sketch_canvas_state_edits_build_and_close_a_polygon() {
+        // Exercise the canvas's state mutators (the click handler / Undo / Clear
+        // / close-loop logic call these): points accumulate, Undo pops + re-opens
+        // the loop, Clear empties it, and a closed loop refuses further points.
+        let mut s = CadWorkbenchState::default();
+        assert!(s.sketch_points().is_empty());
+        assert!(!s.sketch_is_closed());
+
+        s.sketch_add_point(0.0, 0.0);
+        s.sketch_add_point(1.0, 0.0);
+        s.sketch_add_point(1.0, 1.0);
+        assert_eq!(s.sketch_points().len(), 3);
+
+        // Closing the loop (the canvas does this on a click near the first
+        // vertex) then refuses further points.
+        s.sketch_closed = true;
+        s.sketch_add_point(2.0, 2.0);
+        assert_eq!(
+            s.sketch_points().len(),
+            3,
+            "a closed loop rejects new points"
+        );
+
+        // Undo pops the last vertex and re-opens the loop.
+        s.sketch_undo();
+        assert_eq!(s.sketch_points().len(), 2);
+        assert!(!s.sketch_is_closed(), "undo re-opens a closed loop");
+
+        // Clear empties the whole sketch.
+        s.sketch_clear();
+        assert!(s.sketch_points().is_empty());
+        assert!(!s.sketch_is_closed());
+
+        // focus_sketch raises the flag the panel consumes to scroll the canvas.
+        assert!(!s.sketch_focus_request);
+        s.focus_sketch();
+        assert!(
+            s.sketch_focus_request,
+            "focus_sketch flags a scroll-to-canvas"
+        );
+    }
+
+    #[test]
+    fn circle_through_3_recovers_a_known_circle() {
+        // Three points on the unit circle centred at (2, 1): the solver must
+        // recover that centre + radius. Collinear points return None.
+        let (centre, r) = circle_through_3([3.0, 1.0], [2.0, 2.0], [1.0, 1.0])
+            .expect("non-collinear points define a circle");
+        assert!((centre[0] - 2.0).abs() < 1e-9 && (centre[1] - 1.0).abs() < 1e-9);
+        assert!((r - 1.0).abs() < 1e-9, "radius {r}");
+        assert!(
+            circle_through_3([0.0, 0.0], [1.0, 1.0], [2.0, 2.0]).is_none(),
+            "collinear points have no finite circle"
+        );
+    }
+
+    #[test]
+    fn arc_segment_tessellates_onto_its_circle() {
+        // A quarter-ish arc start (1,0) → end (0,1) through via (√½, √½): every
+        // sampled polyline point must lie on the circle through the 3 points
+        // (here the unit circle, centre origin, r = 1).
+        let start = [1.0, 0.0];
+        let via = [
+            std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2,
+        ];
+        let end = [0.0, 1.0];
+        let (centre, r) = circle_through_3(start, via, end).expect("circle");
+        assert!(centre[0].abs() < 1e-9 && centre[1].abs() < 1e-9 && (r - 1.0).abs() < 1e-9);
+
+        let poly = sample_arc(start, via, end);
+        assert!(poly.len() >= 2, "arc sampled into a polyline");
+        // First sample is exactly the start anchor.
+        assert!((poly[0][0] - start[0]).abs() < 1e-9 && (poly[0][1] - start[1]).abs() < 1e-9);
+        for p in &poly {
+            let d = ((p[0] - centre[0]).powi(2) + (p[1] - centre[1]).powi(2)).sqrt();
+            assert!(
+                (d - r).abs() < 1e-6,
+                "sample {p:?} is on the circle (d={d})"
+            );
+        }
+
+        // The full profile through one Arc segment keeps the end anchor and every
+        // interior point still rides the circle.
+        let mut s = CadWorkbenchState::default();
+        s.sketch_clear();
+        s.sketch_add_arc(start, via, end);
+        let profile = s.sketch_profile_polyline();
+        assert!(
+            (profile[0][0] - start[0]).abs() < 1e-9 && (profile[0][1] - start[1]).abs() < 1e-9,
+            "profile starts at the arc start"
+        );
+        let last = *profile.last().unwrap();
+        assert!(
+            (last[0] - end[0]).abs() < 1e-9 && (last[1] - end[1]).abs() < 1e-9,
+            "profile ends at the arc end anchor"
+        );
+        for p in &profile {
+            let d = ((p[0] - centre[0]).powi(2) + (p[1] - centre[1]).powi(2)).sqrt();
+            assert!(
+                (d - r).abs() < 1e-6,
+                "profile point {p:?} on circle (d={d})"
+            );
+        }
+    }
+
+    #[test]
+    fn collinear_arc_falls_back_to_a_straight_chord() {
+        // Three collinear "arc" points must not panic or NaN — the segment
+        // degrades to the straight chord start→end (just the two endpoints).
+        let mut s = CadWorkbenchState::default();
+        s.sketch_clear();
+        s.sketch_add_arc([0.0, 0.0], [1.0, 0.0], [2.0, 0.0]);
+        let profile = s.sketch_profile_polyline();
+        assert_eq!(
+            profile,
+            vec![[0.0, 0.0], [2.0, 0.0]],
+            "a collinear arc is a plain chord"
+        );
+        assert!(
+            profile.iter().all(|p| p[0].is_finite() && p[1].is_finite()),
+            "no NaN/inf from the degenerate arc"
+        );
+    }
+
+    #[test]
+    fn catmull_rom_spline_passes_through_its_control_points() {
+        // The tessellated curve must interpolate every control point (Catmull-Rom
+        // is an interpolating spline). Sample an S-shaped 4-point curve and assert
+        // each control point appears (within tol) somewhere on the polyline.
+        let ctrl = [[0.0, 0.0], [1.0, 1.5], [2.0, -0.5], [3.0, 1.0]];
+        let mut curve = sample_spline(&ctrl);
+        // sample_spline omits the final endpoint (caller appends it); add it so we
+        // can check the last control point too.
+        curve.push(*ctrl.last().unwrap());
+        for cp in &ctrl {
+            let hit = curve
+                .iter()
+                .any(|p| (p[0] - cp[0]).abs() < 1e-6 && (p[1] - cp[1]).abs() < 1e-6);
+            assert!(hit, "spline passes through control point {cp:?}");
+        }
+        // The first sample is exactly the first control point.
+        assert!((curve[0][0]).abs() < 1e-9 && (curve[0][1]).abs() < 1e-9);
+
+        // The same through the public segment path: a Spline segment's profile
+        // hits the seed anchor and every run-through point.
+        let mut s = CadWorkbenchState::default();
+        s.sketch_clear();
+        s.sketch_add_spline(&ctrl);
+        let profile = s.sketch_profile_polyline();
+        for cp in &ctrl {
+            let hit = profile
+                .iter()
+                .any(|p| (p[0] - cp[0]).abs() < 1e-6 && (p[1] - cp[1]).abs() < 1e-6);
+            assert!(hit, "profile spline passes through {cp:?}");
+        }
+    }
+
+    #[test]
+    fn arc_profile_extrudes_to_a_nonempty_solid() {
+        // A closed profile containing an Arc must tessellate and extrude into a
+        // real solid via add_extrude_from_sketch — the headline curved-section
+        // capability. Build: line (0,0)→(2,0), arc up-and-over to (0,2) bulging
+        // through (2.2, 1.0), then back to start.
+        let mut s = CadWorkbenchState::default();
+        s.sketch_clear();
+        s.sketch_add_point(0.0, 0.0); // start anchor
+        s.sketch_add_point(2.0, 0.0); // straight base edge
+        s.sketch_add_arc([2.0, 0.0], [2.2, 1.0], [0.0, 2.0]); // bulging arc side
+
+        let poly = s.sketch_profile_polyline();
+        assert!(
+            poly.len() > 3,
+            "the arc inflates the profile past a bare triangle ({} pts)",
+            poly.len()
+        );
+        assert!(
+            poly.iter().all(|p| p[0].is_finite() && p[1].is_finite()),
+            "tessellated profile is finite"
+        );
+
+        // Extrude the curved profile into the (empty) feature tree.
+        let mut cad = CadWorkbenchState::default();
+        cad.steps.clear();
+        cad.add_extrude_from_sketch(&poly, 1.5);
+        assert_eq!(
+            cad.steps.len(),
+            1,
+            "one extrude step from the curved profile"
+        );
+        assert_eq!(cad.steps[0].kind, FeatureKind::Extrude);
+        assert_eq!(
+            cad.steps[0].profile.len(),
+            poly.len(),
+            "the step carries every tessellated profile point"
+        );
+
+        let (history, status) = rebuild_tree(&cad).expect("curved profile rebuilds");
+        assert_eq!(history.len(), 1, "one step → one snapshot");
+        assert!(
+            history[0][0].faces() > 0,
+            "the extruded curved solid has faces; status: {status}"
+        );
+        let mesh = tessellate_step(&history, 1, &[]).expect("tessellate curved extrude");
+        assert!(
+            crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
+            "the curved-section solid tessellates to a non-empty viewport mesh"
+        );
+        let vol = total_volume(&history[0]);
+        assert!(
+            vol > 0.0,
+            "curved-section solid has positive volume ({vol})"
+        );
+    }
+
+    #[test]
+    fn sketch_tool_switch_clears_pending_and_undo_drops_segments() {
+        // The segment model: Line/Arc/Spline build an ordered segment chain;
+        // switching tool abandons a half-entered segment; Undo drops whole
+        // committed segments (and the lone start anchor last).
+        let mut s = CadWorkbenchState::default();
+        s.sketch_clear();
+        assert_eq!(s.sketch_anchor_count(), 0);
+
+        // Two line clicks → start + 1 Line segment → 2 anchors.
+        s.sketch_add_point(0.0, 0.0);
+        s.sketch_add_point(1.0, 0.0);
+        assert_eq!(s.sketch_anchor_count(), 2);
+
+        // An arc adds one segment (3 anchors total).
+        s.sketch_add_arc([1.0, 0.0], [1.5, 0.5], [1.0, 1.0]);
+        assert_eq!(s.sketch_anchor_count(), 3);
+        assert_eq!(s.sketch_segs.len(), 2, "one Line + one Arc segment");
+
+        // Undo drops the Arc, then the Line, then the start anchor.
+        s.sketch_undo();
+        assert_eq!(s.sketch_segs.len(), 1);
+        s.sketch_undo();
+        assert_eq!(s.sketch_segs.len(), 0);
+        assert_eq!(s.sketch_anchor_count(), 1, "start anchor remains");
+        s.sketch_undo();
+        assert_eq!(
+            s.sketch_anchor_count(),
+            0,
+            "undo drops the lone start anchor"
+        );
+        assert!(s.sketch_start.is_none());
+
+        // A degenerate 1-point spline seed (no run-through points) adds no segment.
+        s.sketch_add_spline(&[[0.5, 0.5]]);
+        assert_eq!(
+            s.sketch_anchor_count(),
+            1,
+            "seed-only spline is just the start"
+        );
+        assert!(
+            s.sketch_segs.is_empty(),
+            "no spline segment from a lone seed"
+        );
+    }
+
+    #[test]
+    fn fmt_num_trims_trailing_zeros() {
+        assert_eq!(fmt_num(1.0), "1");
+        assert_eq!(fmt_num(0.25), "0.25");
+        assert_eq!(fmt_num(1.5), "1.5");
+        assert_eq!(fmt_num(-2.0), "-2");
+        assert_eq!(fmt_num(0.0), "0");
+    }
+
+    #[test]
+    fn part_design_menu_mutators_share_the_panel_path() {
+        // The top-bar Part Design menu drives these same `CadWorkbenchState`
+        // methods the panel's + buttons call. Exercise each and assert the
+        // feature tree + flags land as expected.
+        let mut s = CadWorkbenchState::default();
+
+        // Populate a real rebuild history first (via the shared rebuild path),
+        // so we can prove the reset clears it rather than injecting a fake one.
+        perform_rebuild(&mut s);
+        assert!(s.history.is_some(), "a rebuild populates the history");
+
+        // New part → a single base solid (a New box), cached rebuild cleared.
+        s.reset_to_base_solid();
+        assert_eq!(s.steps.len(), 1, "reset leaves exactly one base step");
+        assert_eq!(s.steps[0].op, Op::New, "the base step starts a new body");
+        assert_eq!(s.steps[0].kind, FeatureKind::Box);
+        assert!(
+            s.history.is_none(),
+            "reset clears the stale rebuild history"
+        );
+
+        // Each add_* appends one step of the expected kind.
+        s.add_extrude();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Extrude);
+        s.add_revolve();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Revolve);
+        s.add_box();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Box);
+        s.add_cylinder();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Cylinder);
+        s.add_sphere();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Sphere);
+        s.add_cone();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Cone);
+        s.add_torus();
+        assert_eq!(s.steps.last().unwrap().kind, FeatureKind::Torus);
+        assert_eq!(s.steps.len(), 8, "7 adds on top of the 1 base step");
+
+        // Boolean submenu sets the last step's op.
+        s.set_last_op_cut();
+        assert_eq!(s.steps.last().unwrap().op, Op::Cut);
+        s.set_last_op_intersect();
+        assert_eq!(s.steps.last().unwrap().op, Op::Intersect);
+        s.set_last_op_union();
+        assert_eq!(s.steps.last().unwrap().op, Op::Join);
+
+        // request_rebuild raises the flag draw_cad_workbench consumes.
+        assert!(!s.rebuild_request);
+        s.request_rebuild();
+        assert!(
+            s.rebuild_request,
+            "request_rebuild flags a viewport rebuild"
+        );
+
+        // "New part (reset)" leaves a lone base box that rebuilds to a real
+        // solid on its own (the menu's New-part → rebuild path).
+        let mut t = CadWorkbenchState::default();
+        t.reset_to_base_solid();
+        let (history, _status) = rebuild_tree(&t).expect("reset base solid rebuilds");
+        assert_eq!(history.len(), 1, "the reset part is a single base step");
+        assert_eq!(history[0][0].faces(), 6, "the base solid is a box");
     }
 
     #[test]

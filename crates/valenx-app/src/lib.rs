@@ -46,6 +46,7 @@ pub mod beam_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
+pub mod confidence;
 pub mod draft2d_workbench;
 pub mod fem_workbench;
 pub mod headless;
@@ -140,6 +141,8 @@ pub mod led_workbench;
 pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
+pub mod materials;
+pub mod mesh_prims;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
 pub mod mosfet_workbench;
@@ -147,6 +150,7 @@ pub mod new_project_dialog;
 pub mod opamp_workbench;
 pub mod optics_workbench;
 pub mod orifice_workbench;
+pub mod param_sketch_panel;
 pub mod pbr_forward_pass;
 pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
@@ -166,6 +170,8 @@ pub mod pressurevessel_workbench;
 /// Per-file registry of agent-bridge `show_3d` mesh producers (replaces the old
 /// per-kind reducer arms; new 3-D tools register from their own module).
 pub mod products_registry;
+pub mod project_library;
+pub mod project_navigator;
 pub mod project_tabs;
 pub mod projectile_workbench;
 pub mod psychrometrics_workbench;
@@ -357,6 +363,144 @@ pub struct WorkspaceProduct {
     /// show the button and so never set it. Set by
     /// [`crate::dock_layout`]'s `render_workspace_body` on button click.
     pub last_export: Option<String>,
+    /// When `Some`, the pane renders this raster **image** scaled to fit the
+    /// tile — the path-traced `render` view (a small Cornell-box framebuffer)
+    /// is the canonical producer. The pixels are carried as a CPU
+    /// [`egui::ColorImage`]; the first frame uploads them to a GPU texture
+    /// cached in [`Self::image_texture`] and then draws with `ui.image`.
+    /// Rendered by [`crate::dock_layout`]'s `render_workspace_body` in a branch
+    /// *before* the text-card fall-through (a peer to the 3-D and 2-D
+    /// branches). `None` for mesh / 2-D / text products.
+    pub image: Option<egui::ColorImage>,
+    /// Lazily-uploaded GPU texture for [`Self::image`] — `None` until the first
+    /// frame that renders the image, which uploads the [`egui::ColorImage`]
+    /// once (keyed by the tile id) and caches the handle here so subsequent
+    /// frames reuse it instead of re-allocating a texture every repaint. The
+    /// handle frees the GPU texture when the product is dropped (RAII). Never
+    /// set for non-image products.
+    pub image_texture: Option<egui::TextureHandle>,
+    /// When `Some`, this mesh product is **animated**: the toolbar shows
+    /// Play/Pause + speed + reset controls and, while playing, the per-tile 3-D
+    /// view re-poses the mesh nodes each frame from [`ProductAnimation::t`]
+    /// (see [`crate::dock_layout`]'s render path). `None` for static products
+    /// (the existing byte-identical static render). Only meaningful when
+    /// [`Self::mesh`] is `Some` — a 2-D / text / image product never animates.
+    /// The 2-stage spur reducer (`gears_workbench::gear_product`) sets this to a
+    /// [`ProductMotion::RigidParts`] so each gear counter-rotates and the teeth
+    /// visibly mesh; other mesh products leave it `None` for now.
+    pub animation: Option<ProductAnimation>,
+}
+
+/// Real-time **animation state** for an animated [`WorkspaceProduct`].
+///
+/// The toolbar advances [`Self::t`] (seconds of *animation* time) each frame
+/// while [`Self::playing`], scaled by [`Self::speed`]; the render path then
+/// poses the product's mesh from `t` via [`Self::motion`]. Kept a plain
+/// `Clone + PartialEq` value (no GPU / mesh handles) so products stay cheap to
+/// snapshot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProductAnimation {
+    /// Whether the clock is currently running (Play vs Pause).
+    pub playing: bool,
+    /// Playback-speed multiplier applied to wall-clock dt, in `0.0..=4.0`
+    /// (the toolbar slider's range). `1.0` is real-time relative to the motion's
+    /// own `rad_per_s`.
+    pub speed: f32,
+    /// Elapsed **animation** time in seconds. Drives every motion's angle
+    /// (`rad_per_s * t`). Reset to `0.0` by the toolbar's reset button.
+    pub t: f32,
+    /// What moves and how.
+    pub motion: ProductMotion,
+}
+
+/// The kind of rigid motion an animated product performs.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProductMotion {
+    /// Spin the **whole mesh** about a fixed world axis through `pivot` — a
+    /// generic turntable for any single-body product. Angle = `rad_per_s * t`.
+    Turntable {
+        /// World-space rotation axis (need not be unit length; normalised at
+        /// pose time).
+        axis: [f32; 3],
+        /// World-space point the axis passes through.
+        pivot: [f32; 3],
+        /// Angular rate (radians per second of animation time).
+        rad_per_s: f32,
+    },
+    /// Per-part **rigid rotation**: each [`RigidPart`] spins its own contiguous
+    /// node range about its own axis/pivot. Used by the gear train so meshing
+    /// gears counter-rotate independently. Nodes outside every part's range stay
+    /// fixed.
+    RigidParts(Vec<RigidPart>),
+}
+
+/// One independently-rotating body inside a [`ProductMotion::RigidParts`]
+/// product: the half-open `node_range` of mesh nodes to rotate, about `axis`
+/// through `pivot`, at `rad_per_s`. The ranges are recorded at mesh-fusion time
+/// (the order parts are concatenated into the combined node array), so they tile
+/// the mesh's node count without overlap.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RigidPart {
+    /// Half-open `[start, end)` index range into the mesh's `nodes` array.
+    pub node_range: std::ops::Range<usize>,
+    /// World-space rotation axis (normalised at pose time).
+    pub axis: [f32; 3],
+    /// World-space point the axis passes through (this body's shaft centre).
+    pub pivot: [f32; 3],
+    /// Signed angular rate (rad/s); the sign encodes spin direction so meshing
+    /// pairs counter-rotate.
+    pub rad_per_s: f32,
+}
+
+impl WorkspaceProduct {
+    /// Give a mesh product a **default inspect-spin** animation if it has none,
+    /// so every bridge-rendered 3-D product carries the Play/Pause + speed
+    /// toolbar (an idle turntable the user can start to inspect the part from
+    /// all sides).
+    ///
+    /// Sets [`Self::animation`] to a paused [`ProductMotion::Turntable`] about
+    /// `+Z` through the mesh's axis-aligned bounding-box centre at
+    /// `0.4 rad/s` (~1 revolution / 15 s — a gentle inspect spin), but **only**
+    /// when both:
+    ///
+    /// - [`Self::animation`] is currently `None` (so a product that already has
+    ///   real motion — e.g. the gear train's [`ProductMotion::RigidParts`] — is
+    ///   left untouched), and
+    /// - [`Self::mesh`] is `Some` (a 2-D / card / image product, which never
+    ///   animates, is left untouched).
+    ///
+    /// `playing` starts `false`: the control is present but the product does
+    /// **not** auto-spin until the user (or an `animate` command) presses Play.
+    /// A no-op in every other case, so it is safe to call unconditionally right
+    /// after a product is built. The pivot is the `(min + max) * 0.5` midpoint
+    /// of the mesh's node AABB (via `mesh_loader::mesh_bounding_box`); an empty
+    /// mesh falls back to the origin.
+    pub fn ensure_default_animation(&mut self) {
+        if self.animation.is_some() {
+            return;
+        }
+        let Some(loaded) = self.mesh.as_ref() else {
+            return;
+        };
+        let pivot = match crate::mesh_loader::mesh_bounding_box(&loaded.mesh) {
+            Some((min, max)) => [
+                (min[0] + max[0]) * 0.5,
+                (min[1] + max[1]) * 0.5,
+                (min[2] + max[2]) * 0.5,
+            ],
+            None => [0.0, 0.0, 0.0],
+        };
+        self.animation = Some(ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: ProductMotion::Turntable {
+                axis: [0.0, 0.0, 1.0],
+                pivot,
+                rad_per_s: 0.4,
+            },
+        });
+    }
 }
 
 /// Which **2-D engineering drawing** a [`WorkspaceProduct`] carries, with the
@@ -373,6 +517,58 @@ pub enum Workspace2dKind {
     /// feature (ATG / ORF / His6 / stop) drawn as a coloured block proportional
     /// to its nt span, plus a nt ruler.
     DnaMap(DnaMapView),
+    /// A **2-D CAD drawing** — the LibreCAD-style entity soup (lines / circles /
+    /// arcs / polylines) of the 2-D drafting workbench, painted as a
+    /// fit-to-tile drawing.
+    Draft2d(Draft2dView),
+    /// An **interior floor-plan** — one or more room wall polygons plus the
+    /// placed-furniture rectangles, painted as a fit-to-tile plan.
+    FloorPlan(FloorPlanView),
+    /// A **2-D line / bar chart** — one or more `(x, y)` series drawn as
+    /// polylines (or vertical bars) inside a framed, auto-scaled plot area with
+    /// gridlines, tick labels, axis labels and a small legend. The natural
+    /// presentation for products that are really *plots* (an FFT magnitude
+    /// spectrum, a concentration-vs-position profile, a population-vs-time
+    /// trajectory) rather than a 3-D blob or a bare text card. See
+    /// [`ChartData`].
+    Chart(ChartData),
+}
+
+/// Plain-data backing for a [`Workspace2dKind::Chart`] — everything the egui
+/// chart painter needs and nothing it doesn't (no GPU / mesh types, so it stays
+/// cheaply `Clone`). The painter auto-scales the axes from the union of every
+/// series' point range, so the producer only supplies the raw `(x, y)` data and
+/// the labels.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChartData {
+    /// Chart heading, drawn at the top of the plot (e.g. `"FFT magnitude
+    /// spectrum"`).
+    pub title: String,
+    /// Label for the horizontal axis (e.g. `"frequency (Hz)"`).
+    pub x_label: String,
+    /// Label for the vertical axis (e.g. `"|X[k]|"`).
+    pub y_label: String,
+    /// The plotted series, in draw order. Each is a polyline or a bar group; the
+    /// painter colours them from a small fixed palette and lists them in the
+    /// legend. An empty list paints just the framed, label-only plot.
+    pub series: Vec<ChartSeries>,
+}
+
+/// One labelled data series on a [`ChartData`] — a sequence of `[x, y]` points
+/// drawn either as a connected polyline (`bars == false`) or as vertical bars
+/// rising from `y = 0` (`bars == true`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChartSeries {
+    /// Legend label for the series (e.g. `"infectious"`).
+    pub label: String,
+    /// The `[x, y]` data points, in x order. The painter maps them through the
+    /// auto-scaled axis transform; fewer than two points still draws the
+    /// markers / bars it can.
+    pub points: Vec<[f64; 2]>,
+    /// When `true`, draw each point as a vertical bar from the x-axis baseline
+    /// up to its `y` value (a spectrum / histogram look); when `false`, connect
+    /// the points with a polyline (a curve-vs-time look).
+    pub bars: bool,
 }
 
 /// Plain-data view for the RC-beam **section drawing** ([`Workspace2dKind::RcSection`]).
@@ -421,6 +617,94 @@ pub struct DnaMapView {
     /// The labelled feature spans (ATG / ORF / His6 / stop), each a
     /// `[start, end)` nt interval with a colour. Ordered for drawing.
     pub features: Vec<DnaFeature>,
+}
+
+/// One drawing primitive on a [`Draft2dView`] — the plain-data (`f64`,
+/// drawing-unit) form of a `valenx_librecad_2d::Entity2D`, carrying only the
+/// geometry the tile painter needs (no layer / DXF metadata). The painter maps
+/// these to screen pixels with a fit-to-tile transform.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Draft2dEntity {
+    /// A straight segment from `a` to `b` (drawing units).
+    Line {
+        /// Start point `[x, y]`.
+        a: [f64; 2],
+        /// End point `[x, y]`.
+        b: [f64; 2],
+    },
+    /// A full circle of `radius` about `centre` (drawing units).
+    Circle {
+        /// Centre `[x, y]`.
+        centre: [f64; 2],
+        /// Radius in drawing units.
+        radius: f64,
+    },
+    /// A circular arc about `centre` from `start_angle_deg` to `end_angle_deg`
+    /// (degrees, CCW), tessellated by the painter.
+    Arc {
+        /// Centre `[x, y]`.
+        centre: [f64; 2],
+        /// Radius in drawing units.
+        radius: f64,
+        /// Start angle (degrees, CCW from +x).
+        start_angle_deg: f64,
+        /// End angle (degrees, CCW from +x).
+        end_angle_deg: f64,
+    },
+    /// A polyline through `vertices`; `closed` joins the last vertex back to
+    /// the first.
+    Polyline {
+        /// Ordered `[x, y]` vertices (drawing units).
+        vertices: Vec<[f64; 2]>,
+        /// Whether the last vertex connects back to the first.
+        closed: bool,
+    },
+}
+
+/// Plain-data view for the **2-D CAD drawing** ([`Workspace2dKind::Draft2d`]).
+/// The drawing's entities plus the model's overall extent (so the painter can
+/// fit it to the tile), and the already-formatted readout rows (entity count,
+/// extent) shown beside the drawing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Draft2dView {
+    /// The drawing primitives to paint, in draw order.
+    pub entities: Vec<Draft2dEntity>,
+    /// Axis-aligned drawing-unit bounds `((min_x, min_y), (max_x, max_y))` of
+    /// all entities — the box the painter scales to fit. A degenerate (empty)
+    /// drawing leaves this at the default unit box.
+    pub bounds: ([f64; 2], [f64; 2]),
+    /// Readout rows shown beside the drawing (entity count, extent).
+    pub lines: Vec<String>,
+}
+
+/// One furniture rectangle on a [`FloorPlanView`] — an axis-aligned footprint
+/// centred at `centre` with `size` `[w, d]` (metres) and a short `label`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FloorPlanItem {
+    /// Footprint centre `[x, y]` (metres, plan coordinates).
+    pub centre: [f64; 2],
+    /// Footprint size `[width, depth]` (metres).
+    pub size: [f64; 2],
+    /// Short label drawn in the rectangle (the furniture kind).
+    pub label: String,
+}
+
+/// Plain-data view for the **interior floor-plan**
+/// ([`Workspace2dKind::FloorPlan`]). The room wall polygons plus the placed
+/// furniture footprints, the overall plan extent (so the painter can fit it to
+/// the tile), and the readout rows (room / piece counts).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FloorPlanView {
+    /// Each room's wall polygon as ordered `[x, y]` vertices (metres). Drawn as
+    /// a closed loop of wall segments.
+    pub rooms: Vec<Vec<[f64; 2]>>,
+    /// The placed-furniture footprints.
+    pub furniture: Vec<FloorPlanItem>,
+    /// Axis-aligned plan-unit bounds `((min_x, min_y), (max_x, max_y))` of the
+    /// rooms — the box the painter scales to fit.
+    pub bounds: ([f64; 2], [f64; 2]),
+    /// Readout rows shown beside the plan (room + furniture counts).
+    pub lines: Vec<String>,
 }
 
 /// Root application state.
@@ -486,6 +770,22 @@ pub struct ValenxApp {
     /// [`Self::dock_tree`] may contain different `agent:<n>` panes, but every
     /// `<n>` is globally distinct.
     pub wb_agent_counter: usize,
+    /// When `true`, the active tab's dock is a **clean agent product tab**: its
+    /// [`Self::dock_tree`] holds **only** that unit's `[workspace:n | agent:n]`
+    /// pair, and `dock_layout::draw_dock_layout` must NOT sync the flag-gated
+    /// `dock_layout::DOCKABLE_PANELS` (notably the global
+    /// `"valenx_assistant_panel"`) into it — so the agent-built product tab
+    /// shows exactly one chat (its own `agent:n`) beside its workspace, never
+    /// the global Assistant pane too. Set by
+    /// `dock_layout::set_clean_workbench_agent_dock` (called from the `new_unit`
+    /// bridge command) and `false` for every other tab, so the landing tab and
+    /// manually-opened "Workbench + Agent" units keep the existing behaviour
+    /// (the assistant tile may share their grid).
+    ///
+    /// **Per-tab.** Swapped in/out with [`Self::dock_tree`] /
+    /// [`Self::dock_enabled`] via [`project_tabs::WorkspaceDoc`]; a
+    /// newly-opened tab installs a default document → this is `false`.
+    pub dock_agent_only: bool,
     /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
     /// many lines of channel `n`'s command file
     /// ([`crate::agent_commands::cmd_path`]) have already been applied. On the
@@ -494,6 +794,16 @@ pub struct ValenxApp {
     /// only genuinely-new appended lines run. Defaults empty (derive). See
     /// [`crate::agent_commands::poll_and_apply_agent_commands`].
     pub agent_cmd_cursor: std::collections::HashMap<usize, usize>,
+    /// Cursor for the **global** (no-`_u`-suffix) agent-command channel
+    /// (`<base-dir>/valenx_chat_cmd.jsonl`): how many lines of that file have
+    /// already been applied. Unlike [`Self::agent_cmd_cursor`] this channel is
+    /// **not** keyed per unit and is polled on every poll regardless of
+    /// [`Self::wb_agent_counter`], so an external agent can `new_unit` to
+    /// bootstrap its own Workbench+Agent unit before any unit exists. `None`
+    /// until the first poll sees the file → starts at line 0 (stale history is
+    /// wiped at launch by [`crate::agent_commands::clear_command_files`]). See
+    /// [`crate::agent_commands::poll_and_apply_agent_commands`].
+    pub agent_global_cmd_cursor: Option<usize>,
     /// Last time the agent-command files were polled, used to throttle the disk
     /// reads to ~1/sec. `None` until the first poll (derive default). See
     /// [`crate::agent_commands`].
@@ -517,6 +827,19 @@ pub struct ValenxApp {
     /// [`WorkspaceProduct`] and [`crate::dock_layout`].
     pub workspace_products: std::collections::HashMap<usize, WorkspaceProduct>,
 
+    /// **Lazy-build queue** for `new_unit`: unit number `n` → the product `kind`
+    /// string its tab should render, deferred until that `workspace:<n>` pane is
+    /// first viewed (or the unit is animated). `new_unit` inserts here and opens
+    /// the tab INSTANTLY instead of building the 3-D product up front, so an
+    /// agent fleet can open 130+ tabs in a burst without building every product
+    /// at once (which briefly hung the app). The deferred build runs in
+    /// `agent_commands::materialize_pending` (crate-private), called from
+    /// `render_workspace_body` (first render of the pane) and the `animate`
+    /// reducer; it moves the entry into [`Self::workspace_products`] and removes
+    /// it here. Defaults empty (derive). A `kind`-less `new_unit` inserts
+    /// nothing, so there is nothing to materialize.
+    pub pending_products: std::collections::HashMap<usize, String>,
+
     pub project: Option<LoadedProject>,
     pub project_path: Option<PathBuf>,
     /// RBAC override block parsed from the loaded project's
@@ -538,6 +861,24 @@ pub struct ValenxApp {
     pub residuals: ResidualHistory,
     pub log: LogPanel,
     pub bottom_tab: BottomTab,
+    /// When `true`, the bottom Residuals / Log dock collapses to just
+    /// its thin header strip (the tab selectors + the collapse/expand
+    /// toggle); the content body — residual plot, log text, or the
+    /// empty-state placeholder — is skipped and the panel stops
+    /// reserving vertical space. Toggled by the AI-drivable
+    /// "Collapse panel" / "Expand panel" button in the header row.
+    /// Defaults to `false` (expanded) via `#[derive(Default)]`.
+    pub bottom_panel_collapsed: bool,
+
+    /// When `true`, the left Browser panel collapses to a thin vertical
+    /// bar holding only the AI-drivable "Expand panel" button; the heavy
+    /// browser body (open-tabs list, navigator, Cases / Geometry / Mesh
+    /// / Results sections) is skipped and the panel stops reserving its
+    /// wide default width. Mirrors `bottom_panel_collapsed` for the
+    /// bottom dock. Toggled by the "Collapse panel" / "Expand panel"
+    /// button; separate from `show_browser` (the show/hide toggle).
+    /// Defaults to `false` (expanded) via `#[derive(Default)]`.
+    pub browser_collapsed: bool,
 
     /// Which case the user clicked on in the browser, if any. `None`
     /// falls back to the first case in the project when a run is
@@ -970,6 +1311,15 @@ pub struct ValenxApp {
     /// State for the Bolted Joint workbench, wrapping `valenx-bolt`. See
     /// [`crate::bolt_workbench`].
     pub bolt: crate::bolt_workbench::BoltWorkbenchState,
+
+    /// Whether the right-side **Parametric Sketch (constraints)** panel is
+    /// visible. Defaults to `false`; flipped on from
+    /// **Part Design → "Parametric Sketch (constraints)"**. This panel is a
+    /// first-class, discoverable host for the in-house `valenx-sketch`
+    /// constraint sketcher — it shares its sketch state with the Mesh
+    /// Toolbox's Sketcher section (`mesh_toolbox.sketcher`), so there is no
+    /// separate state struct. See [`crate::param_sketch_panel`].
+    pub show_param_sketch: bool,
 
     /// Whether the right-side Geomatics Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
@@ -1636,12 +1986,20 @@ pub struct ValenxApp {
     pub landing_inline_message: Option<String>,
 
     /// Memoised command-palette entry list, keyed by
-    /// `(registry.len(), show_non_oss_adapters)`. `build_visible_commands`
-    /// allocates ~360 `String`s per call and used to run every frame;
-    /// the cache invalidates only when the registry grows (rare —
-    /// re-probe / load) or the OSS-only toggle flips in Settings.
-    /// `None` until the first palette render fills it.
-    pub palette_cache: Option<(usize, bool, Vec<crate::commands::CommandKind>)>,
+    /// `(registry.len(), library.content_rev(), show_non_oss_adapters)`.
+    /// `build_visible_commands` allocates ~360 `String`s per call and used
+    /// to run every frame; the cache invalidates when the registry grows
+    /// (rare — re-probe / load), when the saved-project list changes (the
+    /// launcher lists one entry per saved project, so add/remove/**rename**
+    /// must rebuild), or when the OSS-only toggle flips in Settings. `None`
+    /// until the first palette render fills it.
+    ///
+    /// The second key is [`crate::project_library::ProjectLibrary::content_rev`],
+    /// a content fingerprint over each project's `(id, name)` — so an in-place
+    /// rename (which leaves `projects.len()` unchanged) now flips the key and
+    /// the launcher shows the new name on the next frame. See the cache-build
+    /// site in `update.rs`.
+    pub palette_cache: Option<(usize, u64, bool, Vec<crate::commands::CommandKind>)>,
 
     // ── Swappable viewport system (cloud/viewport) ────────────────────────
     /// Which viewport implementation is rendered in the central panel.
@@ -1662,6 +2020,41 @@ pub struct ValenxApp {
     /// document, so the close is gated behind this explicit confirm. See
     /// [`crate::project_tabs::draw_tab_strip`].
     pub tab_close_confirm: Option<usize>,
+
+    /// Pending **"Close all tabs?"** confirmation. `Some(())` while the
+    /// "Close all N tabs?" modal is open (set by the strip toolbar's
+    /// "Close all tabs" button); cleared on Cancel, or on confirm right after
+    /// every tab is closed via [`crate::project_tabs::TabBar::close_all`].
+    /// Closing all tabs discards each tab's unsaved workspace document, so the
+    /// batch close is gated behind this explicit confirm. See
+    /// [`crate::project_tabs::draw_tab_strip`].
+    pub tab_close_all_confirm: Option<()>,
+
+    /// Pending "Save as project…" prompt opened from a tab's right-click
+    /// menu. `Some` while the modal is up; carries the source tab index, the
+    /// in-progress project name, and the chosen destination folder id (None =
+    /// unfiled). On confirm it calls `library.add_project` + persists. Drawn
+    /// by `project_tabs`'s `draw_save_as_project`.
+    pub tab_save_as_project: Option<crate::project_tabs::SaveAsProjectPrompt>,
+
+    /// The foldered, persistent **project library** — saved projects the
+    /// user manages from the Browser's "Projects" navigator (search /
+    /// folders / pin / reorder / reopen-as-tab). Loaded from
+    /// `<state_dir>/library.json` in [`ValenxApp::new`]; persisted on every
+    /// mutation. See [`crate::project_library`] / [`crate::project_navigator`].
+    pub library: crate::project_library::ProjectLibrary,
+
+    /// Transient UI state for the project navigator (search box text, the
+    /// inline-rename editor target + buffer, the "New folder" name prompt).
+    /// Never persisted — rebuilt empty each launch. See
+    /// [`crate::project_navigator::NavigatorState`].
+    pub nav_state: crate::project_navigator::NavigatorState,
+
+    /// Transient UI state for the Browser panel's **"Open Tabs"** list (the
+    /// VS-Code-style "Open Editors" pane mirroring every open tab) — currently
+    /// just the search-box text. Never persisted. See
+    /// [`crate::project_tabs::OpenTabsState`] / `draw_open_tabs_list`.
+    pub open_tabs_state: crate::project_tabs::OpenTabsState,
 
     /// Persistent state for the 2D DNA / plasmid viewport. Survives
     /// viewport-kind switches so pan, zoom, and sub-view selection are
@@ -1716,6 +2109,11 @@ impl ValenxApp {
         if let Some(history) = load_sweep_history_from_state_dir() {
             app.sweep_history = history;
         }
+        // Restore the foldered project library from `<state_dir>/library.json`
+        // so the Browser's "Projects" navigator shows the user's saved
+        // projects on launch. A missing / corrupt file yields an empty
+        // library (see `ProjectLibrary::load`).
+        app.library = crate::project_library::ProjectLibrary::load();
         // First-launch wizard. Load any persisted decision so a user
         // who already dismissed it stays dismissed. Auto-show used to
         // gate on `should_auto_show` (open if not yet completed) — that
@@ -1775,6 +2173,61 @@ impl ValenxApp {
         // without replaying stale history). `app.assistant` is initialized in
         // `Self::default()` above, so its inbox path resolves here.
         crate::agent_commands::clear_command_files(&app);
+
+        // Agent-bridge wake thread. The in-`update()` heartbeat
+        // (`ctx.request_repaint_after(POLL_INTERVAL)` in `update.rs`) only
+        // fires *while `update()` runs*, and egui is reactive: when valenx is
+        // idle (occluded, in the background, or otherwise not receiving input —
+        // the normal case while an external agent drives it) frames stop, so
+        // the agent-command poll stops with them and appended commands sit
+        // unread. A detached background thread holding a clone of the egui
+        // `Context` (`egui::Context` is `Send + Sync`) pokes the event loop on
+        // a fixed cadence regardless of window/focus state: cross-thread
+        // `request_repaint()` routes through eframe's
+        // `set_request_repaint_callback`, which posts a winit
+        // `UserEvent::RequestRepaint` via the `EventLoopProxy` — delivered even
+        // when no OS input is arriving. Spawned once per process (guarded
+        // below) because `eframe::run_native` may invoke this constructor more
+        // than once under `run_and_return`.
+        //
+        // CAVEAT (honest): this does NOT guarantee polling while the window is
+        // *minimized* on eframe 0.28. The run-and-return event loop hard-gates
+        // painting on `window.is_minimized()` (eframe `native/run.rs`): when
+        // iconified it drops the scheduled repaint without calling
+        // `request_redraw`, so `update()` (and the poll) do not run until the
+        // window is restored. There is no `NativeOptions`/`ViewportBuilder`
+        // option to disable that gate. What the thread DOES guarantee is an
+        // immediate flush the instant the window is restored, and continuous
+        // ~3 Hz polling whenever the window is merely idle/background/occluded
+        // but not minimized. Needs runtime verification.
+        {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WAKE_THREAD_STARTED: AtomicBool = AtomicBool::new(false);
+            if WAKE_THREAD_STARTED
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                let ctx = cc.egui_ctx.clone();
+                std::thread::Builder::new()
+                    .name("valenx-agent-wake".to_owned())
+                    .spawn(move || loop {
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                        ctx.request_repaint();
+                    })
+                    // A failure to spawn the wake thread is non-fatal: the app
+                    // still runs and the in-`update()` heartbeat covers the
+                    // interactive case, so we only log rather than abort launch.
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            target: "valenx",
+                            "failed to spawn agent-bridge wake thread: {e}"
+                        );
+                        // Return a dummy handle so the closure's type is
+                        // `JoinHandle<()>`; the thread simply never started.
+                        std::thread::spawn(|| {})
+                    });
+            }
+        }
         app
     }
 
@@ -2429,4 +2882,134 @@ mod tests {
     // public Result<(), String> signature is the contract; the
     // no-workdir error paths above test the callers, which is what
     // matters for app behaviour.
+
+    /// Build a `LoadedMesh` whose node cloud spans the given AABB, so a test
+    /// can assert `ensure_default_animation`'s pivot is the box centre. The
+    /// mesh carries only nodes (no elements) — the quality / histogram
+    /// companions run fine on an element-less mesh (empty results), which is
+    /// all `ensure_default_animation` (node-only AABB) needs.
+    fn loaded_mesh_spanning(min: [f64; 3], max: [f64; 3]) -> LoadedMesh {
+        let mut mesh = valenx_mesh::Mesh::new("test-aabb");
+        // Two opposite corners are enough to fix the AABB; add the origin to
+        // prove the centre is the midpoint of the extent, not of the points.
+        mesh.nodes
+            .push(nalgebra::Vector3::new(min[0], min[1], min[2]));
+        mesh.nodes
+            .push(nalgebra::Vector3::new(max[0], max[1], max[2]));
+        mesh.nodes.push(nalgebra::Vector3::new(0.0, 0.0, 0.0));
+        let quality = valenx_mesh::quality_report(&mesh);
+        let aspect_hist =
+            valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+        let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+        LoadedMesh {
+            path: PathBuf::from("<test>/aabb"),
+            mesh,
+            quality,
+            aspect_hist,
+            skew_hist,
+        }
+    }
+
+    /// A mesh `WorkspaceProduct` (carries `mesh: Some`) with no animation yet —
+    /// the shape every bridge-rendered registry product has before
+    /// `ensure_default_animation` runs.
+    fn mesh_product_without_animation(min: [f64; 3], max: [f64; 3]) -> WorkspaceProduct {
+        WorkspaceProduct {
+            title: "Mesh part".into(),
+            lines: Vec::new(),
+            mesh: Some(loaded_mesh_spanning(min, max)),
+            vertex_colors: None,
+            camera: OrbitCamera::default(),
+            kind2d: None,
+            last_export: None,
+            image: None,
+            image_texture: None,
+            animation: None,
+        }
+    }
+
+    #[test]
+    fn ensure_default_animation_adds_turntable_at_aabb_centre() {
+        // A mesh product with no animation gets a paused +Z turntable whose
+        // pivot is the AABB centre — here the box [-2,-4,-6]..[4,6,10] (which
+        // already contains the helper's origin node, so it is the full extent)
+        // centres on [1, 1, 2].
+        let mut product = mesh_product_without_animation([-2.0, -4.0, -6.0], [4.0, 6.0, 10.0]);
+        product.ensure_default_animation();
+        let anim = product
+            .animation
+            .as_ref()
+            .expect("a default animation was attached to the mesh product");
+        assert!(!anim.playing, "the default inspect-spin starts paused");
+        assert_eq!(anim.speed, 1.0, "default speed is 1.0×");
+        assert_eq!(anim.t, 0.0, "the clock starts at zero");
+        match &anim.motion {
+            ProductMotion::Turntable {
+                axis,
+                pivot,
+                rad_per_s,
+            } => {
+                assert_eq!(*axis, [0.0, 0.0, 1.0], "spins about +Z");
+                assert_eq!(*rad_per_s, 0.4, "~1 rev / 15 s gentle inspect rate");
+                for (got, want) in pivot.iter().zip([1.0_f32, 1.0, 2.0].iter()) {
+                    assert!(
+                        (got - want).abs() < 1e-5,
+                        "pivot {pivot:?} is the AABB centre"
+                    );
+                }
+            }
+            other => panic!("expected a Turntable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ensure_default_animation_is_a_no_op_on_an_already_animated_product() {
+        // A product that already animates (the gear's RigidParts) keeps its own
+        // motion untouched — the default is NOT overwritten onto it.
+        let parts = vec![RigidPart {
+            node_range: 0..3,
+            axis: [0.0, 1.0, 0.0],
+            pivot: [5.0, 0.0, 5.0],
+            rad_per_s: -2.0,
+        }];
+        let mut product = mesh_product_without_animation([-1.0, -1.0, -1.0], [1.0, 1.0, 1.0]);
+        product.animation = Some(ProductAnimation {
+            playing: true,
+            speed: 3.0,
+            t: 1.5,
+            motion: ProductMotion::RigidParts(parts.clone()),
+        });
+        product.ensure_default_animation();
+        let anim = product.animation.as_ref().expect("animation retained");
+        assert!(anim.playing, "the existing playing flag is preserved");
+        assert_eq!(anim.speed, 3.0, "existing speed untouched");
+        assert_eq!(anim.t, 1.5, "existing clock untouched");
+        match &anim.motion {
+            ProductMotion::RigidParts(p) => assert_eq!(*p, parts, "RigidParts left intact"),
+            other => panic!("RigidParts must not be replaced by a Turntable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ensure_default_animation_is_a_no_op_on_a_mesh_less_product() {
+        // A 2-D / card / image product (mesh: None) never animates — no control
+        // is conjured onto it.
+        let mut product = WorkspaceProduct {
+            title: "Card".into(),
+            lines: vec!["a result".into()],
+            mesh: None,
+            vertex_colors: None,
+            camera: OrbitCamera::default(),
+            kind2d: None,
+            last_export: None,
+            image: None,
+            image_texture: None,
+            animation: None,
+        };
+        product.ensure_default_animation();
+        assert!(
+            product.animation.is_none(),
+            "no animation is attached to a mesh-less product"
+        );
+    }
 }

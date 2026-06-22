@@ -360,6 +360,35 @@ fn load_figure_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"bmr"}`** product: a DATA-ONLY text card
+/// of the workbench's own BMR / TDEE headline numbers. The metabolic result
+/// has no characteristic shape — the panel's stylised human figure is a
+/// representative decorative solid, not a real object — so the bridge product
+/// is right-sized to a card (`mesh: None`) carrying just the readout (the
+/// confidence badge is appended centrally). The panel's "Show 3-D figure"
+/// button still builds that representative solid into the central viewport.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`BmrWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` readout.
+pub(crate) fn bmr_product() -> crate::WorkspaceProduct {
+    let s = BmrWorkbenchState::default();
+    let readout = compute(&s).expect("default body inputs ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    crate::WorkspaceProduct {
+        title: "BMR / TDEE".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

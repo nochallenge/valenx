@@ -137,6 +137,41 @@ pub fn draw_variant_effect_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// Build the **Variant Effect** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine HGVS parse results ([`parse_batch`]) for the canonical default batch
+/// (`p.R273H` / `p.Arg249Ser` / `c.817C>T`): a parsed/error tally followed by one
+/// described row per variant. Registered as the `"variant_effect"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view. The rows mirror the panel's own per-variant readout.
+pub(crate) fn variant_effect_product() -> crate::WorkspaceProduct {
+    let results = parse_batch(&VariantEffectWorkbenchState::default().input);
+    let ok = results.iter().filter(|(_, r)| r.is_ok()).count();
+    let err = results.len() - ok;
+    let mut lines = vec![format!(
+        "{} variant(s) · {ok} parsed · {err} error(s)",
+        results.len()
+    )];
+    for (line, res) in &results {
+        match res {
+            Ok(v) => lines.push(format!("{line}  \u{2192}  {}", describe(v))),
+            Err(e) => lines.push(format!("{line}  \u{2192}  parse error: {e}")),
+        }
+    }
+    crate::WorkspaceProduct {
+        title: "Variant Effect".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

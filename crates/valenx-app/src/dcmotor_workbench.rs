@@ -273,17 +273,24 @@ fn push_cyl_x(
     }
 }
 
+/// Presentation spin rate of the motor rotor/shaft, rad/s (~1.3 rev/s) — a
+/// readable inspect speed, not the real ~kRPM blur.
+const ROTOR_RAD_PER_S: f32 = 8.0;
+
 /// Build the motor as a triangle [`Mesh`] — a cylindrical can with an output
-/// shaft protruding from the front face. Representative geometry (the
-/// electrical performance is the single-machine model). `None` for an
-/// invalid motor.
-fn motor_solid_mesh(s: &DcMotorWorkbenchState) -> Option<Mesh> {
+/// shaft protruding from the front face — together with the [`crate::RigidPart`]
+/// for the rotating output shaft (so the can stays put while the shaft spins).
+/// Representative geometry (the electrical performance is the single-machine
+/// model). `None` for an invalid motor.
+fn motor_solid_mesh_parts(s: &DcMotorWorkbenchState) -> Option<(Mesh, Vec<crate::RigidPart>)> {
     build_motor(s).ok()?;
     let mut nodes: Vec<Vector3<f64>> = Vec::new();
     let mut tris: Vec<usize> = Vec::new();
-    // Can / body.
+    // Can / body (the static housing).
     push_cyl_x(&mut nodes, &mut tris, Vector3::zeros(), 1.2, 1.0, 24);
-    // Output shaft, protruding from the +x face.
+    // Output shaft, protruding from the +x face — the rotating part. Record its
+    // half-open node range so the animation rotates only the shaft.
+    let shaft_start = nodes.len();
     push_cyl_x(
         &mut nodes,
         &mut tris,
@@ -292,13 +299,27 @@ fn motor_solid_mesh(s: &DcMotorWorkbenchState) -> Option<Mesh> {
         0.18,
         16,
     );
+    let shaft_end = nodes.len();
     let mut block = ElementBlock::new(ElementType::Tri3);
     block.connectivity = tris.iter().map(|&i| i as u32).collect();
     let mut mesh = Mesh::new("valenx-dcmotor");
     mesh.nodes = nodes;
     mesh.element_blocks.push(block);
     mesh.recompute_stats();
-    Some(mesh)
+    // The shaft spins about the motor axis (+x) through the centreline (y=z=0).
+    let parts = vec![crate::RigidPart {
+        node_range: shaft_start..shaft_end,
+        axis: [1.0, 0.0, 0.0],
+        pivot: [0.0, 0.0, 0.0],
+        rad_per_s: ROTOR_RAD_PER_S,
+    }];
+    Some((mesh, parts))
+}
+
+/// Build the motor as a triangle [`Mesh`] (without the rotor part metadata) for
+/// the central viewport. See [`motor_solid_mesh_parts`].
+fn motor_solid_mesh(s: &DcMotorWorkbenchState) -> Option<Mesh> {
+    motor_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
 }
 
 /// Build the 3-D motor solid and load it into the central viewport.
@@ -326,7 +347,8 @@ fn load_motor_3d(app: &mut ValenxApp) {
 /// its `compute()` readout rows (see [`crate::products_registry`]).
 pub(crate) fn dcmotor_product() -> crate::WorkspaceProduct {
     let s = DcMotorWorkbenchState::default();
-    let mesh = motor_solid_mesh(&s).expect("canonical DC motor ⇒ motor solid builds");
+    let (mesh, parts) =
+        motor_solid_mesh_parts(&s).expect("canonical DC motor ⇒ motor solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<dcmotor>/valenx-motor");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical DC motor ⇒ readout computes"),
@@ -340,6 +362,16 @@ pub(crate) fn dcmotor_product() -> crate::WorkspaceProduct {
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        // Animated: the output shaft spins about the motor axis while the can
+        // (housing) stays put. Starts paused at t = 0; the tile toolbar drives it.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -394,6 +426,41 @@ mod tests {
             ..Default::default()
         };
         assert!(motor_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn dcmotor_product_spins_the_shaft_only() {
+        // The product carries a RigidParts animation: exactly the output shaft
+        // (a non-empty node range within the mesh) spins about +x at a non-zero
+        // rate; the can/housing is left static.
+        let product = dcmotor_product();
+        let loaded = product.mesh.as_ref().expect("motor product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("motor product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 1, "one rotating part: the shaft");
+                let p = &parts[0];
+                assert!(
+                    p.node_range.start < p.node_range.end,
+                    "non-empty shaft range"
+                );
+                assert!(
+                    p.node_range.end <= node_count,
+                    "shaft range within the mesh"
+                );
+                assert!(
+                    p.node_range.start > 0,
+                    "the can precedes the shaft (housing static)"
+                );
+                assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about the motor axis");
+                assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("motor must use per-part rigid motion")
+            }
+        }
     }
 }
 
