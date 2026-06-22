@@ -261,4 +261,78 @@ mod tests {
     fn relative_roughness_at_upper_bound_ok() {
         assert!(haaland_friction_factor(1.0e6, 0.05).is_ok());
     }
+
+    /// **External-benchmark cross-validation — Moody chart / Colebrook
+    /// turbulent point.**
+    ///
+    /// The Moody chart *is* a plot of the implicit Colebrook–White
+    /// equation, so a single Moody point with a published value pins the
+    /// whole turbulent correlation to an outside source. The canonical
+    /// teaching point used by Moody-chart calculators and textbooks is
+    ///
+    /// ```text
+    ///   Re = 1×10⁵,  relative roughness ε/D = 0.001  →  Darcy f ≈ 0.0221
+    /// ```
+    ///
+    /// Solving Colebrook–White to machine precision at this point gives
+    /// `f = 0.022175`, which rounds to the widely-quoted 0.0221 read off
+    /// the Moody chart. The explicit **Haaland** correlation this crate
+    /// ships ([`haaland_friction_factor`]) returns `f = 0.021966` — 0.94 %
+    /// below Colebrook, comfortably inside Haaland's stated ≈2 % accuracy
+    /// envelope. This test asserts both: the Haaland value is within 1.5 %
+    /// of the published 0.0221, and the internal Colebrook reference
+    /// reproduces 0.022175.
+    ///
+    /// Sources:
+    /// - L. F. Moody, "Friction Factors for Pipe Flow", *Trans. ASME* 66
+    ///   (1944) 671–684 — the Moody chart.
+    /// - C. F. Colebrook (1939), the implicit Colebrook–White equation
+    ///   `1/√f = −2 log₁₀(ε/D/3.7 + 2.51/(Re√f))`.
+    /// - Verified against the public Moody/Colebrook calculators and
+    ///   references gathered via search (Re=1e5, ε/D=0.001 → f≈0.0221):
+    ///   <https://en.wikipedia.org/wiki/Moody_chart>,
+    ///   <https://moodychartcalc.com/>,
+    ///   <https://www.nuclear-power.com/nuclear-engineering/fluid-dynamics/major-head-loss-friction-loss/friction-factor-turbulent-flow-colebrook/>.
+    #[test]
+    fn moody_point_re_1e5_roughness_1e3_matches_published_colebrook() {
+        let re = 1.0e5_f64;
+        let eps_rel = 1.0e-3_f64;
+
+        // Published Moody-chart / Colebrook target.
+        let f_published = 0.0221_f64;
+        // Colebrook–White solved to machine precision (the exact value
+        // the chart is drawn from): f = 0.022175.
+        let f_colebrook_ref = 0.022175_f64;
+
+        // The shipped explicit Haaland correlation tracks the published
+        // chart value to better than 1.5%.
+        let f_haaland = haaland_friction_factor(re, eps_rel).unwrap();
+        let rel_pub = (f_haaland - f_published).abs() / f_published;
+        assert!(
+            rel_pub < 0.015,
+            "Haaland f={f_haaland:.6} vs published Moody/Colebrook 0.0221 (rel {rel_pub:.4})"
+        );
+
+        // The internal Colebrook iteration reproduces the high-precision
+        // reference 0.022175 (this is the equation the Moody chart plots).
+        let f_cw = colebrook_white(re, eps_rel);
+        assert!(
+            (f_cw - f_colebrook_ref).abs() < 5e-5,
+            "Colebrook–White f={f_cw:.6} vs reference {f_colebrook_ref}"
+        );
+
+        // And Haaland sits below Colebrook here by under 1% (its
+        // documented behaviour at this regime).
+        let rel_cw = (f_haaland - f_cw).abs() / f_cw;
+        assert!(
+            rel_cw < 0.01,
+            "Haaland {f_haaland:.6} vs Colebrook {f_cw:.6} (rel {rel_cw:.4})"
+        );
+
+        // The dispatcher (friction_factor) classifies this as turbulent
+        // and returns the same Haaland value end-to-end.
+        let dispatched = friction_factor(re, eps_rel).unwrap();
+        assert_eq!(dispatched.regime, FlowRegime::Turbulent);
+        assert!((dispatched.friction_factor - f_haaland).abs() < 1e-12);
+    }
 }
