@@ -340,26 +340,55 @@ fn load_spectrum_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"fft"}`** product: the canonical
-/// magnitude spectrum built as a 3-D bar mesh, paired with the workbench's
-/// own `compute()` readout rows, at a fixed 3/4 camera. Registered in
-/// [`crate::products_registry`]; the per-tool builder the registry dispatches
-/// to. Pure — driven off [`FftWorkbenchState::default`].
+/// The magnitude spectrum as a 2-D **bar chart** series — one bar per
+/// magnitude-spectrum bin over the physically meaningful first half `[0, N/2]`,
+/// with the bar's `x` its physical bin frequency (Hz) and its height `|X[k]|`.
+/// This is the genuine `valenx-fft` result (the same values the readout's peak /
+/// leading rows quote), presented as a spectrum plot rather than a 3-D bar blob.
+/// `None` for an invalid configuration (mirrors [`spectrum_bars_mesh`]).
+fn spectrum_chart(s: &FftWorkbenchState) -> Option<crate::ChartData> {
+    let (mag, _delta_f, _nyquist) = spectrum(s).ok()?;
+    let half = (mag.len() / 2).max(1);
+    let points: Vec<[f64; 2]> = mag[..half]
+        .iter()
+        .enumerate()
+        .map(|(k, &m)| {
+            let f = bin_frequency(k, mag.len(), s.fs_hz).unwrap_or(k as f64);
+            [f, m]
+        })
+        .collect();
+    Some(crate::ChartData {
+        title: "FFT magnitude spectrum".into(),
+        x_label: "frequency (Hz)".into(),
+        y_label: "|X[k]|".into(),
+        series: vec![crate::ChartSeries {
+            label: "magnitude".into(),
+            points,
+            bars: true,
+        }],
+    })
+}
+
+/// The agent-bridge **`show_3d{kind:"fft"}`** product: the canonical magnitude
+/// spectrum presented as a 2-D **bar chart** (`|X[k]|` vs frequency — see
+/// [`spectrum_chart`]) paired with the workbench's own `compute()` readout rows.
+/// An FFT spectrum reads far better as a framed, auto-scaled spectrum plot than
+/// as a 3-D bar solid, so this product carries `kind2d: Some(Chart(..))` and no
+/// mesh. Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`FftWorkbenchState::default`].
 pub(crate) fn fft_product() -> crate::WorkspaceProduct {
     let s = FftWorkbenchState::default();
-    let mesh = spectrum_bars_mesh(&s).expect("canonical FFT ⇒ spectrum bars build");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<spectrum>/valenx-fft");
+    let chart = spectrum_chart(&s).expect("canonical FFT ⇒ spectrum chart builds");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical FFT ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "FFT (magnitude spectrum)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
-        kind2d: None,
+        camera: valenx_viz::OrbitCamera::default(),
+        kind2d: Some(crate::Workspace2dKind::Chart(chart)),
         last_export: None,
         image: None,
         image_texture: None,
