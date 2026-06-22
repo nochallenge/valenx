@@ -472,22 +472,24 @@ fn load_cycle_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// Agent-bridge product: the canonical thermodynamic-cycle workbench as a 3-D
-/// solid plus its `compute()` readout rows (see [`crate::products_registry`]).
+/// Agent-bridge product: a DATA-ONLY text card of the thermodynamic-cycle
+/// workbench's `compute()` readout rows (see [`crate::products_registry`]). A
+/// cycle-efficiency result has no characteristic shape — the panel's labelled
+/// block is a generic slab stand-in, not a real object — so the bridge product
+/// is right-sized to a card (`mesh: None`) carrying just the readout (the
+/// confidence badge is appended centrally). The panel's "Show 3-D" button
+/// still builds that representative block into the central viewport.
 pub(crate) fn thermocycle_product() -> crate::WorkspaceProduct {
     let s = ThermoCycleWorkbenchState::default();
-    let mesh = cycle_block_mesh(&s).expect("canonical thermo cycle ⇒ cycle block solid builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<thermocycle>/valenx-cycle");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical thermo cycle ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Thermodynamic cycle (efficiency)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
         image: None,

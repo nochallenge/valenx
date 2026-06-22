@@ -355,25 +355,26 @@ fn load_triangle_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"powerfactor"}`** product: the canonical
-/// power triangle built as a 3-D prism, paired with the workbench's own
-/// `compute()` readout rows, at a fixed 3/4 camera. Registered in
-/// [`crate::products_registry`]; the per-tool builder the registry dispatches
-/// to. Pure — driven off [`PowerFactorWorkbenchState::default`].
+/// The agent-bridge **`show_3d{kind:"powerfactor"}`** product: a DATA-ONLY
+/// text card of the workbench's own `compute()` readout rows. The power
+/// triangle is a 2-D vector relationship, not a physical object — the panel's
+/// extruded triangular prism is a decorative chart-as-geometry — so the bridge
+/// product is right-sized to a card (`mesh: None`) carrying just the readout
+/// (the confidence badge is appended centrally). The panel's "Show 3-D" button
+/// still builds that representative prism into the central viewport. Registered
+/// in [`crate::products_registry`]; the per-tool builder the registry
+/// dispatches to. Pure — driven off [`PowerFactorWorkbenchState::default`].
 pub(crate) fn powerfactor_product() -> crate::WorkspaceProduct {
     let s = PowerFactorWorkbenchState::default();
-    let mesh = triangle_prism_mesh(&s).expect("canonical power factor ⇒ prism builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<triangle>/valenx-powerfactor");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical power factor ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Power factor (correction)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
         image: None,

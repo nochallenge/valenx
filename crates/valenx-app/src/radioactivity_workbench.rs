@@ -275,26 +275,26 @@ fn load_decay_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"radioactivity"}`** product: the
-/// canonical single-nuclide decay curve built as a 3-D ribbon mesh, paired
-/// with the workbench's own `compute()` readout rows, at a fixed 3/4 camera.
-/// Registered in [`crate::products_registry`]; the per-tool builder the
-/// registry dispatches to. Pure — driven off
-/// [`RadioactivityWorkbenchState::default`].
+/// The agent-bridge **`show_3d{kind:"radioactivity"}`** product: a DATA-ONLY
+/// text card of the workbench's own `compute()` readout rows. The decay result
+/// is a plotted curve, not a physical object — the panel's swept-ribbon mesh is
+/// a decorative chart-as-geometry — so the bridge product is right-sized to a
+/// card (`mesh: None`) carrying just the readout (the confidence badge is
+/// appended centrally). The panel's "Show 3-D" button still builds that
+/// representative ribbon into the central viewport. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`RadioactivityWorkbenchState::default`].
 pub(crate) fn radioactivity_product() -> crate::WorkspaceProduct {
     let s = RadioactivityWorkbenchState::default();
-    let mesh = decay_curve_mesh(&s).expect("canonical decay ⇒ curve mesh builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<decay>/valenx-radioactivity");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical decay ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Radioactivity (decay curve)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
         image: None,
