@@ -20,14 +20,23 @@ use std::f64::consts::TAU;
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
 use valenx_bearing::{BearingType, EquivalentLoad, RatingLife, StaticEquivalentLoad};
-use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Brushed-steel raceways.
+const STEEL: [f32; 3] = [0.60, 0.62, 0.66];
+/// Bright chrome rolling balls.
+const CHROME: [f32; 3] = [0.82, 0.84, 0.88];
+/// Brass cage.
+const BRASS: [f32; 3] = [0.72, 0.60, 0.30];
+/// Presentation spin rate of the rolling assembly (inner race + balls + cage),
+/// rad/s (~0.6 rev/s) — a readable inspect speed for the orbiting elements.
+const SPIN_RAD_PER_S: f32 = 4.0;
 
 /// Persistent form + result state for the Bearing Workbench.
 pub struct BearingWorkbenchState {
@@ -299,153 +308,99 @@ fn compute(s: &BearingWorkbenchState) -> Result<String, String> {
     ))
 }
 
-/// Append an outward-facing box (centre `c`, half-extents `h`) to the
-/// buffers.
-fn push_box(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    h: Vector3<f64>,
-) {
-    let base = nodes.len();
-    let signs = [
-        (-1.0, -1.0, -1.0),
-        (1.0, -1.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (-1.0, 1.0, -1.0),
-        (-1.0, -1.0, 1.0),
-        (1.0, -1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (-1.0, 1.0, 1.0),
-    ];
-    for (sx, sy, sz) in signs {
-        nodes.push(c + Vector3::new(sx * h.x, sy * h.y, sz * h.z));
-    }
-    let faces = [
-        [1, 2, 6, 5],
-        [0, 4, 7, 3],
-        [3, 7, 6, 2],
-        [0, 1, 5, 4],
-        [4, 5, 6, 7],
-        [0, 3, 2, 1],
-    ];
-    for f in faces {
-        tris.extend_from_slice(&[
-            base + f[0],
-            base + f[1],
-            base + f[2],
-            base + f[0],
-            base + f[2],
-            base + f[3],
-        ]);
-    }
-}
-
-/// Append a (double-sided) cylinder whose axis runs along `+x`, spanning
-/// `base.x ..= base.x + length` with circle centre `(base.y, base.z)`.
-fn push_cyl_x(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    base: Vector3<f64>,
-    length: f64,
-    r: f64,
-    seg: usize,
-) {
-    let (x0, x1) = (base.x, base.x + length);
-    let lo = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x0, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    let hi = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x1, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    for j in 0..seg {
-        let jn = (j + 1) % seg;
-        tris.extend_from_slice(&[
-            lo + j,
-            hi + j,
-            hi + jn,
-            lo + j,
-            hi + jn,
-            lo + jn,
-            lo + j,
-            hi + jn,
-            hi + j,
-            lo + j,
-            lo + jn,
-            hi + jn,
-        ]);
-    }
-}
-
-/// Build the bearing as a triangle [`Mesh`] — an outer ring and an inner
-/// ring (two concentric short cylinders along `x`) with a ring of rolling
-/// elements between them and a base. Representative geometry (not to scale;
-/// the rating-life numbers are the `valenx-bearing` result). `None` for an
-/// invalid configuration.
-fn bearing_solid_mesh(s: &BearingWorkbenchState) -> Option<Mesh> {
+/// Build the bearing as a triangle [`Mesh`] **with per-vertex colours** plus a
+/// [`crate::RigidPart`] for the rolling assembly. A real rolling-element
+/// bearing cross-section on the +z axle:
+///
+/// - **outer race** and **inner race** are true *annular* [`MeshBuilder::tube`]s
+///   (hollow rings with a bore, not solid cylinders) in brushed steel;
+/// - the **rolling elements** are bright-chrome [`MeshBuilder::sphere`] balls on
+///   the pitch circle (the primitive the old box-balls were faking);
+/// - a thin brass **cage** ([`MeshBuilder::torus`]) rides the pitch circle
+///   linking the balls.
+///
+/// The inner race + balls + cage are built consecutively as one contiguous node
+/// range that spins about the +z axle (a readable inspect of the orbiting
+/// elements); the outer race stays fixed. Representative dimensions (the
+/// rating-life numbers are the `valenx-bearing` result). `None` for an invalid
+/// configuration.
+///
+/// Returns `(mesh, colors, parts)` with `colors.len() == 3 × triangle_count`.
+fn bearing_solid_mesh_parts(
+    s: &BearingWorkbenchState,
+) -> Option<(Mesh, Vec<[f32; 3]>, Vec<crate::RigidPart>)> {
     rating_life(s).ok()?;
 
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
-
-    let z = 0.6;
+    // Representative bearing cross-section (axle = +z).
     let width = 0.18;
-    let outer_r = 0.5;
-    let inner_r = 0.28;
-    let ball_r = 0.09;
-    let pitch_r = (outer_r + inner_r) * 0.5;
+    let outer_od = 0.5; // outer race outer radius
+    let outer_id = 0.40; // outer race bore (race wall = outer_od − outer_id)
+    let inner_od = 0.30; // inner race outer radius
+    let inner_id = 0.20; // inner race bore (the shaft hole)
+    let pitch_r = (outer_id + inner_od) * 0.5; // ball-centre circle
+    let ball_r = (outer_id - inner_od) * 0.5 * 0.92; // ball nearly fills the gap
+    let cage_minor = ball_r * 0.32; // thin cage ring tube
 
-    // Outer ring (large concentric x-cylinder).
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-width * 0.5, 0.0, z),
+    let mut b = MeshBuilder::new();
+
+    // Outer race — a steel annulus (hollow ring), fixed.
+    b.tube(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        outer_id,
+        outer_od,
         width,
-        outer_r,
-        36,
+        40,
+        STEEL,
     );
-    // Inner ring (small concentric x-cylinder, sharing the axis).
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-width * 0.5, 0.0, z),
+
+    // Rolling assembly (inner race + balls + cage) — one contiguous range that
+    // spins about +z. Build the inner race first so the range starts here.
+    let roll_start = b.node_count();
+    b.tube(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        inner_id,
+        inner_od,
         width,
-        inner_r,
-        28,
+        32,
+        STEEL,
     );
-    // A ring of rolling elements (balls) on the pitch circle, drawn as
-    // small boxes spaced around the axis.
-    let balls = 8;
+    // Balls on the pitch circle in the mid-plane (z = 0).
+    let balls = 9;
     for j in 0..balls {
         let a = j as f64 / balls as f64 * TAU;
-        let cy = pitch_r * a.cos();
-        let cz = z + pitch_r * a.sin();
-        push_box(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(0.0, cy, cz),
-            Vector3::new(width * 0.4, ball_r, ball_r),
-        );
+        let (sa, ca) = a.sin_cos();
+        b.sphere([pitch_r * ca, pitch_r * sa, 0.0], ball_r, 10, 14, CHROME);
     }
-    // Base.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.0, 0.0, 0.05),
-        Vector3::new(0.25, outer_r, 0.05),
+    // Brass cage: a thin torus on the pitch circle in the mid-plane.
+    b.torus(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        pitch_r,
+        cage_minor,
+        40,
+        10,
+        BRASS,
     );
+    let roll_end = b.node_count();
 
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-bearing");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
-    Some(mesh)
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-bearing".to_string();
+
+    let parts = vec![crate::RigidPart {
+        node_range: roll_start..roll_end,
+        axis: [0.0, 0.0, 1.0],
+        pivot: [0.0, 0.0, 0.0],
+        rad_per_s: SPIN_RAD_PER_S,
+    }];
+    Some((mesh, colors, parts))
+}
+
+/// Build the bearing [`Mesh`] (without the colour / part metadata) for the
+/// central viewport. See [`bearing_solid_mesh_parts`].
+fn bearing_solid_mesh(s: &BearingWorkbenchState) -> Option<Mesh> {
+    bearing_solid_mesh_parts(s).map(|(mesh, _colors, _parts)| mesh)
 }
 
 /// Build the 3-D bearing solid and load it into the central viewport.
@@ -478,7 +433,8 @@ fn load_bearing_3d(app: &mut ValenxApp) {
 /// to. Pure — driven off [`BearingWorkbenchState::default`].
 pub(crate) fn bearing_product() -> crate::WorkspaceProduct {
     let s = BearingWorkbenchState::default();
-    let mesh = bearing_solid_mesh(&s).expect("canonical bearing ⇒ ring-and-ball solid builds");
+    let (mesh, colors, parts) =
+        bearing_solid_mesh_parts(&s).expect("canonical bearing ⇒ ring-and-ball solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<bearing>/valenx-bearing");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical bearing ⇒ readout computes"),
@@ -488,10 +444,20 @@ pub(crate) fn bearing_product() -> crate::WorkspaceProduct {
         title: "Ball bearing (L10 rating life)".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        // Animated: the inner race + balls + cage spin about the axle while the
+        // outer race stays fixed. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -615,6 +581,57 @@ mod tests {
             ..Default::default()
         };
         assert!(bearing_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn bearing_carries_colours_and_spins_the_rolling_assembly() {
+        // Per-vertex colours align to the renderer's coloured path (3/triangle),
+        // with the three part colours present (steel races / chrome balls /
+        // brass cage). The product spins the inner-race+balls+cage assembly about
+        // the +z axle while the outer race (built first) stays fixed.
+        let s = BearingWorkbenchState::default();
+        let (mesh, colors, parts) = bearing_solid_mesh_parts(&s).expect("default bearing builds");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        assert!(colors.contains(&STEEL), "race colour present");
+        assert!(colors.contains(&CHROME), "ball colour present");
+        assert!(colors.contains(&BRASS), "cage colour present");
+
+        assert_eq!(parts.len(), 1, "one rolling assembly");
+        let p = &parts[0];
+        assert_eq!(p.axis, [0.0, 0.0, 1.0], "spins about the axle");
+        assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+        // The outer race is built first, so the rolling assembly starts past 0
+        // and ends at the final node (the cage is the last thing built).
+        assert!(
+            p.node_range.start > 0,
+            "outer race precedes the rolling assembly (fixed)"
+        );
+        assert_eq!(
+            p.node_range.end,
+            mesh.nodes.len(),
+            "the rolling assembly reaches the final node"
+        );
+    }
+
+    #[test]
+    fn bearing_product_carries_colours_and_animation() {
+        let product = bearing_product();
+        let loaded = product.mesh.as_ref().expect("bearing product has a mesh");
+        let colors = product
+            .vertex_colors
+            .as_ref()
+            .expect("bearing product carries vertex_colors");
+        assert_eq!(colors.len(), loaded.mesh.total_elements() * 3);
+        let anim = product.animation.expect("bearing product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => assert_eq!(parts.len(), 1),
+            crate::ProductMotion::Turntable { .. } => panic!("bearing uses rigid-part spin"),
+        }
     }
 }
 

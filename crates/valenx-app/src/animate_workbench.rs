@@ -47,6 +47,48 @@ fn joint0(anim: &Animation, t: f64) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// Build the agent-bridge **`animate` product** — a DATA-ONLY *text card*
+/// summarising the keyframe timeline (`mesh: None`, populated `lines`).
+///
+/// Rendering a single *posed frame* as an image is impractical here: this
+/// workbench animates a bare revolute-joint *angle* over time (the
+/// `valenx-animate` `Animation` samples joint values, not a posed renderable
+/// mesh), so there is no body to rasterise into a frame image. The honest
+/// wiring is therefore the same mesh-less text-card path the DATA-ONLY
+/// workbenches (`cfd` / `astro` / `car`) use: the card reports the genuine
+/// timeline facts — keyframe count, duration, easing, and the sampled
+/// start / mid / end joint values — computed from the canonical demo
+/// animation. (Distinct from the `render` product, which *does* produce a real
+/// raster image.)
+pub(crate) fn animate_product() -> crate::WorkspaceProduct {
+    let tween = TweenMode::EaseInOut;
+    let anim = demo_animation(tween);
+    let dur = anim.duration();
+    let n = anim.keyframes.len();
+    let start = joint0(&anim, 0.0);
+    let mid = joint0(&anim, dur * 0.5);
+    let end = joint0(&anim, dur);
+    crate::WorkspaceProduct {
+        title: "Keyframe animation".into(),
+        lines: vec![
+            format!("{n} keyframes · {dur:.2} s · {} easing", tween.label()),
+            "joint 0 sweep (rad):".into(),
+            format!("  t=0.00 s  →  {start:.3}"),
+            format!("  t={:.2} s  →  {mid:.3}", dur * 0.5),
+            format!("  t={dur:.2} s  →  {end:.3}"),
+            "valenx-animate · keyframe timeline".into(),
+        ],
+        mesh: None,
+        vertex_colors: None,
+        camera: valenx_viz::OrbitCamera::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 /// Draw the animation workbench (a no-op unless toggled on via
 /// View → Animation).
 pub fn draw_animate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {

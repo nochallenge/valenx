@@ -466,24 +466,30 @@ fn load_regime_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// Agent-bridge product: the canonical dimensional-analysis workbench as a 3-D
-/// solid plus its `compute()` readout rows (see [`crate::products_registry`]).
+/// Agent-bridge product: a DATA-ONLY text card of the dimensional-analysis
+/// workbench's `compute()` readout rows (see [`crate::products_registry`]).
+/// A dimensionless-group / flow-regime result has no characteristic shape —
+/// the panel's labelled box is an explicit stand-in, not a real object — so
+/// the bridge product is right-sized to a card (`mesh: None`) carrying just
+/// the readout (the confidence badge is appended centrally). The panel's
+/// "Show 3-D" button still builds that representative box into the central
+/// viewport.
 pub(crate) fn dimensional_product() -> crate::WorkspaceProduct {
     let s = DimensionalWorkbenchState::default();
-    let mesh = regime_box_mesh(&s).expect("canonical dimensional ⇒ regime box solid builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<dimensional>/valenx-regime");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical dimensional ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Dimensional analysis (flow regime)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
     }
 }
 

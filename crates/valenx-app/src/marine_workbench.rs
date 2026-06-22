@@ -12,14 +12,28 @@
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
 use valenx_marine::{Hull, FRESHWATER_DENSITY, SEAWATER_DENSITY};
-use valenx_mesh::element::{ElementBlock, ElementType};
+use valenx_marine_hydro::{Hull as HydroHull, WaterProperties, FRESHWATER_NU_15C, SEAWATER_NU_15C};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Antifouling red for the hull below the waterline.
+const ANTIFOUL: [f32; 3] = [0.55, 0.13, 0.13];
+/// Topside grey for the hull above the waterline.
+const TOPSIDE: [f32; 3] = [0.40, 0.43, 0.48];
+/// Teak-ish deck.
+const DECK: [f32; 3] = [0.62, 0.50, 0.34];
+/// Dark keel fin.
+const KEEL: [f32; 3] = [0.18, 0.18, 0.20];
+
+/// Number of transverse stations lofted along the hull length (stern → bow).
+const STATIONS: usize = 15;
+/// Half-section points from keel/waterline up one side (per band).
+const SECTION_POINTS: usize = 8;
 
 /// Persistent form + result state for the Marine / Hull Workbench.
 pub struct MarineWorkbenchState {
@@ -188,6 +202,119 @@ fn build_hull(s: &MarineWorkbenchState) -> Result<Hull, String> {
     .map_err(|e| e.to_string())
 }
 
+// --- Resistance / powering (valenx-marine-hydro, ITTC-57 + Holtrop-Mennen) ---
+//
+// The workbench form only carries the hydrostatic principal dimensions
+// (L / B / T / Cb / displacement); the Holtrop resistance regression needs a
+// handful of extra form coefficients. We supply *representative* mid-range
+// values for a normal merchant hull (labelled in the readout as assumed), so
+// the resistance estimate is honest about what it derives vs. assumes.
+
+/// Representative midship-section coefficient `C_m` for a normal hull.
+const ASSUMED_CM: f64 = 0.98;
+/// Representative waterplane-area coefficient `C_wp` for a normal hull.
+const ASSUMED_CWP: f64 = 0.75;
+/// Representative longitudinal centre of buoyancy (% of L fwd of amidships).
+const ASSUMED_LCB_PERCENT: f64 = -0.75;
+/// Design Froude number at which the headline resistance / power is reported.
+const DESIGN_FROUDE: f64 = 0.25;
+
+/// Append calm-water **resistance + powering** rows (ITTC-57 friction +
+/// Holtrop-Mennen form factor / wave-making, via `valenx-marine-hydro`) to the
+/// hydrostatics readout `out`, computed from this hull's own L / B / T / Cb /
+/// displacement plus the representative form coefficients above. The headline
+/// point is the **design speed** at [`DESIGN_FROUDE`]; two slower speeds
+/// (Fn 0.18, 0.22) round out a short Rt-vs-speed view.
+///
+/// Best-effort: any domain error from the hydro crate (or a hull whose
+/// derived form falls outside the regression) is reported as a single note
+/// line rather than aborting the hydrostatics readout. No numbers are
+/// fabricated — every value comes from the crate's `ResistancePoint`.
+///
+/// Takes the hull's `length_m` and `water_density` directly (rather than the
+/// whole state) so the caller can hold `&mut out` — which is `s.result` — at
+/// the same time without a borrow conflict.
+fn append_resistance_lines(length_m: f64, water_density: f64, hull: &Hull, out: &mut String) {
+    // Water properties: match the workbench's chosen density, ITTC-57 viscosity
+    // for whichever of sea/fresh it is closest to.
+    let nu =
+        if (water_density - FRESHWATER_DENSITY).abs() < (water_density - SEAWATER_DENSITY).abs() {
+            FRESHWATER_NU_15C
+        } else {
+            SEAWATER_NU_15C
+        };
+    let water = WaterProperties {
+        density: water_density,
+        kinematic_viscosity: nu,
+        correlation_allowance: valenx_marine_hydro::DEFAULT_CORRELATION_ALLOWANCE,
+    };
+
+    let hydro = match HydroHull::from_hydrostatic(
+        hull,
+        ASSUMED_CM,
+        ASSUMED_CWP,
+        ASSUMED_LCB_PERCENT,
+        0.0,  // no bulbous bow
+        0.0,  // (bulb centre, ignored without a bulb)
+        0.0,  // no immersed transom
+        0.0,  // normal stern shape (C_stern = 0)
+        None, // wetted surface: Holtrop estimate
+    ) {
+        Ok(h) => h,
+        Err(e) => {
+            out.push_str(&format!("\n\nresistance: unavailable ({e})"));
+            return;
+        }
+    };
+
+    // Design speed from the design Froude number, V = Fn·sqrt(g·L).
+    let v_design = DESIGN_FROUDE * (valenx_marine_hydro::GRAVITY * length_m).sqrt();
+    let design = match hydro.resistance_at(v_design, &water) {
+        Ok(p) => p,
+        Err(e) => {
+            out.push_str(&format!("\n\nresistance: unavailable ({e})"));
+            return;
+        }
+    };
+
+    out.push_str(&format!(
+        "\n\n-- calm-water resistance (ITTC-57 + Holtrop) --\n\
+         assumed Cm/Cwp/lcb: {ASSUMED_CM:.2} / {ASSUMED_CWP:.2} / {ASSUMED_LCB_PERCENT:.2} %\n\
+         wetted surface S: {:.1} m\u{00B2}\n\
+         design speed  : {:.2} m/s ({:.2} kn, Fn {:.3})\n\
+         Cf (ITTC-57)  : {:.6}\n\
+         form factor 1+k: {:.3}\n\
+         R_f friction  : {:.1} kN\n\
+         R_w wave-make : {:.1} kN\n\
+         R_t total     : {:.1} kN\n\
+         P_e eff. power: {:.1} kW",
+        design.wetted_surface_m2,
+        design.speed_ms,
+        design.speed_knots,
+        design.froude_number,
+        design.friction_coefficient,
+        design.form_factor,
+        design.frictional_resistance_n / 1000.0,
+        design.wave_resistance_n / 1000.0,
+        design.total_resistance_kn(),
+        design.effective_power_kw(),
+    ));
+
+    // A short Rt-vs-speed view at two slower Froude numbers + the design point.
+    out.push_str("\nR_t vs speed (kN):");
+    for fn_target in [0.18_f64, 0.22, DESIGN_FROUDE] {
+        let v = fn_target * (valenx_marine_hydro::GRAVITY * length_m).sqrt();
+        if let Ok(p) = hydro.resistance_at(v, &water) {
+            out.push_str(&format!(
+                "\n  Fn {:.2} ({:.1} kn): {:.1}",
+                fn_target,
+                p.speed_knots,
+                p.total_resistance_kn(),
+            ));
+        }
+    }
+}
+
 /// Validate the form, compute the hydrostatics and format the readout.
 /// Extracted from the draw closure so it is unit-testable.
 fn run_marine(s: &mut MarineWorkbenchState) {
@@ -225,68 +352,131 @@ fn run_marine(s: &mut MarineWorkbenchState) {
                     "UNSTABLE (GM <= 0)"
                 },
             );
+            // Append calm-water resistance + powering (ITTC-57 + Holtrop) from
+            // the same hull dimensions — kept after the hydrostatics rows.
+            append_resistance_lines(s.length_m, s.water_density, &hull, &mut s.result);
         }
         Err(e) => s.error = Some(e),
     }
 }
 
-/// Build a representative ship hull as a triangle [`Mesh`] — a raked, pointed
-/// bow forward (+x) tapering from the full midship / stern box section to a
-/// stem at the waterline, with the keel forefoot set slightly aft of the
-/// raked stem head. Length runs along x, beam along y, draft from the keel
-/// `z = 0` up to the waterline `z = T`. Faces are emitted double-sided so the
-/// shaded pass lights the hull from any orbit angle. The solid is a
-/// representative hull *form*; the reported hydrostatics still use the
-/// box-form `Cb` model from `valenx-marine`. `None` for an invalid hull.
-fn hull_solid_mesh(s: &MarineWorkbenchState) -> Option<Mesh> {
+/// The longitudinal **fullness** of the hull at fractional length `u ∈ [0, 1]`
+/// (0 = stern, 1 = bow). 1.0 amidships, tapering toward both ends; the bow
+/// (forward) is finer than the stern. Raised to an exponent driven by the block
+/// coefficient `cb` so a fuller hull (high Cb) keeps its sections fuller for
+/// longer, a fine hull (low Cb) pinches in earlier — keeping the rendered form
+/// consistent with the hydrostatics readout's `Cb`.
+fn fullness(u: f64, cb: f64) -> f64 {
+    // Base bell shape, peak at amidships (u≈0.5), zero at the very ends.
+    let bell = (std::f64::consts::PI * u).sin();
+    // Bias the peak slightly aft so the bow is finer than the stern.
+    let aft_bias = 1.0 - 0.18 * (u - 0.5);
+    // Sharpness: fuller hull ⇒ flatter top (smaller exponent).
+    let sharp = (1.6 - cb).clamp(0.5, 1.4);
+    (bell.powf(sharp) * aft_bias).clamp(0.0, 1.0)
+}
+
+/// One transverse **half-section ring band** at fractional length `u`, spanning
+/// the vertical band from `z_lo` to `z_hi` (a fraction of the local depth). The
+/// section is a closed loop: down the **port** side from the upper edge to the
+/// keel/lower edge, across to **starboard**, up the starboard side, then closed
+/// back across the top — so two adjacent bands loft into a watertight hull
+/// skin. `hl`/`hb` are half-length/half-beam, `depth` the keel-to-waterline
+/// draft, `f` the local [`fullness`]. The section narrows in beam and rises off
+/// the keel toward the ends via `f`, giving the fine entrance / run.
+fn hull_band(u: f64, z_lo: f64, z_hi: f64, hl: f64, hb: f64, depth: f64, f: f64) -> Vec<[f64; 3]> {
+    // Longitudinal x: stern (−hl) at u=0 to a raked bow (+hl) at u=1.
+    let x = -hl + 2.0 * hl * u;
+    // Local half-beam at this station (full amidships, → ~0 at the ends).
+    let local_hb = hb * (0.12 + 0.88 * f);
+    // Keel rise: the bottom lifts toward the ends (rocker / forefoot).
+    let keel_z = (1.0 - f) * depth * 0.55;
+    let n = SECTION_POINTS;
+    // Half-beam at vertical fraction `t` (0 top → 1 bottom): rounds in toward
+    // the keel (a gentle bilge curve), never quite zero.
+    let half_y = |t: f64| -> f64 { local_hb * (1.0 - t * t * 0.85).max(0.06) };
+    let z_at = |t: f64| -> f64 { (z_hi + (z_lo - z_hi) * t).max(keel_z) };
+    let mut ring = Vec::with_capacity(2 * n);
+    // Port side: upper edge (t=0) → lower edge (t=1).
+    for i in 0..n {
+        let t = i as f64 / (n - 1) as f64;
+        ring.push([x, -half_y(t), z_at(t)]);
+    }
+    // Starboard side: lower edge → upper edge (mirror), skipping the shared
+    // bottom keel point (i=n-1) so the closed loop has no duplicate vertex but
+    // keeps both top corners at full beam.
+    for i in (0..n - 1).rev() {
+        let t = i as f64 / (n - 1) as f64;
+        ring.push([x, half_y(t), z_at(t)]);
+    }
+    ring
+}
+
+/// Build a representative ship hull as a triangle [`Mesh`] **with per-vertex
+/// colours** — a **lofted hull** skinned from [`STATIONS`] transverse station
+/// sections along the length (fuller amidships, fine at the bow/stern entrance
+/// and run, with rocker lifting the keel toward the ends), split into a
+/// **below-waterline** band (antifoul red, keel → waterline) and a **topside**
+/// band (grey, waterline → sheer), plus a flat **deck** and a centreline
+/// **keel** fin. The station beam/draft are driven by the workbench's own
+/// length/beam/draft and a [`fullness`] curve shaped by `Cb`, so the rendered
+/// form tracks the hydrostatics readout. Length runs along x, beam along y,
+/// draft from the keel `z = 0` up to the waterline `z = T`. The reported
+/// hydrostatics still use the box-form `Cb` model from `valenx-marine`. `None`
+/// for an invalid hull.
+///
+/// Returns `(mesh, colors)` with `colors.len() == 3 × triangle_count`, ready
+/// for [`crate::WorkspaceProduct::vertex_colors`].
+fn hull_solid_mesh_colored(s: &MarineWorkbenchState) -> Option<(Mesh, Vec<[f32; 3]>)> {
     let hull = build_hull(s).ok()?;
     let (hl, hb, t) = (hull.length_m / 2.0, hull.beam_m / 2.0, hull.draft_m);
-    // The full box section runs from the stern aft to `mx`; forward of that
-    // the hull tapers in plan to the centreline bow. The keel forefoot
-    // (`bkx`) sits aft of the raked stem head at the waterline (`hl`).
-    let mx = hl * 0.15;
-    let bkx = hl * 0.82;
-    let nodes = vec![
-        Vector3::new(-hl, -hb, 0.0), // 0 stern keel port
-        Vector3::new(-hl, hb, 0.0),  // 1 stern keel stbd
-        Vector3::new(-hl, hb, t),    // 2 stern deck stbd
-        Vector3::new(-hl, -hb, t),   // 3 stern deck port
-        Vector3::new(mx, -hb, 0.0),  // 4 mid keel port
-        Vector3::new(mx, hb, 0.0),   // 5 mid keel stbd
-        Vector3::new(mx, hb, t),     // 6 mid deck stbd
-        Vector3::new(mx, -hb, t),    // 7 mid deck port
-        Vector3::new(bkx, 0.0, 0.0), // 8 bow keel forefoot
-        Vector3::new(hl, 0.0, t),    // 9 raked stem head (waterline)
-    ];
-    let mut tris: Vec<u32> = Vec::new();
-    push_quad_ds(&mut tris, 0, 1, 2, 3); // transom (stern)
-    push_quad_ds(&mut tris, 0, 1, 5, 4); // bottom, stern -> mid
-    push_quad_ds(&mut tris, 3, 7, 6, 2); // deck, stern -> mid
-    push_quad_ds(&mut tris, 0, 4, 7, 3); // port side, stern -> mid
-    push_quad_ds(&mut tris, 1, 5, 6, 2); // stbd side, stern -> mid
-    push_quad_ds(&mut tris, 4, 7, 9, 8); // port bow panel
-    push_quad_ds(&mut tris, 5, 6, 9, 8); // stbd bow panel
-    push_tri_ds(&mut tris, 4, 5, 8); // bottom forefoot wedge
-    push_tri_ds(&mut tris, 7, 6, 9); // foredeck wedge to the stem
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris;
-    let mut mesh = Mesh::new("valenx-marine-hull");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
-    Some(mesh)
+    let cb = hull.block_coefficient;
+    // Freeboard: topside rises above the waterline by ~40 % of the draft.
+    let freeboard = t * 0.4;
+    let deck_z = t + freeboard;
+
+    // Build the station sections for the two vertical bands. Endpoints (u=0,
+    // u=1) get a tiny non-zero fullness so the stem/transom rings stay valid
+    // closed loops (capped) rather than collapsing to a line.
+    let mut below: Vec<Vec<[f64; 3]>> = Vec::with_capacity(STATIONS);
+    let mut top: Vec<Vec<[f64; 3]>> = Vec::with_capacity(STATIONS);
+    for k in 0..STATIONS {
+        let u = k as f64 / (STATIONS - 1) as f64;
+        let f = fullness(u, cb).max(0.08);
+        below.push(hull_band(u, 0.0, t, hl, hb, t, f));
+        top.push(hull_band(u, t, deck_z, hl, hb, t, f));
+    }
+
+    let mut b = MeshBuilder::new();
+    // Below-waterline skin (red) and topside skin (grey), each capped so the
+    // transom (stern) and the bow stem are closed.
+    b.loft(&below, true, ANTIFOUL);
+    b.loft(&top, true, TOPSIDE);
+
+    // Deck: a flat slab spanning the full length, slightly inset, at the sheer.
+    let deck_hb = hb * 0.96;
+    b.cuboid(
+        [0.0, 0.0, deck_z],
+        [2.0 * hl * 0.98, 2.0 * deck_hb, t * 0.08],
+        DECK,
+    );
+
+    // Keel: a thin centreline fin running most of the length below the hull.
+    b.cuboid(
+        [hl * -0.05, 0.0, -t * 0.12],
+        [2.0 * hl * 0.6, hb * 0.06, t * 0.24],
+        KEEL,
+    );
+
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-marine-hull".to_string();
+    Some((mesh, colors))
 }
 
-/// Append a double-sided quad `a-b-c-d` (both windings) to `tris`.
-fn push_quad_ds(tris: &mut Vec<u32>, a: usize, b: usize, c: usize, d: usize) {
-    let (a, b, c, d) = (a as u32, b as u32, c as u32, d as u32);
-    tris.extend_from_slice(&[a, b, c, a, c, d, a, c, b, a, d, c]);
-}
-
-/// Append a double-sided triangle `a-b-c` (both windings) to `tris`.
-fn push_tri_ds(tris: &mut Vec<u32>, a: usize, b: usize, c: usize) {
-    let (a, b, c) = (a as u32, b as u32, c as u32);
-    tris.extend_from_slice(&[a, b, c, a, c, b]);
+/// Build the hull [`Mesh`] (without the colour metadata) for the central
+/// viewport. See [`hull_solid_mesh_colored`].
+fn hull_solid_mesh(s: &MarineWorkbenchState) -> Option<Mesh> {
+    hull_solid_mesh_colored(s).map(|(mesh, _colors)| mesh)
 }
 
 /// Build the 3-D hull solid and load it into the central viewport
@@ -320,7 +510,7 @@ fn load_hull_3d(app: &mut ValenxApp) {
 /// `compute()`), so the builder runs the analysis first and reads that field.
 pub(crate) fn marine_product() -> crate::WorkspaceProduct {
     let mut s = MarineWorkbenchState::default();
-    let mesh = hull_solid_mesh(&s).expect("canonical marine ⇒ hull solid builds");
+    let (mesh, colors) = hull_solid_mesh_colored(&s).expect("canonical marine ⇒ hull solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<marine>/valenx-hull");
     run_marine(&mut s);
     let lines = crate::products_registry::lines_from_readout(&s.result);
@@ -329,10 +519,13 @@ pub(crate) fn marine_product() -> crate::WorkspaceProduct {
         title: "Marine hull (hydrostatics)".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
     }
 }
 
@@ -356,6 +549,58 @@ mod tests {
         assert!(s.result.contains("displacement"));
         assert!(s.result.contains("GM"));
         assert!(s.result.contains("STABLE"));
+    }
+
+    #[test]
+    fn analyze_appends_resistance_and_power_lines() {
+        // The readout now carries the calm-water resistance + powering rows from
+        // valenx-marine-hydro (ITTC-57 + Holtrop) alongside the hydrostatics.
+        let mut s = MarineWorkbenchState::default();
+        run_marine(&mut s);
+        assert!(s.error.is_none());
+        // Hydrostatics still present.
+        assert!(s.result.contains("displacement"));
+        assert!(s.result.contains("GM"));
+        // Resistance / powering block present, with the labelled headline rows.
+        assert!(s.result.contains("calm-water resistance"));
+        assert!(s.result.contains("R_t total"));
+        assert!(s.result.contains("P_e eff. power"));
+        assert!(s.result.contains("Cf (ITTC-57)"));
+        assert!(s.result.contains("R_t vs speed"));
+        // The design Froude number is the labelled headline point.
+        assert!(s.result.contains("Fn 0.250"));
+    }
+
+    #[test]
+    fn resistance_lines_carry_finite_positive_numbers() {
+        // Cross-check the appended numbers against the hydro crate directly —
+        // every reported quantity is finite, positive, and not fabricated.
+        let s = MarineWorkbenchState::default();
+        let hull = build_hull(&s).expect("default hull valid");
+        let v = DESIGN_FROUDE * (valenx_marine_hydro::GRAVITY * s.length_m).sqrt();
+        let water = WaterProperties {
+            density: s.water_density,
+            kinematic_viscosity: SEAWATER_NU_15C,
+            correlation_allowance: valenx_marine_hydro::DEFAULT_CORRELATION_ALLOWANCE,
+        };
+        let hydro = HydroHull::from_hydrostatic(
+            &hull,
+            ASSUMED_CM,
+            ASSUMED_CWP,
+            ASSUMED_LCB_PERCENT,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            None,
+        )
+        .expect("hydro hull builds from the default form");
+        let p = hydro.resistance_at(v, &water).expect("resistance computes");
+        assert!(p.total_resistance_kn() > 0.0 && p.total_resistance_kn().is_finite());
+        assert!(p.effective_power_kw() > 0.0 && p.effective_power_kw().is_finite());
+        assert!((p.froude_number - DESIGN_FROUDE).abs() < 1e-9);
+        // The viscous (1+k) resistance must exceed the bare friction.
+        assert!(p.viscous_resistance_n > p.frictional_resistance_n);
     }
 
     #[test]
@@ -385,13 +630,28 @@ mod tests {
     fn hull_mesh_for_default_is_a_nonempty_hull() {
         let s = MarineWorkbenchState::default();
         let mesh = hull_solid_mesh(&s).expect("default hull yields a solid");
-        assert_eq!(mesh.nodes.len(), 10);
+        // The lofted hull has far more than the old 10-node block (two skinned
+        // bands of STATIONS sections + deck + keel).
+        assert!(
+            mesh.nodes.len() > 100,
+            "lofted hull has many station vertices, got {}",
+            mesh.nodes.len()
+        );
         let n = mesh.nodes.len() as u32;
         for blk in &mesh.element_blocks {
             assert!(!blk.connectivity.is_empty());
             assert_eq!(blk.connectivity.len() % 3, 0);
             assert!(blk.connectivity.iter().all(|&i| i < n));
         }
+        // Length runs along x (≈ full L), beam along y (≈ full B), keel/deck
+        // span the draft + freeboard in z.
+        let max_x = mesh.nodes.iter().map(|p| p.x).fold(f64::MIN, f64::max);
+        let max_y = mesh.nodes.iter().map(|p| p.y).fold(f64::MIN, f64::max);
+        assert!(
+            (max_x - s.length_m / 2.0).abs() < s.length_m * 0.05,
+            "spans L"
+        );
+        assert!(max_y <= s.beam_m / 2.0 + 1e-6, "within the beam");
     }
 
     #[test]
@@ -401,6 +661,79 @@ mod tests {
             ..Default::default()
         };
         assert!(hull_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn fullness_is_peaked_amidships_and_fine_at_ends() {
+        // Full amidships, fine at the bow/stern; the bow (u→1) is finer than the
+        // stern (u→0) at symmetric offsets.
+        let cb = 0.7;
+        assert!(fullness(0.5, cb) > 0.85, "fullest amidships");
+        assert!(fullness(0.02, cb) < 0.3, "fine at the stern");
+        assert!(fullness(0.98, cb) < 0.3, "fine at the bow");
+        assert!(
+            fullness(0.75, cb) < fullness(0.25, cb),
+            "bow finer than stern (aft bias)"
+        );
+        // A fuller hull (higher Cb) stays fuller off-amidships than a fine one.
+        assert!(
+            fullness(0.3, 0.85) > fullness(0.3, 0.5),
+            "high Cb keeps fullness"
+        );
+    }
+
+    #[test]
+    fn hull_band_is_a_closed_within_envelope_ring() {
+        // A station ring is a closed loop of 2·n−1 points (port n + starboard
+        // n−1, sharing the keel point), symmetric in y, with x at the station
+        // and z within the [keel, deck] band.
+        let ring = hull_band(0.5, 0.0, 6.0, 60.0, 10.0, 6.0, 1.0);
+        assert_eq!(ring.len(), 2 * SECTION_POINTS - 1);
+        let max_y = ring.iter().map(|p| p[1]).fold(f64::MIN, f64::max);
+        let min_y = ring.iter().map(|p| p[1]).fold(f64::MAX, f64::min);
+        assert!((max_y + min_y).abs() < 1e-9, "port/starboard symmetric");
+        assert!(max_y > 0.0 && max_y <= 10.0 + 1e-9, "within the half-beam");
+        let min_z = ring.iter().map(|p| p[2]).fold(f64::MAX, f64::min);
+        assert!(min_z >= -1e-9, "keel at or above z=0");
+    }
+
+    #[test]
+    fn hull_carries_vertex_aligned_colours() {
+        // The two lofted bands + deck + keel ship per-vertex colours aligned to
+        // the renderer's coloured path (3 / triangle), with the antifoul,
+        // topside and deck colours all present.
+        let s = MarineWorkbenchState::default();
+        let (mesh, colors) = hull_solid_mesh_colored(&s).expect("default hull builds coloured");
+        assert!(!mesh.nodes.is_empty(), "non-empty mesh");
+        assert!(mesh.total_elements() > 0, "mesh has triangles");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        assert!(colors.contains(&ANTIFOUL), "below-waterline colour present");
+        assert!(colors.contains(&TOPSIDE), "topside colour present");
+        assert!(colors.contains(&DECK), "deck colour present");
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
+            }
+        }
+    }
+
+    #[test]
+    fn hull_product_is_coloured_and_aligned() {
+        let product = marine_product();
+        let loaded = product.mesh.as_ref().expect("marine product has a mesh");
+        let colors = product
+            .vertex_colors
+            .as_ref()
+            .expect("marine product carries vertex_colors");
+        assert_eq!(
+            colors.len(),
+            loaded.mesh.total_elements() * 3,
+            "product colours aligned to the coloured path"
+        );
     }
 }
 

@@ -71,6 +71,15 @@ impl AssistantWorkbenchState {
     pub(crate) fn set_inbox_path_for_test(&mut self, path: PathBuf) {
         self.inbox_path = path;
     }
+
+    /// Test-only: override the base **feed** path so a test can read back the
+    /// per-unit feed file ([`unit_feed_path`]) `append_feed_note` writes,
+    /// without colliding with the live app's feed. See `crate::agent_commands`
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn set_feed_path_for_test(&mut self, path: PathBuf) {
+        self.feed_path = path;
+    }
 }
 
 /// Resolve the assistant feed file: `$VALENX_ASSISTANT_FEED` if set, otherwise

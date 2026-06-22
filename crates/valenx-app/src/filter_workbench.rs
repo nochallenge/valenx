@@ -388,6 +388,33 @@ fn load_filter_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"filter"}`** product: the canonical
+/// passive filter built as a 3-D solid, paired with the workbench's own
+/// `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`FilterWorkbenchState::default`].
+pub(crate) fn filter_product() -> crate::WorkspaceProduct {
+    let s = FilterWorkbenchState::default();
+    let mesh = filter_solid_mesh(&s).expect("canonical filter ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<filter>/valenx-filter");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical filter ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Filter (passive)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

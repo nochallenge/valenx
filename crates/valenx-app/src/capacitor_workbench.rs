@@ -329,27 +329,32 @@ fn load_capacitor_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"capacitor"}`** product: the canonical
-/// parallel-plate capacitor built as a 3-D solid, paired with the workbench's
-/// own `compute()` readout rows, at a fixed 3/4 camera. Registered in
-/// [`crate::products_registry`]; the per-tool builder the registry dispatches
-/// to. Pure — driven off [`CapacitorWorkbenchState::default`].
+/// The agent-bridge **`show_3d{kind:"capacitor"}`** product: a DATA-ONLY text
+/// card of the parallel-plate capacitor workbench's `compute()` readout rows
+/// (see [`crate::products_registry`]). A capacitance / energy result has no
+/// characteristic shape — the panel's labelled plate-and-dielectric boxes are a
+/// fixed schematic (generic boxes that don't scale to the real area / gap), not
+/// a real fabricated object — so the bridge product is right-sized to a card
+/// (`mesh: None`) carrying just the readout (the confidence badge is appended
+/// centrally). The panel's "Show 3-D" button still builds that representative
+/// schematic into the central viewport. Pure — driven off
+/// [`CapacitorWorkbenchState::default`].
 pub(crate) fn capacitor_product() -> crate::WorkspaceProduct {
     let s = CapacitorWorkbenchState::default();
-    let mesh = cap_solid_mesh(&s).expect("canonical capacitor ⇒ plate solid builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<capacitor>/valenx-capacitor");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical capacitor ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Capacitor (parallel-plate)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
     }
 }
 

@@ -59,6 +59,7 @@
 //!     crate::WorkspaceProduct {
 //!         title: "Foo".into(), lines, mesh: Some(mesh),
 //!         vertex_colors: None, camera, kind2d: None, last_export: None,
+//!         image: None, image_texture: None, animation: None,
 //!     }
 //! }
 //! ```
@@ -122,6 +123,103 @@ pub(crate) fn lines_from_readout(readout: &str) -> Vec<String> {
         .collect()
 }
 
+/// Promote a [`valenx_viz::TriangleMesh`] triangle soup into a
+/// [`valenx_mesh::Mesh`] of one `Tri3` element **per source triangle, in the
+/// source order**, tagged `id`.
+///
+/// Used by the molecular-geometry product builders (`molecule` / `reactdyn`),
+/// whose canonical geometry comes out of
+/// [`crate::genetics::molecule_view::ball_and_stick`] as a `TriangleMesh`
+/// rather than a `valenx_mesh::Mesh`. Keeping one element per source triangle
+/// **in order** is what lets a paired per-triangle colour list expand cleanly to
+/// the triangle-major per-vertex `vertex_colors` the tile renderer expects:
+/// [`crate::viewport::mesh_to_triangle_surface`] re-emits this mesh's `Tri3`
+/// elements in the same order, so triangle *k* of the returned mesh is triangle
+/// *k* of the input (see [`per_triangle_to_vertex_colors`]). Vertices are not
+/// welded — each triangle owns three fresh nodes — which matches how the source
+/// soup is laid out and keeps the index-alignment trivial.
+pub(crate) fn mesh_from_triangle_soup(
+    soup: &valenx_viz::TriangleMesh,
+    id: &str,
+) -> valenx_mesh::Mesh {
+    let mut nodes: Vec<nalgebra::Vector3<f64>> = Vec::with_capacity(soup.triangles.len() * 3);
+    let mut conn: Vec<u32> = Vec::with_capacity(soup.triangles.len() * 3);
+    for tri in &soup.triangles {
+        for v in &tri.vertices {
+            conn.push(nodes.len() as u32);
+            nodes.push(nalgebra::Vector3::new(
+                v[0] as f64,
+                v[1] as f64,
+                v[2] as f64,
+            ));
+        }
+    }
+    let mut block = valenx_mesh::ElementBlock::new(valenx_mesh::ElementType::Tri3);
+    block.connectivity = conn;
+    let mut mesh = valenx_mesh::Mesh::new(id);
+    mesh.nodes = nodes;
+    mesh.element_blocks.push(block);
+    mesh.recompute_stats();
+    mesh
+}
+
+/// Expand a **per-triangle** colour list (one `[r, g, b]` per triangle, in the
+/// triangle order of a [`mesh_from_triangle_soup`] mesh) into the triangle-major
+/// **per-vertex** `vertex_colors` a [`WorkspaceProduct`] carries: each
+/// triangle's colour is repeated three times (once per corner), in the same
+/// order [`crate::wgpu_renderer::triangles_to_vertices`] walks the surface.
+///
+/// The molecular builders pair this with [`mesh_from_triangle_soup`] (one
+/// element per source triangle, in order) so the returned vec lines up 1:1 with
+/// the renderer's emitted surface vertices.
+pub(crate) fn per_triangle_to_vertex_colors(per_tri: &[[f32; 3]]) -> Vec<[f32; 3]> {
+    let mut out = Vec::with_capacity(per_tri.len() * 3);
+    for &c in per_tri {
+        out.push(c);
+        out.push(c);
+        out.push(c);
+    }
+    out
+}
+
+/// Build the triangle-major **per-vertex** `vertex_colors` for a `Tri3`
+/// `valenx_mesh::Mesh` whose nodes carry a scalar field (one value per node),
+/// mapped through the shared `valenx_fields` cool-to-warm divergent ramp over
+/// `[min, max]`.
+///
+/// Walks the mesh's `Tri3` elements in the exact order
+/// [`crate::viewport::mesh_to_triangle_surface`] re-emits them (block-major,
+/// then the three corners of each triangle) so the result is index-aligned with
+/// the surface vertices [`crate::wgpu_renderer::triangles_to_vertices_colored`]
+/// draws — i.e. its length is `3 × (number of Tri3 elements)`. A node index past
+/// the field length, or a non-finite value, degrades that corner to mid-ramp
+/// rather than panicking. Used by the aero product (per-face `Cp` painted on the
+/// voxelized body shell).
+pub(crate) fn node_field_to_vertex_colors(
+    mesh: &valenx_mesh::Mesh,
+    field: &[f64],
+    min: f64,
+    max: f64,
+) -> Vec<[f32; 3]> {
+    let to_rgb = |node: u32| -> [f32; 3] {
+        let v = field.get(node as usize).copied().unwrap_or(f64::NAN);
+        let v = if v.is_finite() { v } else { 0.5 * (min + max) };
+        let [r, g, b] = valenx_fields::colormap::cool_to_warm_in_range(v, min, max);
+        [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0]
+    };
+    let mut out = Vec::new();
+    for block in &mesh.element_blocks {
+        if block.element_type == valenx_mesh::ElementType::Tri3 {
+            for f in block.connectivity.chunks_exact(3) {
+                out.push(to_rgb(f[0]));
+                out.push(to_rgb(f[1]));
+                out.push(to_rgb(f[2]));
+            }
+        }
+    }
+    out
+}
+
 /// One registry entry: a wire `kind` string mapped to a pure builder that
 /// returns the [`WorkspaceProduct`] for that 3-D model.
 ///
@@ -142,13 +240,18 @@ pub struct MeshProducerEntry {
 /// kind (the reducer then skips it safely — no panic, no placeholder churn,
 /// matching the rest of its bad-input handling).
 ///
-/// **This `match` is the single shared edit point for 3-D mesh tools**: each
-/// arm is one line pairing a wire `kind` with the per-tool builder in that
+/// **This `match` is the single shared edit point for bridge product tools**:
+/// each arm is one line pairing a wire `kind` with the per-tool builder in that
 /// tool's own module. The substantive per-tool code lives in those builders,
 /// not here — so adding a kind is a one-line addition (see the module docs for
-/// the copy-paste pattern). Note `dna` is intentionally absent: `show_3d:dna`
-/// is a *text* card handled directly in the reducer (no mesh), and the 2-D
-/// `show_2d` drawings (`rcbeam` / `dna`) have their own separate path.
+/// the copy-paste pattern). Most arms are 3-D mesh tools; the trailing block is
+/// the **DATA-ONLY** tools whose builders return a mesh-less *text-card*
+/// `WorkspaceProduct` (`mesh: None`, populated `lines`) — the reducer dispatches
+/// those through this same table and the tile renders the card (the mesh-less
+/// path the `dna` card uses) instead of a 3-D view. Note `dna` itself is
+/// intentionally absent: `show_3d:dna` is a text card handled directly in the
+/// reducer, and the 2-D `show_2d` drawings (`rcbeam` / `dna`) have their own
+/// separate path.
 pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
     let build: fn() -> WorkspaceProduct = match kind {
         "rocket" => crate::rocket_workbench::rocket_product,
@@ -242,6 +345,93 @@ pub fn lookup(kind: &str) -> Option<MeshProducerEntry> {
         "bjt" => crate::bjt_workbench::bjt_product,
         "mosfet" => crate::mosfet_workbench::mosfet_product,
         "rectifier" => crate::rectifier_workbench::rectifier_product,
+        // Electrical / EM / power-systems / electrochemistry / photonics /
+        // acoustics / nuclear / signals / propulsion family (each builder lives
+        // in its own workbench module; see that module's `*_product`).
+        "filter" => crate::filter_workbench::filter_product,
+        "antenna" => crate::antenna_workbench::antenna_product,
+        "transmissionline" => crate::transmissionline_workbench::transmissionline_product,
+        "coil" => crate::coil_workbench::coil_product,
+        "led" => crate::led_workbench::led_product,
+        "transformer" => crate::transformer_workbench::transformer_product,
+        "threephase" => crate::threephase_workbench::threephase_product,
+        "powerfactor" => crate::powerfactor_workbench::powerfactor_product,
+        "electrochem" => crate::electrochem_workbench::electrochem_product,
+        "batterypack" => crate::batterypack_workbench::batterypack_product,
+        "batteryecm" => crate::batteryecm_workbench::batteryecm_product,
+        "solarpv" => crate::solarpv_workbench::solarpv_product,
+        "optics" => crate::optics_workbench::optics_product,
+        "acoustics" => crate::acoustics_workbench::acoustics_product,
+        "radioactivity" => crate::radioactivity_workbench::radioactivity_product,
+        "queueing" => crate::queueing_workbench::queueing_product,
+        "fft" => crate::fft_workbench::fft_product,
+        "engine" => crate::engine_workbench::engine_product,
+        // Aerospace + bio family — the last of the 3-D mesh workbenches
+        // (each builder lives in its own workbench module; see that module's
+        // `*_product`).
+        "fixedwing" => crate::fixedwing_workbench::fixedwing_product,
+        "drone" => crate::drone_workbench::drone_product,
+        "windturbine" => crate::windturbine_workbench::windturbine_product,
+        "pharmacokinetics" => crate::pharmacokinetics_workbench::pharmacokinetics_product,
+        "enzymekinetics" => crate::enzymekinetics_workbench::enzymekinetics_product,
+        "hemodynamics" => crate::hemodynamics_workbench::hemodynamics_product,
+        "bonemech" => crate::bonemech_workbench::bonemech_product,
+        "bmr" => crate::bmr_workbench::bmr_product,
+        "thermoreg" => crate::thermoreg_workbench::thermoreg_product,
+        "osmosis" => crate::osmosis_workbench::osmosis_product,
+        "acidbase" => crate::acidbase_workbench::acidbase_product,
+        "popdynamics" => crate::popdynamics_workbench::popdynamics_product,
+        // CAD / reconstruction / reinforcement / molecular / sheet-metal / aero
+        // family — workbenches that produce real geometry from their own kernels
+        // (not the mechanical `*_solid_mesh` pattern); each builder lives in its
+        // own module and extracts a `valenx_mesh::Mesh` from that kernel. The
+        // molecular (`molecule` / `reactdyn`) and `aero` products additionally
+        // carry per-vertex colours (CPK element palette / Cp field).
+        "cad" => crate::cad_workbench::cad_product,
+        "reverse" => crate::reverse_workbench::reverse_product,
+        "reinforcement" => crate::reinforcement_workbench::reinforcement_product,
+        "molecule" => crate::genetics::molecule_view::molecule_product,
+        "reactdyn" => crate::reactdyn_workbench::reactdyn_product,
+        "sheetmetal" => crate::sheetmetal_workbench::sheetmetal_product,
+        "aero" => crate::aero_workbench::aero_product,
+        // DATA-ONLY workbenches — their output is numbers / analysis, not 3-D
+        // geometry, so each builder returns a TEXT-CARD `WorkspaceProduct`
+        // (`mesh: None`, populated `lines`). The reducer dispatches these
+        // through the same `lookup` as the mesh kinds, and the tile renders the
+        // card (the mesh-less path the `dna` card uses) rather than a 3-D view.
+        // Each builder lives in its own workbench module and formats the genuine
+        // computed result rows from that tool's canonical default state.
+        "fields" => crate::fields_workbench::fields_product,
+        "fasteners" => crate::fasteners_workbench::fasteners_product,
+        "frames" => crate::frames_workbench::frames_product,
+        "collision" => crate::collision_workbench::collision_product,
+        "geomatics" => crate::geomatics_workbench::geomatics_product,
+        "hvac" => crate::hvac_workbench::hvac_product,
+        "gasdynamics" => crate::gasdynamics_workbench::gasdynamics_product,
+        "piping" => crate::piping_workbench::piping_product,
+        "cfd" => crate::cfd_workbench::cfd_product,
+        "astro" => crate::astro_workbench::astro_product,
+        "car" => crate::car_workbench::car_product,
+        "neuro" => crate::neuro_workbench::neuro_product,
+        "variant_effect" => crate::variant_effect_workbench::variant_effect_product,
+        // IMAGE / 2-D-DRAWING / extra-card workbenches — these resolve through
+        // the same `lookup`, but their builders return a product that is
+        // neither a `Tri3` mesh nor a bare text card:
+        //   • `render`  → an IMAGE product (`image: Some(ColorImage)`): a small
+        //     synchronous path-trace of a Cornell box (the pane's image branch
+        //     uploads + draws it).
+        //   • `animate` → a DATA-ONLY text CARD (`mesh: None`, `lines`): the
+        //     keyframe-timeline summary (no posed body to rasterise — see
+        //     `animate_product`).
+        //   • `draft2d` / `interior` → 2-D DRAWING products
+        //     (`kind2d: Some(..)`): the 2-D CAD drawing / floor plan, painted by
+        //     the same egui 2-D branch as `rcbeam` / `dna`.
+        // They are asserted by their own registry tests (image.is_some() /
+        // kind2d.is_some()), not the Tri3-mesh assertion.
+        "render" => crate::render_workbench::render_product,
+        "animate" => crate::animate_workbench::animate_product,
+        "draft2d" => crate::draft2d_workbench::draft2d_product,
+        "interior" => crate::interior_workbench::interior_product,
         _ => return None,
     };
     Some(MeshProducerEntry {
@@ -333,6 +523,65 @@ fn kind_static(kind: &str) -> Option<&'static str> {
         "bjt" => "bjt",
         "mosfet" => "mosfet",
         "rectifier" => "rectifier",
+        "filter" => "filter",
+        "antenna" => "antenna",
+        "transmissionline" => "transmissionline",
+        "coil" => "coil",
+        "led" => "led",
+        "transformer" => "transformer",
+        "threephase" => "threephase",
+        "powerfactor" => "powerfactor",
+        "electrochem" => "electrochem",
+        "batterypack" => "batterypack",
+        "batteryecm" => "batteryecm",
+        "solarpv" => "solarpv",
+        "optics" => "optics",
+        "acoustics" => "acoustics",
+        "radioactivity" => "radioactivity",
+        "queueing" => "queueing",
+        "fft" => "fft",
+        "engine" => "engine",
+        // Aerospace + bio family — the last of the 3-D mesh workbenches.
+        "fixedwing" => "fixedwing",
+        "drone" => "drone",
+        "windturbine" => "windturbine",
+        "pharmacokinetics" => "pharmacokinetics",
+        "enzymekinetics" => "enzymekinetics",
+        "hemodynamics" => "hemodynamics",
+        "bonemech" => "bonemech",
+        "bmr" => "bmr",
+        "thermoreg" => "thermoreg",
+        "osmosis" => "osmosis",
+        "acidbase" => "acidbase",
+        "popdynamics" => "popdynamics",
+        // CAD / reconstruction / reinforcement / molecular / sheet-metal / aero
+        // family.
+        "cad" => "cad",
+        "reverse" => "reverse",
+        "reinforcement" => "reinforcement",
+        "molecule" => "molecule",
+        "reactdyn" => "reactdyn",
+        "sheetmetal" => "sheetmetal",
+        "aero" => "aero",
+        // DATA-ONLY card workbenches (mesh-less text-card products).
+        "fields" => "fields",
+        "fasteners" => "fasteners",
+        "frames" => "frames",
+        "collision" => "collision",
+        "geomatics" => "geomatics",
+        "hvac" => "hvac",
+        "gasdynamics" => "gasdynamics",
+        "piping" => "piping",
+        "cfd" => "cfd",
+        "astro" => "astro",
+        "car" => "car",
+        "neuro" => "neuro",
+        "variant_effect" => "variant_effect",
+        // IMAGE / 2-D-drawing / extra-card workbenches (see `lookup`).
+        "render" => "render",
+        "animate" => "animate",
+        "draft2d" => "draft2d",
+        "interior" => "interior",
         _ => return None,
     })
 }
@@ -364,6 +613,7 @@ mod tests {
         "conveyor",
         "bolt",
         "rivet",
+        "fasteners",
         "beam",
         "truss",
         "plate",
@@ -397,17 +647,13 @@ mod tests {
         "chaindrive",
         "fourbar",
         "thermalexpansion",
-        "dimensional",
         "projectile",
         "heattransfer",
-        "insulation",
         "heatexchanger",
         "heatpump",
         "refrigeration",
-        "psychrometrics",
         "thermocouple",
         "thermistor",
-        "thermocycle",
         "fanlaws",
         // Fluid-mechanics / hydraulics / thermo-fluids / electronics
         // workbenches wired into the bridge.
@@ -421,14 +667,50 @@ mod tests {
         "weir",
         "orifice",
         "combustion",
-        "diffusion",
+        // NOTE: `diffusion` is a 2-D CHART product (concentration vs position),
+        // so it lives in DRAWING_2D_KINDS, not here.
         "marine",
         "resistornetwork",
-        "capacitor",
         "opamp",
         "bjt",
         "mosfet",
-        "rectifier",
+        // Electrical / EM / power-systems / electrochemistry / photonics /
+        // acoustics / signals / propulsion workbenches wired into the bridge.
+        "filter",
+        "antenna",
+        "transmissionline",
+        "coil",
+        "led",
+        "transformer",
+        "batterypack",
+        "batteryecm",
+        "solarpv",
+        "optics",
+        "acoustics",
+        // NOTE: `fft` is a 2-D CHART product (magnitude spectrum, bars), so it
+        // lives in DRAWING_2D_KINDS, not here.
+        "engine",
+        // Aerospace + bio workbenches — the last of the 3-D mesh tools —
+        // wired into the bridge.
+        "fixedwing",
+        "drone",
+        "windturbine",
+        "pharmacokinetics",
+        "enzymekinetics",
+        "hemodynamics",
+        "bonemech",
+        // NOTE: `popdynamics` is a 2-D CHART product (population vs time), so it
+        // lives in DRAWING_2D_KINDS, not here.
+        // The 7 real-geometry-extraction workbenches wired in this change — CAD
+        // CSG, point-cloud reconstruction, rebar cage, coloured molecule,
+        // reaction-dynamics frame, folded sheet metal, aero Cp on a demo body.
+        "cad",
+        "reverse",
+        "reinforcement",
+        "molecule",
+        "reactdyn",
+        "sheetmetal",
+        "aero",
     ];
 
     /// The machine-design / structural / civil / strength-of-materials /
@@ -451,6 +733,7 @@ mod tests {
         "conveyor",
         "bolt",
         "rivet",
+        "fasteners",
         "beam",
         "truss",
         "plate",
@@ -484,17 +767,13 @@ mod tests {
         "chaindrive",
         "fourbar",
         "thermalexpansion",
-        "dimensional",
         "projectile",
         "heattransfer",
-        "insulation",
         "heatexchanger",
         "heatpump",
         "refrigeration",
-        "psychrometrics",
         "thermocouple",
         "thermistor",
-        "thermocycle",
         "fanlaws",
         // The 18 fluid-mechanics / hydraulics / thermo-fluids / electronics
         // workbenches wired in this change.
@@ -508,15 +787,351 @@ mod tests {
         "weir",
         "orifice",
         "combustion",
-        "diffusion",
+        // `diffusion` → 2-D CHART (see DRAWING_2D_KINDS), not a mesh kind.
         "marine",
         "resistornetwork",
-        "capacitor",
         "opamp",
         "bjt",
         "mosfet",
-        "rectifier",
+        // Electrical / EM / power-systems / electrochemistry / photonics /
+        // acoustics / signals / propulsion workbenches wired into the bridge.
+        "filter",
+        "antenna",
+        "transmissionline",
+        "coil",
+        "led",
+        "transformer",
+        "batterypack",
+        "batteryecm",
+        "solarpv",
+        "optics",
+        "acoustics",
+        // `fft` → 2-D CHART (see DRAWING_2D_KINDS), not a mesh kind.
+        "engine",
+        // Aerospace + bio workbenches — the last of the 3-D mesh tools —
+        // wired into the bridge.
+        "fixedwing",
+        "drone",
+        "windturbine",
+        "pharmacokinetics",
+        "enzymekinetics",
+        "hemodynamics",
+        "bonemech",
+        // `popdynamics` → 2-D CHART (see DRAWING_2D_KINDS), not a mesh kind.
+        // The 7 real-geometry-extraction workbenches wired in this change. Each
+        // must resolve and build a non-empty `Tri3` product with a title and at
+        // least one readout row — `molecule` / `reactdyn` / `aero` additionally
+        // carry per-vertex colours (asserted separately below).
+        "cad",
+        "reverse",
+        "reinforcement",
+        "molecule",
+        "reactdyn",
+        "sheetmetal",
+        "aero",
     ];
+
+    /// The DATA-ONLY card workbench kinds wired into the bridge. These differ
+    /// from [`KNOWN_3D_KINDS`] / [`WIRED_WORKBENCH_KINDS`] in one essential way:
+    /// their output is numbers / analysis, **not** 3-D geometry, so each builder
+    /// returns a *text-card* [`WorkspaceProduct`] (`mesh: None`, populated
+    /// `lines`) rather than a `Tri3` mesh. They are therefore asserted by the
+    /// card-specific [`every_card_kind_resolves_and_builds_a_text_card`] test
+    /// below — which checks `mesh.is_none()` + non-empty `lines` — and are kept
+    /// out of the mesh arrays so the Tri3-mesh assertions never run against them.
+    const CARD_KINDS: &[&str] = &[
+        "fields",
+        "frames",
+        "collision",
+        "geomatics",
+        "hvac",
+        "gasdynamics",
+        "piping",
+        "cfd",
+        "astro",
+        "car",
+        "neuro",
+        "variant_effect",
+        // Pure-calculator workbenches whose only honest output is the scalar
+        // readout: their former 3-D "model" was a decorative blob (a generic
+        // box / beaker / prism / swept-curve ribbon / fixed schematic that
+        // did not represent a real fabricated object), so each builder now
+        // returns a clean text card (`mesh: None`) instead. The panel's own
+        // "Show 3-D" button still builds that representative solid into the
+        // central viewport; only the agent-bridge product was right-sized.
+        "acidbase",
+        "bmr",
+        "thermoreg",
+        "osmosis",
+        "dimensional",
+        "powerfactor",
+        "queueing",
+        "radioactivity",
+        "thermocycle",
+        "psychrometrics",
+        "insulation",
+        // Electrical / electrochemistry figures-of-merit calculators whose
+        // former 3-D "model" was likewise a decorative schematic of generic
+        // boxes / cylinders (parallel-plate boxes, a diode-bridge package on a
+        // board, three abstract phase limbs, a beaker-with-electrodes) that did
+        // not represent a real fabricated object — right-sized to text cards in
+        // the same spirit. The panel's "Show 3-D" button still builds the
+        // representative schematic into the central viewport.
+        "capacitor",
+        "rectifier",
+        "threephase",
+        "electrochem",
+        // The animation timeline is a DATA-ONLY card too — it summarises the
+        // keyframe timeline (count / duration / sampled joint values); there is
+        // no posed body to rasterise, so it carries no mesh and no 2-D drawing.
+        "animate",
+    ];
+
+    /// The IMAGE workbench kinds — their builder returns a product carrying a
+    /// raster [`crate::WorkspaceProduct::image`] (a CPU `egui::ColorImage`)
+    /// instead of a mesh / card / 2-D drawing. Asserted by
+    /// [`image_kinds_resolve_and_build_an_image_product`] (`image.is_some()` +
+    /// `mesh.is_none()`), so they are kept out of the mesh / card / 2-D arrays.
+    const IMAGE_KINDS: &[&str] = &["render"];
+
+    /// The 2-D-DRAWING workbench kinds whose builder returns a product with a
+    /// [`crate::WorkspaceProduct::kind2d`] (`Some(..)`) painted by the egui 2-D
+    /// branch — the same path `rcbeam` / `dna` use, but resolved through the
+    /// registry. Asserted by
+    /// [`drawing_2d_kinds_resolve_and_build_a_2d_drawing`] (`kind2d.is_some()` +
+    /// `mesh.is_none()` + `image.is_none()`).
+    ///
+    /// `draft2d` / `interior` are engineering drawings (entity soup / floor
+    /// plan); `fft` / `diffusion` / `popdynamics` are **chart** products
+    /// (`Workspace2dKind::Chart`) — products that are really *plots* (a magnitude
+    /// spectrum, a concentration-vs-position profile, a population-vs-time
+    /// trajectory) and read better as a 2-D line / bar chart than as a 3-D blob.
+    const DRAWING_2D_KINDS: &[&str] = &["draft2d", "interior", "fft", "diffusion", "popdynamics"];
+
+    #[test]
+    fn every_card_kind_resolves_and_builds_a_text_card() {
+        // Each DATA-ONLY workbench kind resolves to a registry entry whose pure
+        // builder yields a *text-card* product: NO mesh (so the tile takes the
+        // mesh-less card path the `dna` card uses, not the 3-D viewport), a title,
+        // and at least one genuine computed result row. This is the card-kind
+        // counterpart to the Tri3-mesh assertion above — the distinguishing check
+        // is `mesh.is_none()`, which is exactly what separates a card kind from a
+        // mesh kind, so a card builder that accidentally grew a mesh (or a mesh
+        // builder mis-listed here) is caught.
+        for &k in CARD_KINDS {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
+            let product = (entry.build)();
+            assert!(
+                product.mesh.is_none(),
+                "{k}: a DATA-ONLY card carries no mesh"
+            );
+            // No 2-D drawing either — these render as the plain text card, not the
+            // egui 2-D-drawing branch (which is reserved for `rcbeam` / `dna` /
+            // `draft2d` / `interior`).
+            assert!(
+                product.kind2d.is_none(),
+                "{k}: a DATA-ONLY card is a text card, not a 2-D drawing"
+            );
+            // And no raster image — a text card is text, not the IMAGE branch
+            // (which is `render`). Guards a card builder that mis-listed an
+            // image kind here.
+            assert!(
+                product.image.is_none(),
+                "{k}: a DATA-ONLY card is a text card, not an image"
+            );
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: card carries genuine result rows"
+            );
+        }
+    }
+
+    #[test]
+    fn image_kinds_resolve_and_build_an_image_product() {
+        // Each IMAGE workbench kind resolves to a registry entry whose builder
+        // yields a product carrying a non-empty raster `image` (a CPU
+        // `egui::ColorImage`) and NO mesh — so the tile takes the image branch,
+        // not the 3-D viewport / card / 2-D drawing. The image's pixel buffer
+        // is sized `w·h` Color32 entries (the `from_rgb` invariant), which we
+        // assert is non-empty and matches its declared size.
+        for &k in IMAGE_KINDS {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
+            let product = (entry.build)();
+            assert!(
+                product.mesh.is_none(),
+                "{k}: an image product carries no mesh"
+            );
+            assert!(
+                product.kind2d.is_none(),
+                "{k}: an image product is not a 2-D drawing"
+            );
+            let image = product
+                .image
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: an image product carries an image"));
+            let [w, h] = image.size;
+            assert!(w > 0 && h > 0, "{k}: image has non-zero dimensions");
+            assert_eq!(
+                image.pixels.len(),
+                w * h,
+                "{k}: ColorImage pixel count equals w·h"
+            );
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+        }
+    }
+
+    #[test]
+    fn drawing_2d_kinds_resolve_and_build_a_2d_drawing() {
+        // Each 2-D-DRAWING workbench kind resolves to a registry entry whose
+        // builder yields a product with a `kind2d` (the egui 2-D branch paints
+        // it) and NO mesh / NO image — the distinguishing check is
+        // `kind2d.is_some()`, exactly what routes it to the 2-D painter rather
+        // than the 3-D viewport / image branch / text card. The drawing's view
+        // must carry geometry (a non-empty entity / room list) so the painter
+        // has something to draw.
+        for &k in DRAWING_2D_KINDS {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
+            let product = (entry.build)();
+            assert!(product.mesh.is_none(), "{k}: a 2-D drawing carries no mesh");
+            assert!(
+                product.image.is_none(),
+                "{k}: a 2-D drawing carries no image"
+            );
+            match product
+                .kind2d
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: a 2-D drawing carries a kind2d"))
+            {
+                crate::Workspace2dKind::Draft2d(view) => {
+                    assert!(!view.entities.is_empty(), "{k}: drawing has entities");
+                }
+                crate::Workspace2dKind::FloorPlan(plan) => {
+                    assert!(!plan.rooms.is_empty(), "{k}: floor plan has a room");
+                }
+                crate::Workspace2dKind::Chart(data) => {
+                    // A chart product (fft / diffusion / popdynamics) must carry
+                    // at least one series, every series at least one point, and
+                    // every coordinate finite — so the painter has real,
+                    // plottable data and never NaN-scales the axes.
+                    assert!(!data.series.is_empty(), "{k}: chart has a series");
+                    assert!(
+                        !data.x_label.is_empty() && !data.y_label.is_empty(),
+                        "{k}: chart axes are labelled"
+                    );
+                    for s in &data.series {
+                        assert!(
+                            !s.points.is_empty(),
+                            "{k}: chart series {:?} has points",
+                            s.label
+                        );
+                        for p in &s.points {
+                            assert!(
+                                p[0].is_finite() && p[1].is_finite(),
+                                "{k}: chart point {p:?} is finite"
+                            );
+                        }
+                    }
+                }
+                other => panic!("{k}: unexpected 2-D kind {other:?}"),
+            }
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: drawing carries readout rows"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_kinds_build_a_chart_with_nonempty_finite_series() {
+        // Focused guard for the CHART products: each resolves to a product whose
+        // `kind2d` is `Some(Chart)` (not a 3-D mesh / card / image / drawing),
+        // carrying ≥1 series of finite `[x, y]` points plus the readout rows the
+        // agent chat shows. This is the chart counterpart to the mesh / card /
+        // image assertions — the distinguishing check is `Chart(..)` + finite
+        // points, exactly what routes the product to the 2-D chart painter.
+        for k in ["fft", "diffusion", "popdynamics"] {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(
+                entry.kind, k,
+                "entry.kind echoes the looked-up kind for {k}"
+            );
+            let product = (entry.build)();
+            assert!(product.mesh.is_none(), "{k}: a chart carries no mesh");
+            assert!(product.image.is_none(), "{k}: a chart carries no image");
+            let data = match product.kind2d.as_ref() {
+                Some(crate::Workspace2dKind::Chart(d)) => d,
+                other => panic!("{k}: expected kind2d Some(Chart), got {other:?}"),
+            };
+            assert!(
+                !data.series.is_empty(),
+                "{k}: chart has at least one series"
+            );
+            let total_points: usize = data.series.iter().map(|s| s.points.len()).sum();
+            assert!(total_points > 1, "{k}: chart carries plottable points");
+            for s in &data.series {
+                assert!(!s.points.is_empty(), "{k}: series {:?} non-empty", s.label);
+                for p in &s.points {
+                    assert!(
+                        p[0].is_finite() && p[1].is_finite(),
+                        "{k}: point {p:?} finite"
+                    );
+                }
+            }
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: chart carries readout rows for the agent chat"
+            );
+        }
+    }
+
+    #[test]
+    fn card_kinds_are_disjoint_from_mesh_kinds() {
+        // A kind is exactly one of: a 3-D mesh kind, a DATA-ONLY card kind, an
+        // IMAGE kind, or a 2-D-DRAWING kind — never two at once, so each
+        // test-suite's invariant (mesh-Some / mesh-None+card / image / kind2d)
+        // can't collide. (Guards against a future edit that lists a kind in two
+        // of these arrays.)
+        let mesh = |c: &str| KNOWN_3D_KINDS.contains(&c) || WIRED_WORKBENCH_KINDS.contains(&c);
+        for &c in CARD_KINDS {
+            assert!(!mesh(c), "{c} is a card kind and must not be a mesh kind");
+            assert!(
+                !IMAGE_KINDS.contains(&c),
+                "{c} is a card kind and must not be an image kind"
+            );
+            assert!(
+                !DRAWING_2D_KINDS.contains(&c),
+                "{c} is a card kind and must not be a 2-D-drawing kind"
+            );
+        }
+        for &c in IMAGE_KINDS {
+            assert!(!mesh(c), "{c} is an image kind and must not be a mesh kind");
+            assert!(
+                !DRAWING_2D_KINDS.contains(&c),
+                "{c} is an image kind and must not be a 2-D-drawing kind"
+            );
+        }
+        for &c in DRAWING_2D_KINDS {
+            assert!(
+                !mesh(c),
+                "{c} is a 2-D-drawing kind and must not be a mesh kind"
+            );
+        }
+    }
 
     #[test]
     fn every_wired_workbench_kind_resolves_and_builds_a_tri3_mesh() {
@@ -572,12 +1187,102 @@ mod tests {
                 .unwrap_or_else(|| panic!("{k}: a 3-D product carries a mesh"));
             assert!(!mesh.mesh.nodes.is_empty(), "{k}: mesh has vertices");
             assert!(mesh.mesh.total_elements() > 0, "{k}: mesh has triangles");
+            // Every 3-D product must carry a readout — the result rows
+            // `materialize_pending` posts into the unit's agent chat. `rocket`
+            // shipped empty `lines` here once (it predated that convention and
+            // was absent from WIRED_WORKBENCH_KINDS' lines check), so the
+            // reader saw only "Unit N ready". Assert it for EVERY known 3-D
+            // kind so a reference or future producer can't regress silently.
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: product carries result rows for the agent chat"
+            );
         }
-        // The FEM cantilever is the only kind that ships per-vertex colours.
+        // The FEM cantilever ships von-Mises per-vertex colours.
         assert!(
             (lookup("fem").unwrap().build)().vertex_colors.is_some(),
             "fem product carries von-Mises vertex colours"
         );
+    }
+
+    #[test]
+    fn every_non_3d_registry_kind_also_carries_a_readout() {
+        // The registry kinds NOT in KNOWN_3D_KINDS (TabKind-template tools +
+        // text-card / 2-D / image producers) the 3-D test above doesn't reach.
+        // Each product must STILL carry a non-empty readout — the result rows
+        // `materialize_pending` posts into the unit's agent chat (the quality
+        // bar: every product shows real numbers, not just "Unit N ready").
+        // gasdynamics only ships one because `gasdynamics_product` runs
+        // `run_gasdynamics` first; this guards the rest so a producer that
+        // forgets to populate its readout can't slip into the catalogue.
+        for k in [
+            "animate",
+            "astro",
+            "car",
+            "cfd",
+            "collision",
+            "diffusion",
+            "draft2d",
+            "fft",
+            "fields",
+            "frames",
+            "gasdynamics",
+            "geomatics",
+            "hvac",
+            "interior",
+            "neuro",
+            "piping",
+            "popdynamics",
+            "render",
+            "variant_effect",
+        ] {
+            let product = (lookup(k)
+                .unwrap_or_else(|| panic!("registry resolves {k:?}"))
+                .build)();
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: product carries result rows for the agent chat"
+            );
+        }
+    }
+
+    #[test]
+    fn coloured_products_carry_a_vertex_aligned_colour_vec() {
+        // The molecular (CPK by element) and aero (Cp field) products ship
+        // per-vertex colours. The tile renderer only takes the coloured path
+        // when the colour vec length EXACTLY equals the emitted surface-vertex
+        // stream — three per `Tri3` element (triangle-major, vertex-within-
+        // triangle). Assert that invariant here so a future mesh/colour drift
+        // silently falls back to grey rather than mis-indexing (and this catches
+        // the alignment without the GPU).
+        for k in ["molecule", "reactdyn", "aero"] {
+            let product = (lookup(k).unwrap().build)();
+            let mesh = product
+                .mesh
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: a 3-D product carries a mesh"));
+            let colors = product
+                .vertex_colors
+                .as_ref()
+                .unwrap_or_else(|| panic!("{k}: coloured product carries vertex_colors"));
+            let expected = mesh.mesh.total_elements() * 3;
+            assert_eq!(
+                colors.len(),
+                expected,
+                "{k}: vertex_colors length ({}) must equal 3 \u{00D7} triangle count ({expected}) \
+                 so the renderer takes the coloured path",
+                colors.len(),
+            );
+            // Every channel is a sane [0, 1] colour.
+            for c in colors {
+                for ch in c {
+                    assert!(
+                        ch.is_finite() && (0.0..=1.0).contains(ch),
+                        "{k}: colour channel {ch} out of [0, 1]"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

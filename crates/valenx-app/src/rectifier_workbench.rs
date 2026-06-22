@@ -354,28 +354,32 @@ fn load_rectifier_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"rectifier"}`** product: the canonical
-/// rectifier bridge built as a 3-D solid, paired with the workbench's own
-/// `compute()` figures-of-merit readout rows, at a fixed 3/4 camera.
-/// Registered in [`crate::products_registry`]; the per-tool builder the
-/// registry dispatches to. Pure — driven off
+/// The agent-bridge **`show_3d{kind:"rectifier"}`** product: a DATA-ONLY text
+/// card of the rectifier workbench's `compute()` figures-of-merit readout rows
+/// (see [`crate::products_registry`]). A ripple-factor / form-factor /
+/// efficiency result has no characteristic shape — the panel's diode-bridge
+/// package, reservoir-cap cylinder and board are a fixed schematic of generic
+/// boxes, not a real fabricated object — so the bridge product is right-sized
+/// to a card (`mesh: None`) carrying just the readout (the confidence badge is
+/// appended centrally). The panel's "Show 3-D" button still builds that
+/// representative schematic into the central viewport. Pure — driven off
 /// [`RectifierWorkbenchState::default`].
 pub(crate) fn rectifier_product() -> crate::WorkspaceProduct {
     let s = RectifierWorkbenchState::default();
-    let mesh = rectifier_solid_mesh(&s).expect("canonical rectifier ⇒ bridge solid builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<rectifier>/valenx-rectifier");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical rectifier ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Rectifier (figures of merit)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
     }
 }
 

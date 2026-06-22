@@ -340,28 +340,81 @@ fn load_diffusion_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"diffusion"}`** product: the canonical
-/// 1-D Fickian diffusion concentration profile built as a 3-D surface, paired
-/// with the workbench's own `compute()` readout rows, at a fixed 3/4 camera.
-/// Registered in [`crate::products_registry`]; the per-tool builder the
-/// registry dispatches to. Pure — driven off
-/// [`DiffusionWorkbenchState::default`].
+/// The 1-D diffusion concentration profile as a 2-D **line-chart** series —
+/// concentration `C` vs position `x`. In Gaussian-spread mode (the default) this
+/// samples the genuine point-source kernel `C(x, t)` across `±3σ`; in Fick-1
+/// flux mode it is the straight steady profile linearly interpolating `C_left →
+/// C_right` across the slab `[0, L]`. The values are the real `valenx-diffusion`
+/// result. `None` for an invalid configuration (mirrors [`spread_surface_mesh`]).
+fn concentration_chart(s: &DiffusionWorkbenchState) -> Option<crate::ChartData> {
+    let n = 121_usize;
+    let points: Vec<[f64; 2]> = match s.mode {
+        DiffusionMode::Spread => {
+            let sigma = gaussian_std(s.diffusivity_m2_s, s.time_s).ok()?;
+            if !(sigma.is_finite() && sigma > 0.0) {
+                return None;
+            }
+            let half = 3.0 * sigma;
+            (0..=n)
+                .map(|j| {
+                    let x = -half + 2.0 * half * j as f64 / n as f64;
+                    let c = gaussian_point_source(s.mass, s.diffusivity_m2_s, x, s.time_s)
+                        .unwrap_or(0.0);
+                    [x, c]
+                })
+                .collect()
+        }
+        DiffusionMode::Flux => {
+            // Steady through-slab profile: a straight C_left → C_right line over
+            // [0, L] (validated by the gradient the readout reports).
+            let _ = steady_gradient(s.c_left, s.c_right, s.length_m).ok()?;
+            (0..=n)
+                .map(|j| {
+                    let frac = j as f64 / n as f64;
+                    let x = s.length_m * frac;
+                    let c = s.c_left + (s.c_right - s.c_left) * frac;
+                    [x, c]
+                })
+                .collect()
+        }
+    };
+    Some(crate::ChartData {
+        title: "Diffusion concentration profile".into(),
+        x_label: "position x (m)".into(),
+        y_label: "concentration C".into(),
+        series: vec![crate::ChartSeries {
+            label: "C(x)".into(),
+            points,
+            bars: false,
+        }],
+    })
+}
+
+/// The agent-bridge **`show_3d{kind:"diffusion"}`** product: the canonical 1-D
+/// Fickian diffusion concentration profile presented as a 2-D **line chart**
+/// (`C` vs position — see [`concentration_chart`]) paired with the workbench's
+/// own `compute()` readout rows. A concentration-vs-position profile reads far
+/// better as a framed, auto-scaled curve than as a 3-D bell surface, so this
+/// product carries `kind2d: Some(Chart(..))` and no mesh. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`DiffusionWorkbenchState::default`].
 pub(crate) fn diffusion_product() -> crate::WorkspaceProduct {
     let s = DiffusionWorkbenchState::default();
-    let mesh = spread_surface_mesh(&s).expect("canonical diffusion ⇒ spread surface builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<diffusion>/valenx-diffusion");
+    let chart = concentration_chart(&s).expect("canonical diffusion ⇒ concentration chart builds");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical diffusion ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Diffusion (Fickian 1-D)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
-        kind2d: None,
+        camera: valenx_viz::OrbitCamera::default(),
+        kind2d: Some(crate::Workspace2dKind::Chart(chart)),
         last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
     }
 }
 

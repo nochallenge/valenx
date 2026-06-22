@@ -422,6 +422,88 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     }
 }
 
+/// Resolution (square) of the agent-bridge `render` product's path-trace.
+/// Small on purpose — the registry builder is **synchronous** (it runs inline
+/// when the `show_3d`/registry reducer resolves the kind, with no background
+/// worker), so the render must finish in a few milliseconds. 96² with a
+/// handful of samples is enough to read as a recognisable Cornell box in the
+/// tile.
+const PRODUCT_RENDER_RES: u32 = 96;
+/// Samples-per-pixel for the agent-bridge `render` product — low so the
+/// synchronous build stays fast (a noisy-but-legible preview, like the `cfd`
+/// card's bounded solve).
+const PRODUCT_RENDER_SPP: u32 = 8;
+/// Path-trace bounce depth for the agent-bridge `render` product.
+const PRODUCT_RENDER_DEPTH: u32 = 4;
+/// Exposure for the agent-bridge `render` product's tone-map.
+const PRODUCT_RENDER_EXPOSURE: f32 = 1.0;
+
+/// Build the agent-bridge **`render` product** — a small synchronous Cornell-box
+/// path-trace whose tone-mapped RGB8 framebuffer becomes the tile's
+/// [`egui::ColorImage`] (the IMAGE product the pane renders scaled-to-fit). The
+/// matching `image: Some(..)` path in [`crate::dock_layout`]'s
+/// `render_workspace_body` uploads it to a texture once and draws it.
+///
+/// Unlike the interactive panel (which renders on a worker thread and uploads a
+/// texture there), this builder is **pure and app-state-free** so the registry
+/// reducer can call it inline; the resolution / samples are kept small
+/// ([`PRODUCT_RENDER_RES`] / [`PRODUCT_RENDER_SPP`]) so that inline render is a
+/// few-millisecond operation rather than the panel's full-quality render. The
+/// `lines` carry the render parameters as readout rows. The `48..=512`
+/// resolution clamp inside [`render_demo`] keeps its only error
+/// (`FramebufferError::TooLarge`) unreachable at this size; if it ever did
+/// fail, the product degrades to a parameter-only text card (no `image`) rather
+/// than panicking on the bridge path.
+pub(crate) fn render_product() -> crate::WorkspaceProduct {
+    let lines = match render_demo(
+        PRODUCT_RENDER_RES,
+        PRODUCT_RENDER_SPP,
+        PRODUCT_RENDER_DEPTH,
+        PRODUCT_RENDER_EXPOSURE,
+    ) {
+        Ok((w, h, pixels)) => {
+            // RGB8 → egui ColorImage. `from_rgb` expects exactly `w·h·3` bytes,
+            // which `render_demo` guarantees; the texture upload happens lazily
+            // in the tile renderer.
+            let image = egui::ColorImage::from_rgb([w, h], &pixels);
+            return crate::WorkspaceProduct {
+                title: "Path-traced render".into(),
+                lines: vec![
+                    format!("Cornell box · {w}×{h} px"),
+                    format!("{PRODUCT_RENDER_SPP} samples/px · {PRODUCT_RENDER_DEPTH} bounces"),
+                    "valenx-pathtrace · global illumination".into(),
+                ],
+                mesh: None,
+                vertex_colors: None,
+                camera: valenx_viz::OrbitCamera::default(),
+                kind2d: None,
+                last_export: None,
+                image: Some(image),
+                image_texture: None,
+                animation: None,
+            };
+        }
+        // Unreachable at 96² (well under the cap) — but the bridge path must not
+        // panic, so degrade to a text card describing the intended render.
+        Err(e) => vec![
+            "Path-traced render (Cornell box)".into(),
+            format!("render unavailable: {e}"),
+        ],
+    };
+    crate::WorkspaceProduct {
+        title: "Path-traced render".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: valenx_viz::OrbitCamera::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

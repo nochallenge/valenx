@@ -275,6 +275,34 @@ fn load_decay_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"radioactivity"}`** product: a DATA-ONLY
+/// text card of the workbench's own `compute()` readout rows. The decay result
+/// is a plotted curve, not a physical object — the panel's swept-ribbon mesh is
+/// a decorative chart-as-geometry — so the bridge product is right-sized to a
+/// card (`mesh: None`) carrying just the readout (the confidence badge is
+/// appended centrally). The panel's "Show 3-D" button still builds that
+/// representative ribbon into the central viewport. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`RadioactivityWorkbenchState::default`].
+pub(crate) fn radioactivity_product() -> crate::WorkspaceProduct {
+    let s = RadioactivityWorkbenchState::default();
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical decay ⇒ readout computes"),
+    );
+    crate::WorkspaceProduct {
+        title: "Radioactivity (decay curve)".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

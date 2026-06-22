@@ -657,6 +657,46 @@ fn apply_solution(s: &mut CfdWorkbenchState, sol: &FlowSolution) {
     }
 }
 
+/// Build the **CFD** result card for the Workbench+Agent bridge — a DATA-ONLY
+/// [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the genuine
+/// lid-driven-cavity flow diagnostics for the canonical default case (a 32×32
+/// unit cavity at Re = 100): iteration count / residual, peak and mean speed,
+/// dynamic pressure, cell Reynolds number, vorticity, circulation, wall shear,
+/// etc. Registered as the `"cfd"` producer in
+/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
+/// a 3-D view.
+///
+/// Unlike the live panel — which spawns the SIMPLE solve on a worker thread so
+/// the window stays responsive — a registry builder must be synchronous, so this
+/// runs the same validate → [`solve`] → [`apply_solution`] path inline on the
+/// default state (the test-only `run_cfd` does the same). The default 32×32 / 500-
+/// iteration cavity solve is bounded and modest (the same order of work as the
+/// FEM cantilever builder), so it is acceptable on the bridge call. The default
+/// inputs always validate; on the (canonically-unreachable) validation error the
+/// card carries that message instead.
+pub(crate) fn cfd_product() -> crate::WorkspaceProduct {
+    let mut s = CfdWorkbenchState::default();
+    let lines = match validate_inputs(&s) {
+        Ok(inp) => {
+            apply_solution(&mut s, &solve(inp));
+            crate::products_registry::lines_from_readout(&s.result)
+        }
+        Err(e) => vec![format!("CFD setup invalid: {e}")],
+    };
+    crate::WorkspaceProduct {
+        title: "CFD (lid-driven cavity)".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

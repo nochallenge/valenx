@@ -12,14 +12,28 @@ use std::f64::consts::TAU;
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
 use valenx_drone::{Multirotor, SEA_LEVEL_AIR_DENSITY};
-use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Presentation spin rate for the rotors (rad/s of animation time). Alternating
+/// rotors counter-rotate (the sign flips per rotor) like a real quad.
+const ROTOR_RAD_PER_S: f32 = 6.0;
+
+/// Carbon-dark frame / arms.
+const FRAME: [f32; 3] = [0.16, 0.17, 0.19];
+/// Electronics stack (flight controller) — a cooler grey-blue.
+const STACK: [f32; 3] = [0.30, 0.34, 0.42];
+/// Anodised motor body.
+const MOTOR: [f32; 3] = [0.55, 0.40, 0.20];
+/// Propeller blades — light grey so they read against the dark frame.
+const PROP: [f32; 3] = [0.78, 0.80, 0.84];
+/// Rotor hub (prop nut / bell).
+const HUB: [f32; 3] = [0.10, 0.10, 0.12];
 
 /// Persistent form + result state for the Drone / Multirotor Workbench.
 pub struct DroneWorkbenchState {
@@ -206,135 +220,197 @@ fn run_drone(s: &mut DroneWorkbenchState) {
     }
 }
 
-/// Append an outward-facing box (centre `c`, half-extents) to the buffers.
-fn push_box(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    h: Vector3<f64>,
-) {
-    let base = nodes.len();
-    let signs = [
-        (-1.0, -1.0, -1.0),
-        (1.0, -1.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (-1.0, 1.0, -1.0),
-        (-1.0, -1.0, 1.0),
-        (1.0, -1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (-1.0, 1.0, 1.0),
-    ];
-    for (sx, sy, sz) in signs {
-        nodes.push(c + Vector3::new(sx * h.x, sy * h.y, sz * h.z));
+/// Number of blades on each rotor (a real prop reads as 2 blades, not a disc).
+const BLADES_PER_ROTOR: usize = 2;
+/// Points around one closed blade airfoil section.
+const BLADE_SECTION_POINTS: usize = 10;
+
+/// A closed thin **cambered blade airfoil** loop of chord `chord` and thickness
+/// `thick`, in local `[chordwise, thickness]` coordinates centred on the chord.
+/// A flattened ellipse-ish lens (upper arc + lower arc) — cheap but reads as a
+/// blade cross-section once swept. Counter-clockwise.
+fn blade_section(chord: f64, thick: f64) -> Vec<[f64; 2]> {
+    let n = BLADE_SECTION_POINTS;
+    let half_c = chord * 0.5;
+    let mut pts = Vec::with_capacity(2 * n - 2);
+    // Upper surface, leading → trailing edge.
+    for i in 0..n {
+        let t = i as f64 / (n - 1) as f64;
+        let x = -half_c + t * chord;
+        // Parabolic thickness, zero at both edges, max mid-chord.
+        let y = thick * 0.5 * (1.0 - (2.0 * t - 1.0).powi(2));
+        pts.push([x, y]);
     }
-    let faces = [
-        [1, 2, 6, 5],
-        [0, 4, 7, 3],
-        [3, 7, 6, 2],
-        [0, 1, 5, 4],
-        [4, 5, 6, 7],
-        [0, 3, 2, 1],
-    ];
-    for f in faces {
-        tris.extend_from_slice(&[
-            base + f[0],
-            base + f[1],
-            base + f[2],
-            base + f[0],
-            base + f[2],
-            base + f[3],
-        ]);
+    // Lower surface, trailing → leading, skipping shared endpoints.
+    for i in 1..n - 1 {
+        let t = (n - 1 - i) as f64 / (n - 1) as f64;
+        let x = -half_c + t * chord;
+        let y = -thick * 0.5 * (1.0 - (2.0 * t - 1.0).powi(2));
+        pts.push([x, y]);
     }
+    pts
 }
 
-/// Append a flat (double-sided) disk of radius `r` in the horizontal plane
-/// at centre `c`.
-fn push_disk(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    r: f64,
-    seg: usize,
-) {
-    let center = nodes.len();
-    nodes.push(c);
-    let ring = nodes.len();
-    for j in 0..seg {
-        let t = j as f64 / seg as f64 * TAU;
-        nodes.push(c + Vector3::new(r * t.cos(), r * t.sin(), 0.0));
-    }
-    for j in 0..seg {
-        let jn = (j + 1) % seg;
-        // Both windings so the disk shades from above and below.
-        tris.extend_from_slice(&[center, ring + j, ring + jn, center, ring + jn, ring + j]);
-    }
+/// Place a blade airfoil section into 3-D at radial station `radius` from the
+/// rotor centre `c`, along blade azimuth `blade_a` (radians), set to pitch
+/// angle `pitch` (radians, twisting the chord about the radial axis). The
+/// chord lies tangent to the rotor circle; thickness tilts by the pitch so the
+/// lofted blade is a real twisted aerofoil. Returns one ring for
+/// [`MeshBuilder::loft`].
+fn blade_ring(
+    profile: &[[f64; 2]],
+    c: [f64; 3],
+    radius: f64,
+    blade_a: f64,
+    pitch: f64,
+    z: f64,
+) -> Vec<[f64; 3]> {
+    let (sa, ca) = blade_a.sin_cos();
+    // Radial unit (out along the blade) and tangent unit (chordwise) in plane.
+    let radial = [ca, sa];
+    let tangent = [-sa, ca];
+    let (sp, cp) = pitch.sin_cos();
+    profile
+        .iter()
+        .map(|&[chordwise, th]| {
+            // Pitch rotates (chordwise, thickness) in the tangent/vertical plane.
+            let tang = chordwise * cp - th * sp;
+            let vert = chordwise * sp + th * cp;
+            [
+                c[0] + radial[0] * radius + tangent[0] * tang,
+                c[1] + radial[1] * radius + tangent[1] * tang,
+                c[2] + z + vert,
+            ]
+        })
+        .collect()
 }
 
-/// Append a flat (double-sided) arm strip of half-width `w` from `from` to
-/// `to`, in the horizontal plane.
-fn push_arm(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    from: Vector3<f64>,
-    to: Vector3<f64>,
-    w: f64,
-) {
-    let dir = to - from;
-    if dir.norm() < 1e-9 {
-        return;
+/// Append one rotor — a small **hub cylinder** plus [`BLADES_PER_ROTOR`] real
+/// **twisted, tapered propeller blades** lofted from a root section to a tip
+/// section — centred at `c`, and return the combined node [`Range<usize>`]
+/// covering the whole rotor so the caller can spin it rigidly. Hub coloured
+/// [`HUB`], blades [`PROP`].
+fn push_rotor(b: &mut MeshBuilder, c: [f64; 3], r: f64) -> std::ops::Range<usize> {
+    let start = b.node_count();
+    // Hub: a short cylinder on the rotor axis, sitting just above the motor.
+    let hub_r = r * 0.12;
+    let hub_h = r * 0.18;
+    b.cylinder(
+        [c[0], c[1], c[2] + hub_h * 0.5],
+        [0.0, 0.0, 1.0],
+        hub_r,
+        hub_h,
+        16,
+        HUB,
+    );
+    // Blades radiate from the hub. Root near the hub, tip near radius r.
+    let root_radius = hub_r * 1.2;
+    let tip_radius = r * 0.98;
+    let root_chord = r * 0.30;
+    let tip_chord = r * 0.12;
+    let blade_thick = r * 0.05;
+    let z_blade = c[2] + hub_h; // blades sit on top of the hub
+    for k in 0..BLADES_PER_ROTOR {
+        let blade_a = k as f64 / BLADES_PER_ROTOR as f64 * TAU;
+        // Root pitched ~18°, tip washed out to ~6° (typical blade twist).
+        let root = blade_ring(
+            &blade_section(root_chord, blade_thick),
+            c,
+            root_radius,
+            blade_a,
+            18.0_f64.to_radians(),
+            z_blade,
+        );
+        let tip = blade_ring(
+            &blade_section(tip_chord, blade_thick * 0.6),
+            c,
+            tip_radius,
+            blade_a,
+            6.0_f64.to_radians(),
+            z_blade,
+        );
+        b.loft(&[root, tip], true, PROP);
     }
-    let perp = Vector3::new(-dir.y, dir.x, 0.0).normalize() * w;
-    let base = nodes.len();
-    nodes.push(from + perp);
-    nodes.push(from - perp);
-    nodes.push(to - perp);
-    nodes.push(to + perp);
-    tris.extend_from_slice(&[
-        base,
-        base + 1,
-        base + 2,
-        base,
-        base + 2,
-        base + 3,
-        base,
-        base + 2,
-        base + 1,
-        base,
-        base + 3,
-        base + 2,
-    ]);
+    start..b.node_count()
 }
 
-/// Build the multirotor as a triangle [`Mesh`] — a central hub box with `n`
-/// rotor disks on flat arms, evenly spaced around it. `None` for an invalid
-/// configuration.
-fn drone_solid_mesh(s: &DroneWorkbenchState) -> Option<Mesh> {
+/// Build the multirotor as a triangle [`Mesh`] **with per-vertex colours** plus
+/// one [`crate::RigidPart`] per rotor, so each rotor (hub + blades) spins about
+/// its own shaft while the frame stays put. The airframe is a real **frame
+/// plate** + electronics stack, the `n` arms are round **cylinder** booms (with
+/// a motor can at each end), and each rotor is a hub + [`BLADES_PER_ROTOR`]
+/// twisted tapered **propeller blades** (not a flat disc). Alternating rotors
+/// counter-rotate. `None` for an invalid configuration.
+///
+/// Returns `(mesh, colors, parts)` with `colors.len() == 3 × triangle_count`.
+fn drone_solid_mesh_parts(
+    s: &DroneWorkbenchState,
+) -> Option<(Mesh, Vec<[f32; 3]>, Vec<crate::RigidPart>)> {
     let m = build_drone(s).ok()?;
-    let n = m.rotor_count;
+    let n = m.rotor_count as usize;
     let r = m.rotor_radius_m;
     let arm = r * 2.3;
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
-    // Central hub.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::zeros(),
-        Vector3::new(r * 0.5, r * 0.5, r * 0.25),
+
+    let mut b = MeshBuilder::new();
+
+    // Central frame plate (thin square) + flight-controller stack on top.
+    let body_half = r * 0.55;
+    b.cuboid(
+        [0.0, 0.0, 0.0],
+        [body_half * 2.0, body_half * 2.0, r * 0.10],
+        FRAME,
     );
+    b.cuboid(
+        [0.0, 0.0, r * 0.16],
+        [body_half * 1.1, body_half * 1.1, r * 0.16],
+        STACK,
+    );
+
+    // Arms + motors + spinning rotors, evenly spaced around the frame.
+    let mut parts = Vec::with_capacity(n);
     for i in 0..n {
         let a = i as f64 / n as f64 * TAU;
-        let c = Vector3::new(arm * a.cos(), arm * a.sin(), 0.0);
-        push_arm(&mut nodes, &mut tris, Vector3::zeros(), c, r * 0.12);
-        push_disk(&mut nodes, &mut tris, c, r, 16);
+        let (sa, ca) = a.sin_cos();
+        let motor_c = [arm * ca, arm * sa, 0.0];
+        // Round arm boom from the frame edge out to the motor (a real tube).
+        let inner = [body_half * 0.8 * ca, body_half * 0.8 * sa, 0.0];
+        let mid = [
+            (inner[0] + motor_c[0]) * 0.5,
+            (inner[1] + motor_c[1]) * 0.5,
+            0.0,
+        ];
+        let arm_len = ((motor_c[0] - inner[0]).powi(2) + (motor_c[1] - inner[1]).powi(2)).sqrt();
+        b.cylinder(mid, [ca, sa, 0.0], r * 0.06, arm_len, 12, FRAME);
+        // Motor can under each rotor.
+        let motor_h = r * 0.22;
+        b.cylinder(
+            [motor_c[0], motor_c[1], motor_h * 0.5],
+            [0.0, 0.0, 1.0],
+            r * 0.16,
+            motor_h,
+            16,
+            MOTOR,
+        );
+        // The rotor (hub + blades) — record its range and counter-rotate odds.
+        let rotor_range = push_rotor(&mut b, [motor_c[0], motor_c[1], motor_h], r);
+        let dir = if i % 2 == 0 { 1.0 } else { -1.0 };
+        parts.push(crate::RigidPart {
+            node_range: rotor_range,
+            axis: [0.0, 0.0, 1.0],
+            pivot: [motor_c[0] as f32, motor_c[1] as f32, (motor_h) as f32],
+            rad_per_s: ROTOR_RAD_PER_S * dir,
+        });
     }
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-drone");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
-    Some(mesh)
+
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-drone".to_string();
+    Some((mesh, colors, parts))
+}
+
+/// Build the multirotor [`Mesh`] (without colour / part metadata) for the
+/// central viewport. See [`drone_solid_mesh_parts`].
+fn drone_solid_mesh(s: &DroneWorkbenchState) -> Option<Mesh> {
+    drone_solid_mesh_parts(s).map(|(mesh, _colors, _parts)| mesh)
 }
 
 /// Build the 3-D drone solid and load it into the central viewport.
@@ -355,6 +431,45 @@ fn load_drone_3d(app: &mut ValenxApp) {
         skew_hist,
     });
     app.frame_current_mesh();
+}
+
+/// The agent-bridge **`show_3d{kind:"drone"}`** product: the canonical hub +
+/// rotor-disk multirotor solid (the panel's "Show 3-D drone" geometry) paired
+/// with the workbench's own hover-performance headline numbers, at a fixed
+/// 3/4 camera. Registered in [`crate::products_registry`]; the per-tool
+/// builder the registry dispatches to. Pure — driven off
+/// [`DroneWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `run_drone` "Hover performance"
+/// readout (this workbench formats its readout into `result` rather than via a
+/// shared `compute()` string fn, so the rows are taken from that here).
+pub(crate) fn drone_product() -> crate::WorkspaceProduct {
+    let mut s = DroneWorkbenchState::default();
+    run_drone(&mut s);
+    let (mesh, colors, parts) =
+        drone_solid_mesh_parts(&s).expect("default quadcopter ⇒ a 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<drone>/valenx-drone");
+    let lines = crate::products_registry::lines_from_readout(&s.result);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Drone / Multirotor".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: Some(colors),
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        // Animated: each rotor (hub + blades) spins about its own shaft;
+        // alternating rotors counter-rotate like a real quad. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -414,6 +529,92 @@ mod tests {
             ..Default::default()
         };
         assert!(drone_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn blade_section_is_a_closed_thin_loop() {
+        // A blade lens: closed loop of 2·n−2 points spanning the chord, with a
+        // real (non-zero) thickness and symmetric upper/lower surfaces.
+        let chord = 0.1;
+        let thick = 0.01;
+        let pts = blade_section(chord, thick);
+        assert_eq!(pts.len(), 2 * BLADE_SECTION_POINTS - 2);
+        let max_x = pts.iter().map(|p| p[0]).fold(f64::MIN, f64::max);
+        let min_x = pts.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
+        assert!((max_x - chord * 0.5).abs() < 1e-9 && (min_x + chord * 0.5).abs() < 1e-9);
+        let max_y = pts.iter().map(|p| p[1]).fold(f64::MIN, f64::max);
+        // Parabolic thickness peaks at mid-chord (≤ thick/2 at the samples).
+        assert!(max_y > 0.0 && max_y <= thick * 0.5 + 1e-9, "real thickness");
+        assert!(max_y > thick * 0.4, "near the max-thickness fraction");
+        let min_y = pts.iter().map(|p| p[1]).fold(f64::MAX, f64::min);
+        assert!((max_y + min_y).abs() < 1e-9, "symmetric about the chord");
+    }
+
+    #[test]
+    fn drone_carries_vertex_aligned_colours() {
+        // Frame + arms + motors + twisted-blade rotors ship per-vertex colours
+        // aligned to the renderer's coloured path (3 / triangle), with the
+        // frame, prop and motor colours present.
+        let s = DroneWorkbenchState::default();
+        let (mesh, colors, _parts) =
+            drone_solid_mesh_parts(&s).expect("default drone builds coloured");
+        assert!(!mesh.nodes.is_empty(), "non-empty mesh");
+        assert!(mesh.total_elements() > 0, "mesh has triangles");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        assert!(colors.contains(&FRAME), "frame colour present");
+        assert!(colors.contains(&PROP), "propeller colour present");
+        assert!(colors.contains(&MOTOR), "motor colour present");
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
+            }
+        }
+    }
+
+    #[test]
+    fn drone_product_spins_each_rotor_counter_rotating() {
+        // The product is animated: one RigidPart per rotor, each a non-empty
+        // node range within the mesh spinning about +z; alternating rotors
+        // counter-rotate (signs alternate). The frame is left static.
+        let product = drone_product();
+        let loaded = product.mesh.as_ref().expect("drone product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("drone product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert_eq!(parts.len(), 4, "four rotors on the default quad");
+                for p in &parts {
+                    assert!(
+                        p.node_range.start < p.node_range.end,
+                        "non-empty rotor range"
+                    );
+                    assert!(
+                        p.node_range.end <= node_count,
+                        "rotor range within the mesh"
+                    );
+                    assert_eq!(p.axis, [0.0, 0.0, 1.0], "spins about the rotor axis");
+                    assert!(p.rad_per_s.abs() > 0.0, "rotor spins");
+                }
+                // Adjacent rotors counter-rotate.
+                assert!(
+                    parts[0].rad_per_s.signum() != parts[1].rad_per_s.signum(),
+                    "adjacent rotors counter-rotate"
+                );
+                // Rotor ranges don't overlap (they tile in order).
+                for w in 0..parts.len() - 1 {
+                    assert!(
+                        parts[w].node_range.end <= parts[w + 1].node_range.start,
+                        "rotor ranges are ordered + disjoint"
+                    );
+                }
+            }
+            crate::ProductMotion::Turntable { .. } => panic!("drone must use per-part motion"),
+        }
     }
 }
 

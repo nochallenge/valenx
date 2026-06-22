@@ -665,14 +665,25 @@ pub(crate) fn lv1_camera(mesh: &valenx_mesh::Mesh) -> valenx_viz::OrbitCamera {
 pub(crate) fn rocket_product() -> crate::WorkspaceProduct {
     let mesh = lv1_loaded_mesh();
     let camera = lv1_camera(&mesh.mesh);
+    // Reuse the live valenx-astro ascent so the unit's agent chat shows the
+    // rocket's real flight readout (orbit / Δv / max-Q / peak g) instead of
+    // only "Unit N ready". rocket_product was the first/reference producer and
+    // predated the post-the-readout-to-chat convention every other registry
+    // producer already follows, so its `lines` had been left empty.
+    let mut lines =
+        vec!["Valenx LV-1 · two-stage methalox launch vehicle (flown live by valenx-astro)".into()];
+    lines.extend(fly_lv1().summary.lines().map(str::to_string));
     crate::WorkspaceProduct {
         title: "Rocket".into(),
-        lines: vec![],
+        lines,
         mesh: Some(mesh),
         vertex_colors: None,
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
     }
 }
 

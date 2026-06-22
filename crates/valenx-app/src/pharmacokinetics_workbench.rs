@@ -363,6 +363,35 @@ fn load_pk_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"pharmacokinetics"}`** product: the
+/// canonical drug-vial solid (the panel's "Show 3-D vial" geometry) paired
+/// with the workbench's own one-compartment dosing-profile headline numbers,
+/// at a fixed 3/4 camera. Registered in [`crate::products_registry`]; the
+/// per-tool builder the registry dispatches to. Pure — driven off
+/// [`PharmacokineticsWorkbenchState::default`].
+///
+/// The readout rows mirror the panel's `compute()` dosing-profile readout.
+pub(crate) fn pharmacokinetics_product() -> crate::WorkspaceProduct {
+    let s = PharmacokineticsWorkbenchState::default();
+    let mesh = vial_solid_mesh(&s).expect("default IV-bolus dosing ⇒ a 3-D vial");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<pk>/valenx-pharmacokinetics");
+    let readout = compute(&s).expect("default IV-bolus dosing ⇒ a valid readout");
+    let lines = crate::products_registry::lines_from_readout(&readout);
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Pharmacokinetics".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

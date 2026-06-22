@@ -305,6 +305,29 @@ fn run_piping(s: &mut PipingWorkbenchState) {
     );
 }
 
+/// Build the **Piping (NPS)** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
+/// genuine pipe geometry ([`run_piping`]) for the canonical default selection
+/// (NPS 2, Sch 40, carbon steel: OD / ID / flow area / metal section). Registered
+/// as the `"piping"` producer in [`crate::products_registry::lookup`]; the tile
+/// renders it as a text card, not a 3-D view.
+pub(crate) fn piping_product() -> crate::WorkspaceProduct {
+    let mut s = PipingWorkbenchState::default();
+    run_piping(&mut s);
+    crate::WorkspaceProduct {
+        title: "Piping (NPS)".into(),
+        lines: crate::products_registry::lines_from_readout(&s.result),
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

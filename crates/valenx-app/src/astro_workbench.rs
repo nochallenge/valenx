@@ -169,6 +169,78 @@ pub(crate) fn astro_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
         });
 }
 
+/// Build the **Astro / Launch** result card for the Workbench+Agent bridge — a
+/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are genuine
+/// computed results for the canonical default forms: (1) the ascent-to-orbit
+/// simulation ([`valenx_astro::simulate_ascent`]) of the default launch vehicle —
+/// outcome, apoapsis, periapsis, ideal Δv budget — and (2) the default Hohmann
+/// transfer ([`valenx_astro::hohmann_transfer`], a LEO→GEO 300 → 35 786 km
+/// transfer) — the two burns and the total Δv. Registered as the `"astro"`
+/// producer in [`crate::products_registry::lookup`]; the tile renders it as a
+/// text card, not a 3-D view.
+///
+/// Both computations are state-free (built from `AscentForm::default()` /
+/// `PlannerForm::default()`) and cheap — the ascent is a bounded fixed-step RK4
+/// integration that completes well under a frame, and the Hohmann transfer is
+/// closed-form. On the (canonically-unreachable) solver error each section
+/// carries that message instead of panicking.
+pub(crate) fn astro_product() -> crate::WorkspaceProduct {
+    let mut lines = Vec::new();
+
+    // (1) Ascent to orbit — the genuine simulate_ascent result for the default
+    // launch vehicle + config (same path the Run button drives).
+    let ascent = AscentForm::default();
+    let vehicle = ascent.build_vehicle();
+    let config = ascent.build_config();
+    match valenx_astro::simulate_ascent(&vehicle, &config) {
+        Ok(r) => {
+            lines.push(format!("ascent outcome   : {:?}", r.outcome));
+            lines.push(format!("apoapsis         : {:.0} km", r.apoapsis_km()));
+            lines.push(format!("periapsis        : {:.0} km", r.periapsis_km()));
+            lines.push(format!("ideal Δv budget  : {:.0} m/s", r.ideal_delta_v));
+        }
+        Err(e) => lines.push(format!(
+            "ascent failed: {}",
+            crate::astro::model::friendly_error(&e)
+        )),
+    }
+
+    // (2) Hohmann transfer — the genuine closed-form Δv between the default
+    // departure / arrival circular altitudes (LEO 300 km → GEO 35 786 km).
+    let planner = PlannerForm::default();
+    let r1 = crate::astro::model::altitude_km_to_radius_m(planner.hohmann_from_km);
+    let r2 = crate::astro::model::altitude_km_to_radius_m(planner.hohmann_to_km);
+    lines.push(String::new());
+    lines.push(format!(
+        "Hohmann {:.0} → {:.0} km:",
+        planner.hohmann_from_km, planner.hohmann_to_km
+    ));
+    match valenx_astro::hohmann_transfer(r1, r2) {
+        Ok(t) => {
+            lines.push(format!("  burn 1 Δv      : {:.0} m/s", t.delta_v1));
+            lines.push(format!("  burn 2 Δv      : {:.0} m/s", t.delta_v2));
+            lines.push(format!("  total Δv       : {:.0} m/s", t.total_delta_v));
+        }
+        Err(e) => lines.push(format!(
+            "  cannot plan: {}",
+            crate::astro::model::friendly_error(&e)
+        )),
+    }
+
+    crate::WorkspaceProduct {
+        title: "Astro / Launch".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

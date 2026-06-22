@@ -462,6 +462,34 @@ fn load_lens_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"optics"}`** product: the canonical
+/// biconvex lens built as a 3-D solid, paired with the workbench's own
+/// `compute()` readout rows, at a fixed 3/4 camera. Registered in
+/// [`crate::products_registry`]; the per-tool builder the registry dispatches
+/// to. Pure — driven off [`OpticsWorkbenchState::default`]. (The lens solid
+/// is the canonical representative geometry — it takes no parameters.)
+pub(crate) fn optics_product() -> crate::WorkspaceProduct {
+    let s = OpticsWorkbenchState::default();
+    let mesh = lens_solid_mesh().expect("canonical lens ⇒ solid builds");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<lens>/valenx-optics");
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical optics ⇒ readout computes"),
+    );
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
+    crate::WorkspaceProduct {
+        title: "Optics (lens)".into(),
+        lines,
+        mesh: Some(loaded),
+        vertex_colors: None,
+        camera,
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

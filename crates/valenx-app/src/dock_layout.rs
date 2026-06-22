@@ -320,6 +320,16 @@ fn render_workspace_body(
     // mutates the product's camera (`get_mut`), so the lookups are kept short.
     let idx = n.parse::<usize>().ok();
 
+    // LAZY-BUILD: a `new_unit` only queued this unit's product `kind` in
+    // `pending_products` (so opening its tab was instant); build it now, on the
+    // first render of its pane. Done through a short `&mut app` borrow BEFORE any
+    // immutable render borrow of the product below, so it never overlaps them
+    // (idempotent + a no-op once built / nothing pending). After this, the
+    // `workspace_products.get(..)` lookups below see the freshly built product.
+    if let Some(i) = idx {
+        crate::agent_commands::materialize_pending(app, i);
+    }
+
     // A live 3-D product (a `show_3d` command set `mesh: Some`) renders as an
     // actual lit viewport — same look as the central viewport. The tile id keys
     // a dedicated per-tile offscreen target so it never aliases the central
@@ -354,14 +364,20 @@ fn render_workspace_body(
         // borrows here are short `get` / `get_mut` that finish before the camera
         // clone and the mesh render borrow below, so nothing aliases.
         if let Some(i) = idx {
-            // Read what the strip needs (title + current status) through a short
-            // immutable borrow, cloning out so the borrow ends immediately.
+            // Read what the strip needs (title + current status + a snapshot of
+            // the animation state, if any) through a short immutable borrow,
+            // cloning out so the borrow ends immediately. `ProductAnimation` is
+            // a cheap plain-data `Clone`.
             let strip = app
                 .workspace_products
                 .get(&i)
-                .map(|p| (p.title.clone(), p.last_export.clone()));
-            if let Some((title, last_export)) = strip {
+                .map(|p| (p.title.clone(), p.last_export.clone(), p.animation.clone()));
+            if let Some((title, last_export, animation)) = strip {
                 let mut do_export = false;
+                // Local working copy of the animation state we mutate from the
+                // controls below; written back via one short `get_mut` after the
+                // strip closes (the render borrow above is long gone).
+                let mut anim = animation;
                 ui.horizontal(|ui| {
                     if ui
                         .small_button("⬇ Export STL")
@@ -370,10 +386,58 @@ fn render_workspace_body(
                     {
                         do_export = true;
                     }
+                    // Animation transport controls — only for an animated
+                    // product. The button glyph flips ▶/⏸ but the accessible
+                    // label is FIXED ("Play/Pause animation") so AI / screen
+                    // readers find it by a stable name regardless of state.
+                    if let Some(anim) = anim.as_mut() {
+                        ui.separator();
+                        let glyph = if anim.playing { "⏸" } else { "▶" };
+                        let play = ui
+                            .add(egui::Button::new(glyph).small())
+                            .on_hover_text("Play/Pause animation");
+                        if play.clicked() {
+                            anim.playing = !anim.playing;
+                        }
+                        // Fixed accessible name independent of the ▶/⏸ glyph, so
+                        // AI / screen readers always find this control by the
+                        // same stable label.
+                        play.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::WidgetType::Button,
+                                true,
+                                "Play/Pause animation",
+                            )
+                        });
+                        ui.add(egui::Slider::new(&mut anim.speed, 0.0..=4.0).text("speed x"));
+                        if ui
+                            .add(egui::Button::new("⤺ reset").small())
+                            .on_hover_text("Reset animation")
+                            .clicked()
+                        {
+                            anim.t = 0.0;
+                        }
+                        ui.label(egui::RichText::new(format!("t = {:.2} s", anim.t)).monospace());
+                        // Advance the clock HERE, inside the toolbar's mutable
+                        // borrow (never inside the immutable mesh-render borrow
+                        // below), and keep repainting while playing.
+                        if anim.playing {
+                            anim.t += ui.input(|i| i.stable_dt) * anim.speed;
+                            ui.ctx().request_repaint();
+                        }
+                    }
                     if let Some(msg) = &last_export {
                         ui.label(egui::RichText::new(msg).weak().small());
                     }
                 });
+                // Commit the mutated animation state back (Play/Pause toggle,
+                // speed, reset, advanced `t`) via a short `get_mut`. Cheap
+                // PartialEq guard avoids a write when nothing changed.
+                if let Some(p) = app.workspace_products.get_mut(&i) {
+                    if p.animation != anim {
+                        p.animation = anim;
+                    }
+                }
                 if do_export {
                     // Re-borrow mutably only now (the immutable borrow above is
                     // long gone) to run the export and stash its status. The
@@ -414,6 +478,7 @@ fn render_workspace_body(
                         &tile_key,
                         mesh,
                         product.vertex_colors.as_deref(),
+                        product.animation.as_ref(),
                         &camera,
                         renderer,
                         rs,
@@ -458,6 +523,64 @@ fn render_workspace_body(
         }
     }
 
+    // An IMAGE product (e.g. the path-traced `render`) shows a raster image
+    // scaled to fit the tile — sits *between* the 3-D viewport and the 2-D /
+    // text branches. The CPU pixels live on the product as an `egui::ColorImage`;
+    // the first frame uploads them to a GPU texture (keyed by the tile id) and
+    // caches the handle on the product so later frames reuse it rather than
+    // re-allocating a texture every repaint.
+    let has_image = idx
+        .and_then(|i| app.workspace_products.get(&i))
+        .map(|p| p.image.is_some())
+        .unwrap_or(false);
+    if has_image {
+        if let Some(i) = idx {
+            // Lazily upload the ColorImage to a texture once. `load_texture`
+            // allocates a fresh texture, so we only call it when the cache is
+            // empty; the cloned image is consumed by the upload. The handle is
+            // stashed back on the product (`image_texture`) and freed (RAII)
+            // when the product is dropped.
+            let needs_upload = app
+                .workspace_products
+                .get(&i)
+                .map(|p| p.image.is_some() && p.image_texture.is_none())
+                .unwrap_or(false);
+            if needs_upload {
+                let image = app.workspace_products.get(&i).and_then(|p| p.image.clone());
+                if let Some(image) = image {
+                    let tex = ui.ctx().load_texture(
+                        format!("workspace_img:{n}"),
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    );
+                    if let Some(p) = app.workspace_products.get_mut(&i) {
+                        p.image_texture = Some(tex);
+                    }
+                }
+            }
+            // Draw the cached texture scaled to fit the remaining rect, keeping
+            // the image's aspect ratio. Read the size + handle through a short
+            // immutable borrow.
+            let drawn = app
+                .workspace_products
+                .get(&i)
+                .and_then(|p| p.image_texture.as_ref().map(|t| (t.id(), t.size_vec2())));
+            if let Some((tex_id, tex_size)) = drawn {
+                let avail = ui.available_size();
+                if avail.x > 1.0 && avail.y > 1.0 && tex_size.x > 0.0 && tex_size.y > 0.0 {
+                    let scale = (avail.x / tex_size.x).min(avail.y / tex_size.y);
+                    let draw_size = tex_size * scale;
+                    let (rect, _resp) = ui.allocate_exact_size(avail, egui::Sense::hover());
+                    let img_rect = egui::Rect::from_center_size(rect.center(), draw_size);
+                    let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                    ui.painter_at(rect)
+                        .image(tex_id, img_rect, uv, egui::Color32::WHITE);
+                }
+                return;
+            }
+        }
+    }
+
     // A 2-D drawing product (a `show_2d` command set `kind2d: Some`) paints a
     // flat egui engineering drawing (no wgpu) — sits *between* the 3-D viewport
     // and the text card. Read through a short immutable borrow (no camera
@@ -479,6 +602,15 @@ fn render_workspace_body(
             }
             crate::Workspace2dKind::DnaMap(map) => {
                 paint_dna_map(ui, rect, &map);
+            }
+            crate::Workspace2dKind::Draft2d(view) => {
+                paint_draft2d(ui, rect, &view);
+            }
+            crate::Workspace2dKind::FloorPlan(plan) => {
+                paint_floor_plan(ui, rect, &plan);
+            }
+            crate::Workspace2dKind::Chart(data) => {
+                paint_chart(ui, rect, &data);
             }
         }
         return;
@@ -533,19 +665,27 @@ type MeshAabb = ([f32; 3], [f32; 3]);
 /// was degenerate or the GPU returned no texture (caller falls back to the
 /// text card).
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn render_tile_mesh_3d(
     ui: &mut egui::Ui,
     tile_key: &str,
     mesh: &crate::types::LoadedMesh,
     vertex_colors: Option<&[[f32; 3]]>,
+    animation: Option<&crate::ProductAnimation>,
     camera: &valenx_viz::OrbitCamera,
     renderer: &mut crate::wgpu_renderer::WgpuRenderer,
     render_state: &egui_wgpu::RenderState,
     pixels_per_point: f32,
 ) -> Option<(egui::Response, Option<MeshAabb>)> {
     // Build the shaded surface for the mesh's surface elements (Tri3 / Quad4).
-    // A volumetric-only mesh yields nothing → fall back to the card.
-    let surface = crate::viewport::mesh_to_triangle_surface(&mesh.mesh)?;
+    // A volumetric-only mesh yields nothing → fall back to the card. When the
+    // product is animated, pose the mesh nodes for the current animation clock
+    // first (same triangle order, so `vertex_colors` stay aligned); otherwise
+    // the byte-identical static path.
+    let surface = match animation {
+        Some(anim) => crate::viewport::mesh_to_triangle_surface_posed(&mesh.mesh, anim)?,
+        None => crate::viewport::mesh_to_triangle_surface(&mesh.mesh)?,
+    };
     // Per-vertex-coloured path only when a colour was supplied AND it covers
     // every surface vertex the renderer will emit (3 per triangle); otherwise
     // the plain metal path (byte-identical to the central viewport). The length
@@ -960,6 +1100,492 @@ fn truncate_to_width(text: &str, max_w: f32, font_size: f32) -> String {
     format!("{keep}…")
 }
 
+/// A drawing-units → screen-pixels mapping that fits an axis-aligned
+/// drawing-space box `((min_x, min_y), (max_x, max_y))` into `area` with the
+/// aspect ratio preserved and the content centred, flipping y (drawing y-up →
+/// screen y-down). Returns a closure mapping a drawing `[x, y]` to an
+/// [`egui::Pos2`], together with the uniform scale (px per drawing unit) so the
+/// caller can size radii / strokes consistently.
+///
+/// Shared by [`paint_draft2d`] and [`paint_floor_plan`] (the 2-D CAD drawing
+/// and the floor plan): both lay a real-world-units model into a tile rect and
+/// need the same centred, aspect-correct fit. A degenerate (zero-extent) box
+/// gets a unit extent so the scale stays finite.
+fn fit_box_to_area(
+    min: [f64; 2],
+    max: [f64; 2],
+    area: egui::Rect,
+) -> (impl Fn([f64; 2]) -> egui::Pos2, f32) {
+    let w = (max[0] - min[0]).abs().max(1e-6) as f32;
+    let h = (max[1] - min[1]).abs().max(1e-6) as f32;
+    let scale = (area.width() / w).min(area.height() / h).max(0.0);
+    // The content's drawn size, centred in `area`.
+    let drawn_w = w * scale;
+    let drawn_h = h * scale;
+    let off_x = area.left() + (area.width() - drawn_w) * 0.5;
+    let off_y = area.top() + (area.height() - drawn_h) * 0.5;
+    let min_x = min[0] as f32;
+    let max_y = max[1] as f32;
+    let map = move |p: [f64; 2]| -> egui::Pos2 {
+        egui::pos2(
+            off_x + (p[0] as f32 - min_x) * scale,
+            // y-up → y-down: measure from the top (max_y) downward.
+            off_y + (max_y - p[1] as f32) * scale,
+        )
+    };
+    (map, scale)
+}
+
+/// Paint the **2-D CAD drawing** ([`crate::Workspace2dKind::Draft2d`]) into
+/// `rect` with the egui painter — no wgpu. Fits the drawing's entities
+/// (lines / circles / arcs / polylines) to the tile keeping aspect, draws them
+/// in the engineering-drawing accent colour, and shows the readout rows
+/// (entity count, extent) as a small text block. Pure painting — reads only the
+/// plain-data [`crate::Draft2dView`].
+fn paint_draft2d(ui: &egui::Ui, rect: egui::Rect, view: &crate::Draft2dView) {
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    if rect.width() < 32.0 || rect.height() < 32.0 {
+        return;
+    }
+    let base = (rect.height() * 0.045).clamp(9.0, 13.0);
+    let title_font = egui::FontId::proportional(base + 2.0);
+    let small_font = egui::FontId::proportional((base - 1.0).max(8.0));
+    let pad = 8.0;
+
+    painter.text(
+        egui::pos2(rect.left() + pad, rect.top() + pad),
+        egui::Align2::LEFT_TOP,
+        "2-D Drawing",
+        title_font.clone(),
+        ink,
+    );
+    // Reserve a numbers strip at the bottom; the drawing fills the rest.
+    let strip_h = (view.lines.len() as f32) * (small_font.size + 3.0) + 4.0;
+    let body = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + pad, rect.top() + pad + title_font.size + 6.0),
+        egui::pos2(rect.right() - pad, rect.bottom() - pad - strip_h),
+    );
+    if body.width() < 8.0 || body.height() < 8.0 {
+        return;
+    }
+    let (min, max) = view.bounds;
+    let (to_screen, scale) = fit_box_to_area(min, max, body);
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    for e in &view.entities {
+        match e {
+            crate::Draft2dEntity::Line { a, b } => {
+                painter.line_segment([to_screen(*a), to_screen(*b)], stroke);
+            }
+            crate::Draft2dEntity::Circle { centre, radius } => {
+                painter.circle_stroke(to_screen(*centre), *radius as f32 * scale, stroke);
+            }
+            crate::Draft2dEntity::Arc {
+                centre,
+                radius,
+                start_angle_deg,
+                end_angle_deg,
+            } => {
+                let cc = to_screen(*centre);
+                let r = *radius as f32 * scale;
+                let a0 = start_angle_deg.to_radians() as f32;
+                let a1 = end_angle_deg.to_radians() as f32;
+                let n = 48;
+                let mut prev: Option<egui::Pos2> = None;
+                for i in 0..=n {
+                    let t = a0 + (a1 - a0) * (i as f32 / n as f32);
+                    // y is screen-down, so subtract the sin term.
+                    let p = egui::pos2(cc.x + r * t.cos(), cc.y - r * t.sin());
+                    if let Some(pp) = prev {
+                        painter.line_segment([pp, p], stroke);
+                    }
+                    prev = Some(p);
+                }
+            }
+            crate::Draft2dEntity::Polyline { vertices, closed } => {
+                for w in vertices.windows(2) {
+                    painter.line_segment([to_screen(w[0]), to_screen(w[1])], stroke);
+                }
+                if *closed && vertices.len() > 2 {
+                    painter.line_segment(
+                        [
+                            to_screen(vertices[vertices.len() - 1]),
+                            to_screen(vertices[0]),
+                        ],
+                        stroke,
+                    );
+                }
+            }
+        }
+    }
+    // Numbers strip at the bottom.
+    let mut y = rect.bottom() - pad - strip_h + 2.0;
+    for line in &view.lines {
+        painter.text(
+            egui::pos2(rect.left() + pad, y),
+            egui::Align2::LEFT_TOP,
+            truncate_to_width(line, rect.width() - 2.0 * pad, base),
+            small_font.clone(),
+            weak,
+        );
+        y += small_font.size + 3.0;
+    }
+}
+
+/// Paint the **interior floor-plan** ([`crate::Workspace2dKind::FloorPlan`])
+/// into `rect` with the egui painter — no wgpu. Fits the room wall polygons +
+/// furniture footprints to the tile keeping aspect, draws walls as strokes and
+/// furniture as filled+labelled rectangles, and shows the readout rows (room /
+/// piece counts, extent). Pure painting — reads only the plain-data
+/// [`crate::FloorPlanView`].
+fn paint_floor_plan(ui: &egui::Ui, rect: egui::Rect, plan: &crate::FloorPlanView) {
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    if rect.width() < 40.0 || rect.height() < 40.0 {
+        return;
+    }
+    let base = (rect.height() * 0.045).clamp(9.0, 13.0);
+    let title_font = egui::FontId::proportional(base + 2.0);
+    let small_font = egui::FontId::proportional((base - 1.0).max(8.0));
+    let pad = 8.0;
+
+    painter.text(
+        egui::pos2(rect.left() + pad, rect.top() + pad),
+        egui::Align2::LEFT_TOP,
+        "Floor Plan",
+        title_font.clone(),
+        ink,
+    );
+    let strip_h = (plan.lines.len() as f32) * (small_font.size + 3.0) + 4.0;
+    let body = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + pad, rect.top() + pad + title_font.size + 6.0),
+        egui::pos2(rect.right() - pad, rect.bottom() - pad - strip_h),
+    );
+    if body.width() < 8.0 || body.height() < 8.0 {
+        return;
+    }
+    let (min, max) = plan.bounds;
+    let (to_screen, scale) = fit_box_to_area(min, max, body);
+
+    let wall = egui::Stroke::new(2.0, egui::Color32::from_rgb(180, 190, 210));
+    for poly in &plan.rooms {
+        for w in poly.windows(2) {
+            painter.line_segment([to_screen(w[0]), to_screen(w[1])], wall);
+        }
+        if poly.len() > 2 {
+            painter.line_segment([to_screen(poly[poly.len() - 1]), to_screen(poly[0])], wall);
+        }
+    }
+    let label_font = egui::FontId::proportional((base - 1.0).max(8.0));
+    for item in &plan.furniture {
+        let c = to_screen(item.centre);
+        let r = egui::Rect::from_center_size(
+            c,
+            egui::vec2(item.size[0] as f32 * scale, item.size[1] as f32 * scale),
+        );
+        painter.rect_filled(r, 2.0, egui::Color32::from_rgb(70, 110, 90));
+        painter.rect_stroke(
+            r,
+            2.0,
+            egui::Stroke::new(1.0, egui::Color32::from_gray(200)),
+        );
+        // Only label when the footprint is wide enough to read.
+        if r.width() > 18.0 && r.height() > 10.0 {
+            painter.text(
+                c,
+                egui::Align2::CENTER_CENTER,
+                &item.label,
+                label_font.clone(),
+                egui::Color32::from_gray(220),
+            );
+        }
+    }
+    // Numbers strip at the bottom.
+    let mut y = rect.bottom() - pad - strip_h + 2.0;
+    for line in &plan.lines {
+        painter.text(
+            egui::pos2(rect.left() + pad, y),
+            egui::Align2::LEFT_TOP,
+            truncate_to_width(line, rect.width() - 2.0 * pad, base),
+            small_font.clone(),
+            weak,
+        );
+        y += small_font.size + 3.0;
+    }
+}
+
+/// A "nice" axis tick step ≥ `raw` of the form 1·10ⁿ, 2·10ⁿ or 5·10ⁿ — the
+/// classic round-number choice so tick labels read 0, 20, 40 … rather than
+/// 0, 17, 34 …. Used by [`paint_chart`] to lay gridlines and ticks at human
+/// values. `raw` is the ideal (data-range / tick-count) spacing; a non-finite
+/// or non-positive `raw` falls back to `1.0`.
+fn nice_step(raw: f64) -> f64 {
+    if !(raw.is_finite() && raw > 0.0) {
+        return 1.0;
+    }
+    let exp = raw.log10().floor();
+    let pow10 = 10.0_f64.powf(exp);
+    let frac = raw / pow10; // in [1, 10)
+    let nice = if frac <= 1.0 {
+        1.0
+    } else if frac <= 2.0 {
+        2.0
+    } else if frac <= 5.0 {
+        5.0
+    } else {
+        10.0
+    };
+    nice * pow10
+}
+
+/// Format an axis tick value compactly: integers as integers, otherwise a short
+/// fixed / scientific form depending on magnitude — so a frequency axis reads
+/// `125` and a tiny-diffusivity axis reads `2.7e-3` instead of `0.0027000`.
+fn fmt_tick(v: f64) -> String {
+    if v == 0.0 {
+        return "0".to_string();
+    }
+    let a = v.abs();
+    if !(1e-3..1000.0).contains(&a) {
+        format!("{v:.1e}")
+    } else if (v.round() - v).abs() < 1e-9 && a < 1e6 {
+        format!("{}", v.round() as i64)
+    } else {
+        format!("{v:.3}")
+    }
+}
+
+/// Paint a **2-D line / bar chart** ([`crate::Workspace2dKind::Chart`]) into
+/// `rect` with the egui painter — no wgpu. Draws a framed plot area with
+/// gridlines and auto-scaled axes (ranges taken from the union of every series'
+/// `[x, y]` points), tick labels, the x / y axis labels, each series as a
+/// polyline (or vertical bars when [`crate::ChartSeries::bars`]), and a small
+/// legend. Pure painting — reads only the plain-data [`crate::ChartData`].
+fn paint_chart(ui: &egui::Ui, rect: egui::Rect, data: &crate::ChartData) {
+    let painter = ui.painter_at(rect);
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    if rect.width() < 64.0 || rect.height() < 64.0 {
+        return;
+    }
+    let base = (rect.height() * 0.045).clamp(9.0, 13.0);
+    let title_font = egui::FontId::proportional(base + 2.0);
+    let label_font = egui::FontId::proportional(base);
+    let tick_font = egui::FontId::proportional((base - 1.0).max(8.0));
+    let pad = 8.0;
+
+    // Title across the top.
+    painter.text(
+        egui::pos2(rect.center().x, rect.top() + pad),
+        egui::Align2::CENTER_TOP,
+        &data.title,
+        title_font.clone(),
+        ink,
+    );
+
+    // Auto-scale the axes from the union of every finite point. A degenerate /
+    // empty data set falls back to a unit box so the transform stays finite.
+    let (mut x_min, mut x_max) = (f64::INFINITY, f64::NEG_INFINITY);
+    let (mut y_min, mut y_max) = (f64::INFINITY, f64::NEG_INFINITY);
+    let mut any = false;
+    for s in &data.series {
+        for p in &s.points {
+            if p[0].is_finite() && p[1].is_finite() {
+                x_min = x_min.min(p[0]);
+                x_max = x_max.max(p[0]);
+                y_min = y_min.min(p[1]);
+                y_max = y_max.max(p[1]);
+                any = true;
+            }
+        }
+    }
+    if !any {
+        x_min = 0.0;
+        x_max = 1.0;
+        y_min = 0.0;
+        y_max = 1.0;
+    }
+    // Bars rise from the baseline, so always include y = 0 for a bar series.
+    if data.series.iter().any(|s| s.bars) {
+        y_min = y_min.min(0.0);
+        y_max = y_max.max(0.0);
+    }
+    // Guard zero-width spans (a flat series) so the scale is finite, and pad the
+    // top of the y range a little so the tallest point isn't on the frame.
+    if (x_max - x_min).abs() < 1e-12 {
+        x_min -= 0.5;
+        x_max += 0.5;
+    }
+    if (y_max - y_min).abs() < 1e-12 {
+        y_min -= 0.5;
+        y_max += 0.5;
+    } else {
+        y_max += (y_max - y_min) * 0.05;
+    }
+
+    // Plot rect: leave a left gutter for y ticks + axis label, a bottom gutter
+    // for x ticks + axis label, and the title strip at the top.
+    let left_gutter = 48.0;
+    let bottom_gutter = 34.0;
+    let plot = egui::Rect::from_min_max(
+        egui::pos2(
+            rect.left() + pad + left_gutter,
+            rect.top() + pad + title_font.size + 6.0,
+        ),
+        egui::pos2(rect.right() - pad, rect.bottom() - pad - bottom_gutter),
+    );
+    if plot.width() < 16.0 || plot.height() < 16.0 {
+        return;
+    }
+
+    // Data → screen (y flips: data-up → screen-down).
+    let sx = plot.width() as f64 / (x_max - x_min);
+    let sy = plot.height() as f64 / (y_max - y_min);
+    let to_screen = |p: [f64; 2]| -> egui::Pos2 {
+        egui::pos2(
+            plot.left() + ((p[0] - x_min) * sx) as f32,
+            plot.bottom() - ((p[1] - y_min) * sy) as f32,
+        )
+    };
+
+    // Frame + gridlines + ticks. ~5 divisions on each axis at round values.
+    let grid = egui::Stroke::new(1.0, weak.gamma_multiply(0.35));
+    let axis = egui::Stroke::new(1.2, weak);
+    painter.rect_stroke(plot, 0.0, axis);
+
+    let x_step = nice_step((x_max - x_min) / 5.0);
+    let mut xt = (x_min / x_step).ceil() * x_step;
+    while xt <= x_max + x_step * 1e-6 {
+        let x = to_screen([xt, y_min]).x;
+        painter.line_segment(
+            [egui::pos2(x, plot.top()), egui::pos2(x, plot.bottom())],
+            grid,
+        );
+        painter.text(
+            egui::pos2(x, plot.bottom() + 3.0),
+            egui::Align2::CENTER_TOP,
+            fmt_tick(xt),
+            tick_font.clone(),
+            weak,
+        );
+        xt += x_step;
+    }
+
+    let y_step = nice_step((y_max - y_min) / 5.0);
+    let mut yt = (y_min / y_step).ceil() * y_step;
+    while yt <= y_max + y_step * 1e-6 {
+        let y = to_screen([x_min, yt]).y;
+        painter.line_segment(
+            [egui::pos2(plot.left(), y), egui::pos2(plot.right(), y)],
+            grid,
+        );
+        painter.text(
+            egui::pos2(plot.left() - 4.0, y),
+            egui::Align2::RIGHT_CENTER,
+            fmt_tick(yt),
+            tick_font.clone(),
+            weak,
+        );
+        yt += y_step;
+    }
+
+    // Axis labels: x centred under the plot, y rotated up the left gutter.
+    painter.text(
+        egui::pos2(plot.center().x, rect.bottom() - pad),
+        egui::Align2::CENTER_BOTTOM,
+        &data.x_label,
+        label_font.clone(),
+        ink,
+    );
+    painter.text(
+        egui::pos2(rect.left() + pad, plot.center().y),
+        egui::Align2::CENTER_CENTER,
+        &data.y_label,
+        label_font.clone(),
+        ink,
+    );
+
+    // A small fixed series palette (kept legible on both themes).
+    const PALETTE: [egui::Color32; 6] = [
+        egui::Color32::from_rgb(120, 200, 255),
+        egui::Color32::from_rgb(255, 170, 90),
+        egui::Color32::from_rgb(150, 220, 130),
+        egui::Color32::from_rgb(230, 130, 200),
+        egui::Color32::from_rgb(220, 210, 110),
+        egui::Color32::from_rgb(180, 160, 240),
+    ];
+
+    // Draw each series clipped to the plot rect (so a stray point can't paint
+    // over the ticks / labels).
+    let plot_painter = ui.painter_at(plot);
+    let baseline_y = to_screen([x_min, y_min.max(0.0).min(y_max)]).y;
+    for (si, s) in data.series.iter().enumerate() {
+        let color = PALETTE[si % PALETTE.len()];
+        if s.bars {
+            // One vertical bar per point, from the y = 0 baseline up to its value.
+            // Bar width ≈ the plotted x spacing, leaving a small gap.
+            let n = s.points.len().max(1);
+            let bw = (plot.width() / n as f32 * 0.7).clamp(1.0, plot.width());
+            for p in &s.points {
+                if !(p[0].is_finite() && p[1].is_finite()) {
+                    continue;
+                }
+                let top = to_screen(*p);
+                let x = top.x;
+                let r = egui::Rect::from_min_max(
+                    egui::pos2(x - bw * 0.5, top.y.min(baseline_y)),
+                    egui::pos2(x + bw * 0.5, top.y.max(baseline_y)),
+                );
+                plot_painter.rect_filled(r, 0.0, color);
+            }
+        } else {
+            // Connect the points with a polyline.
+            let stroke = egui::Stroke::new(1.8, color);
+            let pts: Vec<egui::Pos2> = s
+                .points
+                .iter()
+                .filter(|p| p[0].is_finite() && p[1].is_finite())
+                .map(|p| to_screen(*p))
+                .collect();
+            for w in pts.windows(2) {
+                plot_painter.line_segment([w[0], w[1]], stroke);
+            }
+        }
+    }
+
+    // Legend: a small swatch + label per series, stacked in the top-right of the
+    // plot. Only when more than one series (a single series is self-evident from
+    // the y-axis label) and there is room.
+    if data.series.len() > 1 {
+        let row_h = tick_font.size + 4.0;
+        let mut ly = plot.top() + 4.0;
+        for (si, s) in data.series.iter().enumerate() {
+            if ly + row_h > plot.bottom() {
+                break;
+            }
+            let color = PALETTE[si % PALETTE.len()];
+            let sw = egui::Rect::from_min_size(
+                egui::pos2(plot.right() - 96.0, ly + 2.0),
+                egui::vec2(10.0, 10.0),
+            );
+            plot_painter.rect_filled(sw, 1.0, color);
+            plot_painter.text(
+                egui::pos2(sw.right() + 4.0, ly),
+                egui::Align2::LEFT_TOP,
+                truncate_to_width(&s.label, 78.0, tick_font.size),
+                tick_font.clone(),
+                ink,
+            );
+            ly += row_h;
+        }
+    }
+}
+
 /// After the tree has been drawn, drain the per-workbench deferred requests
 /// (3-D mesh loads, field-overlay pushes) the bodies may have set. These run
 /// *outside* any panel borrow, exactly as the classic `draw_<x>_workbench`
@@ -1086,11 +1712,26 @@ impl ValenxApp {
         pixels_per_point: f32,
     ) {
         // 1. Which workbenches are open right now, in the registry's order.
-        let open_ids: Vec<String> = DOCKABLE_PANELS
-            .iter()
-            .filter(|(id, _)| is_panel_open(self, id))
-            .map(|(id, _)| (*id).to_string())
-            .collect();
+        //
+        // A clean agent **product tab** ([`ValenxApp::dock_agent_only`], set by
+        // [`Self::set_clean_workbench_agent_dock`] for a `new_unit`-created tab)
+        // must host ONLY its own `[workspace:n | agent:n]` pair — never the
+        // flag-gated [`DOCKABLE_PANELS`] (notably the global
+        // `"valenx_assistant_panel"`, which is open by default). Forcing the
+        // open set empty here means `sync_tree` adds none of them and strips any
+        // that slipped in, while the unit's wb_agent panes (exempt from sync,
+        // see [`is_wb_agent_pane`]) stay. Normal tabs keep the real open set, so
+        // the landing tab and manually-opened Workbench+Agent grids are
+        // unchanged.
+        let open_ids: Vec<String> = if self.dock_agent_only {
+            Vec::new()
+        } else {
+            DOCKABLE_PANELS
+                .iter()
+                .filter(|(id, _)| is_panel_open(self, id))
+                .map(|(id, _)| (*id).to_string())
+                .collect()
+        };
 
         // Are there any "Workbench + Agent" tiles in the current tree? Those
         // are launcher-created and not gated on a `show_*` flag, so the region
@@ -1323,6 +1964,35 @@ impl ValenxApp {
         place_unit(tree, pair, target);
     }
 
+    /// Make the active tab a **clean agent product tab** for unit `n`:
+    /// **replace** [`Self::dock_tree`] outright with a fresh tree holding only
+    /// the horizontal `[workspace:n | agent:n]` pair, and latch
+    /// [`Self::dock_agent_only`] so [`Self::draw_dock_layout`]'s per-frame
+    /// [`sync_tree`] never injects the flag-gated [`DOCKABLE_PANELS`] — notably
+    /// the global `"valenx_assistant_panel"` (open by default) — into it.
+    ///
+    /// This is what the `new_unit` bridge command calls right after
+    /// [`Self::add_workbench_agent_pair_at`]: that helper *appends* the pair to
+    /// whatever tree exists and the next frame's sync would otherwise add the
+    /// global Assistant pane beside the unit's own `agent:n` chat (two chat
+    /// panes in one product tab — the bug this fixes). Replacing the tree with
+    /// just the pair, plus the `dock_agent_only` latch, guarantees the product
+    /// tab shows exactly **one** chat (its `agent:n`) next to its workspace.
+    ///
+    /// Turns the dock on full-workspace (dock enabled, 3-D viewport hidden) like
+    /// the launcher, so the single pair fills the central area. Leaves
+    /// [`Self::wb_agent_counter`] untouched — the caller already bumped it to
+    /// `n` via `add_workbench_agent_pair_at`.
+    pub(crate) fn set_clean_workbench_agent_dock(&mut self, n: usize) {
+        self.dock_enabled = true;
+        self.viewport_hidden = true;
+        self.dock_agent_only = true;
+        let mut tree = egui_tiles::Tree::empty("valenx_dock_tree");
+        let pair = insert_pair(&mut tree, n);
+        tree.root = Some(pair);
+        self.dock_tree = Some(tree);
+    }
+
     /// Launch **six "Workbench + Agent" units in a 3×2 grid** (3 columns ×
     /// 2 rows) — the demo layout. Turns the dock on, hands out six fresh unit
     /// numbers, and *replaces* the dock root with a vertical container of two
@@ -1365,6 +2035,12 @@ impl ValenxApp {
     pub(crate) fn clear_dock(&mut self) {
         self.dock_tree = None;
         self.viewport_hidden = false;
+        // Return the tab to the neutral dock state. Without this, a "Close all"
+        // on a clean agent product tab (which latched `dock_agent_only = true`
+        // via `set_clean_workbench_agent_dock`) leaves the flag stuck on, so a
+        // subsequently-opened dockable workbench renders as a classic SidePanel
+        // instead of docking (its `sync_tree` injection stays suppressed).
+        self.dock_agent_only = false;
         for (id, _) in DOCKABLE_PANELS {
             close_panel(self, id);
         }
@@ -1857,6 +2533,59 @@ mod tests {
         assert!(panes.contains("valenx_assistant_panel"));
         assert!(panes.contains("workspace:1"));
         assert_eq!(panes.len(), 13);
+    }
+
+    #[test]
+    fn clean_agent_product_tab_dock_excludes_the_assistant_pane() {
+        // A `new_unit`-created PRODUCT tab (set up via
+        // `set_clean_workbench_agent_dock`) must host ONLY its own
+        // `[workspace:n | agent:n]` pair — the global Assistant pane
+        // (`valenx_assistant_panel`, on by DEFAULT) must NOT leak into it, even
+        // across the per-frame `sync_tree` inside `draw_dock_layout`. Contrast
+        // with `wb_agent_tiles_survive_sync_and_dock_keeps_region_alive` above,
+        // where a normal grid (dock_agent_only == false) DOES get the assistant
+        // injected — so this asserts the `dock_agent_only` gate is what keeps a
+        // product tab to a single chat pane.
+        let mut app = ValenxApp::default();
+        // The bug only bites when the assistant is open; it is by default, but
+        // pin it explicitly so the test states its own precondition.
+        app.show_assistant_panel = true;
+
+        // Mint a unit number the way the bridge does (the pair add bumps the
+        // counter), then install the clean product-tab dock for it.
+        app.add_workbench_agent_pair_at(UnitAddTarget::NewRowBottom);
+        let n = app.wb_agent_counter;
+        app.set_clean_workbench_agent_dock(n);
+        assert!(app.dock_agent_only, "product tab latches dock_agent_only");
+
+        // Run several frames so the per-frame sync has every chance to inject
+        // the assistant — it must not, for this tab.
+        let ctx = egui::Context::default();
+        for _ in 0..3 {
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                // Tests run headless (no wgpu backend): pass no render state.
+                app.draw_dock_layout(ctx, None, 1.0);
+            });
+        }
+
+        let panes = pane_ids(app.dock_tree.as_ref().expect("product tab has a dock"));
+        assert!(
+            panes.contains(&format!("workspace:{n}")),
+            "the unit's workspace pane is present"
+        );
+        assert!(
+            panes.contains(&format!("agent:{n}")),
+            "the unit's own agent chat pane is present"
+        );
+        assert!(
+            !panes.contains("valenx_assistant_panel"),
+            "the GLOBAL assistant pane must NOT leak into a clean product tab"
+        );
+        assert_eq!(
+            panes.len(),
+            2,
+            "exactly the workspace + agent pair, nothing else"
+        );
     }
 
     /// Test helper: collect all pane ids reachable from `root` (a tile id),

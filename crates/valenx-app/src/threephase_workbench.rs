@@ -305,6 +305,35 @@ fn load_phases_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
+/// The agent-bridge **`show_3d{kind:"threephase"}`** product: a DATA-ONLY text
+/// card of the balanced three-phase workbench's `compute()` readout rows (see
+/// [`crate::products_registry`]). A line/phase voltage-current and power
+/// result has no characteristic shape — the panel's three cylindrical limbs on
+/// a ring are an abstract stand-in for "three phases", not a real fabricated
+/// object — so the bridge product is right-sized to a card (`mesh: None`)
+/// carrying just the readout (the confidence badge is appended centrally). The
+/// panel's "Show 3-D" button still builds that representative schematic into
+/// the central viewport. Pure — driven off
+/// [`ThreePhaseWorkbenchState::default`].
+pub(crate) fn threephase_product() -> crate::WorkspaceProduct {
+    let s = ThreePhaseWorkbenchState::default();
+    let lines = crate::products_registry::lines_from_readout(
+        &compute(&s).expect("canonical three-phase ⇒ readout computes"),
+    );
+    crate::WorkspaceProduct {
+        title: "Three-phase (balanced load)".into(),
+        lines,
+        mesh: None,
+        vertex_colors: None,
+        camera: Default::default(),
+        kind2d: None,
+        last_export: None,
+        image: None,
+        image_texture: None,
+        animation: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

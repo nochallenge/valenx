@@ -494,6 +494,92 @@ pub(crate) fn mesh_to_triangle_surface(mesh: &Mesh) -> Option<TriangleMesh> {
     }
 }
 
+/// Like [`mesh_to_triangle_surface`], but first **poses** the mesh's node
+/// positions on the CPU from a [`crate::ProductAnimation`] — the per-frame
+/// animation path for an animated [`crate::WorkspaceProduct`].
+///
+/// The renderer has no model matrix (the MVP is camera-only and the vertex
+/// buffer is rebuilt from world node positions every frame), so animation is
+/// done by rotating the `valenx_mesh::Mesh` nodes directly before the surface is
+/// built. We clone the node array, apply the motion's rigid rotation(s) at the
+/// animation clock `anim.t`, then run the *identical* surface builder
+/// ([`mesh_to_triangle_surface`]) over a mesh that shares the original's
+/// element blocks but uses the posed nodes. Because the triangle connectivity
+/// and emission order are untouched, the resulting surface lines up
+/// vertex-for-vertex with the static one — so any `vertex_colors` the caller
+/// holds stay aligned.
+///
+/// - [`crate::ProductMotion::RigidParts`]: each part's `node_range` is rotated
+///   about its own `axis`/`pivot` by `rad_per_s * t` (signed, so meshing pairs
+///   counter-rotate). Nodes outside every range are left in place.
+/// - [`crate::ProductMotion::Turntable`]: **all** nodes are rotated about the
+///   single `axis`/`pivot`.
+///
+/// Returns `None` for a surface-less (volumetric-only) mesh, exactly like the
+/// static builder.
+pub(crate) fn mesh_to_triangle_surface_posed(
+    mesh: &Mesh,
+    anim: &crate::ProductAnimation,
+) -> Option<TriangleMesh> {
+    use nalgebra::{Rotation3, Unit, Vector3};
+
+    // A node-positions clone we rotate in place; element blocks (connectivity)
+    // are shared by reference into a posed view below, so triangle order is
+    // identical to the static path.
+    let mut nodes = mesh.nodes.clone();
+
+    // Rotate the half-open `range` of `nodes` about `pivot` by `angle` rad
+    // around `axis`. A near-zero axis is skipped (no rotation) rather than
+    // panicking on a zero-length normalize.
+    let rotate_range = |nodes: &mut [Vector3<f64>],
+                        range: std::ops::Range<usize>,
+                        axis: [f32; 3],
+                        pivot: [f32; 3],
+                        angle: f64| {
+        let axis_v = Vector3::new(axis[0] as f64, axis[1] as f64, axis[2] as f64);
+        if axis_v.norm() < 1e-9 {
+            return;
+        }
+        let rot = Rotation3::from_axis_angle(&Unit::new_normalize(axis_v), angle);
+        let pivot_v = Vector3::new(pivot[0] as f64, pivot[1] as f64, pivot[2] as f64);
+        let lo = range.start.min(nodes.len());
+        let hi = range.end.min(nodes.len());
+        for p in &mut nodes[lo..hi] {
+            *p = rot * (*p - pivot_v) + pivot_v;
+        }
+    };
+
+    let t = anim.t as f64;
+    match &anim.motion {
+        crate::ProductMotion::RigidParts(parts) => {
+            for part in parts {
+                rotate_range(
+                    &mut nodes,
+                    part.node_range.clone(),
+                    part.axis,
+                    part.pivot,
+                    part.rad_per_s as f64 * t,
+                );
+            }
+        }
+        crate::ProductMotion::Turntable {
+            axis,
+            pivot,
+            rad_per_s,
+        } => {
+            let all = 0..nodes.len();
+            rotate_range(&mut nodes, all, *axis, *pivot, *rad_per_s as f64 * t);
+        }
+    }
+
+    // Build the surface from the posed nodes using the SAME element blocks, so
+    // the emitted triangle order matches the static path exactly.
+    let mut posed = Mesh::new(&mesh.id);
+    posed.nodes = nodes;
+    posed.element_blocks = mesh.element_blocks.clone();
+    mesh_to_triangle_surface(&posed)
+}
+
 // ---------------------------------------------------------------------------
 // Shaded (painter fallback — filled triangles + per-face light)
 // ---------------------------------------------------------------------------
@@ -1335,6 +1421,87 @@ mod tests {
         // 1-D elements have no surface — the filled overlay must
         // skip them rather than panic.
         assert_eq!(triangles_for(ElementType::Line2).len(), 0);
+    }
+
+    #[test]
+    fn posed_surface_rotates_a_known_node_about_z() {
+        use nalgebra::Vector3;
+        use valenx_mesh::{ElementBlock, ElementType, Mesh};
+
+        // One Tri3 with three distinct nodes; we rotate ONLY node 0
+        // (range 0..1) by +90° about +z through the origin, so node 0 at
+        // (1, 0, 0) must land at (0, 1, 0). The other two nodes stay put.
+        let mut m = Mesh::new("pose-smoke");
+        m.nodes = vec![
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(0.0, 0.0, 2.0),
+        ];
+        let mut blk = ElementBlock::new(ElementType::Tri3);
+        blk.connectivity = vec![0, 1, 2];
+        m.element_blocks = vec![blk];
+
+        // rad_per_s * t = π/2 (use rad_per_s = π/2 at t = 1).
+        let anim = crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 1.0,
+            motion: crate::ProductMotion::RigidParts(vec![crate::RigidPart {
+                node_range: 0..1,
+                axis: [0.0, 0.0, 1.0],
+                pivot: [0.0, 0.0, 0.0],
+                rad_per_s: std::f32::consts::FRAC_PI_2,
+            }]),
+        };
+
+        let surface = mesh_to_triangle_surface_posed(&m, &anim).expect("one triangle");
+        assert_eq!(surface.triangles.len(), 1);
+        // The first vertex is node 0 (connectivity [0,1,2]); it moved to (0,1,0).
+        let v0 = surface.triangles[0].vertices[0];
+        assert!((v0[0] - 0.0).abs() < 1e-5, "x→0, got {}", v0[0]);
+        assert!((v0[1] - 1.0).abs() < 1e-5, "y→1, got {}", v0[1]);
+        assert!((v0[2] - 0.0).abs() < 1e-5, "z stays 0, got {}", v0[2]);
+        // Node 1 (second vertex) was outside the rotated range — unchanged.
+        let v1 = surface.triangles[0].vertices[1];
+        assert!((v1[0] - 0.0).abs() < 1e-5);
+        assert!((v1[2] - 1.0).abs() < 1e-5, "untouched node keeps z=1");
+    }
+
+    #[test]
+    fn posed_surface_at_t_zero_matches_static() {
+        use nalgebra::Vector3;
+        use valenx_mesh::{ElementBlock, ElementType, Mesh};
+
+        // At t = 0 every angle is 0, so the posed surface must equal the
+        // static one vertex-for-vertex (keeps vertex_colors aligned).
+        let mut m = Mesh::new("identity-smoke");
+        m.nodes = vec![
+            Vector3::new(1.0, 2.0, 3.0),
+            Vector3::new(4.0, 5.0, 6.0),
+            Vector3::new(7.0, 8.0, 9.0),
+        ];
+        let mut blk = ElementBlock::new(ElementType::Tri3);
+        blk.connectivity = vec![0, 1, 2];
+        m.element_blocks = vec![blk];
+
+        let anim = crate::ProductAnimation {
+            playing: true,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(vec![crate::RigidPart {
+                node_range: 0..3,
+                axis: [0.0, 0.0, 1.0],
+                pivot: [0.0, 0.0, 0.0],
+                rad_per_s: 5.0,
+            }]),
+        };
+
+        let posed = mesh_to_triangle_surface_posed(&m, &anim).expect("triangle");
+        let stat = mesh_to_triangle_surface(&m).expect("triangle");
+        assert_eq!(posed.triangles.len(), stat.triangles.len());
+        for (p, s) in posed.triangles.iter().zip(&stat.triangles) {
+            assert_eq!(p.vertices, s.vertices, "t=0 pose is the identity");
+        }
     }
 
     #[test]

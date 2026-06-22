@@ -16,22 +16,25 @@
 //! block over a movable block, drawn as sheave cylinders) into the central
 //! viewport.
 
-use std::f64::consts::TAU;
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
 use valenx_pulley::{
     actual_mechanical_advantage, effort_distance, ideal_effort, input_work, load_from_effort,
     output_work, real_effort, work_lost, PulleySystem,
 };
 
-use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Cast-iron sheave grey.
+const CAST_IRON: [f32; 3] = [0.46, 0.47, 0.50];
+/// Dark axle/hub colour.
+const HUB: [f32; 3] = [0.26, 0.27, 0.30];
 
 /// The pulley arrangement the form is configured for. The numeric
 /// mechanical advantage always comes from the resulting
@@ -274,103 +277,125 @@ fn arrangement_label(a: Arrangement) -> &'static str {
     }
 }
 
-/// Append an `x`-axis sheave cylinder (a pulley wheel lying with its axle
-/// along `x`) to the buffers: a tube of radius `r` and axial `length`
-/// starting at `base`, with `seg` angular facets.
-fn push_cyl_x(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    base: Vector3<f64>,
-    length: f64,
-    r: f64,
-    seg: usize,
-) {
-    let (x0, x1) = (base.x, base.x + length);
-    let lo = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x0, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    let hi = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x1, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    for j in 0..seg {
-        let jn = (j + 1) % seg;
-        tris.extend_from_slice(&[
-            lo + j,
-            hi + j,
-            hi + jn,
-            lo + j,
-            hi + jn,
-            lo + jn,
-            lo + j,
-            hi + jn,
-            hi + j,
-            lo + j,
-            lo + jn,
-            hi + jn,
-        ]);
-    }
+/// Presentation spin rate of each sheave wheel, rad/s (~0.6 rev/s) — a readable
+/// inspect speed for the rope wheels.
+const SHEAVE_RAD_PER_S: f32 = 4.0;
+
+/// Append a **grooved V-sheave** (a pulley/belt wheel) to `b`, centred at
+/// `centre` with its axle along `axis`, of rim radius `rim_r`, axial half-width
+/// `half_w` and a central bore of radius `bore_r`. The rim is a true revolved
+/// **V-groove** — the profile dips from the rim radius down to `rim_r −
+/// groove_depth` at the mid-plane and back — and a darker hub tube fills the
+/// bore. Built by lathing a closed `(r, z)` cross-section
+/// ([`MeshBuilder::revolve`]) the way a real sheave is turned, replacing the
+/// plain-cylinder fake. Shared with the Belt Drive Workbench.
+///
+/// Returns the [`std::ops::Range<usize>`] of node indices the **whole sheave
+/// (rim + hub)** added, so the caller can record a [`crate::RigidPart`] that
+/// spins it about its axle.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn push_grooved_sheave(
+    b: &mut MeshBuilder,
+    centre: [f64; 3],
+    axis: [f64; 3],
+    rim_r: f64,
+    half_w: f64,
+    bore_r: f64,
+    rim_color: [f32; 3],
+    hub_color: [f32; 3],
+) -> std::ops::Range<usize> {
+    let start = b.node_count();
+    let groove_depth = (rim_r - bore_r).max(0.0) * 0.35;
+    let groove_r = rim_r - groove_depth;
+    // Closed (r, z) cross-section, revolved 360° about the axle. The closing
+    // point repeats the first so the lathe produces a watertight solid: the
+    // bore wall, the two flat faces, and the V-groove rim.
+    let profile = [
+        [bore_r, -half_w], // bore edge, −z face
+        [rim_r, -half_w],  // rim, −z face
+        [groove_r, 0.0],   // bottom of the V at the mid-plane
+        [rim_r, half_w],   // rim, +z face
+        [bore_r, half_w],  // bore edge, +z face
+        [bore_r, -half_w], // close the inner wall back to the start
+    ];
+    b.revolve(&profile, centre, axis, 360.0, 36, rim_color);
+    // Darker hub tube filling the bore (a short collar standing slightly proud).
+    let hub_inner = bore_r * 0.45;
+    b.tube(centre, axis, hub_inner, bore_r, half_w * 2.2, 24, hub_color);
+    start..b.node_count()
 }
 
-/// Build the pulley assembly as a triangle [`Mesh`] — a fixed block (a row
-/// of sheave cylinders high up) over a movable block (a row lower down),
-/// representing the `n` supporting rope segments by splitting the sheaves
-/// between the two blocks. Representative geometry (not to scale; the
-/// mechanical-advantage numbers are the `valenx-pulley` result). `None`
-/// for an invalid configuration.
-fn pulley_solid_mesh(s: &PulleyWorkbenchState) -> Option<Mesh> {
+/// Build the pulley assembly as a triangle [`Mesh`] **with per-vertex colours**
+/// plus a [`crate::RigidPart`] per sheave wheel, so every grooved sheave spins
+/// about its own pin while the rope/blocks frame stays put. A fixed (upper)
+/// block over a movable (lower) block split the `n` supporting rope segments.
+/// Each wheel is now a true revolved **V-groove sheave**
+/// ([`push_grooved_sheave`]) — cast-iron grey rim, dark hub — not a plain
+/// cylinder. `None` for an invalid configuration.
+///
+/// Returns `(mesh, colors, parts)` with `colors.len() == 3 × triangle_count`.
+fn pulley_solid_mesh_parts(
+    s: &PulleyWorkbenchState,
+) -> Option<(Mesh, Vec<[f32; 3]>, Vec<crate::RigidPart>)> {
     let sys = system_of(s).ok()?;
     let n = sys.supporting_ropes();
 
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
+    let mut b = MeshBuilder::new();
+    let mut parts: Vec<crate::RigidPart> = Vec::new();
 
     // Split the supporting segments between a fixed (upper) and movable
     // (lower) block: ceil(n/2) sheaves up, floor(n/2) (at least one) down.
     let fixed_sheaves = n.div_ceil(2).max(1);
     let movable_sheaves = (n / 2).max(1);
-    let r = 0.18;
-    let width = 0.12;
+    let rim_r = 0.18;
+    let half_w = 0.06;
+    let bore_r = 0.05;
     let pitch = 0.5;
+
+    // Each sheave is its own rotating body about its pin (+x axle through the
+    // centre): record its node range + pin centre.
+    let add_sheave = |b: &mut MeshBuilder, parts: &mut Vec<crate::RigidPart>, centre: [f64; 3]| {
+        let range = push_grooved_sheave(
+            b,
+            centre,
+            [1.0, 0.0, 0.0],
+            rim_r,
+            half_w,
+            bore_r,
+            CAST_IRON,
+            HUB,
+        );
+        parts.push(crate::RigidPart {
+            node_range: range,
+            axis: [1.0, 0.0, 0.0],
+            pivot: [centre[0] as f32, centre[1] as f32, centre[2] as f32],
+            rad_per_s: SHEAVE_RAD_PER_S,
+        });
+    };
 
     // Fixed block: a row of sheaves along y at the top (+z).
     let fixed_span = (fixed_sheaves.saturating_sub(1)) as f64 * pitch;
     for i in 0..fixed_sheaves {
         let y = i as f64 * pitch - 0.5 * fixed_span;
-        push_cyl_x(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(-0.5 * width, y, 0.9),
-            width,
-            r,
-            28,
-        );
+        add_sheave(&mut b, &mut parts, [0.0, y, 0.9]);
     }
 
     // Movable block: a row of sheaves lower down (the load hangs here).
     let movable_span = (movable_sheaves.saturating_sub(1)) as f64 * pitch;
     for i in 0..movable_sheaves {
         let y = i as f64 * pitch - 0.5 * movable_span;
-        push_cyl_x(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(-0.5 * width, y, 0.1),
-            width,
-            r,
-            28,
-        );
+        add_sheave(&mut b, &mut parts, [0.0, y, 0.1]);
     }
 
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-pulley");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
-    Some(mesh)
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-pulley".to_string();
+    Some((mesh, colors, parts))
+}
+
+/// Build the pulley assembly as a triangle [`Mesh`] (without the colour / part
+/// metadata) for the central viewport. See [`pulley_solid_mesh_parts`].
+fn pulley_solid_mesh(s: &PulleyWorkbenchState) -> Option<Mesh> {
+    pulley_solid_mesh_parts(s).map(|(mesh, _colors, _parts)| mesh)
 }
 
 /// Build the 3-D pulley assembly and load it into the central viewport.
@@ -403,7 +428,8 @@ fn load_pulley_3d(app: &mut ValenxApp) {
 /// to. Pure — driven off [`PulleyWorkbenchState::default`].
 pub(crate) fn pulley_product() -> crate::WorkspaceProduct {
     let s = PulleyWorkbenchState::default();
-    let mesh = pulley_solid_mesh(&s).expect("canonical tackle ⇒ sheave-block solid builds");
+    let (mesh, colors, parts) =
+        pulley_solid_mesh_parts(&s).expect("canonical tackle ⇒ sheave-block solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<pulley>/valenx-pulley");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical tackle ⇒ readout computes"),
@@ -413,10 +439,19 @@ pub(crate) fn pulley_product() -> crate::WorkspaceProduct {
         title: "Block & tackle (MA = 4)".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
+        image: None,
+        image_texture: None,
+        // Animated: each sheave wheel spins about its own pin. Paused at t = 0.
+        animation: Some(crate::ProductAnimation {
+            playing: false,
+            speed: 1.0,
+            t: 0.0,
+            motion: crate::ProductMotion::RigidParts(parts),
+        }),
     }
 }
 
@@ -573,6 +608,69 @@ mod tests {
             ..Default::default()
         };
         assert!(pulley_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn pulley_carries_vertex_aligned_colours() {
+        // The grooved sheaves ship per-vertex colours aligned to the renderer's
+        // coloured path (3/triangle), with both the cast-iron rim and the dark
+        // hub colours present.
+        let s = PulleyWorkbenchState::default();
+        let (mesh, colors, _parts) = pulley_solid_mesh_parts(&s).expect("default tackle builds");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        assert!(colors.contains(&CAST_IRON), "sheave rim colour present");
+        assert!(colors.contains(&HUB), "hub colour present");
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
+            }
+        }
+    }
+
+    #[test]
+    fn pulley_product_spins_each_sheave() {
+        // The product carries a RigidParts animation: one rotating part per
+        // sheave, each a non-empty node range within the mesh that spins about
+        // its pin (+x) at a non-zero rate.
+        let product = pulley_product();
+        let loaded = product.mesh.as_ref().expect("pulley product has a mesh");
+        let node_count = loaded.mesh.nodes.len();
+        let anim = product.animation.expect("pulley product is animated");
+        assert!(!anim.playing, "starts paused");
+        match anim.motion {
+            crate::ProductMotion::RigidParts(parts) => {
+                assert!(
+                    parts.len() >= 2,
+                    "default 4-rope tackle splits into ≥2 sheaves"
+                );
+                for p in &parts {
+                    assert!(
+                        p.node_range.start < p.node_range.end,
+                        "non-empty sheave range"
+                    );
+                    assert!(
+                        p.node_range.end <= node_count,
+                        "sheave range within the mesh"
+                    );
+                    assert_eq!(p.axis, [1.0, 0.0, 0.0], "each sheave spins about its pin");
+                    assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
+                }
+                // Sheave ranges tile contiguously (no gap/overlap).
+                for w in parts.windows(2) {
+                    assert_eq!(
+                        w[0].node_range.end, w[1].node_range.start,
+                        "sheave node ranges are contiguous"
+                    );
+                }
+            }
+            crate::ProductMotion::Turntable { .. } => {
+                panic!("pulley must use per-part rigid motion")
+            }
+        }
     }
 }
 
