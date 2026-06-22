@@ -13,21 +13,25 @@
 //! "Show 3-D gear" loads a representative gear-blank solid into the
 //! central viewport.
 
-use std::f64::consts::TAU;
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
+use valenx_gears::{GearKind, GearSpec};
 use valenx_geartooth::agma::{agma_bending_stress, geometry_factor_j, AgmaFactors};
 use valenx_geartooth::lewis::{lewis_bending_stress_for_teeth, pitch_line_velocity_m_per_s};
 use valenx_geartooth::lewis_factor::lewis_form_factor;
 use valenx_geartooth::spec::ToothLoad;
-use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Brushed-steel body colour for the gear blank.
+const STEEL: [f32; 3] = [0.62, 0.64, 0.67];
+/// A slightly darker cast colour for the centre hub / bore collar.
+const HUB: [f32; 3] = [0.42, 0.44, 0.47];
 
 /// Persistent form + result state for the Gear Tooth Workbench.
 pub struct GeartoothWorkbenchState {
@@ -270,153 +274,55 @@ fn compute(s: &GeartoothWorkbenchState) -> Result<String, String> {
     ))
 }
 
-/// Append an outward-facing box (centre `c`, half-extents `h`) to the
-/// buffers.
-fn push_box(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    h: Vector3<f64>,
-) {
-    let base = nodes.len();
-    let signs = [
-        (-1.0, -1.0, -1.0),
-        (1.0, -1.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (-1.0, 1.0, -1.0),
-        (-1.0, -1.0, 1.0),
-        (1.0, -1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (-1.0, 1.0, 1.0),
-    ];
-    for (sx, sy, sz) in signs {
-        nodes.push(c + Vector3::new(sx * h.x, sy * h.y, sz * h.z));
-    }
-    let faces = [
-        [1, 2, 6, 5],
-        [0, 4, 7, 3],
-        [3, 7, 6, 2],
-        [0, 1, 5, 4],
-        [4, 5, 6, 7],
-        [0, 3, 2, 1],
-    ];
-    for f in faces {
-        tris.extend_from_slice(&[
-            base + f[0],
-            base + f[1],
-            base + f[2],
-            base + f[0],
-            base + f[2],
-            base + f[3],
-        ]);
-    }
-}
-
-/// Append a (double-sided) cylinder whose axis runs along `+x`, spanning
-/// `base.x ..= base.x + length` with circle centre `(base.y, base.z)`.
-fn push_cyl_x(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    base: Vector3<f64>,
-    length: f64,
-    r: f64,
-    seg: usize,
-) {
-    let (x0, x1) = (base.x, base.x + length);
-    let lo = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x0, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    let hi = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x1, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    for j in 0..seg {
-        let jn = (j + 1) % seg;
-        tris.extend_from_slice(&[
-            lo + j,
-            hi + j,
-            hi + jn,
-            lo + j,
-            hi + jn,
-            lo + jn,
-            lo + j,
-            hi + jn,
-            hi + j,
-            lo + j,
-            lo + jn,
-            hi + jn,
-        ]);
-    }
-}
-
-/// Build the spur gear as a triangle [`Mesh`] — a thin disc blank (axis
-/// along `+x`) whose radius is the pitch radius (scaled to the viewport),
-/// a centre bore collar, and a ring of small teeth boxes around the rim.
-/// Representative geometry (the teeth are blocks, not true involutes; the
-/// stress numbers are the `valenx-geartooth` result). `None` for an
-/// invalid configuration.
-fn gear_solid_mesh(s: &GeartoothWorkbenchState) -> Option<Mesh> {
-    // Gate on a valid load/geometry bundle (same check the readout uses).
+/// Build the spur gear as a triangle [`Mesh`] **with per-vertex colours** —
+/// a real involute spur gear from [`valenx_gears::to_solid_spur`] (the same
+/// quality bar as the Gears Workbench gear train), extruded along its axle
+/// (+z) by the face width, plus a slightly darker centre hub/bore collar
+/// ([`MeshBuilder::tube`]) so the bore reads. The gear geometry is the true
+/// involute the bending-strength analysis is about — not the old ring of
+/// rectangular bumps. Built in real millimetre units (the central viewport
+/// auto-frames it); `None` for an invalid configuration.
+///
+/// Returns `(mesh, colors)` aligned to the renderer's coloured path
+/// (`colors.len() == 3 × triangle_count`), so the product can set
+/// [`crate::WorkspaceProduct::vertex_colors`].
+fn gear_solid_mesh(s: &GeartoothWorkbenchState) -> Option<(Mesh, Vec<[f32; 3]>)> {
+    // Gate on a valid load/geometry bundle (same check the readout uses) and a
+    // tabulated Lewis form factor for this tooth count.
     let load = ToothLoad::new(s.tangential_load_n, s.face_width_mm, s.module_mm, s.teeth).ok()?;
     lewis_form_factor(s.teeth).ok()?;
 
-    // Scale the real pitch radius (mm) into a ~unit-sized viewport solid.
-    let pitch_radius_mm = load.pitch_diameter_mm() / 2.0;
-    let r = (pitch_radius_mm / 100.0).clamp(0.15, 0.9);
-    let thickness = 0.12_f64;
-    let axis_z = 0.7;
+    // The true involute spur gear (axle along +z, centred on z), tessellated.
+    let spec = GearSpec {
+        kind: GearKind::Spur,
+        module_mm: s.module_mm,
+        teeth: s.teeth,
+        pressure_angle_deg: 20.0,
+        helix_angle_deg: 0.0,
+        face_width_mm: s.face_width_mm,
+    };
+    let solid = valenx_gears::to_solid_spur(&spec).ok()?;
+    let gear_mesh = valenx_cad::solid_to_mesh(&solid, valenx_cad::DEFAULT_TESS_TOLERANCE).ok()?;
 
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
+    // A darker hub/bore collar: a short annular tube on the same +z axle, bore
+    // ~22 % of the pitch radius, standing slightly proud of each gear face so
+    // it reads as a hub. The pitch radius is module·teeth/2 (mm).
+    let pitch_r = load.pitch_diameter_mm() / 2.0;
+    let bore_r = (pitch_r * 0.22).max(s.module_mm);
+    let hub_r = bore_r + s.module_mm; // hub wall around the bore
+    let hub_len = s.face_width_mm + 0.25 * s.face_width_mm;
 
-    // Disc blank (thin in the through-thickness +x direction).
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.0, 0.0, axis_z),
-        thickness,
-        r,
-        48,
-    );
-    // Centre bore collar / hub (a smaller, slightly longer cylinder).
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-0.04, 0.0, axis_z),
-        thickness + 0.08,
-        (r * 0.22).max(0.05),
-        20,
-    );
-
-    // A ring of teeth as small boxes spaced around the rim. Cap the count
-    // so the representative mesh stays light regardless of N.
-    let n_bumps = s.teeth.clamp(6, 24) as usize;
-    let tooth = Vector3::new(thickness * 0.5, r * 0.10, r * 0.10);
-    for k in 0..n_bumps {
-        let a = k as f64 / n_bumps as f64 * TAU;
-        push_box(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(0.0, r * a.cos(), axis_z + r * a.sin()),
-            tooth,
-        );
-    }
-
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-geartooth");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
-    Some(mesh)
+    let mut b = MeshBuilder::new();
+    b.append_tri_mesh(&gear_mesh, STEEL);
+    b.tube([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], bore_r, hub_r, hub_len, 28, HUB);
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-geartooth".to_string();
+    Some((mesh, colors))
 }
 
 /// Build the 3-D gear solid and load it into the central viewport.
 fn load_gear_3d(app: &mut ValenxApp) {
-    let Some(mesh) = gear_solid_mesh(&app.geartooth) else {
+    let Some((mesh, _colors)) = gear_solid_mesh(&app.geartooth) else {
         app.geartooth.error =
             Some("gear parameters are invalid — cannot build the 3-D solid".into());
         return;
@@ -444,7 +350,7 @@ fn load_gear_3d(app: &mut ValenxApp) {
 /// Pure (no app state) — driven entirely off [`GeartoothWorkbenchState::default`].
 pub(crate) fn geartooth_product() -> crate::WorkspaceProduct {
     let s = GeartoothWorkbenchState::default();
-    let mesh = gear_solid_mesh(&s).expect("canonical gear-tooth spec ⇒ blank solid builds");
+    let (mesh, colors) = gear_solid_mesh(&s).expect("canonical gear-tooth spec ⇒ blank solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<gear>/valenx-geartooth");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical gear-tooth spec ⇒ readout computes"),
@@ -454,7 +360,7 @@ pub(crate) fn geartooth_product() -> crate::WorkspaceProduct {
         title: "Spur gear tooth (Lewis + AGMA)".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
@@ -580,8 +486,8 @@ mod tests {
     #[test]
     fn gear_mesh_for_default_is_nonempty_and_in_range() {
         let s = GeartoothWorkbenchState::default();
-        let mesh = gear_solid_mesh(&s).expect("default gear yields a solid");
-        assert!(mesh.nodes.len() > 8, "expected disc + hub + teeth ring");
+        let (mesh, _colors) = gear_solid_mesh(&s).expect("default gear yields a solid");
+        assert!(mesh.nodes.len() > 8, "expected involute gear + hub");
         let n = mesh.nodes.len() as u32;
         for blk in &mesh.element_blocks {
             assert!(!blk.connectivity.is_empty());
@@ -591,12 +497,45 @@ mod tests {
     }
 
     #[test]
+    fn gear_mesh_carries_vertex_aligned_colours() {
+        // The gear blank now ships per-vertex colours aligned to the renderer's
+        // coloured path: exactly 3 per triangle (triangle-major). A drift here
+        // would silently fall back to flat grey.
+        let s = GeartoothWorkbenchState::default();
+        let (mesh, colors) = gear_solid_mesh(&s).expect("default gear yields a solid");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
+            }
+        }
+        // Two colours are present: the steel gear body and the darker hub.
+        assert!(colors.contains(&STEEL), "gear body is steel");
+        assert!(colors.contains(&HUB), "hub is a darker cast colour");
+    }
+
+    #[test]
     fn gear_mesh_none_for_invalid() {
         let s = GeartoothWorkbenchState {
             teeth: 0,
             ..Default::default()
         };
         assert!(gear_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn geartooth_product_carries_colours() {
+        let product = geartooth_product();
+        let loaded = product.mesh.as_ref().expect("geartooth product has a mesh");
+        let colors = product
+            .vertex_colors
+            .as_ref()
+            .expect("geartooth product carries vertex_colors");
+        assert_eq!(colors.len(), loaded.mesh.total_elements() * 3);
     }
 }
 

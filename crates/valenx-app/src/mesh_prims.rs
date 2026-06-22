@@ -595,6 +595,34 @@ impl MeshBuilder {
         }
         start..self.nodes.len()
     }
+
+    /// Append an **already-built [`Tri3`](ElementType::Tri3) mesh** (its nodes
+    /// re-based onto this builder's node array) with one flat `color`,
+    /// preserving the per-triangle colour lock-step. This is the bridge for
+    /// solids the primitive lathe/extrude path can't express — chiefly the true
+    /// involute spur gears emitted by [`valenx_gears::to_solid_spur`] +
+    /// tessellated to a [`valenx_mesh::Mesh`] — so a gearbox can place real
+    /// toothed gears alongside primitive housings/shafts in one coloured buffer.
+    /// Non-`Tri3` element blocks are skipped (the gear tessellation is all
+    /// `Tri3`). Triangle node indices are offset by the current node count so
+    /// they reference the merged array.
+    ///
+    /// Returns the [`Range<usize>`] of node indices appended (the whole of
+    /// `mesh.nodes`), so the caller can record a [`crate::RigidPart`] over it.
+    pub fn append_tri_mesh(&mut self, mesh: &Mesh, color: [f32; 3]) -> Range<usize> {
+        let start = self.nodes.len();
+        let offset = self.nodes.len() as u32;
+        self.nodes.extend_from_slice(&mesh.nodes);
+        for blk in &mesh.element_blocks {
+            if blk.element_type != ElementType::Tri3 {
+                continue;
+            }
+            for t in blk.connectivity.chunks_exact(3) {
+                self.tri(t[0] + offset, t[1] + offset, t[2] + offset, color);
+            }
+        }
+        start..self.nodes.len()
+    }
 }
 
 #[cfg(test)]
@@ -796,6 +824,37 @@ mod tests {
         let (m, c, t) = bake(b);
         assert_eq!(m.nodes.len(), total);
         assert_well_formed(&m, &c, t);
+    }
+
+    #[test]
+    fn append_tri_mesh_rebases_and_colours_per_triangle() {
+        // A 2-triangle quad mesh appended after a cuboid must: re-base its node
+        // indices onto the builder's array, push exactly 3 colours per appended
+        // triangle, and report the appended node range. This is the bridge the
+        // gear producers use to drop a tessellated involute solid into the
+        // coloured buffer.
+        let mut ext = Mesh::new("ext");
+        ext.nodes = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(1.0, 1.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+        ];
+        let mut blk = ElementBlock::new(ElementType::Tri3);
+        blk.connectivity = vec![0, 1, 2, 0, 2, 3];
+        ext.element_blocks.push(blk);
+
+        let mut b = MeshBuilder::new();
+        let cuboid = b.cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], RED); // 8 verts, 12 tris
+        let green = [0.0, 1.0, 0.0];
+        let r = b.append_tri_mesh(&ext, green);
+        // Appended range is the 4 external verts, right after the cuboid's 8.
+        assert_eq!(r, cuboid.end..(cuboid.end + 4));
+        let (m, c, t) = bake(b);
+        assert_well_formed(&m, &c, t);
+        assert_eq!(t, 12 + 2, "cuboid 12 tris + appended 2 tris");
+        // The last 2 triangles (6 colour entries) are the appended mesh's green.
+        assert!(c[36..].iter().all(|&x| x == green), "appended tris are green");
     }
 
     #[test]

@@ -14,14 +14,21 @@ use std::f64::consts::TAU;
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
 use valenx_gearbox::{CompoundTrain, GearStage};
-use valenx_mesh::element::{ElementBlock, ElementType};
+use valenx_gears::{GearKind, GearSpec};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Mid-grey cast-iron housing.
+const HOUSING: [f32; 3] = [0.48, 0.49, 0.52];
+/// Brushed-steel gears (the gear-train quality bar's colour).
+const STEEL: [f32; 3] = [0.62, 0.64, 0.67];
+/// Dark hardened-steel shafts.
+const SHAFT: [f32; 3] = [0.24, 0.25, 0.28];
 
 /// Persistent form + result state for the Gearbox Workbench.
 pub struct GearboxWorkbenchState {
@@ -230,212 +237,136 @@ fn compute(s: &GearboxWorkbenchState) -> Result<String, String> {
     ))
 }
 
-/// Append an outward-facing box (centre `c`, half-extents `h`) to the
-/// buffers.
-fn push_box(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    h: Vector3<f64>,
-) {
-    let base = nodes.len();
-    let signs = [
-        (-1.0, -1.0, -1.0),
-        (1.0, -1.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (-1.0, 1.0, -1.0),
-        (-1.0, -1.0, 1.0),
-        (1.0, -1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (-1.0, 1.0, 1.0),
-    ];
-    for (sx, sy, sz) in signs {
-        nodes.push(c + Vector3::new(sx * h.x, sy * h.y, sz * h.z));
-    }
-    let faces = [
-        [1, 2, 6, 5],
-        [0, 4, 7, 3],
-        [3, 7, 6, 2],
-        [0, 1, 5, 4],
-        [4, 5, 6, 7],
-        [0, 3, 2, 1],
-    ];
-    for f in faces {
-        tris.extend_from_slice(&[
-            base + f[0],
-            base + f[1],
-            base + f[2],
-            base + f[0],
-            base + f[2],
-            base + f[3],
-        ]);
-    }
-}
-
-/// Append a (double-sided) cylinder whose axis runs along `+x`, spanning
-/// `base.x ..= base.x + length` with circle centre `(base.y, base.z)`.
-fn push_cyl_x(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    base: Vector3<f64>,
-    length: f64,
-    r: f64,
-    seg: usize,
-) {
-    let (x0, x1) = (base.x, base.x + length);
-    let lo = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x0, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    let hi = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x1, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    for j in 0..seg {
-        let jn = (j + 1) % seg;
-        tris.extend_from_slice(&[
-            lo + j,
-            hi + j,
-            hi + jn,
-            lo + j,
-            hi + jn,
-            lo + jn,
-            lo + j,
-            hi + jn,
-            hi + j,
-            lo + j,
-            lo + jn,
-            hi + jn,
-        ]);
-    }
-}
-
-/// Build the gearbox as a triangle [`Mesh`] — three parallel shafts and
-/// two meshing gear pairs (a pinion driving a larger gear on each stage),
-/// drawn as discs on the shafts, with a base. Representative geometry (the
-/// gears are smooth discs sized by stage, not toothed; the ratios are the
-/// `valenx-gearbox` result). `None` for an invalid train.
 /// Presentation spin rate of the input (stage-1) pinion, rad/s (~1.3 rev/s) —
-/// a readable inspect speed; the rest follow the true ratios + mesh signs.
+/// a readable inspect speed; the rest follow the true tooth-count ratios + the
+/// meshing-pair counter-rotation signs.
 const INPUT_RAD_PER_S: f32 = 8.0;
+/// Common gear geometry for the representative box: module (mm), pressure angle,
+/// face width (mm). The tooth counts come from the form.
+const GB_MODULE_MM: f64 = 3.0;
+const GB_FACE_MM: f64 = 18.0;
 
-/// Build the gearbox as a triangle [`Mesh`] together with a [`crate::RigidPart`]
-/// per gear disc, so the four gears spin about their shafts (the +x axis through
-/// each shaft) while the three cosmetic shaft rods and the base stay put.
-/// Meshing pairs counter-rotate and the stage-2 pinion shares the mid shaft with
-/// the stage-1 gear (equal ω); rates follow the disc-radius ratio,
-/// presentation-scaled. `None` for an invalid train.
-fn gearbox_solid_mesh_parts(s: &GearboxWorkbenchState) -> Option<(Mesh, Vec<crate::RigidPart>)> {
+/// Build the gearbox as a triangle [`Mesh`] **with per-vertex colours** plus a
+/// [`crate::RigidPart`] per gear, so the four real involute gears spin about
+/// their shafts while the housing and shaft rods stay put.
+///
+/// Geometry (axle = +z for every gear, the [`valenx_gears`] extrusion axis):
+/// four involute spur gears from the form's tooth counts, meshed at their TRUE
+/// centre distances `C = m·(z_pinion + z_gear)/2` (mm) so the teeth actually
+/// touch — stage 1 input→layshaft, stage 2 layshaft→output, the two stages
+/// stacked one face-width apart along +z (three parallel shafts). A mid-grey
+/// cast cuboid housing wraps the train, and a dark hardened shaft runs along +z
+/// through each of the three shaft lines. Colours: housing mid-grey, gears
+/// steel, shafts dark.
+///
+/// Meshing pairs counter-rotate and the stage-2 pinion shares the layshaft with
+/// the stage-1 gear (equal ω); the rates follow the TRUE tooth-count ratios
+/// (presentation-scaled by [`INPUT_RAD_PER_S`]). The per-gear `RigidPart`
+/// `node_range`s are recomputed from the freshly-fused geometry (placement
+/// order: input pinion, layshaft gear, layshaft pinion, output gear), so they
+/// stay valid. `None` for an invalid train.
+///
+/// Returns `(mesh, colors, parts)` with `colors.len() == 3 × triangle_count`.
+fn gearbox_solid_mesh_parts(
+    s: &GearboxWorkbenchState,
+) -> Option<(Mesh, Vec<[f32; 3]>, Vec<crate::RigidPart>)> {
     build_train(s).ok()?;
 
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
-    let pinion_r = 0.13;
-    let gear_r = 0.32;
-    let z = 0.7;
-    // Three shafts at y = +0.45, 0, -0.45 (centre distance pinion + gear).
-    for &y in &[0.45, 0.0, -0.45] {
-        push_cyl_x(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(-0.6, y, z),
-            1.2,
-            0.04,
-            12,
+    // True centre distances C = m·(z_a + z_b)/2 keep each meshing pair tangent.
+    let c1 = GB_MODULE_MM * (s.stage1_in + s.stage1_out) as f64 / 2.0; // input ↔ layshaft
+    let c2 = GB_MODULE_MM * (s.stage2_in + s.stage2_out) as f64 / 2.0; // layshaft ↔ output
+    // The two stages ride side-by-side on the layshaft: stack along +z.
+    let zstack = GB_FACE_MM + 5.0;
+
+    // Placement (teeth, centre-x, centre-z) in spin/animation order.
+    let placements: [(u32, f64, f64); 4] = [
+        (s.stage1_in, 0.0, 0.0),         // input pinion
+        (s.stage1_out, c1, 0.0),         // layshaft gear
+        (s.stage2_in, c1, zstack),       // layshaft pinion
+        (s.stage2_out, c1 + c2, zstack), // output gear
+    ];
+
+    let mut b = MeshBuilder::new();
+    // Gears first; record each gear's node range + its shaft pivot (cx, 0, cz).
+    let mut gear_ranges: Vec<(std::ops::Range<usize>, [f32; 3])> = Vec::with_capacity(4);
+    for &(teeth, cx, cz) in &placements {
+        // Build the involute spur solid (centred on z) and translate it bodily
+        // to its shaft centre (cx in x for the centre distance, cz in z for the
+        // stage stack), then tessellate and append with the steel colour.
+        let spec = GearSpec {
+            kind: GearKind::Spur,
+            module_mm: GB_MODULE_MM,
+            teeth,
+            pressure_angle_deg: 20.0,
+            helix_angle_deg: 0.0,
+            face_width_mm: GB_FACE_MM,
+        };
+        let solid = valenx_gears::to_solid_spur(&spec).ok()?;
+        let placed = solid.translated(cx, 0.0, cz).ok()?;
+        let gm = valenx_cad::solid_to_mesh(&placed, valenx_cad::DEFAULT_TESS_TOLERANCE).ok()?;
+        let range = b.append_tri_mesh(&gm, STEEL);
+        gear_ranges.push((range, [cx as f32, 0.0, cz as f32]));
+    }
+
+    // Three hardened shafts along +z through the gear bores: input (x=0),
+    // layshaft (x=c1), output (x=c1+c2). Each spans both stages plus stick-out.
+    let shaft_r = GB_MODULE_MM * 0.8;
+    let shaft_len = zstack + GB_FACE_MM + 16.0;
+    let shaft_cz = zstack * 0.5; // centred on the two-stage stack
+    for &sx in &[0.0, c1, c1 + c2] {
+        b.cylinder(
+            [sx, 0.0, shaft_cz],
+            [0.0, 0.0, 1.0],
+            shaft_r,
+            shaft_len,
+            20,
+            SHAFT,
         );
     }
 
-    // Record each gear disc's node range + shaft pivot as we fuse it, so the
-    // animation rotates each gear about its own shaft (+x). Order: stage-1
-    // pinion, stage-1 gear, stage-2 pinion, stage-2 gear.
-    let mut gear_ranges: Vec<(std::ops::Range<usize>, [f32; 3])> = Vec::with_capacity(4);
-    let mut push_gear = |nodes: &mut Vec<Vector3<f64>>,
-                         tris: &mut Vec<usize>,
-                         centre: Vector3<f64>,
-                         half_len: f64,
-                         radius: f64| {
-        let start = nodes.len();
-        push_cyl_x(nodes, tris, centre, half_len, radius, 24);
-        let end = nodes.len();
-        // Pivot is the shaft line: x is irrelevant for +x rotation, so use
-        // the gear's (y, z) shaft centre.
-        gear_ranges.push((start..end, [0.0, centre.y as f32, centre.z as f32]));
-    };
-
-    // Stage 1: pinion on the top shaft meshing the gear on the mid shaft.
-    push_gear(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-0.05, 0.45, z),
-        0.1,
-        pinion_r,
-    );
-    push_gear(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-0.06, 0.0, z),
-        0.12,
-        gear_r,
-    );
-    // Stage 2: pinion on the mid shaft meshing the gear on the lower shaft.
-    push_gear(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.3, 0.0, z),
-        0.1,
-        pinion_r,
-    );
-    push_gear(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.29, -0.45, z),
-        0.12,
-        gear_r,
-    );
-    // Base.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.0, 0.0, 0.06),
-        Vector3::new(0.7, 0.6, 0.06),
+    // Mid-grey cast housing: a cuboid enclosing the train with clearance. Spans
+    // the full x extent (input shaft → output shaft) and both stacked stages.
+    let pitch_r_out = GB_MODULE_MM * s.stage2_out as f64 / 2.0;
+    let x_span = (c1 + c2) + 2.0 * pitch_r_out + 2.0 * GB_MODULE_MM;
+    let y_span = 2.0 * (GB_MODULE_MM * s.stage1_out as f64 / 2.0) + 4.0 * GB_MODULE_MM;
+    let z_span = zstack + GB_FACE_MM + 2.0 * GB_MODULE_MM;
+    b.cuboid(
+        [(c1 + c2) * 0.5, 0.0, shaft_cz],
+        [x_span, y_span, z_span],
+        HOUSING,
     );
 
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-gearbox");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-gearbox".to_string();
 
-    // True mesh kinematics on the representative discs (ratio = pinion_r/gear_r
-    // per stage): the input pinion spins +; the stage-1 gear counter-rotates and
-    // is slower; the stage-2 pinion shares the mid shaft (equal ω); the stage-2
-    // gear counter-rotates the stage-2 pinion (sign flips back +) and is slower.
-    let step = (pinion_r / gear_r) as f32; // <1 per stage
+    // TRUE tooth-count kinematics: input pinion spins +; stage-1 gear counter-
+    // rotates and is slower by r1 = z1_out/z1_in; the stage-2 pinion shares the
+    // layshaft (equal ω); the stage-2 gear counter-rotates the stage-2 pinion
+    // (sign flips back +) and is slower by r2 = z2_out/z2_in.
+    let r1 = s.stage1_out as f32 / s.stage1_in as f32;
+    let r2 = s.stage2_out as f32 / s.stage2_in as f32;
     let w_in = INPUT_RAD_PER_S;
-    let w_s1g = -w_in * step; // stage-1 gear (counter, slower)
-    let w_s2p = w_s1g; // stage-2 pinion rigid on the mid shaft
-    let w_s2g = -w_s2p * step; // stage-2 gear (counter again ⇒ +, slower)
+    let w_s1g = -w_in / r1; // stage-1 gear (counter, slower)
+    let w_s2p = w_s1g; // stage-2 pinion rigid on the layshaft
+    let w_s2g = -w_s2p / r2; // stage-2 gear (counter again ⇒ +, slower)
     let omegas = [w_in, w_s1g, w_s2p, w_s2g];
     let parts: Vec<crate::RigidPart> = gear_ranges
         .into_iter()
         .zip(omegas)
         .map(|((node_range, pivot), rad_per_s)| crate::RigidPart {
             node_range,
-            axis: [1.0, 0.0, 0.0],
+            axis: [0.0, 0.0, 1.0], // gears spin about their +z axle
             pivot,
             rad_per_s,
         })
         .collect();
-    Some((mesh, parts))
+    Some((mesh, colors, parts))
 }
 
-/// Build the gearbox [`Mesh`] (without the per-gear part metadata) for the
-/// central viewport. See [`gearbox_solid_mesh_parts`].
+/// Build the gearbox [`Mesh`] (without the per-gear part / colour metadata) for
+/// the central viewport. See [`gearbox_solid_mesh_parts`].
 fn gearbox_solid_mesh(s: &GearboxWorkbenchState) -> Option<Mesh> {
-    gearbox_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
+    gearbox_solid_mesh_parts(s).map(|(mesh, _colors, _parts)| mesh)
 }
 
 /// Build the 3-D gearbox solid and load it into the central viewport.
@@ -468,7 +399,7 @@ fn load_gearbox_3d(app: &mut ValenxApp) {
 /// [`GearboxWorkbenchState::default`].
 pub(crate) fn gearbox_product() -> crate::WorkspaceProduct {
     let s = GearboxWorkbenchState::default();
-    let (mesh, parts) =
+    let (mesh, colors, parts) =
         gearbox_solid_mesh_parts(&s).expect("canonical gearbox ⇒ gear-train solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<gearbox>/valenx-gearbox");
     let lines = crate::products_registry::lines_from_readout(
@@ -479,7 +410,7 @@ pub(crate) fn gearbox_product() -> crate::WorkspaceProduct {
         title: "Two-stage gearbox (9:1)".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
@@ -574,10 +505,11 @@ mod tests {
 
     #[test]
     fn gearbox_product_spins_four_gears_counter_rotating() {
-        // The product carries a RigidParts animation: four gear discs, each a
-        // non-empty node range within the mesh, all spinning about +x. Meshing
-        // pairs counter-rotate; the stage-2 pinion shares the mid shaft with the
-        // stage-1 gear (equal ω). The shaft rods + base are left static.
+        // The product carries a RigidParts animation: four real involute gears,
+        // each a non-empty node range within the mesh, all spinning about their
+        // +z axle. Meshing pairs counter-rotate; the stage-2 pinion shares the
+        // layshaft with the stage-1 gear (equal ω). The shafts + housing (built
+        // AFTER the gears, so beyond the last gear range) are left static.
         let product = gearbox_product();
         let loaded = product.mesh.as_ref().expect("gearbox product has a mesh");
         let node_count = loaded.mesh.nodes.len();
@@ -585,25 +517,38 @@ mod tests {
         assert!(!anim.playing, "starts paused");
         match anim.motion {
             crate::ProductMotion::RigidParts(parts) => {
-                assert_eq!(parts.len(), 4, "four gear discs");
+                assert_eq!(parts.len(), 4, "four involute gears");
                 for p in &parts {
                     assert!(
                         p.node_range.start < p.node_range.end,
                         "non-empty gear range"
                     );
                     assert!(p.node_range.end <= node_count, "gear range within the mesh");
-                    assert_eq!(p.axis, [1.0, 0.0, 0.0], "spins about its shaft");
+                    assert_eq!(p.axis, [0.0, 0.0, 1.0], "spins about its +z axle");
                     assert!(p.rad_per_s.abs() > 0.0, "non-zero spin rate");
                 }
+                // The four gears are built first and tile contiguously from 0.
+                assert_eq!(parts[0].node_range.start, 0, "gears are built first");
+                for w in parts.windows(2) {
+                    assert_eq!(
+                        w[0].node_range.end, w[1].node_range.start,
+                        "gear node ranges are contiguous"
+                    );
+                }
+                // The shafts + housing follow the last gear (static remainder).
+                assert!(
+                    parts[3].node_range.end < node_count,
+                    "shafts + housing follow the gears (static)"
+                );
                 let w_in = parts[0].rad_per_s; // stage-1 pinion (input)
                 let w_s1g = parts[1].rad_per_s; // stage-1 gear
-                let w_s2p = parts[2].rad_per_s; // stage-2 pinion (mid shaft)
+                let w_s2p = parts[2].rad_per_s; // stage-2 pinion (layshaft)
                 let w_s2g = parts[3].rad_per_s; // stage-2 gear (output)
                 assert!(w_in > 0.0, "input pinion spins +");
                 assert!(w_s1g < 0.0, "stage-1 gear counter-rotates the input");
                 assert!(
                     (w_s1g - w_s2p).abs() < 1e-6,
-                    "stage-2 pinion shares the mid shaft with the stage-1 gear"
+                    "stage-2 pinion shares the layshaft with the stage-1 gear"
                 );
                 assert!(
                     w_s2g > 0.0,
@@ -612,14 +557,37 @@ mod tests {
                 // The train steps down: the input is fastest, the output slowest.
                 assert!(w_in.abs() > w_s1g.abs());
                 assert!(w_s2p.abs() > w_s2g.abs());
-                // The first gear is built right after the three shaft rods (static).
+                // Default 17:51 stage-1 ⇒ |ω_in| / |ω_layshaft| = 51/17 = 3.
                 assert!(
-                    parts[0].node_range.start > 0,
-                    "shaft rods precede the gears"
+                    (w_in.abs() / w_s1g.abs() - 51.0 / 17.0).abs() < 1e-3,
+                    "input:layshaft speed ratio equals stage-1 gear ratio"
                 );
             }
             crate::ProductMotion::Turntable { .. } => {
                 panic!("gearbox must use per-part rigid motion")
+            }
+        }
+    }
+
+    #[test]
+    fn gearbox_carries_vertex_aligned_colours() {
+        // The gearbox ships per-vertex colours aligned to the renderer's coloured
+        // path (3 per triangle, triangle-major), with all three part colours
+        // (housing / steel gears / dark shafts) present.
+        let s = GearboxWorkbenchState::default();
+        let (mesh, colors, _parts) =
+            gearbox_solid_mesh_parts(&s).expect("default gearbox builds");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        assert!(colors.contains(&HOUSING), "housing colour present");
+        assert!(colors.contains(&STEEL), "gear colour present");
+        assert!(colors.contains(&SHAFT), "shaft colour present");
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
             }
         }
     }
