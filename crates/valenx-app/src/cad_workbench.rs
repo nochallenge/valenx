@@ -220,7 +220,33 @@ pub struct CadWorkbenchState {
     /// viewport on this frame — the programmatic equivalent of clicking the
     /// panel's "Rebuild → viewport" button.
     rebuild_request: bool,
+    /// Mouse-drawn 2-D sketch profile — the polygon vertices `(x, y)` in model
+    /// units, in click order. Feeds [`CadWorkbenchState::add_extrude_from_sketch`].
+    sketch_points: Vec<[f64; 2]>,
+    /// Whether the sketched polygon's loop is closed (the user clicked back near
+    /// the first vertex). A closed loop renders a translucent fill.
+    sketch_closed: bool,
+    /// Snap canvas clicks to the [`SKETCH_SNAP`]-unit grid.
+    sketch_grid_snap: bool,
+    /// Extrude depth (model units) the **Extrude sketch** button applies to the
+    /// drawn profile.
+    sketch_extrude_height: f64,
+    /// Set by the top-bar Part Design **Sketch** menu item to ask the panel to
+    /// scroll the sketch canvas into view and flash its header on this frame.
+    sketch_focus_request: bool,
 }
+
+/// Grid spacing of the sketch canvas, in model units — also the snap step when
+/// **snap-to-grid** is enabled.
+const SKETCH_SNAP: f64 = 0.25;
+
+/// Half-extent of the sketch canvas in model units: the canvas shows
+/// `[-SKETCH_VIEW, +SKETCH_VIEW]` on each axis (a `2·SKETCH_VIEW`-unit window).
+const SKETCH_VIEW: f64 = 4.0;
+
+/// Click/close pick radius on the sketch canvas, in screen pixels — a click
+/// within this distance of the first vertex closes the polygon loop.
+const SKETCH_PICK_PX: f32 = 8.0;
 
 impl Default for CadWorkbenchState {
     fn default() -> Self {
@@ -243,6 +269,11 @@ impl Default for CadWorkbenchState {
             body_visible: Vec::new(),
             density: 1.0,
             rebuild_request: false,
+            sketch_points: Vec::new(),
+            sketch_closed: false,
+            sketch_grid_snap: true,
+            sketch_extrude_height: 1.0,
+            sketch_focus_request: false,
         }
     }
 }
@@ -292,6 +323,69 @@ impl CadWorkbenchState {
     /// axis (the panel's `+ Revolve`), the lathe/turn operation.
     pub fn add_revolve(&mut self) {
         self.steps.push(UiStep::new_revolve());
+    }
+
+    /// Append an Extrude feature whose `(x, y)` profile is the supplied polygon
+    /// `points` (in model units), swept along +Z by `height`. This is the
+    /// **draw-then-extrude** path: the mouse-drawn sketch canvas hands its
+    /// vertices straight to the feature tree. The op is `New` when the tree is
+    /// empty (the first step must start a body) and `Join` otherwise (weld the
+    /// prism onto the running body, matching the panel's `+ Extrude`). A profile
+    /// of fewer than 3 points or a non-finite `height` is ignored. Caller should
+    /// follow with [`Self::request_rebuild`] (or `perform_rebuild`) to fold the
+    /// new prism into the viewport.
+    pub fn add_extrude_from_sketch(&mut self, points: &[[f64; 2]], height: f64) {
+        if points.len() < 3 || !height.is_finite() {
+            return;
+        }
+        let op = if self.steps.is_empty() {
+            Op::New
+        } else {
+            Op::Join
+        };
+        let mut st = UiStep::base(op, FeatureKind::Extrude);
+        st.profile = points.iter().map(|p| (p[0], p[1])).collect();
+        // Literal extrude depth — the timeline resolves the height as an
+        // expression, so a plain number string drives it parametrically-compatibly.
+        st.height = fmt_num(height);
+        self.steps.push(st);
+    }
+
+    /// Add a vertex to the mouse-drawn sketch polygon (a no-op once the loop is
+    /// closed). Used by the canvas's click handler.
+    pub fn sketch_add_point(&mut self, x: f64, y: f64) {
+        if !self.sketch_closed {
+            self.sketch_points.push([x, y]);
+        }
+    }
+
+    /// Remove the last sketched vertex (canvas **Undo last point**). Re-opens a
+    /// closed loop.
+    pub fn sketch_undo(&mut self) {
+        self.sketch_points.pop();
+        self.sketch_closed = false;
+    }
+
+    /// Discard the whole mouse-drawn sketch (canvas **Clear sketch**).
+    pub fn sketch_clear(&mut self) {
+        self.sketch_points.clear();
+        self.sketch_closed = false;
+    }
+
+    /// Read-only view of the current mouse-drawn sketch polygon (model units).
+    pub fn sketch_points(&self) -> &[[f64; 2]] {
+        &self.sketch_points
+    }
+
+    /// Whether the mouse-drawn sketch loop is closed.
+    pub fn sketch_is_closed(&self) -> bool {
+        self.sketch_closed
+    }
+
+    /// Ask the panel to scroll the sketch canvas into view (the top-bar Part
+    /// Design → **Sketch** menu item). `draw_cad_workbench` consumes the flag.
+    pub fn focus_sketch(&mut self) {
+        self.sketch_focus_request = true;
     }
 
     /// Set the boolean [`Op`] of the **last** step (the next feature combines
@@ -1783,6 +1877,18 @@ fn dim_edit(ui: &mut egui::Ui, v: &mut String) {
     ui.add(egui::TextEdit::singleline(v).desired_width(52.0));
 }
 
+/// Format a float as a compact expression string for a feature field — up to 4
+/// decimal places with trailing zeros trimmed (so `1.0 → "1"`, `0.25 → "0.25"`).
+fn fmt_num(v: f64) -> String {
+    let s = format!("{v:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s.is_empty() || s == "-" {
+        "0".to_string()
+    } else {
+        s.to_string()
+    }
+}
+
 /// Rebuild the feature tree and stage the final solid's mesh for the central
 /// 3-D viewport. This is the shared implementation of the panel's
 /// "Rebuild → viewport" button and the programmatic [`CadWorkbenchState::
@@ -1819,6 +1925,195 @@ fn perform_rebuild(s: &mut CadWorkbenchState) {
             s.push_rebuild = false;
             s.tree_status = Some(Err(e));
         }
+    }
+}
+
+/// Draw the interactive 2-D **sketch canvas** — a Fusion-style draw-then-extrude
+/// surface. The user clicks to drop polygon vertices (optionally snapped to the
+/// grid); clicking back near the first vertex closes the loop. The in-progress
+/// profile renders live (segments, vertex dots, a translucent fill when closed,
+/// and a rubber-band preview to the cursor). **Undo last point** / **Clear
+/// sketch** / a **snap-to-grid** checkbox edit the sketch; **Extrude sketch**
+/// (enabled at ≥3 points) pushes the polygon + height into the feature tree and
+/// rebuilds the viewport. Every control is a named, AI-drivable egui widget. All
+/// state lives on [`CadWorkbenchState`]; nothing touches the app god-struct.
+fn draw_sketch_canvas(s: &mut CadWorkbenchState, ui: &mut egui::Ui) {
+    ui.label(
+        egui::RichText::new("click to drop points · click the first point to close the loop")
+            .weak()
+            .small(),
+    );
+
+    // ── Controls row ────────────────────────────────────────────────────────
+    ui.horizontal_wrapped(|ui| {
+        ui.checkbox(&mut s.sketch_grid_snap, "Snap to grid")
+            .on_hover_text(format!("Snap clicks to the {SKETCH_SNAP}-unit grid."));
+        if ui
+            .button("Undo last point")
+            .on_hover_text("Remove the most recently placed sketch vertex.")
+            .clicked()
+        {
+            s.sketch_undo();
+        }
+        if ui
+            .button("Clear sketch")
+            .on_hover_text("Discard the whole drawn profile.")
+            .clicked()
+        {
+            s.sketch_clear();
+        }
+    });
+
+    // ── Canvas ──────────────────────────────────────────────────────────────
+    let side = ui.available_width().clamp(160.0, 360.0);
+    let (resp, painter) =
+        ui.allocate_painter(egui::vec2(side, side), egui::Sense::click());
+    let rect = resp.rect;
+    painter.rect_filled(rect, 3.0, egui::Color32::from_gray(18));
+
+    // Model (y-up, centred, ±SKETCH_VIEW window) ↔ screen (y-down) mapping.
+    let half = rect.width().min(rect.height()) * 0.5;
+    let c = rect.center();
+    let scale = (half / SKETCH_VIEW as f32).max(1.0);
+    let to_screen = |p: [f64; 2]| -> egui::Pos2 {
+        egui::pos2(
+            c.x + p[0] as f32 * scale,
+            c.y - p[1] as f32 * scale,
+        )
+    };
+    let to_model = |pos: egui::Pos2| -> [f64; 2] {
+        [
+            ((pos.x - c.x) / scale) as f64,
+            ((c.y - pos.y) / scale) as f64,
+        ]
+    };
+    let snap = |v: [f64; 2]| -> [f64; 2] {
+        if s.sketch_grid_snap {
+            [
+                (v[0] / SKETCH_SNAP).round() * SKETCH_SNAP,
+                (v[1] / SKETCH_SNAP).round() * SKETCH_SNAP,
+            ]
+        } else {
+            v
+        }
+    };
+
+    // Light grid on the SKETCH_SNAP step, brighter X/Y axes.
+    let grid_stroke = egui::Stroke::new(0.5, egui::Color32::from_gray(40));
+    let axis_stroke = egui::Stroke::new(1.0, egui::Color32::from_gray(90));
+    let mut g = -SKETCH_VIEW;
+    while g <= SKETCH_VIEW + 1e-9 {
+        let sx = to_screen([g, 0.0]).x;
+        let sy = to_screen([0.0, g]).y;
+        painter.line_segment(
+            [egui::pos2(sx, rect.top()), egui::pos2(sx, rect.bottom())],
+            grid_stroke,
+        );
+        painter.line_segment(
+            [egui::pos2(rect.left(), sy), egui::pos2(rect.right(), sy)],
+            grid_stroke,
+        );
+        g += SKETCH_SNAP;
+    }
+    let origin = to_screen([0.0, 0.0]);
+    painter.line_segment(
+        [egui::pos2(rect.left(), origin.y), egui::pos2(rect.right(), origin.y)],
+        axis_stroke,
+    );
+    painter.line_segment(
+        [egui::pos2(origin.x, rect.top()), egui::pos2(origin.x, rect.bottom())],
+        axis_stroke,
+    );
+
+    // Handle a click: close the loop if near the first vertex, else add a point.
+    if resp.clicked() {
+        if let Some(pos) = resp.interact_pointer_pos() {
+            let first_screen = s.sketch_points.first().map(|&p| to_screen(p));
+            let near_first = first_screen
+                .map(|f| f.distance(pos) <= SKETCH_PICK_PX)
+                .unwrap_or(false);
+            if near_first && s.sketch_points.len() >= 3 {
+                s.sketch_closed = true;
+            } else if !s.sketch_closed {
+                let m = snap(to_model(pos));
+                s.sketch_add_point(m[0], m[1]);
+            }
+        }
+    }
+
+    // Render the in-progress polygon.
+    let line_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 200, 255));
+    let pts_screen: Vec<egui::Pos2> = s.sketch_points.iter().map(|&p| to_screen(p)).collect();
+    if s.sketch_closed && pts_screen.len() >= 3 {
+        // Translucent fill for the closed loop.
+        painter.add(egui::Shape::convex_polygon(
+            pts_screen.clone(),
+            egui::Color32::from_rgba_unmultiplied(120, 200, 255, 40),
+            egui::Stroke::NONE,
+        ));
+    }
+    for w in pts_screen.windows(2) {
+        painter.line_segment([w[0], w[1]], line_stroke);
+    }
+    if s.sketch_closed && pts_screen.len() >= 3 {
+        painter.line_segment(
+            [*pts_screen.last().unwrap(), pts_screen[0]],
+            line_stroke,
+        );
+    } else if let (Some(&last), Some(cursor)) = (pts_screen.last(), resp.hover_pos()) {
+        // Rubber-band preview from the last vertex to the cursor.
+        painter.line_segment(
+            [last, cursor],
+            egui::Stroke::new(1.0, egui::Color32::from_gray(120)),
+        );
+    }
+    for (i, &p) in pts_screen.iter().enumerate() {
+        // The first vertex is highlighted as the loop-closing target.
+        let col = if i == 0 {
+            egui::Color32::from_rgb(255, 210, 90)
+        } else {
+            egui::Color32::from_rgb(120, 200, 255)
+        };
+        painter.circle_filled(p, 3.0, col);
+    }
+
+    // ── Status + extrude controls ───────────────────────────────────────────
+    let n = s.sketch_points.len();
+    ui.label(
+        egui::RichText::new(format!(
+            "{n} point{} · {}",
+            if n == 1 { "" } else { "s" },
+            if s.sketch_closed {
+                "closed"
+            } else {
+                "open"
+            }
+        ))
+        .small()
+        .monospace(),
+    );
+    ui.horizontal(|ui| {
+        ui.label("Extrude height");
+        ui.add(
+            egui::DragValue::new(&mut s.sketch_extrude_height)
+                .speed(0.1)
+                .range(0.01..=1.0e6)
+                .suffix(" u"),
+        );
+    });
+    let can_extrude = s.sketch_points.len() >= 3;
+    if ui
+        .add_enabled(can_extrude, egui::Button::new("Extrude sketch"))
+        .on_hover_text(
+            "Sweep the drawn polygon along +Z by the height above into a solid \
+             prism, add it to the feature tree, and rebuild the viewport.",
+        )
+        .clicked()
+    {
+        let pts = s.sketch_points.clone();
+        let h = s.sketch_extrude_height;
+        s.add_extrude_from_sketch(&pts, h);
+        perform_rebuild(s);
     }
 }
 
@@ -1963,6 +2258,18 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         };
                         ui.colored_label(color, &r.status);
                     }
+
+                    // ---- Sketch canvas: draw a polygon → extrude → solid ----
+                    ui.separator();
+                    let sketch_header = ui.label(
+                        egui::RichText::new("Sketch canvas (draw → extrude)").strong(),
+                    );
+                    // The top-bar Part Design → Sketch menu item flags a focus
+                    // request; scroll the canvas header into view this frame.
+                    if std::mem::take(&mut s.sketch_focus_request) {
+                        sketch_header.scroll_to_me(Some(egui::Align::TOP));
+                    }
+                    draw_sketch_canvas(s, ui);
 
                     // ---- Feature tree (CSG) ----
                     ui.separator();
@@ -2537,6 +2844,119 @@ mod tests {
         // π r² h / 3 ≈ 2.094; the BRep volume converges from below.
         let vol = total_volume(&history[0]);
         assert!(vol > 1.5, "revolved cone volume {vol} is in the right range");
+    }
+
+    #[test]
+    fn add_extrude_from_sketch_rebuilds_a_triangular_prism() {
+        // The draw-then-extrude path: a 3-point triangle drawn on the sketch
+        // canvas + a height must yield a feature tree that rebuilds to a
+        // non-empty solid carrying that exact profile.
+        let mut s = CadWorkbenchState::default();
+        s.steps.clear(); // start from an empty tree → the extrude is the base body
+        let triangle = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]];
+        let height = 3.0;
+        s.add_extrude_from_sketch(&triangle, height);
+
+        // One Extrude step, op New (first step starts the body), carrying the
+        // drawn profile and the requested height.
+        assert_eq!(s.steps.len(), 1, "one extrude step appended");
+        let st = &s.steps[0];
+        assert_eq!(st.kind, FeatureKind::Extrude);
+        assert_eq!(st.op, Op::New, "an empty tree's first step must be New");
+        assert_eq!(
+            st.profile,
+            vec![(0.0, 0.0), (2.0, 0.0), (0.0, 2.0)],
+            "the step carries the drawn triangle profile"
+        );
+        assert_eq!(st.height, "3", "the step carries the requested height");
+
+        // It rebuilds to a non-empty solid.
+        let (history, status) = rebuild_tree(&s).expect("extruded sketch rebuilds");
+        assert_eq!(history.len(), 1, "one step → one snapshot");
+        assert!(
+            history[0][0].faces() > 0,
+            "the extruded prism has faces; status: {status}"
+        );
+        let mesh = tessellate_step(&history, 1, &[]).expect("tessellate extrude");
+        assert!(
+            crate::mesh_loader::mesh_bounding_box(&mesh).is_some(),
+            "the extruded prism tessellates to a non-empty viewport mesh"
+        );
+        // Triangular prism volume = base area · height = (½·2·2) · 3 = 6 u³.
+        let vol = total_volume(&history[0]);
+        assert!(
+            (vol - 6.0).abs() < 1e-6,
+            "triangular-prism volume should be 6, got {vol}"
+        );
+
+        // On a non-empty tree the helper welds with Join instead of New.
+        let mut t = CadWorkbenchState::default();
+        let before = t.steps.len();
+        t.add_extrude_from_sketch(&triangle, height);
+        assert_eq!(t.steps.len(), before + 1, "appended onto the existing tree");
+        assert_eq!(
+            t.steps.last().unwrap().op,
+            Op::Join,
+            "a non-empty tree welds the extrude with Join"
+        );
+
+        // Degenerate inputs (fewer than 3 points, or a non-finite height) are
+        // ignored rather than producing a broken step.
+        let mut u = CadWorkbenchState::default();
+        u.steps.clear();
+        u.add_extrude_from_sketch(&[[0.0, 0.0], [1.0, 0.0]], 1.0);
+        assert!(u.steps.is_empty(), "a 2-point profile is rejected");
+        u.add_extrude_from_sketch(&triangle, f64::NAN);
+        assert!(u.steps.is_empty(), "a non-finite height is rejected");
+    }
+
+    #[test]
+    fn sketch_canvas_state_edits_build_and_close_a_polygon() {
+        // Exercise the canvas's state mutators (the click handler / Undo / Clear
+        // / close-loop logic call these): points accumulate, Undo pops + re-opens
+        // the loop, Clear empties it, and a closed loop refuses further points.
+        let mut s = CadWorkbenchState::default();
+        assert!(s.sketch_points().is_empty());
+        assert!(!s.sketch_is_closed());
+
+        s.sketch_add_point(0.0, 0.0);
+        s.sketch_add_point(1.0, 0.0);
+        s.sketch_add_point(1.0, 1.0);
+        assert_eq!(s.sketch_points().len(), 3);
+
+        // Closing the loop (the canvas does this on a click near the first
+        // vertex) then refuses further points.
+        s.sketch_closed = true;
+        s.sketch_add_point(2.0, 2.0);
+        assert_eq!(
+            s.sketch_points().len(),
+            3,
+            "a closed loop rejects new points"
+        );
+
+        // Undo pops the last vertex and re-opens the loop.
+        s.sketch_undo();
+        assert_eq!(s.sketch_points().len(), 2);
+        assert!(!s.sketch_is_closed(), "undo re-opens a closed loop");
+
+        // Clear empties the whole sketch.
+        s.sketch_clear();
+        assert!(s.sketch_points().is_empty());
+        assert!(!s.sketch_is_closed());
+
+        // focus_sketch raises the flag the panel consumes to scroll the canvas.
+        assert!(!s.sketch_focus_request);
+        s.focus_sketch();
+        assert!(s.sketch_focus_request, "focus_sketch flags a scroll-to-canvas");
+    }
+
+    #[test]
+    fn fmt_num_trims_trailing_zeros() {
+        assert_eq!(fmt_num(1.0), "1");
+        assert_eq!(fmt_num(0.25), "0.25");
+        assert_eq!(fmt_num(1.5), "1.5");
+        assert_eq!(fmt_num(-2.0), "-2");
+        assert_eq!(fmt_num(0.0), "0");
     }
 
     #[test]

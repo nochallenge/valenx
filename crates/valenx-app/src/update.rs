@@ -2290,6 +2290,21 @@ impl eframe::App for ValenxApp {
                             ui.close_menu();
                         }
                         ui.separator();
+                        ui.label(egui::RichText::new("Sketch").weak().small());
+                        if ui
+                            .button("Sketch (draw on canvas)")
+                            .on_hover_text(
+                                "Open the interactive 2-D sketch canvas — click to draw a \
+                                 polygon profile with the mouse, then Extrude it into a 3-D \
+                                 solid (the Fusion-style draw → extrude workflow).",
+                            )
+                            .clicked()
+                        {
+                            self.show_cad_workbench = true;
+                            self.cad.focus_sketch();
+                            ui.close_menu();
+                        }
+                        ui.separator();
                         ui.label(egui::RichText::new("Add feature").weak().small());
                         if ui
                             .button("Sketch (extrude profile)")
