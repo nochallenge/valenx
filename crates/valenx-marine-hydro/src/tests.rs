@@ -12,40 +12,63 @@ fn close(a: f64, b: f64, rel: f64) -> bool {
     (a - b).abs() <= rel * b.abs().max(1.0)
 }
 
-/// Regression: a degenerate prismatic coefficient `Cp = 0.25` lands exactly
-/// on the `(4·Cp − 1)` pole of the Holtrop length-of-run term. Before the
-/// guard this returned ±inf/NaN and poisoned the whole resistance readout
-/// (reachable from the UI: the Marine workbench takes the block coefficient
-/// directly and `Cp = Cb / C_m`, so `Cb ≈ 0.245` hits the pole). The guard
-/// keeps it finite.
+/// Regression: Holtrop-Mennen has poles outside its prismatic-coefficient
+/// validity band — the LCB term at Cp=0.25 and the (0.95-Cp) term at Cp=0.95,
+/// both reachable from the Marine workbench block-coefficient field
+/// (Cp = Cb / C_m, C_m=0.98). `resistance_at` must reject an out-of-band hull
+/// with an `OutOfRange` error so the readout reports "unavailable" instead of
+/// a NaN form factor / R_t / P_e.
 #[test]
-fn length_of_run_stays_finite_at_the_cp_pole() {
-    // Cp = Cb / Cm = 0.25 with Cm = 0.980  ->  Cb = 0.245.
-    // Cb = nabla / (L B T); pick L=205, B=32, T=10.
-    let hull = Hull::new(
-        205.0,
-        32.0,
-        10.0,
-        0.245 * 205.0 * 32.0 * 10.0,
-        0.980,
-        0.750,
-        -2.02,
-        0.0,
-        0.0,
-        0.0,
-        10.0,
-        None,
-    )
-    .expect("a degenerate-but-positive hull should still construct");
+fn resistance_rejects_out_of_band_prismatic_coefficient() {
+    let water = WaterProperties::seawater();
+    // Cb -> nabla, holding L=205, B=32, T=10 (so Cp = Cb / 0.980).
+    let make = |cb: f64| {
+        Hull::new(
+            205.0,
+            32.0,
+            10.0,
+            cb * 205.0 * 32.0 * 10.0,
+            0.980,
+            0.750,
+            -2.02,
+            0.0,
+            0.0,
+            0.0,
+            10.0,
+            None,
+        )
+        .expect("a positive hull should construct")
+    };
+
+    // Low pole: Cb=0.245 -> Cp=0.25 (the LCB term).
+    let low = make(0.245);
+    assert!((low.prismatic_coefficient() - 0.25).abs() < 1e-9);
     assert!(
-        (hull.prismatic_coefficient() - 0.25).abs() < 1e-9,
-        "Cp = {} (want 0.25, the pole)",
-        hull.prismatic_coefficient()
+        matches!(
+            low.resistance_at(12.0, &water),
+            Err(HydroError::OutOfRange { .. })
+        ),
+        "Cp=0.25 must be rejected, not return a NaN readout"
     );
-    let lr = hull.length_of_run();
+
+    // High pole: Cb=0.95 -> Cp=0.969 (the (0.95-Cp) term) — an ordinary
+    // full-hull entry, so this band matters in practice.
+    let high = make(0.95);
+    assert!(high.prismatic_coefficient() > 0.95);
     assert!(
-        lr.is_finite(),
-        "length_of_run must stay finite at the Cp=0.25 pole, got {lr}"
+        matches!(
+            high.resistance_at(12.0, &water),
+            Err(HydroError::OutOfRange { .. })
+        ),
+        "Cp>0.95 must be rejected, not return a NaN readout"
+    );
+
+    // Sanity: the in-band Holtrop example (Cp=0.5833) is still accepted
+    // (no over-rejection of valid hulls).
+    let ok = make(0.5833 * 0.980); // Cb -> Cp = 0.5833 (in band)
+    assert!(
+        ok.resistance_at(12.0, &water).is_ok(),
+        "an in-band hull must still compute a resistance"
     );
 }
 
