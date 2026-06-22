@@ -613,6 +613,7 @@ mod tests {
         "conveyor",
         "bolt",
         "rivet",
+        "fasteners",
         "beam",
         "truss",
         "plate",
@@ -733,6 +734,7 @@ mod tests {
         "conveyor",
         "bolt",
         "rivet",
+        "fasteners",
         "beam",
         "truss",
         "plate",
@@ -844,7 +846,6 @@ mod tests {
     /// out of the mesh arrays so the Tri3-mesh assertions never run against them.
     const CARD_KINDS: &[&str] = &[
         "fields",
-        "fasteners",
         "frames",
         "collision",
         "geomatics",
@@ -1136,7 +1137,7 @@ mod tests {
         // forgets to populate its readout can't slip into the catalogue.
         for k in [
             "animate", "astro", "car", "cfd", "collision", "draft2d",
-            "fasteners", "fields", "frames", "gasdynamics", "geomatics", "hvac",
+            "fields", "frames", "gasdynamics", "geomatics", "hvac",
             "interior", "neuro", "piping", "render", "variant_effect",
         ] {
             let product =

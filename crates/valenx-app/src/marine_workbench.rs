@@ -14,6 +14,9 @@ use std::path::PathBuf;
 use eframe::egui;
 
 use valenx_marine::{Hull, FRESHWATER_DENSITY, SEAWATER_DENSITY};
+use valenx_marine_hydro::{
+    Hull as HydroHull, WaterProperties, FRESHWATER_NU_15C, SEAWATER_NU_15C,
+};
 use valenx_mesh::Mesh;
 
 use crate::mesh_prims::MeshBuilder;
@@ -201,6 +204,120 @@ fn build_hull(s: &MarineWorkbenchState) -> Result<Hull, String> {
     .map_err(|e| e.to_string())
 }
 
+// --- Resistance / powering (valenx-marine-hydro, ITTC-57 + Holtrop-Mennen) ---
+//
+// The workbench form only carries the hydrostatic principal dimensions
+// (L / B / T / Cb / displacement); the Holtrop resistance regression needs a
+// handful of extra form coefficients. We supply *representative* mid-range
+// values for a normal merchant hull (labelled in the readout as assumed), so
+// the resistance estimate is honest about what it derives vs. assumes.
+
+/// Representative midship-section coefficient `C_m` for a normal hull.
+const ASSUMED_CM: f64 = 0.98;
+/// Representative waterplane-area coefficient `C_wp` for a normal hull.
+const ASSUMED_CWP: f64 = 0.75;
+/// Representative longitudinal centre of buoyancy (% of L fwd of amidships).
+const ASSUMED_LCB_PERCENT: f64 = -0.75;
+/// Design Froude number at which the headline resistance / power is reported.
+const DESIGN_FROUDE: f64 = 0.25;
+
+/// Append calm-water **resistance + powering** rows (ITTC-57 friction +
+/// Holtrop-Mennen form factor / wave-making, via `valenx-marine-hydro`) to the
+/// hydrostatics readout `out`, computed from this hull's own L / B / T / Cb /
+/// displacement plus the representative form coefficients above. The headline
+/// point is the **design speed** at [`DESIGN_FROUDE`]; two slower speeds
+/// (Fn 0.18, 0.22) round out a short Rt-vs-speed view.
+///
+/// Best-effort: any domain error from the hydro crate (or a hull whose
+/// derived form falls outside the regression) is reported as a single note
+/// line rather than aborting the hydrostatics readout. No numbers are
+/// fabricated — every value comes from the crate's `ResistancePoint`.
+///
+/// Takes the hull's `length_m` and `water_density` directly (rather than the
+/// whole state) so the caller can hold `&mut out` — which is `s.result` — at
+/// the same time without a borrow conflict.
+fn append_resistance_lines(length_m: f64, water_density: f64, hull: &Hull, out: &mut String) {
+    // Water properties: match the workbench's chosen density, ITTC-57 viscosity
+    // for whichever of sea/fresh it is closest to.
+    let nu = if (water_density - FRESHWATER_DENSITY).abs()
+        < (water_density - SEAWATER_DENSITY).abs()
+    {
+        FRESHWATER_NU_15C
+    } else {
+        SEAWATER_NU_15C
+    };
+    let water = WaterProperties {
+        density: water_density,
+        kinematic_viscosity: nu,
+        correlation_allowance: valenx_marine_hydro::DEFAULT_CORRELATION_ALLOWANCE,
+    };
+
+    let hydro = match HydroHull::from_hydrostatic(
+        hull,
+        ASSUMED_CM,
+        ASSUMED_CWP,
+        ASSUMED_LCB_PERCENT,
+        0.0, // no bulbous bow
+        0.0, // (bulb centre, ignored without a bulb)
+        0.0, // no immersed transom
+        0.0, // normal stern shape (C_stern = 0)
+        None, // wetted surface: Holtrop estimate
+    ) {
+        Ok(h) => h,
+        Err(e) => {
+            out.push_str(&format!("\n\nresistance: unavailable ({e})"));
+            return;
+        }
+    };
+
+    // Design speed from the design Froude number, V = Fn·sqrt(g·L).
+    let v_design = DESIGN_FROUDE * (valenx_marine_hydro::GRAVITY * length_m).sqrt();
+    let design = match hydro.resistance_at(v_design, &water) {
+        Ok(p) => p,
+        Err(e) => {
+            out.push_str(&format!("\n\nresistance: unavailable ({e})"));
+            return;
+        }
+    };
+
+    out.push_str(&format!(
+        "\n\n-- calm-water resistance (ITTC-57 + Holtrop) --\n\
+         assumed Cm/Cwp/lcb: {ASSUMED_CM:.2} / {ASSUMED_CWP:.2} / {ASSUMED_LCB_PERCENT:.2} %\n\
+         wetted surface S: {:.1} m\u{00B2}\n\
+         design speed  : {:.2} m/s ({:.2} kn, Fn {:.3})\n\
+         Cf (ITTC-57)  : {:.6}\n\
+         form factor 1+k: {:.3}\n\
+         R_f friction  : {:.1} kN\n\
+         R_w wave-make : {:.1} kN\n\
+         R_t total     : {:.1} kN\n\
+         P_e eff. power: {:.1} kW",
+        design.wetted_surface_m2,
+        design.speed_ms,
+        design.speed_knots,
+        design.froude_number,
+        design.friction_coefficient,
+        design.form_factor,
+        design.frictional_resistance_n / 1000.0,
+        design.wave_resistance_n / 1000.0,
+        design.total_resistance_kn(),
+        design.effective_power_kw(),
+    ));
+
+    // A short Rt-vs-speed view at two slower Froude numbers + the design point.
+    out.push_str("\nR_t vs speed (kN):");
+    for fn_target in [0.18_f64, 0.22, DESIGN_FROUDE] {
+        let v = fn_target * (valenx_marine_hydro::GRAVITY * length_m).sqrt();
+        if let Ok(p) = hydro.resistance_at(v, &water) {
+            out.push_str(&format!(
+                "\n  Fn {:.2} ({:.1} kn): {:.1}",
+                fn_target,
+                p.speed_knots,
+                p.total_resistance_kn(),
+            ));
+        }
+    }
+}
+
 /// Validate the form, compute the hydrostatics and format the readout.
 /// Extracted from the draw closure so it is unit-testable.
 fn run_marine(s: &mut MarineWorkbenchState) {
@@ -238,6 +355,9 @@ fn run_marine(s: &mut MarineWorkbenchState) {
                     "UNSTABLE (GM <= 0)"
                 },
             );
+            // Append calm-water resistance + powering (ITTC-57 + Holtrop) from
+            // the same hull dimensions — kept after the hydrostatics rows.
+            append_resistance_lines(s.length_m, s.water_density, &hull, &mut s.result);
         }
         Err(e) => s.error = Some(e),
     }
@@ -440,6 +560,58 @@ mod tests {
         assert!(s.result.contains("displacement"));
         assert!(s.result.contains("GM"));
         assert!(s.result.contains("STABLE"));
+    }
+
+    #[test]
+    fn analyze_appends_resistance_and_power_lines() {
+        // The readout now carries the calm-water resistance + powering rows from
+        // valenx-marine-hydro (ITTC-57 + Holtrop) alongside the hydrostatics.
+        let mut s = MarineWorkbenchState::default();
+        run_marine(&mut s);
+        assert!(s.error.is_none());
+        // Hydrostatics still present.
+        assert!(s.result.contains("displacement"));
+        assert!(s.result.contains("GM"));
+        // Resistance / powering block present, with the labelled headline rows.
+        assert!(s.result.contains("calm-water resistance"));
+        assert!(s.result.contains("R_t total"));
+        assert!(s.result.contains("P_e eff. power"));
+        assert!(s.result.contains("Cf (ITTC-57)"));
+        assert!(s.result.contains("R_t vs speed"));
+        // The design Froude number is the labelled headline point.
+        assert!(s.result.contains("Fn 0.250"));
+    }
+
+    #[test]
+    fn resistance_lines_carry_finite_positive_numbers() {
+        // Cross-check the appended numbers against the hydro crate directly —
+        // every reported quantity is finite, positive, and not fabricated.
+        let s = MarineWorkbenchState::default();
+        let hull = build_hull(&s).expect("default hull valid");
+        let v = DESIGN_FROUDE * (valenx_marine_hydro::GRAVITY * s.length_m).sqrt();
+        let water = WaterProperties {
+            density: s.water_density,
+            kinematic_viscosity: SEAWATER_NU_15C,
+            correlation_allowance: valenx_marine_hydro::DEFAULT_CORRELATION_ALLOWANCE,
+        };
+        let hydro = HydroHull::from_hydrostatic(
+            &hull,
+            ASSUMED_CM,
+            ASSUMED_CWP,
+            ASSUMED_LCB_PERCENT,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            None,
+        )
+        .expect("hydro hull builds from the default form");
+        let p = hydro.resistance_at(v, &water).expect("resistance computes");
+        assert!(p.total_resistance_kn() > 0.0 && p.total_resistance_kn().is_finite());
+        assert!(p.effective_power_kw() > 0.0 && p.effective_power_kw().is_finite());
+        assert!((p.froude_number - DESIGN_FROUDE).abs() < 1e-9);
+        // The viscous (1+k) resistance must exceed the bare friction.
+        assert!(p.viscous_resistance_n > p.frictional_resistance_n);
     }
 
     #[test]

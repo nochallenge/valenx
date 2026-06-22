@@ -11,10 +11,16 @@
 use eframe::egui;
 use nalgebra::Vector3;
 
-use valenx_fasteners::bolt::iso4017_hex_table;
+use valenx_fasteners::bolt::{iso4017_hex_table, BoltSpec};
 use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
+use crate::mesh_prims::MeshBuilder;
 use crate::ValenxApp;
+
+/// Zinc-plated steel grey for the bolt head + shank.
+const STEEL: [f32; 3] = [0.62, 0.64, 0.68];
+/// Angular segments around the cylindrical shank.
+const SHANK_SEGMENTS: usize = 32;
 
 /// Persistent form + result state for the Fasteners Workbench.
 pub struct FastenersWorkbenchState {
@@ -124,6 +130,65 @@ fn hexagon(across_flats: f64) -> Vec<Vector3<f64>> {
     pts
 }
 
+/// The six **counter-clockwise** `[x, y]` corners of a regular hexagon of the
+/// given width **across flats**, centred at the origin — the closed profile
+/// [`MeshBuilder::extrude`] sweeps into the hex-head prism. Same circumradius
+/// `R = af / √3` as [`hexagon`], but returned open (6 distinct vertices, no
+/// closing duplicate) and as 2-D pairs, which is what `extrude` wants.
+fn hex_profile(across_flats: f64) -> Vec<[f64; 2]> {
+    let r = across_flats / 3.0_f64.sqrt();
+    (0..6)
+        .map(|i| {
+            let th = (i as f64) * std::f64::consts::FRAC_PI_3; // 0°, 60°, … 300°
+            [r * th.cos(), r * th.sin()]
+        })
+        .collect()
+}
+
+/// Build the selected bolt as a real 3-D solid **with per-vertex colours**: an
+/// **ISO 4017 hex head** (a regular hexagon prism of width-across-flats `s` and
+/// head height `k`, extruded along +z) sitting atop a **cylindrical shank**
+/// (diameter = nominal `d`, length = the spec's `length_mm`), unioned into one
+/// [`valenx_mesh::Mesh`] via [`MeshBuilder`]. Steel grey throughout.
+///
+/// The shank runs from `z = 0` (free end) up to `z = L` (under-head bearing
+/// face); the head sits on top from `z = L` to `z = L + k`. Geometry is in
+/// millimetres, matching the dimension readout.
+///
+/// Threads are **not** modelled — the shank is a clean smooth cylinder (the
+/// thread is reported numerically as pitch diameter / tensile stress area in
+/// the readout, the same simplification `valenx_fasteners::bolt::to_solid`
+/// makes). Returns `(mesh, colors)` with `colors.len() == 3 × triangle_count`,
+/// ready for [`crate::WorkspaceProduct::vertex_colors`], or `None` when the
+/// spec's nominal diameter / length is non-positive.
+fn bolt_mesh_colored(spec: &BoltSpec) -> Option<(valenx_mesh::Mesh, Vec<[f32; 3]>)> {
+    let d = spec.thread.nominal_diameter;
+    let length = spec.length_mm;
+    let s = spec.width_across_flats_mm();
+    let k = spec.head_height_mm();
+    if !(d.is_finite() && d > 0.0 && length.is_finite() && length > 0.0 && s > 0.0 && k > 0.0) {
+        return None;
+    }
+
+    let mut b = MeshBuilder::new();
+    // Cylindrical shank, axis along +z, spanning z ∈ [0, L] (centre at L/2).
+    b.cylinder(
+        [0.0, 0.0, length * 0.5],
+        [0.0, 0.0, 1.0],
+        d * 0.5,
+        length,
+        SHANK_SEGMENTS,
+        STEEL,
+    );
+    // Hex head: a regular-hexagon prism of across-flats `s`, extruded from the
+    // bearing face (z = L) up by the head height `k`.
+    b.extrude(&hex_profile(s), length, length + k, STEEL);
+
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-fasteners-bolt".to_string();
+    Some((mesh, colors))
+}
+
 /// Build the hex-head outline for the live preview from the selected bolt's
 /// width across flats, best-effort `None` when the nominal size is not in the
 /// ISO 4017 table (or has a non-positive across-flats).
@@ -217,21 +282,31 @@ fn run_fasteners(s: &mut FastenersWorkbenchState) {
     );
 }
 
-/// Build the **Fasteners** result card for the Workbench+Agent bridge — a
-/// DATA-ONLY [`crate::WorkspaceProduct`] (`mesh: None`) whose `lines` are the
-/// genuine ISO 4017 hex-bolt dimensions ([`run_fasteners`]) for the canonical
-/// default designation (`M6`). Registered as the `"fasteners"` producer in
-/// [`crate::products_registry::lookup`]; the tile renders it as a text card, not
-/// a 3-D view.
+/// Build the **Fasteners** product for the Workbench+Agent bridge — a real
+/// 3-D [`crate::WorkspaceProduct`]: the canonical default bolt (`M6`) built as
+/// an ISO 4017 hex-head + cylindrical-shank solid ([`bolt_mesh_colored`]),
+/// paired with the genuine ISO dimension readout rows ([`run_fasteners`]) and
+/// framed at the shared 3/4 hero camera. Registered as the `"fasteners"`
+/// producer in [`crate::products_registry::lookup`]; the tile renders the
+/// orbitable bolt with its dimensions alongside. Threads are not modelled (the
+/// shank is a smooth cylinder); the thread is reported numerically in `lines`.
 pub(crate) fn fasteners_product() -> crate::WorkspaceProduct {
     let mut s = FastenersWorkbenchState::default();
     run_fasteners(&mut s);
+    let spec = iso4017_hex_table()
+        .into_iter()
+        .find(|b| b.nominal == s.nominal)
+        .expect("default fasteners designation (M6) is in the ISO 4017 table");
+    let (mesh, colors) =
+        bolt_mesh_colored(&spec).expect("canonical M6 bolt ⇒ a non-empty 3-D solid");
+    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<fasteners>/valenx-bolt");
+    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
-        title: "Fasteners".into(),
+        title: "Fasteners (ISO 4017 hex bolt)".into(),
         lines: crate::products_registry::lines_from_readout(&s.result),
-        mesh: None,
-        vertex_colors: None,
-        camera: Default::default(),
+        mesh: Some(loaded),
+        vertex_colors: Some(colors),
+        camera,
         kind2d: None,
         last_export: None,
         image: None,
@@ -328,6 +403,77 @@ mod tests {
             ..Default::default()
         };
         assert!(preview_hex(&s).is_none());
+    }
+
+    #[test]
+    fn hex_profile_has_six_distinct_ccw_corners() {
+        let p = hex_profile(12.0);
+        assert_eq!(p.len(), 6, "open hex profile: 6 distinct corners, no dup");
+        // Across-flats = 2 × apothem (centre → edge-midpoint distance).
+        let mid = [(p[0][0] + p[1][0]) * 0.5, (p[0][1] + p[1][1]) * 0.5];
+        let af = 2.0 * (mid[0] * mid[0] + mid[1] * mid[1]).sqrt();
+        assert!((af - 12.0).abs() < 1e-9, "profile across-flats matches");
+    }
+
+    #[test]
+    fn bolt_mesh_is_a_nonempty_steel_solid_with_aligned_colours() {
+        // The default M6 bolt builds a real 3-D solid (head prism + shank
+        // cylinder) with a per-vertex colour buffer aligned to the renderer's
+        // coloured path (3 entries / triangle), all steel grey.
+        let spec = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M6")
+            .expect("M6 is in the ISO 4017 table");
+        let (mesh, colors) = bolt_mesh_colored(&spec).expect("M6 ⇒ a solid");
+        assert!(!mesh.nodes.is_empty(), "bolt mesh has vertices");
+        assert!(mesh.total_elements() > 0, "bolt mesh has triangles");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count (coloured path)"
+        );
+        assert!(colors.iter().all(|&c| c == STEEL), "all steel grey");
+        // The solid spans the shank length + head height in z, and the hex head
+        // is wider (across-corners) than the shank radius.
+        let max_z = mesh.nodes.iter().map(|p| p.z).fold(f64::MIN, f64::max);
+        let min_z = mesh.nodes.iter().map(|p| p.z).fold(f64::MAX, f64::min);
+        assert!(min_z >= -1e-9, "shank free end at z=0");
+        assert!(
+            (max_z - (spec.length_mm + spec.head_height_mm())).abs() < 1e-6,
+            "top of head at z = L + k"
+        );
+    }
+
+    #[test]
+    fn bolt_mesh_none_for_degenerate_spec() {
+        let mut spec = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M6")
+            .expect("M6");
+        spec.length_mm = 0.0;
+        assert!(bolt_mesh_colored(&spec).is_none(), "zero length ⇒ None");
+    }
+
+    #[test]
+    fn fasteners_product_is_a_real_3d_bolt() {
+        // The agent-bridge product now carries a real mesh + aligned colours and
+        // keeps its ISO dimension readout rows.
+        let product = fasteners_product();
+        let loaded = product.mesh.as_ref().expect("fasteners product has a mesh");
+        assert!(loaded.mesh.total_elements() > 0, "non-empty bolt mesh");
+        let colors = product
+            .vertex_colors
+            .as_ref()
+            .expect("fasteners product carries vertex_colors");
+        assert_eq!(
+            colors.len(),
+            loaded.mesh.total_elements() * 3,
+            "product colours aligned to the coloured path"
+        );
+        assert!(
+            product.lines.iter().any(|l| l.contains("width across flats")),
+            "keeps the ISO dimension readout"
+        );
     }
 }
 
