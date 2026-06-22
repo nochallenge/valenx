@@ -6932,6 +6932,7 @@ dependencies = [
  "valenx-chaindrive",
  "valenx-cheminf",
  "valenx-clutch",
+ "valenx-codon-optimize",
  "valenx-coil",
  "valenx-collision",
  "valenx-columnsteel",
@@ -6993,6 +6994,7 @@ dependencies = [
  "valenx-librecad-2d",
  "valenx-macro",
  "valenx-marine",
+ "valenx-marine-hydro",
  "valenx-md",
  "valenx-mesh",
  "valenx-mesh-to-brep",
@@ -8301,6 +8303,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-marine-hydro"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "valenx-marine",
+]
+
+[[package]]
 name = "valenx-mbd"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -8947,6 +8959,16 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "valenx-mesh",
+]
+
+[[package]]
+name = "valenx-relativity"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
