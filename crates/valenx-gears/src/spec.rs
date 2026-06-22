@@ -87,6 +87,29 @@ impl GearSpec {
     pub fn base_pitch_mm(&self) -> f64 {
         circular_pitch_mm(self.module_mm) * self.pressure_angle_deg.to_radians().cos()
     }
+
+    /// Lewis tooth-root **bending stress** `σ` (MPa) for this gear,
+    /// carrying a tangential transmitted load `w_t_n` (newtons) on a tooth
+    /// whose Lewis form factor is `lewis_form_factor_y`.
+    ///
+    /// Convenience wrapper over [`lewis_bending_stress_mpa`] that uses this
+    /// gear's own module and face width:
+    ///
+    /// ```text
+    /// σ = W_t / (F · m · Y)
+    /// ```
+    ///
+    /// See [`lewis_bending_stress_mpa`] for the full definition, units and
+    /// the Shigley reference. Returns `0.0` for non-positive / non-finite
+    /// inputs.
+    pub fn lewis_bending_stress_mpa(&self, w_t_n: f64, lewis_form_factor_y: f64) -> f64 {
+        lewis_bending_stress_mpa(
+            w_t_n,
+            self.face_width_mm,
+            self.module_mm,
+            lewis_form_factor_y,
+        )
+    }
 }
 
 impl Default for GearSpec {
@@ -103,6 +126,46 @@ pub fn circular_pitch_mm(module_mm: f64) -> f64 {
         return 0.0;
     }
     module_mm * std::f64::consts::PI
+}
+
+/// **Lewis bending stress** `σ` (MPa) at the root of a gear tooth,
+/// modelled as a cantilever beam of uniform strength loaded at its tip
+/// by the tangential transmitted force.
+///
+/// ```text
+/// σ = W_t / (F · m · Y)
+/// ```
+///
+/// with, in a consistent SI-millimetre system,
+///
+/// * `w_t_n` — tangential transmitted load `W_t` (N),
+/// * `face_width_mm` — face width `F` (mm),
+/// * `module_mm` — module `m` (mm),
+/// * `lewis_form_factor_y` — the dimensionless Lewis form factor `Y`,
+///   read from a table by tooth count and pressure angle (e.g. Shigley's
+///   *Mechanical Engineering Design*, Table 14-2; for 20 teeth at a 20°
+///   full-depth tooth, `Y ≈ 0.322`).
+///
+/// Because `N·mm⁻² = MPa`, the result is in megapascals directly. This is
+/// the original Lewis equation (Shigley, *Mechanical Engineering Design*,
+/// "The Lewis Bending Equation") — the bare geometric/strength estimate
+/// **without** the AGMA velocity, size, load-distribution or geometry
+/// (`J`) refinement factors, so it is a first-order screening value, not a
+/// rated allowable. Returns `0.0` for any non-positive or non-finite
+/// argument (the crate's invalid-input sentinel).
+pub fn lewis_bending_stress_mpa(
+    w_t_n: f64,
+    face_width_mm: f64,
+    module_mm: f64,
+    lewis_form_factor_y: f64,
+) -> f64 {
+    if ![w_t_n, face_width_mm, module_mm, lewis_form_factor_y]
+        .iter()
+        .all(|x| x.is_finite() && *x > 0.0)
+    {
+        return 0.0;
+    }
+    w_t_n / (face_width_mm * module_mm * lewis_form_factor_y)
 }
 
 /// Gear ratio `N_driven / N_driver` — the dimensionless speed-reduction (equivalently
@@ -193,6 +256,52 @@ mod tests {
     }
 
     #[test]
+    fn lewis_bending_stress_matches_worked_example() {
+        // Worked example (Lewis equation σ = W_t/(F·m·Y), SI form):
+        //   module m = 2 mm, face width F = 20 mm, tangential load
+        //   W_t = 500 N, Lewis form factor Y = 0.35 (20-tooth gear).
+        //   σ = 500 / (20 · 2 · 0.35) = 35.714 MPa.
+        // Reference: Lewis bending equation, Shigley's *Mechanical
+        // Engineering Design*; this exact worked example (35.7 MPa) is
+        // reproduced by the FIRGELLI Lewis gear-tooth-strength calculator
+        // <https://www.firgelliauto.com/blogs/engineering-calculators/gear-tooth-strength-calculator-lewis-formula>.
+        let sigma = lewis_bending_stress_mpa(500.0, 20.0, 2.0, 0.35);
+        assert!(
+            (sigma - 35.714_285_7).abs() < 1e-4,
+            "Lewis stress {sigma} MPa, expected 35.714 MPa"
+        );
+
+        // Same load/geometry but with the Shigley Table 14-2 Lewis form
+        // factor for a 20-tooth, 20° full-depth tooth, Y = 0.322:
+        //   σ = 500 / (20 · 2 · 0.322) = 38.820 MPa.
+        // (Shigley's *Mechanical Engineering Design*, Table 14-2.)
+        let sigma_shigley = lewis_bending_stress_mpa(500.0, 20.0, 2.0, 0.322);
+        assert!(
+            (sigma_shigley - 38.819_875).abs() < 1e-4,
+            "Lewis stress {sigma_shigley} MPa, expected 38.820 MPa"
+        );
+
+        // The GearSpec convenience method uses the gear's own module and
+        // face width and must agree with the free function.
+        let mut g = GearSpec::standard_spur(20);
+        g.module_mm = 2.0;
+        g.face_width_mm = 20.0;
+        assert!((g.lewis_bending_stress_mpa(500.0, 0.322) - sigma_shigley).abs() < 1e-12);
+
+        // Physical scalings: stress is inversely proportional to face
+        // width, module and Y, and linear in load.
+        let base = lewis_bending_stress_mpa(500.0, 20.0, 2.0, 0.322);
+        assert!((lewis_bending_stress_mpa(1000.0, 20.0, 2.0, 0.322) - 2.0 * base).abs() < 1e-9);
+        assert!((lewis_bending_stress_mpa(500.0, 40.0, 2.0, 0.322) - 0.5 * base).abs() < 1e-9);
+
+        // Guards: any non-positive / non-finite argument → 0.0 sentinel.
+        assert_eq!(lewis_bending_stress_mpa(0.0, 20.0, 2.0, 0.322), 0.0);
+        assert_eq!(lewis_bending_stress_mpa(500.0, 0.0, 2.0, 0.322), 0.0);
+        assert_eq!(lewis_bending_stress_mpa(500.0, 20.0, -2.0, 0.322), 0.0);
+        assert_eq!(lewis_bending_stress_mpa(500.0, 20.0, 2.0, f64::NAN), 0.0);
+    }
+
+    #[test]
     fn base_pitch_equals_pi_m_cos_alpha() {
         // Base pitch p_b = π·m·cos(α) — the spacing of involute flanks
         // measured on the base circle. For module m=2 mm, α=20°:
@@ -246,6 +355,29 @@ mod tests {
         let mp = contact_ratio(&g, &g);
         assert!((mp - 1.556_81).abs() < 1e-4, "contact ratio {mp}");
         // A meshing pair must keep at least one tooth pair engaged.
+        assert!(mp > 1.0);
+    }
+
+    #[test]
+    fn contact_ratio_of_dissimilar_pair_20_by_40() {
+        // A real reduction pair: 20-tooth pinion meshing a 40-tooth gear,
+        // module 1, 20° full-depth, standard center distance. Hand
+        // computation (radii in mm):
+        //   pinion: r=10, rb=10·cos20°=9.39693, ra=11
+        //   gear:   r=20, rb=20·cos20°=18.79385, ra=21
+        //   C=30, p_b=π·cos20°=2.95213
+        //   active line = √(11²−9.39693²) + √(21²−18.79385²) − 30·sin20°
+        //               = 5.71819 + 9.36950 − 10.26060 = 4.82728
+        //   m_c = 4.82728 / 2.95213 = 1.63519
+        let pinion = GearSpec::standard_spur(20);
+        let gear = GearSpec::standard_spur(40);
+        let mp = contact_ratio(&pinion, &gear);
+        assert!((mp - 1.635_19).abs() < 1e-4, "contact ratio {mp}");
+        // Order-independent for a meshing pair.
+        assert!((contact_ratio(&gear, &pinion) - mp).abs() < 1e-12);
+        // Sits between the identical-20T (≈1.557) and identical-40T values,
+        // and stays above 1 for continuous transmission.
+        assert!(mp > contact_ratio(&pinion, &pinion));
         assert!(mp > 1.0);
     }
 

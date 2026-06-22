@@ -19,7 +19,11 @@
 //! - the maximum lift-to-drag ratio and the lift coefficient that achieves
 //!   it ([`Aircraft::max_lift_to_drag`], [`Aircraft::cl_at_max_ld`]); and
 //! - the best (still-air) glide ratio and glide range from an altitude
-//!   ([`Aircraft::best_glide_ratio`], [`Aircraft::glide_range`]).
+//!   ([`Aircraft::best_glide_ratio`], [`Aircraft::glide_range`]); and
+//! - the lift-curve slope `dCL/dα` — the thin-airfoil 2D value `2π`
+//!   ([`THIN_AIRFOIL_LIFT_SLOPE_PER_RAD`]) and its finite-wing
+//!   correction `a = a0/(1 + a0/(π·e·AR))`
+//!   ([`finite_wing_lift_slope_per_rad`], [`Aircraft::lift_curve_slope_per_rad`]).
 //!
 //! ## Model
 //!
@@ -65,6 +69,51 @@ use serde::{Deserialize, Serialize};
 pub const GRAVITY: f64 = 9.80665;
 /// Nominal sea-level air density (kg/m^3, ISA 15 C).
 pub const SEA_LEVEL_AIR_DENSITY: f64 = 1.225;
+
+/// Two-dimensional (infinite-span) lift-curve slope `a0 = dCl/dα` of a
+/// thin airfoil, **per radian**, from thin-airfoil theory: exactly `2π`
+/// (≈ 6.283 /rad, ≈ 0.10966 /deg). This is the inviscid small-angle
+/// result for a thin section, independent of camber (camber only shifts
+/// the zero-lift angle, not the slope).
+///
+/// Reference: Anderson, *Fundamentals of Aerodynamics*, thin-airfoil
+/// theory (`cl = 2π(α − α_{L=0})`).
+pub const THIN_AIRFOIL_LIFT_SLOPE_PER_RAD: f64 = 2.0 * PI;
+
+/// The thin-airfoil 2D lift-curve slope expressed **per degree**:
+/// `2π / 180·π = π²/90 ≈ 0.10966 /deg`.
+///
+/// Reference: Anderson, *Fundamentals of Aerodynamics*.
+pub fn thin_airfoil_lift_slope_per_deg() -> f64 {
+    THIN_AIRFOIL_LIFT_SLOPE_PER_RAD.to_radians()
+}
+
+/// Finite-wing lift-curve slope `a = dCL/dα` (per radian) from Prandtl
+/// lifting-line theory:
+///
+/// ```text
+/// a = a0 / (1 + a0 / (π · e · AR))
+/// ```
+///
+/// where `a0` is the 2D section lift slope (per radian, e.g.
+/// [`THIN_AIRFOIL_LIFT_SLOPE_PER_RAD`]), `aspect_ratio` is the wing
+/// `AR = b²/S`, and `span_efficiency` is the span-efficiency factor `e`
+/// (≈ 1 for an elliptic loading; here the Oswald-type factor in `(0, 1]`).
+/// The finite wing always has a **shallower** slope than its 2D section
+/// (`a < a0`), approaching `a0` only as `AR → ∞`.
+///
+/// Reference: Anderson, *Fundamentals of Aerodynamics* (Prandtl
+/// lifting-line theory). Returns `0.0` for any non-positive / non-finite
+/// argument.
+pub fn finite_wing_lift_slope_per_rad(a0: f64, aspect_ratio: f64, span_efficiency: f64) -> f64 {
+    if ![a0, aspect_ratio, span_efficiency]
+        .iter()
+        .all(|x| x.is_finite() && *x > 0.0)
+    {
+        return 0.0;
+    }
+    a0 / (1.0 + a0 / (PI * span_efficiency * aspect_ratio))
+}
 
 /// An out-of-domain aircraft input.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -166,6 +215,27 @@ impl Aircraft {
     /// Induced-drag factor `k = 1/(pi*AR*e)`.
     pub fn induced_drag_factor(&self) -> f64 {
         1.0 / (PI * self.aspect_ratio * self.oswald_efficiency)
+    }
+
+    /// This wing's finite-span lift-curve slope `dCL/dα` (per radian),
+    /// from Prandtl lifting-line theory applied to a thin-airfoil 2D
+    /// section (`a0 = 2π`):
+    ///
+    /// ```text
+    /// a = 2π / (1 + 2π / (π · e · AR))
+    /// ```
+    ///
+    /// using this aircraft's aspect ratio and span efficiency. Always
+    /// less than the 2D `2π`, tending to it as `AR → ∞`. See
+    /// [`finite_wing_lift_slope_per_rad`].
+    ///
+    /// Reference: Anderson, *Fundamentals of Aerodynamics*.
+    pub fn lift_curve_slope_per_rad(&self) -> f64 {
+        finite_wing_lift_slope_per_rad(
+            THIN_AIRFOIL_LIFT_SLOPE_PER_RAD,
+            self.aspect_ratio,
+            self.oswald_efficiency,
+        )
     }
 
     /// Lift `L = 0.5*rho*V^2*S*CL` (N) at airspeed `v` (m/s) and lift
@@ -311,6 +381,66 @@ mod tests {
         assert!(Aircraft::new(16.0, 1100.0, 1.6, 7.5, 0.0, 0.8, SEA_LEVEL_AIR_DENSITY).is_err());
         assert!(Aircraft::new(16.0, 1100.0, 1.6, 7.5, 0.027, 1.5, SEA_LEVEL_AIR_DENSITY).is_err());
         assert!(Aircraft::new(16.0, 1100.0, 1.6, 7.5, 0.027, 0.0, SEA_LEVEL_AIR_DENSITY).is_err());
+    }
+
+    /// Thin-airfoil theory: the 2D lift-curve slope is exactly `dCl/dα =
+    /// 2π` per radian (≈ 0.10966 per degree). Reference: Anderson,
+    /// *Fundamentals of Aerodynamics*, thin-airfoil theory.
+    #[test]
+    fn thin_airfoil_lift_slope_is_two_pi_per_radian() {
+        // Per radian: exactly 2π (≈ 6.28319 /rad).
+        assert_eq!(THIN_AIRFOIL_LIFT_SLOPE_PER_RAD, 2.0 * PI);
+        // Per degree: 2π·(π/180) = π²/90 ≈ 0.109662.
+        let per_deg = thin_airfoil_lift_slope_per_deg();
+        assert!(
+            (per_deg - 0.109_662).abs() < 1e-5,
+            "got {per_deg} /deg, expected ≈0.10966"
+        );
+
+        // Cross-check by finite difference of cl = 2π·α over a small
+        // angle window (the defining relation of thin-airfoil lift).
+        let cl = |alpha_rad: f64| THIN_AIRFOIL_LIFT_SLOPE_PER_RAD * alpha_rad;
+        let a1 = 1.0_f64.to_radians();
+        let a2 = 3.0_f64.to_radians();
+        let slope_fd = (cl(a2) - cl(a1)) / (a2 - a1);
+        assert!((slope_fd - 2.0 * PI).abs() < 1e-9, "fd slope {slope_fd}");
+    }
+
+    /// Finite-wing (Prandtl lifting-line) lift slope
+    /// `a = a0/(1 + a0/(π·e·AR))` must be below the 2D value and rise
+    /// monotonically toward `2π` as aspect ratio grows. Reference:
+    /// Anderson, *Fundamentals of Aerodynamics* (lifting-line theory).
+    #[test]
+    fn finite_wing_lift_slope_trends_toward_two_pi() {
+        let a0 = THIN_AIRFOIL_LIFT_SLOPE_PER_RAD;
+
+        // GA wing AR=7.5, e=0.8: a = 2π/(1 + 2π/(π·0.8·7.5)) = 4.71239 /rad.
+        let a_ga = finite_wing_lift_slope_per_rad(a0, 7.5, 0.8);
+        assert!((a_ga - 4.712_389).abs() < 1e-4, "GA slope {a_ga} /rad");
+
+        // Strictly shallower than the 2D section.
+        assert!(a_ga < a0);
+
+        // Monotone increasing with aspect ratio, all below 2π.
+        let mut prev = 0.0;
+        for &ar in &[4.0_f64, 8.0, 16.0, 32.0, 1000.0] {
+            let a = finite_wing_lift_slope_per_rad(a0, ar, 1.0);
+            assert!(a > prev, "slope not increasing at AR={ar}: {a} <= {prev}");
+            assert!(a < a0 + 1e-9, "slope {a} exceeded 2π at AR={ar}");
+            prev = a;
+        }
+        // Approaches 2π in the high-AR limit.
+        let a_huge = finite_wing_lift_slope_per_rad(a0, 1.0e6, 1.0);
+        assert!((a_huge - a0).abs() < 1e-3, "high-AR limit {a_huge} vs 2π {a0}");
+
+        // The Aircraft method agrees with the free function for that wing.
+        let a = ga(); // AR=7.5, e=0.8
+        assert!((a.lift_curve_slope_per_rad() - a_ga).abs() < 1e-12);
+
+        // Guards: non-positive / non-finite arguments → 0.0.
+        assert_eq!(finite_wing_lift_slope_per_rad(a0, 0.0, 1.0), 0.0);
+        assert_eq!(finite_wing_lift_slope_per_rad(a0, 8.0, 0.0), 0.0);
+        assert_eq!(finite_wing_lift_slope_per_rad(f64::NAN, 8.0, 1.0), 0.0);
     }
 
     #[test]
