@@ -1,7 +1,7 @@
 //! Parametric feature tree — Fusion-style feature history.
 //!
 //! A [`FeatureTimeline`] is an ordered list of [`Step`]s. Each step takes a
-//! modelling [`Feature`] (box / cylinder / extrude), **places** it at a
+//! modelling [`Feature`] (box / cylinder / extrude / revolve / …), **places** it at a
 //! parametric position, and **combines** it with the running body via an
 //! [`Op`] (start a new body, join, cut, or intersect). Every dimension and
 //! every placement coordinate is a *parameter expression*, resolved against a
@@ -20,8 +20,8 @@
 
 use serde::{Deserialize, Serialize};
 use valenx_cad::{
-    box_solid, cone, cylinder, difference, intersection, prism, sphere, torus, union, CadError,
-    Solid,
+    box_solid, cone, cylinder, difference, intersection, prism, revolve, sphere, torus, union,
+    CadError, Solid,
 };
 
 use crate::parameters::{ParamError, ParameterTable};
@@ -53,6 +53,17 @@ pub enum Feature {
         profile: Vec<(f64, f64)>,
         /// Extrusion-height expression.
         height: String,
+    },
+    /// A solid of revolution (lathe / turn): a fixed half-section profile
+    /// revolved about the Z axis. The profile points are `(r, z)` — radius from
+    /// the axis and axial coordinate — with the endpoints ideally on the axis
+    /// (`r = 0`) so the body caps cleanly. `angle_deg` is the sweep angle in
+    /// degrees (`360` = full lathe body, less = a wedge).
+    Revolve {
+        /// Half-section profile, as `(r, z)` points (radius, axial height).
+        profile: Vec<(f64, f64)>,
+        /// Sweep-angle expression, in **degrees** (`0 < angle ≤ 360`).
+        angle_deg: String,
     },
     /// A sphere of the given radius, centred on the step's placement.
     Sphere {
@@ -237,6 +248,9 @@ impl FeatureTimeline {
                 }
                 Feature::Extrude { profile, height } => {
                     prism(profile, resolve(height)?).map_err(TimelineError::Cad)?
+                }
+                Feature::Revolve { profile, angle_deg } => {
+                    revolve(profile, resolve(angle_deg)?).map_err(TimelineError::Cad)?
                 }
                 Feature::Sphere { radius } => {
                     sphere(resolve(radius)?).map_err(TimelineError::Cad)?
@@ -512,6 +526,27 @@ mod tests {
         assert!(
             m.bodies[0].faces() >= 5,
             "an extruded quad is a box-like solid"
+        );
+    }
+
+    #[test]
+    fn revolve_builds_from_a_half_section() {
+        // A cone half-section revolved a full turn — driven by a named angle
+        // parameter, proving Revolve threads the parameter table like the rest.
+        let mut p = ParameterTable::new();
+        p.set("turn", "360");
+        let mut tl = FeatureTimeline::new();
+        tl.push(Step::at_origin(
+            Op::New,
+            Feature::Revolve {
+                profile: vec![(0.0, 0.0), (1.0, 0.0), (0.0, 2.0)],
+                angle_deg: "turn".into(),
+            },
+        ));
+        let m = tl.rebuild(&p).expect("revolve builds");
+        assert!(
+            m.bodies[0].faces() > 0,
+            "a revolved half-section is a non-empty solid"
         );
     }
 
