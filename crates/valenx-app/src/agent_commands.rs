@@ -1079,6 +1079,36 @@ pub(crate) fn materialize_pending(app: &mut ValenxApp, n: usize) {
         }
     }
 
+    // BASE MATERIAL COLOUR: most catalogue products build a plain `Tri3` mesh
+    // and leave `vertex_colors` `None`, so the tile renderer paints them in the
+    // single neutral brushed-metal grey — every rocket / beam / motor reads the
+    // same. Wired centrally here (the one place every product is built) so the
+    // whole catalogue gains material variety without editing each producer: for
+    // any product that has a `mesh` but authored NO colours of its own, fill a
+    // uniform per-product base tone (steel / concrete / copper / … by category;
+    // see `crate::materials::base_color_for`) over the renderer's coloured path.
+    //
+    // Untouched on purpose:
+    //   • products that already set `vertex_colors` (the rebuilt per-part
+    //     machinery / aero / marine / fasteners, the FEM von-Mises stress map,
+    //     the molecule CPK / aero-Cp overlays) — they keep their richer shading;
+    //   • card / 2-D / image products (`mesh: None`) — nothing to colour.
+    //
+    // The fill length is EXACTLY `3 × total_elements()`: every grey product is a
+    // pure `Tri3` surface mesh, so `mesh_to_triangle_surface` emits one triangle
+    // per element and the coloured path expects three vertices per triangle (see
+    // `crate::wgpu_renderer::triangles_to_vertices_colored`). A length that did
+    // not match would degrade safely to grey via `dock_layout`'s length guard.
+    if let Some(product) = app.workspace_products.get_mut(&n) {
+        if product.vertex_colors.is_none() {
+            if let Some(loaded) = product.mesh.as_ref() {
+                let tris = loaded.mesh.total_elements();
+                let base = crate::materials::base_color_for(&kind_for_badge);
+                product.vertex_colors = Some(vec![base; 3 * tris]);
+            }
+        }
+    }
+
     // CONFIDENCE BADGE: stamp one honest validation line as the final readout
     // entry of every built product. Wired centrally here (not in each producer)
     // so the badge is uniform and conflict-free; it then flows into BOTH the
@@ -1744,6 +1774,89 @@ mod tests {
             posted,
             "materialize posts a `result` note with the product readout; feed = {body:?}"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn materialize_pending_fills_a_base_colour_for_a_previously_grey_product() {
+        // A catalogue product that builds a plain `Tri3` mesh but authors NO
+        // colours of its own (e.g. `rocket`) used to render in the single
+        // neutral grey. `materialize_pending` must now fill a uniform per-
+        // product base tone over the renderer's coloured path — and the fill
+        // length must be EXACTLY 3 × the mesh's triangle count, or the renderer
+        // (dock_layout's length guard) would silently fall back to grey.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "materialize_base_colour");
+
+        app.pending_products.insert(1, "rocket".to_string());
+        crate::agent_commands::materialize_pending(&mut app, 1);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("materialize built the rocket product");
+        let mesh = product.mesh.as_ref().expect("rocket product carries a mesh");
+        let tris = mesh.mesh.total_elements();
+        assert!(tris > 0, "rocket mesh has triangles");
+
+        let colors = product
+            .vertex_colors
+            .as_ref()
+            .expect("a previously-grey product now gets a base colour");
+        assert_eq!(
+            colors.len(),
+            3 * tris,
+            "base-colour fill is exactly 3 × triangle count so the renderer takes \
+             the coloured path"
+        );
+        // The fill is the kind's category base colour, applied uniformly.
+        let expected = crate::materials::base_color_for("rocket");
+        assert!(
+            colors.iter().all(|&c| c == expected),
+            "every vertex carries the rocket (aerospace) base colour {expected:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn materialize_pending_does_not_override_a_per_part_coloured_product() {
+        // The rebuilt per-part-coloured products (e.g. the `gearbox`, which sets
+        // `vertex_colors: Some(..)` with a colour per gear/shaft/housing) must
+        // keep their own richer shading — the central base-colour fill only
+        // applies when a product authored NO colours, so a product that already
+        // has them is left byte-for-byte untouched.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "materialize_no_override");
+
+        // The colours the gearbox producer authors for itself (the source of
+        // truth the fill must NOT clobber).
+        let authored = crate::gearbox_workbench::gearbox_product()
+            .vertex_colors
+            .expect("gearbox authors its own per-part colours");
+
+        app.pending_products.insert(1, "gearbox".to_string());
+        crate::agent_commands::materialize_pending(&mut app, 1);
+
+        let product = app
+            .workspace_products
+            .get(&1)
+            .expect("materialize built the gearbox product");
+        let colors = product
+            .vertex_colors
+            .as_ref()
+            .expect("gearbox keeps its per-part colours");
+        assert_eq!(
+            *colors, authored,
+            "the per-part-coloured gearbox is NOT overridden by the base-colour fill"
+        );
+        // Sanity: it really is more than one flat colour (genuinely per-part),
+        // so this isn't accidentally passing on a degenerate single-tone vec.
+        assert!(
+            colors.iter().any(|&c| c != colors[0]),
+            "gearbox colours are genuinely per-part, not a single base tone"
+        );
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

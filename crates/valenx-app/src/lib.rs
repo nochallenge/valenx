@@ -141,6 +141,7 @@ pub mod led_workbench;
 pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
+pub mod materials;
 pub mod mesh_prims;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
