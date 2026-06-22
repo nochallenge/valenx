@@ -42,6 +42,8 @@
 //! run them — adopting the line count here would skip the agent's whole first
 //! batch. Disk reads are throttled to ~1/sec via [`ValenxApp::last_agent_poll`].
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -74,6 +76,46 @@ const CMD_STEM: &str = "valenx_chat_cmd";
 /// command file cannot spawn unbounded panes. A `new_unit` arriving once
 /// [`crate::ValenxApp::wb_agent_counter`] has reached this is ignored.
 const MAX_UNITS: usize = 200;
+
+/// Pick a **deterministic** header colour for a category group from its name,
+/// used by [`apply_global`] when a [`NewUnit`](AgentCommand::NewUnit) `group`
+/// mints a fresh band.
+///
+/// Same name → same colour (so a category reads identically every time it is
+/// re-created in a session, and two units that mint the *same* group would get
+/// the same colour even if they raced), while distinct names spread across the
+/// hue wheel so categories are visually separable. Implementation: hash the
+/// name with [`DefaultHasher`], take `hue = hash % 360`, and convert from HSV at
+/// a fixed **mid** saturation `0.55` and value `0.85` — bright, pleasant,
+/// mid-saturation tints that are never near-white (s ≠ 0) nor near-black
+/// (v well above 0). The fixed S/V is what keeps every group legible against
+/// the strip regardless of which hue the hash lands on.
+fn color_for(name: &str) -> [u8; 3] {
+    let mut hasher = DefaultHasher::new();
+    name.hash(&mut hasher);
+    let hue = (hasher.finish() % 360) as f32; // 0..360 degrees around the wheel
+    hsv_to_rgb8(hue, 0.55, 0.85)
+}
+
+/// Convert an HSV colour (`hue` in degrees `0..360`, `s`/`v` in `0.0..=1.0`) to
+/// an 8-bit RGB triple. A small dependency-free helper for [`color_for`]; the
+/// standard piece-wise HSV→RGB conversion.
+fn hsv_to_rgb8(hue: f32, s: f32, v: f32) -> [u8; 3] {
+    let h = hue.rem_euclid(360.0) / 60.0; // sector 0..6
+    let c = v * s; // chroma
+    let x = c * (1.0 - (h.rem_euclid(2.0) - 1.0).abs());
+    let m = v - c;
+    let (r1, g1, b1) = match h as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x), // 5 (and the h==6.0 wrap)
+    };
+    let to_u8 = |f: f32| ((f + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+    [to_u8(r1), to_u8(g1), to_u8(b1)]
+}
 
 /// One command an external agent can append to its channel's command file to
 /// drive valenx. **Internally tagged** on `"cmd"`, so each line is a flat
@@ -242,6 +284,18 @@ pub enum AgentCommand {
         /// Optional narration line posted to the new unit's chat feed.
         #[serde(default)]
         note: Option<String>,
+        /// Optional **category group** to file the new unit's tab into — the
+        /// named, coloured, collapsible Chrome-style band in the tab strip (see
+        /// [`crate::project_tabs::TabGroup`]). When set, `apply_global` files
+        /// the just-opened tab into an existing group of that name (so two
+        /// `new_unit`s sharing a `group` land in ONE band), or mints a new band
+        /// named `group` with a deterministic colour (`color_for`) when none
+        /// exists yet. This is what lets an agent organise ~130 product tabs
+        /// into a handful of manageable categories instead of one flat strip.
+        /// Absent → the tab is left ungrouped (the prior behaviour), so older
+        /// `new_unit` JSON without `group` still parses (serde default).
+        #[serde(default)]
+        group: Option<String>,
     },
     /// **Drive an animated product's playback clock** on a unit whose
     /// `workspace:<n>` product carries a [`crate::ProductAnimation`] (e.g. the
@@ -466,7 +520,13 @@ pub fn poll_and_apply_agent_commands(app: &mut ValenxApp) {
 /// poll loop skips unparseable lines). Like [`apply`], every branch is a
 /// no-op-on-bad-input rather than a panic.
 fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
-    let AgentCommand::NewUnit { kind, title, note } = cmd else {
+    let AgentCommand::NewUnit {
+        kind,
+        title,
+        note,
+        group,
+    } = cmd
+    else {
         // Non-`new_unit` commands are per-unit; the global channel has no unit
         // to target, so they are ignored here.
         return;
@@ -556,6 +616,44 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
             // (not only after the next tab switch). `sync_active` clears every
             // panel then turns on just this tab's linked workbench.
             project_tabs::sync_active(app);
+        }
+    }
+
+    // CATEGORY GROUP: file the just-opened unit tab into a named, coloured,
+    // collapsible tab-strip band so an agent can organise ~130 product tabs into
+    // a handful of categories. The unit is fully formed here (tab opened +
+    // titled, dock cleaned, workbench linked), and the new tab is the **active**
+    // one — `TabBar::open` set `active = Some(len-1)` and nothing since
+    // (`set_clean_workbench_agent_dock`, the title rewrite, `sync_active`)
+    // changes the active index, so `app.tab_bar.active` IS this unit's tab. All
+    // grouping goes through the SAME vetted `TabBar` group methods a user's
+    // strip context-menu drives (`new_group_with_tab` / `assign_to_group` /
+    // `rename_group` / `set_group_color`) — no raw field poke. An empty `group`
+    // name leaves the tab ungrouped (the prior behaviour).
+    if let Some(group_name) = group.as_deref() {
+        let group_name = group_name.trim();
+        if !group_name.is_empty() {
+            if let Some(idx) = app.tab_bar.active {
+                // Reuse an existing band of this name so two `new_unit`s sharing
+                // a `group` land in ONE band (no duplicate); else mint a fresh
+                // band, then name + colour it deterministically so the same
+                // category always reads the same colour across a session.
+                let existing = app
+                    .tab_bar
+                    .groups
+                    .iter()
+                    .find(|g| g.name == group_name)
+                    .map(|g| g.id.clone());
+                match existing {
+                    Some(gid) => app.tab_bar.assign_to_group(idx, &gid),
+                    None => {
+                        if let Some(gid) = app.tab_bar.new_group_with_tab(idx) {
+                            app.tab_bar.rename_group(&gid, group_name);
+                            app.tab_bar.set_group_color(&gid, color_for(group_name));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1462,9 +1560,13 @@ mod tests {
             "the attached mesh is the LV-1 rocket (path = {:?})",
             mesh.path
         );
-        // It's a 3-D product, so no text rows.
         assert_eq!(product.title, "Rocket");
-        assert!(product.lines.is_empty());
+        // The rocket now carries its flight readout (orbit / Δv / max-Q /
+        // peak-g) into the unit's agent chat — not just "Unit N ready".
+        assert!(
+            !product.lines.is_empty(),
+            "rocket product carries its flight readout"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1998,6 +2100,7 @@ mod tests {
                 kind: None,
                 title: None,
                 note: None,
+                group: None,
             }
         );
         let rich: AgentCommand =
@@ -2008,6 +2111,7 @@ mod tests {
                 kind: Some("rocket".into()),
                 title: Some("Rocket".into()),
                 note: None,
+                group: None,
             }
         );
         // The full form with a narration note parses too.
@@ -2021,6 +2125,7 @@ mod tests {
                 kind: Some("gear".into()),
                 title: Some("Gear train".into()),
                 note: Some("Designing the reducer…".into()),
+                group: None,
             }
         );
     }
@@ -2038,6 +2143,7 @@ mod tests {
                 kind: None,
                 title: None,
                 note: None,
+                group: None,
             },
         );
         assert_eq!(app.wb_agent_counter, 1, "exactly one unit opened");
@@ -2060,6 +2166,7 @@ mod tests {
                 kind: Some("rocket".into()),
                 title: None,
                 note: None,
+                group: None,
             },
         );
         assert_eq!(app.wb_agent_counter, 1);
@@ -2109,6 +2216,7 @@ mod tests {
                 kind: Some("rocket".into()),
                 title: Some("LV-1 Heavy".into()),
                 note: None,
+                group: None,
             },
         );
         // Instant title-only card; kind queued for lazy build.
@@ -2142,6 +2250,7 @@ mod tests {
                 kind: None,
                 title: Some("Empty bench".into()),
                 note: None,
+                group: None,
             },
         );
         let product = app
@@ -2165,6 +2274,7 @@ mod tests {
                 kind: None,
                 title: None,
                 note: None,
+                group: None,
             },
         );
         assert_eq!(
@@ -2187,6 +2297,7 @@ mod tests {
                 kind: Some("rocket".into()),
                 title: Some("x".into()),
                 note: None,
+                group: None,
             },
         );
         assert_eq!(app.wb_agent_counter, 3, "per-unit new_unit opens no unit");
@@ -2410,6 +2521,7 @@ mod tests {
                 kind: Some("rocket".into()),
                 title: None,
                 note: None,
+                group: None,
             },
         );
         assert!(
@@ -2611,6 +2723,7 @@ mod tests {
                 kind: Some("fem".into()),
                 title: Some("Bracket FEA".into()),
                 note: None,
+                group: None,
             },
         );
         let active = app.tab_bar.active.expect("the product tab is active");
@@ -2630,6 +2743,41 @@ mod tests {
     }
 
     #[test]
+    fn new_unit_group_files_tabs_into_named_collapsible_bands() {
+        // Driving two new_units with the SAME group name lands both in ONE
+        // band; a third with a different name mints a SECOND band. This is what
+        // organises the ~130-product catalogue into manageable category groups.
+        let mut app = ValenxApp::default();
+        let unit = |kind: &str, group: &str| AgentCommand::NewUnit {
+            kind: Some(kind.into()),
+            title: Some(kind.into()),
+            note: None,
+            group: Some(group.into()),
+        };
+        apply_global(&mut app, unit("rocket", "Aerospace"));
+        let g1 = app.tab_bar.tabs[app.tab_bar.active.unwrap()]
+            .group
+            .clone()
+            .expect("first unit is filed into a band");
+        apply_global(&mut app, unit("engine", "Aerospace"));
+        let g2 = app.tab_bar.tabs[app.tab_bar.active.unwrap()]
+            .group
+            .clone()
+            .expect("second unit is filed into a band");
+        assert_eq!(g1, g2, "two units sharing a group name join ONE band");
+        apply_global(&mut app, unit("gear", "Machine design"));
+        let g3 = app.tab_bar.tabs[app.tab_bar.active.unwrap()]
+            .group
+            .clone()
+            .expect("third unit is filed into a band");
+        assert_ne!(g3, g1, "a different group name mints a SECOND band");
+        assert_eq!(app.tab_bar.groups.len(), 2, "exactly two bands exist");
+        let aero = app.tab_bar.groups.iter().find(|g| g.id == g1).unwrap();
+        assert_eq!(aero.name, "Aerospace", "the band is named as requested");
+        assert_ne!(aero.color, [0, 0, 0], "the band carries a colour");
+    }
+
+    #[test]
     fn new_unit_without_kind_links_no_workbench() {
         // A `kind`-less unit links nothing — `workbench_kind` stays `None` and no
         // workbench flag is forced on (the dock fills the tab as before).
@@ -2640,6 +2788,7 @@ mod tests {
                 kind: None,
                 title: Some("Scratch".into()),
                 note: None,
+                group: None,
             },
         );
         let active = app.tab_bar.active.expect("the tab is active");
@@ -2674,6 +2823,7 @@ mod tests {
                     kind: Some(kind.into()),
                     title: None,
                     note: None,
+                    group: None,
                 },
             );
             let active = app.tab_bar.active.expect("active");
