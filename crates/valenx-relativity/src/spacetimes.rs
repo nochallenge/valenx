@@ -42,7 +42,8 @@ pub struct KerrNewman {
 impl KerrNewman {
     /// `a² + Q² ≤ M²` — the condition for a genuine black hole (an event
     /// horizon exists). When this fails the solution describes a *naked
-    /// singularity* instead.
+    /// singularity* instead. Equality is the extremal limit: a degenerate
+    /// horizon (`r+ = r−`) with zero surface gravity and Hawking temperature.
     pub fn is_subextremal(&self) -> bool {
         self.spin * self.spin + self.charge * self.charge <= self.mass * self.mass
     }

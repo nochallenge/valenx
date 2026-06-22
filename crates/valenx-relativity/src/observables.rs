@@ -182,7 +182,7 @@ pub fn gravitational_redshift(bh: &KerrNewman, r_emit: f64, r_obs: f64) -> Resul
         let val = -g[0][0];
         if val <= 0.0 {
             return Err(RelativityError::OutsideDomain(format!(
-                "no static observer at r={r} (inside ergosphere/horizon)"
+                "no static observer at r={r} (at or inside the ergosphere/horizon)"
             )));
         }
         Ok(val)
