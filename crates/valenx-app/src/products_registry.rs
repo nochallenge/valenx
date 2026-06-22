@@ -1131,6 +1131,30 @@ mod tests {
     }
 
     #[test]
+    fn every_non_3d_registry_kind_also_carries_a_readout() {
+        // The registry kinds NOT in KNOWN_3D_KINDS (TabKind-template tools +
+        // text-card / 2-D / image producers) the 3-D test above doesn't reach.
+        // Each product must STILL carry a non-empty readout — the result rows
+        // `materialize_pending` posts into the unit's agent chat (the quality
+        // bar: every product shows real numbers, not just "Unit N ready").
+        // gasdynamics only ships one because `gasdynamics_product` runs
+        // `run_gasdynamics` first; this guards the rest so a producer that
+        // forgets to populate its readout can't slip into the catalogue.
+        for k in [
+            "animate", "astro", "car", "cfd", "collision", "draft2d",
+            "fasteners", "fields", "frames", "gasdynamics", "geomatics", "hvac",
+            "interior", "neuro", "piping", "render", "variant_effect",
+        ] {
+            let product =
+                (lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}")).build)();
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: product carries result rows for the agent chat"
+            );
+        }
+    }
+
+    #[test]
     fn coloured_products_carry_a_vertex_aligned_colour_vec() {
         // The molecular (CPK by element) and aero (Cp field) products ship
         // per-vertex colours. The tile renderer only takes the coloured path
