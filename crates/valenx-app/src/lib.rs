@@ -523,6 +523,51 @@ pub enum Workspace2dKind {
     /// An **interior floor-plan** — one or more room wall polygons plus the
     /// placed-furniture rectangles, painted as a fit-to-tile plan.
     FloorPlan(FloorPlanView),
+    /// A **2-D line / bar chart** — one or more `(x, y)` series drawn as
+    /// polylines (or vertical bars) inside a framed, auto-scaled plot area with
+    /// gridlines, tick labels, axis labels and a small legend. The natural
+    /// presentation for products that are really *plots* (an FFT magnitude
+    /// spectrum, a concentration-vs-position profile, a population-vs-time
+    /// trajectory) rather than a 3-D blob or a bare text card. See
+    /// [`ChartData`].
+    Chart(ChartData),
+}
+
+/// Plain-data backing for a [`Workspace2dKind::Chart`] — everything the egui
+/// chart painter needs and nothing it doesn't (no GPU / mesh types, so it stays
+/// cheaply `Clone`). The painter auto-scales the axes from the union of every
+/// series' point range, so the producer only supplies the raw `(x, y)` data and
+/// the labels.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChartData {
+    /// Chart heading, drawn at the top of the plot (e.g. `"FFT magnitude
+    /// spectrum"`).
+    pub title: String,
+    /// Label for the horizontal axis (e.g. `"frequency (Hz)"`).
+    pub x_label: String,
+    /// Label for the vertical axis (e.g. `"|X[k]|"`).
+    pub y_label: String,
+    /// The plotted series, in draw order. Each is a polyline or a bar group; the
+    /// painter colours them from a small fixed palette and lists them in the
+    /// legend. An empty list paints just the framed, label-only plot.
+    pub series: Vec<ChartSeries>,
+}
+
+/// One labelled data series on a [`ChartData`] — a sequence of `[x, y]` points
+/// drawn either as a connected polyline (`bars == false`) or as vertical bars
+/// rising from `y = 0` (`bars == true`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChartSeries {
+    /// Legend label for the series (e.g. `"infectious"`).
+    pub label: String,
+    /// The `[x, y]` data points, in x order. The painter maps them through the
+    /// auto-scaled axis transform; fewer than two points still draws the
+    /// markers / bars it can.
+    pub points: Vec<[f64; 2]>,
+    /// When `true`, draw each point as a vertical bar from the x-axis baseline
+    /// up to its `y` value (a spectrum / histogram look); when `false`, connect
+    /// the points with a polyline (a curve-vs-time look).
+    pub bars: bool,
 }
 
 /// Plain-data view for the RC-beam **section drawing** ([`Workspace2dKind::RcSection`]).

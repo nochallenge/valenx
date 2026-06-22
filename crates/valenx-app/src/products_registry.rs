@@ -667,7 +667,8 @@ mod tests {
         "weir",
         "orifice",
         "combustion",
-        "diffusion",
+        // NOTE: `diffusion` is a 2-D CHART product (concentration vs position),
+        // so it lives in DRAWING_2D_KINDS, not here.
         "marine",
         "resistornetwork",
         "opamp",
@@ -686,7 +687,8 @@ mod tests {
         "solarpv",
         "optics",
         "acoustics",
-        "fft",
+        // NOTE: `fft` is a 2-D CHART product (magnitude spectrum, bars), so it
+        // lives in DRAWING_2D_KINDS, not here.
         "engine",
         // Aerospace + bio workbenches — the last of the 3-D mesh tools —
         // wired into the bridge.
@@ -697,7 +699,8 @@ mod tests {
         "enzymekinetics",
         "hemodynamics",
         "bonemech",
-        "popdynamics",
+        // NOTE: `popdynamics` is a 2-D CHART product (population vs time), so it
+        // lives in DRAWING_2D_KINDS, not here.
         // The 7 real-geometry-extraction workbenches wired in this change — CAD
         // CSG, point-cloud reconstruction, rebar cage, coloured molecule,
         // reaction-dynamics frame, folded sheet metal, aero Cp on a demo body.
@@ -784,7 +787,7 @@ mod tests {
         "weir",
         "orifice",
         "combustion",
-        "diffusion",
+        // `diffusion` → 2-D CHART (see DRAWING_2D_KINDS), not a mesh kind.
         "marine",
         "resistornetwork",
         "opamp",
@@ -803,7 +806,7 @@ mod tests {
         "solarpv",
         "optics",
         "acoustics",
-        "fft",
+        // `fft` → 2-D CHART (see DRAWING_2D_KINDS), not a mesh kind.
         "engine",
         // Aerospace + bio workbenches — the last of the 3-D mesh tools —
         // wired into the bridge.
@@ -814,7 +817,7 @@ mod tests {
         "enzymekinetics",
         "hemodynamics",
         "bonemech",
-        "popdynamics",
+        // `popdynamics` → 2-D CHART (see DRAWING_2D_KINDS), not a mesh kind.
         // The 7 real-geometry-extraction workbenches wired in this change. Each
         // must resolve and build a non-empty `Tri3` product with a title and at
         // least one readout row — `molecule` / `reactdyn` / `aero` additionally
@@ -897,7 +900,13 @@ mod tests {
     /// registry. Asserted by
     /// [`drawing_2d_kinds_resolve_and_build_a_2d_drawing`] (`kind2d.is_some()` +
     /// `mesh.is_none()` + `image.is_none()`).
-    const DRAWING_2D_KINDS: &[&str] = &["draft2d", "interior"];
+    ///
+    /// `draft2d` / `interior` are engineering drawings (entity soup / floor
+    /// plan); `fft` / `diffusion` / `popdynamics` are **chart** products
+    /// (`Workspace2dKind::Chart`) — products that are really *plots* (a magnitude
+    /// spectrum, a concentration-vs-position profile, a population-vs-time
+    /// trajectory) and read better as a 2-D line / bar chart than as a 3-D blob.
+    const DRAWING_2D_KINDS: &[&str] = &["draft2d", "interior", "fft", "diffusion", "popdynamics"];
 
     #[test]
     fn every_card_kind_resolves_and_builds_a_text_card() {
@@ -1012,12 +1021,74 @@ mod tests {
                 crate::Workspace2dKind::FloorPlan(plan) => {
                     assert!(!plan.rooms.is_empty(), "{k}: floor plan has a room");
                 }
+                crate::Workspace2dKind::Chart(data) => {
+                    // A chart product (fft / diffusion / popdynamics) must carry
+                    // at least one series, every series at least one point, and
+                    // every coordinate finite — so the painter has real,
+                    // plottable data and never NaN-scales the axes.
+                    assert!(!data.series.is_empty(), "{k}: chart has a series");
+                    assert!(
+                        !data.x_label.is_empty() && !data.y_label.is_empty(),
+                        "{k}: chart axes are labelled"
+                    );
+                    for s in &data.series {
+                        assert!(
+                            !s.points.is_empty(),
+                            "{k}: chart series {:?} has points",
+                            s.label
+                        );
+                        for p in &s.points {
+                            assert!(
+                                p[0].is_finite() && p[1].is_finite(),
+                                "{k}: chart point {p:?} is finite"
+                            );
+                        }
+                    }
+                }
                 other => panic!("{k}: unexpected 2-D kind {other:?}"),
             }
             assert!(!product.title.is_empty(), "{k}: product has a title");
             assert!(
                 !product.lines.is_empty(),
                 "{k}: drawing carries readout rows"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_kinds_build_a_chart_with_nonempty_finite_series() {
+        // Focused guard for the CHART products: each resolves to a product whose
+        // `kind2d` is `Some(Chart)` (not a 3-D mesh / card / image / drawing),
+        // carrying ≥1 series of finite `[x, y]` points plus the readout rows the
+        // agent chat shows. This is the chart counterpart to the mesh / card /
+        // image assertions — the distinguishing check is `Chart(..)` + finite
+        // points, exactly what routes the product to the 2-D chart painter.
+        for k in ["fft", "diffusion", "popdynamics"] {
+            let entry = lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}"));
+            assert_eq!(entry.kind, k, "entry.kind echoes the looked-up kind for {k}");
+            let product = (entry.build)();
+            assert!(product.mesh.is_none(), "{k}: a chart carries no mesh");
+            assert!(product.image.is_none(), "{k}: a chart carries no image");
+            let data = match product.kind2d.as_ref() {
+                Some(crate::Workspace2dKind::Chart(d)) => d,
+                other => panic!("{k}: expected kind2d Some(Chart), got {other:?}"),
+            };
+            assert!(!data.series.is_empty(), "{k}: chart has at least one series");
+            let total_points: usize = data.series.iter().map(|s| s.points.len()).sum();
+            assert!(total_points > 1, "{k}: chart carries plottable points");
+            for s in &data.series {
+                assert!(!s.points.is_empty(), "{k}: series {:?} non-empty", s.label);
+                for p in &s.points {
+                    assert!(
+                        p[0].is_finite() && p[1].is_finite(),
+                        "{k}: point {p:?} finite"
+                    );
+                }
+            }
+            assert!(!product.title.is_empty(), "{k}: product has a title");
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: chart carries readout rows for the agent chat"
             );
         }
     }
@@ -1139,9 +1210,10 @@ mod tests {
         // `run_gasdynamics` first; this guards the rest so a producer that
         // forgets to populate its readout can't slip into the catalogue.
         for k in [
-            "animate", "astro", "car", "cfd", "collision", "draft2d",
-            "fields", "frames", "gasdynamics", "geomatics", "hvac",
-            "interior", "neuro", "piping", "render", "variant_effect",
+            "animate", "astro", "car", "cfd", "collision", "diffusion",
+            "draft2d", "fft", "fields", "frames", "gasdynamics", "geomatics",
+            "hvac", "interior", "neuro", "piping", "popdynamics", "render",
+            "variant_effect",
         ] {
             let product =
                 (lookup(k).unwrap_or_else(|| panic!("registry resolves {k:?}")).build)();
