@@ -271,9 +271,7 @@ impl MeshBuilder {
             for j in 0..lon {
                 let phi = j as f64 / lon as f64 * TAU;
                 let (sp, cp) = phi.sin_cos();
-                self.vert(
-                    c + Vector3::new(radius * st * cp, radius * st * sp, radius * ct),
-                );
+                self.vert(c + Vector3::new(radius * st * cp, radius * st * sp, radius * ct));
             }
         }
         let south = self.vert(c + Vector3::new(0.0, 0.0, -radius));
@@ -872,7 +870,14 @@ mod tests {
         let half_len = 4.0;
         let r = 1.0;
         let mut bx = MeshBuilder::new();
-        bx.cylinder([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], r, 2.0 * half_len, seg, RED);
+        bx.cylinder(
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            r,
+            2.0 * half_len,
+            seg,
+            RED,
+        );
         let (mx, _) = bx.into_mesh_and_colors();
         let max_x = mx.nodes.iter().map(|p| p.x).fold(f64::MIN, f64::max);
         let max_z = mx.nodes.iter().map(|p| p.z).fold(f64::MIN, f64::max);
@@ -905,7 +910,10 @@ mod tests {
         assert_well_formed(&m, &c, t);
         // Every vertex sits on the radius (it's a true sphere).
         for p in &m.nodes {
-            assert!((p.norm() - 3.0).abs() < 1e-9, "vertex off the sphere radius");
+            assert!(
+                (p.norm() - 3.0).abs() < 1e-9,
+                "vertex off the sphere radius"
+            );
         }
     }
 
@@ -929,7 +937,11 @@ mod tests {
         let mut b = MeshBuilder::new();
         // True cone: top radius zero → only the base cap centre is added.
         let range = b.cone([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 2.0, 0.0, 4.0, seg, RED);
-        assert_eq!(range, 0..(2 * seg + 1), "2 rings + 1 base centre (apex top)");
+        assert_eq!(
+            range,
+            0..(2 * seg + 1),
+            "2 rings + 1 base centre (apex top)"
+        );
         let (m, c, t) = bake(b);
         assert_well_formed(&m, &c, t);
     }
@@ -989,8 +1001,18 @@ mod tests {
         // closed box: 2 rings of 4 + 2 cap centroids, and side band (2·m tris) +
         // two caps (m tris each).
         let m = 4;
-        let s0 = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
-        let s1 = vec![[0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [1.0, 1.0, 2.0], [0.0, 1.0, 2.0]];
+        let s0 = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ];
+        let s1 = vec![
+            [0.0, 0.0, 2.0],
+            [1.0, 0.0, 2.0],
+            [1.0, 1.0, 2.0],
+            [0.0, 1.0, 2.0],
+        ];
         let mut b = MeshBuilder::new();
         let range = b.loft(&[s0, s1], true, RED);
         assert_eq!(range, 0..(2 * m + 2), "2 rings of m + 2 cap centroids");
@@ -1024,11 +1046,18 @@ mod tests {
         assert_well_formed(&mesh, &c, t);
         // Ragged sections (mismatched length) are rejected → empty range.
         let mut b2 = MeshBuilder::new();
-        let bad = b2.loft(&[ring(0.0), vec![[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]], true, RED);
+        let bad = b2.loft(
+            &[ring(0.0), vec![[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]],
+            true,
+            RED,
+        );
         assert!(bad.is_empty(), "ragged sections rejected");
         // A single section is also rejected.
         let mut b3 = MeshBuilder::new();
-        assert!(b3.loft(&[ring(0.0)], true, RED).is_empty(), "one section rejected");
+        assert!(
+            b3.loft(&[ring(0.0)], true, RED).is_empty(),
+            "one section rejected"
+        );
     }
 
     #[test]
@@ -1037,10 +1066,25 @@ mod tests {
         // the final range end must equal the total node count. This is the
         // "build N parts, each a colour + a returned range" contract.
         let mut b = MeshBuilder::new();
-        let r0 = b.cylinder([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 1.0, 2.0, 12, [1.0, 0.0, 0.0]);
+        let r0 = b.cylinder(
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            1.0,
+            2.0,
+            12,
+            [1.0, 0.0, 0.0],
+        );
         let r1 = b.sphere([3.0, 0.0, 0.0], 1.0, 6, 8, [0.0, 1.0, 0.0]);
         let r2 = b.cuboid([0.0, 3.0, 0.0], [1.0, 1.0, 1.0], [0.0, 0.0, 1.0]);
-        let r3 = b.torus([0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 2.0, 0.5, 12, 8, [1.0, 1.0, 0.0]);
+        let r3 = b.torus(
+            [0.0, 0.0, 3.0],
+            [0.0, 0.0, 1.0],
+            2.0,
+            0.5,
+            12,
+            8,
+            [1.0, 1.0, 0.0],
+        );
         assert_eq!(r0.start, 0);
         assert_eq!(r0.end, r1.start, "part0.end == part1.start");
         assert_eq!(r1.end, r2.start, "part1.end == part2.start");
@@ -1080,7 +1124,10 @@ mod tests {
         assert_well_formed(&m, &c, t);
         assert_eq!(t, 12 + 2, "cuboid 12 tris + appended 2 tris");
         // The last 2 triangles (6 colour entries) are the appended mesh's green.
-        assert!(c[36..].iter().all(|&x| x == green), "appended tris are green");
+        assert!(
+            c[36..].iter().all(|&x| x == green),
+            "appended tris are green"
+        );
     }
 
     #[test]
@@ -1109,11 +1156,23 @@ mod tests {
         let length = 6.0;
         let major_r = 3.0;
         let mut b = MeshBuilder::new();
-        let range = b.helical_thread([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], major_r, pitch, length, seg, RED);
+        let range = b.helical_thread(
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            major_r,
+            pitch,
+            length,
+            seg,
+            RED,
+        );
         let turns = length / pitch;
         let stations = ((turns * seg as f64).round() as usize) + 1;
         // 3 vertices (crest + two roots) per station.
-        assert_eq!(range, 0..(3 * stations), "3-vertex tooth section per station");
+        assert_eq!(
+            range,
+            0..(3 * stations),
+            "3-vertex tooth section per station"
+        );
         let (m, c, t) = bake(b);
         assert_well_formed(&m, &c, t);
         // Every vertex lies within [root, crest] of the axis and inside the swept
@@ -1121,14 +1180,23 @@ mod tests {
         let r_root = major_r - 0.6 * pitch;
         for p in &m.nodes {
             let rad = (p.x * p.x + p.y * p.y).sqrt();
-            assert!(rad >= r_root - 1e-9 && rad <= major_r + 1e-9, "vertex radius in thread band");
-            assert!(p.z >= -length * 0.5 - pitch && p.z <= length * 0.5 + pitch, "within swept length");
+            assert!(
+                rad >= r_root - 1e-9 && rad <= major_r + 1e-9,
+                "vertex radius in thread band"
+            );
+            assert!(
+                p.z >= -length * 0.5 - pitch && p.z <= length * 0.5 + pitch,
+                "within swept length"
+            );
         }
         // The crest vertices climb monotonically in z (a helix, not a stack of
         // flat rings): the last crest is ≈ `length` above the first.
         let first_crest_z = m.nodes[0].z;
         let last_crest_z = m.nodes[(stations - 1) * 3].z;
-        assert!((last_crest_z - first_crest_z - length).abs() < pitch, "crest rises by the swept length");
+        assert!(
+            (last_crest_z - first_crest_z - length).abs() < pitch,
+            "crest rises by the swept length"
+        );
     }
 
     #[test]
@@ -1136,10 +1204,26 @@ mod tests {
         // Non-positive pitch/length, or a pitch so coarse the root radius is not
         // below the crest, must append nothing (no inverted geometry).
         let mut b = MeshBuilder::new();
-        assert!(b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 0.0, 6.0, 24, RED).is_empty(), "zero pitch");
-        assert!(b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 0.5, 0.0, 24, RED).is_empty(), "zero length");
+        assert!(
+            b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 0.0, 6.0, 24, RED)
+                .is_empty(),
+            "zero pitch"
+        );
+        assert!(
+            b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 0.5, 0.0, 24, RED)
+                .is_empty(),
+            "zero length"
+        );
         // r_root = 3 − 0.6·6 = −0.6 ≤ 0 ⇒ rejected.
-        assert!(b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 6.0, 6.0, 24, RED).is_empty(), "root below axis");
-        assert_eq!(b.node_count(), 0, "nothing appended for any degenerate thread");
+        assert!(
+            b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 6.0, 6.0, 24, RED)
+                .is_empty(),
+            "root below axis"
+        );
+        assert_eq!(
+            b.node_count(),
+            0,
+            "nothing appended for any degenerate thread"
+        );
     }
 }

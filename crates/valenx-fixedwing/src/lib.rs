@@ -431,7 +431,10 @@ mod tests {
         }
         // Approaches 2π in the high-AR limit.
         let a_huge = finite_wing_lift_slope_per_rad(a0, 1.0e6, 1.0);
-        assert!((a_huge - a0).abs() < 1e-3, "high-AR limit {a_huge} vs 2π {a0}");
+        assert!(
+            (a_huge - a0).abs() < 1e-3,
+            "high-AR limit {a_huge} vs 2π {a0}"
+        );
 
         // The Aircraft method agrees with the free function for that wing.
         let a = ga(); // AR=7.5, e=0.8

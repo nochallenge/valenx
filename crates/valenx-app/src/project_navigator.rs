@@ -978,9 +978,7 @@ mod tests {
         // vice-versa) — this is routed through the shared
         // `project_tabs::clear_all_inline_renames` from `apply_nav_intent`.
         let mut app = crate::ValenxApp::default();
-        let pid = app
-            .library
-            .add_project(tab(TabKind::Rocket, "Proj"), None);
+        let pid = app.library.add_project(tab(TabKind::Rocket, "Proj"), None);
         let fid = app.library.add_folder("Aero");
 
         // Begin a PROJECT rename → its editor latches.

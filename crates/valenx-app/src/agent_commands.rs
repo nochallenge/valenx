@@ -1795,7 +1795,10 @@ mod tests {
             .workspace_products
             .get(&1)
             .expect("materialize built the rocket product");
-        let mesh = product.mesh.as_ref().expect("rocket product carries a mesh");
+        let mesh = product
+            .mesh
+            .as_ref()
+            .expect("rocket product carries a mesh");
         let tris = mesh.mesh.total_elements();
         assert!(tris > 0, "rocket mesh has triangles");
 

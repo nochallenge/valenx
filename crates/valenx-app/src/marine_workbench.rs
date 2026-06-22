@@ -14,9 +14,7 @@ use std::path::PathBuf;
 use eframe::egui;
 
 use valenx_marine::{Hull, FRESHWATER_DENSITY, SEAWATER_DENSITY};
-use valenx_marine_hydro::{
-    Hull as HydroHull, WaterProperties, FRESHWATER_NU_15C, SEAWATER_NU_15C,
-};
+use valenx_marine_hydro::{Hull as HydroHull, WaterProperties, FRESHWATER_NU_15C, SEAWATER_NU_15C};
 use valenx_mesh::Mesh;
 
 use crate::mesh_prims::MeshBuilder;
@@ -239,13 +237,12 @@ const DESIGN_FROUDE: f64 = 0.25;
 fn append_resistance_lines(length_m: f64, water_density: f64, hull: &Hull, out: &mut String) {
     // Water properties: match the workbench's chosen density, ITTC-57 viscosity
     // for whichever of sea/fresh it is closest to.
-    let nu = if (water_density - FRESHWATER_DENSITY).abs()
-        < (water_density - SEAWATER_DENSITY).abs()
-    {
-        FRESHWATER_NU_15C
-    } else {
-        SEAWATER_NU_15C
-    };
+    let nu =
+        if (water_density - FRESHWATER_DENSITY).abs() < (water_density - SEAWATER_DENSITY).abs() {
+            FRESHWATER_NU_15C
+        } else {
+            SEAWATER_NU_15C
+        };
     let water = WaterProperties {
         density: water_density,
         kinematic_viscosity: nu,
@@ -257,10 +254,10 @@ fn append_resistance_lines(length_m: f64, water_density: f64, hull: &Hull, out: 
         ASSUMED_CM,
         ASSUMED_CWP,
         ASSUMED_LCB_PERCENT,
-        0.0, // no bulbous bow
-        0.0, // (bulb centre, ignored without a bulb)
-        0.0, // no immersed transom
-        0.0, // normal stern shape (C_stern = 0)
+        0.0,  // no bulbous bow
+        0.0,  // (bulb centre, ignored without a bulb)
+        0.0,  // no immersed transom
+        0.0,  // normal stern shape (C_stern = 0)
         None, // wetted surface: Holtrop estimate
     ) {
         Ok(h) => h,
@@ -387,15 +384,7 @@ fn fullness(u: f64, cb: f64) -> f64 {
 /// skin. `hl`/`hb` are half-length/half-beam, `depth` the keel-to-waterline
 /// draft, `f` the local [`fullness`]. The section narrows in beam and rises off
 /// the keel toward the ends via `f`, giving the fine entrance / run.
-fn hull_band(
-    u: f64,
-    z_lo: f64,
-    z_hi: f64,
-    hl: f64,
-    hb: f64,
-    depth: f64,
-    f: f64,
-) -> Vec<[f64; 3]> {
+fn hull_band(u: f64, z_lo: f64, z_hi: f64, hl: f64, hb: f64, depth: f64, f: f64) -> Vec<[f64; 3]> {
     // Longitudinal x: stern (−hl) at u=0 to a raked bow (+hl) at u=1.
     let x = -hl + 2.0 * hl * u;
     // Local half-beam at this station (full amidships, → ~0 at the ends).
@@ -658,7 +647,10 @@ mod tests {
         // span the draft + freeboard in z.
         let max_x = mesh.nodes.iter().map(|p| p.x).fold(f64::MIN, f64::max);
         let max_y = mesh.nodes.iter().map(|p| p.y).fold(f64::MIN, f64::max);
-        assert!((max_x - s.length_m / 2.0).abs() < s.length_m * 0.05, "spans L");
+        assert!(
+            (max_x - s.length_m / 2.0).abs() < s.length_m * 0.05,
+            "spans L"
+        );
         assert!(max_y <= s.beam_m / 2.0 + 1e-6, "within the beam");
     }
 
@@ -684,7 +676,10 @@ mod tests {
             "bow finer than stern (aft bias)"
         );
         // A fuller hull (higher Cb) stays fuller off-amidships than a fine one.
-        assert!(fullness(0.3, 0.85) > fullness(0.3, 0.5), "high Cb keeps fullness");
+        assert!(
+            fullness(0.3, 0.85) > fullness(0.3, 0.5),
+            "high Cb keeps fullness"
+        );
     }
 
     #[test]

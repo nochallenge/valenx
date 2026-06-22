@@ -590,8 +590,7 @@ mod tests {
         // brass cage). The product spins the inner-race+balls+cage assembly about
         // the +z axle while the outer race (built first) stays fixed.
         let s = BearingWorkbenchState::default();
-        let (mesh, colors, parts) =
-            bearing_solid_mesh_parts(&s).expect("default bearing builds");
+        let (mesh, colors, parts) = bearing_solid_mesh_parts(&s).expect("default bearing builds");
         assert_eq!(
             colors.len(),
             mesh.total_elements() * 3,

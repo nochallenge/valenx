@@ -295,7 +295,14 @@ fn push_rotor(b: &mut MeshBuilder, c: [f64; 3], r: f64) -> std::ops::Range<usize
     // Hub: a short cylinder on the rotor axis, sitting just above the motor.
     let hub_r = r * 0.12;
     let hub_h = r * 0.18;
-    b.cylinder([c[0], c[1], c[2] + hub_h * 0.5], [0.0, 0.0, 1.0], hub_r, hub_h, 16, HUB);
+    b.cylinder(
+        [c[0], c[1], c[2] + hub_h * 0.5],
+        [0.0, 0.0, 1.0],
+        hub_r,
+        hub_h,
+        16,
+        HUB,
+    );
     // Blades radiate from the hub. Root near the hub, tip near radius r.
     let root_radius = hub_r * 1.2;
     let tip_radius = r * 0.98;
@@ -348,7 +355,11 @@ fn drone_solid_mesh_parts(
 
     // Central frame plate (thin square) + flight-controller stack on top.
     let body_half = r * 0.55;
-    b.cuboid([0.0, 0.0, 0.0], [body_half * 2.0, body_half * 2.0, r * 0.10], FRAME);
+    b.cuboid(
+        [0.0, 0.0, 0.0],
+        [body_half * 2.0, body_half * 2.0, r * 0.10],
+        FRAME,
+    );
     b.cuboid(
         [0.0, 0.0, r * 0.16],
         [body_half * 1.1, body_half * 1.1, r * 0.16],
@@ -578,8 +589,14 @@ mod tests {
             crate::ProductMotion::RigidParts(parts) => {
                 assert_eq!(parts.len(), 4, "four rotors on the default quad");
                 for p in &parts {
-                    assert!(p.node_range.start < p.node_range.end, "non-empty rotor range");
-                    assert!(p.node_range.end <= node_count, "rotor range within the mesh");
+                    assert!(
+                        p.node_range.start < p.node_range.end,
+                        "non-empty rotor range"
+                    );
+                    assert!(
+                        p.node_range.end <= node_count,
+                        "rotor range within the mesh"
+                    );
                     assert_eq!(p.axis, [0.0, 0.0, 1.0], "spins about the rotor axis");
                     assert!(p.rad_per_s.abs() > 0.0, "rotor spins");
                 }

@@ -107,24 +107,23 @@ pub fn category_for(kind: &str) -> Category {
     match kind {
         // ---- Machine-design / mechanical hardware → steel ----
         "gear" | "geartooth" | "gearbox" | "bearing" | "clutch" | "brake" | "pulley"
-        | "flywheel" | "leadscrew" | "screwthread" | "shaftdesign" | "camdynamics"
-        | "conveyor" | "bolt" | "rivet" | "fasteners" | "springs" | "springdesign"
-        | "springcombination" | "beltdrive" | "chaindrive" | "fourbar" | "leverage"
-        | "inclinedplane" | "vibration" | "dcmotor" | "inductionmotor" | "engine" => {
-            Category::Mechanical
-        }
+        | "flywheel" | "leadscrew" | "screwthread" | "shaftdesign" | "camdynamics" | "conveyor"
+        | "bolt" | "rivet" | "fasteners" | "springs" | "springdesign" | "springcombination"
+        | "beltdrive" | "chaindrive" | "fourbar" | "leverage" | "inclinedplane" | "vibration"
+        | "dcmotor" | "inductionmotor" | "engine" => Category::Mechanical,
 
         // ---- Structural / civil members → concrete grey ----
         "beam" | "truss" | "plate" | "buckling" | "columnsteel" | "retainingwall"
-        | "soilbearing" | "statics" | "mohr" | "torsion" | "fatigue" | "fracture"
-        | "creep" | "pressurevessel" | "straingauge" | "strainrosette" | "rail"
-        | "rcbeam" | "reinforcement" | "bracket" | "frames" => Category::Structural,
+        | "soilbearing" | "statics" | "mohr" | "torsion" | "fatigue" | "fracture" | "creep"
+        | "pressurevessel" | "straingauge" | "strainrosette" | "rail" | "rcbeam"
+        | "reinforcement" | "bracket" | "frames" => Category::Structural,
 
         // ---- Electrical / electronics → copper ----
-        "resistornetwork" | "capacitor" | "opamp" | "bjt" | "mosfet" | "rectifier"
-        | "filter" | "antenna" | "transmissionline" | "coil" | "led" | "transformer"
-        | "threephase" | "powerfactor" | "electrochem" | "batterypack" | "batteryecm"
-        | "solarpv" | "fft" => Category::Electronics,
+        "resistornetwork" | "capacitor" | "opamp" | "bjt" | "mosfet" | "rectifier" | "filter"
+        | "antenna" | "transmissionline" | "coil" | "led" | "transformer" | "threephase"
+        | "powerfactor" | "electrochem" | "batterypack" | "batteryecm" | "solarpv" | "fft" => {
+            Category::Electronics
+        }
 
         // ---- Thermal / thermodynamics / HVAC / combustion → warm tone ----
         "heattransfer" | "insulation" | "heatexchanger" | "heatpump" | "refrigeration"
@@ -132,13 +131,14 @@ pub fn category_for(kind: &str) -> Category {
         | "thermalexpansion" | "combustion" | "hvac" => Category::Thermal,
 
         // ---- Aerospace airframes → aluminium / white ----
-        "rocket" | "fixedwing" | "drone" | "windturbine" | "aero" | "astro"
-        | "projectile" => Category::Aerospace,
+        "rocket" | "fixedwing" | "drone" | "windturbine" | "aero" | "astro" | "projectile" => {
+            Category::Aerospace
+        }
 
         // ---- Bio / chemistry / physiology → organic teal ----
         "molecule" | "reactdyn" | "pharmacokinetics" | "enzymekinetics" | "hemodynamics"
-        | "bonemech" | "bmr" | "thermoreg" | "osmosis" | "acidbase" | "popdynamics"
-        | "neuro" | "variant_effect" | "diffusion" => Category::BioChem,
+        | "bonemech" | "bmr" | "thermoreg" | "osmosis" | "acidbase" | "popdynamics" | "neuro"
+        | "variant_effect" | "diffusion" => Category::BioChem,
 
         // ---- Fluid mechanics / hydraulics / marine / piping → blue-grey ----
         "pump" | "pipeflow" | "pipenetwork" | "hydraulics" | "pneumatics" | "fluidstatics"
@@ -222,14 +222,8 @@ mod tests {
                     "{cat:?} channel {ch} out of [0, 1]"
                 );
             }
-            assert!(
-                c.iter().any(|&ch| ch > 0.05),
-                "{cat:?} is not pure black"
-            );
-            assert!(
-                c.iter().any(|&ch| ch < 0.95),
-                "{cat:?} is not pure white"
-            );
+            assert!(c.iter().any(|&ch| ch > 0.05), "{cat:?} is not pure black");
+            assert!(c.iter().any(|&ch| ch < 0.95), "{cat:?} is not pure white");
         }
     }
 }

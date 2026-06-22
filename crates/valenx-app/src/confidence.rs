@@ -80,7 +80,11 @@ impl Confidence {
             ConfidenceLevel::ValidatedClosedForm | ConfidenceLevel::ValidatedBenchmark => {
                 match self.rel_err {
                     Some(rel_err) => {
-                        format!("✓ validated vs {} · err {:.1}%", self.source, rel_err * 100.0)
+                        format!(
+                            "✓ validated vs {} · err {:.1}%",
+                            self.source,
+                            rel_err * 100.0
+                        )
                     }
                     None => format!("✓ validated vs {}", self.source),
                 }

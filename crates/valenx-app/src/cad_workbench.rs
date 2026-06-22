@@ -2304,8 +2304,7 @@ fn draw_sketch_canvas(s: &mut CadWorkbenchState, ui: &mut egui::Ui) {
 
     // ── Canvas ──────────────────────────────────────────────────────────────
     let side = ui.available_width().clamp(160.0, 360.0);
-    let (resp, painter) =
-        ui.allocate_painter(egui::vec2(side, side), egui::Sense::click());
+    let (resp, painter) = ui.allocate_painter(egui::vec2(side, side), egui::Sense::click());
     let rect = resp.rect;
     painter.rect_filled(rect, 3.0, egui::Color32::from_gray(18));
 
@@ -2314,10 +2313,7 @@ fn draw_sketch_canvas(s: &mut CadWorkbenchState, ui: &mut egui::Ui) {
     let c = rect.center();
     let scale = (half / SKETCH_VIEW as f32).max(1.0);
     let to_screen = |p: [f64; 2]| -> egui::Pos2 {
-        egui::pos2(
-            c.x + p[0] as f32 * scale,
-            c.y - p[1] as f32 * scale,
-        )
+        egui::pos2(c.x + p[0] as f32 * scale, c.y - p[1] as f32 * scale)
     };
     let to_model = |pos: egui::Pos2| -> [f64; 2] {
         [
@@ -2355,11 +2351,17 @@ fn draw_sketch_canvas(s: &mut CadWorkbenchState, ui: &mut egui::Ui) {
     }
     let origin = to_screen([0.0, 0.0]);
     painter.line_segment(
-        [egui::pos2(rect.left(), origin.y), egui::pos2(rect.right(), origin.y)],
+        [
+            egui::pos2(rect.left(), origin.y),
+            egui::pos2(rect.right(), origin.y),
+        ],
         axis_stroke,
     );
     painter.line_segment(
-        [egui::pos2(origin.x, rect.top()), egui::pos2(origin.x, rect.bottom())],
+        [
+            egui::pos2(origin.x, rect.top()),
+            egui::pos2(origin.x, rect.bottom()),
+        ],
         axis_stroke,
     );
 
@@ -2687,9 +2689,8 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
                     // ---- Sketch canvas: draw a polygon → extrude → solid ----
                     ui.separator();
-                    let sketch_header = ui.label(
-                        egui::RichText::new("Sketch canvas (draw → extrude)").strong(),
-                    );
+                    let sketch_header =
+                        ui.label(egui::RichText::new("Sketch canvas (draw → extrude)").strong());
                     // The top-bar Part Design → Sketch menu item flags a focus
                     // request; scroll the canvas header into view this frame.
                     if std::mem::take(&mut s.sketch_focus_request) {
@@ -3269,7 +3270,10 @@ mod tests {
         // The default half-section is a cone (r 1, h 2) → analytic volume
         // π r² h / 3 ≈ 2.094; the BRep volume converges from below.
         let vol = total_volume(&history[0]);
-        assert!(vol > 1.5, "revolved cone volume {vol} is in the right range");
+        assert!(
+            vol > 1.5,
+            "revolved cone volume {vol} is in the right range"
+        );
     }
 
     #[test]
@@ -3373,7 +3377,10 @@ mod tests {
         // focus_sketch raises the flag the panel consumes to scroll the canvas.
         assert!(!s.sketch_focus_request);
         s.focus_sketch();
-        assert!(s.sketch_focus_request, "focus_sketch flags a scroll-to-canvas");
+        assert!(
+            s.sketch_focus_request,
+            "focus_sketch flags a scroll-to-canvas"
+        );
     }
 
     #[test]
@@ -3396,7 +3403,10 @@ mod tests {
         // sampled polyline point must lie on the circle through the 3 points
         // (here the unit circle, centre origin, r = 1).
         let start = [1.0, 0.0];
-        let via = [std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2];
+        let via = [
+            std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2,
+        ];
         let end = [0.0, 1.0];
         let (centre, r) = circle_through_3(start, via, end).expect("circle");
         assert!(centre[0].abs() < 1e-9 && centre[1].abs() < 1e-9 && (r - 1.0).abs() < 1e-9);
@@ -3407,7 +3417,10 @@ mod tests {
         assert!((poly[0][0] - start[0]).abs() < 1e-9 && (poly[0][1] - start[1]).abs() < 1e-9);
         for p in &poly {
             let d = ((p[0] - centre[0]).powi(2) + (p[1] - centre[1]).powi(2)).sqrt();
-            assert!((d - r).abs() < 1e-6, "sample {p:?} is on the circle (d={d})");
+            assert!(
+                (d - r).abs() < 1e-6,
+                "sample {p:?} is on the circle (d={d})"
+            );
         }
 
         // The full profile through one Arc segment keeps the end anchor and every
@@ -3427,7 +3440,10 @@ mod tests {
         );
         for p in &profile {
             let d = ((p[0] - centre[0]).powi(2) + (p[1] - centre[1]).powi(2)).sqrt();
-            assert!((d - r).abs() < 1e-6, "profile point {p:?} on circle (d={d})");
+            assert!(
+                (d - r).abs() < 1e-6,
+                "profile point {p:?} on circle (d={d})"
+            );
         }
     }
 
@@ -3510,7 +3526,11 @@ mod tests {
         let mut cad = CadWorkbenchState::default();
         cad.steps.clear();
         cad.add_extrude_from_sketch(&poly, 1.5);
-        assert_eq!(cad.steps.len(), 1, "one extrude step from the curved profile");
+        assert_eq!(
+            cad.steps.len(),
+            1,
+            "one extrude step from the curved profile"
+        );
         assert_eq!(cad.steps[0].kind, FeatureKind::Extrude);
         assert_eq!(
             cad.steps[0].profile.len(),
@@ -3530,7 +3550,10 @@ mod tests {
             "the curved-section solid tessellates to a non-empty viewport mesh"
         );
         let vol = total_volume(&history[0]);
-        assert!(vol > 0.0, "curved-section solid has positive volume ({vol})");
+        assert!(
+            vol > 0.0,
+            "curved-section solid has positive volume ({vol})"
+        );
     }
 
     #[test]
@@ -3559,13 +3582,24 @@ mod tests {
         assert_eq!(s.sketch_segs.len(), 0);
         assert_eq!(s.sketch_anchor_count(), 1, "start anchor remains");
         s.sketch_undo();
-        assert_eq!(s.sketch_anchor_count(), 0, "undo drops the lone start anchor");
+        assert_eq!(
+            s.sketch_anchor_count(),
+            0,
+            "undo drops the lone start anchor"
+        );
         assert!(s.sketch_start.is_none());
 
         // A degenerate 1-point spline seed (no run-through points) adds no segment.
         s.sketch_add_spline(&[[0.5, 0.5]]);
-        assert_eq!(s.sketch_anchor_count(), 1, "seed-only spline is just the start");
-        assert!(s.sketch_segs.is_empty(), "no spline segment from a lone seed");
+        assert_eq!(
+            s.sketch_anchor_count(),
+            1,
+            "seed-only spline is just the start"
+        );
+        assert!(
+            s.sketch_segs.is_empty(),
+            "no spline segment from a lone seed"
+        );
     }
 
     #[test]
@@ -3594,7 +3628,10 @@ mod tests {
         assert_eq!(s.steps.len(), 1, "reset leaves exactly one base step");
         assert_eq!(s.steps[0].op, Op::New, "the base step starts a new body");
         assert_eq!(s.steps[0].kind, FeatureKind::Box);
-        assert!(s.history.is_none(), "reset clears the stale rebuild history");
+        assert!(
+            s.history.is_none(),
+            "reset clears the stale rebuild history"
+        );
 
         // Each add_* appends one step of the expected kind.
         s.add_extrude();
@@ -3624,7 +3661,10 @@ mod tests {
         // request_rebuild raises the flag draw_cad_workbench consumes.
         assert!(!s.rebuild_request);
         s.request_rebuild();
-        assert!(s.rebuild_request, "request_rebuild flags a viewport rebuild");
+        assert!(
+            s.rebuild_request,
+            "request_rebuild flags a viewport rebuild"
+        );
 
         // "New part (reset)" leaves a lone base box that rebuilds to a real
         // solid on its own (the menu's New-part → rebuild path).

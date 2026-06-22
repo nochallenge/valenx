@@ -314,7 +314,15 @@ fn gear_solid_mesh(s: &GeartoothWorkbenchState) -> Option<(Mesh, Vec<[f32; 3]>)>
 
     let mut b = MeshBuilder::new();
     b.append_tri_mesh(&gear_mesh, STEEL);
-    b.tube([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], bore_r, hub_r, hub_len, 28, HUB);
+    b.tube(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        bore_r,
+        hub_r,
+        hub_len,
+        28,
+        HUB,
+    );
     let (mut mesh, colors) = b.into_mesh_and_colors();
     mesh.id = "valenx-geartooth".to_string();
     Some((mesh, colors))
@@ -350,7 +358,8 @@ fn load_gear_3d(app: &mut ValenxApp) {
 /// Pure (no app state) — driven entirely off [`GeartoothWorkbenchState::default`].
 pub(crate) fn geartooth_product() -> crate::WorkspaceProduct {
     let s = GeartoothWorkbenchState::default();
-    let (mesh, colors) = gear_solid_mesh(&s).expect("canonical gear-tooth spec ⇒ blank solid builds");
+    let (mesh, colors) =
+        gear_solid_mesh(&s).expect("canonical gear-tooth spec ⇒ blank solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<gear>/valenx-geartooth");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical gear-tooth spec ⇒ readout computes"),

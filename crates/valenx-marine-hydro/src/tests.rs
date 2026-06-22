@@ -162,18 +162,18 @@ mod validation {
     /// main particulars.
     fn holtrop_1982_example_hull() -> Hull {
         Hull::new(
-            205.00, // L_wl (m)
-            32.00,  // B (m)
-            10.00,  // T (m)
+            205.00,  // L_wl (m)
+            32.00,   // B (m)
+            10.00,   // T (m)
             37500.0, // nabla (m^3)
-            0.980,  // C_m
-            0.750,  // C_wp
-            -2.02,  // lcb (% of L; aft = negative)
-            20.0,   // A_bt (m^2)
-            4.0,    // h_b (m)
-            16.0,   // A_t (m^2)
-            10.0,   // C_stern
-            None,   // let the crate estimate S (validated below)
+            0.980,   // C_m
+            0.750,   // C_wp
+            -2.02,   // lcb (% of L; aft = negative)
+            20.0,    // A_bt (m^2)
+            4.0,     // h_b (m)
+            16.0,    // A_t (m^2)
+            10.0,    // C_stern
+            None,    // let the crate estimate S (validated below)
         )
         .unwrap()
     }
@@ -201,10 +201,7 @@ mod validation {
         let hull = holtrop_1982_example_hull();
         // Paper: S = 7381.45 m^2 (Holtrop wetted-surface regression).
         let s = hull.wetted_surface();
-        assert!(
-            close(s, 7381.45, 5e-5),
-            "S = {s} m^2 (paper 7381.45 m^2)"
-        );
+        assert!(close(s, 7381.45, 5e-5), "S = {s} m^2 (paper 7381.45 m^2)");
     }
 
     #[test]
@@ -344,9 +341,19 @@ mod units {
             205.0, 32.0, 10.0, 37500.0, 0.98, 0.75, -2.02, 20.0, 4.0, 16.0, 10.0, None,
         )
         .unwrap();
-        let p = hull.resistance_at(knots_to_ms(25.0), &WaterProperties::seawater()).unwrap();
-        assert!(close(p.total_resistance_kn(), p.total_resistance_n / 1000.0, 1e-12));
-        assert!(close(p.effective_power_kw(), p.effective_power_w / 1000.0, 1e-12));
+        let p = hull
+            .resistance_at(knots_to_ms(25.0), &WaterProperties::seawater())
+            .unwrap();
+        assert!(close(
+            p.total_resistance_kn(),
+            p.total_resistance_n / 1000.0,
+            1e-12
+        ));
+        assert!(close(
+            p.effective_power_kw(),
+            p.effective_power_w / 1000.0,
+            1e-12
+        ));
     }
 }
 
@@ -378,7 +385,9 @@ mod properties {
     #[test]
     fn total_is_sum_of_components() {
         let hull = demo_hull();
-        let p = hull.resistance_at(7.0, &WaterProperties::seawater()).unwrap();
+        let p = hull
+            .resistance_at(7.0, &WaterProperties::seawater())
+            .unwrap();
         let sum = p.viscous_resistance_n + p.wave_resistance_n + p.correlation_resistance_n;
         assert!(close(p.total_resistance_n, sum, 1e-9));
         // Viscous = friction * form factor.
@@ -394,12 +403,22 @@ mod properties {
         let estimated = demo_hull();
         let mut measured = demo_hull();
         measured.wetted_surface_m2 = Some(estimated.wetted_surface() * 1.10);
-        assert!(close(measured.wetted_surface(), estimated.wetted_surface() * 1.10, 1e-12));
+        assert!(close(
+            measured.wetted_surface(),
+            estimated.wetted_surface() * 1.10,
+            1e-12
+        ));
         // A bigger wetted surface means more friction at the same speed.
         let water = WaterProperties::seawater();
         assert!(
-            measured.resistance_at(7.0, &water).unwrap().frictional_resistance_n
-                > estimated.resistance_at(7.0, &water).unwrap().frictional_resistance_n
+            measured
+                .resistance_at(7.0, &water)
+                .unwrap()
+                .frictional_resistance_n
+                > estimated
+                    .resistance_at(7.0, &water)
+                    .unwrap()
+                    .frictional_resistance_n
         );
     }
 
@@ -408,8 +427,14 @@ mod properties {
         let hull = demo_hull();
         let sea = WaterProperties::seawater();
         let fresh = WaterProperties::freshwater();
-        let r_sea = hull.resistance_at(7.0, &sea).unwrap().frictional_resistance_n;
-        let r_fresh = hull.resistance_at(7.0, &fresh).unwrap().frictional_resistance_n;
+        let r_sea = hull
+            .resistance_at(7.0, &sea)
+            .unwrap()
+            .frictional_resistance_n;
+        let r_fresh = hull
+            .resistance_at(7.0, &fresh)
+            .unwrap()
+            .frictional_resistance_n;
         assert!(r_sea > r_fresh);
     }
 
@@ -417,7 +442,8 @@ mod properties {
     fn from_hydrostatic_round_trips_geometry() {
         // Build the same geometry via valenx-marine and check volume agrees.
         let hydro = valenx_marine::Hull::new(150.0, 20.0, 8.0, 0.7, 7.0, SEAWATER_DENSITY).unwrap();
-        let hull = Hull::from_hydrostatic(&hydro, 0.98, 0.78, -1.0, 0.0, 0.0, 0.0, 0.0, None).unwrap();
+        let hull =
+            Hull::from_hydrostatic(&hydro, 0.98, 0.78, -1.0, 0.0, 0.0, 0.0, 0.0, None).unwrap();
         assert!(close(hull.volume_m3, hydro.displaced_volume(), 1e-9));
         assert!(close(hull.block_coefficient(), 0.7, 1e-9));
     }
@@ -503,30 +529,87 @@ mod errors {
     #[test]
     fn hull_rejects_out_of_domain_inputs() {
         // zero length
-        assert!(Hull::new(0.0, 32.0, 10.0, 1.0, 0.98, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, None).is_err());
+        assert!(
+            Hull::new(0.0, 32.0, 10.0, 1.0, 0.98, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, None).is_err()
+        );
         // midship coeff > 1
-        assert!(Hull::new(200.0, 32.0, 10.0, 1.0, 1.5, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, None).is_err());
+        assert!(
+            Hull::new(200.0, 32.0, 10.0, 1.0, 1.5, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, None).is_err()
+        );
         // waterplane coeff = 0
-        assert!(Hull::new(200.0, 32.0, 10.0, 1.0, 0.98, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None).is_err());
+        assert!(
+            Hull::new(200.0, 32.0, 10.0, 1.0, 0.98, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None).is_err()
+        );
         // negative bulb area
-        assert!(Hull::new(200.0, 32.0, 10.0, 1.0, 0.98, 0.75, 0.0, -1.0, 0.0, 0.0, 0.0, None).is_err());
+        assert!(
+            Hull::new(200.0, 32.0, 10.0, 1.0, 0.98, 0.75, 0.0, -1.0, 0.0, 0.0, 0.0, None).is_err()
+        );
         // non-finite lcb
-        assert!(Hull::new(200.0, 32.0, 10.0, 1.0, 0.98, 0.75, f64::NAN, 0.0, 0.0, 0.0, 0.0, None).is_err());
+        assert!(Hull::new(
+            200.0,
+            32.0,
+            10.0,
+            1.0,
+            0.98,
+            0.75,
+            f64::NAN,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            None
+        )
+        .is_err());
         // supplied non-positive wetted surface
-        assert!(Hull::new(200.0, 32.0, 10.0, 1.0, 0.98, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, Some(-5.0)).is_err());
+        assert!(Hull::new(
+            200.0,
+            32.0,
+            10.0,
+            1.0,
+            0.98,
+            0.75,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Some(-5.0)
+        )
+        .is_err());
     }
 
     #[test]
     fn water_validation_rejects_bad_fluid() {
-        assert!(WaterProperties { density: 0.0, kinematic_viscosity: 1e-6, correlation_allowance: 0.0 }.validate().is_err());
-        assert!(WaterProperties { density: 1025.0, kinematic_viscosity: -1e-6, correlation_allowance: 0.0 }.validate().is_err());
-        assert!(WaterProperties { density: 1025.0, kinematic_viscosity: 1e-6, correlation_allowance: f64::NAN }.validate().is_err());
+        assert!(WaterProperties {
+            density: 0.0,
+            kinematic_viscosity: 1e-6,
+            correlation_allowance: 0.0
+        }
+        .validate()
+        .is_err());
+        assert!(WaterProperties {
+            density: 1025.0,
+            kinematic_viscosity: -1e-6,
+            correlation_allowance: 0.0
+        }
+        .validate()
+        .is_err());
+        assert!(WaterProperties {
+            density: 1025.0,
+            kinematic_viscosity: 1e-6,
+            correlation_allowance: f64::NAN
+        }
+        .validate()
+        .is_err());
         assert!(WaterProperties::seawater().validate().is_ok());
     }
 
     #[test]
     fn resistance_rejects_non_positive_speed() {
-        let hull = Hull::new(120.0, 18.0, 6.0, 9000.0, 0.95, 0.80, 0.0, 0.0, 0.0, 0.0, 0.0, None).unwrap();
+        let hull = Hull::new(
+            120.0, 18.0, 6.0, 9000.0, 0.95, 0.80, 0.0, 0.0, 0.0, 0.0, 0.0, None,
+        )
+        .unwrap();
         let water = WaterProperties::seawater();
         assert!(hull.resistance_at(0.0, &water).is_err());
         assert!(hull.resistance_at(-3.0, &water).is_err());
