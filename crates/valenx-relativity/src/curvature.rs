@@ -25,7 +25,7 @@
 // math and is error-prone, so the lint is disabled for this module.
 #![allow(clippy::needless_range_loop)]
 
-use crate::autodiff::HyperDual;
+use crate::autodiff::{Dual, HyperDual};
 use crate::metric::Spacetime;
 use crate::tensor::{self, Mat4};
 use crate::{RelativityError, Result};
@@ -126,6 +126,50 @@ fn metric_partials(s: &impl Spacetime, x: [f64; 4]) -> (T3, T4) {
         }
     }
     (dg, d2g)
+}
+
+/// Christoffel symbols `Γ^a_{bc}` at a point.
+///
+/// Cheaper than [`curvature_at`]: only the metric's first derivatives are
+/// needed (4 dual-number passes), so this is what the geodesic integrator calls
+/// on every step.
+///
+/// # Errors
+/// [`RelativityError::CoordinateSingularity`] if the metric is non-finite or
+/// non-invertible at `x`.
+pub fn christoffel_at(spacetime: &impl Spacetime, x: [f64; 4]) -> Result<T3> {
+    let g = spacetime.metric::<f64>(x);
+    if !tensor::all_finite(&g) {
+        return Err(RelativityError::CoordinateSingularity(format!(
+            "metric is non-finite at {x:?}"
+        )));
+    }
+    let ginv = tensor::inverse(&g).ok_or_else(|| {
+        RelativityError::CoordinateSingularity(format!("metric is singular at {x:?}"))
+    })?;
+    Ok(christoffel(&ginv, &first_partials(spacetime, x)))
+}
+
+/// First partials `dg[c][a][b] = ∂_c g_{ab}` via 4 dual-number passes (one per
+/// coordinate). Used where second derivatives are not required.
+fn first_partials(s: &impl Spacetime, x: [f64; 4]) -> T3 {
+    let mut dg: T3 = [[[0.0; 4]; 4]; 4];
+    for c in 0..4 {
+        let xd: [Dual; 4] = std::array::from_fn(|i| {
+            if i == c {
+                Dual::variable(x[i])
+            } else {
+                Dual::constant(x[i])
+            }
+        });
+        let gd = s.metric::<Dual>(xd);
+        for a in 0..4 {
+            for b in 0..4 {
+                dg[c][a][b] = gd[a][b].d;
+            }
+        }
+    }
+    dg
 }
 
 /// `−g⁻¹ (∂_c g) g⁻¹`, i.e. `∂_c g^{ab} = −g^{ae}(∂_c g_{ef})g^{fb}`.

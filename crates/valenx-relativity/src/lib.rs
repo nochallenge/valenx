@@ -48,6 +48,7 @@
 
 mod autodiff;
 pub mod curvature;
+pub mod geodesics;
 pub mod metric;
 pub mod observables;
 pub mod spacetimes;
@@ -56,7 +57,12 @@ pub mod thermo;
 pub mod units;
 
 pub use autodiff::{Dual, HyperDual, Scalar};
-pub use curvature::{curvature_at, Curvature};
+pub use curvature::{christoffel_at, curvature_at, Curvature};
+pub use geodesics::{
+    angular_momentum, deflection_angle, energy, equatorial_state, integrate_geodesic,
+    light_deflection_weak_field, norm, orbit_precession, perihelion_advance_per_orbit,
+    GeodesicOptions, GeodesicState, Kind, StopReason, Trajectory,
+};
 pub use metric::{CoordSystem, Spacetime};
 pub use observables::{
     ergosphere_radius, gravitational_redshift, horizons, isco, photon_sphere, shadow_radius,
