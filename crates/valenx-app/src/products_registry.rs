@@ -646,17 +646,13 @@ mod tests {
         "chaindrive",
         "fourbar",
         "thermalexpansion",
-        "dimensional",
         "projectile",
         "heattransfer",
-        "insulation",
         "heatexchanger",
         "heatpump",
         "refrigeration",
-        "psychrometrics",
         "thermocouple",
         "thermistor",
-        "thermocycle",
         "fanlaws",
         // Fluid-mechanics / hydraulics / thermo-fluids / electronics
         // workbenches wired into the bridge.
@@ -678,9 +674,8 @@ mod tests {
         "bjt",
         "mosfet",
         "rectifier",
-        // The 18 electrical / EM / power-systems / electrochemistry /
-        // photonics / acoustics / nuclear / signals / propulsion workbenches
-        // wired in this change.
+        // Electrical / EM / power-systems / electrochemistry / photonics /
+        // acoustics / signals / propulsion workbenches wired into the bridge.
         "filter",
         "antenna",
         "transmissionline",
@@ -688,19 +683,16 @@ mod tests {
         "led",
         "transformer",
         "threephase",
-        "powerfactor",
         "electrochem",
         "batterypack",
         "batteryecm",
         "solarpv",
         "optics",
         "acoustics",
-        "radioactivity",
-        "queueing",
         "fft",
         "engine",
-        // The 12 aerospace + bio workbenches — the last of the 3-D mesh
-        // tools — wired in this change.
+        // Aerospace + bio workbenches — the last of the 3-D mesh tools —
+        // wired into the bridge.
         "fixedwing",
         "drone",
         "windturbine",
@@ -708,10 +700,6 @@ mod tests {
         "enzymekinetics",
         "hemodynamics",
         "bonemech",
-        "bmr",
-        "thermoreg",
-        "osmosis",
-        "acidbase",
         "popdynamics",
         // The 7 real-geometry-extraction workbenches wired in this change — CAD
         // CSG, point-cloud reconstruction, rebar cage, coloured molecule,
@@ -778,17 +766,13 @@ mod tests {
         "chaindrive",
         "fourbar",
         "thermalexpansion",
-        "dimensional",
         "projectile",
         "heattransfer",
-        "insulation",
         "heatexchanger",
         "heatpump",
         "refrigeration",
-        "psychrometrics",
         "thermocouple",
         "thermistor",
-        "thermocycle",
         "fanlaws",
         // The 18 fluid-mechanics / hydraulics / thermo-fluids / electronics
         // workbenches wired in this change.
@@ -810,9 +794,8 @@ mod tests {
         "bjt",
         "mosfet",
         "rectifier",
-        // The 18 electrical / EM / power-systems / electrochemistry /
-        // photonics / acoustics / nuclear / signals / propulsion workbenches
-        // wired in this change.
+        // Electrical / EM / power-systems / electrochemistry / photonics /
+        // acoustics / signals / propulsion workbenches wired into the bridge.
         "filter",
         "antenna",
         "transmissionline",
@@ -820,19 +803,16 @@ mod tests {
         "led",
         "transformer",
         "threephase",
-        "powerfactor",
         "electrochem",
         "batterypack",
         "batteryecm",
         "solarpv",
         "optics",
         "acoustics",
-        "radioactivity",
-        "queueing",
         "fft",
         "engine",
-        // The 12 aerospace + bio workbenches — the last of the 3-D mesh
-        // tools — wired in this change.
+        // Aerospace + bio workbenches — the last of the 3-D mesh tools —
+        // wired into the bridge.
         "fixedwing",
         "drone",
         "windturbine",
@@ -840,10 +820,6 @@ mod tests {
         "enzymekinetics",
         "hemodynamics",
         "bonemech",
-        "bmr",
-        "thermoreg",
-        "osmosis",
-        "acidbase",
         "popdynamics",
         // The 7 real-geometry-extraction workbenches wired in this change. Each
         // must resolve and build a non-empty `Tri3` product with a title and at
@@ -880,6 +856,24 @@ mod tests {
         "car",
         "neuro",
         "variant_effect",
+        // Pure-calculator workbenches whose only honest output is the scalar
+        // readout: their former 3-D "model" was a decorative blob (a generic
+        // box / beaker / prism / swept-curve ribbon / fixed schematic that
+        // did not represent a real fabricated object), so each builder now
+        // returns a clean text card (`mesh: None`) instead. The panel's own
+        // "Show 3-D" button still builds that representative solid into the
+        // central viewport; only the agent-bridge product was right-sized.
+        "acidbase",
+        "bmr",
+        "thermoreg",
+        "osmosis",
+        "dimensional",
+        "powerfactor",
+        "queueing",
+        "radioactivity",
+        "thermocycle",
+        "psychrometrics",
+        "insulation",
         // The animation timeline is a DATA-ONLY card too — it summarises the
         // keyframe timeline (count / duration / sampled joint values); there is
         // no posed body to rasterise, so it carries no mesh and no 2-D drawing.

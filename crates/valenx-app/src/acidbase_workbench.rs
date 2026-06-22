@@ -427,27 +427,27 @@ fn load_beaker_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"acidbase"}`** product: the canonical
-/// beaker-of-solution solid (the panel's "Show 3-D beaker" geometry) paired
-/// with the workbench's own buffer / pH headline numbers, at a fixed 3/4
-/// camera. Registered in [`crate::products_registry`]; the per-tool builder
-/// the registry dispatches to. Pure — driven off
-/// [`AcidBaseWorkbenchState::default`].
+/// The agent-bridge **`show_3d{kind:"acidbase"}`** product: a DATA-ONLY text
+/// card of the workbench's own buffer / pH headline numbers. Acid-base
+/// equilibria have no characteristic shape — the panel's beaker is a
+/// representative decorative solid, not a real object — so the bridge product
+/// is right-sized to a card (`mesh: None`) carrying just the readout (the
+/// confidence badge is appended centrally). The panel's "Show 3-D beaker"
+/// button still builds that representative solid into the central viewport.
+/// Registered in [`crate::products_registry`]; the per-tool builder the
+/// registry dispatches to. Pure — driven off [`AcidBaseWorkbenchState::default`].
 ///
 /// The readout rows mirror the panel's `compute()` readout.
 pub(crate) fn acidbase_product() -> crate::WorkspaceProduct {
     let s = AcidBaseWorkbenchState::default();
-    let mesh = beaker_solid_mesh(&s).expect("default solution ⇒ a 3-D beaker");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<beaker>/valenx-acidbase");
     let readout = compute(&s).expect("default solution ⇒ a valid readout");
     let lines = crate::products_registry::lines_from_readout(&readout);
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Acid-Base".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
         image: None,

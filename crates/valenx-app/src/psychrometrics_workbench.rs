@@ -309,22 +309,24 @@ fn load_parcel_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// Agent-bridge product: the canonical psychrometrics workbench as a 3-D solid
-/// plus its `compute()` readout rows (see [`crate::products_registry`]).
+/// Agent-bridge product: a DATA-ONLY text card of the psychrometrics
+/// workbench's `compute()` readout rows (see [`crate::products_registry`]). A
+/// moist-air state has no characteristic shape — the panel's air-parcel
+/// control box is a generic stand-in, not a real object — so the bridge
+/// product is right-sized to a card (`mesh: None`) carrying just the readout
+/// (the confidence badge is appended centrally). The panel's "Show 3-D" button
+/// still builds that representative box into the central viewport.
 pub(crate) fn psychrometrics_product() -> crate::WorkspaceProduct {
     let s = PsychrometricsWorkbenchState::default();
-    let mesh = parcel_solid_mesh(&s).expect("canonical psychrometrics ⇒ parcel solid builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<psychrometrics>/valenx-parcel");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical psychrometrics ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Psychrometrics (humidity/enthalpy)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
         image: None,
