@@ -17,6 +17,7 @@ members = [
     # helpers (theme, help text, tooltips, mesh histograms, parsers).
     "crates/valenx-app-core",
     "crates/valenx-astro",
+    "crates/valenx-relativity",
     "crates/valenx-core",
     "crates/valenx-geo",
     "crates/valenx-mesh",
