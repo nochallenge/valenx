@@ -1,0 +1,24 @@
+[package]
+name        = "valenx-marine-hydro"
+description = "Calm-water ship/boat hull RESISTANCE and POWERING estimator: frictional resistance via the ITTC-1957 model-ship correlation line (Cf = 0.075/(log10 Re - 2)^2, Rf = 1/2 rho V^2 S Cf), the Holtrop-Mennen (1982/1984) statistical wetted-surface, form-factor and wave-making method, total resistance Rt = Rf(1+k) + Rw (+ correlation allowance) and effective power Pe = Rt V over a speed range and at a design speed, with Froude and Reynolds numbers. Reuses valenx-marine box-form hydrostatics for geometry. Research/preliminary grade: the frictional + ITTC-57 + wetted-surface chain is validated digit-exact against the Holtrop & Mennen (1982) published worked example; the wave-making term is the documented Holtrop regression but is preliminary. NOT a free-surface Navier-Stokes solver, NOT a substitute for a licensed naval architect or model-test data, and not for design, construction, or any decision affecting safety."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde         = { workspace = true }
+thiserror     = { workspace = true }
+# Reuse the box-form hydrostatics (Hull, displacement) as a geometry source.
+valenx-marine = { path = "../valenx-marine" }
+
+[dev-dependencies]
+# JSON round-trip checks for the serde-derived value types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
