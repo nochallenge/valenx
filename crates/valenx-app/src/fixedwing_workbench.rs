@@ -12,14 +12,20 @@
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
 use valenx_fixedwing::{Aircraft, SEA_LEVEL_AIR_DENSITY};
-use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Aluminium airframe grey for the fuselage body.
+const FUSELAGE: [f32; 3] = [0.74, 0.75, 0.78];
+/// Slightly cooler grey for the main wings.
+const WING: [f32; 3] = [0.62, 0.65, 0.70];
+/// Empennage (tail surfaces) — a touch darker so they read apart from the wings.
+const TAIL: [f32; 3] = [0.52, 0.55, 0.60];
 
 /// Persistent form + result state for the Fixed-Wing / Aircraft Workbench.
 pub struct FixedWingWorkbenchState {
@@ -252,157 +258,168 @@ fn run_aircraft(s: &mut FixedWingWorkbenchState) {
     }
 }
 
-/// Append an outward-facing box (centre `c`, half-extents `h`) to the
-/// buffers.
-fn push_box(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    h: Vector3<f64>,
-) {
-    let base = nodes.len();
-    let signs = [
-        (-1.0, -1.0, -1.0),
-        (1.0, -1.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (-1.0, 1.0, -1.0),
-        (-1.0, -1.0, 1.0),
-        (1.0, -1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (-1.0, 1.0, 1.0),
-    ];
-    for (sx, sy, sz) in signs {
-        nodes.push(c + Vector3::new(sx * h.x, sy * h.y, sz * h.z));
+/// Half the points around one closed airfoil section. The section is sampled
+/// as upper-then-lower surface so a [`MeshBuilder::loft`] of two of these skins
+/// a real wing with finite thickness.
+const AIRFOIL_HALF_POINTS: usize = 16;
+
+/// A closed **symmetric airfoil** loop for a NACA-`00tt` section of chord
+/// `chord` and max-thickness fraction `t_frac` (e.g. `0.12` ⇒ 12 % thick),
+/// returned as `[chordwise, thickness]` 2-D points. Built from the classic
+/// 4-digit half-thickness distribution
+/// `yt = 5t(0.2969√x − 0.1260x − 0.3516x² + 0.2843x³ − 0.1015x⁴)` (chord
+/// normalised to 1, scaled by `chord`), sampled with a cosine chordwise
+/// spacing so the curved leading edge is well resolved. The loop runs along the
+/// upper surface from the trailing edge to the leading edge, then back along
+/// the lower surface — a single closed counter-clockwise polygon. `cx` is the
+/// chordwise origin (the section's local x), so a swept section just shifts it.
+fn airfoil_section(chord: f64, t_frac: f64, cx: f64) -> Vec<[f64; 2]> {
+    let yt = |x: f64| {
+        5.0 * t_frac
+            * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x * x + 0.2843 * x * x * x
+                - 0.1015 * x * x * x * x)
+    };
+    let n = AIRFOIL_HALF_POINTS;
+    let mut pts = Vec::with_capacity(2 * n);
+    // Upper surface: trailing edge (x=1) → leading edge (x=0), cosine spacing.
+    for i in 0..n {
+        let beta = i as f64 / (n - 1) as f64 * std::f64::consts::PI;
+        let x = 0.5 * (1.0 + beta.cos()); // 1 → 0
+        pts.push([cx + x * chord, yt(x) * chord]);
     }
-    let faces = [
-        [1, 2, 6, 5],
-        [0, 4, 7, 3],
-        [3, 7, 6, 2],
-        [0, 1, 5, 4],
-        [4, 5, 6, 7],
-        [0, 3, 2, 1],
-    ];
-    for f in faces {
-        tris.extend_from_slice(&[
-            base + f[0],
-            base + f[1],
-            base + f[2],
-            base + f[0],
-            base + f[2],
-            base + f[3],
-        ]);
+    // Lower surface: leading edge (x=0) → trailing edge (x=1), skipping the
+    // shared LE/TE endpoints so the polygon has no duplicate vertices.
+    for i in 1..n - 1 {
+        let beta = i as f64 / (n - 1) as f64 * std::f64::consts::PI;
+        let x = 0.5 * (1.0 - beta.cos()); // 0 → 1
+        pts.push([cx + x * chord, -yt(x) * chord]);
     }
+    pts
 }
 
-/// Append a flat (double-sided) quad `a-b-c-d` to the buffers. Used for the
-/// thin lifting surfaces, whose winding need not be tracked.
-fn push_quad(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    a: Vector3<f64>,
-    b: Vector3<f64>,
-    c: Vector3<f64>,
-    d: Vector3<f64>,
-) {
-    let base = nodes.len();
-    nodes.push(a);
-    nodes.push(b);
-    nodes.push(c);
-    nodes.push(d);
-    tris.extend_from_slice(&[
-        base,
-        base + 1,
-        base + 2,
-        base,
-        base + 2,
-        base + 3,
-        base,
-        base + 2,
-        base + 1,
-        base,
-        base + 3,
-        base + 2,
-    ]);
+/// Place a planar `[chordwise, thickness]` airfoil section into 3-D for a
+/// **horizontal** lifting surface (wing / tailplane): chord runs along x,
+/// thickness along z, and the whole section sits at spanwise station `y` and
+/// height `z0`. The result is one ring ready for [`MeshBuilder::loft`].
+fn horiz_section(profile: &[[f64; 2]], y: f64, z0: f64) -> Vec<[f64; 3]> {
+    profile.iter().map(|&[cx, th]| [cx, y, z0 + th]).collect()
 }
 
-/// Build the aircraft as a triangle [`Mesh`] — a box fuselage plus tapered
-/// main wings, a horizontal tail and a vertical fin. The planform follows
-/// the aspect ratio and wing area (`span = sqrt(AR * S)`), so the geometry
-/// tracks the inputs. `None` for an invalid (out-of-domain) aircraft.
-/// `+x` is forward (nose), `+y` is the right wing, `+z` is up.
-fn aircraft_solid_mesh(s: &FixedWingWorkbenchState) -> Option<Mesh> {
+/// Place a planar `[chordwise, thickness]` airfoil section into 3-D for the
+/// **vertical** fin: chord runs along x, thickness along y, and the section
+/// sits at height station `z` (so lofting root→tip sweeps it upward).
+fn vert_section(profile: &[[f64; 2]], z: f64) -> Vec<[f64; 3]> {
+    profile.iter().map(|&[cx, th]| [cx, th, z]).collect()
+}
+
+/// Build the aircraft as a triangle [`Mesh`] **with per-vertex colours** — a
+/// **revolved tapered fuselage** (nose + tail fairing) plus **extruded airfoil
+/// surfaces** for the main wings, the horizontal tailplane and the vertical
+/// fin, each a real thickness/taper/sweep loft of a NACA-`00tt` section (not a
+/// flat zero-thickness quad). The planform follows the aspect ratio and wing
+/// area (`span = √(AR·S)`), so the geometry tracks the inputs. Colours:
+/// fuselage aluminium grey, wings cool grey, empennage darker. `+x` is forward
+/// (nose), `+y` is the right wing, `+z` is up. `None` for an invalid aircraft.
+///
+/// Returns `(mesh, colors)` with `colors.len() == 3 × triangle_count`, ready
+/// for [`crate::WorkspaceProduct::vertex_colors`].
+fn aircraft_solid_mesh_colored(s: &FixedWingWorkbenchState) -> Option<(Mesh, Vec<[f32; 3]>)> {
     let a = build_aircraft(s).ok()?;
     let span = (a.aspect_ratio * a.wing_area_m2).sqrt();
     let chord = a.wing_area_m2 / span;
     let semi = span * 0.5;
-
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
-
-    // Fuselage: an elongated box with real height + width (the 3-D anchor).
     let fus_len = span * 0.85;
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::zeros(),
-        Vector3::new(fus_len * 0.5, span * 0.05, span * 0.07),
-    );
+    let max_r = span * 0.06; // peak fuselage radius
 
-    // Main wing: tapered, swept slightly aft, at mid-fuselage. Root chord
-    // 1.5x mean chord, tip chord 0.55x, both centred near the CG.
+    let mut b = MeshBuilder::new();
+
+    // Fuselage: a revolved body of revolution along +x. The half-profile is
+    // `[radius, x]` from a pointed nose, swelling to the cabin, then fairing to
+    // a small tailcone — a real tapered fuselage instead of a box.
+    let nose = fus_len * 0.5;
+    let tail = -fus_len * 0.5;
+    let profile: Vec<[f64; 2]> = vec![
+        [0.0, nose],                 // nose apex
+        [max_r * 0.45, nose - fus_len * 0.10],
+        [max_r * 0.85, nose - fus_len * 0.22],
+        [max_r, fus_len * 0.10],     // cabin (fullest, slightly fwd of centre)
+        [max_r * 0.95, 0.0],
+        [max_r * 0.70, tail + fus_len * 0.28],
+        [max_r * 0.34, tail + fus_len * 0.06],
+        [0.0, tail],                 // tailcone tip
+    ];
+    b.revolve(&profile, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], 360.0, 24, FUSELAGE);
+
+    // Main wing: tapered + swept, finite-thickness airfoil. Root chord 1.5×
+    // mean, tip 0.55×, gentle aft sweep, 12 % thick. Lofted root→tip per side.
     let root_c = chord * 1.5;
     let tip_c = chord * 0.55;
-    let root_xc = 0.0;
-    let tip_xc = -chord * 0.4; // gentle aft sweep
-    let zw = 0.0;
+    let tip_sweep = -chord * 0.4;
+    let root_y = span * 0.05;
     for side in [1.0_f64, -1.0] {
-        let yr = side * span * 0.05; // root at fuselage side
-        let yt = side * semi;
-        push_quad(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(root_xc + root_c * 0.5, yr, zw),
-            Vector3::new(root_xc - root_c * 0.5, yr, zw),
-            Vector3::new(tip_xc - tip_c * 0.5, yt, zw),
-            Vector3::new(tip_xc + tip_c * 0.5, yt, zw),
+        let root = horiz_section(&airfoil_section(root_c, 0.12, -root_c * 0.5), side * root_y, 0.0);
+        let tip = horiz_section(
+            &airfoil_section(tip_c, 0.10, tip_sweep - tip_c * 0.5),
+            side * semi,
+            0.0,
         );
+        // Order sections outboard-going so the cap winding faces outward.
+        let secs = if side > 0.0 {
+            vec![root, tip]
+        } else {
+            vec![tip, root]
+        };
+        b.loft(&secs, true, WING);
     }
 
-    // Horizontal tailplane near the rear.
+    // Horizontal tailplane near the rear, smaller + thinner.
     let tail_x = -fus_len * 0.46;
     let th_root = chord * 0.7;
     let th_tip = chord * 0.35;
     let tail_semi = semi * 0.4;
+    let tail_z = max_r * 0.4;
     for side in [1.0_f64, -1.0] {
-        let yt = side * tail_semi;
-        push_quad(
-            &mut nodes,
-            &mut tris,
-            Vector3::new(tail_x + th_root * 0.5, 0.0, span * 0.04),
-            Vector3::new(tail_x - th_root * 0.5, 0.0, span * 0.04),
-            Vector3::new(tail_x - th_tip * 0.5, yt, span * 0.04),
-            Vector3::new(tail_x + th_tip * 0.5, yt, span * 0.04),
+        let root = horiz_section(
+            &airfoil_section(th_root, 0.10, tail_x - th_root * 0.5),
+            0.0,
+            tail_z,
         );
+        let tip = horiz_section(
+            &airfoil_section(th_tip, 0.09, tail_x - chord * 0.15 - th_tip * 0.5),
+            side * tail_semi,
+            tail_z,
+        );
+        let secs = if side > 0.0 {
+            vec![root, tip]
+        } else {
+            vec![tip, root]
+        };
+        b.loft(&secs, true, TAIL);
     }
 
-    // Vertical fin (in the x-z plane at y = 0), swept.
+    // Vertical fin in the x-z plane at y = 0, swept, lofted bottom→top.
     let fin_h = span * 0.18;
-    push_quad(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(tail_x + th_root * 0.5, 0.0, span * 0.07),
-        Vector3::new(tail_x - th_root * 0.5, 0.0, span * 0.07),
-        Vector3::new(tail_x - th_root * 0.4, 0.0, span * 0.07 + fin_h),
-        Vector3::new(tail_x + th_root * 0.1, 0.0, span * 0.07 + fin_h),
+    let fin_root_c = th_root;
+    let fin_tip_c = th_root * 0.55;
+    let fin_root = vert_section(
+        &airfoil_section(fin_root_c, 0.10, tail_x - fin_root_c * 0.5),
+        max_r * 0.6,
     );
+    let fin_tip = vert_section(
+        &airfoil_section(fin_tip_c, 0.09, tail_x - chord * 0.2 - fin_tip_c * 0.5),
+        max_r * 0.6 + fin_h,
+    );
+    b.loft(&[fin_root, fin_tip], true, TAIL);
 
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-fixedwing");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
-    Some(mesh)
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-fixedwing".to_string();
+    Some((mesh, colors))
+}
+
+/// Build the aircraft [`Mesh`] (without the colour metadata) for the central
+/// viewport. See [`aircraft_solid_mesh_colored`].
+fn aircraft_solid_mesh(s: &FixedWingWorkbenchState) -> Option<Mesh> {
+    aircraft_solid_mesh_colored(s).map(|(mesh, _colors)| mesh)
 }
 
 /// Build the 3-D aircraft solid and load it into the central viewport.
@@ -439,7 +456,8 @@ fn load_aircraft_3d(app: &mut ValenxApp) {
 pub(crate) fn fixedwing_product() -> crate::WorkspaceProduct {
     let mut s = FixedWingWorkbenchState::default();
     run_aircraft(&mut s);
-    let mesh = aircraft_solid_mesh(&s).expect("default GA aircraft ⇒ a 3-D solid");
+    let (mesh, colors) =
+        aircraft_solid_mesh_colored(&s).expect("default GA aircraft ⇒ a 3-D solid");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<aircraft>/valenx-fixedwing");
     let lines = crate::products_registry::lines_from_readout(&s.result);
     let camera = crate::products_registry::camera_for(&loaded.mesh);
@@ -447,7 +465,7 @@ pub(crate) fn fixedwing_product() -> crate::WorkspaceProduct {
         title: "Fixed-Wing / Aircraft".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
@@ -517,6 +535,69 @@ mod tests {
             ..Default::default()
         };
         assert!(aircraft_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn airfoil_section_is_a_closed_thick_loop() {
+        // A 12 % NACA-00xx section: a closed loop of 2·n−2 vertices spanning the
+        // full chord, with a real (non-zero) max thickness ≈ 12 % of chord, and
+        // upper/lower surfaces symmetric about the chord line.
+        let chord = 2.0;
+        let pts = airfoil_section(chord, 0.12, 0.0);
+        assert_eq!(pts.len(), 2 * AIRFOIL_HALF_POINTS - 2);
+        let max_x = pts.iter().map(|p| p[0]).fold(f64::MIN, f64::max);
+        let min_x = pts.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
+        assert!((max_x - chord).abs() < 1e-9 && min_x.abs() < 1e-9, "spans chord");
+        let max_t = pts.iter().map(|p| p[1]).fold(f64::MIN, f64::max);
+        // NACA 4-digit peak half-thickness is ≈ 0.6·t·chord above the chord.
+        assert!(
+            (max_t - 0.12 * chord * 0.6).abs() < 0.02 * chord,
+            "≈12% thickness, got {max_t}"
+        );
+        let min_t = pts.iter().map(|p| p[1]).fold(f64::MAX, f64::min);
+        assert!((max_t + min_t).abs() < 1e-9, "symmetric about the chord");
+    }
+
+    #[test]
+    fn aircraft_carries_vertex_aligned_colours() {
+        // The revolved fuselage + lofted airfoil surfaces ship per-vertex
+        // colours aligned to the renderer's coloured path (3 / triangle), with
+        // the fuselage, wing and tail colours all present and a real 3-D solid
+        // (the wings now have thickness, so node count far exceeds the old
+        // flat-quad build).
+        let s = FixedWingWorkbenchState::default();
+        let (mesh, colors) =
+            aircraft_solid_mesh_colored(&s).expect("default aircraft builds coloured");
+        assert!(!mesh.nodes.is_empty(), "non-empty mesh");
+        assert!(mesh.total_elements() > 0, "mesh has triangles");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        assert!(colors.contains(&FUSELAGE), "fuselage colour present");
+        assert!(colors.contains(&WING), "wing colour present");
+        assert!(colors.contains(&TAIL), "tail colour present");
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
+            }
+        }
+    }
+
+    #[test]
+    fn aircraft_product_is_coloured_and_aligned() {
+        let product = fixedwing_product();
+        let loaded = product.mesh.as_ref().expect("aircraft product has a mesh");
+        let colors = product
+            .vertex_colors
+            .as_ref()
+            .expect("aircraft product carries vertex_colors");
+        assert_eq!(
+            colors.len(),
+            loaded.mesh.total_elements() * 3,
+            "product colours aligned to the coloured path"
+        );
     }
 }
 
