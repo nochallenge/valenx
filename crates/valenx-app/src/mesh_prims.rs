@@ -681,6 +681,99 @@ impl MeshBuilder {
         start..self.nodes.len()
     }
 
+    /// Sweep a **single continuous helical thread ridge** — a real screw
+    /// thread — by lofting a small 60° ISO triangular tooth profile along a
+    /// helix of the given `pitch` (axial advance per full turn) for `length`
+    /// along `axis` through `center`. This is the [`loft`](Self::loft) skin
+    /// pattern (consecutive ring-to-ring quad bands) specialised to a 3-point
+    /// cross-section that rides a helix, so the bolt shank reads as threaded
+    /// rather than smooth.
+    ///
+    /// At helix parameter `t` (turns, `0 ..= length/pitch`) the angle is
+    /// `θ = 2π·t`, the radial unit direction is `dir = u·cos θ + v·sin θ`, and
+    /// the axial position advances as `z = t·pitch`. Each cross-section is a
+    /// triangle in the `(dir, w)` plane: a **crest** vertex at `major_radius`
+    /// and two **root** vertices at `major_radius − 0.6·pitch`, offset axially
+    /// by `±pitch/4` — the canonical ISO 60° truncated-triangle tooth. Skinning
+    /// the three corresponding edges of consecutive sections with quads yields
+    /// the outward-facing helical ridge (three faceted flanks per step).
+    ///
+    /// Uses `seg_per_turn` angular stations per turn (clamped ≥ 3); the total
+    /// station count is `round(turns · seg_per_turn) + 1`. A non-positive
+    /// `pitch`, `length`, or `major_radius`, or a `major_radius` not larger than
+    /// the resulting root radius, yields an empty range (nothing appended) so a
+    /// degenerate thread never produces inverted geometry.
+    ///
+    /// Returns the appended node [`Range<usize>`]: `3 · station_count` vertices
+    /// (one 3-point tooth section per station). The ridge is open (it is meant
+    /// to wrap a core cylinder, e.g. the bolt shank, which seals the interior).
+    #[allow(clippy::too_many_arguments)]
+    pub fn helical_thread(
+        &mut self,
+        center: [f64; 3],
+        axis: [f64; 3],
+        major_radius: f64,
+        pitch: f64,
+        length: f64,
+        seg_per_turn: usize,
+        color: [f32; 3],
+    ) -> Range<usize> {
+        let start = self.nodes.len();
+        let r_root = major_radius - 0.6 * pitch;
+        if !(pitch.is_finite()
+            && pitch > 1e-9
+            && length.is_finite()
+            && length > 1e-9
+            && major_radius.is_finite()
+            && major_radius > r_root
+            && r_root > 1e-9)
+        {
+            return start..self.nodes.len();
+        }
+        let seg = seg_per_turn.max(3);
+        let turns = length / pitch;
+        let stations = ((turns * seg as f64).round() as usize).max(1) + 1;
+        let (u, v, w) = axis_frame(axis);
+        let c = Vector3::new(center[0], center[1], center[2]);
+        // Half the axial extent of one ISO tooth flank (gives the ~60° profile:
+        // a 0.5·pitch tall triangle over a 0.6·pitch radial depth).
+        let half_tooth = pitch * 0.25;
+        // The ridge spans z ∈ [-length/2, +length/2] of the swept length.
+        let z0 = -length * 0.5;
+
+        // One 3-vertex tooth cross-section per angular station, advancing along
+        // the helix. Section s contributes [crest, root_lo, root_hi].
+        let base = self.nodes.len() as u32;
+        for s in 0..stations {
+            let t = s as f64 / seg as f64; // turns elapsed at this station
+            let theta = t * TAU;
+            let (sn, cs) = theta.sin_cos();
+            let dir = u * cs + v * sn;
+            let z = z0 + t * pitch;
+            // Crest: outermost, axially centred on the tooth.
+            self.vert(c + dir * major_radius + w * z);
+            // Root below and above the crest (the two flanks).
+            self.vert(c + dir * r_root + w * (z - half_tooth));
+            self.vert(c + dir * r_root + w * (z + half_tooth));
+        }
+
+        // Skin consecutive sections with quads on each of the three tooth edges,
+        // wound so the outward (away-from-axis) flanks face out — the same
+        // ring-to-ring band pattern as `loft`/`extrude`.
+        for s in 0..stations - 1 {
+            let a = base + (s as u32) * 3; // [a+0 crest, a+1 root_lo, a+2 root_hi]
+            let b = base + (s as u32 + 1) * 3;
+            // Lower flank: crest → root_lo (outer face looks "down-and-out").
+            self.quad(a, b, b + 1, a + 1, color);
+            // Upper flank: root_hi → crest.
+            self.quad(a + 2, b + 2, b, a, color);
+            // Root web closing the tooth valley (root_lo → root_hi), keeping the
+            // ridge a watertight strip between turns.
+            self.quad(a + 1, b + 1, b + 2, a + 2, color);
+        }
+        start..self.nodes.len()
+    }
+
     /// Append an **already-built [`Tri3`](ElementType::Tri3) mesh** (its nodes
     /// re-based onto this builder's node array) with one flat `color`,
     /// preserving the per-triangle colour lock-step. This is the bridge for
@@ -1003,5 +1096,50 @@ mod tests {
         assert_eq!(c.len(), 72);
         assert!(c[..36].iter().all(|&x| x == red), "first part all red");
         assert!(c[36..].iter().all(|&x| x == blue), "second part all blue");
+    }
+
+    #[test]
+    fn helical_thread_well_formed_and_winds_a_helix() {
+        // A 0.5 mm-pitch thread over a 6 mm length on a 3 mm-radius core: it
+        // must be a valid, non-empty coloured mesh, span the swept length in z,
+        // sit between the root and crest radii, and (being a real helix) advance
+        // its crest angle by ≈ 2π per pitch of travel.
+        let seg = 24;
+        let pitch = 0.5;
+        let length = 6.0;
+        let major_r = 3.0;
+        let mut b = MeshBuilder::new();
+        let range = b.helical_thread([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], major_r, pitch, length, seg, RED);
+        let turns = length / pitch;
+        let stations = ((turns * seg as f64).round() as usize) + 1;
+        // 3 vertices (crest + two roots) per station.
+        assert_eq!(range, 0..(3 * stations), "3-vertex tooth section per station");
+        let (m, c, t) = bake(b);
+        assert_well_formed(&m, &c, t);
+        // Every vertex lies within [root, crest] of the axis and inside the swept
+        // length: a true ridge wrapping the core, not stray geometry.
+        let r_root = major_r - 0.6 * pitch;
+        for p in &m.nodes {
+            let rad = (p.x * p.x + p.y * p.y).sqrt();
+            assert!(rad >= r_root - 1e-9 && rad <= major_r + 1e-9, "vertex radius in thread band");
+            assert!(p.z >= -length * 0.5 - pitch && p.z <= length * 0.5 + pitch, "within swept length");
+        }
+        // The crest vertices climb monotonically in z (a helix, not a stack of
+        // flat rings): the last crest is ≈ `length` above the first.
+        let first_crest_z = m.nodes[0].z;
+        let last_crest_z = m.nodes[(stations - 1) * 3].z;
+        assert!((last_crest_z - first_crest_z - length).abs() < pitch, "crest rises by the swept length");
+    }
+
+    #[test]
+    fn helical_thread_rejects_degenerate() {
+        // Non-positive pitch/length, or a pitch so coarse the root radius is not
+        // below the crest, must append nothing (no inverted geometry).
+        let mut b = MeshBuilder::new();
+        assert!(b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 0.0, 6.0, 24, RED).is_empty(), "zero pitch");
+        assert!(b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 0.5, 0.0, 24, RED).is_empty(), "zero length");
+        // r_root = 3 − 0.6·6 = −0.6 ≤ 0 ⇒ rejected.
+        assert!(b.helical_thread([0.0; 3], [0.0, 0.0, 1.0], 3.0, 6.0, 6.0, 24, RED).is_empty(), "root below axis");
+        assert_eq!(b.node_count(), 0, "nothing appended for any degenerate thread");
     }
 }
