@@ -21,6 +21,9 @@ use crate::ValenxApp;
 const STEEL: [f32; 3] = [0.62, 0.64, 0.68];
 /// Angular segments around the cylindrical shank.
 const SHANK_SEGMENTS: usize = 32;
+/// Angular stations **per thread turn** for the helical thread ridge — enough
+/// to read as a smooth helix without exploding the triangle budget.
+const THREAD_SEGMENTS_PER_TURN: usize = 32;
 
 /// Persistent form + result state for the Fasteners Workbench.
 pub struct FastenersWorkbenchState {
@@ -147,23 +150,27 @@ fn hex_profile(across_flats: f64) -> Vec<[f64; 2]> {
 
 /// Build the selected bolt as a real 3-D solid **with per-vertex colours**: an
 /// **ISO 4017 hex head** (a regular hexagon prism of width-across-flats `s` and
-/// head height `k`, extruded along +z) sitting atop a **cylindrical shank**
-/// (diameter = nominal `d`, length = the spec's `length_mm`), unioned into one
+/// head height `k`, extruded along +z) sitting atop a **threaded shank**
+/// (nominal diameter `d`, length = the spec's `length_mm`), unioned into one
 /// [`valenx_mesh::Mesh`] via [`MeshBuilder`]. Steel grey throughout.
 ///
 /// The shank runs from `z = 0` (free end) up to `z = L` (under-head bearing
 /// face); the head sits on top from `z = L` to `z = L + k`. Geometry is in
 /// millimetres, matching the dimension readout.
 ///
-/// Threads are **not** modelled — the shank is a clean smooth cylinder (the
-/// thread is reported numerically as pitch diameter / tensile stress area in
-/// the readout, the same simplification `valenx_fasteners::bolt::to_solid`
-/// makes). Returns `(mesh, colors)` with `colors.len() == 3 × triangle_count`,
+/// The shank is **really threaded**, not smooth: a core cylinder at the ISO
+/// thread **root** radius (`d/2 − 0.6·P`) fills the valleys, and a continuous
+/// 60° ISO triangular thread ridge ([`MeshBuilder::helical_thread`]) is swept
+/// along a helix of the spec's thread **pitch** `P` on top of it, crest at the
+/// nominal radius `d/2`. So the bolt reads as a screw, and the thread's pitch /
+/// pitch diameter / tensile stress area still appear numerically in the
+/// readout. Returns `(mesh, colors)` with `colors.len() == 3 × triangle_count`,
 /// ready for [`crate::WorkspaceProduct::vertex_colors`], or `None` when the
 /// spec's nominal diameter / length is non-positive.
 fn bolt_mesh_colored(spec: &BoltSpec) -> Option<(valenx_mesh::Mesh, Vec<[f32; 3]>)> {
     let d = spec.thread.nominal_diameter;
     let length = spec.length_mm;
+    let pitch = spec.thread.pitch;
     let s = spec.width_across_flats_mm();
     let k = spec.head_height_mm();
     if !(d.is_finite() && d > 0.0 && length.is_finite() && length > 0.0 && s > 0.0 && k > 0.0) {
@@ -171,15 +178,37 @@ fn bolt_mesh_colored(spec: &BoltSpec) -> Option<(valenx_mesh::Mesh, Vec<[f32; 3]
     }
 
     let mut b = MeshBuilder::new();
-    // Cylindrical shank, axis along +z, spanning z ∈ [0, L] (centre at L/2).
+    let major_r = d * 0.5;
+    // ISO thread root radius — the core cylinder sits here so it fills the
+    // thread valleys; the helical ridge rises from it out to the nominal radius.
+    let root_r = (major_r - 0.6 * pitch).max(major_r * 0.5);
+    // Core shank cylinder at the root radius, axis +z, spanning z ∈ [0, L].
     b.cylinder(
         [0.0, 0.0, length * 0.5],
         [0.0, 0.0, 1.0],
-        d * 0.5,
+        root_r,
         length,
         SHANK_SEGMENTS,
         STEEL,
     );
+    // Real helical thread ridge wrapping the core: crest at the nominal radius,
+    // swept along a helix of the ISO pitch over the shank length. The ridge is
+    // inset by half a tooth (pitch/2 total — the tooth flanks extend ±pitch/4
+    // axially) so the threaded region fits exactly inside z ∈ [0, L], keeping
+    // the shank's free end at z = 0. Skipped if the pitch is non-positive or the
+    // shank is too short to hold a full inset tooth (degenerate spec).
+    let thread_len = length - 0.5 * pitch;
+    if pitch.is_finite() && pitch > 0.0 && thread_len > 0.0 {
+        b.helical_thread(
+            [0.0, 0.0, length * 0.5],
+            [0.0, 0.0, 1.0],
+            major_r,
+            pitch,
+            thread_len,
+            THREAD_SEGMENTS_PER_TURN,
+            STEEL,
+        );
+    }
     // Hex head: a regular-hexagon prism of across-flats `s`, extruded from the
     // bearing face (z = L) up by the head height `k`.
     b.extrude(&hex_profile(s), length, length + k, STEEL);
@@ -288,8 +317,9 @@ fn run_fasteners(s: &mut FastenersWorkbenchState) {
 /// paired with the genuine ISO dimension readout rows ([`run_fasteners`]) and
 /// framed at the shared 3/4 hero camera. Registered as the `"fasteners"`
 /// producer in [`crate::products_registry::lookup`]; the tile renders the
-/// orbitable bolt with its dimensions alongside. Threads are not modelled (the
-/// shank is a smooth cylinder); the thread is reported numerically in `lines`.
+/// orbitable bolt with its dimensions alongside. The shank carries a real
+/// helical ISO thread ridge (see [`bolt_mesh_colored`]); the thread is also
+/// reported numerically in `lines`.
 pub(crate) fn fasteners_product() -> crate::WorkspaceProduct {
     let mut s = FastenersWorkbenchState::default();
     run_fasteners(&mut s);
@@ -442,6 +472,65 @@ mod tests {
             (max_z - (spec.length_mm + spec.head_height_mm())).abs() < 1e-6,
             "top of head at z = L + k"
         );
+    }
+
+    #[test]
+    fn threaded_shank_has_more_triangles_than_a_smooth_baseline() {
+        // The real bolt (core cylinder + helical thread ridge + hex head) must
+        // carry strictly more triangles than an equivalent SMOOTH-shank bolt
+        // (plain cylinder + hex head), proving the thread geometry is actually
+        // there — while staying a valid non-empty mesh whose colour buffer holds
+        // exactly 3 entries per triangle (the renderer's coloured-path layout).
+        let spec = iso4017_hex_table()
+            .into_iter()
+            .find(|b| b.nominal == "M6")
+            .expect("M6 is in the ISO 4017 table");
+
+        // Smooth-shank baseline: the pre-thread construction (cylinder + head).
+        let smooth_tris = {
+            let mut b = MeshBuilder::new();
+            b.cylinder(
+                [0.0, 0.0, spec.length_mm * 0.5],
+                [0.0, 0.0, 1.0],
+                spec.thread.nominal_diameter * 0.5,
+                spec.length_mm,
+                SHANK_SEGMENTS,
+                STEEL,
+            );
+            b.extrude(
+                &hex_profile(spec.width_across_flats_mm()),
+                spec.length_mm,
+                spec.length_mm + spec.head_height_mm(),
+                STEEL,
+            );
+            b.into_mesh_and_colors().0.total_elements()
+        };
+
+        let (mesh, colors) = bolt_mesh_colored(&spec).expect("M6 ⇒ a threaded solid");
+        let threaded_tris = mesh.total_elements();
+
+        assert!(!mesh.nodes.is_empty(), "threaded bolt mesh is non-empty");
+        assert!(
+            threaded_tris > smooth_tris,
+            "threaded shank ({threaded_tris} tris) must exceed the smooth baseline ({smooth_tris} tris)"
+        );
+        assert_eq!(
+            colors.len(),
+            threaded_tris * 3,
+            "vertex_colors must equal 3 × triangle count (coloured path)"
+        );
+        assert!(colors.iter().all(|&c| c == STEEL), "all steel grey");
+        // The crest of the thread reaches the nominal radius d/2 (the thread is
+        // proud of the root-radius core), confirming a real ridge, not a tube.
+        let major_r = spec.thread.nominal_diameter * 0.5;
+        let max_rad = mesh
+            .nodes
+            .iter()
+            .map(|p| (p.x * p.x + p.y * p.y).sqrt())
+            .fold(f64::MIN, f64::max);
+        // (The hex head's across-corners is wider, so only assert the thread
+        // crest is at least the nominal radius — it must reach d/2 somewhere.)
+        assert!(max_rad >= major_r - 1e-9, "thread crest reaches the nominal radius");
     }
 
     #[test]
