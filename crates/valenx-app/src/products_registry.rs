@@ -1112,6 +1112,16 @@ mod tests {
                 .unwrap_or_else(|| panic!("{k}: a 3-D product carries a mesh"));
             assert!(!mesh.mesh.nodes.is_empty(), "{k}: mesh has vertices");
             assert!(mesh.mesh.total_elements() > 0, "{k}: mesh has triangles");
+            // Every 3-D product must carry a readout — the result rows
+            // `materialize_pending` posts into the unit's agent chat. `rocket`
+            // shipped empty `lines` here once (it predated that convention and
+            // was absent from WIRED_WORKBENCH_KINDS' lines check), so the
+            // reader saw only "Unit N ready". Assert it for EVERY known 3-D
+            // kind so a reference or future producer can't regress silently.
+            assert!(
+                !product.lines.is_empty(),
+                "{k}: product carries result rows for the agent chat"
+            );
         }
         // The FEM cantilever ships von-Mises per-vertex colours.
         assert!(
