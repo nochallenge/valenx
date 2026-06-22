@@ -51,6 +51,7 @@ pub mod curvature;
 pub mod geodesics;
 pub mod metric;
 pub mod observables;
+pub mod shadow;
 pub mod spacetimes;
 pub mod tensor;
 pub mod thermo;
@@ -68,6 +69,7 @@ pub use observables::{
     ergosphere_radius, gravitational_redshift, horizons, isco, photon_sphere, shadow_radius,
     Horizons, OrbitSense,
 };
+pub use shadow::{equatorial_shadow_edges, render_shadow, trace_pixel, ShadowImage};
 pub use spacetimes::{kerr, reissner_nordstrom, schwarzschild, KerrNewman, Minkowski};
 pub use thermo::{thermodynamics, Thermodynamics};
 
