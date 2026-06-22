@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-relativity"
+description = "In-house general-relativity engine: automatic-differentiation tensor calculus (Christoffel/Riemann/Ricci/Einstein, Kretschmann scalar) over arbitrary metrics, plus the Schwarzschild/Kerr/Reissner-Nordstrom/Kerr-Newman black-hole family - every quantity cross-checked against closed-form ground truth. A real working v1, not a numerical-relativity evolution code."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
