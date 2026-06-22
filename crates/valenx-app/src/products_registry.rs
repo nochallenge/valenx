@@ -670,11 +670,9 @@ mod tests {
         "diffusion",
         "marine",
         "resistornetwork",
-        "capacitor",
         "opamp",
         "bjt",
         "mosfet",
-        "rectifier",
         // Electrical / EM / power-systems / electrochemistry / photonics /
         // acoustics / signals / propulsion workbenches wired into the bridge.
         "filter",
@@ -683,8 +681,6 @@ mod tests {
         "coil",
         "led",
         "transformer",
-        "threephase",
-        "electrochem",
         "batterypack",
         "batteryecm",
         "solarpv",
@@ -791,11 +787,9 @@ mod tests {
         "diffusion",
         "marine",
         "resistornetwork",
-        "capacitor",
         "opamp",
         "bjt",
         "mosfet",
-        "rectifier",
         // Electrical / EM / power-systems / electrochemistry / photonics /
         // acoustics / signals / propulsion workbenches wired into the bridge.
         "filter",
@@ -804,8 +798,6 @@ mod tests {
         "coil",
         "led",
         "transformer",
-        "threephase",
-        "electrochem",
         "batterypack",
         "batteryecm",
         "solarpv",
@@ -875,6 +867,17 @@ mod tests {
         "thermocycle",
         "psychrometrics",
         "insulation",
+        // Electrical / electrochemistry figures-of-merit calculators whose
+        // former 3-D "model" was likewise a decorative schematic of generic
+        // boxes / cylinders (parallel-plate boxes, a diode-bridge package on a
+        // board, three abstract phase limbs, a beaker-with-electrodes) that did
+        // not represent a real fabricated object — right-sized to text cards in
+        // the same spirit. The panel's "Show 3-D" button still builds the
+        // representative schematic into the central viewport.
+        "capacitor",
+        "rectifier",
+        "threephase",
+        "electrochem",
         // The animation timeline is a DATA-ONLY card too — it summarises the
         // keyframe timeline (count / duration / sampled joint values); there is
         // no posed body to rasterise, so it carries no mesh and no 2-D drawing.

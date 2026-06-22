@@ -305,26 +305,27 @@ fn load_phases_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"threephase"}`** product: the canonical
-/// balanced three-phase load built as a 3-D solid, paired with the
-/// workbench's own `compute()` readout rows, at a fixed 3/4 camera.
-/// Registered in [`crate::products_registry`]; the per-tool builder the
-/// registry dispatches to. Pure — driven off
+/// The agent-bridge **`show_3d{kind:"threephase"}`** product: a DATA-ONLY text
+/// card of the balanced three-phase workbench's `compute()` readout rows (see
+/// [`crate::products_registry`]). A line/phase voltage-current and power
+/// result has no characteristic shape — the panel's three cylindrical limbs on
+/// a ring are an abstract stand-in for "three phases", not a real fabricated
+/// object — so the bridge product is right-sized to a card (`mesh: None`)
+/// carrying just the readout (the confidence badge is appended centrally). The
+/// panel's "Show 3-D" button still builds that representative schematic into
+/// the central viewport. Pure — driven off
 /// [`ThreePhaseWorkbenchState::default`].
 pub(crate) fn threephase_product() -> crate::WorkspaceProduct {
     let s = ThreePhaseWorkbenchState::default();
-    let mesh = phases_solid_mesh(&s).expect("canonical three-phase ⇒ solid builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<phases>/valenx-threephase");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical three-phase ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Three-phase (balanced load)".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
         image: None,

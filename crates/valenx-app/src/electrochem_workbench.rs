@@ -379,25 +379,27 @@ fn load_cell_3d(app: &mut ValenxApp) {
     app.frame_current_mesh();
 }
 
-/// The agent-bridge **`show_3d{kind:"electrochem"}`** product: the canonical
-/// electrochemical cell built as a 3-D solid, paired with the workbench's own
-/// `compute()` readout rows, at a fixed 3/4 camera. Registered in
-/// [`crate::products_registry`]; the per-tool builder the registry dispatches
-/// to. Pure — driven off [`ElectrochemWorkbenchState::default`].
+/// The agent-bridge **`show_3d{kind:"electrochem"}`** product: a DATA-ONLY text
+/// card of the electrochemical-cell workbench's `compute()` readout rows (see
+/// [`crate::products_registry`]). A cell-potential / Nernst / Faraday-yield
+/// result has no characteristic shape — the panel's electrolyte tank and two
+/// electrode plates are a fixed schematic of generic boxes (a beaker with
+/// electrodes), not a real fabricated object — so the bridge product is
+/// right-sized to a card (`mesh: None`) carrying just the readout (the
+/// confidence badge is appended centrally). The panel's "Show 3-D" button still
+/// builds that representative schematic into the central viewport. Pure —
+/// driven off [`ElectrochemWorkbenchState::default`].
 pub(crate) fn electrochem_product() -> crate::WorkspaceProduct {
     let s = ElectrochemWorkbenchState::default();
-    let mesh = cell_solid_mesh(&s).expect("canonical cell ⇒ solid builds");
-    let loaded = crate::products_registry::loaded_mesh_from(mesh, "<cell>/valenx-electrochem");
     let lines = crate::products_registry::lines_from_readout(
         &compute(&s).expect("canonical cell ⇒ readout computes"),
     );
-    let camera = crate::products_registry::camera_for(&loaded.mesh);
     crate::WorkspaceProduct {
         title: "Electrochemical cell".into(),
         lines,
-        mesh: Some(loaded),
+        mesh: None,
         vertex_colors: None,
-        camera,
+        camera: Default::default(),
         kind2d: None,
         last_export: None,
         image: None,
