@@ -150,6 +150,7 @@ pub mod new_project_dialog;
 pub mod opamp_workbench;
 pub mod optics_workbench;
 pub mod orifice_workbench;
+pub mod param_sketch_panel;
 pub mod pbr_forward_pass;
 pub mod pharmacokinetics_workbench;
 pub mod pipeflow_workbench;
@@ -1310,6 +1311,15 @@ pub struct ValenxApp {
     /// State for the Bolted Joint workbench, wrapping `valenx-bolt`. See
     /// [`crate::bolt_workbench`].
     pub bolt: crate::bolt_workbench::BoltWorkbenchState,
+
+    /// Whether the right-side **Parametric Sketch (constraints)** panel is
+    /// visible. Defaults to `false`; flipped on from
+    /// **Part Design → "Parametric Sketch (constraints)"**. This panel is a
+    /// first-class, discoverable host for the in-house `valenx-sketch`
+    /// constraint sketcher — it shares its sketch state with the Mesh
+    /// Toolbox's Sketcher section (`mesh_toolbox.sketcher`), so there is no
+    /// separate state struct. See [`crate::param_sketch_panel`].
+    pub show_param_sketch: bool,
 
     /// Whether the right-side Geomatics Workbench is visible. Defaults to
     /// `false`; flipped on from the View menu. Independent of the other
