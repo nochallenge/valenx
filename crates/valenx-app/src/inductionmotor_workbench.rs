@@ -10,18 +10,31 @@
 //! "Show 3-D motor" loads a representative TEFC motor solid into the
 //! central viewport.
 
-use std::f64::consts::TAU;
 use std::path::PathBuf;
 
 use eframe::egui;
-use nalgebra::Vector3;
 
 use valenx_inductionmotor::InductionMotor;
-use valenx_mesh::element::{ElementBlock, ElementType};
 use valenx_mesh::Mesh;
 
+use crate::mesh_prims::MeshBuilder;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
+
+/// Blue-grey painted cast frame (a typical TEFC motor colour).
+const FRAME: [f32; 3] = [0.22, 0.34, 0.52];
+/// Grey machined end bells.
+const ENDBELL: [f32; 3] = [0.52, 0.54, 0.57];
+/// Dark cooling fins.
+const FIN: [f32; 3] = [0.16, 0.18, 0.22];
+/// Bright steel shaft + inner rotor.
+const STEEL: [f32; 3] = [0.68, 0.70, 0.74];
+/// Black plastic cooling-fan cowl.
+const FAN: [f32; 3] = [0.10, 0.10, 0.11];
+/// Black terminal box.
+const TERMINAL: [f32; 3] = [0.10, 0.10, 0.12];
+/// Dark mounting feet.
+const FEET: [f32; 3] = [0.20, 0.21, 0.24];
 
 /// Persistent form + result state for the Induction Motor Workbench.
 pub struct InductionMotorWorkbenchState {
@@ -196,195 +209,83 @@ fn compute(s: &InductionMotorWorkbenchState) -> Result<String, String> {
     ))
 }
 
-/// Append an outward-facing box (centre `c`, half-extents `h`) to the
-/// buffers.
-fn push_box(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    c: Vector3<f64>,
-    h: Vector3<f64>,
-) {
-    let base = nodes.len();
-    let signs = [
-        (-1.0, -1.0, -1.0),
-        (1.0, -1.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (-1.0, 1.0, -1.0),
-        (-1.0, -1.0, 1.0),
-        (1.0, -1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (-1.0, 1.0, 1.0),
-    ];
-    for (sx, sy, sz) in signs {
-        nodes.push(c + Vector3::new(sx * h.x, sy * h.y, sz * h.z));
-    }
-    let faces = [
-        [1, 2, 6, 5],
-        [0, 4, 7, 3],
-        [3, 7, 6, 2],
-        [0, 1, 5, 4],
-        [4, 5, 6, 7],
-        [0, 3, 2, 1],
-    ];
-    for f in faces {
-        tris.extend_from_slice(&[
-            base + f[0],
-            base + f[1],
-            base + f[2],
-            base + f[0],
-            base + f[2],
-            base + f[3],
-        ]);
-    }
-}
-
-/// Append a (double-sided) cylinder whose axis runs along `+x`, spanning
-/// `base.x ..= base.x + length` with circle centre `(base.y, base.z)`.
-fn push_cyl_x(
-    nodes: &mut Vec<Vector3<f64>>,
-    tris: &mut Vec<usize>,
-    base: Vector3<f64>,
-    length: f64,
-    r: f64,
-    seg: usize,
-) {
-    let (x0, x1) = (base.x, base.x + length);
-    let lo = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x0, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    let hi = nodes.len();
-    for j in 0..seg {
-        let a = j as f64 / seg as f64 * TAU;
-        nodes.push(Vector3::new(x1, base.y + r * a.cos(), base.z + r * a.sin()));
-    }
-    for j in 0..seg {
-        let jn = (j + 1) % seg;
-        tris.extend_from_slice(&[
-            lo + j,
-            hi + j,
-            hi + jn,
-            lo + j,
-            hi + jn,
-            lo + jn,
-            lo + j,
-            hi + jn,
-            hi + j,
-            lo + j,
-            lo + jn,
-            hi + jn,
-        ]);
-    }
-}
-
-/// Build the induction motor as a triangle [`Mesh`] — a cylindrical frame
-/// on the shaft axis with two end bells, a protruding output shaft, a
-/// terminal box on top and mounting feet. Representative geometry (the
-/// slip / power split is the `valenx-inductionmotor` result). `None` for
-/// an invalid machine.
-/// Presentation spin rate of the rotor (shaft + cooling fan), rad/s (~1.3
-/// rev/s) — a readable inspect speed, not the real ~3000-rpm blur.
+/// Presentation spin rate of the rotor (inner rotor + shaft + cooling fan),
+/// rad/s (~1.3 rev/s) — a readable inspect speed, not the real ~3000-rpm blur.
 const ROTOR_RAD_PER_S: f32 = 8.0;
 
-/// Build the motor as a triangle [`Mesh`] together with the [`crate::RigidPart`]
-/// for the rotating rotor assembly (the output shaft + cooling-fan cowl), so the
-/// frame, end bells, terminal box and feet stay put while the rotor spins.
-/// `None` for an invalid machine.
+/// Build the induction motor as a triangle [`Mesh`] **with per-vertex colours**
+/// plus the [`crate::RigidPart`] for the rotating rotor assembly. A
+/// representative TEFC motor on the +x axle:
+///
+/// - blue-grey painted cast **frame** + a row of dark **cooling fins** along
+///   the top;
+/// - two grey machined **end bells**;
+/// - the rotating **rotor assembly** — a visible steel **inner rotor** cylinder
+///   inside the frame (so the spinning part reads, the fix for the old
+///   monochrome/floating look), the protruding steel **output shaft** and the
+///   black **fan cowl** — built consecutively as one contiguous node range that
+///   spins about the motor axis;
+/// - a black **terminal box** on top and dark mounting **feet**.
+///
+/// The frame / fins / end bells / terminal box / feet stay put while the rotor
+/// spins. `None` for an invalid machine. Returns `(mesh, colors, parts)` with
+/// `colors.len() == 3 × triangle_count`.
 fn motor_solid_mesh_parts(
     s: &InductionMotorWorkbenchState,
-) -> Option<(Mesh, Vec<crate::RigidPart>)> {
+) -> Option<(Mesh, Vec<[f32; 3]>, Vec<crate::RigidPart>)> {
     build_motor(s).ok()?;
 
-    let mut nodes: Vec<Vector3<f64>> = Vec::new();
-    let mut tris: Vec<usize> = Vec::new();
-    let axis_z = 0.5;
+    let axis = [1.0, 0.0, 0.0];
+    let az = 0.5_f64; // axle height (z)
+    let mut b = MeshBuilder::new();
 
-    // Main frame.
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-0.7, 0.0, axis_z),
-        1.4,
-        0.42,
-        28,
-    );
+    // Main frame (centre x = 0, length 1.4).
+    b.cylinder([0.0, 0.0, az], axis, 0.42, 1.4, 28, FRAME);
+    // Dark cooling fins: thin axial ribs along the top of the frame.
+    for k in 0..6 {
+        let fy = -0.18 + k as f64 * 0.072;
+        b.cuboid([0.0, fy, az + 0.46], [1.2, 0.02, 0.12], FIN);
+    }
     // End bells (slightly larger short cylinders at each end).
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-0.78, 0.0, axis_z),
-        0.1,
-        0.45,
-        28,
-    );
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.68, 0.0, axis_z),
-        0.1,
-        0.45,
-        28,
-    );
-    // Rotating rotor assembly: the output shaft (+x end) and the cooling-fan
-    // cowl (-x end) are built consecutively so they form one contiguous node
-    // range spinning about the motor axis. Record its half-open span.
-    let rotor_start = nodes.len();
-    // Output shaft (thin cylinder protruding from the +x end).
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.78, 0.0, axis_z),
-        0.45,
-        0.08,
-        16,
-    );
-    // Fan cowl at the -x end.
-    push_cyl_x(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(-0.95, 0.0, axis_z),
-        0.17,
-        0.3,
-        20,
-    );
-    let rotor_end = nodes.len();
-    // Terminal box on top.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.0, 0.0, axis_z + 0.46),
-        Vector3::new(0.22, 0.18, 0.12),
-    );
-    // Mounting feet / base.
-    push_box(
-        &mut nodes,
-        &mut tris,
-        Vector3::new(0.0, 0.0, 0.04),
-        Vector3::new(0.7, 0.4, 0.04),
-    );
+    b.cylinder([-0.73, 0.0, az], axis, 0.45, 0.1, 28, ENDBELL);
+    b.cylinder([0.73, 0.0, az], axis, 0.45, 0.1, 28, ENDBELL);
 
-    let mut block = ElementBlock::new(ElementType::Tri3);
-    block.connectivity = tris.iter().map(|&i| i as u32).collect();
-    let mut mesh = Mesh::new("valenx-inductionmotor");
-    mesh.nodes = nodes;
-    mesh.element_blocks.push(block);
-    mesh.recompute_stats();
+    // Rotating rotor assembly: inner rotor (inside the frame) + output shaft +
+    // fan cowl, built consecutively so they form one contiguous node range
+    // spinning about the motor axis. Record its half-open span.
+    let rotor_start = b.node_count();
+    // Visible inner rotor cylinder inside the frame (the spinning part that was
+    // previously implied, not shown).
+    b.cylinder([0.0, 0.0, az], axis, 0.30, 1.3, 24, STEEL);
+    // Output shaft (thin cylinder protruding from the +x end).
+    b.cylinder([1.0, 0.0, az], axis, 0.08, 0.45, 16, STEEL);
+    // Fan cowl at the −x end.
+    b.cylinder([-0.86, 0.0, az], axis, 0.3, 0.17, 20, FAN);
+    let rotor_end = b.node_count();
+
+    // Terminal box on top (static).
+    b.cuboid([0.0, 0.0, az + 0.46], [0.44, 0.36, 0.24], TERMINAL);
+    // Mounting feet / base (static).
+    b.cuboid([0.0, 0.0, 0.04], [1.4, 0.8, 0.08], FEET);
+
+    let (mut mesh, colors) = b.into_mesh_and_colors();
+    mesh.id = "valenx-inductionmotor".to_string();
+
     // The rotor spins about the motor axis (+x) through the centreline
-    // (y = 0, z = axis_z).
+    // (y = 0, z = az).
     let parts = vec![crate::RigidPart {
         node_range: rotor_start..rotor_end,
         axis: [1.0, 0.0, 0.0],
-        pivot: [0.0, 0.0, axis_z as f32],
+        pivot: [0.0, 0.0, az as f32],
         rad_per_s: ROTOR_RAD_PER_S,
     }];
-    Some((mesh, parts))
+    Some((mesh, colors, parts))
 }
 
-/// Build the motor as a triangle [`Mesh`] (without the rotor part metadata) for
-/// the central viewport. See [`motor_solid_mesh_parts`].
+/// Build the motor as a triangle [`Mesh`] (without the colour / rotor part
+/// metadata) for the central viewport. See [`motor_solid_mesh_parts`].
 fn motor_solid_mesh(s: &InductionMotorWorkbenchState) -> Option<Mesh> {
-    motor_solid_mesh_parts(s).map(|(mesh, _parts)| mesh)
+    motor_solid_mesh_parts(s).map(|(mesh, _colors, _parts)| mesh)
 }
 
 /// Build the 3-D motor solid and load it into the central viewport.
@@ -412,7 +313,7 @@ fn load_motor_3d(app: &mut ValenxApp) {
 /// plus its `compute()` readout rows (see [`crate::products_registry`]).
 pub(crate) fn inductionmotor_product() -> crate::WorkspaceProduct {
     let s = InductionMotorWorkbenchState::default();
-    let (mesh, parts) =
+    let (mesh, colors, parts) =
         motor_solid_mesh_parts(&s).expect("canonical induction motor ⇒ motor solid builds");
     let loaded = crate::products_registry::loaded_mesh_from(mesh, "<inductionmotor>/valenx-motor");
     let lines = crate::products_registry::lines_from_readout(
@@ -423,7 +324,7 @@ pub(crate) fn inductionmotor_product() -> crate::WorkspaceProduct {
         title: "Induction motor (slip/torque)".into(),
         lines,
         mesh: Some(loaded),
-        vertex_colors: None,
+        vertex_colors: Some(colors),
         camera,
         kind2d: None,
         last_export: None,
@@ -512,6 +413,36 @@ mod tests {
             ..Default::default()
         };
         assert!(motor_solid_mesh(&s).is_none());
+    }
+
+    #[test]
+    fn motor_carries_colours_and_a_visible_rotor() {
+        // Per-vertex colours align to the renderer's coloured path (3/triangle).
+        // The distinct part colours are present (frame / end bell / steel rotor /
+        // fan / terminal / feet / fins) — the fix for the old monochrome look —
+        // and the steel rotor assembly (inner rotor + shaft + fan) is a non-empty
+        // mid-mesh range so the spinning part reads.
+        let s = InductionMotorWorkbenchState::default();
+        let (mesh, colors, parts) =
+            motor_solid_mesh_parts(&s).expect("default motor builds");
+        assert_eq!(
+            colors.len(),
+            mesh.total_elements() * 3,
+            "vertex_colors must equal 3 × triangle count"
+        );
+        for col in [FRAME, ENDBELL, STEEL, FAN, TERMINAL, FEET, FIN] {
+            assert!(colors.contains(&col), "missing part colour {col:?}");
+        }
+        for c in &colors {
+            for ch in c {
+                assert!(ch.is_finite() && (0.0..=1.0).contains(ch));
+            }
+        }
+        // The rotor (inner rotor + shaft + fan) is a non-empty interior range.
+        assert_eq!(parts.len(), 1);
+        let p = &parts[0];
+        assert!(p.node_range.start > 0 && p.node_range.end < mesh.nodes.len());
+        assert_eq!(p.axis, [1.0, 0.0, 0.0]);
     }
 
     #[test]
