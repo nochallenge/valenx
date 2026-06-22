@@ -534,7 +534,19 @@ impl Hull {
     #[must_use]
     pub fn length_of_run(&self) -> f64 {
         let cp = self.prismatic_coefficient();
-        self.length_m * (1.0 - cp + 0.06 * cp * self.lcb_percent / (4.0 * cp - 1.0))
+        // Guard the LCB-term pole: the denominator (4·Cp − 1) vanishes at
+        // Cp = 0.25 — far below Holtrop's validity band (~0.55–0.85) but
+        // reachable from a degenerate UI block-coefficient entry. Unguarded
+        // it returns ±inf/NaN and poisons the entire resistance readout;
+        // clamp the magnitude (sign-preserving) so a degenerate Cp degrades
+        // to a finite (if non-physical) value instead of NaN.
+        let denom = 4.0 * cp - 1.0;
+        let denom = if denom.abs() < 1e-6 {
+            1e-6_f64.copysign(denom)
+        } else {
+            denom
+        };
+        self.length_m * (1.0 - cp + 0.06 * cp * self.lcb_percent / denom)
     }
 
     /// **Holtrop-Mennen wetted-surface estimate** `S` (m^2) from the principal
@@ -674,8 +686,18 @@ impl Hull {
             * (90.0 - i_e).powf(-1.377_565);
 
         // c3, c2 (bulbous-bow influence on wave resistance), c5 (transom).
-        let c3 = 0.566_15 * self.bulb_area_m2.powf(1.5)
-            / (b * t * (0.31 * self.bulb_area_m2.sqrt() + t - self.bulb_centre_m));
+        // Guard the c3 denominator: with a physically-valid bulb the term
+        // (0.31*sqrt(A_bt) + T - h_b) is positive, but a nonphysical bulb
+        // centre h_b >= 0.31*sqrt(A_bt) + T would drive c3 negative/inf and
+        // make c2 = exp(-1.89*sqrt(c3)) NaN, poisoning R_w (and the readout).
+        // A degenerate bulb contributes no wave effect, so fall back to
+        // c3 = 0 (=> c2 = 1, i.e. no bulbous-bow benefit).
+        let c3_term = 0.31 * self.bulb_area_m2.sqrt() + t - self.bulb_centre_m;
+        let c3 = if c3_term > 1e-9 {
+            0.566_15 * self.bulb_area_m2.powf(1.5) / (b * t * c3_term)
+        } else {
+            0.0
+        };
         let c2 = (-1.89 * c3.sqrt()).exp();
         let c5 = 1.0 - 0.8 * self.transom_area_m2 / (b * t * cm);
 

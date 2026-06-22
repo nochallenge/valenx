@@ -144,6 +144,20 @@ impl Profile {
             let i = std::f64::consts::PI / 64.0 * (d.powi(4) - inner.powi(4));
             return finite_pair(i, i);
         }
+        if let Self::RhsRect { h, b, t } = self {
+            // Exact hollow-rectangle (HSS) second moments: outer minus
+            // inner concentric rectangle (shared centroid). Matches the
+            // hollow area in cross_section_area_mm2 and the textbook HSS
+            // form I_u = (b·h³ − b_i·h_i³)/12. The cross_section_polygon
+            // outline is the *solid* outer rectangle (used only for
+            // rendering); the structural property must subtract the hole,
+            // else I/S is overestimated (unconservative) for tube sections.
+            let b_in = (b - 2.0 * t).max(0.0);
+            let h_in = (h - 2.0 * t).max(0.0);
+            let iu = (b * h.powi(3) - b_in * h_in.powi(3)) / 12.0;
+            let iv = (h * b.powi(3) - h_in * b_in.powi(3)) / 12.0;
+            return finite_pair(iu, iv);
+        }
         // Exact second moments of the closed outline polygon about its
         // own centroid, via the standard shoelace moment integral.
         let poly = cross_section_polygon(self);
@@ -163,6 +177,13 @@ impl Profile {
             let c = (d * 0.5).max(0.0);
             let _ = t;
             return finite_pair(div_or_zero(i, c), div_or_zero(i, c));
+        }
+        if let Self::RhsRect { h, b, .. } = self {
+            // Hollow-correct S = I / c, with I the hollow second moment
+            // from second_moment_of_area_mm4 and the outer extreme-fibre
+            // distances (c_u = h/2, c_v = b/2).
+            let (iu, iv) = self.second_moment_of_area_mm4();
+            return finite_pair(div_or_zero(iu, h * 0.5), div_or_zero(iv, b * 0.5));
         }
         let poly = cross_section_polygon(self);
         let (iu, iv) = polygon_centroidal_second_moments(&poly);
@@ -557,52 +578,53 @@ mod tests {
     }
 
     /// Validation against the closed-form second moment of area and
-    /// section modulus of a solid rectangle. Reference: Roark's
-    /// *Formulas for Stress & Strain* (Table A.1) / Gere, *Mechanics of
-    /// Materials* (App. D): `I = b·h³/12`, `S = b·h²/6`.
-    ///
-    /// `RhsRect`'s outline polygon is the *solid* outer rectangle (the
-    /// hollow interior is not yet modelled — see `cross_section_polygon`),
-    /// so its second moment is that of the solid section. We exploit that
-    /// here as the rectangle test case: b = 50 mm (width, u), h = 100 mm
-    /// (height, v).
+    /// section modulus of a *hollow* rectangle (HSS / rectangular tube).
+    /// Reference: the textbook hollow-section form (Roark's *Formulas for
+    /// Stress & Strain*; Gere, *Mechanics of Materials*, App. D):
+    /// `I_u = (b·h³ − b_i·h_i³)/12`, `S_u = I_u / (h/2)`, with the inner
+    /// dimensions `b_i = b − 2t`, `h_i = h − 2t`. The hole is subtracted
+    /// (consistent with the hollow `cross_section_area_mm2`), so the
+    /// result is the true HSS property — not the solid outer rectangle,
+    /// which would overestimate I/S (unconservative). Case: b = 50 mm
+    /// (width, u), h = 100 mm (height, v), t = 5 mm wall.
     #[test]
     fn rectangle_second_moment_and_modulus_match_closed_form() {
         let b = 50.0_f64;
         let h = 100.0_f64;
-        let rect = Profile::RhsRect { h, b, t: 5.0 };
+        let t = 5.0_f64;
+        let rect = Profile::RhsRect { h, b, t };
+        let b_in = b - 2.0 * t;
+        let h_in = h - 2.0 * t;
 
         let (iu, iv) = rect.second_moment_of_area_mm4();
-        // Strong axis (bending about the horizontal/u axis): I = b·h³/12.
-        assert!(
-            (iu - b * h.powi(3) / 12.0).abs() < 1e-6,
-            "I_u got {iu}, want {}",
-            b * h.powi(3) / 12.0
-        );
-        // Weak axis: I = h·b³/12.
-        assert!(
-            (iv - h * b.powi(3) / 12.0).abs() < 1e-6,
-            "I_v got {iv}, want {}",
-            h * b.powi(3) / 12.0
-        );
+        // Strong axis (bending about the horizontal/u axis):
+        // I_u = (b·h³ − b_i·h_i³)/12.
+        let iu_ref = (b * h.powi(3) - b_in * h_in.powi(3)) / 12.0;
+        assert!((iu - iu_ref).abs() < 1e-6, "I_u got {iu}, want {iu_ref}");
+        // Weak axis: I_v = (h·b³ − h_i·b_i³)/12.
+        let iv_ref = (h * b.powi(3) - h_in * b_in.powi(3)) / 12.0;
+        assert!((iv - iv_ref).abs() < 1e-6, "I_v got {iv}, want {iv_ref}");
 
         let (su, sv) = rect.section_modulus_mm3();
-        // S = b·h²/6  (== I_u / (h/2)).
+        // S = I / c, c the extreme-fibre distance (h/2 strong, b/2 weak).
         assert!(
-            (su - b * h.powi(2) / 6.0).abs() < 1e-6,
+            (su - iu_ref / (h / 2.0)).abs() < 1e-6,
             "S_u got {su}, want {}",
-            b * h.powi(2) / 6.0
+            iu_ref / (h / 2.0)
         );
         assert!(
-            (sv - h * b.powi(2) / 6.0).abs() < 1e-6,
+            (sv - iv_ref / (b / 2.0)).abs() < 1e-6,
             "S_v got {sv}, want {}",
-            h * b.powi(2) / 6.0
+            iv_ref / (b / 2.0)
         );
 
-        // The defining identity S = I / c, with c the extreme-fibre
-        // distance (h/2 strong, b/2 weak).
-        assert!((su - iu / (h / 2.0)).abs() < 1e-6);
-        assert!((sv - iv / (b / 2.0)).abs() < 1e-6);
+        // Regression guard: the hollow second moment must be strictly less
+        // than the solid outer rectangle's (the prior, overestimating
+        // behaviour) — so a revert to the solid outline fails here.
+        assert!(
+            iu < b * h.powi(3) / 12.0 && iv < h * b.powi(3) / 12.0,
+            "hollow I must be < solid outer rectangle"
+        );
     }
 
     /// I-beam strong-axis second moment, validated against the exact

@@ -12,6 +12,43 @@ fn close(a: f64, b: f64, rel: f64) -> bool {
     (a - b).abs() <= rel * b.abs().max(1.0)
 }
 
+/// Regression: a degenerate prismatic coefficient `Cp = 0.25` lands exactly
+/// on the `(4·Cp − 1)` pole of the Holtrop length-of-run term. Before the
+/// guard this returned ±inf/NaN and poisoned the whole resistance readout
+/// (reachable from the UI: the Marine workbench takes the block coefficient
+/// directly and `Cp = Cb / C_m`, so `Cb ≈ 0.245` hits the pole). The guard
+/// keeps it finite.
+#[test]
+fn length_of_run_stays_finite_at_the_cp_pole() {
+    // Cp = Cb / Cm = 0.25 with Cm = 0.980  ->  Cb = 0.245.
+    // Cb = nabla / (L B T); pick L=205, B=32, T=10.
+    let hull = Hull::new(
+        205.0,
+        32.0,
+        10.0,
+        0.245 * 205.0 * 32.0 * 10.0,
+        0.980,
+        0.750,
+        -2.02,
+        0.0,
+        0.0,
+        0.0,
+        10.0,
+        None,
+    )
+    .expect("a degenerate-but-positive hull should still construct");
+    assert!(
+        (hull.prismatic_coefficient() - 0.25).abs() < 1e-9,
+        "Cp = {} (want 0.25, the pole)",
+        hull.prismatic_coefficient()
+    );
+    let lr = hull.length_of_run();
+    assert!(
+        lr.is_finite(),
+        "length_of_run must stay finite at the Cp=0.25 pole, got {lr}"
+    );
+}
+
 // ===========================================================================
 // VALIDATION against published references (the point of the crate).
 // ===========================================================================
