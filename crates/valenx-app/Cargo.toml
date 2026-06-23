@@ -204,6 +204,10 @@ valenx-straingauge   = { path = "../valenx-straingauge" }
 # Native multirotor hover performance — surfaced by the Drone workbench
 # (src/drone_workbench.rs).
 valenx-drone         = { path = "../valenx-drone" }
+# Native propeller / rotor blade-element-momentum (BEMT) performance —
+# surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
+# Pure-Rust solver; the workbench calls its real API directly (no subprocess).
+valenx-rotor         = { path = "../valenx-rotor" }
 # Native rectangular-room reverberation + SPL — surfaced by the Acoustics
 # workbench (src/acoustics_workbench.rs).
 valenx-acoustics     = { path = "../valenx-acoustics" }
