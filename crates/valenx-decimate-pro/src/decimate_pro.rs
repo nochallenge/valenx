@@ -62,7 +62,7 @@ pub fn uv_preserving(
     let weights: Vec<f64> = qmats.iter().copied().map(uv_stretch_weight).collect();
     let protect = top_quartile_mask(&weights);
     let out = decimate_with_protected(mesh, target_fraction, &protect);
-    let out_uvs = remap_uvs(mesh, &out, uvs);
+    let out_uvs = remap_uvs(&out, uvs, &protect);
     Ok((out, out_uvs))
 }
 
@@ -281,25 +281,28 @@ fn stitch_protected_and_free(orig: &Mesh, protect: &[bool], decimated_free: &Mes
     out
 }
 
-fn remap_uvs(orig: &Mesh, out: &Mesh, uvs: &[[f64; 2]]) -> Vec<[f64; 2]> {
-    // v1: the protected vertices appear first in the output (per the
-    // stitch order), so their UVs are direct slice-copies. Any new
-    // decimated-free vertices that don't have a 1:1 ancestor get a
-    // [0, 0] placeholder — Phase 47.5 will solve the per-survivor UV
-    // average from the QEM contraction trail.
+fn remap_uvs(out: &Mesh, uvs: &[[f64; 2]], protect: &[bool]) -> Vec<[f64; 2]> {
+    // The protected vertices appear first in the output, in original-index
+    // order (per decimate_with_protected's stitch order), so copy each
+    // PROTECTED original's UV into the matching leading output slot — walking
+    // the `protect` mask, not a raw 0..n prefix. (The earlier version assigned
+    // original vertex i's UV to output slot i, which only holds when the
+    // protected set is a contiguous prefix — i.e. almost never — and otherwise
+    // silently mis-assigned every survivor's UV.) New decimated-free vertices
+    // keep the [0, 0] placeholder (Phase 47.5 solves their UV from the QEM
+    // contraction trail).
     let mut out_uvs = vec![[0.0_f64; 2]; out.nodes.len()];
-    // First pass: protected verts preserve their UVs.
     let mut prot_idx = 0;
-    let n_min = orig.nodes.len().min(uvs.len());
-    for i in 0..n_min {
-        if let Some(orig_uv) = uvs.get(i) {
-            if let Some(slot) = out_uvs.get_mut(prot_idx) {
-                *slot = *orig_uv;
-            }
-            prot_idx += 1;
-            if prot_idx >= out_uvs.len() {
-                break;
-            }
+    for (i, &p) in protect.iter().enumerate() {
+        if !p {
+            continue;
+        }
+        if let (Some(orig_uv), Some(slot)) = (uvs.get(i), out_uvs.get_mut(prot_idx)) {
+            *slot = *orig_uv;
+        }
+        prot_idx += 1;
+        if prot_idx >= out_uvs.len() {
+            break;
         }
     }
     out_uvs
