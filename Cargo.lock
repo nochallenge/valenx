@@ -8671,6 +8671,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-photogrammetry"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-phylo"
 version = "0.1.0-alpha.1"
 dependencies = [
