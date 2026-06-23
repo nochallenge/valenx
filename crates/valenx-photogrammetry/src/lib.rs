@@ -9,8 +9,8 @@
 //!        → descriptor matching                ← STAGE 2
 //!        → two-view geometry verification     ← STAGE 2
 //!        → relative pose (R, t) + triangulation   ← STAGE 3
-//!        → incremental mapper: register new view (PnP)  ← STAGE 4 (this stage)
-//!        → bundle adjustment
+//!        → incremental mapper: register new view (PnP)  ← STAGE 4
+//!        → bundle adjustment                  ← STAGE 5 (the final solver stage)
 //!        → sparse point cloud + camera poses
 //! ```
 //!
@@ -58,14 +58,37 @@
 //! iterative accuracy on noisy data; bundle adjustment polishes it later), it
 //! needs `n ≥ 6` points, and a **coplanar** point configuration is degenerate.
 //!
+//! **Stage 5 (added here)** is the [`bundle`] module — **bundle adjustment**,
+//! the joint nonlinear refinement that closes the SfM solver. The incremental
+//! estimates of Stages 3–4 are each *local* and *algebraic*, and their errors
+//! accumulate; bundle adjustment polishes the whole reconstruction at once by
+//! **jointly refining every camera pose and every 3-D point to minimize the
+//! total reprojection error** (under Gaussian pixel noise, the maximum-
+//! likelihood estimate). [`bundle_adjust`] runs a **dense Levenberg–Marquardt**
+//! loop over a [`BundleProblem`] ([`Observation`]s linking cameras to points):
+//! each camera is parametrized by 6 DOF (angle-axis [`rodrigues_exp`] rotation +
+//! translation) and each point by 3; it builds a numerical (finite-difference)
+//! Jacobian, solves the damped normal equations
+//! `(JᵀJ + λ·diag(JᵀJ)) δ = −Jᵀr`, and accepts/rejects each step by cost with
+//! `λ` up/down control, returning a [`BundleResult`]. **Gauge fix:** camera 0's
+//! pose is held fixed to remove the 6-DOF gauge freedom. Honest caveats in the
+//! module docs: it is a *dense* solve (roughly `O((6·#cameras + 3·#points)³)`
+//! per step — fine for tens of cameras / hundreds of points; the sparse
+//! Schur-complement form is the future scale path), it uses a numerical (not
+//! analytic) Jacobian, intrinsics are shared and held fixed (per-camera `K` is a
+//! future extension), it is a *local* optimizer needing a good initialization
+//! (exactly what Stages 3–4 supply), and the global **scale** of a pure
+//! two-view-seeded bundle remains free even with camera 0 pinned.
+//!
 //! ## Provenance / licensing
 //!
 //! This is a *clean-room* implementation written from the published
 //! computer-vision literature — FAST (Rosten & Drummond), ORB (Rublee et
 //! al.), the Lowe ratio test (Lowe 2004), the Hartley normalized 8-point
-//! algorithm (Hartley 1997), RANSAC (Fischler & Bolles 1981), and DLT camera
-//! resectioning / PnP (Hartley & Zisserman ch. 7) are all textbook
-//! algorithms. **No COLMAP (or OpenCV) source code is used or
+//! algorithm (Hartley 1997), RANSAC (Fischler & Bolles 1981), DLT camera
+//! resectioning / PnP (Hartley & Zisserman ch. 7), and bundle adjustment by
+//! Levenberg–Marquardt (Hartley & Zisserman App. 6; Triggs et al. 2000) are
+//! all textbook algorithms. **No COLMAP (or OpenCV) source code is used or
 //! copied.** COLMAP is BSD-3-Clause and is credited purely as the *method
 //! reference* for the overall SfM design in the crate's
 //! `THIRD-PARTY-NOTICES` file. valenx itself is `MIT OR Apache-2.0`.
@@ -101,6 +124,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod bundle;
 pub mod descriptor;
 pub mod fast;
 pub mod geometry;
@@ -112,6 +136,10 @@ pub mod twoview;
 mod error;
 mod keypoint;
 
+pub use bundle::{
+    bundle_adjust, rodrigues_exp, rodrigues_log, BundleParams, BundleProblem, BundleResult,
+    Observation,
+};
 pub use descriptor::{
     describe_keypoint, hamming_distance, DESCRIPTOR_BITS, DESCRIPTOR_BYTES, PATCH_RADIUS,
 };
