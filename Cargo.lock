@@ -9502,6 +9502,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-uq"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-variant-effect"
 version = "0.1.0-alpha.1"
 dependencies = [
