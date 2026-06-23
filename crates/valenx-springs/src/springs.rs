@@ -191,6 +191,11 @@ pub fn stiffness_n_per_mm(spec: &SpringSpec) -> f64 {
     let g = spec.shear_modulus_mpa;
     let d = spec.wire_diameter_mm;
     let big_d = spec.mean_coil_diameter_mm;
+    // Match the sibling helpers' sentinel convention: a non-finite or
+    // non-positive wire / coil diameter returns 0.0 rather than ±inf/NaN.
+    if !g.is_finite() || !d.is_finite() || !big_d.is_finite() || d <= 0.0 || big_d <= 0.0 {
+        return 0.0;
+    }
     let n = spec.n_active_coils.max(1e-6);
     g * d.powi(4) / (8.0 * big_d.powi(3) * n)
 }

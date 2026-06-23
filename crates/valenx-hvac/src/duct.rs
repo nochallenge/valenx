@@ -30,7 +30,15 @@ impl CrossSection {
     pub fn hydraulic_diameter_mm(self) -> f64 {
         match self {
             CrossSection::Round { d } => d,
-            CrossSection::Rect { w, h } => 2.0 * w * h / (w + h),
+            CrossSection::Rect { w, h } => {
+                // Mirror the sibling guards (equivalent_round_diameter_mm,
+                // aspect_ratio): a non-finite or non-positive rectangle
+                // returns 0.0 rather than NaN.
+                if !w.is_finite() || !h.is_finite() || w <= 0.0 || h <= 0.0 {
+                    return 0.0;
+                }
+                2.0 * w * h / (w + h)
+            }
         }
     }
 
