@@ -44,12 +44,20 @@ pub struct HarmonicResponse {
 impl HarmonicResponse {
     /// Response magnitude at `dof` across the whole sweep.
     pub fn dof_amplitude(&self, dof: usize) -> Vec<f64> {
+        // Out-of-range DOF returns empty rather than index-panicking (the
+        // struct exposes no DOF count, so callers can't pre-check).
+        if self.amplitude.first().is_some_and(|a| dof >= a.len()) {
+            return Vec::new();
+        }
         self.amplitude.iter().map(|a| a[dof]).collect()
     }
 
     /// `(frequency_hz, amplitude)` of the largest response at `dof` over the
     /// sweep — the dominant resonance peak. `None` for an empty sweep.
     pub fn resonance_peak(&self, dof: usize) -> Option<(f64, f64)> {
+        if self.amplitude.first().is_some_and(|a| dof >= a.len()) {
+            return None;
+        }
         self.frequencies_hz
             .iter()
             .zip(&self.amplitude)
@@ -87,10 +95,14 @@ pub fn solve_harmonic(
         big.view_mut((n, n), (n, n)).copy_from(&a);
         let mut rhs = DVector::zeros(2 * n);
         rhs.rows_mut(0, n).copy_from(force);
+        // A singular block = an undamped resonance (A = K − ω²M singular and
+        // B = ωC = 0 at a natural frequency). The physical amplitude there
+        // diverges, so substitute a +∞ sentinel — NOT zeros, which would report
+        // the resonance peak as a trough and hide it from `resonance_peak`.
         let sol = big
             .lu()
             .solve(&rhs)
-            .unwrap_or_else(|| DVector::zeros(2 * n));
+            .unwrap_or_else(|| DVector::from_element(2 * n, f64::INFINITY));
         let mut amp = DVector::zeros(n);
         for i in 0..n {
             amp[i] = sol[i].hypot(sol[n + i]);

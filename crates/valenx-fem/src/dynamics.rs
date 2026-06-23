@@ -423,8 +423,26 @@ pub fn solve_transient_dynamics(
     let mut acc = m_chol.solve(&rhs0);
 
     // --- the constant Newmark effective stiffness K_eff ---
-    let dt = controls.dt.max(1e-30);
-    let beta = controls.newmark.beta.max(1e-6);
+    // Reject a non-physical time step / Newmark beta rather than silently
+    // clamping them — a clamped dt=0 advances physical time as ~1e-30/step
+    // (final_time ≈ 0) with astronomical effective stiffness, returning a
+    // meaningless result as `Ok`. Every other bad input here is an error.
+    if !(controls.dt.is_finite() && controls.dt > 0.0) {
+        return Err(NativeSolverError::InvalidParams {
+            reason: format!("time step dt must be finite and > 0, got {}", controls.dt),
+        });
+    }
+    if !(controls.newmark.beta.is_finite() && controls.newmark.beta > 0.0) {
+        return Err(NativeSolverError::InvalidParams {
+            reason: format!(
+                "Newmark beta must be finite and > 0 (beta = 0 is explicit central \
+                 difference, which this implicit integrator does not handle), got {}",
+                controls.newmark.beta
+            ),
+        });
+    }
+    let dt = controls.dt;
+    let beta = controls.newmark.beta;
     let gamma = controls.newmark.gamma;
     let a0 = 1.0 / (beta * dt * dt);
     let a1 = gamma / (beta * dt);

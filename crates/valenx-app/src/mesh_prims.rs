@@ -506,6 +506,12 @@ impl MeshBuilder {
             let s1 = ring_start[p + 1];
             let next_apex = ring_len[p + 1] == 1;
             let this_apex = ring_len[p] == 1;
+            // Two consecutive on-axis apexes (e.g. an hourglass / double-cone
+            // profile): there's no band to stitch — emitting one would index the
+            // adjacent ring's vertices and produce garbage triangles.
+            if this_apex && next_apex {
+                continue;
+            }
             if next_apex {
                 let apex = s1;
                 for s in 0..seg {
