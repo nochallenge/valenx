@@ -201,7 +201,7 @@ fn parse_span_or_between(s: &str, strand: Strand) -> Result<Location> {
         // Conventional form: `100^101` -> bond between bases 100 and 101.
         // In 0-based half-open terms that is the boundary at index 100.
         // We accept the wrap form `n^1` and map it to position 0.
-        let position = if nb == na + 1 {
+        let position = if na.checked_add(1) == Some(nb) {
             na // bond before 1-based base nb -> 0-based index na
         } else if nb == 1 && na > 1 {
             0 // n^1 wrap — bond at the origin
