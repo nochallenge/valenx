@@ -39,6 +39,10 @@ fn revolve(
     for w in 0..profile.len() - 1 {
         let s0 = ring_start[w];
         let s1 = ring_start[w + 1];
+        // Two consecutive on-axis apexes: no band to stitch.
+        if profile[w].1 <= 1e-9 && profile[w + 1].1 <= 1e-9 {
+            continue;
+        }
         if profile[w + 1].1 <= 1e-9 {
             let apex = s1;
             for k in 0..seg {
