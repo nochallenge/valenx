@@ -77,6 +77,7 @@ members = [
     "crates/valenx-marine",
     "crates/valenx-marine-hydro",
     "crates/valenx-drone",
+    "crates/valenx-rotor",
     "crates/valenx-fixedwing",
     "crates/valenx-fasteners",
     "crates/valenx-symbols",
