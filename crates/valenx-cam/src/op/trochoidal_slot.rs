@@ -93,7 +93,11 @@ pub fn generate(
             }
             let dir_u = dir / total;
             let perp = Vector3::new(-dir_u.y, dir_u.x, 0.0);
-            let n_loops = ((total / params.step_over).floor() as usize).max(1);
+            // Cap the per-segment loop count: a tiny step_over would otherwise
+            // make this saturate and hang the emit loop (OOM). A real slot is
+            // far below this.
+            const MAX_N_LOOPS: usize = 100_000;
+            let n_loops = ((total / params.step_over).floor() as usize).clamp(1, MAX_N_LOOPS);
             for i in 0..=n_loops {
                 let t = (i as f64) * params.step_over;
                 let t = t.min(total);
