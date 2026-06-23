@@ -1,0 +1,18 @@
+[package]
+name        = "valenx-photogrammetry"
+description = "In-house structure-from-motion building blocks (Stage 1: image + features). A clean-room Rust reimplementation of the standard computer-vision pipeline used by COLMAP — FAST-9 corner detection (16-pixel Bresenham-circle contiguous-arc test with non-maximum suppression) and an ORB-style binary descriptor (intensity-centroid orientation + a 256-bit steered-BRIEF signature). Operates on a plain row-major 8-bit grayscale buffer; pure Rust, dependency-light, no `unsafe`. Research/educational grade — textbook FAST/ORB algorithms, NOT a calibrated metrology / survey-grade photogrammetry product. COLMAP (BSD-3-Clause) is credited as the method reference in THIRD-PARTY-NOTICES; no COLMAP source is used."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

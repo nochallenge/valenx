@@ -62,6 +62,7 @@ members = [
     "crates/valenx-rocket-demo",
     "crates/valenx-inspect",
     "crates/valenx-reverse",
+    "crates/valenx-photogrammetry",
     "crates/valenx-curves",
     "crates/valenx-lattice",
     "crates/valenx-animate",
