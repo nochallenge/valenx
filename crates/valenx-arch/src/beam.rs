@@ -117,7 +117,11 @@ impl BeamParams {
     /// `up` defaults to +Y). `side` = axis × up rotated by
     /// `orientation_angle`.
     fn local_frame(&self) -> (Vector3<f64>, Vector3<f64>, Vector3<f64>) {
-        let axis = (self.end - self.start).normalize();
+        // A zero-length beam (start == end) would make normalize() divide by a
+        // zero norm and yield NaN corners; fall back to a finite default frame.
+        let axis = (self.end - self.start)
+            .try_normalize(1e-12)
+            .unwrap_or_else(|| Vector3::new(1.0, 0.0, 0.0));
         let world_up = Vector3::new(0.0, 0.0, 1.0);
         let mut up = if (axis.dot(&world_up)).abs() > 0.99 {
             // Beam ~parallel to Z, fall back to +Y.
@@ -125,8 +129,11 @@ impl BeamParams {
         } else {
             world_up
         };
-        let side = axis.cross(&up).normalize();
-        up = side.cross(&axis).normalize();
+        let side = axis
+            .cross(&up)
+            .try_normalize(1e-12)
+            .unwrap_or_else(|| Vector3::new(0.0, 1.0, 0.0));
+        up = side.cross(&axis).try_normalize(1e-12).unwrap_or(up);
         // Apply orientation_angle rotation in the (side, up) plane.
         let (sa, ca) = self.orientation_angle.sin_cos();
         let side_rot = side * ca + up * sa;

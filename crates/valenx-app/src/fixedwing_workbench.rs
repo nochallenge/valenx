@@ -209,7 +209,9 @@ fn run_aircraft(s: &mut FixedWingWorkbenchState) {
     match build_aircraft(s) {
         Ok(a) => {
             let p = a.performance();
-            let vc = s.cruise_speed_m_s.max(0.0);
+            // Floor cruise speed to a positive value: at v=0 the level-flight
+            // CL = W/(½ρv²S) diverges to +inf and the L/D ratio becomes NaN.
+            let vc = s.cruise_speed_m_s.max(1.0);
             let cl_cruise = a.level_flight_cl(vc);
             let cd_cruise = a.drag_coefficient(cl_cruise);
             let ld_cruise = if cd_cruise > 0.0 {

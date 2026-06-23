@@ -395,9 +395,14 @@ impl System {
             // Unconstrained: M is diagonal, so divide directly.
             let mut a = DVector::zeros(3 * n);
             for (i, b) in self.bodies.iter().enumerate() {
-                a[3 * i] = q[3 * i] / b.mass;
-                a[3 * i + 1] = q[3 * i + 1] / b.mass;
-                a[3 * i + 2] = q[3 * i + 2] / b.inertia;
+                // A non-positive / non-finite mass or inertia (a body built
+                // directly, bypassing validation) would divide to ±inf/NaN;
+                // treat it as immovable (zero acceleration) instead.
+                let m_ok = b.mass.is_finite() && b.mass > 0.0;
+                let i_ok = b.inertia.is_finite() && b.inertia > 0.0;
+                a[3 * i] = if m_ok { q[3 * i] / b.mass } else { 0.0 };
+                a[3 * i + 1] = if m_ok { q[3 * i + 1] / b.mass } else { 0.0 };
+                a[3 * i + 2] = if i_ok { q[3 * i + 2] / b.inertia } else { 0.0 };
             }
             return a;
         }
