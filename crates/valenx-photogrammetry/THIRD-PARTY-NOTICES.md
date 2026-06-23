@@ -148,7 +148,52 @@ incremental mapper.
   that frame's **metric scale** — unlike Stage 3, there is no free scale
   factor. See the `pnp` module documentation for details.
 
+### Stage 5 — bundle adjustment (joint nonlinear refinement)
+
+The `bundle` module is the final solver stage: it jointly refines all camera
+poses and all 3-D points to minimize the total reprojection error, by a dense
+Levenberg–Marquardt optimization. These are standard results from the same
+multiple-view-geometry / optimization literature.
+
+- **Bundle adjustment** as the maximum-likelihood refinement of structure and
+  motion under Gaussian reprojection noise, and its solution by the
+  **Levenberg–Marquardt** damped-Gauss–Newton method:
+  R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*,
+  2nd ed., Cambridge University Press, 2004, Appendix 6 (iterative estimation
+  methods), and
+  B. Triggs, P. F. McLauchlan, R. I. Hartley, A. W. Fitzgibbon, "Bundle
+  Adjustment — A Modern Synthesis," in *Vision Algorithms: Theory and
+  Practice* (LNCS 1883), Springer, 2000.
+  The Levenberg–Marquardt algorithm itself: K. Levenberg, "A Method for the
+  Solution of Certain Non-Linear Problems in Least Squares," *Quarterly of
+  Applied Mathematics* 2(2), 1944; D. W. Marquardt, "An Algorithm for
+  Least-Squares Estimation of Nonlinear Parameters," *Journal of SIAM* 11(2),
+  1963.
+
+- **Angle-axis (Rodrigues) rotation parametrization** used for the 6-DOF
+  camera blocks (the `exp` / `log` maps between a rotation matrix and its
+  axis-angle 3-vector): O. Rodrigues, "Des lois géométriques qui régissent les
+  déplacements d'un système solide…," *Journal de Mathématiques Pures et
+  Appliquées* 5, 1840; standard modern treatment in Hartley & Zisserman
+  (above) and in the bundle-adjustment literature.
+
+  Implementation note: this is a **dense** Levenberg–Marquardt — it forms and
+  factorizes the full normal matrix `JᵀJ`, costing roughly
+  `O((6·#cameras + 3·#points)³)` per iteration. It is appropriate for the
+  small problems this crate targets (tens of cameras, hundreds of points) and
+  does **not** implement the sparse **Schur-complement** reduction that
+  production bundle adjustment uses to scale to thousands of cameras (a
+  deliberate future extension). The Jacobian is built by **numerical finite
+  differences** (an analytic Jacobian is a future optimization); the camera
+  intrinsics `K` are **shared and held fixed** (per-camera / refined intrinsics
+  are a future extension); the **gauge** is fixed by holding camera 0's pose,
+  which removes the 6-DOF rigid freedom but not the global **scale** of a
+  two-view-seeded reconstruction. Levenberg–Marquardt is a **local** optimizer
+  and requires the kind of initialization that Stages 3–4 provide. See the
+  `bundle` module documentation for details.
+
 These publications describe the methods; the Rust code in this crate is an
-independent implementation. The matching, verification, two-view-geometry, and
-camera-resectioning (PnP) code is written from the mathematics in the
-references above — **no COLMAP or OpenCV source is used or copied.**
+independent implementation. The matching, verification, two-view-geometry,
+camera-resectioning (PnP), and bundle-adjustment code is written from the
+mathematics in the references above — **no COLMAP or OpenCV source is used or
+copied.**
