@@ -519,6 +519,10 @@ members = [
     # Biology (Phase 45) — pharmacokinetics + RNA tertiary structure
     "crates/valenx-adapters/bio/valenx-adapter-pksim",
     "crates/valenx-adapters/bio/valenx-adapter-simrna",
+
+    # Defense / M&S (M4) — uncertainty quantification, surrogates, sensitivity.
+    # General numerical-methods enabler: wraps any model f: inputs → outputs.
+    "crates/valenx-uq",
 ]
 
 # ---------------------------------------------------------------------------

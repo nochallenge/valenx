@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-uq"
+description = "In-house uncertainty quantification (UQ), surrogate modelling, and sensitivity analysis. A dependency-light, deterministic toolkit that wraps any model `f: inputs → outputs` (the `Model` trait): input distributions (uniform/normal/triangular), Monte-Carlo and Latin-hypercube sampling, summary statistics with confidence intervals, global sensitivity (Sobol first-order/total via the Saltelli estimator and Morris elementary effects), and a low-order polynomial response-surface surrogate fitted by least squares. Pure Rust, no `unsafe`, no `rand` — randomness comes from an in-crate seeded SplitMix64 PRNG with Box–Muller normals, so every result is reproducible across runs and machines. Research/educational grade textbook methods: Monte-Carlo error is O(1/√n), the Saltelli Sobol estimator has finite-sample variance, and the polynomial surrogate is a global low-order fit (not a Gaussian-process / kriging interpolant)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+readme.workspace       = true
+publish.workspace      = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
