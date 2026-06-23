@@ -79,29 +79,47 @@ so it's a clean port, not clean-room.
 
 ---
 
-## Track D — Phone → 3-D scan  ·  **in-house photogrammetry, port COLMAP (BSD)**
+## Track D — Phone → 3-D scan  ·  **tiered: in-house depth + splatting, COLMAP adapter for meshes**
 
-**Status:** architecture set; crate-level detail finalizes with the scanning research brief. Three
-parts, only the middle is hard:
+**Status:** research complete (full brief in the session log). **Correction to the first framing:** a
+*full* in-house Rust photogrammetry-to-dense-mesh pipeline is **not feasible today** — the dense
+multi-view-stereo stage has **zero Rust implementations**, so a wholesale COLMAP port would be a
+multi-year from-scratch CV effort. The genuinely in-house path is **monocular depth + Gaussian
+splatting** (both Apache-licensed, pure Rust); **COLMAP stays an optional adapter** for users who want
+a precise geometric mesh (BSD — portable in principle, impractical to port in full).
 
-1. **Capture + transport (mostly built):** extend the existing `valenx-remote` LAN+PIN web bridge —
-   the phone browser captures camera via `getUserMedia` (frames + `MediaRecorder` video) and POSTs to
-   the desktop; plus a file-upload for a pre-recorded video scan. (Same pipe, reversed direction.)
-2. **Reconstruction (the work) — in-house Rust, porting COLMAP (BSD-3):**
-   - **P1 — SfM front-end:** features (ORB/SIFT) → matching → essential-matrix pose → triangulation →
-     **sparse point cloud**. Use Rust numerics (nalgebra/faer) for bundle-adjustment least-squares
-     instead of vendoring Ceres.
-   - **P2 — dense MVS + meshing:** dense stereo → point cloud → Poisson surface reconstruction (heavier).
-   - **Optional 2nd backend:** **Gaussian splatting** via the Rust + wgpu `brush` engine (the
-     "new-tech" path) behind the same interface — also in-house.
-3. **Integration:** point cloud / mesh → the viewport + editor (point-cloud display likely needs adding;
-   mesh import exists).
+**Gating item:** the capture page must be served over **HTTPS** — `getUserMedia` requires a secure
+context, so the current plain-HTTP `valenx-remote` bridge won't get camera access (add a self-signed
+cert trusted on the phone). LiDAR stays web-impossible (native iOS only).
 
-**Honest limits:** **web = camera frames/video only — no LiDAR** (that needs a native iOS app);
-reconstruction is **GPU-heavy** and the hard part; rooms harder than objects; realistic UX is
-"capture → process → result in seconds-to-minutes," not live "watch it build."
+**Capture + transport:** extend `valenx-remote` over HTTPS — `getUserMedia` + `<video>→<canvas>→toBlob`
+frames + `MediaRecorder` video (MP4 on iOS / WebM on Android) POSTed to the desktop, plus a file-upload
+for a pre-recorded scan. Reconstruction runs as an **async job** ("capture → upload → reconstruct →
+notify"), never a live viewfinder.
 
-**Effort:** high (a real CV pipeline). **Impact:** high + distinctive.
+**Tiered build (ship in this order):**
+- **D1 — Instant depth preview (in-house, fastest):** phone photo → `candle` + **Depth-Anything-V2
+  Small** (Apache-2.0, BYO weights) → back-projected point cloud in the viewport. Honestly a 2.5-D,
+  scale-ambiguous preview — not metrology. Proves the phone→desktop loop end-to-end. (~days)
+- **D2 — Gaussian splatting (in-house flagship, the "wow"):** integrate **`brush`** (Apache-2.0,
+  Rust + **wgpu** — valenx's exact GPU stack, CUDA-free, runs on AMD/Intel/Apple) to train a photoreal
+  splat from a photo set / video. Needs posed input (COLMAP-sparse adapter, CPU, supplies poses) and
+  outputs render-only `.ply` splats (no mesh yet). Caveat: `brush` pins git forks of wgpu/egui/naga —
+  run `cargo deny` + reconcile against valenx's wgpu. (~weeks)
+- **D3 — COLMAP adapter → true mesh (optional external):** arm's-length subprocess to user-installed
+  **COLMAP (BSD)** for full SfM→dense→mesh; honest that **dense needs NVIDIA CUDA** (CPU-only users get
+  sparse/poses only). Also the pose-provider for D2.
+
+**Integration:** point cloud / splat / mesh → the viewport + editor (point-cloud + splat display need
+adding; mesh import exists).
+
+**Avoid (non-commercial / copyleft):** Inria 3DGS + SuGaR (non-commercial), DA-V2 Base/Large
+(CC-BY-NC), OpenMVS (AGPL — only ever an optional user-installed adapter, never bundled).
+
+**Honest limits:** async (seconds for depth; minutes–tens-of-minutes for splatting/COLMAP); **objects
+scan far better than rooms** (rooms really want LiDAR, which the web can't give); no LiDAR over the web.
+
+**Effort:** D1 low · D2 medium · D3 low (adapter). **Impact:** high + distinctive.
 
 ---
 
@@ -110,7 +128,7 @@ reconstruction is **GPU-heavy** and the hard part; rooms harder than objects; re
 1. **Now, in parallel (low-risk):** **Track A black-hole** (fastest real payoff — engine's done) and
    **Track B meshgen** (already planned).
 2. **Next:** **Track C drones** — clear brief; `valenx-rotor` (BEMT) is the headline build.
-3. **Then:** **Track D scanning** — biggest CV undertaking; phase the COLMAP port (SfM first).
+3. **Then:** **Track D scanning** — tiered: depth-preview (in-house) → `brush` splatting (in-house) → COLMAP adapter (real meshes). Serve the capture page over HTTPS first.
 
 **Cross-cutting (every track):**
 - **AI-drivable-first** — each workbench ships its agent-bridge command + named widgets.
@@ -119,6 +137,6 @@ reconstruction is **GPU-heavy** and the hard part; rooms harder than objects; re
 
 ## Per-feature plan status
 - **Meshgen** — plan written: `docs/design/plans/2026-06-22-meshgen-byo-llm-plan.md` ✓
-- **Black-hole** — spec + plan: *next to write* (fastest payoff).
-- **Drones** — spec + plan: to write (brief in hand).
-- **Scanning** — spec + plan: to write once the research brief lands.
+- **Black-hole** — plan written: `docs/design/plans/2026-06-22-blackhole-workbench-plan.md` ✓
+- **Drones** — research brief in hand (Track C is the phased plan); full TDD plan to write on demand.
+- **Scanning** — research brief complete; tiered plan in Track D. D1 (depth-preview) TDD plan to write next.
