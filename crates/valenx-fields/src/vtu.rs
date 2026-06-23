@@ -777,7 +777,14 @@ fn parse_appended_data_section(
     for arr in arrays {
         let arr = arr?;
         let data = read_appended_floats(raw, &arr, "PointData/CellData")?;
-        let expected = expected_samples * arr.components.max(1);
+        let expected = expected_samples
+            .checked_mul(arr.components.max(1))
+            .ok_or_else(|| {
+                ParseError::BadAttribute(
+                    "PointData/CellData NumberOfComponents * sample count overflows usize"
+                        .to_string(),
+                )
+            })?;
         if data.len() != expected {
             return Err(ParseError::CountMismatch {
                 what: "PointData/CellData entry",
@@ -899,7 +906,13 @@ fn parse_data_section(
     for arr in iter_data_arrays(section) {
         let arr = arr?;
         let data = parse_floats(arr.body, "DataArray body")?;
-        let expected_len = expected_samples * arr.components.max(1);
+        let expected_len = expected_samples
+            .checked_mul(arr.components.max(1))
+            .ok_or_else(|| {
+                ParseError::BadAttribute(
+                    "DataArray NumberOfComponents * sample count overflows usize".to_string(),
+                )
+            })?;
         if data.len() != expected_len {
             return Err(ParseError::CountMismatch {
                 what: "DataArray body",
@@ -1182,6 +1195,57 @@ mod tests {
     </Piece>
   </UnstructuredGrid>
 </VTKFile>"#
+    }
+
+    /// Regression: a malicious `.vtu` whose field `NumberOfComponents` is large
+    /// enough that `point_count * components` overflows `usize` must return a
+    /// typed `ParseError`, never panic (pre-fix this multiply was unchecked and
+    /// panicked in overflow-checks-on builds). Covers both the ASCII and the
+    /// appended paths.
+    #[test]
+    fn vtu_rejects_overflowing_number_of_components() {
+        let huge = "9999999999999999999"; // > usize::MAX, fits u64
+        let ascii = format!(
+            r#"<?xml version="1.0"?>
+<VTKFile type="UnstructuredGrid" version="2.0" byte_order="LittleEndian">
+  <UnstructuredGrid>
+    <Piece NumberOfPoints="4" NumberOfCells="1">
+      <Points><DataArray type="Float32" NumberOfComponents="3" format="ascii">0 0 0 1 0 0 0 1 0 0 0 1</DataArray></Points>
+      <Cells>
+        <DataArray type="Int32" Name="connectivity" format="ascii">0 1 2 3</DataArray>
+        <DataArray type="Int32" Name="offsets" format="ascii">4</DataArray>
+        <DataArray type="UInt8" Name="types" format="ascii">10</DataArray>
+      </Cells>
+      <PointData><DataArray type="Float32" Name="evil" NumberOfComponents="{huge}" format="ascii">1.0</DataArray></PointData>
+    </Piece>
+  </UnstructuredGrid>
+</VTKFile>"#
+        );
+        let r = parse_ascii(&ascii);
+        assert!(
+            r.is_err(),
+            "overflowing NumberOfComponents must be rejected, not panic; got {r:?}"
+        );
+
+        let appended = format!(
+            r#"<?xml version="1.0"?>
+<VTKFile type="UnstructuredGrid" version="2.0" byte_order="LittleEndian">
+  <UnstructuredGrid>
+    <Piece NumberOfPoints="4" NumberOfCells="1">
+      <Points><DataArray type="Float32" NumberOfComponents="3" format="appended" offset="0"/></Points>
+      <Cells>
+        <DataArray type="Int32" Name="connectivity" format="appended" offset="0"/>
+        <DataArray type="Int32" Name="offsets" format="appended" offset="0"/>
+        <DataArray type="UInt8" Name="types" format="appended" offset="0"/>
+      </Cells>
+      <PointData><DataArray type="Float32" Name="evil" NumberOfComponents="{huge}" format="appended" offset="0"/></PointData>
+    </Piece>
+  </UnstructuredGrid>
+  <AppendedData encoding="raw">_</AppendedData>
+</VTKFile>"#
+        );
+        // Must return Ok or a typed error — never panic.
+        let _ = parse_appended_raw(appended.as_bytes());
     }
 
     /// Deterministic xorshift64 PRNG — reproducible, no external rng dep.
