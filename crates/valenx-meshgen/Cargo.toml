@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-meshgen"
+description = "Bring-your-own mesh-LLM pipeline for valenx: a MeshLlm runtime trait + a quantized-OBJ <-> valenx Mesh codec, so a user-supplied mesh-generation model (e.g. LLaMA-Mesh) turns a text prompt into an editable mesh. Backends are swappable (a test MockBackend now; a feature-gated llama.cpp backend behind `meshgen`). Ships the pipeline, never the weights."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror   = { workspace = true }
+nalgebra    = { workspace = true }
+valenx-mesh = { path = "../valenx-mesh" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"
