@@ -159,8 +159,9 @@ pub fn match_descriptors(
 
         // Lowe ratio test. Requires a genuine second-nearest neighbour;
         // with only one candidate the test is undefined, so we reject.
-        // The comparison is done in u32 to avoid float-rounding surprises:
-        // best_dist < ratio * second_dist.
+        // best_dist < ratio * second_dist, evaluated in f32: both distances
+        // are integers in 0..=256 (exactly representable), so the only
+        // rounding is in the intended `ratio * second_dist` scaling itself.
         if nn.second_dist == u32::MAX {
             continue;
         }
