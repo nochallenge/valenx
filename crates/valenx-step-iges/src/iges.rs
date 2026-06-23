@@ -541,11 +541,17 @@ pub fn parse(text: &str) -> Result<IgesGeometry, StepIgesError> {
                     let curve_de = fields[idx + 1].parse::<u32>().unwrap_or(0);
                     let orientation = fields[idx + 2].parse::<u32>().unwrap_or(1);
                     let count_xyz = fields[idx + 3].parse::<usize>().unwrap_or(0);
+                    if count_xyz > MAX_IGES_LIST_LEN {
+                        return Err(StepIgesError::ListTooLarge {
+                            count: count_xyz,
+                            max: MAX_IGES_LIST_LEN,
+                        });
+                    }
                     members.push(IgesBoundaryMember {
                         curve_de,
                         orientation,
                     });
-                    idx += 4 + count_xyz;
+                    idx = idx.saturating_add(4).saturating_add(count_xyz);
                 }
                 geom.boundaries.push(IgesBoundary {
                     surface_de,
