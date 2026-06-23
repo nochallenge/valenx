@@ -625,6 +625,24 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Rotor / Drone (BEMT) workbench —
+                    // native propeller / rotor blade-element-momentum-theory
+                    // performance on valenx-rotor.
+                    if ui
+                        .checkbox(&mut self.show_rotor_workbench, "Rotor / Drone (BEMT)")
+                        .on_hover_text(
+                            "Show / hide the right-side Rotor / Drone (BEMT) \
+                             workbench — set the blade geometry (count, tip & hub \
+                             radius, radial chord/twist stations) and operating \
+                             point (rpm, freestream, air density), then read \
+                             thrust, torque, power, efficiency, hover figure of \
+                             merit and per-element aerodynamics from the in-house \
+                             valenx-rotor blade-element-momentum engine.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Induction Motor workbench — native
                     // 3-phase induction-motor slip / power (valenx-inductionmotor).
                     if ui
@@ -3035,6 +3053,12 @@ impl eframe::App for ValenxApp {
             // ray-tracer) on valenx-relativity. A no-op unless toggled on via
             // View → Black Hole.
             crate::blackhole_workbench::draw_blackhole_workbench(self, ctx);
+
+            // Rotor / Drone (BEMT) workbench (right) — native propeller / rotor
+            // blade-element-momentum performance on valenx-rotor. A no-op unless
+            // toggled on via View → Rotor / Drone (BEMT) (or opened by the agent
+            // bridge under the id "rotor").
+            crate::rotor_workbench::draw_rotor_workbench(self, ctx);
 
             // Induction Motor workbench (right) — 3-phase induction-motor slip /
             // power on valenx-inductionmotor. Off unless toggled via View.

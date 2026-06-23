@@ -7042,6 +7042,7 @@ dependencies = [
  "valenx-rnadesign",
  "valenx-rnastruct",
  "valenx-rocket-demo",
+ "valenx-rotor",
  "valenx-screwthread",
  "valenx-shaftdesign",
  "valenx-sheet-metal",

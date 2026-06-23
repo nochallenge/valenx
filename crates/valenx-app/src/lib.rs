@@ -191,6 +191,7 @@ pub mod retainingwall_workbench;
 pub mod rivet_workbench;
 pub mod rocket_mesh;
 pub mod rocket_workbench;
+pub mod rotor_workbench;
 pub mod run;
 pub mod scene_overlay;
 pub mod screwthread_workbench;
@@ -1112,6 +1113,16 @@ pub struct ValenxApp {
     /// ray-tracer) over the in-process `valenx-relativity` engine. See
     /// [`crate::blackhole_workbench`].
     pub blackhole: crate::blackhole_workbench::BlackHoleWorkbenchState,
+
+    /// Whether the right-side Rotor / Drone (BEMT) workbench is visible.
+    /// Defaults to `false`; flipped on from the View menu or opened by the
+    /// agent bridge under the id `"rotor"`. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub show_rotor_workbench: bool,
+    /// Form + result state for the Rotor / Drone (BEMT) workbench — native
+    /// propeller / rotor blade-element-momentum-theory performance over the
+    /// in-process `valenx-rotor` engine. See [`crate::rotor_workbench`].
+    pub rotor: crate::rotor_workbench::RotorWorkbenchState,
 
     /// Whether the right-side Induction Motor workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
