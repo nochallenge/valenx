@@ -1,4 +1,4 @@
-//! # valenx-photogrammetry — structure-from-motion building blocks (Stages 1–3)
+//! # valenx-photogrammetry — structure-from-motion building blocks (Stages 1–4)
 //!
 //! An **in-house, clean-room Rust** reimplementation of the front end of a
 //! classical Structure-from-Motion (SfM) pipeline, of the kind made famous
@@ -8,8 +8,8 @@
 //! images → feature detection & description   ← STAGE 1
 //!        → descriptor matching                ← STAGE 2
 //!        → two-view geometry verification     ← STAGE 2
-//!        → relative pose (R, t) + triangulation   ← STAGE 3 (this stage)
-//!        → incremental mapper (PnP)
+//!        → relative pose (R, t) + triangulation   ← STAGE 3
+//!        → incremental mapper: register new view (PnP)  ← STAGE 4 (this stage)
 //!        → bundle adjustment
 //!        → sparse point cloud + camera poses
 //! ```
@@ -41,13 +41,31 @@
 //! supplied — no auto-calibration), and the recovered translation (and hence
 //! the triangulated points) is fixed only **up to a global scale**.
 //!
+//! **Stage 4 (added here)** is the [`pnp`] module — the **incremental
+//! mapper's** core operation: registering a *new* view into an existing
+//! reconstruction by **camera resectioning** from 2D–3D correspondences
+//! (already-triangulated scene points matched to the new image's features).
+//! It solves the **Perspective-n-Point (PnP)** problem with the linear
+//! **DLT** ([`solve_pnp`]): normalize pixels to calibrated rays, build the
+//! `2n×12` homogeneous system from `x̂ᵢ × ([R|t]Xᵢ) = 0`, SVD it, reshape to a
+//! `3×4` `[R|t]`, then orthonormalize the rotation block and rescale the
+//! translation to stay metrically consistent. [`solve_pnp_ransac`] wraps that
+//! in RANSAC over **reprojection error** for robustness to mismatches,
+//! returning a [`PnpResult`] (pose + inlier set). Because the 3-D points come
+//! in a fixed world frame, the recovered [`CameraPose`] is at **metric
+//! scale** — there is no free scale here (contrast Stage 3). Honest caveats in
+//! the module docs: the linear DLT is a strong *initializer* (below EPnP /
+//! iterative accuracy on noisy data; bundle adjustment polishes it later), it
+//! needs `n ≥ 6` points, and a **coplanar** point configuration is degenerate.
+//!
 //! ## Provenance / licensing
 //!
 //! This is a *clean-room* implementation written from the published
 //! computer-vision literature — FAST (Rosten & Drummond), ORB (Rublee et
 //! al.), the Lowe ratio test (Lowe 2004), the Hartley normalized 8-point
-//! algorithm (Hartley 1997), and RANSAC (Fischler & Bolles 1981) are all
-//! textbook algorithms. **No COLMAP (or OpenCV) source code is used or
+//! algorithm (Hartley 1997), RANSAC (Fischler & Bolles 1981), and DLT camera
+//! resectioning / PnP (Hartley & Zisserman ch. 7) are all textbook
+//! algorithms. **No COLMAP (or OpenCV) source code is used or
 //! copied.** COLMAP is BSD-3-Clause and is credited purely as the *method
 //! reference* for the overall SfM design in the crate's
 //! `THIRD-PARTY-NOTICES` file. valenx itself is `MIT OR Apache-2.0`.
@@ -88,6 +106,7 @@ pub mod fast;
 pub mod geometry;
 pub mod image;
 pub mod matching;
+pub mod pnp;
 pub mod twoview;
 
 mod error;
@@ -102,6 +121,7 @@ pub use geometry::{verify_two_view, RansacParams, TwoViewResult};
 pub use image::GrayImage;
 pub use keypoint::Keypoint;
 pub use matching::{match_descriptors, Match};
+pub use pnp::{project_point, solve_pnp, solve_pnp_ransac, CameraPose, PnpRansacParams, PnpResult};
 pub use twoview::{
     decompose_essential, essential_from_fundamental, recover_pose, triangulate_point,
     CameraIntrinsics, TwoViewReconstruction,
