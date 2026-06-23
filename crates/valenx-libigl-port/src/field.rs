@@ -54,6 +54,7 @@ pub fn heat_geodesics(mesh: &TriMesh, source_vertex: usize) -> Result<Vec<f64>, 
             given: n,
         });
     }
+    mesh.validate()?;
 
     let h = mean_edge_length(mesh);
     // Time step t = h² is the value Crane et al. recommend.
