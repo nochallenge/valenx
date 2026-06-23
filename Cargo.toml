@@ -261,6 +261,7 @@ members = [
     "crates/valenx-safety",
     "crates/valenx-orchestrator",
     "crates/valenx-recipes",
+    "crates/valenx-meshgen",
     "crates/valenx-myostatin",
     "crates/valenx-score",
     "crates/valenx-developability",

@@ -8378,6 +8378,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-meshgen"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "thiserror 2.0.18",
+ "valenx-mesh",
+]
+
+[[package]]
 name = "valenx-meshpart"
 version = "0.1.0-alpha.1"
 dependencies = [
