@@ -54,6 +54,7 @@ pub fn lscm(mesh: &TriMesh, fixed_pin_ids: &[usize]) -> Result<Vec<[f64; 2]>, Li
             given: n,
         });
     }
+    mesh.validate()?;
     let pins = resolve_pins(mesh, fixed_pin_ids);
     match lscm_solve(mesh, &pins) {
         Some(uv) => Ok(uv),

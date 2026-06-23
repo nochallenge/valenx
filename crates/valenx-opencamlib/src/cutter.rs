@@ -94,6 +94,12 @@ impl<'a> AdaptiveDropCutter<'a> {
         xy_bounds: ((f64, f64), (f64, f64)),
         step: f64,
     ) -> Vec<(Vector3<f64>, f64)> {
+        // A non-positive / non-finite step never advances the x/y walk —
+        // infinite loop + unbounded out.push (OOM). step is a public,
+        // unvalidated f64.
+        if !(step.is_finite() && step > 0.0) {
+            return Vec::new();
+        }
         let (xs, ys) = xy_bounds;
         let dc = DropCutter::new(self.tris);
         let mut out = Vec::new();
@@ -186,6 +192,12 @@ impl<'a> PushCutter<'a> {
         max_distance: f64,
         step: f64,
     ) -> Vec<Vector3<f64>> {
+        // A non-positive / non-finite step makes max_distance/step non-finite,
+        // the cast saturates to usize::MAX, and Vec::with_capacity panics
+        // ("capacity overflow"). step is a public, unvalidated f64.
+        if !(step.is_finite() && step > 0.0) {
+            return Vec::new();
+        }
         let dc = DropCutter::new(self.tris);
         let mag = (direction.0.powi(2) + direction.1.powi(2))
             .sqrt()

@@ -174,13 +174,18 @@ pub fn lex(src: &str) -> Result<Vec<Token>, OpenScadError> {
                         b'\\' => buf.push('\\'),
                         b'n' => buf.push('\n'),
                         b't' => buf.push('\t'),
-                        // Unknown escape — keep the escaped byte
-                        // verbatim. `other` is a single ASCII byte
-                        // (anything multibyte would have been the
-                        // continuation of a UTF-8 codepoint starting
-                        // BEFORE the backslash, which can't happen
-                        // because `\` itself is single-byte).
-                        other => buf.push(other as char),
+                        // Unknown escape — keep the escaped char verbatim. The
+                        // escaped byte may be the first byte of a multibyte
+                        // codepoint (e.g. `\é`), so decode the whole codepoint;
+                        // pushing a lone byte mangled it AND left `i` mid-
+                        // codepoint, panicking the next &str slice. The shared
+                        // `i += 2` below counts the backslash + 1 byte, so
+                        // advance past the remaining codepoint bytes here.
+                        _ => {
+                            let ch = src[i + 1..].chars().next().unwrap_or('\u{FFFD}');
+                            buf.push(ch);
+                            i += ch.len_utf8() - 1;
+                        }
                     }
                     i += 2;
                 } else {
