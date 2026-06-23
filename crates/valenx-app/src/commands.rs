@@ -228,6 +228,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Aero => "aero",
         TabKind::Gasdynamics => "gasdynamics",
         TabKind::Rotor => "rotor",
+        TabKind::BlackHole => "blackhole",
         TabKind::Cfd => "cfd",
         TabKind::Fem => "fem",
         TabKind::Reactdyn => "reactdyn",
