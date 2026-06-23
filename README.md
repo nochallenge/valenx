@@ -10,13 +10,24 @@
 > alignment, phylogenetics, population genetics, protein structure &
 > design, RNA/mRNA design, CRISPR gene-editing, cryo-EM, and systems
 > biology; and **neuroengineering** — neural-interface / BCI stimulation
-> (extracellular fields, Hodgkin–Huxley cable models, bioheat). Native
-> Rust solvers plus 141 open-source tool integrations.
+> (extracellular fields, Hodgkin–Huxley cable models, bioheat); and
+> **gravitational physics** — an in-house general-relativity / black-hole
+> engine (Kerr–Newman spacetimes, geodesics, Hawking thermodynamics, and a
+> shadow ray-tracer). Native Rust solvers plus 141 open-source tool
+> integrations.
 
 **Status:** `0.1.0-alpha.1` — pre-release. The workflow loop is
 usable end-to-end (load project, click a case, **Prepare**, **Run**,
 inspect results) but real-world testing is just beginning. Expect
 sharp edges; please file issues.
+
+## 📺 Demo
+
+[![Watch the Valenx demo](https://img.youtube.com/vi/n1Je-qk2es0/maxresdefault.jpg)](https://www.youtube.com/watch?v=n1Je-qk2es0)
+
+A walkthrough of Valenx — generating and simulating ~190 products from one app,
+the 3-D editor, and the in-app AI agent. It's an **early developer build, not a
+commercial release** — **contributors wanted.**
 
 ## What it does
 
@@ -87,6 +98,13 @@ Rust solvers ship inside the app and work out of the box:
   (velocity-Verlet on quantum-chemistry forces) and a physically-based **path
   tracer** (light-tree importance sampling, bidirectional path tracing,
   subsurface scattering).
+- **Gravitational physics / general relativity** — an in-house GR & black-hole
+  engine (`valenx-relativity`): Schwarzschild / Kerr / Reissner–Nordström /
+  **Kerr–Newman** spacetimes, curvature tensors via automatic differentiation,
+  null + timelike **geodesics**, observables (photon sphere, ISCO, shadow
+  radius), **Hawking thermodynamics**, and a **black-hole shadow ray-tracer** —
+  checked against closed-form results (Schwarzschild photon sphere = 3M, shadow
+  radius = √27·M).
 - **Neuroengineering / BCI** — a neural-interface stimulation **and recording**
   suite (`valenx-neuro`): an implanted electrode's **extracellular FEM field**
   (reusing the FEA solver), **Hodgkin–Huxley** cable axons, the **Rattay
@@ -183,7 +201,7 @@ full dev setup.
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how the pieces fit together
 - **[ROADMAP.md](./ROADMAP.md)** — 20-year plan
 - **[CHANGELOG.md](./CHANGELOG.md)** — release history
-- **[docs/CI.md](./docs/CI.md)** — CI policy (manual-trigger only; here's why)
+- **[docs/CI.md](./docs/CI.md)** — CI policy (auto-runs on every push + PR; the `CI OK` gate)
 - **[CONTRIBUTING.md](./CONTRIBUTING.md)** — how to contribute + dev setup
 - **[SECURITY.md](./SECURITY.md)** — vulnerability disclosure
 - **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)** — Contributor Covenant v2.1
