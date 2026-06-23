@@ -106,13 +106,20 @@ fn render_png(engine: bool, path: Option<String>) -> anyhow::Result<()> {
         crate::render_workbench::render_rocket(480, 160, 6, 1.1, false)
     }
     .map_err(|e| anyhow::anyhow!("render failed: {e}"))?;
-    let file = std::fs::File::create(&path)?;
-    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
-    enc.set_color(png::ColorType::Rgb);
-    enc.set_depth(png::BitDepth::Eight);
-    let mut writer = enc.write_header()?;
-    writer.write_image_data(&pixels)?;
-    writer.finish()?;
+    // Encode to an in-memory buffer, then publish atomically (sidecar →
+    // rename) so a torn write can't leave a corrupt PNG — matches the
+    // workspace's durable-write guard (no raw File::create in production).
+    let mut buf: Vec<u8> = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut buf, w as u32, h as u32);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header()?;
+        writer.write_image_data(&pixels)?;
+        writer.finish()?;
+    }
+    valenx_core::io_caps::atomic_write_bytes(std::path::Path::new(&path), &buf)
+        .map_err(|e| anyhow::anyhow!("write {path}: {e}"))?;
     println!("wrote {path} ({w}x{h})");
     Ok(())
 }

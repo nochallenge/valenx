@@ -73,6 +73,17 @@ use syn::visit::Visit;
 ///     can't depend on valenx-core because of the core→fields→mesh
 ///     cycle).
 const ALLOWLIST: &[(&str, &str, &str)] = &[
+    // ── Local atomic-write primitive + intentional append sinks ────────
+    (
+        "crates/valenx-recipes/src/lib.rs",
+        "atomic_write",
+        "local atomic-write primitive: sidecar temp + sync_all + rename, mirrors io_caps::atomic_write_str (keeps this crate pure-std/serde, no valenx-core dep)",
+    ),
+    (
+        "crates/valenx-app/src/assistant_workbench.rs",
+        "append_line",
+        "append-only .jsonl agent-chat bridge: an atomic full-file replace would truncate the prior appended lines; incremental append is the intended semantics",
+    ),
     // ── Subprocess stdout/stderr redirect sinks ────────────────────────
     // The created File handle is moved into `Stdio::from(..)` /
     // `cmd.stdout(..)`; the kernel writes the child's output to it. There
