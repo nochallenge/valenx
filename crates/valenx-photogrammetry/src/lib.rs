@@ -1,4 +1,4 @@
-//! # valenx-photogrammetry — structure-from-motion building blocks (Stages 1–2)
+//! # valenx-photogrammetry — structure-from-motion building blocks (Stages 1–3)
 //!
 //! An **in-house, clean-room Rust** reimplementation of the front end of a
 //! classical Structure-from-Motion (SfM) pipeline, of the kind made famous
@@ -6,9 +6,9 @@
 //!
 //! ```text
 //! images → feature detection & description   ← STAGE 1
-//!        → descriptor matching                ← STAGE 2 (this stage)
-//!        → two-view geometry verification     ← STAGE 2 (this stage)
-//!        → relative pose (R, t) + triangulation   ← stage 3
+//!        → descriptor matching                ← STAGE 2
+//!        → two-view geometry verification     ← STAGE 2
+//!        → relative pose (R, t) + triangulation   ← STAGE 3 (this stage)
 //!        → incremental mapper (PnP)
 //!        → bundle adjustment
 //!        → sparse point cloud + camera poses
@@ -18,8 +18,8 @@
 //! type, FAST-9 corner detection (the [`fast`] module), and an ORB-style
 //! oriented binary descriptor (the [`descriptor`] module).
 //!
-//! **Stage 2 (added here)** covers descriptor *matching* and two-view
-//! geometric *verification*:
+//! **Stage 2** covers descriptor *matching* and two-view geometric
+//! *verification*:
 //!
 //! - [`matching`] — brute-force Hamming nearest-neighbour matching with the
 //!   Lowe ratio test and a mutual cross-check ([`match_descriptors`],
@@ -27,8 +27,19 @@
 //! - [`geometry`] — RANSAC estimation of the **fundamental matrix** via the
 //!   Hartley-normalized 8-point algorithm, scoring inliers by Sampson
 //!   distance ([`verify_two_view`], [`RansacParams`], [`TwoViewResult`]).
-//!   This stage recovers `F` and the inlier set **only**; the essential
-//!   matrix, relative pose `(R, t)`, and triangulation are Stage 3.
+//!   This stage recovers `F` and the inlier set **only**.
+//!
+//! **Stage 3 (added here)** is the [`twoview`] module — the **calibrated**
+//! two-view geometry step. Given the camera [`CameraIntrinsics`] it upgrades
+//! the fundamental matrix to the **essential matrix**
+//! ([`essential_from_fundamental`]), decomposes it into the four candidate
+//! relative poses ([`decompose_essential`]), triangulates correspondences by
+//! the linear DLT ([`triangulate_point`]), and selects the physically correct
+//! pose `(R, t)` by the cheirality test, returning a
+//! [`TwoViewReconstruction`] ([`recover_pose`]). Two honest caveats stated in
+//! the module docs: it is the **calibrated path** (intrinsics must be
+//! supplied — no auto-calibration), and the recovered translation (and hence
+//! the triangulated points) is fixed only **up to a global scale**.
 //!
 //! ## Provenance / licensing
 //!
@@ -77,6 +88,7 @@ pub mod fast;
 pub mod geometry;
 pub mod image;
 pub mod matching;
+pub mod twoview;
 
 mod error;
 mod keypoint;
@@ -90,6 +102,10 @@ pub use geometry::{verify_two_view, RansacParams, TwoViewResult};
 pub use image::GrayImage;
 pub use keypoint::Keypoint;
 pub use matching::{match_descriptors, Match};
+pub use twoview::{
+    decompose_essential, essential_from_fundamental, recover_pose, triangulate_point,
+    CameraIntrinsics, TwoViewReconstruction,
+};
 
 /// Detect FAST-9 corners in `img` and compute an ORB-style oriented
 /// 256-bit (`[u8; 32]`) descriptor for each, returning the oriented
