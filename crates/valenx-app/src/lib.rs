@@ -43,6 +43,7 @@ pub mod antenna_workbench;
 pub(crate) mod background;
 pub mod batterypack_workbench;
 pub mod beam_workbench;
+pub mod blackhole_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
@@ -1101,6 +1102,16 @@ pub struct ValenxApp {
     /// in-process solvers (no external solver, no input deck). See
     /// [`crate::fem_workbench`].
     pub fem: crate::fem_workbench::FemWorkbenchState,
+
+    /// Whether the right-side Black-Hole / Relativity workbench is visible.
+    /// Defaults to `false`; flipped on from the View menu. Independent of the
+    /// other workbenches — egui docks them side by side.
+    pub show_blackhole_workbench: bool,
+    /// Form + result state for the Black-Hole / Relativity workbench — native
+    /// general relativity (Kerr–Newman observables, thermodynamics, shadow
+    /// ray-tracer) over the in-process `valenx-relativity` engine. See
+    /// [`crate::blackhole_workbench`].
+    pub blackhole: crate::blackhole_workbench::BlackHoleWorkbenchState,
 
     /// Whether the right-side Induction Motor workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.

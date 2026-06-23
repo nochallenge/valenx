@@ -365,6 +365,10 @@ valenx-solvespace-3d = { path = "../valenx-solvespace-3d" }
 valenx-librecad-2d = { path = "../valenx-librecad-2d" }
 valenx-reinforcement = { path = "../valenx-reinforcement" }
 valenx-pathtrace = { path = "../valenx-pathtrace" }
+# In-house general-relativity engine (Kerr–Newman family, observables,
+# thermodynamics, shadow ray-tracer) — surfaced by the Black-Hole / Relativity
+# workbench (src/blackhole_workbench.rs).
+valenx-relativity = { path = "../valenx-relativity" }
 valenx-hvac = { path = "../valenx-hvac" }
 valenx-beam = { path = "../valenx-beam" }
 valenx-reverse = { path = "../valenx-reverse" }
