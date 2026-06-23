@@ -77,13 +77,43 @@ are standard, widely re-implemented computer-vision methods.
   Cartography," Communications of the ACM 24(6), 1981.
 
   Implementation note: this stage estimates the **fundamental matrix and
-  the inlier correspondence set only**. The essential matrix, relative
-  camera pose `(R, t)`, and triangulation (which need camera intrinsics)
-  are a later stage. The 8-point estimator is linear (algebraic residual),
-  not the maximum-likelihood geometric estimate. See the `geometry` module
+  the inlier correspondence set only**. The 8-point estimator is linear
+  (algebraic residual), not the maximum-likelihood geometric estimate. See
+  the `geometry` module documentation for details.
+
+### Stage 3 — two-view geometry: essential matrix, relative pose, triangulation
+
+The `twoview` module upgrades the fundamental matrix to the essential
+matrix using known camera intrinsics, decomposes it into the relative
+camera pose, and triangulates correspondences. All three are standard
+results from the same epipolar-geometry literature.
+
+- **Essential matrix from the fundamental matrix and intrinsics**
+  (`E = K₂ᵀ F K₁`) and the **decomposition of `E` into `(R, t)`** via the
+  SVD with the orthogonal `W` matrix, yielding the four candidate poses
+  (Result 9.19) and the cheirality (positive-depth) test that selects the
+  physically correct one (§9.6.3):
+  R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*,
+  2nd ed., Cambridge University Press, 2004, Chapter 9.
+
+- **Linear triangulation (DLT — Direct Linear Transform)**, assembling the
+  homogeneous `A X = 0` system from the two cameras' projection matrices and
+  solving by SVD:
+  R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*,
+  2nd ed., §12.2. See also R. I. Hartley and P. Sturm, "Triangulation,"
+  Computer Vision and Image Understanding 68(2), 1997.
+
+  Implementation note: Stage 3 is the **calibrated** path — the camera
+  intrinsics must be supplied (from EXIF, a prior calibration, or a sensible
+  default). Full uncalibrated **auto-calibration** is out of scope. The
+  recovered translation, and hence the triangulated points, is determined
+  only **up to a global scale** (the essential matrix is homogeneous); the
+  translation is returned as a unit direction. The four-fold rotation/
+  translation ambiguity is resolved by the cheirality test, but the scale
+  ambiguity is fundamental to two views. See the `twoview` module
   documentation for details.
 
 These publications describe the methods; the Rust code in this crate is an
-independent implementation. The matching and verification code is written
-from the mathematics in the references above — **no COLMAP or OpenCV source
-is used or copied.**
+independent implementation. The matching, verification, and two-view-geometry
+code is written from the mathematics in the references above — **no COLMAP or
+OpenCV source is used or copied.**
