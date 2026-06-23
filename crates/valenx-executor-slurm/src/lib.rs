@@ -380,6 +380,12 @@ pub fn build_rsync_upload_command(
     vec![
         std::ffi::OsString::from("rsync"),
         std::ffi::OsString::from("-a"),
+        // `-s` / `--protect-args`: stop the REMOTE shell from word-splitting
+        // and glob-/metachar-expanding the `host:<path>` argument. Without
+        // it, rsync hands the post-`host:` path to the remote shell, so a
+        // path containing spaces / `* ? [ ] $( )` etc. would be re-parsed
+        // remotely. This is the rsync-leg half of the command-injection fix.
+        std::ffi::OsString::from("-s"),
         std::ffi::OsString::from("--mkpath"),
         std::ffi::OsString::from(src),
         std::ffi::OsString::from(dst),
@@ -401,6 +407,9 @@ pub fn build_rsync_download_command(
     vec![
         std::ffi::OsString::from("rsync"),
         std::ffi::OsString::from("-a"),
+        // `-s` / `--protect-args`: see build_rsync_upload_command — keep the
+        // remote shell from expanding the `host:<remote_workdir>` argument.
+        std::ffi::OsString::from("-s"),
         std::ffi::OsString::from(src),
         std::ffi::OsString::from(local_workdir.as_os_str()),
     ]
@@ -475,6 +484,20 @@ impl Executor for SlurmExecutor {
                 host,
                 remote_workdir_root,
             } => {
+                // The case name (workdir basename) is interpolated into the
+                // ssh-dispatched `sbatch <target>` and the `host:<path>` rsync
+                // argument below, both of which hit a remote `$SHELL -c`.
+                // `is_safe_case_name` (valenx-core loader) still permits shell
+                // metacharacters (`; $ ( ) | & ` space `*`), so screen it here
+                // with the same strict allow-list used for `remote_workdir_root`
+                // BEFORE spawning rsync or sbatch.
+                let case_name = case_name_for(&job.workdir);
+                validate_remote_path_segment("case name", &case_name).map_err(|e| {
+                    ExecutorError::SubmitFailed {
+                        executor_id: "slurm".into(),
+                        reason: e.to_string(),
+                    }
+                })?;
                 let upload = build_rsync_upload_command(&job.workdir, host, remote_workdir_root);
                 let upload_out = Command::new(&upload[0])
                     .args(&upload[1..])
@@ -495,19 +518,26 @@ impl Executor for SlurmExecutor {
                     });
                 }
                 // The upload uses --mkpath so <root>/<case-name>/ exists.
-                let case_name = job
-                    .workdir
-                    .file_name()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "case".to_string());
-                format!("{remote_workdir_root}/{case_name}/submit.sh")
+                // `case_name` validated above; reused here.
+                //
+                // This target becomes the remote argument of
+                // `ssh host -- sbatch <target>`, which the remote `$SHELL -c`
+                // re-parses. Defense in depth: shell-quote it so even if a
+                // future change widened the allow-list above, the path can't
+                // break out of its argument word remotely. (Both segments are
+                // already strict-allow-listed, so quoting is normally a no-op.)
+                let remote_path = format!("{remote_workdir_root}/{case_name}/submit.sh");
+                shell_quote(&remote_path)
             }
         };
 
         // sbatch dispatch: local for SharedFilesystem, ssh-wrapped
         // for Rsync. current_dir() doesn't apply to the remote shell;
         // the submit script uses `set -euo pipefail` and the remote
-        // workdir is implicit in the script path.
+        // workdir is implicit in the script path. For SharedFilesystem
+        // `sbatch_target` is a literal local path passed straight as an
+        // argv element (no shell), so it is NOT shell-quoted; for Rsync it
+        // is the shell-quoted remote path built above.
         let argv = build_ssh_wrapped_command(
             &self.config.staging_mode,
             "sbatch",
@@ -631,11 +661,16 @@ impl SlurmExecutor {
         else {
             return Ok(()); // SharedFilesystem: nothing to fetch.
         };
-        let case_name = handle
-            .workdir
-            .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "case".to_string());
+        // Same allow-list as submit(): the case name is interpolated into the
+        // `host:<remote_workdir>` rsync argument, which rsync shell-expands.
+        let case_name = case_name_for(&handle.workdir);
+        validate_remote_path_segment("case name", &case_name).map_err(|e| {
+            ExecutorError::FetchFailed {
+                executor_id: "slurm".into(),
+                native_id: handle.native_id.clone(),
+                reason: e.to_string(),
+            }
+        })?;
         let remote_workdir = format!("{remote_workdir_root}/{case_name}");
         let argv = build_rsync_download_command(host, &remote_workdir, &handle.workdir);
         let output = Command::new(&argv[0])
@@ -881,10 +916,15 @@ impl SlurmConfig {
     /// loaded from a project's `case.toml`. It rejects:
     /// - **control characters in `#SBATCH` directive values** — a newline
     ///   would terminate the directive comment line and turn the remainder
-    ///   into an executable line in the bash submit script; and
+    ///   into an executable line in the bash submit script;
     /// - **an rsync/ssh host that starts with `-`** (ssh/rsync would parse
     ///   it as an option such as `-oProxyCommand=…`, executing a local
-    ///   command) or that contains characters outside a safe host set.
+    ///   command) or that contains characters outside a safe host set; and
+    /// - **a `remote_workdir_root` outside a strict `[A-Za-z0-9/._-]`
+    ///   allow-list** (or with a leading `-`) — the value is joined into the
+    ///   ssh-dispatched `sbatch <target>` (which the remote `$SHELL -c`
+    ///   re-parses) and the `host:<path>` rsync argument, so a metacharacter
+    ///   there is remote command injection.
     pub fn validate(&self) -> Result<(), SlurmConfigError> {
         for (name, val) in [
             ("partition", &self.partition),
@@ -909,11 +949,7 @@ impl SlurmConfig {
         } = &self.staging_mode
         {
             validate_ssh_host(host)?;
-            if let Some(c) = remote_workdir_root.chars().find(|&c| c.is_control()) {
-                return Err(SlurmConfigError::Invalid(format!(
-                    "rsync remote_workdir_root contains a control character ({c:?})"
-                )));
-            }
+            validate_remote_path_segment("remote_workdir_root", remote_workdir_root)?;
         }
         Ok(())
     }
@@ -945,6 +981,51 @@ fn validate_ssh_host(host: &str) -> Result<(), SlurmConfigError> {
         )));
     }
     Ok(())
+}
+
+/// Strict allow-list for a path-shaped value that gets interpolated into a
+/// REMOTE shell context — either `remote_workdir_root` (joined into the
+/// ssh-dispatched `sbatch <target>` and the `host:<path>` rsync argument)
+/// or a case name (the per-case sub-directory).
+///
+/// Earlier this site only screened `remote_workdir_root` for control
+/// characters, which left shell metacharacters (`; $ ( ) | & \` space `*`)
+/// free to reach the remote `$SHELL -c` via `ssh host -- sbatch <target>`
+/// and rsync's post-`host:` shell expansion. This is the command-injection
+/// fix: only `[A-Za-z0-9]` plus `/ . _ -` are permitted, and a leading `-`
+/// is rejected so the value can never be misparsed as an rsync/ssh option
+/// (`-e`, `--rsh=…`). Fails loud — never silently sanitizes.
+fn validate_remote_path_segment(field: &str, value: &str) -> Result<(), SlurmConfigError> {
+    if value.is_empty() {
+        return Err(SlurmConfigError::Invalid(format!("{field} is empty")));
+    }
+    if value.starts_with('-') {
+        return Err(SlurmConfigError::Invalid(format!(
+            "{field} `{value}` starts with '-'; refusing — rsync/ssh would parse it as \
+             an option"
+        )));
+    }
+    if let Some(c) = value
+        .chars()
+        .find(|&c| !(c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-')))
+    {
+        return Err(SlurmConfigError::Invalid(format!(
+            "{field} `{value}` contains an unsupported character ({c:?}); allowed: \
+             letters, digits, and / . _ -"
+        )));
+    }
+    Ok(())
+}
+
+/// The per-case sub-directory name = the workdir basename (falls back to
+/// `"case"` for a root/empty path). Single source of truth so the upload,
+/// the sbatch target, and the fetch-back leg all agree on the same name and
+/// the same value is the one that gets validated.
+fn case_name_for(workdir: &std::path::Path) -> String {
+    workdir
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "case".to_string())
 }
 
 /// Convenience — load a [`SlurmConfig`] from a `[hpc.slurm]` table
@@ -1016,6 +1097,201 @@ mod tests {
             ..SlurmConfig::default()
         };
         assert!(c.validate().is_ok());
+    }
+
+    fn rsync_cfg_with_root(root: &str) -> SlurmConfig {
+        SlurmConfig {
+            staging_mode: StagingMode::Rsync {
+                host: "user@hpc.example.edu".into(),
+                remote_workdir_root: root.into(),
+            },
+            ..SlurmConfig::default()
+        }
+    }
+
+    #[test]
+    fn validate_accepts_clean_remote_workdir_root() {
+        // The allow-list permits letters, digits, and / . _ - — the shape
+        // of a real scratch path.
+        assert!(rsync_cfg_with_root("/scratch/user/valenx-runs_01")
+            .validate()
+            .is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_shell_metachars_in_remote_workdir_root() {
+        // Confirmed-HIGH injection vector: remote_workdir_root is joined into
+        // the ssh-dispatched `sbatch <target>` (remote `$SHELL -c`) and the
+        // `host:<path>` rsync argument. Every shell metacharacter must be
+        // rejected by the strict allow-list (was: control-char-only check).
+        for payload in [
+            "/scratch/x; touch /tmp/pwned", // command separator
+            "/scratch/$(touch /tmp/pwned)", // command substitution
+            "/scratch/`touch /tmp/pwned`",  // backtick substitution
+            "/scratch/with a space",        // whitespace word-split
+            "/scratch/x | sh",              // pipe
+            "/scratch/x && rm -rf /",       // logical-and
+            "/scratch/*",                   // glob
+            "/scratch/x\ty",                // tab (control char, still rejected)
+        ] {
+            let c = rsync_cfg_with_root(payload);
+            assert!(
+                matches!(c.validate(), Err(SlurmConfigError::Invalid(_))),
+                "remote_workdir_root {payload:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_leading_dash_remote_workdir_root() {
+        // A leading '-' would be parsed by rsync/ssh as an option flag.
+        let c = rsync_cfg_with_root("-e/bin/sh");
+        assert!(matches!(c.validate(), Err(SlurmConfigError::Invalid(_))));
+    }
+
+    #[test]
+    fn validate_remote_path_segment_screens_case_name_payloads() {
+        // Direct coverage of the boundary guard used for the case name.
+        // Valid names pass; every metacharacter payload is rejected.
+        assert!(validate_remote_path_segment("case name", "case-123_v2.run").is_ok());
+        for payload in [
+            "evil; touch pwned",
+            "evil$(id)",
+            "evil`id`",
+            "evil with space",
+            "evil|sh",
+            "a&b",
+            "star*",
+            "-rf",
+            "", // empty
+        ] {
+            assert!(
+                matches!(
+                    validate_remote_path_segment("case name", payload),
+                    Err(SlurmConfigError::Invalid(_))
+                ),
+                "case name {payload:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn submit_rejects_malicious_case_name_before_spawning() {
+        // The case name is the workdir basename; it reaches the remote shell
+        // via `ssh host -- sbatch <root>/<case>/submit.sh` and `host:<path>`
+        // rsync. `is_safe_case_name` (loader) permits `; $ ( ) | & space *`,
+        // so the slurm-crate boundary must reject it BEFORE any rsync/sbatch
+        // subprocess runs. We use a temp workdir whose basename carries a
+        // metacharacter (creating it on disk is fine — the guard fires before
+        // upload, so no rsync/ssh is ever spawned).
+        let base = std::env::temp_dir().join(format!(
+            "valenx-slurm-evil-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        // Basename contains a command separator + substitution + space + `&`.
+        // (All legal in a Windows directory name — `* | ? < > : " / \` are not,
+        // so they're excluded from the on-disk name; they're covered by the
+        // pure-string `validate_remote_path_segment` test instead.)
+        let evil_workdir = base.join("case; $(touch pwned) & x");
+        std::fs::create_dir_all(&evil_workdir).unwrap();
+
+        let exec = SlurmExecutor::new(SlurmConfig {
+            staging_mode: StagingMode::Rsync {
+                host: "user@hpc.example.edu".into(),
+                remote_workdir_root: "/scratch/x".into(),
+            },
+            ..SlurmConfig::default()
+        });
+        let job = PreparedJob {
+            workdir: evil_workdir,
+            native_command: vec![std::ffi::OsString::from("true")],
+            environment: vec![],
+            estimated_runtime: None,
+            kill_on_drop: false,
+        };
+        let err = exec.submit(&job).unwrap_err();
+        let _ = std::fs::remove_dir_all(&base);
+        match err {
+            ExecutorError::SubmitFailed { reason, .. } => {
+                assert!(
+                    reason.contains("case name"),
+                    "expected a case-name rejection, got: {reason}"
+                );
+            }
+            other => panic!("expected SubmitFailed for malicious case name, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fetch_results_rejects_malicious_case_name() {
+        // The download leg builds `host:<root>/<case>` from the same untrusted
+        // basename; the same guard must apply there.
+        let exec = SlurmExecutor::new(SlurmConfig {
+            staging_mode: StagingMode::Rsync {
+                host: "user@hpc.example.edu".into(),
+                remote_workdir_root: "/scratch/x".into(),
+            },
+            ..SlurmConfig::default()
+        });
+        let handle = ExecutorHandle {
+            executor_id: "slurm".into(),
+            native_id: "12345".into(),
+            workdir: std::path::PathBuf::from("/tmp/case; rm -rf /"),
+        };
+        match exec.fetch_results(&handle) {
+            Err(ExecutorError::FetchFailed { reason, .. }) => {
+                assert!(reason.contains("case name"), "got: {reason}");
+            }
+            other => panic!("expected FetchFailed for malicious case name, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rsync_upload_command_uses_protect_args() {
+        // `-s` / `--protect-args` keeps the remote shell from expanding the
+        // `host:<path>` argument — the rsync-leg half of the injection fix.
+        let cmd = build_rsync_upload_command(
+            std::path::Path::new("/local/case-123"),
+            "alice@cluster.example.com",
+            "/scratch/alice/valenx",
+        );
+        let joined: Vec<String> = cmd
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(joined.iter().any(|s| s == "-s"), "got args: {joined:?}");
+    }
+
+    #[test]
+    fn rsync_download_command_uses_protect_args() {
+        let cmd = build_rsync_download_command(
+            "alice@cluster.example.com",
+            "/scratch/alice/valenx/case-123",
+            std::path::Path::new("/local/case-123"),
+        );
+        let joined: Vec<String> = cmd
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(joined.iter().any(|s| s == "-s"), "got args: {joined:?}");
+    }
+
+    #[test]
+    fn config_from_case_toml_rejects_metachar_remote_workdir_root() {
+        // End-to-end through the untrusted-case.toml loader.
+        let toml = r#"
+[hpc.slurm.staging_mode.rsync]
+host = "user@hpc.example.edu"
+remote_workdir_root = "/scratch/x; touch /tmp/pwned"
+"#;
+        assert!(matches!(
+            config_from_case_toml(toml),
+            Err(SlurmConfigError::Invalid(_))
+        ));
     }
 
     #[test]
