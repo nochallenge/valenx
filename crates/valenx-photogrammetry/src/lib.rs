@@ -1,30 +1,44 @@
-//! # valenx-photogrammetry — structure-from-motion building blocks (Stage 1)
+//! # valenx-photogrammetry — structure-from-motion building blocks (Stages 1–2)
 //!
 //! An **in-house, clean-room Rust** reimplementation of the front end of a
 //! classical Structure-from-Motion (SfM) pipeline, of the kind made famous
 //! by COLMAP. The full pipeline (built out over later stages) is:
 //!
 //! ```text
-//! images → feature detection & description   ← THIS STAGE
-//!        → descriptor matching
-//!        → two-view geometry (essential/fundamental matrix, RANSAC)
-//!        → incremental mapper (PnP, triangulation)
+//! images → feature detection & description   ← STAGE 1
+//!        → descriptor matching                ← STAGE 2 (this stage)
+//!        → two-view geometry verification     ← STAGE 2 (this stage)
+//!        → relative pose (R, t) + triangulation   ← stage 3
+//!        → incremental mapper (PnP)
 //!        → bundle adjustment
 //!        → sparse point cloud + camera poses
 //! ```
 //!
-//! **Stage 1 (this crate as shipped) covers the first arrow only:** the
-//! grayscale [`GrayImage`] input type, FAST-9 corner detection (the
-//! [`fast`] module), and an ORB-style oriented binary descriptor (the
-//! [`descriptor`] module).
+//! **Stage 1** covers the first arrow: the grayscale [`GrayImage`] input
+//! type, FAST-9 corner detection (the [`fast`] module), and an ORB-style
+//! oriented binary descriptor (the [`descriptor`] module).
+//!
+//! **Stage 2 (added here)** covers descriptor *matching* and two-view
+//! geometric *verification*:
+//!
+//! - [`matching`] — brute-force Hamming nearest-neighbour matching with the
+//!   Lowe ratio test and a mutual cross-check ([`match_descriptors`],
+//!   [`Match`]).
+//! - [`geometry`] — RANSAC estimation of the **fundamental matrix** via the
+//!   Hartley-normalized 8-point algorithm, scoring inliers by Sampson
+//!   distance ([`verify_two_view`], [`RansacParams`], [`TwoViewResult`]).
+//!   This stage recovers `F` and the inlier set **only**; the essential
+//!   matrix, relative pose `(R, t)`, and triangulation are Stage 3.
 //!
 //! ## Provenance / licensing
 //!
 //! This is a *clean-room* implementation written from the published
-//! computer-vision literature — FAST (Rosten & Drummond) and ORB (Rublee
-//! et al.) are textbook algorithms. **No COLMAP (or OpenCV) source code is
-//! used or copied.** COLMAP is BSD-3-Clause and is credited purely as the
-//! *method reference* for the overall SfM design in the crate's
+//! computer-vision literature — FAST (Rosten & Drummond), ORB (Rublee et
+//! al.), the Lowe ratio test (Lowe 2004), the Hartley normalized 8-point
+//! algorithm (Hartley 1997), and RANSAC (Fischler & Bolles 1981) are all
+//! textbook algorithms. **No COLMAP (or OpenCV) source code is used or
+//! copied.** COLMAP is BSD-3-Clause and is credited purely as the *method
+//! reference* for the overall SfM design in the crate's
 //! `THIRD-PARTY-NOTICES` file. valenx itself is `MIT OR Apache-2.0`.
 //!
 //! ## What's implemented
@@ -60,7 +74,9 @@
 
 pub mod descriptor;
 pub mod fast;
+pub mod geometry;
 pub mod image;
+pub mod matching;
 
 mod error;
 mod keypoint;
@@ -70,8 +86,10 @@ pub use descriptor::{
 };
 pub use error::{PhotogrammetryError, Result};
 pub use fast::detect_fast;
+pub use geometry::{verify_two_view, RansacParams, TwoViewResult};
 pub use image::GrayImage;
 pub use keypoint::Keypoint;
+pub use matching::{match_descriptors, Match};
 
 /// Detect FAST-9 corners in `img` and compute an ORB-style oriented
 /// 256-bit (`[u8; 32]`) descriptor for each, returning the oriented

@@ -30,9 +30,11 @@ this notice is provided as attribution for the method reference.
 
 ## Algorithm references (textbook computer vision)
 
-The Stage-1 feature front end is implemented directly from the original
-published algorithms, both of which are standard, widely re-implemented
-computer-vision methods:
+The feature front end and the matching / two-view-verification stage are
+implemented directly from the original published algorithms, all of which
+are standard, widely re-implemented computer-vision methods.
+
+### Stage 1 — feature detection & description
 
 - **FAST** corner detector (FAST-9 variant):
   E. Rosten and T. Drummond, "Machine Learning for High-Speed Corner
@@ -51,5 +53,37 @@ computer-vision methods:
   selection / decorrelation step, and is not bit-compatible with OpenCV's
   ORB. See the `descriptor` module documentation for details.
 
+### Stage 2 — descriptor matching & two-view geometric verification
+
+- **Lowe ratio test** for distinctive nearest-neighbour matching
+  (the `matching` module's keep-if-`best < ratio·second` rule):
+  D. G. Lowe, "Distinctive Image Features from Scale-Invariant
+  Keypoints," IJCV 60(2), 2004. (The mutual cross-check is a standard
+  symmetric-consistency filter built on top.)
+
+- **Normalized 8-point algorithm** for the fundamental matrix, with
+  isotropic coordinate conditioning (the `geometry` module's estimator):
+  R. I. Hartley, "In Defense of the Eight-Point Algorithm," IEEE TPAMI
+  19(6), 1997. The underlying linear formulation is the eight-point method
+  of H. C. Longuet-Higgins, "A computer algorithm for reconstructing a
+  scene from two projections," Nature 293, 1981. General epipolar-geometry
+  background: R. Hartley and A. Zisserman, *Multiple View Geometry in
+  Computer Vision*, 2nd ed., 2004 (including the Sampson-distance inlier
+  cost used for scoring).
+
+- **RANSAC** robust estimation wrapping the 8-point fit:
+  M. A. Fischler and R. C. Bolles, "Random Sample Consensus: A Paradigm
+  for Model Fitting with Applications to Image Analysis and Automated
+  Cartography," Communications of the ACM 24(6), 1981.
+
+  Implementation note: this stage estimates the **fundamental matrix and
+  the inlier correspondence set only**. The essential matrix, relative
+  camera pose `(R, t)`, and triangulation (which need camera intrinsics)
+  are a later stage. The 8-point estimator is linear (algebraic residual),
+  not the maximum-likelihood geometric estimate. See the `geometry` module
+  documentation for details.
+
 These publications describe the methods; the Rust code in this crate is an
-independent implementation.
+independent implementation. The matching and verification code is written
+from the mathematics in the references above — **no COLMAP or OpenCV source
+is used or copied.**
