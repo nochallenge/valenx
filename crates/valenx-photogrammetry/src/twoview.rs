@@ -237,11 +237,11 @@ pub fn decompose_essential(e: &Matrix3<f64>) -> [(Matrix3<f64>, Vector3<f64>); 4
     let u = svd.u.unwrap_or_else(Matrix3::identity);
     let v_t = svd.v_t.unwrap_or_else(Matrix3::identity);
 
-    // Enforce the ideal (1, 1, 0) singular structure. (We do not actually
-    // need to rebuild E from it — the rotations depend only on U, V and the
-    // translation only on U — but re-imposing the structure is the canonical
-    // statement of the decomposition and documents the assumption.)
-    let _e_ideal = u * Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0) * v_t;
+    // A valid essential matrix has the ideal (1, 1, 0) singular structure,
+    // but we deliberately do NOT rebuild it: HZ Result 9.19 derives the two
+    // rotation candidates from U and Vᵀ alone and the translation from U's
+    // third column, so the singular values play no part in the recovered pose.
+    // Recomputing E here would be discarded work.
 
     let w = w_matrix();
     let r_a = make_proper_rotation(u * w * v_t);
