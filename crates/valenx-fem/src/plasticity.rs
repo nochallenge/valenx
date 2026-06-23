@@ -496,6 +496,18 @@ pub fn solve_plastic(
     let d_elastic = elasticity_matrix(material)?;
     // Shear modulus G = E / (2(1+ν)).
     let g = material.youngs_modulus / (2.0 * (1.0 + material.poisson_ratio));
+    // The linear-hardening radial return uses Δγ = f_trial / (3G + H); a
+    // softening modulus H ≤ −3G makes that denominator zero/negative and blows
+    // the corrected stress up to ±∞/NaN. yield_stress is validated above, but
+    // hardening_modulus (a public field, softening is a legitimate setting) was
+    // not — reject the ill-posed case at the boundary.
+    if !plastic.hardening_modulus.is_finite() || 3.0 * g + plastic.hardening_modulus <= 0.0 {
+        return Err(NativeSolverError::BadMaterial(format!(
+            "hardening modulus H must keep 3G + H > 0 (got H={}, 3G={})",
+            plastic.hardening_modulus,
+            3.0 * g
+        )));
+    }
     let n_dof = 3 * n_nodes;
     let conn = &tets.connectivity;
     let n_elem = conn.len() / 4;
