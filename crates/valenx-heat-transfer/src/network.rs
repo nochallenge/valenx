@@ -93,6 +93,17 @@ impl ResistanceNetwork {
                 branches.iter().map(|b| b.total_resistance()).sum()
             }
             ResistanceNetwork::Parallel(branches) => {
+                // Guard against an unphysical branch resistance — negative or
+                // NaN, only reachable by building the public Resistor variant
+                // directly (bypassing leaf()'s require_positive) — which would
+                // inject NaN / a negative conductance into the sum. (A zero or
+                // +inf branch already behaves correctly: short / open.)
+                if branches.iter().any(|b| {
+                    let r = b.total_resistance();
+                    r.is_nan() || r < 0.0
+                }) {
+                    return 0.0;
+                }
                 let sum_g: f64 = branches.iter().map(|b| 1.0 / b.total_resistance()).sum();
                 1.0 / sum_g
             }
