@@ -608,6 +608,23 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Black-Hole / Relativity workbench —
+                    // native general relativity (Kerr–Newman observables,
+                    // thermodynamics, shadow ray-tracer) on valenx-relativity.
+                    if ui
+                        .checkbox(&mut self.show_blackhole_workbench, "Black Hole")
+                        .on_hover_text(
+                            "Show / hide the right-side Black-Hole / Relativity \
+                             workbench — pick a Kerr–Newman spacetime and read \
+                             horizons, photon sphere, ISCO, shadow radius, \
+                             redshift and Hawking thermodynamics, plus a \
+                             ray-traced shadow image, on the in-house \
+                             valenx-relativity engine.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Induction Motor workbench — native
                     // 3-phase induction-motor slip / power (valenx-inductionmotor).
                     if ui
@@ -3012,6 +3029,12 @@ impl eframe::App for ValenxApp {
             if !dock_owns_dockable_panels {
                 crate::fem_workbench::draw_fem_workbench(self, ctx);
             }
+
+            // Black-Hole / Relativity workbench (right) — native general
+            // relativity (Kerr–Newman observables, thermodynamics, shadow
+            // ray-tracer) on valenx-relativity. A no-op unless toggled on via
+            // View → Black Hole.
+            crate::blackhole_workbench::draw_blackhole_workbench(self, ctx);
 
             // Induction Motor workbench (right) — 3-phase induction-motor slip /
             // power on valenx-inductionmotor. Off unless toggled via View.

@@ -7033,6 +7033,7 @@ dependencies = [
  "valenx-rectifier",
  "valenx-refrigeration",
  "valenx-reinforcement",
+ "valenx-relativity",
  "valenx-render-bridge",
  "valenx-resistor-network",
  "valenx-retainingwall",
