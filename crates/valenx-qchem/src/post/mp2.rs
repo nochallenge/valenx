@@ -162,6 +162,16 @@ pub fn mp2_energy(rhf: &RhfResult, ao_eri: &EriTensor) -> Result<Mp2Result> {
                     let iajb = mo.get(i, a, j, b);
                     let ibja = mo.get(i, b, j, a);
                     let denom = eps[i] + eps[j] - eps[a] - eps[b];
+                    // MP2 diverges at a vanishing orbital-energy denominator
+                    // (a near-degenerate reference — e.g. a stretched /
+                    // dissociating bond). Error rather than fold a -inf / NaN
+                    // into the correlation energy and report it as valid.
+                    if denom.abs() < 1e-10 {
+                        return Err(QchemError::invalid(
+                            "near-degenerate MP2 denominator — MP2 is not \
+                             applicable to this (near-degenerate) reference",
+                        ));
+                    }
                     // Opposite-spin: (ia|jb)²/denom.
                     // Same-spin: (ia|jb)[(ia|jb) − (ib|ja)]/denom.
                     opposite_spin += iajb * iajb / denom;
