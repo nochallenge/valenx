@@ -148,7 +148,7 @@ fn apply_chg_iso(mol: &mut Molecule, rest: &str, is_charge: bool) {
         if idx + 1 >= nums.len() {
             break;
         }
-        let atom = (nums[idx] - 1) as usize;
+        let atom = nums[idx].wrapping_sub(1) as usize;
         let value = nums[idx + 1];
         if let Some(a) = mol.atoms.get_mut(atom) {
             if is_charge {
