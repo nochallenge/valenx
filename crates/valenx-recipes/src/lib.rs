@@ -206,11 +206,27 @@ impl RecipeStore {
             path: path.clone(),
             source,
         })?;
-        fs::write(&path, json).map_err(|source| RecipeError::Io {
+        Self::atomic_write(&path, &json).map_err(|source| RecipeError::Io {
             path: path.clone(),
             source,
         })?;
         Ok(path)
+    }
+
+    /// Durably write `contents` to `path`: write a sidecar temp file, fsync
+    /// it, then rename it over the target. The rename is atomic on the same
+    /// filesystem, so a crash mid-write can't leave a half-written recipe.
+    /// Mirrors `valenx_core::io_caps::atomic_write_str`, kept local so this
+    /// crate stays pure-std + serde (no valenx-core dependency).
+    fn atomic_write(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        let tmp = path.with_extension("json.tmp");
+        {
+            let mut f = fs::File::create(&tmp)?;
+            f.write_all(contents.as_bytes())?;
+            f.sync_all()?;
+        }
+        fs::rename(&tmp, path)
     }
 
     /// Load every `*.json` recipe in the store, sorted by name. A missing
