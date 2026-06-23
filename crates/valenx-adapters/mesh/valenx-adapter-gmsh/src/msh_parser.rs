@@ -61,13 +61,17 @@ pub fn parse_str(text: &str, mesh_id: &str) -> Result<Mesh, MshError> {
     // iterator is peekable so block parsers can look ahead.
     let mut iter = text.lines().enumerate().peekable();
 
+    // Carry the $Nodes tag→index map to the $Elements parser so connectivity
+    // resolves gmsh node tags correctly even when they are sparse / non-
+    // contiguous (the spec permits it; the default Save path is dense).
+    let mut node_tag_map: Vec<Option<usize>> = Vec::new();
     while let Some((line_no_zero, raw_line)) = iter.next() {
         let line_no = line_no_zero + 1;
         let line = raw_line.trim();
         match line {
             "$MeshFormat" => parse_mesh_format(&mut iter)?,
-            "$Nodes" => parse_nodes(&mut iter, &mut mesh, line_no)?,
-            "$Elements" => parse_elements(&mut iter, &mut mesh, line_no)?,
+            "$Nodes" => node_tag_map = parse_nodes(&mut iter, &mut mesh, line_no)?,
+            "$Elements" => parse_elements(&mut iter, &mut mesh, &node_tag_map, line_no)?,
             s if s.starts_with('$') => {
                 // Unknown block — scan until matching $End.
                 let end_tag = format!("$End{}", &s[1..]);
@@ -115,7 +119,7 @@ fn parse_nodes(
     iter: &mut LineIter<'_>,
     mesh: &mut Mesh,
     block_start_line: usize,
-) -> Result<(), MshError> {
+) -> Result<Vec<Option<usize>>, MshError> {
     let header = next_non_empty(iter).ok_or_else(|| MshError::Malformed {
         line: block_start_line,
         reason: "$Nodes header missing".into(),
@@ -171,7 +175,7 @@ fn parse_nodes(
                 reason: "entity block header expects `dim tag parametric numNodesInBlock`".into(),
             });
         }
-        let parametric: i32 = block_parts[2].parse().map_err(|_| MshError::Malformed {
+        let _parametric: i32 = block_parts[2].parse().map_err(|_| MshError::Malformed {
             line: block_header_line_no + 1,
             reason: "parametric not an integer".into(),
         })?;
@@ -222,12 +226,10 @@ fn parse_nodes(
                 });
             }
 
-            // If the entity is parametric, there's an extra line with
-            // the parametric coordinates. Skip it.
-            if parametric == 1 {
-                let _ = next_non_empty(iter);
-            }
-
+            // MSH 4.1 appends any parametric coordinates (u / u v) on the SAME
+            // line as x y z; the .take(3) above already ignores them, so there
+            // is no separate line to skip here. (The earlier code skipped a
+            // line, consuming the next node and corrupting the rest of $Nodes.)
             let idx = mesh.nodes.len();
             mesh.nodes
                 .push(Vector3::new(coords[0], coords[1], coords[2]));
@@ -249,33 +251,16 @@ fn parse_nodes(
     // off the outer parser.
     skip_block_until(iter, "$EndNodes")?;
 
-    // Stash the tag map on the mesh via stats borrowing? No — we need
-    // it for the elements block. Carry it out via a thread-local
-    // would be ugly. Instead, re-scan the tag->index lookup from the
-    // node order. Since we inserted nodes in the order we read their
-    // tags, and `dense_map` is already `tag → index`, we keep the map
-    // alive by stashing it on the parser state through the caller.
-    //
-    // The signature of this function already has `mesh` as `&mut
-    // Mesh`; to get the map to the Elements parser we'd thread an
-    // extra output parameter, which means changing the signature.
-    // Simpler: build the map on demand from the nodes' *implicit*
-    // tag ordering, which is only safe if tags are contiguous 1..=N.
-    //
-    // gmsh 4.1 emits contiguous tags by default when writing from
-    // `Save "mesh.msh";`, which is what our `.geo` generator does.
-    // For robustness, assume contiguous 1..=N and verify at
-    // Elements-time.
-    //
-    // (In a future pass we can pass the map through a returned
-    // `NodeTagMap` struct.)
-    let _ = dense_map;
-    Ok(())
+    // Return the tag→index map so the $Elements parser can resolve node tags
+    // exactly, including sparse / non-contiguous tags (the spec permits them;
+    // the default gmsh Save path our .geo generator uses is dense 1..=N).
+    Ok(dense_map)
 }
 
 fn parse_elements(
     iter: &mut LineIter<'_>,
     mesh: &mut Mesh,
+    node_tag_map: &[Option<usize>],
     block_start_line: usize,
 ) -> Result<(), MshError> {
     let (header_line_no, header_raw) = next_non_empty(iter).ok_or_else(|| MshError::Malformed {
@@ -342,39 +327,32 @@ fn parse_elements(
             // we don't canonicalise — that way dropped elements still
             // fail loudly on garbage input instead of silently skipping.
             for t in &tokens[1..=expected_nodes] {
-                let tag: u32 = t.parse().map_err(|_| MshError::Malformed {
+                let tag: usize = t.parse().map_err(|_| MshError::Malformed {
                     line: line_no_zero + 1,
                     reason: format!("node tag not an integer: {t:?}"),
                 })?;
-                // gmsh writes contiguous tags 1..=N in the default
-                // Save path, which is what our .geo generator uses.
-                // Convert tag → 0-based index by subtracting 1.
                 if tag == 0 {
                     return Err(MshError::Malformed {
                         line: line_no_zero + 1,
                         reason: "node tag 0 is reserved in gmsh".into(),
                     });
                 }
-                // R33 L1: bounds-check the (0-based) node index against
-                // the node count parsed from the preceding $Nodes block.
-                // Without this a corrupt / out-of-range tag was pushed
-                // verbatim into connectivity and panicked downstream
-                // ("index out of bounds") in valenx_mesh::decimate
-                // (positions[tri[0]]) / boolean (remap[*c]). The OBJ
-                // loader already rejects this at parse (R25 M1); gmsh was
-                // the asymmetry.
-                let index = tag - 1;
-                if (index as usize) >= mesh.nodes.len() {
-                    return Err(MshError::Malformed {
+                // Resolve the gmsh node tag to its 0-based index via the
+                // tag→index map built in $Nodes — correct for sparse / non-
+                // contiguous tags. (The previous `tag - 1` assumed contiguous
+                // 1..=N tags and silently mis-wired connectivity otherwise.) An
+                // unknown / out-of-range tag is rejected here; a verbatim index
+                // would otherwise panic downstream in valenx_mesh::decimate
+                // (positions[tri[0]]) / boolean (remap[*c]) — the OBJ loader
+                // rejects the same at parse (R25 M1).
+                let index = node_tag_map.get(tag).copied().flatten().ok_or_else(|| {
+                    MshError::Malformed {
                         line: line_no_zero + 1,
-                        reason: format!(
-                            "node tag {tag} is out of range: mesh has only {} nodes",
-                            mesh.nodes.len()
-                        ),
-                    });
-                }
+                        reason: format!("element references undefined node tag {tag}"),
+                    }
+                })?;
                 if let Some(ref mut b) = block {
-                    b.connectivity.push(index);
+                    b.connectivity.push(index as u32);
                 }
             }
         }
