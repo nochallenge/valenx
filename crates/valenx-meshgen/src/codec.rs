@@ -41,8 +41,10 @@ pub fn decode(text: &str, profile: &ModelProfile) -> Mesh {
         let verts: Vec<u32> = it
             // OBJ face tokens may be `v`, `v/vt`, `v//vn`; take the vertex part.
             .filter_map(|tok| tok.split('/').next()?.parse::<i64>().ok())
-            // 1-based, positive only; convert to 0-based.
-            .filter_map(|i| u32::try_from(i - 1).ok())
+            // 1-based, positive only; convert to 0-based. Guard `i >= 1` BEFORE
+            // subtracting so a crafted i64::MIN token can't overflow `i - 1`
+            // (the decode is documented tolerant of untrusted model text).
+            .filter_map(|i| if i >= 1 { u32::try_from(i - 1).ok() } else { None })
             .collect();
         if verts.len() < 3 {
             continue;
@@ -166,6 +168,22 @@ f
                 .sum::<usize>(),
             0
         );
+    }
+
+    #[test]
+    fn decode_extreme_negative_face_index_does_not_overflow() {
+        // A crafted i64::MIN face token must not panic on `i - 1` (overflow); it
+        // is rejected like any non-positive index. (Decode handles untrusted text.)
+        let s = "v 0 0 0\nv 127 0 0\nv 0 127 0\nf -9223372036854775808 1 2\nf 1 2 3\n";
+        let m = decode(s, &ModelProfile::LLAMA_MESH);
+        assert_eq!(m.nodes.len(), 3);
+        // The extreme-index face is dropped; the valid `f 1 2 3` is kept.
+        let tris: usize = m
+            .element_blocks
+            .iter()
+            .map(|b| b.connectivity.len() / 3)
+            .sum();
+        assert_eq!(tris, 1);
     }
 
     #[test]
