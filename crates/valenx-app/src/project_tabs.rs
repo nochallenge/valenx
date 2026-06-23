@@ -199,6 +199,8 @@ pub enum TabKind {
     Aero,
     Gasdynamics,
     Rotor,
+    // -- Astrophysics --
+    BlackHole,
     // -- Simulation --
     Cfd,
     Fem,
@@ -233,13 +235,14 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 30] = [
+    pub const TEMPLATES: [TabKind; 31] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
         TabKind::Aero,
         TabKind::Gasdynamics,
         TabKind::Rotor,
+        TabKind::BlackHole,
         TabKind::Cfd,
         TabKind::Fem,
         TabKind::Reactdyn,
@@ -277,6 +280,7 @@ impl TabKind {
             | TabKind::Aero
             | TabKind::Gasdynamics
             | TabKind::Rotor => "Aerospace",
+            TabKind::BlackHole => "Astrophysics",
             TabKind::Cfd | TabKind::Fem | TabKind::Reactdyn | TabKind::Fields => "Simulation",
             TabKind::Cad
             | TabKind::MeshToolbox
@@ -309,6 +313,7 @@ impl TabKind {
             TabKind::Aero => "Aerodynamics",
             TabKind::Gasdynamics => "Gas dynamics",
             TabKind::Rotor => "Rotor / Drone (BEMT)",
+            TabKind::BlackHole => "Black Hole",
             TabKind::Cfd => "CFD",
             TabKind::Fem => "FEM",
             TabKind::Reactdyn => "Reaction dynamics",
@@ -348,6 +353,7 @@ impl TabKind {
             TabKind::Aero => app.show_aero_workbench = true,
             TabKind::Gasdynamics => app.show_gasdynamics_workbench = true,
             TabKind::Rotor => app.show_rotor_workbench = true,
+            TabKind::BlackHole => app.show_blackhole_workbench = true,
             TabKind::Cfd => app.show_cfd_workbench = true,
             TabKind::Fem => app.show_fem_workbench = true,
             TabKind::Reactdyn => app.show_reactdyn_workbench = true,
@@ -393,6 +399,7 @@ impl TabKind {
             "aero" => Some(TabKind::Aero),
             "gasdynamics" => Some(TabKind::Gasdynamics),
             "rotor" => Some(TabKind::Rotor),
+            "blackhole" => Some(TabKind::BlackHole),
             "cfd" => Some(TabKind::Cfd),
             "fem" => Some(TabKind::Fem),
             "reactdyn" => Some(TabKind::Reactdyn),
@@ -1151,6 +1158,7 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "pipeflow",
     "rocket",
     "rotor",
+    "blackhole",
     "batterypack",
     "engine",
     "heatexchanger",
@@ -1307,6 +1315,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "pipeflow" => app.show_pipeflow_workbench = on,
         "rocket" => app.show_rocket_workbench = on,
         "rotor" => app.show_rotor_workbench = on,
+        "blackhole" => app.show_blackhole_workbench = on,
         "batterypack" => app.show_batterypack_workbench = on,
         "engine" => app.show_engine_workbench = on,
         "heatexchanger" => app.show_heatexchanger_workbench = on,
@@ -1338,6 +1347,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_aero_workbench = false;
     app.show_gasdynamics_workbench = false;
     app.show_rotor_workbench = false;
+    app.show_blackhole_workbench = false;
     app.show_cfd_workbench = false;
     app.show_fem_workbench = false;
     app.show_reactdyn_workbench = false;
@@ -2825,6 +2835,7 @@ mod tests {
             ("aero", TabKind::Aero),
             ("gasdynamics", TabKind::Gasdynamics),
             ("rotor", TabKind::Rotor),
+            ("blackhole", TabKind::BlackHole),
             ("cfd", TabKind::Cfd),
             ("fem", TabKind::Fem),
             ("reactdyn", TabKind::Reactdyn),
@@ -4233,6 +4244,7 @@ mod tests {
             app.show_aero_workbench,
             app.show_gasdynamics_workbench,
             app.show_rotor_workbench,
+            app.show_blackhole_workbench,
             app.show_cfd_workbench,
             app.show_fem_workbench,
             app.show_reactdyn_workbench,
@@ -4277,6 +4289,7 @@ mod tests {
                 crate::gasdynamics_workbench::draw_gasdynamics_workbench(app, ctx)
             }
             TabKind::Rotor => crate::rotor_workbench::draw_rotor_workbench(app, ctx),
+            TabKind::BlackHole => crate::blackhole_workbench::draw_blackhole_workbench(app, ctx),
             TabKind::Cfd => crate::cfd_workbench::draw_cfd_workbench(app, ctx),
             TabKind::Fem => crate::fem_workbench::draw_fem_workbench(app, ctx),
             TabKind::Reactdyn => crate::reactdyn_workbench::draw_reactdyn_workbench(app, ctx),
@@ -4587,8 +4600,8 @@ mod headless_ui_tests {
     }
 
     #[test]
-    fn all_workbench_kinds_is_unique_and_covers_132_plus_mesh() {
-        // The registry list has no duplicate ids, and is the 132
+    fn all_workbench_kinds_is_unique_and_covers_133_plus_mesh() {
+        // The registry list has no duplicate ids, and is the 133
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
         for k in ALL_WORKBENCH_KINDS {
@@ -4599,8 +4612,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            133,
-            "132 `show_*_workbench` fields + the meshtoolbox alias"
+            134,
+            "133 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.
