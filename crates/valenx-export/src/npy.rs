@@ -34,10 +34,10 @@ pub fn write_npy_f64(path: &Path, data: &[f64]) -> Result<(), ExportError> {
 
 /// N-dimensional generalisation of [`write_npy_f64`]. Same on-disk
 /// layout, but the shape tuple in the header reflects whatever
-/// `shape` the caller passes in. `data.len()` must equal the product
-/// of `shape`; mismatches panic on debug builds and are clamped on
-/// release (the writer trusts the caller — this is a low-level
-/// primitive).
+/// `shape` the caller passes in. `data.len()` should equal the product
+/// of `shape`; a mismatch panics on debug builds and is clamped on
+/// release (the body is zero-padded or truncated to the shape's element
+/// count) so the written array always matches its declared shape.
 ///
 /// Used by the dataset-batch exporter to emit `(n_samples, n_inputs)`
 /// arrays that ML loaders expect.
@@ -112,13 +112,23 @@ pub fn build_npy_bytes_f64_nd(data: &[f64], shape: &[usize]) -> Vec<u8> {
     debug_assert_eq!(total % 64, 0, "preamble alignment broke");
     let header_len = header.len() as u16;
 
-    let mut out: Vec<u8> = Vec::with_capacity(total + data.len() * 8);
+    let mut out: Vec<u8> = Vec::with_capacity(total + expected * 8);
     out.extend_from_slice(b"\x93NUMPY");
     out.push(1); // major version
     out.push(0); // minor version
     out.extend_from_slice(&header_len.to_le_bytes());
     out.extend_from_slice(header.as_bytes());
-    for v in data {
+    // Write exactly `expected` (= product(shape)) values so the body always
+    // matches the header's declared shape even if `data.len()` disagrees
+    // (debug-asserted above): a short `data` is zero-padded, a long one
+    // truncated. This is the "clamped on release" contract — a misuse can't
+    // emit a header/body-mismatched .npy that a loader would mis-parse.
+    for v in data
+        .iter()
+        .copied()
+        .chain(std::iter::repeat(0.0))
+        .take(expected)
+    {
         out.extend_from_slice(&v.to_le_bytes());
     }
     out
