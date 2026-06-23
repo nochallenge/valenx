@@ -222,7 +222,10 @@ pub fn residuals(mate: &Mate, a: &Assembly, out: &mut [f64]) -> Result<(), Assem
             let pb = a.get_part(*part_b)?;
             let va = pa.transform.apply_vector(*vec_a);
             let vb = pb.transform.apply_vector(*vec_b);
-            let cos_t = (va.dot(&vb) / (va.norm() * vb.norm())).clamp(-1.0, 1.0);
+            // Guard a degenerate (zero-length) mate direction: 0/0 = NaN, and
+            // f64::clamp propagates NaN, poisoning the whole Newton/LM solve.
+            let denom = (va.norm() * vb.norm()).max(1e-12);
+            let cos_t = (va.dot(&vb) / denom).clamp(-1.0, 1.0);
             let angle = cos_t.acos();
             out[0] = angle - *target;
         }
@@ -242,7 +245,14 @@ pub fn residuals(mate: &Mate, a: &Assembly, out: &mut [f64]) -> Result<(), Assem
             // projecting the cross onto an orthonormal basis of
             // va's plane.
             let cross = va.cross(&vb);
-            let na = va.normalize();
+            // try_normalize avoids a NaN basis on a degenerate (zero-length)
+            // va; a zero va also makes `cross` zero, so the residual stays
+            // finite (an unconstrained mate) instead of poisoning the solve.
+            let na = if va.norm() > 1e-12 {
+                va.normalize()
+            } else {
+                Vector3::x()
+            };
             // Build an arbitrary orthogonal pair to na.
             let e1 = if na.x.abs() < 0.9 {
                 na.cross(&Vector3::x()).normalize()
