@@ -52,6 +52,17 @@ pub fn biharmonic(
             reason: "need at least one handle".into(),
         });
     }
+    // Reject an out-of-range handle vertex id before indexing mesh.vertices /
+    // out.vertices with it (the delta + pin loop would otherwise panic).
+    if let Some((bad, _)) = handles.iter().find(|(v, _)| *v >= mesh.vertices.len()) {
+        return Err(LibiglError::BadParameter {
+            name: "handles",
+            reason: format!(
+                "handle references vertex {bad}, but the mesh has only {} vertices",
+                mesh.vertices.len()
+            ),
+        });
+    }
     let one_ring = mesh.vertex_one_ring();
     // BFS hop distance from each handle.
     let mut hop: Vec<Vec<usize>> = handles

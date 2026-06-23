@@ -59,6 +59,12 @@ pub fn cotangent_laplacian(mesh: &TriMesh) -> DMatrix<f64> {
     let mut l = DMatrix::<f64>::zeros(n, n);
     for tri in &mesh.triangles {
         let (i, j, k) = (tri[0], tri[1], tri[2]);
+        // Skip a triangle that indexes past the vertex list (a malformed /
+        // deserialized mesh) instead of panicking; the Result-returning entry
+        // points reject such a mesh up front via TriMesh::validate.
+        if i >= n || j >= n || k >= n {
+            continue;
+        }
         let (vi, vj, vk) = (mesh.vertices[i], mesh.vertices[j], mesh.vertices[k]);
         // Angle at each vertex is opposite the corresponding edge.
         // Edge (j, k) is opposite vertex i, etc.
@@ -87,6 +93,10 @@ pub fn lumped_mass(mesh: &TriMesh) -> DVector<f64> {
     let n = mesh.vertices.len();
     let mut m = DVector::<f64>::zeros(n);
     for tri in &mesh.triangles {
+        // Skip a triangle that indexes past the vertex list (malformed mesh).
+        if tri.iter().any(|&idx| idx >= n) {
+            continue;
+        }
         let (vi, vj, vk) = (
             mesh.vertices[tri[0]],
             mesh.vertices[tri[1]],
@@ -106,7 +116,12 @@ pub fn lumped_mass(mesh: &TriMesh) -> DVector<f64> {
 pub fn mean_edge_length(mesh: &TriMesh) -> f64 {
     let mut total = 0.0;
     let mut n = 0usize;
+    let nv = mesh.vertices.len();
     for tri in &mesh.triangles {
+        // Skip a triangle that indexes past the vertex list (malformed mesh).
+        if tri.iter().any(|&idx| idx >= nv) {
+            continue;
+        }
         for k in 0..3 {
             let a = mesh.vertices[tri[k]];
             let b = mesh.vertices[tri[(k + 1) % 3]];
