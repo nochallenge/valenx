@@ -113,7 +113,42 @@ results from the same epipolar-geometry literature.
   ambiguity is fundamental to two views. See the `twoview` module
   documentation for details.
 
+### Stage 4 — incremental mapper: camera resectioning / PnP
+
+The `pnp` module registers a new view into an existing reconstruction by
+recovering its camera pose from 2D–3D correspondences (already-triangulated
+scene points matched to the new image's features) — the core step of the
+incremental mapper.
+
+- **DLT camera resectioning / Perspective-n-Point (PnP)**, the linear
+  Direct-Linear-Transform pose recovery: normalize image points to calibrated
+  rays `x̂ = K⁻¹ x`, assemble the homogeneous `2n × 12` system from the
+  cross-product constraint `x̂ᵢ × ([R | t] Xᵢ) = 0`, solve by SVD, reshape to
+  the `3×4` `[R | t]`, then orthonormalize the rotation block (nearest proper
+  rotation by SVD) and rescale the translation for metric consistency:
+  R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*,
+  2nd ed., Cambridge University Press, 2004, Chapter 7 (camera resectioning,
+  the DLT algorithm). General PnP background: the calibrated minimal case is
+  P3P; the linear DLT used here needs `n ≥ 6` points.
+
+- **RANSAC** robust estimation wrapping the linear PnP fit, scored by
+  **reprojection error** (the same Fischler & Bolles 1981 paradigm cited for
+  Stage 2):
+  M. A. Fischler and R. C. Bolles, "Random Sample Consensus," Communications
+  of the ACM 24(6), 1981.
+
+  Implementation note: this stage solves PnP by the **linear DLT** — an
+  algebraic, not maximum-likelihood, estimate. It is a fast, accurate
+  *initializer* (essentially exact on clean correspondences) for the later
+  bundle-adjustment stage, but is below EPnP / iterative (Levenberg–Marquardt)
+  accuracy on noisy data. It requires at least **six** correspondences, and a
+  **coplanar** (or collinear) point configuration is degenerate for the DLT (a
+  planar scene needs a homography-based pose, not implemented here). Because
+  the 3-D points are supplied in a fixed world frame, the recovered pose is at
+  that frame's **metric scale** — unlike Stage 3, there is no free scale
+  factor. See the `pnp` module documentation for details.
+
 These publications describe the methods; the Rust code in this crate is an
-independent implementation. The matching, verification, and two-view-geometry
-code is written from the mathematics in the references above — **no COLMAP or
-OpenCV source is used or copied.**
+independent implementation. The matching, verification, two-view-geometry, and
+camera-resectioning (PnP) code is written from the mathematics in the
+references above — **no COLMAP or OpenCV source is used or copied.**
