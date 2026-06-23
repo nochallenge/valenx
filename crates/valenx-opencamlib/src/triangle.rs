@@ -82,9 +82,16 @@ pub fn from_valenx_mesh(m: &valenx_mesh::Mesh) -> Vec<Triangle> {
             continue;
         }
         for tri in block.connectivity.chunks_exact(3) {
-            let a = m.nodes[tri[0] as usize];
-            let b = m.nodes[tri[1] as usize];
-            let c = m.nodes[tri[2] as usize];
+            // Skip a triangle whose connectivity references an out-of-range
+            // node (a corrupt / truncated loaded mesh) instead of indexing
+            // past m.nodes and panicking.
+            let (Some(&a), Some(&b), Some(&c)) = (
+                m.nodes.get(tri[0] as usize),
+                m.nodes.get(tri[1] as usize),
+                m.nodes.get(tri[2] as usize),
+            ) else {
+                continue;
+            };
             out.push(Triangle::new(a, b, c));
         }
     }

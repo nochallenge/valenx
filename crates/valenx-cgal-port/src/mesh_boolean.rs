@@ -650,9 +650,14 @@ fn ray_triangle_hit(orig: Vector3<f64>, dir: Vector3<f64>, tri: &Triangle3) -> b
 pub fn mesh3_from_indexed(vertices: &[Vector3<f64>], faces: &[[usize; 3]]) -> Mesh3 {
     let mut out = Mesh3::new();
     for f in faces {
-        out.triangles.push(Triangle3 {
-            v: [vertices[f[0]], vertices[f[1]], vertices[f[2]]],
-        });
+        // Skip a face that references an out-of-range vertex (e.g. a malformed
+        // or 1-based OBJ/STL) instead of indexing past `vertices` and panicking.
+        let (Some(&v0), Some(&v1), Some(&v2)) =
+            (vertices.get(f[0]), vertices.get(f[1]), vertices.get(f[2]))
+        else {
+            continue;
+        };
+        out.triangles.push(Triangle3 { v: [v0, v1, v2] });
     }
     out
 }

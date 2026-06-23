@@ -130,6 +130,17 @@ fn validate(params: &ThreadMillParams, tool: &Tool) -> Result<(), CamError> {
     if !(params.thread_depth > 0.0) {
         return Err(mk("thread_depth must be > 0".into()));
     }
+    // Bound the revolution count so a tiny (but > 0) pitch can't make
+    // total_steps saturate and hang the helical-emit loop (OOM). Matches the
+    // sibling helix_bore op's MAX_REVS = 10_000 cap.
+    const MAX_REVS: f64 = 10_000.0;
+    let revs = params.thread_depth / params.pitch_mm;
+    if !revs.is_finite() || revs > MAX_REVS {
+        return Err(mk(format!(
+            "pitch_mm {} too small: thread_depth/pitch_mm = {revs} exceeds the {MAX_REVS} revolution cap",
+            params.pitch_mm
+        )));
+    }
     if !(params.feed_mm_per_min > 0.0) {
         return Err(mk("feed must be > 0".into()));
     }
