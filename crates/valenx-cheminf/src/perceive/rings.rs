@@ -128,8 +128,8 @@ pub fn sssr(mol: &Molecule) -> RingInfo {
         for &b in &cand.bonds {
             vec[b / 64] |= 1u64 << (b % 64);
         }
-        if is_independent(&basis, &vec) {
-            basis.push(vec);
+        if let Some(reduced) = reduce_against_basis(&basis, &vec) {
+            basis.push(reduced);
             info.rings.push(cand);
         }
     }
@@ -193,23 +193,35 @@ fn shortest_cycle_through_bond(mol: &Molecule, bi: usize) -> Option<Ring> {
     Some(Ring { atoms, bonds })
 }
 
-/// GF(2) linear-independence test: can `vec` be reduced to zero by the
-/// existing `basis`? Returns `true` if it is independent (non-zero
-/// after reduction).
-fn is_independent(basis: &[Vec<u64>], vec: &[u64]) -> bool {
+/// GF(2) linear reduction against `basis`, whose rows are stored as reduced
+/// residuals so that distinct rows have distinct lowest-set-bit pivots (the
+/// basis is kept in row-echelon form). Returns the reduced residual of `vec`
+/// — with which the caller extends the basis — when `vec` is linearly
+/// independent of the basis, or `None` when `vec` reduces to zero (dependent).
+///
+/// The previous single-pass form pushed *raw* ring vectors into the basis, so
+/// two rows could share a lowest-set-bit pivot and a dependent cycle could
+/// survive reduction and be wrongly accepted as an independent ring. Reducing
+/// the lowest set bit repeatedly — always against the unique row that pivots on
+/// it — keeps the test exact regardless of basis insertion order.
+fn reduce_against_basis(basis: &[Vec<u64>], vec: &[u64]) -> Option<Vec<u64>> {
     let mut v = vec.to_vec();
-    for row in basis {
-        // pivot = lowest set bit of `row`
-        if let Some(pivot) = lowest_set_bit(row) {
-            let (w, b) = (pivot / 64, pivot % 64);
-            if v[w] & (1u64 << b) != 0 {
+    'reduce: loop {
+        let Some(pivot) = lowest_set_bit(&v) else {
+            return None; // reduced to zero → linearly dependent
+        };
+        for row in basis {
+            if lowest_set_bit(row) == Some(pivot) {
                 for i in 0..v.len() {
                     v[i] ^= row[i];
                 }
+                // The pivot bit is now clear, so v's lowest set bit strictly
+                // increases — the loop terminates in <= n_bonds steps.
+                continue 'reduce;
             }
         }
+        return Some(v); // no basis row pivots here → a new independent ring
     }
-    v.iter().any(|&w| w != 0)
 }
 
 fn lowest_set_bit(words: &[u64]) -> Option<usize> {
