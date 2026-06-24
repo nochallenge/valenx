@@ -186,7 +186,10 @@ pub use influence::{hill_sphere_radius, sphere_of_influence_radius};
 pub use lambert::lambert;
 pub use maneuver::{bielliptic_transfer, hohmann_transfer, Transfer};
 pub use orbit::{elements, OrbitElements};
-pub use orbit3d::{ClassicalElements, StateVector};
+pub use orbit3d::{
+    atmosphere_velocity_eci, drag_accel as orbit_drag_accel, propagate_with_drag, BallisticTerm,
+    ClassicalElements, StateVector,
+};
 pub use propulsion::{
     optimize_engine, CoolingInputs, CoolingPerformance, EngineDesign, EngineOptimum,
     EnginePerformance,
