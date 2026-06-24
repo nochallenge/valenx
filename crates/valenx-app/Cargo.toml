@@ -220,6 +220,10 @@ valenx-fluids        = { path = "../valenx-fluids" }
 # dispersion) + quasi-static Archimedes buoyancy — surfaced by the Ocean
 # workbench (src/ocean_workbench.rs). Pure-Rust; no new external deps.
 valenx-ocean         = { path = "../valenx-ocean" }
+# Native reduced-order & surrogate modelling (POD / DMD / DEIM) — surfaced by
+# the ROM workbench (src/rom_workbench.rs). Pure-Rust (nalgebra SVD); no new
+# external deps.
+valenx-rom           = { path = "../valenx-rom" }
 # Native propeller / rotor blade-element-momentum (BEMT) performance —
 # surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
 # Pure-Rust solver; the workbench calls its real API directly (no subprocess).
