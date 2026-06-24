@@ -1575,6 +1575,24 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side UQ workbench (valenx-uq).
+                    if ui
+                        .checkbox(
+                            &mut self.show_uq_workbench,
+                            "Uncertainty quantification (UQ)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the UQ Workbench — native uncertainty quantification \
+                             (forward Monte-Carlo propagation, first-order Sobol sensitivity via \
+                             the Saltelli estimator, and FORM reliability Pf for a g <= 0 \
+                             limit-state) computed in-process by valenx-uq. Research / \
+                             educational — MC error O(1/sqrt(n)); FORM is a first-order \
+                             approximation.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
                     if ui
                         .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
@@ -3333,6 +3351,11 @@ impl eframe::App for ValenxApp {
             // ROM Workbench (right) — native reduced-order modelling (POD / DMD /
             // DEIM) on valenx-rom. A no-op unless toggled on via View → ROM.
             crate::rom_workbench::draw_rom_workbench(self, ctx);
+
+            // UQ Workbench (right) — native uncertainty quantification (Monte-Carlo
+            // propagation + Sobol sensitivity + FORM reliability) on valenx-uq. A
+            // no-op unless toggled on via View → UQ.
+            crate::uq_workbench::draw_uq_workbench(self, ctx);
 
             // Autonomy V&V Workbench (right) — native scenario-based verification of
             // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A

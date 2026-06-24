@@ -238,6 +238,8 @@ pub enum TabKind {
     Ocean,
     // -- Reduced-order modelling --
     Rom,
+    // -- Uncertainty quantification --
+    Uq,
     // -- Autonomy --
     Autonomy,
 }
@@ -245,7 +247,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 36] = [
+    pub const TEMPLATES: [TabKind; 37] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -281,6 +283,7 @@ impl TabKind {
         TabKind::Fluids,
         TabKind::Ocean,
         TabKind::Rom,
+        TabKind::Uq,
         TabKind::Autonomy,
     ];
 
@@ -320,6 +323,7 @@ impl TabKind {
             TabKind::Fluids => "Simulation",
             TabKind::Ocean => "Simulation",
             TabKind::Rom => "Simulation",
+            TabKind::Uq => "Simulation",
         }
     }
 
@@ -363,6 +367,7 @@ impl TabKind {
             TabKind::Fluids => "Fluids (SPH particle sim)",
             TabKind::Ocean => "Ocean (waves + buoyancy)",
             TabKind::Rom => "Reduced-order model (POD)",
+            TabKind::Uq => "Uncertainty quantification",
         }
     }
 
@@ -408,6 +413,7 @@ impl TabKind {
             TabKind::Fluids => app.show_fluids_workbench = true,
             TabKind::Ocean => app.show_ocean_workbench = true,
             TabKind::Rom => app.show_rom_workbench = true,
+            TabKind::Uq => app.show_uq_workbench = true,
         }
     }
 
@@ -459,6 +465,7 @@ impl TabKind {
             "fluids" | "sph" => Some(TabKind::Fluids),
             "ocean" | "waves" => Some(TabKind::Ocean),
             "rom" | "pod" => Some(TabKind::Rom),
+            "uq" | "uncertainty" => Some(TabKind::Uq),
             _ => None,
         }
     }
@@ -1208,6 +1215,8 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "ocean",
     // Native reduced-order modelling (POD / DMD / DEIM) — surfaced by the ROM workbench.
     "rom",
+    // Native uncertainty quantification (MC propagation / Sobol / FORM) — surfaced by the UQ workbench.
+    "uq",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1370,6 +1379,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "fluids" | "sph" => app.show_fluids_workbench = on,
         "ocean" | "waves" => app.show_ocean_workbench = on,
         "rom" | "pod" => app.show_rom_workbench = on,
+        "uq" | "uncertainty" => app.show_uq_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1427,6 +1437,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_fluids_workbench = false;
     app.show_ocean_workbench = false;
     app.show_rom_workbench = false;
+    app.show_uq_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -2920,6 +2931,7 @@ mod tests {
             ("fluids", TabKind::Fluids),
             ("ocean", TabKind::Ocean),
             ("rom", TabKind::Rom),
+            ("uq", TabKind::Uq),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4334,6 +4346,7 @@ mod tests {
             app.show_fluids_workbench,
             app.show_ocean_workbench,
             app.show_rom_workbench,
+            app.show_uq_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4388,6 +4401,7 @@ mod tests {
             TabKind::Fluids => crate::fluids_workbench::draw_fluids_workbench(app, ctx),
             TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
             TabKind::Rom => crate::rom_workbench::draw_rom_workbench(app, ctx),
+            TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
         });
     }
 
@@ -4671,7 +4685,7 @@ mod headless_ui_tests {
 
     #[test]
     fn all_workbench_kinds_is_unique_and_covers_134_plus_mesh() {
-        // The registry list has no duplicate ids, and is the 136
+        // The registry list has no duplicate ids, and is the 139
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
         for k in ALL_WORKBENCH_KINDS {
@@ -4682,8 +4696,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            138,
-            "137 `show_*_workbench` fields + the meshtoolbox alias"
+            140,
+            "139 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

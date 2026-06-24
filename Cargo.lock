@@ -8072,6 +8072,7 @@ dependencies = [
  "valenx-transformer",
  "valenx-transmissionline",
  "valenx-truss",
+ "valenx-uq",
  "valenx-variant-effect",
  "valenx-vehicle",
  "valenx-vibration",
