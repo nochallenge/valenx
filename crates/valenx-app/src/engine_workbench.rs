@@ -201,7 +201,7 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             // ── Design knobs ─────────────────────────────────────
             ui.label(egui::RichText::new("Design point").strong());
             ui.horizontal(|ui| {
-                ui.label("chamber pressure");
+                let lbl = ui.label("chamber pressure");
                 let mut bar = s.design.chamber_pressure / 1.0e5;
                 if ui
                     .add(
@@ -210,39 +210,43 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(1.0..=400.0)
                             .suffix(" bar"),
                     )
+                    .labelled_by(lbl.id)
                     .changed()
                 {
                     s.design.chamber_pressure = bar * 1.0e5;
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("chamber temp");
+                let lbl = ui.label("chamber temp");
                 ui.add(
                     egui::DragValue::new(&mut s.design.chamber_temperature)
                         .speed(10.0)
                         .range(1_000.0..=4_500.0)
                         .suffix(" K"),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
-                ui.label("gas γ");
+                let lbl = ui.label("gas γ");
                 ui.add(
                     egui::DragValue::new(&mut s.design.gamma)
                         .speed(0.005)
                         .range(1.05..=1.40),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
-                ui.label("molar mass");
+                let lbl = ui.label("molar mass");
                 ui.add(
                     egui::DragValue::new(&mut s.design.molar_mass)
                         .speed(0.2)
                         .range(5.0..=40.0)
                         .suffix(" g/mol"),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
-                ui.label("throat area");
+                let lbl = ui.label("throat area");
                 let mut cm2 = s.design.throat_area * 1.0e4;
                 if ui
                     .add(
@@ -251,18 +255,20 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(1.0..=5_000.0)
                             .suffix(" cm²"),
                     )
+                    .labelled_by(lbl.id)
                     .changed()
                 {
                     s.design.throat_area = cm2 * 1.0e-4;
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("expansion ratio ε");
+                let lbl = ui.label("expansion ratio ε");
                 ui.add(
                     egui::DragValue::new(&mut s.design.expansion_ratio)
                         .speed(0.5)
                         .range(1.0..=200.0),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
                 ui.label("target cooling margin");
@@ -647,12 +653,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_engine_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_engine_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -691,5 +710,43 @@ mod headless_ui_tests {
             "detailed engine mesh loaded into viewport"
         );
         assert!(!app.engine.show_engine_3d_request, "request flag cleared");
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_engine_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        // Each of the six design-knob `DragValue`s is associated with its
+        // caption via `labelled_by` (the AI-drivable name). The panel also
+        // hosts two `Slider`s whose inner value field is itself a spin button
+        // we do not caption, so require at least the six DragValues be
+        // labelled rather than every spin button in the tree.
+        let labelled = spin_buttons
+            .iter()
+            .filter(|n| !n.labelled_by().is_empty())
+            .count();
+        assert!(
+            labelled >= 6,
+            "every design-knob DragValue must be labelled_by its caption \
+             (AI-drivable name); only {labelled} of {} spin buttons are labelled",
+            spin_buttons.len()
+        );
+        for caption in ["chamber pressure", "chamber temp", "expansion ratio ε"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

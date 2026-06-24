@@ -102,27 +102,32 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Geometry (mm)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("wire d");
-                        ui.add(egui::DragValue::new(&mut s.wire_diameter_mm).speed(0.05));
+                        let wd = ui.label("wire d");
+                        ui.add(egui::DragValue::new(&mut s.wire_diameter_mm).speed(0.05))
+                            .labelled_by(wd.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("mean coil D");
-                        ui.add(egui::DragValue::new(&mut s.mean_coil_diameter_mm).speed(0.1));
+                        let md = ui.label("mean coil D");
+                        ui.add(egui::DragValue::new(&mut s.mean_coil_diameter_mm).speed(0.1))
+                            .labelled_by(md.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("free length");
-                        ui.add(egui::DragValue::new(&mut s.free_length_mm).speed(0.5));
+                        let fl = ui.label("free length");
+                        ui.add(egui::DragValue::new(&mut s.free_length_mm).speed(0.5))
+                            .labelled_by(fl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("active coils n");
-                        ui.add(egui::DragValue::new(&mut s.n_active_coils).speed(0.1));
+                        let nc = ui.label("active coils n");
+                        ui.add(egui::DragValue::new(&mut s.n_active_coils).speed(0.1))
+                            .labelled_by(nc.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Material").strong());
                     ui.horizontal(|ui| {
-                        ui.label("shear modulus G (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.shear_modulus_mpa).speed(100.0));
+                        let sg = ui.label("shear modulus G (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.shear_modulus_mpa).speed(100.0))
+                            .labelled_by(sg.id);
                     });
 
                     // Live hint: the spring index C = D/d (4–12 is the
@@ -589,6 +594,7 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     /// Render the whole workbench panel once in a headless egui context.
     fn draw_workbench(app: &mut ValenxApp) {
@@ -596,6 +602,20 @@ mod headless_ui_tests {
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_springs_workbench(app, ctx);
         });
+    }
+
+    /// Draw the panel once with accesskit enabled and return the emitted
+    /// accessibility-tree nodes, so the test can inspect names and roles.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_springs_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -619,5 +639,32 @@ mod headless_ui_tests {
         run_springs(&mut app.springs);
         app.springs.error = Some("invalid spring parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_springs_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["wire d", "mean coil D", "free length"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

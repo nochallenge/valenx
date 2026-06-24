@@ -1027,6 +1027,55 @@ mod headless_ui_tests {
     }
 
     #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every numeric DragValue is a SpinButton and must be `labelled_by` its
+        // caption (egui clears a DragValue's own Name), so an AI / screen reader
+        // can find the control by its caption text. Beyond merely being
+        // non-empty, each `labelled_by` target must RESOLVE to the caption node
+        // — i.e. the spin button is correctly associated with a real named
+        // label, not a dangling id.
+        let mut app = ValenxApp::default();
+        app.show_ocean_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let by_id: std::collections::HashMap<NodeId, &Node> =
+            nodes.iter().map(|(id, n)| (*id, n)).collect();
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // 6 wave params + 5 body/water params + 1 time = 12 DragValues, all
+        // unconditionally rendered (no mode gating).
+        assert!(
+            spin_buttons.len() >= 12,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        // Each spin button's labelled_by target resolves to a named caption node.
+        assert!(
+            spin_buttons.iter().all(|n| {
+                n.labelled_by()
+                    .iter()
+                    .any(|id| by_id.get(id).is_some_and(|t| t.name().is_some()))
+            }),
+            "every DragValue's labelled_by must point at a named caption node"
+        );
+        // A couple of captions must exist as named nodes in the a11y tree.
+        for caption in ["number of waves N", "base wavelength L (m)", "time t (s)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+    }
+
+    #[test]
     fn degenerate_wavelength_shows_error_not_panic() {
         // When wavelength <= 0 the workbench must surface the error in-panel,
         // not panic.

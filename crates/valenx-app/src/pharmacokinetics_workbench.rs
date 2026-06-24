@@ -90,30 +90,35 @@ pub fn draw_pharmacokinetics_workbench(app: &mut ValenxApp, ctx: &egui::Context)
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Dose").strong());
                     ui.horizontal(|ui| {
-                        ui.label("dose (mg)");
-                        ui.add(egui::DragValue::new(&mut s.dose_mg).speed(5.0));
+                        let dm = ui.label("dose (mg)");
+                        ui.add(egui::DragValue::new(&mut s.dose_mg).speed(5.0))
+                            .labelled_by(dm.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Disposition").strong());
                     ui.horizontal(|ui| {
-                        ui.label("volume Vd (L)");
-                        ui.add(egui::DragValue::new(&mut s.volume_l).speed(0.5));
+                        let vd = ui.label("volume Vd (L)");
+                        ui.add(egui::DragValue::new(&mut s.volume_l).speed(0.5))
+                            .labelled_by(vd.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("clearance CL (L/h)");
-                        ui.add(egui::DragValue::new(&mut s.clearance_l_per_h).speed(0.25));
+                        let cl = ui.label("clearance CL (L/h)");
+                        ui.add(egui::DragValue::new(&mut s.clearance_l_per_h).speed(0.25))
+                            .labelled_by(cl.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Sampling").strong());
                     ui.horizontal(|ui| {
-                        ui.label("sample time (h)");
-                        ui.add(egui::DragValue::new(&mut s.sample_time_h).speed(0.25));
+                        let st = ui.label("sample time (h)");
+                        ui.add(egui::DragValue::new(&mut s.sample_time_h).speed(0.25))
+                            .labelled_by(st.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("threshold (mg/L)");
-                        ui.add(egui::DragValue::new(&mut s.threshold_mg_per_l).speed(0.1));
+                        let th = ui.label("threshold (mg/L)");
+                        ui.add(egui::DragValue::new(&mut s.threshold_mg_per_l).speed(0.1))
+                            .labelled_by(th.id);
                     });
 
                     ui.add_space(6.0);
@@ -471,12 +476,27 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_pharmacokinetics_workbench(app, ctx);
         });
+    }
+
+    /// Draw the panel once with accesskit enabled and return the emitted
+    /// accessibility-tree nodes, so the test can inspect names and roles.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_pharmacokinetics_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -492,5 +512,32 @@ mod headless_ui_tests {
         app.show_pharmacokinetics_workbench = true;
         run_pk(&mut app.pharmacokinetics);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_pharmacokinetics_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["dose (mg)", "volume Vd (L)", "clearance CL (L/h)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }
