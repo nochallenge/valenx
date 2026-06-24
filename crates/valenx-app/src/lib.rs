@@ -146,6 +146,10 @@ pub mod materials;
 pub mod mesh_prims;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
+/// Richer molecular-viewer representations (sticks / cartoon / marching-cubes
+/// surface) extending [`genetics::molecule_view`]; pure mesh generators wired
+/// into the Macromolecular-Structure panel's representation picker.
+pub mod molviz;
 pub mod mosfet_workbench;
 pub mod new_project_dialog;
 pub mod opamp_workbench;

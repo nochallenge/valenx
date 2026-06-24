@@ -1,0 +1,1619 @@
+//! **Richer molecular-viewer representations** for the Genetics 3-D viewport.
+//!
+//! [`crate::genetics::molecule_view`] already ships two representations —
+//! **ball-and-stick** and **spacefill** (CPK van-der-Waals spheres) — and the
+//! plumbing that pushes a [`valenx_viz::TriangleMesh`] into the app's wgpu 3-D
+//! viewport ([`crate::genetics::molecule_view::show_molecule`]). This module
+//! *extends* that set with the representations a structural-biology viewer is
+//! expected to offer, without touching the viewport or the mesh renderer:
+//!
+//! - **[`Representation::Sticks`]** — bonds only (no atom balls), the
+//!   "licorice" model. A thin wrapper that meshes a molecule's bonds as
+//!   capped cylinders.
+//! - **[`Representation::Cartoon`]** — a smooth **Catmull-Rom ribbon/tube**
+//!   threaded through a protein's Cα backbone, the canonical cartoon view.
+//!   When secondary-structure information is available (the app passes a
+//!   per-residue [`valenx_biostruct::dssp::SecondaryStructure`] track) the
+//!   tube fattens through helices and strands and thins through coil; with no
+//!   SS track it falls back to a uniform tube.
+//! - **[`Representation::Surface`]** — a **marching-cubes isosurface** of a
+//!   union-of-balls (each atom an analytic sphere of `vdw·scale + probe`),
+//!   the molecular / solvent-excluded-style surface. The marching-cubes
+//!   implementation here is the standard table-driven Lorensen-Cline 1987
+//!   algorithm, **reimplemented from scratch** (no external crate) with the
+//!   full 256-entry edge table and 16-per-cell triangle table.
+//!
+//! The geometry generators are **pure functions** over plain data
+//! ([`ViewMolecule`] / control-point slices / a sampled scalar field), each
+//! returning a [`TriangleMesh`] the viewport already knows how to draw, so
+//! they are unit-testable headless (no GUI). The reactive **representation
+//! picker** lives in the Macromolecular-Structure panel
+//! ([`crate::genetics::biostruct`]) as a row of named `selectable_value`
+//! widgets — which makes switching representation AI-drivable through the same
+//! accessibility tree the rest of the workbench exposes.
+//!
+//! ## Honest scope / notes
+//!
+//! - The **surface** is a *union-of-balls* (a.k.a. a fattened van-der-Waals /
+//!   solvent-accessible blend), **not** a rolling-probe solvent-excluded
+//!   surface (SES) with re-entrant patches — the probe radius simply inflates
+//!   each ball before the isosurface is extracted. A true SES (or a Gaussian
+//!   *density* isosurface, the molchanica/QuteMol style) is a documented
+//!   follow-up; the marching-cubes machinery here meshes any scalar field, so
+//!   swapping the field generator is all a density surface would need.
+//! - Surface quality is set by the **grid resolution** (`grid_max` cells along
+//!   the longest box axis). The default keeps a few-hundred-atom structure
+//!   responsive; large structures should lower it (cost is `O(cells³)`). The
+//!   picker exposes the resolution as a slider.
+//! - The **cartoon** uses the Cα trace only (no carbonyl-oriented ribbon
+//!   normals, so strands are rendered as a flattened tube rather than a true
+//!   arrow); secondary structure modulates the tube *radius*, taken from the
+//!   DSSP track the panel computes via [`valenx_biostruct::dssp`].
+//!
+//! ## Reference / attribution
+//!
+//! The set of representations and the union-of-balls→marching-cubes surface
+//! approach are inspired by **molchanica**
+//! (<https://github.com/David-OConnor/molchanica>, MIT). The algorithms here
+//! are an independent clean-room reimplementation from the public method
+//! descriptions and the original papers (Lorensen & Cline 1987 for marching
+//! cubes; Catmull & Rom 1974 for the spline); **no molchanica source is copied
+//! or vendored**. See the workspace `THIRD-PARTY-NOTICES` for the formal
+//! notice.
+
+use valenx_viz::stl::{StlTriangle, TriangleMesh};
+
+use crate::genetics::molecule_view::{self, vdw_radius, ViewMolecule};
+
+/// The molecular-viewer representation modes the Genetics viewport offers.
+///
+/// [`Representation::default`] is [`BallAndStick`](Representation::BallAndStick)
+/// — the representation the viewer rendered before this picker existed, so the
+/// default behaviour is unchanged.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum Representation {
+    /// Small element-coloured spheres at atoms + cylinders at bonds (the
+    /// classic ball-and-stick). The default.
+    #[default]
+    BallAndStick,
+    /// Bonds only, as capped cylinders ("licorice" / sticks).
+    Sticks,
+    /// Full van-der-Waals spheres, no bonds (CPK / space-filling).
+    Spacefill,
+    /// A smooth Catmull-Rom ribbon/tube through the Cα backbone (proteins).
+    Cartoon,
+    /// A marching-cubes isosurface of a union-of-balls (molecular surface).
+    Surface,
+}
+
+impl Representation {
+    /// Every representation, in picker order. Used to build the picker row and
+    /// by the round-trip label test.
+    pub const ALL: [Representation; 5] = [
+        Representation::BallAndStick,
+        Representation::Sticks,
+        Representation::Spacefill,
+        Representation::Cartoon,
+        Representation::Surface,
+    ];
+
+    /// Short human label for the picker button / viewport header.
+    pub fn label(self) -> &'static str {
+        match self {
+            Representation::BallAndStick => "Ball & stick",
+            Representation::Sticks => "Sticks",
+            Representation::Spacefill => "Spacefill",
+            Representation::Cartoon => "Cartoon",
+            Representation::Surface => "Surface",
+        }
+    }
+
+    /// Stable lower-case wire token (for the viewport source label / an
+    /// agent-bridge command argument).
+    pub fn token(self) -> &'static str {
+        match self {
+            Representation::BallAndStick => "ball-stick",
+            Representation::Sticks => "sticks",
+            Representation::Spacefill => "spacefill",
+            Representation::Cartoon => "cartoon",
+            Representation::Surface => "surface",
+        }
+    }
+
+    /// Parse a wire token (case-insensitive; accepts a couple of synonyms)
+    /// back into a [`Representation`]. `None` for an unrecognised token — lets
+    /// an agent-bridge command map a string argument to a mode.
+    pub fn from_token(s: &str) -> Option<Representation> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "ball-stick" | "ball_and_stick" | "ballandstick" | "ball-and-stick" | "bands" => {
+                Some(Representation::BallAndStick)
+            }
+            "sticks" | "stick" | "licorice" => Some(Representation::Sticks),
+            "spacefill" | "cpk" | "vdw" | "space-fill" => Some(Representation::Spacefill),
+            "cartoon" | "ribbon" | "tube" => Some(Representation::Cartoon),
+            "surface" | "sas" | "ses" | "molecular-surface" => Some(Representation::Surface),
+            _ => None,
+        }
+    }
+
+    /// Whether this representation needs a protein backbone (the cartoon does;
+    /// the others mesh any atom set). The picker uses this to warn when a
+    /// cartoon is requested for a structure with no Cα trace.
+    pub fn needs_backbone(self) -> bool {
+        matches!(self, Representation::Cartoon)
+    }
+}
+
+/// Build the [`TriangleMesh`] for `mol` in representation `rep`.
+///
+/// `backbone` is the ordered list of protein backbone control points (Cα
+/// positions, one per residue, with an optional secondary-structure code) —
+/// only consulted for [`Representation::Cartoon`]; pass an empty slice for the
+/// atom-based representations. `params` tunes ball/stick radii, the cartoon
+/// tube and the surface grid.
+///
+/// Every branch reuses geometry the viewer already trusts: the atom
+/// representations call straight through to
+/// [`crate::genetics::molecule_view`], the cartoon meshes a swept tube, and
+/// the surface runs [`marching_cubes`] over the atoms' union-of-balls field. An
+/// empty molecule (and an empty backbone for the cartoon) yields an empty mesh
+/// — never a panic.
+pub fn build_mesh(
+    mol: &ViewMolecule,
+    rep: Representation,
+    backbone: &[BackbonePoint],
+    params: &MolvizParams,
+) -> TriangleMesh {
+    match rep {
+        Representation::BallAndStick => {
+            molecule_view::ball_and_stick(mol, params.ball_scale, params.stick_radius)
+        }
+        Representation::Spacefill => molecule_view::spacefill(mol),
+        Representation::Sticks => sticks(mol, params.stick_radius),
+        Representation::Cartoon => cartoon(backbone, params),
+        Representation::Surface => surface(mol, params),
+    }
+}
+
+/// Per-representation tunables. [`MolvizParams::default`] is the set the picker
+/// starts at; the panel mutates a copy as the user drags sliders.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct MolvizParams {
+    /// Atom-sphere radius multiplier for ball-and-stick (`vdw · ball_scale`).
+    pub ball_scale: f32,
+    /// Bond-cylinder radius (ångström) for ball-and-stick / sticks.
+    pub stick_radius: f32,
+    /// Cartoon tube base radius (ångström) for coil; helices/strands scale it.
+    pub tube_radius: f32,
+    /// Catmull-Rom samples per Cα–Cα span for the cartoon tube.
+    pub tube_samples: usize,
+    /// Radial segments around the cartoon tube / a surface sphere proxy.
+    pub tube_segments: usize,
+    /// Surface: probe radius (ångström) added to every atom's vdW radius
+    /// before the isosurface is extracted (the union-of-balls inflation).
+    pub probe_radius: f32,
+    /// Surface: van-der-Waals radius multiplier for the union-of-balls field.
+    pub surface_vdw_scale: f32,
+    /// Surface: max grid cells along the longest bounding-box axis (quality vs
+    /// cost — cost is `O(grid_max³)`).
+    pub grid_max: usize,
+}
+
+impl Default for MolvizParams {
+    fn default() -> Self {
+        MolvizParams {
+            ball_scale: 0.28,
+            stick_radius: 0.18,
+            tube_radius: 0.45,
+            tube_samples: 8,
+            tube_segments: 8,
+            probe_radius: 1.4,
+            surface_vdw_scale: 1.0,
+            grid_max: 48,
+        }
+    }
+}
+
+/// One protein backbone control point for the cartoon: a Cα position plus an
+/// optional DSSP secondary-structure code (`'H'`/`'G'`/`'I'` helix,
+/// `'E'`/`'B'` sheet, else coil). The code drives the tube radius; `None`
+/// (no SS track) renders a uniform tube.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct BackbonePoint {
+    /// Cα Cartesian position, ångström.
+    pub pos: [f32; 3],
+    /// DSSP one-letter secondary-structure code, or `None` if unknown.
+    pub ss: Option<char>,
+}
+
+impl BackbonePoint {
+    /// A backbone point at `pos` with secondary-structure code `ss`.
+    pub fn new(pos: [f32; 3], ss: Option<char>) -> Self {
+        BackbonePoint { pos, ss }
+    }
+
+    /// Tube-radius scale for this point's secondary structure relative to the
+    /// coil base radius: helices and strands are fatter, coil is the base.
+    fn radius_scale(self) -> f32 {
+        match self.ss {
+            Some('H') | Some('G') | Some('I') => 1.8, // helices
+            Some('E') | Some('B') => 1.5,             // strands
+            _ => 1.0,                                 // coil / turn / bend / unknown
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
+// Sticks (bonds only)
+// --------------------------------------------------------------------------
+
+/// Build a **sticks / licorice** mesh: every bond as a capped cylinder, no
+/// atom balls. A small sphere is placed at each *bonded* atom so the joints
+/// read as round and isolated (unbonded) atoms do not vanish entirely. An
+/// empty molecule yields an empty mesh.
+pub fn sticks(mol: &ViewMolecule, stick_radius: f32) -> TriangleMesh {
+    let mut tris: Vec<StlTriangle> = Vec::new();
+    let r = stick_radius.max(0.02);
+    // A joint sphere at each atom that participates in ≥1 bond, so bends in
+    // the licorice are smooth.
+    let mut bonded = vec![false; mol.atoms.len()];
+    for &(a, b) in &mol.bonds {
+        let (Some(pa), Some(pb)) = (mol.atoms.get(a), mol.atoms.get(b)) else {
+            continue;
+        };
+        push_cylinder(&mut tris, pa.pos, pb.pos, r);
+        bonded[a] = true;
+        bonded[b] = true;
+    }
+    for (i, atom) in mol.atoms.iter().enumerate() {
+        if bonded[i] {
+            push_sphere(&mut tris, atom.pos, r);
+        }
+    }
+    TriangleMesh {
+        format: None,
+        name: Some("genetics-sticks".to_string()),
+        triangles: tris,
+    }
+}
+
+// --------------------------------------------------------------------------
+// Cartoon / ribbon (Catmull-Rom tube through the Cα trace)
+// --------------------------------------------------------------------------
+
+/// Build a **cartoon** tube: a Catmull-Rom spline through the backbone Cα
+/// control points, swept into a tube whose radius follows the per-point
+/// secondary structure. With fewer than two control points the mesh is empty
+/// (a single Cα is drawn as one sphere so a 1-residue input is not invisible).
+pub fn cartoon(backbone: &[BackbonePoint], params: &MolvizParams) -> TriangleMesh {
+    let mut tris: Vec<StlTriangle> = Vec::new();
+    if backbone.is_empty() {
+        return TriangleMesh {
+            format: None,
+            name: Some("genetics-cartoon".to_string()),
+            triangles: tris,
+        };
+    }
+    if backbone.len() == 1 {
+        push_sphere(&mut tris, backbone[0].pos, params.tube_radius.max(0.05));
+        return TriangleMesh {
+            format: None,
+            name: Some("genetics-cartoon".to_string()),
+            triangles: tris,
+        };
+    }
+
+    // Sample the spline (and an interpolated radius) into a centre-line.
+    let centers = sample_backbone_spline(backbone, params.tube_samples.max(1));
+    // Sweep a tube of `params.tube_segments` sides along the centre-line.
+    sweep_tube(
+        &mut tris,
+        &centers,
+        params.tube_radius.max(0.02),
+        params.tube_segments.max(3),
+    );
+    TriangleMesh {
+        format: None,
+        name: Some("genetics-cartoon".to_string()),
+        triangles: tris,
+    }
+}
+
+/// A centre-line sample: a position plus the tube radius at that sample.
+#[derive(Copy, Clone, Debug, PartialEq)]
+struct TubeSample {
+    pos: [f32; 3],
+    radius_scale: f32,
+}
+
+/// Sample a uniform Catmull-Rom spline through the backbone control points,
+/// carrying a smoothly-interpolated per-point radius scale. Phantom endpoints
+/// (reflected neighbours) make the curve pass through the first and last Cα.
+/// The returned samples include the final control point exactly.
+fn sample_backbone_spline(backbone: &[BackbonePoint], samples_per_span: usize) -> Vec<TubeSample> {
+    let n = backbone.len();
+    debug_assert!(n >= 2);
+    let pt = |i: isize| -> [f32; 3] {
+        if i < 0 {
+            reflect(backbone[0].pos, backbone[1].pos)
+        } else if i as usize >= n {
+            reflect(backbone[n - 1].pos, backbone[n - 2].pos)
+        } else {
+            backbone[i as usize].pos
+        }
+    };
+    let scale = |i: isize| -> f32 {
+        let idx = i.clamp(0, n as isize - 1) as usize;
+        backbone[idx].radius_scale()
+    };
+    let mut out: Vec<TubeSample> = Vec::with_capacity((n - 1) * samples_per_span + 1);
+    for k in 0..n - 1 {
+        let p0 = pt(k as isize - 1);
+        let p1 = pt(k as isize);
+        let p2 = pt(k as isize + 1);
+        let p3 = pt(k as isize + 2);
+        let s1 = scale(k as isize);
+        let s2 = scale(k as isize + 1);
+        for i in 0..samples_per_span {
+            let t = i as f32 / samples_per_span as f32;
+            out.push(TubeSample {
+                pos: catmull_rom3(p0, p1, p2, p3, t),
+                radius_scale: s1 + (s2 - s1) * t,
+            });
+        }
+    }
+    // Append the exact final control point so the tube reaches the last Cα.
+    out.push(TubeSample {
+        pos: backbone[n - 1].pos,
+        radius_scale: backbone[n - 1].radius_scale(),
+    });
+    out
+}
+
+/// Reflect `a` about `pivot` → `2·pivot − a` (the phantom-endpoint trick).
+fn reflect(pivot: [f32; 3], a: [f32; 3]) -> [f32; 3] {
+    [
+        2.0 * pivot[0] - a[0],
+        2.0 * pivot[1] - a[1],
+        2.0 * pivot[2] - a[2],
+    ]
+}
+
+/// One uniform Catmull-Rom interpolation at `t ∈ [0,1]` on the span `p1 → p2`
+/// (3-D; same coefficients as the 2-D sketch spline). The curve passes through
+/// `p1` at `t = 0` and `p2` at `t = 1`.
+pub fn catmull_rom3(p0: [f32; 3], p1: [f32; 3], p2: [f32; 3], p3: [f32; 3], t: f32) -> [f32; 3] {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let comp = |a: f32, b: f32, c: f32, d: f32| {
+        0.5 * ((2.0 * b)
+            + (-a + c) * t
+            + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2
+            + (-a + 3.0 * b - 3.0 * c + d) * t3)
+    };
+    [
+        comp(p0[0], p1[0], p2[0], p3[0]),
+        comp(p0[1], p1[1], p2[1], p3[1]),
+        comp(p0[2], p1[2], p2[2], p3[2]),
+    ]
+}
+
+/// Sweep a closed tube of `segments` sides and base radius `base_radius`
+/// (scaled per-sample by `TubeSample::radius_scale`) along a centre-line. Each
+/// adjacent pair of rings is joined by a band of quads (two triangles each).
+/// The frame is propagated with a parallel-transport-ish minimal-rotation
+/// approach (re-projecting the previous `u` onto the new normal plane) so the
+/// tube does not twist.
+fn sweep_tube(
+    tris: &mut Vec<StlTriangle>,
+    centers: &[TubeSample],
+    base_radius: f32,
+    segments: usize,
+) {
+    if centers.len() < 2 {
+        return;
+    }
+    // Build a smooth frame along the curve.
+    let mut rings: Vec<Vec<[f32; 3]>> = Vec::with_capacity(centers.len());
+    // Seed the first frame from the first tangent.
+    let first_dir = normalize(sub(centers[1].pos, centers[0].pos));
+    let (mut u, _v) = perpendicular_basis(first_dir);
+    for i in 0..centers.len() {
+        // Local tangent (central difference where possible).
+        let dir = if i == 0 {
+            normalize(sub(centers[1].pos, centers[0].pos))
+        } else if i == centers.len() - 1 {
+            normalize(sub(centers[i].pos, centers[i - 1].pos))
+        } else {
+            normalize(sub(centers[i + 1].pos, centers[i - 1].pos))
+        };
+        // Re-orthogonalise the carried `u` against the new tangent (minimal
+        // twist), then rebuild `v`.
+        u = normalize(sub(u, scale_vec(dir, dot(u, dir))));
+        if length(u) < 1e-5 {
+            let (nu, _) = perpendicular_basis(dir);
+            u = nu;
+        }
+        let v = normalize(cross(dir, u));
+        let r = base_radius * centers[i].radius_scale.max(0.05);
+        let c = centers[i].pos;
+        let mut ring = Vec::with_capacity(segments);
+        for s in 0..segments {
+            let ang = 2.0 * std::f32::consts::PI * s as f32 / segments as f32;
+            let (ca, sa) = (ang.cos(), ang.sin());
+            ring.push([
+                c[0] + r * (ca * u[0] + sa * v[0]),
+                c[1] + r * (ca * u[1] + sa * v[1]),
+                c[2] + r * (ca * u[2] + sa * v[2]),
+            ]);
+        }
+        rings.push(ring);
+    }
+    // Join consecutive rings.
+    for w in rings.windows(2) {
+        let (r0, r1) = (&w[0], &w[1]);
+        for s in 0..segments {
+            let s1 = (s + 1) % segments;
+            let a0 = r0[s];
+            let a1 = r0[s1];
+            let b0 = r1[s];
+            let b1 = r1[s1];
+            push_tri(tris, a0, b0, b1);
+            push_tri(tris, a0, b1, a1);
+        }
+    }
+    // Cap the two ends with a simple fan to the centre so the tube is closed.
+    cap_ring(tris, &rings[0], centers[0].pos, true);
+    let last = rings.len() - 1;
+    cap_ring(tris, &rings[last], centers[last].pos, false);
+}
+
+/// Triangulate a ring as a fan to its centre (an end cap). `front` flips the
+/// winding so the cap normal faces outward at each end.
+fn cap_ring(tris: &mut Vec<StlTriangle>, ring: &[[f32; 3]], center: [f32; 3], front: bool) {
+    let n = ring.len();
+    for s in 0..n {
+        let s1 = (s + 1) % n;
+        if front {
+            push_tri(tris, center, ring[s1], ring[s]);
+        } else {
+            push_tri(tris, center, ring[s], ring[s1]);
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
+// Surface (marching cubes over a union-of-balls field)
+// --------------------------------------------------------------------------
+
+/// A scalar field sampled on a regular 3-D grid, plus the grid geometry needed
+/// to place the marching-cubes vertices back in world space.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScalarField {
+    /// World-space minimum corner of the grid (cell `(0,0,0)`'s corner).
+    pub origin: [f32; 3],
+    /// Cell spacing along each axis (ångström). Cubic in practice.
+    pub spacing: [f32; 3],
+    /// Grid sample counts (`nx, ny, nz`) — there are `nx·ny·nz` samples.
+    pub dims: [usize; 3],
+    /// Sample values in `x`-fastest, then `y`, then `z` order
+    /// (`idx = x + nx*(y + ny*z)`). Length must equal `nx·ny·nz`.
+    pub values: Vec<f32>,
+}
+
+impl ScalarField {
+    /// Sample at integer grid coordinate `(x, y, z)` (no bounds check beyond
+    /// the linear index; callers stay in range).
+    #[inline]
+    fn at(&self, x: usize, y: usize, z: usize) -> f32 {
+        self.values[x + self.dims[0] * (y + self.dims[1] * z)]
+    }
+
+    /// World position of grid coordinate `(x, y, z)`.
+    #[inline]
+    fn world(&self, x: usize, y: usize, z: usize) -> [f32; 3] {
+        [
+            self.origin[0] + x as f32 * self.spacing[0],
+            self.origin[1] + y as f32 * self.spacing[1],
+            self.origin[2] + z as f32 * self.spacing[2],
+        ]
+    }
+}
+
+/// Build the **union-of-balls scalar field** for a molecule.
+///
+/// The field at a point is `max_i (r_i − |p − c_i|)` over the atoms — i.e. the
+/// signed "how far inside the nearest fattened atom" value, positive inside the
+/// union and zero on its boundary. Meshing the `iso = 0` level set with
+/// [`marching_cubes`] therefore yields the surface of the union of spheres of
+/// radius `r_i = vdw(element)·surface_vdw_scale + probe_radius`.
+///
+/// The grid spans the atoms' bounding box padded by the largest ball radius,
+/// with `grid_max` cells along the longest axis (the other axes scaled to keep
+/// cells ~cubic). Returns `None` for an empty molecule (nothing to mesh).
+pub fn union_of_balls_field(mol: &ViewMolecule, params: &MolvizParams) -> Option<ScalarField> {
+    if mol.atoms.is_empty() {
+        return None;
+    }
+    // Per-atom inflated radius.
+    let radii: Vec<f32> = mol
+        .atoms
+        .iter()
+        .map(|a| vdw_radius(&a.element) * params.surface_vdw_scale + params.probe_radius)
+        .collect();
+    let max_r = radii.iter().cloned().fold(0.0_f32, f32::max).max(0.1);
+
+    // Bounding box of the atom centres, padded by max radius + one cell.
+    let mut min = mol.atoms[0].pos;
+    let mut max = mol.atoms[0].pos;
+    for a in &mol.atoms {
+        for k in 0..3 {
+            min[k] = min[k].min(a.pos[k]);
+            max[k] = max[k].max(a.pos[k]);
+        }
+    }
+    let pad = max_r * 1.2;
+    for k in 0..3 {
+        min[k] -= pad;
+        max[k] += pad;
+    }
+    let extent = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+    let longest = extent[0].max(extent[1]).max(extent[2]).max(1e-3);
+    let grid_max = params.grid_max.clamp(8, 192);
+    let spacing = longest / grid_max as f32;
+    // Sample counts per axis (at least 2 so there is one cell).
+    let dims = [
+        ((extent[0] / spacing).ceil() as usize + 1).max(2),
+        ((extent[1] / spacing).ceil() as usize + 1).max(2),
+        ((extent[2] / spacing).ceil() as usize + 1).max(2),
+    ];
+    let spacing = [spacing, spacing, spacing];
+
+    // Evaluate the field. To keep the O(cells·atoms) cost bounded we only let
+    // each atom touch the grid cells within its radius (a per-atom AABB
+    // splat), initialising the field to a large negative sentinel.
+    let total = dims[0] * dims[1] * dims[2];
+    let mut values = vec![-max_r * 2.0; total];
+    let to_idx = |x: usize, y: usize, z: usize| x + dims[0] * (y + dims[1] * z);
+    for (atom, &r) in mol.atoms.iter().zip(&radii) {
+        // Grid index range overlapping this atom's ball AABB.
+        let lo = |c: f32, m: f32| -> usize {
+            let g = ((c - r - m) / spacing[0]).floor();
+            g.max(0.0) as usize
+        };
+        let hi = |c: f32, m: f32, d: usize| -> usize {
+            let g = ((c + r - m) / spacing[0]).ceil() as isize;
+            g.clamp(0, d as isize - 1) as usize
+        };
+        let (x0, x1) = (lo(atom.pos[0], min[0]), hi(atom.pos[0], min[0], dims[0]));
+        let (y0, y1) = (lo(atom.pos[1], min[1]), hi(atom.pos[1], min[1], dims[1]));
+        let (z0, z1) = (lo(atom.pos[2], min[2]), hi(atom.pos[2], min[2], dims[2]));
+        for z in z0..=z1.min(dims[2] - 1) {
+            for y in y0..=y1.min(dims[1] - 1) {
+                for x in x0..=x1.min(dims[0] - 1) {
+                    let p = [
+                        min[0] + x as f32 * spacing[0],
+                        min[1] + y as f32 * spacing[1],
+                        min[2] + z as f32 * spacing[2],
+                    ];
+                    let d = distance(p, atom.pos);
+                    let val = r - d;
+                    let idx = to_idx(x, y, z);
+                    if val > values[idx] {
+                        values[idx] = val;
+                    }
+                }
+            }
+        }
+    }
+    Some(ScalarField {
+        origin: min,
+        spacing,
+        dims,
+        values,
+    })
+}
+
+/// Build the molecular **surface** mesh for a molecule: a marching-cubes
+/// isosurface of the union-of-balls field at `iso = 0`. An empty molecule
+/// yields an empty mesh.
+pub fn surface(mol: &ViewMolecule, params: &MolvizParams) -> TriangleMesh {
+    let tris = match union_of_balls_field(mol, params) {
+        Some(field) => marching_cubes(&field, 0.0),
+        None => Vec::new(),
+    };
+    TriangleMesh {
+        format: None,
+        name: Some("genetics-surface".to_string()),
+        triangles: tris,
+    }
+}
+
+/// **Marching cubes** (Lorensen & Cline 1987) over a [`ScalarField`] at level
+/// `iso`: extract the triangulated `value == iso` isosurface.
+///
+/// Standard table-driven implementation — for each cube of eight neighbouring
+/// samples, an 8-bit case index is formed from which corners are below `iso`,
+/// [`MC_EDGE_TABLE`] gives which of the 12 cube edges the surface crosses, the
+/// crossing point on each is found by **linear interpolation** of the field,
+/// and [`MC_TRI_TABLE`] lists the triangles (edge triples). Vertices land on
+/// cube edges, so the mesh is watertight up to floating-point. Returns one
+/// [`StlTriangle`] per emitted triangle (winding chosen so normals point
+/// "outward", i.e. toward decreasing field / outside the union of balls).
+pub fn marching_cubes(field: &ScalarField, iso: f32) -> Vec<StlTriangle> {
+    let [nx, ny, nz] = field.dims;
+    let mut tris = Vec::new();
+    if nx < 2 || ny < 2 || nz < 2 {
+        return tris;
+    }
+    // The eight corners of a cube, as (dx, dy, dz) offsets, in the canonical
+    // marching-cubes vertex order.
+    const CORNER: [[usize; 3]; 8] = [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+        [0, 1, 1],
+    ];
+    // Each of the 12 edges connects two corner indices.
+    const EDGE_CORNERS: [[usize; 2]; 12] = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],
+    ];
+
+    for z in 0..nz - 1 {
+        for y in 0..ny - 1 {
+            for x in 0..nx - 1 {
+                // Gather the eight corner values + positions.
+                let mut val = [0.0_f32; 8];
+                let mut pos = [[0.0_f32; 3]; 8];
+                let mut cube_index = 0usize;
+                for (i, c) in CORNER.iter().enumerate() {
+                    let (cx, cy, cz) = (x + c[0], y + c[1], z + c[2]);
+                    val[i] = field.at(cx, cy, cz);
+                    pos[i] = field.world(cx, cy, cz);
+                    // Corner is "inside" when its value exceeds the level.
+                    if val[i] > iso {
+                        cube_index |= 1 << i;
+                    }
+                }
+                let edges = MC_EDGE_TABLE[cube_index];
+                if edges == 0 {
+                    continue; // wholly inside or outside — no surface here
+                }
+                // Interpolate the crossing point on each active edge.
+                let mut vert = [[0.0_f32; 3]; 12];
+                for (e, ec) in EDGE_CORNERS.iter().enumerate() {
+                    if edges & (1 << e) != 0 {
+                        vert[e] = interp_edge(iso, pos[ec[0]], pos[ec[1]], val[ec[0]], val[ec[1]]);
+                    }
+                }
+                // Emit triangles from the per-case edge-triple list.
+                let row = &MC_TRI_TABLE[cube_index];
+                let mut i = 0;
+                while i + 2 < row.len() && row[i] != -1 {
+                    let a = vert[row[i] as usize];
+                    let b = vert[row[i + 1] as usize];
+                    let c = vert[row[i + 2] as usize];
+                    // The table winds so that "inside == value > iso" gives an
+                    // outward normal for a field that is positive inside; our
+                    // union-of-balls field is positive inside, so emit as-is.
+                    push_tri(&mut tris, a, b, c);
+                    i += 3;
+                }
+            }
+        }
+    }
+    tris
+}
+
+/// Linear interpolation of the iso-crossing point along an edge from `p1`
+/// (value `v1`) to `p2` (value `v2`). Falls back to the midpoint when the two
+/// values are (numerically) equal.
+fn interp_edge(iso: f32, p1: [f32; 3], p2: [f32; 3], v1: f32, v2: f32) -> [f32; 3] {
+    let denom = v2 - v1;
+    let t = if denom.abs() < 1e-9 {
+        0.5
+    } else {
+        ((iso - v1) / denom).clamp(0.0, 1.0)
+    };
+    [
+        p1[0] + t * (p2[0] - p1[0]),
+        p1[1] + t * (p2[1] - p1[1]),
+        p1[2] + t * (p2[2] - p1[2]),
+    ]
+}
+
+// --------------------------------------------------------------------------
+// Shared geometry primitives (local to molviz so the module is self-contained;
+// they mirror the sphere/cylinder tessellation in `molecule_view`).
+// --------------------------------------------------------------------------
+
+/// Tessellation density for the local sphere / cylinder helpers.
+const SEGMENTS: usize = 8;
+
+/// Append one triangle (with a winding-derived normal) to `tris`.
+fn push_tri(tris: &mut Vec<StlTriangle>, v0: [f32; 3], v1: [f32; 3], v2: [f32; 3]) {
+    let tri = StlTriangle {
+        normal: [0.0, 0.0, 0.0],
+        vertices: [v0, v1, v2],
+    };
+    let normal = tri.computed_normal();
+    tris.push(StlTriangle {
+        normal,
+        vertices: [v0, v1, v2],
+    });
+}
+
+/// Append a UV sphere centred at `center` with radius `r` to `tris`.
+fn push_sphere(tris: &mut Vec<StlTriangle>, center: [f32; 3], r: f32) {
+    let lat_steps = SEGMENTS;
+    let lon_steps = SEGMENTS * 2;
+    let vert = |lat: usize, lon: usize| -> [f32; 3] {
+        let theta = std::f32::consts::PI * lat as f32 / lat_steps as f32;
+        let phi = 2.0 * std::f32::consts::PI * lon as f32 / lon_steps as f32;
+        [
+            center[0] + r * theta.sin() * phi.cos(),
+            center[1] + r * theta.cos(),
+            center[2] + r * theta.sin() * phi.sin(),
+        ]
+    };
+    for lat in 0..lat_steps {
+        for lon in 0..lon_steps {
+            let v00 = vert(lat, lon);
+            let v01 = vert(lat, lon + 1);
+            let v10 = vert(lat + 1, lon);
+            let v11 = vert(lat + 1, lon + 1);
+            if lat == 0 {
+                push_tri(tris, v00, v10, v11);
+            } else if lat == lat_steps - 1 {
+                push_tri(tris, v00, v10, v01);
+            } else {
+                push_tri(tris, v00, v10, v11);
+                push_tri(tris, v00, v11, v01);
+            }
+        }
+    }
+}
+
+/// Append a cylinder from `a` to `b` of radius `r` to `tris` (side wall +
+/// flat end caps so an isolated stick is closed).
+fn push_cylinder(tris: &mut Vec<StlTriangle>, a: [f32; 3], b: [f32; 3], r: f32) {
+    let axis = sub(b, a);
+    let len = length(axis);
+    if len < 1e-6 {
+        return;
+    }
+    let dir = [axis[0] / len, axis[1] / len, axis[2] / len];
+    let (u, v) = perpendicular_basis(dir);
+    let ring = |center: [f32; 3], seg: usize| -> [f32; 3] {
+        let ang = 2.0 * std::f32::consts::PI * seg as f32 / SEGMENTS as f32;
+        let (c, s) = (ang.cos(), ang.sin());
+        [
+            center[0] + r * (c * u[0] + s * v[0]),
+            center[1] + r * (c * u[1] + s * v[1]),
+            center[2] + r * (c * u[2] + s * v[2]),
+        ]
+    };
+    for seg in 0..SEGMENTS {
+        let a0 = ring(a, seg);
+        let a1 = ring(a, seg + 1);
+        let b0 = ring(b, seg);
+        let b1 = ring(b, seg + 1);
+        push_tri(tris, a0, b0, b1);
+        push_tri(tris, a0, b1, a1);
+        // End caps (fan to the axis endpoints).
+        push_tri(tris, a, a1, a0);
+        push_tri(tris, b, b0, b1);
+    }
+}
+
+/// An orthonormal pair perpendicular to `dir` (assumed unit length).
+fn perpendicular_basis(dir: [f32; 3]) -> ([f32; 3], [f32; 3]) {
+    let seed = if dir[0].abs() < 0.9 {
+        [1.0, 0.0, 0.0]
+    } else {
+        [0.0, 1.0, 0.0]
+    };
+    let u = normalize(cross(dir, seed));
+    let v = normalize(cross(dir, u));
+    (u, v)
+}
+
+#[inline]
+fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+#[inline]
+fn scale_vec(a: [f32; 3], s: f32) -> [f32; 3] {
+    [a[0] * s, a[1] * s, a[2] * s]
+}
+
+#[inline]
+fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+#[inline]
+fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+#[inline]
+fn length(v: [f32; 3]) -> f32 {
+    (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
+}
+
+/// Normalise a vector; returns `[0, 0, 1]` for a (near-)zero input.
+fn normalize(v: [f32; 3]) -> [f32; 3] {
+    let len = length(v);
+    if len < 1e-9 {
+        [0.0, 0.0, 1.0]
+    } else {
+        [v[0] / len, v[1] / len, v[2] / len]
+    }
+}
+
+#[inline]
+fn distance(a: [f32; 3], b: [f32; 3]) -> f32 {
+    length(sub(a, b))
+}
+
+// --------------------------------------------------------------------------
+// Marching-cubes tables (Lorensen & Cline 1987). These are the canonical,
+// widely-published lookup tables; reproduced here so no crate is needed.
+// --------------------------------------------------------------------------
+
+/// For each of the 256 corner-sign cases, a 12-bit mask of which cube edges
+/// the isosurface intersects.
+#[rustfmt::skip]
+const MC_EDGE_TABLE: [u16; 256] = [
+    0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
+    0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
+    0x190, 0x99 , 0x393, 0x29a, 0x596, 0x49f, 0x795, 0x69c,
+    0x99c, 0x895, 0xb9f, 0xa96, 0xd9a, 0xc93, 0xf99, 0xe90,
+    0x230, 0x339, 0x33 , 0x13a, 0x636, 0x73f, 0x435, 0x53c,
+    0xa3c, 0xb35, 0x83f, 0x936, 0xe3a, 0xf33, 0xc39, 0xd30,
+    0x3a0, 0x2a9, 0x1a3, 0xaa , 0x7a6, 0x6af, 0x5a5, 0x4ac,
+    0xbac, 0xaa5, 0x9af, 0x8a6, 0xfaa, 0xea3, 0xda9, 0xca0,
+    0x460, 0x569, 0x663, 0x76a, 0x66 , 0x16f, 0x265, 0x36c,
+    0xc6c, 0xd65, 0xe6f, 0xf66, 0x86a, 0x963, 0xa69, 0xb60,
+    0x5f0, 0x4f9, 0x7f3, 0x6fa, 0x1f6, 0xff , 0x3f5, 0x2fc,
+    0xdfc, 0xcf5, 0xfff, 0xef6, 0x9fa, 0x8f3, 0xbf9, 0xaf0,
+    0x650, 0x759, 0x453, 0x55a, 0x256, 0x35f, 0x55 , 0x15c,
+    0xe5c, 0xf55, 0xc5f, 0xd56, 0xa5a, 0xb53, 0x859, 0x950,
+    0x7c0, 0x6c9, 0x5c3, 0x4ca, 0x3c6, 0x2cf, 0x1c5, 0xcc ,
+    0xfcc, 0xec5, 0xdcf, 0xcc6, 0xbca, 0xac3, 0x9c9, 0x8c0,
+    0x8c0, 0x9c9, 0xac3, 0xbca, 0xcc6, 0xdcf, 0xec5, 0xfcc,
+    0xcc , 0x1c5, 0x2cf, 0x3c6, 0x4ca, 0x5c3, 0x6c9, 0x7c0,
+    0x950, 0x859, 0xb53, 0xa5a, 0xd56, 0xc5f, 0xf55, 0xe5c,
+    0x15c, 0x55 , 0x35f, 0x256, 0x55a, 0x453, 0x759, 0x650,
+    0xaf0, 0xbf9, 0x8f3, 0x9fa, 0xef6, 0xfff, 0xcf5, 0xdfc,
+    0x2fc, 0x3f5, 0xff , 0x1f6, 0x6fa, 0x7f3, 0x4f9, 0x5f0,
+    0xb60, 0xa69, 0x963, 0x86a, 0xf66, 0xe6f, 0xd65, 0xc6c,
+    0x36c, 0x265, 0x16f, 0x66 , 0x76a, 0x663, 0x569, 0x460,
+    0xca0, 0xda9, 0xea3, 0xfaa, 0x8a6, 0x9af, 0xaa5, 0xbac,
+    0x4ac, 0x5a5, 0x6af, 0x7a6, 0xaa , 0x1a3, 0x2a9, 0x3a0,
+    0xd30, 0xc39, 0xf33, 0xe3a, 0x936, 0x83f, 0xb35, 0xa3c,
+    0x53c, 0x435, 0x73f, 0x636, 0x13a, 0x33 , 0x339, 0x230,
+    0xe90, 0xf99, 0xc93, 0xd9a, 0xa96, 0xb9f, 0x895, 0x99c,
+    0x69c, 0x795, 0x49f, 0x596, 0x29a, 0x393, 0x99 , 0x190,
+    0xf00, 0xe09, 0xd03, 0xc0a, 0xb06, 0xa0f, 0x905, 0x80c,
+    0x70c, 0x605, 0x50f, 0x406, 0x30a, 0x203, 0x109, 0x0  ,
+];
+
+/// For each of the 256 cases, up to five triangles given as triples of edge
+/// indices (0..12), terminated by `-1`. The canonical Lorensen-Cline /
+/// Bourke triangle table.
+#[rustfmt::skip]
+const MC_TRI_TABLE: [[i8; 16]; 256] = [
+    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,1,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,8,3,9,8,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,3,1,2,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [9,2,10,0,2,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [2,8,3,2,10,8,10,9,8,-1,-1,-1,-1,-1,-1,-1],
+    [3,11,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,11,2,8,11,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,9,0,2,3,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,11,2,1,9,11,9,8,11,-1,-1,-1,-1,-1,-1,-1],
+    [3,10,1,11,10,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,10,1,0,8,10,8,11,10,-1,-1,-1,-1,-1,-1,-1],
+    [3,9,0,3,11,9,11,10,9,-1,-1,-1,-1,-1,-1,-1],
+    [9,8,10,10,8,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,7,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,3,0,7,3,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,1,9,8,4,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,1,9,4,7,1,7,3,1,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,10,8,4,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [3,4,7,3,0,4,1,2,10,-1,-1,-1,-1,-1,-1,-1],
+    [9,2,10,9,0,2,8,4,7,-1,-1,-1,-1,-1,-1,-1],
+    [2,10,9,2,9,7,2,7,3,7,9,4,-1,-1,-1,-1],
+    [8,4,7,3,11,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [11,4,7,11,2,4,2,0,4,-1,-1,-1,-1,-1,-1,-1],
+    [9,0,1,8,4,7,2,3,11,-1,-1,-1,-1,-1,-1,-1],
+    [4,7,11,9,4,11,9,11,2,9,2,1,-1,-1,-1,-1],
+    [3,10,1,3,11,10,7,8,4,-1,-1,-1,-1,-1,-1,-1],
+    [1,11,10,1,4,11,1,0,4,7,11,4,-1,-1,-1,-1],
+    [4,7,8,9,0,11,9,11,10,11,0,3,-1,-1,-1,-1],
+    [4,7,11,4,11,9,9,11,10,-1,-1,-1,-1,-1,-1,-1],
+    [9,5,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [9,5,4,0,8,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,5,4,1,5,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [8,5,4,8,3,5,3,1,5,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,10,9,5,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [3,0,8,1,2,10,4,9,5,-1,-1,-1,-1,-1,-1,-1],
+    [5,2,10,5,4,2,4,0,2,-1,-1,-1,-1,-1,-1,-1],
+    [2,10,5,3,2,5,3,5,4,3,4,8,-1,-1,-1,-1],
+    [9,5,4,2,3,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,11,2,0,8,11,4,9,5,-1,-1,-1,-1,-1,-1,-1],
+    [0,5,4,0,1,5,2,3,11,-1,-1,-1,-1,-1,-1,-1],
+    [2,1,5,2,5,8,2,8,11,4,8,5,-1,-1,-1,-1],
+    [10,3,11,10,1,3,9,5,4,-1,-1,-1,-1,-1,-1,-1],
+    [4,9,5,0,8,1,8,10,1,8,11,10,-1,-1,-1,-1],
+    [5,4,0,5,0,11,5,11,10,11,0,3,-1,-1,-1,-1],
+    [5,4,8,5,8,10,10,8,11,-1,-1,-1,-1,-1,-1,-1],
+    [9,7,8,5,7,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [9,3,0,9,5,3,5,7,3,-1,-1,-1,-1,-1,-1,-1],
+    [0,7,8,0,1,7,1,5,7,-1,-1,-1,-1,-1,-1,-1],
+    [1,5,3,3,5,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [9,7,8,9,5,7,10,1,2,-1,-1,-1,-1,-1,-1,-1],
+    [10,1,2,9,5,0,5,3,0,5,7,3,-1,-1,-1,-1],
+    [8,0,2,8,2,5,8,5,7,10,5,2,-1,-1,-1,-1],
+    [2,10,5,2,5,3,3,5,7,-1,-1,-1,-1,-1,-1,-1],
+    [7,9,5,7,8,9,3,11,2,-1,-1,-1,-1,-1,-1,-1],
+    [9,5,7,9,7,2,9,2,0,2,7,11,-1,-1,-1,-1],
+    [2,3,11,0,1,8,1,7,8,1,5,7,-1,-1,-1,-1],
+    [11,2,1,11,1,7,7,1,5,-1,-1,-1,-1,-1,-1,-1],
+    [9,5,8,8,5,7,10,1,3,10,3,11,-1,-1,-1,-1],
+    [5,7,0,5,0,9,7,11,0,1,0,10,11,10,0,-1],
+    [11,10,0,11,0,3,10,5,0,8,0,7,5,7,0,-1],
+    [11,10,5,7,11,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [10,6,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,3,5,10,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [9,0,1,5,10,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,8,3,1,9,8,5,10,6,-1,-1,-1,-1,-1,-1,-1],
+    [1,6,5,2,6,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,6,5,1,2,6,3,0,8,-1,-1,-1,-1,-1,-1,-1],
+    [9,6,5,9,0,6,0,2,6,-1,-1,-1,-1,-1,-1,-1],
+    [5,9,8,5,8,2,5,2,6,3,2,8,-1,-1,-1,-1],
+    [2,3,11,10,6,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [11,0,8,11,2,0,10,6,5,-1,-1,-1,-1,-1,-1,-1],
+    [0,1,9,2,3,11,5,10,6,-1,-1,-1,-1,-1,-1,-1],
+    [5,10,6,1,9,2,9,11,2,9,8,11,-1,-1,-1,-1],
+    [6,3,11,6,5,3,5,1,3,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,11,0,11,5,0,5,1,5,11,6,-1,-1,-1,-1],
+    [3,11,6,0,3,6,0,6,5,0,5,9,-1,-1,-1,-1],
+    [6,5,9,6,9,11,11,9,8,-1,-1,-1,-1,-1,-1,-1],
+    [5,10,6,4,7,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,3,0,4,7,3,6,5,10,-1,-1,-1,-1,-1,-1,-1],
+    [1,9,0,5,10,6,8,4,7,-1,-1,-1,-1,-1,-1,-1],
+    [10,6,5,1,9,7,1,7,3,7,9,4,-1,-1,-1,-1],
+    [6,1,2,6,5,1,4,7,8,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,5,5,2,6,3,0,4,3,4,7,-1,-1,-1,-1],
+    [8,4,7,9,0,5,0,6,5,0,2,6,-1,-1,-1,-1],
+    [7,3,9,7,9,4,3,2,9,5,9,6,2,6,9,-1],
+    [3,11,2,7,8,4,10,6,5,-1,-1,-1,-1,-1,-1,-1],
+    [5,10,6,4,7,2,4,2,0,2,7,11,-1,-1,-1,-1],
+    [0,1,9,4,7,8,2,3,11,5,10,6,-1,-1,-1,-1],
+    [9,2,1,9,11,2,9,4,11,7,11,4,5,10,6,-1],
+    [8,4,7,3,11,5,3,5,1,5,11,6,-1,-1,-1,-1],
+    [5,1,11,5,11,6,1,0,11,7,11,4,0,4,11,-1],
+    [0,5,9,0,6,5,0,3,6,11,6,3,8,4,7,-1],
+    [6,5,9,6,9,11,4,7,9,7,11,9,-1,-1,-1,-1],
+    [10,4,9,6,4,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,10,6,4,9,10,0,8,3,-1,-1,-1,-1,-1,-1,-1],
+    [10,0,1,10,6,0,6,4,0,-1,-1,-1,-1,-1,-1,-1],
+    [8,3,1,8,1,6,8,6,4,6,1,10,-1,-1,-1,-1],
+    [1,4,9,1,2,4,2,6,4,-1,-1,-1,-1,-1,-1,-1],
+    [3,0,8,1,2,9,2,4,9,2,6,4,-1,-1,-1,-1],
+    [0,2,4,4,2,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [8,3,2,8,2,4,4,2,6,-1,-1,-1,-1,-1,-1,-1],
+    [10,4,9,10,6,4,11,2,3,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,2,2,8,11,4,9,10,4,10,6,-1,-1,-1,-1],
+    [3,11,2,0,1,6,0,6,4,6,1,10,-1,-1,-1,-1],
+    [6,4,1,6,1,10,4,8,1,2,1,11,8,11,1,-1],
+    [9,6,4,9,3,6,9,1,3,11,6,3,-1,-1,-1,-1],
+    [8,11,1,8,1,0,11,6,1,9,1,4,6,4,1,-1],
+    [3,11,6,3,6,0,0,6,4,-1,-1,-1,-1,-1,-1,-1],
+    [6,4,8,11,6,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [7,10,6,7,8,10,8,9,10,-1,-1,-1,-1,-1,-1,-1],
+    [0,7,3,0,10,7,0,9,10,6,7,10,-1,-1,-1,-1],
+    [10,6,7,1,10,7,1,7,8,1,8,0,-1,-1,-1,-1],
+    [10,6,7,10,7,1,1,7,3,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,6,1,6,8,1,8,9,8,6,7,-1,-1,-1,-1],
+    [2,6,9,2,9,1,6,7,9,0,9,3,7,3,9,-1],
+    [7,8,0,7,0,6,6,0,2,-1,-1,-1,-1,-1,-1,-1],
+    [7,3,2,6,7,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [2,3,11,10,6,8,10,8,9,8,6,7,-1,-1,-1,-1],
+    [2,0,7,2,7,11,0,9,7,6,7,10,9,10,7,-1],
+    [1,8,0,1,7,8,1,10,7,6,7,10,2,3,11,-1],
+    [11,2,1,11,1,7,10,6,1,6,7,1,-1,-1,-1,-1],
+    [8,9,6,8,6,7,9,1,6,11,6,3,1,3,6,-1],
+    [0,9,1,11,6,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [7,8,0,7,0,6,3,11,0,11,6,0,-1,-1,-1,-1],
+    [7,11,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [7,6,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [3,0,8,11,7,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,1,9,11,7,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [8,1,9,8,3,1,11,7,6,-1,-1,-1,-1,-1,-1,-1],
+    [10,1,2,6,11,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,10,3,0,8,6,11,7,-1,-1,-1,-1,-1,-1,-1],
+    [2,9,0,2,10,9,6,11,7,-1,-1,-1,-1,-1,-1,-1],
+    [6,11,7,2,10,3,10,8,3,10,9,8,-1,-1,-1,-1],
+    [7,2,3,6,2,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [7,0,8,7,6,0,6,2,0,-1,-1,-1,-1,-1,-1,-1],
+    [2,7,6,2,3,7,0,1,9,-1,-1,-1,-1,-1,-1,-1],
+    [1,6,2,1,8,6,1,9,8,8,7,6,-1,-1,-1,-1],
+    [10,7,6,10,1,7,1,3,7,-1,-1,-1,-1,-1,-1,-1],
+    [10,7,6,1,7,10,1,8,7,1,0,8,-1,-1,-1,-1],
+    [0,3,7,0,7,10,0,10,9,6,10,7,-1,-1,-1,-1],
+    [7,6,10,7,10,8,8,10,9,-1,-1,-1,-1,-1,-1,-1],
+    [6,8,4,11,8,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [3,6,11,3,0,6,0,4,6,-1,-1,-1,-1,-1,-1,-1],
+    [8,6,11,8,4,6,9,0,1,-1,-1,-1,-1,-1,-1,-1],
+    [9,4,6,9,6,3,9,3,1,11,3,6,-1,-1,-1,-1],
+    [6,8,4,6,11,8,2,10,1,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,10,3,0,11,0,6,11,0,4,6,-1,-1,-1,-1],
+    [4,11,8,4,6,11,0,2,9,2,10,9,-1,-1,-1,-1],
+    [10,9,3,10,3,2,9,4,3,11,3,6,4,6,3,-1],
+    [8,2,3,8,4,2,4,6,2,-1,-1,-1,-1,-1,-1,-1],
+    [0,4,2,4,6,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,9,0,2,3,4,2,4,6,4,3,8,-1,-1,-1,-1],
+    [1,9,4,1,4,2,2,4,6,-1,-1,-1,-1,-1,-1,-1],
+    [8,1,3,8,6,1,8,4,6,6,10,1,-1,-1,-1,-1],
+    [10,1,0,10,0,6,6,0,4,-1,-1,-1,-1,-1,-1,-1],
+    [4,6,3,4,3,8,6,10,3,0,3,9,10,9,3,-1],
+    [10,9,4,6,10,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,9,5,7,6,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,3,4,9,5,11,7,6,-1,-1,-1,-1,-1,-1,-1],
+    [5,0,1,5,4,0,7,6,11,-1,-1,-1,-1,-1,-1,-1],
+    [11,7,6,8,3,4,3,5,4,3,1,5,-1,-1,-1,-1],
+    [9,5,4,10,1,2,7,6,11,-1,-1,-1,-1,-1,-1,-1],
+    [6,11,7,1,2,10,0,8,3,4,9,5,-1,-1,-1,-1],
+    [7,6,11,5,4,10,4,2,10,4,0,2,-1,-1,-1,-1],
+    [3,4,8,3,5,4,3,2,5,10,5,2,11,7,6,-1],
+    [7,2,3,7,6,2,5,4,9,-1,-1,-1,-1,-1,-1,-1],
+    [9,5,4,0,8,6,0,6,2,6,8,7,-1,-1,-1,-1],
+    [3,6,2,3,7,6,1,5,0,5,4,0,-1,-1,-1,-1],
+    [6,2,8,6,8,7,2,1,8,4,8,5,1,5,8,-1],
+    [9,5,4,10,1,6,1,7,6,1,3,7,-1,-1,-1,-1],
+    [1,6,10,1,7,6,1,0,7,8,7,0,9,5,4,-1],
+    [4,0,10,4,10,5,0,3,10,6,10,7,3,7,10,-1],
+    [7,6,10,7,10,8,5,4,10,4,8,10,-1,-1,-1,-1],
+    [6,9,5,6,11,9,11,8,9,-1,-1,-1,-1,-1,-1,-1],
+    [3,6,11,0,6,3,0,5,6,0,9,5,-1,-1,-1,-1],
+    [0,11,8,0,5,11,0,1,5,5,6,11,-1,-1,-1,-1],
+    [6,11,3,6,3,5,5,3,1,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,10,9,5,11,9,11,8,11,5,6,-1,-1,-1,-1],
+    [0,11,3,0,6,11,0,9,6,5,6,9,1,2,10,-1],
+    [11,8,5,11,5,6,8,0,5,10,5,2,0,2,5,-1],
+    [6,11,3,6,3,5,2,10,3,10,5,3,-1,-1,-1,-1],
+    [5,8,9,5,2,8,5,6,2,3,8,2,-1,-1,-1,-1],
+    [9,5,6,9,6,0,0,6,2,-1,-1,-1,-1,-1,-1,-1],
+    [1,5,8,1,8,0,5,6,8,3,8,2,6,2,8,-1],
+    [1,5,6,2,1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,3,6,1,6,10,3,8,6,5,6,9,8,9,6,-1],
+    [10,1,0,10,0,6,9,5,0,5,6,0,-1,-1,-1,-1],
+    [0,3,8,5,6,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [10,5,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [11,5,10,7,5,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [11,5,10,11,7,5,8,3,0,-1,-1,-1,-1,-1,-1,-1],
+    [5,11,7,5,10,11,1,9,0,-1,-1,-1,-1,-1,-1,-1],
+    [10,7,5,10,11,7,9,8,1,8,3,1,-1,-1,-1,-1],
+    [11,1,2,11,7,1,7,5,1,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,3,1,2,7,1,7,5,7,2,11,-1,-1,-1,-1],
+    [9,7,5,9,2,7,9,0,2,2,11,7,-1,-1,-1,-1],
+    [7,5,2,7,2,11,5,9,2,3,2,8,9,8,2,-1],
+    [2,5,10,2,3,5,3,7,5,-1,-1,-1,-1,-1,-1,-1],
+    [8,2,0,8,5,2,8,7,5,10,2,5,-1,-1,-1,-1],
+    [9,0,1,5,10,3,5,3,7,3,10,2,-1,-1,-1,-1],
+    [9,8,2,9,2,1,8,7,2,10,2,5,7,5,2,-1],
+    [1,3,5,3,7,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,7,0,7,1,1,7,5,-1,-1,-1,-1,-1,-1,-1],
+    [9,0,3,9,3,5,5,3,7,-1,-1,-1,-1,-1,-1,-1],
+    [9,8,7,5,9,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [5,8,4,5,10,8,10,11,8,-1,-1,-1,-1,-1,-1,-1],
+    [5,0,4,5,11,0,5,10,11,11,3,0,-1,-1,-1,-1],
+    [0,1,9,8,4,10,8,10,11,10,4,5,-1,-1,-1,-1],
+    [10,11,4,10,4,5,11,3,4,9,4,1,3,1,4,-1],
+    [2,5,1,2,8,5,2,11,8,4,5,8,-1,-1,-1,-1],
+    [0,4,11,0,11,3,4,5,11,2,11,1,5,1,11,-1],
+    [0,2,5,0,5,9,2,11,5,4,5,8,11,8,5,-1],
+    [9,4,5,2,11,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [2,5,10,3,5,2,3,4,5,3,8,4,-1,-1,-1,-1],
+    [5,10,2,5,2,4,4,2,0,-1,-1,-1,-1,-1,-1,-1],
+    [3,10,2,3,5,10,3,8,5,4,5,8,0,1,9,-1],
+    [5,10,2,5,2,4,1,9,2,9,4,2,-1,-1,-1,-1],
+    [8,4,5,8,5,3,3,5,1,-1,-1,-1,-1,-1,-1,-1],
+    [0,4,5,1,0,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [8,4,5,8,5,3,9,0,5,0,3,5,-1,-1,-1,-1],
+    [9,4,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,11,7,4,9,11,9,10,11,-1,-1,-1,-1,-1,-1,-1],
+    [0,8,3,4,9,7,9,11,7,9,10,11,-1,-1,-1,-1],
+    [1,10,11,1,11,4,1,4,0,7,4,11,-1,-1,-1,-1],
+    [3,1,4,3,4,8,1,10,4,7,4,11,10,11,4,-1],
+    [4,11,7,9,11,4,9,2,11,9,1,2,-1,-1,-1,-1],
+    [9,7,4,9,11,7,9,1,11,2,11,1,0,8,3,-1],
+    [11,7,4,11,4,2,2,4,0,-1,-1,-1,-1,-1,-1,-1],
+    [11,7,4,11,4,2,8,3,4,3,2,4,-1,-1,-1,-1],
+    [2,9,10,2,7,9,2,3,7,7,4,9,-1,-1,-1,-1],
+    [9,10,7,9,7,4,10,2,7,8,7,0,2,0,7,-1],
+    [3,7,10,3,10,2,7,4,10,1,10,0,4,0,10,-1],
+    [1,10,2,8,7,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,9,1,4,1,7,7,1,3,-1,-1,-1,-1,-1,-1,-1],
+    [4,9,1,4,1,7,0,8,1,8,7,1,-1,-1,-1,-1],
+    [4,0,3,7,4,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [4,8,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [9,10,8,10,11,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [3,0,9,3,9,11,11,9,10,-1,-1,-1,-1,-1,-1,-1],
+    [0,1,10,0,10,8,8,10,11,-1,-1,-1,-1,-1,-1,-1],
+    [3,1,10,11,3,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,2,11,1,11,9,9,11,8,-1,-1,-1,-1,-1,-1,-1],
+    [3,0,9,3,9,11,1,2,9,2,11,9,-1,-1,-1,-1],
+    [0,2,11,8,0,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [3,2,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [2,3,8,2,8,10,10,8,9,-1,-1,-1,-1,-1,-1,-1],
+    [9,10,2,0,9,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [2,3,8,2,8,10,0,1,8,1,10,8,-1,-1,-1,-1],
+    [1,10,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [1,3,8,9,1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,9,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [0,3,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::genetics::molecule_view::ViewAtom;
+
+    // ---- fixtures --------------------------------------------------------
+
+    /// A small water-like cluster (O + 2 H) with detected bonds.
+    fn water() -> ViewMolecule {
+        let mut mol = ViewMolecule {
+            atoms: vec![
+                ViewAtom::new([0.0, 0.0, 0.0], "O"),
+                ViewAtom::new([0.96, 0.0, 0.0], "H"),
+                ViewAtom::new([-0.24, 0.93, 0.0], "H"),
+            ],
+            bonds: vec![],
+        };
+        mol.bonds = molecule_view::detect_bonds(&mol.atoms);
+        mol
+    }
+
+    /// A short straight Cα trace of `n` residues spaced ~3.8 Å (one peptide
+    /// unit), all coil.
+    fn straight_backbone(n: usize) -> Vec<BackbonePoint> {
+        (0..n)
+            .map(|i| BackbonePoint::new([i as f32 * 3.8, 0.0, 0.0], None))
+            .collect()
+    }
+
+    /// An analytic sphere field of radius `r` centred at the grid centre, on
+    /// an `n³` grid spanning `[-span, span]³`. `value = r − |p|`, so the
+    /// `iso = 0` level set is exactly the sphere of radius `r`.
+    fn sphere_field(n: usize, span: f32, r: f32) -> (ScalarField, [f32; 3]) {
+        let spacing = 2.0 * span / (n as f32 - 1.0);
+        let origin = [-span, -span, -span];
+        let center = [0.0, 0.0, 0.0];
+        let mut values = vec![0.0_f32; n * n * n];
+        for z in 0..n {
+            for y in 0..n {
+                for x in 0..n {
+                    let p = [
+                        origin[0] + x as f32 * spacing,
+                        origin[1] + y as f32 * spacing,
+                        origin[2] + z as f32 * spacing,
+                    ];
+                    let d = ((p[0] - center[0]).powi(2)
+                        + (p[1] - center[1]).powi(2)
+                        + (p[2] - center[2]).powi(2))
+                    .sqrt();
+                    values[x + n * (y + n * z)] = r - d;
+                }
+            }
+        }
+        (
+            ScalarField {
+                origin,
+                spacing: [spacing, spacing, spacing],
+                dims: [n, n, n],
+                values,
+            },
+            center,
+        )
+    }
+
+    // ---- Representation enum / picker logic ------------------------------
+
+    #[test]
+    fn representation_default_is_ball_and_stick() {
+        assert_eq!(Representation::default(), Representation::BallAndStick);
+    }
+
+    #[test]
+    fn representation_all_covers_every_variant_and_has_unique_labels() {
+        assert_eq!(Representation::ALL.len(), 5);
+        // Labels and tokens are all distinct (so the picker rows + wire tokens
+        // don't collide).
+        let mut labels: Vec<&str> = Representation::ALL.iter().map(|r| r.label()).collect();
+        labels.sort_unstable();
+        labels.dedup();
+        assert_eq!(labels.len(), 5, "labels must be unique");
+        let mut tokens: Vec<&str> = Representation::ALL.iter().map(|r| r.token()).collect();
+        tokens.sort_unstable();
+        tokens.dedup();
+        assert_eq!(tokens.len(), 5, "tokens must be unique");
+    }
+
+    #[test]
+    fn representation_token_round_trips() {
+        for rep in Representation::ALL {
+            assert_eq!(
+                Representation::from_token(rep.token()),
+                Some(rep),
+                "token {:?} must round-trip",
+                rep.token()
+            );
+        }
+        // A few human synonyms an agent might send.
+        assert_eq!(
+            Representation::from_token("CARTOON"),
+            Some(Representation::Cartoon)
+        );
+        assert_eq!(
+            Representation::from_token("ribbon"),
+            Some(Representation::Cartoon)
+        );
+        assert_eq!(
+            Representation::from_token(" CPK "),
+            Some(Representation::Spacefill)
+        );
+        assert_eq!(
+            Representation::from_token("licorice"),
+            Some(Representation::Sticks)
+        );
+        assert_eq!(Representation::from_token("nonsense"), None);
+        assert_eq!(Representation::from_token(""), None);
+    }
+
+    #[test]
+    fn only_cartoon_needs_a_backbone() {
+        for rep in Representation::ALL {
+            assert_eq!(rep.needs_backbone(), rep == Representation::Cartoon);
+        }
+    }
+
+    // ---- build_mesh dispatch ---------------------------------------------
+
+    #[test]
+    fn build_mesh_dispatches_each_representation() {
+        let mol = water();
+        let bb = straight_backbone(5);
+        let p = MolvizParams::default();
+        // Atom-based modes produce geometry for water.
+        for rep in [
+            Representation::BallAndStick,
+            Representation::Sticks,
+            Representation::Spacefill,
+            Representation::Surface,
+        ] {
+            let m = build_mesh(&mol, rep, &[], &p);
+            assert!(
+                m.triangle_count() > 0,
+                "{:?} should mesh a 3-atom molecule",
+                rep
+            );
+        }
+        // Cartoon needs the backbone, not the atom list.
+        let cartoon = build_mesh(&mol, Representation::Cartoon, &bb, &p);
+        assert!(cartoon.triangle_count() > 0, "cartoon should mesh a trace");
+    }
+
+    // ---- empty / degenerate inputs (no panic) ----------------------------
+
+    #[test]
+    fn empty_molecule_yields_empty_meshes_no_panic() {
+        let empty = ViewMolecule::new();
+        let p = MolvizParams::default();
+        for rep in Representation::ALL {
+            let m = build_mesh(&empty, rep, &[], &p);
+            assert!(
+                m.triangles.is_empty(),
+                "{:?} on an empty molecule must be empty",
+                rep
+            );
+        }
+        // The surface field generator returns None (nothing to mesh).
+        assert!(union_of_balls_field(&empty, &p).is_none());
+    }
+
+    #[test]
+    fn single_atom_molecule_does_not_panic() {
+        let mut one = ViewMolecule::new();
+        one.atoms.push(ViewAtom::new([1.0, 2.0, 3.0], "C"));
+        let p = MolvizParams::default();
+        // Sticks: no bonds → no geometry, but must not panic.
+        assert!(sticks(&one, p.stick_radius).triangles.is_empty());
+        // Spacefill: one sphere.
+        assert!(molecule_view::spacefill(&one).triangle_count() > 0);
+        // Surface: a single ball still meshes to a closed blob.
+        let surf = surface(&one, &p);
+        assert!(surf.triangle_count() > 0);
+        // Cartoon with a single backbone point → one sphere (not empty).
+        let bb = vec![BackbonePoint::new([0.0, 0.0, 0.0], None)];
+        assert!(cartoon(&bb, &p).triangle_count() > 0);
+    }
+
+    #[test]
+    fn empty_backbone_cartoon_is_empty() {
+        let p = MolvizParams::default();
+        assert!(cartoon(&[], &p).triangles.is_empty());
+    }
+
+    // ---- Catmull-Rom spline passes through control points -----------------
+
+    #[test]
+    fn catmull_rom3_endpoints_interpolate_controls() {
+        let p0 = [0.0, 0.0, 0.0];
+        let p1 = [1.0, 2.0, 3.0];
+        let p2 = [4.0, 0.0, -1.0];
+        let p3 = [5.0, 5.0, 5.0];
+        // t=0 → p1, t=1 → p2 (the defining property of Catmull-Rom).
+        let a = catmull_rom3(p0, p1, p2, p3, 0.0);
+        let b = catmull_rom3(p0, p1, p2, p3, 1.0);
+        for k in 0..3 {
+            assert!((a[k] - p1[k]).abs() < 1e-5);
+            assert!((b[k] - p2[k]).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn backbone_spline_passes_through_every_control_point() {
+        // Use a curved trace so this is a non-trivial check.
+        let bb: Vec<BackbonePoint> = (0..6)
+            .map(|i| {
+                let t = i as f32;
+                BackbonePoint::new(
+                    [t * 3.8, (t * 0.7).sin() * 4.0, (t * 0.4).cos() * 2.0],
+                    None,
+                )
+            })
+            .collect();
+        let samples_per_span = 10;
+        let line = sample_backbone_spline(&bb, samples_per_span);
+        // Every control point must appear (numerically) among the samples:
+        // control k is sample k*samples_per_span (span starts are exact), and
+        // the final control is the appended last sample.
+        for (k, ctrl) in bb.iter().enumerate() {
+            let sample_idx = if k == bb.len() - 1 {
+                line.len() - 1
+            } else {
+                k * samples_per_span
+            };
+            let s = line[sample_idx].pos;
+            for c in 0..3 {
+                assert!(
+                    (s[c] - ctrl.pos[c]).abs() < 1e-4,
+                    "control {k} not interpolated: {:?} vs {:?}",
+                    s,
+                    ctrl.pos
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cartoon_radius_follows_secondary_structure() {
+        // A helix point is fatter than a coil point.
+        let helix = BackbonePoint::new([0.0, 0.0, 0.0], Some('H'));
+        let strand = BackbonePoint::new([0.0, 0.0, 0.0], Some('E'));
+        let coil = BackbonePoint::new([0.0, 0.0, 0.0], None);
+        assert!(helix.radius_scale() > strand.radius_scale());
+        assert!(strand.radius_scale() > coil.radius_scale());
+    }
+
+    #[test]
+    fn cartoon_bounding_box_spans_the_trace() {
+        let bb = straight_backbone(8);
+        let p = MolvizParams::default();
+        let mesh = cartoon(&bb, &p);
+        let (min, max) = mesh.bounding_box().expect("non-empty");
+        // The tube must span roughly the trace length on x (0 .. 7*3.8).
+        assert!(min[0] < 1.0);
+        assert!(max[0] > 7.0 * 3.8 - 1.0);
+    }
+
+    // ---- Marching cubes on an analytic sphere ----------------------------
+
+    #[test]
+    fn marching_cubes_sphere_is_closed_and_on_the_surface() {
+        // A radius-3 sphere on a 32³ grid over [-5, 5].
+        let r = 3.0_f32;
+        let (field, center) = sphere_field(32, 5.0, r);
+        let tris = marching_cubes(&field, 0.0);
+
+        // Plausible counts: a sphere isosurface at this resolution has many
+        // hundreds of triangles, and (crucially) more than a handful.
+        assert!(
+            tris.len() > 200,
+            "expected a few hundred triangles, got {}",
+            tris.len()
+        );
+
+        // Every vertex must lie ~on the sphere (within ~1 cell of radius r).
+        let spacing = field.spacing[0];
+        let tol = spacing * 1.5;
+        for t in &tris {
+            for v in &t.vertices {
+                let d = ((v[0] - center[0]).powi(2)
+                    + (v[1] - center[1]).powi(2)
+                    + (v[2] - center[2]).powi(2))
+                .sqrt();
+                assert!(
+                    (d - r).abs() < tol,
+                    "vertex radius {d} not within {tol} of {r}"
+                );
+            }
+        }
+
+        // Closedness: in a watertight triangle mesh every undirected edge is
+        // shared by an even number of triangles. Quantise vertices to merge
+        // float duplicates from independent cubes, then count edge parity.
+        assert!(mesh_is_closed(&tris, spacing), "sphere mesh must be closed");
+    }
+
+    #[test]
+    fn marching_cubes_vertex_count_scales_with_resolution() {
+        let r = 3.0_f32;
+        let (coarse, _) = sphere_field(16, 5.0, r);
+        let (fine, _) = sphere_field(40, 5.0, r);
+        let nc = marching_cubes(&coarse, 0.0).len();
+        let nf = marching_cubes(&fine, 0.0).len();
+        // A finer grid yields strictly more triangles for the same sphere.
+        assert!(nf > nc, "finer grid {nf} should exceed coarse {nc}");
+    }
+
+    #[test]
+    fn marching_cubes_empty_field_is_empty() {
+        // A field that is entirely below the iso (all "outside") → no surface.
+        let field = ScalarField {
+            origin: [0.0, 0.0, 0.0],
+            spacing: [1.0, 1.0, 1.0],
+            dims: [4, 4, 4],
+            values: vec![-1.0; 64],
+        };
+        assert!(marching_cubes(&field, 0.0).is_empty());
+        // A degenerate (too-thin) grid → no cubes → empty.
+        let thin = ScalarField {
+            origin: [0.0, 0.0, 0.0],
+            spacing: [1.0, 1.0, 1.0],
+            dims: [1, 4, 4],
+            values: vec![1.0; 16],
+        };
+        assert!(marching_cubes(&thin, 0.0).is_empty());
+    }
+
+    // ---- union-of-balls surface field ------------------------------------
+
+    #[test]
+    fn union_of_balls_field_has_expected_grid_and_sign() {
+        let mol = water();
+        let p = MolvizParams::default();
+        let field = union_of_balls_field(&mol, &p).expect("non-empty");
+        // Grid is non-trivial and the value buffer matches the dims.
+        assert_eq!(
+            field.values.len(),
+            field.dims[0] * field.dims[1] * field.dims[2]
+        );
+        assert!(field.dims.iter().all(|&d| d >= 2));
+        // The field is positive at an atom centre (inside the union) and
+        // negative far outside the box.
+        let o = mol.atoms[0].pos;
+        // Nearest grid sample to the O atom.
+        let gx = ((o[0] - field.origin[0]) / field.spacing[0]).round() as usize;
+        let gy = ((o[1] - field.origin[1]) / field.spacing[1]).round() as usize;
+        let gz = ((o[2] - field.origin[2]) / field.spacing[2]).round() as usize;
+        assert!(
+            field.at(gx, gy, gz) > 0.0,
+            "field must be positive inside an atom"
+        );
+        // A corner of the grid (far from any atom) is outside the union.
+        assert!(field.at(0, 0, 0) <= 0.0, "grid corner must be outside");
+    }
+
+    #[test]
+    fn surface_encloses_the_atoms() {
+        // The union-of-balls surface of water must have a bounding box that
+        // contains every atom centre (the surface wraps the atoms).
+        let mol = water();
+        let p = MolvizParams::default();
+        let mesh = surface(&mol, &p);
+        let (min, max) = mesh.bounding_box().expect("non-empty surface");
+        for a in &mol.atoms {
+            for k in 0..3 {
+                assert!(a.pos[k] >= min[k] - 1e-3 && a.pos[k] <= max[k] + 1e-3);
+            }
+        }
+    }
+
+    #[test]
+    fn surface_grid_resolution_is_clamped() {
+        // A pathological grid_max is clamped into [8, 192] so we never try to
+        // allocate an absurd grid (and never produce a zero-cell grid).
+        let mol = water();
+        let mut p = MolvizParams::default();
+        p.grid_max = 1; // below the floor
+        let field = union_of_balls_field(&mol, &p).expect("non-empty");
+        assert!(field.dims.iter().all(|&d| d >= 2));
+        p.grid_max = 100_000; // absurd; clamped to 192
+        let field = union_of_balls_field(&mol, &p).expect("non-empty");
+        let longest = *field.dims.iter().max().unwrap();
+        assert!(longest <= 193, "longest axis {longest} must be clamped");
+    }
+
+    // ---- sticks ----------------------------------------------------------
+
+    #[test]
+    fn sticks_meshes_only_bonded_atoms() {
+        let mol = water(); // O bonded to 2 H
+        let mesh = sticks(&mol, 0.18);
+        assert!(mesh.triangle_count() > 0);
+        // A molecule with no bonds → empty sticks mesh.
+        let mut unbonded = ViewMolecule::new();
+        unbonded.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        unbonded.atoms.push(ViewAtom::new([10.0, 0.0, 0.0], "C"));
+        assert!(sticks(&unbonded, 0.18).triangles.is_empty());
+    }
+
+    // ---- helpers for the closedness check --------------------------------
+
+    /// Check a triangle soup is closed: quantise vertices to a grid finer than
+    /// the cell size to merge duplicates, then every undirected edge must be
+    /// shared by an even number of triangles.
+    fn mesh_is_closed(tris: &[StlTriangle], spacing: f32) -> bool {
+        use std::collections::HashMap;
+        let q = spacing / 100.0; // quantisation step (well below MC vertex spacing)
+        let key = |v: [f32; 3]| -> (i64, i64, i64) {
+            (
+                (v[0] / q).round() as i64,
+                (v[1] / q).round() as i64,
+                (v[2] / q).round() as i64,
+            )
+        };
+        let mut edges: HashMap<((i64, i64, i64), (i64, i64, i64)), usize> = HashMap::new();
+        for t in tris {
+            let vs = [key(t.vertices[0]), key(t.vertices[1]), key(t.vertices[2])];
+            for e in 0..3 {
+                let a = vs[e];
+                let b = vs[(e + 1) % 3];
+                let undirected = if a <= b { (a, b) } else { (b, a) };
+                *edges.entry(undirected).or_default() += 1;
+            }
+        }
+        edges.values().all(|&count| count % 2 == 0)
+    }
+}

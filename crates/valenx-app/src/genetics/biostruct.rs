@@ -16,6 +16,7 @@ use valenx_biostruct::superpose::{kabsch, rmsd};
 
 use super::common;
 use super::molecule_view::{self, ViewMolecule};
+use crate::molviz::{self, BackbonePoint, MolvizParams, Representation};
 use crate::ValenxApp;
 
 /// Which structure sub-tool is showing.
@@ -49,6 +50,12 @@ pub struct BiostructPanel {
     result: String,
     /// Undo / redo over both structure-text inputs + the clash tol.
     history: crate::undo::History<BiostructSnapshot>,
+    /// Which molecular-viewer representation the "Show in 3D viewport" button
+    /// builds. Reactive picker; default [`Representation::BallAndStick`].
+    pub(crate) representation: Representation,
+    /// Per-representation mesh-generation tunables (surface grid resolution,
+    /// cartoon tube, ball/stick radii). Mutated by the picker's sliders.
+    pub(crate) molviz_params: MolvizParams,
 }
 
 impl BiostructPanel {
@@ -120,6 +127,8 @@ impl Default for BiostructPanel {
             error: None,
             result: String::new(),
             history: crate::undo::History::new(),
+            representation: Representation::default(),
+            molviz_params: MolvizParams::default(),
         }
     }
 }
@@ -172,17 +181,17 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     // --- 3-D viewport integration ---------------------------------
     // The structure-A text feeds the viewer for every tool (it is the
     // analyse / Ramachandran input and the mobile superpose
-    // structure). Pushes a ball-and-stick / spacefill mesh into the
-    // app's wgpu 3-D viewport.
+    // structure). A reactive representation picker selects how it is
+    // meshed (ball-and-stick / sticks / spacefill / cartoon / surface),
+    // and "Show in 3D viewport" pushes that mesh into the app's wgpu 3-D
+    // viewport. The picker is a row of named `selectable_value` widgets,
+    // so an agent can switch representation through the accessibility
+    // tree by widget name.
     if !app.genetics.biostruct.structure_a.trim().is_empty() {
-        ui.horizontal(|ui| {
-            if ui.button("Show in 3D viewport").clicked() {
-                show_in_viewport(app, false);
-            }
-            if ui.button("Show (spacefill)").clicked() {
-                show_in_viewport(app, true);
-            }
-        });
+        draw_representation_picker(app, ui);
+        if ui.button("Show in 3D viewport").clicked() {
+            show_in_viewport(app);
+        }
     }
 
     let p = &app.genetics.biostruct;
@@ -193,29 +202,130 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
 }
 
-/// Build the structure-A text into a ball-and-stick (or spacefill)
-/// mesh and push it into the app's 3-D viewport.
-fn show_in_viewport(app: &mut ValenxApp, spacefill: bool) {
+/// Draw the reactive **representation picker** for the 3-D viewer: a row of
+/// named `selectable_value` buttons (one per [`Representation`]) plus the
+/// per-representation tuning controls. The named widgets are what makes the
+/// representation AI-drivable — an agent flips representation by selecting the
+/// button by its `label()` through the accessibility tree.
+fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    let p = &mut app.genetics.biostruct;
+    common::section(ui, "3-D representation");
+    ui.horizontal_wrapped(|ui| {
+        for rep in Representation::ALL {
+            ui.selectable_value(&mut p.representation, rep, rep.label())
+                .on_hover_text(match rep {
+                    Representation::BallAndStick => "Element spheres + bond cylinders.",
+                    Representation::Sticks => "Bonds only (licorice).",
+                    Representation::Spacefill => "Full van-der-Waals spheres (CPK).",
+                    Representation::Cartoon => {
+                        "Smooth Catmull-Rom ribbon/tube through the Cα backbone \
+                         (helices/strands fatten via DSSP)."
+                    }
+                    Representation::Surface => "Marching-cubes molecular surface (union-of-balls).",
+                });
+        }
+    });
+    // Per-representation tuning, only shown when relevant.
+    match p.representation {
+        Representation::Surface => {
+            ui.horizontal(|ui| {
+                ui.label("Surface grid:");
+                ui.add(egui::Slider::new(&mut p.molviz_params.grid_max, 16..=128).text("cells"))
+                    .on_hover_text(
+                        "Marching-cubes resolution along the longest axis — higher is \
+                     smoother but costs O(n³).",
+                    );
+                ui.add(
+                    egui::DragValue::new(&mut p.molviz_params.probe_radius)
+                        .speed(0.05)
+                        .range(0.0..=3.0)
+                        .prefix("probe Å "),
+                )
+                .on_hover_text("Probe radius inflating each atom before the isosurface.");
+            });
+        }
+        Representation::Cartoon => {
+            ui.horizontal(|ui| {
+                ui.label("Tube radius (Å):");
+                ui.add(
+                    egui::DragValue::new(&mut p.molviz_params.tube_radius)
+                        .speed(0.02)
+                        .range(0.1..=2.0),
+                );
+            });
+        }
+        Representation::BallAndStick | Representation::Sticks => {
+            ui.horizontal(|ui| {
+                ui.label("Stick radius (Å):");
+                ui.add(
+                    egui::DragValue::new(&mut p.molviz_params.stick_radius)
+                        .speed(0.01)
+                        .range(0.02..=0.6),
+                );
+            });
+        }
+        Representation::Spacefill => {}
+    }
+}
+
+/// Build the structure-A text into the selected [`Representation`]'s mesh and
+/// push it into the app's 3-D viewport. For the cartoon, the Cα backbone and a
+/// per-residue DSSP secondary-structure track are extracted first; for the
+/// other modes the atom/bond [`ViewMolecule`] is meshed.
+fn show_in_viewport(app: &mut ValenxApp) {
+    let rep = app.genetics.biostruct.representation;
+    let params = app.genetics.biostruct.molviz_params;
     match read_structure(&app.genetics.biostruct.structure_a, "viewer") {
         Ok(s) => {
+            let backbone = if rep.needs_backbone() {
+                ca_backbone(&s)
+            } else {
+                Vec::new()
+            };
+            // A cartoon needs a real Cα trace — fail loudly rather than
+            // silently showing nothing.
+            if rep.needs_backbone() && backbone.len() < 2 {
+                app.genetics.biostruct.error = Some(
+                    "cartoon needs a protein backbone (≥ 2 Cα atoms) — this \
+                     structure has none; try ball-and-stick or surface"
+                        .to_string(),
+                );
+                return;
+            }
             let view = ViewMolecule::from_biostruct(&s);
-            let mesh = if spacefill {
-                molecule_view::spacefill(&view)
-            } else {
-                molecule_view::ball_and_stick(&view, 0.28, 0.18)
-            };
-            let label = if spacefill {
-                "structure.spacefill"
-            } else {
-                "structure.ball-stick"
-            };
-            match molecule_view::show_molecule(app, mesh, label) {
+            let mesh = molviz::build_mesh(&view, rep, &backbone, &params);
+            let label = format!("structure.{}", rep.token());
+            match molecule_view::show_molecule(app, mesh, &label) {
                 Ok(_) => app.genetics.biostruct.error = None,
                 Err(e) => app.genetics.biostruct.error = Some(e),
             }
         }
         Err(e) => app.genetics.biostruct.error = Some(e.to_string()),
     }
+}
+
+/// Extract the per-residue Cα backbone control points of a structure's first
+/// model, tagged with their DSSP secondary-structure code, for the cartoon
+/// representation. Residues without a Cα (ligands, waters, missing atoms) are
+/// skipped; the DSSP track is computed per chain via [`valenx_biostruct::dssp`]
+/// and indexed by residue position so each kept Cα carries its own state.
+fn ca_backbone(s: &valenx_biostruct::structure::Structure) -> Vec<BackbonePoint> {
+    use valenx_biostruct::dssp;
+    let mut out = Vec::new();
+    for chain in &s.first_model().chains {
+        // Per-chain DSSP state, one entry per residue in chain order.
+        let states = dssp::assign_chain(chain).states;
+        for (i, res) in chain.residues.iter().enumerate() {
+            if let Some(ca) = res.ca() {
+                let ss = states.get(i).map(|st| st.code());
+                out.push(BackbonePoint::new(
+                    [ca.coord.x as f32, ca.coord.y as f32, ca.coord.z as f32],
+                    ss,
+                ));
+            }
+        }
+    }
+    out
 }
 
 fn structure_text_input(
@@ -586,5 +696,71 @@ mod headless_ui_tests {
         };
         run_superpose(&mut p);
         assert!(p.error.is_some(), "superpose should error with no Cα atoms");
+    }
+
+    #[test]
+    fn draws_with_every_representation_selected_without_panic() {
+        // The representation picker + its per-mode tuning row must draw for
+        // every representation (the demo PDB is loaded by default, so the
+        // picker is shown).
+        for rep in Representation::ALL {
+            let mut app = app_with_panel();
+            app.genetics.biostruct.representation = rep;
+            draw_headless(&mut app);
+        }
+    }
+
+    #[test]
+    fn show_in_viewport_meshes_the_demo_for_each_representation() {
+        // The demo glycine peptide is a real protein backbone, so every
+        // representation — including cartoon (needs Cα) and surface (marching
+        // cubes) — produces a non-empty mesh in the viewport without error.
+        for rep in Representation::ALL {
+            let mut app = app_with_panel();
+            app.genetics.biostruct.representation = rep;
+            // Keep the surface grid small so the test stays fast.
+            app.genetics.biostruct.molviz_params.grid_max = 24;
+            super::show_in_viewport(&mut app);
+            assert!(
+                app.genetics.biostruct.error.is_none(),
+                "{rep:?} errored: {:?}",
+                app.genetics.biostruct.error
+            );
+            assert!(
+                app.stl.is_some(),
+                "{rep:?} should have pushed a mesh to the viewport"
+            );
+        }
+    }
+
+    #[test]
+    fn cartoon_errors_on_a_structure_with_no_backbone() {
+        // A hetero-only structure (a lone zinc ion) has no Cα trace, so the
+        // cartoon representation must fail loudly rather than show nothing.
+        let mut app = app_with_panel();
+        app.genetics.biostruct.representation = Representation::Cartoon;
+        app.genetics.biostruct.structure_a = "\
+HETATM    1 ZN    ZN A   1       0.000   0.000   0.000  1.00  0.00          ZN
+END
+"
+        .to_string();
+        super::show_in_viewport(&mut app);
+        assert!(
+            app.genetics.biostruct.error.is_some(),
+            "cartoon with no backbone should surface an error"
+        );
+    }
+
+    #[test]
+    fn ca_backbone_extracts_dssp_tagged_trace() {
+        // The demo 3-glycine peptide yields 3 Cα control points, each carrying
+        // a DSSP secondary-structure code (so the cartoon tube can modulate).
+        let s = read_structure(DEMO_PDB, "demo").unwrap();
+        let bb = super::ca_backbone(&s);
+        assert_eq!(bb.len(), 3, "three Cα control points");
+        assert!(
+            bb.iter().all(|p| p.ss.is_some()),
+            "every backbone point carries a DSSP code"
+        );
     }
 }
