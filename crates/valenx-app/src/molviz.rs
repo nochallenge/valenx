@@ -37,10 +37,17 @@
 //! - The **surface** is a *union-of-balls* (a.k.a. a fattened van-der-Waals /
 //!   solvent-accessible blend), **not** a rolling-probe solvent-excluded
 //!   surface (SES) with re-entrant patches — the probe radius simply inflates
-//!   each ball before the isosurface is extracted. A true SES (or a Gaussian
-//!   *density* isosurface, the molchanica/QuteMol style) is a documented
-//!   follow-up; the marching-cubes machinery here meshes any scalar field, so
-//!   swapping the field generator is all a density surface would need.
+//!   each ball before the isosurface is extracted. A true SES with re-entrant
+//!   patches remains a documented follow-up.
+//! - **[`Representation::Density`]** is the Gaussian-density isosurface (the
+//!   molchanica/QuteMol "volume" style): each atom is splatted as a Gaussian and
+//!   the *sum* is meshed at a chosen iso-level — reusing the same marching-cubes
+//!   machinery with a different field generator ([`gaussian_density_field`]). It
+//!   is a phenomenological smooth-blob model (a sum of Gaussians), **not** a
+//!   quantum-mechanical electron density: no wavefunction, no basis set, no
+//!   bonding charge redistribution. The iso-level is read as a fraction of one
+//!   atom's peak amplitude, so it controls how far down each atom's Gaussian
+//!   tail the blob's boundary sits (lower iso → fatter, more-merged blobs).
 //! - Surface quality is set by the **grid resolution** (`grid_max` cells along
 //!   the longest box axis). The default keeps a few-hundred-atom structure
 //!   responsive; large structures should lower it (cost is `O(cells³)`). The
@@ -84,17 +91,22 @@ pub enum Representation {
     Cartoon,
     /// A marching-cubes isosurface of a union-of-balls (molecular surface).
     Surface,
+    /// A marching-cubes isosurface of a **Gaussian electron-density-like
+    /// field** (a sum of per-atom Gaussians) at a chosen iso-level — the
+    /// QuteMol/Chimera "volume / density" blob view.
+    Density,
 }
 
 impl Representation {
     /// Every representation, in picker order. Used to build the picker row and
     /// by the round-trip label test.
-    pub const ALL: [Representation; 5] = [
+    pub const ALL: [Representation; 6] = [
         Representation::BallAndStick,
         Representation::Sticks,
         Representation::Spacefill,
         Representation::Cartoon,
         Representation::Surface,
+        Representation::Density,
     ];
 
     /// Short human label for the picker button / viewport header.
@@ -105,6 +117,7 @@ impl Representation {
             Representation::Spacefill => "Spacefill",
             Representation::Cartoon => "Cartoon",
             Representation::Surface => "Surface",
+            Representation::Density => "Density",
         }
     }
 
@@ -117,6 +130,7 @@ impl Representation {
             Representation::Spacefill => "spacefill",
             Representation::Cartoon => "cartoon",
             Representation::Surface => "surface",
+            Representation::Density => "density",
         }
     }
 
@@ -132,6 +146,9 @@ impl Representation {
             "spacefill" | "cpk" | "vdw" | "space-fill" => Some(Representation::Spacefill),
             "cartoon" | "ribbon" | "tube" => Some(Representation::Cartoon),
             "surface" | "sas" | "ses" | "molecular-surface" => Some(Representation::Surface),
+            "density" | "volume" | "electron-density" | "blob" | "isosurface" => {
+                Some(Representation::Density)
+            }
             _ => None,
         }
     }
@@ -172,6 +189,7 @@ pub fn build_mesh(
         Representation::Sticks => sticks(mol, params.stick_radius),
         Representation::Cartoon => cartoon(backbone, params),
         Representation::Surface => surface(mol, params),
+        Representation::Density => density_surface(mol, params),
     }
 }
 
@@ -197,6 +215,23 @@ pub struct MolvizParams {
     /// Surface: max grid cells along the longest bounding-box axis (quality vs
     /// cost — cost is `O(grid_max³)`).
     pub grid_max: usize,
+    /// Density: Gaussian width σ (ångström) of each atom's contribution to the
+    /// density field. Larger σ → smoother, fatter, more-merged blobs.
+    pub density_sigma: f32,
+    /// Density: iso-level (as a fraction of the per-atom peak `density_amplitude`)
+    /// at which the blob isosurface is extracted. Must be in `(0, 1)` to give a
+    /// surface around a lone atom; ≥ the peak amplitude yields an empty mesh.
+    pub density_iso: f32,
+    /// Density: the peak amplitude a single atom contributes at its own centre,
+    /// before the per-element weighting. The iso-level is read relative to this.
+    pub density_amplitude: f32,
+    /// Density: whether each atom's Gaussian amplitude is scaled by a crude
+    /// per-element electron count (heavier atoms denser), or left uniform.
+    pub density_weight_by_element: bool,
+    /// Density: max grid cells along the longest bounding-box axis (separate
+    /// from the union-of-balls `grid_max` so the two surfaces tune
+    /// independently). Cost is `O(density_grid_max³)`.
+    pub density_grid_max: usize,
 }
 
 impl Default for MolvizParams {
@@ -210,6 +245,11 @@ impl Default for MolvizParams {
             probe_radius: 1.4,
             surface_vdw_scale: 1.0,
             grid_max: 48,
+            density_sigma: 1.0,
+            density_iso: 0.5,
+            density_amplitude: 1.0,
+            density_weight_by_element: true,
+            density_grid_max: 48,
         }
     }
 }
@@ -625,6 +665,176 @@ pub fn surface(mol: &ViewMolecule, params: &MolvizParams) -> TriangleMesh {
     TriangleMesh {
         format: None,
         name: Some("genetics-surface".to_string()),
+        triangles: tris,
+    }
+}
+
+// --------------------------------------------------------------------------
+// Density (marching cubes over a sum-of-Gaussians electron-density-like field)
+// --------------------------------------------------------------------------
+
+/// A crude **relative electron count** per element, used to weight each atom's
+/// Gaussian amplitude in the density field so heavier atoms read denser. This is
+/// just the atomic number for the common elements (and `6.0`, carbon-like, for
+/// anything unrecognised) — *not* a real scattering factor; it only makes the
+/// blob fatter around heavy atoms. Returns a multiplier ≥ 1.
+fn element_electron_weight(element: &str) -> f32 {
+    match element.trim().to_ascii_uppercase().as_str() {
+        "H" | "D" => 1.0,
+        "C" => 6.0,
+        "N" => 7.0,
+        "O" => 8.0,
+        "F" => 9.0,
+        "NA" => 11.0,
+        "MG" => 12.0,
+        "P" => 15.0,
+        "S" => 16.0,
+        "CL" => 17.0,
+        "K" => 19.0,
+        "CA" => 20.0,
+        "FE" => 26.0,
+        "ZN" => 30.0,
+        _ => 6.0,
+    }
+}
+
+/// Build the **Gaussian density scalar field** for a molecule.
+///
+/// Each atom contributes an isotropic Gaussian
+/// `wᵢ · amplitude · exp(−|p − cᵢ|² / (2σ²))` and the field is the *sum* over
+/// atoms, producing a smooth, electron-density-like scalar volume that peaks at
+/// (and merges between) atom centres. `wᵢ` is `1` when
+/// [`MolvizParams::density_weight_by_element`] is off, else a crude relative
+/// electron count ([`element_electron_weight`], normalised so hydrogen = 1) so
+/// heavier atoms read denser.
+///
+/// The grid spans the atoms' bounding box padded by a few σ (so the Gaussian
+/// tails are captured), with `density_grid_max` cells along the longest axis
+/// (the other axes scaled to keep cells ~cubic). To keep the cost bounded each
+/// atom only splats into the grid cells within a few σ of its centre (the tail
+/// beyond ~4σ is negligible). Returns `None` for an empty molecule.
+///
+/// ## Honest note
+///
+/// This is a **phenomenological Gaussian sum**, *not* a quantum-mechanical
+/// electron density: there is no wavefunction, no basis set, and no bonding
+/// redistribution of charge. It is the same family of "blur the atoms into a
+/// smooth blob" model used for quick volume previews (QuteMol / Chimera "Gaussian
+/// surface"), useful for shape/occupancy intuition only.
+pub fn gaussian_density_field(mol: &ViewMolecule, params: &MolvizParams) -> Option<ScalarField> {
+    if mol.atoms.is_empty() {
+        return None;
+    }
+    let sigma = params.density_sigma.max(1e-3);
+    let amplitude = params.density_amplitude.max(1e-6);
+    let two_sigma_sq = 2.0 * sigma * sigma;
+    // Capture the Gaussian out to `cutoff` (a few σ; beyond ~4σ the value is
+    // < 0.04 % of the peak, well under any sensible iso-level).
+    let cutoff = sigma * 4.0;
+
+    // Per-atom amplitude (element-weighted, normalised so H = 1).
+    let weights: Vec<f32> = mol
+        .atoms
+        .iter()
+        .map(|a| {
+            if params.density_weight_by_element {
+                // Normalise by hydrogen's weight so an all-H field still peaks
+                // at `amplitude` and `density_iso` keeps its meaning.
+                element_electron_weight(&a.element) / element_electron_weight("H")
+            } else {
+                1.0
+            }
+        })
+        .collect();
+
+    // Bounding box of the atom centres, padded by the Gaussian cutoff + a cell.
+    let mut min = mol.atoms[0].pos;
+    let mut max = mol.atoms[0].pos;
+    for a in &mol.atoms {
+        for k in 0..3 {
+            min[k] = min[k].min(a.pos[k]);
+            max[k] = max[k].max(a.pos[k]);
+        }
+    }
+    let pad = cutoff * 1.1;
+    for k in 0..3 {
+        min[k] -= pad;
+        max[k] += pad;
+    }
+    let extent = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+    let longest = extent[0].max(extent[1]).max(extent[2]).max(1e-3);
+    let grid_max = params.density_grid_max.clamp(8, 192);
+    let spacing = longest / grid_max as f32;
+    let dims = [
+        ((extent[0] / spacing).ceil() as usize + 1).max(2),
+        ((extent[1] / spacing).ceil() as usize + 1).max(2),
+        ((extent[2] / spacing).ceil() as usize + 1).max(2),
+    ];
+    let spacing = [spacing, spacing, spacing];
+
+    // Accumulate each atom's Gaussian into the grid (summed). Start at zero
+    // (empty space → zero density) and splat only the cells near each atom.
+    let total = dims[0] * dims[1] * dims[2];
+    let mut values = vec![0.0_f32; total];
+    let to_idx = |x: usize, y: usize, z: usize| x + dims[0] * (y + dims[1] * z);
+    for (atom, &w) in mol.atoms.iter().zip(&weights) {
+        let peak = amplitude * w;
+        // Grid index range overlapping this atom's cutoff AABB (each axis uses
+        // the same cubic spacing). `lo`/`hi` clamp into range.
+        let lo = |c: f32, m: f32| -> usize {
+            let g = ((c - cutoff - m) / spacing[0]).floor();
+            g.max(0.0) as usize
+        };
+        let hi = |c: f32, m: f32, d: usize| -> usize {
+            let g = ((c + cutoff - m) / spacing[0]).ceil() as isize;
+            g.clamp(0, d as isize - 1) as usize
+        };
+        let (x0, x1) = (lo(atom.pos[0], min[0]), hi(atom.pos[0], min[0], dims[0]));
+        let (y0, y1) = (lo(atom.pos[1], min[1]), hi(atom.pos[1], min[1], dims[1]));
+        let (z0, z1) = (lo(atom.pos[2], min[2]), hi(atom.pos[2], min[2], dims[2]));
+        for z in z0..=z1.min(dims[2] - 1) {
+            for y in y0..=y1.min(dims[1] - 1) {
+                for x in x0..=x1.min(dims[0] - 1) {
+                    let p = [
+                        min[0] + x as f32 * spacing[0],
+                        min[1] + y as f32 * spacing[1],
+                        min[2] + z as f32 * spacing[2],
+                    ];
+                    let d2 = {
+                        let dx = p[0] - atom.pos[0];
+                        let dy = p[1] - atom.pos[1];
+                        let dz = p[2] - atom.pos[2];
+                        dx * dx + dy * dy + dz * dz
+                    };
+                    values[to_idx(x, y, z)] += peak * (-d2 / two_sigma_sq).exp();
+                }
+            }
+        }
+    }
+    Some(ScalarField {
+        origin: min,
+        spacing,
+        dims,
+        values,
+    })
+}
+
+/// Build the molecular **density** mesh for a molecule: a marching-cubes
+/// isosurface of the [`gaussian_density_field`] at an absolute level of
+/// `density_iso · density_amplitude` (so the iso-level is expressed as a
+/// fraction of one atom's peak). An empty molecule — or an iso-level at/above
+/// the per-atom peak amplitude, which no isolated atom reaches — yields an empty
+/// mesh (never a panic; overlapping atoms can still exceed the peak via their
+/// summed tails, so they may still surface).
+pub fn density_surface(mol: &ViewMolecule, params: &MolvizParams) -> TriangleMesh {
+    let iso = params.density_iso * params.density_amplitude.max(1e-6);
+    let tris = match gaussian_density_field(mol, params) {
+        Some(field) => marching_cubes(&field, iso),
+        None => Vec::new(),
+    };
+    TriangleMesh {
+        format: None,
+        name: Some("genetics-density".to_string()),
         triangles: tris,
     }
 }
@@ -1256,17 +1466,17 @@ mod tests {
 
     #[test]
     fn representation_all_covers_every_variant_and_has_unique_labels() {
-        assert_eq!(Representation::ALL.len(), 5);
+        assert_eq!(Representation::ALL.len(), 6);
         // Labels and tokens are all distinct (so the picker rows + wire tokens
         // don't collide).
         let mut labels: Vec<&str> = Representation::ALL.iter().map(|r| r.label()).collect();
         labels.sort_unstable();
         labels.dedup();
-        assert_eq!(labels.len(), 5, "labels must be unique");
+        assert_eq!(labels.len(), 6, "labels must be unique");
         let mut tokens: Vec<&str> = Representation::ALL.iter().map(|r| r.token()).collect();
         tokens.sort_unstable();
         tokens.dedup();
-        assert_eq!(tokens.len(), 5, "tokens must be unique");
+        assert_eq!(tokens.len(), 6, "tokens must be unique");
     }
 
     #[test]
@@ -1320,6 +1530,7 @@ mod tests {
             Representation::Sticks,
             Representation::Spacefill,
             Representation::Surface,
+            Representation::Density,
         ] {
             let m = build_mesh(&mol, rep, &[], &p);
             assert!(
@@ -1575,6 +1786,183 @@ mod tests {
         assert!(longest <= 193, "longest axis {longest} must be clamped");
     }
 
+    // ---- Gaussian density iso-surface ------------------------------------
+
+    /// A one-atom [`ViewMolecule`] of `element` at `pos`.
+    fn one_atom(element: &str, pos: [f32; 3]) -> ViewMolecule {
+        let mut m = ViewMolecule::new();
+        m.atoms.push(ViewAtom::new(pos, element));
+        m
+    }
+
+    /// Analytic iso-radius of a single Gaussian: solving
+    /// `peak·exp(−r²/2σ²) = iso` gives `r = σ·sqrt(−2·ln(iso/peak))`.
+    fn gaussian_iso_radius(sigma: f32, peak: f32, iso: f32) -> f32 {
+        sigma * (-2.0 * (iso / peak).ln()).sqrt()
+    }
+
+    #[test]
+    fn single_atom_density_isosurface_is_a_sphere_of_the_analytic_radius() {
+        // Hydrogen so the element weight is 1 → peak == density_amplitude and
+        // the analytic radius uses the amplitude directly.
+        let mut p = MolvizParams::default();
+        p.density_sigma = 1.2;
+        p.density_amplitude = 1.0;
+        p.density_iso = 0.4; // well below the peak → a real sphere
+        p.density_grid_max = 48;
+        let center = [2.0_f32, -1.0, 0.5];
+        let mol = one_atom("H", center);
+
+        let field = gaussian_density_field(&mol, &p).expect("non-empty");
+        let iso_abs = p.density_iso * p.density_amplitude;
+        let tris = marching_cubes(&field, iso_abs);
+        assert!(
+            tris.len() > 200,
+            "expected a sphere, got {} tris",
+            tris.len()
+        );
+
+        let expect_r = gaussian_iso_radius(p.density_sigma, p.density_amplitude, p.density_iso);
+        let spacing = field.spacing[0];
+        let tol = spacing * 1.5;
+
+        // Every vertex lies ~on the analytic sphere, and the centroid is the
+        // atom centre (the blob is centred on the atom).
+        let mut centroid = [0.0_f32; 3];
+        for t in &tris {
+            for v in &t.vertices {
+                let d = ((v[0] - center[0]).powi(2)
+                    + (v[1] - center[1]).powi(2)
+                    + (v[2] - center[2]).powi(2))
+                .sqrt();
+                assert!(
+                    (d - expect_r).abs() < tol,
+                    "vertex radius {d} not within {tol} of analytic {expect_r}"
+                );
+                for k in 0..3 {
+                    centroid[k] += v[k];
+                }
+            }
+        }
+        let n = (tris.len() * 3) as f32;
+        for k in 0..3 {
+            centroid[k] /= n;
+            assert!(
+                (centroid[k] - center[k]).abs() < tol,
+                "centroid axis {k} = {} not near atom {}",
+                centroid[k],
+                center[k]
+            );
+        }
+
+        // The mesh extent on each axis spans ~the analytic diameter.
+        let mesh = density_surface(&mol, &p);
+        let (min, max) = mesh.bounding_box().expect("non-empty");
+        for k in 0..3 {
+            let span = max[k] - min[k];
+            assert!(
+                (span - 2.0 * expect_r).abs() < 2.0 * tol,
+                "axis {k} span {span} not ~ analytic diameter {}",
+                2.0 * expect_r
+            );
+            // And the sphere is centred on the atom.
+            let mid = 0.5 * (min[k] + max[k]);
+            assert!((mid - center[k]).abs() < tol);
+        }
+    }
+
+    #[test]
+    fn density_isosurface_above_peak_amplitude_is_empty_no_panic() {
+        // A lone atom's density never exceeds its peak; an iso AT/ABOVE the peak
+        // therefore has no crossing → empty mesh, and must not panic.
+        let mut p = MolvizParams::default();
+        p.density_weight_by_element = false; // peak == amplitude exactly
+        p.density_amplitude = 1.0;
+        p.density_iso = 1.0; // exactly the peak — unreachable from below
+        let mol = one_atom("C", [0.0, 0.0, 0.0]);
+        assert!(
+            density_surface(&mol, &p).triangles.is_empty(),
+            "iso == peak must give an empty density surface"
+        );
+        // Comfortably above the peak: also empty, also no panic.
+        p.density_iso = 5.0;
+        assert!(density_surface(&mol, &p).triangles.is_empty());
+    }
+
+    #[test]
+    fn two_overlapping_atoms_give_one_connected_watertight_surface() {
+        // Two atoms closer than ~2σ merge into a single connected blob. Use a
+        // generous σ so the Gaussians strongly overlap.
+        let mut p = MolvizParams::default();
+        p.density_sigma = 1.5;
+        p.density_amplitude = 1.0;
+        p.density_weight_by_element = false; // equal peaks, simpler reasoning
+        p.density_iso = 0.5;
+        p.density_grid_max = 56;
+        let mut mol = ViewMolecule::new();
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.atoms.push(ViewAtom::new([1.5, 0.0, 0.0], "C")); // ~1σ apart → merged
+
+        let field = gaussian_density_field(&mol, &p).expect("non-empty");
+        let iso_abs = p.density_iso * p.density_amplitude;
+        let tris = marching_cubes(&field, iso_abs);
+        assert!(!tris.is_empty(), "overlapping atoms must produce a surface");
+
+        // Watertight: every undirected edge shared by an even count.
+        assert!(
+            mesh_is_closed(&tris, field.spacing[0]),
+            "merged density blob must be a closed surface"
+        );
+
+        // Connected (one component): flood-fill the triangle adjacency graph
+        // over quantised shared vertices and check every triangle is reached.
+        assert_eq!(
+            connected_components(&tris, field.spacing[0]),
+            1,
+            "two overlapping atoms must give a single connected blob"
+        );
+    }
+
+    #[test]
+    fn density_field_sums_overlapping_gaussians_above_single_peak() {
+        // Where two equal Gaussians overlap, the summed field at the midpoint
+        // can exceed a single atom's peak — the defining feature of a *sum*
+        // (vs. the union-of-balls `max`). Place them ~1σ apart.
+        let mut p = MolvizParams::default();
+        p.density_sigma = 1.0;
+        p.density_amplitude = 1.0;
+        p.density_weight_by_element = false;
+        p.density_grid_max = 64;
+        let mut mol = ViewMolecule::new();
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.atoms.push(ViewAtom::new([1.0, 0.0, 0.0], "C"));
+        let field = gaussian_density_field(&mol, &p).expect("non-empty");
+        // Max sample value must exceed a single peak (1.0) thanks to the sum.
+        let max_val = field.values.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(
+            max_val > 1.0,
+            "summed overlap max {max_val} should exceed a single peak 1.0"
+        );
+    }
+
+    #[test]
+    fn density_field_empty_molecule_is_none() {
+        let empty = ViewMolecule::new();
+        let p = MolvizParams::default();
+        assert!(gaussian_density_field(&empty, &p).is_none());
+        assert!(density_surface(&empty, &p).triangles.is_empty());
+    }
+
+    #[test]
+    fn density_element_weight_makes_heavy_atoms_denser() {
+        // A heavier element contributes a larger peak (so its blob is fatter at
+        // a fixed iso). Sulfur (16) ≫ hydrogen (1).
+        assert!(element_electron_weight("S") > element_electron_weight("H"));
+        assert!(element_electron_weight("FE") > element_electron_weight("C"));
+        // Unknown falls back to a carbon-like weight (not zero → never vanishes).
+        assert!(element_electron_weight("Xx") > 0.0);
+    }
+
     // ---- sticks ----------------------------------------------------------
 
     #[test]
@@ -1615,5 +2003,59 @@ mod tests {
             }
         }
         edges.values().all(|&count| count % 2 == 0)
+    }
+
+    /// Count connected components of a triangle soup: triangles are adjacent
+    /// when they share at least one (quantised) vertex; flood-fill the adjacency
+    /// graph and count the disjoint groups. A single watertight blob → 1.
+    fn connected_components(tris: &[StlTriangle], spacing: f32) -> usize {
+        use std::collections::HashMap;
+        if tris.is_empty() {
+            return 0;
+        }
+        let q = spacing / 100.0;
+        let key = |v: [f32; 3]| -> (i64, i64, i64) {
+            (
+                (v[0] / q).round() as i64,
+                (v[1] / q).round() as i64,
+                (v[2] / q).round() as i64,
+            )
+        };
+        // Map each shared vertex to the triangles that touch it.
+        let mut vert_tris: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
+        for (ti, t) in tris.iter().enumerate() {
+            for v in &t.vertices {
+                vert_tris.entry(key(*v)).or_default().push(ti);
+            }
+        }
+        // Union-find over triangles via shared vertices.
+        let mut parent: Vec<usize> = (0..tris.len()).collect();
+        fn find(parent: &mut [usize], i: usize) -> usize {
+            let mut r = i;
+            while parent[r] != r {
+                r = parent[r];
+            }
+            // Path-compress.
+            let mut c = i;
+            while parent[c] != r {
+                let next = parent[c];
+                parent[c] = r;
+                c = next;
+            }
+            r
+        }
+        for group in vert_tris.values() {
+            for w in group.windows(2) {
+                let a = find(&mut parent, w[0]);
+                let b = find(&mut parent, w[1]);
+                if a != b {
+                    parent[a] = b;
+                }
+            }
+        }
+        let mut roots: Vec<usize> = (0..tris.len()).map(|i| find(&mut parent, i)).collect();
+        roots.sort_unstable();
+        roots.dedup();
+        roots.len()
     }
 }
