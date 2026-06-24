@@ -103,20 +103,24 @@ pub fn draw_inclinedplane_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Ramp").strong());
                     ui.horizontal(|ui| {
-                        ui.label("slope angle (°)");
-                        ui.add(egui::DragValue::new(&mut s.angle_deg).speed(0.5));
+                        let cap = ui.label("slope angle (°)");
+                        ui.add(egui::DragValue::new(&mut s.angle_deg).speed(0.5))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("friction μ");
-                        ui.add(egui::DragValue::new(&mut s.mu).speed(0.01));
+                        let cap = ui.label("friction μ");
+                        ui.add(egui::DragValue::new(&mut s.mu).speed(0.01))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("block weight W (N)");
-                        ui.add(egui::DragValue::new(&mut s.weight_n).speed(1.0));
+                        let cap = ui.label("block weight W (N)");
+                        ui.add(egui::DragValue::new(&mut s.weight_n).speed(1.0))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("lift height h (m)");
-                        ui.add(egui::DragValue::new(&mut s.lift_height_m).speed(0.1));
+                        let cap = ui.label("lift height h (m)");
+                        ui.add(egui::DragValue::new(&mut s.lift_height_m).speed(0.1))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
@@ -461,12 +465,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_inclinedplane_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_inclinedplane_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -482,5 +499,32 @@ mod headless_ui_tests {
         app.show_inclinedplane_workbench = true;
         run_inclinedplane(&mut app.inclinedplane);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_inclinedplane_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["slope angle (°)", "block weight W (N)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

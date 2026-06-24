@@ -129,19 +129,22 @@ pub fn draw_enzymekinetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Enzyme (uninhibited)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("Vmax (µmol/min)");
-                        ui.add(egui::DragValue::new(&mut s.vmax_umol_per_min).speed(1.0));
+                        let cap = ui.label("Vmax (µmol/min)");
+                        ui.add(egui::DragValue::new(&mut s.vmax_umol_per_min).speed(1.0))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Km (mM)");
-                        ui.add(egui::DragValue::new(&mut s.km_mm).speed(0.1));
+                        let cap = ui.label("Km (mM)");
+                        ui.add(egui::DragValue::new(&mut s.km_mm).speed(0.1))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Substrate").strong());
                     ui.horizontal(|ui| {
-                        ui.label("[S] (mM)");
-                        ui.add(egui::DragValue::new(&mut s.s_mm).speed(0.1));
+                        let cap = ui.label("[S] (mM)");
+                        ui.add(egui::DragValue::new(&mut s.s_mm).speed(0.1))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
@@ -164,8 +167,9 @@ pub fn draw_enzymekinetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
                     if s.mode != InhibitionMode::None {
                         ui.horizontal(|ui| {
-                            ui.label("[I] (mM)");
-                            ui.add(egui::DragValue::new(&mut s.i_mm).speed(0.1));
+                            let cap = ui.label("[I] (mM)");
+                            ui.add(egui::DragValue::new(&mut s.i_mm).speed(0.1))
+                                .labelled_by(cap.id);
                         });
                         let ki_label = if s.mode == InhibitionMode::Uncompetitive {
                             "Ki' (mM)"
@@ -173,8 +177,9 @@ pub fn draw_enzymekinetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             "Ki (mM)"
                         };
                         ui.horizontal(|ui| {
-                            ui.label(ki_label);
-                            ui.add(egui::DragValue::new(&mut s.ki_mm).speed(0.1));
+                            let cap = ui.label(ki_label);
+                            ui.add(egui::DragValue::new(&mut s.ki_mm).speed(0.1))
+                                .labelled_by(cap.id);
                         });
                     }
 
@@ -630,12 +635,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_enzymekinetics_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_enzymekinetics_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -651,5 +669,32 @@ mod headless_ui_tests {
         app.show_enzymekinetics_workbench = true;
         run_enzyme(&mut app.enzymekinetics);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_enzymekinetics_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["Vmax (µmol/min)", "Km (mM)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

@@ -74,20 +74,24 @@ pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Bend parameters").strong());
                     ui.horizontal(|ui| {
-                        ui.label("thickness (mm)");
-                        ui.add(egui::DragValue::new(&mut s.thickness_mm).speed(0.05));
+                        let cap_thk = ui.label("thickness (mm)");
+                        ui.add(egui::DragValue::new(&mut s.thickness_mm).speed(0.05))
+                            .labelled_by(cap_thk.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("inside radius (mm)");
-                        ui.add(egui::DragValue::new(&mut s.inside_radius_mm).speed(0.05));
+                        let cap_rad = ui.label("inside radius (mm)");
+                        ui.add(egui::DragValue::new(&mut s.inside_radius_mm).speed(0.05))
+                            .labelled_by(cap_rad.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("bend angle (\u{00B0})");
-                        ui.add(egui::DragValue::new(&mut s.bend_angle_deg).speed(1.0));
+                        let cap_ang = ui.label("bend angle (\u{00B0})");
+                        ui.add(egui::DragValue::new(&mut s.bend_angle_deg).speed(1.0))
+                            .labelled_by(cap_ang.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("k-factor");
-                        ui.add(egui::DragValue::new(&mut s.k_factor).speed(0.01));
+                        let cap_kf = ui.label("k-factor");
+                        ui.add(egui::DragValue::new(&mut s.k_factor).speed(0.01))
+                            .labelled_by(cap_kf.id);
                     });
                     ui.label(
                         egui::RichText::new("k-factor = neutral-axis fraction (0.33–0.5 typical)")
@@ -495,6 +499,7 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     /// Render the whole workbench panel once in a headless egui context.
     fn draw_workbench(app: &mut ValenxApp) {
@@ -502,6 +507,19 @@ mod headless_ui_tests {
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_sheetmetal_workbench(app, ctx);
         });
+    }
+
+    /// Render the workbench with accesskit enabled and return its a11y nodes.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_sheetmetal_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -525,5 +543,32 @@ mod headless_ui_tests {
         run_sheetmetal(&mut app.sheetmetal);
         app.sheetmetal.error = Some("invalid bend parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_sheetmetal_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["thickness (mm)", "k-factor"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

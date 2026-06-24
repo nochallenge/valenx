@@ -94,27 +94,32 @@ pub fn draw_pipenetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Parallel loop A → B").strong());
                     ui.horizontal(|ui| {
-                        ui.label("pipe 0 resistance k₀");
-                        ui.add(egui::DragValue::new(&mut s.k0).speed(0.1));
+                        let cap = ui.label("pipe 0 resistance k₀");
+                        ui.add(egui::DragValue::new(&mut s.k0).speed(0.1))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("pipe 1 resistance k₁");
-                        ui.add(egui::DragValue::new(&mut s.k1).speed(0.1));
+                        let cap = ui.label("pipe 1 resistance k₁");
+                        ui.add(egui::DragValue::new(&mut s.k1).speed(0.1))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("total inflow Q (m³/s)");
-                        ui.add(egui::DragValue::new(&mut s.total_inflow).speed(0.1));
+                        let cap = ui.label("total inflow Q (m³/s)");
+                        ui.add(egui::DragValue::new(&mut s.total_inflow).speed(0.1))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Solver (Hardy-Cross)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("tolerance |dQ|");
-                        ui.add(egui::DragValue::new(&mut s.tolerance).speed(1.0e-9));
+                        let cap = ui.label("tolerance |dQ|");
+                        ui.add(egui::DragValue::new(&mut s.tolerance).speed(1.0e-9))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("max iterations");
-                        ui.add(egui::DragValue::new(&mut s.max_iterations).speed(1.0));
+                        let cap = ui.label("max iterations");
+                        ui.add(egui::DragValue::new(&mut s.max_iterations).speed(1.0))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -520,12 +525,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_pipenetwork_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_pipenetwork_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -541,5 +559,40 @@ mod headless_ui_tests {
         app.show_pipenetwork_workbench = true;
         run_network(&mut app.pipenetwork);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every numeric DragValue is a SpinButton whose own Name egui clears;
+        // each must be `labelled_by` its caption so an AI / screen reader can
+        // find it by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_pipenetwork_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in [
+            "pipe 0 resistance k₀",
+            "total inflow Q (m³/s)",
+            "max iterations",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

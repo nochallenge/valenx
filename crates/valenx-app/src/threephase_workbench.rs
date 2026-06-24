@@ -95,16 +95,19 @@ pub fn draw_threephase_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Supply").strong());
                     ui.horizontal(|ui| {
-                        ui.label("line voltage (V)");
-                        ui.add(egui::DragValue::new(&mut s.v_line).speed(1.0));
+                        let cap = ui.label("line voltage (V)");
+                        ui.add(egui::DragValue::new(&mut s.v_line).speed(1.0))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("line current (A)");
-                        ui.add(egui::DragValue::new(&mut s.i_line).speed(0.5));
+                        let cap = ui.label("line current (A)");
+                        ui.add(egui::DragValue::new(&mut s.i_line).speed(0.5))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("power factor cos φ");
-                        ui.add(egui::DragValue::new(&mut s.power_factor).speed(0.01));
+                        let cap = ui.label("power factor cos φ");
+                        ui.add(egui::DragValue::new(&mut s.power_factor).speed(0.01))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -430,12 +433,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_threephase_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_threephase_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -451,5 +467,32 @@ mod headless_ui_tests {
         app.show_threephase_workbench = true;
         run_threephase(&mut app.threephase);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_threephase_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["line voltage (V)", "power factor cos φ"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }
